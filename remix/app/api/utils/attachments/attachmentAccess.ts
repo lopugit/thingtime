@@ -9,7 +9,7 @@ import { ACL_ALL, ACL_INHERIT, ACL_OWNER, aclFromVisibility, type ThingVisibilit
 import { withThingLink, canView, canViewInherited, type ThingDoc, type Viewer } from '../things/things';
 import type { AttachmentPurpose, ProfileAttachmentSlot } from './attachmentCore';
 
-export type AttachmentAccessViewer = (NonNullable<Viewer> & { isAdmin?: boolean; sharedRoot?: string }) | null;
+export type AttachmentAccessViewer = { id: string; username?: string | null; isAdmin?: boolean } | null;
 
 type AttachmentTargetAclDoc = {
 	shareId: string;

@@ -65,7 +65,7 @@ test('settings store round-trips, rejects invalid writes, and degrades to defaul
 });
 
 test('admin media provider choice overrides env resolution; default delegates', async () => {
-	const env = { THINGTIME_MODERATION_PROVIDER: 'claude', CLAUDE_CODE_OAUTH_TOKEN: 'a', OPENAI_API_KEY: 'o' } as any;
+	const env = { THINGTIME_MODERATION_PROVIDER: 'claude', ANTHROPIC_API_KEY: 'a', OPENAI_API_KEY: 'o' } as any;
 	const forcedOff = await resolveModerationProvider(env, 'off');
 	assert.equal(forcedOff.kind, 'off');
 	const forcedOpenai = await resolveModerationProvider(env, 'openai');
@@ -135,15 +135,6 @@ const setAt = (doc: any, path: string, value: any) => {
 	for (const part of parts.slice(0, -1)) target = target[part] ??= {};
 	target[parts[parts.length - 1]] = value;
 };
-const unsetAt = (doc: any, path: string) => {
-	const parts = path.split('.');
-	let target = doc;
-	for (const part of parts.slice(0, -1)) {
-		if (!target?.[part] || typeof target[part] !== 'object') return;
-		target = target[part];
-	}
-	delete target[parts[parts.length - 1]];
-};
 
 const fakeCollection = (state: FakeState) => ({
 	findOne: async (filter: any) => state.docs.get(filter.shareId) ?? null,
@@ -152,15 +143,10 @@ const fakeCollection = (state: FakeState) => ({
 		const existing = state.docs.get(filter.shareId);
 		if (existing && matches(existing, filter)) {
 			for (const [key, value] of Object.entries(update.$set ?? {})) setAt(existing, key, value);
-			for (const key of Object.keys(update.$unset ?? {})) unsetAt(existing, key);
+			for (const key of Object.keys(update.$unset ?? {})) delete existing[key];
 			return { modifiedCount: 1, matchedCount: 1 };
 		}
 		if (options?.upsert) {
-			if (existing) {
-				const duplicate = new Error('duplicate key') as Error & { code: number };
-				duplicate.code = 11000;
-				throw duplicate;
-			}
 			const inserted: any = { ...(update.$setOnInsert ?? {}) };
 			for (const [key, value] of Object.entries(update.$set ?? {})) setAt(inserted, key, value);
 			state.docs.set(filter.shareId, inserted);
@@ -216,19 +202,6 @@ test('text analyzer stamps verdicts on the thing and flags blocked/nsfw text wit
 	assert.equal(flag.crystal.targetKind, 'text');
 	assert.equal(flag.crystal.excerpt, 'hello world');
 	assert.equal(flag.crystal.attachmentPurpose, 'post');
-});
-
-test('text flag creation never repurposes an ordinary Thing that squats the deterministic id', async () => {
-	const state: FakeState = { docs: new Map([['post-1', postDoc()]]), updates: [] };
-	const flagId = moderationFlagShareId('post-1');
-	const ordinary = { shareId: flagId, thingtime: ['data'], ownerId: 'attacker', crystal: { keep: true } };
-	const home: FakeState = { docs: new Map([[flagId, ordinary]]), updates: [] };
-	const result = await textAnalyzer(state, home, { flagged: true, categories: { 'sexual/minors': true } })('post-1');
-	assert.deepEqual(result, { ok: false, error: 'Text moderation analysis failed', retryable: true });
-	assert.equal(home.docs.get(flagId), ordinary);
-	assert.deepEqual(ordinary.crystal, { keep: true });
-	assert.equal(state.docs.get('post-1').moderation.status, 'blocked');
-	assert.equal(state.docs.get('post-1').moderation.flagPending, true);
 });
 
 test('text analyzer labels comment/share purposes and bounds the excerpt at 500 chars', async () => {
@@ -375,32 +348,16 @@ test('text sweep: off releases pending only; batches analyze and count', async (
 	assert.deepEqual(result, { scanned: 4, analyzed: 2, flagged: 1, failed: 1, skippedOff: false });
 });
 
-test('moderation sweep continues full successful batches, but not failures or short batches', async () => {
-	const { ATTACHMENT_SWEEP_BATCH, TEXT_SWEEP_BATCH, shouldContinueModerationSweep } = await import('./moderationAdmin');
-	const text = (scanned: number, failed = 0) => ({ scanned, analyzed: scanned - failed, flagged: 0, failed, skippedOff: false });
-	const attachments = (scanned: number, failed = 0) => ({ scanned, analyzed: scanned - failed, flagged: 0, skipped: 0, failed });
-	assert.equal(shouldContinueModerationSweep(text(TEXT_SWEEP_BATCH), attachments(0)), true);
-	assert.equal(shouldContinueModerationSweep(text(0), attachments(ATTACHMENT_SWEEP_BATCH)), true);
-	assert.equal(shouldContinueModerationSweep(text(TEXT_SWEEP_BATCH, 1), attachments(0)), false);
-	assert.equal(shouldContinueModerationSweep(text(0), attachments(ATTACHMENT_SWEEP_BATCH, 1)), false);
-	assert.equal(shouldContinueModerationSweep(text(TEXT_SWEEP_BATCH - 1), attachments(ATTACHMENT_SWEEP_BATCH - 1)), false);
-});
-
-test('moderation sweep cron route requires the exact bearer secret, starts a continuation, and fails closed unconfigured', async () => {
+test('moderation sweep cron route requires the exact bearer secret and fails closed unconfigured', async () => {
 	const { createModerationSweepLoader } = await import('../../../routes/api/v1/moderation/sweep/_sweep');
 	let sweeps = 0;
-	let continuations = 0;
 	const loader = createModerationSweepLoader({
 		getSecret: () => 'cron-test-secret',
 		sweepText: (async () => {
 			sweeps += 1;
-			return { scanned: 25, analyzed: 25, flagged: 0, failed: 0, skippedOff: false };
+			return { scanned: 1, analyzed: 1, flagged: 0, failed: 0, skippedOff: false };
 		}) as any,
-		sweepAttachments: (async () => ({ scanned: 0, analyzed: 0, flagged: 0, skipped: 0, failed: 0 })) as any,
-		startContinuation: async () => {
-			continuations += 1;
-			return 'wrun_test_continuation';
-		}
+		sweepAttachments: (async () => ({ scanned: 0, analyzed: 0, flagged: 0, skipped: 0, failed: 0 })) as any
 	});
 	for (const authorization of [undefined, 'cron-test-secret', 'bearer cron-test-secret', 'Bearer wrong']) {
 		const response = await loader({
@@ -418,10 +375,8 @@ test('moderation sweep cron route requires the exact bearer secret, starts a con
 	assert.equal(authorized.status, 200);
 	const body = await authorized.json();
 	assert.equal(body.ok, true);
-	assert.equal(body.text.analyzed, 25);
-	assert.equal(body.continuationRunId, 'wrun_test_continuation');
+	assert.equal(body.text.analyzed, 1);
 	assert.equal(sweeps, 1);
-	assert.equal(continuations, 1);
 
 	const unconfigured = createModerationSweepLoader({ getSecret: () => undefined });
 	const response = await unconfigured({ request: new Request('https://thingtime.example/api/v1/moderation/sweep') });
@@ -440,7 +395,7 @@ test('sync screen budget env parsing: default, override, disable, clamp', () => 
 const freshBreaker = (): SyncScreenBreaker => ({ failures: 0, openUntil: 0 });
 const content = (text: string, imageUrls: string[] = []) => ({ text, imageUrls });
 
-test('create-time sync screen: fast verdicts gate the doc, slow/broken omni falls back to owner-private pending', async () => {
+test('create-time sync screen: fast verdicts gate the doc, slow/broken omni fails open to async', async () => {
 	const screenChoice = (result: OmniModerationResult | 'hang' | 'throw') => async () =>
 		({
 			kind: 'screen' as const,

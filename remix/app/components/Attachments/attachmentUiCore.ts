@@ -247,20 +247,11 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 		size,
 		contentType,
 		...(detectedContentType ? { detectedContentType } : {}),
-		// Linked attachments keep the server's declared render hint instead — their
-		// bytes render straight from the external URL in safe sinks. Legacy opaque
-		// rows may still carry a detected audio container, which lets the player
-		// offer playback without trusting a caller-provided media kind.
-		mediaKind: linkedUrl
-			? safeLinkedMediaKind(record.mediaKind)
-			: safeAttachmentMediaKind(contentType === 'application/octet-stream' && detectedContentType ? detectedContentType : contentType, record.mediaKind),
-		...(filenamePreview ? { filenamePreview } : {}),
-		...(title ? { title } : {}),
-		...(description ? { description } : {}),
+		// Audio is valid canonical server metadata, but is intentionally treated as
+		// a generic download until Thingtime ships a vetted inline audio player.
+		mediaKind: safeAttachmentMediaKind(contentType, record.mediaKind),
 		// only an explicit server true survives — nothing client-side can set it
-		...(record.nsfw === true ? { nsfw: true } : {}),
-		...(linkedUrl ? { url: linkedUrl } : {}),
-		...(record.pending === true ? { pending: true as const } : {})
+		...(record.nsfw === true ? { nsfw: true } : {})
 	};
 };
 
@@ -398,11 +389,11 @@ export const attachmentUploadError = (
 		Number(context.remainingBytes) >= 0 &&
 		Number(context.fileSizeBytes) > Number(context.remainingBytes);
 	if (status === 401) return 'Your session expired. Log in again before uploading this file.';
-	if (code === 'public_uploads_not_approved') {
-		return 'Public media uploads need admin approval during the beta. After email verification, an admin can approve this account.';
-	}
-	if (code === 'private_uploads_not_approved') {
-		return 'Private media uploads need admin approval during the beta. After email verification, an admin can approve this account.';
+	// The start route answers with the purpose-matched scope code; the
+	// already-started parts/complete calls answer with the any-scope one. All
+	// three mean the same thing to the person holding the file.
+	if (code === 'public_uploads_not_approved' || code === 'private_uploads_not_approved' || code === 'media_upload_not_granted') {
+		return 'Media uploads need admin approval during the beta. An admin has been notified — you can upload here once your account is approved.';
 	}
 	if (status === 403) return 'This account is not allowed to upload that file.';
 	if (status === 413) return 'This file is larger than Thingtime can accept.';
@@ -480,9 +471,7 @@ export const sameAttachmentSnapshot = (left: AttachmentComposerSnapshot, right: 
 			leftAttachment.contentType !== rightAttachment.contentType ||
 			leftAttachment.detectedContentType !== rightAttachment.detectedContentType ||
 			leftAttachment.mediaKind !== rightAttachment.mediaKind ||
-			leftAttachment.nsfw !== rightAttachment.nsfw ||
-			leftAttachment.url !== rightAttachment.url ||
-			leftAttachment.pending !== rightAttachment.pending
+			leftAttachment.nsfw !== rightAttachment.nsfw
 		) {
 			return false;
 		}

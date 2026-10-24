@@ -43,12 +43,11 @@ test('moderation doc guards read only well-formed stamps', () => {
 	assert.equal(attachmentIsNsfw({ moderation: { status: 'nsfw' } }), true);
 });
 
-test('public metadata carries nsfw and quarantines pending or blocked attachments', () => {
+test('public metadata carries nsfw and drops blocked attachments entirely', () => {
 	const crystal = { name: 'a.png', size: 10, contentType: 'image/png', mediaKind: 'image' };
 	assert.deepEqual(toAttachmentPublicMetadata('id-1', crystal), { id: 'id-1', ...crystal });
 	assert.deepEqual(toAttachmentPublicMetadata('id-1', crystal, { status: 'clear' }), { id: 'id-1', ...crystal });
 	assert.deepEqual(toAttachmentPublicMetadata('id-1', crystal, { status: 'nsfw' }), { id: 'id-1', ...crystal, nsfw: true });
-	assert.equal(toAttachmentPublicMetadata('id-1', crystal, { status: 'pending' }), null);
 	assert.equal(toAttachmentPublicMetadata('id-1', crystal, { status: 'blocked' }), null);
 	// malformed moderation input never crashes or leaks a flag
 	assert.deepEqual(toAttachmentPublicMetadata('id-1', crystal, 'garbage'), { id: 'id-1', ...crystal });
@@ -66,12 +65,12 @@ test('test provider keys verdicts off filename markers', async () => {
 
 test('provider resolution follows THINGTIME_MODERATION_PROVIDER and fails to off without a key', async () => {
 	assert.equal((await resolveModerationProvider({} as any)).kind, 'off');
-	assert.equal((await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'off', CLAUDE_CODE_OAUTH_TOKEN: 'k' } as any)).kind, 'off');
+	assert.equal((await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'off', ANTHROPIC_API_KEY: 'k' } as any)).kind, 'off');
 	const testChoice = await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'test' } as any);
 	assert.equal(testChoice.kind === 'provider' && testChoice.provider.name, 'test');
-	const claudeChoice = await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'claude', CLAUDE_CODE_OAUTH_TOKEN: 'test-key' } as any);
+	const claudeChoice = await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'claude', ANTHROPIC_API_KEY: 'test-key' } as any);
 	assert.equal(claudeChoice.kind === 'provider' && claudeChoice.provider.name, 'claude');
-	const implicit = await resolveModerationProvider({ CLAUDE_CODE_OAUTH_TOKEN: 'test-key' } as any);
+	const implicit = await resolveModerationProvider({ ANTHROPIC_API_KEY: 'test-key' } as any);
 	assert.equal(implicit.kind === 'provider' && implicit.provider.name, 'claude');
 });
 
@@ -129,14 +128,10 @@ test('analyzer stamps nsfw verdicts and logs a moderation flag', async () => {
 	const stamp = lastModerationStamp(state);
 	assert.equal(stamp.status, 'nsfw');
 	assert.equal(stamp.provider, 'test');
-	assert.equal(stamp.flagPending, true);
 	const flag = state.updates.find((entry) => entry.filter?.shareId === moderationFlagShareId('attachment-1'));
 	assert.ok(flag, 'flag upsert recorded');
-	assert.equal(flag!.filter.thingtime, MODERATION_FLAG_THINGTIME, 'an ordinary colliding Thing is never repurposed as a flag');
 	assert.equal(flag!.options?.upsert, true);
-	assert.equal(flag!.update.$set.thingtime, undefined);
-	assert.deepEqual(flag!.update.$setOnInsert.thingtime, [MODERATION_FLAG_THINGTIME]);
-	assert.ok(state.updates.some((entry) => entry.update?.$unset?.['moderation.flagPending'] === ''), 'landed flag clears retry marker');
+	assert.deepEqual(flag!.update.$set.thingtime, [MODERATION_FLAG_THINGTIME]);
 });
 
 test('analyzer quarantines TOS verdicts as blocked', async () => {
@@ -182,36 +177,4 @@ test('analyzer leaves the doc pending on provider failure and no-ops landed verd
 	const landed: FakeCollectionState = { doc: readyImageDoc({ moderation: { status: 'clear' } }), updates: [] };
 	assert.deepEqual(await analyzerWith(landed, { nsfw: true, tosViolation: false })('attachment-1'), { ok: true, status: 'clear' });
 	assert.equal(landed.updates.length, 0);
-});
-
-test('analyzer retries a lost moderationFlag without re-running the provider', async () => {
-	const state: FakeCollectionState = {
-		doc: readyImageDoc({ moderation: { status: 'nsfw', provider: 'test', flagPending: true } }),
-		updates: []
-	};
-	const result = await analyzerWith(state, { nsfw: false, tosViolation: false })('attachment-1');
-	assert.deepEqual(result, { ok: true, status: 'nsfw' });
-	const flag = state.updates.find((entry) => entry.options?.upsert === true);
-	assert.equal(flag?.filter?.thingtime, MODERATION_FLAG_THINGTIME);
-	assert.ok(state.updates.some((entry) => entry.update?.$unset?.['moderation.flagPending'] === ''));
-});
-
-test('a delayed image verdict cannot mutate a deleting file or its retained cancellation receipt', async () => {
-	for (const state of ['deleting', 'cancelled']) {
-		let current = readyImageDoc(), flags = 0;
-		const analyze = createAnalyzeReadyAttachment({
-			getThings: (async () => ({ findOne: async () => ({ ...current }), updateOne: async (filter: any, update: any) => {
-				if (filter.thingtime === MODERATION_FLAG_THINGTIME) { flags++; return { modifiedCount: 1 }; }
-				if (filter.attachmentState !== current.attachmentState) return { modifiedCount: 0 };
-				Object.assign(current, update.$set); return { modifiedCount: 1 };
-			} })) as any,
-			getS3: () => ({ signDownload: async () => ({ url: 'https://s3.example/signed' }) }) as any,
-			fetchBytes: async () => new Uint8Array([1]),
-			resolveProvider: async () => ({ kind: 'provider', provider: { name: 'test', model: 'test', analyzeImage: async () => {
-				current = { ...readyImageDoc(), attachmentState: state }; return { nsfw: true, tosViolation: false, categories: ['test'], reason: 'test verdict' };
-			} } }), now: () => NOW
-		});
-		await analyze('attachment-1');
-		assert.equal((current as any).moderation, undefined); assert.equal(flags, 0);
-	}
 });

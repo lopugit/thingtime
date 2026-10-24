@@ -1999,6 +1999,7 @@ THINGTIME_EMAIL_FAIL_CLOSED="false"     # fail-open unless "true"
 SES_SANDBOX="1"                         # test throttle (1 msg/sec) for /tests
 THINGTIME_EMAIL_TEST_RECIPIENT="support@thingtime.com"
 THINGTIME_ADMIN_NOTIFICATION_EMAIL="admin@thingtime.com"  # "new user" ops mail
+THINGTIME_ADMIN_EMAIL="admin@thingtime.com" # destination for admin alerts (new-user media-grant requests)
 ```
 
 `THINGTIME_ADMIN_NOTIFICATION_EMAIL` is where the internal **new user**
@@ -2047,6 +2048,355 @@ SES SMTP credentials for the app path. `GET /api/v1/email/config` returns the
 sanitized resolved config (never credentials); `POST /api/v1/email/test-otp` is
 a dev/preview-only helper for the `/tests` page restricted to the configured
 test recipient (or a plus alias of it).
+
+### Private S3 media and attachments
+
+Upload permission is the scoped beta gate documented under
+[Public upload approval](#public-upload-approval) (public / private / all
+scopes since PR #310). `PublicUser.canUploadMedia` is the any-scope alias; the
+composer's 🔐 approval-pending card is purpose-aware (public purposes check
+`publicUploadsEnabled`, message/profile purposes check
+`privateUploadsEnabled`), and ungranted starts answer 403 with
+`public_uploads_not_approved` / `private_uploads_not_approved` per the
+requested purpose. The already-started part/complete calls carry one extra
+any-scope check answering `403 { code: "media_upload_not_granted" }`, while
+abort/delete stay open so a permission change mid-upload cannot strand a
+paid-for reservation. The separate `meta.mediaUpload` flag (**Grant media** on
+the `/admin` Users tab, `POST /api/v1/admin/set-media-upload`, and the
+`grant-media-upload-to-existing-users` migration) is retained as an
+admin-visible grant record only — the scopes above are what enforce. Admins
+can always upload.
+
+Uploaded images are moderated asynchronously after upload: a provider-pluggable
+NSFW/TOS analysis stamps a protected `moderation` field on the attachment
+thing. NSFW media renders heavily blurred behind a "Show Anyway" click;
+TOS/illegal verdicts quarantine the media (never served publicly, admins can
+open evidence) and log a `moderationFlag` for the `/admin` → Moderation review
+queue, which also offers a retry sweep for attachments the async kickoff
+missed.
+
+The recommended production provider is the tiered `openai+claude` pipeline:
+OpenAI's **free** `omni-moderation-latest` endpoint screens every image first,
+clean images stamp `clear` at $0, and only flagged/borderline images escalate
+to a paid Claude vision call for the policy-nuanced verdict (see
+`docs/ai-api-cost-analysis.md`). Note the free screen cannot detect CSAM in
+images (OpenAI's `sexual/minors` category is text-only) and cannot apply
+Thingtime's "artistic nudity still blurs" rule — that is exactly why flagged
+and borderline images always escalate, and why omni alone never stamps
+`blocked`. If Claude is unreachable, omni-flagged images fail safe to `nsfw`
+(blurred + flagged for admin review); if OpenAI is unreachable, every image
+goes straight to Claude.
+
+```sh
+THINGTIME_MODERATION_PROVIDER="openai+claude"  # 'openai+claude' (alias 'tiered') | 'claude' | 'openai' | 'test' | 'off'
+                                               # unset default by keys: both → openai+claude; ANTHROPIC only → claude;
+                                               # OPENAI only → openai; neither → off
+ANTHROPIC_API_KEY="<key>"                # Claude API key (escalation / claude provider)
+OPENAI_API_KEY="<key>"                   # OpenAI key for the free omni-moderation screen
+TT_MODERATION_MODEL="claude-opus-5"      # optional Claude model override
+TT_MODERATION_ESCALATION_SCORE="0.2"     # optional; escalate unflagged images whose max
+                                         # image-category score meets this 0..1 threshold
+```
+
+Note: `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are shared with the Lopu musing
+feature — their presence alone activates image moderation when
+`THINGTIME_MODERATION_PROVIDER` is unset. Set it to `off` explicitly in
+environments that carry the keys for musing but must not moderate. An
+unrecognized provider value warns and falls back to the key-based default
+rather than silently disabling moderation.
+
+Admins control which AI runs each moderation surface from `/admin` →
+Moderation → "AI moderation settings": media uploads (default / tiered
+openai+claude / free openai-only / claude / off) and post/comment text
+(default / free openai / off). Admin choices are stored in the settings
+collection and override the env default; "default" delegates back to the
+env/key logic above. Post and comment text is screened by the free
+omni-moderation endpoint whenever an OpenAI key exists: block-worthy
+categories (sexual/minors, threatening harassment/hate, violent-illicit,
+self-harm instructions) quarantine the post/comment — it vanishes from every
+feed, thread, and search for everyone — while other flagged categories queue
+an advisory `moderationFlag` (with a bounded text excerpt as evidence) for
+the admin review queue without hiding the content. Edited text is re-screened;
+admin review verdicts are final until an admin changes them.
+
+Post creation is FAIL-CLOSED while text moderation is on: the free omni
+screen races a bounded time budget (`TT_TEXT_SCREEN_BUDGET_MS`, default
+600ms) BEFORE the insert, and a verdict in time means the post is born
+stamped — blocked content never renders anywhere. When no verdict can be
+obtained (omni outage, circuit breaker open, or `TT_TEXT_SCREEN_BUDGET_MS=0`
+async-release mode) the post is born **pending: visible only to its owner**
+until the async queue or the hourly cron screens and releases it — its
+creation notifications fire at release, when followers can actually see it.
+No post-family content ever goes public unscreened while the surface is on;
+turning the surface off publishes normally (and the sweep releases any
+stranded pending docs so an off flip can't orphan them). The budget is
+measured entirely server→OpenAI (client speed is irrelevant), and the
+per-instance breaker (3 failures → open 60s) skips the omni call during
+confirmed outages so posting stays fast — posts just arrive born-pending.
+Edits stay async.
+
+Text screening covers every omni-judgeable public surface of a post-family
+thing in one free combined request: prose (`crystal.text`), marketplace
+listing text (title/location/category/condition), tags, and the legacy
+external image URLs (`crystal.images`, capped at 8/post — omni fetches the
+URLs itself, so the multi-URL photos flow is moderated too; URL images follow
+the same image-blind `sexual/minors` limitation as omni-only media, so they
+flag/advisory rather than auto-block). Known coverage gaps, deliberate for
+now: video and non-image file CONTENTS (needs frame-extraction/AV infra) and
+profile bio/display-name (different write path).
+
+A scheduled safety net (`GET /api/v1/moderation/sweep`, Vercel Cron at minute
+29 each hour, `CRON_SECRET` bearer — same contract as the attachments cleanup
+cron) retries moderation the fire-and-forget kickoffs lost: post-family things
+with real text and no moderation stamp (process death between the post write
+and the verdict stamp, provider outages) plus the standard ready-attachment
+sweep. Because the omni screen is free, the same job also gradually drains any
+backlog from periods when text moderation was off; it no-ops while the text
+surface is off. The `/admin` → Moderation "Run analysis sweep" button drains
+the same batches on demand and shows the text backlog count.
+
+Posts, comments and replies, Messenger messages and thread replies, custom
+reaction emoji, and profile avatar/banner images use direct, checksummed
+multipart uploads to a private S3 bucket. The browser receives short-lived part
+URLs, not AWS credentials; product records reference stable attachment ids,
+never expiring S3 URLs. Attachment bytes are reserved against the account's
+Thingtime storage tier before upload and remain charged until exact-version S3
+deletion is confirmed. A stable client request id is hashed with the
+authenticated owner into an opaque owner-scoped attachment id, making lost
+start responses safely retryable without cross-account id squatting or
+existence disclosure.
+
+Every surface binds only its own server-validated attachment purpose. Comment
+and reply files inherit the root post visibility through the complete parent
+chain. Message and thread files require current chat membership. Personal and
+community custom emoji bind one safe raster image to their exact owner/scope;
+community images require membership, while an emoji already used in a shared
+conversation remains renderable to its authenticated participants. Deleting an
+owning post/comment/message/emoji removes the exact S3 versions before Mongo
+rows and quota reservations are released. Custom Mongo data planes cannot bind
+or authorize these home-storage objects.
+
+Profile media is limited to JPEG, PNG, GIF, WebP, or AVIF and 64 MiB per image.
+The server binds a ready upload only to its exact owner and requested avatar or
+banner slot in the same home-Mongo transaction as the profile update. Public
+profile rendering uses the stable same-origin content route; the bucket stays
+private. Replacing or removing managed profile media releases the old reference
+transactionally, but its bytes remain billed until the cleanup path permanently
+deletes the exact S3 version and removes the attachment Thing. External http(s)
+image URLs remain a separate, quota-saving alternative and are never fetched by
+the Thingtime server.
+
+Configure only these server-side Vercel variables. Scope the production bucket
+and role to **Production** only. Thingtime's `develop` Custom Environment and
+standard feature Preview deployments use the separate development bucket,
+role, data plane, and cleanup secret; never expose the production values to
+either environment.
+
+```sh
+THINGTIME_PRIVATE_S3_ROLE_ARN="arn:aws:iam::<12-digit-account-id>:role/<production-attachment-role>"
+THINGTIME_PRIVATE_S3_BUCKET="<private-bucket-name>"
+THINGTIME_PRIVATE_S3_REGION="<aws-region>"
+CRON_SECRET="<long-random-vercel-cron-secret>"
+```
+
+The bucket name must be DNS-compatible **without dots**; dotted names are
+rejected so every signed URL uses the unambiguous virtual-hosted S3 form. The
+bucket must also belong to the same 12-digit AWS account named by the role ARN.
+The runtime derives `ExpectedBucketOwner` from that ARN and fails closed when
+the bucket owner differs.
+
+In Vercel, mark all four values **Sensitive**. Give Production its values only
+in the built-in Production environment. Give `develop` a distinct set only in
+the branch-tracked Custom Environment named `develop`; never select the generic
+Preview environment. `CRON_SECRET` authenticates only
+`/api/v1/attachments/cleanup`; it is not a Thingtime user, PAT, app, or
+service-account credential, and must never use a `THINGTIME_*` browser-visible
+name. Use different secrets for Production and develop.
+
+The `develop` Custom Environment must use an exact `develop` branch matcher and
+own `https://dev.thingtime.com`. Its Vercel OIDC subject is
+`owner:<vercel-team-slug>:project:<vercel-project-name>:environment:develop`.
+This is intentionally different from ordinary PR deployments, whose subject
+ends in `environment:preview`. Branch-scoped Preview variables alone are not an
+AWS boundary because Vercel's Preview OIDC subject contains no Git branch; do
+not trust `environment:preview` for the develop role.
+
+The role must use Vercel OIDC temporary credentials and an exact production
+subject for this project. Do not create an S3 IAM user, reuse the SES IAM user,
+or set generic `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_REGION`
+variables for attachments. Restrict its object policy to the app's `objects/*`
+prefix. With Vercel's recommended team issuer mode, use this placeholder-only
+trust policy (replace every angle-bracket value):
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Allow",
+			"Principal": {
+				"Federated": "arn:aws:iam::<12-digit-account-id>:oidc-provider/oidc.vercel.com/<vercel-team-slug>"
+			},
+			"Action": "sts:AssumeRoleWithWebIdentity",
+			"Condition": {
+				"StringEquals": {
+					"oidc.vercel.com/<vercel-team-slug>:aud": "https://vercel.com/<vercel-team-slug>",
+					"oidc.vercel.com/<vercel-team-slug>:sub": "owner:<vercel-team-slug>:project:<vercel-project-name>:environment:<production-or-develop>"
+				}
+			}
+		}
+	]
+}
+```
+
+Create one role per environment. Substitute `production` for the Production
+role and `develop` for the develop role; never wildcard the environment portion
+of `sub` and never let one role trust both subjects.
+
+Attach this placeholder-only permissions policy to the role. Keep generic
+`s3:DeleteObject` out: in a versioned bucket it can create a delete marker
+without permanently removing the billed object version.
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "ThingtimePrivateAttachments",
+			"Effect": "Allow",
+			"Action": [
+				"s3:AbortMultipartUpload",
+				"s3:DeleteObjectVersion",
+				"s3:GetObject",
+				"s3:GetObjectVersion",
+				"s3:ListMultipartUploadParts",
+				"s3:PutObject",
+				"s3:PutObjectTagging",
+				"s3:PutObjectVersionTagging"
+			],
+			"Resource": "arn:aws:s3:::<private-bucket-name>/objects/*"
+		}
+	]
+}
+```
+
+The runtime role needs only those object actions:
+
+- `s3:PutObject` and `s3:PutObjectTagging` (the MPU starts with a pending tag)
+- `s3:GetObject` and `s3:GetObjectVersion`
+- `s3:DeleteObjectVersion`
+- `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts`
+- `s3:PutObjectVersionTagging`
+
+Do not grant `s3:ListBucket`, `s3:ListBucketMultipartUploads`, ACL,
+public-read, or bucket-administration actions. Completed attachments persist
+the opaque S3 `VersionId`; sniffing, tagging, download, and deletion all target
+that exact verified version. Exact-version deletion happens before the Thingtime
+storage reservation is refunded, so bucket versioning cannot hide unmetered
+noncurrent bytes.
+
+Keep both account- and bucket-level S3 Block Public Access enabled, Bucket Owner
+Enforced object ownership on, and bucket versioning enabled. Bucket policy
+should explicitly deny non-TLS requests and TLS below 1.2. The
+`aws:PrincipalIsAWSService` condition avoids accidentally blocking AWS service
+principals whose network context AWS redacts:
+
+```json
+{
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "DenyInsecureTransport",
+			"Effect": "Deny",
+			"Principal": "*",
+			"Action": "s3:*",
+			"Resource": ["arn:aws:s3:::<private-bucket-name>", "arn:aws:s3:::<private-bucket-name>/*"],
+			"Condition": {
+				"Bool": {
+					"aws:SecureTransport": "false",
+					"aws:PrincipalIsAWSService": "false"
+				}
+			}
+		},
+		{
+			"Sid": "DenyTLSBelow12",
+			"Effect": "Deny",
+			"Principal": "*",
+			"Action": "s3:*",
+			"Resource": ["arn:aws:s3:::<private-bucket-name>", "arn:aws:s3:::<private-bucket-name>/*"],
+			"Condition": {
+				"NumericLessThan": {
+					"s3:TlsVersion": "1.2"
+				},
+				"Bool": {
+					"aws:PrincipalIsAWSService": "false"
+				}
+			}
+		}
+	]
+}
+```
+
+Configure CORS with one exact origin per bucket, `PUT`, and the one
+application-authored request header: the production Thingtime origin for the
+production bucket, and `https://dev.thingtime.com` for the develop bucket. The
+uploader deliberately sends a Blob with no `Content-Type`, and completion
+obtains ETags/checksums server-side with ListParts, so no S3 response headers
+need to be exposed:
+
+```json
+[
+	{
+		"AllowedHeaders": ["x-amz-checksum-sha256"],
+		"AllowedMethods": ["PUT"],
+		"AllowedOrigins": ["https://<environment-origin>"],
+		"ExposeHeaders": [],
+		"MaxAgeSeconds": 300
+	}
+]
+```
+
+Lifecycle must abort incomplete multipart uploads after seven days and remove
+noncurrent versions after 30 days. This AWS CLI/API-shaped placeholder applies
+both actions only to Thingtime's object prefix (the S3 console asks for the same
+rule fields):
+
+```json
+{
+	"Rules": [
+		{
+			"ID": "thingtime-private-attachment-cleanup",
+			"Status": "Enabled",
+			"Filter": { "Prefix": "objects/" },
+			"NoncurrentVersionExpiration": { "NoncurrentDays": 30 },
+			"AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+		}
+	]
+}
+```
+
+Presigned URLs work with a private bucket; public access must stay off.
+Production uses the app's hourly Vercel Cron at minute 17. Vercel Cron runs
+Production deployments only, so the `develop` Custom Environment instead needs
+an external hourly scheduler that sends the same exact bearer header to
+`https://dev.thingtime.com/api/v1/attachments/cleanup`. Thingtime uses a
+dedicated AWS EventBridge API Destination for that call; keep its connection
+secret distinct, its invocation role limited to that one destination, and its
+rate at one request/second. Configure the Connection as API-key auth with
+header name `Authorization` and value `Bearer <develop-cron-secret>`. Restrict
+the role trust to `events.amazonaws.com` plus the exact rule `aws:SourceArn`
+and account, and grant only `events:InvokeApiDestination` on the exact API
+Destination ARN. Schedule `cron(17 * * * ? *)`; never put the connection secret
+in the rule payload, repository, or logs. Both paths process at most 1,000 rows with a
+25-second wall-clock budget per pass. Pending cancellations
+that issued a presigned part URL stay conservatively billed through an eight-day,
+lifecycle-backed settlement window. Cleanup then requires two empty
+Abort/ListParts checks at least one hour apart before HEAD verification,
+exact-version deletion, and transactional refund. This prevents a signed part
+PUT that finishes late from escaping tier accounting; the seven-day S3
+incomplete-MPU lifecycle remains a required independent guard.
+An MPU that never issued a part URL has no possible late browser PUT and can be
+refunded promptly after Abort/ListParts/HEAD proves it empty.
 
 ### Notification emails (SES notification stream)
 

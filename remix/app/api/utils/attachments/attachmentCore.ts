@@ -40,11 +40,9 @@ export type AttachmentPublicMetadata = {
 	size: number;
 	contentType: string;
 	mediaKind: AttachmentMediaKind;
-	filenamePreview?: string;
-	// owner-authored presentation metadata for the media's own Thing page and
-	// lightbox — optional, absent on legacy attachments, never empty strings
-	title?: string;
-	description?: string;
+	// present (true) only when the server-side moderation pipeline stamped the
+	// attachment nsfw — the client renders it blurred behind a consent click
+	nsfw?: boolean;
 	// Magic-byte-sniffed MIME type, present only when the served contentType
 	// collapsed to application/octet-stream so downloads can still name the real
 	// container. Server-written at finalization; never client input.
@@ -510,64 +508,14 @@ export const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | 
 		: null;
 };
 
-// Apply owner-authored presentation text to an already-canonical attachment
-// crystal. The magic-byte detector's optional detectedContentType is
-// server-owned metadata: annotation must preserve it exactly, never accept it
-// from the patch and never silently erase it.
-export const applyAttachmentAnnotationPatch = (value: unknown, patch: AttachmentAnnotationPatch): AttachmentMetadataResult => {
-	const before = canonicalAttachmentCrystal(value);
-	if (!before) return { ok: false, error: 'Attachment metadata is not canonical' };
-	const sanitized = sanitizeAttachmentPublicMetadata({
-		name: before.name,
-		size: before.size,
-		contentType: before.contentType,
-		title: patch.title === undefined ? before.title : patch.title,
-		description: patch.description === undefined ? before.description : patch.description,
-		filenamePreview: patch.filenamePreview === undefined ? before.filenamePreview : patch.filenamePreview
-	});
-	if (!sanitized.ok) return sanitized;
-	return {
-		ok: true,
-		crystal: {
-			...sanitized.crystal,
-			// linked crystals keep their declared render hint and external URL —
-			// sanitize re-derives mediaKind from contentType, which only holds for
-			// stored-object crystals
-			...(before.url ? { mediaKind: before.mediaKind, url: before.url } : {}),
-			...(before.detectedContentType ? { detectedContentType: before.detectedContentType } : {})
-		}
-	};
-};
-
-// A moderation status that keeps the attachment out of public projections and
-// the client-facing bound-set contract. Shared with the PATCH attachment sync
-// so the projection and the cover check can never disagree about what a
-// client could possibly have seen.
-export const attachmentModerationHidesFromPublic = (moderation: unknown): boolean => {
-	const status = (moderation as { status?: unknown } | null | undefined)?.status;
-	return status === 'pending' || status === 'blocked';
-};
-
-// `moderation` is the protected root stamp (api/utils/moderation). Pending and
-// blocked attachments never project publicly: pending is the fail-closed
-// quarantine while analysis/retry runs; blocked is the final quarantine.
-// ownerView (the viewer owns this attachment) keeps PENDING visible with a
-// `pending: true` badge so an owner's media never silently vanishes from
-// their own post while analysis runs — blocked stays hidden for everyone,
-// matching the text-thing rule.
-export const toAttachmentPublicMetadata = (
-	id: unknown,
-	crystal: unknown,
-	moderation?: unknown,
-	options: { ownerView?: boolean } = {}
-): AttachmentPublicMetadata | null => {
+// `moderation` is the protected root stamp (api/utils/moderation). Blocked
+// attachments never project publicly — they simply vanish from payloads; the
+// content route separately refuses to serve their bytes.
+export const toAttachmentPublicMetadata = (id: unknown, crystal: unknown, moderation?: unknown): AttachmentPublicMetadata | null => {
 	const canonical = canonicalAttachmentCrystal(crystal);
 	if (typeof id !== 'string' || !id || !canonical) return null;
 	const status = (moderation as { status?: unknown } | null | undefined)?.status;
 	if (status === 'blocked') return null;
-	if (status === 'pending') {
-		return options.ownerView === true ? { id, ...canonical, pending: true as const } : null;
-	}
 	return { id, ...canonical, ...(status === 'nsfw' ? { nsfw: true as const } : {}) };
 };
 

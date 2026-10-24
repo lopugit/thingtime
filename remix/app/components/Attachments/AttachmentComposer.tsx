@@ -453,13 +453,18 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 	const fileTypes = uploadFileTypes(allowedContentTypes, imageOnly);
 	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(attachmentCountLimit(purpose), Math.trunc(maxFiles))) : attachmentCountLimit(purpose);
 	const lopu = useLopu();
+	// Beta upload-approval gate, purpose-aware (PR #310 scopes): public
+	// purposes (post/comment/custom-emoji) need publicUploadsEnabled, private
+	// purposes (message + own profile media) need privateUploadsEnabled. An
+	// explicit false means the server withheld that scope (undefined = stale
+	// cached user or pre-scope server — fall back to the any-scope alias and
+	// let the server 403 decide). The server re-checks on every upload start.
 	const currentUser = useCurrentUser();
-	const workspace = useWorkspaceUser();
-	const localOnly = workspace?.localOnly === true;
-	const saveOnDevice = !!workspace && (localOnly || ['post','comment'].includes(purpose));
-	const uploadScope = attachmentUploadScopeForPurpose(purpose);
-	const scopeEnabled = currentUser ? (uploadScope === 'private' ? currentUser.privateUploadsEnabled : currentUser.publicUploadsEnabled) : undefined;
-	const uploadsNotGranted = !saveOnDevice && scopeEnabled === false;
+	const requiresPrivateScope = purpose === 'message' || purpose === 'profile-avatar' || purpose === 'profile-banner';
+	const scopeEnabled = requiresPrivateScope
+		? currentUser?.privateUploadsEnabled ?? currentUser?.canUploadMedia
+		: currentUser?.publicUploadsEnabled ?? currentUser?.canUploadMedia;
+	const uploadsNotGranted = scopeEnabled === false;
 	const [dragging, setDragging] = React.useState(false);
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
 	const emittedSnapshotRef = React.useRef<AttachmentComposerSnapshot | null>(null);
@@ -554,11 +559,9 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		[boundedMaxFiles, disabled, enqueueFiles, onSelectionError, totalCount, uploadsNotGranted]
 	);
 
-	React.useImperativeHandle(ref, () => ({ markCommitted, addFiles: choose }), [choose, markCommitted]);
-
-	// With the URL adder available, the panel stays useful before upload
-	// approval — file picking is disabled with the note, linked media works.
-	if (uploadsNotGranted && uploads.length === 0 && !allowLinkedUrls) {
+	// Ungated accounts see a quiet approval-pending card instead of a dropzone
+	// that would only collect per-file 403s.
+	if (uploadsNotGranted) {
 		return (
 			<Flex flexDirection="column" rowGap={2} role="group" aria-label={ariaLabel}>
 				<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
@@ -566,15 +569,15 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 				</Text>
 				<Box border={BORDER} borderRadius="var(--tt-radius-md, 12px)" background="var(--tt-surface, #fafafb)" padding={3}>
 					<Text fontSize="12px" color={MUTED} whiteSpace="normal">
-						🔐 {uploadScope === 'private' ? 'Private' : 'Public'} media uploads need admin approval during the beta. After email verification, an
-						admin is notified; uploads unlock as soon as this scope is approved.
+						🔐 Media uploads need admin approval during the beta. An admin has been notified about your account — uploads unlock as
+						soon as you&#39;re approved.
 					</Text>
 				</Box>
 			</Flex>
 		);
 	}
 
-	const storageLabel = saveOnDevice ? 'Up to 16 MiB per file and 64 MiB in this device workspace.' :
+	const storageLabel =
 		storageStatus === 'reconciling'
 			? 'Storage is being verified; the server will check each file.'
 			: storageStatus === 'unavailable'

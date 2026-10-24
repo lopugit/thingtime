@@ -119,49 +119,66 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   keep recording. Docs: `docs/unified-timeline.md` (2026-10-14 section),
   `docs/feature-map/history-and-timeline.md`.
 
-- 2026-10-13 — **Claude (AI)**: Unified Timeline named versions, undo this
-  change, compare with now and version export (`api.timeline` 1.18.0): new
-  `timeline-version-name` relational records behind the `name-version`
-  command (one protected unbilled record per event, every name/rename/clear a
-  metered effect event in the version's branch, page and entry reads carry
-  `names`), `mode: 'undo'` on preview/apply-version through the existing merge
-  engine (committed as a restore labelled `Undid change`, no new operation
-  value), a client-only compare-with-now view over the existing recovery
-  preview, GET `export=1` with its own `timeline.export` limit, and the opt-in
-  `test:timeline:versions` HTTP suite. Details in
-  [docs/unified-timeline.md](../docs/unified-timeline.md#named-versions-undo-compare-with-now-and-export--2026-10-13).
-  PR note: [PRs/993-…](../PRs/993-claude-history-browser-integration--unified-timeline-named-versions-undo-compare-export.md) (PR #993).
-- 2026-10-13 — **Claude (AI)**: Unified Timeline contextual messages. Owner
-  notes, Lopu explanations and derived system lines on every recorded change:
-  new `timeline-note` relational records, `add-note` / `explain-change` /
-  `remove-note` Timeline commands (`api.timeline` 1.17.0, page and entry reads
-  now carry `notes`), a `timeline.explain` rate limit, IndexedDB note cache and
-  offline queue, Changes / Message / Versions tabs in the History detail panel,
-  message bubbles in List / Cards / Frames with a Messages toggle. Details in
-  [docs/unified-timeline.md](../docs/unified-timeline.md#contextual-notes-and-lopu-explanations--2026-10-13)
-  and the PR note
-  [PRs/991-…](../PRs/991-claude-history-browser-integration--unified-timeline-contextual-messages.md)
-  (PR #991).
-- 2026-10-13 — **Codex (AI)**: The Mac node now collects bounded battery and
-  adapter measurements, with detailed publishing negotiated through device
-  state 1.10.0. The device drawer shows battery status in Quick controls,
-  detailed readings under system hardware, and an expandable full Things page
-  shared with the drawer. Device right-click menus open that page. The local
-  Electron build now installs its separately locked MCP helper before building
-  in a fresh worktree and preserves an available installed app signing identity.
-  The shared device page uses context-free layout wrappers so expanding it does
-  not trip the app recovery screen. The installed app footer now identifies its
-  bundled branch and full commit instead of the selected server's deployment.
-  Follow-up: installed-app QA found the selected production server's older
-  device-state contract left every detailed row empty. The paired local Mac
-  now uses a narrow signed Node battery read in both device views, with an
-  adapter registry fallback and live-value acceptance checks in the project
-  guidance. The broad local snapshot remains blocked by XPC policy. The
-  installed signed app now shows real cycles, capacity, voltage and adapter
-  values matching the Mac's IOKit reading in both device views. The Electron
-  dev command now runs an isolated unsigned app beside the installed app,
-  blocks Node service access, and cleans its profile and staged bundles on exit.
-  Details: [PR #990](../PRs/990-codex-mac-battery-monitor-add-detailed-mac-battery-telemetry-and-full-device-things-page.md).
+- **Admin AI-moderation settings + free omni text moderation (2026-08-19,
+  Claude (AI))**: `/admin` → Moderation gains an "AI moderation settings"
+  card choosing the provider per surface — media uploads (default / tiered /
+  free openai-only / claude / off) and post/comment text (default / free
+  openai / off) — stored under `Thingtime.ModerationSettings` and overriding
+  the env default. New text pipeline: post/comment/share `crystal.text` is
+  screened by the free omni endpoint on create and on edit; block-worthy
+  categories quarantine the thing (hidden from feeds/threads/search via
+  `canView` + thread loading), other flags queue an advisory `moderationFlag`
+  with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
+  and its stamps are final for the pipeline. A new hourly cron
+  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute
+  29) retries text moderation lost to mid-flight process deaths or provider
+  outages and drains off-era backlog for free, plus the standard attachment
+  sweep; the admin sweep button runs both batches and the tab shows the text
+  backlog count. Post creation adds a hybrid sync gate: the free omni screen
+  races `TT_TEXT_SCREEN_BUDGET_MS` (default 600ms, `0` disables) before the
+  insert so flagged posts are born stamped (blocked content never renders,
+  even briefly), while timeouts/outages fail open to the async pipeline —
+  moderation can never break posting; a per-instance circuit breaker
+  (3 failures → open, 60s cooldown) skips the omni call during confirmed
+  outages. Fail-closed (owner decision 2026-08-19): when no sync verdict is
+  obtainable while the surface is on, posts are born PENDING — owner-private
+  until the async queue / hourly cron screens and releases them (creation
+  notifications fire at release); `TT_TEXT_SCREEN_BUDGET_MS=0` becomes
+  async-release mode, and the off sweep releases stranded pending docs. Screening now covers ALL omni-judgeable post content in one
+  combined free request: prose + listing text + tags + legacy external image
+  URLs (`crystal.images`, cap 8), closing the unmoderated URL-photos gap.
+
+- **Free omni-moderation first-pass gate (2026-08-19, Claude (AI))**: the
+  moderation pipeline gains a tiered `openai+claude` provider — OpenAI's free
+  `omni-moderation-latest` endpoint screens every image first; clean images
+  stamp `clear` at $0 and only flagged/borderline images escalate to the paid
+  Claude vision call (fail-safes: omni outage → straight to Claude; Claude
+  outage → omni-flagged images stamp `nsfw`/blur instead of pending). New env:
+  `OPENAI_API_KEY` reused for the screen, optional
+  `TT_MODERATION_ESCALATION_SCORE` (default 0.2);
+  `THINGTIME_MODERATION_PROVIDER` accepts `openai+claude` (alias `tiered`) and
+  standalone `openai`, and the unset default picks the tiered pipeline when
+  both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
+  (PR #308 note has details).
+- **`all` branch AI build doctor**: the Build all branch workflow now runs the
+  union build after every input-changed rebuild and, when textually-clean
+  merges collide semantically (duplicate helpers declared by two PRs), repairs
+  the branch with up to three guarded, edit-files-only Claude rounds — the
+  conflict resolver's action pin, model waterfall, and credential-scan
+  posture — committing replayable fixups on `all` itself and re-verifying the
+  build mechanically. Live-fired locally against the real 64-PR union: four
+  collision layers healed to a green build, and the fixups replayed cleanly
+  onto the next rebuild. — Claude (AI), 2026-08-19
+- **`all` wildcard branch automation**: new **Build all branch** control-plane
+  workflow — thin listener `.github/workflows/all-branch.yml` on product
+  branches, implementation plus `build-all-branch.mjs` builder on the
+  protected `github-actions` branch — that deterministically rebuilds the
+  generated `all` branch: `develop` + `main` + every open non-fork PR (stacked
+  branch → branch PRs included, `no-all` label opts out) merged newest-wins
+  with theirs-biased auto-resolution, force-pushed only when the resulting
+  tree actually changes, with an `ALL_BRANCH.md` manifest on the branch
+  recording every merge and skip. See README “Branch automation: the `all`
+  wildcard branch”. — Claude (AI), 2026-08-18
 
 - 2026-09-30 — **Codex (AI)**: Unacknowledged server Action completions can now
   survive locally and synchronize through the shared Timeline outbox without
@@ -2483,6 +2500,42 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   overrides and an explicit prune command. The semantic content-addressed cache
   remains reusable, while older snapshots stay recoverable from Git history.
   — Codex (AI), 2026-08-31
+
+### Added
+
+- **NSFW/TOS media moderation pipeline**: uploaded images are analyzed
+  asynchronously after `complete` (provider-pluggable: Claude API vision via
+  `THINGTIME_MODERATION_PROVIDER=claude`, deterministic `test` provider, or
+  `off`), stamping a protected `moderation` root field on the attachment
+  thing. NSFW media renders behind a heavy blur + red wash with a centered
+  NSFW badge and "Show Anyway" reveal; TOS/illegal verdicts quarantine the
+  media (dropped from public payloads, content route 404s for non-admins)
+  and log a `moderationFlag` thing. New `/admin` → Moderation tab reviews
+  flags (Clear/NSFW/Block overrides, audit-stamped) and runs a bounded
+  analysis sweep via `GET/POST /api/v1/admin/moderation`. See the
+  [PR #308 implementation notes](../PRs/308-claude-nsfw-tos-media-moderation--nsfw-tos-media-moderation-pipeline.md).
+  — Claude (AI), 2026-08-18
+
+- **Beta media-upload approval gate (consolidated with the #301/#310
+  hotfixes)**: uploads are governed by the scoped permissions from PR #310
+  (tri-state `meta.publicUploads` + `meta.privateUploads`; absent =
+  grandfathered, purpose-aware start gate with
+  `public_uploads_not_approved` / `private_uploads_not_approved`). This PR
+  fixes the parallel-gate double-grant hazard by removing the earlier
+  duplicate gate from the upload START path, keeps
+  `PublicUser.canUploadMedia` as the any-scope alias, and ships the composer's
+  purpose-aware 🔐 approval-pending card (public purposes check
+  publicUploadsEnabled, message/profile purposes check privateUploadsEnabled).
+  The already-started parts/complete calls keep one extra any-scope check that
+  still answers `403 { code: "media_upload_not_granted" }`, while abort/delete
+  stay open. The per-account `meta.mediaUpload` / root `secureMediaUpload`
+  grant (Grant/Revoke media on `/admin` → Users, `POST
+  /api/v1/admin/set-media-upload`, the registration request email to
+  `THINGTIME_ADMIN_EMAIL`, and the `grant-media-upload-to-existing-users`
+  grandfathering migration) is retained as an admin-visible grant record; the
+  scopes are the single enforcement path. See the
+  [PR #302 implementation notes](../PRs/302-claude-media-upload-permission-gate--beta-media-upload-permission-gate.md).
+  — Claude (AI), 2026-08-18
 
 ### Fixed
 
