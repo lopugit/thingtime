@@ -11,14 +11,7 @@ import { safeJoin } from '~/utils';
 import { createLatestRevisionAutosave } from './latestRevisionAutosave';
 import type { LatestRevisionAutosaveCoordinator } from './latestRevisionAutosave';
 import { drainThingtimeMutationQueue } from './thingtimeMutationQueue';
-import {
-	hasPersistedThingtimeRuntimeMethods,
-	parseThingtime,
-	parseThingtimeWithDiagnostics,
-	stringifyThingtime,
-	stringifyThingtimeForStorage
-} from './thingtimeSerialization';
-import { createThingtimeSyncChannel, shouldPublishAppliedWrite } from './thingtimeSyncChannel';
+import { createThingtimeSyncChannel } from './thingtimeSyncChannel';
 import type { ThingtimeSyncChannel, ThingtimeSyncPath } from './thingtimeSyncChannel';
 export interface ThingtimeTypes {
 	thingtime: any;
@@ -167,11 +160,6 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		// Applied from another tab's broadcast — never re-published (no echo
 		// loops) and never entered into this tab's undo/redo timeline.
 		fromRemote?: boolean;
-		// Ephemeral view chrome for THIS viewport — what is currently open and
-		// focused here, as opposed to user data or a saved preference. Still
-		// persisted (a reload restores it), but never broadcast, so one tab's
-		// panel/focus state cannot actuate another tab's UI mid-session.
-		tabLocal?: boolean;
 	};
 
 	interface SetThingtimeProps {
@@ -342,6 +330,12 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 			}
 		) => {
 			setThingtimeQueueRef.current.push({ path, value, options, timestamp: Date.now() });
+			// Broadcast local writes so other same-origin tabs converge instead of
+			// clobbering each other on their next full-tree persist. Remote-applied
+			// writes are never re-published.
+			if (!options?.fromRemote) {
+				syncChannelRef.current?.publish(path as ThingtimeSyncPath, value);
+			}
 			if (setThingtimeFlushScheduledRef.current) return;
 			setThingtimeFlushScheduledRef.current = true;
 			queueMicrotask(flushSetThingtimeQueue);
@@ -545,6 +539,28 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 			channel?.close();
 		};
 	}, [storageKey, persistLocal]);
+
+	// Keep the sync channel pointed at the current setThingtime without ever
+	// recreating the channel itself.
+	setThingtimeSyncRef.current = (path, value) => {
+		// Remote writes ride the normal queue (so pre-hydration messages are held
+		// in order) but skip this tab's undo timeline — undo stays per-tab.
+		setThingtime(path, value, { ignoreUndoRedo: true, fromRemote: true });
+	};
+
+	React.useEffect(() => {
+		const channel = createThingtimeSyncChannel({
+			tabId: syncTabIdRef.current as string,
+			serialize: stringify,
+			parse,
+			onRemoteWrite: (path, value) => setThingtimeSyncRef.current?.(path, value)
+		});
+		syncChannelRef.current = channel;
+		return () => {
+			syncChannelRef.current = null;
+			channel?.close();
+		};
+	}, []);
 
 	React.useEffect(() => {
 		const persistence = persistenceRef.current;
