@@ -259,6 +259,21 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		]
 	},
 	{
+		id: 'marketing',
+		label: 'Marketing',
+		icon: '📣',
+		to: '/marketing',
+		children: [
+			{ id: 'marketing-home', label: 'Marketing hub', icon: '🌈', to: '/marketing' },
+			{ id: 'marketing-social', label: 'Social images', icon: '📸', to: '/marketing/social-media' },
+			{ id: 'marketing-landing', label: 'Feature pages', icon: '📄', to: '/marketing/landing' },
+			{ id: 'marketing-guides', label: 'How-to guides', icon: '📘', to: '/marketing/guides' },
+			{ id: 'marketing-walkthroughs', label: 'Walkthroughs', icon: '🖱️', to: '/marketing/walkthroughs' },
+			{ id: 'marketing-compare', label: 'Comparisons', icon: '⚖️', to: '/marketing/compare' },
+			{ id: 'marketing-for', label: 'For every audience', icon: '🎯', to: '/marketing/for' }
+		]
+	},
+	{
 		id: 'docs',
 		label: 'Docs',
 		icon: '📚',
