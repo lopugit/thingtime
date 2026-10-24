@@ -28,6 +28,9 @@ The related
 [trusted developer ecosystem roadmap](../PLAN/trusted-developer-ecosystem-roadmap.md)
 sequences that work. The proposed execution backlog is
 [TODO 27](../TODO/claude-todo/27-trusted-developer-ecosystem.md).
+The separate agent-runtime gap around origin-bound Character checks and
+private task reporting is tracked in
+[TODO 58](../TODO/claude-todo/58-agent-coordination-and-task-reporting.md).
 
 ## Evidence ledger
 
