@@ -98,7 +98,13 @@ Native provider implementation and signed release are tracked separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
 private catalog and negotiates an optional supported native bridge.
 
-## Account content snapshots
+Local account workers are bound to the confirmed root identity generation,
+origin, owner ID and data plane (`app/local-workspace/runtime.client.ts`).
+Expected-actor mismatch now also returns `code: ACTOR_CHANGED`; the existing
+409 refusal remains. A mismatched queue stops before another request and root
+identity refreshes. Temporary/anonymous users do not start account workers, and
+logging in does not adopt anonymous content. See the incomplete
+[local workspace acceptance matrix](../local-workspaces.md).
 
 The internal owner inventory uses `backups/accountSnapshots.ts` and the shared
 `timeline/accountContent.ts` v1 contract for approved profile content and private
@@ -115,39 +121,6 @@ direct IPs. It exercises explicit current-writer restoration,
 concurrent edits, source-vault removal and revoked authentication. HTTP/browser,
 managed profile-media restore and product restore orchestration remain separate gates.
 See [portable backups](../portable-backups.md#account-profile-content-and-private-preferences).
-
-Local account workers are bound to the confirmed root identity generation,
-origin, owner ID and data plane (`app/local-workspace/runtime.client.ts`).
-Expected-actor mismatch now also returns `code: ACTOR_CHANGED`; the existing
-409 refusal remains. A mismatched queue stops before another request and root
-identity refreshes. Temporary/anonymous users do not start account workers, and
-logging in does not adopt anonymous content. See the incomplete
-[local workspace acceptance matrix](../local-workspaces.md).
-
-Offline account roots contain only a local workspace pointer and `user: null`
-(`local-workspace/rootFallback.ts`), never a cached authenticated profile. Local
-and remote leases are separate. `createRootDataLoader` installs workspace binding
-only after its latest-request fence; a stale success/failure cannot change a
-newer pointer. `useWorkspaceUser` is content identity only. Legacy anonymous tree
-hydration does not silently claim data for an account. Test `test:root-data`,
-`test:local-workspace` and `test:autosave` for these boundaries.
-
-Delegated composer APIs and explicit Character submissions capture their local
-workspace lease when the callback is created (`characterRequest.client.ts`,
-`useApi.tsx`, `useAsyncFetcher.tsx`). A retained callback cannot acquire a later
-root account or database; remote confirmation is checked again for each request.
-`characterCallbacks.test.ts` exercises the real submission hook, while
-`characterDelegation.test.ts` covers the API facade, confirmation loss and
-same-account/new-generation retirement. This does not grant delegated offline
-workspace access or queue Character writes as the owner.
-
-
-The opt-in `drafts/workspaceSwitch.browser.test.ts` uses the actual account switcher
-and identity BroadcastChannel across three clean browser tabs. Held device reads
-and a delayed successful private-comment response cannot enter the next account;
-the original account retains edits, recovery sources and exactly one acknowledged
-comment. This is local account-switch acceptance, not coverage of every origin,
-data-plane or editor transition. Setup: [local workspaces](../local-workspaces.md#native-cross-tab-draft-isolation--2026-10-17).
 
 ## AI provider model availability
 
@@ -305,7 +278,7 @@ requires dry-run/confirmation, checks exact identity and idle account state, and
 deletes account/bootstrap/auth records atomically in the home DB. It cannot
 accept arbitrary target accounts. Delivery and migration audit records remain.
 
-OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpenAiCredential` through the existing admin credentials route and `PlatformCredentials.tsx`. It is same-origin, admin-only and create-only; `api.admin-ci-credentials` 3.1.1 is negotiated before use. The sole source is server `OPENAI_API_KEY`, and the destination is `OpenAI` / `OPENAI_THINGTIME_API_KEY`.
+OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpenAiCredential` through the existing admin credentials route and `PlatformCredentials.tsx`. It is same-origin, admin-only and create-only; `api.admin-ci-credentials` 3.1.0 is negotiated before use. The sole source is server `OPENAI_API_KEY`, and the destination is `OpenAI` / `OPENAI_THINGTIME_API_KEY`.
 
 
 ## Local ChatGPT plan connections

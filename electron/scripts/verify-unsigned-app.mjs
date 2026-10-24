@@ -1,5 +1,4 @@
 import { verifyPasswordProvider } from './verify-password-provider.mjs';
-import { existsSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -30,5 +29,4 @@ await verifyUnsignedArtifacts({
     runtimePath
 });
 await verifyPasswordProvider(path.join(contentsPath, 'Helpers/Thingtime Passwords.app'), { unsigned: true });
-verifyAgentPackage(appPath, undefined, { required: true });
 console.log(`Verified unsigned Thingtime app ${appPath}`);

@@ -97,8 +97,6 @@ export const useThingSource = ({
 	const sourceKey = JSON.stringify(source || null);
 	const active = !!source && interactive;
 	const canRun = runtime.canRunSources || !!runtime.sharedRun;
-	const liveStream = source?.refresh === 'live' ? source.stream : undefined;
-	const liveSourceValid = !!liveStream && validateLiveSourceStream(liveStream);
 	// inputs interpolate {arg} tokens against the args and {query.x} against
 	// the URL — the same substitution the template itself gets
 	const inputsKey = JSON.stringify({ i: source?.inputs || null, a: argValues, q: runtime.query });
@@ -114,12 +112,10 @@ export const useThingSource = ({
 			identity: runtime.identity,
 			binding,
 			status: (!active ? 'inert' : !canRun ? 'signed-out' : 'loading') as ThingSourceState,
-			result: active && canRun && !runtime.sharedRun && (source?.refresh !== 'live' || liveSourceValid)
-				? readSourceCache(runtime.cacheScope, runtime.pageId, cacheId, binding)
-				: undefined,
+			result: active && canRun && !runtime.sharedRun ? readSourceCache(runtime.cacheScope, runtime.pageId, cacheId, binding) : undefined,
 			error: null as string | null
 		}),
-		[runtime.identity, binding, active, canRun, runtime.sharedRun, runtime.cacheScope, runtime.pageId, cacheId, liveSourceValid, source?.refresh]
+		[runtime.identity, binding, active, canRun, runtime.sharedRun, runtime.cacheScope, runtime.pageId, cacheId]
 	);
 	const [storedState, setState] = React.useState(initial);
 	// A new target must never render the preceding target's controls, even
@@ -282,7 +278,7 @@ export const useThingSource = ({
 		canRun,
 		runtime.sharedRun,
 		runtime.identity,
-		sourceLoader,
+		runtime.load,
 		cacheScope,
 		sourceKey,
 		inputsKey,

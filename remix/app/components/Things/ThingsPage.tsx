@@ -1,3 +1,8 @@
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
+import { LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
+import { openThingHistory, TimelineLibrary } from '~/components/Timeline/TimelineHost';
+import { isManagedLibraryThing, isTopLevelLibraryThing } from './thingsCore';
+import { FilesystemThingsPage } from './FilesystemThingsBrowser';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
@@ -84,7 +89,34 @@ const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
 };
 
 export const ThingsPage = () => {
-  const user = useCurrentUser();
+  const [params] = useSearchParams();
+  if (params.get('activity') === '1') return <ActivityManagerPage />;
+  if (params.get('unfiled') === 'attachments') return <UnfiledAttachmentsPage />;
+  const folder = params.get('folder');
+  return folder?.startsWith('timeline-folder-') ? <TimelineLibrary folderId={folder} storage={params.get('historyStorage') === 'home' ? 'home' : 'selected'} /> : <ThingsPageContents />;
+};
+
+const ThingsPageContents = () => {
+  const [params] = useSearchParams();
+  const scope = useWorkspaceScope();
+  return params.has("files") ? <FilesystemThingsPage /> : <ThingsLibraryPage key={scope} />;
+};
+
+const ThingsLibraryPage = () => {
+  const user = useWorkspaceUser();
+  const [importOpen, setImportOpen] = useState(false);
+  const [importBundle, setImportBundle] = useState<TransferBundle | null>(null);
+  const [importDestination, setImportDestination] = useState<string | null>(null);
+  const [exportIds, setExportIds] = useState<string[]>([]);
+  const transferOperation = useRef<AbortController | null>(null);
+  const transferAccount = useRef(user?.id);
+  useEffect(() => {
+    if (transferAccount.current !== user?.id) {
+      transferAccount.current = user?.id;
+      setImportOpen(false); setImportBundle(null); setExportIds([]); setClipboard(null);
+    }
+    return () => { transferOperation.current?.abort(); };
+  }, [user?.id]);
   const api = useApi();
   const lopu = useLopu();
   const navigate = useNavigate();

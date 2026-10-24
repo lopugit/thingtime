@@ -1,5 +1,4 @@
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
-import { agentTestEnvironment } from '../../app/api/utils/agentTesting';
 
 const MONGO_PASSWORD_PLACEHOLDER = '<db_password>';
 
@@ -112,7 +111,6 @@ const cloneProxyRequestHeaders = (request: Request, fallbackUrl: URL) => {
 };
 
 export const proxyApiRequestToFallback = async (request: Request, options: { stripForwardedOrigin?: boolean } = {}) => {
-  if (process.env.THINGTIME_AGENT_TEST_MODE === '1') return Response.json({ ok: false, error: 'Isolated tests cannot use an API fallback.' }, { status: 503 });
   const requestUrl = new URL(request.url);
   // Direct callers cannot bypass the dispatcher's policy.
   if (!shouldProxyApiToFallback(request)) return unavailableLocalApiResponse();

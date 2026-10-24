@@ -5,8 +5,6 @@ import { rootIdentity } from '../../utils/rootIdentity';
 import { resolveAccountWebpage } from '../../local-workspace/accountApi.client';
 import { currentAccountWorkspace, isAnonymousWorkspace } from '../../local-workspace/runtime.client';
 import { resolveLocalWebpage } from '../../local-workspace/api.client';
-import { hasLiveSourceBinding } from '~/schemas/liveSources';
-import { requiresEditableBlockContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
 import React from 'react';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';

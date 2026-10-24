@@ -1,7 +1,4 @@
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
-import { LIVE_SOURCES } from '~/schemas/liveSources';
-import { templateToBlocks } from './templateBlocks';
-import { collectBlockIds, newBlockId } from './webpageBlocks';
 import { HEIC_IMAGE_ACCEPT } from '../Attachments/heicImage';
 import React from 'react';
 import { Box, Button, Flex, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
