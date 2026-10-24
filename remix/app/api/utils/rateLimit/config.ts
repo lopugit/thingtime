@@ -185,83 +185,12 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // login attempts (password step and OTP step share the endpoint): bounds
   // credential stuffing and OTP-email sends beyond the per-challenge attempt cap
   'auth.login': { limit: 30, windowMs: 60_000, enabled: true },
-  // passkey ceremonies: options endpoints only mint signed challenge cookies
-  // (cheap, but unauthenticated), verify endpoints do signature checks + at
-  // most one session mint — bound both like login. Management (register/
-  // rename/revoke/delete) is session-authed and keyed by user.
-  'auth.passkeyOptions': { limit: 60, windowMs: 60_000, enabled: true },
-  'auth.passkeyLogin': { limit: 30, windowMs: 60_000, enabled: true },
-  'auth.passkeyManage': { limit: 30, windowMs: 60_000, enabled: true },
-  // cross-deployment auto-login suggestions: resolves at most a handful of
-  // roster/session docs per call, unauthenticated, so bound per IP
-  'auth.accountHints': { limit: 60, windowMs: 60_000, enabled: true },
-  // federated flavor of the above: other Thingtime deployments' pages read it
-  // cross-origin (same-site credentials), so it gets its own IP bucket
-  'auth.hintsResolve': { limit: 60, windowMs: 60_000, enabled: true },
-  // cross-origin session handoff: minting is session-authed (user-keyed) and
-  // each code is single-use + 2-minute TTL; redemption is anonymous (IP)
-  'auth.ssoHandoff': { limit: 20, windowMs: 60_000, enabled: true },
-  'auth.ssoSession': { limit: 20, windowMs: 60_000, enabled: true },
-  // FedCM: browser-mediated fetches (Sec-Fetch-Dest: webidentity). Accounts
-  // reads are roster lookups; assertions mint at most one code/token each.
-  'fedcm.accounts': { limit: 120, windowMs: 60_000, enabled: true },
-  'fedcm.assertion': { limit: 20, windowMs: 60_000, enabled: true },
-  // public sign-up: anonymous bcrypt + user-doc writes, every success emails
-  // the supplied address (mail-bomb + enumeration surface like the other auth
-  // mailers), and it's an awaited ensureIndexes bootstrap caller — throttling
-  // keeps retries from re-running the index battery too. Keyed by IP; roomy
-  // enough for a human fumbling taken usernames, tight for account farming.
-  'auth.register': { limit: 10, windowMs: 15 * 60_000, enabled: true },
-  // First-session /things bootstrap: every success creates a durable user,
-  // session, roster entry, and subscription ledger. Reuse is checked before
-  // this bucket, so five creations per IP/day is generous for cookie loss and
-  // deliberately tight against anonymous account farming. Fail-closed route.
-  'auth.temporary': { limit: 5, windowMs: 24 * 60 * 60_000, enabled: true },
-  // personal-access-token minting (POST /api/v1/tokens) — session-authed, but
-  // each mint writes a session doc, so bound accumulation beyond the per-user
-  // token cap
-  // Lopu model catalog (GET /api/v1/ai/models) — public read of a code-backed
-  // list plus one indexed row scan; browse-shaped, anonymous callers key by IP
-  'ai.chatgpt-plan': { limit: 120, windowMs: 60_000, enabled: true },
-  'ai.models': { limit: 120, windowMs: 60_000, enabled: true },
-  'ai.complete': { limit: 20, windowMs: 600_000, enabled: true },
-  // admin catalog toggles, on-demand re-seed and provider-key re-check
-  // (POST /api/v1/admin/ai/models { id, enabled } | { seed } | { probe }) —
-  // the seed is a batch write and the probe dials the providers (5 s cap
-  // each); enforced fail-closed at the route
-  'admin.ai.models': { limit: 30, windowMs: 60_000, enabled: true },
-  // Thingtime.LopuChatDefaults singleton (GET public / POST admin) — a rare
-  // interactive read/save; the public GET keys anonymous callers by IP and
-  // the admin POST is enforced fail-closed at the route
-  'settings.lopu-prompt': { limit: 30, windowMs: 60_000, enabled: true },
-  'settings.lopu-chat-defaults': { limit: 30, windowMs: 60_000, enabled: true },
-  // Thingtime.LopuAccess singleton (GET public / POST admin) — the client
-  // reads it to render the locked state; the admin POST fails closed
-  'settings.lopu-access': { limit: 30, windowMs: 60_000, enabled: true },
-  // Lopu verified access + credits, admin side (verified-access design note
-  // §1/§3): the per-user verify toggle, the accounts directory, and credit
-  // grants / request approvals — bounded interactive admin actions, the
-  // writes enforced fail-closed at the route
-  'admin.users.lopu-access': { limit: 60, windowMs: 60_000, enabled: true },
-  'admin.lopu.accounts': { limit: 60, windowMs: 60_000, enabled: true },
-  'admin.lopu.credits': { limit: 60, windowMs: 60_000, enabled: true },
-  'tokens.mint': { limit: 30, windowMs: 3_600_000, enabled: true },
-  // PAT listing aggregates the user's pat sessions — bounded like oauth.grants
-  'tokens.read': { limit: 60, windowMs: 60_000, enabled: true },
-  // PAT revocation — cheap owner-bound update, still bounded
-  'tokens.revoke': { limit: 60, windowMs: 60_000, enabled: true },
   // Cross-deployment account links. Linking/unlinking makes the SERVER dial
   // whatever base URL the caller supplied (login probe + identity check) — the
   // same outbound-fetch abuse surface as mongodb.endpoint, so the window stays
   // tight and the routes enforce fail-closed. Token minting shares the key
   // (each mint writes a never-expiring session doc).
   'deployments.link': { limit: 10, windowMs: 300_000, enabled: true },
-  // Editing a link you already hold (name, sync mode, path rules) dials
-  // NOTHING — it rewrites one row in the caller's own secure blob. It gets its
-  // own budget because the settings pane sends one PATCH per sync-mode tap and
-  // per path-rule save: on the dial budget above, configuring a couple of links
-  // exhausts the window and locks the same user out of linking and unlinking.
-  'deployments.update': { limit: 60, windowMs: 60_000, enabled: true },
   // One sync pass fans out up to ~40 writes against the linked deployment plus
   // paginated reads on both sides — heavier than any single API call, so the
   // per-user budget is small (fail-closed at the route). Passes are resumable,
