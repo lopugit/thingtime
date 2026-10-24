@@ -1,4 +1,6 @@
-import { json, requireJsonContentType } from '~/api/http';
+import { vaultWriteResponse } from './write';
+import { vaultMetadataResponse } from './metadata';
+import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import {
 	createUserVaultGroup,
@@ -37,6 +39,10 @@ export const action = async ({ request }: { request: Request }) => {
   if (body?.expectedOwnerId !== undefined && body.expectedOwnerId !== user.id) return json({ ok: false, error: 'Your Thingtime account changed. Reload before saving.' }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
 	try {
 		switch (body?.action) {
+			case 'sync-write':
+                return vaultWriteResponse(request, user.id, body);
+			case 'sync-metadata':
+				return vaultMetadataResponse(request, user.id, body);
 			case 'create-group':
 				return json({ ok: true, group: await createUserVaultGroup(user.id, body) }, { headers: NO_STORE });
 			case 'save-secret':

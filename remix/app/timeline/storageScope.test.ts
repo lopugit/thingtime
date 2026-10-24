@@ -57,6 +57,21 @@ test('shared home sessions upload once and releasing selected history cannot sto
 	reopened.release(); await backend.close();
 });
 
+test('device History without a remote folder upgrades one shared connection without accepting a conflicting folder', async () => {
+ const backend=new IndexedDbTimelineBackend(new IDBFactory());
+ const pool=new TimelineConnectionPool((scope,folderId)=>{
+  const store=new TimelineLocalStore(scope,backend),branches=new TimelineBranchStore(scope,backend),notes=new TimelineNoteStore(scope,backend),names=new TimelineNameStore(scope);
+  return {scope,folderId,store,branches,notes,names,sync:new TimelineSync(store,{push:async event=>entryFixture(event),page:async()=>({entries:[],nextBefore:null,nextAfter:null})},branches)};
+ });
+ const scope={...home,delegatedBy:'principal'},device=pool.acquire(scope,'');
+ await device.connection.store.enqueue(eventFixture());
+ const found=pool.acquire(scope,'verified-folder');assert.equal(found.connection,device.connection);
+ assert.equal(found.connection.folderId,'verified-folder');assert.equal((await found.connection.store.pending()).length,1);
+ const offline=pool.acquire(scope,'');assert.equal(offline.connection.folderId,'verified-folder');
+ assert.throws(()=>pool.acquire(scope,'different-folder'),/folder changed/);
+ device.release();found.release();offline.release();await backend.close();
+});
+
 test('identical event ids in different databases remain separate through pending replay and cache eviction', async () => {
 	const backend = new IndexedDbTimelineBackend(new IDBFactory());
 	const uploads: string[] = [];

@@ -46,7 +46,10 @@ export const transferFilesystem = async (clipboard: FileClipboard, destination: 
         if (item.inode && item.inode.type !== 'file') throw new Error('Links and special files cannot be transferred.');
         if (!item.inode && !item.thingtime.includes('attachment')) throw new Error('This folder contains other Things. Use the main Things copy action to preserve them.');
         const size = item.inode?.size ?? Number(item.crystal.size);
-        if (!Number.isSafeInteger(size) || size < 0 || size > FILESYSTEM_MAX_BYTES || (bytes += size) > 128 * 1024 * 1024) throw new Error('Choose files up to 32 MiB each and 128 MiB total.');
+        if (!Number.isSafeInteger(size) || size < 0) throw new Error('A source file has invalid size metadata.');
+        // Paired-device commands still use their bounded wire buffers. Native
+        // Thingtime copies pass immutable File/Blob handles between adapters.
+        if ((item.inode || destination.deviceId) && (size > FILESYSTEM_MAX_BYTES || (bytes += size) > 128 * 1024 * 1024)) throw new Error('Paired-device transfers support files up to 32 MiB each and 128 MiB total.');
         result.push({ item });
       }
     }

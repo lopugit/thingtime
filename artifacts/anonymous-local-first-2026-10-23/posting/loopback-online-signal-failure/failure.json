@@ -1,0 +1,413 @@
+{
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\n\nOffline account workspace. Local edits are available; account sync is paused until your session is verified.\n\nReconnect\nReview sync\n\n1 draft change saved on this device. Waiting for verified account sync. Posting is independent.\n\nReview draft sync\nTHINGTIME · POSTS SAVED ON THIS DEVICE\nFeed 📰\n⏱️ Latest\nOn this device\n🪐 My subspaces\nFilters\nPost as\nOffline account workspace\n\nDraft saved on this device ✓\n\nLoad drafts & templates\n📝 Text\n🖼️ Photos\n🏪 Marketplace\n📦 Things\n🗳️ Poll\n🌈\nMy native draft survives an offline restart.\n↶\n↷\nChanges\n🪐 No subspace\nLoading…\n🌐 Public\n🤝 Friends\n🏡 Family\n🔒 Private\n🕵️ Anyone with the link\n🎭 Custom\nPost ✨\n\nShowing posts created or retained in this device workspace. This is a partial view; community updates and current access changes need a connection.\n\n🪐\n\nNo posts saved in this device workspace match these filters.\n\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 22ms\n\nMongoDB: connected (25ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister",
+  "errors": [],
+  "offlineWrites": [],
+  "failedDraftWrites": 0,
+  "routeErrors": [],
+  "responses": [
+    {
+      "path": "/api/root-data",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 200
+    }
+  ]
+}

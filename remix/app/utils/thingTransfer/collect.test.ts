@@ -60,3 +60,21 @@ test('export options are honored, external folder placement is detached, source 
   assert.equal(bundle.manifest.things[0].folderId, undefined);
   assert.equal(doc.folderId, 'outside');
 });
+
+test('Blob collection preserves file identity and metadata across asynchronous hashing', async context => {
+  const doc = make('note');
+  const entry = { id: 'original', name: 'original.bin', mime: 'application/octet-stream', data: new Blob([new Uint8Array([1, 2, 3])]) };
+  const original = Blob.prototype.arrayBuffer;
+  context.mock.method(Blob.prototype, 'arrayBuffer', function(this: Blob) {
+    entry.id = 'changed'; entry.name = 'changed.bin'; doc.crystal.name = 'Changed';
+    return original.call(this);
+  });
+  const bundle = await collectTransfer(['note'], {
+    ...provider([doc]), files: async function* () { yield entry; }
+  });
+  assert.equal(bundle.manifest.files[0].id, 'original');
+  assert.equal(bundle.manifest.files[0].name, 'original.bin');
+  assert.equal(bundle.manifest.things[0].crystal.name, 'note');
+  assert.deepEqual([...bundle.files.keys()], ['original']);
+  assert.deepEqual(new Uint8Array(await bundle.files.get('original')!.arrayBuffer()), new Uint8Array([1, 2, 3]));
+});

@@ -1,0 +1,306 @@
+{
+  "account": true,
+  "runId": "380ed248-1bfb-4c63-8db8-3678a53a28cb",
+  "sourceRoot": "79349ec8-5402-4198-9be9-f273f5415c8b",
+  "copyRoot": "d1898674-dfae-49f1-98ac-a57fa64cdb11",
+  "sourcePost": "0316054c-7d10-45e0-905f-cfc7cc0437a2",
+  "copyPost": "fd9e09a0-e9b4-4dbc-b918-9825985ba9e2",
+  "nativeImport": true,
+  "coldOfflineReload": true,
+  "mixedOrder": true,
+  "exactMetadata": true,
+  "exactStoredBytes": true,
+  "canonicalExportReimport": true,
+  "independentIds": true,
+  "noExternalUrlFetch": true,
+  "lostRequestId": "19f17111-44ed-4899-bcbb-3bf9f31e8dfa",
+  "lostReceipt": {
+    "ok": true,
+    "attachment": {
+      "id": "att_b7cedfc321dc7bc38cf8ea3ebd958d3928a72229de539b72f6b5d925e1ef3c18",
+      "name": "second.txt",
+      "size": 0,
+      "contentType": "text/plain",
+      "mediaKind": "file",
+      "url": "https://gallery.example.test/second.txt?view=2"
+    },
+    "updatedAt": "2026-10-23T09:16:04.200Z"
+  },
+  "linkAttempts": [
+    {
+      "requestId": "19f17111-44ed-4899-bcbb-3bf9f31e8dfa",
+      "url": "https://gallery.example.test/second.txt?view=2",
+      "mediaKind": "file",
+      "purpose": "post"
+    },
+    {
+      "requestId": "19f17111-44ed-4899-bcbb-3bf9f31e8dfa",
+      "url": "https://gallery.example.test/second.txt?view=2",
+      "mediaKind": "file",
+      "purpose": "post"
+    },
+    {
+      "requestId": "33aa91f8-f990-48ae-a021-5242c4983978",
+      "url": "https://gallery.example.test/first.txt?view=1#leaf",
+      "mediaKind": "file",
+      "purpose": "post"
+    },
+    {
+      "requestId": "c61a0af7-b9d2-4046-80cb-5d1b59e00981",
+      "url": "https://gallery.example.test/first.txt?view=1#leaf",
+      "mediaKind": "file",
+      "purpose": "post"
+    },
+    {
+      "requestId": "fca005cc-60cd-4aaa-9652-578023e79db4",
+      "url": "https://gallery.example.test/second.txt?view=2",
+      "mediaKind": "file",
+      "purpose": "post"
+    },
+    {
+      "requestId": "19f17111-44ed-4899-bcbb-3bf9f31e8dfa",
+      "url": "https://gallery.example.test/second.txt?view=2",
+      "mediaKind": "file",
+      "purpose": "post"
+    },
+    {
+      "requestId": "19f17111-44ed-4899-bcbb-3bf9f31e8dfa",
+      "url": "https://gallery.example.test/second.txt?view=2",
+      "mediaKind": "file",
+      "purpose": "post"
+    }
+  ],
+  "privateGuestRefusal": true,
+  "bounds": [
+    {
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "width": 320,
+      "scrollWidth": 320
+    }
+  ],
+  "writes": [
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/uploads",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/uploads/parts",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/local-object",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/attachments/uploads/complete",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/uploads",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/uploads/parts",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/local-object",
+      "offline": false
+    },
+    {
+      "path": "/api/v1/attachments/uploads/complete",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/link",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/link",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/link",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/link",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/annotate",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/annotate",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/link",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/annotate",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/link",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/link",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/attachments/annotate",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "actor": "6adb25a98d76baae4ed90207",
+      "plane": "home"
+    }
+  ],
+  "externalRequests": [],
+  "errors": []
+}

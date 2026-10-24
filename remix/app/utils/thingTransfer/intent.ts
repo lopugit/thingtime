@@ -1,7 +1,7 @@
 /** Tab-memory only. Clipboard/archive text never carries authority to move.
  * Root account changes revoke both saved intent and in-flight copy tickets. */
 export const createTransferIntent = () => {
-  type Intent = Readonly<{ ownerId: string; digest: string; ids: readonly string[] }>;
+  type Intent = Readonly<{ ownerId: string; destination: string; digest: string; ids: readonly string[] }>;
   let ownerId: string | undefined;
   let epoch = 0;
   let intent: Intent | null = null;
@@ -9,15 +9,15 @@ export const createTransferIntent = () => {
     account(next: string | undefined) {
       if (next !== ownerId) { ownerId = next; epoch++; intent = null; }
     },
-    ticket(owner: string | undefined) { return owner && owner === ownerId ? { ownerId: owner, epoch } : null; },
-    record(ticket: { ownerId: string; epoch: number } | null, digest: string, ids: string[]) {
+    ticket(owner: string | undefined, destination = 'selected') { return owner && owner === ownerId ? { ownerId: owner, epoch, destination } : null; },
+    record(ticket: { ownerId: string; epoch: number; destination: string } | null, digest: string, ids: string[]) {
       if (!ticket || ticket.ownerId !== ownerId || ticket.epoch !== epoch) return false;
-      intent = Object.freeze({ ownerId: ticket.ownerId, digest, ids: Object.freeze([...new Set(ids)]) });
+      intent = Object.freeze({ ownerId: ticket.ownerId, destination: ticket.destination, digest, ids: Object.freeze([...new Set(ids)]) });
       return true;
     },
-    peek(owner: string | undefined) { return owner && owner === ownerId ? intent : null; },
-    match(owner: string | undefined, digest: string) {
-      return owner && owner === ownerId && intent?.digest === digest ? intent : null;
+    peek(owner: string | undefined, destination = 'selected') { return owner && owner === ownerId && intent?.destination === destination ? intent : null; },
+    match(owner: string | undefined, digest: string, destination = 'selected') {
+      return owner && owner === ownerId && intent?.destination === destination && intent.digest === digest ? intent : null;
     },
     settle(expected: Intent, succeeded: readonly string[]) {
       if (intent !== expected) return;

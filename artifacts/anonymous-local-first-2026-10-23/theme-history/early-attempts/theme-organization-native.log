@@ -1,0 +1,60 @@
+✖ native library moves, drains and deletes private account themes offline with independent conditional synchronization (5350.84279ms)
+✖ anonymous native library preserves folder contents and deletes the applied theme fully offline without any account writes (30091.003336ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 37178.870932
+
+✖ failing tests:
+
+test at app/local-workspace/accountThemeOrganization.browser.test.ts:2:1271
+✖ native library moves, drains and deletes private account themes offline with independent conditional synchronization (5350.84279ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  401 !== 200
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountThemeOrganization.browser.test.ts:106:12)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 401,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/local-workspace/accountThemeOrganization.browser.test.ts:2:10785
+✖ anonymous native library preserves folder contents and deletes the applied theme fully offline without any account writes (30091.003336ms)
+  locator.click: Timeout 20000ms exceeded.
+  Call log:
+    - waiting for getByRole('menuitem', { name: 'Import into my Things…', exact: true })
+      - locator resolved to <button tabindex="0" type="button" data-index="2" role="menuitem" id="menu-list-_r_2_-menuitem-_r_9_" class="chakra-menu__menuitem cha-5ck06g">Import into my Things…</button>
+    - attempting click action
+      2 × waiting for element to be visible, enabled and stable
+        - element is not stable
+      - retrying click action
+      - waiting 20ms
+      2 × waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - element is outside of the viewport
+      - retrying click action
+        - waiting 100ms
+      36 × waiting for element to be visible, enabled and stable
+         - element is visible, enabled and stable
+         - scrolling into view if needed
+         - done scrolling
+         - element is outside of the viewport
+       - retrying click action
+         - waiting 500ms
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountThemeOrganization.browser.test.ts:308:86) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('menuitem', { name: 'Import into my Things…', exact: true })", '    - locator resolved to <button tabindex="0" type="button" data-index="2" role="menuitem" id="menu-list-_r_2_-menuitem-_r_9_" class="chakra-menu__menuitem cha-5ck06g">Import into my Things…</button>', '  - attempting click action', '    2 × waiting for element to be visible, enabled and stable', '      - element is not stable', '    - retrying click action', '    - waiting 20ms', '    2 × waiting for element to be visible, enabled and stable', '      - element is visible, enabled and stable', '      - scrolling into view if needed', '      - done scrolling', '      - element is outside of the viewport', '    - retrying click action', '      - waiting 100ms', '    36 × waiting for element to be visible, enabled and stable', '       - element is visible, enabled and stable', '       - scrolling into view if needed', '       - done scrolling', '       - element is outside of the viewport', '     - retrying click action', '       - waiting 500ms' ]
+  }

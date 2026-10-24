@@ -1,5 +1,5 @@
 import React from 'react';
-import { useSharedMediaUrl } from '../Sharing/SharedMedia';
+import { useSharedAccess, useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Download, ListMusic } from 'lucide-react';
 
@@ -8,6 +8,7 @@ import { readOfflineAudio, removeOfflineAudio, saveOfflineAudio } from './audioP
 import { nextQueuedAudioIndex } from './audioPlaybackCore';
 import type { PublicAttachment } from './attachmentTypes';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { localMediaId } from '~/local-workspace/media';
 import { RecordingTranscript } from './RecordingTranscript';
 
 const BORDER = '1px solid var(--tt-border, #ececef)';
@@ -26,6 +27,7 @@ const releaseAudio = (audio: HTMLAudioElement) => {
 
 export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attachments: PublicAttachment[]; compact?: boolean }) => {
 	const mediaUrl = useSharedMediaUrl();
+	const shared = useSharedAccess();
 	const user = useCurrentUser();
 	const audioRef = React.useRef<HTMLAudioElement | null>(null);
 	const [activeIndex, setActiveIndex] = React.useState(0);
@@ -41,6 +43,8 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 	const activeId = active?.id || '';
 	const activeLinkedUrl = active?.url || '';
 	const viewerId = user?.id || null;
+	const deviceAudio = !!active && !!localMediaId(attachmentMediaSrc(active));
+	const cacheAllowed = !deviceAudio && !shared.key && !shared.sharedRoot;
 
 	React.useEffect(() => {
 		const audio = audioRef.current;
@@ -50,7 +54,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 	}, []);
 
 	React.useEffect(() => {
-		if (!activeId || activeLinkedUrl) {
+		if (!activeId || activeLinkedUrl || !cacheAllowed) {
 			setOfflineCopy(null);
 			setOfflineAvailable(false);
 			setUsingOffline(false);
@@ -68,7 +72,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 		return () => {
 			cancelled = true;
 		};
-	}, [activeId, activeLinkedUrl, viewerId]);
+	}, [activeId, activeLinkedUrl, viewerId, cacheAllowed]);
 
 	React.useEffect(() => {
 		if (!usingOffline || !offlineCopy) {
@@ -80,7 +84,8 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 		return () => URL.revokeObjectURL(url);
 	}, [offlineCopy, usingOffline]);
 
-	const source = active ? offlineUrl || mediaUrl(attachmentMediaSrc(active)) : '';
+	const source = active ? (cacheAllowed ? offlineUrl : null) || mediaUrl(attachmentMediaSrc(active)) : '';
+	React.useEffect(() => { setPlaybackError(null); }, [source]);
 	const sourceType = active ? attachmentPlaybackContentType(active) : '';
 
 	React.useEffect(() => {
@@ -106,7 +111,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 	}, []);
 
 	const saveActiveOffline = React.useCallback(async () => {
-		if (!active || active.url || savingOffline) return;
+		if (!active || active.url || savingOffline || !cacheAllowed) return;
 		setSavingOffline(true);
 		setPlaybackError(null);
 		try {
@@ -120,10 +125,10 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 		} finally {
 			setSavingOffline(false);
 		}
-	}, [active, savingOffline, viewerId, mediaUrl]);
+	}, [active, savingOffline, viewerId, mediaUrl, cacheAllowed]);
 
 	const clearActiveOffline = React.useCallback(async () => {
-		if (!active || active.url) return;
+		if (!active || active.url || !cacheAllowed) return;
 		try {
 			await removeOfflineAudio(active.id, viewerId);
 			setUsingOffline(false);
@@ -132,7 +137,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 		} catch {
 			setPlaybackError('Thingtime could not remove the saved offline copy.');
 		}
-	}, [active, viewerId]);
+	}, [active, viewerId, cacheAllowed]);
 
 	if (!active) return null;
 
@@ -166,7 +171,8 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 						if (next !== null) selectTrack(next, true);
 					}}
 					onError={() => {
-						if (offlineUrl) {
+						if (!source) return;
+						if (cacheAllowed && offlineUrl) {
 							setUsingOffline(false);
 							setPlaybackError('The saved copy could not be decoded. Streaming will be used instead.');
 							return;
@@ -174,11 +180,12 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 						setPlaybackError('This browser could not decode this audio codec. You can still download the original file.');
 					}}
 				>
-					<source src={source} type={sourceType} />
+					{source ? <source src={source} type={sourceType} /> : null}
 				</audio>
 			</Box>
 
-			{!active.url ? (
+			{deviceAudio && !shared.key && !shared.sharedRoot ? <Text mt={2} fontSize="10px" color={MUTED}>Saved on this device</Text> : null}
+			{!active.url && cacheAllowed ? (
 				<Flex mt={2} columnGap={2} rowGap={1} flexWrap="wrap" alignItems="center">
 					{offlineAvailable ? (
 						<>
@@ -202,7 +209,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 
 			<Button
 				as="a"
-				href={mediaUrl(active.url || attachmentContentUrl(active.id, true))}
+				href={mediaUrl(active.url || attachmentContentUrl(active.id, true)) || undefined}
 				{...(active.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: active.name })}
 				mt={2}
 				size="xs"

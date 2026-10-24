@@ -3,7 +3,7 @@ import { Button, Menu, MenuButton, MenuItem, MenuList, Portal, Text, IconButton,
 import { Settings } from 'lucide-react';
 import { Link } from 'react-router';
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { bundleFromPlan, writeTransferClipboard } from '~/utils/thingTransfer/browser';
 import { transferChecksum } from '~/utils/thingTransfer/archive';
@@ -13,11 +13,15 @@ import { TRANSFER_MENU_Z } from './transferLayers';
 import { transferIntent } from '~/utils/thingTransfer/intent';
 
 type Props = { id?: string | null; linkKey?: string; disabledReason?: string; onImported?: () => void; canCut?: boolean; menuContainerRef?: React.RefObject<HTMLElement | null>; settings?: boolean; menuItems?: React.ReactNode; onOpen?: () => void; label?: string };
+const VIEWPORT_MODIFIERS = [
+  { name: 'preventOverflow', options: { rootBoundary: 'viewport', altAxis: true, tether: false, padding: 12 } },
+  { name: 'flip', options: { rootBoundary: 'viewport', padding: 12 } }
+];
 
 /** Shared persisted-Thing entry point. Account, source or key changes tear down
  * every pending transfer before another context can receive its result. */
 export const ThingTransferControls = (props: Props) => {
-  const user = useCurrentUser();
+  const user = useWorkspaceUser();
   return <TransferControls key={`${user?.id || 'anonymous'}:${props.id || ''}:${props.linkKey || ''}`}
     {...props} ownerId={user?.id} />;
 };
@@ -53,12 +57,12 @@ const TransferControls = ({ id, linkKey, disabledReason, ownerId, onImported, ca
     }).finally(() => { if (operation.current === controller) { operation.current = null; setCopying(false); } });
   };
   return <>
-    {/* The inspector is fixed: an absolute portal can scroll/move on focus
-        between pointer-down and pointer-up, losing the menu item's click. */}
-    <Menu isLazy strategy="fixed" placement="bottom-end" onOpen={onOpen}>
+    {/* Fixed inspector layers need fixed positioning. Document controls retain
+        document coordinates so menu focus cannot detach them while scrolling. */}
+    <Menu isLazy strategy={menuContainerRef || settings ? 'fixed' : 'absolute'} placement="bottom-end" modifiers={VIEWPORT_MODIFIERS} onOpen={onOpen}>
       {settings ? <MenuButton as={IconButton} icon={<Settings size={16} />} aria-label={label || 'Thing settings'} size="sm" variant="ghost" data-testid="builder-thing-settings" />
         : <MenuButton as={Button} size="xs" variant="outline" data-testid="thing-transfer-menu">{copying ? 'Copying…' : 'Transfer'}</MenuButton>}
-      <Portal containerRef={menuContainerRef}><MenuList zIndex={TRANSFER_MENU_Z} maxWidth="calc(100vw - 32px)" minWidth="min(240px, calc(100vw - 32px))">
+      <Portal containerRef={menuContainerRef}><MenuList zIndex={TRANSFER_MENU_Z} maxWidth="calc(100vw - 32px)" minWidth="min(240px, calc(100vw - 32px))" maxHeight="calc(100dvh - 80px)" overflowY="auto" overscrollBehavior="contain">
         {menuItems}
         {menuItems ? <MenuDivider /> : null}
         <MenuItem onClick={() => copy()} isDisabled={!id || !!disabledReason || copying}>Copy to clipboard</MenuItem>

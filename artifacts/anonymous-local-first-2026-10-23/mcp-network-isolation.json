@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "mode": "bwrap-unshare-all",
+  "uid": 1000,
+  "routes": "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT                                                       \n",
+  "directConnections": {
+    "203.0.113.1": "ENETUNREACH",
+    "::ffff:203.0.113.1": "ENETUNREACH",
+    "2001:db8::1": "ENETUNREACH"
+  },
+  "applicationAndMcpConfigAbsent": true,
+  "personalProfileAbsent": true,
+  "absentPaths": [
+    "/workspace/thingtime/remix/.env",
+    "/workspace/thingtime/MCP/.env",
+    "/workspace/thingtime/MCP/config.json",
+    "/home/agent/.config"
+  ],
+  "recordedAt": "2026-10-23T09:51:04.905Z",
+  "scope": "OS namespace for final rebuilt local MCP SDK/stdio operation; no API server or database mounted",
+  "rendererHash": "a6571e789f9963a79bd8a04dec4c565e1d46a0ca881b5147d27db23a71e1b32a",
+  "packageHash": "15e93be01ba2478f19fbdd20201bb18d72ab6c87f794e5a7c4800854b4ab85a7"
+}

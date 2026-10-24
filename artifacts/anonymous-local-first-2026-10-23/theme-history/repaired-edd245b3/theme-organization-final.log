@@ -1,0 +1,35 @@
+✖ native library moves, drains and deletes private account themes offline with independent conditional synchronization (30478.745148ms)
+✖ native library moves, drains and deletes private account themes offline under a selected custom plane with independent conditional synchronization (25796.826245ms)
+✔ anonymous native library preserves folder contents and deletes the applied theme fully offline without any account writes (28110.223371ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 84872.067202
+
+✖ failing tests:
+
+test at app/local-workspace/accountThemeOrganization.browser.test.ts:2:1308
+✖ native library moves, drains and deletes private account themes offline with independent conditional synchronization (30478.745148ms)
+  locator.waitFor: Timeout 20000ms exceeded.
+  Call log:
+    - waiting for getByRole('link', { name: 'Organization peach e0a052', exact: true }) to be visible
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountThemeOrganization.browser.test.ts:166:64) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('link', { name: 'Organization peach e0a052', exact: true }) to be visible" ]
+  }
+
+test at app/local-workspace/accountThemeOrganization.browser.test.ts:2:1308
+✖ native library moves, drains and deletes private account themes offline under a selected custom plane with independent conditional synchronization (25796.826245ms)
+  locator.waitFor: Timeout 20000ms exceeded.
+  Call log:
+    - waiting for getByRole('link', { name: 'Organization peach c85012', exact: true }) to be visible
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountThemeOrganization.browser.test.ts:166:64) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('link', { name: 'Organization peach c85012', exact: true }) to be visible" ]
+  }

@@ -2,7 +2,7 @@ import { thingEntityLink } from '../Thingtime/ContextMenu/thingEntityLink';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { aclForAudience, audienceOfAcl, sharePathForThing, audienceDescription } from './audienceCore';
+import { aclForAudience, audienceOfAcl, sharePathForThing, audienceDescription, thingAudienceDisplay } from './audienceCore';
 
 test('quick audiences use the shared ACL grammar without dropping app grants', () => {
 	assert.deepEqual(aclForAudience('public', ['tt:user', 'tt:hidden', 'tt:user/ada/write', 'tt:app/weather']), ['tt:all', 'tt:app/weather']);
@@ -52,4 +52,22 @@ test('copy-link menus omit keys for owners, inherited audiences and old keyed vi
 test('inherited private and friends wording refers to the parent rather than the child author', () => {
   assert.equal(audienceDescription(['tt:user'], 'media', true), 'only the parent’s owner can see this media');
   assert.equal(audienceDescription(['tt:userFriends'], 'post', true), 'only the parent’s friends circle can see this post');
+});
+
+test('a resolved public ACL does not claim an inherited comment is publicly accessible', () => {
+  const display = thingAudienceDisplay({ id: 'comment', acl: ['tt:inherit'], audience: { sourceId: 'root', acl: ['tt:all'] } });
+  assert.equal(display.label, 'Inherited audience');
+  assert.equal(display.description, 'follows the parent’s audience');
+  assert.notEqual(display.emoji, '🌐');
+  assert.equal(thingAudienceDisplay({ id: 'comment', acl: ['tt:inherit'] }).description, display.description);
+  assert.equal(thingAudienceDisplay({ id: 'media', audience: { sourceId: 'root', acl: ['tt:all'] } }, 'media').description, display.description);
+});
+
+test('known private subspace restrictions and ordinary public audiences remain explicit', () => {
+  const root = { id: 'root', acl: ['tt:all'] };
+  assert.equal(thingAudienceDisplay(root).description, 'anyone can see this post');
+  const privateRoot = { ...root, subspace: { access: 'private' } };
+  assert.equal(thingAudienceDisplay(privateRoot).description, 'private subspace members only');
+  assert.equal(thingAudienceDisplay(privateRoot).emoji, '🔒');
+  assert.equal(thingAudienceDisplay({ ...privateRoot, acl: ['tt:userFriends'] }).description, 'private subspace · only the author’s friends can see this post');
 });

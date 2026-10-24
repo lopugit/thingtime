@@ -6,7 +6,12 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
 import { openThingHistory } from '~/components/Timeline/TimelineHost';
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { AccountThemeSyncStatus } from '~/local-workspace/AccountThemeSyncStatus';
+import { LocalApiView } from '~/local-workspace/LocalApiView';
+import { RetainedThemeReview } from '~/local-workspace/RetainedThemeReview';
+import { LOCAL_WORKSPACE_CHANGED, workspaceIdentityKey, subscribeWorkspaceIdentity } from '~/local-workspace/runtime.client';
+import { rootIdentity } from '~/utils/rootIdentity';
 import { useTtTheme } from '~/hooks/useTtTheme';
 import { RAINBOW } from '~/theme/rainbow';
 
@@ -17,7 +22,7 @@ import {
 	isHexColor,
 	ThingsBadgePaddingControl
 } from './controls';
-import { CURATED_FONTS, themeToCssVars, TtTheme } from '~/theme/tokens';
+import { CURATED_FONTS, themeToCssVars, type TtTheme } from '~/theme/tokens';
 
 const MONO = 'var(--tt-font-mono, ui-monospace, Menlo, monospace)';
 
@@ -223,9 +228,18 @@ const COLOR_FIELDS: { key: string; label: string; hint?: string }[] = [
  * the API, shareable links (?apply=<id>), and cross-device active theme.
  */
 export const ThemeStudio = () => {
+ const identity = React.useSyncExternalStore(subscribeWorkspaceIdentity, workspaceIdentityKey, () => '');
+ // Saved themes and their History share the Home partition even when the
+ // content library is connected to a different database. Child import/sync
+ // controls inherit this same local view; remote authority remains selected.
+ return <LocalApiView.Provider value={{ localPlane: 'home' }}><ThemeStudioWorkspace key={identity} /></LocalApiView.Provider>;
+};
+const ThemeStudioWorkspace = () => {
 	const lopu = useLopu();
 	const api = useApi();
-	const user = useCurrentUser();
+	const user = useWorkspaceUser();
+	const localOnly = !!user?.localOnly;
+	const apiRef = React.useRef(api); apiRef.current = api;
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const {
@@ -243,27 +257,44 @@ export const ThemeStudio = () => {
 		setGeneral,
 		setWindows,
 		resetOverrides,
-		applyThemeDoc
+		applyThemeDoc,
+        flushTheme
 	} = useTtTheme();
+	const themeRef = React.useRef(theme); themeRef.current = theme;
 
 	const [myThemes, setMyThemes] = React.useState<any[]>([]);
+ const [activeThemeId, setActiveThemeId] = React.useState<string | null>(null);
+ const mounted = React.useRef(true);
+ React.useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+ const isCurrent = (generation: number) => mounted.current && generation === rootIdentity.read().generation;
 	const [saveName, setSaveName] = React.useState('');
-	const [savePublic, setSavePublic] = React.useState(true);
+	const [savePublic, setSavePublic] = React.useState(false);
 	const [saving, setSaving] = React.useState(false);
+	const [listError, setListError] = React.useState<string | null>(null);
+	const listRequest = React.useRef(0);
 
 	const refreshMyThemes = React.useCallback(async () => {
 		if (!user) return;
+		const request = ++listRequest.current, generation = rootIdentity.read().generation;
+		setListError(null);
 		try {
-			const res = await api.v1.themes.list();
+			const res = await apiRef.current.v1.themes.list();
+			if (request !== listRequest.current || generation !== rootIdentity.read().generation) return;
 			setMyThemes(res?.themes || []);
-		} catch (error) {
-			// listing is best-effort; errors surface on explicit actions
+ setActiveThemeId(res?.activeThemeId ?? null);
+ setListError(res?.syncError || null);
+		} catch (error: any) {
+			if (request === listRequest.current && generation === rootIdentity.read().generation) setListError(error?.error || 'Could not load saved themes. Retry when storage is available.');
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [user?.id]);
+	}, [user?.id, user?.offline]);
 
 	React.useEffect(() => {
-		refreshMyThemes();
+		void refreshMyThemes();
+ const refresh = () => { void refreshMyThemes(); };
+ window.addEventListener(LOCAL_WORKSPACE_CHANGED, refresh);
+ const invalidate = () => { listRequest.current++; };
+ return () => { invalidate(); window.removeEventListener(LOCAL_WORKSPACE_CHANGED, refresh); };
 	}, [refreshMyThemes]);
 
 	// Apply a shared theme from ?apply=<shareId> deep links.
@@ -293,20 +324,30 @@ export const ThemeStudio = () => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [applyParam]);
 
-	const applyPreset = (name: string) => {
-		setPreset(name);
-		if (user) {
-			api.v1.themes.setActive({ themeId: null }).catch(() => {});
-		}
-	};
-
-	const applySaved = (saved: any) => {
-		applyThemeDoc(saved.theme, { shareId: saved.id });
-		if (user) {
-			api.v1.themes.setActive({ themeId: saved.id }).catch(() => {});
-		}
-		lopu({ title: `Theme "${saved.name}" applied 🎨`, status: 'success', duration: 5000 });
-	};
+ const applyPreset = async (name: string) => {
+  const generation = rootIdentity.read().generation;
+  try {
+   await api.v1.themes.setActive({ themeId: null });
+   if (!isCurrent(generation)) return;
+   setPreset(name);
+   await flushTheme();
+   if (!isCurrent(generation)) return;
+   setActiveThemeId(null);
+  } catch (error: any) { if (isCurrent(generation)) lopu({title: 'Could not save this theme choice', description: error?.message || error?.error, status: 'error'}); }
+ };
+ const applySaved = async (saved: any) => {
+  const generation = rootIdentity.read().generation;
+  try {
+   await api.v1.themes.setActive({themeId: saved.id});
+   if (!isCurrent(generation)) return;
+   applyThemeDoc(saved.theme, {shareId: saved.id});
+   await flushTheme();
+   if (!isCurrent(generation)) return;
+   setActiveThemeId(saved.id);
+   setSavePublic(saved.visibility === 'public');
+   lopu({title: `Theme "${saved.name}" applied 🎨`, description: 'Applied on this device.', status: 'success', duration: 5000});
+  } catch (error: any) { if (isCurrent(generation)) lopu({title: 'Could not save this theme choice', description: error?.message || error?.error, status: 'error'}); }
+ };
 
 	const shareSaved = async (saved: any) => {
 		const url = `${window.location.origin}/themes?apply=${saved.id}`;
@@ -319,48 +360,53 @@ export const ThemeStudio = () => {
 	};
 
 	const deleteSaved = async (saved: any) => {
+ const generation = rootIdentity.read().generation;
 		try {
 			await api.v1.themes.remove({ id: saved.id });
+ if (!isCurrent(generation)) return;
 			lopu({ title: `Deleted "${saved.name}" 🗑️`, status: 'success', duration: 5000 });
 			refreshMyThemes();
 		} catch (error: any) {
-			lopu({ title: 'Could not delete theme 🌧️', description: error?.error, status: 'error' });
+			if (isCurrent(generation)) lopu({ title: 'Could not delete theme 🌧️', description: error?.error, status: 'error' });
 		}
 	};
 
 	const saveCurrent = async () => {
+		const generation = rootIdentity.read().generation;
+ const savingTheme = themeRef.current, savingName = saveName;
 		const name = saveName.trim() || appliedThemeName || `${theme.name} remix`;
-		if (!user) {
-			lopu({
-				title: 'Log in to save themes ✨',
-				description: 'Your theme keeps working on this device — log in to save and share it.',
-				status: 'info',
-				link: { label: 'Log in →', href: '/login' }
-			});
-			return;
-		}
+		if (!user) return;
 		setSaving(true);
+        let savedLocally = false;
 		try {
 			// Re-saving the currently applied saved theme (same or blank name)
 			// updates it in place instead of minting a duplicate document.
-			const updatingApplied =
-				appliedThemeShareId && (!saveName.trim() || saveName.trim() === appliedThemeName);
+			const appliedOwned = myThemes.find(saved => saved.id === appliedThemeShareId);
+			const updatingApplied = appliedOwned && (!saveName.trim() || saveName.trim() === appliedThemeName);
 			const res = await api.v1.themes.save({
 				id: updatingApplied ? appliedThemeShareId : undefined,
 				name,
 				theme: { name, colors: theme.colors, fonts: theme.fonts, general: theme.general, windows: theme.windows },
-				visibility: savePublic ? 'public' : 'private'
+				visibility: !localOnly && savePublic ? 'public' : 'private',
+				expectedUpdatedAt: updatingApplied ? appliedOwned.updatedAt : undefined
 			});
-			lopu({ title: `Theme "${name}" saved 🎨`, description: savePublic ? 'It’s shareable — copy the link from My themes.' : 'Saved privately.', status: 'success' });
-			setSaveName('');
-			refreshMyThemes();
-			if (res?.theme?.id) {
-				api.v1.themes.setActive({ themeId: res.theme.id }).catch(() => {});
-			}
+			savedLocally = true;
+            if (!isCurrent(generation)) return;
+            if (res?.theme?.id && themeRef.current === savingTheme) {
+                applyThemeDoc(res.theme.theme, {shareId: res.theme.id});
+                await flushTheme();
+                if (!isCurrent(generation)) return;
+                void api.v1.themes.setActive({themeId:res.theme.id}).catch((error: any) => {
+                    if (isCurrent(generation)) lopu({title:'Theme saved; selection could not be saved',description:error?.message || error?.error,status:'error'});
+                });
+            }
+            lopu({title:`Theme "${name}" saved 🎨`,description:localOnly?'Saved on this device.':'Saved on this device. Account sync runs separately.',status:'success'});
+            setSaveName(current => current === savingName ? '' : current);
+            void refreshMyThemes();
 		} catch (error: any) {
-			lopu({ title: 'Could not save theme 🌧️', description: error?.error, status: 'error' });
+			if (isCurrent(generation)) lopu({ title: savedLocally ? 'Theme saved; current look could not be saved' : 'Could not save theme 🌧️', description: error?.message || error?.error, status: 'error' });
 		} finally {
-			setSaving(false);
+			if (isCurrent(generation)) setSaving(false);
 		}
 	};
 
@@ -377,8 +423,8 @@ export const ThemeStudio = () => {
 					Themes 🎨
 				</Text>
 				<Text marginTop="6px" fontSize="md" color="var(--tt-text, #5a5a66)">
-					Make Thingtime yours — tweak colours, fonts, and the general feel. Save your look as a theme and share it
-					with a link — or browse everyone&rsquo;s public looks in the{' '}
+					Make Thingtime yours — tweak colours, fonts, and the general feel.{' '}
+					{localOnly ? 'Save and export your looks on this device, or browse public looks in the ' : 'Save your look as a theme and share it with a link — or browse public looks in the '}
 					<Text as={RouterLink} to="/themes/gallery" textDecoration="underline" _hover={{ color: 'var(--tt-ink, #16161a)' }}>
 						theme gallery ✨
 					</Text>
@@ -569,7 +615,7 @@ export const ThemeStudio = () => {
 
 				{/* Save + share */}
 				<Text {...sectionHeaderStyle} marginTop={10} marginBottom={2}>
-					Save as a shareable theme
+					Save a theme on this device
 				</Text>
 				<Flex
 					border="1px solid var(--tt-border, #ececef)"
@@ -592,22 +638,25 @@ export const ThemeStudio = () => {
 						border="1px solid var(--tt-border, #ececef)"
 						borderRadius="var(--tt-radius-sm, 9px)"
 					/>
-					<Flex alignItems="center" gap="6px">
+					{localOnly ? <Text fontSize="13px">Saved on this device</Text> : <Flex alignItems="center" gap="6px">
 						<Switch size="sm" isChecked={savePublic} onChange={(e) => setSavePublic(e.target.checked)} />
 						<Text fontSize="13px" color="var(--tt-text, #5a5a66)">
 							Shareable
 						</Text>
-					</Flex>
-					<ActionButton onClick={saveCurrent} fontWeight={700} color="var(--tt-ink, #16161a)">
+					</Flex>}
+					<ActionButton onClick={saveCurrent} disabled={saving} fontWeight={700} color="var(--tt-ink, #16161a)">
 						{saving ? 'Saving…' : 'Save theme 💾'}
 					</ActionButton>
 				</Flex>
 
+				<AccountThemeSyncStatus onAdopt={saved => { if (saved) applyThemeDoc(saved.theme, {shareId: saved.id}); else setPreset('Thingtime'); }} />
+				<RetainedThemeReview renderPreview={theme => <ThemePreviewCard theme={theme} />} />
 				{/* My themes */}
 				<Text {...sectionHeaderStyle} marginTop={10} marginBottom={2}>
 					My themes
 				</Text>
 				<Box marginBottom={3}><ThingTransferControls onImported={refreshMyThemes} /></Box>
+				{listError ? <Flex role="alert" gap={2} alignItems="center"><Text fontSize="sm">{listError}</Text><ActionButton onClick={refreshMyThemes}>Retry</ActionButton></Flex> : null}
 				{!user ? (
 					<Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">
 						<Box as="button" onClick={() => navigate('/login')} color="var(--tt-link, #2f8fd6)" cursor="pointer" fontWeight={600}>
@@ -623,7 +672,7 @@ export const ThemeStudio = () => {
 					<Flex direction="column" gap="10px">
 						{myThemes.map((saved) => {
 							const isActive = appliedThemeShareId === saved.id;
-							const isUsersActive = user?.activeThemeId === saved.id;
+							const isUsersActive = activeThemeId === saved.id;
 							return (
 								<Flex
 									key={saved.id}
@@ -643,14 +692,14 @@ export const ThemeStudio = () => {
 											{saved.name} {isUsersActive ? '⭐' : ''}
 										</Text>
 										<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
-											{saved.visibility === 'public' ? 'shareable 🔗' : 'private 🔒'}
+											{saved.localOnly ? 'on this device' : saved.syncState && saved.syncState !== 'synced' ? 'saved on this device · ' + saved.syncState : saved.visibility === 'public' ? 'shareable 🔗' : 'private 🔒'}
 										</Text>
 									</Box>
 									<Flex gap="6px" flexWrap="wrap">
 										<ActionButton onClick={() => applySaved(saved)}>Apply</ActionButton>
 										<ActionButton onClick={() => openThingHistory(saved.id, ['theme'])}>History</ActionButton>
 										<ThingTransferControls id={saved.id} canCut onImported={refreshMyThemes} />
-										{saved.visibility === 'public' ? <ActionButton onClick={() => shareSaved(saved)}>Share 🔗</ActionButton> : null}
+										{saved.visibility === 'public' && (!saved.syncState || saved.syncState === 'synced') ? <ActionButton onClick={() => shareSaved(saved)}>Share 🔗</ActionButton> : null}
 										<ActionButton tone="danger" onClick={() => deleteSaved(saved)}>
 											Delete
 										</ActionButton>

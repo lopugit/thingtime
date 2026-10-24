@@ -108,3 +108,31 @@ export const audienceDescription = (acl: readonly string[] | undefined, noun = '
   if (!audiences.length) return `only ${inherited ? 'the parent’s owner' : 'the author'} can see this ${noun}`;
   return `only ${audiences.join(', ')} can see this ${noun}`;
 };
+
+export const thingAudienceDisplay = (thing: {
+  id: string;
+  acl?: readonly string[];
+  audience?: ResolvedAudience;
+  subspace?: { access: string } | null;
+  subspaceContextMissing?: true;
+}, noun = 'post') => {
+  const effectiveAcl = thing.audience?.acl || thing.acl;
+  const inherited = !!thing.acl?.includes('tt:inherit') || (!!thing.audience && thing.audience.sourceId !== thing.id);
+  const privateSubspace = thing.subspace?.access === 'private';
+  if (privateSubspace) return {
+    emoji: '🔒', label: 'Private subspace', hint: 'Subspace membership is required',
+    description: audienceOfAcl(effectiveAcl) === 'public' ? 'private subspace members only'
+      : `private subspace · ${audienceDescription(effectiveAcl, noun, inherited)}`
+  };
+  // A resolved parent ACL does not include its subspace's membership fence.
+  // Without that context, inheriting tt:all is not evidence of public access.
+  if (inherited) return {
+    emoji: '↳', label: 'Inherited audience', hint: 'Follows the parent’s audience',
+    description: 'follows the parent’s audience'
+  };
+  if (thing.subspaceContextMissing) return {
+    emoji: '↳', label: 'Subspace audience', hint: 'Subspace access details are not saved on this device',
+    description: 'subspace access details unavailable on this device'
+  };
+  return { ...THING_AUDIENCE_META[audienceOfAcl(effectiveAcl)], description: audienceDescription(effectiveAcl, noun) };
+};

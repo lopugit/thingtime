@@ -1,0 +1,37 @@
+✖ native account Duplicate copies offline file bytes privately and independent queues resume after reconnect (58645.697796ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 59100.485533
+
+✖ failing tests:
+
+test at app/local-workspace/accountFileCopy.browser.test.ts:2:1418
+✖ native account Duplicate copies offline file bytes privately and independent queues resume after reconnect (58645.697796ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   {
+  +     actor: '6adb26558d76baae4ed90262',
+  +     offline: true,
+  +     path: '/api/v1/algorithms/sync',
+  +     plane: 'home'
+  +   }
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountFileCopy.browser.test.ts:190:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ { path: '/api/v1/algorithms/sync', offline: true, actor: '6adb26558d76baae4ed90262', plane: 'home' } ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

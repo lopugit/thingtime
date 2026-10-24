@@ -1,0 +1,9 @@
+{
+  "baselineDiagnosticCount": 91,
+  "currentDiagnosticCount": 91,
+  "added": [],
+  "removed": [],
+  "baseline": "independently archived fd49b8d1 source with only three attachment-test parse closures repaired",
+  "normalization": "strip archived baseline path prefix and diagnostic line/column positions; compare full file, TS code and message multiset",
+  "scope": "final product and native fixtures including canonical upload MIME receipt repair"
+}

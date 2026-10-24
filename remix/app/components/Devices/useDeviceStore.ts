@@ -788,7 +788,14 @@ export type UseDeviceStoreOptions = {
 
 export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true }: UseDeviceStoreOptions) => {
 	const ownerId = userId || null;
-	const active = enabled && Boolean(ownerId);
+	const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine !== false);
+	useEffect(() => {
+		const update = () => setOnline(navigator.onLine !== false);
+		window.addEventListener('online', update); window.addEventListener('offline', update);
+		return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); };
+	}, []);
+	// Retained device snapshots stay visible; remote effects require connectivity.
+	const active = enabled && Boolean(ownerId) && online;
 	const api = useDeviceApi();
 	const lopu = useLopu();
 	const lopuRef = useRef(lopu);
@@ -832,7 +839,7 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 	}, []);
 
 	const refreshList = useCallback(async (): Promise<void> => {
-		if (!active || !ownerId) return;
+		if (!active || !ownerId || navigator.onLine === false) return;
 		const inFlight = listRequestRef.current;
 		if (inFlight?.ownerId === ownerId) return inFlight.promise;
 		setStore((previous) => (previous.ownerId === ownerId ? { ...previous, listRefreshing: true } : previous));
@@ -856,7 +863,7 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 				});
 				reportedErrorsRef.current.delete('list');
 			} catch (error) {
-				if (!(error instanceof Error && error.name === 'AbortError')) {
+				if (navigator.onLine !== false && !(error instanceof Error && error.name === 'AbortError')) {
 					notifyError('list', 'Couldn’t refresh your computers 😔', error);
 				}
 				setStore((previous) => (previous.ownerId === ownerId ? { ...previous, listLoaded: true, listRefreshing: false } : previous));
@@ -870,7 +877,7 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 
 	const refreshDevice = useCallback(
 		async (deviceId: string, options: { quiet?: boolean } = {}): Promise<DeviceRuntimeState | null> => {
-			if (!active || !ownerId || !deviceId) return null;
+			if (!active || !ownerId || !deviceId || navigator.onLine === false) return null;
 			const existing = detailRequestsRef.current.get(deviceId);
 			if (existing) return existing;
 			setStore((previous) => {
@@ -926,7 +933,7 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 							}
 						};
 					});
-					if (commandsResult.status === 'rejected' || approvalsResult.status === 'rejected' || screensResult.status === 'rejected') {
+					if (navigator.onLine !== false && (commandsResult.status === 'rejected' || approvalsResult.status === 'rejected' || screensResult.status === 'rejected')) {
 						notifyError(
 							`detail-partial:${deviceId}`,
 							'Some device activity couldn’t refresh',
@@ -944,7 +951,7 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 					reportedErrorsRef.current.delete(`detail:${deviceId}`);
 					return next;
 				} catch (error) {
-					if (!options.quiet && !(error instanceof Error && error.name === 'AbortError')) {
+					if (navigator.onLine !== false && !options.quiet && !(error instanceof Error && error.name === 'AbortError')) {
 						notifyError(`detail:${deviceId}`, 'Couldn’t refresh that computer 😔', error);
 					}
 					return null;
@@ -1023,7 +1030,7 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 					catchingUp = false;
 					reportedErrorsRef.current.delete(`events:${selectedDeviceId}`);
 				} catch (error) {
-					if (cancelled || (error instanceof Error && error.name === 'AbortError')) return;
+					if (cancelled || navigator.onLine === false || (error instanceof Error && error.name === 'AbortError')) return;
 					failures += 1;
 					const status = error && typeof error === 'object' && 'status' in error && typeof error.status === 'number' ? error.status : null;
 					if (status === 400 && cursor) {

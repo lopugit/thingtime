@@ -63,6 +63,14 @@ API token or arbitrary HTTP access in the agent host. It launches a fresh
 Chromium context and fulfills only the two shipped preview files in memory.
 Nothing is fetched from the apparent loopback URL.
 
+If Chromium is installed in a shared cache (for example `/ms-playwright` in an
+isolated container), set `PLAYWRIGHT_BROWSERS_PATH` to that directory in the
+MCP server's explicit `env` configuration. The MCP SDK filters inherited
+environment variables, so setting it only on the parent process is insufficient.
+The example client and integration test forward this one non-secret path when
+set. Keep the browser version matched to `MCP/package-lock.json`; do not forward
+account credentials or the complete host environment.
+
 Call `thingtime_capabilities`, then `thingtime_render_and_export`:
 
 ```json
@@ -131,7 +139,7 @@ root; without `blockId`, the first component, or the root element for a single
 component. It is captured at the first requested viewport.
 
 Production/static hosting must serve the generated CSP headers. The existing
-Vite and Vercel packaging paths set them; `dist/draft-preview/policy.json`
+Vite, Nitro Node-server and Vercel packaging paths set them; `dist/draft-preview/policy.json`
 contains the same generated policy for the offline MCP host. Do not serve the
 HTML on an account origin with a generic server that omits the sandbox header.
 
@@ -169,3 +177,70 @@ reexports through the normal API. It removes only its imported Things and
 logs out. Stop the QA PM2 stack and disposable Mongo process after verification.
 No existing account is used. This is separate from the anonymous workflow,
 which performs no writes at all.
+
+
+## Current isolated render and editable-browser evidence — 2026-10-23
+
+Fresh [canonical JSON, actual PNGs and usage examples](
+../artifacts/anonymous-local-first-2026-10-23/README.md) are retained in the
+repository, alongside verification hashes, invalid-render cases and normal
+private importer round-trip evidence. The stdio MCP server is actually called
+by an SDK client in an OS namespace without an account, backend or outbound
+route. This chat has no callable Thingtime MCP tool; the SDK test does not prove
+its native host connection or a deployed service.
+
+The final packaged snapshot is
+`15e93be01ba2478f19fbdd20201bb18d72ab6c87f794e5a7c4800854b4ab85a7`;
+the renderer hash is
+`a6571e789f9963a79bd8a04dec4c565e1d46a0ca881b5147d27db23a71e1b32a`.
+The complete real stdio acceptance passed in 41.14 seconds with no skips and
+unchanged deadlines: native JSON/PNG resources, repeat canonical export,
+concurrent busy refusal, malformed input, missing dependencies, remote assets,
+invalid crops, invisible text and overflow. The actual web editor, ordinary
+nested Builder editing through cold offline reload, and normal private importer
+also passed against that final package. The downloaded JSON hashes identically
+across MCP, web and importer:
+`a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c`.
+The artifact README links exact logs and preserves earlier captures and setup
+failures separately. These local results do not establish current-head CI,
+deployed-preview acceptance or this chat's MCP artifact transport.
+
+The clean browser editor and ordinary nested Builder checks use the complete
+packaged app in a separate disposable Linux browser/backend namespace. See
+`remix/scripts/isolated-linux-browser.mjs` and its TESTING.md checklist. Both
+processes have denied direct IPv4, mapped/native IPv6, hostname and redirect
+egress. Required system libraries, source/dependency trees and an immutable
+app snapshot are explicitly mounted read-only; no host profile, repository
+configuration, dotenv file, Docker socket or inherited credential is available.
+Fresh synthetic accounts belong only to the disposable backend. This is not the
+installed macOS application or an assertion that the runtime has no mounts.
+
+An incomplete verification build omitted the independent renderer bundle and
+correctly failed the web-editor test. The canonical `build:client` already builds
+all four independent bundles. Runtime startup now also rejects HTML fallback
+responses for missing JavaScript before marking the app healthy. The setup
+failure and successful complete-build checks remain separate evidence.
+
+## Packaged-server regression checkpoint — 2026-10-19
+
+The Node server now applies the same canonical sandbox and `no-store` headers
+as Vite/Vercel. A metadata CSP cannot enforce `sandbox`: the HTTP response must
+carry it. Native acceptance verifies storage denial on the actual Node-served
+page, including ordinary, query-string, directory and encoded asset paths.
+The JSON download control is disabled initially, during rendering and after a
+failed render; the last valid preview remains visible without becoming an
+exportable stale result.
+
+For the documented isolated browser-manager runtime, set `TT_DRAFT_WEB_BASE`
+to its loopback application origin and `TT_DRAFT_TEST_SESSION` to its public
+session ID. The integration test checks the actual health response before using
+that origin. The legacy dedicated `22460` fixture remains supported. These
+variables are test configuration, never account credentials or authorization.
+
+Local evidence: `tmp/current-render-native/native/` contains fresh MCP JSON,
+1440×1000, 390×844 and 320×844 PNGs, the 400×560 card crop, editor captures,
+serving/storage checks and the normal private importer round trip. The importer
+legitimately remaps both IDs and component keys; content and dependencies remain
+intact. The runtime has no external network, host mounts or published ports and
+is released after testing. This is local acceptance, not target-host connector,
+CI or deployed verification.

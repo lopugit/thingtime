@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readTransferFile, readTransferFiles, MAX_TRANSFER_BATCH } from './readFile';
+import { readTransferFile, readTransferFiles } from './readFile';
 import { encodeTransferArchive, transferChecksum } from './archive';
 import { serializeTransfer, type ThingTransfer } from './format';
 
@@ -20,7 +20,7 @@ test('detects ZIP bytes and verifies complete attached content', async () => {
   const archive = await encodeTransferArchive({ manifest: original, files: new Map([['attachment', bytes]]) });
   const actual = await readTransferFile(new Blob([Uint8Array.from(archive)], { type: 'text/plain' }));
   assert.deepEqual(actual.manifest, original);
-  assert.deepEqual(actual.files.get('attachment'), bytes);
+  assert.deepEqual(new Uint8Array(await actual.files.get('attachment')!.arrayBuffer()), bytes);
 });
 
 test('aborted selection does not publish a stale parsed transfer', async () => {
@@ -42,17 +42,50 @@ test('multi-file selection keeps overlapping identities and different bytes inde
   }
   const bundles = await readTransferFiles(files);
   assert.equal(bundles.length, 2);
-  bundles.forEach((bundle, index) => {
+  for (const [index, bundle] of bundles.entries()) {
     assert.deepEqual(bundle.manifest, originals[index]);
-    assert.deepEqual(bundle.files.get('same-id'), payloads[index]);
-  });
+    assert.deepEqual(new Uint8Array(await bundle.files.get('same-id')!.arrayBuffer()), payloads[index]);
+  }
 });
 
-test('batch selection validates every file before returning and rejects excessive selection', async () => {
+test('batch selection validates every file before returning and honors cancellation', async () => {
   const valid = new File([serializeTransfer(manifest())], 'thing.json');
   await assert.rejects(readTransferFiles([valid, new File(['invalid'], 'bad.json')]), /valid JSON/);
   await assert.rejects(readTransferFiles([]), /Choose/);
-  await assert.rejects(readTransferFiles(Array(MAX_TRANSFER_BATCH + 1).fill(valid)), /Choose/);
   const controller = new AbortController(); controller.abort();
   await assert.rejects(readTransferFiles([valid], controller.signal), { name: 'AbortError' });
+});
+
+test('more than twelve transfer files remain independent', async () => {
+  const files = Array.from({ length: 20 }, (_, index) => {
+    const value = manifest(); value.things[0].crystal.content = `Independent item ${index}`;
+    return new File([serializeTransfer(value)], `item-${index}.json`);
+  });
+  const bundles = await readTransferFiles(files);
+  assert.equal(bundles.length, files.length);
+  assert.deepEqual(bundles.map(bundle => bundle.manifest.things[0].crystal.content), files.map((_, index) => `Independent item ${index}`));
+  assert.ok(bundles.every(bundle => bundle.manifest.roots[0] === 'post'));
+  bundles[0].manifest.things[0].crystal.content = 'Edited first item';
+  assert.equal(bundles[1].manifest.things[0].crystal.content, 'Independent item 1');
+});
+
+test('separate transfers do not consume one combined Thing budget', async () => {
+  const original = manifest();
+  original.things = Array.from({ length: 600 }, (_, index) => ({ id: `post-${index}`, thingtime: ['post'], crystal: { content: `Independent ${index}` } }));
+  original.roots = original.things.map(row => row.id);
+  const file = new File([serializeTransfer(original)], 'many-things.json');
+  const bundles = await readTransferFiles([file, file]);
+  assert.equal(bundles.reduce((sum, bundle) => sum + bundle.manifest.things.length, 0), 1200);
+  assert.deepEqual(bundles[0].manifest, original);
+  assert.deepEqual(bundles[1].manifest, original);
+  bundles[0].manifest.things[599].crystal.content = 'Changed first transfer';
+  assert.equal(bundles[1].manifest.things[599].crystal.content, 'Independent 599');
+});
+
+test('an oversized individual transfer is still refused inside a batch', async () => {
+  const valid = new File([serializeTransfer(manifest())], 'valid.json');
+  const oversized = manifest();
+  oversized.things = Array.from({ length: 1001 }, (_, index) => ({ id: `post-${index}`, thingtime: ['post'], crystal: { content: 'Invalid single transfer' } }));
+  oversized.roots = ['post-0'];
+  await assert.rejects(readTransferFiles([valid, new File([JSON.stringify(oversized)], 'oversized.json')]), /Invalid number of Things/);
 });

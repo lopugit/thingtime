@@ -23,6 +23,10 @@ process.once('message', async (input: RenderInput) => {
     });
     const page = await context.newPage();
     page.setDefaultTimeout(6000);
+    // Loading and parsing the native renderer bundle can exceed a normal UI
+    // operation timeout on a cold CPU. The parent still bounds the entire job
+    // (startup, rendering and all screenshots) to 30 seconds.
+    page.setDefaultNavigationTimeout(15000);
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message.slice(0, 300)));
     await page.goto(`${origin}/draft-preview/index.html`, { waitUntil: 'load' });

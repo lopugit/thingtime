@@ -1,0 +1,37 @@
+{
+  "account": false,
+  "runId": "7567bbda-6dd9-4015-bdc9-0726e83bc71d",
+  "sourceRoot": "local-5d8af31a-de22-4e45-a89d-e55cc8d4edc8",
+  "copyRoot": "local-ac0e60d8-4116-48a7-888c-ee1d84fd5254",
+  "sourcePost": "local-c30ed5ac-c4d3-49f9-87b2-a515a1df54f1",
+  "copyPost": "local-f36cf638-4de3-46b6-a825-df1e77fc3532",
+  "nativeImport": true,
+  "coldOfflineReload": true,
+  "mixedOrder": true,
+  "exactMetadata": true,
+  "exactStoredBytes": true,
+  "canonicalExportReimport": true,
+  "independentIds": true,
+  "noExternalUrlFetch": true,
+  "lostRequestId": "",
+  "lostReceipt": null,
+  "linkAttempts": [],
+  "privateGuestRefusal": false,
+  "bounds": [
+    {
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "width": 320,
+      "scrollWidth": 320
+    }
+  ],
+  "writes": [],
+  "externalRequests": [],
+  "errors": []
+}

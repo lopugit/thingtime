@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Button, Text } from '@chakra-ui/react';
 import { useSearchParams } from 'react-router';
-import { useCurrentUser } from '../../hooks/useCurrentUser';
+import { useWorkspaceUser } from '../../hooks/useWorkspaceUser';
 import { useDataPlane } from '../../hooks/useDataPlane';
 import { useApi } from '../../hooks/useApi';
 import { useTimelineSession } from '../../timeline/TimelineProvider';
@@ -15,8 +15,9 @@ import { PageShell } from '../Layout/PageShell';
 type Connection = NonNullable<ReturnType<typeof useTimelineSession>['connection']>;
 export function BranchWebpage({ pageId }: { pageId: string }) {
 	const [params] = useSearchParams();
-	const user = useCurrentUser();
-	const dataPlane = useDataPlane();
+	const user = useWorkspaceUser();
+	const accountPlane = useDataPlane();
+	const dataPlane = user?.localOnly ? 'local-workspace' : accountPlane;
 	const session = useTimelineSession();
 	const api = useApi();
 	const [switchError, setSwitchError] = React.useState('');
@@ -26,7 +27,7 @@ export function BranchWebpage({ pageId }: { pageId: string }) {
 	let invalid = '';
 	try {
 		parseTimelineBranchLookup({ branchId, thingId: pageId });
-		if (!ownerId || !isDataPlane(plane) || ['historyOwner', 'dataPlane', 'branchId', 'page'].some((key) => params.getAll(key).length !== 1))
+		if (!ownerId || !(isDataPlane(plane) || (ownerId === 'local-workspace' && plane === 'local-workspace')) || ['historyOwner', 'dataPlane', 'branchId', 'page'].some((key) => params.getAll(key).length !== 1))
 			throw new Error('Invalid branch link. Open the branch from History.');
 	} catch (error: any) {
 		invalid = error.message;
@@ -52,7 +53,7 @@ export function BranchWebpage({ pageId }: { pageId: string }) {
 								? 'Open this branch in its original database.'
 								: 'Connecting to your branch history…')}
 					</Text>
-					{!invalid && ownerId === user?.id && plane === 'home' && dataPlane !== plane ? (
+					{!invalid && !user?.localOnly && ownerId === user?.id && plane === 'home' && dataPlane !== plane ? (
 						<Button
 							mt={3}
 							onClick={() =>

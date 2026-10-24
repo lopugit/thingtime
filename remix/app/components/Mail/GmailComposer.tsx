@@ -6,12 +6,14 @@ import type { MailAccount } from '~/mail/model';
 export function GmailComposer({
 	ownerId,
 	account,
+	getRemoteAccount,
 	initial,
 	saveLocal,
 	onClose
 }: {
 	ownerId: string;
 	account: MailAccount;
+	getRemoteAccount: (id: string) => Promise<MailAccount>;
 	initial: LocalGmailDraft;
 	saveLocal: (draft: LocalGmailDraft, remove?: boolean) => Promise<LocalGmailDraft>;
 	onClose: (sent?: boolean) => void;
@@ -68,12 +70,13 @@ export function GmailComposer({
 			const pending = { ...value, ...(send ? { sendWriteId: writeId } : { saveWriteId: writeId }) };
 			await persist(pending);
 			if (failure.current) throw failure.current;
+			const remote = await getRemoteAccount(account.id);
 			const result = await mailRequest(
 				ownerId,
 				{
 					operation: 'google-action',
 					id: account.id,
-					revision: account.revision,
+					revision: remote.revision,
 					writeId,
 					mutation: {
 						action: send ? 'send' : 'draft-save',

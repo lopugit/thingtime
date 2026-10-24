@@ -19,6 +19,7 @@ type RouteModule = {
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
   ...actionDataRoutes,
+  'v1/things/interactions': () => import('../../../app/routes/api/v1/things/interactions/_interactions'),
   'v1/devices/node/identity': () => import('../../../app/routes/api/v1/devices/node/identity/_identity'),
   'v1/devices/disconnect': () => import('../../../app/routes/api/v1/devices/disconnect/_disconnect'),
   'v1/files/batches': () => import('../../../app/routes/api/v1/files/batches/_batches'),
@@ -279,6 +280,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/subspaces/transfer': () => import('../../../app/routes/api/v1/subspaces/transfer/_transfer'),
   'v1/subspaces/update': () => import('../../../app/routes/api/v1/subspaces/update/_update'),
   'v1/themes': () => import('../../../app/routes/api/v1/themes/_themes'),
+  'v1/algorithms/sync': () => import('../../../app/routes/api/v1/algorithms/sync/_sync'),
+  'v1/themes/sync': () => import('../../../app/routes/api/v1/themes/sync/_sync'),
   'v1/themes/active': () => import('../../../app/routes/api/v1/themes/active/_active'),
   'v1/themes/delete': () => import('../../../app/routes/api/v1/themes/delete/_delete'),
   'v1/themes/shared': () => import('../../../app/routes/api/v1/themes/shared/_shared'),

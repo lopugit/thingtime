@@ -7,7 +7,7 @@ import { attachmentImageResponse, parseImageWidth } from '~/api/utils/attachment
 import { json, redirect } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { getAttachmentDownload, getAttachmentDownloadTarget, getAttachmentFingerprint } from '~/api/utils/attachments/attachments';
-import { withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
+import { isSameOriginAttachmentRequest, withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
 import { fetchStoredObject } from '~/api/utils/attachments/localAttachmentStorage';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { viewerOf, withFriendIds, withLinkKeys } from '~/api/utils/things/things';
@@ -19,6 +19,7 @@ type ContentDependencies = {
 	downloadTarget: typeof getAttachmentDownloadTarget;
 	fingerprint: typeof getAttachmentFingerprint;
 	enrichViewer: typeof withFriendIds;
+	fetchObject: typeof fetchStoredObject;
 	rangeFetch: typeof fetchStoredObject;
 };
 
@@ -29,6 +30,7 @@ const defaultDependencies: ContentDependencies = {
 	downloadTarget: getAttachmentDownloadTarget,
 	fingerprint: getAttachmentFingerprint,
 	enrichViewer: withFriendIds,
+	fetchObject: fetchStoredObject,
 	rangeFetch: fetchStoredObject
 };
 
@@ -65,6 +67,11 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			// Service credentials are not first-party attachment principals. Treat
 			// them exactly like an anonymous caller for public-post authorization.
 			const user = resolvedUser?.accountKind === 'user' ? resolvedUser : null;
+			const retainBytes = url.searchParams.get('cache') === 'retain-bytes';
+			const retainOwnedFile = retainBytes || url.searchParams.get('cache') === 'retain';
+			if (retainOwnedFile && (!user || !isSameOriginAttachmentRequest(request))) return json({ ok: false, error: 'A same-origin full user session is required' }, { status: user ? 403 : 401 });
+			if (retainOwnedFile && (sharedRoot || url.searchParams.has('key') || url.searchParams.has('width') || url.searchParams.get('download') !== '1'))
+				return json({ ok: false, error: 'File retention requires an unscoped original download' }, { status: 400 });
 			const limit = await dependencies.enforceLimit(request, 'attachments.read', user ? `user:${user.id}` : null, {
 				failClosed: true
 			});
@@ -101,9 +108,14 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				audience || sharedRoot ? { id: '', ...audience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) } : null,
 				url.searchParams.get('id'),
 				url.searchParams.get('download') === '1',
-				retained ? range!.version : undefined
+				retained ? range!.version : undefined,
+				retainOwnedFile
 			);
 			if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
+			if (retainOwnedFile) {
+				if (!result.retention || result.retention.ownerId !== user!.id) return json({ ok: false, error: 'Saved owned file not found' }, { status: 404 });
+				if (!retainBytes) return json({ ok: true, cacheKey: `${result.cacheKey}:original`, size: result.size, file: result.retention });
+			}
 			if (range) {
 				if (result.version !== range.version) return json({ ok: false, error: 'Attachment version changed' }, { status: 409 });
 				if (range.offset + range.length > result.size) return json({ ok: false, error: 'Attachment range is outside the file' }, { status: 416 });
@@ -168,10 +180,10 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				if (response.ok) response.headers.set('ETag', etag);
 				return response;
 			}
-			if (url.searchParams.get('cache') === 'bytes') {
-				if (result.size > 16 * 1024 * 1024) return json({ ok: false, error: 'Use native streaming for large files' }, { status: 413 });
-				const upstream = await fetchStoredObject(result.url, { redirect: 'error', signal: AbortSignal.timeout(25_000) });
-				if (!upstream.ok || !upstream.body) return new Response(null, { status: 502 });
+			if (retainBytes || url.searchParams.get('cache') === 'bytes') {
+				if (!retainBytes && result.size > 16 * 1024 * 1024) return json({ ok: false, error: 'Use native streaming for large files' }, { status: 413 });
+				const upstream = await dependencies.fetchObject(result.url, { redirect: 'error', signal: AbortSignal.any([request.signal, AbortSignal.timeout(25_000)]) });
+				if (!upstream.ok || !upstream.body) { void upstream.body?.cancel().catch(() => {}); return new Response(null, { status: 502 }); }
 				return new Response(upstream.body, {
 					headers: {
 						ETag: etag,
@@ -192,10 +204,10 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 		}).then((response) => {
 			// Bytes may be retained, but the browser must reauthorize before reuse.
 			if (
-				response.status === 304 ||
+				(new URL(request.url).searchParams.get('cache') !== 'retain-bytes') && (response.status === 304 ||
 				(response.status === 200 &&
 					response.headers.get('Content-Type') !== 'application/json; charset=utf-8' &&
-					!response.headers.get('Content-Type')?.includes('application/json'))
+					!response.headers.get('Content-Type')?.includes('application/json')))
 			) {
 				response.headers.set('Cache-Control', 'private, no-cache');
 				response.headers.delete('Pragma');

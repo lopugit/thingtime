@@ -24,11 +24,14 @@ export type TimelineNoteCommand =
 	| { command: 'add-note'; operationId: string; eventId: string; thingId: string; text: string }
 	| { command: 'explain-change'; operationId: string; eventId: string; thingId: string }
 	| { command: 'remove-note'; operationId: string; noteId: string };
+/** Payload-free durable identity fence: a delayed add/explain retry cannot
+ * recreate a removed note. Local and account authorities use this same record. */
+export type TimelineNoteRemoval = { formatVersion: 1; id: string; ownerId: string; removedAt: string };
 export type TimelineNoteResult = { ok: true; note: TimelineNote } | { ok: true; removed: true; noteId: string };
 /** Presentation state for one note in the browser: accepted by the account,
  * authored on this device and waiting, or queued for removal. A definitive
  * server refusal is kept with the queued command until it is dismissed. */
-export type HistoryNoteView = { note: TimelineNote; status: 'accepted' | 'pending' | 'removing'; failure: { status: number; message: string } | null };
+export type HistoryNoteView = { operationId?: string; note: TimelineNote; status: 'accepted' | 'pending' | 'removing'; failure: { status: number; message: string } | null };
 
 const identifier = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(value);
 const uuid = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(value);
@@ -52,6 +55,11 @@ export function parseTimelineNote(input: unknown): TimelineNote {
 	if (value.formatVersion !== 1 || !noteId(value.id) || !identifier(value.ownerId) || !identifier(value.eventId) || !identifier(value.thingId) ||
 		!TIMELINE_NOTE_AUTHORS.includes(value.author) || !isTimelineNoteText(value.text) || !date(value.createdAt)) throw new Error('Invalid Timeline note');
 	return value as TimelineNote;
+}
+export function parseTimelineNoteRemoval(input: unknown): TimelineNoteRemoval {
+ const value = record(input, ['formatVersion', 'id', 'ownerId', 'removedAt'], 'Timeline note removal');
+ if (value.formatVersion !== 1 || !noteId(value.id) || !identifier(value.ownerId) || !date(value.removedAt)) throw new Error('Invalid Timeline note removal');
+ return value as TimelineNoteRemoval;
 }
 export function parseTimelineNoteCommand(input: unknown): TimelineNoteCommand {
 	if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid Timeline note command');

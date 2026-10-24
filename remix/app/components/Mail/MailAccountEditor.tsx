@@ -9,20 +9,22 @@ const defaultServer = (protocol: MailProtocol, address: string): MailServer => (
 	security: 'tls',
 	username: address
 });
-export const newMailAccount = (): MailAccount => ({
+export const newMailAccount = (allowCloud = true): MailAccount => ({
 	id: crypto.randomUUID(),
 	name: '',
 	address: '',
 	revision: 0,
 	servers: { imap: defaultServer('imap', '') },
-	sync: { cloud: false, local: true, transport: hasNativeMailSync() ? 'native' : 'relay' }
+	sync: { cloud: false, local: true, transport: hasNativeMailSync() ? 'native' : allowCloud ? 'relay' : 'connector' }
 });
 export function MailAccountEditor({
+	allowCloud = true,
 	account,
 	busy,
 	onSave,
 	onCancel
 }: {
+	allowCloud?: boolean;
 	account: MailAccount;
 	busy: boolean;
 	onSave: (account: MailAccount) => Promise<unknown>;
@@ -162,7 +164,11 @@ export function MailAccountEditor({
 					})}
 				<Flex direction="column" gap={3}>
 					<Text fontWeight="600">Where should this account sync?</Text>
-					<Checkbox isChecked={draft.sync.cloud} onChange={(event) => setDraft({ ...draft, sync: { ...draft.sync, cloud: event.target.checked } })}>
+					<Checkbox
+						isDisabled={!allowCloud}
+						isChecked={draft.sync.cloud}
+						onChange={(event) => setDraft({ ...draft, sync: { ...draft.sync, cloud: event.target.checked } })}
+					>
 						Through Thingtime’s cloud
 					</Checkbox>
 					<Text fontSize="xs" color="var(--tt-muted)">
@@ -190,7 +196,9 @@ export function MailAccountEditor({
 								{(hasNativeMailSync() || draft.sync.transport === 'native') && (
 									<option value="native">Directly from this app{hasNativeMailSync() ? '' : ' — unavailable in this app'}</option>
 								)}
-								<option value="relay">Thingtime API relay — no installation</option>
+								<option value="relay" disabled={!allowCloud}>
+									Thingtime API relay — no installation
+								</option>
 								<option value="connector">Paired local connector</option>
 							</Select>
 							<Text fontSize="xs" color="var(--tt-muted)" mt={2}>

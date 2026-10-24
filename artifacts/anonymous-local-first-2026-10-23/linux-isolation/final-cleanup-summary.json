@@ -1,0 +1,10 @@
+{
+  "allTaskRuntimeMetadataRemoved": true,
+  "remainingRuntimeDirectories": [],
+  "finalFixtureCleanup": {
+    "namespaceStopped": true,
+    "privateHomeAndDatabaseRemoved": true,
+    "runtimeMetadataRemoved": true,
+    "artifactsRetained": true
+  }
+}

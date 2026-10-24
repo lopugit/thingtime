@@ -1,0 +1,34 @@
+✖ native anonymous theme History reviews restore, undo and merge offline (48042.020562ms)
+✖ native account theme History reviews restore, undo and merge offline (51068.31675ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 99468.342244
+
+✖ failing tests:
+
+test at app/local-workspace/themeVersions.browser.test.ts:2:1332
+✖ native anonymous theme History reviews restore, undo and merge offline (48042.020562ms)
+  locator.waitFor: Timeout 25000ms exceeded.
+  Call log:
+    - waiting for locator('input:not([type="color"])[value="#885544"]') to be visible
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:84:92) {
+    name: 'TimeoutError',
+    log: [ `  - waiting for locator('input:not([type="color"])[value="#885544"]') to be visible` ]
+  }
+
+test at app/local-workspace/themeVersions.browser.test.ts:2:1332
+✖ native account theme History reviews restore, undo and merge offline (51068.31675ms)
+  locator.waitFor: Timeout 25000ms exceeded.
+  Call log:
+    - waiting for locator('input:not([type="color"])[value="#885544"]') to be visible
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:84:92) {
+    name: 'TimeoutError',
+    log: [ `  - waiting for locator('input:not([type="color"])[value="#885544"]') to be visible` ]
+  }

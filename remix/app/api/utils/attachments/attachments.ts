@@ -10,6 +10,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { StorageMutationError } from '../storage/storageCore';
 import {
+	isStandaloneAttachmentPurpose,
 	attachmentMediaKindForContentType,
 	canonicalLinkedAttachmentUrl,
 	isAttachmentObjectVersionId,
@@ -34,6 +35,7 @@ import {
 	PROFILE_ATTACHMENT_CONTENT_TYPES,
 	attachmentMpuSettlementAt,
 	attachmentStore,
+	isIdempotentLinkedAttachment,
 	bindReadyCommentAttachmentsToTarget,
 	bindReadyEmojiAttachmentToTarget,
 	bindReadyMessageAttachmentsToTarget,
@@ -41,6 +43,7 @@ import {
 	bindReadyAttachmentsToTarget,
 	syncBoundTargetAttachments,
 	type AttachmentDoc,
+	type AttachmentDeleteClaimScope,
 	type AttachmentPurpose,
 	type ProfileAttachmentSlot,
 	type AttachmentStore
@@ -376,7 +379,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	const cleanupClaimedDoc = async (
 		getS3: () => AttachmentS3,
 		doc: AttachmentDoc,
-		scope: { kind: 'draft'; expiredAtOrBefore?: Date; finalizingUpdatedAtOrBefore?: Date } | { kind: 'target'; targetId: string }
+		scope: AttachmentDeleteClaimScope
 	): Promise<AttachmentCleanupOutcome> => {
 		// Linked docs never touch S3. For everything else, resolve the client
 		// BEFORE the destructive deleting claim so an unconfigured/broken S3
@@ -822,11 +825,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				expiresAt: doc.attachmentExpiresAt?.toISOString() ?? null
 			});
 			const sameRequest = (doc: AttachmentDoc) =>
-				doc.ownerId === ownerId &&
+				doc.ownerId === ownerId && (doc.attachmentState === 'cancelled' || (
 				doc.attachmentRequestFingerprint === requestFingerprint &&
 				(intent.purpose === 'post'
 					? (doc.attachmentPurpose === undefined || doc.attachmentPurpose === 'post') && doc.attachmentProfileSlot === undefined
-					: doc.attachmentPurpose === intent.purpose && doc.attachmentProfileSlot === intent.profileSlot);
+					: doc.attachmentPurpose === intent.purpose && doc.attachmentProfileSlot === intent.profileSlot)));
 
 			let ownsInitialization = false;
 			let reserved = requestedId ? await dependencies.store.getById(id) : null;
@@ -859,6 +862,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					reserved = raced;
 				}
 			}
+			if (reserved.attachmentState === 'cancelled') return fail(409, 'This upload request was cancelled', { code: 'upload_cancelled', retryable: false });
       // Persist provenance before returning any byte-upload authority, including
       // retries of a pre-provenance deterministic reservation. Never infer it.
       if (fileSyncOrigin) {
@@ -952,7 +956,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					}
 					reserved = persisted;
 				} else {
-					if (!persisted) await s3.abortMultipartUpload({ objectKey, uploadId }).catch(() => {});
+					if (!persisted || persisted.attachmentState === 'cancelled') await s3.abortMultipartUpload({ objectKey, uploadId }).catch(() => {});
 					throw error;
 				}
 			}
@@ -1282,21 +1286,49 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			? { ok: true, deferred: true, retryAt: doc.attachmentExpiresAt.toISOString() }
 			: null;
 
-	const cancel = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ deferred: boolean; retryAt?: string }>> => {
+	const cancelRequest = async (ownerId: string, requestId: string): Promise<AttachmentResult<{ cancelled: true; deferred: boolean; retryAt?: string }>> => {
+		if (dependencies.customMongoActive()) return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+		const id = attachmentIdForRequest(ownerId, requestId);
+		// A competing start/cleanup may win the unique-row race. Re-read through
+		// the same reservation operation; never acknowledge an absent row as fenced.
+		for (let attempt = 0; attempt < 3; attempt++) {
+			let existing: AttachmentDoc;
+			try { existing = await dependencies.store.reserveCancellation(ownerId, id); }
+			catch (error) { if (Number((error as any)?.code) === 11000) continue; throw error; }
+			if (existing.attachmentPurpose === 'password' && !dependencies.passwordVault) return fail(404, 'Attachment not found');
+			if (existing.attachmentState === 'cancelled') return { ok: true, cancelled: true, deferred: false };
+			if (existing.targetId || !['pending', 'deleting'].includes(existing.attachmentState)) {
+				return fail(409, 'Upload already finalized or attached; refresh before deleting', { code: 'upload_already_finalized', retryable: false });
+			}
+			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, { kind: 'draft', retainCancellation: true });
+			if (outcome.status !== 'skipped') return { ...cleanupResponse(outcome), cancelled: true };
+		}
+		return fail(503, 'Upload cancellation is still in progress; retry the same request id', { retryable: true });
+	};
+
+	const cancel = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ deferred: boolean; retryAt?: string; cancelled?: true }>> => {
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid cancellation request');
 			const raw = input as Record<string, unknown>;
+			if ('requestId' in raw) {
+				if (Object.keys(raw).some(key => key !== 'requestId')) return fail(400, 'Invalid cancellation request');
+				const requestId = normalizeId(raw.requestId);
+				if (!requestId) return fail(400, 'Invalid attachment request id');
+				return await cancelRequest(ownerId, requestId);
+			}
 			if (Object.keys(raw).some((key) => key !== 'uploadId')) return fail(400, 'Invalid cancellation request');
 			const id = normalizeId(raw.uploadId);
 			if (!id) return fail(400, 'Invalid attachment upload id');
 			const existing = await getOwnedByAttachmentOrRequestId(ownerId, id);
 			if (!existing) return { ok: true, deferred: false };
 			if (existing.attachmentPurpose === 'password' && !dependencies.passwordVault) return fail(404, 'Attachment not found');
+			if (existing.attachmentState === 'cancelled') return { ok: true, deferred: false };
 			if (existing.targetId) return fail(409, 'Attached files must be removed from their post');
 			if (existing.attachmentState === 'finalizing') {
 				return fail(409, 'Attachment finalization is in progress — try again');
 			}
-			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, { kind: 'draft' });
+			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, { kind: 'draft',
+				...(dependencies.passwordVault && existing.attachmentPurpose === 'password' ? { retainCancellation: true as const } : {}) });
 			if (outcome.status === 'skipped') {
 				const raced = await getOwnedByAttachmentOrRequestId(ownerId, id);
 				if (raced?.targetId) return fail(409, 'Attached files must be removed from their post');
@@ -1311,18 +1343,87 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		}
 	};
 
-	const remove = async (ownerId: string, input: unknown, options?: { pendingOnly: boolean }): Promise<AttachmentResult<{ deferred: boolean; retryAt?: string }>> => {
+	const remove = async (ownerId: string, input: unknown, options?: { pendingOnly?: boolean; retainCancellation?: true }): Promise<AttachmentResult<{ deferred: boolean; retryAt?: string; deleted?: true }>> => {
 		try {
 			if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Invalid attachment deletion request');
 			const raw = input as Record<string, unknown>;
-			if (Object.keys(raw).some((key) => !['id', 'targetId'].includes(key))) return fail(400, 'Invalid attachment deletion request');
+			if (Object.keys(raw).some((key) => !['id', 'targetId', 'expectedUpdatedAt', 'requestId', 'retainReceipt'].includes(key))) return fail(400, 'Invalid attachment deletion request');
+			if (raw.expectedUpdatedAt !== undefined && (typeof raw.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(raw.expectedUpdatedAt)))) {
+				return fail(400, 'expectedUpdatedAt must be an ISO timestamp');
+			}
+			const expectedUpdatedAt = raw.expectedUpdatedAt === undefined ? undefined : new Date(raw.expectedUpdatedAt as string);
 			const id = normalizeId(raw.id);
 			const targetId = raw.targetId === undefined ? null : normalizeId(raw.targetId);
 			if (!id) return fail(400, 'Invalid attachment id');
 			if (raw.targetId !== undefined && !targetId) return fail(400, 'Invalid attachment target id');
+			if ('retainReceipt' in raw) {
+				if (raw.retainReceipt !== true || !expectedUpdatedAt || 'requestId' in raw)
+					return fail(400, 'Existing file deletion requires retainReceipt:true and expectedUpdatedAt, without requestId');
+				if (dependencies.customMongoActive()) return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+				// Existing account files do not store their original upload request ID.
+				// Only a current, exact owned ID can establish this receipt. Never
+				// reserve an arbitrary missing ID or interpret it as a request ID.
+				const existing = await dependencies.store.getOwned(ownerId, id);
+				if (!existing || existing.shareId !== id || existing.ownerId !== ownerId) return fail(404, 'Attachment not found');
+				if (existing.attachmentState === 'cancelled' && existing.attachmentCancellationRequested)
+					return { ok: true, deleted: true, deferred: false };
+				const contentPurpose = existing.attachmentPurpose === 'post' || existing.attachmentPurpose === 'comment' ? existing.attachmentPurpose : undefined;
+				const eligible = targetId ? !!contentPurpose && existing.targetId === targetId : !existing.targetId && isStandaloneAttachmentPurpose(existing.attachmentPurpose);
+				if (!eligible || existing.attachmentLinked || existing.attachmentImportDraft || existing.attachmentProfileSlot ||
+					!['ready', 'deleting'].includes(existing.attachmentState) || (existing.attachmentState === 'ready' && existing.attachmentExpiresAt))
+					return fail(409, 'Only a saved standalone file or matching post/comment file can use an existing-file receipt');
+				if (existing.attachmentState !== 'deleting' && existing.updatedAt.getTime() !== expectedUpdatedAt.getTime())
+					return fail(409, 'Attachment changed; refresh before deleting');
+				const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, {
+					...(targetId ? { kind: 'target' as const, targetId, contentPurpose } : { kind: 'draft' as const, standalonePurpose: existing.attachmentPurpose as 'file' | 'recording' }), retainCancellation: true, expectedUpdatedAt
+				});
+				const receipt = await dependencies.store.getOwned(ownerId, id);
+				if (receipt?.shareId === id && receipt.ownerId === ownerId && receipt.attachmentCancellationRequested &&
+					['cancelled', 'deleting'].includes(receipt.attachmentState))
+					return { ...(outcome.status === 'skipped' ? deferredDeletingResponse(receipt) || { ok: true as const, deferred: receipt.attachmentState === 'deleting' } : cleanupResponse(outcome)), deleted: true };
+				if (receipt && receipt.attachmentState !== 'deleting') return fail(409, 'Attachment changed; refresh before deleting');
+				// A legacy cleanup may have removed the row concurrently. Absence
+				// cannot prove a replay fence, so keep the caller's recovery intent.
+				return fail(503, 'File deletion receipt is not confirmed; retry the same request', { retryable: true });
+			}
+			if ('requestId' in raw) {
+				const requestId = normalizeId(raw.requestId);
+				if (!requestId || !expectedUpdatedAt || attachmentIdForRequest(ownerId, requestId) !== id)
+					return fail(400, 'Durable file deletion requires the matching upload request id and expectedUpdatedAt');
+				if (dependencies.customMongoActive()) return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+				// Reserve absence as well as existing uploads. A missing row alone is
+				// not proof against a delayed replay of the original start request.
+				for (let attempt = 0; attempt < 3; attempt++) {
+					let reserved: AttachmentDoc;
+					try { reserved = await dependencies.store.reserveCancellation(ownerId, id); }
+					catch (error) { if (Number((error as any)?.code) === 11000) continue; throw error; }
+					if (reserved.attachmentState === 'cancelled') return { ok: true, deleted: true, deferred: false };
+					const contentPurpose = reserved.attachmentPurpose === 'post' || reserved.attachmentPurpose === 'comment' ? reserved.attachmentPurpose : undefined;
+					const eligible = targetId ? !!contentPurpose && (!reserved.targetId || reserved.targetId === targetId)
+						: !reserved.targetId && isStandaloneAttachmentPurpose(reserved.attachmentPurpose) && !(reserved.attachmentState === 'ready' && reserved.attachmentExpiresAt);
+					if (!eligible || (reserved.attachmentLinked && (!targetId || !isIdempotentLinkedAttachment(reserved))) || reserved.attachmentImportDraft || reserved.attachmentProfileSlot || !['ready', 'deleting'].includes(reserved.attachmentState))
+						return fail(409, 'This upload must finish or be removed through its owning surface');
+					if (reserved.attachmentState !== 'deleting' && reserved.updatedAt.getTime() !== expectedUpdatedAt.getTime()) return fail(409, 'Attachment changed; refresh before deleting');
+					// A content-file receipt fences the exact target and immutable purpose
+					// in the same cleanup claim. Unbound ready uploads may be discarded
+					// before their local parent ever synchronizes.
+					const result = targetId ? cleanupResponse(await cleanupClaimedDoc(() => dependencies.getS3(), reserved, {
+						...(reserved.targetId ? { kind: 'target' as const, targetId } : { kind: 'draft' as const }), contentPurpose, expectedUpdatedAt, retainCancellation: true,
+						...(reserved.attachmentLinked ? { linkedRequestFingerprint: reserved.attachmentRequestFingerprint } : {})
+					})) : await remove(ownerId, { id, expectedUpdatedAt: raw.expectedUpdatedAt }, { retainCancellation: true });
+					if (!result.ok) return result;
+					const receipt = await dependencies.store.getById(id);
+					if (receipt?.ownerId === ownerId && receipt.attachmentCancellationRequested && ['cancelled', 'deleting'].includes(receipt.attachmentState))
+						return { ...result, deleted: true };
+					// A concurrent legacy cleanup removed the row: reserve its fence
+					// on the next pass, never acknowledge an unprotected missing row.
+				}
+				return fail(503, 'File deletion is still in progress; retry the same request', { retryable: true });
+			}
 			const existing = await getOwnedByAttachmentOrRequestId(ownerId, id);
 			if (!existing) return { ok: true, deferred: false };
 			if (existing.attachmentPurpose === 'password' && !dependencies.passwordVault) return fail(404, 'Attachment not found');
+			if (existing.attachmentState === 'cancelled') return { ok: true, deferred: false };
 			// Internal copy rollback may only discard unfinished uploads. The
 			// cleanup claim below CAS-fences the observed state, so a concurrent
 			// finalization cannot turn this retry into deletion of a durable file.
@@ -1337,13 +1438,26 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (existing.attachmentState === 'finalizing') {
 				return fail(409, 'Attachment finalization is in progress — try again');
 			}
-			const reason = existing.targetId ? { kind: 'target' as const, targetId: existing.targetId } : { kind: 'draft' as const };
+			// Once deleting, the original content version no longer applies: cleanup
+			// retries must still finish exact-version removal and quota settlement.
+			if (expectedUpdatedAt && existing.attachmentState !== 'deleting' && existing.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+				return fail(409, 'Attachment changed; refresh before deleting');
+			}
+			const reason: AttachmentDeleteClaimScope = {
+				...(existing.targetId ? { kind: 'target', targetId: existing.targetId } : { kind: 'draft', ...(options?.retainCancellation ? { retainCancellation: true as const, ...(isStandaloneAttachmentPurpose(existing.attachmentPurpose) ? { standalonePurpose: existing.attachmentPurpose } : {}) } : {}) }),
+				...(options?.retainCancellation ? { retainCancellation: true as const } : {}),
+				...(expectedUpdatedAt ? { expectedUpdatedAt } : {})
+			};
 			const outcome = await cleanupClaimedDoc(() => dependencies.getS3(), existing, reason);
 			if (outcome.status === 'skipped') {
 				const raced = await getOwnedByAttachmentOrRequestId(ownerId, id);
 				if (raced?.targetId && raced.targetId !== targetId) return fail(409, 'Attached files must be removed from their post');
 				if (raced?.attachmentState === 'finalizing') {
 					return fail(409, 'Attachment finalization is in progress — try again');
+				}
+				if (expectedUpdatedAt && raced && raced.attachmentState !== 'cancelled') {
+					if (raced.attachmentState !== 'deleting') return fail(409, 'Attachment changed; refresh before deleting');
+					return deferredDeletingResponse(raced) || fail(503, 'Attachment cleanup is still in progress; retry deletion');
 				}
 				return deferredDeletingResponse(raced) || { ok: true, deferred: false };
 			}
@@ -1446,12 +1560,17 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	};
 
 	const download = async (
-		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean, retainedVersion?: string
-	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; version: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
+		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean, retainedVersion?: string, retainOwnedFile = false
+	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; version: string; size: number; contentType: string; disposition: string; image: boolean; retention?: { purpose: 'file' | 'recording' | 'post' | 'comment'; targetId?: string; ownerId: string; updatedAt: string; folderId: string | null; attachment: AttachmentPublicMetadata } }>> => {
 		try {
 			const readable = await readableStoredAttachment(viewer, idInput, false, true, retainedVersion);
 			if (readable.ok === false) return readable;
 			const { doc } = readable;
+			if (retainOwnedFile && (viewer?.id !== doc.ownerId || viewer.sharedRoot || !(isStandaloneAttachmentPurpose(doc.attachmentPurpose) ? !doc.targetId : ['post','comment'].includes(doc.attachmentPurpose) && !!doc.targetId) ||
+				doc.attachmentExpiresAt || doc.attachmentImportDraft || doc.attachmentProfileSlot || doc.attachmentLinked || doc.moderation?.status === 'blocked'))
+				return fail(404, 'Saved owned file not found');
+			const retainedMetadata = retainOwnedFile ? toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation, { ownerView: true }) : null;
+			if (retainOwnedFile && !retainedMetadata) return fail(404, 'Saved owned file metadata is unavailable');
 			const s3 = dependencies.getS3();
 			const inline = !forceDownload && attachmentMayRenderInline(doc.crystal);
 			const signed = await s3.signDownload({
@@ -1471,7 +1590,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				size: doc.objectSizeBytes,
 				contentType: inline ? doc.crystal.contentType : 'application/octet-stream',
 				disposition: attachmentContentDisposition(doc.crystal.name, inline),
-				image: inline && doc.crystal.mediaKind === 'image'
+				image: inline && doc.crystal.mediaKind === 'image',
+				...(retainOwnedFile ? { retention: {
+					purpose: doc.attachmentPurpose as 'file' | 'recording' | 'post' | 'comment', ...(doc.targetId ? { targetId: doc.targetId } : {}), ownerId: doc.ownerId, updatedAt: doc.updatedAt.toISOString(), folderId: doc.folderId || null,
+					attachment: retainedMetadata!
+				} } : {})
 			};
 		} catch (error) {
 			return knownFailure(error) || unavailable('download', error);
@@ -1558,7 +1681,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		attachmentIds: readonly unknown[],
 		purpose: ContentAttachmentPurpose,
 		maxAttachments = attachmentCountLimit(purpose),
-		expectedTargetId?: unknown
+		expectedTargetId?: unknown, allowMixed = false
 	): Promise<AttachmentResult<InspectedAttachments>> => {
 		try {
 			if (dependencies.customMongoActive()) {
@@ -1597,7 +1720,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 						!toAttachmentPublicMetadata(doc.shareId, doc.crystal)
 					);
 				}) ||
-				bindingStates.size > 1
+				(bindingStates.size > 1 && !allowMixed)
 			) {
 				return fail(409, 'One or more attachments are unavailable or already attached');
 			}
@@ -1619,11 +1742,14 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 
 	const inspectForPost = async (
 		ownerId: string,
-		attachmentIds: readonly unknown[]
+		attachmentIds: readonly unknown[], expectedTargetId?: unknown
 	): Promise<AttachmentResult<{ hasAny: boolean; hasVisual: boolean }>> => {
-		const inspected = await inspectForPurpose(ownerId, attachmentIds, 'post');
+		const inspected = await inspectForPurpose(ownerId, attachmentIds, 'post', attachmentCountLimit('post'), expectedTargetId);
 		return inspected.ok ? { ok: true, hasAny: inspected.hasAny, hasVisual: inspected.hasVisual } : inspected;
 	};
+
+	const inspectForUpdate = (ownerId: string, attachmentIds: readonly unknown[], purpose: 'post' | 'comment', targetId: string) =>
+		inspectForPurpose(ownerId, attachmentIds, purpose, attachmentCountLimit(purpose), targetId, true);
 
 	const inspectForComment = (ownerId: string, attachmentIds: readonly unknown[], expectedTargetId?: unknown) =>
 		inspectForPurpose(ownerId, attachmentIds, 'comment', MAX_ATTACHMENTS_PER_TARGET, expectedTargetId);
@@ -1647,7 +1773,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		return inspected;
 	};
 
-	const beforeCascade = async (root: { shareId: string; ownerId: string }): Promise<AttachmentResult> => {
+	const beforeCascade = async (root: { shareId: string; ownerId: string }, retainReceipts = false): Promise<AttachmentResult> => {
 		try {
 			// A custom data-plane shareId can collide with a home post id. Those
 			// roots cannot own private Thingtime S3 attachments and must never drive
@@ -1658,7 +1784,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			let s3: AttachmentS3 | null = null;
 			const getS3 = () => (s3 ??= dependencies.getS3());
 			for (const doc of docs) {
-				const outcome = await cleanupClaimedDoc(getS3, doc, { kind: 'target', targetId: root.shareId });
+				const outcome = await cleanupClaimedDoc(getS3, doc, { kind: 'target', targetId: root.shareId,
+					...(retainReceipts && !doc.attachmentLinked && ['post', 'comment'].includes(doc.attachmentPurpose || '') ? { retainCancellation: true as const } : {}) });
 				if (outcome.status === 'deferred') {
 					throw new AttachmentServiceError(503, 'Attachment deletion is still settling — try again');
 				}
@@ -1676,6 +1803,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	};
 
 	return {
+		link: (ownerId: string, input: unknown) => linkAttachmentWithDependencies(ownerId, input, dependencies),
 		start,
 		signParts,
 		complete,
@@ -1688,6 +1816,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		describeTransfer,
 		copy,
 		inspectForPost,
+		inspectForUpdate,
 		inspectForComment,
 		inspectForMessage,
 		inspectForEmoji,
@@ -1700,6 +1829,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 
 const service = createAttachmentService();
 
+export const linkAttachment = service.link;
 export const startAttachmentUpload = service.start;
 export const signAttachmentUploadParts = service.signParts;
 export const completeAttachmentUpload = service.complete;
@@ -1712,6 +1842,7 @@ export const getAttachmentFingerprint = service.fingerprint;
 export const describeAttachmentTransfer = service.describeTransfer;
 export const copySharedAttachment = service.copy;
 export const inspectReadyAttachmentsForPost = service.inspectForPost;
+export const inspectReadyAttachmentsForUpdate = service.inspectForUpdate;
 export const inspectReadyAttachmentsForComment = service.inspectForComment;
 export const inspectReadyAttachmentsForMessage = service.inspectForMessage;
 export const inspectReadyAttachmentForEmoji = service.inspectForEmoji;
@@ -1729,14 +1860,17 @@ export const createReadyAttachmentPostInsertHook =
 // POST /api/v1/attachments/annotate — owner-authored display metadata on a
 // ready attachment (draft or bound). The media's own Thing page and the post
 // lightbox render these; binding, audience, and object bytes are untouched.
-export const annotateAttachment = async (ownerId: string, input: unknown, options: { unboundPostOnly?: boolean } = {}): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
+export const annotateAttachment = async (ownerId: string, input: unknown, options: { unboundPostOnly?: boolean } = {}): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata; updatedAt: string }>> => {
 	try {
 		if (isCustomMongoEndpointActive()) {
 			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 		}
 		const record = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
-		if (Object.keys(record).some((key) => !['id', 'filenamePreview', 'title', 'description'].includes(key))) {
+		if (Object.keys(record).some((key) => !['id', 'filenamePreview', 'title', 'description', 'expectedUpdatedAt'].includes(key))) {
 			return fail(400, 'Invalid attachment annotation request');
+		}
+		if (record.expectedUpdatedAt !== undefined && (typeof record.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(record.expectedUpdatedAt)))) {
+			return fail(400, 'expectedUpdatedAt must be an ISO timestamp');
 		}
 		const id = normalizeId(record.id);
 		if (!id) return fail(400, 'Invalid attachment id');
@@ -1752,10 +1886,10 @@ export const annotateAttachment = async (ownerId: string, input: unknown, option
 		if (title === undefined && description === undefined && filenamePreview === undefined) {
 			return fail(400, 'Provide a filename preview, title or description to update');
 		}
-		const doc = await annotateOwnedAttachment(ownerId, id, { filenamePreview, title, description }, options);
+		const doc = await annotateOwnedAttachment(ownerId, id, { filenamePreview, title, description }, { ...options, expectedUpdatedAt: record.expectedUpdatedAt as string | undefined });
 		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
 		if (!attachment) return fail(409, 'Attachment metadata failed validation after update');
-		return { ok: true, attachment };
+		return { ok: true, attachment, updatedAt: doc.updatedAt.toISOString() };
 	} catch (error) {
 		return knownFailure(error) || unavailable('annotate', error);
 	}
@@ -1766,17 +1900,19 @@ export const annotateAttachment = async (ownerId: string, input: unknown, option
 // any uploaded attachment, but no bytes ever touch Thingtime storage: the
 // crystal's url renders straight from the original site (img/video/anchor safe
 // sinks; the server never fetches it, so there is no SSRF surface). Duplicate
-// URLs are deliberately allowed — each mint is its own attachment thing.
+// URLs are deliberately allowed — each new request is its own attachment thing.
 // Unbound mints expire on the same 24h draft TTL as uploads.
-export const linkAttachment = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
+async function linkAttachmentWithDependencies(ownerId: string, input: unknown, dependencies: AttachmentServiceDependencies): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata; updatedAt: string }>> {
 	try {
-		if (isCustomMongoEndpointActive()) {
+		if (dependencies.customMongoActive()) {
 			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
 		}
 		const record = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
-		if (Object.keys(record).some((key) => !['url', 'purpose', 'mediaKind'].includes(key))) {
+		if (Object.keys(record).some((key) => !['url', 'purpose', 'mediaKind', 'requestId'].includes(key))) {
 			return fail(400, 'Invalid linked media request');
 		}
+		const requestId = 'requestId' in record ? normalizeId(record.requestId) : undefined;
+		if (requestId === null) return fail(400, 'Invalid attachment request id');
 		const url = canonicalLinkedAttachmentUrl(record.url);
 		if (!url) return fail(400, 'Linked media must be a plain http(s) URL of at most 2048 characters');
 		const purpose = record.purpose === undefined ? 'post' : record.purpose;
@@ -1802,20 +1938,46 @@ export const linkAttachment = async (ownerId: string, input: unknown): Promise<A
 			mediaKind,
 			url
 		};
-		const doc = await attachmentStore.insertLinkedReady({
-			id: randomUUID(),
-			ownerId,
-			crystal,
-			purpose,
-			expiresAt: new Date(Date.now() + ATTACHMENT_READY_DRAFT_TTL_MS)
-		});
-		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation);
-		if (!attachment) return fail(409, 'Linked media failed validation after creation');
-		return { ok: true, attachment };
+		const id = requestId ? attachmentIdForRequest(ownerId, requestId) : dependencies.uuid();
+		// Domain separation prevents an upload and a link from sharing a request
+		// receipt even if their serialized metadata happens to match.
+		const requestFingerprint = requestId ? createHash('sha256').update('thingtime-linked-attachment-request-v1\0')
+			.update(JSON.stringify({ url, purpose, mediaKind })).digest('hex') : undefined;
+		const reply = (doc: AttachmentDoc): AttachmentResult<{ attachment: AttachmentPublicMetadata; updatedAt: string }> => {
+			if (doc.ownerId !== ownerId || doc.shareId !== id) return fail(409, 'Attachment request identity changed');
+			if (doc.attachmentState === 'cancelled') return fail(409, 'Attachment request was cancelled', { code: 'upload_cancelled', retryable: false });
+			if (doc.attachmentState !== 'ready' || !doc.attachmentLinked ||
+				(requestFingerprint && doc.attachmentRequestFingerprint !== requestFingerprint))
+				return fail(409, 'Attachment request already exists with different metadata or is being deleted', { retryable: false });
+			// A replay cannot renew a draft or resurrect an expired request. Bound
+			// attachments have no expiry and return their current annotated metadata.
+			if ((!doc.targetId && !doc.attachmentExpiresAt) || (doc.attachmentExpiresAt &&
+				(!Number.isFinite(doc.attachmentExpiresAt.getTime()) || doc.attachmentExpiresAt.getTime() <= dependencies.now().getTime())))
+				return fail(409, 'Linked attachment draft expired; create a new request', { retryable: false });
+			const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation);
+			if (!attachment) return fail(409, 'Linked media failed validation after creation');
+			return { ok: true, attachment, updatedAt: doc.updatedAt.toISOString() };
+		};
+		if (requestId) {
+			const existing = await dependencies.store.getById(id);
+			if (existing) return reply(existing);
+		}
+		try {
+			return reply(await dependencies.store.insertLinkedReady({ id, ownerId, crystal, purpose, requestFingerprint,
+				expiresAt: new Date(dependencies.now().getTime() + ATTACHMENT_READY_DRAFT_TTL_MS) }));
+		} catch (error) {
+			// The unique attachment identity and quota charge commit together. A
+			// concurrent winner can be replayed, without charging or minting again.
+			if (requestId) {
+				const raced = await dependencies.store.getById(id);
+				if (raced) return reply(raced);
+			}
+			throw error;
+		}
 	} catch (error) {
 		return knownFailure(error) || unavailable('link', error);
 	}
-};
+}
 
 // PATCH-time sync: re-stamp the display order of a target's bound attachments
 // AND bind any newly uploaded ready drafts an edit appends. The store helper

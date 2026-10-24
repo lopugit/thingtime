@@ -1,34 +1,36 @@
+import { binarySize, type TransferBinary } from './binary';
 import { transferChecksum, type TransferBundle } from './archive';
 import { TRANSFER_FORMAT, TRANSFER_LIMITS, TransferFormatError, serializeTransfer, transferAnnotations, type TransferAnnotations, type TransferFile, type TransferThing } from './format';
 
-export type TransferSourceFile = TransferAnnotations & { id: string; name: string; mime: string; data: Uint8Array };
+export type TransferSourceFile<T extends TransferBinary = Uint8Array> = TransferAnnotations & { id: string; name: string; mime: string; data: T };
 /** Adapters MUST authorize each read using the current viewer and return a
  * content-only projection. Folder listing is never an authorization grant.
  * Composition adapters canonicalize aliases before returning dependencies.
  */
-export type TransferSource = {
+export type TransferSource<T extends TransferBinary = Uint8Array> = {
   read: (id: string, signal?: AbortSignal) => Promise<TransferThing>;
   children: (folderId: string, cursor: string | undefined, signal?: AbortSignal) => Promise<{ ids: string[]; cursor?: string | null }>;
   dependencies: (thing: TransferThing, signal?: AbortSignal) => Promise<string[]>;
-  files: (thing: TransferThing, signal?: AbortSignal) => AsyncIterable<TransferSourceFile>;
+  files: (thing: TransferThing, signal?: AbortSignal) => AsyncIterable<TransferSourceFile<T>>;
 };
 export type CollectTransferOptions = {
   includeChildren?: boolean;
   includeDependencies?: boolean;
   includeFiles?: boolean;
+  includeLinks?: boolean;
   signal?: AbortSignal;
   progress?: (state: { things: number; files: number; bytes: number }) => void;
 };
 const fail = (message: string): never => { throw new TransferFormatError(message); };
 
 /** Complete, bounded traversal: never exports only the first visible UI page. */
-export const collectTransfer = async (roots: string[], source: TransferSource, options: CollectTransferOptions = {}): Promise<TransferBundle> => {
+export const collectTransfer = async <T extends TransferBinary = Uint8Array>(roots: string[], source: TransferSource<T>, options: CollectTransferOptions = {}): Promise<TransferBundle<T>> => {
   const selected = [...new Set(roots)];
   if (!selected.length || selected.length > TRANSFER_LIMITS.things) fail('Choose between 1 and 1000 Things');
   const queue = [...selected];
   const queued = new Set(queue);
   const docs = new Map<string, TransferThing>();
-  const files = new Map<string, Uint8Array>();
+  const files = new Map<string, T>();
   const metadata: TransferFile[] = [];
   let bytes = 0;
   const check = () => options.signal?.throwIfAborted();
@@ -49,9 +51,9 @@ export const collectTransfer = async (roots: string[], source: TransferSource, o
     // imported content are executed by this collector.
     const copy: TransferThing = structuredClone(doc);
     docs.set(id, copy);
-    if (doc.targetId) enqueue([doc.targetId]);
-    if (options.includeDependencies !== false) enqueue(await source.dependencies(doc, options.signal));
-    if (doc.thingtime.includes('folder') && options.includeChildren !== false) {
+    if (copy.targetId) enqueue([copy.targetId]);
+    if (options.includeDependencies !== false) enqueue(await source.dependencies(copy, options.signal));
+    if (copy.thingtime.includes('folder') && options.includeChildren !== false) {
       let cursor: string | undefined;
       const cursors = new Set<string>();
       for (let page = 0; ; page++) {
@@ -64,20 +66,21 @@ export const collectTransfer = async (roots: string[], source: TransferSource, o
         cursors.add(result.cursor); cursor = result.cursor;
       }
     }
-    if (options.includeFiles !== false) for await (const file of source.files(doc, options.signal)) {
+    if (options.includeFiles !== false) for await (const file of source.files(copy, options.signal)) {
       check();
       if (files.has(file.id)) {
         // The same embedded media may appear in several Things, but it must
         // represent the same bytes throughout one portable snapshot.
         const existing = metadata.find((entry) => entry.id === file.id)!;
-        if (existing.bytes !== file.data.byteLength || existing.sha256 !== await transferChecksum(file.data)) fail('A file changed during export');
+        if (existing.bytes !== binarySize(file.data) || existing.sha256 !== await transferChecksum(file.data, options.signal)) fail('A file changed during export');
         continue;
       }
-      if (files.size >= TRANSFER_LIMITS.files || bytes + file.data.byteLength > TRANSFER_LIMITS.fileBytes) fail('This export exceeds the file limit');
-      const data = Uint8Array.from(file.data);
-      metadata.push({ id: file.id, name: file.name, mime: file.mime, targetId: doc.id, ...transferAnnotations(file),
-        path: `files/${files.size.toString().padStart(6, '0')}`, bytes: data.byteLength, sha256: await transferChecksum(data) });
-      files.set(file.id, data); bytes += data.byteLength;
+      if (files.size >= TRANSFER_LIMITS.files || bytes + binarySize(file.data) > TRANSFER_LIMITS.fileBytes) fail('This export exceeds the file limit');
+      const data = (file.data instanceof Blob ? file.data : Uint8Array.from(file.data)) as T;
+      const entry = { id: file.id, name: file.name, mime: file.mime, targetId: copy.id, ...transferAnnotations(file),
+        path: `files/${files.size.toString().padStart(6, '0')}`, bytes: binarySize(data), sha256: '' };
+      entry.sha256 = await transferChecksum(data, options.signal);
+      metadata.push(entry); files.set(entry.id, data); bytes += entry.bytes;
     }
     options.progress?.({ things: docs.size, files: files.size, bytes });
   }

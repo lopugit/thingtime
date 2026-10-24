@@ -38,3 +38,20 @@ test('bounded input and explicit root validation', async () => {
   await assert.rejects(() => prepareDraft('{'), /valid JSON/);
   await assert.rejects(() => prepareDraft(fixture(), 'account-thing'), /not in the supplied/);
 });
+
+test('new editable and transient block types cannot enable Actions in anonymous export previews', async () => {
+  for (const type of ['element', 'collection', 'condition']) {
+    const input = fixture();
+    input.things[0].crystal.blocks = [{ id: 'interactive', type, tag: 'div', children: [] }];
+    await assert.rejects(() => prepareDraft(input), /Unsupported draft block/);
+  }
+  for (const patch of [
+    { source: { action: 'private-action' } },
+    { props: { 'data-tt-action': 'private-action' } },
+    { props: { onClick: 'private-action' } }
+  ]) {
+    const input = fixture();
+    Object.assign(input.things[0].crystal.blocks[0], patch);
+    await assert.rejects(() => prepareDraft(input), /Unsupported draft field/);
+  }
+});

@@ -1,0 +1,13 @@
+{
+  "scope": "whole managed workspace cgroup including all concurrent jobs",
+  "recordedAt": "2026-10-23T09:58:44.315943+00:00",
+  "memoryBytes": 11695493120,
+  "memoryEvents": {
+    "low": "0",
+    "high": "0",
+    "max": "23683",
+    "oom": "0",
+    "oom_kill": "0",
+    "oom_group_kill": "0"
+  }
+}

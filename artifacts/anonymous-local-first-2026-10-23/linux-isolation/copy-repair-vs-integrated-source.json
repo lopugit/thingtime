@@ -1,0 +1,11 @@
+{
+  "integratedSourceSha256": "5a2658430098927c4c81311ad33e8a62ef3022fcf27a700ad7760056fb581967",
+  "repairSourceSha256": "8a95b2df38f68bc247d1492c74eec5689bcc526c59888fc1cf4acdfb9db17476",
+  "intentionalChangedFiles": [
+    {
+      "path": "remix/app/local-workspace/accountFileMetadata.ts",
+      "integratedSha256": "c2729363213898450675e1c07f64c71ad20d89fa07ce7c88758de5acfe5bfae3",
+      "repairSha256": "343309b8e859223ec67024e1086110ec81eb78f949b85d31f3f6dd28f537048e"
+    }
+  ]
+}

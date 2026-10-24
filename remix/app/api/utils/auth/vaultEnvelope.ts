@@ -1,4 +1,7 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, randomUUID, scrypt } from 'node:crypto';
+import { assertVaultIdentity as identity, vaultValueContext as valueContext, vaultPasswordContext as passwordContext, vaultFailure as failure,
+  VAULT_MAX_VALUE_BYTES as MAX_VALUE_BYTES, VAULT_MAX_PASSWORD_BYTES, type VaultSealed as Sealed, type VaultEnvelope, type PasswordKeyEnvelope, type SessionKeyEnvelope } from '../../../passwords/vaultEnvelopeContract';
+export type { VaultEnvelope, PasswordKeyEnvelope, SessionKeyEnvelope } from '../../../passwords/vaultEnvelopeContract';
 
 // Cryptographic primitives for the password/session vault migration. These do
 // not authenticate a caller or choose a recovery/background-access policy.
@@ -6,20 +9,7 @@ import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, randomUUID, sc
 // A stable random data key allows password/session rotation without rewriting
 // every provider credential. Never derive a data key from a stored password hash.
 export type VaultDataKey = { id: string; bytes: Buffer };
-type Sealed = { cipherText: string; iv: string; tag: string };
-export type VaultEnvelope = Sealed & { version: 2; keyId: string };
-export type PasswordKeyEnvelope = Sealed & { version: 1; keyId: string; kdf: 'scrypt-32768-8-3'; salt: string };
-export type SessionKeyEnvelope = Sealed & {
-  version: 1; keyId: string; kdf: 'hkdf-sha256'; salt: string; sessionId: string; expiresAt: number;
-};
-type Identity = { ownerId: string; keyId: string };
 type Session = { id: string; token: string; expiresAt: number };
-const MAX_VALUE_BYTES = 64 * 1024;
-const failure = () => new Error('The saved vault key or value could not be unlocked.');
-const identity = ({ ownerId, keyId }: Identity) => {
-  if (typeof ownerId !== 'string' || !ownerId || ownerId.length > 200 ||
-      typeof keyId !== 'string' || !/^vault-key-[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(keyId)) throw failure();
-};
 const keyBytes = (key: Buffer) => {
   if (!Buffer.isBuffer(key) || key.length !== 32) throw failure();
   return key;
@@ -51,14 +41,7 @@ const open = (key: Buffer, aad: string[], value: Sealed, maxBytes = MAX_VALUE_BY
   finally { partial?.fill(0); }
 };
 export const createVaultDataKey = (): VaultDataKey => ({ id: `vault-key-${randomUUID()}`, bytes: randomBytes(32) });
-const valueContext = (ownerId: string, keyId: string, recordId: string, purpose: 'oauth' | 'secret') => {
-  identity({ ownerId, keyId });
-  if (typeof recordId !== 'string' || !recordId || recordId.length > 200 || !['oauth', 'secret'].includes(purpose)) throw failure();
-  return ['thingtime-vault-value:v2', ownerId, keyId, recordId, purpose];
-};
-// User/provider values have no product size cap. A storage adapter may pass
-// its actual physical capacity; key wrappers retain their small protocol bound.
-export const sealVaultValue = (ownerId: string, key: VaultDataKey, recordId: string, purpose: 'oauth' | 'secret', value: string, maxBytes = Infinity): VaultEnvelope => {
+export const sealVaultValue = (ownerId: string, key: VaultDataKey, recordId: string, purpose: 'oauth' | 'secret', value: string, maxBytes = MAX_VALUE_BYTES): VaultEnvelope => {
   if (typeof value !== 'string' || Buffer.byteLength(value) > maxBytes) throw failure();
   const plain = Buffer.from(value);
   try { return { version: 2, keyId: key.id, ...seal(key.bytes, valueContext(ownerId, key.id, recordId, purpose), plain, maxBytes) }; }
@@ -74,7 +57,7 @@ export const openVaultValue = (ownerId: string, key: VaultDataKey, recordId: str
 // from selecting a cheap KDF or forcing unbounded allocations. Password input
 // is exact (no trimming, normalization, or bcrypt-style truncation).
 const passwordKey = async (password: string, salt: Buffer) => {
-  if (typeof password !== 'string' || !password || Buffer.byteLength(password) > 4096) throw failure();
+  if (typeof password !== 'string' || !password || Buffer.byteLength(password) > VAULT_MAX_PASSWORD_BYTES) throw failure();
   const bytes = Buffer.from(password);
   try {
     return await new Promise<Buffer>((resolve, reject) => {
@@ -82,7 +65,6 @@ const passwordKey = async (password: string, salt: Buffer) => {
     });
   } finally { bytes.fill(0); }
 };
-const passwordContext = (ownerId: string, keyId: string) => ['thingtime-vault-password:v1', ownerId, keyId, 'scrypt-32768-8-3'];
 const openKey = (wrappingKey: Buffer, context: string[], envelope: Sealed & { keyId: string }): VaultDataKey => {
   const bytes = open(wrappingKey, context, envelope);
   if (bytes.length !== 32) { bytes.fill(0); throw failure(); }

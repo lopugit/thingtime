@@ -32,6 +32,46 @@ Disable a Character to block future sign-ins, revoke its sessions and return
 owner sessions that were acting as it to the owner. Posts remain attributed to
 the Character. Re-enabling never resurrects revoked credentials.
 
+## Drafts on this device
+
+A composer's **Post as** selection saves text drafts to a private device workspace
+for the selected origin, signed-in principal, Character and data plane. Drafts
+for the owner, another Character, and an independently signed-in Character stay
+separate. The normal draft/template picker reads this workspace offline.
+
+After the owner-only roster has loaded, the device retains only Character IDs,
+names, login modes and disabled flags for these local editors. It does not retain
+passwords, session credentials, profile details or management privileges. An
+anonymous workspace cannot use an account's retained roster or draft partition.
+
+Draft sync uses the existing canonical draft/file queues and starts only after
+account confirmation. Every remote request still negotiates the Characters
+capability and reauthorizes the selected Character on the server. The Character
+draft sync panel exposes pending changes, retries and conflict review. A sync
+failure preserves the device draft, and posting remains an independent action.
+Settings → Things includes these delegated drafts and their files in the device
+storage total for the signed-in account's selected database. Other accounts,
+direct Character sign-ins and other databases remain separate. The meter reads
+only keys and validated accounting records; it never clones file contents.
+Delegated offline posting and general Character workspace coverage are still
+tracked in [the local-workspace matrix](local-workspaces.md).
+
+## Private theme and algorithm synchronization
+
+On servers advertising `api.themes-sync` 1.6.0 and `api.algorithms-sync` 1.4.0,
+the canonical sync endpoints accept an owned `X-Thingtime-Character` selection.
+Without that header they use the session-selected acting identity. Every request
+still requires a live full session, same origin, the exact expected actor and
+selected database. The server resolves delegation again before writing and before
+returning private content. Disabled and foreign Characters are refused without
+using the owner's catalogue or selection.
+
+Delegated clients negotiate `api.auth-characters` 1.0.0 alongside the relevant
+sync contract. Snapshots, conditional writes, immutable retries and selection
+use the existing home storage and accounting; these endpoints grant no anonymous
+or offline authority. Broader delegated local workspace wiring remains tracked
+in [the acceptance matrix](local-workspaces.md).
+
 ## Agent coordination
 
 First run the supported, read-only discovery command (Node 20+ and the normal
@@ -134,3 +174,43 @@ No personal profile or production credential is copied. It retains screenshots
 and compares rendered actions with persisted API results. The temporary servers
 and database are removed after the run. These test listeners are intentionally
 not exposed through Funnel and are not a persistent development server.
+
+### Device History separation
+
+Delegated Timeline cache keys include the principal in addition to the Character,
+origin and data plane (`timeline/contract.ts`, `local-workspace/accountTimeline.ts`).
+This does not change portable event/receipt formats or grant remote authority.
+Older authored versions remain readable only within their proven workspace;
+ambiguous shared-cache records are not adopted. Direct Character sign-in keeps
+a separate partition. `characterTimeline.test.ts` covers every command queue,
+cold reopen and identity retirement. Full offline Character History UI remains
+an explicit gate in [the workspace matrix](local-workspaces.md).
+
+
+### Device content after closing the composer
+
+`CharacterContentScope` resolves `?character=<id>` against the current workspace's
+retained roster for content routes. The Things library's **Workspace** selector
+opens an available Character, and ordinary library, inspector, post, reply,
+parent and History links preserve that selection. `useApi` uses the same
+principal/actor account worker for local posts, attachments and editable Things
+as `characterDraftWorkspace`. Remote requests still reauthorize delegation.
+A guest or unavailable actor receives an explicit status, without falling back
+to another account's local content. Quick comments use the selected actor's
+local facade; anonymous editor identities remain anonymous. An offline reply
+requires its target in the selected actor's retained partition. Local images use
+the same partition and release object URLs on leaving; shared links cannot borrow
+device bytes. Remaining feature-specific routes and full acceptance remain
+tracked in [local workspaces](local-workspaces.md).
+
+Opt-in native coverage: `app/local-workspace/characterWorkspace.browser.test.ts`.
+Run only in a verified isolated runtime with `TT_RENDER_ORIGIN`,
+`TT_RENDER_SESSION`, `TT_SHARED_PLAYWRIGHT_PATH`,
+`TT_CHARACTER_WORKSPACE_ARTIFACTS` and `TT_CHARACTER_ADMIN_FIXTURE`.
+The last path belongs to a disposable administrator fixture in that runtime;
+never provide real-account credentials. Configure the existing local attachment
+storage adapter inside its temporary filesystem. The fixture grants its new
+Character uploads through the normal admin API and checks real post/file
+readback, guest/principal refusal and independent draft failures. Its browser
+and backend must both retain the enforced network boundary. No deployed or
+installed-app acceptance follows from this local test.
