@@ -11558,13 +11558,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/users/profile',
     summary: 'Reads public profiles or updates the current user profile fields.',
     detail:
-		'GET returns a stripped public projection that never includes email or verification fields, or the ' +
-      'birthday, plus wornTheme ({id, name} of the profile owner’s active theme, resolved through the ' +
-      'public share gate — null when unset or private). POST updates the caller display name, bio, ' +
-      'avatar, banner, or birthday. Avatar/banner may use either one external http(s) URL or a ready ' +
-      'private attachment created for the exact profile slot; managed media remains in the private ' +
-      'bucket and is served through a stable same-origin content route. Birthday is YYYY-MM-DD, ' +
-      'private — stored in the secure blob and shared with apps only via the exact profile.birthday scope.',
+      'GET returns a stripped public projection that never includes email or verification fields, plus wornTheme ({id, name} of the profile owner’s active theme, resolved through the public share gate — null when unset or private). POST updates the caller display name, bio, avatar URL, or banner URL.',
     auth: {
       mode: 'optional',
       description: 'GET is public. POST requires an auth cookie or Authorization: Bearer token.'
