@@ -289,45 +289,6 @@ Password migration coverage and encrypted file lifecycle: `passwords/onePassword
 encrypted attachment to a source archive entry; item editors preserve structured
 values, source context and password history. See [the password contract](../password-manager.md).
 
-### Anonymous password files and shared archive storage
-
-`passwords/storage.ts` is the explicit backend contract for the existing
-attachment UI and 1PUX writer. `local-workspace/passwordFiles.ts` supplies the
-anonymous device adapter, using canonical encrypted frames, encrypted metadata,
-scoped IDB chunks, atomic completion and parent-delete cleanup. Incomplete
-staging expires after 24 hours on a subsequent upload; completed files do not
-expire. The normal anonymous importer/exporter has no HTTP fallback. Test
-`passwordFiles.test.ts` and the opt-in `passwordVault.browser.test.ts` through
-`test:local-workspace`. Account file retention/synchronization and larger entry
-codec coverage remain outstanding; see the local workspace acceptance matrix.
-
-
-Account password file deletion replay/conflict preservation: `api.passwords`
-1.2.0 retains protected parent-bound cancellation receipts through canonical
-attachment cleanup. `passwords/fileLifecycle.test.ts`, attachment tests and
-opt-in `local-workspace/passwordFileLifecycle.api.test.ts` cover replay and owner
-isolation. `passwordSync.test.ts` verifies atomic file/source-archive copies and
-pending-file review after remote parent removal. Account UI activation and native
-file acceptance remain open; see the [checkpoint](../local-workspaces.md#password-file-deletion-replay-and-conflict-preservation--2026-10-18).
-
-
-Password entry/file-metadata device codecs use `passwords/passwordValueCrypto.ts`
-and the account writer's shared `passwords/capacity.ts` ceiling. Generic provider
-credential defaults remain separate. `vaultCrypto.test.ts`, `passwordVault.test.ts`,
-`passwordSync.test.ts` and `passwordFileSync.test.ts` cover large-value parity,
-exact export/replay and conflict copies. Aggregate workspace capacity policy and
-native large-value acceptance remain open; this is not an unlimited-storage claim.
-
-
-`local-workspace/storage.ts` uses browser storage capacity for IndexedDB
-admission while preserving scoped atomic accounting and identity leases.
-`storageTestFixture.ts` injects quota-class errors only in tests;
-`storageCapacity.test.ts` verifies data beyond the removed application budgets.
-`accountReadRevocation.ts` frees clean display snapshots before refusal markers
-without deleting authored work. Settings shows accounted usage, not a fixed
-quota. Remaining buffered adapters and native acceptance are tracked in
-[local workspaces](../local-workspaces.md).
-
 Claude keyless discovery reads the official public lifecycle table through
 `modelDiscovery.ts`. `modelSync.ts` stores public provenance separately from
 credential availability, preserving admission and absent rows. The workflow
@@ -359,38 +320,3 @@ admin lookup, session selection, agent coordination and acceptance runbook.
 `resolveSessionUser` defaults to the authenticated principal for roster and
 credential callers; request authentication passes an explicit selection (or null
 for the session default). Never re-mint a principal session with an acting user ID.
-
-### Delegated editor draft storage
-
-`local-workspace/characterDrafts.client.ts` reuses the account draft/catalog/file
-services in a principal-and-actor partition. `drafts/draftClient.ts` routes a
-composer’s selected Character there without changing the root account binding.
-`characterRoster.client.ts` retains only selector labels; `useCharacters` keeps
-remote loading fenced and uses these labels offline. Neither retained labels nor
-local draft access grants remote Character authority. See `characterDrafts.test.ts`,
-`characterRoster.test.ts` and the opt-in `characterDrafts.browser.test.ts`.
-
-Character History cache separation uses optional device-only `TimelineScope.delegatedBy`
-and `accountTimelineScope`, with lease-checked assembly in `timeline/localBackend.client.ts`.
-`local-workspace/characterTimeline.test.ts` proves principal/actor isolation,
-legacy authored-version preservation and separate branch/note/name queues.
-The canonical Timeline event/receipt schema and server authority are unchanged.
-
-
-Delegated content now shares `accountWorkspaceWorker` through `useApi` and
-`characterDraftWorkspace`; `CharacterContentScope` owns reloadable post/History
-context. `characterWorkspace.test.ts` covers actual-hook offline files/posts,
-canonical History export and stale-principal refusal. The opt-in browser test
-uses disposable accounts and the normal upload approval API. Remote-operation
-connectivity is checked by `assertAccountSyncAllowed`; the profile transport
-regression covers a disconnect during capability discovery.
-
-### Character content navigation and selectors
-
-`CharacterContentRoute` gates content routes against the current principal's
-retained roster; `CharacterWorkspacePicker` exposes that selection in Things.
-`characterContentPath` retains it only on internal content navigation.
-`useApi` accepts an explicit editor actor for quick comments, preserving local
-completion and the existing remote delegation checks. Anonymous display users
-stay anonymous. Regressions: `characterWorkspace.test.ts`,
-`thingsLocation.test.ts` and opt-in `characterWorkspace.browser.test.ts`.

@@ -104,40 +104,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-23: Keep account file annotation and folder placement syncing when upload
-  completion safely normalizes the file MIME. Reconciliation uses the verified
-  same-file receipt, preserves the original local MIME and retry identity, and
-  still refuses later content or ownership changes. — Codex (AI)
-
-- 2026-10-23: Add dedicated local theme/algorithm History restore, undo and merge;
-  scoped device feeds; accurate inherited audience labels; and composer clearance
-  for the floating assistant. Remove obsolete local editor/provider/import caps,
-  retry theme reads on reconnect, and support local bulk Action copy/move/delete.
-  Copy complete account files offline through the normal importer and recheck
-  source availability in the commit transaction. Separate transfer files no longer
-  share one aggregate admission budget. Support offline URL gallery attachments,
-  drafts/templates and mixed transfers through the existing media journal, with
-  idempotent link registration/deletion and bound-file annotations. Negotiate
-  link 1.1.0 and deletion 1.8.0 contracts. Preserve protected writers and independent
-  account queues. Fresh native JSON/PNG,
-  isolated-browser evidence and remaining gates are in [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
-  — Codex (AI)
-
-- 2026-10-22: Move device sync configuration off Things home into a dedicated
-  device page; keep storage attachments and parent-linked records out of root,
-  retain recovery/search access, and preserve private upload provenance before
-  bytes are transferred. Add editable activity controls with durable teardown,
-  quiet refresh, and measured Electron resource totals. Parent-path isolated
-  acceptance passed; installed/deployed verification is pending. [Details](../PRs/1089-codex-device-activity-library-fix-device-sync-placement-generated-parent-paths-and-activity-controls.md). **Codex (AI)**
-
-- 2026-10-22: Add a dedicated editable device sync overview, device double-click/keyboard navigation to saved cloud roots, and collapsed defaults in both device settings presentations. Real-account acceptance pending. [Details](../PRs/1088-codex-device-sync-browser-add-dedicated-device-sync-ui-and-browse-saved-device-files.md). **Codex (AI)**
-
-- 2026-10-21: Add closed upload-batch failure counts to rotated local diagnostics and show negotiated folder-batch/reservation observations through the existing editable readiness status. No retry, authority, receipt or scheduling changes; historical member codes remain unknown. [Details](../PRs/1084-codex-sync-recovery-diagnostics-expose-closed-sync-recovery-diagnostics.md). **Codex (AI)**
-
-- 2026-10-21: Add negotiated parent-first folder metadata batches, refresh immediate parent index stamps on child changes, and retain explicit new target intents when proven-unpublished parents are superseded. Original IDs, unknown-write recovery, canonical placement locks and fresh authority/source fences remain intact. Installed throughput remains unverified. [Details](../PRs/1083-codex-sync-folder-batches-batch-guarded-folder-metadata-before-dependent-uploads.md). **Codex (AI)**
-
-- 2026-10-21: Add negotiated bounded small-file upload batches across durable preparation, original-ID reservations, native source validation and canonical per-file receipts, plus scan-only transient identity recovery. Controlled amplification reduction is verified; practical installed throughput remains unverified. See [PR 1081](../PRs/1081-codex-sync-small-file-batches-batch-independent-small-file-uploads.md). — Codex (AI)
-
 - 2026-10-21: Replace fixed native identity completion spacing with a conservative FIFO burst/rolling budget while preserving every fresh auth/source fence and shared server cooldown. Controlled scheduling improves; installed throughput remains unverified. See [PR 1080](../PRs/1080-codex-sync-identity-budget-allow-bounded-bursts-of-fresh-native-identity-checks.md). — Codex (AI)
 
 - 2026-10-21: Add bounded closed host phase timings and distinguish native identity admission from HTTP duration. Best-effort asynchronous diagnostics preserve all transfer/auth/source/receipt behavior; installed bottleneck evidence remains pending. See [PR 1079](../PRs/1079-codex-sync-phase-timing-measure-closed-native-sync-request-phases.md). — Codex (AI)
