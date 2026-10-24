@@ -639,6 +639,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				transition="background 0.15s ease"
 				cursor="pointer"
 				title={user ? 'Your profile' : 'Log in'}
+				onClick={onAccountRowClick}
 			>
 				<Flex as="a" href={user ? '/profile' : '/login'} align="center" gap={2} flex={1} minWidth={0}
 					onClick={(event) => { if (isPlainLinkClick(event)) { event.preventDefault(); onAccountRowClick(); } }}>
@@ -648,10 +649,9 @@ export const DrawerContent = (props: DrawerContentProps) => {
 						{user ? (user.temporary ? LOGIN_TO_CLAIM_LABEL : getUserDisplayName(user)) : 'Log in'}
 					</Text>
 				)}
-				</Flex>
 				<Center
-					as="a"
-					href="/settings"
+					as="button"
+					type="button"
 					marginLeft="auto"
 					width="26px"
 					height="26px"
@@ -662,7 +662,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 					cursor="pointer"
 					aria-label="Settings"
 					title="Settings"
-					onClick={(event) => { if (isPlainLinkClick(event)) { event.preventDefault(); onSettingsClick(event); } }}
+					onClick={onSettingsClick}
 				>
 					<Icon name="gear" size="11px"></Icon>
 				</Center>

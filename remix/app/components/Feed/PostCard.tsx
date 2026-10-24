@@ -18,6 +18,7 @@ import {
   Input,
   Menu,
   MenuButton,
+  MenuDivider,
   MenuItem,
   MenuItemOption,
   MenuList,
@@ -1802,46 +1803,16 @@ function PostCardImpl(props: PostCardProps) {
       setEditing(false);
       return;
     }
-    // Inline #hashtags render as live tag links, so an edit must keep the
-    // stored tags in step with the text (the composer harvests on publish —
-    // without this, an added '#newtag' would linkify but its own search would
-    // never find the post). Inline tags dropped from the text drop off; every
-    // other stored tag (explicit composer tags, the folded marketplace
-    // category) survives; canonicalPostTags dedupes the merge and caps it.
-    const prevTags = post.tags;
-    const nextInline = extractInlineHashtags(text);
-    const removedInline = new Set(extractInlineHashtags(prevText).filter((tag) => !nextInline.includes(tag)));
-    const tags = canonicalPostTags([...(prevTags || []).filter((tag) => !removedInline.has(tag)), ...nextInline]);
     setEditing(false);
-    // a plain-text inline edit drops any rich-text doc the post carried, and
-    // re-syncs the tag set recomputed from the edited text above
-    onChanged?.(post.id, (prev) => ({ ...prev, text, richText: null, tags }));
+    onChanged?.((prev) => ({ ...prev, text }));
     try {
-      await api.v1.things.update({ id: post.id, crystal: { text, richText: null }, tags });
+      await api.v1.things.update({ id: post.id, crystal: { text } });
       lopu({ title: 'Post updated ✏️', status: 'success', duration: 4000 });
     } catch (err: any) {
-      onChanged?.(post.id, (prev) => ({ ...prev, text: prevText, richText: post.richText, tags: prevTags }));
+      onChanged?.((prev) => ({ ...prev, text: prevText }));
       setEditText(text); // give the draft back
       setEditing(true);
       lopu({ title: err?.error || 'Could not save that edit 😞', status: 'error' });
-    }
-  };
-
-  // Custom audience 🎭: the picker composes the acl; applying PATCHes it
-  const [audienceOpen, setAudienceOpen] = React.useState(false);
-  const handleCustomApply = async (acl: string[]) => {
-    const prevVisibility = post.visibility;
-    const prevAcl = post.acl;
-    onChanged?.(post.id, (prev) => ({ ...prev, visibility: 'custom' as PostVisibility, acl }));
-    try {
-      const resp = await api.v1.things.update({ id: post.id, acl });
-      if (resp?.post) {
-        onChanged?.(post.id, (prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl, linkKey: resp.post.linkKey, audience: resp.post.audience }));
-      }
-      lopu({ title: 'Custom audience set 🎭', description: 'Exactly the people you picked, with the powers you gave them.', status: 'success', duration: 4000 });
-    } catch (err: any) {
-      onChanged?.(post.id, (prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl, audience: post.audience }));
-      lopu({ title: err?.error || 'Could not change the audience 😞', status: 'error' });
     }
   };
 
@@ -1849,38 +1820,34 @@ function PostCardImpl(props: PostCardProps) {
   // immediately; the server response reconciles the derived acl, and a
   // failure flips it back.
   const handleVisibilityChange = async (next: PostVisibility) => {
-    // custom routes through the picker (it needs the WHO before it can apply)
-    if (next === 'custom') {
-      setAudienceOpen(true);
-      return;
-    }
     if (next === post.visibility) return;
     const prevVisibility = post.visibility;
     const prevAcl = post.acl;
-    onChanged?.(post.id, (prev) => ({ ...prev, visibility: next, acl: aclForAudience(next, prev.acl), audience: undefined }));
+    onChanged?.((prev) => ({ ...prev, visibility: next }));
     try {
       const resp = await api.v1.things.update({ id: post.id, visibility: next });
       if (resp?.post) {
-        // linkKey rides along: entering hidden mints a fresh secret, so the
-        // Copy hidden link item works the moment the switch lands
-        onChanged?.(post.id, (prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl, linkKey: resp.post.linkKey, audience: resp.post.audience }));
+        onChanged?.((prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl }));
       }
       const meta = CIRCLE_META[next];
-      lopu({
-        title: `Privacy set to ${meta.label} ${meta.emoji}`,
-        description: next === 'hidden' ? 'Unlisted everywhere — “Copy hidden link” in the post menu shares its secret URL.' : undefined,
-        status: 'success',
-        duration: 4000
-      });
+      lopu({ title: `Privacy set to ${meta.label} ${meta.emoji}`, status: 'success', duration: 4000 });
     } catch (err: any) {
-      onChanged?.(post.id, (prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl, audience: post.audience }));
+      onChanged?.((prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl }));
       lopu({ title: err?.error || 'Could not change privacy 😞', status: 'error' });
     }
   };
 
-  // menu copy-link: always the clipboard (the share icon owns the native
-  // sheet). Unlisted posts share their canonical permalink.
-  //
+  // menu copy-link: always the clipboard (the share icon owns the native sheet)
+  const handleCopyLink = async () => {
+    const url = `${window.location.origin}/post/${post.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      lopu({ title: 'Link copied 🔗', status: 'success', duration: 4000 });
+    } catch {
+      // clipboard unavailable (http origin) — hand the link over anyway
+      lopu({ title: `Copy this link: ${url}`, status: 'info', duration: 10000 });
+    }
+  };
 
   // Toggle one reaction token (single emoji or a multi-emoji group). Optimistic:
   // we repaint the card immediately, then reconcile with the server's counts
@@ -2365,53 +2332,97 @@ function PostCardImpl(props: PostCardProps) {
             <ReportModal isOpen onClose={() => setReportOpen(false)} api={api} subspaceId={post.subspace.id} subspaceSlug={post.subspace.slug} target="post" onReport={handleReport} />
           )}
           {isOwner && (
-            <CustomAudienceModal
-              isOpen={audienceOpen}
-              onClose={() => setAudienceOpen(false)}
-              initialAcl={post.visibility === 'custom' ? post.acl : undefined}
-              onApply={handleCustomApply}
-            />
+            <Menu placement="bottom-end" autoSelect={false}>
+              <MenuButton
+                as={IconButton}
+                aria-label="Post options"
+                icon={<MoreHorizontal size={16} />}
+                size="xs"
+                variant="ghost"
+                color={MUTED}
+                borderRadius="8px"
+              />
+              <MenuList minWidth="190px" borderRadius={RADIUS_MD} zIndex={10}>
+                <MenuItem fontSize="sm" onClick={handleEditStart}>
+                  Edit ✏️
+                </MenuItem>
+                <MenuItem fontSize="sm" onClick={handleCopyLink}>
+                  Copy link 🔗
+                </MenuItem>
+                <MenuDivider />
+                <MenuOptionGroup
+                  title="Privacy"
+                  type="radio"
+                  value={post.visibility}
+                  onChange={(value) => handleVisibilityChange(value as PostVisibility)}
+                >
+                  {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
+                    <MenuItemOption key={key} value={key} fontSize="sm">
+                      {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
+                    </MenuItemOption>
+                  ))}
+                </MenuOptionGroup>
+                <MenuDivider />
+                <MenuItem fontSize="sm" color="var(--tt-danger, #e5484d)" onClick={handleDelete}>
+                  Delete 🗑️
+                </MenuItem>
+              </MenuList>
+            </Menu>
           )}
         </Flex>
 
-        {/* subspace context — where the post lives, its flair, mod badges */}
-        {(post.subspace || post.subspaceMod?.removed) && (
-          <Flex alignItems="center" columnGap={1.5} rowGap={1} flexWrap="wrap" fontSize="xs" data-testid="post-subspace-line">
-            {post.subspace && (
-              <Flex
-                as={Link}
-                to={`/s/${post.subspace.slug}`}
-                alignItems="center"
-                columnGap={1}
-                fontWeight={700}
-                color={INK}
-                border={BORDER}
-                borderRadius="999px"
-                paddingX={2}
-                paddingY="1px"
-                _hover={{ borderColor: post.subspace.accent || ACCENT }}
-                onClick={(event: React.MouseEvent) => event.stopPropagation()}
-                title={post.subspace.name}
-              >
-                <Text as="span">{post.subspace.icon || '🪐'}</Text>
-                <Text as="span" fontFamily="mono" fontWeight={600}>
-                  s/{post.subspace.slug}
-                </Text>
-              </Flex>
-            )}
-            {post.flair && (
-              <Text
-                as="span"
+        {/* body — shares render caption + nested original; the owner's edit
+        mode mounts the FULL composer (type tabs, photos, listing, thing,
+        tags, circle) pre-filled from the post. Shares edit their caption
+        only — the shared original is the body. */}
+        {editing && !post.isShare ? (
+          <PostComposer
+            editPost={post}
+            onPosted={(updated) => {
+              onChanged?.(updated);
+              setEditing(false);
+            }}
+            onClose={() => setEditing(false)}
+          />
+        ) : editing ? (
+          <Flex flexDirection="column" rowGap={3}>
+            <Textarea
+              size="sm"
+              rows={3}
+              resize="vertical"
+              borderRadius="var(--tt-radius-sm, 9px)"
+              placeholder="Say something… ✨"
+              autoFocus
+              value={editText}
+              onChange={(event) => setEditText(event.target.value)}
+            />
+            <Flex alignItems="center" columnGap={2}>
+              <Button
+                size="xs"
+                color="white"
+                fontFamily="heading"
                 fontWeight={600}
-                paddingX={2}
-                paddingY="1px"
-                borderRadius="999px"
-                border={`1px solid ${post.flair.color || 'var(--tt-border, #ececef)'}`}
-                color={post.flair.color || TEXT}
-                data-testid="post-flair"
+                background={RAINBOW}
+                backgroundSize="calc(100px + 200%)"
+                sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}
+                _hover={{ opacity: 0.9 }}
+                borderRadius={RADIUS_MD}
+                isDisabled={!canSaveEdit}
+                onClick={handleEditSave}
               >
-                {post.flair.emoji ? `${post.flair.emoji} ` : ''}
-                {post.flair.label}
+                Save ✨
+              </Button>
+              <Button size="xs" variant="ghost" borderRadius={RADIUS_MD} onClick={() => setEditing(false)}>
+                Cancel
+              </Button>
+            </Flex>
+            {post.shareOf && <SharedPostCard post={post.shareOf} />}
+          </Flex>
+        ) : post.isShare ? (
+          <Flex flexDirection="column" rowGap={3}>
+            {post.text && (
+              <Text fontSize="md" color={TEXT} whiteSpace="normal">
+                {post.text}
               </Text>
             )}
             {post.subspaceMod?.pinned && (
