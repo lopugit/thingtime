@@ -12327,6 +12327,7 @@ separate from deterministic discovery/lease tests.
 - Commander daemon trust-boundary integration: complete every HTTP/security assertion and cleanup within the 30-second suite allowance under concurrent native builds; do not treat the default five-second unit-test timeout as a server latency contract.
 - Commander Settings titlebar: repeat maximize/restore on the real screen, including native and web double-click deliveries; verify the previous frame is restored and process headers remain aligned with values after resizing.
 - Incident account cleanup: use real signup and logout notification constructors; accept only system history tied to the exact revoked fixture session. Reject unrelated content, actors and timestamps before writes.
+- Commander account restart recovery: retain all saved account metadata across rebuilds and restarts; restore the exact issuing origin/client (including legacy IDs), switch between environments and back, and retry a temporarily locked Keychain on focus without removing the account. Cloud sync must use the saved issuer and refuse redirects; a changed next-login profile must never receive another account's token. Confirm the production desktop callback registration separately before claiming live sign-in acceptance.
 
 
 ## Editable private settings documents
