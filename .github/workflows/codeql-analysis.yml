@@ -1,41 +1,20 @@
 name: Lopu CodeQL all branches
 
-run-name: >-
-  ${{ github.event_name == 'workflow_dispatch'
-      && inputs.pr_number != ''
-      && format('Lopu CodeQL PR #{0} @ {1}', inputs.pr_number, inputs.expected_head_sha)
-      || github.event_name == 'pull_request'
-      && format('Lopu CodeQL PR #{0} @ {1}', github.event.pull_request.number, github.event.pull_request.head.sha)
-      || format('Lopu CodeQL {0} @ {1}', github.ref_name, github.sha) }}
-
-# Canonical unprivileged advanced CodeQL implementation. Product branches call
-# this workflow for analysis events and call codeql-pr-handoff.yml only for the
-# metadata-only pull_request_target hop. Keeping those permission ceilings in
-# separate reusable workflows lets normal pull_request runs retain their PR
-# check contexts without asking a read-capped event for actions:write. A direct
-# push trigger remains here so changes to the control-plane branch itself are
-# scanned even though that sparse branch does not carry the product listener.
+# Trigger-only listener. The reviewed executable implementation lives on the
+# protected github-actions branch.
 on:
-  workflow_call:
-    inputs:
-      pr_number:
-        description: "Trusted PR number selected by the default-branch Lopu listener"
-        required: false
-        default: ""
-        type: string
-      expected_head_sha:
-        description: "Head SHA bound to the PR event that requested the scan"
-        required: false
-        default: ""
-        type: string
-      backfill_listener_owned:
-        description: "Allow a trusted manual activation backfill even when the PR base now carries the normal listener"
-        required: false
-        default: false
-        type: boolean
   pull_request:
+  # This default-branch listener exists independently of the PR's base branch.
+  # The target-context lane executes only the protected metadata handoff: it
+  # never analyzes the base branch or checks out untrusted PR content with the
+  # target event's write-capable token. A separate workflow_dispatch run then
+  # analyzes the exact immutable PR head without secrets.
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
   push:
-    branches: [github-actions]
+    branches: ["**"]
+  schedule:
+    - cron: "17 3 * * 1"
   workflow_dispatch:
     inputs:
       pr_number:
@@ -48,318 +27,22 @@ on:
         required: false
         default: ""
         type: string
-      backfill_listener_owned:
-        description: "One-time activation backfill for a PR whose target now carries the normal listener"
-        required: false
-        default: false
-        type: boolean
 
 permissions:
+  actions: write
   contents: read
+  packages: read
+  pull-requests: read
+  security-events: write
 
 jobs:
-  scope:
-    name: Select one analysis owner
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
-      security-events: read
-    outputs:
-      analyze: ${{ steps.scope.outputs.analyze }}
-      analysis_ref: ${{ steps.scope.outputs.analysis_ref }}
-      analysis_sha: ${{ steps.scope.outputs.analysis_sha }}
-      checkout_ref: ${{ steps.scope.outputs.checkout_ref }}
-    steps:
-      - name: Prefer the PR analysis for an open branch head
-        id: scope
-        shell: bash
-        env:
-          ADVANCED_ENABLED: ${{ vars.CODEQL_ADVANCED_ENABLED }}
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ inputs.pr_number }}
-          EXPECTED_HEAD_SHA: ${{ inputs.expected_head_sha }}
-          BACKFILL_LISTENER_OWNED: ${{ inputs.backfill_listener_owned }}
-        run: |
-          set -euo pipefail
+  pr-handoff:
+    if: github.event_name == 'pull_request_target'
+    uses: lopugit/thingtime/.github/workflows/codeql-pr-handoff.yml@github-actions
 
-          analyze=true
-          analysis_ref=""
-          analysis_sha=""
-          checkout_ref=""
-          if [ "$ADVANCED_ENABLED" != true ]; then
-            analyze=false
-            echo '::notice::Advanced CodeQL is staged but inactive. Promote the listener to the default branch, disable default setup, then set CODEQL_ADVANCED_ENABLED=true.'
-          elif [ "$EVENT_NAME" = workflow_dispatch ] && [ -n "$PR_NUMBER" ]; then
-            [[ "$PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]] || {
-              echo "::error::Invalid PR number."
-              exit 1
-            }
-            if [ -n "$EXPECTED_HEAD_SHA" ] && [[ ! "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40,64}$ ]]; then
-              echo "::error::Invalid expected PR head SHA."
-              exit 1
-            fi
-
-            pr_json="$(gh api "repos/$REPO/pulls/$PR_NUMBER")"
-            state="$(jq -r '.state' <<<"$pr_json")"
-            live_head_sha="$(jq -r '.head.sha' <<<"$pr_json")"
-            base_sha="$(jq -r '.base.sha' <<<"$pr_json")"
-            base_ref="$(jq -r '.base.ref' <<<"$pr_json")"
-            if [ "$state" != open ]; then
-              analyze=false
-              echo "PR #$PR_NUMBER is no longer open; the stale scan is a no-op."
-            elif [ -n "$EXPECTED_HEAD_SHA" ] && [ "$EXPECTED_HEAD_SHA" != "$live_head_sha" ]; then
-              analyze=false
-              echo "PR #$PR_NUMBER advanced from $EXPECTED_HEAD_SHA to $live_head_sha; its newer event owns analysis."
-            else
-              base_listener_b64=""
-              if candidate_listener_b64="$(
-                gh api "repos/$REPO/contents/.github/workflows/codeql-analysis.yml?ref=$base_sha" \
-                  --jq .content 2>/dev/null
-              )"; then
-                base_listener_b64="$candidate_listener_b64"
-              fi
-              base_has_pr_listener=false
-              if [ -n "$base_listener_b64" ]; then
-                base_listener="$(printf '%s' "$base_listener_b64" | tr -d '\n' | base64 --decode)"
-                if grep -Eq '^  pull_request:$' <<<"$base_listener"; then
-                  base_has_pr_listener=true
-                fi
-              fi
-
-              # `pulls/N.base.sha` is GitHub's cached base pointer and
-              # `refs/pull/N/merge` is recomputed independently, so the two
-              # skew in both directions whenever the base branch advances.
-              # Resolve the live base branch tip as a second accepted parent so
-              # a freshly recomputed merge ref is never misread as stale.
-              base_branch_sha=""
-              if [[ "$base_ref" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-                if candidate_base_branch_sha="$(
-                  gh api "repos/$REPO/git/ref/heads/$base_ref" \
-                    --jq .object.sha 2>/dev/null
-                )"; then
-                  if [[ "$candidate_base_branch_sha" =~ ^[0-9a-f]{40,64}$ ]]; then
-                    base_branch_sha="$candidate_base_branch_sha"
-                  fi
-                fi
-              fi
-
-              merge_ref="refs/pull/$PR_NUMBER/merge"
-              merge_sha=""
-              # Whether GitHub publishes a synthetic merge ref for this PR at
-              # all, which is a strictly different question from whether the
-              # one it published is current. Only a PR GitHub cannot merge
-              # lacks the ref entirely, and that is the only case in which no
-              # `pull_request` run exists to own the analysis. Keep the two
-              # apart: the freshness check below clears `merge_sha`, and the
-              # ownership decision must not read that as "unmergeable".
-              mergeable_pr=false
-              # `gh api` writes GitHub's JSON error body to stdout for a
-              # missing synthetic merge ref. Do not capture that body through
-              # `|| true` and later mistake it for a commit SHA. A conflicted
-              # PR legitimately has no merge ref, so retain the exact-head
-              # fallback below when the request fails.
-              if candidate_merge_sha="$(
-                gh api "repos/$REPO/git/ref/pull/$PR_NUMBER/merge" \
-                  --jq .object.sha 2>/dev/null
-              )"; then
-                if [[ "$candidate_merge_sha" =~ ^[0-9a-f]{40,64}$ ]]; then
-                  merge_sha="$candidate_merge_sha"
-                  mergeable_pr=true
-                elif [ -n "$candidate_merge_sha" ]; then
-                  echo "::warning::PR #$PR_NUMBER returned an invalid synthetic merge SHA; analyzing its exact head instead."
-                fi
-              fi
-              if [ -n "$merge_sha" ]; then
-                merge_parents="$(gh api "repos/$REPO/git/commits/$merge_sha" --jq '[.parents[].sha]')"
-                if ! jq -e --arg base "$base_sha" --arg branch_base "$base_branch_sha" --arg head "$live_head_sha" \
-                    'length == 2
-                      and .[1] == $head
-                      and (.[0] == $base
-                        or ($branch_base != "" and .[0] == $branch_base))' <<<"$merge_parents" >/dev/null; then
-                  echo "PR #$PR_NUMBER has a stale merge ref; ignoring it because its parents do not match the live base and head."
-                  merge_sha=""
-                fi
-              fi
-              # Gate ownership on `mergeable_pr`, not on `merge_sha`. GitHub
-              # recomputes `refs/pull/N/merge` lazily, so a mergeable PR whose
-              # base advanced legitimately reports parents that match neither
-              # the cached `pulls/N.base.sha` nor the live tip. That is a stale
-              # *ref*, not an absent one: the `pull_request` run still exists
-              # and is still analyzing `refs/pull/N/merge` right now. Reading
-              # the cleared `merge_sha` as "no merge ref" sent this dispatch
-              # down the exact-head fallback beside it, and the two uploads
-              # then raced under different refs. Advanced Security opens the
-              # PR's aggregate CodeQL check against whichever snapshot lands
-              # first: on PR #557 the head-ref `actions` analysis opened it at
-              # 11:30:19Z and the head-ref `javascript-typescript` analysis did
-              # not arrive until 11:41:49Z (12m43s under the contention the
-              # duplicate scans themselves created), so the check closed
-              # `timed_out` at 11:36:46Z and never reopened. Same hazard the
-              # push path already guards against below, one event away.
-              if [ "$base_has_pr_listener" = true ] \
-                 && [ "$mergeable_pr" = true ] \
-                 && [ "$BACKFILL_LISTENER_OWNED" != true ]; then
-                analyze=false
-                echo "PR #$PR_NUMBER is mergeable and its target carries the normal listener; that pull_request run owns analysis."
-              elif [ -n "$merge_sha" ]; then
-                analysis_ref="$merge_ref"
-                analysis_sha="$merge_sha"
-                checkout_ref="$merge_ref"
-                if [ "$base_has_pr_listener" = true ]; then
-                  echo "PR #$PR_NUMBER predates its target's listener activation; Lopu will backfill its exact merge ref."
-                else
-                  echo "PR #$PR_NUMBER targets a branch without the listener; Lopu will analyze its exact merge ref."
-                fi
-              else
-                analysis_ref="refs/pull/$PR_NUMBER/head"
-                analysis_sha="$live_head_sha"
-                checkout_ref="$analysis_ref"
-                # Report the two facts the block now keeps apart. Saying "no
-                # merge ref" for a ref that is merely stale is what made the
-                # PR #557 incident hard to read: the log claimed the ref was
-                # absent on the line directly after announcing it was stale,
-                # which hid that a live pull_request run was analyzing that
-                # very ref. Only a PR GitHub cannot merge is refless.
-                #
-                # A stale ref reaching this fallback is only a concurrency
-                # warning when the target actually carries the listener, which
-                # now means a deliberate `backfill_listener_owned` activation
-                # scan running beside a live `pull_request` merge-ref run --
-                # the residual #557 shape, opted into. Without the listener no
-                # `pull_request` run exists to race, so raising the same alarm
-                # there would fire on the ordinary path and train readers to
-                # ignore the line that matters.
-                if [ "$mergeable_pr" != true ]; then
-                  echo "PR #$PR_NUMBER has no merge ref; Lopu will analyze its exact head while conflict management continues."
-                elif [ "$base_has_pr_listener" = true ]; then
-                  echo "::warning::PR #$PR_NUMBER has a stale merge ref and this activation backfill is analyzing its exact head; a pull_request run may be analyzing its merge ref concurrently."
-                else
-                  echo "PR #$PR_NUMBER has a stale merge ref and its target carries no listener; Lopu will analyze its exact head, and no pull_request run competes for it."
-                fi
-              fi
-
-              if [ "$analyze" = true ]; then
-                encoded_ref="$(jq -rn --arg value "$analysis_ref" '$value | @uri')"
-                analyses="$(gh api "repos/$REPO/code-scanning/analyses?ref=$encoded_ref&per_page=100")"
-                if jq -e --arg sha "$analysis_sha" '
-                  [.[]
-                    | select(.commit_sha == $sha and .tool.name == "CodeQL")
-                    | .category]
-                  | unique as $categories
-                  | ($categories | index("/language:actions")) != null
-                    and ($categories | index("/language:javascript-typescript")) != null
-                ' <<<"$analyses" >/dev/null; then
-                  analyze=false
-                  echo "PR #$PR_NUMBER@$analysis_sha already has both Lopu CodeQL language analyses."
-                fi
-              fi
-            fi
-          elif [ "$EVENT_NAME" = push ]; then
-            open_prs="$(gh pr list --repo "$REPO" --state open \
-              --head "$GITHUB_REF_NAME" --limit 100 \
-              --json headRefOid)"
-            if jq -e --arg sha "$GITHUB_SHA" \
-                 'any(.[]; .headRefOid == $sha)' <<<"$open_prs" >/dev/null; then
-              analyze=false
-              echo "An open PR owns $GITHUB_REF_NAME@$GITHUB_SHA; its pull_request run is the single CodeQL analysis owner."
-            fi
-          fi
-          {
-            echo "analyze=$analyze"
-            echo "analysis_ref=$analysis_ref"
-            echo "analysis_sha=$analysis_sha"
-            echo "checkout_ref=$checkout_ref"
-          } >>"$GITHUB_OUTPUT"
-
-  analyze:
-    name: Analyze (${{ matrix.language }})
-    needs: scope
-    if: needs.scope.outputs.analyze == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      actions: read
-      contents: read
-      packages: read
-      pull-requests: read
-      security-events: write
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [actions, javascript-typescript]
-    concurrency:
-      group: >-
-        codeql-${{ matrix.language }}-${{ github.event_name }}-${{ needs.scope.outputs.analysis_sha || github.event.pull_request.head.sha || github.sha }}
-      # A later push/PR/central signal must not terminate CodeQL while it is
-      # uploading the earlier immutable snapshot. Preserve the whole bounded
-      # queue and let each scope check no-op when its analysis already exists.
-      queue: max
-      cancel-in-progress: false
-    steps:
-      - name: Check out the analyzed revision without credentials
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          ref: ${{ needs.scope.outputs.checkout_ref || github.sha }}
-          fetch-depth: 2
-          persist-credentials: false
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
-        with:
-          languages: ${{ matrix.language }}
-
-      # The scope pre-flight samples `gh pr list` within seconds of the push,
-      # so a branch that is pushed FIRST and adopted by a PR moments later
-      # still reaches this job believing it owns analysis. Uploading a
-      # refs/heads analysis for a commit that is now an open PR head makes
-      # GitHub Advanced Security open that PR's CodeQL check against the
-      # branch snapshot and close it `timed_out` before the PR's own merge-ref
-      # analyses land. Re-check ownership at the last moment before upload.
-      - name: Confirm this push still owns the analysis
-        id: ownership
-        if: github.event_name == 'push' && needs.scope.outputs.analysis_ref == ''
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-
-          upload=true
-          # Every push to every branch reaches this step, so a rate-limited or
-          # transient lookup must not fail the job. Failing here would produce
-          # exactly the red CodeQL check this step exists to prevent, and would
-          # additionally discard a database that is already built. Preserve
-          # `gh`'s exit status the way the scope pre-flight does for its
-          # optional lookups — never `|| true` — and fall back to the prior
-          # behaviour of analyzing.
-          if open_prs="$(gh pr list --repo "$REPO" --state open \
-            --head "$GITHUB_REF_NAME" --limit 100 \
-            --json headRefOid)"; then
-            if jq -e --arg sha "$GITHUB_SHA" \
-                 'any(.[]; .headRefOid == $sha)' <<<"$open_prs" >/dev/null; then
-              upload=false
-              echo "::notice::An open PR adopted $GITHUB_REF_NAME@$GITHUB_SHA after this push started; its pull_request run is the single CodeQL analysis owner."
-            fi
-          else
-            echo "::warning::Could not re-confirm PR ownership of $GITHUB_REF_NAME@$GITHUB_SHA; analyzing this push rather than leaving the commit unscanned."
-          fi
-          echo "upload=$upload" >>"$GITHUB_OUTPUT"
-
-      - name: Analyze the triggering revision
-        if: needs.scope.outputs.analysis_ref == '' && steps.ownership.outputs.upload != 'false'
-        uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
-        with:
-          category: /language:${{ matrix.language }}
-
-      - name: Analyze the exact centrally dispatched PR head
-        if: needs.scope.outputs.analysis_ref != ''
-        uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
-        with:
-          category: /language:${{ matrix.language }}
-          ref: ${{ needs.scope.outputs.analysis_ref }}
-          sha: ${{ needs.scope.outputs.analysis_sha }}
+  control-plane:
+    if: github.event_name != 'pull_request_target'
+    uses: lopugit/thingtime/.github/workflows/codeql-analysis.yml@github-actions
+    with:
+      pr_number: ${{ inputs.pr_number || '' }}
+      expected_head_sha: ${{ inputs.expected_head_sha || '' }}
