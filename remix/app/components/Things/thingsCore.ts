@@ -1,12 +1,6 @@
-import { isFolderThing } from '../../schemas/folderThing';
 // Shared vocabulary for the /things page — types, display helpers, and the
 // localCache shape. Pure module (no React) so views/dialogs/tests can all
 // import it without dragging component code along.
-
-import { primaryKindOf, THING_KIND_ICONS } from './thingIcon';
-import { THING_AUDIENCE_META, sharePathForThing, thingPath, type ResolvedAudience } from '../Sharing/audienceCore';
-
-export { FILE_TYPE_ICON_RULES, THING_KIND_ICONS, fileIconForThing, primaryKindOf, thingIcon } from './thingIcon';
 
 export type ThingsAuthor = {
   id: string;
@@ -17,16 +11,12 @@ export type ThingsAuthor = {
 
 // PublicThing as the /things page consumes it (see api/utils/things/things.ts)
 export type ThingsThing = {
-  inode?: import('~/api/utils/devices/deviceFilesystemCore').FilesystemEntry & { deviceId: string };
-  audience?: ResolvedAudience;
   id: string;
   thingtime: string[];
   author: ThingsAuthor;
   visibility: string;
   acl: string[];
-  linkKey?: string;
   targetId: string | null;
-  parentId?: string | null;
   folderId: string | null;
   crystal: Record<string, any>;
   extended: unknown | null;
@@ -81,43 +71,45 @@ export type ThingsCache = {
   schemaRenders?: Record<string, Record<string, unknown> | null>;
 };
 
-export const thingsCacheKey = (userId: string | null | undefined) => `tt-things-v2-${userId || 'anon'}`;
-// Native library and detail previews share only an exact workspace destination.
-export const thingsWorkspaceCacheKey = (scope: string, localPlane?: 'home') => `tt-things-workspace-${JSON.stringify([scope, localPlane || 'selected'])}`;
+export const thingsCacheKey = (userId: string | null | undefined) => `tt-things-${userId || 'anon'}`;
 
 export const folderKeyOf = (folderId: string | null) => folderId || 'root';
 
-/** Apply the root contract to cached first paint as well as fresh API pages.
- * Search and explicit folder views keep their own scope. */
-export const isTopLevelLibraryThing = (thing: Pick<ThingsThing, 'thingtime' | 'folderId' | 'targetId' | 'parentId' | 'crystal'>): boolean =>
-  !thing.folderId && !thing.targetId && !thing.parentId && !thing.crystal?.parentId && !thing.thingtime.some(kind => kind === 'attachment' || kind === 'file-sync');
-
-export const isFolder = (thing: Pick<ThingsThing, 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>): boolean => isFolderThing(thing);
-
-// Kinds the server refuses to copy (mirrors UNCOPYABLE in
-// api/utils/things/things.ts): attached children live under their target — a
-// duplicate would dangle. The menu hides Duplicate for these instead of
-// offering an action that can only fail.
-// Archives copy through portable transfer, never generic duplicateThing.
-export const UNCOPYABLE_KINDS = ['comment', 'reaction', 'save', 'share', 'vote', 'chat-archive'] as const;
-
-export const isDuplicable = (thing: Pick<ThingsThing, 'thingtime'>): boolean =>
-  !UNCOPYABLE_KINDS.some((kind) => thing.thingtime.includes(kind));
+export const isFolder = (thing: Pick<ThingsThing, 'thingtime'>): boolean => thing.thingtime.includes('folder');
 
 // The kinds the page lets you filter by; 'all' = no thingtime filter. Kept to
 // kinds the listing can actually contain (protected kinds never appear).
 export const THINGS_KIND_FILTERS = [
   { id: 'all', label: 'All', icon: '🌀' },
   { id: 'folder', label: 'Folders', icon: '📁' },
-  { id: 'attachment', label: 'Files', icon: '💾' },
   { id: 'post', label: 'Posts', icon: '📝' },
   { id: 'data', label: 'Data', icon: '📦' },
   { id: 'schema', label: 'Schemas', icon: '💎' },
-  { id: 'component', label: 'Components', icon: '🧩' },
-  { id: 'action', label: 'Actions', icon: '⚡' },
   { id: 'comment', label: 'Comments', icon: '💬' }
 ] as const;
 export type ThingsKindFilter = (typeof THINGS_KIND_FILTERS)[number]['id'];
+
+const KIND_ICONS: Record<string, string> = {
+  folder: '📁',
+  post: '📝',
+  comment: '💬',
+  reaction: '😊',
+  share: '🔁',
+  save: '🔖',
+  data: '📦',
+  schema: '💎'
+};
+
+// primary kind for labels/icons: the most specific schema wins over 'post'
+const PRIMARY_KIND_ORDER = ['folder', 'share', 'comment', 'reaction', 'save', 'schema', 'data', 'post'];
+
+export const primaryKindOf = (thing: Pick<ThingsThing, 'thingtime'>): string =>
+  PRIMARY_KIND_ORDER.find((kind) => thing.thingtime.includes(kind)) || thing.thingtime[0] || 'data';
+
+export const thingIcon = (thing: Pick<ThingsThing, 'thingtime' | 'crystal'>): string => {
+  if (isFolder(thing) && typeof thing.crystal?.icon === 'string' && thing.crystal.icon) return thing.crystal.icon;
+  return KIND_ICONS[primaryKindOf(thing)] || '🌀';
+};
 
 const firstLine = (value: string, max = 80): string => {
   const line = value.split('\n').find((entry) => entry.trim()) || '';
@@ -129,7 +121,7 @@ const firstLine = (value: string, max = 80): string => {
 // about what the thing is instead of rendering an empty row.
 export const thingDisplayName = (thing: Pick<ThingsThing, 'thingtime' | 'crystal'>): string => {
   const crystal = thing.crystal || {};
-  for (const key of ['title', 'name']) {
+  for (const key of ['name', 'title']) {
     if (typeof crystal[key] === 'string' && crystal[key].trim()) return firstLine(crystal[key]);
   }
   if (typeof crystal.text === 'string' && crystal.text.trim()) return firstLine(crystal.text);
@@ -143,8 +135,39 @@ export const thingDisplayName = (thing: Pick<ThingsThing, 'thingtime' | 'crystal
 };
 
 export const VISIBILITY_META: Record<string, { label: string; icon: string }> = {
-  ...Object.fromEntries(Object.entries(THING_AUDIENCE_META).map(([key, value]) => [key, { label: value.label, icon: value.emoji }])),
+  public: { label: 'Public', icon: '🌐' },
+  friends: { label: 'Friends', icon: '🤝' },
+  family: { label: 'Family', icon: '🏡' },
+  private: { label: 'Private', icon: '🔒' },
   inherit: { label: 'Inherits', icon: '🔗' }
+};
+
+// legacy circle names → acl arrays (mirrors LEGACY_VISIBILITY_ACLS in
+// schemas/registry.ts — the share dialog composes person grants on top)
+export const CIRCLE_BASE_ACLS: Record<string, string[]> = {
+  public: ['tt:all'],
+  friends: ['-tt:all', 'tt:userFriends', 'tt:user'],
+  family: ['-tt:all', 'tt:userFamily', 'tt:user'],
+  private: ['tt:user']
+};
+
+export const personGrantsOf = (acl: string[]): string[] =>
+  acl
+    .filter((entry) => entry.startsWith('tt:user/'))
+    .map((entry) => entry.slice('tt:user/'.length));
+
+export const circleOf = (acl: string[]): string => {
+  if (acl.includes('tt:inherit')) return 'inherit';
+  if (acl.includes('tt:all')) return 'public';
+  if (acl.includes('tt:userFriends')) return 'friends';
+  if (acl.includes('tt:userFamily')) return 'family';
+  return 'private';
+};
+
+export const composeAcl = (circle: string, people: string[]): string[] => {
+  const base = CIRCLE_BASE_ACLS[circle] || CIRCLE_BASE_ACLS.private;
+  const grants = people.map((username) => `tt:user/${username}`);
+  return [...base, ...grants].filter((entry, index, all) => all.indexOf(entry) === index);
 };
 
 export const formatWhen = (iso: string): string => {
@@ -162,40 +185,10 @@ export const formatWhen = (iso: string): string => {
   return date.toLocaleDateString();
 };
 
-// Where a thing's OWN page lives — the permalink Copy link / Share hand out
-// and the page a double-click opens, so a pasted link and an opened tile
-// land on the same surface. Every kind with a dedicated page routes there
-// (folders open in place on /things); components, data and whatever kind
-// comes next land on the universal /thing/:id page. The /things?preview=
-// deep link stays the explicit quick-look, never the permalink.
-export const thingLink = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>): string => {
-  return thingPath(thing);
-};
-
-export const thingShareLink = (
-  thing: Pick<ThingsThing, 'id' | 'thingtime' | 'acl' | 'linkKey'>
-): string => sharePathForThing(thing);
-
-// The surfaces the universal page can send a viewer back to.
-export type ThingsReferrer = 'things' | 'actions' | 'feed';
-
-// The href a browse surface NAVIGATES to: the permalink plus the referrer
-// hint the universal /thing/:id page reads for its back link. Only that page
-// consumes the hint, so dedicated pages (post/action/webpage/schema) and the
-// shareable permalink itself never carry it.
-export const thingOpenHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>, from: ThingsReferrer): string => {
-  const href = thingLink(thing);
-  return href.startsWith('/thing/') ? `${href}${href.includes('?') ? '&' : '?'}from=${from}` : href;
-};
-
-// What a `?from=` param names, defaulting to the feed. An OWN-property check,
-// not a truthiness one: `?from=toString` (or constructor / __proto__ /
-// valueOf) resolves through Object.prototype on a plain record lookup, so a
-// `REFERRERS[param] || REFERRERS.feed` fallback hands back a function instead
-// of falling through — and the back link then renders with no label and
-// navigates nowhere. Same guard demoDetail.parseKindFilter uses.
-export const parseThingsReferrer = (raw: string | null | undefined): ThingsReferrer =>
-  raw === 'things' || raw === 'actions' || raw === 'feed' ? raw : 'feed';
+// permalink for the share dialog's copy-link: posts have a page of their own,
+// everything else deep-links into the /things preview modal
+export const thingLink = (thing: Pick<ThingsThing, 'id' | 'thingtime'>): string =>
+  thing.thingtime.includes('post') ? `/post/${thing.id}` : `/things?preview=${encodeURIComponent(thing.id)}`;
 
 // stable sort for browse views: folders first (Drive convention), then the
 // chosen order. Every comparator ends on id so the order is deterministic.
@@ -263,7 +256,7 @@ export const groupThings = (things: ThingsThing[], groupBy: ThingsGroupBy): Thin
   return orderedKinds.map((kind) => ({
     key: kind,
     label: KIND_GROUP_LABELS[kind] || `${kind.charAt(0).toUpperCase()}${kind.slice(1)}s`,
-    icon: THING_KIND_ICONS[kind] || '🌀',
+    icon: KIND_ICONS[kind] || '🌀',
     items: byKind.get(kind) || []
   }));
 };
@@ -275,17 +268,6 @@ export const schemaIdOf = (thing: Pick<ThingsThing, 'thingtime' | 'crystal'>): s
   thing.thingtime.includes('data') && typeof thing.crystal?.schemaId === 'string' && thing.crystal.schemaId
     ? thing.crystal.schemaId
     : null;
-
-// The render template a SCHEMA thing declares (crystal.render, an object
-// tree), null when it has none or the response is not a schema. One reader
-// for the /things Previews cache and the universal /thing/:id page, so a data
-// thing draws through exactly the same template on both.
-export const schemaRenderOf = (schemaThing: unknown): Record<string, unknown> | null => {
-  const thing = schemaThing as { thingtime?: unknown; crystal?: { render?: unknown } | null } | null;
-  if (!thing || !Array.isArray(thing.thingtime) || !thing.thingtime.includes('schema')) return null;
-  const render = thing.crystal?.render;
-  return render && typeof render === 'object' && !Array.isArray(render) ? (render as Record<string, unknown>) : null;
-};
 
 // {field} token interpolation for schema render templates: every string in the
 // tree (props and children alike) swaps {dotted.path} tokens for the data
@@ -336,11 +318,3 @@ export const interpolateRenderTree = (
   };
   return walk(tree) as Record<string, unknown>;
 };
-
-// Match the writer's projection: dedicated library/attachment renames change
-// display metadata only; ordinary schema names stay in sync with their title.
-export const thingRenameCrystal = (thing: Pick<ThingsThing, 'crystal' | 'thingtime'>, title: string): Record<string, string> =>
-  ({ title, ...(!isManagedLibraryThing(thing) && !thing.thingtime.includes('attachment') && typeof thing.crystal?.name === 'string' ? { name: title } : {}) });
-
-export const isManagedLibraryThing = (thing: Pick<ThingsThing, 'thingtime'>): boolean =>
-  thing.thingtime.length === 1 && ['theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(thing.thingtime[0]);

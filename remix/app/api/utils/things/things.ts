@@ -1027,13 +1027,14 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
 // them, so a folder pointer can never reference another user's folder, a
 // non-folder thing, or (for folder moves) its own descendant.
 
-// Mechanical children (reactions, saves, poll votes) live under their target
-// and never surface as content — filing them is meaningless. Comments/shares/
-// posts are authored content and CAN be filed: folderId is pure owner-side
-// organization, orthogonal to targetId attachment and inherit visibility.
-const FOLDER_UNFILEABLE = ['reaction', 'save', 'vote', UPDOWN_THINGTIME];
+// Mechanical children (reactions, saves) live under their target and never
+// surface as content — filing them is meaningless. Comments/shares/posts are
+// authored content and CAN be filed: folderId is pure owner-side organization,
+// orthogonal to targetId attachment and inherit visibility.
+const FOLDER_UNFILEABLE = ['reaction', 'save'];
 // Ancestor-walk bound. Legitimate folder trees are shallow; the walk fails
 // closed at the cap so a corrupt chain can never loop the server.
+const MAX_FOLDER_DEPTH = 64;
 
 // Validates a raw folderId input for a thing of the given schemas. Returns the
 // resolved folder shareId, null for root, or a Fail. Ownership is strict: the
@@ -1049,7 +1050,6 @@ const resolveFolderAssignment = async (
   if (typeof rawFolderId !== 'string' || !rawFolderId.trim()) {
     return fail(400, 'folderId must be a folder thing id (or null for the root)');
   }
-  if (rawFolderId.trim().startsWith('timeline-')) return fail(400, 'The Timeline folder is managed by history');
   if (thingtime.some((id) => FOLDER_UNFILEABLE.includes(id))) {
     return fail(400, `${thingtime.join('+')} things live under their target and cannot be filed in folders`);
   }
@@ -1057,7 +1057,7 @@ const resolveFolderAssignment = async (
   const folder = (await things.findOne({
     shareId: rawFolderId.trim(),
     ownerId,
-    ...folderThingMatch()
+    thingtime: 'folder'
   } as any)) as any as ThingDoc | null;
   if (!folder) return fail(404, 'Folder not found');
   return { ok: true, folderId: folder.shareId };
@@ -1076,7 +1076,7 @@ const folderAncestryContains = async (ownerId: string, folderId: string, needleI
     if (visited.has(current)) return true; // existing cycle — fail closed
     visited.add(current);
     const doc = (await things.findOne(
-      { shareId: current, ownerId, ...folderThingMatch() } as any,
+      { shareId: current, ownerId, thingtime: 'folder' } as any,
       { projection: { folderId: 1 } } as any
     )) as any as ThingDoc | null;
     if (!doc) return false; // chain ends at root (or a since-deleted parent)
@@ -1319,8 +1319,8 @@ export const createThing = async (
     acl = [ACL_INHERIT];
   } else if (validated.requiresTarget && !validated.thingtime.includes('post')) {
     acl = [ACL_INHERIT];
-  } else if (validated.thingtime.includes('folder') || validated.thingtime.includes('file-sync')) {
-    // Organization and device-folder configuration default private, unlike
+  } else if (validated.thingtime.includes('folder')) {
+    // organization structure is personal — folders default private, unlike
     // the public default for standalone content things
     acl = inputAcl || [ACL_OWNER];
   } else {
@@ -1359,6 +1359,9 @@ export const createThing = async (
     if (isFail(interaction)) return interaction;
     rootSubspaceId = interaction.rootSubspaceId;
   }
+
+  const folderAssignment = await resolveFolderAssignment(ownerId, input.folderId, validated.thingtime);
+  if (isFail(folderAssignment)) return folderAssignment;
 
   if (validated.thingtime.includes('comment') && target) {
 		// includeBlocked: the cap is a physical doc bound — blocked spam must not
@@ -2560,105 +2563,21 @@ const toPublicDiscussionPage = async (
   docs: ThingDoc[], viewer: Viewer, projected: PublicThing[]
 ): Promise<PublicDiscussion[]> => {
   if (!docs.length) return [];
-  const byId = new Map(projected.map(thing => [thing.id, thing]));
-  const redacted = (doc: ThingDoc) => doc.subspaceMod?.status === 'removed' && doc.ownerId !== viewer?.id &&
-    !canModerateSubspace(viewer?.subspaceRoles?.get(subspaceIdOfDoc(doc) || '') || null);
-  const readable = docs.filter(doc => !redacted(doc));
-  const references = [...new Set(readable.flatMap(doc => postThingReferences(crystalOf(doc).thing).map(item => item.id)))];
-  const linkedDocs = (await resolvePostLinkedThings(references, viewer)).filter(doc => !doc.appId && !redacted(doc));
-  const linked = new Map((await toPublicThings(linkedDocs, viewer)).map(thing => [thing.id, thing]));
-  const attachments = new Map<string, AttachmentPublicMetadata[]>();
-  if (readable.length) {
-    const things = await getThingsCollection();
-    // $topN retains only 26 documents per source even for legacy roots with
-    // unlimited media. Only canonical inherited, same-owner attachments can
-    // ride the source's authority. Explicit/private ACLs and app rows do not.
-    const groups = await things.aggregate([
-      { $match: withMatch({ thingtime: 'attachment', attachmentState: 'ready', acl: [ACL_INHERIT], appId: { $in: [null] } },
-        { $or: readable.map(doc => ({ targetId: doc.shareId, ownerId: doc.ownerId,
-          attachmentPurpose: thingtimeOf(doc).includes('comment') ? 'comment' : { $in: ['post', null] } })) },
-        visibleRelatedModerationClause(viewer?.id || null)) },
-      { $set: { discussionAttachmentOrder: { $cond: [
-        { $and: [{ $isNumber: '$attachmentSortIndex' }, { $gte: ['$attachmentSortIndex', 0] }, { $lte: ['$attachmentSortIndex', Number.MAX_SAFE_INTEGER] }] },
-        '$attachmentSortIndex', Number.MAX_SAFE_INTEGER] } } },
-      { $group: { _id: '$targetId', docs: { $topN: { n: 26, sortBy: { discussionAttachmentOrder: 1, createdAt: 1, shareId: 1 },
-        output: { shareId: '$shareId', ownerId: '$ownerId', targetId: '$targetId', attachmentSortIndex: '$attachmentSortIndex',
-          crystal: '$crystal', moderation: '$moderation', createdAt: '$createdAt' } } } } }
-    ] as any).toArray();
-    for (const group of groups) {
-      const media = orderAttachmentDocsByStoredSort(group.docs as any[]).flatMap(doc => {
-        const item = toAttachmentPublicMetadata(doc.shareId, doc.crystal, doc.moderation, { ownerView: !!viewer?.id && doc.ownerId === viewer.id });
-        return item ? [item] : [];
-      });
-      attachments.set(group._id, media);
-    }
-  }
-  return docs.map(doc => {
-    const thing = byId.get(doc.shareId)!;
-    const crystal = crystalOf(doc);
-    const hidden = redacted(doc);
-    const media = attachments.get(doc.shareId) || [];
-    // The generic companion must not leak the removed body either.
-    const { comments: _comments, replies: _replies, reactions: _reactions, ...directCrystal } = thing.crystal;
-    thing.crystal = hidden ? { type: crystal.type || 'text' } : directCrystal;
-    if (hidden) { thing.extended = null; thing.geo = null; thing.tags = []; }
-    thing.attachments = media.slice(0, 25);
-    return {
-      id: doc.shareId, thingtime: thing.thingtime, type: (crystal.type as PostType) || 'text', author: thing.author,
-      audience: thing.audience, visibility: thing.visibility as PostVisibility, acl: thing.acl,
-      ...(thing.linkKey ? { linkKey: thing.linkKey } : {}),
-      text: hidden ? '' : String(crystal.text || ''),
-      richText: !hidden && crystal.richText && typeof crystal.richText === 'object' && !Array.isArray(crystal.richText) ? crystal.richText as Record<string, any> : null,
-      images: hidden ? [] : (crystal.images as string[]) || [], attachments: thing.attachments,
-      ...(media.length > 25 ? { attachmentsTruncated: true as const } : {}),
-      mediaLayout: hidden ? null : mediaLayoutOf(crystal), listing: hidden ? null : (crystal.listing as MarketplaceListing) || null,
-      thing: !hidden && crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? crystal.thing as Record<string, any> : null,
-      ...(!hidden && postThingReferences(crystal.thing).length ? { linkedThings: postThingReferences(crystal.thing).map(ref => ({ ...ref, thing: linked.get(ref.id) || null })) } : {}),
-      tags: hidden ? [] : thing.tags, title: !hidden && typeof crystal.title === 'string' ? crystal.title : null,
-      subspaceMod: doc.subspaceMod?.status === 'removed' ? { status: 'removed' as const, removed: true,
-        reason: hidden ? null : doc.subspaceMod.reason || null, removedAt: doc.subspaceMod.removedAt ? new Date(doc.subspaceMod.removedAt).toISOString() : null,
-        pinned: false, locked: doc.subspaceMod.locked === true, nsfw: false, spoiler: false, viewerCanModerate: !hidden && doc.ownerId !== viewer?.id } : null,
-      comments: [] as [], repliesLoaded: false as const,
-      isShare: !!targetIdOf(doc) && thing.thingtime.includes('share'), shareOf: null,
-      extended: hidden ? null : thing.extended, geo: hidden ? null : thing.geo, createdAt: thing.createdAt
-    };
-  });
-};
-
-export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Viewer, resolveAudience = false): Promise<PublicThing[]> => {
-  if (!docs.length) return [];
-  const viewer = asViewer(viewerInput);
-  const [profiles, audiences] = await Promise.all([resolveProfiles(docs.map((doc) => doc.ownerId)), resolveAudience ? resolvePublicAudiences(docs, viewer) : Promise.resolve(new Map<string, ResolvedAudience>())]);
-  return docs.map((doc) => {
-    // token grants are owner-facing management data, not audience — only the
-    // owner's own credentials (session or their tokens) see them
-    const tokenAcl = viewer?.id && viewer.id === doc.ownerId ? tokenAclOf(doc) : [];
-    // the hidden-link secret is owner-facing too, and only meaningful while
-    // the acl still says hidden
-    const linkKey =
-      viewer?.id && viewer.id === doc.ownerId && typeof doc.linkKey === 'string' && doc.linkKey && aclOf(doc).includes(ACL_HIDDEN)
-        ? doc.linkKey
-        : null;
-    return {
-      id: doc.shareId,
-      thingtime: thingtimeOf(doc),
-      author: profiles.get(doc.ownerId) || null,
-      audience: audiences.get(doc.shareId),
-      visibility: visibilityFromAcl(aclOf(doc)),
-      acl: aclOf(doc),
-      ...(linkKey ? { linkKey } : {}),
-      targetId: targetIdOf(doc),
-      folderId: folderIdOf(doc),
-      crystal: crystalOf(doc),
-      extended: doc.extended ?? null,
-      geo: publicGeo(doc.geo),
-      tags: doc.tags || [],
-      ...(tokenAcl.length ? { tokenAcl } : {}),
-      createdAt: new Date(doc.createdAt).toISOString(),
-      updatedAt: new Date(doc.updatedAt).toISOString(),
-      ...(viewer?.id === doc.ownerId && typeof (doc as any).timelineHeadId === 'string' ? { timelineHeadId: (doc as any).timelineHeadId } : {})
-    };
-  });
+  const profiles = await resolveProfiles(docs.map((doc) => doc.ownerId));
+  return docs.map((doc) => ({
+    id: doc.shareId,
+    thingtime: thingtimeOf(doc),
+    author: profiles.get(doc.ownerId) || null,
+    visibility: visibilityFromAcl(aclOf(doc)),
+    acl: aclOf(doc),
+    targetId: targetIdOf(doc),
+    folderId: folderIdOf(doc),
+    crystal: crystalOf(doc),
+    extended: doc.extended ?? null,
+    tags: doc.tags || [],
+    createdAt: new Date(doc.createdAt).toISOString(),
+    updatedAt: new Date(doc.updatedAt).toISOString()
+  }));
 };
 
 // ---------------------------------------------------------------------------
@@ -2785,11 +2704,7 @@ const customEngageFail = (): Fail =>
 
 // Target-attached things resolve visibility through their inherit chain (see
 // aclChainCore for the cycle-safe walk — legitimate deep comment chains must
-// never be cut off, only cycles and broken/missing targets fail closed). The
-// sole exception is an unrestricted owner opening their own orphaned media:
-// the object remains private to its owner, but must stay recoverable from its
-// direct permalink when a historic parent has disappeared. No audience or PAT
-// session can use that recovery path.
+// never be cut off, only cycles and broken/missing targets fail closed).
 // `findByShareId` is injectable so page-sized callers can share a batched
 // lookup; the default stays the plain per-hop findOne.
 export const canViewInherited = async (
@@ -2797,66 +2712,8 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
-  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
-	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
-	// terminal — a blocked or born-private comment under a clean post must
-	// vanish for non-owners too
-	if (attachmentIsBlocked(doc as any)) return false;
-	if (
-		attachmentModerationStatus(doc as any) === 'pending' &&
-		thingtimeOf(doc).some((kind) => TEXT_MODERATED_THINGTIMES.has(kind)) &&
-		doc.ownerId !== viewer?.id
-	) {
-		return false;
-	}
-  let ancestorDenied = false;
-  const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), async id => {
-    const ancestor = await findByShareId(id);
-    if (ancestor && (isDeviceControlThing(ancestor) || attachmentIsBlocked(ancestor as any) ||
-      (attachmentModerationStatus(ancestor as any) === 'pending' &&
-       thingtimeOf(ancestor).some(kind => TEXT_MODERATED_THINGTIMES.has(kind)) && ancestor.ownerId !== viewer?.id))) ancestorDenied = true;
-    return ancestor;
-  });
-  if (ancestorDenied) return false;
-  if (terminal) {
-    // tt:extsourced / legacy tt:extacct/ audiences (synced external posts and
-    // their comment chains) resolve live against the viewer's connections —
-    // loaded lazily here and memoised on the viewer object for the request path.
-    // This runs BEFORE the first canView so an unloaded set can never deny a
-    // legitimate external-source viewer, and the memo is in place for the
-    // found-post fallback below (withFoundPostGrant spreads the same viewer).
-    // It also has to precede the hidden-link viewer below, since withThingLink
-    // spreads `viewer` and would otherwise snapshot it before the memo lands.
-    if (hasExtSourcedAudience(terminal)) await ensureExtSourced(viewer, terminal.shareId);
-    if (hasExtacctAudience(terminal)) await ensureExtAccountIds(viewer);
-    const linkedViewer = viewer?.linkThingIds?.has(doc.shareId) ? withThingLink(viewer, terminal.shareId) : viewer;
-    if (canView(terminal, linkedViewer)) return true;
-    if (!patVisibilityBlocksAcl(viewer, aclOf(terminal)) && await serviceWorkspaceCanRead(terminal, viewer)) return true;
-    if (isCustomMongoEndpointActive()) return false;
-    return canView(terminal, await withFoundPostGrant(terminal, viewer, findByShareId));
-  }
-
-  // Attachments are independently stored media objects. If a parent was
-  // deleted or a legacy migration left the relation dangling, preserve an
-  // owner-only recovery route rather than turning the original bytes into an
-  // inaccessible orphan. Keep all other inherited children fail-closed and
-  // never bypass a visibility-scoped personal access token.
-  return (
-    thingtimeOf(doc).includes('attachment') &&
-    !!viewer?.id &&
-    doc.ownerId === viewer.id &&
-    !patVisibilityOf(viewer)
-  );
-};
-
-// Mutation-site visibility-fence check with the inherit chain resolved —
-// updateThing and deleteThing load their target by ownership (never through
-// canView), so they ask this directly. Free for unrestricted viewers; broken
-// chains fail closed like canViewInherited.
-const patVisibilityBlocksDoc = async (viewer: Viewer, doc: ThingDoc): Promise<boolean> => {
-  if (!patVisibilityOf(viewer)) return false;
-  const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing);
-  return !terminal || patVisibilityBlocksAcl(viewer, aclOf(terminal));
+  const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findByShareId);
+  return !!terminal && canView(terminal, viewer);
 };
 
 // Coalescing, memoised shareId lookup for one request: every lookup issued in
@@ -2866,7 +2723,7 @@ const patVisibilityBlocksDoc = async (viewer: Viewer, doc: ThingDoc): Promise<bo
 // one per doc×hop — the per-doc walks were fine locally but timed the /things
 // function out in production, where each Mongo round trip crosses regions
 // (~200ms Vercel iad1 ↔ Atlas Sydney).
-export const batchedThingLookup = (): ((shareId: string) => Promise<ThingDoc | null>) => {
+const batchedThingLookup = (): ((shareId: string) => Promise<ThingDoc | null>) => {
   const cache = new Map<string, Promise<ThingDoc | null>>();
   let pending: { ids: Set<string>; promise: Promise<Map<string, ThingDoc>> } | null = null;
   return (shareId: string) => {
@@ -3522,44 +3379,34 @@ export const listThings = async (
   let discussionTarget: ThingDoc | null = null;
   if (query.targetId) {
     if (query.folder) return fail(400, 'folder filtering applies to your own things, not a target listing');
-    const target = await findViewableThingAs(query.targetId, viewer, app);
-    if (!target || (query.commentProjection && target.appId)) return fail(404, 'Thing not found');
-    if (query.commentProjection) discussionTarget = target;
-    if (!app) {
-      const terminal = await resolveInheritChain(target, d => aclOf(d).includes(ACL_INHERIT), findThing);
-      viewer = withThingLink(viewer, terminal?.shareId || target.shareId);
-    }
-    // under the app lens, children are namespace things too — the owner's
-    // first-party comments on an app thing (no appId) never surface here
-    match = app ? withMatch({ targetId: target.shareId }, ...appMatchClauses(app)) : { targetId: target.shareId };
-  } else if (app) {
-    match = withMatch({}, ...appMatchClauses(app));
+    const target = await findViewableThing(query.targetId, viewer);
+    if (!target) return fail(404, 'Thing not found');
+    match = { targetId: target.shareId };
   } else {
     if (!viewer?.id) return fail(401, 'Unauthorized');
     // your OWN things, but not your account/theme/algorithm/waitlist things —
     // those are managed by their dedicated endpoints and would otherwise show
-    // up as inert, non-editable entries (edit/delete 403) in the data browser.
-    // Messenger plumbing (chats, memberships, messages…) stays out for the
-    // same reason — /messages is its browser.
+    // up as inert, non-editable entries (edit/delete 403) in the data browser
+    match = {
+      ownerId: viewer.id,
+      thingtime: { $nin: [...PROTECTED_THINGTIME] },
+      $or: [{ thingtime: { $exists: true } }, { kind: 'post' }]
+    };
     const folder = typeof query.folder === 'string' ? query.folder.trim() : '';
-    const hiddenKinds = folder
-      ? [...PROTECTED_THINGTIME, ...FOLDER_UNFILEABLE]
-      : [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME];
-    match = withMatch(
-      ownerLibraryMatch(viewer.id, hiddenKinds, context.archiveOwnerId === viewer.id && !viewer.pat && !query.appId && !isCustomMongoEndpointActive()),
-      await legacyThingReadsRequired() ? { $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] } : { thingtime: { $exists: true } }
-    );
+    if (folder) {
+      // Folder browse: mechanical children (reactions, saves) are unfileable —
+      // they'd otherwise flood the root level (no folderId reads as root) with
+      // rows the browser hides anyway, wasting whole pages and one inherit
+      // walk each. Excluded server-side so folder pages carry real content.
+      match.thingtime = { $nin: [...PROTECTED_THINGTIME, ...FOLDER_UNFILEABLE] };
+    }
     if (folder === 'root') {
       // v1 docs and pre-folder v2 docs have no folderId at all — both read as root
-      match = withMatch(match, ownerLibraryRootMatch());
+      match.folderId = { $in: [null] };
     } else if (folder) {
       const assignment = await resolveFolderAssignment(viewer.id, folder, []);
       if (isFail(assignment)) return assignment;
       match.folderId = assignment.folderId;
-    }
-    // narrow to one app's namespace (session-auth data browser)
-    if (typeof query.appId === 'string' && query.appId.trim()) {
-      match = withMatch(match, { appId: query.appId.trim() });
     }
   }
   if (thingtime.length) {
@@ -3621,39 +3468,12 @@ export const listThings = async (
   // thing attached to a target can carry its OWN acl (e.g. a private share:
   // thingtime ['post','share'], targetId=original) — those must be judged on
   // their own acl, never disclosed just because their target is viewable.
-  let visible: ThingDoc[];
-  if (app) {
-    visible = await appVisiblePage(app, page);
-  } else {
-    // The checks run concurrently over one shared batched lookup, so a page of
-    // attached things costs one round trip per chain level, not one per doc.
-    const lookup = batchedThingLookup();
-    const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer, lookup)));
-    visible = page.filter((_, index) => verdicts[index]);
-  }
-  const projected = await toPublicThings(visible, viewer, query.commentProjection === true);
-  if (query.commentProjection) {
-    const comments = (await toPublicDiscussionPage(visible, viewer, projected)).map(post => ({ ...post, targetId: targetIdOf(visible.find(doc => doc.shareId === post.id)!) }));
-    return { ok: true, things: projected, nextCursor, comments };
-  }
-  if (query.targetId && !app && !isCustomMongoEndpointActive()) {
-    const comments = visible.filter(doc => thingtimeOf(doc).includes('comment'));
-    const media = await resolvePostAttachments(
-      comments.map(doc => doc.shareId),
-      new Map(comments.map(doc => [doc.shareId, { ownerId: doc.ownerId, purpose: 'comment' as const }])),
-      viewer.id
-    );
-    for (const thing of projected) if (thing.thingtime.includes('comment')) thing.attachments = media.get(thing.id) || [];
-  }
-  for (const thing of projected) if (thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive') {
-    // Library entries are private root summaries, never history or stored
-    // authority. Only the dedicated snapshot route returns archived people.
-    thing.crystal = { name: typeof thing.crystal.name === 'string' ? thing.crystal.name : 'Chat archive', ...(typeof thing.crystal.title === 'string' ? { title: thing.crystal.title } : {}) };
-    thing.acl = ['tt:user']; thing.visibility = 'private'; thing.extended = null; thing.tags = [];
-    delete thing.linkKey; delete thing.tokenAcl;
-  }
-  if (app) await appShapeProjections(app, visible, projected);
-  return { ok: true, things: projected, nextCursor };
+  // The checks run concurrently over one shared batched lookup, so a page of
+  // attached things costs one round trip per chain level, not one per doc.
+  const lookup = batchedThingLookup();
+  const verdicts = await Promise.all(page.map((doc) => canViewInherited(doc, viewer, lookup)));
+  const visible = page.filter((_, index) => verdicts[index]);
+  return { ok: true, things: await toPublicThings(visible, viewer), nextCursor };
 };
 
 // Copy a target's LEGACY embedded reactions/comments into standalone v2 things
@@ -4905,110 +4725,27 @@ export const deleteThing = async (
 	const deleteFilter = {
     shareId: shareId.trim(),
     ownerId: viewer.id,
-    thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME] },
-    ...(app ? { appId: app.appId } : {}),
-    ...(sandboxTokenId ? { $or: [{ tokenAcl: tokenAclEntryFor(sandboxTokenId) }, { createdByTokenId: sandboxTokenId }] } : {})
-	};
-
-	const initial = (await things.findOne(deleteFilter as any)) as any as ThingDoc | null;
-	if (!initial) {
-    if (sandboxTokenId && (await things.findOne({ shareId: shareId.trim(), ownerId: viewer.id } as any))) {
-      return patSandboxFail();
-    }
-    return fail(404, 'Thing not found');
+    thingtime: { $nin: [...PROTECTED_THINGTIME] }
+  } as any)) as any as ThingDoc | null;
+  if (!deleted) return fail(404, 'Thing not found');
+  // comments/reactions/saves attached to the deleted thing go with it (v2
+  // things AND interim kind docs); share things survive so they can render
+  // their 'original unavailable' placeholder
+  await things.deleteMany({
+    $or: [
+      { targetId: deleted.shareId, thingtime: { $in: ['comment', 'reaction', 'save'] } },
+      { parentId: deleted.shareId, kind: { $in: ['comment', 'reaction'] } }
+    ]
+  } as any);
+  // deleting a folder never deletes what's inside it — contents (and
+  // subfolders) re-parent to the deleted folder's own parent, so the worst a
+  // folder delete can do to your things is flatten them one level
+  if (thingtimeOf(deleted).includes('folder')) {
+    await things.updateMany(
+      { ownerId: viewer.id, folderId: deleted.shareId } as any,
+      { $set: { folderId: deleted.folderId || null, updatedAt: new Date() } } as any
+    );
   }
-	if (hooks.expectedUpdatedAt !== undefined && hooks.expectedUpdatedAt !== null) {
-		if (typeof hooks.expectedUpdatedAt !== 'string' || Number.isNaN(new Date(hooks.expectedUpdatedAt).getTime())) {
-			return fail(400, 'expectedUpdatedAt must be an ISO timestamp');
-		}
-		const currentUpdatedAt = new Date(initial.updatedAt);
-		if (Number.isNaN(currentUpdatedAt.getTime()) || currentUpdatedAt.getTime() !== new Date(hooks.expectedUpdatedAt).getTime()) {
-			return fail(409, 'Thing changed after the preview — build a new preview before deleting');
-		}
-	}
-  // visibility fence — same judgement the update path makes: out-of-audience
-  // things are untouchable (inherit acls resolve through the target chain)
-  if (await patVisibilityBlocksDoc(viewer, initial)) return patVisibilityFail(viewer);
-	// Pin the physical root identity across the multi-transaction drain. If a
-	// competing deleter wins and a caller later reuses the same public shareId,
-	// this in-flight request must never delete that replacement Thing (ABA).
-	const anchoredDeleteFilter = {
-		...deleteFilter,
-		_id: (initial as any)._id,
-		...(isFolderThing(initial) || (hooks.expectedUpdatedAt !== undefined && hooks.expectedUpdatedAt !== null) ? { updatedAt: initial.updatedAt } : {})
-	};
-	const deleteCapture = hooks.timelineCapture ?? newThingMutationCapture(viewer.id);
-
-	try {
-		await hooks.beforeDelete?.(initial);
-		if (hooks.beforeCascade) {
-			const prepared = await hooks.beforeCascade(initial);
-			if (prepared.ok === false) return prepared;
-		} else {
-			// Defense in depth for future/internal callers: generic cascade deletion
-			// must never refund a protected attachment Thing before its external S3
-			// version is permanently deleted. Home routes provide beforeCascade;
-			// custom data planes cannot own private attachments.
-			const attachmentChild = await things.findOne(
-				{
-					ownerId: initial.ownerId,
-					thingtime: 'attachment',
-					attachmentState: { $in: ['pending', 'finalizing', 'ready', 'deleting'] },
-					targetId: { $in: cascadeLinkIdsOf(initial) }
-				} as any,
-				{ projection: { _id: 1 } }
-			);
-			if (attachmentChild) return fail(409, 'Attachment cleanup must finish before this Thing can be deleted');
-		}
-		// the comments deleted along the way (a reported comment takes the rows
-		// that flagged it — clearSubspaceReportsFor below)
-		const deletedCommentIds = new Set<string>();
-		// Descendants commit leaf-first in deterministic <=100-row transactions;
-		// the root remains as a durable retry anchor until the closure is empty.
-		// Each batch uses exact findOneAndDelete before-images, so Mongo callback
-		// retries, competing deleters, and caller retries debit transactional
-		// account/app ledgers at most once. Sandbox refunds happen immediately
-		// after each commit; an ambiguous sandbox failure stays conservatively
-		// over-counted for its existing reconciliation path to repair.
-		for (let pass = 0; pass < MAX_CASCADE_DRAIN_PASSES; pass += 1) {
-			const anchoredRoot = (await things.findOne(anchoredDeleteFilter as any)) as any as ThingDoc | null;
-			if (!anchoredRoot) {
-				const oldRootStillExists = await things.findOne({ _id: (initial as any)._id } as any);
-				return oldRootStillExists ? fail(409, 'Thing changed while it was being deleted — try again') : { ok: true };
-			}
-			const descendants = await discoverCascadeDescendants(anchoredRoot);
-			const attachmentTargets = attachmentCascadeCleanupTargets(descendants);
-			if (attachmentTargets.length) {
-				if (!hooks.beforeCascade) {
-					return fail(409, 'Attachment cleanup must finish before this Thing can be deleted');
-				}
-				// Comment/reply attachments can be deeper than the requested root. Remove
-				// every exact S3 version before allowing Mongo cascade accounting to see
-				// its protected attachment row, then re-walk the now-changed closure.
-				for (const target of attachmentTargets) {
-					const prepared = await hooks.beforeCascade(target as ThingDoc);
-					if (prepared.ok === false) return prepared;
-				}
-				continue;
-			}
-			let rewalk = false;
-			for (const batch of cascadeDeletionBatches(descendants)) {
-				const result = await deleteCascadeBatchAtomically(batch, (initial as any)._id, viewer.id);
-				if (result.blocked) {
-					rewalk = true;
-					break;
-				}
-				await refundDeletedNamespaceDocs(result.deleted);
-				for (const gone of result.deleted) if (thingtimeOf(gone).includes('comment') && gone.shareId) deletedCommentIds.add(gone.shareId);
-			}
-			if (rewalk) continue;
-
-			if (isFolderThing(anchoredRoot)) await drainFolderPlacement(anchoredDeleteFilter, deleteCapture);
-			const rootResult = await deleteDrainedRootAtomically(anchoredDeleteFilter, viewer.id, deleteCapture, hooks);
-			if (rootResult.state === 'blocked') continue;
-			if (rootResult.state === 'deleted') {
-				await refundDeletedNamespaceDocs([rootResult.doc]);
-				await clearSubspaceReportsFor(rootResult.doc, deletedCommentIds);
   return { ok: true };
 			}
 
@@ -5278,58 +5015,13 @@ export const updateThing = async (
     if (isFail(assignment)) return assignment;
     if (
       assignment.folderId &&
-      isFolderThing(doc) &&
+      thingtime.includes('folder') &&
       (await folderAncestryContains(viewer.id, assignment.folderId, doc.shareId))
     ) {
       return fail(400, 'A folder cannot be moved into itself or its own subfolders');
     }
     nextFolderId = assignment.folderId;
   }
-
-  // token grants replace whole too (merging grant lists is ambiguous; null
-  // clears). The sandbox guard above already ran, so a sandboxed token can
-  // only re-grant on things it holds a grant on — and it may lock itself out
-  // by dropping its own entry, like chmod.
-  const nextTokenAcl = sanitizeTokenAcl(input.tokenAcl);
-  if (isFail(nextTokenAcl)) return nextTokenAcl;
-
-	const nextExtended = hasExtendedChange ? extended.value : doc.extended ?? null;
-	const newSize = thingStorageSizeBytes({ crystal: validated.crystal, extended: nextExtended, tags });
-	// Same home-plane rule as createThing: under a data-plane endpoint override
-	// this row lives on the user's own MongoDB — account accounting (and its
-	// content stamps) never applies, even to synced-in rows that carry stamps.
-	const accountPlaneApplies = !isCustomMongoEndpointActive();
-	const wasBillable = isBillableStorageThing(doc) && accountPlaneApplies;
-	const nextStorageDoc: ThingDoc = {
-		...doc,
-		schemaVersion: THINGS_SCHEMA_VERSION,
-		thingtime,
-      crystal: validated.crystal,
-		extended: nextExtended,
-      tags
-	};
-	const isBillable = isBillableStorageThing(nextStorageDoc) && accountPlaneApplies;
-	const registeredStorageScope = storageScope && !storageScope.sandbox ? storageScope : null;
-	const currentSourceBytes = currentContentSizeBytes(doc);
-	if ((wasBillable || registeredStorageScope) && currentSourceBytes === null) {
-		// Never turn an uncertain legacy baseline into a current-looking stamp by
-		// applying only new-old. Even before a ledger is published ready, racing
-		// migration activation could otherwise certify a total which omitted the
-		// old row. The idempotent storage migration is the sole baseline writer.
-		return fail(503, 'Thing requires the current storage migration before it can be updated');
-	}
-	const oldStorageBytes = currentSourceBytes ?? storedThingSizeBytes(doc);
-	const accountDelta = (isBillable ? newSize : 0) - (wasBillable ? oldStorageBytes : 0);
-	const appDelta = storageScope ? newSize - oldStorageBytes : 0;
-	const storageTracked = wasBillable || isBillable || !!storageScope;
-
-	// Sandbox namespaces retain their ephemeral/windowed pre-reservation path.
-	// Real account + registered-app deltas are applied below inside one Mongo
-	// transaction with the document CAS.
-	if (storageScope?.sandbox && appDelta > 0) {
-		const charge = await chargeAppStorage(storageScope, appDelta);
-      if (charge.ok === false) return fail(charge.status, charge.error);
-    }
 
   const now = new Date();
   const set: Record<string, any> = {
@@ -5566,7 +5258,6 @@ export type BulkOp = (typeof BULK_OPS)[number];
 export type BulkThingsInput = {
   op?: unknown;
   ids?: unknown;
-  expectedUpdatedAt?: unknown; // conditional single-item move
   folderId?: unknown; // move/copy destination (null/omitted = root)
   acl?: unknown; // share: the audience to apply
   visibility?: unknown; // share: legacy circle alias, mapped onto acl
@@ -5577,7 +5268,6 @@ export type BulkItemResult = {
   id: string;
   ok: boolean;
   error?: string;
-  status?: number;
   newId?: string;
   // recursive folder ops: how many descendants were copied / acl-updated and
   // how many were skipped (uncopyable kinds, inherit-locked audiences)
@@ -5589,7 +5279,7 @@ export type BulkItemResult = {
 // Kinds that can't be duplicated: attached children live under their target
 // (a copy would dangle). Folders CAN be copied — the whole subtree is walked
 // through the same per-item create path, skipping these kinds inside.
-const UNCOPYABLE = ['comment', 'reaction', 'save', 'share', 'vote', UPDOWN_THINGTIME];
+const UNCOPYABLE = ['comment', 'reaction', 'save', 'share'];
 
 // Recursive folder op bound (copy / recursive share): the subtree walk fails
 // loudly past this many things instead of silently truncating.
@@ -5616,7 +5306,7 @@ const collectFolderTree = async (
     for (const child of children) {
       if (docs.length >= MAX_FOLDER_TREE_THINGS) return { docs, truncated: true };
       docs.push(child);
-      if (isFolderThing(child) && !visitedFolders.has(child.shareId)) {
+      if (thingtimeOf(child).includes('folder') && !visitedFolders.has(child.shareId)) {
         visitedFolders.add(child.shareId);
         nextFrontier.push(child.shareId);
       }
@@ -5628,9 +5318,7 @@ const collectFolderTree = async (
 
 export const bulkThings = async (
   viewerInput: string | Viewer,
-  input: BulkThingsInput,
-  placementDependencies: { collection?: typeof getThingsCollection; moveRecording?: typeof moveManagedContent } = {},
-  context: { archiveOwnerId?: string } = {}
+  input: BulkThingsInput
 ): Promise<Fail | { ok: true; op: BulkOp; results: BulkItemResult[]; succeeded: number; failed: number }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
@@ -5646,10 +5334,6 @@ export const bulkThings = async (
     if (!ids.includes(id)) ids.push(id);
   }
   if (ids.length > MAX_BULK_IDS) return fail(400, `At most ${MAX_BULK_IDS} things per bulk request`);
-  if (input.expectedUpdatedAt !== undefined && (op !== 'move' || ids.length !== 1 || typeof input.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(input.expectedUpdatedAt)))) {
-    return fail(400, 'expectedUpdatedAt requires a single-item move and an ISO timestamp');
-  }
-  const expectedUpdatedAt = input.expectedUpdatedAt as string | undefined;
 
   // move/copy destination validated once up front so a bad folder fails the
   // whole request loudly instead of 100 identical per-item errors
@@ -5674,14 +5358,11 @@ export const bulkThings = async (
 
   // copy one doc through the real create path (validation, acl defaults,
   // provenance re-checks, storage accounting all apply). `nameHint` adds the
-  // Drive-style "Copy of" prefix to any NAMED top-level copy (crystal.name is
-  // metadata — data, folder, schema, …) so a copy is never indistinguishable
-  // from its original. Inner (subtree) names keep; unnamed kinds like posts
-  // keep their content untouched (title/text is content, not a filename).
+  // Drive-style "Copy of" prefix (top-level copies only — inner names keep).
   const copyOne = async (doc: ThingDoc, destination: string | null, nameHint: boolean) => {
     const thingtime = thingtimeOf(doc);
     const crystal: Record<string, any> = { ...crystalOf(doc) };
-    if (nameHint && typeof crystal.name === 'string' && crystal.name.trim()) {
+    if (nameHint && (thingtime.includes('data') || thingtime.includes('folder')) && typeof crystal.name === 'string' && crystal.name.trim()) {
       crystal.name = `Copy of ${crystal.name}`.slice(0, 120);
     }
     return createThing(
@@ -5698,39 +5379,17 @@ export const bulkThings = async (
     );
   };
 
-  const things = await (placementDependencies.collection || getThingsCollection)();
+  const things = await getThingsCollection();
   const results: BulkItemResult[] = [];
   for (const id of ids) {
     if (op === 'delete') {
       const result = await deleteThing(viewer, id);
-      results.push('error' in result ? { id, ok: false, error: result.error } : { id, ok: true });
+      results.push(result.ok ? { id, ok: true } : { id, ok: false, error: result.error });
       continue;
     }
     if (op === 'move') {
-      const owned = await things.findOne({ shareId: id, ownerId: viewer.id } as any) as unknown as ThingDoc | null;
-      if (owned?.thingtime?.length === 1 && ['attachment', 'file', 'theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(owned.thingtime[0])) {
-        if (owned.thingtime[0] === 'chat-archive' && (context.archiveOwnerId !== viewer.id || viewer.pat)) {
-          results.push({ id, ok: false, error: 'Only the first-party archive owner can move this history' });
-          continue;
-        }
-        if (patSandboxBlocks(viewer, owned) || await patVisibilityBlocksDoc(viewer, owned)) {
-          results.push({ id, ok: false, error: 'This token cannot move that managed content' });
-          continue;
-        }
-        if (expectedUpdatedAt !== undefined && Date.parse(expectedUpdatedAt) !== new Date(owned.updatedAt).getTime()) {
-          results.push({ id, ok: false, status: 409, error: 'Content changed before the move. Refresh and compare your changes.' });
-          continue;
-        }
-        try {
-          await (placementDependencies.moveRecording || moveManagedContent)(viewer.id, id, folderId, expectedUpdatedAt ?? new Date(owned.updatedAt).toISOString());
-          results.push({ id, ok: true });
-        } catch (error) {
-          results.push({ id, ok: false, status: (error as { status?: number })?.status === 409 ? 409 : 400, error: 'Content could not be moved. Refresh and check that it is saved managed content and the destination is in your own library. Legacy themes/algorithms must first be copied into the current library.' });
-        }
-        continue;
-      }
-      const result = await updateThing(viewer, id, { folderId }, { expectedUpdatedAt });
-      results.push('error' in result ? { id, ok: false, status: result.status, error: result.error } : { id, ok: true });
+      const result = await updateThing(viewer, id, { folderId });
+      results.push(result.ok ? { id, ok: true } : { id, ok: false, error: result.error });
       continue;
     }
 
@@ -5741,11 +5400,11 @@ export const bulkThings = async (
       continue;
     }
     const thingtime = thingtimeOf(doc);
-    const isFolderDoc = isFolderThing(doc);
+    const isFolderDoc = thingtime.includes('folder');
 
     if (op === 'share') {
       const result = await updateThing(viewer, id, sharePatch);
-      if ('error' in result) {
+      if (!result.ok) {
         results.push({ id, ok: false, error: result.error });
         continue;
       }
@@ -5767,11 +5426,10 @@ export const bulkThings = async (
       let firstError: string | undefined;
       for (const child of tree.docs) {
         const childResult = await updateThing(viewer, child.shareId, sharePatch);
-        if ('error' in childResult) {
+        if (childResult.ok) applied += 1;
+        else {
           skipped += 1;
           if (!firstError) firstError = childResult.error;
-        } else {
-          applied += 1;
         }
       }
       results.push({ id, ok: true, applied, skipped, ...(skipped && firstError ? { error: firstError } : {}) });
@@ -5786,8 +5444,8 @@ export const bulkThings = async (
       continue;
     }
     if (!isFolderDoc) {
-      const created = await copyOne(doc, folderId, true);
-      results.push('error' in created ? { id, ok: false, error: created.error } : { id, ok: true, newId: created.doc.shareId });
+      const created = await copyOne(doc, folderId, thingtime.includes('data'));
+      results.push(created.ok ? { id, ok: true, newId: created.doc.shareId } : { id, ok: false, error: created.error });
       continue;
     }
     const tree = await collectFolderTree(viewer.id, doc.shareId);
@@ -5796,7 +5454,7 @@ export const bulkThings = async (
       continue;
     }
     const rootCopy = await copyOne(doc, folderId, true);
-    if ('error' in rootCopy) {
+    if (!rootCopy.ok) {
       results.push({ id, ok: false, error: rootCopy.error });
       continue;
     }
@@ -5813,11 +5471,11 @@ export const bulkThings = async (
         continue;
       }
       const childCopy = await copyOne(child, parentNewId, false);
-      if ('error' in childCopy) {
-        skipped += 1;
-      } else {
+      if (childCopy.ok) {
         copied += 1;
-        if (isFolderThing(child)) idMap.set(child.shareId, childCopy.doc.shareId);
+        if (childKinds.includes('folder')) idMap.set(child.shareId, childCopy.doc.shareId);
+      } else {
+        skipped += 1;
       }
     }
     results.push({ id, ok: true, newId: rootCopy.doc.shareId, copied, skipped });

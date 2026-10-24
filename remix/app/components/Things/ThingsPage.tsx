@@ -1,103 +1,55 @@
-import { CharacterWorkspacePicker } from '../Characters/CharacterContentScope';
-import { useCharacterContentPath } from '../Characters/CharacterScope';
-import { useDataPlane } from '~/hooks/useDataPlane';
-import { LocalApiView, useLocalApiView } from '~/local-workspace/LocalApiView';
-import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
-import { LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
-import { UnfiledAttachmentsPage } from './UnfiledAttachmentsPage';
-import { ActivityManagerPage } from '~/components/Activity/ActivityManagerPage';
-import { DeviceSyncPanel, DeviceSyncedFilesPage } from '~/components/Devices/DeviceSyncBrowser';
-import { deviceSyncedFilesHref } from '~/components/Devices/deviceSyncNavigation';
-import { openThingHistory, TimelineLibrary } from '~/components/Timeline/TimelineHost';
-import { isManagedLibraryThing, isTopLevelLibraryThing } from './thingsCore';
-import { FilesystemThingsPage } from './FilesystemThingsBrowser';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { transferIntent } from '~/utils/thingTransfer/intent';
-import { readThingsLocation, writeThingsLocation, thingBrowseHref, thingInspectHref, readLibraryDestination, homeLibraryHref, type ThingsLocationState } from './thingsLocation';
 
-import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, MenuDivider, MenuOptionGroup, MenuItemOption, Portal, Text } from '@chakra-ui/react';
-import { ArrowUpDown, Columns3, Eye, FolderDown, LayoutGrid, Layers, Plus, Rows3, Settings, Search as SearchIcon, Tag, X } from 'lucide-react';
+import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
+import { ArrowUpDown, Columns3, Eye, LayoutGrid, Layers, Plus, Rows3, Search as SearchIcon, Tag, X } from 'lucide-react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
-import { archiveNounForKinds } from '~/components/Attachments/attachmentArchiveActions';
-import { archiveDownloadLabel } from '~/components/Attachments/attachmentUiCore';
-import { useAttachmentArchive } from '~/components/Attachments/useAttachmentArchive';
-import { sendRecordingThingToLopu } from '~/components/Lopu/recordingThingHandoff';
 import { useIsMobileViewport } from '~/components/Nav/Drawer/useDrawer';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
-import { DeviceDetailsDrawer } from '~/components/Devices/DeviceDetailsDrawer';
-import { deviceThingsPageHref } from '~/components/Devices/deviceNavigation';
-import { MobileDeviceSetupCard } from '~/components/Devices/MobileDeviceSetupCard';
-import { LocalNodeSetupCard } from '~/components/Devices/LocalNodeSetupCard';
-import type { DeviceActionIntent, DeviceControlResolver } from '~/components/Devices/DeviceStateGrid';
-import type { DeviceActionKind, DeviceRuntimeState } from '~/components/Devices/deviceTypes';
-import { useDeviceStore } from '~/components/Devices/useDeviceStore';
-import { useLocalThingtimeNode } from '~/components/Devices/useLocalThingtimeNode';
-import { mayReadLocalBattery, useLocalDeviceBattery } from '~/components/Devices/useLocalDeviceBattery';
 import { ThingContextMenu } from '~/components/Thingtime/ContextMenu/ThingContextMenu';
 import type { ThingContextMenuAction } from '~/components/Thingtime/ContextMenu/ThingContextMenu';
 import { useThingContextMenu } from '~/components/Thingtime/ContextMenu/useThingContextMenu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
-import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
 
 import { FolderTree } from './FolderTree';
-import { ThingImportDialog } from './ThingImportDialog';
-import { ThingExportDialog } from './ThingExportDialog';
-import { bundleFromPlan, readTransferClipboard, writeTransferClipboard, MAX_CLIPBOARD_BYTES } from '~/utils/thingTransfer/browser';
-import { transferChecksum, type TransferBundle } from '~/utils/thingTransfer/archive';
 import { DeleteConfirmDialog, MoveDialog, NewFolderDialog, PreviewModal, RenameDialog, ShareDialog } from './ThingsDialogs';
-import { ThingsColumnsView, ThingsGridView, ThingsListView } from './ThingsViews';
-import type { ThingsItemAction, ThingsItemHandlers } from './ThingsViews';
+import { ThingsColumnsView, ThingsGridView, ThingsItemAction, ThingsItemHandlers, ThingsListView } from './ThingsViews';
 import { buildThingsBackgroundMenu, buildThingsItemMenu } from './thingsMenuModel';
 import {
   THINGS_GROUP_OPTIONS,
   THINGS_KIND_FILTERS,
   THINGS_SORT_OPTIONS,
+  ThingsCache,
+  ThingsClipboard,
+  ThingsDisplayMode,
+  ThingsGroupBy,
+  ThingsKindFilter,
+  ThingsSort,
+  ThingsThing,
+  ThingsView,
   folderKeyOf,
   groupThings,
   isFolder,
   primaryKindOf,
   schemaIdOf,
-  schemaRenderOf,
   sortThings,
   thingDisplayName,
-  thingRenameCrystal,
-  thingShareLink,
-  thingsWorkspaceCacheKey,
-} from './thingsCore';
-import type {
-	ThingsCache,
-	ThingsClipboard,
-	ThingsDisplayMode,
-	ThingsGroupBy,
-	ThingsKindFilter,
-	ThingsSort,
-	ThingsThing,
-	ThingsView
+  thingLink,
+  thingsCacheKey
 } from './thingsCore';
 
 const PAGE_SIZE = 50;
-// listing noise: reaction/save/vote things are mechanical children, not content
-const HIDDEN_KINDS = new Set(['reaction', 'save', 'vote']);
+// listing noise: reaction/save things are mechanical children, not content
+const HIDDEN_KINDS = new Set(['reaction', 'save']);
 // custom sort/group loads the whole folder (honest ordering needs the full
 // set) — bounded so a giant folder can't fetch forever
 const MAX_ARRANGE_THINGS = 1000;
 // schema render templates cached for Previews (bounded localCache footprint)
 const MAX_CACHED_SCHEMA_RENDERS = 40;
-
-const LOCAL_DEVICE_ACTIONS = new Set<DeviceActionKind>([
-	'register-service',
-	'unregister-service',
-	'begin-pairing',
-	'complete-pairing',
-	'unpair',
-	'request-permission',
-	'open-permission-settings'
-]);
 
 const pillProps = (active: boolean) =>
   ({
@@ -108,15 +60,12 @@ const pillProps = (active: boolean) =>
     color: 'var(--tt-text, #26262b)',
     fontSize: '12px',
     fontWeight: 500,
-    height: 'auto',
-    minHeight: '26px',
-    minWidth: 'auto',
-    padding: 'var(--tt-things-badge-padding, 3px 8px)',
-    variant: 'outline' as const,
-    _hover: {
-      background: active ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.18))' : 'var(--tt-surface-hover, #f5f5f7)'
-    }
-	} as const);
+    height: '26px',
+    paddingX: 3,
+    variant: 'unstyled' as const,
+    display: 'inline-flex',
+    alignItems: 'center'
+  }) as const;
 
 const monoLabel = {
   color: 'var(--tt-faint, #b6b6c0)',
@@ -124,13 +73,6 @@ const monoLabel = {
   fontSize: '10px',
   textTransform: 'uppercase'
 } as const;
-
-const ToolbarGroup = ({ children, label, wrap = false }: { children: React.ReactNode; label: string; wrap?: boolean }) => (
-  <Flex alignItems="center" flexShrink={0} gap={2} maxWidth="100%" width="max-content" wrap={wrap ? 'wrap' : 'nowrap'}>
-    <Text {...monoLabel}>{label}</Text>
-    {children}
-  </Flex>
-);
 
 const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
   const seen = new Set<string>();
@@ -142,47 +84,7 @@ const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
 };
 
 export const ThingsPage = () => {
-  const [params] = useSearchParams();
-  const user = useWorkspaceUser();
-  const destination = readLibraryDestination(params, user);
-  if (params.get('activity') === '1') return <ActivityManagerPage />;
-  if (params.get('unfiled') === 'attachments') return <UnfiledAttachmentsPage />;
-  const folder = params.get('folder');
-  if (destination === 'invalid') return <Box p={6} pt="100px"><Text role="alert">This library link does not match the current account workspace.</Text><Button as={RouterLink} to="/things" mt={3}>Open current library</Button></Box>;
-  return <LocalApiView.Provider value={destination === 'home' ? { localPlane: 'home' } : {}}>{folder?.startsWith('timeline-folder-') ? <TimelineLibrary folderId={folder} storage={destination === 'home' || params.get('historyStorage') === 'home' ? 'home' : 'selected'} /> : <ThingsPageContents />}</LocalApiView.Provider>;
-};
-
-const ThingsPageContents = () => {
-  const [params] = useSearchParams();
-  const scope = useWorkspaceScope();
-  const view = useLocalApiView();
-  // Device surfaces read the account plane, so the local-first home view falls
-  // through to the library instead of opening the synced-file browser.
-  return params.has("files") && !view.localPlane ? <FilesystemThingsPage /> : params.get("deviceFiles") && !params.get("folder") && !view.localPlane ? <DeviceSyncedFilesPage deviceId={params.get("deviceFiles")!} /> : <ThingsLibraryPage key={`${scope}:${view.localPlane || "selected"}`} />;
-};
-
-const ThingsLibraryPage = () => {
-  const contentPath = useCharacterContentPath();
-  const scope = useWorkspaceScope();
-  const localView = useLocalApiView();
-  const homeView = localView.localPlane === "home";
-  const selectedPlane = useDataPlane();
-  const destinationKey = JSON.stringify([scope, localView.localPlane || "selected"]);
-  const user = useWorkspaceUser();
-  const authenticatedUser = useCurrentUser();
-  const [importOpen, setImportOpen] = useState(false);
-  const [importBundle, setImportBundle] = useState<TransferBundle<Uint8Array | Blob> | null>(null);
-  const [importDestination, setImportDestination] = useState<string | null>(null);
-  const [exportIds, setExportIds] = useState<string[]>([]);
-  const transferOperation = useRef<AbortController | null>(null);
-  const transferAccount = useRef(user?.id);
-  useEffect(() => {
-    if (transferAccount.current !== user?.id) {
-      transferAccount.current = user?.id;
-      setImportOpen(false); setImportBundle(null); setExportIds([]); setClipboard(null);
-    }
-    return () => { transferOperation.current?.abort(); };
-  }, [user?.id]);
+  const user = useCurrentUser();
   const api = useApi();
   const lopu = useLopu();
   const navigate = useNavigate();
@@ -193,126 +95,31 @@ const ThingsLibraryPage = () => {
   apiRef.current = api;
   const lopuRef = useRef(lopu);
   lopuRef.current = lopu;
-  const recordingOwner = useRef(user?.id);
-  recordingOwner.current = user?.id;
-  const recordingHandoffBusy = useRef(false);
 
   const folderId = searchParams.get('folder') || null;
   const previewParam = searchParams.get('preview') || null;
-	const deviceParam = homeView ? null : searchParams.get('device') || null;
-	const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
-	const devicePageMode = Boolean(deviceParam && searchParams.get('deviceView') === 'page');
-	const deviceSyncMode = Boolean(deviceParam && searchParams.get('deviceView') === 'sync');
   const currentKey = folderKeyOf(folderId);
 
-  const archive = useAttachmentArchive();
-
-	const devicesEnabled = Boolean(!homeView && authenticatedUser && authenticatedUser.id === user?.id && authenticatedUser.accountKind === 'user' && !authenticatedUser.temporary);
-	const deviceStore = useDeviceStore({
-		userId: user?.id,
-		selectedDeviceId: deviceParam,
-		enabled: devicesEnabled
-	});
-	const currentAccountDeviceIds = useMemo(
-		() => deviceStore.devices.flatMap((device) => (device.summary?.id ? [device.summary.id] : [])),
-		[deviceStore.devices]
-	);
-	const localNode = useLocalThingtimeNode(deviceParam, deviceStore.refreshList, deviceStore.loading ? undefined : currentAccountDeviceIds);
-	const localBattery = useLocalDeviceBattery(
-		user?.id,
-		deviceParam,
-		mayReadLocalBattery(deviceParam, currentAccountDeviceIds, localNode.pairedDeviceIds, devicesEnabled, deviceStore.loading)
-	);
-	const serverDeviceControlFor = deviceStore.controlFor;
-	const executeServerDeviceAction = deviceStore.executeAction;
-	const setDevicePermissionMode = deviceStore.setPermissionMode;
-	const localDeviceControlFor = localNode.controlFor;
-	const executeLocalDeviceAction = localNode.executeAction;
-
-  // Never seed a destination with the ambiguous legacy account-only cache.
-  const cacheKey = thingsWorkspaceCacheKey(scope, localView.localPlane);
+  const cacheKey = thingsCacheKey(user?.id);
   const cached = useMemo(() => readLocalCache<ThingsCache>(cacheKey), [cacheKey]);
 
-  const locationState = readThingsLocation(searchParams, cached);
-  const { q: urlQ, view, display: displayMode, sort, group: groupBy, kind: kindFilter } = locationState;
-  // Router navigation may transition asynchronously; the input itself must
-  // update synchronously so fast typing/paste cannot lose characters.
-  const [q, setQueryDraft] = useState(urlQ);
-  useEffect(() => {
-    if (typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('q') || '') !== urlQ) return;
-    setQueryDraft(urlQ);
-  }, [urlQ]);
-  const updateLocation = useCallback((patch: Partial<ThingsLocationState>, replace = false) => {
-    setSearchParams(previous => {
-      // A second click can arrive before the first navigation commits React
-      // state. Merge against the latest browser URL, not that stale render.
-      const current = typeof window === 'undefined' ? previous : new URLSearchParams(window.location.search);
-      return writeThingsLocation(current, { ...readThingsLocation(current, cached), ...patch });
-    },
-      { replace, preventScrollReset: true });
-  }, [setSearchParams, cached]);
-  // Normalize missing preferences once per entry, not on every keystroke. The
-  // URL remains the source of truth on POP/back/forward and shared links.
-  useEffect(() => {
-    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).toString() !== searchParams.toString()) return;
-    const next = writeThingsLocation(searchParams, readThingsLocation(searchParams, cached));
-    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true, preventScrollReset: true });
-  }, [searchParams, setSearchParams, cached]);
-  const setQ = useCallback((value: string) => { setQueryDraft(value); updateLocation({ q: value }, true); }, [updateLocation]);
-  const setView = useCallback((value: ThingsView) => updateLocation({ view: value }), [updateLocation]);
-  const setDisplayMode = useCallback((value: ThingsDisplayMode) => updateLocation({ display: value }), [updateLocation]);
-  const setSort = useCallback((value: ThingsSort) => updateLocation({ sort: value }), [updateLocation]);
-  const setGroupBy = useCallback((value: ThingsGroupBy) => updateLocation({ group: value }), [updateLocation]);
-  const setKindFilter = useCallback((value: ThingsKindFilter) => updateLocation({ kind: value }), [updateLocation]);
+  const [view, setView] = useState<ThingsView>(cached?.view || 'grid');
+  const [displayMode, setDisplayMode] = useState<ThingsDisplayMode>(cached?.displayMode || 'name');
+  const [sort, setSort] = useState<ThingsSort>(cached?.sort || 'newest');
+  const [groupBy, setGroupBy] = useState<ThingsGroupBy>(cached?.groupBy || 'none');
+  const [kindFilter, setKindFilter] = useState<ThingsKindFilter>('all');
   const [folderPages, setFolderPages] = useState<Record<string, ThingsThing[]>>(cached?.folders || {});
   const [cursors, setCursors] = useState<Record<string, string | null>>({});
   const [loadingKeys, setLoadingKeys] = useState<Set<string>>(new Set());
   const [folderMeta, setFolderMeta] = useState<NonNullable<ThingsCache['folderMeta']>>(cached?.folderMeta || {});
 
-  // "Download all files" for the folder being browsed: one small manifest read
-  // says whether a ZIP would hold anything (folders with no stored files show
-  // no button). The answer is cached per folder AND per listed contents, so
-  // walking back into an unchanged folder costs nothing, while adding, moving
-  // or deleting a Thing in it re-probes — a stale pill never survives a change.
-  // The probe waits for the folder's own listing so a never-loaded folder is
-  // not probed twice, and it draws on the manifest rate window, never the
-  // download one.
-  const [folderArchives, setFolderArchives] = useState<Record<string, { signature: string; archive: { fileCount: number; totalBytes: number } | null }>>({});
-  const folderSignature = folderId && folderPages[currentKey] ? folderPages[currentKey].map((item) => item.id).join('\n') : null;
-  useEffect(() => {
-    if (!user?.id || !folderId || folderSignature === null) return;
-    if (folderArchives[folderId]?.signature === folderSignature) return;
-    let cancelled = false;
-    const remember = (value: { fileCount: number; totalBytes: number } | null) => {
-      if (!cancelled) setFolderArchives((prev) => ({ ...prev, [folderId]: { signature: folderSignature, archive: value } }));
-    };
-    apiRef.current.v1.attachments.archive
-      .manifest({ id: folderId })
-      .then((manifest: any) => remember(manifest?.ok && manifest.fileCount > 0 ? { fileCount: manifest.fileCount, totalBytes: manifest.totalBytes || 0 } : null))
-      .catch(() => remember(null));
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, folderId, folderSignature]); // eslint-disable-line react-hooks/exhaustive-deps
-  const folderArchive = folderId ? folderArchives[folderId]?.archive ?? null : null;
-
+  const [q, setQ] = useState('');
   const [searchResults, setSearchResults] = useState<ThingsThing[] | null>(null);
   const [searching, setSearching] = useState(false);
-  const [searchCursor, setSearchCursor] = useState<string | null>(null);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [searchIncomplete, setSearchIncomplete] = useState(false);
-  const searchRequest = useRef(0);
-  const searchAbort = useRef<AbortController | null>(null);
-  // bumped after mutations (duplicate) so an active search re-fetches and the
-  // fresh copies appear in the results the user is actually looking at
-  const [searchSeq, setSearchSeq] = useState(0);
 
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const anchorRef = useRef<string | null>(null);
-  const [clipboard, setClipboard] = useState<ThingsClipboard>(() => {
-    const cut = transferIntent.peek(user?.id, destinationKey);
-    return cut ? { mode: 'cut', ids: [...cut.ids] } : null;
-  });
+  const [clipboard, setClipboard] = useState<ThingsClipboard>(null);
 
   // drag-and-drop: the ids in flight + the folder currently hovered as a drop
   // target (null = the root row/breadcrumb, undefined = nothing hovered)
@@ -320,41 +127,26 @@ const ThingsLibraryPage = () => {
   const [dropTarget, setDropTarget] = useState<string | null | undefined>(undefined);
 
   // schema shareId → its render template (null = fetched, none) for Previews
-	const [schemaRenders, setSchemaRenders] = useState<NonNullable<ThingsCache['schemaRenders']>>(cached?.schemaRenders || {});
+  const [schemaRenders, setSchemaRenders] = useState<NonNullable<ThingsCache['schemaRenders']>>(
+    cached?.schemaRenders || {}
+  );
   const schemaFetchRef = useRef<Set<string>>(new Set());
 
   // right-click menus (the design-system Thing Context Menu, 'context'
   // presentation) — one instance for items, one for the background
   const itemMenu = useThingContextMenu();
   const backgroundMenu = useThingContextMenu();
-  const deviceMenu = useThingContextMenu();
-  const closeItemMenu = itemMenu.closeMenu;
-  const closeBackgroundMenu = backgroundMenu.closeMenu;
-  const closeDeviceMenu = deviceMenu.closeMenu;
-  const openDeviceMenu = deviceMenu.openAtPointer;
-  const [menuDeviceId, setMenuDeviceId] = useState<string | null>(null);
   const [menuThing, setMenuThing] = useState<ThingsThing | null>(null);
 
   const [newFolderOpen, setNewFolderOpen] = useState(false);
-  const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
-  const openNewFolder = useCallback((parent: string | null) => { setNewFolderParent(parent); setNewFolderOpen(true); }, []);
-  useEffect(() => {
-    const action = searchParams.get('widget');
-    if (!user || (action !== 'search' && action !== 'newFolder')) return;
-    if (action === 'newFolder') openNewFolder(folderId);
-    else requestAnimationFrame(() => document.getElementById('thingtime-things-search')?.focus());
-    const next = new URLSearchParams(searchParams);
-    next.delete('widget');
-    setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams, user, folderId, openNewFolder]);
-
   const [renameThing, setRenameThing] = useState<ThingsThing | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
   const [shareThings, setShareThings] = useState<ThingsThing[]>([]);
   const [deleteThings, setDeleteThings] = useState<ThingsThing[]>([]);
   const [previewThing, setPreviewThing] = useState<ThingsThing | null>(null);
 
-	const dialogOpen = importOpen || !!exportIds.length || newFolderOpen || !!renameThing || moveOpen || !!shareThings.length || !!deleteThings.length || !!previewThing || !!deviceParam;
+  const dialogOpen =
+    newFolderOpen || !!renameThing || moveOpen || !!shareThings.length || !!deleteThings.length || !!previewThing;
 
   // ------------------------------------------------------------------ data
 
@@ -429,22 +221,6 @@ const ThingsLibraryPage = () => {
     if (currentKey !== 'root') ensureLoaded(null);
   }, [user?.id, folderId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync conflict choices and other tabs mutate the same local workspace.
-  // Refresh visible folders as well as search, retaining their current paint.
-  useEffect(() => {
-    if (!user?.id) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const refresh = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        void fetchFolder(folderId);
-        if (folderId) void fetchFolder(null);
-      }, 0);
-    };
-    window.addEventListener(LOCAL_WORKSPACE_CHANGED, refresh);
-    return () => { clearTimeout(timer); window.removeEventListener(LOCAL_WORKSPACE_CHANGED, refresh); };
-  }, [user?.id, folderId, fetchFolder]);
-
   // deep-linked folder (?folder=) whose ancestry we haven't met yet — resolve
   // folder names upward so breadcrumbs/columns stay honest, cycle-safe
   useEffect(() => {
@@ -501,59 +277,37 @@ const ThingsLibraryPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewParam]);
 
-  // Search the current workspace first; a confirmed account can refresh its
-  // owned remote results without replacing the local view with a blank screen.
-  const fetchSearch = useCallback(async (cursor?: string) => {
-    const query = q.trim();
-    if (!user?.id || !query) return;
-    const seq = ++searchRequest.current;
-    searchAbort.current?.abort();
-    const controller = new AbortController(); searchAbort.current = controller;
-    setSearching(true); setSearchError(null);
-    let refreshed = false, refreshFailed = false;
-    const accept = (resp: any) => {
-      if (seq !== searchRequest.current || controller.signal.aborted) return;
-      if (resp?.ok === false) throw new Error(resp.error || 'Could not search your Things.');
-      setSearchResults(previous => cursor ? dedupeById([...(previous || []), ...(resp.things || [])]) : resp.things || []);
-      setSearchCursor(resp.nextCursor || null); setSearchIncomplete(!!resp.incomplete);
-      setSearching(!!resp.refreshing);
-    };
-    const failed = (error: any) => {
-      if (seq !== searchRequest.current || controller.signal.aborted) return;
-      setSearchError(error?.message || error?.error || 'Could not search your Things. Please retry.');
-      setSearching(false);
-    };
-    try {
-      // A signed-in account without a resolved data plane gets the plain remote
-      // facade, which has no owner to pin — keep sending the account scope so
-      // the library never widens into other authors' public Things. Local-only
-      // and offline workspaces are already single-owner and refuse the filter.
-      const result = await apiRef.current.v1.things.search({ q: query, workspace: true,
-        author: user.localOnly || user.offline ? undefined : user.username,
-        thingtime: kindFilter === 'all' ? undefined : kindFilter, limit: PAGE_SIZE, cursor },
-        { signal: controller.signal, onRefresh: (resp: any) => { refreshed = true; accept(resp); }, onError: (error: unknown) => { refreshFailed = true; failed(error); } });
-      if (!refreshed) accept(refreshFailed ? { ...result, refreshing: false } : result);
-    } catch (error) { failed(error); }
-  }, [q, kindFilter, user?.id, user?.username, user?.offline, user?.localOnly]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  // deep search across every folder (server-side, own things)
   useEffect(() => {
-    if (!q.trim() || !user?.id) {
-      setSearchResults(null); setSearchCursor(null); setSearchError(null); setSearchIncomplete(false); setSearching(false);
+    const query = q.trim();
+    if (!user || !query) {
+      setSearchResults(null);
+      setSearching(false);
       return;
     }
-    const requests = searchRequest, abort = searchAbort;
-    const timer = setTimeout(() => void fetchSearch(), 350);
-    return () => { clearTimeout(timer); requests.current++; abort.current?.abort(); };
-  }, [fetchSearch, searchSeq, q, user?.id]);
-  useEffect(() => {
-    const refresh = () => setSearchSeq(seq => seq + 1);
-    window.addEventListener(LOCAL_WORKSPACE_CHANGED, refresh);
-    window.addEventListener('online', refresh); window.addEventListener('offline', refresh);
+    let cancelled = false;
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const resp = await apiRef.current.v1.things.search({
+          q: query,
+          author: user.username,
+          thingtime: kindFilter === 'all' ? undefined : kindFilter,
+          limit: PAGE_SIZE
+        });
+        if (cancelled) return;
+        setSearchResults(resp?.things || []);
+      } catch {
+        if (!cancelled) setSearchResults([]);
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 350);
     return () => {
-      window.removeEventListener(LOCAL_WORKSPACE_CHANGED, refresh);
-      window.removeEventListener('online', refresh); window.removeEventListener('offline', refresh);
+      cancelled = true;
+      clearTimeout(timer);
     };
-  }, []);
+  }, [q, kindFilter, user?.id, user?.username]);
 
   // persist the optimistic seed (writeLocalCache swallows quota errors)
   useEffect(() => {
@@ -561,7 +315,10 @@ const ThingsLibraryPage = () => {
     const folders: Record<string, ThingsThing[]> = {};
     for (const [key, things] of Object.entries(folderPages)) folders[key] = things.slice(0, PAGE_SIZE);
     const cachedRenders = Object.fromEntries(Object.entries(schemaRenders).slice(0, MAX_CACHED_SCHEMA_RENDERS));
-		writeLocalCache(cacheKey, { view, displayMode, sort, groupBy, folders, folderMeta, schemaRenders: cachedRenders } satisfies ThingsCache);
+    writeLocalCache(
+      cacheKey,
+      { view, displayMode, sort, groupBy, folders, folderMeta, schemaRenders: cachedRenders } satisfies ThingsCache
+    );
   }, [user?.id, cacheKey, view, displayMode, sort, groupBy, folderPages, folderMeta, schemaRenders]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // custom sort/group orders the WHOLE folder, so keep pulling pages until the
@@ -589,7 +346,14 @@ const ThingsLibraryPage = () => {
       apiRef.current.v1.things
         .get({ id: schemaId })
         .then((resp: any) => {
-          const render = schemaRenderOf(resp?.thing);
+          const schemaThing = resp?.thing;
+          const render =
+            schemaThing?.thingtime?.includes?.('schema') &&
+            schemaThing?.crystal?.render &&
+            typeof schemaThing.crystal.render === 'object' &&
+            !Array.isArray(schemaThing.crystal.render)
+              ? (schemaThing.crystal.render as Record<string, unknown>)
+              : null;
           setSchemaRenders((prev) => ({ ...prev, [schemaId]: render }));
         })
         .catch(() => setSchemaRenders((prev) => ({ ...prev, [schemaId]: null })));
@@ -612,7 +376,7 @@ const ThingsLibraryPage = () => {
       const page = folderPages[folderKeyOf(targetFolderId)];
       if (!page) return undefined;
       return sortThings(
-        page.filter((thing) => !HIDDEN_KINDS.has(primaryKindOf(thing)) && (targetFolderId !== null || isTopLevelLibraryThing(thing))),
+        page.filter((thing) => !HIDDEN_KINDS.has(primaryKindOf(thing))),
         sort
       );
     },
@@ -627,28 +391,6 @@ const ThingsLibraryPage = () => {
 
   const searchMode = q.trim().length > 0;
   const displayItems = searchMode ? searchResults || [] : browseItems;
-	const visibleDevices = useMemo<DeviceRuntimeState[]>(() => {
-		if (!devicesEnabled || kindFilter !== 'all' || (!searchMode && folderId)) return [];
-		const query = q.trim().toLocaleLowerCase();
-		if (!query) return deviceStore.devices;
-		return deviceStore.devices.filter((state) => {
-			const summary = state.summary;
-			if (!summary) return false;
-			const searchable = [
-				summary.name,
-				summary.platform,
-				summary.system?.model,
-				summary.system?.osName,
-				summary.system?.osVersion,
-				...(state.snapshot?.observed.runningApps.flatMap((app) => [app.name, app.bundleId]) || []),
-				...(state.snapshot?.connectors.flatMap((connector) => [connector.label, connector.kind]) || [])
-			]
-				.filter((value): value is string => typeof value === 'string')
-				.join(' ')
-				.toLocaleLowerCase();
-			return searchable.includes(query);
-		});
-	}, [deviceStore.devices, devicesEnabled, folderId, kindFilter, q, searchMode]);
 
   const breadcrumbs = useMemo(() => {
     const trail: { id: string; name: string; icon?: string }[] = [];
@@ -672,7 +414,10 @@ const ThingsLibraryPage = () => {
     for (const pathFolderId of columnsPath) ensureLoaded(pathFolderId);
   }, [view, columnsPath, ensureLoaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-	const cutIds = useMemo(() => new Set(clipboard?.mode === 'cut' ? clipboard.ids : []), [clipboard]);
+  const cutIds = useMemo(
+    () => new Set(clipboard?.mode === 'cut' ? clipboard.ids : []),
+    [clipboard]
+  );
 
   const selectedThings = useMemo(() => {
     const all = searchMode ? searchResults || [] : Object.values(folderPages).flat();
@@ -682,62 +427,17 @@ const ThingsLibraryPage = () => {
 
   // ------------------------------------------------------------------ actions
 
-	const openDevice = useCallback(
-		(deviceId: string) => {
-			setSelection(new Set());
-			anchorRef.current = null;
-			setPreviewThing(null);
-			setSearchParams(
-				(previous) => {
-					const next = new URLSearchParams(previous);
-					next.set('device', deviceId);
-					next.delete('deviceView');
-					next.delete('preview');
-					return next;
-				},
-				{ preventScrollReset: true }
-			);
-		},
-		[setSearchParams]
-	);
-
-	const closeDevice = useCallback(() => {
-		setSearchParams(
-			(previous) => {
-				const next = new URLSearchParams(previous);
-				next.delete('device');
-				next.delete('deviceView');
-				return next;
-			},
-			{ preventScrollReset: true, replace: true }
-		);
-	}, [setSearchParams]);
-
-	const deviceControlFor = useCallback<DeviceControlResolver>(
-		(action, targetKey) => (LOCAL_DEVICE_ACTIONS.has(action) ? localDeviceControlFor(action, targetKey) : serverDeviceControlFor(action, targetKey)),
-		[localDeviceControlFor, serverDeviceControlFor]
-	);
-
-	const onDeviceAction = useCallback(
-		(intent: DeviceActionIntent) => {
-			if (LOCAL_DEVICE_ACTIONS.has(intent.action)) executeLocalDeviceAction(intent);
-			else void executeServerDeviceAction(intent);
-		},
-		[executeLocalDeviceAction, executeServerDeviceAction]
-	);
-
   const navigateToFolder = useCallback(
     (targetFolderId: string | null) => {
       setSelection(new Set());
       anchorRef.current = null;
+      setQ('');
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
           if (targetFolderId) next.set('folder', targetFolderId);
           else next.delete('folder');
-          next.delete('q');
           next.delete('preview');
-					next.delete('device');
           return next;
         },
         { preventScrollReset: true }
@@ -771,10 +471,6 @@ const ThingsLibraryPage = () => {
     [currentKey, fetchFolder]
   );
 
-  // Open = the thing's OWN page (thingsCore.thingLink: post/action/webpage/
-  // schema pages, the universal /thing/:id for components, data and the
-  // rest) with the referrer hint for its back link; folders open in place.
-  // The PreviewModal stays the explicit quick-look ('preview' / ?preview=).
   const openThing = useCallback(
     (thing: ThingsThing) => {
       if (isFolder(thing)) {
@@ -785,14 +481,9 @@ const ThingsLibraryPage = () => {
         navigate(`/post/${thing.id}`);
         return;
       }
-      // actions open their inspector — the /things half of the program loop
-      if (thing.thingtime.includes('action')) {
-        navigate(`/actions/${encodeURIComponent(thing.id)}`);
-        return;
-      }
       setPreviewThing(thing);
     },
-    [navigate, navigateToFolder, searchParams]
+    [navigate, navigateToFolder]
   );
 
   const toggleSelect = useCallback((thing: ThingsThing) => {
@@ -825,56 +516,45 @@ const ThingsLibraryPage = () => {
           return;
         }
       }
-      openThing(thing);
+      setSelection(new Set([thing.id]));
+      anchorRef.current = thing.id;
     },
     [displayItems, isMobile, openThing, toggleSelect]
   );
 
   const selectAll = useCallback(() => {
-		setSelection((prev) => (prev.size === displayItems.length ? new Set() : new Set(displayItems.map((thing) => thing.id))));
+    setSelection((prev) =>
+      prev.size === displayItems.length ? new Set() : new Set(displayItems.map((thing) => thing.id))
+    );
   }, [displayItems]);
 
-	const copyToClipboard = useCallback((mode: 'copy' | 'cut', ids: string[]) => {
+  const copyToClipboard = useCallback(
+    (mode: 'copy' | 'cut', ids: string[]) => {
       if (!ids.length) return;
-      transferOperation.current?.abort();
-      const controller = new AbortController();
-      transferOperation.current = controller;
-      const ownerId = recordingOwner.current;
-      const ticket = transferIntent.ticket(ownerId, destinationKey);
-      const bundle = apiRef.current.v1.things.export({ ids }, { signal: controller.signal }).then(async (result) => {
-        if (!result?.ok) throw new Error(result?.error || 'Export failed');
-        const value = await bundleFromPlan(result.plan, { signal: controller.signal });
-        controller.signal.throwIfAborted();
-        return value;
+      setClipboard({ mode, ids });
+      lopuRef.current({
+        title: mode === 'copy' ? `Copied ${ids.length} 📋` : `Cut ${ids.length} ✂️`,
+        description: 'Paste into any folder.',
+        status: 'info',
+        duration: 5000
       });
-      // Invoke synchronously in the gesture, before the export promise resolves.
-      void writeTransferClipboard(bundle, controller.signal).then(async (text) => {
-        const digest = await transferChecksum(new TextEncoder().encode(text));
-        if (controller.signal.aborted || recordingOwner.current !== ownerId) return;
-        if (mode === 'cut') {
-          if (!transferIntent.record(ticket, digest, ids)) return;
-        } else transferIntent.clear();
-        setClipboard({ mode, ids });
-        lopuRef.current({ title: mode === 'copy' ? `Copied ${ids.length} 📋` : `Cut ${ids.length} ✂️`,
-          description: 'Copied portable content to your clipboard. Paste in Things to import; cut moves only within this workspace.', status: 'success' });
-      }).catch((error) => {
-        const cancelled = controller.signal.aborted;
-        controller.abort();
-        if (!cancelled && recordingOwner.current === ownerId) lopuRef.current({ title: 'Could not copy', description: error instanceof Error ? error.message : 'Use Download instead.', status: 'error' });
-      });
-	}, [destinationKey]);
+    },
+    []
+  );
 
-	const runBulk = useCallback(async (op: 'move' | 'copy' | 'delete', ids: string[], destination?: string | null) => {
+  const runBulk = useCallback(
+    async (op: 'move' | 'copy' | 'delete', ids: string[], destination?: string | null) => {
       try {
         const resp = await apiRef.current.v1.things.bulk({ op, ids, folderId: destination ?? null });
-        const results: { id: string; ok: boolean; error?: string; newId?: string }[] = resp?.results || [];
-        const failures = results.filter((entry) => !entry.ok);
-        return { ok: true as const, succeeded: resp?.succeeded || 0, failures, results };
+        const failures = (resp?.results || []).filter((entry: any) => !entry.ok);
+        return { ok: true as const, succeeded: resp?.succeeded || 0, failures };
       } catch (err: any) {
         lopuRef.current({ title: 'That didn’t work 😔', description: err?.error || undefined, status: 'error' });
-        return { ok: false as const, succeeded: 0, failures: [], results: [] };
+        return { ok: false as const, succeeded: 0, failures: [] };
       }
-	}, []);
+    },
+    []
+  );
 
   const summarize = useCallback((verb: string, succeeded: number, failures: { error?: string }[]) => {
     if (!failures.length) {
@@ -901,102 +581,21 @@ const ThingsLibraryPage = () => {
   );
 
   const pasteClipboardTo = useCallback(
-    async (destination: string | null, pastedText?: string) => {
-      const ownerId = recordingOwner.current;
-      transferOperation.current?.abort();
-      const controller = new AbortController();
-      transferOperation.current = controller;
-      try {
-        const text = pastedText ?? await navigator.clipboard.readText();
-        if (text.length > MAX_CLIPBOARD_BYTES) throw new Error('Clipboard content is too large. Import the ZIP file instead.');
-        const digest = await transferChecksum(new TextEncoder().encode(text));
-        if (controller.signal.aborted || recordingOwner.current !== ownerId) return;
-        const cut = transferIntent.match(ownerId, digest, destinationKey);
-        if (cut) {
-          const ids = [...cut.ids];
-          const result = await runBulk('move', ids, destination);
-          if (!result.ok || recordingOwner.current !== ownerId) return;
-          summarize('Moved', result.succeeded, result.failures);
-          const succeeded = new Set(result.results.filter((entry) => entry.ok).map((entry) => entry.id));
-          const remaining = ids.filter((id) => !succeeded.has(id));
-          setClipboard(remaining.length ? { mode: 'cut', ids: remaining } : null);
-          transferIntent.settle(cut, [...succeeded]);
-          setSelection(new Set()); refreshAfterMutation([...sourceKeysOf(ids), destination]);
-        } else {
-          const bundle = await readTransferClipboard(text, controller.signal);
-          if (controller.signal.aborted || recordingOwner.current !== ownerId) return;
-          setImportBundle(bundle); setImportDestination(destination); setImportOpen(true);
-        }
-      } catch (error) {
-        if (!controller.signal.aborted && recordingOwner.current === ownerId) lopuRef.current({ title: 'Could not paste', description: error instanceof Error ? error.message : 'Choose a Thingtime transfer file instead.', status: 'error' });
-      }
+    async (destination: string | null) => {
+      if (!clipboard?.ids.length) return;
+      const { mode, ids } = clipboard;
+      const sources = sourceKeysOf(ids);
+      const result = await runBulk(mode === 'cut' ? 'move' : 'copy', ids, destination);
+      if (!result.ok) return;
+      summarize(mode === 'cut' ? 'Moved' : 'Pasted', result.succeeded, result.failures);
+      if (mode === 'cut') setClipboard(null);
+      setSelection(new Set());
+      refreshAfterMutation([...sources, destination]);
     },
-    [destinationKey, refreshAfterMutation, runBulk, sourceKeysOf, summarize]
+    [clipboard, refreshAfterMutation, runBulk, sourceKeysOf, summarize]
   );
 
   const pasteClipboard = useCallback(() => pasteClipboardTo(folderId), [folderId, pasteClipboardTo]);
-
-  // one-click Duplicate: bulk-copy each target into ITS OWN folder (beside the
-  // original — NOT the browsed folder, which can differ when acting on search
-  // results or ancestor columns), no clipboard round-trip. Originals are
-  // untouched — the copy op mints NEW things through the real create path. The
-  // response's per-item newIds let the copies paint instantly with REAL server
-  // ids (createFolder pattern, never phantom rows) into the source folder's
-  // page; the refetch right after reconciles authoritative crystals and order.
-  const duplicateThings = useCallback(
-    async (targets: ThingsThing[]) => {
-      if (!targets.length) return;
-      // one bulk copy per source folder, so every copy lands beside its original
-      const groups = new Map<string | null, ThingsThing[]>();
-      for (const thing of targets) {
-        const sourceFolderId = thing.folderId ?? null;
-        const group = groups.get(sourceFolderId);
-        if (group) group.push(thing);
-        else groups.set(sourceFolderId, [thing]);
-      }
-      let succeeded = 0;
-      const failures: { error?: string }[] = [];
-      let anyOk = false;
-      const now = new Date().toISOString();
-      for (const [sourceFolderId, group] of groups) {
-        const result = await runBulk('copy', group.map((thing) => thing.id), sourceFolderId);
-        if (!result.ok) continue; // runBulk already toasted the transport error
-        anyOk = true;
-        succeeded += result.succeeded;
-        failures.push(...result.failures);
-        const newIdBySource = new Map(
-          result.results.filter((entry) => entry.ok && entry.newId).map((entry) => [entry.id, entry.newId as string])
-        );
-        if (!newIdBySource.size) continue;
-        const copies: ThingsThing[] = group
-          .filter((thing) => newIdBySource.has(thing.id))
-          .map((thing) => ({
-            ...thing,
-            id: newIdBySource.get(thing.id) as string,
-            folderId: sourceFolderId,
-            // mirror the server's top-level copy naming (Copy of X for named
-            // things) so the instant paint matches what the refetch confirms
-            crystal:
-              typeof thing.crystal?.name === 'string' && thing.crystal.name.trim()
-                ? { ...thing.crystal, name: `Copy of ${thing.crystal.name}`.slice(0, 120) }
-                : thing.crystal,
-            createdAt: now,
-            updatedAt: now
-          }));
-        const paintKey = folderKeyOf(sourceFolderId);
-        setFolderPages((prev) => ({ ...prev, [paintKey]: dedupeById([...copies, ...(prev[paintKey] || [])]) }));
-        rememberFolderMeta(copies);
-      }
-      if (!anyOk) return;
-      summarize('Duplicated', succeeded, failures);
-      setSelection(new Set());
-      refreshAfterMutation([...groups.keys()]);
-      // the search overlay hides folder pages — re-run the active search so the
-      // fresh "Copy of X" rows show up where the user is actually looking
-      if (searchMode) setSearchSeq((seq) => seq + 1);
-    },
-    [refreshAfterMutation, rememberFolderMeta, runBulk, searchMode, summarize]
-  );
 
   // one move path for the Move dialog, drag-and-drop, and cut-paste-into
   const moveIdsTo = useCallback(
@@ -1060,7 +659,9 @@ const ThingsLibraryPage = () => {
         if (recursive && (inside || skippedInside)) {
           lopuRef.current({
             title: `Audience flowed to ${inside} thing${inside === 1 ? '' : 's'} inside 📂`,
-						description: skippedInside ? `${skippedInside} skipped (attached things keep inheriting their target’s audience).` : undefined,
+            description: skippedInside
+              ? `${skippedInside} skipped (attached things keep inheriting their target’s audience).`
+              : undefined,
             status: 'info',
             duration: 6000
           });
@@ -1086,7 +687,9 @@ const ThingsLibraryPage = () => {
       setFolderPages((prev) => {
         const next: typeof prev = {};
         for (const [key, things] of Object.entries(prev)) {
-					next[key] = things.map((entry) => (entry.id === thing.id ? { ...entry, crystal: { ...entry.crystal, ...thingRenameCrystal(entry, name) } } : entry));
+          next[key] = things.map((entry) =>
+            entry.id === thing.id ? { ...entry, crystal: { ...entry.crystal, name } } : entry
+          );
         }
         return next;
       });
@@ -1094,19 +697,11 @@ const ThingsLibraryPage = () => {
         setFolderMeta((prev) => ({ ...prev, [thing.id]: { ...(prev[thing.id] || { folderId: thing.folderId }), name } }));
       }
       try {
-        // The selected adapter validates local writes and negotiates remote
-        // capabilities only when it actually sends an account request.
-        const response = isManagedLibraryThing(thing)
-          ? await apiRef.current.v1.things.renameLibrary({ id: thing.id, displayTitle: name, expectedUpdatedAt: thing.updatedAt })
-          : thing.thingtime.includes('attachment')
-          ? await apiRef.current.v1.attachments.annotate({ id: thing.id, title: name })
-          : await apiRef.current.v1.things.update({ id: thing.id, crystal: thingRenameCrystal(thing, name) });
-        if (response?.ok === false) throw new Error(response.error || 'Rename failed');
-        setSearchResults(previous => previous?.map(entry => entry.id === thing.id ? { ...entry, crystal: { ...entry.crystal, ...thingRenameCrystal(entry, name) } } : entry) || null);
+        await apiRef.current.v1.things.update({ id: thing.id, crystal: { name } });
         lopuRef.current({ title: 'Renamed ✏️', status: 'success', duration: 4000 });
         return true;
       } catch (err: any) {
-        lopuRef.current({ title: 'Rename failed 😔', description: err?.error || err?.message || undefined, status: 'error' });
+        lopuRef.current({ title: 'Rename failed 😔', description: err?.error || undefined, status: 'error' });
         refreshAfterMutation(sourceKeysOf([thing.id]));
         return false;
       }
@@ -1120,11 +715,11 @@ const ThingsLibraryPage = () => {
         const resp = await apiRef.current.v1.things.create({
           thingtime: ['folder'],
           crystal: { name, ...(icon ? { icon } : {}) },
-          folderId: newFolderParent
+          folderId
         });
         const thing: ThingsThing | undefined = resp?.thing;
         if (thing) {
-          setFolderPages((prev) => ({ ...prev, [folderKeyOf(newFolderParent)]: dedupeById([thing, ...(prev[folderKeyOf(newFolderParent)] || [])]) }));
+          setFolderPages((prev) => ({ ...prev, [currentKey]: dedupeById([thing, ...(prev[currentKey] || [])]) }));
           rememberFolderMeta([thing]);
         }
         lopuRef.current({ title: `Folder “${name}” created 📁`, status: 'success', duration: 5000 });
@@ -1134,80 +729,30 @@ const ThingsLibraryPage = () => {
         return false;
       }
     },
-    [newFolderParent, rememberFolderMeta]
+    [currentKey, folderId, rememberFolderMeta]
   );
 
   const copyLink = useCallback(async (thing: ThingsThing) => {
-    const url = `${window.location.origin}${homeView ? thingBrowseHref(thing, searchParams.toString()) : thingShareLink(thing)}`;
+    const url = `${window.location.origin}${thingLink(thing)}`;
     try {
       await navigator.clipboard.writeText(url);
-      lopuRef.current({
-        title: thing.acl.includes('tt:hidden') ? 'Secret link copied 🕵️' : 'Link copied 🔗',
-        description: url,
-        status: 'success',
-        duration: 5000
-      });
+      lopuRef.current({ title: 'Link copied 🔗', description: url, status: 'success', duration: 5000 });
     } catch {
       lopuRef.current({ title: 'Couldn’t copy the link', description: url, status: 'error' });
     }
-  }, [homeView, searchParams]);
-
-  const sendRecording = useCallback(async (thing: ThingsThing) => {
-    const ownerId = recordingOwner.current;
-    if (!ownerId || recordingHandoffBusy.current) return;
-    if (homeView && selectedPlane !== 'home') {
-      lopuRef.current({ title: 'Select home before sending this recording', description: 'Local home browsing does not change the connected database.', status: 'error' });
-      return;
-    }
-    recordingHandoffBusy.current = true;
-    try {
-      const sent = await sendRecordingThingToLopu(thing, ownerId, {
-        origin: window.location.origin, activeOwner: () => recordingOwner.current,
-        confirm: (message) => window.confirm(message), fetch: window.fetch.bind(window)
-      });
-      if (sent && recordingOwner.current === ownerId) lopuRef.current({ title: 'Recording sent to Lopu 🦄',
-        description: 'Follow transcription and the linked conversation in Recording activity.', status: 'success', link: { label: 'Recording activity', href: '/lopu/recordings' } });
-    } catch (error) {
-      if (recordingOwner.current === ownerId) lopuRef.current({ title: 'Recording needs attention',
-        description: error instanceof Error ? error.message : 'Check Recording activity before retrying.', status: 'error', link: { label: 'Recording settings', href: '/lopu/recordings' } });
-    } finally { recordingHandoffBusy.current = false; }
-  }, [homeView, selectedPlane]);
+  }, []);
 
   const onItemAction = useCallback(
     (thing: ThingsThing, action: ThingsItemAction) => {
-      if (homeView && selectedPlane !== 'home' && ['download-archive', 'share-download-link'].includes(action)) {
-        lopuRef.current({ title: 'Select home for account download links', description: 'Use Download for a portable device copy.', status: 'error' });
-        return;
-      }
       const group = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
       switch (action) {
-        case 'history': openThingHistory(thing.id, thing.thingtime, homeView ? 'home' : undefined); break;
-        case 'download':
-          setExportIds(group.map((entry) => entry.id));
-          break;
-        case 'download-archive':
-          void archive.download(thing.id, archiveNounForKinds(thing.thingtime) || 'post');
-          break;
-        case 'share-download-link':
-          void archive.shareLink(thing.id, archiveNounForKinds(thing.thingtime) || 'post');
-          break;
-        case 'send-to-lopu':
-          void sendRecording(thing);
-          break;
         case 'open':
           openThing(thing);
           break;
         case 'preview':
           setPreviewThing(thing);
           break;
-        case 'inspect':
-          navigate(thingInspectHref(thing.id, searchParams.toString()));
-          break;
-        case 'paste-into':
-          pasteClipboardTo(thing.id);
-          break;
         case 'rename':
-        case 'edit':
           setRenameThing(thing);
           break;
         case 'move':
@@ -1219,20 +764,10 @@ const ThingsLibraryPage = () => {
           break;
         case 'copy':
           // folders copy their whole subtree server-side (bounded, honest)
-					copyToClipboard(
-						'copy',
-						group.map((entry) => entry.id)
-					);
+          copyToClipboard('copy', group.map((entry) => entry.id));
           break;
         case 'cut':
-					copyToClipboard(
-						'cut',
-						group.map((entry) => entry.id)
-					);
-          break;
-        case 'duplicate':
-          // server-side per-item results skip uncopyable kinds honestly
-          duplicateThings(group);
+          copyToClipboard('cut', group.map((entry) => entry.id));
           break;
         case 'copyLink':
           copyLink(thing);
@@ -1242,7 +777,7 @@ const ThingsLibraryPage = () => {
           break;
       }
     },
-    [archive, copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo, homeView, selectedPlane, searchParams]
+    [copyLink, copyToClipboard, openThing, selectedThings, selection]
   );
 
   // ------------------------------------------------------------------ drag & drop
@@ -1327,50 +862,27 @@ const ThingsLibraryPage = () => {
     [backgroundMenu.openAtPointer, itemMenu.closeMenu] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-	const onDeviceContextMenu = useCallback((deviceId: string, event: React.MouseEvent) => {
-		closeItemMenu();
-		closeBackgroundMenu();
-		setMenuDeviceId(deviceId);
-		openDeviceMenu(event);
-	}, [closeItemMenu, closeBackgroundMenu, openDeviceMenu]);
-
   const menuActCount = menuThing && selection.has(menuThing.id) && selection.size > 1 ? selection.size : 1;
 
   const itemMenuModel = useMemo(
     () =>
-			menuThing ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString() }) : { sections: [] },
-    [menuThing, menuActCount, clipboard?.ids.length, user?.id, searchParams]
+      menuThing
+        ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0 })
+        : { sections: [] },
+    [menuThing, menuActCount, clipboard?.ids.length]
   );
 
   const onItemMenuAction = useCallback(
     ({ action }: ThingContextMenuAction) => {
       if (!menuThing) return;
       switch (action.command) {
-        case 'history': openThingHistory(menuThing.id, menuThing.thingtime, homeView ? 'home' : undefined); break;
-        case 'download':
-          onItemAction(menuThing, 'download');
-          break;
-        case 'download-archive':
-        case 'share-download-link':
-          onItemAction(menuThing, action.command);
-          break;
-        case 'send-to-lopu':
-          onItemAction(menuThing, 'send-to-lopu');
-          break;
         case 'open':
           openThing(menuThing);
-          break;
-        case 'preview':
-          setPreviewThing(menuThing);
-          break;
-        case 'inspect':
-          onItemAction(menuThing, 'inspect');
           break;
         case 'copy-link':
           copyLink(menuThing);
           break;
         case 'rename':
-        case 'edit':
           onItemAction(menuThing, 'rename');
           break;
         case 'move':
@@ -1385,9 +897,6 @@ const ThingsLibraryPage = () => {
         case 'cut':
           onItemAction(menuThing, 'cut');
           break;
-        case 'duplicate':
-          onItemAction(menuThing, 'duplicate');
-          break;
         case 'paste-into':
           pasteClipboardTo(menuThing.id);
           break;
@@ -1396,7 +905,7 @@ const ThingsLibraryPage = () => {
           break;
       }
     },
-    [copyLink, menuThing, onItemAction, openThing, pasteClipboardTo, homeView]
+    [copyLink, menuThing, onItemAction, openThing, pasteClipboardTo]
   );
 
   const backgroundMenuModel = useMemo(
@@ -1411,11 +920,6 @@ const ThingsLibraryPage = () => {
       }),
     [clipboard?.ids.length, displayItems.length, sort, groupBy, view, displayMode]
   );
-	const deviceMenuModel = useMemo(() => ({ sections: [{ id: 'device-navigation', actions: [{
-		id: 'open-device-files', label: 'Open synced files', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncedFilesHref(menuDeviceId) : '/things'
-	}, { id: 'open-device-page', label: 'Device settings page', icon: '⚙️', lucide: 'maximize', href: menuDeviceId ? deviceThingsPageHref(menuDeviceId) : '/things'
-	}, { id: 'open-device-settings', label: 'Quick device settings', icon: '⚙️', lucide: 'settings', command: 'inspect-device'
-	}] }] }), [menuDeviceId]);
 
   const onBackgroundMenuAction = useCallback(
     ({ action }: ThingContextMenuAction) => {
@@ -1426,11 +930,8 @@ const ThingsLibraryPage = () => {
         displayMode?: ThingsDisplayMode;
       };
       switch (action.command) {
-        case 'import':
-          setImportBundle(null); setImportDestination(folderId); setImportOpen(true);
-          break;
         case 'new-folder':
-          openNewFolder(folderId);
+          setNewFolderOpen(true);
           break;
         case 'paste':
           pasteClipboard();
@@ -1452,23 +953,22 @@ const ThingsLibraryPage = () => {
           break;
       }
     },
-    [folderId, openNewFolder, pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
+    [pasteClipboard, selectAll]
   );
 
   // context menus close on any outside press (their surfaces portal to <body>,
   // so this checks the class, not the React tree)
   useEffect(() => {
-    if (!itemMenu.open && !backgroundMenu.open && !deviceMenu.open) return;
+    if (!itemMenu.open && !backgroundMenu.open) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest?.('.thing-context-menu')) return;
-      closeItemMenu();
-      closeBackgroundMenu();
-      closeDeviceMenu();
+      itemMenu.closeMenu();
+      backgroundMenu.closeMenu();
     };
     window.addEventListener('pointerdown', onPointerDown);
     return () => window.removeEventListener('pointerdown', onPointerDown);
-  }, [itemMenu.open, backgroundMenu.open, deviceMenu.open, closeItemMenu, closeBackgroundMenu, closeDeviceMenu]);
+  }, [itemMenu.open, backgroundMenu.open, itemMenu.closeMenu, backgroundMenu.closeMenu]);
 
   // ------------------------------------------------------------------ keyboard
 
@@ -1482,11 +982,11 @@ const ThingsLibraryPage = () => {
         event.preventDefault();
         selectAll();
       } else if (meta && event.key.toLowerCase() === 'c' && selection.size) {
-        event.preventDefault();
         copyToClipboard('copy', [...selection]);
       } else if (meta && event.key.toLowerCase() === 'x' && selection.size) {
-        event.preventDefault();
         copyToClipboard('cut', [...selection]);
+      } else if (meta && event.key.toLowerCase() === 'v' && clipboard?.ids.length) {
+        pasteClipboard();
       } else if ((event.key === 'Delete' || event.key === 'Backspace') && selection.size) {
         event.preventDefault();
         setDeleteThings(selectedThings);
@@ -1494,23 +994,9 @@ const ThingsLibraryPage = () => {
         setSelection(new Set());
       }
     };
-    // Native paste supplies the text without requiring clipboard-read permission.
-    // Leave editable controls and other dialogs' clipboard handling untouched.
-    const onPaste = (event: ClipboardEvent) => {
-      if (event.defaultPrevented || dialogOpen || itemMenu.open || backgroundMenu.open) return;
-      const target = event.target as HTMLElement | null;
-      // Paste can target a non-Element node (the document) when nothing is
-      // focused; call closest() optionally so the listener cannot throw.
-      if (target?.closest?.('input, textarea, [contenteditable]:not([contenteditable="false"]), [role="dialog"]')) return;
-      const text = event.clipboardData?.getData('text/plain');
-      if (!text) return;
-      event.preventDefault();
-      void pasteClipboardTo(folderId, text);
-    };
     window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('paste', onPaste);
-    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('paste', onPaste); };
-  }, [backgroundMenu.open, clipboard, copyToClipboard, dialogOpen, itemMenu.open, pasteClipboardTo, folderId, selectAll, selectedThings, selection]);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [backgroundMenu.open, clipboard, copyToClipboard, dialogOpen, itemMenu.open, pasteClipboard, selectAll, selectedThings, selection]);
 
   // ------------------------------------------------------------------ render
 
@@ -1532,14 +1018,7 @@ const ThingsLibraryPage = () => {
           <Text color="var(--tt-muted, #9a9aa6)" fontSize="14px" maxWidth="360px">
             Log in to collect, organise, and share everything you make on Thingtime.
           </Text>
-          <Button
-            as={RouterLink}
-            size="sm"
-            to="/login"
-            background="var(--tt-accent, hotpink)"
-            color="var(--tt-accent-contrast, #ffffff)"
-            _hover={{ opacity: 0.9 }}
-          >
+          <Button as={RouterLink} colorScheme="pink" size="sm" to="/login">
             Log in 🗝️
           </Button>
         </Flex>
@@ -1548,9 +1027,6 @@ const ThingsLibraryPage = () => {
   }
 
   const itemHandlers: ThingsItemHandlers = {
-    locationSearch: searchParams.toString(),
-    clipboardCount: clipboard?.ids.length || 0,
-    ownerId: user?.id,
     selected: selection,
     cutIds,
     isMobile,
@@ -1575,58 +1051,16 @@ const ThingsLibraryPage = () => {
     onDragLeave: () => onFolderDragLeave(target),
     onDrop: (event: React.DragEvent) => onFolderDrop(target, event),
     ...(dropTarget === target
-			? {
-					background: 'var(--tt-accent-soft, rgba(244, 114, 182, 0.14))',
-					borderRadius: '6px',
-					boxShadow: 'inset 0 0 0 2px var(--tt-accent, #f472b6)'
-			  }
+      ? { background: 'var(--tt-accent-soft, rgba(244, 114, 182, 0.14))', borderRadius: '6px', boxShadow: 'inset 0 0 0 2px var(--tt-accent, #f472b6)' }
       : {})
   });
 
   const loading = loadingKeys.has(currentKey) && !folderPages[currentKey];
-	const deviceSurfaceLoading = devicesEnabled && kindFilter === 'all' && (searchMode || !folderId) && deviceStore.loading && !visibleDevices.length;
-	const canPaintContent = !loading || visibleDevices.length > 0;
   const allSelected = displayItems.length > 0 && displayItems.every((thing) => selection.has(thing.id));
   const moveDisabledIds = new Set(selectedThings.filter(isFolder).map((thing) => thing.id));
   // group-by renders one titled section per kind (grid/list; columns is
   // already hierarchical)
   const groupedSections = groupBy === 'kind' && view !== 'columns' ? groupThings(displayItems, groupBy) : null;
-	const devicePresentation = {
-		devices: visibleDevices,
-		deviceCounts: deviceStore.countsById,
-		selectedDeviceId: deviceParam || selectedDevice,
-		onDeviceSelect: setSelectedDevice,
-		onDeviceOpen: (id: string) => navigate(deviceSyncedFilesHref(id)),
-		onDeviceContextMenu
-	};
-	const searchResultCount = (searchResults || []).length + visibleDevices.length;
-	if (deviceSyncMode && deviceParam) return (
-    <Flex justify="center" background="var(--tt-surface, #fafafb)" minHeight="100vh" paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 24px)" paddingBottom={16} paddingX={{ base: 4, md: 6 }} width="100%">
-      <Flex direction="column" gap={6} width="100%" maxWidth="1100px" minWidth={0}>
-        <DeviceSyncPanel deviceId={deviceParam} ownerId={user?.id} pairedDeviceIds={localNode.pairedDeviceIds} ownedDeviceIds={currentAccountDeviceIds} />
-        {devicesEnabled && user?.id ? <MobileDeviceSetupCard ownerId={user.id} onPaired={deviceStore.refreshList} /> : null}
-        {devicesEnabled && localNode.available ? <LocalNodeSetupCard onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} /> : null}
-      </Flex>
-    </Flex>
-  );
-	if (devicePageMode) return (
-		<Flex background="var(--tt-surface, #fafafb)" minHeight="100vh" paddingBottom={16} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 20px)" paddingX={{ base: 3, md: 6 }} width="100%">
-			<DeviceDetailsDrawer
-				controlFor={deviceControlFor}
-				localBattery={localBattery}
-				ownerId={user?.id}
-				pairedDeviceIds={localNode.pairedDeviceIds}
-				ownedDeviceIds={currentAccountDeviceIds}
-				isOpen
-				onAction={onDeviceAction}
-				onClose={closeDevice}
-				onPermissionModeChange={setDevicePermissionMode}
-				presentation="page"
-				screenAvailability="not-installed"
-				state={deviceStore.selectedState}
-			/>
-		</Flex>
-	);
 
   return (
     <Flex
@@ -1637,19 +1071,10 @@ const ThingsLibraryPage = () => {
       paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
       width="100%"
     >
-      <Flex direction="column" gap={4} maxWidth="100%" paddingTop={[4, 6]} paddingX={4} width={['100%', '100%', '1100px']}
-        style={{ boxSizing: 'border-box', minWidth: 0, paddingInline: 16 }}>
-        <CharacterWorkspacePicker />
+      <Flex direction="column" gap={4} maxWidth="100%" paddingTop={[4, 6]} paddingX={4} width={['100%', '100%', '1100px']}>
         <Flex alignItems="baseline" gap={3} wrap="wrap">
           <Text {...monoLabel}>Thingtime · Things</Text>
-          <Button as={RouterLink} to={contentPath("/things?files=thingtime")} size="sm" variant="ghost">Browse files</Button>
-          {!folderId && !searchMode ? <Button as={RouterLink} to={contentPath("/things?unfiled=attachments")} size="sm" variant="outline" minHeight="44px">Unfiled files</Button> : null}
-          {user && !user.localOnly ? <Flex gap={2} wrap="wrap" aria-label="Library storage">
-            <Button as={RouterLink} to={contentPath("/things")} size="sm" variant={homeView ? 'outline' : 'solid'} aria-pressed={!homeView}>Selected library</Button>
-            <Button as={RouterLink} to={contentPath(homeLibraryHref(user.id))} size="sm" variant={homeView ? 'solid' : 'outline'} aria-pressed={homeView}>Home library</Button>
-          </Flex> : null}
         </Flex>
-        {homeView ? <Text fontSize="sm">Home library on this device. Local edits and imports finish here; account sync runs separately when its matching connection is available.</Text> : null}
         <Flex alignItems="center" gap={3} wrap="wrap">
           <Text
             as="h1"
@@ -1666,36 +1091,18 @@ const ThingsLibraryPage = () => {
             Things
           </Text>
           <Box flex={1} />
-          <Menu placement="bottom-end" closeOnSelect={false}>
-            <MenuButton as={Button} size="sm" variant="ghost" aria-label="Things settings" minW="36px" px={2}><Settings size={18} /></MenuButton>
-            <Portal><MenuList zIndex={10250} maxH="70vh" overflowY="auto" maxW="calc(100vw - 32px)">
-              <MenuOptionGroup title="Layout" type="radio" value={view} onChange={value => setView(value as ThingsView)}>
-                <MenuItemOption value="grid">Grid</MenuItemOption><MenuItemOption value="list">List</MenuItemOption><MenuItemOption value="columns">Folder columns</MenuItemOption>
-              </MenuOptionGroup>
-              <MenuOptionGroup title="Display" type="radio" value={displayMode} onChange={value => setDisplayMode(value as ThingsDisplayMode)}>
-                <MenuItemOption value="name">Names</MenuItemOption><MenuItemOption value="preview">Rendered previews</MenuItemOption>
-              </MenuOptionGroup>
-              <MenuOptionGroup title="Sort" type="radio" value={sort} onChange={value => setSort(value as ThingsSort)}>{THINGS_SORT_OPTIONS.map(option => <MenuItemOption key={option.id} value={option.id}>{option.label}</MenuItemOption>)}</MenuOptionGroup>
-              <MenuOptionGroup title="Group" type="radio" value={groupBy} onChange={value => setGroupBy(value as ThingsGroupBy)}>{THINGS_GROUP_OPTIONS.map(option => <MenuItemOption key={option.id} value={option.id}>{option.label}</MenuItemOption>)}</MenuOptionGroup>
-              <MenuDivider />
-              <MenuItem onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import Things…</MenuItem>
-              <MenuItem onClick={() => void fetchFolder(folderId)}>Refresh this folder</MenuItem>
-              <MenuItem onClick={selectAll}>{allSelected ? 'Clear selection' : 'Select all'}</MenuItem>
-              <MenuDivider /><MenuItem as={RouterLink} to="/things?logs=1">Error logs</MenuItem>
-            </MenuList></Portal>
-          </Menu>
           <Menu placement="bottom-end">
-            <MenuButton as={Button} bg="var(--tt-accent, hotpink)" color="var(--tt-accent-contrast, #ffffff)" leftIcon={<Plus size={14} />} size="sm" _hover={{ opacity: 0.9 }}>
+            <MenuButton as={Button} colorScheme="pink" leftIcon={<Plus size={14} />} size="sm">
               New
             </MenuButton>
             <Portal>
               <MenuList fontSize="13px" zIndex={10250}>
-                <MenuItem onClick={() => openNewFolder(folderId)}>📁 New folder</MenuItem>
+                <MenuItem onClick={() => setNewFolderOpen(true)}>📁 New folder</MenuItem>
                 <MenuItem as={RouterLink} to="/feed">
-                  📝 {homeView && selectedPlane !== 'home' ? 'New post in selected library' : 'New post'}
+                  📝 New post
                 </MenuItem>
-                <MenuItem as={RouterLink} to={contentPath("/schemas")}>
-                  💎 {homeView && selectedPlane !== 'home' ? 'New data in selected library' : 'New data thing'}
+                <MenuItem as={RouterLink} to="/schemas">
+                  💎 New data thing
                 </MenuItem>
               </MenuList>
             </Portal>
@@ -1724,8 +1131,7 @@ const ThingsLibraryPage = () => {
               height="100%"
               onChange={(event) => setQ(event.target.value)}
               padding={0}
-							id="thingtime-things-search"
-                            placeholder="Search all your things and computers…"
+              placeholder="Search all your things…"
               value={q}
               variant="unstyled"
             />
@@ -1737,87 +1143,7 @@ const ThingsLibraryPage = () => {
           </Flex>
         </Box>
 
-        {/* toolbar: browse controls stay available while contextual selection actions appear below */}
-        <Flex alignItems="center" columnGap={4} rowGap={2} wrap="wrap">
-          {user?.id && <>
-            <Button {...pillProps(false)} onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import…</Button>
-            <Button {...pillProps(false)} onClick={pasteClipboard}>Paste</Button>
-            {!!selection.size && <Button {...pillProps(false)} onClick={() => setExportIds([...selection])}>Download…</Button>}
-            {folderId && folderArchive ? (
-              <Button {...pillProps(false)} leftIcon={<FolderDown size={13} />} title="Every stored file in this folder (and its sub-folders) as one ZIP" onClick={() => void archive.download(folderId, 'folder')}>
-                {archiveDownloadLabel(folderArchive.fileCount, folderArchive.totalBytes)}
-              </Button>
-            ) : null}
-          </>}
-          <ToolbarGroup label="view">
-            <Button {...pillProps(view === 'grid')} leftIcon={<LayoutGrid size={13} />} onClick={() => setView('grid')}>
-              Grid
-            </Button>
-            <Button {...pillProps(view === 'list')} leftIcon={<Rows3 size={13} />} onClick={() => setView('list')}>
-              List
-            </Button>
-            <Button {...pillProps(view === 'columns')} leftIcon={<Columns3 size={13} />} onClick={() => setView('columns')}>
-              Columns
-            </Button>
-          </ToolbarGroup>
-          <ToolbarGroup label="show">
-            <Button {...pillProps(displayMode === 'name')} leftIcon={<Tag size={13} />} onClick={() => setDisplayMode('name')}>
-              Names
-            </Button>
-						<Button {...pillProps(displayMode === 'preview')} leftIcon={<Eye size={13} />} onClick={() => setDisplayMode('preview')}>
-              Previews
-            </Button>
-          </ToolbarGroup>
-          <ToolbarGroup label="arrange">
-            <Menu placement="bottom-start">
-              <MenuButton as={Button} {...pillProps(sort !== 'newest')} leftIcon={<ArrowUpDown size={13} />}>
-                {THINGS_SORT_OPTIONS.find((option) => option.id === sort)?.label || 'Sort'}
-              </MenuButton>
-              <Portal>
-                <MenuList fontSize="13px" zIndex={10250}>
-                  {THINGS_SORT_OPTIONS.map((option) => (
-										<MenuItem key={option.id} fontWeight={sort === option.id ? 600 : 400} onClick={() => setSort(option.id)}>
-                      {option.icon} {option.label}
-                    </MenuItem>
-                  ))}
-                </MenuList>
-              </Portal>
-            </Menu>
-            <Menu placement="bottom-start">
-              <MenuButton as={Button} {...pillProps(groupBy !== 'none')} leftIcon={<Layers size={13} />}>
-                {groupBy === 'none' ? 'Group' : THINGS_GROUP_OPTIONS.find((option) => option.id === groupBy)?.label}
-              </MenuButton>
-              <Portal>
-                <MenuList fontSize="13px" zIndex={10250}>
-                  {THINGS_GROUP_OPTIONS.map((option) => (
-										<MenuItem key={option.id} fontWeight={groupBy === option.id ? 600 : 400} onClick={() => setGroupBy(option.id)}>
-                      {option.icon} {option.label}
-                    </MenuItem>
-                  ))}
-                </MenuList>
-              </Portal>
-            </Menu>
-          </ToolbarGroup>
-          <ToolbarGroup label="kind" wrap>
-            {THINGS_KIND_FILTERS.map((entry) => (
-              <Button key={entry.id} {...pillProps(kindFilter === entry.id)} onClick={() => setKindFilter(entry.id)}>
-                {entry.icon} {entry.label}
-              </Button>
-            ))}
-          </ToolbarGroup>
-          {clipboard?.ids.length ? (
-            <>
-              <Box flex={1} />
-              <Button {...pillProps(true)} onClick={pasteClipboard}>
-                📥 Paste {clipboard.ids.length} here
-              </Button>
-              <Button {...pillProps(false)} onClick={() => { transferIntent.clear(); setClipboard(null); }}>
-                ✕
-              </Button>
-            </>
-          ) : null}
-        </Flex>
-
+        {/* toolbar: selection actions replace browse pills while selecting */}
         {selection.size > 0 ? (
           <Flex
             alignItems="center"
@@ -1841,26 +1167,106 @@ const ThingsLibraryPage = () => {
             </Button>
             <Button
               {...pillProps(false)}
-							onClick={() =>
-								copyToClipboard(
-									'copy',
-									selectedThings.filter((thing) => !isFolder(thing)).map((thing) => thing.id)
-								)
-							}
+              onClick={() => copyToClipboard('copy', selectedThings.filter((thing) => !isFolder(thing)).map((thing) => thing.id))}
             >
               📋 Copy
             </Button>
             <Button {...pillProps(false)} onClick={() => copyToClipboard('cut', [...selection])}>
               ✂️ Cut
             </Button>
-						<Button {...pillProps(false)} color="var(--tt-danger, #e5484d)" onClick={() => setDeleteThings(selectedThings)}>
+            <Button
+              {...pillProps(false)}
+              color="var(--tt-danger, #e5484d)"
+              onClick={() => setDeleteThings(selectedThings)}
+            >
               🗑️ Delete
             </Button>
             <Button {...pillProps(false)} onClick={() => setSelection(new Set())}>
               ✕ Clear
             </Button>
           </Flex>
-        ) : null}
+        ) : (
+          <Flex alignItems="center" gap={2} wrap="wrap">
+            <Text {...monoLabel}>view</Text>
+            <Button {...pillProps(view === 'grid')} leftIcon={<LayoutGrid size={13} />} onClick={() => setView('grid')}>
+              Grid
+            </Button>
+            <Button {...pillProps(view === 'list')} leftIcon={<Rows3 size={13} />} onClick={() => setView('list')}>
+              List
+            </Button>
+            <Button {...pillProps(view === 'columns')} leftIcon={<Columns3 size={13} />} onClick={() => setView('columns')}>
+              Columns
+            </Button>
+            <Box width={2} />
+            <Text {...monoLabel}>show</Text>
+            <Button {...pillProps(displayMode === 'name')} leftIcon={<Tag size={13} />} onClick={() => setDisplayMode('name')}>
+              Names
+            </Button>
+            <Button
+              {...pillProps(displayMode === 'preview')}
+              leftIcon={<Eye size={13} />}
+              onClick={() => setDisplayMode('preview')}
+            >
+              Previews
+            </Button>
+            <Box width={2} />
+            <Text {...monoLabel}>arrange</Text>
+            <Menu placement="bottom-start">
+              <MenuButton as={Button} {...pillProps(sort !== 'newest')} leftIcon={<ArrowUpDown size={13} />}>
+                {THINGS_SORT_OPTIONS.find((option) => option.id === sort)?.label || 'Sort'}
+              </MenuButton>
+              <Portal>
+                <MenuList fontSize="13px" zIndex={10250}>
+                  {THINGS_SORT_OPTIONS.map((option) => (
+                    <MenuItem
+                      key={option.id}
+                      fontWeight={sort === option.id ? 600 : 400}
+                      onClick={() => setSort(option.id)}
+                    >
+                      {option.icon} {option.label}
+                    </MenuItem>
+                  ))}
+                </MenuList>
+              </Portal>
+            </Menu>
+            <Menu placement="bottom-start">
+              <MenuButton as={Button} {...pillProps(groupBy !== 'none')} leftIcon={<Layers size={13} />}>
+                {groupBy === 'none' ? 'Group' : THINGS_GROUP_OPTIONS.find((option) => option.id === groupBy)?.label}
+              </MenuButton>
+              <Portal>
+                <MenuList fontSize="13px" zIndex={10250}>
+                  {THINGS_GROUP_OPTIONS.map((option) => (
+                    <MenuItem
+                      key={option.id}
+                      fontWeight={groupBy === option.id ? 600 : 400}
+                      onClick={() => setGroupBy(option.id)}
+                    >
+                      {option.icon} {option.label}
+                    </MenuItem>
+                  ))}
+                </MenuList>
+              </Portal>
+            </Menu>
+            <Box width={2} />
+            <Text {...monoLabel}>kind</Text>
+            {THINGS_KIND_FILTERS.map((entry) => (
+              <Button key={entry.id} {...pillProps(kindFilter === entry.id)} onClick={() => setKindFilter(entry.id)}>
+                {entry.icon} {entry.label}
+              </Button>
+            ))}
+            {clipboard?.ids.length ? (
+              <>
+                <Box flex={1} />
+                <Button {...pillProps(true)} onClick={pasteClipboard}>
+                  📥 Paste {clipboard.ids.length} here
+                </Button>
+                <Button {...pillProps(false)} onClick={() => setClipboard(null)}>
+                  ✕
+                </Button>
+              </>
+            ) : null}
+          </Flex>
+        )}
 
         {/* breadcrumbs — every crumb is also a drag-and-drop move target */}
         {!searchMode && (
@@ -1893,93 +1299,57 @@ const ThingsLibraryPage = () => {
           </Flex>
         )}
         {searchMode && (
-          <Box>
           <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
-						{searching
-							? 'Searching all your folders…'
-							: `${searchResultCount} result${searchResultCount === 1 ? '' : 's'} across your things and computers`}
+            {searching ? 'Searching all your folders…' : `${(searchResults || []).length} result${(searchResults || []).length === 1 ? '' : 's'} across all folders`}
           </Text>
-          {searchIncomplete && <Text fontSize="sm">Showing Things saved on this device. Your account may contain more results.</Text>}
-          {searchError && <Box role="alert"><Text color="var(--tt-danger, #e5484d)" fontSize="sm">{searchError}</Text><Button size="sm" onClick={() => void fetchSearch()}>Retry search</Button></Box>}
-          </Box>
         )}
 
         <Flex alignItems="flex-start" gap={4}>
           {/* folder tree sidebar (desktop, browse mode) */}
           {!isMobile && !searchMode && view !== 'columns' && (
             <Box flexShrink={0} paddingTop={1} width="220px">
-							<FolderTree currentFolderId={folderId} dnd={treeDnd} ensureLoaded={ensureLoaded} itemsFor={itemsFor} onPick={navigateToFolder} onNewFolder={openNewFolder} />
+              <FolderTree
+                currentFolderId={folderId}
+                dnd={treeDnd}
+                ensureLoaded={ensureLoaded}
+                itemsFor={itemsFor}
+                onPick={navigateToFolder}
+              />
             </Box>
           )}
 
           <Box flex={1} minHeight="45vh" minWidth={0} onContextMenu={onBackgroundContextMenu}>
-						{loading && !visibleDevices.length && (
+            {loading && (
               <Text color="var(--tt-faint, #b6b6c0)" fontSize="13px" paddingY={6} textAlign="center">
                 Loading your things… 🌀
               </Text>
             )}
-						{!loading && deviceSurfaceLoading && !displayItems.length ? (
-							<Text color="var(--tt-faint, #b6b6c0)" fontSize="13px" paddingY={6} textAlign="center">
-								Finding your computers… 🖥️
-							</Text>
-						) : null}
-						{canPaintContent &&
-							view === 'grid' &&
+            {!loading && view === 'grid' &&
               (groupedSections ? (
-								<>
-									{visibleDevices.length ? (
-										<Box marginBottom={4}>
+                groupedSections.map((section) => (
+                  <Box key={section.key} marginBottom={4}>
                     <Text {...monoLabel} marginBottom={2}>
-												🖥️ Devices · {visibleDevices.length}
+                      {section.icon} {section.label} · {section.items.length}
                     </Text>
                     <ThingsGridView
-												{...devicePresentation}
                       displayMode={displayMode}
                       handlers={itemHandlers}
-												items={[]}
+                      items={section.items}
                       schemaRenderFor={schemaRenderFor}
                     />
                   </Box>
-									) : null}
-									{groupedSections.map((section) => (
-										<Box key={section.key} marginBottom={4}>
-											<Text {...monoLabel} marginBottom={2}>
-												{section.icon} {section.label} · {section.items.length}
-											</Text>
-											<ThingsGridView displayMode={displayMode} handlers={itemHandlers} items={section.items} schemaRenderFor={schemaRenderFor} />
-										</Box>
-									))}
-								</>
+                ))
               ) : (
                 <ThingsGridView
-									{...devicePresentation}
                   displayMode={displayMode}
                   handlers={itemHandlers}
                   items={displayItems}
                   schemaRenderFor={schemaRenderFor}
                 />
               ))}
-						{canPaintContent &&
-							view === 'list' &&
+            {!loading && view === 'list' &&
               (groupedSections ? (
-								<>
-									{visibleDevices.length ? (
-										<Box marginBottom={4}>
-											<Text {...monoLabel} marginBottom={2}>
-												🖥️ Devices · {visibleDevices.length}
-											</Text>
-											<ThingsListView
-												{...devicePresentation}
-												allSelected={false}
-												displayMode={displayMode}
-												handlers={itemHandlers}
-												items={[]}
-												onToggleAll={selectAll}
-												schemaRenderFor={schemaRenderFor}
-											/>
-										</Box>
-									) : null}
-									{groupedSections.map((section) => (
+                groupedSections.map((section) => (
                   <Box key={section.key} marginBottom={4}>
                     <Text {...monoLabel} marginBottom={2}>
                       {section.icon} {section.label} · {section.items.length}
@@ -1993,11 +1363,9 @@ const ThingsLibraryPage = () => {
                       schemaRenderFor={schemaRenderFor}
                     />
                   </Box>
-									))}
-								</>
+                ))
               ) : (
                 <ThingsListView
-									{...devicePresentation}
                   allSelected={allSelected}
                   displayMode={displayMode}
                   handlers={itemHandlers}
@@ -2006,10 +1374,8 @@ const ThingsLibraryPage = () => {
                   schemaRenderFor={schemaRenderFor}
                 />
               ))}
-						{canPaintContent && view === 'columns' && !searchMode && (
+            {!loading && view === 'columns' && !searchMode && (
               <ThingsColumnsView
-                onNewFolder={openNewFolder}
-								{...devicePresentation}
                 activeFolderAt={(depth) => columnsPath[depth + 1] ?? null}
                 displayMode={displayMode}
                 handlers={itemHandlers}
@@ -2019,9 +1385,8 @@ const ThingsLibraryPage = () => {
                 schemaRenderFor={schemaRenderFor}
               />
             )}
-						{canPaintContent && view === 'columns' && searchMode && (
+            {!loading && view === 'columns' && searchMode && (
               <ThingsGridView
-								{...devicePresentation}
                 displayMode={displayMode}
                 handlers={itemHandlers}
                 items={displayItems}
@@ -2029,7 +1394,7 @@ const ThingsLibraryPage = () => {
               />
             )}
 
-						{canPaintContent && !displayItems.length && !visibleDevices.length && !searching && !searchError && !deviceSurfaceLoading && (
+            {!loading && !displayItems.length && !searching && (
               <Flex
                 alignItems="center"
                 border="1px dashed var(--tt-border, #ececef)"
@@ -2040,13 +1405,12 @@ const ThingsLibraryPage = () => {
                 paddingY={10}
               >
                 <Text fontSize="28px">{searchMode ? '🔍' : '🪺'}</Text>
-								<Text fontSize="13px">{searchMode ? 'Nothing matched that search.' : 'Nothing here yet — create something with New ✨'}</Text>
+                <Text fontSize="13px">
+                  {searchMode ? 'Nothing matched that search.' : 'Nothing here yet — create something with New ✨'}
+                </Text>
               </Flex>
             )}
 
-            {searchMode && searchCursor && <Flex justifyContent="center" paddingY={4}>
-              <Button isDisabled={searching} onClick={() => void fetchSearch(searchCursor)} size="sm" variant="outline">Load more search results</Button>
-            </Flex>}
             {!searchMode && cursors[currentKey] && view !== 'columns' && (
               <Flex justifyContent="center" paddingY={4}>
                 <Button onClick={() => fetchFolder(folderId, cursors[currentKey])} size="sm" variant="outline">
@@ -2058,26 +1422,7 @@ const ThingsLibraryPage = () => {
         </Flex>
       </Flex>
 
-			<DeviceDetailsDrawer
-				controlFor={deviceControlFor}
-				localBattery={localBattery}
-				ownerId={user?.id}
-				pairedDeviceIds={localNode.pairedDeviceIds}
-				ownedDeviceIds={currentAccountDeviceIds}
-				isOpen={Boolean(deviceParam) && !devicePageMode}
-				onAction={onDeviceAction}
-				onClose={closeDevice}
-				onPermissionModeChange={setDevicePermissionMode}
-				screenAvailability="not-installed"
-				state={deviceStore.selectedState}
-			/>
-
       {/* dialogs */}
-      {!!exportIds.length && transferAccount.current === user?.id && <ThingExportDialog key={user?.id || 'anonymous'} ids={exportIds} onClose={() => setExportIds([])} />}
-      {importOpen && user?.id && transferAccount.current === user.id && <ThingImportDialog key={user.id} ownerId={user.id} initialBundle={importBundle} folderId={importDestination} onClose={() => { setImportOpen(false); setImportBundle(null); }} onImported={(destination) => {
-        refreshAfterMutation([destination]);
-        lopu({ title: 'Things imported', description: 'Your new private copies are ready.', status: 'success' });
-      }} />}
       <NewFolderDialog isOpen={newFolderOpen} onClose={() => setNewFolderOpen(false)} onCreate={createFolder} />
       <RenameDialog onClose={() => setRenameThing(null)} onRename={renameApplied} thing={renameThing} />
       <MoveDialog
@@ -2118,12 +1463,6 @@ const ThingsLibraryPage = () => {
         model={backgroundMenuModel}
         onAction={onBackgroundMenuAction}
       />
-		<ThingContextMenu
-			{...deviceMenu.menuProps}
-			meta={menuDeviceId ? { path: deviceStore.devices.find((device) => device.deviceId === menuDeviceId)?.summary?.name || 'Device', type: 'Device' } : undefined}
-			model={deviceMenuModel}
-			onAction={({ action }) => { if (action.command === 'inspect-device' && menuDeviceId) openDevice(menuDeviceId); }}
-		/>
     </Flex>
   );
 };

@@ -944,55 +944,26 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         return getJson(`/api/v1/things${toQuery({ id: args.id, archive: true })}`, options);
       }, [getJson]),
       update: useCallback(
-        async (args, options?: ThingRequestOptions) => {
-          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
-          const expectedActor = options?.expectedActor ?? args?.expectedActor;
-          if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.42.0');
-          if (args?.crystal?.configurationVersion !== undefined && args?.crystal?.localRootId !== undefined) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
-          if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
-          if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
-          else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
-          if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
-          if (hasLiveSourceBinding(args?.crystal)) await requireThingtimeCapability('api.things', '1.37.0');
-          else if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
-          if (args?.crystal?.inputs?.some?.((input: { type?: string }) => input?.type === 'json')) await requireThingtimeCapability('api.things-update', '1.10.0');
-          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
-          else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
-          if (expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
-          options?.signal?.throwIfAborted();
-          return asyncFetcher.submit(
+        async (args) =>
+          asyncFetcher.submit(
             {
               id: args?.id,
-              geo: args?.geo,
               crystal: args?.crystal,
-              ...(args?.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: args.expectedUpdatedAt } : {}),
-              ...(args?.replaceCrystal === true ? { replaceCrystal: true } : {}),
               acl: args?.acl,
               visibility: args?.visibility,
               tags: args?.tags,
-              tokenAcl: args?.tokenAcl,
               // move support — only send folderId when the caller provides it
               // (undefined must stay "leave it where it is", null = root)
-              ...(args && 'folderId' in args ? { folderId: args.folderId } : {}),
-              // attachment sync — only send when the caller provides it (the
-              // full desired order: every bound id plus any newly uploaded
-              // ready drafts to bind; removals are rejected server-side)
-              ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
+              ...(args && 'folderId' in args ? { folderId: args.folderId } : {})
             },
-            { action: '/api/v1/things', method: 'PATCH', expectedActor, expectedDataPlane, expectedApiOrigin: options?.expectedApiOrigin, signal: options?.signal }
-          );
-        },
+            { action: '/api/v1/things', method: 'PATCH' }
+          ),
         [asyncFetcher]
       ),
-      renameLibrary: useCallback(async (args: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => {
-        await requireThingtimeCapability('api.things', '1.27.0');
-        return asyncFetcher.submit(args, { action: '/api/v1/things', method: 'PATCH' });
-      }, [asyncFetcher]),
       // multi-select move/copy/delete/share — see /docs/api things-bulk
       bulk: useCallback(
-        async (args) => {
-          if (args?.op === 'move') await requireThingtimeCapability('api.things-bulk', '1.4.0');
-          return asyncFetcher.submit(
+        async (args) =>
+          asyncFetcher.submit(
             {
               op: args?.op,
               ids: args?.ids,
@@ -1002,8 +973,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
               ...(args?.recursive ? { recursive: true } : {})
             },
             { action: '/api/v1/things/bulk' }
-          );
-        },
+          ),
         [asyncFetcher]
       ),
       upsert: useCallback(
@@ -1027,28 +997,13 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       ),
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), [getJson]),
       create: useCallback(
-        async (args, options?: ThingRequestOptions) => {
-          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
-          const expectedActor = options?.expectedActor ?? args?.expectedActor;
-          if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.42.0');
-          if (args?.thingtime?.includes('file-sync')) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
-          if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
-					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
-          else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
-          if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
-          if (hasLiveSourceBinding(args?.crystal)) await requireThingtimeCapability('api.things', '1.37.0');
-          else if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
-          if (args?.crystal?.inputs?.some?.((input: { type?: string }) => input?.type === 'json')) await requireThingtimeCapability('api.things', '1.33.0');
-          if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
-          else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
-          if (expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
-          const payload = buildThingCreateRequestPayload(args);
-					const attachmentIds = args?.attachmentIds;
-					const ret = withPostRequestDeadline(signal => asyncFetcher.submit(payload, { action: '/api/v1/things', errorContext: 'publish your post', signal, expectedActor, expectedDataPlane, expectedApiOrigin: options?.expectedApiOrigin }), 30_000, options?.signal);
-					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
-						ret.then(refreshRootData).catch(() => {});
-					}
-					return ret;
+        async (args) => {
+          const { type, text, images, listing, thing, thingtime, crystal, targetId, folderId, acl, visibility, tags } = args;
+          // unified shape when thingtime is given, legacy post shape otherwise
+          const payload = Array.isArray(thingtime)
+            ? { thingtime, crystal, targetId, folderId, acl, visibility, tags }
+            : { type, text, images, listing, thing, acl, visibility, tags };
+          return asyncFetcher.submit(payload, { action: '/api/v1/things' });
         },
         [asyncFetcher]
       ),

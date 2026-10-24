@@ -21,7 +21,10 @@ import Register from './routes/register';
 import ResetPassword from './routes/reset-password';
 import SavedRoute from './routes/saved';
 import ThingtimeUrl from './routes/$';
-import ThingPage from './routes/thing';
+import ThingsRoute from './routes/things';
+import TestsPage from './routes/tests';
+import Themes from './routes/themes';
+import VercelPage from './routes/vercel';
 import VerifyEmail from './routes/verify-email';
 import Welcome from './routes/welcome';
 import { recoverStaleChunk } from './utils/staleChunkRecovery';
@@ -307,15 +310,12 @@ export const router = createBrowserRouter([
         lazy: lazyRoute(() => import('./routes/vercel')),
         loader: vercelDeploymentsLoader
       },
-      { path: 'settings', lazy: lazyRoute(() => import('./routes/settings')) },
-      { path: 'settings/:tab', lazy: lazyRoute(() => import('./routes/settings')) },
-      { path: 'tests', lazy: lazyRoute(() => import('./routes/tests')) },
-      { path: 'themes', lazy: lazyRoute(() => import('./routes/themes')) },
-      { path: 'themes/gallery', lazy: lazyRoute(() => import('./routes/themes.gallery')) },
+      { path: 'settings', element: <SettingsRoute /> },
+      { path: 'tests', element: <TestsPage /> },
+      { path: 'themes', element: <Themes /> },
       // the unified Things browser claims EXACTLY /things; deeper /things/*
       // paths still reach the ThingtimeUrl tree viewer via the catch-all
-      { path: 'things', lazy: lazyRoute(() => import('./routes/things')) },
-      { path: 'agent-browsers/:taskId?', lazy: lazyRoute(() => import('./routes/agent-browsers')) },
+      { path: 'things', element: <ThingsRoute /> },
       { path: 'welcome', element: <Welcome />, loader: requireUser('/register') },
       { path: '*', element: <ThingtimeUrl /> }
     ]

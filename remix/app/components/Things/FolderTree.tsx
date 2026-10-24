@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 import { ThingsThing, isFolder, thingDisplayName, thingIcon } from './thingsCore';
@@ -31,7 +31,6 @@ export type FolderTreeProps = {
   disabledIds?: Set<string>;
   rootLabel?: string;
   dnd?: FolderTreeDnd;
-  onNewFolder?: (parentId: string | null) => void;
 };
 
 const dndProps = (folderId: string | null, dnd?: FolderTreeDnd) =>
@@ -110,8 +109,7 @@ const TreeNode = ({
           {children.map((child) => (
             <TreeNode key={child.id} depth={depth + 1} folder={child} props={props} />
           ))}
-          {props.onNewFolder && <Button size="xs" variant="ghost" ml={`${30 + depth * 14}px`} my={1} onClick={() => props.onNewFolder?.(folder.id)}>New folder +</Button>}
-          {!props.onNewFolder && props.itemsFor(folder.id) && !children.length && (
+          {props.itemsFor(folder.id) && !children.length && (
             <Text color="var(--tt-faint, #b6b6c0)" fontSize="11px" paddingLeft={`${30 + depth * 14}px`} paddingY="2px">
               No subfolders
             </Text>
@@ -148,8 +146,7 @@ export const FolderTree = (props: FolderTreeProps) => {
       {rootFolders.map((folder) => (
         <TreeNode key={folder.id} depth={0} folder={folder} props={props} />
       ))}
-      {props.onNewFolder && <Button size="xs" variant="ghost" ml={2} my={1} onClick={() => props.onNewFolder?.(null)}>New folder +</Button>}
-      {!props.onNewFolder && props.itemsFor(null) && !rootFolders.length && (
+      {props.itemsFor(null) && !rootFolders.length && (
         <Text color="var(--tt-faint, #b6b6c0)" fontSize="11px" paddingLeft={2} paddingY={1}>
           No folders yet — make one with New 📁
         </Text>

@@ -82,13 +82,7 @@ const csv = (value: string | null): string[] =>
 // GET /api/v1/things?target=<shareId>&thingtime=comment&cursor=&limit= — list
 // things attached to a viewable thing (its comments/reactions).
 // GET /api/v1/things?thingtime=&folder=&cursor=&limit= — list your own things
-// (folder=root for unfiled things, folder=<folder shareId> for its children;
-// session auth may add appId=<clientId> to browse ONE app's namespace).
-//
-// App-scoped tokens ("Login with Thingtime") work here too: every read is
-// fenced to the app's own namespace (root appId stamp + audience acl +
-// author-liveness — apps/namespace.ts), so an app sees its slice of the
-// user's Thingtime and nothing else.
+// (folder=root for unfiled things, folder=<folder shareId> for its children).
 export const loader = async ({ request }: { request: Request }) => {
   const actor = await resolveActor(request, { thingsScope: 'things.read' });
   if (actor instanceof Response) return actor;
@@ -169,20 +163,13 @@ export const loader = async ({ request }: { request: Request }) => {
     );
   }
 
-  const result = await listThings(
-    viewer,
-    {
-      commentProjection,
-      thingtime: csv(params.get('thingtime')),
-      targetId: (params.get('target') || '').trim() || null,
-      folder: (params.get('folder') || '').trim() || null,
-      cursor: params.get('cursor'),
-      limit: Number(params.get('limit')) || undefined,
-      appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null
-    },
-    app,
-    { archiveOwnerId: actor.kind === 'user' && user?.accountKind === 'user' ? user.id : undefined }
-  );
+  const result = await listThings(viewer, {
+    thingtime: csv(params.get('thingtime')),
+    targetId: (params.get('target') || '').trim() || null,
+    folder: (params.get('folder') || '').trim() || null,
+    cursor: params.get('cursor'),
+    limit: Number(params.get('limit')) || undefined
+  });
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
   }

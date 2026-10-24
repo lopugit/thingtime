@@ -126,17 +126,9 @@ export default function App() {
               ? `${baseTitle} - Profile`
               : pathname === '/settings'
                 ? `${baseTitle} - Settings`
-                : pathname === '/admin'
-                  ? `${baseTitle} - Admin`
-                  : pathname === '/things'
-                    ? `${baseTitle} - Things`
-                    : pathname.startsWith('/actions')
-                      ? `${baseTitle} - Actions`
-                      : pathname.startsWith('/components')
-                        ? `${baseTitle} - Components`
-                        : pathname === '/branding'
-                          ? `${baseTitle} - Brand resources`
-                          : baseTitle;
+                : pathname === '/things'
+                  ? `${baseTitle} - Things`
+                  : baseTitle;
 
       document.title = routeTitle;
     }

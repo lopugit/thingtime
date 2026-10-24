@@ -5242,772 +5242,94 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       always 'sandbox-' prefixed so pooled feeds can't impersonate real
       accounts.
 
-## Token minter — personal access tokens (`remix/app/components/Settings/TokenMinter.tsx`, `api/utils/auth/patTokens.ts`)
+## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
 
-- [ ] Settings → Token minter (auth only): mint with default "Full things
-      access" — the returned token appears ONCE in the reveal card (token +
-      curl example + copy buttons); after reload the reveal is gone and the
-      token is unrecoverable, but the row lists in "Your tokens" (painted
-      instantly from the `tt-pat-tokens-<userId>` local cache, server
-      reconciles behind).
-- [ ] Permissions selector: with Full things access on, unticking one leaf
-      (e.g. Delete) converts the selection to "every leaf except that one"
-      and the hint lists exactly the granted scopes; minting with zero
-      scopes is blocked with a toast.
-- [ ] Expiry dials stay in sync: preset chips (1h…1y, Never ∞), the
-      log-scale slider (1ms → 10y, far right = never), and the value+unit
-      inputs all drive the same expiresInMs; the human date preview updates.
-- [ ] Uses dials: Unlimited / 1 / 10 / 1000 / custom; a use-limited token
-      consumes exactly one use per authenticated call — the (maxUses+1)-th
-      call 401s "no uses remaining", and a 403 (missing scope) consumes
-      NOTHING. Two racing final calls can never both spend the last use
-      (atomic usesRemaining > 0 decrement).
-- [ ] A PAT works ONLY where wired: things CRUD/search/feed/user/save/
-      comment/react/share by scope (PUT upsert needs create+update), plus
-      free introspection at /api/v1/tokens/self. It must 401 on
-      /api/v1/tokens (list/mint), /tokens/revoke, /auth/me, themes,
-      algorithms, oauth — and be rejected when smuggled via the auth
-      COOKIE (Bearer-only).
-- [ ] Sub-second expiry is real: a 1500ms token works immediately and 401s
-      after 2s (session expiresAt is the authoritative ms check; the JWT
-      exp is ceiled to seconds).
-- [ ] Revoke (session-only) kills the token immediately, is idempotent,
-      flips the row optimistically (reverts on failure), and gives a
-      never-expiring token a reap date so the TTL index eventually clears
-      it. Expired tokens vanish from the list once Mongo's TTL sweep runs.
-- [ ] Permissions selector "Select all ✅ / Unselect all 🧹" buttons: all →
-      the single Full-access chip state; none → zero chips + mint blocked.
-- [ ] Sandbox ("Only its own things 🧸", onlyCreatedThings) — the tt:token
-      grant system: every PAT-created thing carries the creator's
-      tt:token/<id> entry in tokenAcl; a sandboxed token CAN patch/PUT-
-      replace/delete/comment/react/save/share things carrying its entry and
-      gets 403 "sandboxed … tt:token grant" on everything else (the 403 is a
-      post-auth target check, so it DOES consume a use — only missing-scope
-      403s are free) — including reaction/save REMOVAL on ungranted things
-      and re-sharing a token-created share of a foreign root. Delete stays
-      one atomic filter op on success (tokenAcl OR legacy createdByTokenId)
-      and returns the sandbox 403, not a phantom 404, when the thing exists
-      but carries no grant.
-- [ ] Grant layering: owner PATCHes a thing's tokenAcl to [A, B] → BOTH
-      sandboxed tokens mutate it; removing A's entry cuts A off immediately
-      while B keeps working; owner can CREATE a thing pre-granted to a
-      token that never touched it; a sandboxed token can re-grant (add
-      peers to) things it holds a grant on, and can lock itself out by
-      dropping its own entry (session always recovers it). tokenAcl
-      replaces WHOLE (null clears), max 32 entries, entries must match
-      tt:token/<id> (400 otherwise), and a tokenAcl replacement also clears
-      the legacy createdByTokenId stamp so removed grants can't resurrect
-      through the back-compat read.
-- [ ] tokenAcl is owner-only in projections: the owner (and their tokens)
-      see it on GET /things?id=; anonymous viewers and other users never
-      receive the field. Legacy round-2 docs (createdByTokenId, no
-      tokenAcl) still honor their creator via the read shim.
-- [ ] Non-sandboxed tokens and full sessions ignore tokenAcl entirely; the
-      settings list row shows "🧸 its own things only" + a "Grant 🆔"
-      copy button (copies tt:token/<id>).
-- [ ] Visibility fence ("Visibility 🌗" toggles, `meta.visibility`
-      'all'|'public'|'private'): a public-only token sees ONLY world-visible
-      things — a private thing 404s on GET ?id= even for its owner, listings/
-      feed/search omit private things, creating with a private acl 403s, the
-      no-acl create default stays public, and PATCHing a public thing's acl
-      to private 403s (boundary locked both directions). A private-only token
-      mirrors it: public posts 404, the feed shows only non-public things,
-      no-acl creates default to acl ['tt:user'] (private), creating/patching
-      to tt:all 403s, and reacting/commenting on a public post 404s (target
-      invisible). Inherited audiences resolve through the target chain — a
-      public-only token CAN comment on a public post and list its comments
-      (children carry ['tt:inherit']). 'all' and legacy pre-field tokens stay
-      unrestricted; mint 400s on unknown visibility values; /tokens/self and
-      the mint response report the fence; the settings row badges 🌐/🔒
-      restricted tokens; combines with the 🧸 sandbox. The fence also rides
-      /api/v1/things/user: a fenced token's profile pages AND postCount only
-      cover in-fence posts (regression: a stacked-branch restructure once
-      dropped this clause, leaking private-post counts to public-only
-      tokens). Covered by section F of `node scripts/verify-pat-tokens.mjs`.
-- [ ] The fence survives the edge cache: `?anon=1` on feed/search is answered
-      as the Bearer credential rather than anonymously, the fenced answer
-      carries `private, no-store`, and the credential-less cacheable answer
-      carries `Vary: Authorization` — `public, s-maxage` is exactly what
-      licenses a shared cache to replay a stored response to an
-      Authorization-carrying request, so without the Vary a warm anon entry
-      reaches a fenced token without the origin ever being asked. Same
-      section F.
-- [ ] Hidden visibility ('hidden', acl ['tt:hidden','tt:user'] + random
-      linkKey): composer/post-menu offer 🕵️ Hidden; the created/edited thing
-      returns owner-only linkKey (never in non-owner projections); anonymous
-      GET ?id= 404s without the key, 200s with ?key=<linkKey>, wrong keys stay
-      blind; the post never appears in the public feed, other users' profile
-      view, or search — the owner still sees it in their own feed/listings;
-      body.key admits other users to comment/react/save/share; PATCHing the
-      audience away from hidden kills the link INSTANTLY, and re-hiding mints
-      a FRESH key (old links stay dead — key rotation on every entry into
-      hidden); "Copy hidden link 🕵️" in the post menu copies
-      /post/<id>?key=<linkKey> and the /post page threads ?key= through to
-      the API. Covered by section G of `node scripts/verify-pat-tokens.mjs`.
-- [ ] GET bridge (/api/v1/get + per-token allowGet, "Works via GET links 🌍"
-      in the minter): only tokens minted with the tick resolve there (others
-      403), the token rides ?token= (Bearer also accepted, cookies NEVER —
-      a cookie-only request 401s, so mutating GETs can't be CSRF'd), op ∈
-      get/list/search/feed/self/create/update/upsert/delete/react/comment/
-      save/share behave exactly like their endpoints: same scopes (403s free),
-      same atomic use accounting (op=self is free introspection), same
-      sandbox + visibility fence, mirrored rate-limit keys. Args = body JSON
-      param + query params overlaid ({/[/" values parse as JSON, bare words
-      stay strings, thingtime accepts csv); responses carry Cache-Control:
-      private, no-store + Referrer-Policy: no-referrer; unknown ops 400.
-      Minted rows badge 🌍 GET links. Covered by section H of
-      `node scripts/verify-pat-tokens.mjs`.
-- [ ] Custom audiences 🎭 ('custom', acl marker tt:custom + baseline +
-      capability grants): the composer/post-menu Custom option opens the
-      audience picker (baseline chips Only-these-people / +secret-link /
-      +everyone; user search via /api/v1/users/search; prefilled Recents /
-      Friends / Connections sections filtered by the search box; per-entry
-      capability select Read/Comment/Edit; save-selection-as-group and
-      pick-existing-group). Applying composes acl ['tt:custom','tt:user',
-      baseline?, 'tt:user/<name>[/comment|/write]'…, 'tt:group/<id>[…]'…] and
-      the wire round-trips visibility 'custom'. Enforcement: read grant =
-      view only (comment/react 403 — general baseline viewers TOO, even with
-      a public baseline or a hidden link key); write ⊃ comment ⊃ read; write
-      grantees PATCH crystal/extended/tags but NEVER acl/visibility/folder/
-      tokenAcl (403) and never delete (owner-only); storage stays billed to
-      the owner. Group grants resolve live: PATCHing the group's member list
-      (replacement semantics) grants/revokes instantly on every thing that
-      references tt:group/<id>; deleting the group makes its entries inert.
-      Granted things land in the grantee's FEED (visibilityQueryFor grant
-      clause); hidden baseline mints a linkKey (key = read only). Groups are
-      protected kinds managed solely via /api/v1/groups (+ audience-sources).
-      Covered by section I of `node scripts/verify-pat-tokens.mjs`.
-- [ ] Unified Thing sharing: `/things` Share, Builder page settings,
-      component-card Save version, and component-detail Save version all offer
-      Public / Friends / Family / Private / Anyone with the link / Custom from
-      the same audience control. Custom opens the people + groups capability
-      picker. At a mobile viewport, open Custom from the Builder inspector and
-      confirm the entire picker (including its buttons) layers above the drawer
-      and remains usable. Saving a standalone Builder page with the link option
-      mints an owner-only key; its copied `/p/<id>?key=<key>` URL resolves while
-      logged out, and the same key pattern opens non-page/non-post Things through
-      `/thing/<id>?key=<key>`. A no-key visit remains 404 and never paints a
-      bearer-key response from local cache. Moving away from hidden invalidates
-      the old link.
-- [ ] When reconciling older audience feature branches, each post/composer opens
-      exactly one Custom audience picker. Preserve the shared viewer fields,
-      composer state, ACL payload and drawer layering without duplicate blocks.
-- [ ] Token visibility fence 'hidden' mode ("Hidden only 🕵️" chip): the token
-      lives entirely in hidden link-key things — its no-acl creates are born
-      hidden WITH a fresh linkKey, public/private things 404, creating
-      outside the fence 403s; composes with the sandbox and the GET bridge.
-      Covered by section I of the verify suite.
-- [ ] Circle filters honour every circle they offer (regression: a new circle
-      that the filter menu shows but the API drops reads downstream as "no
-      circle filter", so the chip WIDENS the result set instead of narrowing
-      it). Tick 🕵️ Hidden alone in the feed/search Advanced panel: only your
-      hidden things come back, not the whole feed. Tick 🔒 Private alone: no
-      hidden things in the result. Tick 🎭 Custom alone: your custom-audience
-      things plus the ones granted to you by name/group, nothing else. Tick
-      any five of the six circles: the omitted circle really is omitted (this
-      used to fall through to an "all circles" shortcut keyed on selection
-      COUNT) — including 🎭 Custom, whose grant clause is gated on the filter
-      like every other clause, so omitting it really does drop the things
-      other people granted you. Leaving every circle unticked is unchanged —
-      the default feed still shows all of your own things, hidden included,
-      plus everything granted to you.
-- [ ] PAT × app-token coexistence on the shared things routes (one resolver,
-      three credential kinds): a PAT ignores Origin (no app binding), the
-      OPTIONS preflight for app SDKs still serves with Authorization allowed,
-      a PAT with things.read can browse `GET /things?appId=` (first-party
-      read), a PAT 401s on the app-token-only app-data surface, an app token
-      401s on /api/v1/tokens, and the oversized-payload 413 fires BEFORE
-      actor resolution so it never consumes a PAT use. One command re-checks
-      all of this: `node scripts/verify-pat-tokens.mjs <nitro base url>`
-      (companion to `scripts/verify-app-namespaces.mjs`).
-
-## Admin dashboard, subscription tiers & ownership links (`/admin`, `api/utils/subscriptions/`, `api/utils/accounts/accountLinks.ts`)
-
-- [ ] `/admin` → Moderation lists flags (unreviewed first) with status badges;
-      `View` opens the raw media (blocked media opens for admins only);
-      `Clear` / `NSFW` / `Block` override the verdict with a Lopu toast and
-      stamp reviewedBy; exercise all three overrides on deterministic clear,
-      nsfw, and blocked uploads. `Run analysis sweep` reports
-      analyzed/flagged/skipped counts and drains pending attachments plus
-      verdicts whose flag write was interrupted.
-      Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
-      restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
-      name already on the allowlist is refused, so register FIRST). One command
-      re-checks the whole management plane end-to-end:
-      `TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
-
-- [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
-      the dashboard for admins; `/admin/users`, `/admin/apps`,
-      `/admin/moderation`, `/admin/tiers`, `/admin/ci-control`,
-      `/admin/external-integrations`, `/admin/ai-providers`, `/admin/lopu`,
-      `/admin/platform`, and `/admin/access` each open the exact
-      matching tab, remain correct through refresh/back/forward, and an unknown
-      admin section safely returns to `/admin`. The drawer's Account section
-      shows the 🛠️ Admin item only for admins.
-- [ ] Users tab: free-text query searches every safe projected field; typed
-      filters cover created-day ranges, tier id/name/version, booleans, quotas,
-      storage, and every count; multiple filters combine with AND and sorting
-      is deterministic. Each row shows created time, tier badge (+ `custom`
-      badge when overrides exist), storage used/allowance, app-namespace bytes,
-      and app/PAT/connected counts. With more than 400 mixed Things/legacy
-      users, confirm the UI drains every 200-row cursor page without gaps or
-      duplicates and a field/tier match found only on page 3 is still returned.
-      Confirm numeric `is any of` / `is none of` filters accept comma-separated
-      values. Exact-email matches and all backing stores stay globally newest
-      first across page boundaries.
-      If a continuation request fails, the last complete snapshot stays visible;
-      a cold failure shows an error with an in-place Retry action instead of an
-      authoritative empty table.
-- [ ] Apps tab query covers identity, origins, created/suspended time, status,
-      owners/managers, users, storage, and every subscription field. A no-match
-      query keeps the controls visible; Clear filters restores the rows; tier
-      or link changes refresh rows without clearing the active query. Seed more
-      than 200 apps and confirm a manager/tier match beyond page 1 is queryable.
-- [ ] Tiers tab query covers every descriptor field: lifecycle/version,
-      identity text, display price amounts, computed/custom discounts,
-      Editor.js inclusion text, quotas, and all timestamps. Filtered cards stay
-      in Live / Draft / Archived groups with correct per-group empty states.
-- [ ] System has independent queries for rate-limit rules and current admins.
-      Filtering rate limits never discards hidden unsaved edits, and the
-      separate Promote a user lookup keeps its existing username/email flow.
-- [ ] Subscription editor: assigning a live tier's exact `tierVersionId` +
-      per-field override (number in MB for byte fields, or Unlimited) persists
-      and the row updates on save; Reset to default pins the current live
-      default revision. If the current revision was archived, its card remains
-      visible as current/non-selectable and note/override-only edits preserve
-      that exact historical revision.
-- [ ] Tiers tab lifecycle: create a new draft, edit its name/tagline/banner,
-      currency, all four renewal prices, quota defaults, and Editor.js
-      inclusions; reload and confirm every field persists. The draft appears
-      only in Draft / not live and never in public `GET /api/v1/tiers`.
-- [ ] Pricing discounts: each daily→weekly/monthly/yearly,
-      weekly→monthly/yearly, and monthly→yearly percentage is computed from
-      annualized prices. Enter a custom saved percentage, confirm it overrides
-      just that comparison, then clear it and confirm the computed value
-      returns. Check a zero-decimal currency (JPY) and a three-decimal currency
-      (KWD) render their minor-unit prices correctly.
-- [ ] Publish requires confirmation, makes the immutable revision live/public,
-      and hides the mutable editor. Create a new draft version, publish it, and
-      confirm the former live revision moves to Archived while an existing
-      user's pinned `tierVersionId`, title, and quota snapshot stay unchanged.
-- [ ] Archive requires confirmation and never deletes history. The default
-      Free revision cannot be archived without publishing its replacement;
-      draft and archived revisions are rejected for new assignments. A tier
-      already holding a draft disables duplicate draft creation.
-- [ ] Tier cards render the optional banner (with graceful broken-image
-      fallback), tagline, four prices, savings, quotas, and rich inclusions.
-      Desktop and 375px layouts have no clipping/overlap; open each lifecycle
-      confirmation and the Editor.js content editor while testing.
-- [ ] Tier quotas actually enforce: with `maxApps: 1` override the second
-      `POST /api/v1/apps` is refused 400; a `null` override (or payg) lifts
-      the cap. App subjects accept only `appStorageBytes`; tier/override and the
-      runtime aggregate move atomically on the app Thing, `null` meters without
-      blocking, and administrator-custom app plans lock owner tier changes.
-- [ ] `subscription-tier`, `subscription`, and `account-link` kinds are
-      PROTECTED: generic `POST /api/v1/things` refuses them, and generic
-      creation also rejects the deterministic `subscription-*` shareId
-      namespace (published tiers, self-assigned plans, or links would be
-      privilege escalation).
-- [ ] Apps tab: every app across all users with owner, co-managers, live-grant
-      user count, storage rollup, and status. Suspend uses an inline
-      Confirm/Cancel, flips the row to SUSPENDED + Restore, and: existing app
-      tokens die immediately (401), the consent screen and /oauth/authorize
-      refuse 403, restore allows re-authorization but does NOT resurrect swept
-      sessions.
-- [ ] Ownership links (many-to-many both ways): admin assigns an account link
-      → target appears under the owner's "Owned accounts" in the switcher
-      (`GET /api/v1/auth/accounts/owned`), "Sign in →" assumes it without
-      credentials (fresh per-browser session folded into the roster; other
-      browsers/owners are never signed out), non-linked users get 403. App
-      links put the app in the co-manager's `/apps` list and update/delete
-      accept them; removing the link removes access (404).
-- [ ] Mobile (375px): the admin tables scroll inside their own container —
-      the page body itself never scrolls horizontally; modals fit with no
-      clipped controls.
-
-## CI control-plane storage (`ciControl` satellite, retention, relocation, index rebuild)
-
-Regression class fixed 2026-09-02: `things_v2` in production held 1.82M docs of
-which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
-(3.15 GB of index for ~4.5k content docs) and growing ~270k rows/day.
-
-- [ ] Every `ci-*` write lands in `ciControl_v1`, never `things_v2`: send a
-      signed synthetic `workflow_job` delivery to
-      `/api/v1/integrations/github/webhook` on a local stack and confirm
-      `things_v2` gains no `thingtime: ci-*` rows while `ciControl_v1` gains
-      the repository, job, and event rows (admin query workbench, collection
-      `ciControl`).
-- [ ] Retention stamps: a `ci-event` row carries `expiresAt` ≈ createdAt + 14d,
-      a `job:` `ci-workflow-run` row ≈ updatedAt + 30d, a top-level run/
-      deployment/preview ≈ 90d, and `ci-repository` / `ci-pull-request` /
-      `ci-branch` / policy / dispatch rows carry NO `expiresAt`. Re-delivering
-      an update to a job refreshes its stamp from the new `updatedAt`.
-- [ ] Env overrides: `THINGTIME_CI_EVENT_RETENTION_DAYS=0` removes the stamp
-      from new events (kept forever); a non-numeric value falls back to the
-      default; values above 3650 clamp.
-- [ ] Repository no-op suppression: two consecutive deliveries for the same
-      repository with status `active` record ONE `ci-event` whose parent is the
-      repository row (the insert), not one per delivery; an `archived`
-      transition records one more. Entity events (PR `synchronize` with an
-      unchanged status) are still recorded.
-- [ ] `GET /api/v1/admin/ci` dashboard: runs, events, stats counts, and
-      `freshness.latestEventAt` still populate from the satellite; the
-      per-parent history drawer still lists events newest-first.
-- [ ] Boot ensure on a database that carries the seven retired `things`
-      index names (`kind_1_typeId_*` ×4, `kind_1_deletedAt_*`,
-      `thingtime_1_parentId_1_createdAt_-1_shareId_1`,
-      `things_ci_repository_updated`) drops them; the unfiltered `kind_1_*`
-      and `sandboxExpiresAt_1` originals are replaced by the partial
-      `things_v1_kind_*` / `things_sandbox_expires_at` indexes with the new
-      index created BEFORE the old name is dropped (`db.things_v2.getIndexes()`
-      never shows neither).
-- [ ] `ciControl_v1` ends up with exactly `_id_`, `ci_control_share_id_unique`,
-      `ci_control_repository_updated`, `ci_control_repository_status`,
-      `ci_control_repository_external_id`, `ci_control_parent_created`, and
-      `ci_control_expires_at` (TTL, `expireAfterSeconds: 0`).
-- [ ] `relocate-ci-control-telemetry` (admin **/migrations**): on a database
-      holding pre-satellite `ci-*` rows in `things_v2`, the dry run reports
-      per-kind relocate/expired counts and writes nothing; the confirmed run
-      copies live rows (insert-if-absent by shareId — a satellite row that
-      already exists keeps its newer state), deletes every matched `things`
-      row including already-expired ones, and reports `drained`. A run that
-      hits its time budget says so and the panel's pending count keeps the
-      migration actionable until it reads 0. Non-CI things are untouched.
-- [ ] `rebuild-things-indexes`: the storage-generations table shows document,
-      on-disk, and index bytes per physical collection with an orange `N× docs`
-      badge when index bytes exceed 8× document bytes (and 64 MB); the dry run
-      lists plan-owned indexes and any residue it would leave alone; the
-      confirmed run rebuilds them (twins named `<name>__rebuild` appear only
-      during the run), `db.things_v2.getIndexes()` matches the plan afterwards,
-      total index bytes drop, and a duplicate `shareId` insert attempted during
-      the run is still rejected with E11000.
-- [ ] `GET /api/v1/admin/migrations` generation rows carry `dataBytes`,
-      `storageBytes`, `indexBytes`, `indexes`; capabilities advertise
-      `api.admin-migrations` `1.1.0` and `api.mongodb-raw-results` `1.1.0`
-      (collection allowlist now includes `ciControl`).
-
-## Admin CI control plane (`/admin` → CI Control, `api/utils/ciControl/`)
-
-- [ ] With a prior snapshot cached, CI Control paints the last-known feature
-      rows on first render without a spinner, then reconciles in the background.
-      A failed refresh preserves those rows, says they are cached, and retries.
-- [ ] Grow CI event/run/deployment history beyond MongoDB's 32 MiB blocking-sort
-      threshold and confirm `/api/v1/admin/ci?limit=0` still returns through the
-      repository-scoped `things_ci_repository_updated` index. Confirm every
-      selectable feature, branch, and PR is returned, recent run/deployment/
-      preview/dispatch rows are capped, and the four summary totals remain exact
-      through independent counts. Leave the page foregrounded for at least two
-      30-second polls and confirm no live-refresh warning appears. While that
-      snapshot is unavailable, load a saved stack: every saved PR number stays
-      visible as restoring, its count remains honest, and the rows rehydrate in
-      order when the live snapshot recovers without another click.
-- [ ] Force the CI snapshot reader to raise MongoDB code 292 and confirm the API
-      returns a private 503 with `Retry-After` and
-      `code: ci_dashboard_query_capacity`. The browser preserves cached rows,
-      coalesces overlapping 5s/30s refreshes, backs off 30s → 60s → 120s up to
-      five minutes, and a manual Refresh bypasses that wait. Runtime logs contain
-      `ci_dashboard_query_failed`, the route, and Mongo code 292 without query,
-      namespace, credential, or document details.
-- [ ] Anonymous and non-admin callers receive the standard admin denial from
-      all three `/api/v1/admin/ci*` endpoints. The dashboard never renders for
-      them and the webhook routes do not accept a browser session as authority.
-- [ ] Send the same signed GitHub delivery twice: the entity projection is
-      current and exactly one relational `ci-event` exists for that delivery
-      and parent. A payload with one changed byte, a missing delivery header,
-      another repository, or a bad HMAC is rejected without writes.
-- [ ] Send Vercel deployment created → ready and retry each exact body. One
-      current deployment and preview projection advance to ready; exact retries
-      do not duplicate history. Invalid HMAC and payloads over 2 MiB fail.
-- [ ] GitHub reconciliation groups promotion PRs with their source feature,
-      paginates beyond 100 branches/open PRs, refreshes runs/deployments,
-      preserves existing event history, and never exposes the App private key
-      or installation token.
-- [ ] Dispatch every allowlisted workflow and confirm the audit row moves
-      requested → accepted (or failed) with a relational event. Arbitrary
-      workflow names, non-allowlisted inputs, and feature-branch entry refs
-      cannot reach GitHub. Rebase/release require the UI confirmation gate.
-- [ ] Build and save multiple Feature Stacks with one or more feature rows and
-      one or more targets. Reload, edit each stack, and confirm order, name,
-      targets, auto-decide state, and target progress persist. Save & merge must
-      be enabled with exactly one valid source/target and have no product count
-      cap or hidden confirmation gate. Verify the server snapshots live
-      same-repo PR base/head refs and SHAs, rejects drafts/forks/moved refs and
-      duplicate targets, and forwards only canonical base64 through the thin
-      `develop` listener.
-- [ ] Rerun a saved Feature Stack after one selected PR has merged, another has
-      closed, and another has become a draft. The new run safely omits those
-      inactive entries, preserves the relative order of every remaining live
-      source, and rejects only when no compatible live source remains.
-- [ ] Mix PRs targeting `github-actions`, `main`, and `develop`, keep Auto
-      decide branches selected, and prove the immutable plan routes controller
-      sources only to `github-actions`, main sources only to `main`, and develop
-      sources only to selected product targets. Include a selected source and a
-      selected target with no compatible partner: both are safely omitted while
-      the remaining compatible pairs still queue, and a zero-pair plan is rejected.
-      Confirm skipped saved targets are labelled skipped rather than running forever.
-      Uncheck it and prove the
-      explicit merge-everywhere mode remains available.
-- [ ] In the protected Feature Stack run, confirm each target starts from its
-      admitted SHA, every source becomes exactly one two-parent merge commit in
-      list order, clean merges are byte-identical to Git, AI edits touch only
-      recomputed conflict paths, source/target movement aborts publication, and
-      a target-specific PR is opened with auto-merge while branch protection
-      remains the final gate. The target worker must remain active until that
-      PR is actually merged, and must fail if the PR closes unmerged. Pause or
-      opt-out labels must stop the batch.
-- [ ] After a large Feature Stack publishes its target PR, run the required
-      Web CI aggregate against the combined head. Cross-branch additions must
-      retain every shared runtime import and keep the typecheck ratchet at or
-      below its baseline; repairing the published head must rerun required
-      checks without replacing the immutable stack history or disabling
-      auto-merge.
-- [ ] While a Feature Stack is active, confirm Lopu posts a signed progress
-      snapshot immediately, whenever its target phase changes, every ten
-      minutes while unchanged, and once when all target workers are terminal.
-      Reload CI Control between updates: the stream must retain chronological
-      messages, exact per-job GitHub links, progress percentage, and a refreshed
-      finish estimate in the browser's local timezone, even after more than 500
-      unrelated CI events arrive between heartbeats. A changed body, stale
-      timestamp, mismatched repository/stack/run, or replayed delivery ID must
-      not create a second event, and reporter failure must not cancel the merge.
-- [ ] In AI credential waterfall, add Anthropic, OpenAI, and a custom platform
-      from the dropdown's Add value field. Add two named OAuth tokens and confirm
-      neither value appears in GET/mutation responses, browser storage, page
-      text, logs, or copied metadata. Reorder them, reload, toggle one off,
-      rotate it, and delete it; ordering and enabled state remain stable.
-- [ ] Send a fresh exact-body HMAC request to
-      `/api/v1/integrations/ci/credentials` from each allowed protected/listener
-      workflow ref. Confirm the response is `no-store`, contains enabled tokens
-      in admin order, and the same nonce, a stale timestamp, another repository,
-      another workflow filename/ref, a changed body, or bad signature is
-      rejected without disclosing a credential.
-- [ ] With an empty vault and the legacy preferred/primary OAuth repository
-      secrets present, run one protected Lopu job and confirm they import once
-      with the intended names/order. Run again to prove no duplicates, then
-      remove the account-specific GitHub secrets and prove a Claude-backed job
-      fetches from Thingtime using only `THINGTIME_CI_ROUTER_SECRET`.
-- [ ] Force classified capacity failures through at least three enabled vault
-      rows and verify Lopu tries them strictly top-to-bottom. A non-retryable
-      model/tool failure must stop immediately. Max-turn continuation and
-      Graphify reuse the exact selected mode-0600 token without restarting the
-      waterfall or printing any value.
-- [ ] Fetch `/.well-known/thingtime-capabilities.json` from localhost and the
-      preview origin. Confirm its `origin` matches exactly, every generated API
-      and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
-      `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
-      are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `2.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
-      breaking-major manifest before dispatch. CI dispatch 2.1 adds
-      compatible-pair omission during automatic Feature Stack routing.
-- [ ] Start a saved Feature Stack, then use its Pause control while the linked
-      GitHub Actions run is queued or active. Confirm only that exact run is
-      cancelled, the saved definition and historical GitHub link remain, the
-      stack reads paused after late webhook/progress receipts, and ordinary
-      Save & merge refuses until Restart is used. Repeat with Stop, then use
-      Restart and confirm a new immutable run id and GitHub run are appended
-      without replacing prior history. At desktop and 375px mobile widths,
-      all three controls remain visible, labelled, non-overlapping, and show a
-      clear confirmation before Stop or active-run Restart.
-- [ ] Select one trusted open PR and independently enable Develop and
-      Production/Main previews, including both at once. Develop must use only
-      the configured Custom Environment; Production must require the explicit
-      warning acknowledgement, and use Production values server-side. Confirm
-      one GitHub Actions-owned marker comment appears before either deployment starts,
-      with a row for each enabled environment, its expected persistent URL, and
-      a clearly labelled estimated ready time. Confirm the same comment updates
-      each row with the immutable `*.vercel.app` snapshot and its distinct
-      PR-scoped persistent URL. A READY receipt must move only that environment's
-      alias to the verified current SHA; synchronize must update both rows
-      without adding another marker comment. Disable one environment and close
-      the PR to prove only owned aliases/deployments are removed, while `thingtime.com` and
-      `dev.thingtime.com` never move. Neither response, browser state, log,
-      comment, nor status event may contain a credential value.
-- [ ] Inspect both selected-environment build jobs and confirm they check out
-      the exact controller-authorized SHA, receive no GitHub Environment or
-      Vercel token, and upload only a symlink-preserving prebuilt archive. The
-      protected publisher must validate each archive, use `--prebuilt` plus
-      `--skip-domain`, and reject a deployment whose actual Custom Environment
-      or production target does not match its selected row.
-- [ ] Push a new commit to that PR and verify the signed `synchronize` delivery
-      rebuilds each enabled environment at exactly the new live head SHA.
-      Drafts, forks, moved heads, another repository, and closed PRs fail
-      closed. Disable each environment and close the PR; cleanup must delete
-      only deployments carrying the exact Thingtime PR/environment markers,
-      while stable develop and production deployments remain untouched.
-- [ ] Save each supported automation with GitHub Actions, then Vercel Sandbox,
-      and verify the cached dashboard updates optimistically and rolls back with
-      authored copy on failure. Web CI and Electron release visibly remain
-      GitHub-only rather than accepting an unsupported provider. The section
-      presents Feature Stack, conflict repair, rebases, promotions, and sync as
-      operation lanes of the one Lopu PR manager; Web CI and Electron remain a
-      separate supporting-build group, never competing repository managers.
-- [ ] Remove each Vercel-provider prerequisite in turn (GitHub App id,
-      installation id, private key, router secret, and Vercel runtime identity).
-      The Admin badge says setup is needed, names the missing server setting,
-      disables the Vercel option, and a direct policy POST returns the authored
-      409 without changing the prior policy. Vercel is shown ready only when all
-      prerequisites are present.
-- [ ] Send a fresh, correctly HMAC-signed provider request and verify a GitHub
-      policy returns `execute: true`; a Vercel policy creates exactly one
-      idempotent dispatch for duplicate delivery keys. Reject stale timestamps,
-      changed bodies, unknown workflows/inputs, and bad signatures without
-      starting a Workflow or writing a claim.
-- [ ] With Vercel selected, confirm the native GitHub trigger performs only its
-      provider-router job, a durable Vercel Workflow creates one uniquely
-      labelled ephemeral Sandbox runner, and the exact protected workflow
-      re-enters on that runner. Confirm completion/failure is projected and the
-      Sandbox plus GitHub runner registration are deleted afterward.
-- [ ] On Vercel's universal image, bootstrap must run GitHub's version-matched
-      `bin/installdependencies.sh` non-interactively and provide `/dev/fd` from
-      `/proc/self/fd` before registration. Make each command fail in turn and
-      verify the provisional exact runner/Sandbox is still cleaned even though
-      `createRunner()` never returns its handle to the outer Workflow.
-- [ ] Remove or invalidate each router dependency in turn (router secret, App,
-      Workflow/Sandbox auth) and verify automatic triggers fail over to
-      GitHub-hosted compute with a visible event instead of silently stopping.
-- [ ] Before the first Reconcile, the configured-but-empty dashboard explains
-      that no provider events have been imported. Run Reconcile once and verify
-      existing branches, open PRs, runs, deployments, and previews populate;
-      subsequent GitHub/Vercel deliveries advance the same records and history.
-- [ ] Desktop: search and use the Vercel-style multi-select PR status filter,
-      including All statuses, Clean, Conflicting, Draft, Merged, Closed, Unknown,
-      and every mixed combination; confirm each choice matches the status badge exactly,
-      then select a PR, open its GitHub and
-      preview links, inspect topology, Actions runs, and the full status
-      timeline. Scroll the page top-to-bottom and the sticky detail panel to its
-      bottom without clipping, overlap, or horizontal page overflow.
-- [ ] Select and remove at least 30 Feature Stack PRs while the selectable PR
-      table is in view. The ordered stack and selectable PR table remain separate
-      scroll regions, the composer height stays fixed, and the row under the
-      pointer does not jump vertically after any selection.
-- [ ] Run a saved Feature Stack and keep it selected. Its live merge stream
-      refreshes dispatch, workflow/job, skipped-target, and target-PR updates
-      without a page reload; progress never decreases; links open the matching
-      GitHub run or PR; and the clearly labelled estimated finish uses the
-      browser's local timezone. Terminal success and failure stop live polling.
-- [ ] Complete the public Feature Stack controller while deliberately skipping
-      its target worker. The timeline remains strictly chronological, the card
-      changes from Live to Needs attention without inventing another ETA, and
-      current plus bounded historical rows link only to their exact GitHub runs.
-- [ ] Collapse and expand the Lopu automation, AI credential waterfall, and
-      Feature Stack cards from their headings. Reload and navigate away/back;
-      the per-admin collapsed state persists, the closed cards consume only
-      their heading height, all heading toggles expose `aria-expanded`, and a
-      selected actively running Feature Stack can remain collapsed until the
-      admin deliberately opens it again.
-- [ ] Open `/admin`, then every bookmarkable tab route (`/admin/users`,
-      `/admin/apps`, `/admin/moderation`, `/admin/tiers`, `/admin/ci-control`,
-      `/admin/external-integrations`, `/admin/system`). Reload and use Back and
-      Forward; the selected tab and content must match the URL without a page
-      jump, and an unknown section must fail closed to Users.
-- [ ] Desktop and 375px mobile: add/remove Feature Stack rows and targets, save,
-      load, edit, archive, toggle auto-decide, and inspect target progress;
-      verify long branch/feature names truncate without hiding
-      their remove controls, the ordered list remains readable, every control
-      is keyboard-focusable, and the full page has no horizontal overflow.
-- [ ] Desktop and 375px mobile: exercise every credential row control, the
-      add/rotate password fields, long labels, eight-row maximum, delete
-      confirmation, and error alerts. Scroll top-to-bottom; no credential
-      control clips, overlaps, or creates horizontal page overflow.
-- [ ] Admin → System: edit an existing non-default model row in place, change
-      model, effort, and speed, cancel once, apply once, reject a duplicate,
-      save, reload, and confirm its priority is preserved without delete/re-add.
-- [ ] Mobile (375px): search/filter rows, open the bottom detail drawer, scroll
-      every section, open the dispatch modal and confirmation state, then close
-      both. The drawer is flush left/right/bottom, has no clipped controls, and
-      the page never scrolls horizontally.
-- [ ] Run `node scripts/workflow-caller-contract.mjs` manually or inspect its
-      protected advisory comment: every product-branch workflow has exactly
-      one reusable call pinned to `@github-actions`, no runner/steps/shell
-      behavior, and no product-branch Actions scripts. A mismatch warns but
-      does not join the required unit-test aggregate.
-
-PR #220 live acceptance recorded on 2026-08-10:
-
-- [x] A human exact-PR trigger handed off to Vercel, registered one unique
-      runner, re-entered as `thingtime-ci-control[bot]`, ran the protected
-      detector successfully, and deleted the exact runner and Sandbox.
-- [x] A setup failure after the original trigger exited dispatched the same
-      protected workflow back to GitHub-hosted compute through the App.
-- [x] First authenticated Reconcile populated the CI dashboard; GitHub App,
-      webhook, provider-router, and Vercel readiness were visible together.
-- [x] Desktop and 375 px mobile acceptance covered provider persistence,
-      dispatch confirmation/cancel, PR #220 detail panel/drawer, full-page
-      scrolling, and zero horizontal overflow.
-- [x] `node scripts/workflow-caller-contract.mjs`, focused CI-control tests,
-      targeted lint, build/output verification, and Graphify integrity checks
-      passed for the published branch.
-
-## App-owner storage manager (`/apps/manage`, `api/utils/apps/appStorageManagement.ts`)
-
-- [ ] Logged-out visitors get the sign-in card. An owner sees every registered
-      app; an administrator-linked co-manager sees the linked app; ordinary app
-      users and removed co-managers get the same 404-shaped denial as an unknown
-      app and cannot inspect aggregate usage or the user roster.
-- [ ] Selecting any current live card sends its stable tier id plus exact
-      `tierVersionId`, updates the whole-app allowance while preserving exact
-      usage, and rejects a downgrade below current usage atomically. The
-      bootstrapped Free → Plus → Pro → PAYG path yields 5/25/100 GiB/null. An
-      administrator-custom plan shows `custom` and disables self-service tier
-      buttons until the admin resets it; an archived current revision remains
-      visible but cannot be newly selected.
-- [ ] Default cap starts at 50 MiB, accepts 0 and finite MiB values no larger
-      than the current aggregate, and is re-checked atomically against a racing
-      plan change. Existing users without overrides immediately inherit it.
-- [ ] Select one user or many (up to all 200 shown) and apply a custom cap;
-      each protected `app-storage` ledger records its own override, `Use app
-default` unsets it, and runtime usage reports the effective cap. A custom
-      value above the aggregate is refused; a later aggregate downgrade clamps
-      enforcement even if a historical override was larger.
-- [ ] The roster includes users with current or past grants/ledgers, but a
-      username appears only while a live unexpired grant covers
-      `profile.username`. App-user IDs/usernames are never written to the
-      browser localStorage cache, and a failed manager re-authorization clears
-      the cached storage view.
-- [ ] Desktop and 375px mobile: switch apps; inspect banner/price/savings/rich
-      inclusions on tier cards; choose a plan; edit the default;
-      search, select-all, single-select, bulk apply/reset; horizontally scroll
-      the user table; and scroll the full page top-to-bottom. No page-level
-      horizontal overflow, clipping, sticky overlap, or console errors.
-
-## Rate limiting & index-ensure reliability (`api/utils/rateLimit/enforce.ts`, `api/utils/mongodb/collections.ts`)
-
-- [ ] Healthy path: burst a rate-limited endpoint past its limit (e.g.
-      `things.search`, 120/min → 121 requests) → 429 with `Retry-After`,
-      and NO `[rate-limit]`/`[mongodb]` error lines in the logs.
-- [ ] Public sign-up is throttled: burst POST /api/v1/auth/register past
-      `auth.register` (default 10 per 15 min per IP) → 429 with `Retry-After`;
-      earlier attempts in the window still work (validation 400s/409s count
-      against the window too). Blocked attempts return before the awaited
-      `ensureIndexes` bootstrap, so hammering register can't re-run the index
-      battery while the DB is broken.
-- [ ] Index-ensure failure is AUDIBLE, never silent: break the index battery
-      (drop `things_v2`'s `ownerId_1_crystal.appId_1_crystal.key_1` unique
-      index, insert two docs sharing `(ownerId, crystal.appId, crystal.key)`),
-      start a FRESH API process → the boot-time warmup run logs one
-      line beginning `[mongodb] ensureIndexes failed building things.<index>`
-      and saying the next bootstrap call will retry. The cold-start PR moved
-      the battery off the request path, so ordinary API traffic neither retries
-      it nor logs; only the awaited bootstrap callers (`registerUser`, admin
-      migrations) can trigger another attempt.
-- [ ] In-flight work is shared, but failures are retryable immediately: while
-      one ensureIndexes battery is running, concurrent bootstrap callers await
-      that same promise; after it fails, the next explicit bootstrap caller
-      starts one fresh attempt instead of inheriting a rejected promise for a
-      fixed cooldown.
-- [ ] Self-heals after cleanup: delete the duplicate docs, then hit an awaited
-      ensureIndexes caller (register a user / run an admin migration) or restart
-      the process → the unique index is rebuilt immediately (`getIndexes()`
-      shows it) and no stale cooldown blocks the recovered database.
-- [ ] Limiter outage is AUDIBLE, never silent: with the limiter's own DB ops
-      failing (e.g. Mongo down/unreachable), a limited endpoint logs
-      `[rate-limit] enforcement unavailable for <rule> — failing open` per
-      request; ordinary actions fail open (the route then surfaces its own DB
-      error), `failClosed` routes return the 429 unavailable shape. Regression
-      class: a bare `catch {}` fail-open invisibly disabled ALL rate limiting
-      (2026-07 perf audit).
-
-## Password hasher (`/crypto` Password Hasher panel, `api/utils/crypto/passwordHasher.server.ts`)
-
-- [ ] `/crypto` → Password Hasher: enter a username + password → the panel
-      shows a VERIFIED badge, `bcrypt cost 10`, the `$2b$10$…` hash, and a
-      mongosh snippet templated with that username. A supplied password is
-      NEVER echoed back in the response; only a generated one is.
-- [ ] "Generate a strong one" + a length (12–64) returns a password shown
-      exactly once ("save it now") whose hash verifies against it — check
-      independently with `bcrypt.compare` if in doubt.
-- [ ] The hash is self-verified server-side before return (`verified: true`);
-      a password under 6 chars still hashes but is flagged (register's
-      minimum), because an existing account may predate any policy.
-- [ ] END-TO-END (the point of the tool): register a throwaway user via the
-      real API, hash a NEW password, run the returned snippet VERBATIM in
-      mongosh, then log in — the new password works and the old one is
-      rejected. The snippet must report `things: matched 1, modified 1`.
-- [ ] Blob integrity: after the snippet runs, the user's `secure` BinData
-      blob still holds email / accountKind / emailVerified / meta, and
-      `secureVersion` incremented by 1 (matching the app's CAS write). A
-      plain `$set: { passwordHash }` on a things-era user writes a field
-      NOTHING reads — the snippet must unpack → edit → repack instead.
-- [ ] Snippet handles both stores and a miss: an unknown username reports
-      "No user named …" AND lists the usernames that do exist, instead of
-      silently modifying 0 docs.
-- [ ] Collection names in the snippet come from `physicalCollectionName()`
-      (currently `things_v2` / `users_v2`) — never hardcoded, so a version
-      bump can't hand out a snippet that edits a frozen generation.
-- [ ] Rate limited per IP (`crypto.hashPassword`, 20/min): bcrypt is the CPU
-      cost, so a burst past the limit 429s with the hashing message. The
-      intent stays ANONYMOUS on purpose — being locked out is the reason to
-      reach for it — and never reads or writes the database.
-
-## Social graph — follows + friends (`api/utils/users/social.ts`, `/api/v1/users/{follow,friend,relationships,connections}`)
-
-- [ ] Follow is ONE-WAY and instant: user B POSTs `/users/follow { username: A }`
-      → `{ following: true, followerCount }`; A's profile shows the count and B
-      sees "Following ✓" immediately (optimistic, reverts on failure). Repeat
-      with `follow: true` is idempotent; `follow: false` (or toggle) unfollows.
-- [ ] Friendship needs APPROVAL: B `intent: request` → `pending-outgoing`; A's
-      own profile shows the "Friend requests 🤝" inbox with Accept/Decline; A
-      accepts → both sides read `friendState: friends` and friend counts bump.
-      Requesting someone who already requested YOU accepts instead of duping
-      (one doc per pair — `crystal.friendKey`, unique index).
-- [ ] Self-actions rejected: following or friending yourself 400s.
-- [ ] `tt:userFriends` acl is REAL now: a friends-visibility post is readable
-      by an accepted friend (permalink AND feed AND the owner's profile as
-      seen by the friend), 404s for strangers/anonymous, and stops resolving
-      the moment either side unfriends.
-- [ ] Relationship reads are public: `/users/relationships?username=` returns
-      counts logged out (`viewer: null`); logged in it adds following /
-      followedBy / friendState, and `incomingRequests` on your own profile.
-      `/users/connections` lists followers/following/friends publicly;
-      `type=requests` is your-own-account-only (403 otherwise).
-- [ ] Forged edges impossible: `follow`/`friend`/`notification` are PROTECTED
-      kinds — generic `POST /api/v1/things` refuses them (a forged accepted
-      `friend` doc would fake acl visibility).
-
-## Notifications (`api/utils/notifications/notifications.ts`, `/api/v1/notifications*`, nav bell)
-
-- [ ] Emission: new follower, friend request, friend accepted, comment on your
-      post, reply to your comment, reaction (preview = the token), repost, and
-      capped fan-out (≤200 newest connections) of new posts to followers
-      (`post-from-followed`) and friends (`post-from-friend`). Own actions
-      never notify yourself; a failed emit never fails the triggering action.
-- [ ] Fan-out respects the post's audience: public posts notify followers +
-      friends, friends-only posts notify friends only, private posts fan out
-      to nobody.
-- [ ] The bell 🔔 (auth only) shows the unread badge (seeded from localCache —
-      no flash), reconciles on mount/focus/slow poll, opens a popover of the
-      latest 20 (unread rows tinted, actor avatar + type emoji, preview,
-      time-ago), zeroes the badge on open (mark-all-read), and click-through
-      goes to `/post/<id>` or the actor's profile. Works within a 375px
-      viewport with no overflow.
-- [ ] Settings → Notifications: one switch per type (defaults ON), optimistic
-      flip + revert on failure, per-user localCache seed, merge-patch POST
-      (unknown types 400). Disabling a type hides even ALREADY-WRITTEN
-      notifications of that type from the list and unread count (read-time
-      filtering), and single-recipient emits skip writing it entirely.
-- [ ] Mobile nav overlap regression: the centered commander pill must NOT
-      cover the bell / username (they sit above it via `.nav-right-section`
-      z-index, and the pill reserves 148px on the right). Regression class:
-      nav-right controls rendered under the absolutely-positioned commander
-      host and were untappable on mobile (2026-08).
-
-## Post views (`api/utils/things/views.ts`, `/api/v1/things/views`, `useViewTracking`)
-
-- [ ] Public stats on every post payload: `viewCount` (unique viewer
-      identities) + `viewStats { impressions, avgDwellMs }`; the card's action
-      row shows 👁 + compact count with the full stats in the tooltip, for
-      everyone (logged out included).
-- [ ] Counting is honest: a card must be ≥50% visible for ≥1s to count; one
-      event per post per pageview; batches flush every 10s and on page hide
-      via sendBeacon. Dwell (time on screen), max visible ratio, and viewport
-      position (0..1) ride along.
-- [ ] Manipulation resistance (all server-side, client untrusted): one
-      postViews doc per (postId, viewerKey) — replays bump impressions only,
-      never uniques; owner self-views dropped entirely; anonymous identities
-      dedup on salted sha256(ip|UA) with NO raw IP at rest; UA-less requests
-      dropped; dwell clamped (≤120s/event); batch ≤50; unknown or
-      not-viewable posts dropped (a view write only lands where a read would
-      succeed); rate limited `things.views` per user-or-IP; headless
-      (`navigator.webdriver`) browsers skip client-side too.
-- [ ] Views are tracked on every post surface: feed, profiles (both wired via
-      PostList) and the `/post/:id` permalink page.
+- [ ] `/things` seeds instantly from `tt-things-<userId>` localStorage cache
+      (no skeleton flash when prior state exists) and background-refetches;
+      logged-out visitors get the sign-in hero, never a spinner.
+- [ ] Folder CRUD: New → New folder creates a `["folder"]` thing (private by
+      default) inside the CURRENT folder; rename edits `crystal.name`; folders
+      never combine with other schemas (`["post","folder"]` 400s).
+- [ ] Containment is a `folderId` pointer on the child: move = PATCH
+      `{ id, folderId }` (null = root); a folder can never move into itself or
+      its own subtree (400, cycle-safe ancestor walk); reactions/saves refuse
+      folderId; deleting a folder RE-PARENTS its contents to the folder's
+      parent instead of deleting them.
+- [ ] `GET /api/v1/things?folder=root|<id>` lists only that folder level for
+      the owner; v1/pre-folder docs read as root; `folderId` is a searchable
+      root field on /search conditions.
+- [ ] Bulk ops (`POST /api/v1/things/bulk`, ≤100 ids): move/copy/delete/share
+      run the SAME single-item paths (updateThing/createThing/deleteThing)
+      with per-item ok/error results — one bad id never fails the batch, and
+      the toast reports "N done, M skipped" honestly. Copy refuses
+      comment/reaction/save/share things and mints fresh shareIds ("Copy of"
+      name hint on data things and folders).
+- [ ] Recursive folder copy: copying a FOLDER duplicates its whole subtree
+      through the same per-item create path (snapshot-first, so copying a
+      folder into itself terminates), skips uncopyable kinds with honest
+      copied/skipped counts, and refuses trees over 500 things BEFORE copying
+      anything (never a half-copied tree).
+- [ ] Bulk share (`op: 'share'` + acl/visibility): applies the audience per
+      item via updateThing; `recursive: true` flows a folder's audience to
+      everything inside (same 500 bound, refused past it), counting
+      inherit-locked things as skipped, never silently changing them. Missing
+      acl 400s the whole batch loudly.
+- [ ] Selection: click selects, Cmd/Ctrl toggles, Shift ranges, Cmd/Ctrl+A
+      selects all loaded, Escape clears; the contextual toolbar replaces the
+      view pills while anything is selected. Mobile: tap OPENS, checkboxes
+      select.
+- [ ] Clipboard: Copy/Cut (toolbar or Cmd/Ctrl+C/X) then Paste into any folder
+      (Cmd/Ctrl+V or the Paste pill); cut items dim until pasted; cut+paste
+      moves, copy+paste duplicates.
+- [ ] Delete always confirms first (permanent — cascade note; folder
+      re-parenting note when folders are selected); optimistic removal
+      reconciles by refetch.
+- [ ] Views: grid / list (name-kind-audience-tags-updated columns) / Miller
+      columns (click folder opens next column, path highlighted). The
+      Names/Previews toggle applies to ALL views: previews live-render each
+      thing through the kind registry (crystal.render templates win, then
+      crystal.thing, then the crystal itself) inside bounded, pointer-inert
+      boxes, falling back to icon+name per item; folders always show as icons.
+- [ ] Preview modal deep link `/things?preview=<id>` opens any viewable thing
+      (ThingView tree + Move/Share/Delete actions) and is what Copy link hands
+      out for non-post things (posts link `/post/:id`).
+- [ ] Share dialog: audience select initialises from the thing's acl; person
+      grants add `tt:user/<username>` entries via people search;
+      inherit-locked (attached) things are warned about and skipped, not
+      silently changed. Selecting folders reveals the "Also apply to
+      everything inside" checkbox (off by default) — applying with it on
+      updates deep descendants' acls and toasts the applied/skipped counts.
+- [ ] Right-click context menus (the design-system Thing Context Menu):
+      right-clicking a thing selects it (Finder semantics) and opens
+      Open/Copy link · Rename/Move/Share · Copy/Cut/Paste-into-folder ·
+      Delete, acting on the whole selection when the target is part of one
+      ("Copy 4 things"); right-clicking empty canvas opens New folder / Paste
+      / Sort by / Group by / View / Select all with radio-checked current
+      states. Text selections and editable fields keep the BROWSER menu; any
+      outside press closes the surface; page keyboard shortcuts pause while a
+      menu is open.
+- [ ] Sort (Newest/Oldest/Name A–Z/Z–A/Kind) and Group by (None/Kind) apply
+      across grid+list (columns stays hierarchical), folders always first,
+      persisted in the tt-things cache; a non-default arrangement eagerly
+      loads the folder's remaining pages (bounded at 1000) so ordering is
+      honest, and group sections show "📁 Folders · N"-style counts with
+      correct plurals ("Data", not "Datas").
+- [ ] Drag-and-drop: dragging a selected thing drags the whole selection
+      (desktop only); folder tiles/rows, tree nodes, and every breadcrumb
+      (including "All things" = root) highlight with the accent inset ring on
+      dragover, clear on dragleave, and drop = the same bulk move path as
+      Move to… (server still cycle-checks); a folder can't be dropped onto
+      itself.
+- [ ] Schema render-template previews: in Previews mode, data things stamped
+      with crystal.schemaId render through that schema's crystal.render tree
+      with `{field}` tokens interpolated from the data thing's crystal —
+      always through the sanitising Chakra/Html allowlist renderers
+      (interpolation runs BEFORE the gates, so injected values can't bypass
+      URL/CSS screening); schemas are fetched once each and cached (null
+      cached for schemas without templates); everything else keeps the
+      existing kind-registry preview with per-item icon+name fallback.
+- [ ] Deep search (top input) queries /api/v1/things/search scoped to the
+      viewer's username across ALL folders, debounced, with kind-filter
+      composition; browse mode filters kinds client-side over loaded pages.
+- [ ] Columns-view folder loading happens in an effect, never during render
+      (React "setState while rendering" stays fixed).
