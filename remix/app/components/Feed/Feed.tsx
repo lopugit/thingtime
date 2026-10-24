@@ -1,6 +1,6 @@
 import { LOCAL_WORKSPACE_CHANGED, workspaceIdentityKey } from '~/local-workspace/runtime.client';
 import React from 'react';
-import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
 import { useSearchParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
@@ -241,6 +241,23 @@ export const FeedPage = () => {
     );
   }, [setSearchParams]);
 
+  // public tag feeds (claude-todo/10 ✨): /feed?tag=<tag> narrows the feed to
+  // one tag — shareable, guest-visible topic hubs. Tag chips on PostCards link
+  // here; the banner clears back to the full feed.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tagParam = (searchParams.get('tag') || '').trim().toLowerCase() || null;
+
+  const clearTagParam = React.useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('tag');
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
+
   const load = React.useCallback(
     async (options: { reset?: boolean; cursor?: string | null } = {}) => {
       const { reset, cursor } = options;
@@ -326,7 +343,7 @@ export const FeedPage = () => {
         }
       }
     },
-    [filters, algorithmId, scope, appliedAdvanced, tagParam, tagApplied, localTag, near, deviceOnly]
+    [filters, algorithmId, appliedAdvanced, tagParam]
   );
 
   // the scope chip: flips instantly (the pager reloads through `load`'s deps)
@@ -498,32 +515,36 @@ export const FeedPage = () => {
           </Box>
         </Flex>
 
-        {sharedPreview && (
-          <Box p="1.5px" borderRadius="var(--tt-radius-md, 12px)" background={RAINBOW} backgroundSize="calc(100px + 200%)" sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}>
-            <Flex
-              alignItems="center"
-              columnGap={3}
-              rowGap={2}
-              flexWrap="wrap"
-              padding={3}
-              borderRadius="calc(var(--tt-radius-md, 12px) - 1.5px)"
-              background="var(--tt-card, #fff)"
-            >
-              <Text fontSize="sm" color="var(--tt-text, #5a5a66)">
-                {sharedPreview.ownerUsername ? `@${sharedPreview.ownerUsername} shared their` : 'Someone shared their'} feed
-                brain <strong>&ldquo;{sharedPreview.name}&rdquo; {sharedPreview.emoji}</strong>
-                {sharedPreview.eventCount > 0 ? ` — trained on ${sharedPreview.eventCount.toLocaleString()} scrolls` : ' — still an egg 🥚'}
+        {tagParam && (
+          <Flex
+            alignItems="center"
+            columnGap={2}
+            padding="8px 12px"
+            borderRadius="var(--tt-radius-md, 12px)"
+            border="1px solid var(--tt-border, #ececef)"
+            background="var(--tt-card, #fff)"
+          >
+            <Text fontSize="sm" color="var(--tt-text, #5a5a66)">
+              Posts tagged{' '}
+              <Text as="span" fontFamily="mono" fontWeight={700} color="var(--tt-ink, #16161a)">
+                #{tagParam}
               </Text>
-              <Flex marginLeft="auto" columnGap={2}>
-                <Button size="sm" isLoading={branchingShared} onClick={handleBranchShared}>
-                  Branch a copy 🌿
-                </Button>
-                <Button size="sm" variant="ghost" color="var(--tt-muted, #9a9aa6)" onClick={clearSharedParam}>
-                  Dismiss
-                </Button>
-              </Flex>
-            </Flex>
-          </Box>
+            </Text>
+            <Box
+              as="button"
+              type="button"
+              marginLeft="auto"
+              onClick={clearTagParam}
+              fontSize="13px"
+              fontWeight={600}
+              color="var(--tt-muted, #9a9aa6)"
+              cursor="pointer"
+              _hover={{ color: 'var(--tt-ink, #16161a)' }}
+              title="Back to the full feed"
+            >
+              Clear ✕
+            </Box>
+          </Flex>
         )}
 
         {/* controls */}

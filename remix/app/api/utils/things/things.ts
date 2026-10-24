@@ -2980,9 +2980,7 @@ export const getFeed = async (
   const viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const types = (query.types || []).filter((type) => POST_TYPES.includes(type));
-  // REQUESTABLE, not the default set — 'hidden' and 'custom' are chips the
-  // filter menu offers, and a dropped circle reads as "no filter" downstream
-  const circles = (query.circles || []).filter((circle) => REQUESTABLE_VISIBILITIES.includes(circle));
+  const circles = (query.circles || []).filter((circle) => VISIBILITIES.includes(circle));
   // same normalization sanitizeTags applies at write time — the stored tags
   // are already trimmed/lowercased/capped, so an un-normalized filter could
   // never match anything
@@ -3004,19 +3002,7 @@ export const getFeed = async (
     if (query.from) range.createdAt.$gte = query.from;
     if (query.to) range.createdAt.$lte = query.to;
   }
-  const match = withMatch(
-    await postMatch(),
-    visibility,
-    typeClause(types),
-    tag ? { tags: tag } : {},
-    range,
-    query.preset === 'political' ? { tags: { $in: ['politics', 'political'] } } : {},
-    query.preset === 'global' ? circleClause('public') : {},
-    query.preset === 'local' ? (query.near ? geoRadiusClause(query.near, query.radiusKm || 50) : { tags: (query.localTag || '').trim().toLowerCase().replace(/^#/, '').slice(0, MAX_TAG_CHARS) }) : {},
-    query.preset === 'rising' ? { createdAt: { $gte: new Date(Date.now() - 86400000) } } : {},
-    scopedSubspaceIds ? { 'crystal.subspaceId': { $in: scopedSubspaceIds } } : {},
-    ...subspaceFeedClauses(viewer)
-  );
+  const match = withMatch(postMatch(), visibility, typeClause(types), tag ? { tags: tag } : {}, range);
 
   const things = await getThingsCollection();
   const weights = query.weights || null;
