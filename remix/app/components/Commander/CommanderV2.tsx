@@ -27,7 +27,7 @@ import { hasOpenOverlay } from '~/hooks/useFeedShortcuts';
 export const CommanderV2 = (props) => {
 	const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();
 
-	const { changePath } = usePath();
+	const { mode, changePath } = usePath();
 
 	const navigate = useNavigate();
 	const lopu = useLopu();
