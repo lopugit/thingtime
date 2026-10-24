@@ -179,34 +179,41 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
 
 8. **✅ FIXED — 🔒 SECURITY: brute-force + abuse rate limiting on auth endpoints.**
 
-   Login and resend-verification use the shared, admin-tunable IP limiter and
-   size-capped body reader. PR #167 added the canonical `auth.register` rule at
-   10 attempts per 15 minutes per IP; PR #99 leaves that rule unchanged and adds
-   the remaining 16 KiB streaming registration body cap. Public registration
-   continues to whitelist accepted fields rather than forwarding caller `meta`.
-   Full rationale and the earlier §A closure: `claude-todo/09-security-hardening.md`.
+9. **✅ FIXED — 🐛 DATA CORRUPTION: the persist reviver turns ordinary strings into Dates.**
 
-9. **✅ FIXED IN PR #99 — 🐛 persisted strings no longer corrupt into Dates.**
+   Fixed on `claude/todo9-date-reviver-strict`: the reviver now revives only
+   exact `toISOString()` output (flatted's `Date.toJSON` is the actual persist
+   format — the replacer never sees a `Date`), so everyday strings survive
+   persist/reload untouched while real Dates and legacy saves still round-trip.
 
-   The active persistence serializer tags real Dates and never infers a Date
-   from an untagged string. Ambiguous legacy ISO values remain text rather than
-   risking user-data corruption; known date fields can migrate schema-aware.
-   This keeps Dates and identical-looking user text distinct across new repeated
-   save/reload cycles. Malformed tag-looking user objects are preserved,
-   functions are dropped, and the real flatted codec is covered by focused
-   regression tests.
+   Original report: `ThingtimeProvider` (`remix/app/Providers/ThingtimeProvider.tsx` L30–34, used
+   at L89 / L379–382) revives **any** string that passes V8's lenient
+   `Date.parse` into a `Date` when rehydrating from localforage. Everyday values
+   like `"Post 1"`, `"1"`, `"2024"`, `"March 2024"`, `"5 April"` become `Date`
+   objects on reload; the replacer (L71–75) then rewrites them as ISO strings —
+   **permanently corrupting user data after one save/reload cycle**, and Dates can
+   reach React render paths. Fix: only revive a strict ISO-8601 pattern, or tag
+   Dates in the replacer (mirror the existing `ttype:'function'` scheme:
+   `{ttype:'date', iso}`) and revive only tagged values.
 
-10. **✅ FIXED IN PR #99 — 🔒 persisted-state code execution removed; strict CSP added.**
+10. **✅ FIXED (CSP keeps `unsafe-eval` for now) — 🔒 SECURITY: persisted-state `eval` = arbitrary code execution on load; add a CSP.**
 
-    Persisted functions are no longer serialized, legacy `ttype:'function'`
-    payloads are dropped without execution, and the application policy omits
-    both inline script execution and `unsafe-eval`. Pre-paint boot code now comes
-    from same-origin `/tt-boot.js`; only repository-controlled design bundles get
-    a path-scoped runtime-compiler exception inside an opaque-origin sandbox.
-    Commander assignments now parse data literals without `eval`. Unused
-    smarts dynamic-code modes remain blocked by CSP; any future executable
-    command design must use an explicit safe registry or isolated sandbox rather
-    than weakening the whole application policy.
+    Fixed on `claude/todo10-eval-csp-s3`: persisted `{ttype:'function'}` values
+    are never eval'd (inert warn stubs) and functions no longer persist at all.
+    A build-injected CSP meta tag ships with `script-src 'self'` + sha256 hashes
+    for the shell's two inline scripts (no `unsafe-inline` for scripts), blocking
+    injected inline/remote scripts. `'unsafe-eval'` remains because smarts and
+    the Commander evaluate user-typed JS by design — dropping it is a separate
+    migration. No `frame-ancestors` on purpose (embedding is a feature).
+
+    Original report: Same provider revives `{ttype:'function'}` values by `eval(value.code)`
+    (L39) plus a scoped `eval` (L53); the replacer serialises every function this
+    way (L71–87) and the whole tree persists to IndexedDB every change (L435–438),
+    revived on every load. With no CSP anywhere in the repo (`unsafe-eval`
+    effectively allowed), anything that can write same-origin storage (an XSS, an
+    extension, another tab) plants a payload that runs on every subsequent load.
+    Stop `eval`-based function revival (drop function persistence or use a
+    sandboxed/signed representation) **and** add a CSP without `unsafe-eval`.
     Full spec: `claude-todo/09-security-hardening.md`.
 
 11. **✅ FIXED: Feed shows duplicate posts in ranked mode.**

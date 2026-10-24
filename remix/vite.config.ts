@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { extname, isAbsolute, join, normalize, relative } from 'node:path';
@@ -149,82 +150,43 @@ const designDocsStaticPlugin = () => ({
   }
 });
 
-const embedBundleDevPlugin = () => ({
-  name: 'thingtime-embed-bundle-dev',
-  configureServer(server) {
-    server.middlewares.use((req, res, next) => {
-      if (req.url?.split('?')[0] !== '/embed/thingtime.min.js' || !existsSync(embedBundlePath)) {
-        next();
-        return;
-      }
+// Build-only CSP, delivered as a meta tag so it applies wherever the static
+// shell is hosted (Vercel serves index.html directly, bypassing Nitro headers).
+// script-src carries sha256 hashes for the shell's own inline scripts instead
+// of 'unsafe-inline', so injected inline/remote scripts are blocked.
+// 'unsafe-eval' stays for now: smarts + the Commander evaluate user-typed JS by
+// design — dropping it is blocked on migrating them off eval (TODO 10 notes).
+// No frame-ancestors on purpose: embedding Thingtime is a feature (embed SDK,
+// default-open SSO origins). Dev is untouched (apply: 'build').
+const cspMetaPlugin = () => ({
+  name: 'thingtime-csp-meta',
+  apply: 'build' as const,
+  transformIndexHtml: {
+    order: 'post' as const,
+    handler(html: string) {
+      const inlineScriptHashes = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(
+        ([, body]) => `'sha256-${createHash('sha256').update(body).digest('base64')}'`
+      );
+      const csp = [
+        "default-src 'self'",
+        ["script-src 'self' 'unsafe-eval'", ...inlineScriptHashes].join(' '),
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' data: https://fonts.gstatic.com",
+        "img-src 'self' data: blob: https:",
+        "media-src 'self' data: blob: https:",
+        "connect-src 'self' https: wss:",
+        "worker-src 'self' blob:",
+        "frame-src 'self' https:",
+        "object-src 'none'",
+        "base-uri 'self'"
+      ].join('; ');
 
-      const stats = statSync(embedBundlePath);
-      res.statusCode = 200;
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cache-Control', 'no-store');
-      res.setHeader('Content-Length', String(stats.size));
-      res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
-      createReadStream(embedBundlePath).pipe(res);
-    });
+      return html.replace(
+        '<meta charset="utf-8" />',
+        `<meta charset="utf-8" />\n    <meta http-equiv="Content-Security-Policy" content="${csp}" />`
+      );
+    }
   }
-});
-
-// Proxy to the local Nitro while preserving the browser-facing host/proto (an
-// upstream proxy's x-forwarded-* wins), so origin-derived output stays correct.
-const forwardHostProxy = (target: string) => ({
-  target,
-  changeOrigin: true,
-  configure(proxy: any) {
-    proxy.on('proxyReq', (proxyReq: any, req: any) => {
-      const host = req.headers.host;
-      if (!host || proxyReq.getHeader('x-forwarded-host')) return;
-      proxyReq.setHeader('x-forwarded-host', host);
-      const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0]?.trim();
-      proxyReq.setHeader('x-forwarded-proto', proto || 'http');
-    });
-  }
-});
-
-const configureIsolatedRuntimes = (server: { middlewares: ViteDevServer['middlewares'] }) => {
-    server.middlewares.use((req,res,next) => {
-      const path = req.url?.split('?')[0];
-      if (path === '/draft-preview/index.html' || path === '/draft-preview/' ) {
-        res.setHeader('Content-Security-Policy', draftPreviewCsp);
-        res.setHeader('Cache-Control', 'no-store');
-        res.setHeader('Content-Type', 'text/html');
-        createReadStream(fileURLToPath(new URL('./public/draft-preview/index.html', import.meta.url))).pipe(res); return;
-      }
-      if (path === '/draft-preview/runner.js') {
-        const file = fileURLToPath(new URL('./dist/draft-preview/runner.js', import.meta.url));
-        if (!existsSync(file)) { res.statusCode = 503; res.end('Run npm run build:draft'); return; }
-        res.setHeader('Content-Type', 'text/javascript'); res.setHeader('Cache-Control', 'no-store');
-        createReadStream(file).pipe(res); return;
-      }
-      if (path === '/app/webPlatform/mediaWorker.ts' || /^\/assets\/mediaWorker-[A-Za-z0-9_-]+\.js$/.test(path)) {
-        res.setHeader('Content-Security-Policy', mediaWorkerCsp);
-        res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
-      }
-      if (path === '/platform/runtime.html' || path === '/platform/runtime.js') {
-        const file = fileURLToPath(new URL(`./dist${path}`, import.meta.url));
-        if (!existsSync(file)) { res.statusCode=503;res.end('Run npm run build:platform');return; }
-        res.setHeader('Content-Type',path.endsWith('.html')?'text/html':'text/javascript');
-        res.setHeader('Content-Security-Policy',platformRuntimeCsp);
-        res.setHeader('Cache-Control','no-store');
-        createReadStream(file).pipe(res);return;
-      }
-      if (path !== '/library/sandbox.html' && path !== '/library/sdk.html' && path !== '/library/runner.js') return next();
-      const file = fileURLToPath(new URL(path.endsWith('.html') ? `./public${path}` : './dist/library/runner.js', import.meta.url));
-      if (!existsSync(file)) { res.statusCode=503;res.end('Run npm run build:library');return; }
-      res.setHeader('Content-Type',path.endsWith('.html')?'text/html':'text/javascript');
-      res.setHeader('Content-Security-Policy',path === '/library/sdk.html' ? librarySdkCsp : librarySandboxCsp);
-      res.setHeader('Cache-Control','no-store');
-      createReadStream(file).pipe(res);
-    });
-};
-const librarySandboxPlugin = (): Plugin => ({
-  name: 'library-isolated-preview',
-  configureServer: configureIsolatedRuntimes,
-  configurePreviewServer: configureIsolatedRuntimes
 });
 
 export default defineConfig({
@@ -288,5 +250,5 @@ export default defineConfig({
       '/api': forwardHostProxy(localApiTarget)
     }
   },
-  plugins: [platformRuntimePlugin(),librarySandboxPlugin(),previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
+  plugins: [react(), designDocsStaticPlugin(), cspMetaPlugin()]
 });
