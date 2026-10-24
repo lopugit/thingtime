@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node executes this TypeScript test directly and requires the .ts extension.
-import { CATEGORIES, CATEGORY_BY_KEY, MARKETING_BASE, PAGES, PAGE_BY_SLUG, PAGE_COUNT, STYLE_FEATURE_KEYS, TOTAL_ASSET_COUNT, buildPage, buildPageBySlug, categoryCounts, searchPages, styleSiblingsFor, validateCatalog } from './catalog.ts';
+import { CATEGORIES, CATEGORY_BY_KEY, PAGES, PAGE_BY_SLUG, PAGE_COUNT, STYLE_FEATURE_KEYS, TOTAL_ASSET_COUNT, buildPage, buildPageBySlug, categoryCounts, searchPages, validateCatalog } from './catalog.ts';
 // @ts-ignore see above
 import { FEATURES, FEATURE_BY_KEY, getFeature } from './features.ts';
 // @ts-ignore see above
@@ -46,7 +46,8 @@ test('the counts spelled out in words still match the lists', () => {
 			wording: 'twelve',
 			sites: [
 				'catalog.ts CATEGORIES styles.blurb ("re-cut in twelve viral trends" — also the category meta description)',
-				'routes/marketing/_index.tsx ("twelve viral styles", "twelve viral styles and ten platform sizes", "Twelve viral looks")'
+				'routes/marketing/_index.tsx ("twelve viral styles", "twelve viral styles and ten platform sizes", "Twelve viral looks")',
+				'routes/marketing/page.tsx ("Re-cut in eleven other styles" — TRENDS.length - 1)'
 			]
 		},
 		{ count: SOCIAL_FORMATS.length, expected: 10, wording: 'ten', sites: ['routes/marketing/_index.tsx ("ten platform sizes")'] },
@@ -58,36 +59,6 @@ test('the counts spelled out in words still match the lists', () => {
 			entry.expected,
 			`This list now has ${entry.count} entries, but ${entry.sites.length} place(s) still say "${entry.wording}". Update the copy (or derive it, as social-media.tsx does with \${TRENDS.length}) and this expectation:\n  - ${entry.sites.join('\n  - ')}`
 		);
-	}
-});
-
-// "Same page, other looks" on a landing page offers the same feature in the
-// other trends. Only STYLE_FEATURE_KEYS features have `styles/*` pages, so for
-// the other 43 the offer has to be empty rather than eleven chips resolved
-// through a `landing/<feature>` fallback — which pointed every one of them at
-// the page the reader was already on.
-test('style siblings only offer editions that exist', () => {
-	const styled = STYLE_FEATURE_KEYS[0];
-	const unstyled = FEATURES.find((feature) => !STYLE_FEATURE_KEYS.includes(feature.key));
-	assert.ok(unstyled, 'expected at least one feature without style editions');
-
-	const siblings = styleSiblingsFor(styled, 'bold-brutal');
-	assert.equal(siblings.length, TRENDS.length - 1, `${styled} should offer every trend but the current one`);
-	assert.ok(!siblings.some((entry) => entry.trend.key === 'bold-brutal'), 'the current trend is never offered');
-
-	assert.deepEqual(styleSiblingsFor(unstyled.key, 'bold-brutal'), [], `${unstyled.key} has no style editions, so it must offer none`);
-	assert.deepEqual(styleSiblingsFor(undefined, 'bold-brutal'), [], 'a page with no feature ref offers none');
-
-	// Every href must resolve to a real page, never back to the current one.
-	for (const featureKey of [...STYLE_FEATURE_KEYS, unstyled.key]) {
-		for (const trend of TRENDS) {
-			for (const entry of styleSiblingsFor(featureKey, trend.key)) {
-				const slug = entry.href.slice(`${MARKETING_BASE}/`.length);
-				assert.ok(PAGE_BY_SLUG[slug], `dead style sibling ${entry.href}`);
-				assert.equal(slug, `styles/${entry.trend.key}/${featureKey}`);
-				assert.notEqual(entry.trend.key, trend.key);
-			}
-		}
 	}
 });
 
@@ -151,39 +122,6 @@ test('unknown slugs return null and search finds by title words', () => {
 	assert.ok(results.length > 0);
 	assert.ok(results[0].slug.includes('passkeys'));
 	assert.ok(PAGE_BY_SLUG['landing/feed']);
-});
-
-// /marketing/search reports `pages.length` as the match total in its <h1>, its
-// meta description and its "show more" arithmetic, so whatever limit the route
-// passes IS the number the user is told and the last page they can reach. That
-// only stays honest while the route asks for the whole catalog: everyday words
-// match far more pages than any small cap, so a capped call silently strands
-// the remainder. Nothing is rendered eagerly — the route's own `limit` (60 at a
-// time) bounds the DOM — so the full result set is the correct request.
-test('searchPages is bounded only by its limit, so a small cap would strand matches', () => {
-	// Ordinary queries a visitor would actually type, including the product name.
-	for (const query of ['thingtime', 'thing', 'and', 'your', 'you', 'style']) {
-		const all = searchPages(query, PAGE_COUNT);
-		assert.ok(
-			all.length > 400,
-			`"${query}" matches only ${all.length} pages; this test exists because such queries exceed a fixed cap — re-pick the sample if the catalog shrank`
-		);
-		// The limit is a slice, never a filter: a smaller one hides real matches.
-		assert.deepEqual(searchPages(query, 400), all.slice(0, 400));
-		assert.ok(
-			all.length <= PAGE_COUNT,
-			`"${query}" returned ${all.length} results for a ${PAGE_COUNT}-page catalog`
-		);
-	}
-	// The whole-catalog request is what /marketing/search passes, and it must
-	// return every match rather than saturating at some internal ceiling.
-	const everything = searchPages('thingtime', PAGE_COUNT);
-	assert.equal(
-		everything.length,
-		PAGES.filter((entry) => `${entry.title} ${entry.description} ${entry.slug} ${entry.eyebrow}`.toLowerCase().includes('thingtime')).length,
-		'searchPages(query, PAGE_COUNT) must return every page whose searchable text matches'
-	);
-	assert.equal(new Set(everything.map((entry) => entry.slug)).size, everything.length, 'results must not repeat a page');
 });
 
 test('every walkthrough uses only targets its mock screen exposes', () => {

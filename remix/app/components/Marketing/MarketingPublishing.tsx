@@ -123,7 +123,7 @@ export const PublishStatePill = ({ published, compact = false }: { published: bo
 export const MarketingAdminBar = ({ surface }: { surface?: AdminSurface }) => {
 	const user = useCurrentUser();
 	const visibility = useMarketingVisibility();
-	const { publications } = useMarketingPublications();
+	const { publications, status } = useMarketingPublications();
 	const [preview, setPreview] = usePreviewAsVisitor();
 	const { setState, busy } = usePublishActions();
 
@@ -133,14 +133,6 @@ export const MarketingAdminBar = ({ surface }: { surface?: AdminSurface }) => {
 	const bulk = surface?.bulk;
 	const bulkPublished = bulk ? bulk.keys.filter((key) => visibility.isPublished(key)).length : 0;
 	const bulkRemaining = bulk ? bulk.keys.length - bulkPublished : 0;
-	// No known publish state: nothing fetched yet ('cold'), or the cold fetch
-	// FAILED with nothing cached to fall back on ('error' — the store only
-	// keeps that status while `publications` is still null; a stale cache
-	// leaves it 'cached'/'live'). Either way every key reads as unpublished,
-	// which the bulk switch below must not act on. Admins still see every
-	// surface — `visibility.everything` does not wait on the fetch — so this
-	// gates the CONTROLS, not the page.
-	const stateUnknown = !publications;
 
 	if (preview) {
 		return (
@@ -205,7 +197,7 @@ export const MarketingAdminBar = ({ surface }: { surface?: AdminSurface }) => {
 					{surface ? (
 						<AdminButton
 							primary={!published}
-							disabled={busy || stateUnknown}
+							disabled={busy || status === 'cold'}
 							onClick={() => void setState([surface.key], published ? null : 'published', surface.label)}
 							data-testid="marketing-publish-toggle"
 						>
@@ -213,14 +205,9 @@ export const MarketingAdminBar = ({ surface }: { surface?: AdminSurface }) => {
 						</AdminButton>
 					) : null}
 					{bulk && bulk.keys.length ? (
-						// Same unknown-state guard as the single-surface switch above, and
-						// it matters more here: with no known state every key reads as
-						// unpublished, so this renders "Publish all N" over the WHOLE set
-						// and one click would publish the pages an admin deliberately left
-						// unpublished. Wait the one round trip for a known state.
 						bulkRemaining > 0 ? (
 							<AdminButton
-								disabled={busy || stateUnknown}
+								disabled={busy}
 								onClick={() => void setState(bulk.keys.filter((key) => !visibility.isPublished(key)), 'published', `${bulkRemaining} ${bulk.noun}`)}
 								data-testid="marketing-publish-all"
 								title={`${bulkPublished} of ${bulk.keys.length} ${bulk.noun} published`}
@@ -229,7 +216,7 @@ export const MarketingAdminBar = ({ surface }: { surface?: AdminSurface }) => {
 							</AdminButton>
 						) : (
 							<AdminButton
-								disabled={busy || stateUnknown}
+								disabled={busy}
 								onClick={() => void setState(bulk.keys, null, `${bulk.keys.length} ${bulk.noun}`)}
 								data-testid="marketing-unpublish-all"
 							>

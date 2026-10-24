@@ -289,9 +289,7 @@ export default function SocialMediaSuite() {
 			? 'This part of the Thingtime marketing site is not published yet.'
 			: `${formatCount(visibleAssetCount)} downloadable social images: ${features.length === FEATURES.length ? 'every' : formatCount(features.length)} Thingtime feature${
 					features.length === 1 ? '' : 's'
-			  } in ${TRENDS.length} viral styles and ${SOCIAL_FORMATS.length} platform formats, each with a ready-to-post caption.`,
-		// cold start writes nothing rather than a fail-closed "0 images" blurb
-		enabled: visibility.ready
+			  } in ${TRENDS.length} viral styles and ${SOCIAL_FORMATS.length} platform formats, each with a ready-to-post caption.`
 	});
 
 	const select = React.useCallback(

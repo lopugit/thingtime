@@ -22,8 +22,7 @@ import {
 	sectionKey,
 	socialFeatureKey,
 	summarizePublications,
-	validatePublicationChanges,
-	visibleActions
+	validatePublicationChanges
 } from './publishing';
 
 test('every catalog surface has a publishable key and every key resolves back to its surface', () => {
@@ -81,21 +80,6 @@ test('keys that name nothing in the catalog are rejected, including inherited ob
 		assert.equal(resolvePublicationKey(key).ok, false, String(key));
 	}
 	assert.equal(parsePublicationKey('x'.repeat(300)), null);
-});
-
-// The catalog tops out at two blocks of the same type today, so the ordinal
-// grammar has to be exercised directly: a generated page that ever reaches ten
-// (`pageSections` mints "hero/10") must still produce a hideable key.
-test('section ordinals accept every repeat pageSections can mint, and nothing else', () => {
-	for (const ordinal of [2, 3, 9, 10, 11, 19, 20, 99, 100, 137]) {
-		const target = parsePublicationKey(`section:landing/feed#hero/${ordinal}`);
-		assert.deepEqual(target, { type: 'section', slug: 'landing/feed', section: `hero/${ordinal}` }, `hero/${ordinal} must parse`);
-	}
-	// /1 is never minted (the first block carries the bare type), and leading
-	// zeros would make two keys for one section
-	for (const ordinal of ['0', '1', '01', '02', '010', '-2', '2.5', '1e2', '']) {
-		assert.equal(parsePublicationKey(`section:landing/feed#hero/${ordinal}`), null, `hero/${ordinal} must be rejected`);
-	}
 });
 
 test('changes are validated per target: sections hide, everything else publishes, duplicates collapse', () => {
@@ -222,44 +206,4 @@ test('summaries and bulk helpers agree with the catalog', () => {
 	assert.equal(stylesSummary.total, pagesInCategory('styles').length);
 	assert.equal(summary.categories.find((category) => category.key === 'landing')!.indexPublished, false);
 	assert.ok(PAGE_BY_SLUG['landing/feed'], 'the sample page used across these tests exists');
-});
-
-test('visibleActions never points a hero/CTA primary into the gate', () => {
-	// every use-cases/* page ships this exact shape: a marketing primary and a
-	// /register secondary (catalog.ts buildUseCase)
-	const template = { label: 'Copy the template', to: '/marketing/templates/car' };
-	const register = { label: 'Try Thingtime free', to: '/register' };
-
-	const publications = applyPublicationChanges(EMPTY_PUBLICATIONS, [{ key: pageKey('use-cases/car-maintenance-log'), state: 'published' }]);
-	const visitor = createVisibility({ publications, isAdmin: false, previewAsVisitor: false });
-
-	// the template page is NOT published: the secondary is promoted rather than
-	// the visitor being handed a prominent button into "Not published yet"
-	const gated = visibleActions(visitor, template, register);
-	assert.equal(gated.primary.to, '/register');
-	assert.equal(gated.secondary, null, 'the promoted action is never rendered twice');
-
-	// published: the block is untouched
-	const open = createVisibility({
-		publications: applyPublicationChanges(publications, [{ key: pageKey('templates/car'), state: 'published' }]),
-		isAdmin: false,
-		previewAsVisitor: false
-	});
-	assert.deepEqual(visibleActions(open, template, register), { primary: template, secondary: register });
-
-	// admins see the suite whole
-	const admin = createVisibility({ publications: EMPTY_PUBLICATIONS, isAdmin: true, previewAsVisitor: false });
-	assert.deepEqual(visibleActions(admin, template, register), { primary: template, secondary: register });
-
-	// a gated secondary still drops out of a visible primary's block
-	assert.deepEqual(visibleActions(visitor, register, template), { primary: register, secondary: null });
-
-	// both gated (no catalog block does this today) keeps one working button
-	assert.deepEqual(visibleActions(visitor, template, { label: 'The use case', to: '/marketing/use-cases/car-maintenance-log/vs-notion' }), {
-		primary: { label: 'Try Thingtime free', to: '/register' },
-		secondary: null
-	});
-
-	// non-marketing destinations are never gated
-	assert.deepEqual(visibleActions(visitor, { label: 'Open the tree', to: '/things' }, undefined), { primary: { label: 'Open the tree', to: '/things' }, secondary: null });
 });

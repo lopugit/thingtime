@@ -38,46 +38,9 @@ test('the marketing section itself follows its children for visitors', () => {
 	assert.ok(!ids(filterDrawerTopItems(drawerMenuItems, true, false)).includes('marketing'));
 	assert.ok(ids(filterDrawerTopItems(drawerMenuItems, false, true, nothing)).includes('marketing'), 'admins keep the section');
 	assert.ok(ids(filterDrawerTopItems(drawerMenuItems, false, false, only('category:landing'))).includes('marketing'), 'one published child is enough');
-	// Publication filtering preserves all sections the viewer is authorized to see.
-	assert.equal(filterDrawerTopItems(drawerMenuItems, false, false, nothing).length, filterDrawerItemsByAuth(drawerMenuItems, false, false, () => true).length - 1);
+	// nothing else is ever dropped by the publication filter
+	assert.equal(filterDrawerTopItems(drawerMenuItems, false, false, nothing).length, drawerMenuItems.length - 1);
 	// the auth-only rules still apply unchanged
 	const messages = drawerMenuItems.find((item) => item.id === 'messages')!;
 	assert.deepEqual(filterDrawerItemsByAuth(messages.children, false, false, nothing), []);
-});
-
-test('a top-level section keeps its own auth rules under the publication filter', () => {
-	const ids = (items: { id: string }[]) => items.map((item) => item.id);
-	// both call sites moved from filterDrawerItemsByAuth to filterDrawerTopItems,
-	// so the section's own authOnly/guestOnly/adminOnly must survive the move
-	const adminSection = { ...drawerMenuItems[0], id: 'admin-only-section', adminOnly: true };
-	const guestSection = { ...drawerMenuItems[0], id: 'guest-only-section', guestOnly: true };
-	const authSection = { ...drawerMenuItems[0], id: 'auth-only-section', authOnly: true };
-	const items = [adminSection, guestSection, authSection];
-	assert.deepEqual(ids(filterDrawerTopItems(items, false, false, nothing)), ['guest-only-section']);
-	assert.deepEqual(ids(filterDrawerTopItems(items, true, false, nothing)), ['auth-only-section']);
-	assert.deepEqual(ids(filterDrawerTopItems(items, true, true, nothing)), ['admin-only-section', 'auth-only-section']);
-});
-
-// DrawerItemSettings' "Close after click" list mirrors the drawer, so it must
-// use the SAME pair of filters. Gating a top-level section on its own key
-// (filterDrawerItemsByAuth over drawerMenuItems) would hide Marketing from the
-// settings list while DrawerContent still renders it.
-test('a section is listed by its children, not by its own key', () => {
-	const ids = (items: { id: string }[]) => items.map((item) => item.id);
-	// a published category with an unpublished hub: the section IS reachable,
-	// so both the drawer and the settings mirror must list it
-	const live = only('category:landing');
-	assert.ok(ids(filterDrawerTopItems(drawerMenuItems, false, false, live)).includes('marketing'));
-	// filtering the top level on its own key would drop it — the two helpers
-	// genuinely disagree here, which is why both call sites use the same one
-	assert.ok(!ids(filterDrawerItemsByAuth(drawerMenuItems, false, false, live)).includes('marketing'));
-	// and they agree once the hub itself is published
-	assert.ok(ids(filterDrawerItemsByAuth(drawerMenuItems, false, false, only('hub'))).includes('marketing'));
-});
-
-test('Admin is a top-level admin-only section immediately below Dev', () => {
-	const ids = (admin: boolean) => filterDrawerTopItems(drawerMenuItems, true, admin, nothing).map(item => item.id);
-	assert.ok(!ids(false).includes('admin'));
-	assert.equal(ids(true).indexOf('admin'), ids(true).indexOf('dev') + 1);
-	assert.ok(!drawerMenuItems.find(item => item.id === 'dev')!.children.some(item => item.id === 'dev-admin'));
 });

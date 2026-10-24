@@ -45,15 +45,6 @@ the whole suite with the publishing controls in place. The model lives in
 shape — safe for the drawer's eager bundle) and `publishing.ts` (catalog
 validation, visibility, summaries, bulk helpers).
 
-**What the gate is.** It is enforced in the client: no `/marketing` route has a
-server loader, and the generated catalog ships in the browser bundle. So the
-gate is a navigation and indexing control — it decides what a visitor is
-offered, linked to, counted and shown, and keeps unpublished surfaces out of
-search engines — not a confidentiality boundary. The only thing the server
-withholds is admin state (the per-key `audit` trail); page copy is not
-withheld. Write the copy as if it were already public, and do not stage
-genuinely confidential material behind an unpublished key.
-
 | Key | Surface | Accepted state |
 | --- | --- | --- |
 | `hub` | `/marketing` (also gates `/marketing/search`) | `published` |
@@ -128,7 +119,6 @@ for an admin without signing out.
 - Every `*_BY_KEY` / `PAGE_BY_SLUG` map is null-prototype, so a URL segment or query value naming an `Object.prototype` member (`constructor`, `toString`, `__proto__`…) resolves to nothing and hits the normal not-found path instead of a half-built page.
 - Every publishable surface has a catalog-validated key, section ids are unique per page, keys naming nothing (including `constructor`-style names) are rejected, sections only accept `hidden` and everything else only `published`, visitors never resolve an unpublished surface while admins resolve everything unless previewing, and the store's projection drops stale keys and fails closed on read outages (`publishing.test.ts`, `api/utils/marketing/marketingPublications.test.ts`).
 - Category and search indexes group pages under unique keys, and grouping keeps every page exactly once in first-seen order. `/marketing/search` mixes namespaces, and one name ("Developers") is both a persona and a feature family — so the section key is the namespaced group key, never the visible label.
-- `searchPages`' `limit` is a slice, never a filter, and `/marketing/search` passes the whole catalog. The count it returns is what the heading, the meta description and "show more" all report, so a fixed cap would both misstate the total and strand the remainder — ordinary queries run well past any small one ("thingtime" matches 1,091 of 1,635 pages). Only `limit` in the route (60 at a time) bounds what is rendered.
 
 ## Manual checks
 

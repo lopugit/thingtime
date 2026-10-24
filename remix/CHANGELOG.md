@@ -104,6 +104,532 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-05 — Marketing suite locked behind an admin publish gate — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/638-claude-marketing-pages-admin-guard--marketing-publish-gate.md`).
+- Everything under `/marketing` (hub, category indexes, the 1,600+ generated
+  pages, their sections, the social-image suite and each feature's image set)
+  is now admin-only until an admin publishes it, one key at a time
+  (`remix/app/marketing/publishingCore.ts` + `publishing.ts`; model in
+  `docs/marketing-suite.md` → Publishing). Nothing cascades: an index lists
+  whatever is published beneath it; sections can be hidden inside a published
+  page.
+- Visitors get a `noindex` "Not published yet" card (never a redirect); every
+  in-suite link, crumb, count, footer link, drawer entry and search result
+  follows the viewer's visibility. Unknown state fails closed.
+- State is one `settings` singleton (`marketing-publications`), read by
+  `GET /api/v1/marketing/publications` and written by the admin-only
+  `GET|POST /api/v1/admin/marketing/publications` (≤ 2,000 catalog-validated
+  changes per atomic write, fail-closed rate limit); both documented and
+  published through `/api/v1/capabilities` at 1.0.0.
+- Controls: an admin bar under the sub-nav on every marketing page (publish
+  this surface, bulk over its children, 👁️ View as visitor, Manage all →),
+  🌐/🔒 chips on cards and social menu rows, hide/show frames on page sections,
+  and a new `/admin/marketing` tab for whole-suite sweeps.
+- Tests: `test:marketing` now also covers the publishing core, the store and
+  the API route folders; `test:api-capabilities` pins the two new contracts.
+
+- 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
+
+### 2026-09-03 — Generated marketing suite: 1,600+ pages, animated walkthroughs, social image suite — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/610-claude-marketing-suite--generated-marketing-suite.md`).
+- **`/marketing`** is a catalog-generated marketing site: feature landing
+  pages, how-to guides, animated cursor walkthroughs over mock screens,
+  fair competitor comparisons and alternatives, audience pages, use cases,
+  concept explainers, starter templates, twelve "style editions" per lead
+  feature, FAQ pages and getting-started checklists — 1,635 pages from one
+  data set (`remix/app/marketing/`), every slug validated, every link
+  resolved, hero-first and CTA-last, deterministic per slug.
+- **`/marketing/social-media`** is a menu-navigable image suite: every
+  feature × twelve viral trend styles × ten platform formats renders as a
+  self-contained SVG and downloads as PNG at the exact platform size, with
+  per-platform captions and hashtags (10,680 images).
+- Routes are lazy (`marketing`, `marketing/social-media`,
+  `marketing/:category`, `marketing/*`); the root title effect defers to
+  `useMarketingSeo` under `/marketing`; the drawer gains a Marketing hub.
+- Tests: `npm run test:marketing` (catalog validation, walkthrough target
+  coverage, SVG rendering, copy determinism, mock-screen coverage, player
+  engine); manual checklist in `TESTING.md` ("Marketing suite"); design
+  notes in `docs/marketing-suite.md`.
+
+### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
+
+- Admin-selected Develop and Production/Main preview settings now dispatch only
+  their bounded full policy to the protected `github-actions` controller; the
+  product backend no longer creates, aliases, deletes, or comments on Vercel
+  deployments. GitHub Actions maintains one PR comment, posted before build
+  launch with every
+  selected environment's expected persistent URL and estimated ready time, then
+  updated with each immutable snapshot URL and final status. READY receipts move
+  only the matching alias to the verified current deployment, while
+  disable/close cleanup remains bounded to Thingtime-owned preview resources.
+  Each exact-SHA environment build runs without deployment credentials and only
+  its validated prebuilt artifact reaches the protected publisher.
+  See the [PR #597 engineering note](../PRs/597-codex-preview-pr-environment-links-publish-multi-environment-preview-links-on-prs.md).
+
+### 2026-09-03 — Storage migration readiness and API sweep correction — Codex (AI)
+
+- Detailed diagnosis, migration receipts, and validation:
+  [`PRs/601-codex-fix-image-upload-migrations--storage-migration-readiness.md`](../PRs/601-codex-fix-image-upload-migrations--storage-migration-readiness.md).
+- Nitro health now reports `degraded` and names
+  `backfill-user-storage-accounting` whenever current user ledgers are absent,
+  malformed, non-ready, or behind `USER_STORAGE_ACCOUNTING_VERSION`, making
+  the same fail-closed condition that blocks image uploads visible to deploy
+  monitoring before users encounter it.
+- Corrected the email-config API docs and live test contract: sanitized email
+  diagnostics remain available in local development and Vercel previews, while
+  production's intentional 403 environment gate is now documented and tested.
+
+### 2026-09-03 — Host-native Thingtime login bootstrap — Codex (AI)
+
+- `@Thingtime login` is now callable before authentication and returns its
+  OAuth challenge as a successful MCP tool response, allowing the invoking
+  ChatGPT/Codex task to own PKCE, browser launch, callback, and subsequent
+  authenticated requests without a separate CLI transport.
+- Account and data tools remain OAuth-only and continue to fail closed at the
+  HTTP authorization boundary.
+
+### 2026-09-02 — CI telemetry satellite + things index storage reclaim (PR #583) — Claude (AI)
+
+- Grouped summary; details in the PR note
+  (`PRs/583-claude-thingtime-mongodb-index-storage-dffe19--ci-control-satellite-index-storage.md`)
+  and the audit report (`docs/architecture/mongodb-index-storage-audit.md`).
+- **Production audit**: `things_v2` was 1.82 M docs / 3.15 GB of index at the
+  64-index cap, 99.75 % of it `ci-*` webhook telemetry with no retention.
+- **New `ciControl` satellite collection** (`ciControl_v1`) for every `ci-*`
+  Thing, six-index plan, TTL retention on root `expiresAt`
+  (`THINGTIME_CI_{EVENT,JOB,ACTIVITY}_RETENTION_DAYS`, defaults 14/30/90,
+  `0` = forever); the repository row records events only on real transitions.
+- **`things` index plan**: seven dead/moved indexes retired at boot, `kind_*`
+  and the sandbox TTL made partial, cap-safe swaps, leftover rebuild twins
+  pruned.
+- **Admin migrations** `relocate-ci-control-telemetry` and
+  `rebuild-things-indexes`; `/migrations` shows a per-collection storage
+  census (`api.admin-migrations` 1.1.0); `ciControl` queryable in the
+  workbench (`api.mongodb-raw-results` 1.1.0).
+- **Deployment note**: after deploying, run the two migrations from
+  `/migrations` (dry run, then confirm) to move existing rows and reclaim the
+  index files; boot alone only frees the retired indexes.
+
+
+### 2026-09-01 — Builder round 8: saved-media lifecycle + 17-finding review batch — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/485-…`, round 8).
+- **Saved pages own their media now**: webpage saves bind the owner's
+  referenced builder uploads to the page thing (`webpageAttachments.ts`,
+  wired into things create + PATCH), so the draft reaper stops eating media
+  off saved pages and a public `/p/` page serves its images anonymously via
+  acl inherit. A live-preview E2E caught TWO buried blockers: the id capture
+  truncated real 68-char attachment ids (`{8,64}` → `{8,128}`), and the
+  content endpoint's target authorization only recognized post targets —
+  `attachmentAccess.ts` now accepts exactly-`['webpage']` targets alongside
+  exactly-`['post']`, still failing closed otherwise. Verified end-to-end on
+  the preview: drop-upload → public save → bind stamped → anonymous 200.
+- **Adversarial review batch (49 agents, 16 confirmed findings fixed)**:
+  edit/view WYSIWYG parity (root gaps, placeholder leaks, edit-only border
+  radius), inspector typography actually reaching text, rendered-seam drag
+  convention (downward off-by-one), acl-preserving public toggle +
+  `expectedUpdatedAt` concurrency on saves, foreign-page fork fallback,
+  touch access to the full block menu (⋯ chip) + 28px coarse hit bands,
+  authored-html `data-tt-*`/`on*` scrubbing, per-account view caches, and
+  a confirm before discarding unsaved edits.
+- **Mobile edit mode**: the drawer starts closed under 768px (selecting a
+  block still opens it) and the 🌐 hint text hides on phones.
+
+### 2026-09-01 — Builder round 6: true-WYSIWYG canvas, inline Editor.js, wrap-with-block — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/485-…`, round 6).
+- **Rendered rich-text typography**: Chakra's reset made sanitised
+  h1-h6/lists/quotes/tables render as plain body text — `RichHtmlView` +
+  `richHtmlStyles.ts` restore a real document scale (heading sizes match the
+  Editor.js editing scale) and memoise the parse.
+- **Inline Editor.js**: selected text blocks edit in place with the FULL
+  Editor.js block editor; the modal stays as the "advanced" surface (drawer
+  button + new right-click menu, shared `RichTextModal`). The old
+  contentEditable inline editor was retired.
+- **Block context menu + wrap-with-block**: right-click any frame (or the
+  chip's ⊞) for Advanced editor / Wrap with block (searchable drill-down;
+  containers are the only block kind with a children slot) / Duplicate /
+  move / delete. New pure ops `wrapBlock` + `duplicateBlock` (tested).
+- **True-WYSIWYG edit canvas**: insert affordances became absolute overlay
+  edge strips — edit-mode geometry is pixel-identical to view mode
+  (measured across the mode toggle). The 🌐 Global label floats in the nav
+  breathing band; the region separator is a zero-height overlay; the
+  trailing add affordance is a spacious dashed well.
+- **Input UX**: numeric clamps commit on blur/Enter (typing "300" no longer
+  snaps to the minimum at "3"); sides/corners inputs stop trimming per
+  keystroke.
+
+### 2026-08-31 — Builder round 5: media drop/paste everywhere, Figma-parity controls, resizable drawer — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/485-…`, round 5).
+- **Media lands anywhere**: dropping a file ONTO any block frame uploads it
+  (media blocks swap their src in place, containers take it inside, others
+  get it inserted after); window-level edit-mode guards stop the browser
+  from opening dropped files — unhandled drops append to the page;
+  ⌘/Ctrl+V of clipboard files uploads at the selected block (text paste is
+  never hijacked). Media inspector gains ⬆️ Upload file + URL input.
+- **Figma-parity inspector controls** (`FigmaControls.tsx` + pure
+  `figmaControlValues.ts`, node-tested): padding/margin with uniform ▢ /
+  linked-axes ⬍⬌ / independent-sides ⛶ modes, per-corner radius, border
+  (style/width/color) and shadow (X/Y/blur/spread/color) composers,
+  segmented text-align — all writing css shorthands into the bounded
+  per-block css record. Min width/height fields added.
+- **Alignment actually visible**: aligned blocks shrink to fit-content and
+  use justify-self in grid cells (align-self alone was invisible on
+  100%-wide blocks and wrong-axis in grids).
+- **Editor.js rich editing**: 📝 Rich editor modal on text blocks — full
+  Editor.js block vocabulary, converted doc↔html (`editorJsHtml.ts`);
+  rendered html still passes only through the sanitising allowlist
+  renderer. Component blocks: double-click any rendered text to edit the
+  matching arg in an inline popover.
+- **Drawer**: drag-resizable via the left edge (persisted width shared with
+  the canvas padding); paired fields wrap instead of crushing selects
+  ("imag/e" cutoff fixed); placeholders muted; inline editor no longer
+  draws a second outline inside the selected frame.
+
+### 2026-08-31 — Builder round 4: Figma-layer styling, WYSIWYG, layout fixes — Claude (AI)
+
+- Grouped summary; full detail in the PR note
+  (`PRs/485-thingtime-design-system-01d6ee-design-system-builder.md`, PR #485
+  round 4).
+- **Layout/selection fixes**: nested blocks are clickable (innermost frame
+  wins the capture-phase click, ancestors no longer steal selection); grid
+  containers place children in cells correctly (insert zones no longer occupy
+  grid cells — side-by-side blocks work; trailing add-tile cell instead); row
+  children share the line via flex sizing; global strip gets breathing room
+  below the nav and the edit canvas paints the surface wash (no white body
+  bar between regions).
+- **Figma-layer styling**: every block carries a bounded `css` record edited
+  through inspector Layout/Appearance/Typography panels + a raw Custom CSS
+  editor; text blocks gain tag overrides + rich `html`; new `media` and
+  `html` block types; OS file drops upload via the attachments API into
+  media blocks. Server gate: `sanitizeWebpageBlock` bounds css keys/values
+  and blocks `expression()`/`@import`/`javascript:`/non-https `url()`;
+  coverage in `app/schemas/webpageBlockGate.test.ts`.
+- **Inline WYSIWYG**: selected text blocks edit in place (contentEditable,
+  Enter/Shift+Enter soft breaks, rich paste, floating B/I/U/S/link toolbar);
+  rendered rich text passes only through the sanitising allowlist renderer
+  (`htmlToNode` + `HtmlThingRenderer`, which gained the pure formatting tags
+  b/i/u/s/mark/sub/sup).
+- **Stale-chunk self-heal**: after each preview alias flip, already-open tabs
+  died on "Failed to fetch dynamically imported module" (old HTML → replaced
+  hashed chunks). `entry.client` (vite:preloadError) and `lazyRoute` now
+  recover with one session-guarded hard reload.
+- **Component catalog seeded**: the 2800-component catalog
+  (lopugit/thingtime-components) now lives in the dev DB behind
+  `*.previews.dev.thingtime.com` via `POST /api/v1/admin/components/seed`
+  (census 2800) — the builder's component search returns real results.
+
+### 2026-08-30 — Design system alignment + block-based site builder — Claude (AI)
+
+- Grouped summary; full detail in the PR note
+  (`PRs/485-thingtime-design-system-01d6ee-design-system-builder.md`, PR #485).
+- **Design system**: new shared `PageShell`/`PageHeader` primitives
+  (`remix/app/components/Layout/PageShell.tsx`) extracted from the canonical
+  hand-copied idiom; every off-system page aligned (status, mongodb-status,
+  tests, vercel, crypto, migrations, apps, raw, ode, reset-password,
+  catch-all shell, admin dashboard + TierManager/IntegrationManager/
+  ModerationTab/AdminPanel/CIControlDashboard) plus a token nit sweep.
+  `/docs/design-system` gains foundations/page-scaffold/brutal-button/
+  builder-blocks entries; `/design-system` redirects there.
+- **Builder**: new `webpage` thing kind (bounded block tree, sanitized in the
+  registry write gate), `GET /api/v1/webpages/resolve`, admin
+  `POST /api/v1/admin/webpages/seed` (26 site docs + site-global), `/builder`
+  canvas (hover boundaries, inline + add-block menu with Mongo-backed
+  component search, drag/drop, right-side inspector drawer), `/p/:id`
+  published pages, and site-wide ✏️ edit mode with viewer-owned
+  personalisation forks + memoised global blocks.
+- **Round 3 (limitless builder)**: builder mode is full-bleed on every page
+  (dual-region 🌐 global + page editing, one drawer, collapsible), touch UX is
+  Squarespace-grade (44px zones, dropwells, bottom-sheet insert menu, chrome
+  unselectable), and built-in pages decompose into PIXEL-IDENTICAL native
+  sections via the new registry (`components/Builder/nativeSections.tsx`):
+  status, home landing, welcome, ode, mongodb-status so far — the route, the
+  seed table, and the builder all share one section list.
+- **Catalog eviction**: the components-db catalog + pipeline moved to the
+  public repo <https://github.com/lopugit/thingtime-components> (2800
+  components); this repo ships only the runtime — components live in MongoDB
+  and the frontend fetches them via `/api/v1/components/browse`.
+- Local runbook: seed site pages with an admin session via
+  `POST /api/v1/admin/webpages/seed`; smoke with
+  `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.
+
+### 2026-09-01 — ChatGPT OAuth production credential vault
+
+- Production ChatGPT connector credentials now use a dedicated sensitive Vercel
+  encryption key, allowing the OAuth connection screen to create and retain
+  independently encrypted multi-account credentials. — Codex (AI), 2026-09-01
+### 2026-09-01 — Self-draining moderation safety sweep
+
+- A successful full moderation sweep batch now immediately starts a durable
+  continuation run. Each run remains bounded to 25 text posts and 10
+  attachments; only failures stop that surface's chain, leaving the hourly
+  Vercel Cron as the safe retry path. — Codex (AI), 2026-09-01
+
+### 2026-09-01 — Production search server-bundle repair
+
+- `/api/v1/things/search` now statically bundles its emoji-name metadata
+  instead of leaving an untraced runtime JSON lookup in the Vercel function.
+  The Vercel output verifier now fails the build if this missing-dependency
+  class returns, and the `api.things-search` capability advances to `1.1.1`.
+  — Codex (AI), 2026-09-01
+
+### 2026-08-31 — Bounded Graphify snapshot retention
+
+- Graphify now retains one active portable snapshot by default after successful
+  update, extract, cluster, and ensure runs, with fail-closed retention
+  overrides and an explicit prune command. The semantic content-addressed cache
+  remains reusable, while older snapshots stay recoverable from Git history.
+  — Codex (AI), 2026-08-31
+
+### Fixed
+
+- **Consolidated uniqueness lookups no longer collection-scan `things`.** The
+  post-consolidation helpers queried `$or: [{uniqueKeys}, {crystal.<field>}]`,
+  but the five `crystal.*Key` indexes had just been dropped and MongoDB only
+  unions an `$or` when *every* branch is indexed — so each lookup degraded to a
+  full scan (measured on a live MongoDB 8 replica set: 50,001 docs examined vs
+  1), once per synced live event, message segment, command and approval. The
+  fallback arm could never match anyway: all five key families are introduced
+  by this branch, so no row predates the root stamp. Lookups are now a single
+  indexed `uniqueKeys` predicate, and the key rides `$setOnInsert` rather than
+  `$addToSet`, which an equality filter makes illegal on upsert.
+  — Lopu, 2026-08-28
+- **The device bootstrap stopped resurrecting `crystal.deviceUniqueKeys`.**
+  `newDeviceThing` deliberately no longer writes that mirror, so every device
+  row created since the last cold start re-matched the legacy backfill and had
+  it written back — an unaccounted `raw` write that bypasses the storage ledger,
+  on a filter that never converged. The backfill is now scoped to rows that
+  predate the root `uniqueKeys` stamp. — Lopu, 2026-08-28
+
+### 2026-08-25 — Action Thing v1 security review: private minting, trust boundary, delegated resolution
+
+- Multi-agent defensive security review of the Action Thing surface (report:
+  SECURITY-REPORTS/2026-08-25-action-thing-v1-security-review.md). Three
+  findings, all fixed: action-created things now mint PRIVATE
+  (`acl: [ACL_OWNER]`) instead of inheriting createThing's public standalone
+  default; the /things PreviewModal passes `untrusted` for components the
+  viewer does not own, so foreign markup renders inert; and a ttAction click
+  (`source: 'component'`) resolves only actions the invoker owns, closing an
+  id-path hijack the actionKey branch was already hardened against. The
+  inspector also stopped asserting absolute negatives for composing actions.
+  Battery 73/73 (+8 security regressions), test:actions 27/27,
+  test:schemas 82/82. Verified live: a foreign component renders but does not
+  fire, an owned one still does, and onboard-customer's invoice is private.
+
+### 2026-08-25 — Action Thing v1: builder, ttAction closure, Used-by, v2 design
+
+- "⚡ New action" builder on /actions with LIVE-DERIVED capabilities
+  (declaration always covers behavior — one unscoped step unscopes the
+  capability), ttAction component-render bindings (data-tt-action /
+  data-tt-action-inputs, the only allowlisted data-* attributes; /things
+  PreviewModal is the interactive surface), the Used-by back-reference
+  panel on the inspector, seven Lopu-review fixes across review rounds, unit
+  suites test:actions (23) + actionGrammar (15), and the v2
+  external-capabilities design (PRs/action-thing-v2-external-capabilities.md).
+  Details: PRs/387-*.md. CI green; batteries 65/65 + 30/30. A functional
+  multi-review pass (correctness / UX-consistency / docs-accuracy) then
+  landed: optimistic cached paint on /actions/:key, ActionChip overflow
+  guards at 375px, family-consistent pink CTAs, design-doc reconciliation
+  with the shipped grammar/executor, input-default/type congruence
+  (save-time refusal + type-aware builder coercion), the ⚡ kind renderer
+  wired into /things tiles, inspector state reset on cross-action
+  navigation, and latest-revision resolution for duplicate actionKeys
+  (executor + inspector agree; test:actions 25, test:schemas 82).
+
+### 2026-08-24 — Action Thing v1 (declarative, capability-bounded programs)
+
+- New `action` + protected `action-run` kinds, executor
+  (`api/utils/actions/execute.ts`), `POST /api/v1/actions/run` +
+  `GET /api/v1/actions/runs`, /actions browse + inspector UI, ⚡ kind renderer
+  and Actions filter on /things, drawer entry, and the Customer/Invoice demo
+  seed (`scripts/seed-demo-app.mjs`). Verified by
+  `scripts/verify-actions.mjs` (52 live checks) + browser click-through.
+  Details: `PRs/action-thing-v1-design.md` and PR #387 (stacked on the
+  Components runtime split, PR #382).
+
+### Changed
+
+- **Saved Feature Stacks now have Pause, Stop, and Restart controls.** Pause
+  and Stop cancel only the exact linked GitHub Actions run while retaining the
+  stack definition and historical run links; Restart safely cancels active
+  compute before creating a fresh immutable run. Late webhook and progress
+  receipts cannot overwrite a deliberate paused or stopped state.
+- **Feature Stack progress no longer disappears under a busy CI event feed.**
+  The saved-stack endpoint returns a bounded per-dispatch event stream, so
+  immediate, phase-change, and 10-minute Lopu heartbeats remain chronological
+  and visible while unrelated repository automation is active.
+  Details: [PR #550](../PRs/550-codex-feature-stack-lifecycle-main-feature-stack-run-controls.md).
+  — Codex (AI), 2026-09-01
+
+- **Reusable Feature Stacks no longer fail because an older selected PR has
+  already completed.** Each run now omits merged, closed, and draft entries at
+  admission time, keeps every remaining live source in the saved order, and
+  rejects only when no compatible live source remains. The protected target
+  worker now stays active through branch protection until its generated stack
+  PR has actually merged. — Codex (AI), 2026-09-01
+
+- **Feature pushes no longer spend Vercel Build CPU.** Root Vercel Git policy
+  now disables automatic deployments with the recursive `**` branch glob for
+  every branch except exact `main` and `develop`; eligible PR previews are
+  compiled on GitHub and uploaded as validated prebuilt bundles targeting the
+  `develop` Custom Environment without the production-only `--skip-domain`
+  flag, while native production and stable-development builds remain intact.
+  — Codex (AI), 2026-09-01
+
+- **Editor.js block controls now stay at the active line's right edge on
+  mobile.** The + and settings buttons no longer drop underneath post text,
+  and the editor reserves enough inline space to prevent overlap with long or
+  right-aligned blocks. — Codex (AI), 2026-09-01
+
+- **Running Feature Stacks now report durable Lopu progress into their own CI
+  console.** The protected controller sends an immediate signed snapshot,
+  phase transitions, ten-minute heartbeats, and a terminal update. Thingtime
+  binds each event to the exact stored stack/run, renders it chronologically,
+  links back to the precise Actions run, and refreshes progress plus the
+  viewer-local finish estimate without exposing workflow credentials.
+  — Codex (AI), 2026-09-01
+
+- **Feature Stack runs now expose their exact GitHub Actions history and stop
+  reporting a finished controller as live.** Every new dispatch carries a
+  durable run identity, signed workflow events attach the exact run URL, the
+  activity stream is sorted chronologically, and a controller that exits before
+  publishing a target PR is labelled Needs attention instead of receiving an
+  ever-moving ETA. The protected Lopu worker also tolerates its expected skipped
+  sibling dependencies, so admitted target merges actually start.
+  — Codex (AI), 2026-09-01
+
+- **Published posts and rich comments now retain their native Editor.js
+  document across the browser API boundary.** The request allowlist includes
+  `richText` alongside the canonical plain-text fallback, so headings no
+  longer reappear as literal Markdown such as `## Posts` after posting or
+  reloading. — Codex (AI), 2026-09-01
+
+- **Posting now flushes the live Editor.js document before freezing a post
+  payload.** Tapping Post immediately after changing a heading, colour,
+  alignment, size, whitespace, or line break can no longer publish the older
+  plain-text snapshot while the composer still shows the newer rich styling.
+  — Codex (AI), 2026-08-31
+
+- **Post media editing now has one visual source of truth.** Auto and Rows show
+  final-view previews, Rows uses add/remove and per-row image-count controls,
+  Grid previews expose the clickable 1×1 span badge, and the single Media &
+  files panel owns reorder, metadata, and delete actions in create and edit.
+  Attachments are now default searchable level-one Things (including display
+  filename/title/description), while Reaction schema searches resolve human
+  emoji names such as “heart” to stored emoji and render the matching parent
+  posts. — Codex (AI), 2026-08-31
+
+- **[Admin CI refreshes now fail softly and recover without a request
+  storm.](../PRs/513-codex-fix-admin-ci-sort-memory-admin-ci-refresh-resilience.md)**
+  The protected snapshot route turns MongoDB blocking-sort memory failures into
+  a retryable, private 503 with stable route/error-code telemetry, while the UI
+  keeps its cached state, deduplicates overlapping pollers, and exponentially
+  backs off automatic retries up to five minutes. — Codex (AI), 2026-08-31
+
+- **Passkeys and the Admin CI snapshot now recover from the two mobile failure
+  modes seen in production.** Registration and login options require the same
+  on-device user verification enforced by the WebAuthn verifier, so a valid
+  iCloud Keychain or 1Password ceremony is no longer rejected after the
+  authenticator returns. CI entities are read per repository through a stable
+  compound sort index instead of a growing in-memory sort, and a saved Feature
+  Stack keeps its PR-number placeholders visible until a temporarily missing
+  live snapshot can rehydrate them. Unlimited Feature Stack selection no longer
+  makes the same request fetch unlimited run, deployment, preview, and dispatch
+  history; activity stays bounded while the dashboard totals remain exact.
+  Running Feature Stacks now also respect an
+  admin's collapsed-card choice instead of immediately forcing themselves open.
+  — Codex (AI), 2026-08-31
+
+- **[Admins can now opt a trusted PR into Develop and Production/Main previews
+  independently.](../PRs/505-codex-feature-stack-merge-status-filters-admin-ci-feature-stacks-and-pr-previews.md)**
+  Each switch builds the exact live same-repository SHA with
+  its selected Vercel environment, production access requires an explicit
+  warning acknowledgement, signed PR/Vercel events refresh later commits and
+  status, and immutable preview URLs never take over a stable custom domain.
+  Marker-scoped cleanup cannot delete ordinary develop or production
+  deployments. — Codex (AI), 2026-08-31
+
+- **Feature Stack selection and monitoring now stay focused during large merge
+  batches.** Exact clean, conflicting, draft, merged, closed, and unknown PR
+  filters replace the broad status buckets; independently scrolling selected
+  and available-PR panes stop row additions from moving the page; compatible
+  sources and targets are safely retained when another selected branch family
+  has no match; and the active stack shows a live progress feed with workflow,
+  target, and local-time ETA updates. Every Admin tab now has a bookmarkable
+  subroute, CI Control's long cards remember their collapsed state, and its
+  compute settings identify the one Lopu repository manager separately from
+  supporting build pipelines. — Codex (AI), 2026-08-31
+- **Post text now keeps its real rich-text presentation after saving.** Feed,
+  profile, repost, comment, and permalink cards render the bounded native
+  Editor.js document—including inline marks, block style tunes, repeated
+  whitespace, and hard line breaks—while retaining a canonical plain-text
+  fallback for search, moderation, notifications, and older clients. — Codex
+  (AI), 2026-08-31
+
+- **Moving preview and production aliases now self-heal stale client chunks.**
+  Vite preload failures and React Router lazy imports share a one-reload
+  session guard, recognise Chromium, Safari, and Firefox dynamic-import errors,
+  and clear the guard only after ten healthy seconds so a broken network or
+  deployment cannot create a reload loop. — Codex (AI), 2026-08-31
+
+- **Vercel now serves Thingtime's origin-scoped API capability manifest from
+  Nitro instead of the SPA shell.** The generic
+  `/.well-known/thingtime-capabilities.json` route joins OAuth and ChatGPT
+  discovery ahead of the filesystem and `index.html` fallbacks, and the built
+  output verifier locks in that ordering. — Codex (AI), 2026-08-31
+- **The new Limitless MCP Lab turns the live connector contract into an
+  interactive use-case gallery.** `/docs/mcp` discovers the public MCP methods
+  in parallel, keeps the current release contract on first paint, demonstrates
+  five composable workflows, and drives the exact shipped review App with
+  synthetic non-mutating previews so confirmation and recovery behavior can be
+  explored safely. Its production route grants that sandboxed App only the
+  exact SHA-256 script hash it needs, preserving the strict global CSP without
+  `unsafe-inline` or `unsafe-eval`. — Codex (AI), 2026-08-30
+- **[Thingtime’s ChatGPT/Codex MCP surface is now composable and preview-first.](../PRs/482-codex-limitless-mcp-make-thingtime-mcp-limitless-composable-and-safe.md)**
+  Thirty-one bounded tools add exact batch reads, schema intelligence,
+  relationship/thread traversal, change polling, signed multi-Thing previews,
+  optimistic concurrency, encrypted history/undo, durable Capability workflow
+  runs, MCP prompts/resources, and an interactive result/diff review UI while
+  continuing to reject arbitrary routes, queries, and code. — Codex (AI),
+  2026-08-30
+- **Desktop AI and device idempotency now share Thingtime's protected
+  uniqueness namespace.** Five one-off crystal-path unique indexes were
+  consolidated into the existing Binary root `uniqueKeys` index, restoring
+  five MongoDB slots (57/64 in the complete home plan), keeping domain hashes
+  out of the wildcard text index's uniqueness mechanism, and preserving
+  compatibility through a home-only backfill. The migration no longer rewrites
+  or drops indexes in user-owned custom data endpoints. — Codex (AI), 2026-08-28
+- **Lopu's model-waterfall streaming retries now have behavioral SSE coverage.**
+  A dedicated provider-double suite proves that a reasoning-starved decorated
+  Claude or OpenAI stream retries bare on the same model, never retries after
+  visible text, reads the durable waterfall once, emits no blank provider
+  metadata, and reaches the canned library only after both providers genuinely
+  starve. — Codex (AI), 2026-08-27
+- **Web search now exposes its real relevance signal and keeps post context
+  inline.** Ranked Thing results carry the query-relative Mongo text score and
+  show it as subdued metadata in both Standard and Data views; unselected
+  Commander Enter defaults to the full-search row without stealing setter
+  commands, and `/thing/:id` renders a post-shaped Thing with its interactive
+  post card above the raw data. — Codex (AI), 2026-08-27
+- **Thingtime’s ChatGPT deployment runbook now follows the supported workspace
+  app path.** It documents Admin/Owner Developer Mode, Apps → Create, OAuth
+  tool scanning, draft testing from the tools menu/@mentions, publication,
+  frozen tool snapshots, Enterprise/Edu refresh controls, Business
+  recreate-and-republish release requirements, role/action controls, and the
+  current web-only plus plan-level write limits. — Codex (AI), 2026-08-26
+
+- **Explicit data-authority identity for clients and peer federation**:
+  deployments now publish a safe `production`, `development`, or named
+  `custom` database/authentication environment through root data and
+  `api.capabilities` `1.1.0`. Electron rejects selected endpoints that cannot
+  prove this identity, account recovery uses its configured authority rather
+  than Vercel tier/branch inference, and signed peer gossip is scoped to the
+  matching federation id. No MongoDB host, database name, connection string,
+  account, or secret is exposed. — Codex (AI), 2026-08-24
+
 ### Added
 
 - **Followers + friends, notifications, and public post view stats**: one-way
