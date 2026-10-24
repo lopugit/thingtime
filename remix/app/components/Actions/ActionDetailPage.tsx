@@ -1,8 +1,4 @@
 import React from 'react';
-import { openThingHistory } from '../Timeline/TimelineHost';
-import { actionTimelineWarning, type ActionTimelineReport } from '../../timeline/actionOutcome';
-import { parseActionJson } from '~/schemas/actionJsonInput';
-import { ThingDefinitionEditor } from '../Builder/DefinitionEditor/ThingDefinitionEditor';
 import {
 	Box,
 	Button,
@@ -18,10 +14,9 @@ import { ArrowLeft, ExternalLink, Play } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
-import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
-import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { readLocalCache } from '~/hooks/localCache';
 import { CARD_STYLES } from '~/theme/card';
 import { ActionChip } from './ActionChip';
 import { opChipTone } from './ActionsPage';
@@ -52,8 +47,6 @@ const monoLabel = {
 type RunResponse = {
 	ok: boolean;
 	runId?: string;
-	history?: ActionTimelineReport;
- historyError?: string;
 	status?: 'ok' | 'error';
 	result?: unknown;
 	error?: string;
@@ -66,7 +59,6 @@ type RunResponse = {
 
 type RunRecord = {
 	id: string;
-	localOnly?: boolean;
 	status: string;
 	startedAt: string | null;
 	durationMs: number | null;
@@ -102,7 +94,6 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 		for (const descriptor of descriptors) {
 			const name = String(descriptor.name);
 			if (descriptor.type === 'boolean') initial[name] = descriptor.default === true;
-			else if (descriptor.type === 'json') initial[name] = descriptor.default === undefined ? '' : JSON.stringify(descriptor.default, null, 2);
 			else initial[name] = descriptor.default === undefined || descriptor.default === null ? '' : String(descriptor.default);
 		}
 		return initial;
@@ -120,16 +111,12 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 				const name = String(descriptor.name);
 				const value = values[name];
 				if (value === '' || value === undefined) continue;
-				inputs[name] = descriptor.type === 'number' ? Number(value) : descriptor.type === 'json' ? parseActionJson(value) : value;
+				inputs[name] = descriptor.type === 'number' ? Number(value) : value;
 			}
 			const response = (await apiRef.current.v1.actions.run({ action: action.id, inputs })) as RunResponse;
 			setLastRun(response);
 			onRan?.();
-			if (response?.historyError) {
- lopuRef.current({ title: 'Local run history', description: response.historyError, status: 'warning' });
- } else if (response?.history?.status === 'incomplete') {
-				lopuRef.current({ title: 'Action History sync', description: actionTimelineWarning(response.history), status: 'warning' });
-			} else if (response?.status === 'ok') {
+			if (response?.status === 'ok') {
 				lopuRef.current({ title: `⚡ ${action.crystal.name || 'Action'} ran ✓`, description: `${response.durationMs}ms · ${response.opsUsed} ops`, status: 'success', duration: 6000 });
 			} else {
 				lopuRef.current({ title: 'Run finished with an error 🧯', description: response?.error || undefined, status: 'error' });
@@ -184,7 +171,7 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 											</option>
 										))}
 									</Select>
-								) : type === 'text' || type === 'json' ? (
+								) : type === 'text' ? (
 									<Textarea
 										onChange={(event) => setValues((prior) => ({ ...prior, [name]: event.target.value }))}
 										rows={3}
@@ -214,13 +201,10 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 						<ActionChip size="md" tone={lastRun.status === 'ok' ? 'ok' : 'danger'}>{lastRun.status}</ActionChip>
 						{typeof lastRun.durationMs === 'number' ? (
 							<Text color={MUTED} fontSize="xs">
-								{lastRun.durationMs}ms · {lastRun.opsUsed} ops
-                                {lastRun.depthUsed != null ? ` · depth ${lastRun.depthUsed}` : ''}
-                                {lastRun.childActionsUsed != null ? ` · ${lastRun.childActionsUsed} child actions` : ''}
+								{lastRun.durationMs}ms · {lastRun.opsUsed} ops · depth {lastRun.depthUsed} · {lastRun.childActionsUsed} child actions
 							</Text>
 						) : null}
 					</Flex>
-					{lastRun.history?.status === 'incomplete' ? <Text role="status" fontSize="sm" mt={2}>{actionTimelineWarning(lastRun.history)}</Text> : null}
 					{lastRun.error ? (
 						<Text color="var(--tt-danger, #e5484d)" fontSize="sm" mt={2} overflowWrap="anywhere">
 							{lastRun.error}
@@ -265,24 +249,17 @@ const RunPanel = ({ action, onRan }: { action: ActionThing; onRan?: () => void }
 };
 
 export const ActionDetailPage = () => {
- const scope = useWorkspaceScope();
- const { key } = useParams();
- return <WorkspaceActionDetailPage key={`${scope}:${key}`} scope={scope} />;
-};
-const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 	const { key } = useParams();
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
-	const workspaceUser = useWorkspaceUser();
- const user = scope === 'pending' ? null : workspaceUser;
+	const user = useCurrentUser();
 	const navigate = useNavigate();
 	const [state, setState] = React.useState<{ key: string; action: ActionThing | null; missing: boolean }>({
 		key: '',
 		action: null,
 		missing: false
 	});
-	const [editing, setEditing] = React.useState(false);
 	const [runs, setRuns] = React.useState<RunRecord[]>([]);
 	const [schemaNames, setSchemaNames] = React.useState<Record<string, string>>({});
 	const [usedBy, setUsedBy] = React.useState<{ id: string; name: string; componentKey: string | null }[]>([]);
@@ -299,7 +276,6 @@ const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 	const [seenKey, setSeenKey] = React.useState(requestKey);
 	if (seenKey !== requestKey) {
 		setSeenKey(requestKey);
-		setEditing(false);
 		setRuns([]);
 		setUsedBy([]);
 		setSchemaNames({});
@@ -309,19 +285,19 @@ const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 	// that cache while the authoritative fetch reconciles in the background.
 	const cachedAction = React.useMemo(() => {
 		if (!key) return null;
-		const cache = readLocalCache<{ actions?: ActionThing[] }>(`tt-actions-${scope}`);
+		const cache = readLocalCache<{ actions?: ActionThing[] }>(`tt-actions-${user?.id || 'anon'}`);
 		return selectActionByKey(cache?.actions || [], key);
-	}, [key, scope]);
+	}, [key, user?.id]);
 	const visible = state.key === requestKey ? state : { key: requestKey, action: cachedAction, missing: false };
 
 	React.useEffect(() => {
-		if (!key || scope === 'pending') return;
+		if (!key) return;
 		let cancelled = false;
 		(async () => {
 			try {
 				let action: ActionThing | null = null;
 				try {
-					const byId = !user?.localOnly || key.startsWith('local-') ? await apiRef.current.v1.things.get({ id: key }) : null;
+					const byId = await apiRef.current.v1.things.get({ id: key });
 					if (isActionThing(byId?.thing)) action = byId.thing as ActionThing;
 				} catch {}
 				if (!action && user?.id) {
@@ -356,7 +332,7 @@ const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 						(async () => {
 							const resolved: Record<string, string> = {};
 							await Promise.all(
-								collectSchemaRefs(resolvedAction.crystal).filter(ref => !user?.localOnly || ref.startsWith('local-')).map(async (ref) => {
+								collectSchemaRefs(resolvedAction.crystal).map(async (ref) => {
 									try {
 										const response = await apiRef.current.v1.things.get({ id: ref });
 										const name = response?.thing?.crystal?.name;
@@ -376,7 +352,7 @@ const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 		return () => {
 			cancelled = true;
 		};
-	}, [key, requestKey, user?.id, user?.localOnly, scope]);
+	}, [key, requestKey, user?.id]);
 
 	const action = visible.action;
 	const crystal = action?.crystal || {};
@@ -412,12 +388,6 @@ const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 					<Box minH="200px" />
 				) : (
 					<>
-						{editing ? <ThingDefinitionEditor id={action.id} onClose={() => setEditing(false)} onSaved={(saved) => {
-                            setState({ key: requestKey, action: saved as ActionThing, missing: false });
-                            const cacheKey = `tt-actions-${scope}`;
-                            const cached = readLocalCache<{ actions?: ActionThing[] }>(cacheKey);
-                            if (cached?.actions) writeLocalCache(cacheKey, { ...cached, actions: cached.actions.map((entry) => entry.id === saved.id ? saved : entry) });
-                        }} /> : null}
 						<Box {...CARD_STYLES} p={{ base: 5, md: 6 }}>
 							<Flex align="flex-start" justify="space-between" gap={3} wrap="wrap">
 								<Box minW={0}>
@@ -439,7 +409,6 @@ const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 										</Text>
 									) : null}
 								</Box>
-								{action.author?.id === user?.id && user?.id ? <Button size="sm" onClick={() => setEditing(true)}>Edit definition</Button> : null}
 								<Button as={Link} rightIcon={<ExternalLink size={13} />} size="xs" to={`/thing/${encodeURIComponent(action.id)}`} variant="ghost">
 									Thing view
 								</Button>
@@ -493,12 +462,10 @@ const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 										<Flex direction="column" gap={1}>
 											{(crystal.capabilities || []).length ? (
 												(crystal.capabilities || []).map((entry) => (
-													<ActionChip key={entry.capability} size="md" tone="ok" wrap>
+													<ActionChip key={entry.capability} size="md" tone="ok">
 														{entry.capability}
 														{entry.schemas?.length ? `: ${entry.schemas.map((ref) => displayRef(ref, schemaNames)).join(', ')}` : ''}
 														{entry.actions?.length ? `: ${entry.actions.join(', ')}` : ''}
-                                                {entry.endpoints?.length ? `: ${entry.endpoints.join(', ')}` : ''}
-													{entry.providers?.length ? `: ${entry.providers.join(', ')}` : ''}
 													</ActionChip>
 												))
 											) : (
@@ -528,10 +495,9 @@ const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 									</Section>
 								</Flex>
 
-								{effects.lookups.length || effects.creates.length || effects.reads.length || effects.updates || effects.deletes || effects.publicReads.length || effects.systemReads.length || effects.invokes.length ? (
+								{effects.creates.length || effects.reads.length || effects.updates || effects.invokes.length ? (
 									<Section title="Effects (derived from the steps)">
 										<Flex gap={1.5} wrap="wrap">
-											{effects.lookups.map((provider) => <ActionChip key={provider} tone="read" wrap>sends query to {provider} · uses your Vault key</ActionChip>)}
 											{effects.creates.map((schema) => (
 												<ActionChip key={`c-${schema}`} size="md" tone="create">
 													creates {displayRef(schema, schemaNames)}
@@ -542,24 +508,9 @@ const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 													reads {schema === '*' ? 'things' : displayRef(schema, schemaNames)}
 												</ActionChip>
 											))}
-											{effects.publicReads.map((schema) => (
-												<ActionChip key={`pr-${schema}`} size="md" tone="read">
-													reads everyone’s public {displayRef(schema, schemaNames)}
-												</ActionChip>
-											))}
-											{effects.systemReads.map((schema) => (
-												<ActionChip key={`sr-${schema}`} size="md" tone="read">
-													reads the platform’s {displayRef(schema, schemaNames)}
-												</ActionChip>
-											))}
 											{effects.updates ? (
 												<ActionChip size="md" tone="write">
 													updates things
-												</ActionChip>
-											) : null}
-											{effects.deletes ? (
-												<ActionChip size="md" tone="danger">
-													deletes things
 												</ActionChip>
 											) : null}
 											{effects.invokes.map((invoked) => (
@@ -594,20 +545,17 @@ const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 								</Text>
 							</Box>
 						) : null}
-						{user ? <RunPanel action={action} key={`${action.id}:${user.id}`} onRan={loadRuns} /> : null}
+						{user ? <RunPanel action={action} key={action.id} onRan={loadRuns} /> : null}
 
 						<Box {...CARD_STYLES} p={{ base: 4, md: 5 }}>
 							<Text {...monoLabel} mb={2}>
-								Recent execution details
+								Last runs
 							</Text>
-							{!user?.localOnly ? <Button size="sm" variant="outline" mb={2} onClick={() => openThingHistory(action.id)}>Open History</Button> : null}
-							<Text fontSize="xs" color={MUTED} mb={3}>{user?.localOnly ? 'The latest 50 execution details are saved on this device. They stay private to this local workspace.' : 'History keeps saved changes and recorded server outcomes. Recent execution details below are labelled by where the Action ran.'}</Text>
 							{runs.length ? (
 								<Stack spacing={2}>
 									{runs.map((record) => (
 										<Flex align="center" gap={2} key={record.id} wrap="wrap">
 											<ActionChip size="sm" tone={record.status === 'ok' ? 'ok' : 'danger'}>{record.status}</ActionChip>
-											<Text color={MUTED} fontSize="xs">{record.localOnly ? 'This device' : 'Server'}</Text>
 											<Text color={MUTED} fontSize="xs">
 												{record.startedAt ? new Date(record.startedAt).toLocaleString() : '—'}
 											</Text>
@@ -624,7 +572,7 @@ const WorkspaceActionDetailPage = ({ scope }: { scope: string }) => {
 								</Stack>
 							) : (
 								<Text color={MUTED} fontSize="sm">
-									No execution details available yet.
+									No runs yet — this panel is the inspectable trail every invocation leaves.
 								</Text>
 							)}
 						</Box>

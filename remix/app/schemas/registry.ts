@@ -1450,37 +1450,6 @@ export const COMPONENT_ARG_TYPES = ['string', 'text', 'number', 'boolean', 'enum
 export const COMPONENT_ARG_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const COMPONENT_KEY_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
-// Webpage block-tree caps (grammar + sanitizer live beside the component
-// sanitizer further down; see the webpage block grammar section).
-export const MAX_WEBPAGE_BLOCKS = Number.POSITIVE_INFINITY;
-export const MAX_WEBPAGE_BLOCK_DEPTH = Number.POSITIVE_INFINITY;
-export const MAX_WEBPAGE_BLOCK_ID_CHARS = 40;
-export const MAX_WEBPAGE_BLOCK_REF_CHARS = 128;
-export const MAX_WEBPAGE_TEXT_CHARS = 2000;
-export const MAX_WEBPAGE_BLOCKS_BYTES = Number.POSITIVE_INFINITY;
-export const MAX_WEBPAGE_ROUTE_CHARS = 120;
-export const WEBPAGE_BLOCK_TYPES = ['component', 'container', 'text', 'native', 'media', 'html', 'element', 'collection', 'condition'] as const;
-export const WEBPAGE_CONTAINER_DIRECTIONS = ['column', 'row', 'grid'] as const;
-export const WEBPAGE_TEXT_STYLES = ['body', 'heading', 'eyebrow'] as const;
-export const WEBPAGE_BLOCK_ALIGNS = ['start', 'center', 'end', 'stretch'] as const;
-export const WEBPAGE_ROUTE_PATTERN = /^\/[a-z0-9\-/_]*$/;
-// Figma-style per-block custom CSS + rich/raw HTML bounds. HTML is never
-// trusted at render (the client parses it through the sanitising allowlist
-// renderer); the gate bounds size and blocks the classic CSS escape hatches.
-export const MAX_WEBPAGE_CSS_PROPS = 40;
-export const MAX_WEBPAGE_CSS_KEY_CHARS = 48;
-export const MAX_WEBPAGE_CSS_VALUE_CHARS = 240;
-export const MAX_WEBPAGE_HTML_CHARS = 20000;
-export const MAX_WEBPAGE_MEDIA_SRC_CHARS = 2048;
-// source-bound blocks may poll on an interval (a clock, a live tally):
-// bounded below so one page can never hammer the executor
-export const MIN_WEBPAGE_SOURCE_INTERVAL_MS = 5_000;
-export const MAX_WEBPAGE_SOURCE_INTERVAL_MS = 3_600_000;
-export const DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS = 15_000;
-export const WEBPAGE_TEXT_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'blockquote', 'pre', 'code'] as const;
-export const WEBPAGE_MEDIA_KINDS = ['image', 'video', 'audio'] as const;
-export const WEBPAGE_CSS_KEY_PATTERN = /^(--)?[a-z][a-z0-9-]*$/;
-
 const componentSchema: ThingtimeSchema = {
 	id: 'component',
 	version: 1,
@@ -1509,7 +1478,6 @@ const componentSchema: ThingtimeSchema = {
 			description: 'The design language this component follows; user-authored components default to custom.'
 		},
 		{ name: 'category', type: 'string', required: false, max: MAX_COMPONENT_CATEGORY_CHARS, description: 'Catalog category, e.g. buttons, forms, feedback, navigation, flow.' },
-		{ name: 'source', type: 'record', required: false, description: 'Viewer-owned Action binding: { action, inputs?, refresh?: load/manual/interval/live, intervalMs? }. Source values resolve into result/state/error; the page can override this binding.' },
 		{ name: 'componentKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Stable slug identity linking saved versions to their source component.' },
 		{ name: 'familyKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Groups the library renditions (designs) of one functional component — /components shows one card per family.' },
 		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved instances of a componentKey.' },
@@ -1564,69 +1532,6 @@ const componentSchema: ThingtimeSchema = {
 	}
 };
 
-// Webpages are things too (thingtime ["webpage"]). A webpage is a bounded
-// ordered block tree: component blocks reference component things by
-// componentKey/shareId (resolved + drawn client-side through the sanitising
-// allowlist renderers, one budget per block), container blocks lay children
-// out, text blocks carry short copy, and native blocks mark where a built-in
-// app screen sits on a site page. The whole site is block-based: system
-// webpage-route-<key> docs describe every built-in route, users personalise
-// them with their own pageKey twin (siteRoute match, viewer-owned wins), and
-// standalone pages publish at /p/<id>. Built and edited with the /builder.
-const webpageSchema: ThingtimeSchema = {
-	id: 'webpage',
-	version: 1,
-	kind: 'crystal',
-	collection: null,
-	title: 'Webpage',
-	summary: 'A block-based page built from component things — create and edit with the /builder.',
-	detail:
-		'A webpage thing is an ordered, bounded tree of blocks: component blocks reference ' +
-		'component things (by componentKey or shareId) with per-block arg overrides, container ' +
-		'blocks arrange children in columns/rows/grids, text blocks hold short copy, and native ' +
-		'blocks mark where a built-in Thingtime screen renders on a site page. Blocks never carry ' +
-		'raw markup — referenced components resolve through the existing arg-template DSL and are ' +
-		'drawn only through the sanitising allowlist renderers, each block with its own render ' +
-		'budget. System webpage-route-<key> docs make every built-in route a block site; a ' +
-		'viewer-owned webpage with the same siteRoute personalises it. Standalone pages serve at ' +
-		'/p/<shareId>.',
-	fields: [
-		{ name: 'name', type: 'string', required: true, max: MAX_SCHEMA_NAME_CHARS, description: 'Display name, e.g. "My portfolio".' },
-		{ name: 'description', type: 'string', required: false, max: MAX_SCHEMA_DESCRIPTION_CHARS, description: 'What this page is for.' },
-		{ name: 'pageKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Stable slug identity linking saved versions of one page.' },
-		{ name: 'siteRoute', type: 'string', required: false, max: MAX_WEBPAGE_ROUTE_CHARS, description: 'App route this page describes (site pages only), e.g. /status.' },
-		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved instances of a pageKey.' },
-		{ name: 'forkOf', type: 'string', required: false, description: 'shareId of the webpage this one was forked from (provenance only).' },
-		{ name: 'previewBg', type: 'string', required: false, max: MAX_COMPONENT_PREVIEW_BG_CHARS, description: 'Optional CSS background for the page canvas.' },
-		{
-			name: 'blocks',
-			type: 'record',
-			required: true,
-			description:
-				'Ordered editable block tree: ' +
-				'{ id, type: component (component ref + args), container (direction/gap/columns + children), ' +
-				'text (text + style, optional href link), or native (built-in screen key) — plus align/maxWidth per block }.'
-		}
-	],
-	example: {
-		name: 'Launch page',
-		pageKey: 'launch-page',
-		blocks: [
-			{ id: 'hero-title', type: 'text', text: 'A GUI for the internet.', style: 'heading', align: 'center' },
-			{
-				id: 'cta-row',
-				type: 'container',
-				direction: 'row',
-				gap: 4,
-				align: 'center',
-				children: [
-					{ id: 'cta', type: 'component', component: 'thingtime-button-solid', args: { label: 'Join the waitlist 🚀' } }
-				]
-			}
-		]
-	}
-};
-
 // Actions are things too (thingtime ["action"]). An action is a small
 // DECLARATIVE program over a closed, registered operation vocabulary — there
 // is no persisted JavaScript and no `while` primitive because the vocabulary
@@ -1637,89 +1542,28 @@ const webpageSchema: ThingtimeSchema = {
 // `actions.invoke` calls, and every run lands as a protected `action-run`
 // child thing (targetId = the action) so the program's behaviour stays
 // inspectable after the fact.
-// v2 vocabulary (apps-on-Thingtime): `compute` binds a pure value (any step
-// value, typically a `{ ttExpr: [...] }` expression — schemas/actionExpressions.ts)
-// to a step result; `things.delete` removes ONE of the invoker's own data
-// things; `each` invokes a child action once per element of a bounded list
-// with `$item`/`$index` bound; `fail` refuses the run with an authored
-// message. Any step may carry `when: <value>` — falsy skips it (result null),
-// which is the whole of branching: there is still no loop primitive other
-// than the budget-bounded `each`, and no persisted code.
-export const ACTION_STEP_OPS = [
-	'http.request',
-	'lookup',
-	'things.create',
-	'things.get',
-	'things.search',
-	'things.update',
-	'things.delete',
-	'actions.invoke',
-	'compute',
-	'each',
-	'fail',
-	'return'
-] as const;
-export const ACTION_CAPABILITIES = ['http.request', 'lookup', 'things.read', 'things.create', 'things.update', 'things.delete', 'actions.invoke'] as const;
-export const ACTION_INPUT_TYPES = ['string', 'text', 'number', 'boolean', 'enum', 'json'] as const;
-export const MAX_ACTION_STEPS = 40;
+export const ACTION_STEP_OPS = ['things.create', 'things.get', 'things.search', 'things.update', 'actions.invoke', 'return'] as const;
+export const ACTION_CAPABILITIES = ['things.read', 'things.create', 'things.update', 'actions.invoke'] as const;
+export const ACTION_INPUT_TYPES = ['string', 'text', 'number', 'boolean', 'enum'] as const;
+export const MAX_ACTION_STEPS = 20;
 export const MAX_ACTION_INPUTS = 16;
 export const MAX_ACTION_CAPABILITY_ENTRIES = 8;
 export const MAX_ACTION_CAPABILITY_SCOPES = 12;
 export const MAX_ACTION_KEY_CHARS = 80;
 export const MAX_ACTION_SCHEMA_REF_CHARS = 128;
-export const MAX_ACTION_STEP_VALUE_KEYS = 48;
+export const MAX_ACTION_STEP_VALUE_KEYS = 24;
 export const MAX_ACTION_STEP_STRING_CHARS = 2000;
-// expressions nest two levels per call ({ ttExpr: [ … ] }), so a readable
-// program composes six or seven calls deep — the run-time budget bounds cost
-export const MAX_ACTION_STEP_VALUE_DEPTH = 16;
-export const MAX_ACTION_CONCAT_PARTS = 24;
-export const MAX_ACTION_SEARCH_LIMIT = 100;
-export const MAX_ACTION_SEARCH_OFFSET = 1000;
-export const MAX_ACTION_SEARCH_WHERE_KEYS = 8;
-export const MAX_ACTION_SEARCH_MATCH_KEYS = 4;
-export const MAX_ACTION_SEARCH_MATCH_CHARS = 120;
-export const MAX_ACTION_EACH_ITEMS = 20;
-// A search reads ONE of three corpora. 'own' and 'public' differ only in
-// whose docs they match; 'system' is a different KIND of source and exists
-// because "public" is not the same claim as "platform-authored".
-//
-// Seeded app content (StarsAlign's school entries, Pokeworld's species) is
-// public data things, so a `public` search finds it — but it also finds
-// every OTHER public data thing carrying the same schema stamp, and
-// `crystal.schema` is a free-form convention field on the open `data`
-// crystal: any signed-in account can create a public data thing naming a
-// public schema (createThing only checks that a supplied `schemaId` resolves
-// to a schema the writer can SEE, and a seeded schema is world-readable).
-// A platform action reading its own seeded corpus in `public` scope
-// therefore reads a corpus strangers can write into: with the default
-// newest-first sort and `limit: 1`, the newest forged row wins and every
-// viewer of that app page reads it. 'system' pins `ownerId: 'system'` so a
-// program that means "the rows the seed wrote" says exactly that.
-export const ACTION_SEARCH_SCOPES = ['own', 'public', 'system'] as const;
-export const ACTION_SEARCH_SORT_DIRECTIONS = ['asc', 'desc'] as const;
-export const ACTION_SEARCH_FIELD_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,59}$/;
+export const MAX_ACTION_STEP_VALUE_DEPTH = 5;
+export const MAX_ACTION_CONCAT_PARTS = 12;
+export const MAX_ACTION_SEARCH_LIMIT = 50;
 export const MAX_ACTION_TRACE_ENTRIES = 60;
 export const MAX_ACTION_RUN_ERROR_CHARS = 2000;
-// The most run records GET /api/v1/actions/runs will ever hand back in one
-// response — the ceiling the caller's `limit` is clamped to.
-export const MAX_ACTION_RUN_HISTORY = 50;
-// Retention for the run-record trail, per (owner, action). The records are
-// the ONE artifact of a run that is written outside createThing (protected
-// kind, direct insert) and stamped storageClass 'control', so they are
-// excluded from the storage ledger by isBillableStorageThing — neither
-// quota-admitted nor billed. Without a bound, `actions.run` (60/min) is a
-// standing 86k-records-per-day-per-account writer of unaccounted storage,
-// each record carrying up to maxInputBytes + maxResultBytes. The executor
-// therefore prunes to the newest N after each write. Keep this at or above
-// MAX_ACTION_RUN_HISTORY so retention can never drop a record the history
-// endpoint would still show.
-export const MAX_ACTION_RUNS_RETAINED = 50;
 export const ACTION_KEY_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // Server-enforced ceilings for the per-invocation envelope. Authors may lower
 // every knob; these are the hard caps the executor clamps against.
 export const ACTION_LIMIT_CEILINGS = {
 	timeoutMs: 10_000,
-	maxOperations: 100,
+	maxOperations: 50,
 	maxDepth: 8,
 	maxChildActions: 20,
 	maxResultBytes: 256 * 1024,
@@ -1727,7 +1571,7 @@ export const ACTION_LIMIT_CEILINGS = {
 } as const;
 export const ACTION_LIMIT_DEFAULTS = {
 	timeoutMs: 5_000,
-	maxOperations: 40,
+	maxOperations: 25,
 	maxDepth: 4,
 	maxChildActions: 10,
 	maxResultBytes: 64 * 1024,
@@ -1752,13 +1596,12 @@ const actionSchema: ThingtimeSchema = {
 		'"$now") or { ttConcat: [...] } string composition — reference substitution, never ' +
 		'evaluation. Child actions started via actions.invoke consume the PARENT invocation\'s ' +
 		'budget, so recursive chains terminate by construction. Every run is recorded as a ' +
-		'protected action-run child thing for inspection. Lookup steps use a registered provider ' +
-		'and the action owner’s Vault credential; provider results are omitted from run history. ' +
-		'Authored actions cannot supply arbitrary network destinations or read raw secrets.',
+		'protected action-run child thing for inspection. In v1 the vocabulary has no network, ' +
+		'no secrets, and no delete — external integrations arrive later as Connection-owned ' +
+		'capabilities.',
 	fields: [
 		{ name: 'name', type: 'string', required: true, max: MAX_SCHEMA_NAME_CHARS, description: 'Display name, e.g. "Create customer".' },
 		{ name: 'description', type: 'string', required: false, max: MAX_SCHEMA_DESCRIPTION_CHARS, description: 'What this action does and when to run it.' },
-		{ name: 'runtime', type: 'string', required: false, description: 'server (default) or browser. Browser programs use request steps with the current session.' },
 		{ name: 'actionKey', type: 'string', required: false, max: MAX_ACTION_KEY_CHARS, description: 'Stable slug identity (lowercase-dashed) other actions can invoke by key.' },
 		{ name: 'category', type: 'string', required: false, max: MAX_COMPONENT_CATEGORY_CHARS, description: 'Catalog category, e.g. customers, invoices, utilities.' },
 		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved revisions of an actionKey.' },
@@ -1781,7 +1624,7 @@ const actionSchema: ThingtimeSchema = {
 			description:
 				`Ordered step list, 1–${MAX_ACTION_STEPS}, each { op: ${ACTION_STEP_OPS.join(' | ')}, … }. ` +
 				'things.create { schema, values }; things.get { id }; things.search { schema?, limit? }; ' +
-				'things.update { id, values }; actions.invoke { action, inputs? }; lookup { provider, credentialId, query }; return { value }. ' +
+				'things.update { id, values }; actions.invoke { action, inputs? }; return { value }. ' +
 				'Values are literal JSON, whole-value refs, or ttConcat compositions.'
 		},
 		{
@@ -1791,7 +1634,7 @@ const actionSchema: ThingtimeSchema = {
 			max: MAX_ACTION_CAPABILITY_ENTRIES,
 			description:
 				`Declared capability list, max ${MAX_ACTION_CAPABILITY_ENTRIES}: { capability (${ACTION_CAPABILITIES.join('/')}), ` +
-				'schemas? (scope list), actions? (invoke allowlist), providers? (lookup allowlist) }. Save-time validation requires every step ' +
+				'schemas? (scope list), actions? (invoke allowlist) }. Save-time validation requires every step ' +
 				'to be covered by a declared capability, so the declaration is always true.'
 		},
 		{
@@ -1824,7 +1667,7 @@ const actionSchema: ThingtimeSchema = {
 	}
 };
 
-// Completed ordinary server invocations attempt one bounded debug record — server-minted by
+// Every action invocation lands one protected run record — server-minted by
 // the executor only (a forged run record would falsify the audit trail), so
 // the kind rides PROTECTED_THINGTIME and has no crystal sanitizer on the
 // generic write path.
@@ -1843,10 +1686,7 @@ const actionRunSchema: ThingtimeSchema = {
 		'consumed (operations, depth, child actions), a size-capped echo of the inputs and ' +
 		'result, and a per-step trace — the inspectable "what actually happened" half of the ' +
 		'action contract. Direct create/update/delete through the generic things routes is ' +
-		'refused. Operational telemetry, so the trail is retained rather than kept forever: the ' +
-		`executor keeps the newest ${MAX_ACTION_RUNS_RETAINED} records per action per owner and ` +
-		'prunes older ones after each run, and deleting the action deletes its run records with it. ' +
-		'Canonical Timeline separately retains private admission and redacted outcome events; this bounded record is supplementary debugging data.',
+		'refused.',
 	fields: [
 		{ name: 'status', type: 'enum', required: true, values: ['ok', 'error'], description: 'Whether the run completed or failed.' },
 		{ name: 'startedAt', type: 'date', required: true, description: 'When the invocation began.' },
@@ -4304,25 +4144,9 @@ export const PROTECTED_THINGTIME = [
   // credential, so these are server-minted end to end (auth/passkeys.ts)
   'passkey',
   'passkey-app-link',
-  // Embed SDK things (api/utils/things/embeddedThings.ts) are owned by
-  // /api/v1/embed/things end to end — version-checked writes, their own
-  // audience field. Protected so generic /things CRUD cannot forge or edit
-  // them AND so the search/listThings `$nin` keeps a *public* embed out of
-  // the ordinary post surfaces it is not content for.
-  EMBEDDED_THINGTIME,
-	...DEVICE_THINGTIME,
   // executor-minted run records — a forged action-run would falsify the
   // audit trail the /actions inspector shows (api/utils/actions/)
-  'action-run',
-  // the Lopu model catalog (api/utils/ai/models.ts): catalog fields are code
-  // and `enabled` is admin-only, so nothing may mint a model or flip
-  // availability through generic Thing CRUD
-  'ai-model',
-  // Lopu credits and usage (api/utils/lopu/accounting.ts): a forged account,
-  // ledger row or usage row would be free credits or a falsified bill
-  'lopu-account',
-  'lopu-usage',
-  'lopu-credit'
+  'action-run'
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -4554,21 +4378,8 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   },
   schemaThingSchema,
   componentSchema,
-  webpageSchema,
   actionSchema,
   actionRunSchema,
-  {
-    id: 'post-discovery', version: 1, kind: 'crystal', collection: null,
-    title: 'Collected secret post', summary: 'Private record of a successful secret-link visit.',
-    requiresTarget: true, createdVia: 'GET /api/v1/things?id=...&key=...',
-    detail: 'One protected control Thing per account or anonymous browser and post. targetId identifies the discovered post. Never exposed through generic reads, exports, search or CRUD. Current hidden ACL and key digest are rechecked on every access; rotation or removal revokes the record. Post deletion cascades it. IP metadata is private and does not itself authorize access.',
-    fields: [
-      { name: 'authorId', type: 'id', required: true, system: true, description: 'Author whose profile may list the discovered post.' },
-      { name: 'linkKeyDigest', type: 'string', required: true, system: true, max: 64, description: 'One-way digest of the valid secret link generation.' },
-      { name: 'anonymousId', type: 'id', required: false, system: true, description: 'One-way browser identity, absent for signed-in accounts.' },
-      { name: 'ipAddress', type: 'string', required: false, system: true, max: 45, description: 'Private IP observed when this link generation was collected.' }
-    ], example: { authorId: 'author-id', linkKeyDigest: 'one-way-link-generation-digest' }
-  },
   saveThingSchema,
   voteSchema,
   updownSchema,
@@ -5561,55 +5372,6 @@ const sanitizeComponentArgs = (input: unknown): { ok: true; args: Record<string,
 	return { ok: true, args };
 };
 
-const sanitizeSourceBinding = (input: unknown): { ok: true; source: Record<string, unknown> } | Fail => {
-	if (typeof input !== 'object' || Array.isArray(input)) return fail(400, `Component/page source must be an object`);
-	const rawSource = input as Record<string, unknown>;
-	const action = typeof rawSource.action === 'string' ? rawSource.action.trim() : '';
-	if (!action || action.length > MAX_ACTION_KEY_CHARS || !ACTION_KEY_PATTERN.test(action)) {
-		return fail(400, `Component/page source.action must be an actionKey (lowercase-dashed slug)`);
-	}
-	const source: Record<string, unknown> = { action };
-	if (rawSource.inputs !== undefined && rawSource.inputs !== null) {
-		if (typeof rawSource.inputs !== 'object' || Array.isArray(rawSource.inputs)) {
-			return fail(400, `Component/page source.inputs must be an object of scalar input values`);
-		}
-		const inputs: Record<string, unknown> = {};
-		const entries = Object.entries(rawSource.inputs as Record<string, unknown>);
-		if (entries.length > MAX_ACTION_INPUTS) return fail(400, `Component/page source.inputs can hold at most ${MAX_ACTION_INPUTS} entries`);
-		for (const [key, value] of entries) {
-			if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
-				return fail(400, `Component/page source input "${key.slice(0, 40)}" is not a valid input name`);
-			}
-			const scalar = sanitizeComponentArgScalar(value, MAX_COMPONENT_SAVED_ARG_CHARS);
-			if (scalar === null && value !== null) return fail(400, `Component/page source input ${key} must be a string, number, or boolean`);
-			if (scalar !== null) inputs[key] = scalar;
-		}
-		if (Object.keys(inputs).length) source.inputs = inputs;
-	}
-	// refresh: 'load' (default — again after every control run), 'manual'
-	// (once, on load), or 'interval' (also every intervalMs — a clock, a
-	// live tally; bounded so a page can never poll the executor hard)
-	if (rawSource.refresh !== undefined && rawSource.refresh !== null) {
-		if (rawSource.refresh !== 'load' && rawSource.refresh !== 'manual' && rawSource.refresh !== 'interval' && rawSource.refresh !== 'live') {
-			return fail(400, `Component/page source.refresh must be load, manual, interval, or live`);
-		}
-		if (rawSource.refresh !== 'load') source.refresh = rawSource.refresh;
-	}
-	if (rawSource.stream !== undefined || rawSource.refresh === 'live') {
-		const stream = validateLiveSource(rawSource.stream);
-		if (!stream) return fail(400, 'Component/page live source must use a registered read-only stream adapter');
-		source.stream = stream;
-	}
-	if (rawSource.intervalMs !== undefined && rawSource.intervalMs !== null) {
-		const intervalMs = Number(rawSource.intervalMs);
-		if (!Number.isInteger(intervalMs) || intervalMs < MIN_WEBPAGE_SOURCE_INTERVAL_MS || intervalMs > MAX_WEBPAGE_SOURCE_INTERVAL_MS) {
-			return fail(400, `Component/page source.intervalMs must be ${MIN_WEBPAGE_SOURCE_INTERVAL_MS}–${MAX_WEBPAGE_SOURCE_INTERVAL_MS}`);
-		}
-		if (source.refresh === 'interval') source.intervalMs = intervalMs;
-	}
-	return { ok: true as const, source };
-};
-
 const sanitizeComponentCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
 	const name = typeof input.name === 'string' ? input.name.trim() : '';
 	if (!name) return fail(400, 'Components need a name');
@@ -5695,412 +5457,6 @@ const sanitizeComponentCrystal = (input: Record<string, unknown>): { ok: true; c
 	if (isFail(render)) return render;
 	crystal.render = render.render;
 
-	if (input.source !== undefined && input.source !== null) {
-		const checked = sanitizeSourceBinding(input.source);
-		if (isFail(checked)) return checked;
-		crystal.source = checked.source;
-	}
-
-	return { ok: true, crystal };
-};
-
-// ---------------------------------------------------------------------------
-// Webpage block grammar — the save-time half of the block-based site builder.
-// A webpage crystal embeds a BOUNDED ordered block tree (the component
-// precedent: bounded replace-on-write document, NOT an accumulating list, so
-// FUNDAMENTALS §3's relational rule doesn't apply). Blocks never carry render
-// markup themselves: a 'component' block references a component thing by
-// componentKey/shareId and the client resolves + draws it through the
-// existing sanitising allowlist renderers with a per-block budget —
-// composition happens at the block layer so the template DSL (and its
-// external components-db resolver twin) stays untouched. 'native' blocks mark
-// where a built-in app screen renders and only ever resolve on the matching
-// site route — /p/ pages ignore them.
-
-// One css declaration value: no nested rules/markup, no expression()/@import,
-// no javascript: url — url() only with https/site-relative/data-image targets.
-const isSafeWebpageCssValue = (value: string): boolean => {
-	// no markup/nested-rule characters; `;` stays legal (data: URIs need it, and
-	// values are applied per-property through style objects, where a semicolon
-	// can never open a second declaration)
-	if (/[<>{}]/.test(value)) return false;
-	const lower = value.toLowerCase();
-	if (lower.includes('expression(') || lower.includes('@import') || lower.includes('javascript:')) return false;
-	const urlMatches = lower.matchAll(/url\(\s*['"]?([^'")]*)/g);
-	for (const match of urlMatches) {
-		const target = (match[1] || '').trim();
-		if (!/^(https:\/\/|\/(?![/\\])|data:image\/)/.test(target)) return false;
-	}
-	return true;
-};
-
-// Site-relative or explicit https. The second character matters: the WHATWG URL
-// parser folds `\` into `/` for special schemes, so `/\evil.example` resolves to
-// https://evil.example — a protocol-relative URL wearing a site-relative coat.
-// Both slash shapes are refused so "site-relative" really means same-origin.
-const isSafeWebpageMediaSrc = (value: string): boolean =>
-	/^(https:\/\/|\/(?![/\\]))/.test(value) && !/\s/.test(value);
-
-// A text block's link target: the media-src screen plus mailto:/tel: (a page
-// button or nav link), never javascript:/data:/protocol-relative.
-const isSafeWebpageHref = (value: string): boolean =>
-	isSafeWebpageMediaSrc(value) || /^(mailto:|tel:)[^\s/][^\s]*$/i.test(value);
-
-const sanitizeWebpageBlock = (
-	input: unknown,
-	depth: number,
-	state: { nodes: number; ids: Set<string> }
-): { ok: true; block: Record<string, unknown> } | Fail => {
-	if (!input || typeof input !== 'object' || Array.isArray(input)) {
-		return fail(400, 'Each webpage block must be an object');
-	}
-	if (depth > MAX_WEBPAGE_BLOCK_DEPTH) return fail(400, `Webpage blocks nest at most ${MAX_WEBPAGE_BLOCK_DEPTH} levels`);
-	state.nodes += 1;
-	if (state.nodes > MAX_WEBPAGE_BLOCKS) return fail(400, `Webpages can hold at most ${MAX_WEBPAGE_BLOCKS} blocks`);
-
-	const raw = input as Record<string, unknown>;
-	const id = typeof raw.id === 'string' ? raw.id.trim() : '';
-	if (!id || id.length > MAX_WEBPAGE_BLOCK_ID_CHARS || !COMPONENT_KEY_PATTERN.test(id)) {
-		return fail(400, 'Every block needs a lowercase-dashed id');
-	}
-	if (state.ids.has(id)) return fail(400, `Duplicate block id: ${id}`);
-	state.ids.add(id);
-
-	const type = typeof raw.type === 'string' ? raw.type : '';
-	if (!(WEBPAGE_BLOCK_TYPES as readonly string[]).includes(type)) {
-		return fail(400, `Block ${id} has an unknown type (expected ${WEBPAGE_BLOCK_TYPES.join('/')})`);
-	}
-
-	const block: Record<string, unknown> = { id, type };
-
-	const align = typeof raw.align === 'string' ? raw.align : '';
-	if (align) {
-		if (!(WEBPAGE_BLOCK_ALIGNS as readonly string[]).includes(align)) {
-			return fail(400, `Block ${id} align must be ${WEBPAGE_BLOCK_ALIGNS.join('/')}`);
-		}
-		block.align = align;
-	}
-	if (raw.maxWidth !== undefined && raw.maxWidth !== null) {
-		const maxWidth = Number(raw.maxWidth);
-		if (!Number.isInteger(maxWidth) || maxWidth < 120 || maxWidth > 1680) {
-			return fail(400, `Block ${id} maxWidth must be 120–1680`);
-		}
-		block.maxWidth = maxWidth;
-	}
-	if (raw.css !== undefined && raw.css !== null) {
-		if (typeof raw.css !== 'object' || Array.isArray(raw.css)) {
-			return fail(400, `Block ${id} css must be an object of css property → value`);
-		}
-		const entries = Object.entries(raw.css as Record<string, unknown>);
-		if (entries.length > MAX_WEBPAGE_CSS_PROPS) {
-			return fail(400, `Block ${id} css can hold at most ${MAX_WEBPAGE_CSS_PROPS} properties`);
-		}
-		const css: Record<string, string> = {};
-		for (const [key, value] of entries) {
-			if (!WEBPAGE_CSS_KEY_PATTERN.test(key) || key.length > MAX_WEBPAGE_CSS_KEY_CHARS) {
-				return fail(400, `Block ${id} css key "${key.slice(0, 40)}" must be a kebab-case css property`);
-			}
-			if (typeof value !== 'string' || !value.trim()) continue;
-			if (value.length > MAX_WEBPAGE_CSS_VALUE_CHARS) {
-				return fail(400, `Block ${id} css value for ${key} is too long (max ${MAX_WEBPAGE_CSS_VALUE_CHARS})`);
-			}
-			if (!isSafeWebpageCssValue(value)) {
-				return fail(400, `Block ${id} css value for ${key} contains a blocked construct`);
-			}
-			css[key] = value.trim();
-		}
-		if (Object.keys(css).length) block.css = css;
-	}
-
-		if (raw.args !== undefined && raw.args !== null) {
-			if (typeof raw.args !== 'object' || Array.isArray(raw.args)) {
-				return fail(400, `Block ${id} args must be an object of scalar arg values`);
-			}
-			const args: Record<string, unknown> = {};
-			const entries = Object.entries(raw.args as Record<string, unknown>);
-			if (entries.length > MAX_COMPONENT_SAVED_ARGS) {
-				return fail(400, `Block ${id} args can hold at most ${MAX_COMPONENT_SAVED_ARGS} entries`);
-			}
-			for (const [key, value] of entries) {
-				if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
-					return fail(400, `Block ${id} arg key "${key.slice(0, 40)}" is not a valid arg name`);
-				}
-				const scalar = sanitizeComponentArgScalar(value, MAX_COMPONENT_SAVED_ARG_CHARS);
-				if (scalar === null && value !== null) return fail(400, `Block ${id} arg ${key} must be a string, number, or boolean`);
-				if (scalar !== null) args[key] = scalar;
-			}
-			if (Object.keys(args).length) block.args = args;
-		}
-	// Source bindings can scope any editable subtree. Execution retains the
-	// same viewer-owned Action authorization as a component source.
-	if (raw.source != null) {
-		const checked = sanitizeSourceBinding(raw.source);
-		if (isFail(checked)) return checked;
-		block.source = checked.source;
-	}
-	if (type === 'element' || type === 'collection' || type === 'condition') {
-		if (type === 'element') {
-			const tag = typeof raw.tag === 'string' ? raw.tag.toLowerCase() : 'div';
-			if (!HTML_ALLOWED_TAGS.has(tag) || (tag.startsWith('tt-') && tag !== 'tt-media-pipeline')) return fail(400, 'Element blocks require a safe HTML tag');
-			if (tag === 'tt-media-pipeline') {
-				try { validateMediaPipeline((raw.props as any)?.pipeline); } catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid media pipeline'); }
-			}
-			block.tag = tag;
-			if (typeof raw.text === 'string') block.text = raw.text;
-		}
-		for (const key of ['props', 'condition', 'format']) {
-			if (raw[key] == null) continue;
-			if (typeof raw[key] !== 'object' || Array.isArray(raw[key])) return fail(400, `Block ${key} must be an object`);
-			const checked = checkSchemaRenderTree(raw[key], 0, { nodes: 0 });
-			if (checked !== true) return checked;
-			block[key] = raw[key];
-		}
-		if (raw.children != null && !Array.isArray(raw.children)) return fail(400, 'Block children must be a list');
-		const children: Record<string, unknown>[] = [];
-		for (const child of (raw.children || []) as unknown[]) {
-			const checked = sanitizeWebpageBlock(child, depth + 1, state);
-			if (isFail(checked)) return checked;
-			children.push(checked.block);
-		}
-		if (children.length || type !== 'element') block.children = children;
-		return { ok: true, block };
-	}
-
-	if (type === 'component') {
-		const component = typeof raw.component === 'string' ? raw.component.trim() : '';
-		if (!component || component.length > MAX_WEBPAGE_BLOCK_REF_CHARS || /[$\s]/.test(component)) {
-			return fail(400, `Block ${id} needs a component reference (componentKey or shareId)`);
-		}
-		block.component = component;
-
-		// source: a DATA BINDING — the page runtime runs this action AS THE
-		// VIEWER (delegated, owner-only resolution like a ttAction click) when
-		// the page loads and again after any control on the page runs, and
-		// exposes the result to the component template as `result`. The action
-		// is named by actionKey (never a foreign id), inputs are bounded
-		// scalars whose strings may carry {arg} / {query.<name>} tokens, and
-		// nothing here widens what the viewer could run by hand.
-		if (raw.source !== undefined && raw.source !== null) {
-			const checked = sanitizeSourceBinding(raw.source);
-			if (isFail(checked)) return checked;
-			block.source = checked.source;
-		}
-		return { ok: true, block };
-	}
-
-	if (type === 'container') {
-		const direction = typeof raw.direction === 'string' ? raw.direction : 'column';
-		if (!(WEBPAGE_CONTAINER_DIRECTIONS as readonly string[]).includes(direction)) {
-			return fail(400, `Block ${id} direction must be ${WEBPAGE_CONTAINER_DIRECTIONS.join('/')}`);
-		}
-		block.direction = direction;
-		if (raw.gap !== undefined && raw.gap !== null) {
-			const gap = Number(raw.gap);
-			if (!Number.isInteger(gap) || gap < 0 || gap > 12) return fail(400, `Block ${id} gap must be 0–12`);
-			block.gap = gap;
-		}
-		if (raw.columns !== undefined && raw.columns !== null) {
-			const columns = Number(raw.columns);
-			if (!Number.isInteger(columns) || columns < 1 || columns > 6) return fail(400, `Block ${id} columns must be 1–6`);
-			block.columns = columns;
-		}
-		const children: Record<string, unknown>[] = [];
-		if (raw.children !== undefined && raw.children !== null) {
-			if (!Array.isArray(raw.children)) return fail(400, `Block ${id} children must be a list of blocks`);
-			for (const child of raw.children) {
-				const sanitized = sanitizeWebpageBlock(child, depth + 1, state);
-				if (isFail(sanitized)) return sanitized;
-				children.push(sanitized.block);
-			}
-		}
-		block.children = children;
-		return { ok: true, block };
-	}
-
-	if (type === 'text') {
-		const text = typeof raw.text === 'string' ? raw.text : '';
-		const html = typeof raw.html === 'string' ? raw.html : '';
-		if (!text.trim() && !html.trim()) return fail(400, `Block ${id} needs text`);
-		block.text = text.slice(0, MAX_WEBPAGE_TEXT_CHARS);
-		if (html.trim()) {
-			// rich WYSIWYG content — size-bounded here; the client renders it ONLY
-			// through the sanitising allowlist renderer (tags/props/urls/styles)
-			if (html.length > MAX_WEBPAGE_HTML_CHARS) {
-				return fail(400, `Block ${id} rich text is too long (max ${MAX_WEBPAGE_HTML_CHARS} chars)`);
-			}
-			block.html = html;
-		}
-		const style = typeof raw.style === 'string' ? raw.style : '';
-		if (style) {
-			if (!(WEBPAGE_TEXT_STYLES as readonly string[]).includes(style)) {
-				return fail(400, `Block ${id} style must be ${WEBPAGE_TEXT_STYLES.join('/')}`);
-			}
-			block.style = style;
-		}
-		const tag = typeof raw.tag === 'string' ? raw.tag.toLowerCase() : '';
-		if (tag) {
-			if (!(WEBPAGE_TEXT_TAGS as readonly string[]).includes(tag)) {
-				return fail(400, `Block ${id} tag must be ${WEBPAGE_TEXT_TAGS.join('/')}`);
-			}
-			block.tag = tag;
-		}
-		// optional link target — the text renders as an anchor (buttons, nav
-		// links); screened like a media src, with mailto:/tel: allowed
-		const href = typeof raw.href === 'string' ? raw.href.trim() : '';
-		if (href) {
-			if (href.length > MAX_WEBPAGE_MEDIA_SRC_CHARS || !isSafeWebpageHref(href)) {
-				return fail(400, `Block ${id} href must be an https, site-relative, mailto:, or tel: link`);
-			}
-			block.href = href;
-		}
-		return { ok: true, block };
-	}
-
-	if (type === 'media') {
-		const src = typeof raw.src === 'string' ? raw.src.trim() : '';
-		if (src && (src.length > MAX_WEBPAGE_MEDIA_SRC_CHARS || !isSafeWebpageMediaSrc(src))) {
-			return fail(400, `Block ${id} src must be an https or site-relative URL`);
-		}
-		block.src = src;
-		const media = typeof raw.media === 'string' ? raw.media : 'image';
-		if (!(WEBPAGE_MEDIA_KINDS as readonly string[]).includes(media)) {
-			return fail(400, `Block ${id} media must be ${WEBPAGE_MEDIA_KINDS.join('/')}`);
-		}
-		block.media = media;
-		const alt = typeof raw.alt === 'string' ? raw.alt.trim() : '';
-		if (alt) block.alt = alt.slice(0, 300);
-		return { ok: true, block };
-	}
-
-	if (type === 'html') {
-		const html = typeof raw.html === 'string' ? raw.html : '';
-		if (!html.trim()) return fail(400, `Block ${id} needs html`);
-		if (html.length > MAX_WEBPAGE_HTML_CHARS) {
-			return fail(400, `Block ${id} html is too long (max ${MAX_WEBPAGE_HTML_CHARS} chars)`);
-		}
-		// stored verbatim, never rendered raw: the client parses it into the
-		// allowlist renderer's node tree (tags/props/styles/urls sanitised there)
-		block.html = html;
-		return { ok: true, block };
-	}
-
-	// native — a built-in app screen slot; only the matching site route renders
-	// it, everywhere else it is inert (never markup, never fetched).
-	const native = typeof raw.native === 'string' ? raw.native.trim() : '';
-	if (!native || native.length > MAX_COMPONENT_KEY_CHARS || !COMPONENT_KEY_PATTERN.test(native)) {
-		return fail(400, `Block ${id} needs a native screen key (lowercase-dashed slug)`);
-	}
-	block.native = native;
-	return { ok: true, block };
-};
-
-export const sanitizeWebpageBlocks = (input: unknown): { ok: true; blocks: Record<string, unknown>[] } | Fail => {
-	if (!Array.isArray(input)) return fail(400, 'Webpage blocks must be a list');
-	const state = { nodes: 0, ids: new Set<string>() };
-	const blocks: Record<string, unknown>[] = [];
-	const pending = input.map(entry => ({ entry, target: blocks }));
- const seen = new Set<object>();
- for (let cursor = 0; cursor < pending.length; cursor++) {
-  const { entry, target } = pending[cursor];
-  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return fail(400, 'Each webpage block must be an object');
-  if (seen.has(entry)) return fail(400, 'Webpage blocks must be an acyclic tree');
-  seen.add(entry);
-  const raw = entry as Record<string, unknown>;
-  if (raw.children != null && !Array.isArray(raw.children)) return fail(400, 'Block children must be a list');
-  const sanitized = sanitizeWebpageBlock({ ...raw, children: undefined }, 1, state);
-  if (isFail(sanitized)) return sanitized;
-  target.push(sanitized.block);
-  if (Array.isArray(raw.children)) {
-   if (!['container', 'element', 'collection', 'condition'].includes(String(raw.type))) return fail(400, 'This block type cannot contain children');
-   const children: Record<string, unknown>[] = [];
-   sanitized.block.children = children;
-   for (const child of raw.children) pending.push({ entry: child, target: children });
-  }
- }
-
-	let serialized = '';
-	try {
-		serialized = JSON.stringify(blocks);
-	} catch {
-		return fail(400, 'Webpage blocks must be JSON-serialisable');
-	}
-	if (serialized.length > MAX_WEBPAGE_BLOCKS_BYTES) {
-		return fail(400, `Webpage blocks are too large (max ${MAX_WEBPAGE_BLOCKS_BYTES} bytes)`);
-	}
-	return { ok: true, blocks };
-};
-
-const sanitizeWebpageCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
-	const name = typeof input.name === 'string' ? input.name.trim() : '';
-	if (!name) return fail(400, 'Webpages need a name');
-	if (name.length > MAX_SCHEMA_NAME_CHARS) return fail(400, `Webpage name is too long (max ${MAX_SCHEMA_NAME_CHARS})`);
-
-	const crystal: Record<string, unknown> = { name };
-
-	const description = typeof input.description === 'string' ? input.description.trim().slice(0, MAX_SCHEMA_DESCRIPTION_CHARS) : '';
-	if (description) crystal.description = description;
-
-	if (input.pageKey !== undefined && input.pageKey !== null && input.pageKey !== '') {
-		const pageKey = typeof input.pageKey === 'string' ? input.pageKey.trim() : '';
-		if (!pageKey || pageKey.length > MAX_COMPONENT_KEY_CHARS || !COMPONENT_KEY_PATTERN.test(pageKey)) {
-			return fail(400, 'pageKey must be a lowercase-dashed slug');
-		}
-		crystal.pageKey = pageKey;
-	}
-
-	// suiteKey names the behaviour suite (an installable app bundle —
-	// schemas/behaviourSuites.ts) this page belongs to, so a viewer of the
-	// seeded copy can install the whole program from the page itself.
-	if (input.suiteKey !== undefined && input.suiteKey !== null && input.suiteKey !== '') {
-		const suiteKey = typeof input.suiteKey === 'string' ? input.suiteKey.trim() : '';
-		if (!suiteKey || suiteKey.length > MAX_COMPONENT_KEY_CHARS || !COMPONENT_KEY_PATTERN.test(suiteKey)) {
-			return fail(400, 'suiteKey must be a lowercase-dashed slug');
-		}
-		crystal.suiteKey = suiteKey;
-	}
-
-	// siteRoute binds a site page (system default or a user's personal
-	// override) to an app route; /p/ pages leave it unset.
-	if (input.siteRoute !== undefined && input.siteRoute !== null && input.siteRoute !== '') {
-		const siteRoute = typeof input.siteRoute === 'string' ? input.siteRoute.trim() : '';
-		if (!siteRoute || siteRoute.length > MAX_WEBPAGE_ROUTE_CHARS || !WEBPAGE_ROUTE_PATTERN.test(siteRoute)) {
-			return fail(400, 'siteRoute must be an app path like /status');
-		}
-		crystal.siteRoute = siteRoute;
-	}
-
-	if (input.version !== undefined && input.version !== null) {
-		const version = Number(input.version);
-		if (!Number.isInteger(version) || version < 1 || version > 999999) return fail(400, 'version must be a positive integer');
-		crystal.version = version;
-	}
-
-	if (input.forkOf !== undefined && input.forkOf !== null && input.forkOf !== '') {
-		const forkOf = typeof input.forkOf === 'string' ? input.forkOf.trim() : '';
-		if (!forkOf || forkOf.length > 128 || /[$\s]/.test(forkOf)) return fail(400, 'forkOf must be a thing id');
-		crystal.forkOf = forkOf;
-	}
-
-	if (input.previewBg !== undefined && input.previewBg !== null && input.previewBg !== '') {
-		const previewBg = typeof input.previewBg === 'string' ? input.previewBg.trim() : '';
-		// Same screen the per-block `css` values above get, not the looser
-		// component-era `[<>]|javascript:` check: a webpage's previewBg is drawn
-		// on /p/<id>, where the viewer is NOT the author, so it has to refuse
-		// nested-rule characters, expression()/@import, and off-site url()
-		// targets exactly like every other author-supplied css value on a page.
-		if (!previewBg || previewBg.length > MAX_COMPONENT_PREVIEW_BG_CHARS || !isSafeWebpageCssValue(previewBg)) {
-			return fail(400, 'previewBg must be a short CSS background value');
-		}
-		crystal.previewBg = previewBg;
-	}
-
-	if (input.blocks === undefined || input.blocks === null) {
-		return fail(400, 'Webpages need a blocks list (may be empty)');
-	}
-	const blocks = sanitizeWebpageBlocks(input.blocks);
-	if (isFail(blocks)) return blocks;
-	crystal.blocks = blocks.blocks;
-
 	return { ok: true, crystal };
 };
 
@@ -6121,33 +5477,15 @@ const MAX_ACTION_REF_PATH_SEGMENTS = 6;
 export type ActionRef =
 	| { kind: 'input'; name: string }
 	| { kind: 'step'; step: number; path: string[] }
-	| { kind: 'now' }
-	// the invoking viewer — $viewer.id / $viewer.username
-	| { kind: 'viewer'; field: 'id' | 'username' }
-	// the current element inside an `each` step or a list lambda — $item, $item.path
-	| { kind: 'item'; path: string[] }
-	// its 0-based position — $index
-	| { kind: 'index' };
+	| { kind: 'now' };
 
-const parseRefPath = (value: string, segments: string[]): string[] | Fail => {
-	if (segments.length > MAX_ACTION_REF_PATH_SEGMENTS) return fail(400, `Reference path is too deep "${value.slice(0, 80)}"`);
-	for (const segment of segments) {
-		if (!ACTION_REF_SEGMENT_PATTERN.test(segment) || ACTION_BANNED_SEGMENTS.has(segment)) {
-			return fail(400, `Invalid reference segment in "${value.slice(0, 80)}"`);
-		}
-	}
-	return segments;
-};
-
-// Parse a whole-value reference string ("$input.name", "$step.1.id", "$now",
-// "$viewer.id", "$item.hp", "$index"). Returns null when the string is not a
-// reference (plain literal data) and Fail when it LOOKS like a reference but
-// is malformed — a typo'd ref that silently became a literal would be a
-// debugging trap.
+// Parse a whole-value reference string ("$input.name", "$step.1.id", "$now").
+// Returns null when the string is not a reference (plain literal data) and
+// Fail when it LOOKS like a reference but is malformed — a typo'd ref that
+// silently became a literal would be a debugging trap.
 export const parseActionRef = (value: string): ActionRef | null | Fail => {
 	if (!value.startsWith('$') || value.startsWith('$$')) return null;
 	if (value === '$now') return { kind: 'now' };
-	if (value === '$index') return { kind: 'index' };
 	const parts = value.slice(1).split('.');
 	if (parts[0] === 'input') {
 		if (parts.length !== 2 || !COMPONENT_ARG_NAME_PATTERN.test(parts[1])) {
@@ -6160,34 +5498,22 @@ export const parseActionRef = (value: string): ActionRef | null | Fail => {
 		if (!Number.isInteger(step) || step < 1 || step > MAX_ACTION_STEPS) {
 			return fail(400, `Invalid step reference "${value.slice(0, 80)}" (expected $step.<n> with n 1–${MAX_ACTION_STEPS})`);
 		}
-		const path = parseRefPath(value, parts.slice(2));
-		if (!Array.isArray(path)) return path;
+		const path = parts.slice(2);
+		if (path.length > MAX_ACTION_REF_PATH_SEGMENTS) return fail(400, `Step reference path is too deep "${value.slice(0, 80)}"`);
+		for (const segment of path) {
+			if (!ACTION_REF_SEGMENT_PATTERN.test(segment) || ACTION_BANNED_SEGMENTS.has(segment)) {
+				return fail(400, `Invalid step reference segment in "${value.slice(0, 80)}"`);
+			}
+		}
 		return { kind: 'step', step, path };
 	}
-	if (parts[0] === 'viewer') {
-		if (parts.length !== 2 || (parts[1] !== 'id' && parts[1] !== 'username')) {
-			return fail(400, `Invalid viewer reference "${value.slice(0, 80)}" (expected $viewer.id or $viewer.username)`);
-		}
-		return { kind: 'viewer', field: parts[1] };
-	}
-	if (parts[0] === 'item') {
-		const path = parseRefPath(value, parts.slice(1));
-		if (!Array.isArray(path)) return path;
-		return { kind: 'item', path };
-	}
-	return fail(400, `Unknown reference root "${value.slice(0, 80)}" (expected $input, $step, $now, $viewer, $item, or $index)`);
+	return fail(400, `Unknown reference root "${value.slice(0, 80)}" (expected $input, $step, or $now)`);
 };
 
-// Where a value sits when it is validated: `itemDepth` > 0 means $item /
-// $index are bound (inside an `each` step's inputs or a list lambda).
-type ActionValueScope = { itemDepth: number };
-const TOP_SCOPE: ActionValueScope = { itemDepth: 0 };
-
-// Validate one step-value tree: literal JSON, whole-value refs,
-// { ttConcat: [...] } string composition, or { ttExpr: [fn, ...args] }
-// expressions over the closed function catalogue. stepIndex is 1-based; refs
-// may only point at EARLIER steps so the program is executable top to bottom.
-const validateActionValue = (value: unknown, stepIndex: number, depth = 0, scope: ActionValueScope = TOP_SCOPE): Fail | { ok: true } => {
+// Validate one step-value tree: literal JSON, whole-value refs, or
+// { ttConcat: [...] } string composition. stepIndex is 1-based; refs may only
+// point at EARLIER steps so the program is executable top to bottom.
+const validateActionValue = (value: unknown, stepIndex: number, depth = 0): Fail | { ok: true } => {
 	if (depth > MAX_ACTION_STEP_VALUE_DEPTH) return fail(400, `Step ${stepIndex} values nest too deeply (max ${MAX_ACTION_STEP_VALUE_DEPTH})`);
 	if (value === null || typeof value === 'boolean') return { ok: true };
 	if (typeof value === 'number') {
@@ -6203,16 +5529,13 @@ const validateActionValue = (value: unknown, stepIndex: number, depth = 0, scope
 		if (ref && 'kind' in ref && ref.kind === 'step' && ref.step >= stepIndex) {
 			return fail(400, `Step ${stepIndex} references $step.${ref.step} before it has run`);
 		}
-		if (ref && 'kind' in ref && (ref.kind === 'item' || ref.kind === 'index') && scope.itemDepth <= 0) {
-			return fail(400, `Step ${stepIndex} uses ${value.slice(0, 40)} outside an each step or a list lambda`);
-		}
 		return { ok: true };
 	}
 	if (typeof value !== 'object') return fail(400, `Step ${stepIndex} values must be JSON data`);
 	if (Array.isArray(value)) {
 		if (value.length > MAX_ACTION_STEP_VALUE_KEYS) return fail(400, `Step ${stepIndex} lists cap at ${MAX_ACTION_STEP_VALUE_KEYS} entries`);
 		for (const entry of value) {
-			const checked = validateActionValue(entry, stepIndex, depth + 1, scope);
+			const checked = validateActionValue(entry, stepIndex, depth + 1);
 			if (isFail(checked)) return checked;
 		}
 		return { ok: true };
@@ -6224,31 +5547,10 @@ const validateActionValue = (value: unknown, stepIndex: number, depth = 0, scope
 			return fail(400, `ttConcat needs 1–${MAX_ACTION_CONCAT_PARTS} parts`);
 		}
 		for (const part of record.ttConcat) {
-			if (typeof part !== 'string' && typeof part !== 'number' && typeof part !== 'boolean' && !(part && typeof part === 'object' && !Array.isArray(part))) {
-				return fail(400, 'ttConcat parts must be strings, numbers, booleans, refs, or expressions');
+			if (typeof part !== 'string' && typeof part !== 'number' && typeof part !== 'boolean') {
+				return fail(400, 'ttConcat parts must be strings, numbers, booleans, or refs');
 			}
-			const checked = validateActionValue(part, stepIndex, depth + 1, scope);
-			if (isFail(checked)) return checked;
-		}
-		return { ok: true };
-	}
-	if (keys.length === 1 && keys[0] === 'ttExpr') {
-		const expression = record.ttExpr;
-		if (!Array.isArray(expression) || !expression.length || expression.length > MAX_EXPRESSION_ARGS + 1) {
-			return fail(400, `Step ${stepIndex} ttExpr needs [fn, ...args] with at most ${MAX_EXPRESSION_ARGS} args`);
-		}
-		const fn = typeof expression[0] === 'string' ? expression[0] : '';
-		const signature = catalogueSignature(fn);
-		if (!signature) {
-			return fail(400, `Step ${stepIndex} ttExpr names an unknown function "${String(expression[0]).slice(0, 40)}" (the catalogue is closed)`);
-		}
-		const args = expression.slice(1);
-		if (args.length < signature.min || args.length > signature.max) {
-			return fail(400, `Step ${stepIndex} ${fn} takes ${signature.min === signature.max ? signature.min : `${signature.min}–${signature.max}`} args`);
-		}
-		for (let index = 0; index < args.length; index += 1) {
-			const lambda = isLambdaArg(fn, index);
-			const checked = validateActionValue(args[index], stepIndex, depth + 1, lambda ? { itemDepth: scope.itemDepth + 1 } : scope);
+			const checked = validateActionValue(part, stepIndex, depth + 1);
 			if (isFail(checked)) return checked;
 		}
 		return { ok: true };
@@ -6258,7 +5560,7 @@ const validateActionValue = (value: unknown, stepIndex: number, depth = 0, scope
 		if (!ACTION_STEP_KEY_PATTERN.test(key) || ACTION_BANNED_SEGMENTS.has(key)) {
 			return fail(400, `Step ${stepIndex} has an invalid key "${key.slice(0, 64)}"`);
 		}
-		const checked = validateActionValue(record[key], stepIndex, depth + 1, scope);
+		const checked = validateActionValue(record[key], stepIndex, depth + 1);
 		if (isFail(checked)) return checked;
 	}
 	return { ok: true };
@@ -6310,13 +5612,7 @@ const sanitizeActionInputs = (input: unknown): Fail | { ok: true; inputs: Record
 			}
 			descriptor.values = values;
 		}
-		if (raw.default !== undefined && type === 'json') {
-			try {
-				descriptor.default = copyActionJson(raw.default);
-			} catch (error) {
-				return fail(400, `Input ${name}: ${error instanceof Error ? error.message : 'Invalid JSON default'}`);
-			}
-		} else if (raw.default !== undefined) {
+		if (raw.default !== undefined) {
 			const fallback = sanitizeComponentArgScalar(raw.default, MAX_COMPONENT_ARG_DEFAULT_CHARS);
 			if (fallback === null && raw.default !== null) return fail(400, `Input ${name} default must be a string, number, or boolean`);
 			if (fallback !== null) {
@@ -6349,7 +5645,7 @@ const sanitizeActionInputs = (input: unknown): Fail | { ok: true; inputs: Record
 	return { ok: true, inputs };
 };
 
-export type ActionCapabilityEntry = { capability: string; schemas?: string[]; actions?: string[]; providers?: string[]; endpoints?: string[] };
+export type ActionCapabilityEntry = { capability: string; schemas?: string[]; actions?: string[] };
 
 const sanitizeActionCapabilities = (input: unknown): Fail | { ok: true; capabilities: ActionCapabilityEntry[] } => {
 	if (!Array.isArray(input)) return fail(400, 'Action capabilities must be a list');
@@ -6368,15 +5664,6 @@ const sanitizeActionCapabilities = (input: unknown): Fail | { ok: true; capabili
 		if (seen.has(capability)) return fail(400, `Duplicate capability: ${capability}`);
 		seen.add(capability);
 		const sanitized: ActionCapabilityEntry = { capability };
-		if (capability === 'http.request') {
-			if (!Array.isArray(raw.endpoints) || !raw.endpoints.length || raw.endpoints.length > MAX_ACTION_CAPABILITY_SCOPES || !raw.endpoints.every(isActionHttpEndpoint))
-				return fail(400, 'http.request needs a literal method and API path allowlist');
-			sanitized.endpoints = [...new Set(raw.endpoints)] as string[];
-		} else if (raw.endpoints !== undefined) return fail(400, 'Only http.request takes endpoints');
-		if (capability === 'lookup') {
-			if (!Array.isArray(raw.providers) || !raw.providers.length || raw.providers.length > MAX_ACTION_CAPABILITY_SCOPES || raw.providers.some((provider) => !isActionLookupProvider(provider))) return fail(400, 'lookup needs a registered providers allowlist');
-			sanitized.providers = [...new Set(raw.providers)] as string[];
-		} else if (raw.providers !== undefined) return fail(400, 'Only lookup takes providers');
 		if (raw.schemas !== undefined && raw.schemas !== null) {
 			if (!Array.isArray(raw.schemas) || raw.schemas.length > MAX_ACTION_CAPABILITY_SCOPES) {
 				return fail(400, `Capability ${capability} scopes cap at ${MAX_ACTION_CAPABILITY_SCOPES} schemas`);
@@ -6407,16 +5694,15 @@ const sanitizeActionCapabilities = (input: unknown): Fail | { ok: true; capabili
 	return { ok: true, capabilities };
 };
 
-const sanitizeActionLimits = (input: unknown, browser = false): Fail | { ok: true; limits: Record<string, number> } => {
+const sanitizeActionLimits = (input: unknown): Fail | { ok: true; limits: Record<string, number> } => {
 	if (!input || typeof input !== 'object' || Array.isArray(input)) return fail(400, 'Action limits must be an object');
 	const raw = input as Record<string, unknown>;
 	const limits: Record<string, number> = {};
-	const ceilings = browser ? { ...ACTION_LIMIT_CEILINGS, ...BROWSER_ACTION_EXPANDED_LIMITS } : ACTION_LIMIT_CEILINGS;
 	for (const key of Object.keys(ACTION_LIMIT_CEILINGS) as (keyof typeof ACTION_LIMIT_CEILINGS)[]) {
 		if (raw[key] === undefined || raw[key] === null) continue;
 		const value = Number(raw[key]);
 		if (!Number.isInteger(value) || value < 1) return fail(400, `Limit ${key} must be a positive integer`);
-		limits[key] = Math.min(value, ceilings[key]);
+		limits[key] = Math.min(value, ACTION_LIMIT_CEILINGS[key]);
 	}
 	const unknown = Object.keys(raw).find((key) => !(key in ACTION_LIMIT_CEILINGS));
 	if (unknown) return fail(400, `Unknown limit "${unknown.slice(0, 40)}"`);
@@ -6453,83 +5739,27 @@ const sanitizeActionSteps = (
 		if (!(ACTION_STEP_OPS as readonly string[]).includes(op)) {
 			return fail(400, `Step ${stepIndex} has an unknown op "${String(raw.op).slice(0, 40)}" (the vocabulary is closed: ${ACTION_STEP_OPS.join(', ')})`);
 		}
+		if (op === 'return' && stepIndex !== input.length) return fail(400, 'return must be the last step');
 		const step: ActionStep = { op };
-		// `when` — the one branching primitive: any step may be guarded by a
-		// value; falsy skips the step (its result reads null). An unguarded
-		// return still has to be the last step; a guarded one is an early exit.
-		if (raw.when !== undefined && raw.when !== null) {
-			const checked = validateActionValue(raw.when, stepIndex);
-			if (isFail(checked)) return checked;
-			step.when = raw.when;
-		}
-		if (op === 'return' && step.when === undefined && stepIndex !== input.length) return fail(400, 'return must be the last step (guard it with `when` for an early exit)');
-		const checkValues = (value: unknown, field: string, required: boolean, scope: ActionValueScope = TOP_SCOPE): Fail | null => {
+		const checkValues = (value: unknown, field: string, required: boolean): Fail | null => {
 			if (value === undefined || value === null) {
 				return required ? fail(400, `Step ${stepIndex} (${op}) needs ${field}`) : null;
 			}
-			// a whole-value ref ("$step.3.player") or one expression may stand in
-			// for the object — the executor still refuses a non-object at run time
-			if (typeof value === 'string') {
-				const ref = value.trim().startsWith('$') ? parseActionRef(value.trim()) : null;
-				if (!ref || !('kind' in ref)) return fail(400, `Step ${stepIndex} ${field} must be an object or a $ref to one`);
-				const checked = validateActionValue(value.trim(), stepIndex, 0, scope);
-				if (isFail(checked)) return checked;
-				step[field] = value.trim();
-				return null;
-			}
 			if (typeof value !== 'object' || Array.isArray(value)) return fail(400, `Step ${stepIndex} ${field} must be an object`);
-			const checked = validateActionValue(value, stepIndex, 0, scope);
+			const checked = validateActionValue(value, stepIndex);
 			if (isFail(checked)) return checked;
 			step[field] = value;
 			return null;
 		};
-		// an id / list / message is a ref string, a literal, or ONE expression
-		// object ({ ttExpr } / { ttConcat }) that resolves at run time
-		const isExpressionObject = (value: unknown): boolean =>
-			!!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value as object).length === 1 && ('ttExpr' in (value as object) || 'ttConcat' in (value as object));
 		const checkRefString = (value: unknown, field: string): Fail | null => {
-			if (isExpressionObject(value)) {
-				const checked = validateActionValue(value, stepIndex);
-				if (isFail(checked)) return checked;
-				step[field] = value;
-				return null;
-			}
 			if (typeof value !== 'string' || !value.trim()) return fail(400, `Step ${stepIndex} (${op}) needs ${field}`);
 			const checked = validateActionValue(value.trim(), stepIndex);
 			if (isFail(checked)) return checked;
 			step[field] = value.trim();
 			return null;
 		};
-		const checkAnyValue = (value: unknown, field: string, scope: ActionValueScope = TOP_SCOPE): Fail | null => {
-			if (value === undefined) return fail(400, `Step ${stepIndex} (${op}) needs ${field}`);
-			const checked = validateActionValue(value, stepIndex, 0, scope);
-			if (isFail(checked)) return checked;
-			step[field] = value;
-			return null;
-		};
 		let failure: Fail | null = null;
-		if (op === 'http.request') {
-			const endpoint = actionHttpEndpoint(raw.method, raw.path);
-			if (!endpoint) return fail(400, `Step ${stepIndex} needs a literal API path and HTTP method`);
-			if (!byCapability.get('http.request')?.endpoints?.includes(endpoint)) return fail(400, `Step ${stepIndex} endpoint is outside its http.request capability`);
-			if (typeof raw.feature !== 'string' || !/^api\.[a-z0-9-]+$/.test(raw.feature) || typeof raw.minimumVersion !== 'string' || !/^\d+\.\d+\.\d+$/.test(raw.minimumVersion))
-				return fail(400, `Step ${stepIndex} needs an API capability feature and minimumVersion`);
-			Object.assign(step, { method: raw.method, path: raw.path, feature: raw.feature, minimumVersion: raw.minimumVersion });
-			if (raw.method === 'GET' && raw.body !== undefined) return fail(400, 'GET request steps cannot carry a body');
-			failure = checkValues(raw.query ?? {}, 'query', true) || checkValues(raw.body, 'body', false);
-			if (raw.pagination !== undefined) {
-				const pagination = parseActionRequestPagination(raw.pagination);
-				if (raw.method !== 'GET' || !pagination) return fail(400, 'Pagination needs a GET request and valid cursor/items paths and budgets');
-				step.pagination = pagination;
-			}
-		} else if (op === 'lookup') {
-			if (!isActionLookupProvider(raw.provider)) return fail(400, `Step ${stepIndex} needs a registered lookup provider`);
-			if (!byCapability.get('lookup')?.providers?.includes(raw.provider)) return fail(400, `Step ${stepIndex} needs lookup capability for ${raw.provider}`);
-			if (typeof raw.credentialId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(raw.credentialId)) return fail(400, 'lookup credentialId must be a literal Vault entry id');
-			step.provider = raw.provider;
-			step.credentialId = raw.credentialId;
-			failure = checkRefString(raw.query, 'query');
-		} else if (op === 'things.create') {
+		if (op === 'things.create') {
 			const schema = sanitizeActionSchemaRef(raw.schema, `Step ${stepIndex} schema`);
 			if (isFail(schema)) return schema;
 			step.schema = schema.ref;
@@ -6549,99 +5779,28 @@ const sanitizeActionSteps = (
 				}
 				step.limit = limit;
 			}
-			if (raw.offset !== undefined && raw.offset !== null) {
-				const offset = Number(raw.offset);
-				if (!Number.isInteger(offset) || offset < 0 || offset > MAX_ACTION_SEARCH_OFFSET) {
-					return fail(400, `Step ${stepIndex} offset must be 0–${MAX_ACTION_SEARCH_OFFSET}`);
-				}
-				step.offset = offset;
-			}
-			// scope: 'own' (default — the invoker's own data things), 'public'
-			// (tt:all data things from anyone) or 'system' (tt:all data things
-			// the SEED owns). The two non-own scopes REQUIRE a schema so a
-			// cross-owner search can never be the whole corpus.
-			if (raw.scope !== undefined && raw.scope !== null) {
-				const scope = typeof raw.scope === 'string' ? raw.scope : '';
-				if (!(ACTION_SEARCH_SCOPES as readonly string[]).includes(scope)) {
-					return fail(400, `Step ${stepIndex} scope must be ${ACTION_SEARCH_SCOPES.join(', ')}`);
-				}
-				if (scope !== 'own' && typeof step.schema !== 'string') return fail(400, `Step ${stepIndex} ${scope} searches must name a schema`);
-				step.scope = scope;
-			}
-			// where: equality on crystal fields; match: case-insensitive substring
-			// on crystal string fields. Values are ordinary step values.
-			const checkFieldMap = (value: unknown, field: string, maxKeys: number): Fail | null => {
-				if (value === undefined || value === null) return null;
-				if (typeof value !== 'object' || Array.isArray(value)) return fail(400, `Step ${stepIndex} ${field} must be an object of field → value`);
-				const entries = Object.entries(value as Record<string, unknown>);
-				if (!entries.length) return null;
-				if (entries.length > maxKeys) return fail(400, `Step ${stepIndex} ${field} caps at ${maxKeys} fields`);
-				for (const [key, entry] of entries) {
-					if (!ACTION_SEARCH_FIELD_PATTERN.test(key) || ACTION_BANNED_SEGMENTS.has(key) || key === 'schema' || key === 'schemaId') {
-						return fail(400, `Step ${stepIndex} ${field} field "${key.slice(0, 40)}" is not a plain crystal field name`);
-					}
-					if (entry !== null && typeof entry === 'object' && !Array.isArray(entry)) {
-						const keys = Object.keys(entry as Record<string, unknown>);
-						if (!(keys.length === 1 && (keys[0] === 'ttConcat' || keys[0] === 'ttExpr'))) {
-							return fail(400, `Step ${stepIndex} ${field}.${key} must be a scalar, a ref, or an expression`);
-						}
-					} else if (Array.isArray(entry)) {
-						return fail(400, `Step ${stepIndex} ${field}.${key} must be a scalar, a ref, or an expression`);
-					}
-					const checked = validateActionValue(entry, stepIndex);
-					if (isFail(checked)) return checked;
-				}
-				step[field] = value;
-				return null;
-			};
-			failure = checkFieldMap(raw.where, 'where', MAX_ACTION_SEARCH_WHERE_KEYS) || checkFieldMap(raw.match, 'match', MAX_ACTION_SEARCH_MATCH_KEYS);
-			if (!failure && raw.sort !== undefined && raw.sort !== null) {
-				const sort = raw.sort as Record<string, unknown>;
-				const field = typeof sort === 'object' && sort && typeof sort.field === 'string' ? sort.field.trim() : '';
-				const dir = typeof sort === 'object' && sort && typeof sort.dir === 'string' ? sort.dir : 'desc';
-				if (!field || (field !== 'createdAt' && field !== 'updatedAt' && !ACTION_SEARCH_FIELD_PATTERN.test(field)) || ACTION_BANNED_SEGMENTS.has(field)) {
-					return fail(400, `Step ${stepIndex} sort.field must be createdAt, updatedAt, or a crystal field name`);
-				}
-				if (!(ACTION_SEARCH_SORT_DIRECTIONS as readonly string[]).includes(dir)) return fail(400, `Step ${stepIndex} sort.dir must be asc or desc`);
-				step.sort = { field, dir };
-			}
-			if (!failure) failure = requireCapability(stepIndex, 'things.read', typeof step.schema === 'string' ? step.schema : undefined);
+			failure = requireCapability(stepIndex, 'things.read', typeof step.schema === 'string' ? step.schema : undefined);
 		} else if (op === 'things.update') {
 			failure =
 				checkRefString(raw.id, 'id') ||
 				checkValues(raw.values, 'values', true) ||
 				requireCapability(stepIndex, 'things.update');
-		} else if (op === 'things.delete') {
-			failure = checkRefString(raw.id, 'id') || requireCapability(stepIndex, 'things.delete');
-		} else if (op === 'actions.invoke' || op === 'each') {
+		} else if (op === 'actions.invoke') {
 			const actionRef = sanitizeActionSchemaRef(raw.action, `Step ${stepIndex} action`);
 			if (isFail(actionRef)) return actionRef;
 			step.action = actionRef.ref;
-			if (op === 'each') {
-				// the list is any earlier value; inputs may read $item / $index
-				failure = checkAnyValue(raw.list, 'list');
-				if (!failure && raw.max !== undefined && raw.max !== null) {
-					const max = Number(raw.max);
-					if (!Number.isInteger(max) || max < 1 || max > MAX_ACTION_EACH_ITEMS) return fail(400, `Step ${stepIndex} max must be 1–${MAX_ACTION_EACH_ITEMS}`);
-					step.max = max;
-				}
-				if (!failure) failure = checkValues(raw.inputs, 'inputs', false, { itemDepth: 1 });
-			} else {
-				failure = checkValues(raw.inputs, 'inputs', false);
-			}
-			if (!failure) failure = requireCapability(stepIndex, 'actions.invoke');
+			failure = checkValues(raw.inputs, 'inputs', false) || requireCapability(stepIndex, 'actions.invoke');
 			if (!failure) {
 				const invoke = byCapability.get('actions.invoke');
 				if (invoke?.actions && !invoke.actions.includes(actionRef.ref)) {
 					failure = fail(400, `Step ${stepIndex} invokes "${actionRef.ref}" but the actions.invoke allowlist is ${invoke.actions.join(', ')}`);
 				}
 			}
-		} else if (op === 'compute') {
-			failure = checkAnyValue(raw.value, 'value');
-		} else if (op === 'fail') {
-			failure = checkAnyValue(raw.message, 'message');
 		} else if (op === 'return') {
-			failure = checkAnyValue(raw.value, 'value');
+			if (raw.value === undefined) return fail(400, `Step ${stepIndex} (return) needs value`);
+			const checked = validateActionValue(raw.value, stepIndex);
+			if (isFail(checked)) return checked;
+			step.value = raw.value;
 		}
 		if (failure) return failure;
 		steps.push(step);
@@ -6653,24 +5812,15 @@ const sanitizeActionSteps = (
 // renders THIS, never an author-written claim, so the display can't drift
 // from the behaviour.
 export type ActionEffects = {
-	lookups: string[];
 	creates: string[];
 	reads: string[];
 	updates: boolean;
-	deletes: boolean;
 	invokes: string[];
 	returns: boolean;
-	// pure value computation (compute steps / expressions) — no data effect
-	computes: boolean;
-	// schemas searched across OTHER people's public data things
-	publicReads: string[];
-	// schemas searched across the SEED's own public data things — platform
-	// content, so a narrower claim than publicReads and worth its own chip
-	systemReads: string[];
 };
 
 export const deriveActionEffects = (steps: unknown): ActionEffects => {
-	const effects: ActionEffects = { lookups: [], creates: [], reads: [], updates: false, deletes: false, invokes: [], returns: false, computes: false, publicReads: [], systemReads: [] };
+	const effects: ActionEffects = { creates: [], reads: [], updates: false, invokes: [], returns: false };
 	if (!Array.isArray(steps)) return effects;
 	for (const entry of steps) {
 		if (!entry || typeof entry !== 'object') continue;
@@ -6681,26 +5831,10 @@ export const deriveActionEffects = (steps: unknown): ActionEffects => {
 		// an UNSCOPED get or search is the broadest read in the vocabulary —
 		// it must surface as the '*' ("reads things") effect, never as nothing
 		if ((step.op === 'things.get' || step.op === 'things.search') && !schema && !effects.reads.includes('*')) effects.reads.push('*');
-		// a public-scope search reads OTHER people's public data things of that
-		// schema — a distinct disclosure from "reads your own"
-		if (step.op === 'things.search' && step.scope === 'public' && schema && !effects.publicReads.includes(schema)) effects.publicReads.push(schema);
-		// a system-scope search reads only what the SEED wrote — no stranger's
-		// row can enter that corpus, so it is not a public-corpus disclosure
-		if (step.op === 'things.search' && step.scope === 'system' && schema && !effects.systemReads.includes(schema)) effects.systemReads.push(schema);
-		if (step.op === 'http.request') {
-			const endpoint = actionHttpEndpoint(step.method, step.path);
-			if (endpoint && !effects.reads.includes(endpoint)) effects.reads.push(endpoint);
-			// A general API call can create, update, or delete according to its
-			// contract. Never claim a write request is a harmless read.
-			if (step.method !== 'GET') { effects.updates = true; effects.deletes = true; effects.creates.push(String(step.path)); }
-		}
 		if (step.op === 'things.update') effects.updates = true;
-		if (step.op === 'things.delete') effects.deletes = true;
-		if ((step.op === 'actions.invoke' || step.op === 'each') && typeof step.action === 'string' && !effects.invokes.includes(step.action)) {
+		if (step.op === 'actions.invoke' && typeof step.action === 'string' && !effects.invokes.includes(step.action)) {
 			effects.invokes.push(step.action);
 		}
-		if (step.op === 'lookup' && typeof step.provider === 'string' && !effects.lookups.includes(step.provider)) effects.lookups.push(step.provider);
-		if (step.op === 'compute') effects.computes = true;
 		if (step.op === 'return') effects.returns = true;
 	}
 	return effects;
@@ -6714,14 +5848,6 @@ export const sanitizeActionCrystal = (input: Record<string, unknown>): { ok: tru
 	if (name.length > MAX_SCHEMA_NAME_CHARS) return fail(400, `Action name is too long (max ${MAX_SCHEMA_NAME_CHARS})`);
 
 	const crystal: Record<string, unknown> = { name };
-	if (input.runtime !== undefined && input.runtime !== 'server' && input.runtime !== 'browser') return fail(400, 'Action runtime must be server or browser');
-	if (input.runtime === 'browser') crystal.runtime = 'browser';
-	if (input.expressionLimits !== undefined) {
-		const parsed = parseBrowserExpressionLimits(input.expressionLimits);
-		if (input.runtime !== 'browser' || !parsed) return fail(400, 'Expression limits require browser execution and bounded nodes/listItems');
-		crystal.expressionLimits = parsed;
-	}
-
 
 	const description = typeof input.description === 'string' ? input.description.trim().slice(0, MAX_SCHEMA_DESCRIPTION_CHARS) : '';
 	if (description) crystal.description = description;
@@ -6768,9 +5894,6 @@ export const sanitizeActionCrystal = (input: Record<string, unknown>): { ok: tru
 	const steps = sanitizeActionSteps(input.steps, capabilities);
 	if (isFail(steps)) return steps;
 	crystal.steps = steps.steps;
-	if (input.runtime === 'browser') {
-		if (steps.steps.some((step) => !(BROWSER_ACTION_OPS as readonly string[]).includes(step.op))) return fail(400, 'Browser actions use HTTP requests, computations, child actions and returns');
-	} else if (steps.steps.some((step) => step.op === 'http.request')) return fail(400, 'HTTP request steps require the browser runtime');
 
 	// $input refs must point at declared inputs — a ref to an undeclared input
 	// would always resolve to undefined and is certainly an authoring mistake.
@@ -6802,7 +5925,7 @@ export const sanitizeActionCrystal = (input: Record<string, unknown>): { ok: tru
 	if (inputRefIssue) return inputRefIssue;
 
 	if (input.limits !== undefined && input.limits !== null) {
-		const limits = sanitizeActionLimits(input.limits, input.runtime === 'browser');
+		const limits = sanitizeActionLimits(input.limits);
 		if (isFail(limits)) return limits;
 		if (Object.keys(limits.limits).length) crystal.limits = limits.limits;
 	}
@@ -7046,7 +6169,6 @@ const crystalSanitizers: Record<
   save: () => ({ ok: true, crystal: {} }),
   schema: sanitizeSchemaCrystal,
   component: sanitizeComponentCrystal,
-  webpage: sanitizeWebpageCrystal,
   // action-run deliberately has NO sanitizer — run records are executor-
   // minted only, and the missing entry makes the generic write path 403.
   action: sanitizeActionCrystal,

@@ -1647,50 +1647,7 @@ placeholder:
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
 
-### Index and storage hygiene
-
-The boot-time `ensureIndexes` converges every collection to the index plan in
-`remix/app/api/utils/mongodb/collections.ts` and prunes the names listed in
-`RETIRED_THINGS_INDEXES`. Index files never shrink on their own: after a mass
-delete (for example relocating CI telemetry out of `things`), each index keeps
-its old on-disk size until it is dropped and recreated. The admin migrations
-page (**/migrations**) shows a storage census per physical collection —
-document bytes, on-disk bytes, index bytes, and index count — and flags a
-generation whose index total is far above its document bytes. Reclaim it with
-the `rebuild-things-indexes` migration (unique constraints stay enforced by a
-twin index throughout). The audit that produced this runbook, with the
-production measurements, is in `docs/architecture/mongodb-index-storage-audit.md`.
-
-Vercel functions and the Atlas cluster are both pinned to Sydney (`syd1` in the
-root `vercel.json`). For how that becomes region-local latency worldwide without
-splitting the database or the URL, see
-`docs/architecture/geo-distribution.md` — a proposal, not shipped behaviour.
-
-### Hosted `develop` and Preview data plane
-
-`https://dev.thingtime.com` and generic Vercel Preview deployments deliberately
-share one development data/auth plane. Assign the current development MongoDB,
-JWT, `APP_URL`, cron, and private-S3 values to both the `develop` Custom
-Environment and generic Preview. Keep Production MongoDB, JWT, and S3 values
-separately scoped; never reuse or document their secrets. Treat every branch
-that Vercel may build for this project as trusted development code with access
-to shared, disposable development data.
-
-For Atlas, the username inside `MONGODB_CONNECTION_STRING` is authoritative.
-The runtime reads `MONGO_PASS` only when replacing the literal
-`<db_password>` placeholder; `MONGO_USER` may remain operator metadata but is
-not read by the application. The home API explicitly selects the canonical
-`thingtime` database, so the hosted URI may leave its database path empty.
-
-After changing the hosted database configuration, redeploy `develop` and check
-`GET https://dev.thingtime.com/api/v1/health/mongodb`. It must return HTTP 200,
-`connected: true`, the expected development Atlas host, `dbName: "thingtime"`,
-and no `x-thingtime-api-fallback` response header. Compare the same endpoint on
-`https://thingtime.com` and confirm that Production reports a different Atlas
-host. The current Thingtime hostnames and deployment state are recorded in
-`VERCEL_DEPLOYMENTS.md`; forks should substitute infrastructure they control.
-
-## Components library (`/components` + the external catalog)
+## Components library (`/components` + `components-db/`)
 
 `/components` is the UI-first sibling of `/schemas`: component things
 (thingtime `["component"]`) carry an arg-templated render tree (drawn only
@@ -1698,46 +1655,29 @@ through the sanitising allowlist renderers) plus arg descriptors the page
 turns into a live tester. "Save version" stores the current tester state as a
 user-owned component thing in your Things.
 
-The platform component catalog (styled after Ant Design, Bootstrap, MUI,
+The 1000-component platform catalog (styled after Ant Design, Bootstrap, MUI,
 shadcn/ui, Untitled UI, daisyUI, React Flow, and the Thingtime house style)
-lives in its own public repository —
-[lopugit/thingtime-components](https://github.com/lopugit/thingtime-components)
-— as a folder database (one JSON per component + manifest) alongside the
-deterministic generator/validator/seeder pipeline. This app repo ships only
-the component runtime and the Thingtime-required components; catalog
-components live in MongoDB as system `component` things and the frontend
-fetches them from there (`GET /api/v1/components/browse`). That catalog
-repo's `components-db/index.json` `count`/`target` are the source of truth
-for the catalog size — tranche 2 grew it to 70 archetypes / 350 families /
-2800 components.
+lives in the repo as a folder database: one JSON file per component under
+`components-db/components/<library>/<slug>.json` plus an `index.json`
+manifest, produced deterministically by `scripts/components-db/generate.mjs`
+from archetype builders in `scripts/components-db/lib/archetypes/`.
 
 Fork-safe seeding into your own dev DB (real API only — no direct Mongo):
-
-Admins can also publish a catalog from `/components` → **Import component
-catalog**. Choose a JSON array of component definitions (or an object with a
-`components` array), review the validated count, then select **Publish catalog**.
-This uses the signed-in session, so no password file is needed. Files are capped
-at 32 MiB / 5,000 definitions. Batches respect the API's count, body-size and
-rate limits; stopping or retrying preserves completed work without duplicating
-components. The selected origin must advertise `api.admin-components-seed`
-1.0.0 and `api.webpages-suites-install` 1.1.0 or compatible versions.
 
 ```sh
 # 1. Start the dev stack and register a throwaway user, then restart with
 #    that user on the admin allowlist:
 ADMIN_USERNAMES="<your-seed-user>" npm run web-pms
 
-# 2. Clone the catalog repo and put credentials where the seeder finds them:
-git clone https://github.com/lopugit/thingtime-components.git
-cd thingtime-components
+# 2. Put the credentials where the seeder finds them (untracked file):
 cat > scripts/components-db/.seed-env <<'ENV'
 TT_SEED_BASE=http://127.0.0.1:<nitro-port>
 TT_SEED_ADMIN_USER=<your-seed-user>
 TT_SEED_ADMIN_PASS=<your-seed-password>
 ENV
 
-# 3. Validate the catalog, then seed (idempotent, batched):
-node scripts/components-db/generate.mjs --check
+# 3. Regenerate + validate the catalog, then seed (idempotent, batched):
+node scripts/components-db/generate.mjs
 node scripts/components-db/seed.mjs
 ```
 
@@ -1746,46 +1686,6 @@ public things with deterministic `component-<slug>` shareIds (the prefix is
 reserved against squatters), refreshes drifted crystals in place, and never
 touches foreign docs. `GET` on the same path returns the census.
 Verification: `node remix/scripts/verify-components.mjs http://127.0.0.1:<nitro-port>`.
-
-## App suites (Pokeworld + StarsAlign on Thingtime)
-
-Two real apps ship as **installable app suites** — schema things + component
-things + action things + data things + builder pages, defined in
-`remix/app/schemas/appSuites/` and driven by the action domain packs in
-`remix/app/api/utils/actions/packs/` (`astro.*` on `astronomy-engine`,
-`pokeworld.*`). Design notes: `PRs/578-builder-demo-library-app-suites-pokeworld-starsalign.md`.
-
-Fork-safe setup (no secrets involved):
-
-1. Seed the demo library as an admin — `POST /api/v1/admin/webpages/seed-demos`
-   or the 🌱 button on `/builder/demos`. This writes the seeded system copies
-   of every suite (pages at `/p/pokeworld`, `/p/starsalign`) plus the public
-   content data things (school entries, species). Re-running converges.
-2. Sign in and open `/builder/demos` → **📱 Apps** → **Install app**, or press
-   any control on the seeded page. `POST /api/v1/webpages/suites/install
-   { key }` upserts the whole suite into your things by stable key
-   (idempotent), and the same `/p/<key>` URLs now serve your copy.
-3. Assets load from the original sites (`https://www.pokeworld.center/tiles/…`
-   and `/sprites/…`); no keys, map APIs, or env vars are needed.
-4. Existing checkouts: the astro pack adds the `astronomy-engine` dependency —
-   run `corepack pnpm --dir remix install --frozen-lockfile` (or
-   `npm run worktree-setup`) once, or the Nitro dev worker dies with
-   `Could not resolve 'astronomy-engine'` and every `/api` call 503s.
-
-Verify end to end against a running stack:
-
-```sh
-node remix/scripts/verify-app-suites.mjs http://127.0.0.1:<web-port>
-```
-
-The script registers a throwaway user, installs both suites, plays (walks
-into an encounter, battles, throws balls), and drives every StarsAlign
-program; set `TT_VERIFY_ADMIN_USER` / `TT_VERIFY_ADMIN_PASS` to an
-`ADMIN_USERNAMES` account to seed first (register that account **before**
-allowlisting it — env admins cannot self-register). If the shared local
-Mongo sits at the 64-index cap, run the stack against a private replica set:
-`mongod --port 27117 --replSet rsapps --dbpath <dir>` + `rs.initiate()` and
-`MONGODB_CONNECTION_STRING='mongodb://127.0.0.1:27117/?replicaSet=rsapps&directConnection=true'`.
 
 ## Admin access
 

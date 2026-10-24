@@ -781,7 +781,16 @@ const ThingsLibraryPage = () => {
         navigateToFolder(thing.id);
         return;
       }
-      navigate(thingBrowseHref(thing, searchParams.toString()));
+      if (thing.thingtime.includes('post')) {
+        navigate(`/post/${thing.id}`);
+        return;
+      }
+      // actions open their inspector — the /things half of the program loop
+      if (thing.thingtime.includes('action')) {
+        navigate(`/actions/${encodeURIComponent(thing.id)}`);
+        return;
+      }
+      setPreviewThing(thing);
     },
     [navigate, navigateToFolder, searchParams]
   );

@@ -5,8 +5,7 @@
 // scoped capabilities, ref validity, return placement, limits), the executor
 // (create/get/search/update/invoke/return, $refs, $$ escape, ttConcat, $now),
 // the budget envelope (ops exhaustion, recursion refusal — direct and A→B→A),
-// run records (protected kind, owner-private history, deleted with their
-// action), and the auth gates.
+// run records (protected kind, owner-private history), and the auth gates.
 import { randomBytes } from 'node:crypto';
 
 const BASE = process.argv[2] || process.env.TT_VERIFY_BASE || 'http://127.0.0.1:17052';
@@ -201,73 +200,6 @@ const run = async () => {
 	const unknownInput = await runAction(alice.cookie, { action: createCustomerId, inputs: { name: 'Ada', nope: 1 } });
 	check('unknown input is 400', unknownInput.status === 400 && /Unknown input/.test(unknownInput.body?.error || ''));
 
-	// ---- input names that collide with Object.prototype ---------------------
-	// Input names are only pattern-checked, so an action may legally declare one
-	// called `constructor`/`toString`/`__proto__`. Both halves of $input
-	// resolution are hasOwnProperty-gated (execute.ts validateRunInputs +
-	// resolveValue), so an OMITTED one reads as undefined — its declared default
-	// applies, its "is required" refusal fires — instead of resolving to the
-	// inherited member through the caller's JSON object.
-	const protoInputs = await createThing(alice.cookie, {
-		thingtime: ['action'],
-		crystal: {
-			name: 'Prototype-named inputs',
-			actionKey: `proto-inputs-${suffix}`,
-			inputs: [
-				{ name: 'constructor', type: 'string', default: 'fallback' },
-				{ name: 'toString', type: 'string', required: true }
-			],
-			steps: [
-				{ op: 'things.create', schema: CUSTOMER, values: { name: '$input.toString', note: '$input.constructor' } },
-				{ op: 'return', value: '$step.1' }
-			],
-			capabilities: [{ capability: 'things.create', schemas: [CUSTOMER] }]
-		}
-	});
-	check('prototype-named inputs save', protoInputs.status === 200, JSON.stringify(protoInputs.body).slice(0, 200));
-
-	const protoMissing = await runAction(alice.cookie, { action: `proto-inputs-${suffix}`, inputs: {} });
-	check(
-		'omitted prototype-named required input reports "is required"',
-		protoMissing.status === 400 && /toString is required/.test(protoMissing.body?.error || ''),
-		JSON.stringify(protoMissing.body).slice(0, 200)
-	);
-
-	const protoDefault = await runAction(alice.cookie, { action: `proto-inputs-${suffix}`, inputs: { toString: 'Grace Hopper' } });
-	check(
-		'omitted prototype-named input falls back to its declared default',
-		protoDefault.status === 200 && protoDefault.body?.status === 'ok' && protoDefault.body?.result?.crystal?.note === 'fallback',
-		JSON.stringify(protoDefault.body).slice(0, 300)
-	);
-
-	// Declared own keys survive the null-prototype input accumulator. Omitting
-	// that key must still resolve to nothing, never an inherited prototype.
-	const protoLeak = await createThing(alice.cookie, {
-		thingtime: ['action'],
-		crystal: {
-			name: 'Proto leak probe',
-			actionKey: `proto-leak-${suffix}`,
-			inputs: [{ name: '__proto__', type: 'boolean' }],
-			steps: [{ op: 'return', value: '$input.__proto__' }]
-		}
-	});
-	check('__proto__-named input saves', protoLeak.status === 200, JSON.stringify(protoLeak.body).slice(0, 200));
-	const protoLeakRun = await runAction(alice.cookie, {
-		action: `proto-leak-${suffix}`,
-		inputs: JSON.parse('{"__proto__":true}')
-	});
-	check(
-		'$input.__proto__ preserves the explicitly supplied boolean',
-		protoLeakRun.status === 200 && protoLeakRun.body?.status === 'ok' && protoLeakRun.body?.result === true,
-		JSON.stringify(protoLeakRun.body).slice(0, 300)
-	);
-	const protoOmittedRun = await runAction(alice.cookie, { action: `proto-leak-${suffix}`, inputs: {} });
-	check(
-		'omitted $input.__proto__ resolves to nothing, not Object.prototype',
-		protoOmittedRun.status === 200 && protoOmittedRun.body?.status === 'ok' && protoOmittedRun.body?.result == null,
-		JSON.stringify(protoOmittedRun.body).slice(0, 300)
-	);
-
 	const run1 = await runAction(alice.cookie, { action: `create-customer-${suffix}`, inputs: { name: 'Ada Lovelace', email: 'ada@example.com' } });
 	check('run by actionKey succeeds', run1.status === 200 && run1.body?.ok === true && run1.body?.status === 'ok', JSON.stringify(run1.body).slice(0, 300));
 	check('run returns the created thing', typeof run1.body?.result?.id === 'string');
@@ -459,93 +391,6 @@ const run = async () => {
 	check('anonymous runs list is 401', anonRuns.status === 401);
 	const bellaRuns = await api(`/api/v1/actions/runs?action=${encodeURIComponent(createCustomerId)}`, { cookie: bella.cookie });
 	check('run history is owner-private', bellaRuns.status === 200 && (bellaRuns.body?.runs || []).length === 0);
-
-	// ---- the trail dies with its action (Lopu review finding) ----------------
-	// action-run is PROTECTED (no route lets its owner delete one) and
-	// storageClass 'control' (outside the storage ledger), and the retention
-	// prune only ever fires during a run OF THAT ACTION. So if deleting an
-	// action left its records behind, create/run/delete cycles would strand
-	// unaccounted documents that nothing would ever prune — and the owner could
-	// never remove their own run history. The cascade closes both.
-	const disposable = await createThing(alice.cookie, {
-		thingtime: ['action'],
-		crystal: { name: 'Disposable', actionKey: `disposable-${suffix}`, steps: [{ op: 'return', value: 'bye' }] }
-	});
-	const disposableId = disposable.body?.thing?.id;
-	check('disposable action saves', disposable.status === 200 && !!disposableId);
-	const disposableRun = await runAction(alice.cookie, { action: disposableId });
-	check('disposable action runs', disposableRun.status === 200 && disposableRun.body?.status === 'ok');
-	const beforeDelete = await api(`/api/v1/actions/runs?action=${encodeURIComponent(disposableId)}`, { cookie: alice.cookie });
-	check('its run is in history before the delete', beforeDelete.status === 200 && (beforeDelete.body?.runs || []).length === 1);
-	const deleted = await api(`/api/v1/things?id=${encodeURIComponent(disposableId)}`, { cookie: alice.cookie, method: 'DELETE' });
-	check('deleting an action succeeds', deleted.status === 200, `status ${deleted.status} ${JSON.stringify(deleted.body || {}).slice(0, 140)}`);
-	const afterDelete = await api(`/api/v1/actions/runs?action=${encodeURIComponent(disposableId)}`, { cookie: alice.cookie });
-	check(
-		'deleting an action deletes its run records (no stranded trail)',
-		afterDelete.status === 200 && (afterDelete.body?.runs || []).length === 0,
-		`${(afterDelete.body?.runs || []).length} record(s) survived`
-	);
-	// the neighbours' trails are untouched — the cascade is scoped to targetId
-	const neighbourRuns = await api(`/api/v1/actions/runs?action=${encodeURIComponent(createCustomerId)}`, { cookie: alice.cookie });
-	check('another action keeps its own runs', neighbourRuns.status === 200 && (neighbourRuns.body?.runs || []).length > 0);
-
-	// ---- ...including a run that was ALREADY IN FLIGHT (Lopu review finding) --
-	// The record is written when the run ENDS, so the cascade — which snapshots
-	// the closure before that insert exists — cannot see it. createThing rides
-	// out this race by transacting its insert with a touch of the target doc;
-	// the run-record insert writes no parent doc, so nothing makes Mongo retry
-	// either side and the orphan is permanent (unprunable, undeletable,
-	// off-ledger). Delete the action WHILE a run of it is in flight: whichever
-	// way the interleaving lands, no record may survive naming a dead action.
-	const inFlight = await createThing(alice.cookie, {
-		thingtime: ['action'],
-		crystal: {
-			name: 'Deleted mid-run',
-			actionKey: `midrun-${suffix}`,
-			capabilities: [{ capability: 'things.read' }],
-			// several real round trips, so the DELETE below lands before the run
-			// reaches writeRunRecord — the window this guard actually closes
-			steps: [
-				...Array.from({ length: 12 }, () => ({ op: 'things.search', limit: 5 })),
-				{ op: 'return', value: 'done' }
-			]
-		}
-	});
-	const inFlightId = inFlight.body?.thing?.id;
-	check('mid-run-delete action saves', inFlight.status === 200 && !!inFlightId, JSON.stringify(inFlight.body || {}).slice(0, 200));
-	// fire the run WITHOUT awaiting, then delete underneath it. The short head
-	// start only removes the uninteresting third interleaving (the delete
-	// beating resolveActionProgram, which is a plain 404 and strands nothing);
-	// both remaining orders must satisfy the assertions below.
-	const inFlightRun = runAction(alice.cookie, { action: inFlightId });
-	await new Promise((resolve) => setTimeout(resolve, 250));
-	let midRunDelete = await api(`/api/v1/things?id=${encodeURIComponent(inFlightId)}`, { cookie: alice.cookie, method: 'DELETE' });
-	const runOutcome = await inFlightRun;
-	// a cascade that raced a just-committed record answers 409 "try again" —
-	// retry so the assertion below tests the trail, not the retry contract
-	for (let attempt = 0; attempt < 5 && midRunDelete.status === 409; attempt += 1) {
-		midRunDelete = await api(`/api/v1/things?id=${encodeURIComponent(inFlightId)}`, { cookie: alice.cookie, method: 'DELETE' });
-	}
-	check(
-		'the action deletes while one of its runs is still executing',
-		midRunDelete.status === 200,
-		`status ${midRunDelete.status} ${JSON.stringify(midRunDelete.body || {}).slice(0, 140)}`
-	);
-	check('the in-flight run still returns its own result to the caller', runOutcome.status === 200 && !!runOutcome.body?.runId);
-	const strandedByAction = await api(`/api/v1/actions/runs?action=${encodeURIComponent(inFlightId)}`, { cookie: alice.cookie });
-	check(
-		'a run that finished after its action was deleted leaves no record',
-		strandedByAction.status === 200 && (strandedByAction.body?.runs || []).length === 0,
-		`${(strandedByAction.body?.runs || []).length} record(s) survived`
-	);
-	// and it is gone from the UNFILTERED history too — that view is the only
-	// place an orphan would still surface, and nothing could ever remove it
-	const wholeHistory = await api(`/api/v1/actions/runs?limit=50`, { cookie: alice.cookie });
-	check(
-		'no orphan survives in the unfiltered run history either',
-		wholeHistory.status === 200 && !(wholeHistory.body?.runs || []).some((record) => record?.actionId === inFlightId),
-		JSON.stringify((wholeHistory.body?.runs || []).filter((record) => record?.actionId === inFlightId)).slice(0, 140)
-	);
 
 	// ---- action privacy ------------------------------------------------------
 	const privateAction = await createThing(alice.cookie, {
@@ -768,35 +613,6 @@ const run = async () => {
 		secDeliberateRun.status === 200 && secDeliberateRun.body?.result === 'bella-ran',
 		`status ${secDeliberateRun.status}`
 	);
-
-	// Builder form clearing is an explicit value, not a request for defaults.
-	const clearAction = await createThing(alice.cookie, { thingtime: ['action'], crystal: {
-		name: 'Clear customer note', inputs: [{ name: 'id', type: 'string', required: true }, { name: 'note', type: 'text', default: 'fallback' }],
-		capabilities: [{ capability: 'things.update', schemas: [CUSTOMER] }],
-		steps: [{ op: 'things.update', id: '$input.id', values: { note: '$input.note' } }, { op: 'return', value: '$step.1' }]
-	} });
-	check('builder clear action saves', clearAction.status === 200);
-	const clearRun = await runAction(alice.cookie, { action: clearAction.body?.thing?.id, source: 'component', inputs: { id: secMintedId, note: '' } });
-	check('builder clear action succeeds', clearRun.body?.status === 'ok', JSON.stringify(clearRun.body).slice(0, 300));
-	const clearedRead = await api(`/api/v1/things?id=${encodeURIComponent(secMintedId)}`, { cookie: alice.cookie });
-	check('empty text survives API save and readback instead of applying default', clearedRead.body?.thing?.crystal?.note === '');
-	check('partial form edit preserves unrelated fields', clearedRead.body?.thing?.crystal?.name === 'Audience Probe');
-	await runAction(alice.cookie, { action: clearAction.body?.thing?.id, inputs: { id: secMintedId } });
-	const defaultRead = await api(`/api/v1/things?id=${encodeURIComponent(secMintedId)}`, { cookie: alice.cookie });
-	check('omitted text still uses descriptor default', defaultRead.body?.thing?.crystal?.note === 'fallback');
-	const missingRequired = await runAction(alice.cookie, { action: clearAction.body?.thing?.id, inputs: { id: '', note: '' } });
-	check('empty required input is refused before writes', missingRequired.status === 400);
-	const lookupAction = await createThing(alice.cookie, { thingtime: ['action'], acl: ['tt:all'], crystal: {
-		name: 'Address lookup', inputs: [{ name: 'address', type: 'string', required: true }],
-		capabilities: [{ capability: 'lookup', providers: ['google-geocoding'] }],
-		steps: [{ op: 'lookup', provider: 'google-geocoding', credentialId: 'missing-test-vault-entry', query: '$input.address' }, { op: 'return', value: '$step.1' }]
-	} });
-	check('registered lookup action publishes', lookupAction.status === 200);
-	const noKey = await runAction(alice.cookie, { action: lookupAction.body?.thing?.id, inputs: { address: 'Synthetic example' } });
-	check('missing Vault key fails without network access', noKey.body?.status === 'error' && /Vault/.test(noKey.body?.error || ''));
-	check('lookup results are marked transient', noKey.body?.cache === 'no-store');
-	const foreignLookup = await runAction(bella.cookie, { action: lookupAction.body?.thing?.id, inputs: { address: 'Synthetic example' } });
-	check('even deliberate foreign lookup cannot use viewer Vault', foreignLookup.body?.status === 'error' && /action you own/.test(foreignLookup.body?.error || ''));
 
 	// ---- docs twins ----------------------------------------------------------
 	const runDocs = await api('/api/v1/actions/run-docs');

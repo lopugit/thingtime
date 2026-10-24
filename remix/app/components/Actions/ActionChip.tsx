@@ -29,14 +29,12 @@ export const ActionChip = ({
 	dot = true,
 	size = 'md',
 	tone = 'neutral',
-	wrap = false,
 	...rest
 }: {
 	children: React.ReactNode;
 	dot?: boolean;
 	size?: ChipSize;
 	tone?: ChipTone;
-	wrap?: boolean;
 } & Record<string, unknown>) => {
 	const sizing = SIZE_STYLES[size];
 	return (
@@ -62,8 +60,7 @@ export const ActionChip = ({
 				lineHeight="1.3"
 				overflow="hidden"
 				textOverflow="ellipsis"
-				whiteSpace={wrap ? 'normal' : 'nowrap'}
-				overflowWrap={wrap ? 'anywhere' : undefined}
+				whiteSpace="nowrap"
 			>
 				{children}
 			</Text>

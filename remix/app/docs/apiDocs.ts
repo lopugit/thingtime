@@ -13072,157 +13072,32 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'things-export',
-    // 1.17.0: preserve optional owned algorithm library display titles.
-    // 1.16.0: retain optional owned theme display titles through canonical transfer.
-    featureVersion: '1.17.0',
-    contractVersion: '1.17.0',
-    // 1.12.0: include shared emoji content referenced by authorized live history.
-    // Standalone emoji exports remain owner-only; stored bytes keep current gates.
-    // 1.11.1: preserve the canonical ISO crystal edit/deletion timestamps.
-    // 1.11.0: first-party members export ordinary live chats as private archives.
-    // 1.10.0: owner folder traversal includes complete private archive roots.
-    // 1.9.0: first-party owners re-export complete private archive histories;
-    // optional traversal never strips participants/messages/reactions. Required
-    // media and custom emojis remain owner-authorized and cannot be omitted.
-    // 1.7.1: excluded file bytes do not require storage access; read gates remain.
-    // 1.7.0: owned themes/algorithms retain included folder placement.
-    // 1.6.1: durable recordings pass owner-only live attachment reads without draft expiry.
-    // 1.6.0: recordings preserve folderId when their parent is included.
-    group: 'things',
-    title: 'Plan a portable Thing export',
-    notes: [
-      'External HTTPS participant avatars are downloaded only after live-chat membership and profile resolution. Downloads pin public DNS to the socket, omit credentials, refuse redirects, and enforce ten seconds, 2 MiB compressed and 4 million decoded pixels per image. PNG/JPEG/GIF/WebP bytes enter plan-only inlineBase64 entries bound to exactly one historical participant; clients checksum them into ZIP files and never retain the source URL. HTTP, redirected, unsafe, oversized or unreadable avatars fail the complete export. Imported copies use ordinary private uploads and never refetch the original URL.',
-      'Exported live messages include contiguous zero-based position values so fresh imported IDs cannot reorder equal-timestamp segments. When any archive message supplies position, all messages must provide distinct values spanning zero through messageCount minus one. Older archives without positions retain timestamp ordering.',
-      'AI chat archives preserve historical assistant avatarPreset (lopu/chatgpt/claude) and bounded inert toolHistory receipts (name, ok, summary only). No target IDs, approvals, billing or connector metadata is portable. Live-device sources require completely synchronized history; incomplete or ambiguous segmented messages fail explicitly. External HTTPS profile avatars use the bounded image snapshot path described above.',
-      'Live ordinary chat IDs require first-party user scope and current active/pending membership. History is read in one home-database snapshot, including former participants and all threads, then converted to private archive rows. Import replaces self with the importer and never sends messages or restores live memberships. Preparation is bounded to 30 seconds. Managed avatars and message media use canonical attachment reads; inaccessible or incomplete media fails the entire export. External HTTPS avatars use the bounded image snapshot path; unsupported URL forms fail explicitly. Custom-emoji dependencies referenced by this authorized live history are resolved in one bounded batch, including other participants’ emoji. Hidden, foreign or incomplete definitions fail; stored bytes retain current attachment gates. Source account, community and folder fields are excluded.',
-      'Private chat-archive roots can be re-exported only by their first-party user owner. Every participant, message, reply and reaction is included regardless of optional traversal flags; independent history-row roots are rejected. All archive media and required custom emoji definitions must remain readable and included, or the entire export fails. Re-import creates fresh private ownership; archived identities never become live accounts or memberships.',
-      'Standalone custom emojis export only for their owner; authorized live-history dependencies use the separate content-only path. Each portable custom-emoji Thing contains name and emojiFileId, requires image bytes, and excludes source community scope. Legacy inline images use a bounded plan-only inlineBase64 file field (512 KiB image maximum); clients decode that into checksummed ZIP bytes and omit inlineBase64 from the manifest. Stored images use the normal content endpoint.'
-    ],
-    // 1.5.0: owned standalone recordings require stored bytes. Their portable
-    // attachment Thing contains only recordingFileId; plan-only sourceId on the
-    // file identifies the authorized download and never enters the archive.
-    endpoint: '/api/v1/things/export',
-    summary: 'Read authorized content, folder descendants, app dependencies and file/link descriptors, including bounded annotations. Owned/public themes use dedicated readers. Feed algorithms use owner-only home-plane reads, including legacy profiles: exports contain name, emoji, exact weights, eventCount and lastTrainedAt, never shared status, lineage or active selection. Algorithm files contain private interest weights; public preview links do not authorize full export.',
-    detail: 'Owned theme transfers preserve optional crystal.title display metadata through the canonical transfer format. Standalone files export through the protected attachment adapter. Their portable crystal includes recordingFileId and optional filePurpose=file, preserving the original immutable purpose and bytes. ' +
-      'Read-only POST. Owned standalone recordings use an attachment Thing with only crystal.recordingFileId and exactly one required stored byte entry. Its plan-only sourceId identifies the authenticated content download; sourceId never enters portable files. includeFiles=false fails for recordings. Reuses live Thing and composition audience checks, canonicalizes executable aliases, and drains folder pagination. File metadata uses the same live moderation, audience and object-state gates as downloads. No ownership, ACL, tokens, object keys or signed URLs are exported. Clients download stored files through the normal content endpoint and compute checksums. Optional links contain validated external URLs, mediaKind and owner annotations; attachmentOrder preserves mixed gallery order. Linked bytes are never fetched. Flagged linked media, inaccessible dependencies, unsupported managed records and bounds violations fail explicitly rather than truncating.',
-    auth: { mode: 'optional', description: 'Session or anonymous public/keyed content access. Folder enumeration requires ownership. App tokens and PATs are not supported.' },
-    methods: ['POST'],
-    steps: ['POST JSON { ids, key?, includeChildren?, includeDependencies?, includeFiles?, includeLinks? }. All inclusion flags default to true. Links may be included in JSON independently of stored files.', 'Bounds: 1000 Things, 2000 total file/link entries, 512 MiB file bytes, 16 MiB plan JSON and 120 seconds. Existing composition bounds also apply.', 'Response plan contains roots, content-only things, files, optional links and attachmentOrder. Files carry id, targetId, name, mime, bytes and optional sharedRoot. Links carry id, targetId, plain http(s) url, mediaKind and optional title, description and filenamePreview. Keep the presented key only in memory for authorized downloads, never in the portable archive.'],
-    requestExamples: [{ name: 'Export a folder', description: 'Include its complete contents.', method: 'POST', body: { ids: ['folder-id'] } }],
-    responseExamples: [{ status: 200, description: 'Authorized content plan.', body: { ok: true, plan: { roots: ['note'], things: [{ id: 'note', thingtime: ['data'], crystal: { name: 'Note' } }], files: [] } } }]
-  }),
-  endpoint({
-    id: 'things-import',
-    // 1.13.0: preserve optional owned algorithm library display titles.
-    // 1.12.0: retain optional owned theme display titles through canonical transfer.
-    // 1.4.0: owner-only algorithm snapshots and private validated restoration.
-    // 1.9.0: atomic private chat archives with importer identity substitution.
-    // 1.9.1: accept canonical stored-upload custom emoji IDs in archives.
-    featureVersion: '1.13.0',
-    contractVersion: '1.13.0',
-    notes: [
-      'Historical participants may carry avatarPreset lopu, chatgpt or claude instead of avatarFileId, never on self. Messages may carry toolHistory with at most 20 display-only {name, ok, summary} receipts (80/240 character limits). Extra fields and deleted-message receipts are rejected. These fields survive private storage and re-export; they never authorize tools or resolve live accounts.',
-      'Chat archive records use only chat-archive, chat-archive-participant, chat-archive-message and chat-archive-reaction kinds. A root contains name, topic, chatType (dm/group/channel), createdAt and selfParticipantId. Participants target the root and contain username, displayName, nickname, joinedAt and optional avatarFileId. Messages target the root and contain participantId, text, createdAt, deleted and optional editedAt, replyToId, threadRootId and systemText. Reactions target a message and contain participantId, emoji and createdAt. Dates are canonical millisecond UTC ISO strings; all participant, reply and thread references must stay inside the same archive.',
-      'The importer replaces the self participant. Other participants are archived snapshots, never live user accounts. Only roots can have folderId; archive records cannot carry extended fields, tags, roles, source user IDs or ACLs. File avatars require one fresh stored PNG/JPEG/GIF/WebP file; deleted message tombstones cannot carry text or media. Custom reaction tokens require an included custom-emoji definition. Each complete archive is inserted and file-bound atomically on the home plane after its folders and emoji dependencies. No memberships, messages to real recipients, invitations or notifications are created.',
-      'A failed later import rolls back each previously created archive through its dedicated child-first attachment cleanup and accounted deletion. Incomplete cleanup returns the archive root in remainingIds and retains earlier dependencies. Private archive export, owner lifecycle controls and read-only historical rendering are supported.',
-      'Custom emoji image files must be uploaded with purpose custom-emoji. Each emoji imports through the canonical writer into the personal library with a suffixed name and fresh server attempt identity. MIME/size, freshness and ownership are checked in the binding transaction; existing emojis and community membership are not restored or changed. New copies use the dedicated emoji cleanup path if a later import step fails.'
-    ],
-    // Dedicated themes/algorithms/emojis use remapped folders or the selected destination.
-    group: 'things',
-    title: 'Import portable Things',
-    endpoint: '/api/v1/things/import',
-    summary: 'Import private caller-owned content, preserving templated media and file/link annotations. Themes and feed algorithms use dedicated home-plane writers with fresh IDs and quota checks, without changing active selections. Themes accept name and token data. Algorithms accept name, optional display title, emoji, weights, eventCount and canonical ISO lastTrainedAt or null; each weight bucket allows at most 10000 keys of at most 512 characters and finite weights from -50 to 50. Malformed data fails without truncation. Imported algorithms start unshared with no branch lineage and never execute training events. Both kinds retain folder placement but reject child Things, extended fields and gallery files. Other account/control kinds remain protected.',
-    detail: 'Theme imports preserve validated optional crystal.title display metadata on fresh private copies. Standalone file transfers require fresh file-import uploads; the manifest filePurpose=file must match the immutable upload purpose before any mutation. Commit uses the existing accounted attachment writer. ' +
-      'Recording attachment Things contain only crystal.recordingFileId referencing one stored file targeted at that Thing, with optional folderId but without extra fields, children or links. Upload those bytes with purpose recording-import and private-upload approval. Import validates a fresh ready owner draft, commits annotations and durability atomically without changing purpose or moderation, returns the new recording ID, and remaps embedded recording URLs. Included recording folders are remapped after all parent folders exist; otherwise recordings use the selected import destination. Placement uses the dedicated transactional home-plane writer, without changing bytes or ACLs. Existing recordings cannot be reused. Later failures delete newly committed recordings through the attachment lifecycle; deferred cleanup appears in remainingIds. Other content allocates fresh IDs, remaps composition, folder, target and schema references, and uses normal schema validation, quota accounting and transactional attachment binding. Never restores ownership, ACL grants, link secrets, site routes or managed account records. Other stored files use normal post-purpose uploads. Optional links recreate private URL-backed gallery drafts without fetching external bytes. Repeated successful requests create separate copies; never automatically retry an uncertain mutation. Returns linksImported separately from filesImported.',
-    auth: { mode: 'session', description: 'Requires a first-party user account. Cross-origin requests, app tokens, PATs and service accounts are not supported.' },
-    methods: ['POST'],
-    steps: ['POST JSON { manifest, files?, folderId? }. The manifest uses format thingtime.transfer, version 1, roots, things, files and optional links plus attachmentOrder. Links use the export descriptor shape; IDs must be unique across Things/files/links. When links exist, attachmentOrder must cover every file/link exactly once.', 'At most 1000 Things and 2000 total file/link entries; manifest content is bounded to 16 MiB. The request has 1 MiB additional upload-map headroom and execution is bounded to 120 seconds.', 'Upload stored files normally and supply each new ready attachment ID. Never upload or fetch linked URLs: import recreates their records. Success returns roots, old-to-new Thing ids, imported, filesImported and linksImported.', 'If rollback fails or is deferred, stop deleting earlier dependencies and preserve remaining linked resources. Return 503 with remainingIds for the surviving copies and deliberately retained records. Do not automatically retry the original import mutation.'],
-    requestExamples: [{ name: 'Import a note', description: 'Create a private independent note.', method: 'POST', body: { manifest: { format: 'thingtime.transfer', version: 1, roots: ['note'], things: [{ id: 'note', thingtime: ['data'], crystal: { name: 'Note' } }], files: [] } } }],
-    responseExamples: [{ status: 200, description: 'Private content imported.', body: { ok: true, roots: ['new-note-id'], ids: { note: 'new-note-id' }, imported: 1, filesImported: 0 } }]
-  }),
-  endpoint({
-    id: 'things-fork',
-    // 1.8.0: User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts.
-    // 1.4.0: root render media bindings preserve split-fragment template behavior.
-    featureVersion: '1.8.0',
-    contractVersion: '1.8.0',
-    group: 'things',
-    title: 'Copy a shared composition',
-    endpoint: '/api/v1/things/fork',
-    summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content and bound post-purpose file galleries; independently readable foreign components include their authored same-author children. Bound files keep their copied home target and gallery order, even when also embedded elsewhere. Linked gallery entries become new private quota-accounted records with the same validated external URL and annotations; external bytes are never fetched, stored or redirected by the content endpoint. Flagged linked media cannot be re-minted as unflagged. Non-post purposes are excluded and unavailable or unsupported files fail the copy instead of silently dropping a gallery.',
-    detail: 'User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts. Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
-      'Revalidates the root audience and traverses stored component, action, schema and data references, including saved component arguments and every persisted page instance. Copies readable relational comments and nested replies in parent-first order (up to 512 Things, files and comments; larger copies fail without truncation), including comments on media and each nested gallery. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Templated controls retain their editable arguments and receive a bounded ttActionRefs array of [original resolved reference, copied id] pairs on the authored control node. The renderer applies the first matching pair once after ttAction interpolation, never to labels or inputs, and strips the marker from rendered output. Unused pairs are not access grants. Deferred tt-collection/Collection itemTemplate controls participate in stored dependency discovery and copying; row runtime values never grant authority. Dialog closeOnAction references follow copied actions without independently granting access. Forks of forks rebind to their own actions. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
-    auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed. File-bearing copies additionally require the recipient to be a user account with normal post-purpose upload approval; that permission is checked before reservation and throughout copying.' },
-    methods: ['POST'],
-    steps: ['POST { id, key? }. Supported roots are post, data, schema, component, webpage and action content; organizational folders, managed records and target-attached relationship rows retain their dedicated lifecycle.', 'Stored first-party media referenced by pages/components is copied to new caller-owned uploads through quota, exact-version authorization and normal moderation. HTML/CSS, saved URL arguments and exact attachment IDs in persisted argument values/defaults are retargeted, including nested lists and page-instance overrides. Matching ttMap keys and ttIf comparison values follow copied IDs so branch selection is preserved. URL template strings, argument labels and unrelated prose are preserved. External URLs are unchanged. Split-fragment file IDs retain their argument program and use root render ttMediaRefs pairs after interpolation. At most 512 valid first-match ID pairs map only first-party unkeyed media props and parsed CSS; the marker is stripped from output, generated text shares the render budget, and unused pairs never grant access. Re-forks compose targets onto their newly copied files.', 'Post and comment galleries preserve order, use their original attachment purpose, and supply inspected media to post validation. Copied comments inherit the new private parent; source community/flair placement is removed. Reactions and votes are not copied. Files bind transactionally to a copied Thing, with at most 25 files per target. The operation shares a 120-second copy deadline and revalidates the source composition before and after writes. Failure cleans only new Things/uploads; deferred cleanup remains billed and is reported. filesCopied counts newly owned attachments, separately from copied Things.', 'Open the returned id in Builder for a webpage or /thing/:id for other content.'],
-    requestExamples: [{ name: 'Copy a shared page', description: 'Save an editable private copy.', method: 'POST', body: { id: 'page-id', key: 'owner-issued-link-key' } }],
-    responseExamples: [{ status: 200, description: 'Independent private copy created.', body: { ok: true, id: 'new-page-id', copied: 3, ids: ['new-action-id', 'new-component-id', 'new-page-id'], filesCopied: 1 } }]
-  }),
-  endpoint({
     id: 'actions-run',
-    // 1.39.0: User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts.
-    // 1.34.0 adds owned XPath evaluator, compiled expression and result objects.
-    // 1.34.1 retains trusted mutation provenance; 1.35.0 adds native traversal and reusable synchronous data callbacks.
-    featureVersion: '1.39.0',
-    contractVersion: '1.39.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
-    summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
+    summary: 'Execute one action thing inside its declared capability + budget envelope.',
     detail:
-      'Version 1.38 preserves opaque pagination cursor query values up to the shared 16-KiB transport bound in local UI navigation. User-authored data strings no longer have the generic 5,000-character cap; other schema and storage constraints retain their contracts. ' +
-      'Version 1.37.1 fixes browser Action requests in the installed desktop shell: same-origin requests use the selected HTTPS account endpoint with actor and database preconditions preserved; incomplete web servers still fail closed. ' +
-      'Version 1.37.0 adds history.recovery:{formatVersion:1,event,dataPlane,proof} when completion retries fail and configured signing keys can seal the exact immutable outcome. API clients should retain this bounded bundle and retry it through api.timeline 1.16.0; never rerun the Action to repair delivery. The first-party client durably queues the same event before reporting local retention, then synchronizes normally across reloads. A lost response or process death before sealing cannot supply a known outcome; incomplete without recovery remains explicit. ' +
-      'Version 1.36.0 journals admitted ordinary server runs and outcomes in canonical Timeline, including read-only runs. A failed admission returns 507/503 before execution. Completed runs include history:{status:recorded|incomplete,startedEventId,outcomeEventId:string|null}; incomplete preserves the actual run result and warns that completion was not acknowledged after bounded receipt retries. Do not replay the Action to repair History. A process that stops after admission can leave only a started event. Outcomes omit runtime payloads, use the invoker account/data plane and survive Action deletion. Browser preparation and shared runs remain unrecorded. The bounded action-run records below remain a supplementary debug cache. ' +
-      'Traversal programs expose native TreeWalker, NodeIterator and NodeFilter behavior on owned detached trees. Generic synchronous callback objects or functions execute bounded data definitions with explicit bindings through the existing DOM policy, preserving native callback identity, pointer/removal semantics, reentrancy and thrown data. Source evaluation and asynchronous callbacks are not used for synchronous filters. ' +
-      'Server-executed Thing writes retain trusted Action provenance and share an operation id across nested steps. AI-initiated Actions retain AI provenance; preparing a browser program records no successful mutation. Client-supplied source/actor/operation fields cannot claim server provenance. ' +
-      'XPath programs reuse owned detached documents, compiled expressions, native result types and Node or data-backed namespace resolvers. Synchronous work is bounded by expression and actual tree complexity; scalar queries cannot inspect the surrounding runtime. Native node identity, snapshot and iterator semantics are preserved. ' +
-      'ARIA programs edit native nullable properties and owned element relationships, preserve frozen reference-list identity, and compare property assignment with content-attribute reflection. Browser support remains explicit; saved programs contain all inputs, relationships and projections. ' +
-      'Layout programs read bounded Window metrics and owned Element, Range, CaretPosition and geometry receivers. Document hit tests exclude runtime nodes; scrollingElement is a metrics-only projection. Scrolling awaits native completion. Saved event bindings support media queries, VisualViewport handlers and exact callback removal. ' +
-      'CSSOM programs edit native declarations, stylesheet rules and open shadow-root adopted stylesheets through owned bounded receivers. Asynchronous stylesheet replacement shares the run deadline and Stop fence; computed declarations retain native read-only errors. Examples and edited inputs remain ordinary Component program data. ' +
-      'Live DOM programs may observe bounded native events and pass local element arguments. Explicit allowFormEvents enables validation/submit events in an opaque frame with form-action navigation denied. Prototype method dispatch resists named controls, and event receipts expose submitter and user-edited validity. ' +
-      'SVG programs author namespace-aware bounded document trees and reuse native surface receivers for shape measurements, unit conversion, animated values, transforms and typed lists. Registered primitive IDL constants can be read without exposing constructors. Local references, SVG list sizes and viewport writes are validated; program data and edited inputs persist through the existing private Component save Action. ' +
-      'Canvas programs use explicit surface receivers for native 2D drawing, typed settings, paths, gradients, patterns and pixels. The existing worker DOM bridge exposes bounded surface/construct operations; it refuses foreign nodes, unrelated surface mutations, unregistered contexts and excessive resource sizes. Saved Component programs retain all drawing operations and edited inputs. ' +
-      'Web standards catalogue expressions return editable DOM receiver programs for detached document trees, including typed HTML form state, validation, text selection and live option/radio collections. Collection length writes enforce allocation limits before invoking native setters and detached collection mutations retain their owning tree budget. The dom expression requests document/get/set/call operations through a bounded isolated worker bridge; real native receivers remain local to the run and mutations are projected into the preview. Saved programs preserve the complete operation data. ' +
-      'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
-      'Reusable indexBy and groupBy expressions create bounded own-key lookups from lists using scalar lambda keys; invalid and prototype keys are refused. Browser programs using these expressions require executionVersion 1.11.0. ' +
-      'Web standards adds the web-standards installable suite, pure webstandards.browse/component expressions and the reusable tt-web-platform declarative document/CSS/JavaScript runtime. Runtime execution is isolated from account data; inventory provenance and incomplete-demo coverage are explicit. ' +
-      'Component source bindings use the same validation as page bindings and survive create/update. Browser Actions may declare expressionLimits {nodes,listItems} up to 1000000/10000 (defaults 20000/1000), with shared parent/child budgets and deadline checks inside evaluation. Browser each steps also require executionVersion 1.9.0. Each prepares every allowlisted child as the current viewer, shares all parent budgets, and rejects an oversized batch before its first request; authors explicitly slice batches when desired. Programs using expressionLimits require executionVersion 1.9.0. The Builder runtime includes stable-identity, revision-pinned tt-form controls and encoded local query navigation. ' +
-      'GET http.request steps optionally declare pagination {cursorParam,cursorPath,itemsPath,itemKey?,maxPages?,maxItems?}. The client merges pages without truncation, spends the shared operation/time/result budgets on every page, and rejects repeated cursors or mismatched response fields. Browser-only limits may optionally reach timeoutMs 120000 and maxResultBytes 8388608; server limits and defaults are unchanged. Pagination or expanded browser limits require executionVersion: 1.8.0 or a compatible 1.x client; older clients receive 409 before execution. ' +
-      'Browser programs (runtime: browser) require an owned Action, a first-party session and execution: browser. Preparation returns status: prepared, execution: browser, actionId, validated inputs, viewer id and the sanitized program. It performs no steps and writes no run record or completion notification. Old clients receive 409. Browser clients execute http.request, compute, actions.invoke, each, fail and return with the same expression grammar and shared budgets; requests are restricted to declared literal same-origin API method/path pairs, without custom credentials or redirects. Each request negotiates its feature/version and sends X-Thingtime-Expected-Actor; all executable API routes refuse a mismatched active account with 409 before side effects. Browser execution returns a local result and trace, not a persisted action-run. Browser programs cannot run in server chains or shared read-only compositions. ' +
-      'Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
-      'An independently readable foreign component starts its own audience boundary for its authored same-author descendants. The outer root is still required, and revoking either audience removes shared access. Page-authored cross-author arguments may select only independently readable actions, never guessed private actions belonging to either author. Execution remains read-only and never uses an author identity. ' +
-      'Shared controls can select actions through persisted component argument defaults, savedArgs and each page-block override. Discovery follows authored render branches and bounded stored repeats; runtime query/result/viewer input and arbitrary metadata grant no access. Copied ttActionRefs bindings resolve to the copied actions without changing input data. ' +
-      'Lookup steps { op: lookup, provider: google-geocoding, credentialId: a literal Vault entry id, query: $input.address } require capability { capability: lookup, providers: [google-geocoding] }. The caller must own the executing action and Vault key. Fixed HTTPS provider, no redirects, 500-character query, 128KB response, five results and an eight-second maximum within the run deadline. Shared lookup runs are refused. Runs using lookups return cache: no-store; persisted run results are replaced by an omission notice. Optional text inputs preserve explicit empty strings for clearing saved fields. See /docs/builder/lookups. ' +
       'The Action Thing executor: action things (thingtime ["action"]) are small declarative programs over a ' +
-      'closed operation vocabulary (things.create/get/search/update/delete, actions.invoke, lookup, compute, each, fail, return) with typed inputs, ' +
+      'closed operation vocabulary (things.create/get/search/update, actions.invoke, return) with typed inputs, ' +
       'author-declared capabilities, and a limits envelope. Capabilities only NARROW — every operation delegates ' +
       'to the ordinary things API as the signed-in caller, so ACL, quotas and schema validation always apply and ' +
       'an action can never do something its invoker couldn’t do by hand. One budget (deadline, operation count, ' +
       'depth, child actions, result bytes) is shared across the whole invocation including child actions.invoke ' +
       'calls, so recursive chains terminate by construction. Every run lands a protected action-run thing ' +
       '(targetId = the action) with a per-step trace; the response carries the same runId, status, result, ' +
-      'budget usage and trace. Shared mode accepts sharedRoot (a stored content Thing, including a webpage, component, action, data or schema id) and an optional key. Schema template controls participate in the same stored dependency graph. ' +
-      'It rechecks the root audience on every call, resolves only stored reachable actions in their author namespace, and permits ' +
-      'read-only execution without signing in. It never borrows the author or viewer private-account authority, never mutates saved data, ' +
-      'and creates no persistent run record or notification; its shared-run id is ephemeral. Explicit stored same-author data dependencies ' +
-      'inherit the root audience; dynamic ids retain ordinary anonymous read access. Search schema definitions resolve through the current action’s stored composition edge, while the search itself retains ordinary anonymous/public/system data boundaries. Every ordinary completed run also stores an action-run ' +
-      'notification, including successful component runs (quiet delivery).',
+      'budget usage and trace.',
     auth: {
-      mode: 'optional',
-      description: 'A session is required for ordinary runs. Shared read-only runs require access to sharedRoot, with its key or group membership when applicable. PATs and app tokens do not grant execution authority.'
+      mode: 'session',
+      description: 'Session cookie required. PATs and app tokens are default-denied in v1.'
     },
     methods: ['POST'],
     steps: [
       'POST { action: "<shareId or your actionKey>", inputs: { ... } }.',
-      'Add source: "component" when the run is DELEGATED — fired by a control inside rendered component markup rather than chosen from the ' +
-        'inspector. That narrows resolution to actions you own, so a template someone else authored cannot lend your authority to their ' +
-        'program by naming its id. Omit it for a deliberate run, which may also resolve any action you can read.',
       'Inputs are validated against the action’s typed descriptors (400 on mismatch).',
       'The executor runs the steps inside the budget; refs like "$input.name" and "$step.1.id" substitute whole values.',
       'Read status ("ok" | "error"), result, trace, and budget usage from the response.',
-      'Read durable activity via GET /api/v1/timeline using the discovered account/data-plane scope and thingId=<action id>. GET /api/v1/actions/runs?action=<id> supplies the supplementary recent debug cache.'
+      'Fetch history later via GET /api/v1/actions/runs?action=<id>.'
     ],
     requestExamples: [
       {
@@ -13256,15 +13131,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'actions',
     title: 'List action runs',
     endpoint: '/api/v1/actions/runs',
-    summary: 'Your own recent Action execution details, newest first — a bounded debug cache.',
+    summary: 'Your own action-run records, newest first — the inspectable audit trail.',
     detail:
       'action-run things are PROTECTED (executor-minted only, invisible to the generic thing reads), so run ' +
       'history has this dedicated read model: the signed-in caller’s own runs, optionally filtered to one action ' +
       'via action=<shareId>, newest first, limit ≤ 50. Each run carries status, startedAt, durationMs, budget ' +
-      'usage, a size-capped echo of the inputs and result, and the per-step trace the /actions inspector renders. ' +
-      'The trail is retained, not permanent: the executor keeps the newest 50 records per action per owner and ' +
-      'prunes older ones after each run, and deleting the action deletes its run records with it — so treat run ' +
-      'details as a rolling window rather than a permanent log. New server executions also journal redacted durable outcomes in canonical Timeline; those records survive deletion and are read through /api/v1/timeline.',
+      'usage, a size-capped echo of the inputs and result, and the per-step trace the /actions inspector renders.',
     auth: {
       mode: 'session',
       description: 'Session cookie required; you only ever see your own runs.'
@@ -13381,270 +13253,6 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'webpages-resolve',
-    contractVersion: '1.8.0',
-    featureVersion: '1.8.0',
-    group: 'webpages',
-    title: 'Resolve a webpage',
-    endpoint: '/api/v1/webpages/resolve',
-    summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
-    detail:
-      'Version 1.8 resolves saved intrinsic media containers and ordinary editable child controls for browser-local image and video compression. ' +
-      'Version 1.7 adds registered authenticated live SSE source bindings. Shared-root execution cannot borrow viewer stream authority. Version 1.6 adds individually editable element, collection and condition blocks, any-block Action sources, transparent option repetition and Show all pagination. Element props/text and child templates use the existing safe binding language. Authored trees no longer have product block-count/depth limits; transport and storage constraints still apply. ' +
-      'In 1.5.0, authenticated POST with ownerId and dataPlane in the query and {blocks} in the body resolves current components for an unsaved or branch draft. It sanitizes block trees and uses a 192-KiB request cap and 4-MiB response cap. Returns {ok,components,refs}; it reads no live page, grants no inherited audience from caller-supplied blocks and writes nothing. Recheck the scope before adopting results. These are current component definitions, not a historical dependency checkout. All POST replies are private/no-store. ' +
-      'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Webpage things (thingtime ["webpage"]) hold a bounded ordered block tree: component blocks reference ' +
-      'component things by componentKey or shareId, container blocks lay children out, text blocks carry short ' +
-      'copy, and native blocks mark where a built-in Thingtime screen sits on a site page. This endpoint resolves ' +
-      'ONE page — by id (a standalone /p/ page), by path (the site page bound to an app route, where a ' +
-      'viewer-owned personalised doc outranks the seeded system default), or global=1 (the site-global block ' +
-      'doc) — together with every referenced component in one batched query. Component refs resolve exact ' +
-      'shareIds first, then the seeded platform doc (component-<ref>), then the page author’s latest ' +
-      'componentKey match; the refs map records each resolution. Author-owned embedded components inherit ' +
-      'the resolved page audience for this response, including anonymous hidden-link readers and custom groups. ' +
-      'Standalone component ACLs are not rewritten; foreign components still require their own read access. ' +
-      'Pages are created and edited through the ' +
-      'ordinary /api/v1/things write path (the webpage crystal sanitizer is the write gate) — this endpoint ' +
-      'only reads. A standalone hidden page opens by its canonical id without a secret query parameter, matching the ' +
-      'ordinary Things hidden-link contract; the bearer key is never returned to non-owners.',
-    auth: {
-      mode: 'optional',
-      description: 'Anonymous callers resolve public pages, hidden standalone pages by their exact canonical id, and seeded site defaults; signed-in callers also get their own pages and personalised site docs.'
-    },
-    methods: ['GET', 'POST'],
-    steps: [
-      'GET with exactly one of id=<shareId>, path=</route>, or global=1.',
-      'Read page (null when no doc matches a path/global lookup) and source ("user" | "system").',
-      'Render blocks by looking each component block’s ref up in the refs map, then in components[].',
-      'Treat a null refs entry as an unresolvable component (render a placeholder).',
-      'Handle 400 for a malformed query, 404 for an id that doesn’t resolve, and 429 when rate-limited.'
-    ],
-    requestExamples: [
-      {
-        name: 'Resolve a standalone page',
-        description: 'The read behind /p/<id>.',
-        method: 'GET',
-        query: { id: 'my-launch-page' }
-      },
-      {
-        name: 'Resolve an unlisted page by secret link',
-        description: 'The key is the bearer secret copied by the page owner.',
-        method: 'GET',
-        query: { id: 'my-unlisted-page', key: 'owner-issued-link-key' }
-      },
-      {
-        name: 'Resolve a site page',
-        description: 'The block doc bound to an app route (viewer-personalised when a fork exists).',
-        method: 'GET',
-        query: { path: '/status' }
-      }
-    ],
-    responseExamples: [
-      {
-        status: 200,
-        description: 'Page and referenced components returned.',
-        body: {
-          ok: true,
-          page: {
-            id: 'webpage-route-status',
-            thingtime: ['webpage'],
-            crystal: {
-              name: 'Status',
-              pageKey: 'route-status',
-              siteRoute: '/status',
-              blocks: [{ id: 'native-status', type: 'native', native: 'status' }]
-            }
-          },
-          source: 'system',
-          components: [],
-          refs: {}
-        }
-      }
-    ]
-  }),
-  endpoint({
-    id: 'library-request', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'library',
-    title: 'Run a credentialed library read', endpoint: '/api/v1/library/request',
-    summary: 'Runs one curated, read-only third-party API example with a transient caller-supplied key.',
-    detail: 'The catalogue selects the HTTPS origin, GET path or read-only Places POST search, fixed JSON body template, permitted inputs and authentication scheme. No arbitrary URLs, redirects, headers, mutation methods or stored secrets are accepted. Full accounts only; fail-closed 20/minute rate limit, 24 KB body, 16 KB inputs, 12 second upstream deadline and 256 KB response limit. Stripe accepts test-mode keys only. Responses are no-store; supplied keys are redacted from successful results and all errors are generic. Public keyless examples fetch directly in the browser. Version 1.2 adds Mapbox, Google Places (New), YouTube, Spotify, Microsoft Graph, GitLab, Cloudflare and Contentful examples. OAuth providers require a caller-supplied access token; no client secret or token exchange is accepted. Clients negotiate api.library-request >=1.2.0 on this origin. Browser SDK keys use a separate isolated browser path, never this endpoint.',
-    auth: { mode: 'session-or-bearer', description: 'A full signed-in account is required; temporary accounts are rejected.' },
-    methods: ['POST'],
-    steps: ['Choose a credentialed example ID from the library.', 'POST exampleId, input and apiKey as JSON.', 'Read result; keys and results are not persisted.'],
-    requestExamples: [{ name: 'List available models', description: 'Use your own key; placeholder only.', method: 'POST', body: { exampleId: 'openai-available-models', input: {}, apiKey: '<your-api-key>' } }],
-    responseExamples: [{ status: 200, description: 'Bounded provider JSON', body: { ok: true, result: { data: [] } } }, { status: 400, description: 'Invalid input or provider failure', body: { ok: false, error: 'API request failed.' } }, { status: 401, description: 'Sign in required', body: { ok: false, error: 'Sign in with a full account to use an API key.' } }, { status: 429, description: 'Rate limited', body: { ok: false, error: 'Please wait before running another API example.' } }]
-  }),
-  endpoint({
-    id: 'webpages-demos',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
-    group: 'webpages',
-    title: 'Browse the builder demo library',
-    endpoint: '/api/v1/webpages/demos',
-    summary: 'Lists the deterministic catalog of builder demos (sections, full pages, component-block pages) and behaviour suites (schemas + components + actions + data + page), with a seeded flag per entry.',
-    detail:
-      'Version 1.1 includes native site forms, media controls, and private request Actions. Copying a demo with suiteKey requires installing that suite first. ' +
-      'The demo library is code: schemas/webpageDemos generates a few hundred example webpages from family × ' +
-      'layout × tone tables, each of which clears the webpage write gate unchanged. This endpoint lists that ' +
-      'catalog — id (the seeded shareId webpage-demo-<slug>), slug, name, family, kind, tone, layout, tags, ' +
-      'description, blockCount — plus families with counts and, per demo, whether its system doc is seeded on ' +
-      'this deployment (then /p/<id> and /builder?page=<id> open it directly; the builder forks a viewer’s edits ' +
-      'into their own twin). Pass slug=<slug> to also get that one demo’s full crystal (blocks included) — the ' +
-      'payload a client posts to /api/v1/things to make its own copy, seeded or not. Every response also lists ' +
-      'suites[] — the behaviour suites (schemas/behaviourSuites): bundles of schema things, ttAction-bound ' +
-      'component things, action things (the closed-vocabulary programs), sample data things, and a page, each ' +
-      'with counts, the system copy’s pageId/actionIds/schemaIds, and a seeded flag. Pass suite=<key> for ' +
-      'suite.bundle — the OWN-mode materialisation (schemas referenced by name, child actions by actionKey) a ' +
-      'client posts part by part to /api/v1/things (schemas, then components, actions, data stamped with the ' +
-      'created schema ids, then the page) so the page’s controls run the caller’s own programs end to end. ' +
-      'Every response also carries components[] + refs — the platform library component things the ' +
-      'component-kind demos reference, resolved exactly as /api/v1/webpages/resolve resolves a page’s blocks, ' +
-      'so a client can draw those demos without a second round trip; a null ref means that componentKey is not ' +
-      'seeded here and the block draws nothing. Read-only and public; two bounded queries, no per-viewer state.',
-    auth: {
-      mode: 'optional',
-      description: 'Anonymous callers see the same catalog and seeded flags — nothing here is per-viewer.'
-    },
-    methods: ['GET'],
-    steps: [
-      'GET with no query for the whole catalog, or family=<key> / kind=section|page|component to filter.',
-      'Read families[] (key, title, emoji, kind, description, count), total, seededCount, and suites[].',
-      'Draw kind=component demos by folding components[] + refs into a ref → component map (buildComponentsByRef).',
-      'Pass slug=<slug> to receive demo.crystal — POST it to /api/v1/things with thingtime ["webpage"] to copy it.',
-      'Pass suite=<key> to receive suite.bundle and install it: POST each schema, component, action, data (add schemaId), then the page.',
-      'Treat seeded: true as “/p/<id> and the builder open this demo directly” (suites: /actions/<actionId> runs the seeded program).',
-      'Handle 400 for an unknown family/kind/slug/suite shape, 404 for an unknown slug or suite, and 429 when rate-limited.'
-    ],
-    requestExamples: [
-      {
-        name: 'Browse one family',
-        description: 'Every hero demo.',
-        method: 'GET',
-        query: { family: 'hero' }
-      },
-      {
-        name: 'Fetch one demo with blocks',
-        description: 'The crystal to clone.',
-        method: 'GET',
-        query: { slug: 'hero-centered-paper' }
-      },
-      {
-        name: 'Fetch a behaviour suite bundle',
-        description: 'Everything needed to install the guestbook suite into your own things.',
-        method: 'GET',
-        query: { suite: 'guestbook' }
-      }
-    ],
-    responseExamples: [
-      {
-        status: 200,
-        description: 'Catalog slice returned.',
-        body: {
-          ok: true,
-          total: 322,
-          seededCount: 322,
-          families: [{ key: 'hero', title: 'Hero', emoji: '🌅', kind: 'section', description: 'Opening statements — centered, split, with stats, and minimal.', count: 24 }],
-          demos: [
-            {
-              id: 'webpage-demo-hero-centered-paper',
-              slug: 'hero-centered-paper',
-              name: 'Hero · Centered · Paper',
-              family: 'hero',
-              kind: 'section',
-              tone: 'paper',
-              layout: 'centered',
-              tags: ['webpage', 'demo', 'hero', 'section', 'paper', 'centered'],
-              description: 'Opening statements — centered, split, with stats, and minimal. Centered layout in the paper tone, copy from Thingtime.',
-              previewBg: '#fafafb',
-              blockCount: 7,
-              seeded: true
-            }
-          ],
-          suites: [
-            {
-              key: 'guestbook',
-              title: 'Guestbook',
-              emoji: '📖',
-              description: 'Sign a guestbook, then read the signatures back.',
-              story: ['The simplest program: one schema, one create action, one search action.'],
-              tone: 'paper',
-              counts: { schemas: 1, components: 2, actions: 2, data: 3 },
-              pageId: 'webpage-demo-suite-guestbook',
-              actionIds: ['action-demo-guestbook-sign', 'action-demo-guestbook-recent'],
-              schemaIds: ['schema-demo-guestbook-entry'],
-              seeded: true
-            }
-          ],
-          refs: { 'thingtime-button-solid': 'component-thingtime-button-solid', 'thingtime-card-basic': 'component-thingtime-card-basic' },
-          components: [{ id: 'component-thingtime-button-solid', thingtime: ['component'], visibility: 'public', crystal: { name: 'Solid Button', componentKey: 'thingtime-button-solid', args: [], render: {} } }]
-        }
-      }
-    ]
-  }),
-  endpoint({
-    id: 'webpages-suites-install',
-    contractVersion: '1.6.0',
-    featureVersion: '1.6.0',
-    group: 'webpages',
-    title: 'Install a behaviour suite or app suite',
-    endpoint: '/api/v1/webpages/suites/install',
-    summary: 'Installs (or re-installs) one suite — schemas, components, actions, sample data, and every page — into the caller’s own things in one idempotent request.',
-    detail:
-      '1.5.0 adds the agent-tasks installable suite: private task, todo and progress Data Things, editable Components and Actions, and links to the desktop browser adapter. Browser claims and network enforcement remain device operations and require the desktop agent-browser capability. ' +
-      '1.4.0 adds the media-tools suite: editable local WebCodecs conversion programs with selected-file input, resize, MP4/WebM encoding, progress/cancel, preview, host download and a saved-component Action. No video bytes are uploaded or persisted by conversion; device codec support is required. ' +
-      'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
-      'Web standards adds the web-standards installable suite, pure webstandards.browse/component expressions and the reusable tt-web-platform declarative document/CSS/JavaScript runtime. Runtime execution is isolated from account data; inventory provenance and incomplete-demo coverage are explicit. ' +
-      'Version 1.1 adds site-forms and catalog-records suites, native form fields, and versioned interactive controls. ' +
-      'Site forms and catalog records create private Things; external effects require a configured integration Action. ' +
-      'Optional onlyMissing: true preserves all existing parts while installing absent dependencies. Installed page component references bind to the caller’s concrete component ids. ' +
-      'A suite is an installable program bundle (schemas/behaviourSuites): schema things, ttAction-bound component ' +
-      'things, action things, sample data things, and one or more builder pages. App suites (Pokeworld, StarsAlign) are ' +
-      'multi-page suites whose pages link to each other by pageKey. This endpoint writes the OWN-mode bundle through the ' +
-      'ordinary create/update utils as the caller — the same things the part-by-part client install creates — but ' +
-      'IDEMPOTENTLY: each part has a stable key inside the caller’s things (schema name, componentKey, actionKey, ' +
-      'pageKey, sample stamp), so a second call updates the existing copy in place instead of duplicating it, and sample ' +
-      'data is seeded once and never clobbered. Pages keep their pageKey, which is what makes /p/<pageKey> resolve the ' +
-      'caller’s copy ahead of the seeded one. Session-only, like actions.run: an install creates programs the caller ' +
-      'will run as themselves; delegated controls on the installed pages resolve owner-only.',
-    auth: {
-      mode: 'session',
-      description: 'A signed-in session. App tokens and personal access tokens are refused — installing programs is a first-party act.'
-    },
-    methods: ['POST'],
-    steps: [
-      'POST { key } where key is a suite key from GET /api/v1/webpages/demos (suites[].key).',
-      'Read created / updated counts, the per-part id maps (schemaIds, componentIds, actionIds, pageIds, dataIds), and entryPageKey.',
-      'Open /p/<entryPageKey> — the resolver now answers with the caller’s own copy; every control runs their own programs.',
-      'Call again after the catalog changes to refresh the copy in place (data things are never touched).',
-      'Handle 401 signed out, 404 for an unknown key, 422 when a part refuses to save (the message names the part), 429 when rate-limited (12/min).'
-    ],
-    requestExamples: [
-      { name: 'Install Pokeworld', description: 'Every page, control, and program of the game into your things.', method: 'POST', body: { key: 'pokeworld' } },
-      { name: 'Install missing site form dependencies', description: 'Preserves customized Actions and controls.', method: 'POST', body: { key: 'site-forms', onlyMissing: true } },
-      { name: 'Install the guestbook demo suite', description: 'A single-page behaviour suite.', method: 'POST', body: { key: 'guestbook' } }
-    ],
-    responseExamples: [
-      {
-        status: 200,
-        description: 'Installed (first call).',
-        body: {
-          ok: true,
-          suite: 'pokeworld',
-          title: 'Pokeworld',
-          created: 31,
-          updated: 0,
-          schemaIds: { trainer: 'a1b2…' },
-          componentIds: { map: 'c3d4…' },
-          actionIds: { move: 'e5f6…' },
-          pageIds: { play: 'g7h8…' },
-          dataIds: [],
-          entryPageId: 'g7h8…',
-          entryPageKey: 'pokeworld'
-        }
-      },
-      { status: 200, description: 'Re-installed after a catalog update — refreshed in place.', body: { ok: true, suite: 'pokeworld', title: 'Pokeworld', created: 0, updated: 4, schemaIds: {}, componentIds: {}, actionIds: {}, pageIds: {}, dataIds: [], entryPageId: 'g7h8…', entryPageKey: 'pokeworld' } },
-      { status: 404, description: 'Unknown suite.', body: { ok: false, error: 'No suite matches "nope"' } }
-    ]
-  }),
-  endpoint({
     id: 'admin-components-seed',
     group: 'admin',
     title: 'Seed component library',
@@ -13695,114 +13303,6 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Seed report returned.',
         body: { ok: true, received: 1, created: 1, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 1 }
-      }
-    ]
-  }),
-  endpoint({
-    id: 'admin-webpages-seed-demos',
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
-    group: 'admin',
-    title: 'Seed the builder demo library',
-    endpoint: '/api/v1/admin/webpages/seed-demos',
-    summary: 'Upserts every builder demo page and every behaviour-suite part (schemas, components, actions, data, pages) as system-owned public things.',
-    detail:
-      'Optional POST query catalog=integrations seeds only the integration library: one index, one page per provider, one page and component per example. It returns the ordinary seed report without suites; GET remains the general census: totalSeeded includes integration pages, while demosSeeded and suitesSeeded count only their respective catalogues. Unknown catalog values return 400. No keys or live output are stored. ' +
-      'The write path for the builder demo library: the deterministic schemas/webpageDemos catalog seeds one ' +
-      'system-owned webpage thing per demo (shareId webpage-demo-<slug>, reserved prefix, pageKey demo-<slug>, ' +
-      'tags webpage/demo/<family>/<kind>), and the schemas/behaviourSuites catalog seeds every suite part — ' +
-      'schema-demo-<suite>-<key>, component-demo-<suite>-<key> (ttAction-bound controls), ' +
-      'action-demo-<suite>-<key> (programs whose schema refs are the seeded schema ids and whose child refs are ' +
-      'the seeded action ids), data-demo-<suite>-<n> (stamped schema/schemaId like executor-minted things), and ' +
-      'webpage-demo-suite-<suite>. All carry storageClass "control", acl ["tt:all"], and per-kind hashed ' +
-      'uniqueKeys — the same envelope and reconciling upsert as the site-page seed. Every crystal passes its ' +
-      'kind’s validateThingtimeCrystal gate, the exact gate user things clear. Idempotent and self-healing: ' +
-      're-runs leave matching docs unchanged, refresh drifted crystals/tags in place, and skip (never touch) ' +
-      'foreign docs squatting a destination id. Once seeded, every demo opens at /p/ and in the builder (edits ' +
-      'fork), suite parts are browsable on /schemas, /components and /actions, and a signed-in viewer can run a ' +
-      'seeded action from its /actions page (it mints THEIR data things). The report sums both passes and ' +
-      'carries the suite pass as `suites`. GET returns the seed census (site + demo + suite counts) without writing.',
-    auth: {
-      mode: 'session-or-bearer',
-      description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
-    },
-    methods: ['GET', 'POST'],
-    steps: [
-      'POST with an empty body — the demo catalog is server-side and deterministic.',
-      'Use ?catalog=integrations to prepare the integration builder hierarchy independently; negotiate api.admin-webpages-seed-demos >=1.2.0 first.',
-      'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
-      'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal, suitesSeeded, suitesTotal } to check the census without writing — the three seeded counts are disjoint, so a suite page counts once, under suitesSeeded.',
-      'Re-run after the catalogs change — converges, never duplicates.',
-      'Handle 401/403 for non-admins and 429 when the fail-closed rate limit trips.'
-    ],
-    requestExamples: [
-      {
-        name: 'Seed the demo library',
-        description: 'Upsert every catalog demo.',
-        method: 'POST',
-        body: {}
-      }
-    ],
-    responseExamples: [
-      {
-        status: 200,
-        description: 'Seed report returned.',
-        body: {
-          ok: true,
-          received: 447,
-          created: 447,
-          refreshed: 0,
-          unchanged: 0,
-          skipped: 0,
-          notes: [],
-          totalSeeded: 364,
-          suites: { ok: true, received: 125, created: 125, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 364 }
-        }
-      }
-    ]
-  }),
-  endpoint({
-    id: 'admin-webpages-seed',
-    contractVersion: '1.1.0',
-    group: 'admin',
-    title: 'Seed site webpages',
-    endpoint: '/api/v1/admin/webpages/seed',
-    summary: 'Upserts the built-in site-page docs (one webpage thing per app route, native-block bodies) plus the site-global doc.',
-    detail:
-      'The write path that makes every built-in Thingtime route a block-based site: a deterministic server-side ' +
-      'table seeds one system-owned webpage thing per app route (shareId webpage-route-<key>, the prefix is ' +
-      'reserved against squatters) whose block list is the locked native block for that screen, plus the empty ' +
-      'site-global doc (webpage-site-global). storageClass "control", acl ["tt:all"], hashed webpage:<slug> ' +
-      'uniqueKeys. Crystals pass validateThingtimeCrystal(["webpage"]) — the exact write gate user pages clear. ' +
-      'Idempotent and self-healing: re-runs leave matching docs unchanged, refresh drifted crystals/tags in ' +
-      'place, and skip (never touch) foreign docs squatting a destination id. Viewers personalise site pages by ' +
-      'saving their own webpage twin (same pageKey/siteRoute) through the builder — the seeds themselves never ' +
-      'change per user. GET returns the seed census without writing.',
-    auth: {
-      mode: 'session-or-bearer',
-      description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
-    },
-    methods: ['GET', 'POST'],
-    steps: [
-      'POST with an empty body — the seed table is server-side and deterministic.',
-      'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
-      'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal, suitesSeeded, suitesTotal } — totalSeeded counts every system webpage (site pages, the global doc, and demo-library pages), and the category counts cover site, demo and suite pages; totalSeeded also includes the separately seeded integration library.',
-      'Re-run after adding routes to the seed table — converges, never duplicates.',
-      'Handle 401/403 for non-admins and 429 when the fail-closed rate limit trips.'
-    ],
-    requestExamples: [
-      {
-        name: 'Seed the site pages',
-        description: 'Upsert every built-in route doc + the global doc.',
-        method: 'POST',
-        body: {}
-      }
-    ],
-    responseExamples: [
-      {
-        status: 200,
-        description: 'Seed report returned.',
-        body: { ok: true, received: 28, created: 28, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 28 }
       }
     ]
   }),
