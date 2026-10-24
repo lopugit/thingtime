@@ -14,6 +14,19 @@ Plus the repository's canonical AI instruction files (`AI_ALL.md`, with
 `AGENTS.md` and `CLAUDE.md` as symlinks to it), because agents work on this
 branch too.
 
+Graphify output is stored as immutable content-addressed snapshots. Use
+`.github/scripts/graphify`; it fingerprints the source tree without generated
+output, serializes writers, validates each atomic graph set, converts mutable
+semantic responses into immutable input-key/content-hash variants, and keeps
+mutable root aliases out of Git. The same trusted router is copied into Lopu
+workspaces, so post-merge Graphify publication never executes a PR-head script
+with repository credentials.
+
+The router keeps one active portable snapshot by default and prunes superseded
+snapshots after successful updates. Run `.github/scripts/graphify prune` to
+enforce retention without rebuilding, or set `GRAPHIFY_SNAPSHOT_RETENTION` to a
+positive integer when this branch deliberately needs more than one snapshot.
+
 The root `vercel.json` is the one deliberate non-CI runtime file. Vercel now
 uses the repository root for product deployments, so this branch must keep a
 config at that same location. It sets `git.deploymentEnabled` to `false` for
@@ -57,6 +70,64 @@ refuses them outright because it cannot push to a fork's branches.
 syntax-checks every script, runs each `--self-test`, and asserts this branch's
 shape (see below). Web CI does not run — its path filters are `remix/**`, which
 cannot exist here.
+
+CI concurrency is scoped to the PR number or pushed/dispatched ref. A newer
+run may supersede the same subject, but unrelated PRs never share a cancellation
+slot. Event-admission and preview-comment regression tests run in the required
+`verify` job, independently of the broader advisory contracts.
+
+Automated comments must begin with their canonical `<!-- thingtime-... -->`
+marker. The owner PAT is deliberately retained where GitHub's integration token
+lacks permission; its `User` identity is not treated as proof of human authorship.
+Bot and marker-prefixed comments stop before a runner starts. Other user comments
+pass a read-only protected classifier that recognizes legacy standalone markers,
+preserves quoted replies and fenced code examples, and suppresses unchanged edits.
+Queued comment review workers fetch and reclassify the exact live comment before
+creating PR worktrees or invoking a model. Missing comments stop cleanly; failed
+metadata reads fail closed. Both preview publishers edit their owned comment only
+when its content changes and never adopt a human's quoted status as their own.
+
+Preview eligibility also requires a real `remix/package.json` file at the exact
+authorized head SHA. A controller-only head follows the existing skip/cleanup
+path instead of entering dependency installation. Only a contents 404 means the
+file is missing; authentication, rate-limit, and server errors remain errors.
+See [.github/TESTING.md](.github/TESTING.md) for regression and rollout checks.
+
+### Discoverable preview status and recovery
+
+Both publishers post expected persistent URLs and a ready-time estimate before
+releasing the secretless build, then update the same marked comment with the
+immutable snapshot URL. GitHub leaves edited comments in their original place
+in the timeline; check the PR sidebar when an older comment is hard to find.
+
+Successful publication adds `last preview built DD/MM HH:MM AEST #<PR>` (AEDT
+during daylight saving). The timestamp is Vercel's actual READY time in
+`Australia/Melbourne`, not the time a workflow reused or repaired that preview.
+Admin-selected environments have separate `last preview dev` and `last preview
+prod` labels. The PR suffix makes each history label safe to rename without
+changing another PR's date. A separate `preview: <lane> queued/building/ready/
+failed/removed` label describes current state; failure and cleanup preserve the
+last successful timestamp. Only controller-owned labels are changed.
+
+The existing six-hour default-branch preview schedule now inspects open PRs as
+well as previously created deployments. It restores comments, labels and aliases
+for verified current-SHA READY deployments without rebuilding them. Missing
+previews enter the normal secretless build through a bot-authenticated dispatch,
+after the same author, repository, exact-head and application-bundle checks.
+Active native worker/handoff queues and active Vercel builds are left alone.
+Each exact-SHA GitHub deployment keeps a durable recovery receipt: at least
+30 minutes between requests and at most three automatic attempts. A failed PR
+does not stop the rest of the inventory. After the limit, inspect the workflow
+and manually rerun it after correcting the error; a new head has a fresh budget.
+
+Fork setup: retain caller `contents: write`, `issues: write` and
+`pull-requests: write`, and the protected `vercel-develop-pr-control` environment.
+The recovery dispatch specifically uses the workflow's `github.token`; optional
+`CONFLICT_RESOLVER_PAT` is only the existing fallback for comments/receipts. No new
+secret is needed, and no deployment credential reaches a product build. The
+sweep repairs the ordinary develop lane only: it never infers or enables admin
+environment selections from an old deployment/comment. Those remain authorized
+by the existing backend GitHub App dispatch.
 
 ## Lopu principal repository manager
 
@@ -102,15 +173,70 @@ candidate to the automation-owned `sync/main-into-develop` branch and opens or
 refreshes a PR from that branch. It never uses protected `main` as the writable
 PR head. The ordinary Lopu conflict lane can therefore merge `develop` into
 the safe head, resolve it, rebuild Graphify, and publish without rewriting
-either primary branch.
+either primary branch. That exact automation-owned branch uses an independent
+serialized resolver lane, so an older ordinary-conflict backlog cannot delay
+repository synchronization. As soon as GitHub reports that exact published
+head as mergeable, the sync lane merges the PR explicitly; it does not rely on
+native auto-merge, which GitHub refuses to arm when `develop` has no
+protected-branch rule. The merger revalidates the PR repository, head/base
+names, all three branch SHAs, and that the head contains live `main`, then
+submits an exact-head merge and confirms the resulting `develop` still contains
+that `main` commit.
+It polls through GitHub PR-object hydration lag while checking the live sync
+ref directly, and treats an ambiguous transient merge response as successful
+only after the merged PR and resulting `develop` ancestry prove the commit
+landed. Any moving ref, unresolved conflict, or stale candidate defers safely
+to the next Lopu pass.
 
 The public manager coalesces event storms by semantic PR or branch key: GitHub
 keeps the active run plus the newest pending run, and
 `cancel-in-progress: false` prevents that newest signal from interrupting work
 already running. The survivor re-derives the complete live PR, comment, check,
-and branch state. Only the shared model fleet uses durable `queue: max`, because
-already-selected work for distinct PRs must not disappear while one Lopu is
-active.
+and branch state. Before a conflict detector publishes another repository
+batch, it also cancels only older batch runs that are still pending/queued and
+waits for their GitHub capacity to release; an in-progress worker is always
+preserved. Only the shared model fleet uses durable `queue: max`, so admitted
+work remains serialized while event storms cannot fill the pending-job limit
+with obsolete immutable snapshots.
+
+Queue recovery (2026-09-05): review handoffs inspect GitHub's native `lopu-review-<scope>` concurrency
+group instead of only the most recent 100 workflow dispatches. They verify the
+trusted run's actual review job is unstarted before reusing that waiter; an
+active review still permits one follow-up for newer changes. Human comment
+events retain their own comment-id-bearing handoffs. Controller status comments
+carry the hidden `thingtime-` marker and do not trigger another model review,
+even when a PAT makes their author look like a human. Control-plane CI uses
+separate concurrency groups per PR/ref so unrelated PRs cannot cancel each
+other's validation.
+
+Queue regression checks: `node --test .github/scripts/lopu-review-queue.test.mjs`.
+After deployment, inspect the native concurrency groups and job states: a
+pending Lopu fleet member is waiting for serialized mutation access, not
+necessarily consuming a runner or blocking the separate preview pipeline.
+Confirm that an old unstarted review coalesces a new automated signal, a running
+review allows a follow-up, and ordinary human comments still reach Lopu.
+The helper needs only Actions read access (the handoff already needs Actions
+write for dispatch) and fails closed on unavailable or incomplete queue data.
+
+Batch reviews also support cooperative handover. After a five-minute useful-work
+quantum, other jobs waiting in the native fleet queue request wrap-up. Claude
+receives that request between tool calls through trusted hooks; Codex receives
+the same checkpoint protocol and checks before each PR. The request is latched
+and polling is limited to once per minute. The reviewer finishes and validates
+its current PR, writes its completed report, then ends normally. The existing
+exact-head publisher pushes only completed reviews, and a metadata-only artifact
+records the remaining PR numbers before one continuation is queued behind other
+work. Continuations re-read live eligibility and heads, and have a distinct run
+title so a partial continuation cannot suppress a new full-scope signal.
+
+This is cooperative, not a hard deadline: it never kills a process or cancels a
+run. Unfinished changes, an active Git operation, and zero-progress loops block
+handover. Atomic conflict repairs, feature-stack merges, and deployments retain
+their existing non-interruptible boundary. Already-running old controller jobs
+cannot acquire the hooks retroactively. If continuation dispatch fails, the run
+fails visibly and its seven-day `lopu-review-handoff` artifact preserves the
+remaining inventory for a controlled retry; no raw source patches or secrets
+are put in that artifact. No new secret or backend setting is required.
 
 The stack rebase/cascade implementation is internal in the same way. Existing
 `rebase-pr-stack-ai` exact-worker events enter through **Lopu PR manager**, keep
@@ -122,6 +248,15 @@ Conflict and stale-branch workers retain the complete commit graph needed to
 merge the exact snapshotted base, but use Git partial-clone blob filtering so
 Lopu does not download the repository's multi-gigabyte historical file corpus
 for every PR. Required working-tree and merge blobs are fetched lazily.
+
+Every non-deleted target-branch push is also an update signal for eligible
+same-repository PRs whose base is that exact branch. Lopu snapshots the live
+head and base refs and merges the target into the PR head under an exact-head
+lease, even when GitHub has not yet recomputed its `BEHIND`/mergeability fields.
+This is a merge, not a rebase: it preserves contributor history. Forks,
+protected/default heads, and `no-ai-merge` or `ai-merge-paused` PRs remain
+excluded; a worker that finds its exact base already present exits successfully
+without creating a graph-only commit or pushing the branch.
 
 The default backend is Claude. To use Codex through the OpenAI Platform API,
 configure these repository settings (all names and values are examples; never
@@ -1279,6 +1414,15 @@ optional display cap using the same server-only token configuration.
 
 Add this as a sensitive Vercel project environment variable:
 
+The worker builds the exact authorized PR SHA on GitHub without repository or
+environment secrets, packages `.vercel/output`, and passes that artifact to a
+separate protected publisher. The publisher validates archive paths, links,
+size, Vite shell, and Build Output routes before a pinned Vercel CLI uploads it
+with `--prebuilt`; feature-branch build scripts never receive the Vercel token
+or the develop S3 probe URL. Keep build-time public values derivable from the
+GitHub event. Secrets used by server functions remain runtime values in the
+selected Vercel Custom Environment and must not be copied into the build job.
+
 ```sh
 VERCEL_API_TOKEN="<vercel-rest-api-token>"
 VERCEL_PROJECT_ID="prj_<project-id>"
@@ -1290,7 +1434,10 @@ VERCEL_CUSTOM_ENVIRONMENT_ID="env_<custom-environment-id>"
 STABLE_DEVELOP_DOMAIN="dev.example.com"
 PREVIEW_ALIAS_SUFFIX="preview.example.com"
 PRODUCTION_PREVIEW_ALIAS_SUFFIX="production-preview.example.com"
+PREVIEW_EXPECTED_BUILD_MINUTES="5"
+ADMIN_PREVIEW_DISPATCHER_LOGIN="your-ci-control-app[bot]"
 DEVELOP_PREVIEW_TRUSTED_ACTORS="<comma-separated-github-logins>"
+THINGTIME_DEVELOP_S3_CORS_PROBE_URL="https://<bucket>.s3.<region>.amazonaws.com/<unsigned-probe-path>"
 ```
 
 ### Stable develop domain
@@ -1301,10 +1448,10 @@ domain itself to the `develop` Git branch. This gives Vercel a deterministic
 fallback for the hostname, while the controller separately promotes only an
 exact, verified native `develop` deployment.
 
-If trusted PR automation creates deployments in that same Custom Environment,
-its deployment payload must set `autoAssignCustomDomains: false` and assign
-only a separate PR alias after validating the exact repository, branch, commit,
-and READY state. Bind the development PR wildcard to the `develop` Git branch.
+If trusted PR automation creates prebuilt deployments in that same Custom
+Environment, it must use `--skip-domain` and assign only a separate PR alias
+after validating the exact repository, branch, commit metadata, and READY
+state. Bind the development PR wildcard to the `develop` Git branch.
 Vercel does not permit binding a project domain to the production branch as a
 Preview domain, so the production preview wildcard must remain detached (the
 documented Vercel production fallback) and may not attach to a Custom
@@ -1313,9 +1460,87 @@ The controller checks both Vercel bindings, DNS, and a live `/api/root-data`
 fallback probe before it can publish, so a detached production wildcard is only
 accepted when it actually resolves to `main`.
 
-Stacked PRs are supported only when each parent is an open same-repository PR
-from an allowlisted author and the bounded chain terminates at `develop`.
-The chain is resolved from the protected controller; a missing, ambiguous,
-untrusted, cyclic, draft, or overlong parent chain receives no credentialed
-preview. Use domains and environment ids from your own Vercel project; never
-copy another project's account-specific identifiers or verification records.
+Every open, ready, same-repository PR from an allowlisted author is eligible,
+regardless of whether its base is `develop`, `main`, or another feature branch.
+The controller revalidates the exact live ref and SHA before publishing, while
+the deployment itself always remains in the isolated Vercel `develop` Custom
+Environment. A closed former parent PR therefore cannot strand a child PR, and
+forks, drafts, stale dispatches, or users without current write access still
+receive no credentialed preview. As soon as authorization succeeds, the
+controller posts the expected persistent URL and a clearly labelled UTC ready
+estimate before product checkout, dependency installation, or build. The
+publisher preserves that original estimate when it adds the immutable URL and
+terminal status. Both secretless build paths retry only the pinned pnpm
+bootstrap after transient package-registry transport failures.
+
+The admin CI page can additionally store a bounded Develop/Production preview
+policy and send it through the `thingtime-ci-control[bot]` GitHub App. The
+product backend has no Vercel publishing path: `.github/scripts/deploy-admin-pr-previews.mjs`
+owns deployment creation, marker-scoped cleanup, exact-SHA READY aliasing, and
+the single PR comment. It writes the expected persistent URLs and estimated
+ready time before contacting Vercel, then adds each immutable snapshot URL as
+soon as Vercel returns it. Production selection targets the Vercel production
+runtime but never auto-assigns a production domain; it uses only the separate
+PR-scoped production-preview wildcard. Set `ADMIN_PREVIEW_DISPATCHER_LOGIN` to
+the exact installed GitHub App bot login. Use domains and environment ids from
+your own Vercel project; never copy another project's account-specific
+identifiers or verification records.
+
+## Desktop and Recovery release pipeline
+
+`electron-release.yml` delegates main publication to the same protected worker
+as `electron-pr-release.yml`. Only a main push or owner dispatch can select main;
+PR callers retain the owner/same-repository/desktop-release label gate. Reusable
+workflows retain the original caller event, as documented in
+[GitHub's context rules](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations).
+Both lanes test and package desktop plus Recovery ZIPs before publication.
+
+Keep the product main-release listener's permissions at `contents: write` and
+`pull-requests: read` to permit the nested worker. Roll out that listener through
+the regular product promotion. Do not merge this control-plane branch into the
+application. Manual owner dispatch from `github-actions` can verify an approved
+product PR independently of main promotion.
+
+Signing still requires all six existing repository secrets: `MAC_CSC_LINK`,
+`MAC_CSC_KEY_PASSWORD`, `APPLE_API_KEY_BASE64`, `APPLE_API_KEY_ID`,
+`APPLE_API_ISSUER`, and `APPLE_TEAM_ID`. Use your own account's credentials;
+configure none to produce the explicit unsigned lane, or all six for Developer
+ID plus notarization. Partial configuration fails. Unsigned builds are marked
+in tags, filenames and notes, are prereleases, and never become latest.
+
+### macOS signing and build identity
+
+The Electron/Recovery worker passes `GITHUB_RUN_NUMBER` as
+`THINGTIME_ELECTRON_BUILD_NUMBER`, so native bundle and embedded web metadata
+retain the cloud build identity. Configure `MAC_CSC_LINK` (base64 encrypted
+Developer ID P12), `MAC_CSC_KEY_PASSWORD`, and `APPLE_TEAM_ID` as Actions secrets.
+Notarization accepts explicit `APPLE_API_KEY_BASE64`, `APPLE_API_KEY_ID`, and
+`APPLE_API_ISSUER`, falling back to the approved iOS CI `ASC_KEY_CONTENT`,
+`ASC_KEY_ID`, and `ASC_ISSUER_ID` only after macOS signing is configured. Both
+key-content forms are base64 encoded. An iOS-only setup retains the explicit
+unsigned fallback; partial macOS signing still fails closed. No credential
+material belongs in this branch. Regression coverage executes the actual
+selection and version shell in `.github/scripts/electron-release-gates.test.mjs`.
+
+
+## Commander signed releases
+
+`commander-release.yml` admits main pushes and owner dispatches on main or
+`github-actions`, resolves the immutable main commit, and builds Commander plus
+Thingtime Recovery for Apple silicon. Source TypeScript/Rust/Swift tests run
+before credential import. ZIPs use Recovery-compatible `Commander-App-Release-`
+and `Thingtime-Recovery-App-Release-` names and include `SHA256SUMS.txt`.
+Each archive is notarized, stapled, extracted and verified before one publication;
+Commander uses `--latest=false` to preserve Electron's latest release.
+
+Configure encrypted `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_TEAM_ID`, and
+`APPLE_API_KEY_BASE64` / `APPLE_API_KEY_ID` / `APPLE_API_ISSUER`. The notarization
+key also accepts the existing `ASC_KEY_CONTENT` / `ASC_KEY_ID` / `ASC_ISSUER_ID`
+secrets. Missing credentials fail closed; no unsigned fallback is published.
+Fork maintainers must deliberately configure their own repository guard, protected
+controller reference and signing secrets. Private material is imported into a
+temporary Keychain and deleted by the always-run cleanup step.
+
+Run `node --test .github/scripts/commander-release.test.mjs` for caller admission,
+main-SHA selection, API-error handling, credential timing and asset publication
+regressions. The product source owns Commander packaging and Recovery behavior.

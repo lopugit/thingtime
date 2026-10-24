@@ -21,8 +21,10 @@ const CAPACITY_PATTERNS = [
 
 const CREDENTIAL_PATTERNS = [
   /\bauthentication[_ -]?error\b/iu,
+  /\bfailed to authenticate\b/iu,
   /\binvalid (?:anthropic )?(?:api key|oauth token|access token|credential)\b/iu,
   /\b(?:oauth|access) token[^\n]{0,40}\b(?:expired|invalid|revoked)\b/iu,
+  /\boauth session[^\n]{0,80}\b(?:expired|invalid|revoked|could not be refreshed)\b/iu,
   /\b(?:unauthorized|not authorized)\b/iu,
   /\b(?:status|http|error)[^\n]{0,20}\b401\b/iu,
 ];
@@ -45,6 +47,23 @@ export function classifyClaudeCredentialFailure(value) {
   if (CREDENTIAL_PATTERNS.some((pattern) => pattern.test(text))) {
     return { retryable: true, reason: "credential-rejected" };
   }
+  const messages = Array.isArray(value) ? value : [value];
+  const result = [...messages]
+    .reverse()
+    .find((message) => message?.type === "result");
+  if (
+    result?.is_error === true &&
+    Number(result?.num_turns) <= 1 &&
+    Number(result?.total_cost_usd) === 0
+  ) {
+    // claude-code-action deliberately withholds the result text unless its
+    // full-output mode is enabled. A credential rejected during the SDK
+    // preflight therefore arrives here as an otherwise opaque, zero-cost
+    // one-turn error. It is safe to advance the bounded credential waterfall:
+    // no model work started and at most eight administrator-configured slots
+    // can run.
+    return { retryable: true, reason: "zero-cost-preflight" };
+  }
   return { retryable: false, reason: "non-credential-failure" };
 }
 
@@ -61,6 +80,7 @@ function selfTest() {
   }
   for (const sample of [
     { type: "result", is_error: true, error: "authentication_error: invalid OAuth token" },
+    { type: "result", is_error: true, result: "Failed to authenticate: OAuth session expired and could not be refreshed" },
     { status: 401, message: "Unauthorized" },
   ]) {
     assert.deepEqual(classifyClaudeCredentialFailure(sample), {
@@ -68,6 +88,16 @@ function selfTest() {
       reason: "credential-rejected",
     });
   }
+  assert.deepEqual(
+    classifyClaudeCredentialFailure({
+      type: "result",
+      subtype: "success",
+      is_error: true,
+      num_turns: 1,
+      total_cost_usd: 0,
+    }),
+    { retryable: true, reason: "zero-cost-preflight" },
+  );
   for (const sample of [
     { type: "result", subtype: "error_max_turns", error: "Reached max turns 500" },
     { type: "result", subtype: "error_during_execution", error: "Tests failed" },

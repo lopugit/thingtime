@@ -1,12 +1,19 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { isManagedPreviewComment as isManagedComment, upsertPreviewComment, publishPreviewNotifications } from './preview-comments.mjs';
+import { syncPreviewLabels, deploymentBuiltAt, previewBuildTime } from './preview-labels.mjs';
+import { recoverySourceIssue, previewWorkActive, recoveryAttempt, reconcilePreviewInventory } from './preview-recovery.mjs';
+import { execFile } from 'node:child_process';
 import { resolveCname } from 'node:dns/promises';
-import { readFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { promisify } from 'node:util';
 
 const COMMENT_MARKER = '<!-- thingtime-develop-pr-preview -->';
 const WORKFLOW_DEPLOYMENT_MARKER = 'thingtimeDevelopPrPreview';
+const PREBUILT_DEPLOYMENT_MARKER = 'thingtimeGithubPrebuiltPreview';
 const CONTROLLER_DISPATCH_TYPE = 'develop-pr-preview-controller';
 const CONTROLLER_WORKFLOW_PATH = '.github/workflows/develop-pr-preview.yml';
 const TRUSTED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
@@ -20,12 +27,13 @@ const MAX_DEPLOYMENT_PAGES = 20;
 const MAX_WORKFLOW_DEPLOYMENTS = 500;
 const MAX_RECONCILE_PULL_REQUESTS = 100;
 const MAX_GITHUB_PAGES = 10;
-const MAX_PR_STACK_DEPTH = 12;
 const REQUEST_TIMEOUT_MS = 30_000;
 const CANCEL_TIMEOUT_MS = 2 * 60 * 1000;
 const STABLE_DEVELOP_TIMEOUT_MS = 10 * 60 * 1000;
 const STABLE_DEVELOP_POLL_MS = 5_000;
 const MAX_STABLE_DEPLOYMENTS = 50;
+const DEFAULT_EXPECTED_BUILD_MINUTES = 5;
+const execFileAsync = promisify(execFile);
 
 class HttpError extends Error {
 	constructor(status, code) {
@@ -53,6 +61,23 @@ const requiredEnv = (name) => {
 const optionalEnv = (name, fallback) => {
 	const value = process.env[name]?.trim();
 	return value || fallback;
+};
+
+const expectedReadyAt = (startedAt = Date.now()) => {
+	const minutes = Number(optionalEnv('PREVIEW_EXPECTED_BUILD_MINUTES', String(DEFAULT_EXPECTED_BUILD_MINUTES)));
+	if (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 60) {
+		throw new Error('PREVIEW_EXPECTED_BUILD_MINUTES must be a whole number from 1 to 60');
+	}
+	return new Date(Math.ceil((startedAt + minutes * 60_000) / 60_000) * 60_000).toISOString();
+};
+
+const expectedReadyForRun = () => {
+	const value = process.env.PREVIEW_EXPECTED_READY_AT?.trim();
+	if (!value) return expectedReadyAt();
+	if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\.000Z$/.test(value) || !Number.isFinite(Date.parse(value))) {
+		throw new Error('PREVIEW_EXPECTED_READY_AT was invalid');
+	}
+	return value;
 };
 
 const boundedInteger = (value, name) => {
@@ -245,6 +270,7 @@ const pullRequestShapeIssue = (pullRequest, repository, repositoryId) => {
 	if (Number(pullRequest.base?.repo?.id) !== repositoryId || pullRequest.base?.repo?.full_name !== repository) {
 		return 'wrong-base-repository';
 	}
+	if (!isSafeHeadRef(pullRequest.base?.ref)) return 'invalid-base-ref';
 	if (Number(pullRequest.head?.repo?.id) !== repositoryId || pullRequest.head?.repo?.full_name !== repository) {
 		return 'fork';
 	}
@@ -266,10 +292,9 @@ const pullRequestShapeIssue = (pullRequest, repository, repositoryId) => {
 	return null;
 };
 
-const classifyPullRequest = (pullRequest, repository, repositoryId, { terminalBranch = 'develop' } = {}) => {
+const classifyPullRequest = (pullRequest, repository, repositoryId) => {
 	const shapeIssue = pullRequestShapeIssue(pullRequest, repository, repositoryId);
 	if (shapeIssue) return { allowed: false, reason: shapeIssue };
-	if (pullRequest.base?.ref !== terminalBranch) return { allowed: false, reason: 'wrong-base' };
 	return { allowed: true };
 };
 
@@ -308,10 +333,10 @@ const repositoryDispatchSourceIssue = (run, payload, config) => {
 		? run.pull_requests.find((candidate) => Number(candidate.number) === payload.prNumber)
 		: null;
 	if (!sourcePullRequest) {
-		// GitHub removes the workflow run's pull_requests association after a PR
-		// closes. For that one event, bind the dispatch to the same-repository run's
-		// immutable head SHA and branch instead.
-		if (payload.action !== 'closed') return 'missing-source-pull-request';
+		// GitHub can remove the workflow run's pull_requests association while the
+		// PR is still open (observed after a successful listener dispatch). Bind the
+		// missing association to the same-repository run's immutable head instead;
+		// the current PR and its live head are independently revalidated below.
 		if (Number(run.head_repository?.id) !== config.repositoryId) return 'wrong-source-head-repository';
 		if (run.head_sha !== payload.headSha) return 'wrong-source-head-sha';
 		if (run.head_branch !== payload.headRef) return 'wrong-source-head-ref';
@@ -333,33 +358,21 @@ const dispatchPullRequestIssue = (pullRequest, dispatch) => {
 	return null;
 };
 
-const deploymentPayload = ({ pullRequest, config }) => {
+const workflowDeploymentCommitSha = (deployment) => deployment?.meta?.githubCommitSha ?? deployment?.gitSource?.sha ?? null;
+const workflowDeploymentCommitRef = (deployment) => deployment?.meta?.githubCommitRef ?? deployment?.gitSource?.ref ?? null;
+
+const deploymentMetadata = ({ pullRequest, config }) => {
 	const [githubCommitOrg, githubCommitRepo] = config.repository.split('/');
 	return {
-		name: config.projectName,
-		project: config.projectId,
-		customEnvironmentSlugOrId: config.customEnvironmentId,
-		// PR deployments receive only their exact PR alias. The stable develop alias
-		// is promoted separately after an exact native develop deployment is READY.
-		autoAssignCustomDomains: false,
-		gitSource: {
-			type: 'github',
-			repoId: config.gitRepoId,
-			ref: pullRequest.head.ref,
-			sha: pullRequest.head.sha
-		},
-		meta: {
-			githubDeployment: '1',
-			githubCommitOrg,
-			githubCommitRepo,
-			githubCommitRef: pullRequest.head.ref,
-			githubCommitSha: pullRequest.head.sha,
-			githubPrId: String(pullRequest.number),
-			githubRepoId: String(config.gitRepoId),
-			githubRepositoryId: String(config.repositoryId),
-			thingtimeCustomEnvironmentId: config.customEnvironmentId,
-			[WORKFLOW_DEPLOYMENT_MARKER]: '1'
-		}
+		githubCommitOrg,
+		githubCommitRepo,
+		githubCommitRef: pullRequest.head.ref,
+		githubCommitSha: pullRequest.head.sha,
+		githubPrId: String(pullRequest.number),
+		githubRepoId: String(config.gitRepoId),
+		thingtimeCustomEnvironmentId: config.customEnvironmentId,
+		[WORKFLOW_DEPLOYMENT_MARKER]: '1',
+		[PREBUILT_DEPLOYMENT_MARKER]: '1'
 	};
 };
 
@@ -372,12 +385,10 @@ const deploymentIdentityIssue = (deployment, config, { prNumber, expectedSha, ex
 	if (prNumber !== undefined && String(deployment.meta?.githubPrId ?? '') !== String(prNumber)) {
 		return 'wrong-pull-request';
 	}
-	if (deployment.gitSource?.type !== 'github') return 'wrong-git-provider';
-	if (String(deployment.gitSource?.repoId ?? '') !== String(config.gitRepoId)) return 'wrong-git-repository';
 	if (String(deployment.meta?.githubRepoId ?? '') !== String(config.gitRepoId)) {
 		return 'metadata-git-repository-mismatch';
 	}
-	if (String(deployment.meta?.githubRepositoryId ?? '') !== String(config.repositoryId)) {
+	if (String(deployment.meta?.githubRepositoryId ?? deployment.meta?.githubRepoId ?? '') !== String(config.repositoryId)) {
 		return 'metadata-github-repository-mismatch';
 	}
 	if (deployment.meta?.thingtimeCustomEnvironmentId !== config.customEnvironmentId) {
@@ -387,18 +398,32 @@ const deploymentIdentityIssue = (deployment, config, { prNumber, expectedSha, ex
 	if (deployment.meta?.githubCommitOrg !== repositoryOwner || deployment.meta?.githubCommitRepo !== repositoryName) {
 		return 'metadata-repository-name-mismatch';
 	}
-	if (!/^[0-9a-f]{40}$/.test(deployment.gitSource?.sha ?? '')) return 'invalid-git-sha';
-	if (deployment.meta?.githubCommitSha !== deployment.gitSource.sha) return 'metadata-sha-mismatch';
-	if (deployment.meta?.githubCommitRef !== deployment.gitSource.ref) return 'metadata-ref-mismatch';
-	if (expectedSha && deployment.gitSource.sha !== expectedSha) return 'wrong-git-sha';
-	if (expectedRef && deployment.gitSource.ref !== expectedRef) return 'wrong-git-ref';
+	if (!/^[0-9a-f]{40}$/.test(deployment.meta?.githubCommitSha ?? '')) return 'invalid-metadata-sha';
+	if (!isSafeHeadRef(deployment.meta?.githubCommitRef)) return 'invalid-metadata-ref';
+	if (deployment.meta?.[PREBUILT_DEPLOYMENT_MARKER] === '1') {
+		if (deployment.gitSource != null) {
+			if (deployment.gitSource.type !== 'github') return 'wrong-git-provider';
+			if (String(deployment.gitSource.repoId ?? '') !== String(config.gitRepoId)) return 'wrong-git-repository';
+			if (deployment.gitSource.sha !== deployment.meta.githubCommitSha) return 'metadata-sha-mismatch';
+			if (deployment.gitSource.ref !== deployment.meta.githubCommitRef) return 'metadata-ref-mismatch';
+		}
+	} else {
+		if (deployment.gitSource?.type !== 'github') return 'wrong-git-provider';
+		if (String(deployment.gitSource?.repoId ?? '') !== String(config.gitRepoId)) return 'wrong-git-repository';
+		if (deployment.meta.githubCommitSha !== deployment.gitSource.sha) return 'metadata-sha-mismatch';
+		if (deployment.meta.githubCommitRef !== deployment.gitSource.ref) return 'metadata-ref-mismatch';
+	}
+	if (expectedSha && workflowDeploymentCommitSha(deployment) !== expectedSha) return 'wrong-git-sha';
+	if (expectedRef && workflowDeploymentCommitRef(deployment) !== expectedRef) return 'wrong-git-ref';
 	return null;
 };
 
 const choosePreferredDeployment = (deployments, expectedSha) =>
 	deployments
 		.filter(
-			(deployment) => deployment.gitSource?.sha === expectedSha && (deployment.readyState === 'READY' || ACTIVE_STATES.has(deployment.readyState))
+			(deployment) =>
+				workflowDeploymentCommitSha(deployment) === expectedSha &&
+				(deployment.readyState === 'READY' || ACTIVE_STATES.has(deployment.readyState))
 		)
 		.sort((left, right) => {
 			const readiness = Number(right.readyState === 'READY') - Number(left.readyState === 'READY');
@@ -427,7 +452,7 @@ const deploymentListParams = (config, { prNumber = null, sha = null, until = nul
 	if (prNumber !== null) params.set('meta-githubPrId', String(boundedInteger(prNumber, 'PR number')));
 	if (sha) {
 		if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('Vercel deployment SHA filter is invalid');
-		params.set('sha', sha);
+		params.set(workflowOwned ? 'meta-githubCommitSha' : 'sha', sha);
 	}
 	if (until !== null) params.set('until', String(boundedInteger(until, 'Vercel deployment cursor')));
 	return params;
@@ -472,10 +497,41 @@ const runSelfTest = async () => {
 		previewAliasSuffix: 'previews.dev.thingtime.com',
 		productionPreviewAliasSuffix: 'previews.thingtime.com'
 	};
+	truthy(
+		isManagedPreviewComment({
+			user: { login: 'github-actions[bot]', type: 'Bot' },
+			author_association: 'NONE',
+			body: COMMENT_MARKER
+		})
+	);
+	truthy(
+		isManagedPreviewComment({
+			user: { login: 'lopugit', type: 'User' },
+			author_association: 'OWNER',
+			body: COMMENT_MARKER
+		})
+	);
+	truthy(
+		!isManagedPreviewComment({
+			user: { login: 'outside-user', type: 'User' },
+			author_association: 'NONE',
+			body: COMMENT_MARKER
+		})
+	);
+	const previousExpectedReady = process.env.PREVIEW_EXPECTED_READY_AT;
+	process.env.PREVIEW_EXPECTED_READY_AT = '2026-09-03T12:30:00.000Z';
+	equal(expectedReadyForRun(), '2026-09-03T12:30:00.000Z');
+	process.env.PREVIEW_EXPECTED_READY_AT = 'not-a-time';
+	throws(() => expectedReadyForRun());
+	if (previousExpectedReady === undefined) delete process.env.PREVIEW_EXPECTED_READY_AT;
+	else process.env.PREVIEW_EXPECTED_READY_AT = previousExpectedReady;
 
 	equal(classifyPullRequest(base, config.repository, config.repositoryId), { allowed: true });
 	equal(classifyPullRequest({ ...base, state: 'closed' }, config.repository, config.repositoryId).reason, 'not-open');
-	equal(classifyPullRequest({ ...base, base: { ...base.base, ref: 'main' } }, config.repository, config.repositoryId).reason, 'wrong-base');
+	equal(classifyPullRequest({ ...base, base: { ...base.base, ref: 'main' } }, config.repository, config.repositoryId), { allowed: true });
+	equal(classifyPullRequest({ ...base, base: { ...base.base, ref: 'release/example' } }, config.repository, config.repositoryId), {
+		allowed: true
+	});
 	equal(pullRequestShapeIssue({ ...base, base: { ...base.base, ref: 'codex/parent' } }, config.repository, config.repositoryId), null);
 	equal(
 		classifyPullRequest({ ...base, head: { ...base.head, repo: { id: 99, full_name: 'lopugit/thingtime' } } }, config.repository, config.repositoryId)
@@ -522,12 +578,23 @@ const runSelfTest = async () => {
 	truthy(pullRequestMatchesSnapshot(base, snapshot));
 	truthy(!pullRequestMatchesSnapshot({ ...base, head: { ...base.head, sha: 'b'.repeat(40) } }, snapshot));
 
-	const payload = deploymentPayload({ pullRequest: base, config });
-	equal(payload.project, config.projectId);
-	equal(payload.customEnvironmentSlugOrId, config.customEnvironmentId);
-	equal(payload.autoAssignCustomDomains, false);
-	equal(payload.gitSource.sha, base.head.sha);
-	equal(payload.meta[WORKFLOW_DEPLOYMENT_MARKER], '1');
+	const metadata = deploymentMetadata({ pullRequest: base, config });
+	equal(metadata.githubCommitSha, base.head.sha);
+	equal(metadata.githubCommitRef, base.head.ref);
+	equal(metadata.githubDeployment, undefined);
+	equal(metadata[WORKFLOW_DEPLOYMENT_MARKER], '1');
+	equal(metadata[PREBUILT_DEPLOYMENT_MARKER], '1');
+	equal(Object.keys(metadata).length, 9);
+	const runtimeEnvironment = {
+		THINGTIME_BRANCH_NAME: base.head.ref,
+		THINGTIME_GIT_COMMIT_SHA: base.head.sha
+	};
+	const prebuiltArgs = prebuiltDeploymentArgs({ config, prebuiltDirectory: '/tmp/prebuilt', metadata, runtimeEnvironment });
+	truthy(prebuiltArgs.includes('--target=develop'));
+	truthy(!prebuiltArgs.includes('--skip-domain'));
+	truthy(prebuiltArgs.includes('--env'));
+	truthy(prebuiltArgs.includes(`THINGTIME_BRANCH_NAME=${base.head.ref}`));
+	truthy(prebuiltArgs.includes(`THINGTIME_GIT_COMMIT_SHA=${base.head.sha}`));
 	equal(customEnvironmentDomainNames(['dev.thingtime.com', { name: 'preview.example.com' }, { domain: 'legacy.example.com' }]), [
 		'dev.thingtime.com',
 		'preview.example.com',
@@ -625,6 +692,21 @@ const runSelfTest = async () => {
 		}),
 		null
 	);
+	const prebuiltDeployment = {
+		...deployment,
+		meta: { ...deployment.meta, [PREBUILT_DEPLOYMENT_MARKER]: '1' },
+		gitSource: null
+	};
+	equal(
+		deploymentIdentityIssue(prebuiltDeployment, config, {
+			prNumber: base.number,
+			expectedSha: base.head.sha,
+			expectedRef: base.head.ref
+		}),
+		null
+	);
+	equal(workflowDeploymentCommitSha(prebuiltDeployment), base.head.sha);
+	equal(workflowDeploymentCommitRef(prebuiltDeployment), base.head.ref);
 	equal(deploymentIdentityIssue({ ...deployment, projectId: 'prj_wrong' }, config, { prNumber: 201 }), 'wrong-project');
 	equal(
 		deploymentIdentityIssue({ ...deployment, customEnvironment: { id: 'env_wrong', slug: 'develop' } }, config, { prNumber: 201 }),
@@ -687,7 +769,7 @@ const runSelfTest = async () => {
 		limit: '100',
 		[`meta-${WORKFLOW_DEPLOYMENT_MARKER}`]: '1',
 		'meta-githubPrId': '201',
-		sha: base.head.sha,
+		'meta-githubCommitSha': base.head.sha,
 		until: '123'
 	});
 	equal(Object.fromEntries(deploymentListParams(config, { sha: developSha, workflowOwned: false })), {
@@ -700,6 +782,13 @@ const runSelfTest = async () => {
 	throws(() => deploymentListParams(config, { sha: 'not-a-sha' }));
 	truthy(IDEMPOTENT_METHODS.has('GET'));
 	truthy(!IDEMPOTENT_METHODS.has('POST'));
+	truthy(isRetryableHttpResponse(403, new Headers({ 'retry-after': '2' }), { message: 'secondary rate limit' }));
+	truthy(isRetryableHttpResponse(403, new Headers({ 'x-ratelimit-remaining': '0' }), { message: 'API rate limit exceeded' }));
+	truthy(isRetryableHttpResponse(403, new Headers(), { message: 'You have exceeded a secondary rate limit.' }));
+	truthy(isRetryableHttpResponse(403, new Headers(), null));
+	truthy(!isRetryableHttpResponse(403, new Headers(), { message: 'Resource not accessible by integration' }));
+	equal(parseErrorCode({ message: 'Resource not accessible by integration' }), 'integration-permission');
+	equal(parseErrorCode({ message: 'API rate limit exceeded for installation ID 123.' }), 'api-rate-limit');
 	truthy(CLEANUP_ACTIONS.has('converted_to_draft'));
 
 	const dispatchPayload = {
@@ -733,7 +822,19 @@ const runSelfTest = async () => {
 	equal(repositoryDispatchSourceIssue({ ...sourceRun, path: '.github/workflows/untrusted.yml' }, dispatchPayload, config), 'wrong-workflow-path');
 	equal(repositoryDispatchSourceIssue(sourceRun, { ...dispatchPayload, headSha: 'b'.repeat(40) }, config), 'wrong-source-head-sha');
 	equal(repositoryDispatchSourceIssue(sourceRun, { ...dispatchPayload, headRef: 'codex/wrong' }, config), 'wrong-source-head-ref');
-	equal(repositoryDispatchSourceIssue({ ...sourceRun, pull_requests: [] }, dispatchPayload, config), 'missing-source-pull-request');
+	equal(repositoryDispatchSourceIssue({ ...sourceRun, pull_requests: [] }, dispatchPayload, config), null);
+	equal(
+		repositoryDispatchSourceIssue({ ...sourceRun, pull_requests: [], head_repository: { id: 99 } }, dispatchPayload, config),
+		'wrong-source-head-repository'
+	);
+	equal(
+		repositoryDispatchSourceIssue({ ...sourceRun, pull_requests: [], head_sha: 'b'.repeat(40) }, dispatchPayload, config),
+		'wrong-source-head-sha'
+	);
+	equal(
+		repositoryDispatchSourceIssue({ ...sourceRun, pull_requests: [], head_branch: 'codex/wrong' }, dispatchPayload, config),
+		'wrong-source-head-ref'
+	);
 	const closedDispatchPayload = { ...dispatchPayload, action: 'closed' };
 	const closedSourceRun = { ...sourceRun, status: 'completed', pull_requests: [] };
 	equal(repositoryDispatchSourceIssue(closedSourceRun, closedDispatchPayload, config), null);
@@ -760,41 +861,79 @@ const runSelfTest = async () => {
 		}
 	});
 	equal(parsedDispatch, closedDispatchPayload);
+	const recoveryEvent = { action: CONTROLLER_DISPATCH_TYPE, sender: { type: 'Bot', login: 'github-actions[bot]' },
+		client_payload: { pr_number: '201', source_run_id: '123', actor: 'lopu', action: 'synchronize',
+			head_sha: base.head.sha, head_ref: base.head.ref, recovery: '1' } };
+	equal(parseRepositoryDispatch(recoveryEvent), { ...dispatchPayload, action: 'synchronize', recovery: true });
+	for (const sender of [undefined, { type: 'User', login: 'lopu' }, { type: 'Bot', login: 'other[bot]' }]) {
+		throws(() => parseRepositoryDispatch({ ...recoveryEvent, sender }));
+	}
+	throws(() => parseRepositoryDispatch({ ...recoveryEvent, client_payload: { ...recoveryEvent.client_payload, action: 'closed' } }));
 	throws(() =>
 		parseRepositoryDispatch({
 			action: CONTROLLER_DISPATCH_TYPE,
 			client_payload: { pr_number: '201', source_run_id: '123', actor: 'lopu', action: 'closed', head_sha: base.head.sha, head_ref: '' }
 		})
 	);
-	const stacked = {
-		...base,
-		number: 202,
-		base: { ref: 'codex/parent', repo: { id: 42, full_name: 'lopugit/thingtime' } },
-		head: { ...base.head, ref: 'codex/child', sha: 'c'.repeat(40) }
-	};
-	const parent = {
-		...base,
-		number: 203,
-		base: { ref: 'develop', repo: { id: 42, full_name: 'lopugit/thingtime' } },
-		head: { ...base.head, ref: 'codex/parent', sha: 'b'.repeat(40) }
-	};
-	const resolvedStack = await resolvePullRequestStack(config, stacked, {
-		findParent: async (_config, ref) => {
-			equal(ref, 'codex/parent');
-			return parent;
-		}
-	});
+	const acceptedBases = ['main', 'release/example', 'codex/former-parent'];
+	for (const baseRef of acceptedBases) {
+		const direct = { ...base, base: { ...base.base, ref: baseRef } };
+		const checked = await assertTrustedPullRequestStack(config, direct, {
+			actor: 'lopu',
+			assertPrincipal: async (_config, login, label) => {
+				equal(login, 'lopu');
+				truthy(label === 'author' || label === 'actor');
+			}
+		});
+		equal(checked.stack.chain.map((candidate) => candidate.number), [201]);
+		equal(checked.stack.terminalBranch, baseRef);
+	}
 	equal(
-		resolvedStack.chain.map((candidate) => candidate.number),
-		[202, 203]
+		pullRequestShapeIssue({ ...base, base: { ...base.base, ref: '' } }, config.repository, config.repositoryId),
+		'invalid-base-ref'
+	);
+
+	// A trusted control-plane PR still has nothing to preview: its head carries
+	// only `.github`, so the contents probe 404s and the PR is ineligible rather
+	// than authorized into a build that can only fail.
+	const bundleProbe = (result) => async (repository, headSha) => {
+		equal(repository, config.repository);
+		equal(headSha, base.head.sha);
+		if (result instanceof Error) throw result;
+		return result;
+	};
+	await assertPreviewBundle(config, base, { hasPreviewBundle: bundleProbe(true) });
+	checks += 1;
+	await assert.rejects(
+		assertPreviewBundle(config, base, { hasPreviewBundle: bundleProbe(false) }),
+		(error) => error instanceof EligibilityError && error.reason === 'head-has-no-preview-bundle'
+	);
+	checks += 1;
+	// A transport fault must not be silently read as "nothing to preview".
+	await assert.rejects(
+		assertPreviewBundle(config, base, { hasPreviewBundle: bundleProbe(new HttpError(500, 'server_error')) }),
+		(error) => error instanceof HttpError && error.status === 500
+	);
+	checks += 1;
+	const contentsProbe = (response) => async (path) => {
+		equal(path, `/repos/${config.repository}/contents/${PREVIEW_BUNDLE_PATH}?ref=${base.head.sha}`);
+		if (response instanceof Error) throw response;
+		return response;
+	};
+	equal(await headHasPreviewBundle(config.repository, base.head.sha, contentsProbe({ type: 'file' })), true);
+	equal(await headHasPreviewBundle(config.repository, base.head.sha, contentsProbe({ type: 'dir' })), false);
+	equal(
+		await headHasPreviewBundle(config.repository, base.head.sha, contentsProbe(new HttpError(404, 'not_found'))),
+		false
 	);
 	await assert.rejects(
-		resolvePullRequestStack(config, stacked, {
-			findParent: async () => {
-				throw new EligibilityError('stack-parent-missing');
-			}
-		}),
-		(error) => error instanceof EligibilityError && error.reason === 'stack-parent-missing'
+		headHasPreviewBundle(config.repository, base.head.sha, contentsProbe(new HttpError(403, 'forbidden'))),
+		(error) => error instanceof HttpError && error.status === 403
+	);
+	checks += 1;
+	await assert.rejects(
+		headHasPreviewBundle(config.repository, 'not-a-sha', contentsProbe({ type: 'file' })),
+		(error) => error instanceof EligibilityError && error.reason === 'invalid-head-sha'
 	);
 	checks += 1;
 
@@ -804,7 +943,37 @@ const runSelfTest = async () => {
 const parseErrorCode = (body) => {
 	if (!body || typeof body !== 'object') return 'unknown';
 	const code = body.error?.code ?? body.code;
-	return typeof code === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(code) ? code : 'unknown';
+	if (typeof code === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(code)) return code;
+	const message = typeof body.message === 'string' ? body.message.toLowerCase() : '';
+	if (message.includes('resource not accessible by integration')) return 'integration-permission';
+	if (message.includes('secondary rate limit')) return 'secondary-rate-limit';
+	if (message.includes('api rate limit exceeded')) return 'api-rate-limit';
+	if (message.includes('not found')) return 'not-found';
+	if (message.includes('validation failed')) return 'validation-failed';
+	return 'unknown';
+};
+
+const isRetryableHttpResponse = (status, headers, body) => {
+	if (status === 429 || status >= 500) return true;
+	if (status !== 403) return false;
+	if (headers?.get?.('retry-after')) return true;
+	if (headers?.get?.('x-ratelimit-remaining') === '0') return true;
+	const message = typeof body?.message === 'string' ? body.message.toLowerCase() : '';
+	return (
+		!message ||
+		message.includes('secondary rate limit') ||
+		message.includes('api rate limit exceeded') ||
+		message.includes('abuse detection') ||
+		message.includes('please wait a few minutes before you try again')
+	);
+};
+
+const retryDelayMs = (response, attempt) => {
+	const retryAfterSeconds = Number(response.headers.get('retry-after'));
+	if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+		return Math.min(retryAfterSeconds * 1000, 30_000);
+	}
+	return 1000 * 2 ** attempt;
 };
 
 const requestJson = async (url, { method = 'GET', token, body, accept = [200], retries, timeoutMs = REQUEST_TIMEOUT_MS } = {}) => {
@@ -827,7 +996,7 @@ const requestJson = async (url, { method = 'GET', token, body, accept = [200], r
 				signal: AbortSignal.timeout(timeoutMs)
 			});
 		} catch {
-			lastError = new Error('Request failed before a response was received');
+			lastError = new TypeError('Request failed before a response was received');
 			if (attempt < retryLimit) {
 				await delay(1000 * 2 ** attempt);
 				continue;
@@ -847,8 +1016,8 @@ const requestJson = async (url, { method = 'GET', token, body, accept = [200], r
 		if (accept.includes(response.status)) return parsed;
 		const error = new HttpError(response.status, parseErrorCode(parsed));
 		lastError = error;
-		if (attempt < retryLimit && (response.status === 429 || response.status >= 500)) {
-			await delay(1000 * 2 ** attempt);
+		if (attempt < retryLimit && isRetryableHttpResponse(response.status, response.headers, parsed)) {
+			await delay(retryDelayMs(response, attempt));
 			continue;
 		}
 		throw error;
@@ -858,11 +1027,20 @@ const requestJson = async (url, { method = 'GET', token, body, accept = [200], r
 
 const githubUrl = (path) => `${process.env.GITHUB_API_URL ?? 'https://api.github.com'}${path}`;
 
-const githubRequest = (path, options = {}) =>
-	requestJson(githubUrl(path), {
-		...options,
-		token: requiredEnv('GH_TOKEN')
-	});
+const githubRequest = async (path, options = {}) => {
+	try {
+		return await requestJson(githubUrl(path), {
+			...options,
+			token: requiredEnv('GH_TOKEN')
+		});
+	} catch (error) {
+		if (error instanceof HttpError) {
+			const pathname = String(path).split('?')[0];
+			error.message = `GitHub ${String(options.method ?? 'GET').toUpperCase()} ${pathname} failed with HTTP ${error.status} (${error.code})`;
+		}
+		throw error;
+	}
+};
 
 const vercelRequest = (path, options = {}) => {
 	const separator = path.includes('?') ? '&' : '?';
@@ -874,41 +1052,6 @@ const vercelRequest = (path, options = {}) => {
 };
 
 const getPullRequest = async (repository, number) => githubRequest(`/repos/${repository}/pulls/${boundedInteger(number, 'PR number')}`);
-
-const findOpenStackParent = async (config, headRef) => {
-	if (!isSafeHeadRef(headRef)) throw new EligibilityError('invalid-stack-base-ref');
-	const [owner] = config.repository.split('/');
-	const query = new URLSearchParams({ state: 'open', head: `${owner}:${headRef}`, per_page: '100' });
-	const candidates = await githubRequest(`/repos/${config.repository}/pulls?${query}`);
-	if (!Array.isArray(candidates)) throw new Error('GitHub stack-parent response was invalid');
-	const matching = candidates.filter(
-		(candidate) =>
-			candidate.head?.ref === headRef &&
-			Number(candidate.head?.repo?.id) === config.repositoryId &&
-			candidate.head?.repo?.full_name === config.repository
-	);
-	if (matching.length === 0) throw new EligibilityError('stack-parent-missing');
-	if (matching.length !== 1) throw new EligibilityError('stack-parent-ambiguous');
-	return matching[0];
-};
-
-const resolvePullRequestStack = async (config, pullRequest, { terminalBranch = 'develop', findParent = findOpenStackParent } = {}) => {
-	if (!['develop', 'main'].includes(terminalBranch)) throw new Error('Preview stack terminal branch is invalid');
-	const chain = [];
-	const seenNumbers = new Set();
-	let current = pullRequest;
-	for (let depth = 0; depth < MAX_PR_STACK_DEPTH; depth += 1) {
-		const shapeIssue = pullRequestShapeIssue(current, config.repository, config.repositoryId);
-		if (shapeIssue) throw new EligibilityError(depth === 0 ? shapeIssue : `stack-parent-${shapeIssue}`);
-		const number = boundedInteger(current.number, 'Pull request number');
-		if (seenNumbers.has(number)) throw new EligibilityError('stack-cycle');
-		seenNumbers.add(number);
-		chain.push(current);
-		if (current.base.ref === terminalBranch) return { chain, terminalBranch };
-		current = await findParent(config, current.base.ref);
-	}
-	throw new EligibilityError('stack-depth-exceeded');
-};
 
 const developRefSha = (reference) => {
 	if (reference?.ref !== 'refs/heads/develop' || reference?.object?.type !== 'commit' || !/^[0-9a-f]{40}$/.test(reference.object.sha ?? '')) {
@@ -934,6 +1077,12 @@ const parseRepositoryDispatch = (event) => {
 		headSha: String(event.client_payload.head_sha ?? ''),
 		headRef: String(event.client_payload.head_ref ?? '')
 	};
+	if (event.client_payload.recovery === '1') {
+		if (event.sender?.type !== 'Bot' || event.sender?.login !== 'github-actions[bot]' || payload.action !== 'synchronize') {
+			throw new EligibilityError('untrusted-recovery-sender');
+		}
+		payload.recovery = true;
+	}
 	if (!PR_EVENT_ACTIONS.has(payload.action)) throw new EligibilityError('unexpected-source-action');
 	if (!/^[0-9a-f]{40}$/.test(payload.headSha)) throw new EligibilityError('invalid-source-head-sha');
 	if (!isSafeHeadRef(payload.headRef)) throw new EligibilityError('invalid-source-head-ref');
@@ -943,7 +1092,10 @@ const parseRepositoryDispatch = (event) => {
 const assertRepositoryDispatchSource = async (config, event) => {
 	const payload = parseRepositoryDispatch(event);
 	const run = await githubRequest(`/repos/${config.repository}/actions/runs/${payload.sourceRunId}`);
-	const issue = repositoryDispatchSourceIssue(run, payload, config);
+	const repository = payload.recovery ? await githubRequest(`/repos/${config.repository}`) : null;
+	const issue = payload.recovery
+		? recoverySourceIssue(run, payload, { ...config, defaultBranch: repository.default_branch })
+		: repositoryDispatchSourceIssue(run, payload, config);
 	if (issue) throw new EligibilityError(`invalid-dispatch-source-${issue}`);
 	return payload;
 };
@@ -970,21 +1122,56 @@ const assertTrustedPrincipal = async (config, login, label) => {
 	}
 };
 
-const assertTrustedPullRequest = async (config, pullRequest, { actor = null } = {}) => {
+const assertTrustedPullRequest = async (config, pullRequest, { actor = null, assertPrincipal = assertTrustedPrincipal } = {}) => {
 	const shapeIssue = pullRequestShapeIssue(pullRequest, config.repository, config.repositoryId);
 	if (shapeIssue) throw new EligibilityError(shapeIssue);
-	await assertTrustedPrincipal(config, pullRequest.user.login, 'author');
-	if (actor) await assertTrustedPrincipal(config, actor, 'actor');
+	await assertPrincipal(config, pullRequest.user.login, 'author');
+	if (actor) await assertPrincipal(config, actor, 'actor');
 	return pullRequest;
 };
 
-const assertTrustedPullRequestStack = async (config, pullRequest, { actor = null } = {}) => {
-	const stack = await resolvePullRequestStack(config, pullRequest);
-	for (const candidate of stack.chain) {
-		await assertTrustedPullRequest(config, candidate);
+const assertTrustedPullRequestStack = async (config, pullRequest, { actor = null, assertPrincipal = assertTrustedPrincipal } = {}) => {
+	// Preview eligibility belongs to the exact PR being built. Its base may be
+	// develop, main, another feature branch, or a branch whose former parent PR
+	// has already closed; none of those shapes changes the trust of this PR's
+	// same-repository author, ref, or immutable head SHA.
+	await assertTrustedPullRequest(config, pullRequest, { actor, assertPrincipal });
+	return { pullRequest, stack: { chain: [pullRequest], terminalBranch: pullRequest.base.ref } };
+};
+
+// Trust is not the same question as buildability. The build job checks the
+// exact head out into the `product/` directory and then runs
+// `pnpm --dir product/remix install`, so the head must carry `remix/` for the
+// preview to build at all — no matter how trusted its author is. Control-plane
+// PRs (base `github-actions`) carry only `.github` and the root docs, so every
+// one of them was authorized, failed the build with
+// `ENOENT ... /product/remix`, and published a "Develop S3 preview failed"
+// comment telling the operator to correct the deployment, DNS, or CORS
+// configuration. Probe the head instead and let the controller take its
+// ordinary skip/reconcile path.
+//
+// The path is repository-relative: `product/` is the checkout directory, not
+// part of the repository layout. This is also deliberately a head-content
+// probe rather than a base-ref filter, because the caller workflow does not
+// filter by base ref either — retarget and close events must still reach
+// cleanup.
+const PREVIEW_BUNDLE_PATH = 'remix/package.json';
+
+const headHasPreviewBundle = async (repository, headSha, request = githubRequest) => {
+	if (!/^[0-9a-f]{40}$/.test(headSha ?? '')) throw new EligibilityError('invalid-head-sha');
+	try {
+		const entry = await request(`/repos/${repository}/contents/${PREVIEW_BUNDLE_PATH}?ref=${headSha}`);
+		return entry?.type === 'file';
+	} catch (error) {
+		if (error instanceof HttpError && error.status === 404) return false;
+		throw error;
 	}
-	if (actor) await assertTrustedPrincipal(config, actor, 'actor');
-	return { pullRequest, stack };
+};
+
+const assertPreviewBundle = async (config, pullRequest, { hasPreviewBundle = headHasPreviewBundle } = {}) => {
+	if (!(await hasPreviewBundle(config.repository, pullRequest.head?.sha))) {
+		throw new EligibilityError('head-has-no-preview-bundle');
+	}
 };
 
 const assertCurrentPullRequest = async (config, snapshot, actor) => {
@@ -994,30 +1181,19 @@ const assertCurrentPullRequest = async (config, snapshot, actor) => {
 	return current;
 };
 
-const upsertComment = async (repository, number, body) => {
-	const prNumber = boundedInteger(number, 'PR number');
-	let existing = null;
-	for (let page = 1; page <= MAX_GITHUB_PAGES && !existing; page += 1) {
-		const comments = await githubRequest(`/repos/${repository}/issues/${prNumber}/comments?per_page=100&page=${page}`);
-		if (!Array.isArray(comments)) throw new Error('GitHub comments response was invalid');
-		existing = comments.find((comment) => comment.user?.login === 'github-actions[bot]' && comment.body?.includes(COMMENT_MARKER));
-		if (comments.length < 100) break;
-		if (page === MAX_GITHUB_PAGES) throw new Error('GitHub comment scan exceeded its safety bound');
-	}
-	const nextBody = `${COMMENT_MARKER}\n${body}`;
-	if (existing) {
-		await githubRequest(`/repos/${repository}/issues/comments/${existing.id}`, {
-			method: 'PATCH',
-			body: { body: nextBody }
-		});
-	} else {
-		await githubRequest(`/repos/${repository}/issues/${prNumber}/comments`, {
-			method: 'POST',
-			body: { body: nextBody },
-			accept: [201]
-		});
-	}
-};
+const isManagedPreviewComment = (comment) => isManagedComment(comment, COMMENT_MARKER);
+
+const upsertComment = (repository, number, body) => upsertPreviewComment({
+	request: githubRequest, repository, number, marker: COMMENT_MARKER, body
+});
+
+const publishDevelopStatus = (config, pullRequest, fields, { bestEffort = false } = {}) =>
+	publishPreviewNotifications([
+		() => upsertComment(config.repository, pullRequest.number, deploymentComment({ pullRequest, ...fields })),
+		() => syncPreviewLabels({ request: githubRequest, repository: config.repository, number: pullRequest.number,
+			sha: pullRequest.head.sha, status: fields.state === 'deploying' ? 'building' : fields.state,
+			...(fields.builtAt ? { builtAt: fields.builtAt } : {}) })
+	], { bestEffort });
 
 const findGithubDeployment = async (repository, pullRequest) => {
 	const environment = `develop-pr-${pullRequest.number}`;
@@ -1098,12 +1274,15 @@ const markGithubEnvironmentInactive = async (repository, prNumber, keepId = null
 
 const dashboardUrl = (deploymentId, config) => `https://vercel.com/${config.teamSlug}/${config.projectName}/${deploymentId}`;
 
-const deploymentComment = ({ state, pullRequest, alias, deploymentUrl, dashboard, note }) => {
+const deploymentComment = ({ state, pullRequest, alias, deploymentUrl, dashboard, note, expectedReady = null, builtAt = null }) => {
 	const sha = pullRequest.head.sha.slice(0, 8);
 	const title =
 		state === 'ready' ? '✅ Develop S3 preview ready' : state === 'failed' ? '❌ Develop S3 preview failed' : '🧪 Develop S3 preview deploying';
-	const previewLine = state === 'ready' ? `- Preview: [https://${alias}](https://${alias})` : '';
-	return `### ${title}\n\n- Commit: \`${sha}\`\n- Environment: Vercel Custom Environment \`develop\`\n${previewLine}${
+	const previewLabel = state === 'ready' ? 'Preview' : 'Expected preview';
+	const previewLine = `- ${previewLabel}: [https://${alias}](https://${alias})`;
+	const expectedLine = state === 'deploying' && expectedReady ? `\n- Expected ready: ${expectedReady.replace('T', ' ').replace(':00.000Z', ' UTC')} (estimate)` : '';
+	const builtLine = builtAt ? `\n- Last successfully built: ${previewBuildTime(builtAt)} (Australia/Melbourne)` : '';
+	return `### ${title}\n\n- Commit: \`${sha}\`\n- Environment: Vercel Custom Environment \`develop\`\n${previewLine}${expectedLine}${builtLine}${
 		deploymentUrl ? `\n- Immutable deployment: [${deploymentUrl}](${deploymentUrl})` : ''
 	}${dashboard ? `\n- Vercel status: [open deployment](${dashboard})` : ''}${
 		note ? `\n\n${note}` : ''
@@ -1288,7 +1467,7 @@ const listWorkflowDeployments = async (config, { prNumber = null, sha = null } =
 		}
 		const issue = deploymentIdentityIssue(detail, config, { prNumber: prNumber ?? undefined });
 		if (issue) throw new Error(`Workflow deployment ownership check failed (${issue})`);
-		if (sha && detail.gitSource.sha !== sha) throw new Error('Vercel SHA filter returned a mismatched deployment');
+		if (sha && workflowDeploymentCommitSha(detail) !== sha) throw new Error('Vercel SHA filter returned a mismatched deployment');
 		details.push(detail);
 	}
 	return details;
@@ -1546,17 +1725,89 @@ const prepareDeployment = async (config, pullRequest) => {
 	return reusable;
 };
 
+const assertPrebuiltOutput = async (directory) => {
+	const outputDirectory = resolve(directory, '.vercel/output');
+	const [rawConfig, indexHtml] = await Promise.all([
+		readFile(resolve(outputDirectory, 'config.json'), 'utf8'),
+		readFile(resolve(outputDirectory, 'static/index.html'), 'utf8')
+	]);
+	const outputConfig = JSON.parse(rawConfig);
+	if (!Array.isArray(outputConfig.routes)) throw new Error('Prebuilt Vercel output config is missing routes');
+	if (!indexHtml.includes('<div id="root"></div>')) throw new Error('Prebuilt Vercel output is missing the Vite root shell');
+	return outputDirectory;
+};
+
+const prebuiltDeploymentArgs = ({ config, prebuiltDirectory, metadata, runtimeEnvironment }) => {
+	const args = [
+		'deploy',
+		'--prebuilt',
+		'--archive=tgz',
+		'--target=develop',
+		'--yes',
+		'--scope',
+		config.teamSlug,
+		'--cwd',
+		prebuiltDirectory
+	];
+	for (const [key, value] of Object.entries(runtimeEnvironment).sort(([left], [right]) => left.localeCompare(right))) {
+		args.push('--env', `${key}=${value}`);
+	}
+	for (const [key, value] of Object.entries(metadata).sort(([left], [right]) => left.localeCompare(right))) {
+		args.push('--meta', `${key}=${value}`);
+	}
+	return args;
+};
+
+const deployPrebuiltOutput = async (config, pullRequest) => {
+	const prebuiltDirectory = resolve(requiredEnv('VERCEL_PREBUILT_DIR'));
+	await assertPrebuiltOutput(prebuiltDirectory);
+	await mkdir(resolve(prebuiltDirectory, '.vercel'), { recursive: true });
+	await writeFile(
+		resolve(prebuiltDirectory, '.vercel/project.json'),
+		`${JSON.stringify({ orgId: config.teamId, projectId: config.projectId })}\n`,
+		{ mode: 0o600 }
+	);
+
+	const metadata = deploymentMetadata({ pullRequest, config });
+	const runtimeEnvironment = {
+		THINGTIME_BRANCH_NAME: pullRequest.head.ref,
+		THINGTIME_GIT_COMMIT_SHA: pullRequest.head.sha
+	};
+	const args = prebuiltDeploymentArgs({ config, prebuiltDirectory, metadata, runtimeEnvironment });
+
+	const { stdout } = await execFileAsync(resolve(requiredEnv('VERCEL_CLI_PATH')), args, {
+		env: {
+			...process.env,
+			VERCEL_ORG_ID: config.teamId,
+			VERCEL_PROJECT_ID: config.projectId,
+			VERCEL_TOKEN: requiredEnv('VERCEL_API_TOKEN')
+		},
+		maxBuffer: 4 * 1024 * 1024,
+		timeout: 10 * 60 * 1000
+	});
+	const candidateUrl = stdout
+		.trim()
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter(Boolean)
+		.at(-1);
+	let deploymentHostname;
+	try {
+		const parsed = new URL(candidateUrl);
+		if (parsed.protocol !== 'https:' || parsed.pathname !== '/' || parsed.search || parsed.hash) throw new Error('invalid URL');
+		deploymentHostname = safeHostname(parsed.hostname, 'Prebuilt Vercel deployment URL');
+	} catch {
+		throw new Error('Vercel CLI did not return an exact deployment URL');
+	}
+	if (!deploymentHostname.endsWith('.vercel.app')) throw new Error('Prebuilt deployment URL was outside vercel.app');
+	return deploymentDetail(deploymentHostname);
+};
+
 const createVercelDeployment = async (config, pullRequest, reusable = null) => {
 	if (reusable) return reusable;
-	const payload = deploymentPayload({ pullRequest, config });
 	let created;
 	try {
-		created = await vercelRequest('/v13/deployments?forceNew=1', {
-			method: 'POST',
-			body: payload,
-			retries: 0,
-			accept: [200, 201]
-		});
+		created = await deployPrebuiltOutput(config, pullRequest);
 	} catch (error) {
 		await delay(1500);
 		const reconciled = choosePreferredDeployment(
@@ -1574,14 +1825,13 @@ const createVercelDeployment = async (config, pullRequest, reusable = null) => {
 		if (reconciled) return reconciled;
 		throw new Error('Vercel create response did not identify a deployment');
 	}
-	const detail = await deploymentDetail(created.id);
-	const issue = deploymentIdentityIssue(detail, config, {
+	const issue = deploymentIdentityIssue(created, config, {
 		prNumber: pullRequest.number,
 		expectedSha: pullRequest.head.sha,
 		expectedRef: pullRequest.head.ref
 	});
 	if (issue) throw new Error(`Created Vercel deployment failed identity validation (${issue})`);
-	return detail;
+	return created;
 };
 
 const waitForDeployment = async (config, pullRequest, deployment) => {
@@ -1646,6 +1896,8 @@ const cleanupComment = (reason) => {
 const handleIneligible = async (config, pullRequest, reason, { comment = true } = {}) => {
 	const prNumber = boundedInteger(pullRequest.number, 'PR number');
 	const cleaned = await cleanupPrResources(config, prNumber);
+	await syncPreviewLabels({ request: githubRequest, repository: config.repository,
+		number: prNumber, sha: pullRequest.head.sha, status: 'removed' });
 	if (comment && (cleaned.aliasRemoved || cleaned.deleted > 0)) {
 		await upsertComment(
 			config.repository,
@@ -1665,17 +1917,26 @@ const reconcile = async (config) => {
 		group.push(deployment);
 		byPullRequest.set(prNumber, group);
 	}
+	// The old sweep only visited PRs with Vercel objects. A failed authorization
+	// or missed event creates no such object, so those PRs were never repaired.
+	const open = await githubRequest(`/repos/${config.repository}/pulls?state=open&per_page=100`);
+	if (!Array.isArray(open) || open.length >= 100) throw new Error('Open preview PR inventory exceeds its safety bound');
+	for (const pr of open) if (!byPullRequest.has(pr.number)) byPullRequest.set(pr.number, []);
 	if (byPullRequest.size > MAX_RECONCILE_PULL_REQUESTS) {
 		throw new Error('Scheduled reconciliation exceeded its pull-request safety bound');
 	}
 
 	let removedAliases = 0;
 	let removedDeployments = 0;
-	for (const [prNumber, owned] of byPullRequest) {
+	await reconcilePreviewInventory({ numbers: [...byPullRequest.keys()], inspect: async (prNumber) => {
+		const owned = byPullRequest.get(prNumber);
+		if (await previewWorkActive(githubRequest, config.repository, prNumber)) return;
 		let pullRequest = null;
+		let candidate = null;
 		try {
-			const candidate = await getPullRequest(config.repository, prNumber);
+			candidate = await getPullRequest(config.repository, prNumber);
 			await assertTrustedPullRequestStack(config, candidate);
+			await assertPreviewBundle(config, candidate);
 			pullRequest = candidate;
 		} catch (error) {
 			if (!(error instanceof EligibilityError) && !(error instanceof HttpError && error.status === 404)) throw error;
@@ -1685,16 +1946,20 @@ const reconcile = async (config) => {
 			const cleaned = await cleanupPrResources(config, prNumber, owned);
 			if (cleaned.aliasRemoved) removedAliases += 1;
 			removedDeployments += cleaned.deleted;
-			continue;
+			if (candidate) await syncPreviewLabels({ request: githubRequest, repository: config.repository,
+				number: prNumber, sha: candidate.head.sha, status: 'removed' });
+			return;
 		}
 
+		// Do not race a Vercel build that outlived its GitHub job either.
+		if (owned.some((deployment) => ACTIVE_STATES.has(deployment.readyState))) return;
 		const binding = await getAliasBinding(config, prNumber);
 		let keeper = null;
 		if (
 			binding &&
 			binding.deployment.readyState === 'READY' &&
-			binding.deployment.gitSource.sha === pullRequest.head.sha &&
-			binding.deployment.gitSource.ref === pullRequest.head.ref
+			workflowDeploymentCommitSha(binding.deployment) === pullRequest.head.sha &&
+			workflowDeploymentCommitRef(binding.deployment) === pullRequest.head.ref
 		) {
 			keeper = binding.deployment;
 		} else if (binding) {
@@ -1704,10 +1969,71 @@ const reconcile = async (config) => {
 			});
 			removedAliases += 1;
 		}
-		keeper ??= choosePreferredDeployment(owned, pullRequest.head.sha);
+		keeper ??= choosePreferredDeployment(owned.filter((deployment) => workflowDeploymentCommitRef(deployment) === pullRequest.head.ref), pullRequest.head.sha);
+		if (keeper) {
+			const snapshot = pullRequestSnapshot(pullRequest);
+			await assertCurrentPullRequest(config, snapshot, null);
+			await assertVercelConfiguration(config);
+			const alias = previewAlias(prNumber, config.previewAliasSuffix);
+			await verifyCors(`https://${alias}`, safeCorsProbeUrl(requiredEnv('DEVELOP_S3_CORS_PROBE_URL')));
+			await assertCurrentPullRequest(config, snapshot, null);
+			if (binding?.deployment.id !== keeper.id) await assignAliasVerified(config, keeper, prNumber);
+			await verifyPublishedAlias(`https://${alias}`);
+			await assertCurrentPullRequest(config, snapshot, null);
+			const githubDeployment = await createGithubDeployment(config.repository, pullRequest);
+			const statuses = await githubRequest(`/repos/${config.repository}/deployments/${githubDeployment.id}/statuses?per_page=100`);
+			if (!Array.isArray(statuses)) throw new Error('Invalid deployment status inventory');
+			if (statuses[0]?.state !== 'success' || statuses[0]?.environment_url !== `https://${alias}`) {
+				await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'success', {
+					environmentUrl: `https://${alias}`, logUrl: dashboardUrl(keeper.id, config),
+					description: 'Develop S3 preview is ready at the exact current SHA'
+				});
+			}
+			await publishDevelopStatus(config, pullRequest, { state: 'ready', alias, builtAt: deploymentBuiltAt(keeper),
+				deploymentUrl: deploymentUrl(keeper), dashboard: dashboardUrl(keeper.id, config),
+				note: 'The alias passed the develop bucket CORS preflight and a final live PR/SHA fence.' });
+		} else {
+			await requestRecoveryBuild(config, pullRequest);
+		}
 		removedDeployments += await cleanupDeployments(owned, config, prNumber, keeper ? new Set([keeper.id]) : new Set());
-	}
+	} });
 	console.log(`Develop preview reconciliation complete: prs=${byPullRequest.size}; aliases=${removedAliases}; deployments=${removedDeployments}`);
+};
+
+const requestRecoveryBuild = async (config, pullRequest) => {
+	const recoveryToken = requiredEnv('RECOVERY_GH_TOKEN');
+	const snapshot = pullRequestSnapshot(pullRequest);
+	await assertCurrentPullRequest(config, snapshot, null);
+	if (await previewWorkActive(githubRequest, config.repository, pullRequest.number)) return;
+	const deployment = await createGithubDeployment(config.repository, pullRequest);
+	const statuses = await githubRequest(`/repos/${config.repository}/deployments/${deployment.id}/statuses?per_page=100`);
+	const decision = recoveryAttempt(statuses);
+	if (!decision.allowed) {
+		if (decision.reason === 'retry-limit') {
+			await publishDevelopStatus(config, pullRequest, { state: 'failed',
+				alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
+				note: 'Automatic recovery reached its three-attempt limit for this commit. Inspect the workflow failure and manually re-run the preview after fixing it.' });
+		}
+		console.log(`Preview recovery deferred for PR #${pullRequest.number}: ${decision.reason}`);
+		return;
+	}
+	// Record before dispatch. An uncertain API response cannot cause an
+	// immediate duplicate; the bounded receipt survives runner replacement.
+	await setGithubDeploymentStatus(config.repository, deployment.id, 'queued', {
+		description: `Preview recovery requested (attempt ${decision.attempt})`,
+		logUrl: `https://github.com/${config.repository}/actions/runs/${requiredEnv('GITHUB_RUN_ID')}`
+	});
+	await publishDevelopStatus(config, pullRequest, { state: 'deploying',
+		alias: previewAlias(pullRequest.number, config.previewAliasSuffix), expectedReady: expectedReadyAt(),
+		note: 'The scheduled controller found no ready preview for this commit and requested a fresh secretless build.' }, { bestEffort: true });
+	await requestJson(githubUrl(`/repos/${config.repository}/dispatches`), {
+		method: 'POST', accept: [204], retries: 0, token: recoveryToken,
+		body: { event_type: CONTROLLER_DISPATCH_TYPE, client_payload: {
+			pr_number: String(pullRequest.number), head_sha: pullRequest.head.sha, head_ref: pullRequest.head.ref,
+			action: 'synchronize', actor: pullRequest.user.login, source_run_id: requiredEnv('GITHUB_RUN_ID'), recovery: '1'
+		} }
+	});
+	console.log(`Requested bounded preview recovery for PR #${pullRequest.number}, attempt ${decision.attempt}`);
 };
 
 const reportFailure = async (config, pullRequest, githubDeployment, vercelDeployment) => {
@@ -1719,6 +2045,8 @@ const reportFailure = async (config, pullRequest, githubDeployment, vercelDeploy
 		immutableUrl = null;
 	}
 	const reporting = [];
+	reporting.push(syncPreviewLabels({ request: githubRequest, repository: config.repository,
+		number: pullRequest.number, sha: pullRequest.head.sha, status: 'failed' }));
 	if (githubDeployment?.id) {
 		reporting.push(
 			setGithubDeploymentStatus(config.repository, githubDeployment.id, 'failure', {
@@ -1756,17 +2084,14 @@ const deploy = async (config, pullRequest) => {
 	let githubDeployment = null;
 	let vercelDeployment = null;
 	let published = false;
+	const estimatedReady = expectedReadyForRun();
 	try {
 		githubDeployment = await createGithubDeployment(config.repository, pullRequest);
-		await upsertComment(
-			config.repository,
-			pullRequest.number,
-			deploymentComment({
+		await publishDevelopStatus(config, pullRequest, {
 				state: 'deploying',
-				pullRequest,
-				alias: previewAlias(pullRequest.number, config.previewAliasSuffix)
-			})
-		);
+				alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
+				expectedReady: estimatedReady
+			}, { bestEffort: true });
 		vercelDeployment = await createVercelDeployment(config, pullRequest, reusable);
 		const immutableUrl = deploymentUrl(vercelDeployment);
 		const dashboard = dashboardUrl(vercelDeployment.id, config);
@@ -1775,17 +2100,13 @@ const deploy = async (config, pullRequest) => {
 			logUrl: dashboard,
 			description: 'Deploying exact SHA to Vercel Custom Environment develop'
 		});
-		await upsertComment(
-			config.repository,
-			pullRequest.number,
-			deploymentComment({
+		await publishDevelopStatus(config, pullRequest, {
 				state: 'deploying',
-				pullRequest,
 				alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
 				deploymentUrl: immutableUrl,
-				dashboard
-			})
-		);
+				dashboard,
+				expectedReady: estimatedReady
+			}, { bestEffort: true });
 
 		const ready = await waitForDeployment(config, pullRequest, vercelDeployment);
 		await assertCurrentPullRequest(config, snapshot, config.actor);
@@ -1796,6 +2117,7 @@ const deploy = async (config, pullRequest) => {
 		await assertCurrentPullRequest(config, snapshot, config.actor);
 		await assignAliasVerified(config, ready, pullRequest.number);
 		await verifyPublishedAlias(aliasUrl);
+		await assertCurrentPullRequest(config, snapshot, config.actor);
 		published = true;
 
 		await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'success', {
@@ -1803,18 +2125,14 @@ const deploy = async (config, pullRequest) => {
 			logUrl: dashboard,
 			description: 'Develop S3 preview is ready at the exact current SHA'
 		});
-		await upsertComment(
-			config.repository,
-			pullRequest.number,
-			deploymentComment({
+		await publishDevelopStatus(config, pullRequest, {
 				state: 'ready',
-				pullRequest,
+				builtAt: deploymentBuiltAt(ready),
 				alias,
 				deploymentUrl: deploymentUrl(ready),
 				dashboard,
 				note: 'The alias passed the develop bucket CORS preflight and a final live PR/SHA fence.'
-			})
-		);
+			});
 		const owned = await listWorkflowDeployments(config, { prNumber: pullRequest.number });
 		await cleanupDeployments(owned, config, pullRequest.number, new Set([ready.id]));
 		await markGithubEnvironmentInactive(config.repository, pullRequest.number, githubDeployment.id);
@@ -1828,17 +2146,88 @@ const deploy = async (config, pullRequest) => {
 	}
 };
 
+const writePrepareOutputs = async ({ shouldBuild, pullRequest = null, expectedReady = null }) => {
+	const outputPath = requiredEnv('GITHUB_OUTPUT');
+	const lines = [`should_build=${shouldBuild ? 'true' : 'false'}`];
+	if (pullRequest) {
+		lines.push(`pr_number=${boundedInteger(pullRequest.number, 'PR number')}`);
+		lines.push(`head_sha=${pullRequest.head.sha}`);
+		lines.push(`head_ref=${pullRequest.head.ref}`);
+		if (expectedReady) lines.push(`expected_ready_at=${expectedReady}`);
+	}
+	await appendFile(outputPath, `${lines.join('\n')}\n`, { mode: 0o600 });
+};
+
+const prepareBuildPlan = async () => {
+	let config = runtimeConfig();
+	const eventName = requiredEnv('GITHUB_EVENT_NAME');
+	if (eventName === 'schedule' || eventName === 'pull_request_target') {
+		await writePrepareOutputs({ shouldBuild: false });
+		console.log(`GitHub prebuild not required for ${eventName}`);
+		return;
+	}
+
+	const event = JSON.parse(await readFile(requiredEnv('GITHUB_EVENT_PATH'), 'utf8'));
+	let dispatch = null;
+	try {
+		dispatch = eventName === 'repository_dispatch' ? await assertRepositoryDispatchSource(config, event) : null;
+	} catch (error) {
+		if (!(error instanceof EligibilityError)) throw error;
+		await writePrepareOutputs({ shouldBuild: false });
+		console.log(`GitHub prebuild skipped: ${error.reason}`);
+		return;
+	}
+	config = {
+		...config,
+		actor: dispatch?.actor ?? normalizeLogin(process.env.GITHUB_TRIGGERING_ACTOR || requiredEnv('GITHUB_ACTOR'))
+	};
+	const prNumber =
+		eventName === 'workflow_dispatch'
+			? boundedInteger(event.inputs?.pr_number, 'PR number')
+			: dispatch?.prNumber ?? boundedInteger(event.pull_request?.number, 'PR number');
+	const pullRequest = await getPullRequest(config.repository, prNumber);
+	const dispatchIssue = dispatchPullRequestIssue(pullRequest, dispatch);
+	if (dispatchIssue) {
+		await writePrepareOutputs({ shouldBuild: false });
+		console.log(`GitHub prebuild skipped for stale PR #${prNumber}: ${dispatchIssue}`);
+		return;
+	}
+	try {
+		await assertTrustedPullRequestStack(config, pullRequest, { actor: config.actor });
+		await assertPreviewBundle(config, pullRequest);
+	} catch (error) {
+		if (!(error instanceof EligibilityError)) throw error;
+		await writePrepareOutputs({ shouldBuild: false });
+		console.log(`GitHub prebuild not required for PR #${prNumber}: ${error.reason}`);
+		return;
+	}
+	const expectedReady = expectedReadyAt();
+	await publishDevelopStatus(config, pullRequest, {
+			state: 'deploying',
+			alias: previewAlias(pullRequest.number, config.previewAliasSuffix),
+			expectedReady
+		}, { bestEffort: true });
+	await writePrepareOutputs({ shouldBuild: true, pullRequest, expectedReady });
+	console.log(`GitHub prebuild authorized for PR #${prNumber} at ${pullRequest.head.sha}`);
+};
+
 const main = async () => {
 	if (process.argv.includes('--self-test')) {
 		await runSelfTest();
+		return;
+	}
+	if (process.argv.includes('--prepare')) {
+		await prepareBuildPlan();
 		return;
 	}
 
 	let config = runtimeConfig();
 	const eventName = requiredEnv('GITHUB_EVENT_NAME');
 	if (eventName === 'schedule') {
-		await reconcileStableDevelopAlias(config);
-		await reconcile(config);
+		const results = await Promise.allSettled([reconcileStableDevelopAlias(config), reconcile(config)]);
+		const failures = results.filter((result) => result.status === 'rejected');
+		if (failures.length) throw new AggregateError(failures.map((result) => result.reason),
+			`Scheduled preview reconciliation failed: ${failures.map((result) => result.reason.message).join('; ')}`);
 		return;
 	}
 
@@ -1870,6 +2259,9 @@ const main = async () => {
 	let stackEligibilityError = null;
 	try {
 		await assertTrustedPullRequestStack(config, pullRequest, { actor: config.actor });
+		// The reconcile/report step re-enters here with no prebuilt bundle, so a
+		// head that cannot build must be classified before deploy() is reached.
+		await assertPreviewBundle(config, pullRequest);
 	} catch (error) {
 		if (!(error instanceof EligibilityError)) throw error;
 		stackEligibilityError = error;
