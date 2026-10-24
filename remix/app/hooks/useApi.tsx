@@ -1023,171 +1023,20 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         [asyncFetcher]
       )
     },
-    // third-party app connections (Reddit, YouTube, Mastodon, …) — link
-    // external accounts, browse their feeds, manage AI feed filters
-    connections: {
-      providers: useCallback(async () => getJson('/api/v1/connections/providers'), [getJson]),
-      list: useCallback(async () => getJson('/api/v1/connections'), [getJson]),
-      connect: useCallback(
-        async (args) => asyncFetcher.submit({ provider: args?.provider, fields: args?.fields, expectedOwnerId: args?.expectedOwnerId }, { action: '/api/v1/connections', signal: args?.signal }),
-        [asyncFetcher]
+    algorithms: {
+      list: useCallback(async () => getJson('/api/v1/algorithms'), []),
+      // share-link preview (identity + training size only, never weights)
+      getShared: useCallback(
+        async (args) => getJson(`/api/v1/algorithms/shared?id=${encodeURIComponent(args?.id || '')}`),
+        []
       ),
-      unlink: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/connections/unlink' }), [asyncFetcher]),
-      // SSO account linking: begin returns the provider's authorize URL — send
-      // the browser there; the callback lands back on /connections
-      oauthBegin: useCallback(
-        async (args) => asyncFetcher.submit({ provider: args?.provider, expectedOwnerId: args?.expectedOwnerId }, { action: '/api/v1/connections/oauth/begin', signal: args?.signal }),
-        [asyncFetcher]
-      ),
-      // the Thingtime-managed virtual YouTube subscription list
-      youtubeSearch: useCallback(async (args) => getJson(`/api/v1/connections/youtube/search${toQuery({ q: args?.q })}`), [getJson]),
-      youtubeChannels: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
-            { ...(args && 'add' in args ? { add: args.add } : {}), ...(args?.remove ? { remove: args.remove } : {}) },
-            { action: '/api/v1/connections/youtube/channels' }
-          ),
-        [asyncFetcher]
-      ),
-      feed: useCallback(
-        async (args) =>
-          getJson(
-            `/api/v1/connections/feed${toQuery({
-              connection: args?.connection,
-              cursor: args?.cursor,
-              limit: args?.limit,
-              sync: args?.sync,
-              deepen: args?.deepen
-            })}`
-          ),
-        [getJson]
-      ),
-      filters: useCallback(async () => getJson('/api/v1/connections/filters'), [getJson]),
-      saveFilter: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
-            { id: args?.id, name: args?.name, prompt: args?.prompt, action: args?.action, enabled: args?.enabled },
-            { action: '/api/v1/connections/filters' }
-          ),
-        [asyncFetcher]
-      ),
-      removeFilter: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id, remove: true }, { action: '/api/v1/connections/filters' }),
-        [asyncFetcher]
-      )
-    },
-    // first-party browsing of app namespaces (what has each app stored for me)
-    apps: {
-      list: useCallback(async () => getJson('/api/v1/apps'), [getJson]),
-      storage: useCallback(async (args: { clientId: string }) => getJson(`/api/v1/apps/storage${toQuery({ clientId: args?.clientId })}`), [getJson]),
-      setStorage: useCallback(
-        async (args: {
-          clientId: string;
-          action: 'set-tier' | 'set-default-user-cap' | 'set-user-cap';
-          tier?: string;
-          tierVersionId?: string;
-          allowanceBytes?: number | null;
-          userIds?: string[];
-        }) => asyncFetcher.submit(args, { action: '/api/v1/apps/storage' }),
-        [asyncFetcher]
-      ),
-      dataSummary: useCallback(async () => getJson('/api/v1/apps/data-summary'), [getJson]),
-      dataShared: useCallback(
-        async (args) =>
-          getJson(
-            `/api/v1/apps/data/shared${toQuery({
-              appId: args?.appId,
-              thingtime: args?.thingtime,
-              cursor: args?.cursor,
-              limit: args?.limit
-            })}`
-          ),
-        [getJson]
-      ),
-      dataDeleteAll: useCallback(
-        async (args) => asyncFetcher.submit({ appId: args?.appId }, { action: '/api/v1/apps/data/delete-all' }),
-        [asyncFetcher]
-      )
-    },
-    groups: {
-      // audience groups (custom visibility) + the picker's prefill sources
-      list: useCallback(async () => getJson('/api/v1/groups'), [getJson]),
       create: useCallback(
         async (args) => asyncFetcher.submit({ name: args?.name, memberIds: args?.memberIds }, { action: '/api/v1/groups' }),
         [asyncFetcher]
       ),
       update: useCallback(
         async (args) =>
-          asyncFetcher.submit(
-            {
-              id: args?.id,
-              ...(args && 'name' in args ? { name: args.name } : {}),
-              ...(args && 'memberIds' in args ? { memberIds: args.memberIds } : {})
-            },
-            { action: '/api/v1/groups', method: 'PATCH' }
-          ),
-        [asyncFetcher]
-      ),
-      remove: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/groups', method: 'DELETE' }),
-        [asyncFetcher]
-      ),
-      audienceSources: useCallback(async () => getJson('/api/v1/groups/audience-sources'), [getJson])
-    },
-    tokens: {
-      // personal access tokens (Settings → Token minter) — the mint response
-      // carries the token string exactly once
-      list: useCallback(async () => getJson('/api/v1/tokens'), [getJson]),
-      mint: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
-            {
-              name: args?.name,
-              scopes: args?.scopes,
-              expiresInMs: args?.expiresInMs ?? null,
-              maxUses: args?.maxUses ?? null,
-              onlyCreatedThings: args?.onlyCreatedThings === true,
-              visibility: args?.visibility ?? 'all',
-              allowGet: args?.allowGet === true
-            },
-            { action: '/api/v1/tokens' }
-          ),
-        [asyncFetcher]
-      ),
-      revoke: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/tokens/revoke' }), [asyncFetcher])
-    },
-    algorithms: {
-      search: useCallback(async (args = {}, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
-        if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
-        await requireThingtimeCapability('api.algorithms-search', '1.0.0');
-        return getJson(`/api/v1/algorithms/search${toQuery(args)}`, options);
-      }, [getJson]),
-      list: useCallback(async () => getJson('/api/v1/algorithms'), [getJson]),
-      // share-link preview (identity + training size only, never weights)
-      getShared: useCallback(
-        async (args, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
-          if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
-          return getJson(`/api/v1/algorithms/shared?id=${encodeURIComponent(args?.id || '')}`, options);
-        },
-        [getJson]
-      ),
-      create: useCallback(
-        async (args, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
-          if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
-          const { name, emoji, branchFrom, events, description } = args;
-          if (description !== undefined) await requireThingtimeCapability('api.algorithms', '1.1.0');
-          options?.signal?.throwIfAborted();
-          return asyncFetcher.submit({ name, emoji, branchFrom, events, description }, { action: '/api/v1/algorithms', signal: options?.signal, expectedActor: options?.expectedActor, expectedDataPlane: options?.expectedDataPlane });
-        },
-        [asyncFetcher]
-      ),
-      update: useCallback(
-        async (args, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
-          if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
-          if (args?.listed !== undefined || args?.description !== undefined) await requireThingtimeCapability('api.algorithms-update', '1.1.0');
-          options?.signal?.throwIfAborted();
-          return asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared, listed: args?.listed, description: args?.description }, { action: '/api/v1/algorithms/update', signal: options?.signal, expectedActor: options?.expectedActor, expectedDataPlane: options?.expectedDataPlane });
-        },
+          asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared }, { action: '/api/v1/algorithms/update' }),
         [asyncFetcher]
       ),
       remove: useCallback(

@@ -46,8 +46,6 @@ export type FeedAlgorithmDoc = {
   // invitation. The doc itself STAYS private (acl never changes) — shared:true
   // only lets link-holders read the tiny preview and branch their own copy.
   shared: boolean;
-  listed?: boolean;
-  description?: string;
   schemaVersion: number;
   createdAt: Date;
   updatedAt: Date;
@@ -61,20 +59,14 @@ export type PublicAlgorithm = {
   eventCount: number;
   lastTrainedAt: string | null;
   shared: boolean;
-  listed?: boolean;
-  description?: string;
   createdAt: string;
   updatedAt: string;
   topInterests: Array<{ kind: 'type' | 'tag' | 'author'; key: string; label?: string; weight: number }>;
 };
 
 // What a share-link holder may see BEFORE branching: identity + training size
-// only. Never weights or topInterests — the doc itself is never readable.
-// Note this bounds the PREVIEW, not the disclosure: branching copies the
-// weights into the caller's own algorithm (see createAlgorithm), where they
-// surface as that copy's topInterests. Flipping shared:true is therefore
-// consent to disclose the trained profile to link-holders, and the owner-facing
-// copy in AlgorithmManager says exactly that.
+// only. Never weights or topInterests — those are the owner's behavioral
+// profile, and the always-private invariant above stays intact.
 export type SharedAlgorithmPreview = {
   id: string;
   name: string;
@@ -83,7 +75,9 @@ export type SharedAlgorithmPreview = {
   ownerUsername: string | null;
 };
 
-const MAX_ALGORITHMS_PER_USER = MAX_SAVED_ALGORITHMS;
+const MAX_ALGORITHMS_PER_USER = 50;
+const MAX_NAME_CHARS = 60;
+const MAX_EVENTS_PER_BATCH = 100;
 const DEFAULT_EMOJI = '🧠';
 
 type Fail = { ok: false; status: number; error: string };
@@ -131,8 +125,6 @@ const algorithmThingToDoc = (thing: any): FeedAlgorithmDoc => ({
   eventCount: thing.crystal?.eventCount || 0,
   lastTrainedAt: thing.crystal?.lastTrainedAt ?? null,
   shared: thing.crystal?.shared === true,
-  listed: thing.crystal?.listed === true,
-  description: thing.crystal?.description || '',
   schemaVersion: thing.schemaVersion,
   createdAt: thing.createdAt,
   updatedAt: thing.updatedAt
@@ -174,8 +166,6 @@ const projectAlgorithm = (doc: FeedAlgorithmDoc, usernames: Map<string, string>)
   emoji: doc.emoji || DEFAULT_EMOJI,
   parentId: doc.parentId || null,
   shared: doc.shared === true,
-  listed: doc.listed === true,
-  description: doc.description || '',
   eventCount: doc.eventCount || 0,
   lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt).toISOString() : null,
   createdAt: new Date(doc.createdAt).toISOString(),
@@ -210,6 +200,34 @@ const findOwnedAlgorithmWithEra = async (ownerId: string, shareId: unknown, sess
 
 const findOwnedAlgorithm = async (ownerId: string, shareId: unknown, session?: ClientSession): Promise<FeedAlgorithmDoc | null> =>
   (await findOwnedAlgorithmWithEra(ownerId, shareId, session))?.doc ?? null;
+
+// Any-owner lookup honoured ONLY for algorithms whose owner flipped shared:true
+// — the branch-invitation gate. shareId is an unguessable UUID, so possession
+// of the link + the explicit flag together are the consent.
+const findSharedAlgorithm = async (shareId: unknown): Promise<FeedAlgorithmDoc | null> => {
+  if (typeof shareId !== 'string' || !shareId.trim()) return null;
+  const id = shareId.trim();
+  const things = await getThingsCollection();
+  const thing = await things.findOne({ shareId: id, thingtime: 'feed-algorithm', 'crystal.shared': true } as any);
+  if (thing) return algorithmThingToDoc(thing);
+  const algorithms = await getFeedAlgorithmsCollection();
+  const legacy = (await algorithms.findOne({ shareId: id, shared: true } as any)) as any as FeedAlgorithmDoc | null;
+  return legacy || null;
+};
+
+// The share-link preview: identity + training size, never the profile.
+export const getSharedAlgorithmPreview = async (shareId: unknown): Promise<SharedAlgorithmPreview | null> => {
+  const doc = await findSharedAlgorithm(shareId);
+  if (!doc) return null;
+  const usernames = await resolveAuthorUsernames([String(doc.ownerId)]);
+  return {
+    id: doc.shareId,
+    name: doc.name,
+    emoji: doc.emoji || DEFAULT_EMOJI,
+    eventCount: doc.eventCount || 0,
+    ownerUsername: usernames.get(String(doc.ownerId)) ?? null
+  };
+};
 
 // Any-owner lookup honoured ONLY for algorithms whose owner flipped shared:true
 // — the branch-invitation gate. shareId is an unguessable UUID, so possession
@@ -343,11 +361,9 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
   let parentId: string | null = null;
   if (input.branchFrom !== undefined && input.branchFrom !== null) {
     // own algorithms first; otherwise a share-link branch — allowed only when
-    // the parent's owner explicitly flipped shared:true. The parent doc stays
-    // untouched and unreadable, but its weights ARE copied here into the
-    // caller's own algorithm and become visible to them as topInterests — that
-    // disclosure is what shared:true consents to, and it survives a later
-    // unshare because the copy is independent from the moment it is made.
+    // the parent's owner explicitly flipped shared:true. The copied weights
+    // land in the CALLER's own always-private algorithm; the parent stays
+    // untouched and unreadable.
     const parent = (await findOwnedAlgorithm(ownerId, input.branchFrom)) || (await findSharedAlgorithm(input.branchFrom));
     if (!parent) return fail(404, 'Algorithm to branch from was not found');
     weights = {
@@ -409,9 +425,7 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
       weights: doc.weights,
       eventCount: doc.eventCount,
       lastTrainedAt: doc.lastTrainedAt,
-      shared: doc.shared,
-      listed: false,
-      description: doc.description
+      shared: doc.shared
     },
 		extended: null,
     ownerId,
@@ -451,8 +465,7 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
 
 export const updateAlgorithm = async (
   ownerId: string,
-  input: { id?: unknown; name?: unknown; emoji?: unknown; shared?: unknown; listed?: unknown; description?: unknown },
-  boundary: AlgorithmMutationBoundary = {}
+  input: { id?: unknown; name?: unknown; emoji?: unknown; shared?: unknown }
 ): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
   const found = await findOwnedAlgorithmWithEra(ownerId, input.id);
   if (!found) return fail(404, 'Algorithm not found');
@@ -473,6 +486,20 @@ export const updateAlgorithm = async (
     // strict boolean — a truthy string must not silently publish a share link
     if (typeof input.shared !== 'boolean') return fail(400, 'shared must be a boolean');
     set.shared = input.shared;
+  }
+
+  // write to the store the doc actually lives in
+  if (era === 'things') {
+    const thingSet: Record<string, any> = { updatedAt: set.updatedAt };
+    if (set.name !== undefined) thingSet['crystal.name'] = set.name;
+    if (set.emoji !== undefined) thingSet['crystal.emoji'] = set.emoji;
+    if (set.shared !== undefined) thingSet['crystal.shared'] = set.shared;
+    await (await getThingsCollection()).updateOne(
+      { shareId: doc.shareId, ownerId, thingtime: 'feed-algorithm' } as any,
+      { $set: thingSet }
+    );
+  } else {
+    await (await getFeedAlgorithmsCollection()).updateOne({ shareId: doc.shareId, ownerId } as any, { $set: set });
   }
 
   if (input.description !== undefined) {
