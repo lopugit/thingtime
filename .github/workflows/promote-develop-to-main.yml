@@ -17,9 +17,43 @@
 name: Promote develop to main
 
 on:
+  workflow_call:
+    inputs:
+      execution_provider:
+        description: "Internal: hosted compute selected by Thingtime CI Control"
+        required: false
+        default: "github-actions"
+        type: string
+      runner_label:
+        description: "Internal: unique Vercel Sandbox self-hosted runner label"
+        required: false
+        default: ""
+        type: string
+      control_dispatch_id:
+        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
+        required: false
+        default: ""
+        type: string
   push:
     branches: [develop]
   workflow_dispatch:
+    inputs:
+      execution_provider:
+        description: "Internal: hosted compute selected by Thingtime CI Control"
+        required: false
+        default: "github-actions"
+        type: choice
+        options: [github-actions, vercel-sandbox]
+      runner_label:
+        description: "Internal: unique Vercel Sandbox self-hosted runner label"
+        required: false
+        default: ""
+        type: string
+      control_dispatch_id:
+        description: "Internal: Thingtime ci-dispatch id used for cross-run observability"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -30,43 +64,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  open-pr:
-    runs-on: ubuntu-latest
+  route:
+    uses: ./.github/workflows/ci-provider-router.yml
+    with:
+      workflow: promote-develop
+      execution_provider: ${{ inputs.execution_provider || 'github-actions' }}
+      runner_label: ${{ inputs.runner_label || '' }}
+      control_dispatch_id: ${{ inputs.control_dispatch_id || '' }}
+    secrets: inherit
+
+  promotion-pr:
+    needs: route
+    if: needs.route.outputs.execute == 'true'
+    runs-on: ${{ needs.route.outputs.runner_label || 'ubuntu-latest' }}
     steps:
-      - name: Reuse the open promotion PR if one exists
-        id: existing
+      - name: Check out develop with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out trusted automation support
+        uses: actions/checkout@v4
+        with:
+          ref: github-actions
+          path: workflow-control
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Open or refresh the promotion PR (changelog + delta comments)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          existing=$(gh pr list --repo "${{ github.repository }}" --base main --head develop --state open --json number --jq '.[0].number')
-          if [ -n "$existing" ]; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-            echo "Promotion PR #$existing is already open and tracks develop automatically." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Check develop is ahead of main
-        if: steps.existing.outputs.found == 'false'
-        id: ahead
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          ahead=$(gh api "repos/${{ github.repository }}/compare/main...develop" --jq '.ahead_by')
-          echo "ahead=$ahead" >> "$GITHUB_OUTPUT"
-          if [ "$ahead" = "0" ]; then
-            echo "develop has nothing main lacks — no promotion PR needed." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Open the promotion PR
-        if: steps.existing.outputs.found == 'false' && steps.ahead.outputs.ahead != '0'
-        env:
-          GH_TOKEN: ${{ secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
-        run: |
-          gh pr create \
-            --repo "${{ github.repository }}" \
-            --base main \
-            --head develop \
-            --title "Promote develop to main" \
-            --body "Standing promotion PR opened by the *Promote develop to main* workflow. Its head is \`develop\`, so every new push or merge to \`develop\` shows up here on its own. Merge it whenever main should catch up — the workflow opens the next one after the following push to \`develop\`. The *Sync main into develop* workflow levels develop with main again after each promotion."
-          echo "Opened a promotion PR (develop → main)." >> "$GITHUB_STEP_SUMMARY"
+          GH_TOKEN_CREATE: ${{ secrets.SYNC_BRANCHES_PAT || secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          PROMOTION_PR_LABELS: no-ai-rebase
+        run: node workflow-control/.github/scripts/promotion-pr-changelog.mjs

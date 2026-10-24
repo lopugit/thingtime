@@ -4302,23 +4302,291 @@ email whose link points at the attacker.
 
 ## Embed SSO / "Login with Thingtime" (`remix/app/components/OAuth/AuthorizePage.tsx`, `remix/app/api/utils/apps/`)
 
-- [ ] Origins are DEFAULT-OPEN (owner decision): `/authorize?client_id=<real
-      ttapp>&origin=<https origin NOT on the app's origins list>` (e.g. a
-      Vercel preview URL) shows the login → consent flow, never "This origin
-      is not on the app's allowlist". `/api/v1/apps/public` returns ok for
-      any valid origin; only unknown clientIds (404) and malformed origins
-      (400 — e.g. http on a non-localhost host) refuse.
-- [ ] Registering an app without `origins` works (`POST /api/v1/apps
-      { name }` → `origins: []`); updating origins to `[]` works; a bad
-      entry (`ftp://…`, non-localhost http) still 400s.
-- [ ] Token binding is per-token, not per-list: a minted app token works on
-      `/api/v1/oauth/userinfo` with `Origin:` = the origin that opened the
-      popup, is 403-rejected ("Origin does not match this token") from any
-      other Origin, and KEEPS working after the app's origins list is edited.
-      Deleting the app still kills its tokens.
-- [ ] The consent screen always displays the requesting origin host next to
-      the app name (both logged-out and consent states) — with open origins
-      this display is the user's phishing signal; it must never be dropped.
+- [ ] The action row is icon + count ONLY (no text labels): 💬 comments with
+      the merged react button DIRECTLY beside it, then 🔁 repost and ↗ share.
+      Comment rows mirror the pattern — reply icon then react control inline
+      under the bubble (no right-edge column) — and the react popup + full
+      picker open without clipping from the left-side positions.
+- [ ] The merged react button shows ALL the viewer's own reaction tokens
+      FIRST, then the crowd's top remaining tokens by count (+ total; heart
+      outline at zero), and tints accent when the viewer holds a reaction.
+      Click, hover, and touch-and-hold all open the quick-react popup on the
+      POST button; picking an emoji applies optimistically (no wait), and ＋
+      opens the full custom picker.
+- [ ] Threads that mount OPEN (the two-level ship, drill-panel roots)
+      revalidate in the background even when the cache already covers their
+      reply count — reactions/edits made elsewhere reconcile in within a
+      beat. Regression: cache-complete threads skipped the mount refetch and
+      froze reply reactions at the cached snapshot forever.
+- [ ] RACE (devtools: delay `/api/v1/things?id=` responses ~3s): tap a
+      reaction while a thread/feed/permalink fetch is in flight — the tap
+      must survive the stale response landing (no disappear/reappear, no
+      wrong counts), and a fresh reload must converge on the server truth.
+      All server-copy ingestion merges through `reactionOverlay` stamped
+      with the fetch START time; every local mutation notes itself there.
+      Regression class: background refetches snapshotted pre-tap clobbered
+      optimistic (even acked) reactions wholesale on ingest.
+- [ ] ERROR CONTEXT (devtools: fail `/api/v1/things/react` once with a Nitro
+      `{error:true,status:500,unhandled:true}` response): Lopu shows a readable
+      “couldn’t confirm” title plus server/refresh guidance — never a lone 🌧️.
+      The client refetches that thing before deciding whether the optimistic
+      reaction stuck; if the truth fetch also fails, it keeps the optimistic
+      copy and warns the viewer to refresh before retrying instead of blindly
+      toggling the reaction back. An authored 4xx/503 message remains visible
+      verbatim and safely reverts a server-marked rejection. A malformed or
+      truncated 2xx mutation response is commit-unknown and follows the same
+      truth-reconciliation path. Login `reason` and account-switcher `accounts`
+      fields still survive the shared error normalization.
+- [ ] Comment rows: reply is an icon-only toggle under the bubble with the
+      merged react control right beside it — a SINGLE tap hearts the comment
+      (❤️, optimistic, tap again to unheart) while hover / touch-and-hold
+      opens the quick-react popup (the POST button's click still opens the
+      popup). The thread reveal is a "View N replies / Hide replies" text
+      link BELOW the comment; "Show previous replies/comments" reveals from
+      BELOW the lists. Reply avatars (20px) are smaller than parent comment
+      avatars (28px).
+- [ ] The "Write a comment… / Reply to…" pills are subdued: house grey
+      border + muted placeholder (never Chakra's default near-black
+      outline).
+- [ ] Threads never flatten and have NO max depth: opening replies (or the
+      reply input) at visual depth 4 slides that comment in as the panel's
+      new top-level row (slide-right animation; the back arrow slides left to
+      return one level), with its replies restarting at depth 1 — repeatable
+      indefinitely. Closing comments exits the drill-down back to the root.
+- [ ] The server never caps thread depth either: replying at depth 65+ still
+      creates, and a deep comment's permalink resolves its parent AND walks
+      all the way back to the root post. Cycle safety in the visibility and
+      parent-chain walks is a visited set, never a depth rail (regression
+      class: 4-hop, then 64-hop caps 404ing deep replies as "Post not
+      found").
+- [ ] Repost is a menu: instant "Repost" posts immediately (toast + count
+      bump); "Quote post" opens the caption + circle popover. Share is
+      OUTWARD only: native share sheet where available, otherwise copy-link
+      with the Lopu toast — logged-out users can still share, while react /
+      repost nudge them to log in.
+
+## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
+
+- [ ] Clicking a NAVIGATING drawer item (top-level or sub-item) closes the
+      drawer after navigating on BOTH desktop and mobile; items without a
+      destination only select their submenu and keep it open. Search keeps
+      its own "Search closes drawer" setting on desktop.
+- [ ] Settings → Drawer → "Close after click" lists every menu item (auth
+      filtered, children nested under their top item) with per-item
+      switches defaulting ON; turning one off keeps the drawer open for
+      that item's clicks and persists across reloads.
+- [ ] The drawer footer avatar, composer avatars, and account switcher rows
+      show the user's avatar IMAGE when one is set — the rainbow initial
+      circle is only the no-avatar fallback (regression: UserAvatarCircle
+      ignored avatarUrl entirely).
+
+## Required Web CI contexts (`.github/workflows/web-ci.yml`)
+
+- [ ] On a PR that changes `remix/`, confirm the real build and API jobs report
+      `Build + typecheck ratchet + unit tests` and `API suite (headless /tests
+      runner)`, while both required-context companion jobs have distinct
+      skipped names and cannot satisfy a failed real job. Reusable callers keep
+      the same inner names under their existing `control-plane /` prefix.
+- [ ] On a PR with no `remix/` or `.github/workflows/web-ci.yml` changes,
+      confirm the lightweight companions report both exact required-context
+      names successfully and the expensive build/API jobs have distinct
+      skipped names. Neither context may remain in Expected/Pending state.
+- [ ] Break the path-classification job deliberately in a disposable branch.
+      Confirm neither exact required-context name is emitted and branch
+      protection blocks the PR instead of treating a skipped job as proof.
+
+## AI merge-conflict resolver (`.github/workflows/resolve-pr-conflicts.yml`)
+
+- [ ] Create standalone same-repository merge-conflicting PRs targeting
+      `main` and a non-default base. Confirm both are detected and updated,
+      while a clean PR, a fork PR, a protected head, and the default branch
+      are never resolver push targets.
+- [ ] Exercise a base-branch push, a head-branch push, PR opened/reopened, the
+      scheduled repository scan, a blank manual scan, and exact PR/base/head
+      manual selectors. Push detection must find PRs both targeting and
+      originating from the pushed branch. A global scan spanning three
+      conflicted PRs must dispatch exactly three trusted per-PR workers to the
+      fixed `develop` workflow revision. Human/manual and legacy
+      `repository_dispatch` runs must stay detector-only; only a bot-authored
+      internal handoff on `develop` with a positive PR, blank branch, and valid
+      depth may load the model or resolve.
+- [ ] Give a manual exact-PR/base/head selector that matches no open PR and
+      confirm the detector fails with actionable log and step-summary output.
+      Give one that matches only clean, UNKNOWN, fork, protected/default-head,
+      paused, or rebase-owned PRs and confirm it succeeds with a visible
+      no-worker warning/summary rather than silently skipping downstream jobs.
+- [ ] Create a normal two-PR stack and confirm its members are excluded before
+      either ownership label exists. Add `no-ai-rebase` and confirm that member
+      becomes merge-owned. Add a fresh `ai-rebase-in-progress` mutex and confirm
+      the merge resolver abstains. Confirm a pause label alone never determines
+      ownership: if topology/verdicts transition the PR to merge ownership, the
+      merge resolver verifies and clears stale `ai-rebase-paused` before work.
+- [ ] Force an unchanged eligible merge-resolution failure and confirm it adds
+      `ai-merge-paused`; scheduled, push, PR-target, and blank-manual scans must
+      abstain afterward. An exact PR/base/head manual run must carry internal
+      retry intent, clear the hold, and retry. A failure after the
+      head/base/topology/ownership changes must not leave a stale pause label on
+      the newly owned state. Verify the hidden pause marker is accepted only
+      from `github-actions[bot]`, requires the complete strict schema, and
+      round-trips the exact refs, SHAs, owner, and topology.
+- [ ] Feed a mocked global scan more than 1,000 open PRs across GraphQL pages.
+      Confirm every page is combined exactly once and conflicting PRs on every
+      base remain eligible for their unique per-PR handoff. Give one resolved
+      head more than 30 direct child PRs and confirm the cascade's explicit high
+      limit dispatches every child number to `develop` without truncation.
+- [ ] Move the head, move the base, change stack topology or ownership labels,
+      close the PR, or protect the head while a run is resolving. Every case
+      must refuse publication. An exact-head lease must preserve concurrent
+      work; if `git push` reports a transport error after the exact commit
+      lands, the live-ref check must classify it as published rather than
+      retrying it.
+
+## Per-feature develop → main promoter (`.github/scripts/promote-features-to-main.mjs`)
+
+- [ ] Merge a feature PR into `develop`, record its two-parent merge SHA, then
+      force-rewrite `develop` to an equivalent cherry-pick so that merge object
+      is no longer advertised by any ref. From a fresh full clone, confirm the
+      promoter's self-test first proves the object is absent, fetches it by
+      exact SHA with both parents, proves a stable patch-equivalent commit is
+      still effective at the current `develop` tip, performs the mainline
+      cherry-pick, and gets the expected tree. Repeat after a later revert and
+      with a multi-commit rebase range: the revert must fail closed, while the
+      full aggregate range (not only its last commit) must be verified.
+- [ ] Run the orphaned-history self-test with the clone's Git author name
+      deliberately empty. The attempted mainline cherry-pick must return an
+      operational error, abort the sequencer, leave `HEAD` at the target base,
+      and clean both the index and tracked worktree instead of treating the
+      words `empty ident name` as an empty source patch.
+- [ ] Configure a valid Git identity, apply the recovered source pick, then
+      apply that identical pick again. The second, genuinely empty pick must
+      be skipped from verified sequencer/index state and leave the promoted
+      tree unchanged.
+- [ ] Give one standalone source PR an invalid or unavailable historical merge
+      object between two valid standalone PRs. A dry run must report that PR as
+      blocked, continue to plan the later independent PR, and publish both the
+      block and partial plan in the step summary without exiting early.
+- [ ] Repeat with the unavailable PR in the middle of a named promotion stack.
+      The failed member and only its later dependent stack members must be
+      deferred while the next unrelated group continues. Force an unexpected
+      group-local Git error as well and confirm later groups still run.
+- [ ] Re-run after a partial batch has already created promotion PRs. Existing
+      `promotion-of` markers and branches must prevent duplicates, including
+      records older than the first 200 repository PRs, while `MAX_NEW_PRS`
+      counts reused branches as newly opened PRs too. Force-update an open
+      promotion branch between runs and confirm the promoter fetches its live
+      OID before stacking the next member rather than using a stale local ref;
+      a repurposed branch, same-path/whitespace drift, duplicate provenance,
+      or an OPEN promotion targeting the wrong stack base must be blocked. For
+      an external stack, validate every OPEN link back to `main` and every
+      CLOSED source merged before the current group; any unshipped earlier
+      CLOSED member must stop dependents, while a later successor must not be
+      misclassified as their prerequisite.
+
+## PR conflict resolver model waterfall (`remix/app/components/Admin/`)
+
+- [ ] Logged out, `GET /api/v1/settings/pr-conflict-auto-resolver-model-waterfall`
+      returns the public key, ordered waterfall, and curated model catalog;
+      `POST` returns 401. A signed-in non-admin `POST` returns 403, while an
+      admin can save a valid reordered waterfall.
+- [ ] Settings → Admin paints the last-known waterfall immediately, then
+      reconciles in the background. Add Fable 5 and Opus 5, drag a row by its
+      dedicated handle, use the Up/Down controls, remove a non-default row,
+      save, reload, and confirm the exact order persists. `default` stays
+      present and cannot be removed.
+- [ ] Exercise the editor at desktop and mobile widths from the top to the
+      bottom of `/settings`: model names, Max-effort badges, handles, fallback
+      copy, and save/add/remove controls never clip, overlap, or create
+      horizontal scrolling.
+- [ ] Resolver workflow config parsing accepts only `default`,
+      `claude-fable-5`, and `claude-opus-5`, preserves their public order, and
+      appends `default` defensively. An unavailable endpoint, malformed JSON,
+      duplicate/unknown model, wrong key, or empty array emits a warning and
+      selects only `--model default`; no stored value can inject another CLI
+      flag.
+- [ ] On the protected `github-actions` control plane, put `claude-opus-5`
+      first and exercise a merge conflict, a rebase conflict, and each
+      workflow's semantic Graphify refresh (including a clean rebase). Confirm
+      the Claude action and Graphify logs name the same Admin-selected primary;
+      repeat with `default`, then run the workflow control-plane contract and
+      confirm it rejects any legacy or hardcoded model in active AI runtime
+      YAML.
+- [ ] With an availability failure on the first configured model, Claude
+      Code tries the ordered native fallback chain. A completed run that still
+      leaves conflict markers stops for manual review; it does not silently
+      spend another model attempt.
+
+## AI PR/stack rebase resolver (`.github/workflows/rebase-pr-stacks.yml`)
+
+- [ ] Create standalone same-repo PRs against `main` and against a non-default
+      branch whose heads are `mergeable: true` but `rebaseable: false`.
+      Confirm automatic, scheduled, push-triggered, PR-triggered, and blank
+      manual scans leave both histories untouched: they are not stacks and
+      already merge cleanly. An explicit PR-number retry may still replay one
+      deliberately. Then make a standalone PR genuinely merge-conflicting and
+      confirm only **Resolve PR conflicts (AI)** owns it. Regression class:
+      standalone replay failures were incorrectly force-rebased and could
+      ping-pong with a merge-resolver update.
+- [ ] Create a two-PR stack (child PR based on the root PR's head). After the
+      root is rebased, confirm the child dispatch receives the old and new
+      parent SHAs, replays with onto semantics, and completes root-to-leaf
+      without duplicating the parent's commits. Confirm a stack member with
+      either `mergeable: false` or `rebaseable: false` remains rebase-owned,
+      while a clean stack is left alone.
+- [ ] Exercise detection from a branch push, PR opened/reopened event, the
+      scheduled scan, and a manual PR-number dispatch. Automatic scans evaluate
+      every same-repo PR regardless of base branch, never dispatch a
+      standalone history rewrite, route standalone merge conflicts to the
+      merge workflow, do not race a blocked child ahead of its parent, and
+      terminate after resolution instead of looping on the workflow's own
+      push. A blank manual dispatch must perform the same repository-wide scan.
+- [ ] Return unknown merge/rebaseability for several PRs at once and confirm
+      polling proceeds round-robin, giving every candidate an API check in each
+      bounded round. Exercise a stack deeper than eight PRs and confirm it is
+      still ordered and cascaded root-to-leaf (the hard loop guard is 64).
+- [ ] Add `no-ai-rebase` before detection and confirm the PR is skipped. Force
+      a resolver failure, confirm `ai-rebase-paused` is added and automatic
+      scans leave the exact failed snapshot alone, then change a ref or topology
+      and confirm the stale hold is cleared and re-detected. Review an unchanged
+      run and confirm a deliberate manual retry is available. Transition a PR
+      from merge-owned/`ai-merge-paused` to rebase-owned and vice versa; the new
+      owner must clear only the opposing pause after proving ownership, while a
+      fresh `ai-rebase-in-progress` mutex always blocks publication. Queue a
+      retry, then add a fresh same-snapshot pause or change its resolver owner;
+      the queued run must not erase that newer hold. Publication must require
+      pauses to be absent, and post-push cleanup must preserve any pause created
+      for the newly published snapshot. While a parent is
+      paused, actively owned, protected,
+      or still has unknown rebaseability, confirm an automatically detected
+      conflicting child is held back; once that same parent is confirmed
+      rebaseable, the child may become the next root. Confirm stack members are
+      excluded from the merge-based resolver before ownership labels exist;
+      `no-ai-rebase` deliberately routes a merge-conflicting member back to it.
+- [ ] Leave an `ai-rebase-in-progress` label behind for more than 90 minutes.
+      Confirm a still-conflicting PR is recovered into a new exact dispatch,
+      while a now-clean PR has the orphaned lock removed without a rewrite. A
+      manual clean retry should also clear a stale `ai-rebase-paused` label.
+- [ ] While a run is resolving, push another commit to the PR head. The exact
+      force-with-lease must reject the stale rewrite; no partial rebase may
+      reach the remote branch and the concurrent commit must remain intact.
+- [ ] Present a fork PR, the default branch, and a protected branch. Each is
+      refused before Claude or a force push runs. A conflict file that attempts
+      prompt injection cannot make Claude edit outside the recomputed conflict
+      set or invoke Git/shell; trusted verification rejects unresolved markers,
+      unmerged index entries, and out-of-scope changes before any push.
+- [ ] Resolve a PR whose final diff touches `remix/` using only `GITHUB_TOKEN`.
+      Confirm the rewritten SHA receives an explicit **Web CI** workflow run;
+      a non-web diff should not spend a redundant CI dispatch.
+- [ ] Add a non-conflicted tracked symlink targeting `.git/config`, plus a
+      conflict prompt that asks Claude to read/write through it. Confirm the AI
+      workspace contains only regular copies of the exact conflict files and no
+      repository, symlink, trusted action, or Git metadata. Add an external or
+      `.git`-targeting tracked symlink and confirm graphify validation refuses it
+      before semantic extraction or publication.
+- [ ] Change the repository default branch while a resolver fixture is paused,
+      and simulate a push whose server-side ref update succeeds but whose client
+      exits nonzero. The adjacent pre-push default-branch check must prevent a
+      default ref rewrite, while post-push ref inspection must report the actual
+      published state rather than claiming the remote stayed unchanged.
 
 ## Data crystals & nesting depth (`remix/app/schemas/registry.ts`)
 

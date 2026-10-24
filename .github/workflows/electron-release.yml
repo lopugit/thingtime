@@ -3,6 +3,7 @@ name: Electron App Release
 # GitHub requires trigger entrypoints on the branch that receives the event.
 # All executable release behavior lives on the protected github-actions ref.
 on:
+  workflow_call:
   push:
     branches: [main]
     paths:
