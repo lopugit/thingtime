@@ -4585,3 +4585,85 @@ request observations, not a file-operation or HTTP request census. See
 [the timing field definitions](docs/mobile-file-sync.md#closed-host-phase-timing--2026-10-21)
 before interpreting a bounded installed capture. No authorization, source check,
 rate-limit, receipt or native request/response contract changes.
+
+### Bounded folder metadata batches — 2026-10-21
+
+Trusted Mac upload/backup streams additionally negotiate `fileAccessVersion`
+1.14.0, optional `fileFolderBatchVersion` 1.0.0 and selected-origin
+`api.file-sync-batches` 1.1.0. Existing file-batch 1.0 clients remain compatible.
+At most 256 absent-target folders share a 320 KiB descriptor; requests and
+folder results remain bounded to 512 KiB. No new credentials, storage provider,
+collection or setup is required. Existing grants, paired devices, private roots,
+exclusions and ignore rules still apply. Other hosts retain scalar execution.
+
+Receipt history is checked before local source IO. One bounded native operation
+validates every missing member's exact directory stamp under fresh pre/post
+identity, grant, account, configuration and conditions checks. It discloses no
+file bytes. A changed child entry publishes the already-indexed immediate
+parent's new full stamp, including when the child is excluded; it does not scan
+the excluded subtree. Stale folder observations remain provisional and cannot
+be silently refreshed under an old operation ID.
+
+The existing batch route adds `folder-probe` and `folder-commit` to its four
+file/metadata phases. Canonical folder writes use parent-first waves of at most
+eight in one Mongo transaction, retaining inner placement locks, individual
+Timeline receipts, quota and exact ownership/path checks. An after-write error
+rolls back that whole wave; earlier committed waves remain recoverable. A parent
+receipt must pin the original operation ID, and the parent must still occupy its
+current owned private path before children are dispatched. Historical receipts
+alone do not authorize a moved, deleted or replaced parent.
+
+Journal version 15 retains typed folder reservations and original uncertain
+IDs across restart or capability loss. A proven-unpublished parent supersession
+can create an explicit **new child target intent**, only after the old child's
+receipt is missing, its durable dispatch fence is false, its source is unchanged
+and the replacement parent is canonically confirmed at the reviewed path.
+Original operations and supersession evidence remain retained; retirement never
+counts as uploaded files or bytes. Unknown writes stay with their original IDs.
+No source watermark or baseline is advanced by this recovery decision.
+
+These changes target folder-constrained file frontiers. Controlled tests and
+isolated native/Mongo fixtures are distinct evidence; installed same-job
+throughput and byte-identical recovery remain release acceptance requirements.
+# GitHub-built Vercel deployments
+
+Thingtime builds production, custom environments and previews on standard
+GitHub-hosted Ubuntu runners. Vercel hosts the resulting Build Output API
+artifact; it does not compile application source. The protected implementation
+lives on `github-actions` in `.github/workflows/deploy-vercel-prebuilt.yml`.
+Product branches carry a thin listener only. Existing PR preview controllers
+already use the same separate build/publish pattern.
+
+`main` maps to production, branches matching Vercel's custom-environment
+matchers map to that environment (`develop` today), and other product branches
+map to Preview. The default-branch listener also observes requested push runs
+of Web CI and Lopu CodeQL so older branches need not contain the new listener.
+Duplicate READY SHAs reuse their artifacts and reconcile aliases/status without recompiling. Deleted, stale and fork PR events never
+authorize a deployment. Use **Actions → Vercel prebuilt deployments → Run
+workflow**, on `main`, to deploy a branch manually; `auto` selects its target.
+Production always requires the current `main` head. Use `preview` explicitly
+to test the production branch without moving production.
+
+Fork setup: create a GitHub environment named `vercel-prebuilt-control`, restrict
+it to the default branch, add `VERCEL_DEPLOY_TOKEN` as an environment secret,
+and set non-secret environment variables `VERCEL_PROJECT_ID`,
+`VERCEL_PROJECT_NAME`, `VERCEL_TEAM_ID` and `VERCEL_TEAM_SLUG` for your own project.
+Keep deployment credentials out of repository-level secrets and build jobs.
+Point reusable workflow references at your protected controller branch.
+Disconnect Vercel's native Git integration and remove its source deploy hooks
+after proving a GitHub-built deployment. Keep `git.deploymentEnabled: false`
+and the always-skip ignore command as repository safeguards. Existing runtime
+variables, vault selection, regions, domains and production cron definitions
+remain managed by their normal contracts. The publisher copies only regions,
+Fluid settings and production cron definitions from the immutable source
+configuration into the prebuilt output and explicitly pins the deployment region;
+it never executes source in its credential-bearing job. The publisher verifies
+the accepted cron list and region as well as the deployed app.
+
+`staging` now runs the current app at https://staging.thingtime.com using
+Preview runtime settings. Its history is preserved; the existing `develop`
+custom environment remains on https://dev.thingtime.com.
+
+See [Vercel deployment references](VERCEL_DEPLOYMENTS.md) for the project and
+verification receipts. Standard Actions usage for this public repository is
+subject to GitHub's current plan terms; Vercel hosting/runtime charges remain.
