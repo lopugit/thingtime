@@ -5,21 +5,139 @@ listener → protected `github-actions` implementation). Rebuilt from scratch an
 force-pushed on every change: never base work on `all`, never edit it by
 hand, and expect `git reset --hard` when tracking it locally.
 
-Bases: `develop` @ e6e5b04 + `main` @ 0a51557
+Bases: `develop` @ f41cf65 + `main` @ 83a709c
 
-## Merged pull requests (9, in merge order)
+## Merged pull requests (127, in merge order)
 
 | PR | Head | Title | Result |
 | --- | --- | --- | --- |
 | #823 | `promote/pr-802-thingtime-funding-launch--to-main` @ 2bf09d9 | [Promote] Add a support page for contributions, paid setup and sponsorship (#802) | clean merge |
 | #832 | `codex/thingtime-world-domination-todos-20260916-2104` @ f748629 | docs: grow Thingtime's world-domination TODO garden | pinned generated Graphify state |
-| #992 | `codex/service-account-library` @ 0c6bcc0 | Add multi-account third-party services with encrypted credential recovery | pinned generated Graphify state |
-| #996 | `codex/password-manager` @ 8ad72b4 | Add signed Apple password, passkey and OTP providers | pinned generated Graphify state |
-| #1000 | `codex/anonymous-local-first` @ 14f1e76 | feat: support anonymous and offline local workspaces | pinned generated Graphify state |
+| #992 | `codex/service-account-library` @ 254258d | Add editable multi-account services with encrypted credential recovery | clean merge |
+| #996 | `codex/password-manager` @ ab9d399 | Add Apple credential providers and editable password-manager layouts | clean merge |
+| #1000 | `codex/anonymous-local-first` @ 5ab9283 | Extend anonymous/offline workspaces and native render exports | pinned generated Graphify state |
 | #1022 | `sync/main-into-develop` @ 878dfca | Sync main into develop | pinned generated Graphify state |
 | #1026 | `codex/mail-release-recovery` @ aef1896 | Fix the lease heartbeat test that blocked the Gmail Mac release | pinned generated Graphify state |
 | #1037 | `codex/commander-session-persistence` @ e63a76f | Fix Commander saved-account restoration across restarts | pinned generated Graphify state |
 | #1085 | `promote/pr-1070-lopu-credential-selection--to-main` @ dbaef02 | [Promote] Add Lopu defaults and per-chat AI credential selection (#1070) | clean merge |
+| #1090 | `claude/action-thing-permissions-336bc0` @ eb1a66d | Preserve Claude worktree: action-thing-permissions-336bc0 | pinned generated Graphify state |
+| #1091 | `claude/action-thing-permissions-be50ad` @ 31a66bf | Preserve Claude worktree: action-thing-permissions-be50ad | pinned generated Graphify state |
+| #1092 | `claude/algorithm-growth-s4` @ 9b18a2e | Preserve Claude worktree: algorithm-growth-s4 | pinned generated Graphify state |
+| #1093 | `claude/api-playground-s4` @ 910fdbe | Preserve Claude worktree: api-playground-s4 | pinned generated Graphify state |
+| #1094 | `claude/sandbox-spaces` @ 6eb9107 | Preserve Claude worktree: app-shared-data | pinned generated Graphify state |
+| #1095 | `claude/block-editor-ui-layout-75355b` @ 0cc7932 | Preserve Claude worktree: auto-conflict-resolution-issue-9d9f34 | clean merge |
+| #1096 | `claude/todo-index-budget` @ eb46110 | Preserve Claude worktree: auto-login-passkey-support-593cd3 | pinned generated Graphify state |
+| #1097 | `pr-69-final-review` @ 376511a | Preserve Claude worktree: blissful-jennings-ca8d62 | pinned generated Graphify state |
+| #1098 | `claude/auto-resolve-llm-semantic-5ccadf` @ f0df96f | Preserve Claude worktree: brave-euclid-d6c8c0 | pinned generated Graphify state |
+| #1099 | `codex/claude-preserve-20261022-circles-spec-s4` @ bc81362 | Preserve Claude worktree: circles-spec-s4 | pinned generated Graphify state |
+| #1100 | `codex/claude-preserve-20261022-cmdz-native-undo` @ 4d5977d | Preserve Claude worktree: cmdz-native-undo | pinned generated Graphify state |
+| #1101 | `claude/commander-palette-s4` @ 4aee5c9 | Preserve Claude worktree: commander-palette-s4 | pinned generated Graphify state |
+| #1102 | `claude/drawer-groups-keypath-polish-s6` @ 626d5bf | Preserve Claude worktree: cross-tab-sync-s6 | auto-resolved theirs (1 paths: Commander/extensions/raycast/pnpm-workspace.yaml); pinned generated Graphify state |
+| #1103 | `claude/cross-tab-thingtime-sync-s4` @ 829d8e8 | Preserve Claude worktree: cross-tab-thingtime-sync-s4 | pinned generated Graphify state |
+| #1104 | `claude/crystal-reservation-removal` @ 5f0283a | Preserve Claude worktree: crystal-key-squat | pinned generated Graphify state |
+| #1105 | `claude/cross-deployment-account-sync` @ ccfcf33 | Preserve Claude worktree: deployment-sync | pinned generated Graphify state |
+| #1106 | `claude/devkit-request-log-s4` @ cecff97 | Preserve Claude worktree: devkit-request-log-s4 | pinned generated Graphify state |
+| #1107 | `claude/docs-embed-section-spine` @ 6d8577d | Preserve Claude worktree: docs-search-bar-30c7d0 | pinned generated Graphify state |
+| #1108 | `claude/easter-eggs-s4` @ 37922f0 | Preserve Claude worktree: easter-eggs-s4 | pinned generated Graphify state |
+| #1109 | `claude/auto-promote-pr-changelog-69311f` @ 7787427 | Preserve Claude worktree: elegant-sutherland-55449a | pinned generated Graphify state |
+| #1110 | `claude/resolver-detect-wait-comments` @ 36be9ce | Preserve Claude worktree: eloquent-williams-4dcd51 | pinned generated Graphify state |
+| #1111 | `codex/claude-preserve-20261022-eval-csp-hardening` @ c1b48f7 | Preserve Claude worktree: eval-csp-hardening | pinned generated Graphify state |
+| #1112 | `codex/claude-preserve-20261022-feed-dedupe-s8` @ 177b84e | Preserve Claude worktree: feed-dedupe-s8 | pinned generated Graphify state |
+| #1113 | `codex/claude-preserve-20261022-fix-date-reviver-corruption` @ 1aafa94 | Preserve Claude worktree: fix-date-reviver-corruption | pinned generated Graphify state |
+| #1114 | `claude/search-page-nav-autosearch-4dfbe8` @ 7002b0c | Preserve Claude worktree: focused-shamir-c2f2a1 | pinned generated Graphify state |
+| #1115 | `claude/followers-friends-notifications-views-4fcfcf` @ d472441 | Preserve Claude worktree: followers-friends-notifications-views-4fcfcf | pinned generated Graphify state |
+| #1116 | `claude/nitro-vercel-websocket-dae1ff` @ 799b4df | Preserve Claude worktree: gallant-dewdney-8ab929 | pinned generated Graphify state |
+| #1117 | `codex/claude-preserve-20261022-github-action-pr-conflicts-1e294d` @ 88c24a9 | Preserve Claude worktree: github-action-pr-conflicts-1e294d | pinned generated Graphify state |
+| #1118 | `claude/intelligent-tharp-5d5cbe` @ d6d5c41 | Preserve Claude worktree: infallible-cray-66e445 | pinned generated Graphify state |
+| #1119 | `claude/thingtime-ios-icon-testflight-0a4b22` @ 3a6451d | Preserve Claude worktree: infallible-grothendieck-7596c2 | pinned generated Graphify state |
+| #1120 | `claude/admin-ui-user-app-management-5571a3` @ 6ded4e7 | Preserve Claude worktree: inspiring-mcnulty-348eb8 | pinned generated Graphify state |
+| #1121 | `claude/lopu-credits-codeql-url-assert` @ a886d3a | Preserve Claude worktree: lopu-ai-chatbot-358029 | clean merge |
+| #1122 | `codex/claude-preserve-20261022-marketing-pages-admin-guard-ed2cd8` @ ed5ef2c | Preserve Claude worktree: marketing-pages-admin-guard-ed2cd8 | pinned generated Graphify state |
+| #1123 | `claude/mongodb-collection-versioning-7cbc86` @ cade8bb | Preserve Claude worktree: mongodb-collection-versioning-7cbc86 | pinned generated Graphify state |
+| #1124 | `claude/thingtime-reactions-not-found-0630bb` @ 2bf911a | Preserve Claude worktree: mongodb-endpoint-config-a574b6 | pinned generated Graphify state |
+| #1125 | `claude/unified-things-page-796e34` @ d670fd7 | Preserve Claude worktree: mongodb-populate-auth-f5a00a | pinned generated Graphify state |
+| #1126 | `claude/history-browser-integration` @ fe1837d | Preserve Claude worktree: mystifying-liskov-d7c0b0 | clean merge |
+| #1127 | `claude/nice-stonebraker-5622a4` @ 2e33b85 | Preserve Claude worktree: nice-stonebraker-5622a4 | pinned generated Graphify state |
+| #1128 | `claude/notification-toggles-email-push-3fdf6e` @ 1701f8f | Preserve Claude worktree: notification-toggles-email-push-3fdf6e | auto-resolved theirs (1 paths: remix/vercel.json); pinned generated Graphify state |
+| #1129 | `claude/nsfw-tos-media-moderation-58c301` @ cca868b | Preserve Claude worktree: nsfw-tos-media-moderation-58c301 | pinned generated Graphify state |
+| #1130 | `codex/claude-preserve-20261022-pokeworld-starsalign-thingtime-40cd5f` @ fd32c46 | Preserve Claude worktree: pokeworld-starsalign-thingtime-40cd5f | clean merge |
+| #1131 | `claude/post-editor-media-badges-7b2acd` @ 4300a86 | Preserve Claude worktree: post-editor-media-badges-7b2acd | pinned generated Graphify state |
+| #1132 | `claude/dx-test-runner-ci` @ 00db4f9 | Preserve Claude worktree: postcard-memo-onchanged | pinned generated Graphify state |
+| #1133 | `claude/worker-lane-aware` @ cda0c11 | Preserve Claude worktree: pr-merge-conflicts-64a6af | auto-resolved theirs (8 paths: .github/actions/rebase-conflict-round/action.yml, .github/scripts/promote-features-to-ma… |
+| #1134 | `claude/profile-post-editing-629153` @ 02ae0c2 | Preserve Claude worktree: profile-post-editing-629153 | pinned generated Graphify state |
+| #1135 | `claude/search-materialize-searchtext` @ db0a6c4 | Preserve Claude worktree: quirky-varahamihira-aea93a | pinned generated Graphify state |
+| #1136 | `claude/recover-stopped-chats-d041f4` @ 8073cbc | Preserve Claude worktree: recover-stopped-chats-d041f4 | pinned generated Graphify state |
+| #1137 | `claude/sync-pr-pat-only` @ 88880cb | Preserve Claude worktree: retarget-prs-develop-7ad8cf | pinned generated Graphify state |
+| #1138 | `claude/fluid-compute-vercel-json` @ 49df4e7 | Preserve Claude worktree: sad-swartz-3e577b | pinned generated Graphify state |
+| #1139 | `codex/claude-preserve-20261022-schema-drawer-components-lib-441b3b` @ d9a456f | Preserve Claude worktree: schema-drawer-components-lib-441b3b | pinned generated Graphify state |
+| #1140 | `claude/service-account-email-lookup-285f8a` @ 193a867 | Preserve Claude worktree: service-account-email-lookup-285f8a | pinned generated Graphify state |
+| #1141 | `codex/claude-preserve-20261022-session-fd429c` @ f1d80d7 | Preserve Claude worktree: session-fd429c | clean merge |
+| #1142 | `codex/claude-preserve-20261022-session-ffdf75` @ b3b48ba | Preserve Claude worktree: session-ffdf75 | clean merge |
+| #1143 | `claude/share-algorithms-s4` @ 30b353e | Preserve Claude worktree: share-algorithms-s4 | pinned generated Graphify state |
+| #1144 | `claude/fable-five-funtime` @ 9c90aa4 | Preserve Claude worktree: signup-permissions-hotfix-865663 | pinned generated Graphify state |
+| #1145 | `claude/all-branch-listener-concurrency-hotfix` @ ac84e75 | Preserve Claude worktree: signup-permissions-hotfix-99c05c | pinned generated Graphify state |
+| #1146 | `claude/stoic-moore-5bb300` @ 58623c3 | Preserve Claude worktree: stoic-moore-5bb300 | clean merge |
+| #1147 | `claude/tag-feeds-s4` @ c53d760 | Preserve Claude worktree: tag-feeds-s4 | pinned generated Graphify state |
+| #1148 | `claude/theme-gallery-s4` @ 763d818 | Preserve Claude worktree: theme-gallery-s4 | pinned generated Graphify state |
+| #1149 | `claude/thingtime-app-integration-63ddad` @ 4600a0c | Preserve Claude worktree: thingtime-app-integration-63ddad | pinned generated Graphify state |
+| #1150 | `claude/thingtime-design-system-01d6ee` @ a4c6d9b | Preserve Claude worktree: thingtime-design-system-01d6ee | clean merge |
+| #1151 | `claude/thingtime-features-verify-merge-603261` @ f8cf907 | Preserve Claude worktree: thingtime-features-verify-merge-603261 | clean merge |
+| #1152 | `claude/thingtime-messenger-platform-c9c2b5` @ eb2807e | Preserve Claude worktree: thingtime-messenger-platform-c9c2b5 | pinned generated Graphify state |
+| #1153 | `claude/thingtime-pr-review-loop-e60795` @ e025735 | Preserve Claude worktree: thingtime-pr-review-loop-e60795 | pinned generated Graphify state |
+| #1154 | `codex/claude-preserve-20261022-third-party-app-integration-c96057` @ 2ba909e | Preserve Claude worktree: third-party-app-integration-c96057 | pinned generated Graphify state |
+| #1155 | `claude/todo08-branding-svg-png-s1` @ ff46f93 | Preserve Claude worktree: todo2-verification-link-origin | pinned generated Graphify state |
+| #1156 | `claude/todo9-date-reviver-strict` @ 63a001c | Preserve Claude worktree: todo9-date-reviver | pinned generated Graphify state |
+| #1157 | `s8-consolidate-security` @ d9a4f2d | Preserve Claude worktree: undo-guard-s8 | pinned generated Graphify state |
+| #1158 | `claude/upload-approval-scopes` @ b950af2 | Preserve Claude worktree: user-signup-permissions-hotfix-4c4165 | pinned generated Graphify state |
+| #1159 | `claude/vercel-webhook-status` @ 44875b6 | Preserve Claude worktree: vercel-webhook-status | auto-resolved theirs (1 paths: Commander/extensions/raycast/pnpm-workspace.yaml); pinned generated Graphify state |
+| #1160 | `claude/waitlist-fortune-s4` @ 6490b9a | Preserve Claude worktree: waitlist-fortune-s4 | pinned generated Graphify state |
+| #1161 | `claude/wear-my-theme-s4` @ d5abd44 | Preserve Claude worktree: wear-my-theme-s4 | pinned generated Graphify state |
+| #1162 | `codex/claude-preserve-20261022-wizardly-nightingale-7b83c7` @ 77a5467 | Preserve Claude worktree: wizardly-nightingale-7b83c7 | pinned generated Graphify state |
+| #1163 | `claude/nice-lamarr-81551e` @ f325fe9 | Preserve Claude worktree: youthful-mclean-b89f5b | pinned generated Graphify state |
+| #1165 | `codex/preserve-20261022-codex-lopu-batch-review.lKNgUt-ffc886` @ 4d7e79b | chore: preserve Codex worktree codex-lopu-batch-review.lKNgUt-ffc886 | auto-resolved theirs (498 paths: .githooks/README.md, .github/scripts/rebase-stack/start.sh, .graphifyignore, AI_Idling… |
+| #1166 | `codex/preserve-20261022-codex-thingtime-docs-drawer-gap-2f79e7` @ d6a2505 | chore: preserve Codex worktree codex-thingtime-docs-drawer-gap-2f79e7 | pinned generated Graphify state |
+| #1167 | `codex/preserve-20261022-codex-thingtime-attachment-permalink-resolution-8dbdef` @ 553c991 | chore: preserve Codex worktree codex-thingtime-attachment-permalink-resolution-8dbdef | pinned generated Graphify state |
+| #1168 | `codex/preserve-20261022-codex-unified-pr-agent-thingtime-4f99f3` @ af7dbbd | chore: preserve Codex worktree codex-unified-pr-agent-thingtime-4f99f3 | auto-resolved theirs (1 paths: remix/CHANGELOG.md); pinned generated Graphify state |
+| #1169 | `codex/preserve-20261022-codex-recovery-release-builder-7135b0` @ 12922fd | chore: preserve Codex worktree codex-recovery-release-builder-7135b0 | pinned generated Graphify state |
+| #1170 | `codex/preserve-20261022-codex-ai-desktop-messenger-8d1588` @ 045a835 | chore: preserve Codex worktree codex-ai-desktop-messenger-8d1588 | pinned generated Graphify state |
+| #1171 | `codex/preserve-20261022-codex-stack-progress-chat-main-ace0a5` @ 8060f31 | chore: preserve Codex worktree codex-stack-progress-chat-main-ace0a5 | pinned generated Graphify state |
+| #1172 | `codex/preserve-20261022-codex-thingtime-capabilities-integrate-e94765` @ 0402817 | chore: preserve Codex worktree codex-thingtime-capabilities-integrate-e94765 | pinned generated Graphify state |
+| #1173 | `codex/preserve-20261022-codex-verify-pr68-updater-4dc547` @ 5d92278 | chore: preserve Codex worktree codex-verify-pr68-updater-4dc547 | pinned generated Graphify state |
+| #1174 | `codex/preserve-20261022-codex-verify-thingtime-recovery-init-786255` @ 24c3c96 | chore: preserve Codex worktree codex-verify-thingtime-recovery-init-786255 | pinned generated Graphify state |
+| #1175 | `codex/preserve-20261022-codex-pr359-control-plane-d87989` @ f77fde6 | chore: preserve Codex worktree codex-pr359-control-plane-d87989 | pinned generated Graphify state |
+| #1176 | `codex/preserve-20261022-codex-lopu-live-audit.PF9Rpb-78bffc` @ 0baa17e | chore: preserve Codex worktree codex-lopu-live-audit.PF9Rpb-78bffc | pinned generated Graphify state |
+| #1177 | `codex/preserve-20261022-codex-thingtime-peer-discovery-4ab614` @ 78431e2 | chore: preserve Codex worktree codex-thingtime-peer-discovery-4ab614 | pinned generated Graphify state |
+| #1178 | `codex/preserve-20261022-codex-lopu-pr-comment-listener-final-6373f0` @ bd14849 | chore: preserve Codex worktree codex-lopu-pr-comment-listener-final-6373f0 | pinned generated Graphify state |
+| #1179 | `codex/preserve-20261022-codex-verify-missed-stack-1042c5` @ 5a2b5fb | chore: preserve Codex worktree codex-verify-missed-stack-1042c5 | pinned generated Graphify state |
+| #1180 | `codex/preserve-20261022-codex-media-gallery-search-upgrades-33cf22` @ 0523c68 | chore: preserve Codex worktree codex-media-gallery-search-upgrades-33cf22 | pinned generated Graphify state |
+| #1181 | `codex/preserve-20261022-codex-rich-commander-previews-36f9e0` @ c9b5abb | chore: preserve Codex worktree codex-rich-commander-previews-36f9e0 | clean merge |
+| #1182 | `codex/preserve-20261022-codex-lopu-pr-comment-listener-1ef6d3` @ 3042ac9 | chore: preserve Codex worktree codex-lopu-pr-comment-listener-1ef6d3 | pinned generated Graphify state |
+| #1183 | `codex/preserve-20261022-codex-post-rich-text-blocks-d5a2ed` @ 04900ba | chore: preserve Codex worktree codex-post-rich-text-blocks-d5a2ed | pinned generated Graphify state |
+| #1184 | `codex/preserve-20261022-codex-cb56-2a30f9` @ 4fc9b6b | chore: preserve Codex worktree codex-cb56-2a30f9 | auto-resolved theirs (14 paths: AGENTS.md, AGENTS.md~refs_all-build_pr-1184, CLAUDE.md, CLAUDE.md~refs_all-build_pr-118… |
+| #1185 | `codex/preserve-20261022-codex-pr299-performance-review-fb6be6` @ dc7305d | chore: preserve Codex worktree codex-pr299-performance-review-fb6be6 | pinned generated Graphify state |
+| #1186 | `codex/preserve-20261022-codex-subspace-messages-views-06d138` @ 1ebad5d | chore: preserve Codex worktree codex-subspace-messages-views-06d138 | clean merge |
+| #1187 | `codex/preserve-20261022-codex-lopu-review-dedupe.mqQ5Lc-4d0d85` @ 00280ca | chore: preserve Codex worktree codex-lopu-review-dedupe.mqQ5Lc-4d0d85 | clean merge |
+| #1188 | `codex/preserve-20261022-codex-post-rich-text-5e4acc` @ 075a8df | chore: preserve Codex worktree codex-post-rich-text-5e4acc | pinned generated Graphify state |
+| #1189 | `codex/preserve-20261022-codex-recovery-main-promotion-492120` @ 005a9c5 | chore: preserve Codex worktree codex-recovery-main-promotion-492120 | clean merge |
+| #1190 | `codex/preserve-20261022-codex-commander-search-single-frame-c6cb3f` @ ef575bb | chore: preserve Codex worktree codex-commander-search-single-frame-c6cb3f | pinned generated Graphify state |
+| #1191 | `codex/preserve-20261022-codex-agent-overview-implementation-e0a889` @ 32d2a89 | chore: preserve Codex worktree codex-agent-overview-implementation-e0a889 | pinned generated Graphify state |
+| #1192 | `codex/preserve-20261022-codex-thingtime-sso-plugin-auth-b5ec2c` @ c39a26a | chore: preserve Codex worktree codex-thingtime-sso-plugin-auth-b5ec2c | pinned generated Graphify state |
+| #1193 | `codex/preserve-20261022-codex-commander-login-oauth-compat-aa5fc0` @ de47158 | chore: preserve Codex worktree codex-commander-login-oauth-compat-aa5fc0 | auto-resolved theirs (192 paths: Commander/extensions/raycast/.eslintrc.json, Commander/extensions/raycast/.gitattribut… |
+| #1194 | `codex/preserve-20261022-codex-116a-a62878` @ a9e4648 | chore: preserve Codex worktree codex-116a-a62878 | clean merge |
+| #1195 | `codex/preserve-20261022-codex-lopu-pr-synchronize-listener-8f843f` @ ff1c30b | chore: preserve Codex worktree codex-lopu-pr-synchronize-listener-8f843f | pinned generated Graphify state |
+| #1196 | `codex/preserve-20261022-codex-pr359-conflict-resolver-6f4046` @ ad43745 | chore: preserve Codex worktree codex-pr359-conflict-resolver-6f4046 | pinned generated Graphify state |
+| #1197 | `codex/preserve-20261022-codex-2-mobile-file-sync-4295d3` @ 01c9efb | chore: preserve Codex worktree codex-2-mobile-file-sync-4295d3 | pinned generated Graphify state |
+| #1198 | `codex/preserve-20261022-codex-2-media-pipeline-ace2ae` @ da2e26b | chore: preserve Codex worktree codex-2-media-pipeline-ace2ae | clean merge |
+| #1199 | `codex/preserve-20261022-codex-2-mac-menu-bar-source-4ed1d9` @ ca76f6e | chore: preserve Codex worktree codex-2-mac-menu-bar-source-4ed1d9 | auto-resolved theirs (4 paths: electron/package.json, electron/preload.cjs, electron/scripts/build-web.mjs, remix/serve… |
+| #1200 | `codex/preserve-20261022-codex-2-web-standards-builder-aa247b` @ 5be4c23 | chore: preserve Codex worktree codex-2-web-standards-builder-aa247b | clean merge |
+| #1201 | `codex/preserve-20261022-codex-2-password-import-fix-cd859e` @ 6294ae1 | chore: preserve Codex worktree codex-2-password-import-fix-cd859e | clean merge |
+| #1202 | `codex/preserve-20261022-codex-2-file-sync-release-769527` @ 2b3d9ca | chore: preserve Codex worktree codex-2-file-sync-release-769527 | pinned generated Graphify state |
+| #1203 | `codex/preserve-20261022-codex-2-agent-browser-installed-0e29e3` @ 8975faf | chore: preserve Codex worktree codex-2-agent-browser-installed-0e29e3 | pinned generated Graphify state |
+| #1204 | `codex/preserve-20261022-codex-pr263-codeql.HsPnP9-29bd00` @ 80c8bb4 | chore: preserve Codex worktree codex-pr263-codeql.HsPnP9-29bd00 | auto-resolved theirs (14 paths: FUNDAMENTALS.md, electron/main.cjs, iOS/Thingtime/Web/WebView.swift, iOS/project.yml, r… |
+| #1213 | `codex/vercel-actions-receipts` @ 1cd46b0 | Record GitHub-built deployment migration and active staging | auto-resolved theirs (1 paths: VERCEL_DEPLOYMENTS.md); pinned generated Graphify state |
+| #1215 | `codex/media-maximum-size` @ 7a3c35e | Support maximum file size for local images and videos | clean merge |
+| #1216 | `codex/browser-device-folder-sync` @ bbe0021 | Make device folder sync manageable from any signed-in browser | auto-resolved theirs (2 paths: remix/app/api/utils/rateLimit/config.ts, remix/app/root.tsx); pinned generated Graphify … |
+| #1217 | `codex/lopu-credential-acceptance` @ 70e1b98 | Keep Lopu credentials isolated across async chat changes | clean merge |
 
 ## Skipped pull requests (4)
 
