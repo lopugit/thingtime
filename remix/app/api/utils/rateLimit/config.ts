@@ -185,107 +185,15 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // login attempts (password step and OTP step share the endpoint): bounds
   // credential stuffing and OTP-email sends beyond the per-challenge attempt cap
   'auth.login': { limit: 30, windowMs: 60_000, enabled: true },
-  // Cross-deployment account links. Linking/unlinking makes the SERVER dial
-  // whatever base URL the caller supplied (login probe + identity check) — the
-  // same outbound-fetch abuse surface as mongodb.endpoint, so the window stays
-  // tight and the routes enforce fail-closed. Token minting shares the key
-  // (each mint writes a never-expiring session doc).
-  'deployments.link': { limit: 10, windowMs: 300_000, enabled: true },
-  // One sync pass fans out up to ~40 writes against the linked deployment plus
-  // paginated reads on both sides — heavier than any single API call, so the
-  // per-user budget is small (fail-closed at the route). Passes are resumable,
-  // so a tight cap costs only patience, never data.
-  'deployments.sync': { limit: 6, windowMs: 300_000, enabled: true },
-  // /crypto password hasher: anonymous and pure (no DB), but bcrypt burns
-  // ~100ms of CPU per call by design, so the budget is tight per IP — the
-  // compute is the abuse surface, not the hash it returns
-  'crypto.hashPassword': { limit: 20, windowMs: 60_000, enabled: true },
-  // Messenger. Sending is chattier than posting, so it gets a higher window
-  // than things.write; membership/chat mutations share one bounded bucket.
-  'chats.message': { limit: 120, windowMs: 60_000, enabled: true },
-  'chats.write': { limit: 60, windowMs: 60_000, enabled: true },
-  // A desktop sync is chunked into bounded JSON batches. The wider hourly
-  // window accommodates a first full-history import while still fencing a
-  // runaway renderer or replay loop.
-  'ai.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
-	// User Secure Vault writes are rare and credential-sensitive; voice replies
-	// can spend a user-supplied provider quota, so both fail closed at routes.
-  'library.request': { limit: 20, windowMs: 60_000, enabled: true },
-	'lopu.vault': { limit: 60, windowMs: 60_000, enabled: true },
-	'lopu.voiceReply': { limit: 30, windowMs: 60_000, enabled: true },
-	// Paired device mesh. Pairing creates credentials and therefore fails
-	// closed at the routes; state/command/event budgets are deliberately roomy
-	// enough for a live desktop while still bounding stuck pollers and replays.
-	'devices.read': { limit: 240, windowMs: 60_000, enabled: true },
-	'devices.pairing': { limit: 20, windowMs: 3_600_000, enabled: true },
-	'devices.pairing.claim': { limit: 30, windowMs: 15 * 60_000, enabled: true },
-	'devices.state': { limit: 240, windowMs: 60_000, enabled: true },
-	'devices.commands': { limit: 120, windowMs: 60_000, enabled: true },
-	'devices.node.commands': { limit: 600, windowMs: 60_000, enabled: true },
-	'devices.liveSync': { limit: 120, windowMs: 60_000, enabled: true },
-	'devices.approvals': { limit: 120, windowMs: 60_000, enabled: true },
-	'devices.permissions': { limit: 60, windowMs: 60_000, enabled: true },
-	'devices.events': { limit: 240, windowMs: 60_000, enabled: true },
-	'devices.screen': { limit: 60, windowMs: 60_000, enabled: true },
-	'devices.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
-  // message reactions mirror things.react but chats toggle faster in practice
-  'chats.react': { limit: 120, windowMs: 60_000, enabled: true },
-  // read receipts fire on every focused chat scroll — cheap single-doc updates,
-  // but still bounded so a stuck client can't hammer the collection
-  'chats.read': { limit: 240, windowMs: 60_000, enabled: true },
-  // Lopu conversations (/api/v1/lopu/chats family): the list is polled by the
-  // chat window and the /lopu page like the messenger sidebar; create,
-  // rename/retune and delete are interactive one-offs.
-  'lopu.chats': { limit: 120, windowMs: 60_000, enabled: true },
-  'lopu.chats.write': { limit: 30, windowMs: 60_000, enabled: true },
-  // One Lopu reply (POST /api/v1/lopu/chats/reply) is a streamed model turn
-  // with up to 24 tool executions behind it — provider spend plus real writes
-  // as the viewer — so the budget is per user over ten minutes and the route
-  // enforces it fail-closed: a limiter outage must not become free AI calls.
-  'lopu.chat': { limit: 40, windowMs: 600_000, enabled: true },
-  // The caller's Lopu account + history (GET /api/v1/lopu/account, /history):
-  // refreshed after every turn and on focus — browse-shaped reads
-  'lopu.account': { limit: 120, windowMs: 60_000, enabled: true },
-  // POST /api/v1/lopu/account/topup-request writes a ledger row and mails the
-  // admin inbox, so it is per user per hour and fails closed at the route
-  'lopu.account.write': { limit: 10, windowMs: 3_600_000, enabled: true },
-  // custom emoji uploads carry up to ~512KB data URIs into things docs — rare
-  // interactive action, so the budget is per-hour like app registration
-  'emojis.write': { limit: 30, windowMs: 3_600_000, enabled: true },
-  // The integration vault can trigger provider operations; keep its admin
-  // control plane bounded even before an endpoint policy is consulted.
-  'admin.integrations': { limit: 60, windowMs: 60_000, enabled: true },
-  // marketing publish state (GET /api/v1/marketing/publications) — one tiny
-  // settings read per /marketing navigation, anonymous callers key by IP
-  'marketing.publications': { limit: 240, windowMs: 60_000, enabled: true },
-  // admin publish/unpublish sweeps (POST /api/v1/admin/marketing/publications)
-  // — up to 2,000 keys per call; enforced fail-closed at the route
-  'admin.marketingPublications': { limit: 60, windowMs: 60_000, enabled: true },
-  // service-account provisioning is public self-service but each call mints a
-  // permanent bearer token + a 5 GiB-allowance account and sends a verification
-  // email — bound it tightly per IP (a legit integrator provisions a handful,
-  // ever). Enforced fail-closed at the route like mongodb.populate.
-  'auth.serviceAccount': { limit: 10, windowMs: 15 * 60_000, enabled: true },
-  // Public diagnostic packets used by Commander Activity. A speed run makes
-  // exactly five requests in each direction (one for each fixed packet size),
-  // so this admits one complete measurement every 15 minutes per client IP and
-  // rejects traffic if the shared limiter is unavailable.
-  'networkProbe.ping': { limit: 60, windowMs: 60_000, enabled: true },
-  'networkProbe.download': { limit: 5, windowMs: 15 * 60_000, enabled: true },
-  // One v2 run has 11 chunks, each at most 2 MiB (22 MiB ceiling per window,
-  // below the previous five 10 MiB requests). Downloads still use five packets.
-  // Versioned because persisted v1 rules count logical packets, not chunks.
-  'networkProbe.upload.v2': { limit: NETWORK_PROBE_UPLOAD_REQUESTS, windowMs: 15 * 60_000, enabled: true },
-  // token introspection (POST /api/v1/auth/introspect) — read-only status
-  // checks by external platforms; two cheap DB reads per call, keyed by IP for
-  // anonymous callers, bounded like the other public reads
-  'auth.introspect': { limit: 120, windowMs: 60_000, enabled: true },
-  // the "try my feed brain 🧠" share-link preview (GET /api/v1/algorithms/shared)
-  // — public and anonymous, two DB reads per call (the algorithm lookup plus an
-  // owner-username resolve). The shareId is an unguessable uuid, so this is not
-  // an enumeration brake; it is the same "bound the anonymous public read"
-  // budget the other unauthenticated endpoints carry, keyed by hashed IP.
-  'algorithms.shared': { limit: 120, windowMs: 60_000, enabled: true }
+  // signups create a user + bcrypt hash + verification email/outbox row per
+  // request — a resource-amplification + mailbox-spam vector if unbounded, and
+  // the only auth endpoint that was still unthrottled. Anonymous, keyed by IP;
+  // generous enough for legit retries (and shared NAT), admin-tunable.
+  'auth.register': { limit: 10, windowMs: 10 * 60_000, enabled: true },
+  // token introspection (/api/v1/auth/introspect) — an unauthenticated live-DB
+  // lookup external integrations may call per request; bounded per IP like the
+  // other public reads so it can't be hammered
+  'auth.introspect': { limit: 300, windowMs: 60_000, enabled: true }
 };
 
 export const RATE_LIMIT_ENDPOINTS = Object.keys(RATE_LIMIT_DEFAULTS);
