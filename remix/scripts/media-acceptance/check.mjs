@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, stat } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createConnection } from 'node:net';
@@ -45,7 +45,7 @@ try {
  await page.getByText('Compression settings',{exact:true}).click();
  const status=page.locator('output');
  const link=page.getByRole('link',{name:'Download output',exact:true});
- const wait=()=>status.filter({hasText:/Complete|unsupported|not supported|damaged|cannot|failed|unavailable|requires|error/i}).waitFor({timeout:120000});
+ const wait=()=>status.filter({hasText:/Complete|unsupported|not supported|damaged|cannot|failed|unavailable|requires|error|too small|maximum file|maximum output|positive|invalid/i}).waitFor({timeout:120000});
  const save=async name=>{await link.waitFor();const pending=page.waitForEvent('download');await link.click();await(await pending).saveAs(root+'/'+name);};
  await page.locator('input[type=file]').setInputFiles(root+'/source.png');
  await page.getByLabel('Maximum width',{exact:true}).fill('640');
@@ -56,6 +56,47 @@ try {
  const image=await sharp(root+'/image.webp').metadata();assert.equal(image.width,640);assert.equal(image.height,480);assert.equal(image.hasAlpha,true);
  assert.ok((await sharp(root+'/image.webp').ensureAlpha().raw().toBuffer())[3]<255);
  console.log('IMAGE_PROBE',JSON.stringify({format:image.format,width:image.width,height:image.height,alpha:image.hasAlpha}));
+ const sizeField=page.getByLabel('Maximum file size',{exact:true});
+ const sizeUnit=page.getByLabel('Size unit',{exact:true});
+ const boundedSave=async(name,limit)=>{await save(name);const bytes=(await stat(root+'/'+name)).size;assert.ok(bytes<=limit,`${name}: ${bytes} exceeds ${limit}`);return bytes;};
+ await sizeUnit.selectOption('KB');await sizeField.fill('60');
+ await page.getByRole('button',{name:'Start',exact:true}).click();await wait();
+ const webpBudgetBytes=await boundedSave('budget-image.webp',60000);
+ assert.equal((await sharp(root+'/budget-image.webp').metadata()).hasAlpha,true);
+ await page.getByLabel('Image format',{exact:true}).selectOption('png');await sizeField.fill('30');
+ await page.getByRole('button',{name:'Start',exact:true}).click();await wait();
+ const pngBudgetBytes=await boundedSave('budget-image.png',30000);
+ const budgetPng=await sharp(root+'/budget-image.png').metadata();assert.equal(budgetPng.hasAlpha,true);assert.ok(budgetPng.width<640);
+ await page.getByLabel('Image format',{exact:true}).selectOption('auto');await sizeField.fill('6');
+ await page.locator('input[type=file]').setInputFiles(root+'/source.gif');
+ await page.getByRole('button',{name:'Start',exact:true}).click();await wait();
+ const gifBudgetBytes=await boundedSave('budget-animation.webp',6000);
+ const budgetAnimation=await sharp(root+'/budget-animation.webp',{animated:true}).metadata();
+ assert.equal(budgetAnimation.pages,4);assert.deepEqual(budgetAnimation.delay,[250,250,250,250]);assert.equal(budgetAnimation.loop,0);
+ const sourceProbe=JSON.parse(execFileSync('ffprobe',['-v','error','-show_entries','format=duration','-of','json',root+'/source.mp4'],{encoding:'utf8'}));
+ const videoBudgets=[];
+ await page.locator('input[type=file]').setInputFiles(root+'/source.mp4');
+ for(const format of ['mp4','webm']){
+  await page.getByLabel('Video format',{exact:true}).selectOption(format);
+  await page.getByLabel('Video audio',{exact:true}).selectOption('keep');
+  await sizeUnit.selectOption(format==='mp4'?'KB':'MB');await sizeField.fill(format==='mp4'?'200':'0.2');
+  await page.getByRole('button',{name:'Start',exact:true}).click();await wait();
+  const bytes=await boundedSave('budget-video.'+format,200000);
+  const probe=JSON.parse(execFileSync('ffprobe',['-v','error','-show_entries','format=duration:stream=codec_name,codec_type,width,height','-of','json',root+'/budget-video.'+format],{encoding:'utf8'}));
+  assert.ok(Math.abs(Number(probe.format.duration)-Number(sourceProbe.format.duration))<0.15,'size targeting must keep full video duration');
+  assert.ok(probe.streams.some(s=>s.codec_type==='audio'),'size targeting must preserve requested audio');
+  videoBudgets.push({format,bytes,duration:probe.format.duration,audio:probe.streams.find(s=>s.codec_type==='audio').codec_name});
+ }
+ await sizeUnit.selectOption('KB');await sizeField.fill('0.001');
+ await page.getByRole('button',{name:'Start',exact:true}).click();await wait();
+ assert.equal(await link.isVisible(),false);assert.match(await status.innerText(),/size|limit|budget|small/i);
+ await sizeField.fill('-1');await page.getByRole('button',{name:'Start',exact:true}).click();await wait();assert.equal(await link.isVisible(),false);
+ await sizeField.fill('');
+ await page.getByLabel('Video format',{exact:true}).selectOption('mp4');
+ await page.locator('input[type=file]').setInputFiles(root+'/source.png');
+ await page.getByRole('button',{name:'Start',exact:true}).click();await wait();await save('unlimited-after-budget.webp');
+ assert.equal((await sharp(root+'/unlimited-after-budget.webp').metadata()).width,640);
+ console.log('SIZE_BUDGET_PASS',JSON.stringify({webpBudgetBytes,pngBudgetBytes,gifBudgetBytes,videoBudgets,tooSmallRefused:true,blankUnlimited:true}));
  // The same chosen file survives changing settings; Start uses the new values.
  await page.getByLabel('Maximum width',{exact:true}).fill('320');
  await page.getByRole('button',{name:'Start',exact:true}).click();await wait();await save('image-small.webp');

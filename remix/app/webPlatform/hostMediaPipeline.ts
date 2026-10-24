@@ -1,6 +1,6 @@
 import { isImageFile } from './imageFiles';
 import type { ImageWasmAssets } from './imagePipeline';
-import { resolveMediaSettings, type MediaPipeline } from './mediaPipeline';
+import { assertMediaOutputSize, resolveMediaSettings, type MediaPipeline } from './mediaPipeline';
 
 type MediaWorkerPort = Pick<Worker, 'postMessage' | 'terminate' | 'onmessage' | 'onerror'>;
 /** Trusted host adapter: only a selected Blob crosses out of the opaque frame.
@@ -47,6 +47,15 @@ export function createHostMediaPipeline(
 					if (disposed || sequence !== current) return;
 					const result = event.data;
 					if (!result || !['progress', 'complete', 'error'].includes(result.type)) return;
+					if (result.type === 'complete') {
+						try {
+							assertMediaOutputSize(result.blob, settings.maxOutputBytes);
+						} catch (error) {
+							stop();
+							emit({ type: 'error', message: error instanceof Error ? error.message : 'Invalid media output' });
+							return;
+						}
+					}
 					if (result.type !== 'progress') stop();
 					emit(result);
 				};
