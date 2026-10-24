@@ -502,109 +502,12 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         },
         [asyncFetcher]
       ),
-      setLopuChatDefaults: useCallback(
-        async (args: { model?: string | null; effort?: string | null; speed?: string | null }) =>
-          asyncFetcher.submit(
-            { model: args?.model ?? null, effort: args?.effort ?? null, speed: args?.speed ?? null },
-            { action: '/api/v1/settings/lopu-chat-defaults', errorContext: 'save the Lopu chat defaults' }
-          ),
+      secureFields: useCallback(async () => getJson('/api/v1/admin/secure-fields'), []),
+      setSecureFields: useCallback(
+        async (fields) => asyncFetcher.submit({ fields }, { action: '/api/v1/admin/secure-fields' }),
         [asyncFetcher]
       ),
-      // Thingtime.LopuAccess — who may use Lopu and what a new account starts with
-      setLopuAccess: useCallback(
-        async (args: { requireVerification?: boolean; allowByoUnverified?: boolean; starterCredits?: number; lowBalanceWarningCredits?: number }) =>
-          asyncFetcher.submit(args, { action: '/api/v1/settings/lopu-access', errorContext: 'save the Lopu access settings' }),
-        [asyncFetcher]
-      ),
-      // { userId, verified } — the per-account Lopu verified flag (meta.lopuVerified)
-      setUserLopuAccess: useCallback(
-        async (args: { userId: string; verified: boolean }) =>
-          asyncFetcher.submit(
-            { userId: args?.userId, verified: args?.verified },
-            { action: '/api/v1/admin/users/lopu-access', errorContext: `${args?.verified ? 'verify' : 'unverify'} Lopu access` }
-          ),
-        [asyncFetcher]
-      ),
-      // Admin → Lopu accounts: rows { user, balanceMicros, month, lifetime, pendingRequest }, cursor-paged
-      lopuAccounts: useCallback(
-        async (args?: { q?: string; cursor?: string; limit?: number }, options?: { signal?: AbortSignal }) =>
-          getJson(`/api/v1/admin/lopu/accounts${toQuery(args)}`, options),
-        [getJson]
-      ),
-      // grant / adjust credits ({ userId, credits, entry, reason }), approve a
-      // request ({ ...same, requestId }) or decline one ({ requestId, decline: true, reason })
-      lopuCredits: useCallback(
-        async (args: {
-          userId?: string;
-          credits?: number;
-          entry?: 'grant' | 'topup' | 'adjust' | 'refund';
-          reason?: string;
-          requestId?: string;
-          decline?: boolean;
-        }) => asyncFetcher.submit(args, { action: '/api/v1/admin/lopu/credits', errorContext: 'update Lopu credits' }),
-        [asyncFetcher]
-      ),
-      integrations: useCallback(async () => getJson('/api/v1/admin/integrations'), [getJson]),
-      integrationAction: useCallback(
-        async (args: Record<string, unknown>) =>
-          asyncFetcher.submit(args, { action: '/api/v1/admin/integrations', errorContext: 'manage integration policy' }),
-        [asyncFetcher]
-      ),
-      ciControl: useCallback(
-				async (args?: { limit?: number }, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
-        [getJson]
-      ),
-      ciCredentials: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/credentials', options), [getJson]),
-      ciFeatureStacks: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/stacks', options), [getJson]),
-      ciStackChat: useCallback(async (runId: string) => getJson(`/api/v1/admin/ci/stacks/chat${toQuery({ runId })}`), [getJson]),
-      sendCiStackQuestion: useCallback(async (args: Record<string, unknown>) => asyncFetcher.submit(args, { action: '/api/v1/admin/ci/stacks/chat', errorContext: 'ask Lopu about a stack run' }), [asyncFetcher]),
-      mutateCiFeatureStack: useCallback(
-        async (args: Record<string, unknown>) =>
-          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/stacks', errorContext: 'manage Feature Stacks' }),
-        [asyncFetcher]
-      ),
-      mutateCiCredential: useCallback(
-        async (args: Record<string, unknown>) =>
-          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/credentials', errorContext: 'manage Lopu credential waterfall' }),
-        [asyncFetcher]
-      ),
-      reconcileCiControl: useCallback(
-        async () => asyncFetcher.submit({}, { action: '/api/v1/admin/ci/reconcile', errorContext: 'reconcile CI control data' }),
-        [asyncFetcher]
-      ),
-      dispatchCiWorkflow: useCallback(
-        async (args: { workflow: string; ref?: string; inputs?: Record<string, unknown> }) =>
-          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/dispatch', errorContext: `dispatch ${args.workflow}` }),
-        [asyncFetcher]
-      ),
-      setCiAutomationPolicy: useCallback(
-        async (args: { workflow: string; executionProvider: string; enabled?: boolean }) =>
-          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/automations', errorContext: `update ${args.workflow} execution provider` }),
-        [asyncFetcher]
-      ),
-      setCiPreviewPolicy: useCallback(
-        async (args: { prNumber: number; environment: 'develop' | 'production'; enabled: boolean; acknowledgeProductionData?: boolean }) =>
-          asyncFetcher.submit(args, { action: '/api/v1/admin/ci/previews', errorContext: `update ${args.environment} PR preview` }),
-        [asyncFetcher]
-      ),
-      setPrConflictResolverModelWaterfall: useCallback(
-				async (waterfall) => {
-          await requireThingtimeCapability('api.settings-pr-conflict-auto-resolver-model-waterfall', '1.1.0');
-          return asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' });
-        },
-        [asyncFetcher]
-      ),
-      rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), [getJson]),
-      setRateLimits: useCallback(async (endpoints) => asyncFetcher.submit({ endpoints }, { action: '/api/v1/admin/rate-limits' }), [asyncFetcher]),
-			// A private, cursor-paged projection for the Developer → Deployment
-			// peers explorer. This intentionally differs from /api/v1/peers,
-			// whose HMAC + Ed25519 protocol is for deployments only.
-			peers: useCallback(
-				async (args?: { cursor?: string; limit?: number }, options?: { signal?: AbortSignal }) =>
-					getJson(`/api/v1/admin/peers${toQuery(args)}`, options),
-				[getJson]
-			),
-      users: useCallback(async (args) => getJson(`/api/v1/admin/users${toQuery(args)}`), [getJson]),
+      users: useCallback(async (args) => getJson(`/api/v1/admin/users${toQuery(args)}`), []),
       setAdmin: useCallback(
         async (args) => asyncFetcher.submit({ userId: args?.userId, admin: args?.admin }, { action: '/api/v1/admin/set-admin' }),
         [asyncFetcher]
