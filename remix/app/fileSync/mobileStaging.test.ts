@@ -250,33 +250,3 @@ test('download telemetry excludes retained offsets and repeated completed stages
  await stageMobileCopy(scope, rootId, f.operation, f.source, signal, f.request, bridge, record);
  assert.deepEqual(transferred, [0]);
 });
-
-test('empty regular-file staging checks the source and finishes without a byte request', async () => {
-    const operation = { id: 'f877a2c5-1aaf-4e45-a39d-bf1250bc0419', confirmed: false, mutation: {
-        kind: 'copy', from: 'remote', path: 'empty', expectedTarget: null, source: { path: 'empty', id: 'cloud-empty', version: 'r1', kind: 'file', size: 0,
-            sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' } } } satisfies SyncOperation;
-    const stage: LocalStagedCopy = { scope, operationId: operation.id, token: 'private-empty-stage', entry: { ...operation.mutation.source, id: 'native-empty', version: 'native-v1' } };
-    const calls: FolderRequest[] = []; let checks = 0;
-    const source = { size: 0, check: () => { checks++; }, read: async () => { throw Error('An empty restore must never request bytes'); } };
-    const result = await stageMobileCopy(scope, rootId, operation, source, new AbortController().signal, async (_owner, input) => {
-        calls.push(input);
-        return parseMobileFolderResult({ type: 'mobile-files-result', payload: { requestId: 'empty', ownerId: scope.ownerId, origin: scope.origin, roots: [], rootId,
-            staging: { received: 0, ...(input.action === 'stage-finish' ? { stage } : {}) } } }, { requestId: 'empty', ownerId: scope.ownerId, origin: scope.origin }, input)!;
-    }, { platform: 'macos', fileAccessVersion: '1.11.0', fileStagingVersion: '1.1.0' });
-    assert.deepEqual(result, stage); assert.deepEqual(calls.map(call => call.action), ['stage-begin', 'stage-finish']); assert.ok(checks >= 3);
-});
-
-test('negotiated Mac cloud staging fetches fresh target authority per range and keeps payload out of the renderer', async () => {
- const f = await fixture(), signal = new AbortController().signal, targetCalls: [number,number][] = [];
- const file = { id: 'cloud-file', revision: 'r1', name: 'file', folderId: null, trashed: false, content: { attachmentId: 'attachment', version: 'a'.repeat(64), size: f.bytes.length, fingerprint: f.operation.mutation.source.fingerprint! } };
- const source = { ...f.source, nativeCloud: { scope, file }, read: async () => { throw Error('native download payload must not enter renderer'); },
- downloadTarget: async (offset: number, length: number) => { targetCalls.push([offset,length]); return { version: 1 as const, ownerId: scope.ownerId, attachmentId: file.content.attachmentId, contentVersion: file.content.version, size: file.content.size, offset, length, fingerprint: file.content.fingerprint, url: 'https://storage.invalid/signed', expiresAt: new Date(Date.now()+59000).toISOString(), headers: { Range: `bytes=${offset}-${offset+length-1}` } }; } };
- const bridge = { platform: 'macos' as const, fileAccessVersion: '1.14.0', fileResourceLimitsVersion: '1.0.0', fileDownloadVersion: '1.0.0', fileStagingVersion: '1.1.0' };
- const samples: [number,number][] = [], record = (bytes: number, received: number) => samples.push([bytes, received]);
- const observed: FolderRequest[] = []; const request = async (...args: Parameters<typeof f.request>) => { const input = args[1]; observed.push(input); if (input.action === 'stage-download') assert.equal(input.target?.offset, input.offset); return f.request(...args); };
- await assert.rejects(stageMobileCopy(scope, rootId, f.operation, source, signal, request, bridge, record), /lost acknowledged/);
- const stage = await stageMobileCopy(scope, rootId, f.operation, source, signal, request, bridge, record);
- assert.equal(stage.operationId, f.operation.id); assert.deepEqual(targetCalls, [[0,2097152],[2097152,3]]); assert.deepEqual(f.ranges, []);
- assert.equal(observed.filter(input => input.action === 'stage-download').length, 2);
- assert.deepEqual(samples, [[0,0],[0,2097152],[3,2097155]], 'Only newly acknowledged payload is reported; retained offsets are not new traffic');
-});

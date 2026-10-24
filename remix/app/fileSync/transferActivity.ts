@@ -30,11 +30,7 @@ export function createTransferActivitySession(options: { now?: () => number } = 
 			else {
 				if (!Number.isSafeInteger(value) || value < 0) throw Error('Invalid transferred count.');
 				const previous = target[field];
-				if (previous === null && field === 'bytes') {
-					// The first known sample establishes a new byte baseline. Its
-					// preceding interval was unmeasured, so it contributes no rate.
-					target.bytes = value;
-				} else if (previous !== null) {
+				if (previous !== null) {
 					const next = previous + value;
 					if (!Number.isSafeInteger(next)) throw Error('Transferred count exceeds its safe bound.');
 					target[field] = next;

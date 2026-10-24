@@ -372,7 +372,7 @@ function cloudFileTransport(runtime: CloudTransportRuntime, saved: CloudWrite, s
 						if (!response.ok) throw Error(`Cloud upload part failed (${response.status}); retain this run.`);
 					}
 					digests.set(digest, i * 32);
-					transferred?.(payloadBytes);
+					transferred?.(source.uploadPart ? null : length);
 					progress?.(offset + length, source.size);
 				}
 				if (!equalContentFingerprints({ algorithm: 'sha256-parts-v1', ...plan, sha256: hex(await hash(digests)) }, m.source.fingerprint!))

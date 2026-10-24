@@ -1,7 +1,4 @@
-import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import React from 'react';
-import type { ForegroundSyncProgress } from '~/fileSync/foregroundSync';
-import type { SyncProgressState } from '~/fileSync/progressProjection';
 import { toWindowMs, type TransferSpeedSeries, type SpeedReading, type TransferUnit } from '~/fileSync/transferSpeed';
 import { TransientBlockHost, type TransientBlockActions } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
@@ -11,8 +8,6 @@ import { MAX_SPEED_TRACKERS, TRANSFER_UNITS, WINDOW_UNITS, readSpeedTrackers, sp
 
 export type TransferSpeedTrackersProps = {
  scopeKey: string;
- state?: SyncProgressState;
- stage?: ForegroundSyncProgress['stage'];
  /** Runtime history is owned by the active transfer, never the saved layout. */
  series?: Pick<TransferSpeedSeries, 'read'>;
  accountTransport?: SettingsDocumentHostProps['accountTransport'];
@@ -22,25 +17,15 @@ export function TransferSpeedTrackers(props: TransferSpeedTrackersProps) {
   {document => <TrackerDocument key={props.scopeKey} {...props} document={document} />}
  </SettingsDocumentHost>;
 }
-export function speedReadingLabel(reading: SpeedReading | undefined, state: SyncProgressState = 'running', stage?: ForegroundSyncProgress['stage']) {
- if (state === 'complete') {
-  if (!reading || (reading.status === 'unknown' && reading.reason === 'unavailable')) return 'Complete · Rate unavailable';
-  if (reading.status === 'unknown') return 'Complete · No rate samples';
-  return 'Complete';
- }
- if (state === 'paused') return 'Paused';
- if (state === 'running' && (stage === 'checking' || stage === 'scanning')) return 'Waiting for indexing';
+export function speedReadingLabel(reading: SpeedReading | undefined) {
  if (!reading) return 'Unavailable';
- if (reading.status === 'paused') return state === 'cancelled' ? 'Cancelled' : state === 'error' ? 'Stopped after error' : 'Paused';
+ if (reading.status === 'paused') return 'Paused';
  if (reading.status === 'unknown') return reading.reason === 'unavailable' ? 'Unavailable' : 'Collecting samples…';
  return `${reading.value.toLocaleString(undefined, { maximumFractionDigits: 3 })} ${reading.unit}`;
 }
-export function observedSeconds(reading: SpeedReading | undefined, windowMs: number) {
- return (Math.min(reading?.observedDurationMs || 0, windowMs) / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 });
-}
-function TrackerDocument({ scopeKey, series, state, stage, document }: TransferSpeedTrackersProps & { document: SettingsDocumentControls }) {
+function TrackerDocument({ scopeKey, series, document }: TransferSpeedTrackersProps & { document: SettingsDocumentControls }) {
  const [, tick] = React.useReducer(value => value + 1, 0);
- React.useEffect(() => { if (state !== 'running' || !series) return; const timer = activityInterval('timer:components/Devices/TransferSpeedTrackers:1', 'Transfer speed display', tick, 1000); return () => clearActivityInterval(timer); }, [state, series]);
+ React.useEffect(() => { const timer = setInterval(tick, 1000); return () => clearInterval(timer); }, []);
  const [error, setError] = React.useState('');
  const trackers = readSpeedTrackers(document.blocks);
  const readings: Record<string, Record<string, string>> = {};
@@ -48,8 +33,9 @@ function TrackerDocument({ scopeKey, series, state, stage, document }: TransferS
   const windowMs = toWindowMs(tracker.windowValue, tracker.windowUnit);
   const upload = series?.read({ direction: 'upload', unit: tracker.unit, windowMs });
   const download = series?.read({ direction: 'download', unit: tracker.unit, windowMs });
-  readings[tracker.id] = { upload: speedReadingLabel(upload, state, stage), download: speedReadingLabel(download, state, stage),
-   window: `Averaging over ${tracker.windowValue} ${tracker.windowValue === 1 ? tracker.windowUnit.slice(0, -1) : tracker.windowUnit} · Upload ${observedSeconds(upload, windowMs)}s / Download ${observedSeconds(download, windowMs)}s measured${['Kbps', 'Mbps', 'Gbps'].includes(tracker.unit) ? ' · Acknowledged payload samples; native uploads update on completed-part acknowledgment, not continuous wire progress.' : ''}${!series ? ' · Live transfer counters unavailable.' : ''}` };
+  const observed = Math.max(upload?.observedDurationMs || 0, download?.observedDurationMs || 0);
+  readings[tracker.id] = { upload: speedReadingLabel(upload), download: speedReadingLabel(download),
+   window: `Averaging over ${tracker.windowValue} ${tracker.windowValue === 1 ? tracker.windowUnit.slice(0, -1) : tracker.windowUnit} · ${Math.min(observed / 1000, windowMs / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} seconds observed${!series ? ' · Live transfer counters unavailable.' : ''}` };
  }
  const actions: TransientBlockActions = {
   add: () => {
