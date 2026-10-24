@@ -5420,37 +5420,34 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Mobile sync connection editor
 
-- [x] In an installed iOS WebKit app, start a real foreground transfer after
-  native approval. Inventory and byte requests must retain the Window receiver
-  for `fetch`; copying the function into a transport must not cause an illegal
-  invocation. The editor browser fixture rejects an unrelated fetch receiver.
+## Mac menu bar and reusable device scripts
 
-- [ ] Open `scripts/mobile-sync-editor.browser.html` in the local dev browser.
-  Exercise the real editor/useApi with synthetic native and Things responses.
-  Save all settings, reload before saving, and verify complete draft restoration,
-  including whitespace-only names and unfinished invalid exclusion text.
-  Backup disables deletion propagation; empty/invalid destinations/exclusions
-  cannot dispatch. Repeat at desktop 1280px and mobile 390px/320px, including
-  long folder names, checkbox wrapping and lower save/error controls.
-- [ ] Lose the next accepted create/edit reply; readback confirms the same
-  connection without a duplicate write. Go offline before saving, reload, and
-  retry the fixed pending ID/payload. Retry never silently edits an uncertain
-  payload. The real-API configuration integration covers both accepted reply
-  losses through the same save helper, exact write counts and stale edits.
-- [ ] Change the saved version elsewhere before saving. Preserve the full local
-  draft, inspect saved settings without discarding it, then explicitly replace
-  the draft with a freshly read saved version. Do not silently overwrite.
-- [ ] Remove native access during editing: keep the saved connection and mark
-  missing access. If no mutation was dispatched on the first attempt, the draft
-  stays editable. Do not unlock a previously uncertain write on a failed grant
-  check. A confirmed existing save can be read back without restoring the grant.
-- [ ] Quota/disabled draft storage blocks HTTP dispatch. Another tab replacing
-  the draft disables further edits until reload. Account/origin/device/data-plane
-  changes cannot retarget a save; requests carry both guards and stale async
-  completions are fenced, including React StrictMode remounts.
-- [ ] Check paginated private cloud folders/connections, excluded invalid/shared
-  connections, cached first paint and missing-grant labels in signed-in native
-  apps. The synthetic fixture is not proof of real picker/background transfers.
+- Install both suites privately; edit the saved Component and Action source in
+  Builder, and verify page refresh retains last-known readings.
+- On the signed installed Mac app, compare inventory program/path/PID with
+  NSRunningApplication; distinguish missing readings from zero and false.
+- Check partial/collecting/locked/offline/no-node/empty states, select a Mac,
+  search and paginate every item; locked snapshots must contain no inventory.
+- At desktop and 390px widths expand details, long paths, output and earlier-run
+  controls, then scroll to the bottom with no clipping or horizontal overflow.
+- Run harmless printf via a paired Mac. Inspect the complete source in approval;
+  deny one request, approve another, and verify exact stdout/exit status.
+- Script runs must require fresh approval regardless of always-allow policy;
+  unpaired, locked, incompatible or unapproved envelopes must fail closed.
+- Verify time/output limits, retry identity, expiry, owner isolation and no
+  result bytes in device event history. Save output only on explicit request.
+- Save a recipe before selecting a device or entering a Run ID; then run the
+  same form with both filled. Each Action must accept exactly its declared fields.
+- Save a full 16 KiB recipe beginning with literal `$input` text; execute the
+  saved Action and verify the exact source survives input defaults and validation.
+- Save full-sized output (including UTF-8 replacement characters) and verify
+  `extended.result` retains every character while searchable metadata validates.
+- Regression: inline collection pagination/search must retain items beyond
+  10,000 while rendering only the current page and including default styles.
+- Run the isolated browser fixture and focused native/backend/capability suites;
+  smoke the built manifest before deploying and repeat the real installed path.
+- Password AutoFill desktop regression (2026-10-18): from a signed installed app, open Passwords via the sidebar and Commander search, connect AutoFill, and confirm real vault metadata loads. Exercise GET and POST private-service proxy routes through a real Nitro HTTP server; preserve query/body and reject cross-origin writes without cloning the server request as a native Request. A selected server older than api.passwords 1.2.0 must reject q search clearly before forwarding credentials/body; matching-major compatible patches must pass.
+- Incident account cleanup: use real signup and logout notification constructors; accept only system history tied to the exact revoked fixture session. Reject unrelated content, actors and timestamps before writes.
 
 - [ ] In transport fixtures, classify storage requests by parsed exact origin,
   never a URL prefix that would accept a lookalike host. CodeQL flagged the old
