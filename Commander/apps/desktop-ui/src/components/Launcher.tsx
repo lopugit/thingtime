@@ -4,7 +4,6 @@ import {
   AppWindow,
   ArrowRight,
   Calculator,
-  Check,
   Command,
   CornerDownLeft,
   Files,
@@ -14,7 +13,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Settings2,
   Terminal,
 } from 'lucide-react';
 import type {
@@ -322,7 +320,7 @@ export function Launcher({ state }: { state: CommanderState }) {
         else
           void state
             .rememberRecentSearch(state.query)
-            .then(() => hideLauncher(true))
+            .then(hideLauncher)
             .catch((error: unknown) =>
               state.reportError(error instanceof Error ? error.message : 'Could not close Commander'),
             );
@@ -403,13 +401,7 @@ export function Launcher({ state }: { state: CommanderState }) {
         }}
         onDoubleClick={() => void runHitAction(hit, hit.actions[0]?.id ?? 'open')}
       >
-        <ResultIcon
-          icon={hit.icon}
-          kind={hit.kind}
-          path={hit.path}
-          shouldLoadNativeIcon={!historyVisible && !state.resultsStale}
-          nativeIconPriority={rowSelected ? 0 : 1 + Math.abs(rowIndex - state.selectedIndex)}
-        />
+        <ResultIcon icon={hit.icon} kind={hit.kind} path={hit.path} />
         <span className="result-copy">
           <span className="result-title">{displayTitle(hit)}</span>
           {hit.subtitle ? <span className="result-subtitle">{hit.subtitle}</span> : null}
@@ -459,24 +451,6 @@ export function Launcher({ state }: { state: CommanderState }) {
           />
           <span className="search-hint">Actions</span>
           <kbd>⌘ K</kbd>
-          <button
-            type="button"
-            className="launcher-settings-button"
-            title="Open Commander Settings"
-            aria-label="Open Commander Settings"
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
-            }}
-            onClick={() => {
-              void state
-                .executeCommand('builtin:settings', 'open-settings', '')
-                .catch((error: unknown) =>
-                  state.reportError(error instanceof Error ? error.message : 'Could not open Settings'),
-                );
-            }}
-          >
-            <Settings2 aria-hidden="true" />
-          </button>
         </header>
 
         <div className="result-region">
@@ -505,10 +479,8 @@ export function Launcher({ state }: { state: CommanderState }) {
                 ) : null}
               </span>
             ) : (
-              <span className="result-count">
-                {state.searchPending ? (
-                  <RefreshCw className="search-spinner" aria-label="Updating results" />
-                ) : null}
+              <span className={state.searchPending ? 'result-count updating' : 'result-count'}>
+                {state.searchPending ? <RefreshCw aria-label="Updating results" /> : null}
                 {state.hits.length}
               </span>
             )}
@@ -617,7 +589,7 @@ export function Launcher({ state }: { state: CommanderState }) {
             ))}
             {!totalRows ? (
               <div className="empty-state">
-                <Command />
+                {state.searchPending ? <RefreshCw className="search-spinner" /> : <Command />}
                 <strong>{state.searchPending ? 'Searching…' : 'No results found'}</strong>
                 <span>
                   {state.searchPending
@@ -680,34 +652,6 @@ export function Launcher({ state }: { state: CommanderState }) {
                 >
                   <Plus />
                   <span>Open New Window</span>
-                </button>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={state.bootstrap?.settings.windowPinning.defaultPinned ?? false}
-                  disabled={!state.bootstrap?.settings.windowPinning.enabled}
-                  onClick={() => {
-                    const settings = state.bootstrap?.settings;
-                    if (!settings) return;
-                    setPinMenuOpen(false);
-                    void state.saveSettings({
-                      ...settings,
-                      windowPinning: {
-                        ...settings.windowPinning,
-                        defaultPinned: !settings.windowPinning.defaultPinned,
-                      },
-                    });
-                  }}
-                >
-                  <Check
-                    aria-hidden="true"
-                    style={{
-                      visibility: state.bootstrap?.settings.windowPinning.defaultPinned
-                        ? 'visible'
-                        : 'hidden',
-                    }}
-                  />
-                  <span>Open New Windows Pinned</span>
                 </button>
               </aside>
             ) : null}

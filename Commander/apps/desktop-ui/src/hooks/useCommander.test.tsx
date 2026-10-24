@@ -61,10 +61,7 @@ describe('useCommander launcher sessions', () => {
       kinds: [],
       commands: { count: 0 },
       automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 360 },
-      customTimeoutMs: null,
       resourceLimits: DEFAULT_SETTINGS.indexing.resourceLimits,
-      timing: { samples: 0 },
-      timeoutAttempts: [],
     });
     vi.mocked(api.addRecentSearch).mockImplementation(async (query, command) => ({
       recentSearches: [
@@ -94,7 +91,7 @@ describe('useCommander launcher sessions', () => {
     ]);
   });
 
-  it('clears prior-query rows immediately while the next search is pending', async () => {
+  it('keeps the last results visible until the next streamed search produces an update', async () => {
     const staleHit: SearchHit = {
       id: 'builtin:settings',
       title: 'Commander Settings',
@@ -123,7 +120,7 @@ describe('useCommander launcher sessions', () => {
 
     act(() => result.current.setQuery('emoji'));
 
-    expect(result.current.hits).toEqual([]);
+    expect(result.current.hits).toEqual([staleHit]);
     expect(result.current.selectedIndex).toBe(0);
     expect(result.current.searchPending).toBe(true);
     expect(result.current.resultsStale).toBe(true);

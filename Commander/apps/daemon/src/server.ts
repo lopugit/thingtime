@@ -42,24 +42,18 @@ import {
   searchEmojiSymbolsCommandName,
 } from './services/catalog.js';
 import { IndexingService } from './services/indexing.js';
-import { PersistentStore, type AccountEnvironmentUpdate } from './services/persistence.js';
+import { PersistentStore } from './services/persistence.js';
 import { macosSystemExtension, macosSystemShortcutURL } from './services/macosSystem.js';
 import { preferenceValuesForCommand, RaycastLocalService } from './services/raycastLocal.js';
 import { SearchService } from './services/search.js';
 import { SearchResultCache } from './services/searchCache.js';
 import { ThingtimeService } from './services/thingtime.js';
-import {
-  commanderCapabilityManifest,
-  resolveCommanderRoute,
-  type CommanderRouteId,
-} from './services/httpRoutes.js';
 import { CALCULATOR_RESULT_ITEM_ID, calculatorSearchHit } from './services/calculator.js';
 
 // Bump these whenever ranking or result-presentation semantics change so an
 // installed Commander never replays results produced by an older search core.
-const SEARCH_CONTEXT_VERSION = 4;
-const SEARCH_CACHE_KEY_VERSION = 3;
-const COMMANDER_NATIVE_REDIRECT_URI = 'com.thingtime.commander://oauth/callback';
+const SEARCH_CONTEXT_VERSION = 3;
+const SEARCH_CACHE_KEY_VERSION = 2;
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -128,25 +122,21 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
   const server = http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? '/', `http://${options.host}`);
-      const routeId = resolveCommanderRoute(request.method ?? '', url.pathname)?.id;
-      if (!routeId) return json(response, 404, { error: 'Not found' });
-      if (routeId === 'capabilities') return json(response, 200, commanderCapabilityManifest(baseUrl));
-      if (routeId === 'health') {
+      if (request.method === 'GET' && url.pathname === '/healthz') {
         return json(response, 200, { ok: true, protocolVersion: PROTOCOL_VERSION, pid: process.pid });
       }
       if (url.pathname.startsWith('/api/native/')) {
         if (!safeToken(request.headers['x-commander-native'], nativeToken))
           return json(response, 401, { error: 'Unauthorized' });
-        return await routeNativeApi(request, response, url, routeId);
+        return await routeNativeApi(request, response, url);
       }
       if (url.pathname.startsWith('/api/')) {
         if (!safeToken(request.headers['x-commander-session'], token))
           return json(response, 401, { error: 'Unauthorized' });
-        return await routeApi(request, response, url, routeId);
+        return await routeApi(request, response, url);
       }
-      if (routeId === 'oauth-callback') return await oauthCallback(response, url);
-      if (routeId === 'static-assets') return await serveStatic(response, options.uiPath, url.pathname);
-      return json(response, 404, { error: 'Not found' });
+      if (url.pathname === '/oauth/callback') return await oauthCallback(response, url);
+      return await serveStatic(response, options.uiPath, url.pathname);
     } catch (error) {
       return json(response, 500, { error: error instanceof Error ? error.message : 'Internal error' });
     }
@@ -165,12 +155,6 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     onUpdate?: (event: SearchStreamEvent) => void,
   ): Promise<SearchHit[]> => {
     const snapshot = store.snapshot();
-    // A catalog refresh is a single atomic swap. Every request deliberately
-    // uses one snapshot, so a query in progress never combines an old catalog
-    // preview with a newer final result; the next keystroke/request gets the
-    // latest committed catalog without waiting for indexing.
-    const catalog = search.snapshot();
-    const catalogRevision = searchRevision;
     const calculation = calculatorSearchHit(query, snapshot.settings.calculator);
     const present = (hits: SearchHit[]) =>
       [
@@ -183,7 +167,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       order: snapshot.settings.resultCategoryOrder,
       windowMode: snapshot.settings.windowMode,
       favourites: snapshot.settings.showFavouritesInCompactMode,
-      revision: catalogRevision,
+      revision: searchRevision,
     });
     const key = JSON.stringify({
       version: SEARCH_CACHE_KEY_VERSION,
@@ -191,7 +175,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       order: snapshot.settings.resultCategoryOrder,
       windowMode: snapshot.settings.windowMode,
       favourites: snapshot.settings.showFavouritesInCompactMode,
-      revision: catalogRevision,
+      revision: searchRevision,
     });
     const indexedItemsPromise = indexing.queryItems(query);
     const cached = await searchCache.lookup({ key, contextKey, query: normalizedQuery });
@@ -217,9 +201,8 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       });
       emittedCachedResults = true;
     } else if (cached?.indexedItems.length) {
-      let previewHits = await search.searchSnapshot(
+      let previewHits = await search.search(
         query,
-        catalog,
         30,
         cached.indexedItems,
         preferenceScores,
@@ -240,9 +223,8 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     }
 
     if (!emittedCachedResults) {
-      let catalogHits = await search.searchSnapshot(
+      let catalogHits = await search.search(
         query,
-        catalog,
         30,
         [],
         preferenceScores,
@@ -259,9 +241,8 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
     }
 
     const indexedItems = await indexedItemsPromise;
-    let hits = await search.searchSnapshot(
+    let hits = await search.search(
       query,
-      catalog,
       30,
       indexedItems,
       preferenceScores,
@@ -276,25 +257,16 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       complete: true,
       cached: false,
     });
-    // Never let a just-finished, older snapshot overwrite cache state after a
-    // live catalog update. Its response is still valid for its caller.
-    if (catalogRevision === searchRevision) {
-      void searchCache
-        .put({ key, contextKey, query: normalizedQuery, hits, indexedItems })
-        .catch(() => undefined);
-    }
+    void searchCache
+      .put({ key, contextKey, query: normalizedQuery, hits, indexedItems })
+      .catch(() => undefined);
     return presentedHits;
   };
 
-  async function routeApi(
-    request: IncomingMessage,
-    response: ServerResponse,
-    url: URL,
-    routeId: CommanderRouteId,
-  ): Promise<void> {
+  async function routeApi(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
     const state = store.snapshot();
     const extensionsForState = availableExtensions(state.extensions, platform);
-    if (routeId === 'bootstrap') {
+    if (request.method === 'GET' && url.pathname === '/api/bootstrap') {
       const body: BootstrapResponse = {
         protocolVersion: PROTOCOL_VERSION,
         platform,
@@ -313,25 +285,11 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       };
       return json(response, 200, body);
     }
-    if (routeId === 'activity-network') {
-      return json(response, 200, await thingtime.networkProbe(state.settings));
-    }
-    if (routeId === 'activity-network-speed') {
-      return json(
-        response,
-        200,
-        await thingtime.networkProbe(
-          state.settings,
-          true,
-          networkProbeCredential(state.settings, state.accounts, credentials),
-        ),
-      );
-    }
-    if (routeId === 'search') {
+    if (request.method === 'GET' && url.pathname === '/api/search') {
       const query = url.searchParams.get('q') ?? '';
       return json(response, 200, { hits: await searchNow(query) });
     }
-    if (routeId === 'search-stream') {
+    if (request.method === 'GET' && url.pathname === '/api/search/stream') {
       const query = url.searchParams.get('q') ?? '';
       response.writeHead(200, {
         'content-type': 'application/x-ndjson; charset=utf-8',
@@ -353,37 +311,40 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       if (!response.destroyed) response.end();
       return;
     }
-    if (routeId === 'search-cache-status') return json(response, 200, await searchCache.status());
-    if (routeId === 'search-cache') {
+    if (request.method === 'GET' && url.pathname === '/api/search/cache/status')
+      return json(response, 200, await searchCache.status());
+    if (request.method === 'DELETE' && url.pathname === '/api/search/cache') {
       await searchCache.clear();
       return json(response, 200, { ok: true, status: await searchCache.status() });
     }
-    if (routeId === 'index-status') return json(response, 200, await indexing.status());
-    if (routeId === 'index') {
+    if (request.method === 'GET' && url.pathname === '/api/index/status')
+      return json(response, 200, await indexing.status());
+    if (request.method === 'POST' && url.pathname === '/api/index') {
       const { scope } = await readBody<{ scope?: IndexScope }>(request);
       if (!scope || !isIndexScope(scope))
         return json(response, 400, { error: 'A valid index scope is required' });
       void indexing.start(scope).catch(() => undefined);
       return json(response, 202, { ok: true, scope, status: await indexing.status() });
     }
-    if (routeId === 'history') {
+    if (request.method === 'POST' && url.pathname === '/api/history') {
       const { query, command } = await readBody<{ query?: string; command?: RecentSearchCommand }>(request);
       if (typeof query !== 'string' || !query.trim())
         return json(response, 400, { error: 'query is required' });
       return json(response, 200, { recentSearches: await store.addRecentSearch(query, command) });
     }
-    if (routeId === 'settings') {
+    if (request.method === 'PUT' && url.pathname === '/api/settings') {
       const settings = await store.setSettings(await readBody<CommanderSettings>(request));
       indexing.updateSettings(settings);
       searchCache.updateSettings(settings.searchCache);
       searchRevision += 1;
       return json(response, 200, { settings });
     }
-    if (routeId === 'extensions') return json(response, 200, { extensions: extensionsForState });
-    if (routeId === 'extensions-raycast') {
+    if (request.method === 'GET' && url.pathname === '/api/extensions')
+      return json(response, 200, { extensions: extensionsForState });
+    if (request.method === 'GET' && url.pathname === '/api/extensions/raycast') {
       return json(response, 200, await localRaycast.list(extensionsForState, state.extensionPreferences));
     }
-    if (routeId === 'extensions-raycast-add') {
+    if (request.method === 'POST' && url.pathname === '/api/extensions/raycast/add') {
       const { name, installationId } = await readBody<{ name?: string; installationId?: string }>(request);
       if (!name || !installationId)
         return json(response, 400, { error: 'name and installationId are required' });
@@ -419,7 +380,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
         sync: sync.summary,
       });
     }
-    if (routeId === 'extensions-raycast-sync') {
+    if (request.method === 'POST' && url.pathname === '/api/extensions/raycast/sync') {
       const { name, installationId } = await readBody<{ name?: string; installationId?: string }>(request);
       if (!name || !installationId)
         return json(response, 400, { error: 'name and installationId are required' });
@@ -433,7 +394,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       await store.upsertExtensionPreferences(sync.state);
       return json(response, 200, { extension, sync: sync.summary });
     }
-    if (routeId === 'extensions-sideload') {
+    if (request.method === 'POST' && url.pathname === '/api/extensions/sideload') {
       const { path: extensionPath, allowUntrustedBuildScripts = false } = await readBody<{
         path?: string;
         allowUntrustedBuildScripts?: boolean;
@@ -458,14 +419,14 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
         },
       });
     }
-    if (routeId === 'extensions-store') {
+    if (request.method === 'GET' && url.pathname === '/api/extensions/store') {
       const current = new Set(extensionsForState.map((extension) => extension.name));
       const catalog = await browseRaycastStore(url.searchParams.get('q') ?? '');
       return json(response, 200, {
         extensions: catalog.map((extension) => ({ ...extension, installed: current.has(extension.name) })),
       });
     }
-    if (routeId === 'extensions-store-install') {
+    if (request.method === 'POST' && url.pathname === '/api/extensions/store/install') {
       const candidate = await readBody<StoreExtension>(request);
       if (!candidate.repositoryUrl)
         return json(response, 409, {
@@ -476,7 +437,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
           'Store discovery is live; one-click source installation is not exposed by the Raycast Store. Open it, clone the extension, then use Sideload.',
       });
     }
-    if (routeId === 'execute') {
+    if (request.method === 'POST' && url.pathname === '/api/execute') {
       const {
         itemId,
         actionId,
@@ -631,90 +592,61 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       }
       return json(response, 200, { ok: true });
     }
-    if (routeId === 'accounts-login') {
-      const start = await thingtime.beginRegisteredLogin(
-        state.settings,
-        COMMANDER_NATIVE_REDIRECT_URI,
-        `${baseUrl}/oauth/callback`,
-      );
+    if (request.method === 'POST' && url.pathname === '/api/accounts/login') {
+      const start = thingtime.beginLogin(state.settings, `${baseUrl}/oauth/callback`);
       return json(response, 200, { authorizeUrl: start.authorizeUrl, state: start.state });
     }
-    if (routeId === 'accounts-active') {
+    if (request.method === 'PUT' && url.pathname === '/api/accounts/active') {
       const { id } = await readBody<{ id: string }>(request);
       return json(response, 200, { account: await store.setActiveAccount(id) });
     }
-    if (routeId === 'accounts-environments') {
-      const { environments } = await readBody<{ environments?: AccountEnvironmentUpdate[] }>(request);
-      if (!Array.isArray(environments) || environments.length > 64)
-        return json(response, 400, { error: 'A bounded list of account environments is required' });
-      return json(response, 200, {
-        accounts: await store.reconcileAccountEnvironments(environments),
-      });
-    }
-    if (routeId === 'accounts-remove') {
+    if (request.method === 'DELETE' && url.pathname.startsWith('/api/accounts/')) {
       const id = decodeURIComponent(url.pathname.slice('/api/accounts/'.length));
       credentials.delete(id);
       await store.removeAccount(id);
       return json(response, 200, { ok: true });
     }
-    if (routeId === 'accounts-credentials') {
+    if (request.method === 'PUT' && url.pathname === '/api/accounts/credentials') {
       const input = await readBody<{ accountId: string; token: string }>(request);
       if (!input.accountId || !input.token)
         return json(response, 400, { error: 'accountId and token are required' });
       credentials.set(input.accountId, input.token);
       return json(response, 200, { ok: true });
     }
-    if (routeId === 'accounts-credentials-pending') {
+    if (request.method === 'POST' && url.pathname === '/api/accounts/credentials/pending') {
       if (pendingCredential && Date.now() - pendingCredential.createdAt > 5 * 60_000)
         pendingCredential = null;
       return json(response, 200, {
         credential: pendingCredential ? { accountId: pendingCredential.accountId } : null,
       });
     }
-    if (routeId === 'sync') {
+    if (request.method === 'POST' && url.pathname === '/api/sync') {
       const active = state.settings.activeAccountId;
       const credential = active ? credentials.get(active) : undefined;
       if (!credential)
         return json(response, 401, { error: 'Unlock or sign in to the active Thingtime account first' });
-      const settings = await thingtime.syncAccount(
-        credential,
-        state.settings,
-        state.accounts.find((account) => account.id === active),
-      );
+      const settings = await thingtime.sync(credential, state.settings);
       await store.setSettings(settings, { markCloudChanges: false });
       return json(response, 200, { settings, syncedAt: new Date().toISOString() });
     }
     return json(response, 404, { error: 'Not found' });
   }
 
-  async function routeNativeApi(
-    request: IncomingMessage,
-    response: ServerResponse,
-    url: URL,
-    routeId: CommanderRouteId,
-  ): Promise<void> {
-    if (routeId === 'native-oauth-callback') {
-      const { callbackUrl } = await readBody<{ callbackUrl?: string }>(request);
-      const callback = parseNativeOAuthCallback(callbackUrl);
-      if (!callback)
-        return json(response, 400, { error: 'Commander rejected an invalid native sign-in callback' });
-      const result = await completeOAuthCallback(callback, COMMANDER_NATIVE_REDIRECT_URI);
-      return json(response, 200, { ok: true, accountId: result.account.id });
-    }
-    if (routeId === 'native-credentials-claim') {
+  async function routeNativeApi(request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> {
+    if (request.method === 'POST' && url.pathname === '/api/native/credentials/claim') {
       const { accountId } = await readBody<{ accountId?: string }>(request);
       if (!accountId || pendingCredential?.accountId !== accountId)
         return json(response, 404, { error: 'No pending credential for this account' });
       return json(response, 200, { accountId: pendingCredential.accountId, token: pendingCredential.token });
     }
-    if (routeId === 'native-credentials-ack') {
+    if (request.method === 'POST' && url.pathname === '/api/native/credentials/ack') {
       const { accountId } = await readBody<{ accountId?: string }>(request);
       if (!accountId || pendingCredential?.accountId !== accountId)
         return json(response, 404, { error: 'No pending credential for this account' });
       pendingCredential = null;
       return json(response, 200, { ok: true });
     }
-    if (routeId === 'native-credentials') {
+    if (request.method === 'PUT' && url.pathname === '/api/native/credentials') {
       const input = await readBody<{ accountId?: string; token?: string }>(request);
       if (!input.accountId || !input.token)
         return json(response, 400, { error: 'accountId and token are required' });
@@ -725,49 +657,42 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
   }
 
   async function oauthCallback(response: ServerResponse, url: URL): Promise<void> {
-    try {
-      const result = await completeOAuthCallback(url, `${baseUrl}/oauth/callback`);
-      return html(
-        response,
-        200,
-        callbackPage(
-          'You’re signed in',
-          `Commander connected @${result.account.username}. You can close this tab.`,
-          true,
-        ),
-      );
-    } catch (error) {
-      return html(
-        response,
-        400,
-        callbackPage(
-          'Thingtime sign-in failed',
-          error instanceof Error ? error.message : 'Commander could not complete sign-in.',
-          false,
-        ),
-      );
-    }
-  }
-
-  async function completeOAuthCallback(
-    url: URL,
-    redirectUri: string,
-  ): Promise<{ account: CommanderAccount }> {
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
     const error = url.searchParams.get('error');
     if (error) {
-      if (!state || !thingtime.cancel(store.snapshot().settings, state, redirectUri))
-        throw new Error('The authorization response was not requested by Commander.');
-      throw new Error(error);
+      if (!state || !thingtime.cancel(state))
+        return html(
+          response,
+          400,
+          callbackPage(
+            'Thingtime sign-in failed',
+            'The authorization response was not requested by Commander.',
+            false,
+          ),
+        );
+      return html(response, 400, callbackPage('Thingtime sign-in cancelled', error, false));
     }
-    if (!code || !state) throw new Error('Missing authorization response');
+    if (!code || !state)
+      return html(
+        response,
+        400,
+        callbackPage('Thingtime sign-in failed', 'Missing authorization response', false),
+      );
     const snapshot = store.snapshot();
-    const result = await thingtime.exchange(snapshot.settings, state, code, redirectUri);
+    const result = await thingtime.exchange(snapshot.settings, state, code, `${baseUrl}/oauth/callback`);
     credentials.set(result.account.id, result.token);
     pendingCredential = { accountId: result.account.id, token: result.token, createdAt: Date.now() };
     await store.upsertAccount(result.account);
-    return { account: result.account };
+    return html(
+      response,
+      200,
+      callbackPage(
+        'You’re signed in',
+        `Commander connected @${result.account.username}. You can close this tab.`,
+        true,
+      ),
+    );
   }
 
   return {
@@ -856,47 +781,6 @@ function safeToken(candidate: string | string[] | undefined, expected: string): 
   const right = Buffer.from(expected);
   return left.length === right.length && timingSafeEqual(left, right);
 }
-
-/**
- * The native URL handler is an untrusted browser entry point. Keep its parser
- * just as strict as the AppKit side before it reaches the pending PKCE state.
- */
-function parseNativeOAuthCallback(value: unknown): URL | null {
-  if (typeof value !== 'string' || !value || value.length > 8_192) return null;
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return null;
-  }
-  if (
-    url.protocol !== 'com.thingtime.commander:' ||
-    url.hostname !== 'oauth' ||
-    url.pathname !== '/callback' ||
-    url.port ||
-    url.username ||
-    url.password ||
-    url.hash
-  )
-    return null;
-
-  const allowed = new Set(['code', 'state', 'error', 'error_description']);
-  const entries = [...url.searchParams.entries()];
-  if (entries.some(([key]) => !allowed.has(key))) return null;
-  const grouped = new Map<string, string[]>();
-  for (const [key, item] of entries) grouped.set(key, [...(grouped.get(key) ?? []), item]);
-  if ([...grouped.values()].some((items) => items.length !== 1)) return null;
-  const state = grouped.get('state')?.[0];
-  const code = grouped.get('code')?.[0];
-  const error = grouped.get('error')?.[0];
-  const description = grouped.get('error_description')?.[0];
-  if (!state || state.length < 16 || state.length > 512) return null;
-  if ((code === undefined) === (error === undefined)) return null;
-  if (code !== undefined && (!code || code.length > 4096)) return null;
-  if (error !== undefined && (!error || error.length > 1024)) return null;
-  if (description !== undefined && description.length > 1024) return null;
-  return url;
-}
 async function serveStatic(response: ServerResponse, root: string, pathname: string): Promise<void> {
   const rootReal = await realpath(root);
   const requested = pathname === '/' ? 'launcher.html' : pathname.replace(/^\/+/, '');
@@ -919,4 +803,3 @@ async function serveStatic(response: ServerResponse, root: string, pathname: str
   });
   createReadStream(candidate).pipe(response);
 }
-import { networkProbeCredential } from './services/networkProbe.js';

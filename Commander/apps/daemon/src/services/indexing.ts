@@ -1,4 +1,4 @@
-import { access, readdir } from 'node:fs/promises';
+import { access } from 'node:fs/promises';
 import { watch, type FSWatcher } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,24 +12,19 @@ import {
   type IndexResourceUsage,
   type IndexStatus,
 } from '@commander/filesystem-indexer';
-import { INDEXING_TIMEOUT_ATTEMPT_LIMIT, INDEXING_TIMING_SAMPLE_LIMIT } from '@commander/protocol';
 import type {
   CommanderSettings,
   IndexScope,
   IndexingSettings,
   IndexingStatus,
-  IndexRunTiming,
   Platform,
   SearchItem,
 } from '@commander/protocol';
-import { applicationDirectories, discoverApplications, discoverApplicationsQuick } from './applications.js';
+import { applicationDirectories, discoverApplications } from './applications.js';
 import { commanderDataDirectory } from './config.js';
 import { pathActions } from './pathActions.js';
 
-// Application bundle changes under active volumes are watched with FSEvents.
-// This slower reconciliation is only the safety net for a missed native event
-// or a newly mounted volume.
-export const APPLICATION_REFRESH_MINUTES = 6 * 60;
+export const APPLICATION_REFRESH_MINUTES = 5;
 
 interface IndexingCallbacks {
   applications(items: SearchItem[]): void;
@@ -44,18 +39,10 @@ interface IndexingServiceOptions {
   callbacks: IndexingCallbacks;
 }
 
-interface ScheduledIndexRun {
-  scope: IndexScope;
-  promise: Promise<void>;
-  resolve(): void;
-  reject(error: Error): void;
-}
-
-// Output page size only: the indexer ranks matching records before returning it.
-const FILESYSTEM_RESULT_PAGE_SIZE = 160;
+const FILESYSTEM_RESULT_LIMIT = 160;
+const APPLICATION_RESULT_LIMIT = 1_000;
 const COMMANDER_INDEX_TIMEOUT_MS = 90_000;
 const COMMANDER_MAX_INDEX_TIMEOUT_MS = 15 * 60_000;
-const INDEX_STATUS_CACHE_MS = 30_000;
 
 export class IndexingService {
   readonly #platform: Platform;
@@ -68,8 +55,8 @@ export class IndexingService {
   #available = false;
   #message: string | undefined;
   #running = new Set<IndexScope>();
-  #activeRun: ScheduledIndexRun | undefined;
-  #pendingRun: ScheduledIndexRun | undefined;
+  #runs = new Map<IndexScope, Promise<void>>();
+  #writeQueue = Promise.resolve();
   #timer: ReturnType<typeof setInterval> | undefined;
   #applicationWatchers: FSWatcher[] = [];
   #applicationDebounce: ReturnType<typeof setTimeout> | undefined;
@@ -77,11 +64,7 @@ export class IndexingService {
   #lastFallbackApplicationsAtMs: number | undefined;
   #commandCount = 0;
   #lastRunResources: IndexResourceUsage | undefined;
-  #recentTimings: IndexRunTiming[] = [];
-  #timeoutAttempts: NonNullable<IndexingStatus['timeoutAttempts']> = [];
-  #timeoutSequence = 0;
   #lastStatus: IndexStatus | undefined;
-  #lastStatusReadAtMs = 0;
   #progress: IndexingStatus['progress'];
   #progressSources = new Map<string, number>();
 
@@ -113,22 +96,19 @@ export class IndexingService {
         await this.#reader.status();
         this.#available = true;
         applications = await this.#queryApplications();
+        if (!applications.length) {
+          await this.start('applications');
+          applications = await this.#queryApplications();
+        }
       } catch (error) {
         this.#disableRust(error);
       }
     }
-    // The fallback gives the launcher freshly installed top-level applications
-    // while a missing/stale index is refreshed independently in the background.
-    applications = mergeApplications(applications, await discoverApplicationsQuick());
+    if (!applications.length) applications = await discoverApplications();
     this.#callbacks.applications(applications);
     this.#timer = setInterval(() => void this.#automaticRefresh(), 60_000);
     this.#timer.unref();
-    void this.#watchApplications();
-    // Search always reads the latest committed catalog snapshot. Indexing runs
-    // independently and swaps that catalog when its atomic database update
-    // completes, so new searches remain live without a startup race.
-    // Reuse a fresh persisted index on launch, rather than scanning every time
-    // Commander starts. Watchers and the reconciliation schedule keep it fresh.
+    await this.#watchApplications();
     void this.#automaticRefresh();
     return applications;
   }
@@ -141,16 +121,13 @@ export class IndexingService {
     }
   }
 
-  async queryItems(query: string, limit = FILESYSTEM_RESULT_PAGE_SIZE): Promise<SearchItem[]> {
-    if (!this.#reader || !this.#settings.enabled || !query.trim()) return [];
+  async queryItems(query: string, limit = FILESYSTEM_RESULT_LIMIT): Promise<SearchItem[]> {
+    if (!this.#reader || !this.#settings.enabled || query.trim().length < 2) return [];
     try {
-      // All apps are already in the in-memory catalogue. Only read files and
-      // folders here: a crowded filename page cannot exclude a matching app,
-      // and search never needs to initiate an indexing run or discovery scan.
       const response = await this.#reader.query({
         query,
-        kinds: ['file', 'directory'],
-        limit: Math.max(1, limit),
+        kinds: ['application', 'file', 'directory'],
+        limit: Math.min(FILESYSTEM_RESULT_LIMIT, Math.max(1, limit)),
       });
       return response.records.map(indexRecordToSearchItem);
     } catch (error) {
@@ -172,66 +149,26 @@ export class IndexingService {
   }
 
   start(scope: IndexScope): Promise<void> {
-    const active = this.#activeRun;
-    if (!active) return this.#beginRun(scope);
-    // A complete run contains every narrower scope, so those requests can
-    // safely join it rather than scheduling an unnecessary scan.
-    if (active.scope === scope || active.scope === 'all') return active.promise;
-
-    const pending = this.#pendingRun;
-    if (pending) {
-      if (pending.scope === scope || pending.scope === 'all') return pending.promise;
-      // Keep the oldest active database writer intact, but make queued work
-      // latest-wins. This preserves automatic indexing without allowing a
-      // long queue of stale full-tree scans to build up behind it.
-      pending.resolve();
-    }
-    const next = this.#createRun(scope);
-    this.#pendingRun = next;
-    return next.promise;
-  }
-
-  #beginRun(scope: IndexScope): Promise<void> {
-    const run = this.#createRun(scope);
-    this.#activateRun(run);
-    return run.promise;
-  }
-
-  #createRun(scope: IndexScope): ScheduledIndexRun {
-    let resolve: (() => void) | undefined;
-    let reject: ((error: Error) => void) | undefined;
-    const promise = new Promise<void>((resolvePromise, rejectPromise) => {
-      resolve = resolvePromise;
-      reject = rejectPromise;
-    });
-    return {
-      scope,
-      promise,
-      resolve: () => resolve?.(),
-      reject: (error) => reject?.(error),
-    };
-  }
-
-  #activateRun(run: ScheduledIndexRun): void {
-    this.#activeRun = run;
-    this.#running.add(run.scope);
-    if ((!this.#reader || !this.#writer) && (run.scope === 'all' || run.scope === 'applications'))
+    const current = this.#runs.get(scope);
+    if (current) return current;
+    if (scope === 'all' || scope === 'applications')
       void this.#refreshFallbackApplications().catch(() => undefined);
-    void this.#perform(run.scope)
-      .then(() => run.resolve())
+    this.#running.add(scope);
+    const run = this.#writeQueue
+      .catch(() => undefined)
+      .then(() => this.#perform(scope))
       .catch((error) => {
         this.#message = errorMessage(error);
-        run.reject(error instanceof Error ? error : new Error(errorMessage(error)));
+        throw error;
       })
       .finally(() => {
-        if (this.#progress?.scope === run.scope) this.#progress = undefined;
-        this.#running.delete(run.scope);
-        if (this.#activeRun !== run) return;
-        this.#activeRun = undefined;
-        const next = this.#pendingRun;
-        this.#pendingRun = undefined;
-        if (next) this.#activateRun(next);
+        if (this.#progress?.scope === scope) this.#progress = undefined;
+        this.#running.delete(scope);
+        this.#runs.delete(scope);
       });
+    this.#writeQueue = run.catch(() => undefined);
+    this.#runs.set(scope, run);
+    return run;
   }
 
   reindexCommands(): number {
@@ -241,10 +178,7 @@ export class IndexingService {
   }
 
   async status(): Promise<IndexingStatus> {
-    const status =
-      !this.#lastStatus || Date.now() - this.#lastStatusReadAtMs >= INDEX_STATUS_CACHE_MS
-        ? ((await this.#safeRustStatus()) ?? this.#lastStatus)
-        : this.#lastStatus;
+    const status = (await this.#safeRustStatus()) ?? this.#lastStatus;
     return {
       available: this.#available,
       running: [...this.#running],
@@ -268,11 +202,8 @@ export class IndexingService {
         applicationsMinutes: APPLICATION_REFRESH_MINUTES,
         filesystemMinutes: this.#settings.refreshIntervalMinutes,
       },
-      customTimeoutMs: this.#settings.customTimeoutMs,
       resourceLimits: structuredClone(this.#settings.resourceLimits),
       ...(this.#lastRunResources ? { lastRunResources: structuredClone(this.#lastRunResources) } : {}),
-      timing: timingSummary(this.#recentTimings),
-      timeoutAttempts: structuredClone(this.#timeoutAttempts),
       ...(this.#progress ? { progress: structuredClone(this.#progress) } : {}),
       ...(this.#message ? { message: this.#message } : {}),
     };
@@ -284,9 +215,6 @@ export class IndexingService {
     this.#timer = undefined;
     this.#applicationDebounce = undefined;
     for (const watcher of this.#applicationWatchers.splice(0)) watcher.close();
-    const pending = this.#pendingRun;
-    this.#pendingRun = undefined;
-    pending?.reject(new Error('Filesystem indexing service closed'));
     await Promise.allSettled([this.#reader?.close(), this.#writer?.close()]);
     this.#reader = undefined;
     this.#writer = undefined;
@@ -319,24 +247,24 @@ export class IndexingService {
       await this.#refreshFallbackApplications();
       return;
     }
-    const roots = await indexRoots(this.#platform, ['/']);
+    const roots = await existingDirectories(applicationDirectories(this.#platform));
     if (!roots.length) {
       this.#callbacks.applications([]);
       return;
     }
     await this.#writeIndex({
-      sources: roots.map((root) => ({
-        id: `applications:${root}`,
+      sources: roots.map((root, index) => ({
+        id: `applications:${index}:${root}`,
         root,
         kinds: ['application'],
-        respectGitIgnore: this.#settings.respectGitIgnore,
+        respectGitIgnore: false,
         includeHidden: this.#settings.includeHidden,
         followSymlinks: false,
+        maxDepth: 1,
       })),
-      customIgnores: this.#settings.customIgnores,
+      customIgnores: [],
       maxEntries: this.#settings.maxEntries,
       resourceLimits: this.#settings.resourceLimits,
-      pruneSourcePrefixes: ['applications:'],
     });
     this.#available = true;
     this.#message = undefined;
@@ -345,12 +273,12 @@ export class IndexingService {
 
   async #indexFilesystem(kinds: IndexKind[]): Promise<void> {
     if (!this.#writer) throw new Error('The bundled Rust filesystem indexer is unavailable');
-    const roots = await indexRoots(this.#platform, this.#settings.roots);
+    const roots = await existingDirectories(this.#settings.roots.map(expandRoot));
     if (!roots.length) throw new Error('None of the configured filesystem index roots are available');
     const indexedKinds = [...new Set([...kinds, 'application' as const])];
     const configuration: IndexConfiguration = {
-      sources: roots.map((root) => ({
-        id: `filesystem:${root}`,
+      sources: roots.map((root, index) => ({
+        id: `filesystem:${index}:${root}`,
         root,
         kinds: indexedKinds,
         respectGitIgnore: this.#settings.respectGitIgnore,
@@ -360,7 +288,6 @@ export class IndexingService {
       customIgnores: this.#settings.customIgnores,
       maxEntries: this.#settings.maxEntries,
       resourceLimits: this.#settings.resourceLimits,
-      pruneSourcePrefixes: ['filesystem:'],
     };
     await this.#writeIndex(configuration);
     this.#available = true;
@@ -371,40 +298,17 @@ export class IndexingService {
   async #writeIndex(configuration: IndexConfiguration): Promise<IndexReport> {
     const writer = this.#writer;
     if (!writer) throw new Error('The bundled Rust filesystem indexer is unavailable');
-    const timeoutMs =
-      this.#settings.customTimeoutMs ??
-      indexTimeoutMs(configuration.resourceLimits?.maxCpuPercent, configuration.maxEntries == null);
     try {
-      const report = await writer.index(configuration, timeoutMs, (progress) =>
-        this.#recordProgress(progress),
+      const report = await writer.index(
+        configuration,
+        indexTimeoutMs(configuration.resourceLimits?.maxCpuPercent, configuration.maxEntries == null),
+        (progress) => this.#recordProgress(progress),
       );
       this.#lastRunResources = report.resources;
-      this.#recentTimings = [
-        {
-          scope: this.#progress?.scope ?? 'all',
-          completedAtMs: report.completedAtMs,
-          durationMs: report.durationMs,
-        },
-        ...this.#recentTimings,
-      ].slice(0, INDEXING_TIMING_SAMPLE_LIMIT);
       this.#lastStatus = structuredClone(report.status);
-      this.#lastStatusReadAtMs = Date.now();
       return report;
     } catch (error) {
       if (!errorMessage(error).includes('timed out')) throw error;
-      const scope = this.#progress?.scope ?? 'all';
-      const message = `Index ${indexScopeLabel(scope)} timed out after ${formatTimeout(timeoutMs)}. Increase the custom index timeout if this scan needs longer.`;
-      this.#timeoutAttempts = [
-        {
-          id: `index-timeout-${Date.now()}-${++this.#timeoutSequence}`,
-          scope,
-          occurredAtMs: Date.now(),
-          timeoutMs,
-          message,
-        },
-        ...this.#timeoutAttempts,
-      ].slice(0, INDEXING_TIMEOUT_ATTEMPT_LIMIT);
-      this.#message = message;
       if (this.#writer === writer) {
         this.#writer = undefined;
         await writer.close();
@@ -418,7 +322,7 @@ export class IndexingService {
       }
       if (this.#platform === 'macos') {
         throw new Error(
-          `${message} If it appears stuck rather than slow, grant Commander Full Disk Access or narrow the configured roots before retrying.`,
+          'Filesystem indexing was stopped after macOS blocked a folder. Grant Commander Full Disk Access or narrow the configured roots, then run Index Files or Index Folders again.',
         );
       }
       throw error;
@@ -462,13 +366,12 @@ export class IndexingService {
 
   async #queryApplications(): Promise<SearchItem[]> {
     if (!this.#reader) return [];
-    const response = await this.#reader.catalogue(['application']);
-    // Read the complete persistent app catalogue, including freshly installed
-    // apps that the bounded direct scan can see before the index catches up.
-    return mergeApplications(
-      response.records.map(indexRecordToSearchItem),
-      await discoverApplicationsQuick(),
-    );
+    const response = await this.#reader.query({
+      query: '',
+      kinds: ['application'],
+      limit: APPLICATION_RESULT_LIMIT,
+    });
+    return response.records.map(indexRecordToSearchItem);
   }
 
   async #automaticRefresh(): Promise<void> {
@@ -500,7 +403,6 @@ export class IndexingService {
       this.#available = true;
       this.#message = undefined;
       this.#lastStatus = structuredClone(status);
-      this.#lastStatusReadAtMs = Date.now();
       return status;
     } catch (error) {
       this.#disableRust(error);
@@ -520,32 +422,17 @@ export class IndexingService {
   }
 
   async #watchApplications(): Promise<void> {
-    // Recursive volume watches deliver broad live coverage on macOS. Keep the
-    // familiar application directories as overlapping fallback watches in
-    // case a filesystem declines a recursive root watch.
-    const roots = await existingDirectories([
-      ...(await indexRoots(this.#platform, ['/'])),
-      ...applicationDirectories(this.#platform),
-    ]);
+    const roots = await existingDirectories(applicationDirectories(this.#platform));
     for (const root of roots) {
       try {
-        const watcher = watch(
-          root,
-          { persistent: false, recursive: this.#platform === 'macos' },
-          (_event, filename) => {
-            // Watching a macOS volume recursively is inexpensive; rescanning
-            // it for every ordinary file save is not. Only application-bundle
-            // and volume-mount events trigger the application catalog refresh.
-            const changedPath = filename?.toString().replaceAll('\\', '/') ?? '';
-            if (changedPath && !isApplicationCatalogChange(changedPath)) return;
-            if (this.#applicationDebounce) clearTimeout(this.#applicationDebounce);
-            this.#applicationDebounce = setTimeout(() => {
-              this.#applicationDebounce = undefined;
-              void this.start('applications').catch(() => undefined);
-            }, 750);
-            this.#applicationDebounce.unref();
-          },
-        );
+        const watcher = watch(root, { persistent: false }, () => {
+          if (this.#applicationDebounce) clearTimeout(this.#applicationDebounce);
+          this.#applicationDebounce = setTimeout(() => {
+            this.#applicationDebounce = undefined;
+            void this.start('applications').catch(() => undefined);
+          }, 750);
+          this.#applicationDebounce.unref();
+        });
         watcher.on('error', () => undefined);
         this.#applicationWatchers.push(watcher);
       } catch {
@@ -553,33 +440,6 @@ export class IndexingService {
       }
     }
   }
-}
-
-function timingSummary(timings: readonly IndexRunTiming[]): IndexingStatus['timing'] {
-  if (!timings.length) return { samples: 0 };
-  const durations = timings.map((timing) => timing.durationMs);
-  return {
-    samples: durations.length,
-    averageDurationMs: Math.round(durations.reduce((total, value) => total + value, 0) / durations.length),
-    lastDurationMs: durations[0]!,
-    longestDurationMs: Math.max(...durations),
-  };
-}
-
-function indexScopeLabel(scope: IndexScope): string {
-  return {
-    all: 'Everything',
-    applications: 'Apps',
-    commands: 'Commands',
-    files: 'Files',
-    directories: 'Folders',
-  }[scope];
-}
-
-function formatTimeout(value: number): string {
-  if (value < 1_000) return `${value} ms`;
-  if (value < 60_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')} seconds`;
-  return `${(value / 60_000).toFixed(1).replace(/\.0$/, '')} minutes`;
 }
 
 export function indexTimeoutMs(maxCpuPercent = 100, unlimited = false): number {
@@ -628,30 +488,6 @@ function expandRoot(value: string): string {
   return path.resolve(value);
 }
 
-/**
- * `/` means every eligible mounted volume on macOS, not merely the files that
- * happened to be one directory below /Applications. Each source stays on its
- * own filesystem in the Rust walker, avoiding duplicate traversal through
- * mount points while still covering external disks explicitly.
- */
-async function indexRoots(platform: Platform, roots: readonly string[]): Promise<string[]> {
-  const expanded = roots.map(expandRoot);
-  if (platform !== 'macos' || !expanded.some((root) => path.resolve(root) === path.parse(root).root))
-    return existingDirectories(expanded);
-  return existingDirectories([...expanded, ...(await mountedVolumeRoots())]);
-}
-
-async function mountedVolumeRoots(): Promise<string[]> {
-  try {
-    const entries = await readdir('/Volumes', { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
-      .map((entry) => path.join('/Volumes', entry.name));
-  } catch {
-    return [];
-  }
-}
-
 async function existingDirectories(values: string[]): Promise<string[]> {
   const unique = [...new Set(values.map((value) => path.resolve(value)))];
   const existing = await Promise.all(
@@ -665,38 +501,6 @@ async function existingDirectories(values: string[]): Promise<string[]> {
     }),
   );
   return existing.filter((value): value is string => Boolean(value));
-}
-
-function mergeApplications(indexed: SearchItem[], fallback: SearchItem[]): SearchItem[] {
-  const paths = new Set<string>();
-  return [...indexed, ...fallback].filter((item) => {
-    const key = item.path ?? item.id;
-    if (paths.has(key)) return false;
-    paths.add(key);
-    return true;
-  });
-}
-
-function deduplicateSearchItems(items: SearchItem[]): SearchItem[] {
-  const paths = new Set<string>();
-  return items.filter((item) => {
-    const key = `${item.kind}:${item.path ?? item.id}`;
-    if (paths.has(key)) return false;
-    paths.add(key);
-    return true;
-  });
-}
-
-function isApplicationCatalogChange(changedPath: string): boolean {
-  const normalized = changedPath.toLowerCase();
-  return (
-    normalized === 'applications' ||
-    normalized.startsWith('applications/') ||
-    normalized === 'volumes' ||
-    normalized.startsWith('volumes/') ||
-    normalized.endsWith('.app') ||
-    normalized.includes('.app/')
-  );
 }
 
 function isDue(status: IndexStatus, kind: IndexKind, minutes: number, now: number): boolean {

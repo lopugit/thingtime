@@ -14,10 +14,7 @@ import type {
   SearchCacheStatus,
   SearchStreamEvent,
   StoreExtension,
-  ThingtimeNetworkProbe,
 } from '@commander/protocol';
-
-import { verifyDaemonLoginCapabilities } from './daemonCapabilities';
 
 const query = new URLSearchParams(window.location.search);
 const sessionToken = query.get('token') ?? '';
@@ -99,9 +96,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ scope }),
     }),
-  activityNetwork: () => request<ThingtimeNetworkProbe>('/api/activity/network'),
-  activityNetworkSpeed: () =>
-    request<ThingtimeNetworkProbe>('/api/activity/network/speed', { method: 'POST' }),
   listExtensions: () => request<{ extensions: CommanderExtension[] }>('/api/extensions'),
   listRaycastExtensions: () => request<LocalRaycastExtensionsResponse>('/api/extensions/raycast'),
   addRaycastExtension: (name: string, installationId: string) =>
@@ -146,10 +140,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(extension),
     }),
-  beginLogin: async () => {
-    await verifyDaemonLoginCapabilities(window.location.origin);
-    return request<{ authorizeUrl: string; state: string }>('/api/accounts/login', { method: 'POST' });
-  },
+  beginLogin: () =>
+    request<{ authorizeUrl: string; state: string }>('/api/accounts/login', { method: 'POST' }),
   completeLogin: (session: unknown) =>
     request<{ account: CommanderAccount }>('/api/accounts/callback', {
       method: 'POST',
@@ -159,13 +151,6 @@ export const api = {
     request<{ account: CommanderAccount }>('/api/accounts/active', {
       method: 'PUT',
       body: JSON.stringify({ id }),
-    }),
-  reconcileAccountEnvironments: (
-    environments: Array<{ accountId: string; baseUrl: string; clientId: string }>,
-  ) =>
-    request<{ accounts: CommanderAccount[] }>('/api/accounts/environments', {
-      method: 'PUT',
-      body: JSON.stringify({ environments }),
     }),
   removeAccount: (id: string) =>
     request<{ ok: true }>(`/api/accounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),

@@ -10,5 +10,3 @@ target/
 .env.local
 runtime/
 coverage/
-release/
-release-upload/

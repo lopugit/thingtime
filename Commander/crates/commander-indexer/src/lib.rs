@@ -26,9 +26,6 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-#[cfg(unix)]
-pub mod backup;
-pub mod backup_ignore;
 mod resources;
 
 use resources::{validate_resource_limits, ResourceGovernor};
@@ -37,12 +34,12 @@ pub use resources::{EffectiveResourceLimits, IndexResourceLimits, IndexResourceU
 const SCHEMA_VERSION: i64 = 3;
 const MAX_SOURCES: usize = 128;
 const MAX_IGNORE_RULES: usize = 512;
+const MAX_QUERY_RESULTS: usize = 1_000;
+const MAX_FUZZY_CANDIDATES: usize = 12_000;
 const MAX_COARSE_QUERY_CHARACTERS: usize = 16;
 const MAX_DIAGNOSTICS: usize = 20;
 const DATABASE_OPEN_RETRY_ATTEMPTS: usize = 100;
 const DATABASE_OPEN_RETRY_DELAY: Duration = Duration::from_millis(25);
-const STRICT_FTS_BUDGET: Duration = Duration::from_millis(200);
-const FUZZY_FTS_BUDGET: Duration = Duration::from_millis(350);
 const COARSE_FUZZY_BUDGET: Duration = Duration::from_millis(350);
 const PATH_FALLBACK_BUDGET: Duration = Duration::from_millis(250);
 const DATABASE_JOURNAL_SIZE_LIMIT_BYTES: u64 = 64 * 1024 * 1024;
@@ -153,12 +150,6 @@ pub struct IndexConfiguration {
     pub max_entries: Option<usize>,
     #[serde(default)]
     pub resource_limits: IndexResourceLimits,
-    /// Optional source namespaces whose records should exactly match this
-    /// configuration after a successful run. Commander uses this to remove
-    /// stale results from an unplugged volume without touching another
-    /// independently indexed namespace.
-    #[serde(default)]
-    pub prune_source_prefixes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -183,8 +174,7 @@ pub struct QueryRequest {
     #[serde(default)]
     pub kinds: Vec<IndexKind>,
     #[serde(default = "default_query_limit")]
-    /// Maximum returned results, not a candidate-scan cap. Null returns all.
-    pub limit: Option<usize>,
+    pub limit: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -368,7 +358,6 @@ impl IndexDatabase {
                 }
             }
         }
-        self.prune_absent_sources(configuration)?;
 
         let indexed = reports.iter().map(|report| report.indexed).sum();
         let skipped = reports.iter().map(|report| report.skipped).sum();
@@ -392,34 +381,40 @@ impl IndexDatabase {
     }
 
     pub fn query(&self, request: &QueryRequest) -> Result<QueryResponse, IndexerError> {
-        let limit = request.limit.unwrap_or(usize::MAX);
-        if limit == 0 {
+        if request.limit == 0 {
             return Ok(QueryResponse {
                 records: Vec::new(),
             });
+        }
+        if request.limit > MAX_QUERY_RESULTS {
+            return Err(IndexerError::new(
+                "invalid_request",
+                format!("limit may not exceed {MAX_QUERY_RESULTS}"),
+            ));
         }
         let kinds = normalized_kinds(&request.kinds);
         let query = request.query.trim();
         let query_length = query.chars().count();
         let mut records = if query_length >= 3 {
-            let mut matches = self.query_fts(query, &kinds, limit)?;
+            let mut matches = self.query_fts(query, &kinds, request.limit)?;
+            rank_records(&mut matches, query);
             if matches.is_empty() {
-                matches = self.query_coarse_fuzzy(query, &kinds, limit)?;
+                matches = self.query_coarse_fuzzy(query, &kinds, request.limit)?;
                 rank_records(&mut matches, query);
             }
             if matches.is_empty() {
-                matches = self.query_path_fallback(query, &kinds, limit)?;
+                matches = self.query_path_fallback(query, &kinds, request.limit)?;
                 rank_records(&mut matches, query);
             }
             matches
         } else if query_length > 0 {
-            self.query_prefix(query, &kinds, limit)?
+            self.query_prefix(query, &kinds, request.limit)?
         } else {
-            let mut matches = self.query_like(query, &kinds, limit)?;
+            let mut matches = self.query_like(query, &kinds, request.limit)?;
             rank_records(&mut matches, query);
             matches
         };
-        deduplicate_records(&mut records, limit);
+        deduplicate_records(&mut records, request.limit);
         Ok(QueryResponse { records })
     }
 
@@ -435,11 +430,9 @@ impl IndexDatabase {
     }
 
     pub fn status(&self) -> Result<IndexStatus, IndexerError> {
-        let total_records: i64 = self.connection.query_row(
-            "SELECT COALESCE(SUM(count), 0) FROM source_status",
-            [],
-            |row| row.get(0),
-        )?;
+        let total_records: i64 =
+            self.connection
+                .query_row("SELECT COUNT(*) FROM records", [], |row| row.get(0))?;
         let mut kinds = Vec::new();
         for kind in [
             IndexKind::Application,
@@ -447,7 +440,7 @@ impl IndexDatabase {
             IndexKind::Directory,
         ] {
             let count: i64 = self.connection.query_row(
-                "SELECT COALESCE(SUM(count), 0) FROM source_status WHERE kind = ?1",
+                "SELECT COUNT(*) FROM records WHERE kind = ?1",
                 [kind.as_str()],
                 |row| row.get(0),
             )?;
@@ -597,81 +590,16 @@ impl IndexDatabase {
         Ok(())
     }
 
-    fn prune_absent_sources(
-        &mut self,
-        configuration: &IndexConfiguration,
-    ) -> Result<(), IndexerError> {
-        if configuration.prune_source_prefixes.is_empty() {
-            return Ok(());
-        }
-        let transaction = self.connection.transaction()?;
-        for prefix in &configuration.prune_source_prefixes {
-            let active_ids = configuration
-                .sources
-                .iter()
-                .filter(|source| source.id.starts_with(prefix))
-                .map(|source| source.id.as_str())
-                .collect::<Vec<_>>();
-            let mut values = vec![SqlValue::Text(format!("{prefix}%"))];
-            values.extend(active_ids.iter().map(|id| SqlValue::Text((*id).to_owned())));
-            let selection = if active_ids.is_empty() {
-                "source_id LIKE ?1".to_owned()
-            } else {
-                let placeholders = (2..=active_ids.len() + 1)
-                    .map(|index| format!("?{index}"))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("source_id LIKE ?1 AND source_id NOT IN ({placeholders})")
-            };
-            transaction.execute(
-                &format!("DELETE FROM records WHERE {selection}"),
-                params_from_iter(values.iter()),
-            )?;
-            transaction.execute(
-                &format!("DELETE FROM source_status WHERE {selection}"),
-                params_from_iter(values.iter()),
-            )?;
-        }
-        transaction.commit()?;
-        Ok(())
-    }
-
     fn query_fts(
         &self,
         query: &str,
         kinds: &[IndexKind],
         limit: usize,
     ) -> Result<Vec<IndexRecord>, IndexerError> {
-        let strict = self
-            .run_bounded_query(STRICT_FTS_BUDGET, || {
-                self.query_strict_fts(query, kinds, limit)
-            })?
-            .unwrap_or_default();
-        if !strict.is_empty() {
-            return Ok(strict);
-        }
-
-        // The typo-tolerant expression ORs query trigrams. On a multi-million
-        // record index, a no-match query containing common trigrams can touch
-        // most of the FTS table. Keep that useful fallback, but never let it
-        // hold the launcher behind an unbounded scan.
-        Ok(self
-            .run_bounded_query(FUZZY_FTS_BUDGET, || {
-                self.query_fts_with_stats(query, kinds, limit)
-            })?
-            .map(|(records, _)| records)
-            .unwrap_or_default())
-    }
-
-    fn query_strict_fts(
-        &self,
-        query: &str,
-        kinds: &[IndexKind],
-        limit: usize,
-    ) -> rusqlite::Result<Vec<IndexRecord>> {
-        let Some(fts_query) = strict_fts_query(query) else {
+        let Some(fts_query) = fuzzy_fts_query(query) else {
             return Ok(Vec::new());
         };
+        let expanded_limit = limit.saturating_mul(12).min(MAX_FUZZY_CANDIDATES);
         let mut statement = self.connection.prepare(
             "SELECT r.path, r.name, r.parent, r.kind, r.modified_at_ms, r.size
              FROM records_fts
@@ -679,50 +607,22 @@ impl IndexDatabase {
              WHERE records_fts MATCH ?1
                AND ((?2 = 1 AND r.kind = 'application')
                  OR (?3 = 1 AND r.kind = 'file')
-                 OR (?4 = 1 AND r.kind = 'directory'))",
+                 OR (?4 = 1 AND r.kind = 'directory'))
+             ORDER BY bm25(records_fts), lower(r.name), r.path
+             LIMIT ?5",
         )?;
         let flags = kind_flags(kinds);
-        let rows =
-            statement.query_map(params![fts_query, flags.0, flags.1, flags.2], row_to_record)?;
-        collect_ranked_rows(rows, query, limit)
-    }
-
-    fn query_fts_with_stats(
-        &self,
-        query: &str,
-        kinds: &[IndexKind],
-        limit: usize,
-    ) -> rusqlite::Result<(Vec<IndexRecord>, usize)> {
-        let Some(fts_query) = fuzzy_fts_query(query) else {
-            return Ok((Vec::new(), 0));
-        };
-        let mut statement = self.connection.prepare(
-            "SELECT r.path, r.name, r.parent, r.kind, r.modified_at_ms, r.size
-             FROM records_fts
-             JOIN records r ON r.rowid = records_fts.rowid
-             WHERE records_fts MATCH ?1
-               AND ((?2 = 1 AND r.kind = 'application')
-                 OR (?3 = 1 AND r.kind = 'file')
-                 OR (?4 = 1 AND r.kind = 'directory'))",
+        let rows = statement.query_map(
+            params![
+                fts_query,
+                flags.0,
+                flags.1,
+                flags.2,
+                i64::try_from(expanded_limit).unwrap_or(i64::MAX)
+            ],
+            row_to_record,
         )?;
-        let flags = kind_flags(kinds);
-        let rows =
-            statement.query_map(params![fts_query, flags.0, flags.1, flags.2], row_to_record)?;
-        let mut records = Vec::with_capacity(limit.min(1_024));
-        let mut candidates_evaluated = 0;
-        let prune_at = limit.saturating_mul(16).max(1_024);
-        for row in rows {
-            let mut record = row?;
-            candidates_evaluated += 1;
-            if rank_record(&mut record, query) {
-                records.push(record);
-                if records.len() >= prune_at {
-                    retain_best_ranked_records(&mut records, limit);
-                }
-            }
-        }
-        retain_best_ranked_records(&mut records, limit);
-        Ok((records, candidates_evaluated))
+        collect_rows(rows)
     }
 
     fn query_prefix(
@@ -732,24 +632,20 @@ impl IndexDatabase {
         limit: usize,
     ) -> Result<Vec<IndexRecord>, IndexerError> {
         let prefix = format!("{}%", escape_like(query));
-        let mut records = Vec::with_capacity(limit.min(1_024));
+        let mut records = Vec::with_capacity(limit.saturating_mul(kinds.len()));
         let mut statement = self.connection.prepare(
             "SELECT path, name, parent, kind, modified_at_ms, size
              FROM records
              WHERE kind = ?1
                AND name LIKE ?2 ESCAPE '\\' COLLATE NOCASE
-             ORDER BY CASE WHEN name = ?3 COLLATE NOCASE THEN 0 ELSE 1 END,
-                      length(name), name COLLATE NOCASE, path
-             LIMIT ?4",
+             ORDER BY name COLLATE NOCASE
+             LIMIT ?3",
         )?;
         for kind in kinds {
-            // This is an output page after SQL ranking, never a pre-ranking
-            // alphabetic candidate slice. An exact name anywhere wins.
             let rows = statement.query_map(
                 params![
                     kind.as_str(),
                     &prefix,
-                    query,
                     i64::try_from(limit).unwrap_or(i64::MAX)
                 ],
                 row_to_record,
@@ -779,6 +675,7 @@ impl IndexDatabase {
         kinds: &[IndexKind],
         limit: usize,
     ) -> Result<Vec<IndexRecord>, IndexerError> {
+        let expanded_limit = limit.saturating_mul(4).min(MAX_QUERY_RESULTS * 4);
         let contains = format!("%{}%", escape_like(query));
         let prefix = format!("{}%", escape_like(query));
         let mut statement = self.connection.prepare(
@@ -808,7 +705,7 @@ impl IndexDatabase {
                 flags.0,
                 flags.1,
                 flags.2,
-                i64::try_from(limit).unwrap_or(i64::MAX)
+                i64::try_from(expanded_limit).unwrap_or(i64::MAX)
             ],
             |row| {
                 let mut record = row_to_record(row)?;
@@ -837,6 +734,10 @@ impl IndexDatabase {
         if prefixes.is_empty() {
             return Ok(Vec::new());
         }
+        let query_length = query
+            .chars()
+            .filter(|character| character.is_alphanumeric())
+            .count();
         let prefix_matches = prefixes
             .iter()
             .enumerate()
@@ -849,27 +750,34 @@ impl IndexDatabase {
         let application_parameter = prefixes.len() + 1;
         let file_parameter = application_parameter + 1;
         let directory_parameter = file_parameter + 1;
+        let length_parameter = directory_parameter + 1;
+        let limit_parameter = length_parameter + 1;
         let sql = format!(
             "SELECT path, name, parent, kind, modified_at_ms, size
              FROM records
              WHERE ({prefix_matches})
                AND ((?{application_parameter} = 1 AND kind = 'application')
                  OR (?{file_parameter} = 1 AND kind = 'file')
-                 OR (?{directory_parameter} = 1 AND kind = 'directory'))"
+                 OR (?{directory_parameter} = 1 AND kind = 'directory'))
+             ORDER BY abs(length(name) - ?{length_parameter}), lower(name), path
+             LIMIT ?{limit_parameter}"
         );
         let flags = kind_flags(kinds);
+        let expanded_limit = limit.saturating_mul(12).min(MAX_FUZZY_CANDIDATES);
         let mut parameters = prefixes.into_iter().map(SqlValue::Text).collect::<Vec<_>>();
         parameters.extend([
             SqlValue::Integer(flags.0),
             SqlValue::Integer(flags.1),
             SqlValue::Integer(flags.2),
+            SqlValue::Integer(i64::try_from(query_length).unwrap_or(i64::MAX)),
+            SqlValue::Integer(i64::try_from(expanded_limit).unwrap_or(i64::MAX)),
         ]);
         Ok(self
             .run_bounded_query(COARSE_FUZZY_BUDGET, || {
                 let mut statement = self.connection.prepare(&sql)?;
                 let rows =
                     statement.query_map(params_from_iter(parameters.iter()), row_to_record)?;
-                collect_ranked_rows(rows, query, limit)
+                rows.collect()
             })?
             .unwrap_or_default())
     }
@@ -883,6 +791,7 @@ impl IndexDatabase {
         Ok(self
             .run_bounded_query(PATH_FALLBACK_BUDGET, || {
                 let contains = format!("%{}%", escape_like(query));
+                let expanded_limit = limit.saturating_mul(4).min(MAX_QUERY_RESULTS * 4);
                 let flags = kind_flags(kinds);
                 let mut statement = self.connection.prepare(
                     "SELECT path, name, parent, kind, modified_at_ms, size
@@ -890,11 +799,20 @@ impl IndexDatabase {
                      WHERE path LIKE ?1 ESCAPE '\\' COLLATE NOCASE
                        AND ((?2 = 1 AND kind = 'application')
                          OR (?3 = 1 AND kind = 'file')
-                         OR (?4 = 1 AND kind = 'directory'))",
+                         OR (?4 = 1 AND kind = 'directory'))
+                     LIMIT ?5",
                 )?;
-                let rows = statement
-                    .query_map(params![contains, flags.0, flags.1, flags.2], row_to_record)?;
-                collect_ranked_rows(rows, query, limit)
+                let rows = statement.query_map(
+                    params![
+                        contains,
+                        flags.0,
+                        flags.1,
+                        flags.2,
+                        i64::try_from(expanded_limit).unwrap_or(i64::MAX)
+                    ],
+                    row_to_record,
+                )?;
+                rows.collect()
             })?
             .unwrap_or_default())
     }
@@ -1121,25 +1039,6 @@ struct ScanContext<'a> {
     governor: Arc<ResourceGovernor>,
 }
 
-/// Shared traversal configuration for search indexing and backup capture.
-fn source_walker(root: &Path, source: &IndexSource, governor: &ResourceGovernor) -> WalkBuilder {
-    let mut builder = WalkBuilder::new(root);
-    builder
-        .threads(governor.effective().worker_threads)
-        .hidden(!source.include_hidden)
-        .follow_links(source.follow_symlinks)
-        .same_file_system(true)
-        .ignore(source.respect_git_ignore)
-        .parents(source.respect_git_ignore)
-        .git_ignore(source.respect_git_ignore)
-        .git_global(source.respect_git_ignore)
-        .git_exclude(source.respect_git_ignore);
-    if let Some(max_depth) = source.max_depth {
-        builder.max_depth(Some(max_depth));
-    }
-    builder
-}
-
 fn scan_and_store(
     transaction: &Transaction<'_>,
     context: ScanContext<'_>,
@@ -1154,7 +1053,22 @@ fn scan_and_store(
         generation,
         governor,
     } = context;
-    let builder = source_walker(root, source, &governor);
+    let mut builder = WalkBuilder::new(root);
+    builder
+        // ignore 0.4.25 is pinned and holds at most one ReadDir per traversal
+        // worker. ResourceGovernor takes the strictest thread, parallel-work,
+        // logical-CPU, and open-directory ceiling before we reach this call.
+        .threads(governor.effective().worker_threads)
+        .hidden(!source.include_hidden)
+        .follow_links(source.follow_symlinks)
+        .ignore(source.respect_git_ignore)
+        .parents(source.respect_git_ignore)
+        .git_ignore(source.respect_git_ignore)
+        .git_global(source.respect_git_ignore)
+        .git_exclude(source.respect_git_ignore);
+    if let Some(max_depth) = source.max_depth {
+        builder.max_depth(Some(max_depth));
+    }
     let walker = builder.build_parallel();
     let kinds: HashSet<IndexKind> = normalized_kinds(&source.kinds).into_iter().collect();
     let (sender, receiver) =
@@ -1592,27 +1506,6 @@ fn validate_configuration(configuration: &IndexConfiguration) -> Result<(), Inde
             "maxEntries must be null/omitted for unlimited indexing or at least 1",
         ));
     }
-    if configuration.prune_source_prefixes.len() > MAX_SOURCES {
-        return Err(IndexerError::new(
-            "invalid_configuration",
-            format!("at most {MAX_SOURCES} source-prune prefixes are allowed"),
-        ));
-    }
-    let mut prune_prefixes = HashSet::new();
-    for prefix in &configuration.prune_source_prefixes {
-        if prefix.trim().is_empty() || prefix.len() > 128 {
-            return Err(IndexerError::new(
-                "invalid_configuration",
-                "source-prune prefixes must contain between 1 and 128 bytes",
-            ));
-        }
-        if !prune_prefixes.insert(prefix.as_str()) {
-            return Err(IndexerError::new(
-                "invalid_configuration",
-                format!("duplicate source-prune prefix: {prefix}"),
-            ));
-        }
-    }
     validate_resource_limits(&configuration.resource_limits)?;
     let mut ids = HashSet::new();
     for source in &configuration.sources {
@@ -1702,28 +1595,6 @@ fn collect_rows(
         .map_err(Into::into)
 }
 
-// Visit every matching row; retain only the best requested output page in
-// memory. A small page must never become an arbitrary pre-ranking scan cap.
-fn collect_ranked_rows(
-    rows: rusqlite::MappedRows<'_, impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<IndexRecord>>,
-    query: &str,
-    limit: usize,
-) -> rusqlite::Result<Vec<IndexRecord>> {
-    let mut records = Vec::with_capacity(limit.min(1_024));
-    let prune_at = limit.saturating_mul(16).max(1_024);
-    for row in rows {
-        let mut record = row?;
-        if rank_record(&mut record, query) {
-            records.push(record);
-            if records.len() >= prune_at {
-                retain_best_ranked_records(&mut records, limit);
-            }
-        }
-    }
-    retain_best_ranked_records(&mut records, limit);
-    Ok(records)
-}
-
 fn deduplicate_records(records: &mut Vec<IndexRecord>, limit: usize) {
     let mut seen = HashSet::new();
     records.retain(|record| seen.insert((record.path.clone(), record.kind)));
@@ -1740,26 +1611,15 @@ fn rank_records(records: &mut Vec<IndexRecord>, query: &str) {
         });
         return;
     }
-    records.retain_mut(|record| rank_record(record, query));
-    sort_ranked_records(records);
-}
-
-fn rank_record(record: &mut IndexRecord, query: &str) -> bool {
-    let name_score = fuzzy_text_score(query, &record.name);
-    let parent_score = fuzzy_text_score(query, &record.parent).map(|score| score * 35 / 100);
-    let Some(score) = name_score.into_iter().chain(parent_score).max() else {
-        return false;
-    };
-    record.score = i64::try_from(score).unwrap_or(i64::MAX);
-    true
-}
-
-fn retain_best_ranked_records(records: &mut Vec<IndexRecord>, limit: usize) {
-    sort_ranked_records(records);
-    records.truncate(limit);
-}
-
-fn sort_ranked_records(records: &mut [IndexRecord]) {
+    records.retain_mut(|record| {
+        let name_score = fuzzy_text_score(query, &record.name);
+        let parent_score = fuzzy_text_score(query, &record.parent).map(|score| score * 35 / 100);
+        let Some(score) = name_score.into_iter().chain(parent_score).max() else {
+            return false;
+        };
+        record.score = i64::try_from(score).unwrap_or(i64::MAX);
+        true
+    });
     records.sort_by(|left, right| {
         right
             .score
@@ -1783,16 +1643,6 @@ fn fuzzy_fts_query(query: &str) -> Option<String> {
         .map(|term| format!("\"{}\"", term.replace('"', "\"\"")))
         .collect::<Vec<_>>();
     (!terms.is_empty()).then(|| terms.join(" OR "))
-}
-
-fn strict_fts_query(query: &str) -> Option<String> {
-    let terms = query
-        .split(|character: char| !character.is_alphanumeric())
-        .map(str::trim)
-        .filter(|term| term.chars().count() >= 3)
-        .map(|term| format!("\"{}\"", term.to_lowercase().replace('"', "\"\"")))
-        .collect::<Vec<_>>();
-    (!terms.is_empty()).then(|| terms.join(" AND "))
 }
 
 fn database_size_bytes(path: &Path) -> u64 {
@@ -1851,8 +1701,8 @@ fn default_true() -> bool {
     true
 }
 
-fn default_query_limit() -> Option<usize> {
-    Some(50)
+fn default_query_limit() -> usize {
+    50
 }
 
 #[cfg(unix)]
@@ -1929,61 +1779,7 @@ mod tests {
             custom_ignores: Vec::new(),
             max_entries: Some(10_000),
             resource_limits: IndexResourceLimits::default(),
-            prune_source_prefixes: Vec::new(),
         }
-    }
-
-    #[test]
-    fn prunes_records_for_disconnected_sources_inside_the_requested_namespace() {
-        let temp = TempDir::new().expect("tempdir");
-        let boot = temp.path().join("boot");
-        let volume = temp.path().join("volume");
-        create_dir_all(&boot).expect("boot directory");
-        create_dir_all(&volume).expect("volume directory");
-        write(boot.join("boot.txt"), "boot").expect("boot file");
-        write(volume.join("volume.txt"), "volume").expect("volume file");
-
-        let mut first = configuration(&boot, vec![IndexKind::File]);
-        first.sources = vec![
-            IndexSource {
-                id: "filesystem:/".to_owned(),
-                root: boot.clone(),
-                kinds: vec![IndexKind::File],
-                respect_git_ignore: true,
-                include_hidden: false,
-                follow_symlinks: false,
-                max_depth: None,
-            },
-            IndexSource {
-                id: "filesystem:/Volumes/Work".to_owned(),
-                root: volume,
-                kinds: vec![IndexKind::File],
-                respect_git_ignore: true,
-                include_hidden: false,
-                follow_symlinks: false,
-                max_depth: None,
-            },
-        ];
-        first.prune_source_prefixes = vec!["filesystem:".to_owned()];
-        let mut database = database(&temp);
-        database.index(&first).expect("initial index");
-
-        let mut after_unmount = configuration(&boot, vec![IndexKind::File]);
-        after_unmount.sources[0].id = "filesystem:/".to_owned();
-        after_unmount.prune_source_prefixes = vec!["filesystem:".to_owned()];
-        database
-            .index(&after_unmount)
-            .expect("reconcile mounted sources");
-
-        let records = database
-            .query(&QueryRequest {
-                query: String::new(),
-                kinds: vec![IndexKind::File],
-                limit: Some(20),
-            })
-            .expect("query");
-        assert_eq!(records.records.len(), 1);
-        assert_eq!(records.records[0].name, "boot.txt");
     }
 
     #[test]
@@ -2087,7 +1883,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "keep".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("query");
         assert_eq!(results.records.len(), 1);
@@ -2132,7 +1928,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "keep".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("query");
         assert_eq!(results.records.len(), 1);
@@ -2162,7 +1958,7 @@ mod tests {
             .query(&QueryRequest {
                 query: String::new(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("query");
         let names: Vec<_> = results
@@ -2198,7 +1994,7 @@ mod tests {
             .query(&QueryRequest {
                 query: String::new(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("query");
         assert_eq!(results.records.len(), 1);
@@ -2224,12 +2020,11 @@ mod tests {
     }
 
     #[test]
-    fn deeply_nested_application_bundles_are_indexed_without_walking_their_contents() {
+    fn application_bundles_are_indexed_without_walking_their_contents() {
         let temp = TempDir::new().expect("tempdir");
-        create_dir_all(temp.path().join("Managed/Store/Example.app/Contents/MacOS")).expect("app");
+        create_dir_all(temp.path().join("Example.app/Contents/MacOS")).expect("app");
         write(
-            temp.path()
-                .join("Managed/Store/Example.app/Contents/MacOS/example"),
+            temp.path().join("Example.app/Contents/MacOS/example"),
             "binary",
         )
         .expect("binary");
@@ -2248,7 +2043,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "Example".to_owned(),
                 kinds: vec![IndexKind::Application],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("query apps");
         assert_eq!(applications.records.len(), 1);
@@ -2257,7 +2052,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "example".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("query files");
         assert!(files.records.is_empty());
@@ -2289,7 +2084,7 @@ mod tests {
             .query(&QueryRequest {
                 query: String::new(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("files")
             .records;
@@ -2306,7 +2101,7 @@ mod tests {
             .query(&QueryRequest {
                 query: String::new(),
                 kinds: vec![IndexKind::Directory],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("directories")
             .records;
@@ -2337,7 +2132,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "Media".to_owned(),
                 kinds: vec![IndexKind::Directory],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("directories");
         assert_eq!(directories.records.len(), 1);
@@ -2346,7 +2141,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "private".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("files");
         assert!(files.records.is_empty());
@@ -2373,7 +2168,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "note".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("query files")
             .records
@@ -2382,7 +2177,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "folder".to_owned(),
                 kinds: vec![IndexKind::Directory],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("query dirs")
             .records
@@ -2402,218 +2197,11 @@ mod tests {
             .query(&QueryRequest {
                 query: "invoice.txt".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("query")
             .records;
         assert_eq!(records[0].name, "invoice.txt");
-    }
-
-    #[test]
-    fn every_catalogue_can_return_more_than_one_thousand_records_without_reindexing() {
-        let temp = TempDir::new().expect("tempdir");
-        let mut database = database(&temp);
-        let transaction = database.connection.transaction().expect("transaction");
-        for kind in [
-            IndexKind::Application,
-            IndexKind::File,
-            IndexKind::Directory,
-        ] {
-            for index in 0..1_501 {
-                let name = format!("catalogue-{index:04}");
-                transaction
-                    .execute(
-                        "INSERT INTO records(source_id, path, name, parent, kind, generation)
-                     VALUES ('catalogue-test', ?1, ?2, '/tmp', ?3, 1)",
-                        params![
-                            format!("/tmp/{}/{name}", kind.as_str()),
-                            name,
-                            kind.as_str()
-                        ],
-                    )
-                    .expect("insert catalogue record");
-            }
-        }
-        transaction.commit().expect("commit catalogue");
-        let writes = database.connection.total_changes();
-        for kind in [
-            IndexKind::Application,
-            IndexKind::File,
-            IndexKind::Directory,
-        ] {
-            for limit in [None, Some(1_501)] {
-                for query in ["", "catalogue", "ca"] {
-                    let response = database
-                        .query(&QueryRequest {
-                            query: query.to_owned(),
-                            kinds: vec![kind],
-                            limit,
-                        })
-                        .expect("complete catalogue query");
-                    assert_eq!(response.records.len(), 1_501, "{kind:?}: {query}");
-                    assert!(response
-                        .records
-                        .iter()
-                        .any(|record| record.name == "catalogue-1500"));
-                }
-            }
-        }
-        assert_eq!(
-            database.connection.total_changes(),
-            writes,
-            "queries must not index or write"
-        );
-    }
-
-    #[test]
-    fn short_prefix_ranks_before_taking_the_output_page() {
-        let temp = TempDir::new().expect("tempdir");
-        let mut database = database(&temp);
-        let transaction = database.connection.transaction().expect("transaction");
-        for index in 0..1_501 {
-            let name = format!("aa-long-name-{index:04}");
-            transaction
-                .execute(
-                    "INSERT INTO records(source_id, path, name, parent, kind, generation)
-                 VALUES ('prefix-test', ?1, ?2, '/tmp', 'file', 1)",
-                    params![format!("/tmp/{name}"), name],
-                )
-                .expect("insert prefix noise");
-        }
-        transaction
-            .execute(
-                "INSERT INTO records(source_id, path, name, parent, kind, generation)
-             VALUES ('prefix-test', '/tmp/az', 'az', '/tmp', 'file', 1)",
-                [],
-            )
-            .expect("insert late best match");
-        transaction.commit().expect("commit");
-        let response = database
-            .query(&QueryRequest {
-                query: "a".to_owned(),
-                kinds: vec![IndexKind::File],
-                limit: Some(1),
-            })
-            .expect("prefix page");
-        assert_eq!(response.records[0].name, "az");
-    }
-
-    #[test]
-    fn query_limit_defaults_to_a_page_and_null_requests_all_results() {
-        let default: QueryRequest =
-            serde_json::from_value(serde_json::json!({"query": ""})).unwrap();
-        let all: QueryRequest =
-            serde_json::from_value(serde_json::json!({"query": "", "limit": null})).unwrap();
-        assert_eq!(default.limit, Some(50));
-        assert_eq!(all.limit, None);
-    }
-
-    #[test]
-    fn multiword_query_finds_names_across_separators_with_the_strict_fts_path() {
-        let temp = TempDir::new().expect("tempdir");
-        create_dir_all(temp.path().join("Thingtime Recovery.app")).expect("exact application");
-        write(temp.path().join("thingtime-notes.txt"), "noise").expect("thingtime noise");
-        write(temp.path().join("recovery-notes.txt"), "noise").expect("recovery noise");
-        let mut database = database(&temp);
-        database
-            .index(&configuration(
-                temp.path(),
-                vec![IndexKind::Application, IndexKind::File],
-            ))
-            .expect("index");
-
-        let records = database
-            .query(&QueryRequest {
-                query: "thingtime recovery".to_owned(),
-                kinds: vec![IndexKind::Application, IndexKind::File],
-                limit: Some(20),
-            })
-            .expect("query")
-            .records;
-
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].kind, IndexKind::Application);
-        assert_eq!(records[0].name, "Thingtime Recovery");
-    }
-
-    #[test]
-    fn strict_fts_query_requires_each_search_word() {
-        assert_eq!(
-            strict_fts_query("Thingtime recovery"),
-            Some("\"thingtime\" AND \"recovery\"".to_owned())
-        );
-        assert_eq!(
-            strict_fts_query("raycast-start"),
-            Some("\"raycast\" AND \"start\"".to_owned())
-        );
-        assert_eq!(strict_fts_query("a !"), None);
-    }
-
-    #[test]
-    fn broad_fuzzy_fts_can_be_interrupted_by_its_time_budget() {
-        let temp = TempDir::new().expect("tempdir");
-        let mut database = database(&temp);
-        let transaction = database.connection.transaction().expect("transaction");
-        for index in 0..5_000 {
-            let name = if index % 2 == 0 {
-                format!("thingtime-noise-{index}")
-            } else {
-                format!("recovery-noise-{index}")
-            };
-            transaction
-                .execute(
-                    "INSERT INTO records(source_id, path, name, parent, kind, generation)
-                     VALUES ('budget-test', ?1, ?2, '/tmp', 'file', 1)",
-                    params![format!("/tmp/{name}"), name],
-                )
-                .expect("insert noise record");
-        }
-        transaction.commit().expect("commit noise records");
-
-        let result = database
-            .run_bounded_query(Duration::ZERO, || {
-                database.query_fts_with_stats(
-                    "thingtime recovery totally nonexistent zephyr",
-                    &[IndexKind::File],
-                    20,
-                )
-            })
-            .expect("bounded query");
-
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn mixed_kind_query_has_no_pre_ranking_candidate_cap() {
-        let temp = TempDir::new().expect("tempdir");
-        create_dir_all(temp.path().join("raycast-stop.app")).expect("exact application");
-        for index in 0..64 {
-            write(
-                temp.path().join(format!("raycast-start-{index:02}.txt")),
-                "noise",
-            )
-            .expect("raycast noise");
-            write(temp.path().join(format!("stop-{index:02}.txt")), "noise").expect("stop noise");
-        }
-        let mut database = database(&temp);
-        database
-            .index(&configuration(
-                temp.path(),
-                vec![IndexKind::Application, IndexKind::File],
-            ))
-            .expect("index");
-
-        let (records, candidates_evaluated) = database
-            .query_fts_with_stats(
-                "raycast stop",
-                &[IndexKind::Application, IndexKind::File],
-                1,
-            )
-            .expect("query");
-
-        assert_eq!(candidates_evaluated, 129);
-        assert_eq!(records[0].kind, IndexKind::Application);
-        assert_eq!(records[0].name, "raycast-stop");
     }
 
     #[test]
@@ -2630,7 +2218,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "ea".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("short prefix query")
             .records;
@@ -2657,7 +2245,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "raycsat".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("transposition query")
             .records;
@@ -2667,7 +2255,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "settngs".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("omission query")
             .records;
@@ -2677,7 +2265,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "nite".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("short substitution query")
             .records;
@@ -2698,7 +2286,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "invoices".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("query")
             .records;
@@ -2802,7 +2390,7 @@ mod tests {
             .query(&QueryRequest {
                 query: String::new(),
                 kinds: vec![IndexKind::File],
-                limit: Some(20),
+                limit: 20,
             })
             .expect("query preserved index")
             .records;

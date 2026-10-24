@@ -10,7 +10,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         launcher: fileURLToPath(new URL('./launcher.html', import.meta.url)),
-        processes: fileURLToPath(new URL('./processes.html', import.meta.url)),
         settings: fileURLToPath(new URL('./settings.html', import.meta.url)),
       },
     },

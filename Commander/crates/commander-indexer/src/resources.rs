@@ -10,7 +10,7 @@ pub(crate) const MIN_RESOURCE_MEMORY_MIB: usize = 32;
 pub(crate) const MAX_RESOURCE_THREADS: usize = 64;
 pub(crate) const MAX_RESOURCE_PARALLELISM: usize = 64;
 pub(crate) const MAX_OPEN_DIRECTORIES: usize = 256;
-pub(crate) const MIN_CPU_PERCENT: usize = 1;
+pub(crate) const MIN_CPU_PERCENT: usize = 5;
 pub(crate) const MAX_CPU_PERCENT: usize = 100;
 
 const DEFAULT_MAX_THREADS: usize = 2;
@@ -75,21 +75,14 @@ pub struct EffectiveResourceLimits {
 pub struct IndexResourceUsage {
     pub effective: EffectiveResourceLimits,
     pub cpu_time_ms: u64,
-    pub cpu_time_nanoseconds: u64,
-    pub wall_time_nanoseconds: u64,
     pub average_cpu_percent: usize,
     pub peak_memory_bytes: u64,
     pub throttled_ms: u64,
     pub memory_checks: u64,
-    pub active_worker_limit: usize,
-    pub cpu_measurement_available: bool,
 }
 
 pub(crate) struct ResourceGovernor {
     effective: EffectiveResourceLimits,
-    cpu_share: usize,
-    active_workers: AtomicUsize,
-    active_worker_limit: AtomicUsize,
     started_wall: Instant,
     started_cpu: Option<ProcessTime>,
     checkpoints: AtomicUsize,
@@ -101,13 +94,6 @@ pub(crate) struct ResourceGovernor {
     cpu_window: Mutex<CpuWindow>,
 }
 
-pub(crate) struct WorkerPermit<'a>(&'a ResourceGovernor);
-impl Drop for WorkerPermit<'_> {
-    fn drop(&mut self) {
-        self.0.active_workers.fetch_sub(1, Ordering::Release);
-    }
-}
-
 struct CpuWindow {
     wall: Instant,
     cpu: Option<ProcessTime>,
@@ -115,12 +101,6 @@ struct CpuWindow {
 
 impl ResourceGovernor {
     pub(crate) fn new(limits: &IndexResourceLimits) -> Result<Self, IndexerError> {
-        Self::new_with_cpu_share(limits, 1)
-    }
-    pub(crate) fn new_with_cpu_share(
-        limits: &IndexResourceLimits,
-        cpu_share: usize,
-    ) -> Result<Self, IndexerError> {
         validate_resource_limits(limits)?;
         let started_wall = Instant::now();
         let started_cpu = Some(ProcessTime::try_now().map_err(|error| {
@@ -131,11 +111,6 @@ impl ResourceGovernor {
         })?);
         let governor = Self {
             effective: effective_resource_limits(limits, logical_cpu_count()),
-            cpu_share: cpu_share.max(1),
-            active_workers: AtomicUsize::new(0),
-            active_worker_limit: AtomicUsize::new(
-                effective_resource_limits(limits, logical_cpu_count()).worker_threads,
-            ),
             started_wall,
             started_cpu,
             checkpoints: AtomicUsize::new(0),
@@ -174,55 +149,30 @@ impl ResourceGovernor {
         Ok(())
     }
 
-    /// Each directory/file observation holds one eligible worker slot. CPU
-    /// feedback lowers this gate without spawning a second traversal pool.
-    pub(crate) fn admit(&self) -> Result<WorkerPermit<'_>, IndexerError> {
-        loop {
-            self.checkpoint()?;
-            self.throttle_cpu();
-            let active = self.active_workers.load(Ordering::Relaxed);
-            if active < self.active_worker_limit.load(Ordering::Relaxed)
-                && self
-                    .active_workers
-                    .compare_exchange(active, active + 1, Ordering::AcqRel, Ordering::Relaxed)
-                    .is_ok()
-            {
-                return Ok(WorkerPermit(self));
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-    }
-
     pub(crate) fn check_memory_now(&self) -> Result<(), IndexerError> {
         self.sample_memory()
     }
 
     pub(crate) fn finish(&self) -> IndexResourceUsage {
         self.enforce_total_cpu_average();
-        self.snapshot()
-    }
-
-    pub(crate) fn snapshot(&self) -> IndexResourceUsage {
         let elapsed = self.started_wall.elapsed();
-        let measured_cpu = self.started_cpu.and_then(|started| {
-            ProcessTime::try_now()
-                .ok()
-                .map(|now| now.duration_since(started))
-        });
-        let cpu_time = measured_cpu.unwrap_or_default();
+        let cpu_time = self
+            .started_cpu
+            .and_then(|started| {
+                ProcessTime::try_now()
+                    .ok()
+                    .map(|now| now.duration_since(started))
+            })
+            .unwrap_or_default();
         let average_cpu_percent =
             average_cpu_percent(cpu_time, elapsed, self.effective.logical_cpu_count);
         IndexResourceUsage {
             effective: self.effective.clone(),
             cpu_time_ms: duration_ms(cpu_time),
-            cpu_time_nanoseconds: u64::try_from(cpu_time.as_nanos()).unwrap_or(u64::MAX),
-            wall_time_nanoseconds: u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX),
             average_cpu_percent,
             peak_memory_bytes: self.peak_memory_bytes.load(Ordering::Relaxed),
             throttled_ms: nanos_to_millis(self.throttled_ns.load(Ordering::Relaxed)),
             memory_checks: self.memory_checks.load(Ordering::Relaxed),
-            active_worker_limit: self.active_worker_limit.load(Ordering::Relaxed),
-            cpu_measurement_available: measured_cpu.is_some(),
         }
     }
 
@@ -277,28 +227,11 @@ impl ResourceGovernor {
             return;
         };
         let cpu_elapsed = now_cpu.duration_since(started_cpu);
-        let percent = cpu_elapsed.as_secs_f64()
-            / wall_elapsed.as_secs_f64()
-            / self.effective.logical_cpu_count as f64
-            * 100.0;
-        let limit = self.active_worker_limit.load(Ordering::Relaxed);
-        if percent * self.cpu_share as f64 > self.effective.max_cpu_percent as f64 {
-            self.active_worker_limit
-                .store(limit.saturating_sub(1).max(1), Ordering::Relaxed);
-        } else if percent * self.cpu_share as f64 * 5.0
-            < self.effective.max_cpu_percent as f64 * 4.0
-            && wall_elapsed >= CPU_WINDOW_RESET
-        {
-            self.active_worker_limit.store(
-                (limit + 1).min(self.effective.worker_threads),
-                Ordering::Relaxed,
-            );
-        }
         let sleep_for = cpu_throttle_delay(
             cpu_elapsed,
             wall_elapsed,
             self.effective.logical_cpu_count,
-            self.effective.max_cpu_percent as f64 / self.cpu_share as f64,
+            self.effective.max_cpu_percent,
         )
         .min(MAX_THROTTLE_SLEEP);
         if !sleep_for.is_zero() {
@@ -329,7 +262,7 @@ impl ResourceGovernor {
             now_cpu.duration_since(started_cpu),
             self.started_wall.elapsed(),
             self.effective.logical_cpu_count,
-            self.effective.max_cpu_percent as f64 / self.cpu_share as f64,
+            self.effective.max_cpu_percent,
         );
         if sleep_for.is_zero() {
             return;
@@ -433,12 +366,12 @@ fn cpu_throttle_delay(
     cpu_elapsed: Duration,
     wall_elapsed: Duration,
     logical_cpus: usize,
-    max_cpu_percent: f64,
+    max_cpu_percent: usize,
 ) -> Duration {
-    if wall_elapsed.is_zero() || logical_cpus == 0 || max_cpu_percent == 0.0 {
+    if wall_elapsed.is_zero() || logical_cpus == 0 || max_cpu_percent == 0 {
         return Duration::ZERO;
     }
-    let capacity = logical_cpus as f64 * max_cpu_percent / 100.0;
+    let capacity = logical_cpus as f64 * max_cpu_percent as f64 / 100.0;
     let allowed_cpu_seconds = wall_elapsed.as_secs_f64() * capacity;
     let excess_cpu_seconds = cpu_elapsed.as_secs_f64() - allowed_cpu_seconds;
     if excess_cpu_seconds <= 0.0 {
@@ -520,7 +453,7 @@ mod tests {
                 Duration::from_millis(300),
                 Duration::from_millis(100),
                 4,
-                50.0,
+                50,
             ),
             Duration::from_millis(50)
         );
@@ -529,7 +462,7 @@ mod tests {
                 Duration::from_millis(150),
                 Duration::from_millis(100),
                 4,
-                50.0,
+                50,
             ),
             Duration::ZERO
         );

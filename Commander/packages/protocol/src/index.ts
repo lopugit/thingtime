@@ -7,22 +7,6 @@ export const COMMANDER_THINGTIME_PRODUCTION_CLIENT_ID = 'ttapp_7a68dafc-23c0-451
 export const COMMANDER_THINGTIME_DEVELOPMENT_CLIENT_ID = 'ttapp_5aec98d2-b17b-4396-b450-528ccc730d0e';
 /** Compatibility alias for the production client. */
 export const COMMANDER_THINGTIME_CLIENT_ID = COMMANDER_THINGTIME_PRODUCTION_CLIENT_ID;
-export const COMMANDER_THINGTIME_CUSTOM_ENVIRONMENT_LIMIT = 16;
-
-export const COMMANDER_THINGTIME_ENVIRONMENTS = [
-  {
-    id: 'production',
-    name: 'Production',
-    baseUrl: COMMANDER_THINGTIME_PRODUCTION_URL,
-    clientId: COMMANDER_THINGTIME_PRODUCTION_CLIENT_ID,
-  },
-  {
-    id: 'development',
-    name: 'Develop',
-    baseUrl: COMMANDER_THINGTIME_DEVELOPMENT_URL,
-    clientId: COMMANDER_THINGTIME_DEVELOPMENT_CLIENT_ID,
-  },
-] as const;
 
 /**
  * Built-in IDs that Commander shipped before their registration was corrected.
@@ -75,7 +59,7 @@ export const COMMAND_SHORTCUT_LIMIT = 256;
 export const INDEXING_ROOT_LIMIT = 32;
 export const INDEXING_IGNORE_RULE_LIMIT = 256;
 export const INDEXING_MAX_ENTRIES_LIMIT = Number.MAX_SAFE_INTEGER;
-export const INDEXING_SETTINGS_VERSION = 5 as const;
+export const INDEXING_SETTINGS_VERSION = 3 as const;
 export const INDEXING_MAX_THREADS_LIMIT = 64;
 export const INDEXING_MAX_PARALLELISM_LIMIT = 64;
 export const INDEXING_MAX_OPEN_DIRECTORIES_LIMIT = 256;
@@ -83,8 +67,6 @@ export const INDEXING_MIN_CPU_PERCENT = 5;
 export const INDEXING_MAX_CPU_PERCENT = 100;
 export const INDEXING_MIN_MEMORY_MIB = 32;
 export const INDEXING_MAX_MEMORY_MIB = 131_072;
-export const INDEXING_TIMEOUT_ATTEMPT_LIMIT = 20;
-export const INDEXING_TIMING_SAMPLE_LIMIT = 20;
 export const CALCULATOR_MIN_DECIMAL_PLACES = 0;
 export const CALCULATOR_MAX_DECIMAL_PLACES = 14;
 
@@ -155,22 +137,10 @@ export const DEFAULT_CALCULATOR_SETTINGS: CalculatorSettings = {
   maxDecimalPlaces: 10,
 };
 
-export const DEFAULT_ACTIVITY_SETTINGS: ActivitySettings = {
-  // Ping is cheap enough to keep current while the Activity page is open. A
-  // complete speed test transfers 35.6 MiB in both directions, so it remains
-  // explicitly opt-in instead of silently consuming a connection in the
-  // background.
-  periodicSpeedTestEnabled: false,
-  periodicSpeedTestIntervalMinutes: 15,
-};
-
 export const DEFAULT_INDEXING_SETTINGS: IndexingSettings = {
   version: INDEXING_SETTINGS_VERSION,
   enabled: true,
-  // `/` is expanded by the daemon into the boot volume plus currently mounted
-  // macOS volumes. The Rust walker never crosses a mount boundary implicitly,
-  // so each file is indexed once unless a user explicitly adds an overlap.
-  roots: ['/'],
+  roots: ['~'],
   respectGitIgnore: true,
   includeHidden: true,
   customIgnores: [
@@ -179,7 +149,6 @@ export const DEFAULT_INDEXING_SETTINGS: IndexingSettings = {
   ],
   refreshIntervalMinutes: 6 * 60,
   maxEntries: null,
-  customTimeoutMs: null,
   resourceLimits: { ...DEFAULT_INDEXING_RESOURCE_LIMITS },
 };
 
@@ -241,46 +210,6 @@ function normalizedText(value: unknown, maximumLength: number): string | undefin
   if (typeof value !== 'string') return undefined;
   const text = value.trim().slice(0, maximumLength);
   return text || undefined;
-}
-
-export interface CommanderThingtimeCustomEnvironment {
-  id: string;
-  name: string;
-  baseUrl: string;
-  clientId: string;
-}
-
-function normalizedEnvironmentUrl(value: unknown): string | undefined {
-  const text = normalizedText(value, 512);
-  if (!text) return undefined;
-  try {
-    const url = new URL(text);
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined;
-    return text.replace(/\/+$/, '');
-  } catch {
-    return undefined;
-  }
-}
-
-export function normalizeCommanderThingtimeCustomEnvironments(
-  value: unknown,
-): CommanderThingtimeCustomEnvironment[] {
-  if (!Array.isArray(value)) return [];
-  const environments: CommanderThingtimeCustomEnvironment[] = [];
-  const ids = new Set<string>();
-  for (const candidate of value) {
-    if (!candidate || typeof candidate !== 'object') continue;
-    const item = candidate as Partial<CommanderThingtimeCustomEnvironment>;
-    const id = normalizedText(item.id, 96);
-    const name = normalizedText(item.name, 96);
-    const baseUrl = normalizedEnvironmentUrl(item.baseUrl);
-    const clientId = normalizedText(item.clientId, 256);
-    if (!id || !name || !baseUrl || !clientId || ids.has(id)) continue;
-    ids.add(id);
-    environments.push({ id, name, baseUrl, clientId });
-    if (environments.length === COMMANDER_THINGTIME_CUSTOM_ENVIRONMENT_LIMIT) break;
-  }
-  return environments;
 }
 
 function boundedInteger(value: unknown, minimum: number, maximum: number, fallback: number): number {
@@ -450,11 +379,9 @@ export function fuzzyTextScore(queryValue: string, candidateValue: string): numb
   const value = [...candidateValue.toLowerCase()].slice(0, 512).join('');
   if (!query) return 0;
   if (!value) return -1;
-  const compactQuery = compactSearchText(query);
-  const compactValue = compactSearchText(value);
-  if (compactValue === compactQuery) return 100_000;
-  if (compactValue.startsWith(compactQuery)) return 80_000 - compactValue.length;
-  const containedAt = compactValue.indexOf(compactQuery);
+  if (value === query) return 100_000;
+  if (value.startsWith(query)) return 80_000 - value.length;
+  const containedAt = value.indexOf(query);
   if (containedAt >= 0) return 60_000 - containedAt;
   let cursor = 0;
   let gaps = 0;
@@ -469,6 +396,8 @@ export function fuzzyTextScore(queryValue: string, candidateValue: string): numb
     cursor = found + 1;
   }
   if (subsequence) return 10_000 - gaps;
+  const compactQuery = compactSearchText(query);
+  const compactValue = compactSearchText(value);
   if (compactQuery.length < 3 || !compactValue) return -1;
   const distance = substringDamerauDistance(compactQuery, compactValue);
   return distance <= maximumTypoDistance(compactQuery.length) ? 8_000 - distance * 1_500 : -1;
@@ -607,29 +536,6 @@ export function normalizeCalculatorSettings(value: unknown): CalculatorSettings 
   };
 }
 
-export function normalizeActivitySettings(value: unknown): ActivitySettings {
-  const candidate =
-    value && typeof value === 'object' && !Array.isArray(value) ? (value as Partial<ActivitySettings>) : {};
-  return {
-    periodicSpeedTestEnabled:
-      typeof candidate.periodicSpeedTestEnabled === 'boolean'
-        ? candidate.periodicSpeedTestEnabled
-        : DEFAULT_ACTIVITY_SETTINGS.periodicSpeedTestEnabled,
-    periodicSpeedTestIntervalMinutes: boundedInteger(
-      candidate.periodicSpeedTestIntervalMinutes,
-      5,
-      24 * 60,
-      DEFAULT_ACTIVITY_SETTINGS.periodicSpeedTestIntervalMinutes,
-    ),
-  };
-}
-
-export const DEFAULT_USE_CUSTOM_WINDOW_RESIZE_HANDLING = true;
-
-export function normalizeCustomWindowResizeHandling(value: unknown): boolean {
-  return typeof value === 'boolean' ? value : DEFAULT_USE_CUSTOM_WINDOW_RESIZE_HANDLING;
-}
-
 export function normalizeIndexingSettings(value: unknown): IndexingSettings {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const candidate = source as Partial<IndexingSettings>;
@@ -672,10 +578,6 @@ export function normalizeIndexingSettings(value: unknown): IndexingSettings {
         ? Math.min(24 * 60, Math.max(5, candidate.refreshIntervalMinutes!))
         : DEFAULT_INDEXING_SETTINGS.refreshIntervalMinutes;
   const currentVersion = candidate.version === INDEXING_SETTINGS_VERSION;
-  // `~` was Commander’s default before whole-volume indexing. Preserve every
-  // deliberate multi-root/custom configuration, while upgrading that legacy
-  // singleton default so existing installs receive the new behavior.
-  const upgradeLegacyDefaultRoot = !currentVersion && roots.length === 1 && roots[0] === '~';
   const maxEntries =
     candidate.maxEntries === null
       ? null
@@ -688,11 +590,7 @@ export function normalizeIndexingSettings(value: unknown): IndexingSettings {
   return {
     version: INDEXING_SETTINGS_VERSION,
     enabled: typeof candidate.enabled === 'boolean' ? candidate.enabled : DEFAULT_INDEXING_SETTINGS.enabled,
-    roots: upgradeLegacyDefaultRoot
-      ? [...DEFAULT_INDEXING_SETTINGS.roots]
-      : roots.length
-        ? roots
-        : [...DEFAULT_INDEXING_SETTINGS.roots],
+    roots: roots.length ? roots : [...DEFAULT_INDEXING_SETTINGS.roots],
     respectGitIgnore:
       typeof candidate.respectGitIgnore === 'boolean'
         ? candidate.respectGitIgnore
@@ -710,12 +608,6 @@ export function normalizeIndexingSettings(value: unknown): IndexingSettings {
           : DEFAULT_INDEXING_SETTINGS.customIgnores.map((rule) => ({ ...rule })),
     refreshIntervalMinutes,
     maxEntries,
-    customTimeoutMs:
-      candidate.customTimeoutMs === null
-        ? null
-        : Number.isSafeInteger(candidate.customTimeoutMs) && candidate.customTimeoutMs! > 0
-          ? candidate.customTimeoutMs!
-          : DEFAULT_INDEXING_SETTINGS.customTimeoutMs,
     resourceLimits: normalizeIndexingResourceLimits(candidate.resourceLimits),
   };
 }
@@ -763,7 +655,6 @@ export interface CommanderSettings {
   showMenuBarIcon: boolean;
   showFavouritesInCompactMode: boolean;
   windowMode: WindowMode;
-  useCustomWindowResizeHandling: boolean;
   appearance: Appearance;
   textSize: TextSize;
   hotkey: string;
@@ -772,13 +663,11 @@ export interface CommanderSettings {
   searchCache: SearchCacheSettings;
   emojiDefaultAction: EmojiDefaultAction;
   calculator: CalculatorSettings;
-  activity: ActivitySettings;
   windowPinning: WindowPinningSettings;
   indexing: IndexingSettings;
   activeAccountId: string | null;
   thingtimeBaseUrl: string;
   thingtimeClientId: string;
-  thingtimeCustomEnvironments: CommanderThingtimeCustomEnvironment[];
   syncRevision: number;
   syncUpdatedAt: string | null;
   syncDirty: boolean;
@@ -794,11 +683,6 @@ export interface SearchCacheSettings {
 export interface CalculatorSettings {
   enabled: boolean;
   maxDecimalPlaces: number;
-}
-
-export interface ActivitySettings {
-  periodicSpeedTestEnabled: boolean;
-  periodicSpeedTestIntervalMinutes: number;
 }
 
 export interface SearchCacheStatus extends SearchCacheSettings {
@@ -828,8 +712,6 @@ export interface IndexingSettings {
   customIgnores: IndexIgnoreRule[];
   refreshIntervalMinutes: number;
   maxEntries: number | null;
-  /** Blank keeps Commander’s automatic timeout; a positive safe integer is milliseconds. */
-  customTimeoutMs: number | null;
   resourceLimits: IndexingResourceLimits;
 }
 
@@ -860,27 +742,6 @@ export interface IndexingResourceUsage {
   memoryChecks: number;
 }
 
-export interface IndexRunTiming {
-  scope: IndexScope;
-  completedAtMs: number;
-  durationMs: number;
-}
-
-export interface IndexTimingSummary {
-  samples: number;
-  averageDurationMs?: number;
-  lastDurationMs?: number;
-  longestDurationMs?: number;
-}
-
-export interface IndexTimeoutAttempt {
-  id: string;
-  scope: IndexScope;
-  occurredAtMs: number;
-  timeoutMs: number;
-  message: string;
-}
-
 export interface IndexKindStatus {
   kind: IndexKind;
   count: number;
@@ -903,11 +764,8 @@ export interface IndexingStatus {
     applicationsMinutes: number;
     filesystemMinutes: number;
   };
-  customTimeoutMs: number | null;
   resourceLimits: IndexingResourceLimits;
   lastRunResources?: IndexingResourceUsage;
-  timing: IndexTimingSummary;
-  timeoutAttempts: IndexTimeoutAttempt[];
   progress?: IndexingProgress;
   message?: string;
 }
@@ -929,11 +787,6 @@ export interface CommanderAccount {
   scopes: string[];
   expiresAt: string;
   lastSyncedAt?: string;
-  /** Public origin/app metadata; the credential itself remains native-only. */
-  environment?: {
-    baseUrl: string;
-    clientId: string;
-  };
 }
 
 export interface ExtensionCommand {
@@ -1112,20 +965,13 @@ export interface NativeRequest<T = unknown> {
     | 'launcher.openNewWindow'
     | 'launcher.commandReady'
     | 'application.quit'
-    | 'application.control'
     | 'window.beginDrag'
-    | 'window.toggleMaximize'
-    | 'window.state'
-    | 'window.keepAbove'
-    | 'processes.open'
     | 'filesystem.beginDrag'
     | 'filesystem.icon'
     | 'filesystem.copy'
     | 'filesystem.trash'
     | 'filesystem.delete'
     | 'system.metrics'
-    | 'permission.fullDiskAccess'
-    | 'notification.show'
     | 'settings.open'
     | 'application.open'
     | 'application.pasteTarget'
@@ -1140,8 +986,7 @@ export interface NativeRequest<T = unknown> {
     | 'settings.applyNative'
     | 'credential.claim'
     | 'credential.unlock'
-    | 'credential.delete'
-    | 'credential.environments';
+    | 'credential.delete';
   params?: T;
 }
 
@@ -1163,79 +1008,12 @@ export interface SystemMetrics {
     filesystemUsedBytes: number;
     filesystemTotalBytes: number;
     filesystemAvailableBytes: number;
-    memory: {
-      usedBytes: number;
-      totalBytes: number;
-      activeBytes: number;
-      wiredBytes: number;
-      cachedBytes: number;
-      compressedBytes: number;
-      purgeableBytes: number;
-    };
-    filesystem: {
-      usedBytes: number;
-      totalBytes: number;
-      availableBytes: number;
-      purgeableBytes: number;
-    };
-    responsivenessApplications: SystemResponsivenessApplication[];
-    processes: SystemProcessMetric[];
     gpu: {
       name: string;
       available: boolean;
       utilizationPercent?: number;
       source: 'io-registry' | 'unavailable';
     };
-  };
-}
-
-export interface SystemProcessAverage {
-  cpuPercent: number;
-  residentMemoryBytes: number;
-  diskReadBytesPerSecond: number;
-  diskWriteBytesPerSecond: number;
-  gpuPercent?: number;
-  networkBytesPerSecond?: number;
-  observedSeconds: number;
-}
-
-export interface SystemProcessMetric {
-  startedAtMs?: number;
-  average?: SystemProcessAverage;
-  pid: number;
-  parentPid: number;
-  name: string;
-  cpuPercent: number;
-  residentMemoryBytes: number;
-  diskReadBytesPerSecond: number;
-  diskWriteBytesPerSecond: number;
-  // macOS does not provide public, per-process network or GPU counters. These
-  // remain optional rather than presenting system-wide values as if they were
-  // attributable to one process.
-  networkBytesPerSecond?: number;
-  gpuPercent?: number;
-}
-
-export interface SystemResponsivenessApplication {
-  pid: number;
-  name: string;
-  kind: 'ui' | 'agent' | 'service';
-  signal: 'repeatedAccessibilityTimeout' | 'accessibilityProbeInconclusive';
-}
-
-export interface ThingtimeNetworkProbe {
-  sampledAtMs: number;
-  ping: {
-    roundTripMs: number;
-    requestMs: number;
-    responseMs: number;
-  };
-  speed?: {
-    sampledAtMs?: number;
-    packetBytes: number[];
-    downloads: Array<{ bytes: number; durationMs: number; megabitsPerSecond: number }>;
-    uploads: Array<{ bytes: number; durationMs: number; megabitsPerSecond: number }>;
-    errors?: Array<{ direction: 'download' | 'upload'; message: string }>;
   };
 }
 
@@ -1262,7 +1040,6 @@ export interface NativeSettingsSnapshot {
   openAtLogin: boolean;
   showMenuBarIcon: boolean;
   windowMode: WindowMode;
-  useCustomWindowResizeHandling: boolean;
   windowPinning: WindowPinningSettings;
 }
 
@@ -1282,7 +1059,6 @@ export const DEFAULT_SETTINGS: CommanderSettings = {
   showMenuBarIcon: true,
   showFavouritesInCompactMode: true,
   windowMode: 'default',
-  useCustomWindowResizeHandling: DEFAULT_USE_CUSTOM_WINDOW_RESIZE_HANDLING,
   appearance: 'system',
   textSize: 'default',
   hotkey: 'Command+Space',
@@ -1291,7 +1067,6 @@ export const DEFAULT_SETTINGS: CommanderSettings = {
   searchCache: { ...DEFAULT_SEARCH_CACHE_SETTINGS },
   emojiDefaultAction: 'paste',
   calculator: { ...DEFAULT_CALCULATOR_SETTINGS },
-  activity: { ...DEFAULT_ACTIVITY_SETTINGS },
   windowPinning: { ...DEFAULT_WINDOW_PINNING_SETTINGS },
   indexing: {
     ...DEFAULT_INDEXING_SETTINGS,
@@ -1302,7 +1077,6 @@ export const DEFAULT_SETTINGS: CommanderSettings = {
   activeAccountId: null,
   thingtimeBaseUrl: COMMANDER_THINGTIME_PRODUCTION_URL,
   thingtimeClientId: COMMANDER_THINGTIME_PRODUCTION_CLIENT_ID,
-  thingtimeCustomEnvironments: [],
   syncRevision: 0,
   syncUpdatedAt: null,
   syncDirty: false,

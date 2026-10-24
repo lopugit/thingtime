@@ -28,7 +28,6 @@ portable from day one.
 - arrow-key selection, Return execution, Escape dismissal, and Command-K actions;
 - type-aware right-click menus, including Finder reveal, file copy, path/name copy, recoverable Trash, and confirmed
   permanent delete actions for filesystem-backed results;
-- a Settings gear in the launcher header, with mouse and keyboard access to the native Settings window;
 - searchable Commander Settings results with tab-aware deep links into the separate native settings window;
 - a dedicated Activity settings tab that samples Commander host/daemon CPU, memory, storage, process count, plus
   local Mac CPU, best-effort system GPU, memory, thermal state, and filesystem capacity without uploading metrics;
@@ -106,38 +105,14 @@ occupied by an orphaned service.
 
 The Codex Run button is wired through `.codex/environments/environment.toml` to the same script.
 
-### macOS signing policy
-
-Normal Commander builds are direct-distribution builds. The script automatically selects an installed
-`Developer ID Application` identity and uses a secure timestamp. It deliberately fails before touching the
-currently installed app when that identity is unavailable: `Apple Development` is for local/TCC testing and
-`Apple Distribution` is for App Store delivery; neither is a substitute for Developer ID distribution.
-
-For an explicitly local-only iteration, use `COMMANDER_SIGNING_MODE=development ./script/build_and_run.sh --verify`.
-That path is not a distributable Gatekeeper build. `COMMANDER_SIGNING_IDENTITY` may select a specific identity,
-but distribution mode accepts only a `Developer ID Application` identity. Public downloads additionally need
-Apple notarization credentials configured outside this repository; a valid Developer ID signature alone is not
-a notarization ticket. Local distribution builds use the Keychain profile named `Commander Notarization` by default,
-submit a ZIP with `notarytool`, staple the accepted ticket, and only then replace `~/Applications/Commander.app`.
-Set `COMMANDER_NOTARY_PROFILE` to use another Keychain profile. The GitHub release workflow uses
-`COMMANDER_NOTARIZATION_MODE=external` because it submits with its short-lived CI API-key credentials instead.
-
 ## GitHub Releases
 
-The main-branch `.github/workflows/commander-release.yml` is a thin caller of the
-protected `github-actions` implementation. Main pushes touching Commander, or an
-owner dispatch on main/github-actions, build the exact main commit on an Apple
-silicon macOS runner. The workflow publishes a Developer ID signed, notarized
-`Commander-App-Release-<version>-macos-arm64.zip`, a matching Thingtime Recovery
-ZIP, and `SHA256SUMS.txt`. Both final archives are extracted and verified before
-publication. Commander releases use `--latest=false` to preserve Electron's
-repository-wide latest release.
-
-Versions include the run number and source commit, for example
-`commander-v0.1.0+build.103.gabcdef123456`. The app keeps `0.1.0` as its marketing
-version and `103` as `CFBundleVersion`; signed bundle metadata retains the release
-tag, full commit and main branch. Recovery's Commander selector discovers these
-archives and preserves that provenance in This Mac even when offline.
+`.github/workflows/commander-release.yml` follows the native Electron release
+pattern. A qualifying `main` push, or an explicit dispatch, builds Commander on
+macOS and publishes a GitHub Release with a ZIP of `Commander.app` plus a
+SHA-256 checksum. Each release gets a monotonic SemVer build suffix and tag,
+such as `commander-v0.1.0+build.10423`; the app stores `0.1.0` as its marketing
+version and `10423` as its macOS build number.
 
 The base version is deliberately human-controlled and shared by every
 Commander workspace. Check it with `corepack pnpm version:check`; intentionally
@@ -151,54 +126,17 @@ corepack pnpm version:bump -- 1.2.3
 ```
 
 The workflow's build metadata never writes back to source, so repeat builds are
-uniquely versioned without noisy release-only commits. GitHub-hosted builds fail closed without the complete Developer ID and notarization
-credentials; there is no unsigned distribution fallback. Configure encrypted
-repository secrets `MAC_CSC_LINK` (base64 PKCS#12), `MAC_CSC_KEY_PASSWORD`,
-`APPLE_TEAM_ID`, and either `APPLE_API_KEY_BASE64` / `APPLE_API_KEY_ID` /
-`APPLE_API_ISSUER` or the existing `ASC_KEY_CONTENT` / `ASC_KEY_ID` /
-`ASC_ISSUER_ID` API-key secrets. The workflow imports an ephemeral Keychain only
-after source checks and removes its signing material on success or failure.
-Forks must configure their own approved controller, caller guard and credentials.
-
-For CI, `./script/build_and_run.sh --prepare` installs, compiles and tests without
-accessing signing credentials or stopping the installed app. After importing
-credentials, `./script/build-production-release.sh` packages those outputs,
-notarizes, staples and checks the extracted archive. `--build-only` also leaves
-the installed app running. Production packaging requires `COMMANDER_RELEASE_VERSION`,
-`COMMANDER_BUILD_NUMBER`, `COMMANDER_GIT_COMMIT`, `COMMANDER_SIGNING_IDENTITY`,
-`APPLE_TEAM_ID` and the three `APPLE_API_*` notarization variables; the workflow
-sets these without writing secrets to source. `COMMANDER_GIT_BRANCH` records main.
-
-Switching an existing local Apple Development build to a Developer ID release
-changes macOS's signing requirement. If a privacy permission stops working, use
-Commander's permission status and System Settings to grant that app access again;
-Recovery never changes privacy toggles or resets grants.
+uniquely versioned without noisy release-only commits. GitHub-hosted builds are
+ad-hoc signed until an Apple Developer certificate and notarization credentials
+are deliberately configured; the release notes make that trust boundary clear.
 
 ## Thingtime setup
 
 Commander uses the real Thingtime API; it never reads the database directly.
 
-The local daemon publishes `/.well-known/commander-capabilities.json`, generated from the
-same operation registry used for HTTP dispatch. Its origin-scoped feature versions cover
-every active route, including native callbacks and static assets, without exposing account
-data or credentials. Before sign-in the UI requires `commander.accounts-login` 1.1.0 or a
-compatible same-major update. That contract adds verified callback selection; callback
-contracts also enforce the original server, client and redirect binding. Add or change
-operations in `apps/daemon/src/services/httpRoutes.ts` and deliberately version their contracts.
-
-Commander ships with a public Thingtime client ID. Before opening browser sign-in, it negotiates
-the selected server's OAuth capabilities and checks the exact callback registration. It prefers
-`com.thingtime.commander://oauth/callback`. If the server explicitly reports that native callback
-as unregistered, Commander checks and uses its currently bound loopback callback, normally
-`http://127.0.0.1:47820/oauth/callback`. Both paths use one-time authorization codes and S256 PKCE;
-each attempt is bound to its original server, client ID and callback. Network errors, suspended apps
-and incompatible capabilities fail without switching callbacks.
-
-For another deployment, register your own app through Thingtime Apps, allow the exact loopback
-origin used by Commander, and optionally register the exact native callback under native redirect
-URIs (not web origins). Advanced settings retain the server/client-ID overrides. Do not assume a
-callback is registered merely because it appears in this README: the live server remains the
-authority. The login requests only `profile.username` and `app-data`.
+Commander ships with its public Thingtime client registration for the exact loopback origin
+`http://127.0.0.1:47820` and callback `http://127.0.0.1:47820/oauth/callback`. The login requests
+`profile.username` and `app-data`; Advanced settings retain a client-ID override for another Thingtime deployment.
 
 The browser login uses authorization code + PKCE. Access tokens are saved only through the native credential bridge:
 Keychain on macOS, Credential Manager on Windows, and Secret Service on Linux. Sync data is stored privately under
@@ -216,12 +154,8 @@ The launcher footer replaces its idle status with the current source label and l
 a scan. Search settings also expose the result-section order and a private cache policy: enable/disable, maximum
 size, expiry, custom cache-directory override, reveal, and clear. Cache files contain result metadata only, use
 owner-only permissions, and are never included in Thingtime cloud settings sync. Commander warms recent snapshots
-into a bounded in-memory tier and re-ranks cached filesystem candidates while a refined live query completes. When
-the input changes, it clears the prior query's rows first, so stale matches are never presented as results for the
-new query.
-Live trigram search has no pre-ranking candidate-count ceiling: every matching FTS row is scored, while only the
-best requested results stay resident in memory. The indexer reader runs the active query plus only the latest queued
-refinement, so rapid typing cannot build a stale backlog of uncapped searches.
+into a bounded in-memory tier and re-ranks cached filesystem candidates while a refined live query completes, so
+typing never has to blank or temporarily downgrade the list to catalog-only results.
 
 ## Raycast companion command
 
@@ -257,40 +191,3 @@ swift build --package-path hosts/macos
 
 Windows and Linux compile/runtime testing is deliberately deferred, as requested. Their shared layers are covered
 by the TypeScript and Rust checks; their native shells remain explicitly unverified.
-
-## Process monitor and utility windows
-
-Activity's Processes panel defaults to Name ascending, with PID as the final
-stable tie-breaker. CPU/memory/disk changes update readings without reordering
-rows unless you choose a usage sort. Sort by, Order, Average window, parent
-grouping and composable filters are saved locally and shared with the separate
-Processes window. Filters support text matching, numeric comparisons, binary
-memory/throughput units and explicit available/unavailable values.
-
-Average window offers Current, 5/10/30 minutes, 1/3/6/12 hours and 1 day. Usage
-columns, filters and sorting all use the selected sampled average. Native windows
-share one sampler and history; readings are duration-weighted in one-minute
-buckets. History is collected while a metrics view polls, stays in memory for the
-running app, expires after one day, and resets for exited/reused PIDs. Each row
-shows the actual observed minutes; sleep/closed-view gaps are excluded, and
-unavailable GPU/network readings never become zero. No past history is invented
-when selecting a longer window. This is a sampled monitor, not a historical
-recorder or a guarantee of continuous background collection.
-
-Use the pop-out icon beside Processes for its resizable native window. Keep above
-sets only that window's level; closing/reopening reuses the window during the
-current app session. Double-click the Settings or Processes title bar to maximize
-within the current screen's usable area, then again to restore its previous frame.
-This does not enter a fullscreen Space.
-
-### Isolated native window development
-
-Run `./script/window-preview.sh` from `Commander/` to build a fast unsigned
-window preview, then open the printed `.app` path. It uses the production
-`CommanderUtilityWindow` implementation and a worktree-specific bundle identity
-and cache directory. It has no daemon, ports, network, credentials, global
-hotkeys, or access to the installed Commander profile. Its duplicate-delivery
-button exercises native/web double-click coalescing; the titlebar and Keep above
-control exercise native window behavior. Run `./script/window-preview.sh --clean`
-to stop and remove this worktree's generated preview before final verification.
-The preview supplements the canonical signed installed-app acceptance checks.

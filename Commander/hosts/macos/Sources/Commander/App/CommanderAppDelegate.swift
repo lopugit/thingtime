@@ -4,7 +4,6 @@ import AppKit
 final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   private static let launcherHotKeyIdentifier = "launcher"
   private let daemon = DaemonSupervisor()
-  private let portInspector = LoopbackPortInspector()
   private let keychain = KeychainStore()
   private let loginItem = LaunchAtLoginService()
   private var daemonReady: DaemonReady?
@@ -12,20 +11,16 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   private var launcherRecency: [UUID: UInt64] = [:]
   private var recencyCounter: UInt64 = 0
   private var settings: SettingsWindowController?
-  private var processes: SettingsWindowController?
-  private var sharedMetrics: SystemMetricsService?
   private var statusItem: CommanderStatusItem?
   private var hotKeyRegistry: GlobalHotKeyRegistry?
   private var hotKeyShortcut: String?
   private var commandHotKeyShortcuts: [String: String] = [:]
   private var windowMode = LauncherWindowMode.standard
-  private var useCustomWindowResizeHandling = true
   private var pinningEnabled = true
   private var defaultPinned = false
   private var focusRecentOnCurrentDisplay = true
   private var hasAppliedWindowPinningSettings = false
   private var isTerminating = false
-  private var pendingOAuthCallbacks: [URL] = []
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.setActivationPolicy(.accessory)
@@ -45,14 +40,8 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
     return false
   }
 
-  func application(_ application: NSApplication, open urls: [URL]) {
-    for url in urls where CommanderOAuthCallback.isValid(url) {
-      receiveOAuthCallback(url)
-    }
-  }
-
-  private func startDaemon(port: Int = DaemonSupervisor.defaultPort) {
-    daemon.start(port: port, onUnexpectedExit: { [weak self] error in
+  private func startDaemon() {
+    daemon.start(onUnexpectedExit: { [weak self] error in
       self?.handleUnexpectedDaemonExit(error)
     }) { [weak self] result in
       guard let self else { return }
@@ -69,28 +58,8 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
 
   private func buildWindows(ready: DaemonReady) {
     daemonReady = ready
-    sharedMetrics = SystemMetricsService(daemonPID: ready.pid)
     settings = SettingsWindowController(ready: ready, bridge: makeBridge(ready: ready, launcherID: nil))
     _ = try? createLauncher(show: false)
-    let callbacks = pendingOAuthCallbacks
-    pendingOAuthCallbacks.removeAll(keepingCapacity: false)
-    callbacks.forEach(receiveOAuthCallback)
-  }
-
-  private func receiveOAuthCallback(_ url: URL) {
-    guard CommanderOAuthCallback.isValid(url) else { return }
-    guard let ready = daemonReady else {
-      pendingOAuthCallbacks.append(url)
-      return
-    }
-    Task { @MainActor [weak self] in
-      do {
-        try await OAuthCallbackHandoff(ready: ready).deliver(url)
-        self?.settings?.show(tab: .account)
-      } catch {
-        NSLog("Commander OAuth callback handoff failed: %@", error.localizedDescription)
-      }
-    }
   }
 
   private func makeBridge(ready: DaemonReady, launcherID: UUID?) -> CommanderNativeBridge {
@@ -100,9 +69,6 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
       loginItem: loginItem,
       showLauncher: { [weak self] in self?.showLauncher(id: launcherID) },
       hideLauncher: { [weak self] in self?.launcher(id: launcherID)?.hide() },
-      dismissLauncher: { [weak self] in
-        self?.launcher(id: launcherID)?.hide(restoringPreviousApplication: true)
-      },
       launcherState: { [weak self] in
         guard let self, let launcher = self.launcher(id: launcherID) else {
           throw CommanderHostError.launcherUnavailable
@@ -115,7 +81,11 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
       },
       openNewLauncherWindow: { [weak self] in
         guard let self else { throw CommanderHostError.launcherUnavailable }
-        return try self.createLauncher(show: true, screen: self.activeScreen()).statePayload
+        return try self.createLauncher(
+          show: true,
+          screen: self.activeScreen(),
+          pinnedOverride: true
+        ).statePayload
       },
       commandHotKeyReady: { [weak self] itemID in
         self?.launcher(id: launcherID)?.commandHotKeyReady(itemID: itemID)
@@ -137,32 +107,20 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
       },
       updateMenuBar: { [weak self] visible in self?.setMenuBarVisible(visible) },
       updateWindowMode: { [weak self] mode in try self?.setWindowMode(mode) },
-      updateCustomWindowResizeHandling: { [weak self] enabled in
-        self?.setCustomWindowResizeHandling(enabled)
-      },
       updateWindowPinning: { [weak self] enabled, pinned, focusCurrentDisplay in
         self?.setWindowPinning(
           enabled: enabled,
           defaultPinned: pinned,
           focusRecentOnCurrentDisplay: focusCurrentDisplay
         )
-      },
-      sharedMetrics: sharedMetrics,
-      showProcesses: { [weak self] in self?.showProcessesWindow() }
+      }
     )
-  }
-
-  private func showProcessesWindow() {
-    guard let ready = daemonReady else { return }
-    if processes == nil {
-      processes = SettingsWindowController(ready: ready, bridge: makeBridge(ready: ready, launcherID: nil), surface: "processes", title: "Commander Processes")
-    }
-    processes?.show()
   }
 
   private func createLauncher(
     show: Bool,
-    screen: NSScreen? = nil
+    screen: NSScreen? = nil,
+    pinnedOverride: Bool? = nil
   ) throws -> LauncherPanelController {
     guard let ready = daemonReady else { throw CommanderHostError.launcherUnavailable }
     let id = UUID()
@@ -170,11 +128,13 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
       id: id,
       ready: ready,
       bridge: makeBridge(ready: ready, launcherID: id),
-      pinned: Self.initialPinnedState(defaultPinned: defaultPinned),
+      pinned: Self.initialPinnedState(
+        defaultPinned: defaultPinned,
+        pinnedOverride: pinnedOverride
+      ),
       pinningEnabled: pinningEnabled
     )
     controller.setWindowMode(windowMode)
-    controller.setCustomWindowResizeHandling(useCustomWindowResizeHandling)
     controller.didBecomeKey = { [weak self] id in self?.markRecent(id) }
     launchers[id] = controller
     markRecent(id)
@@ -182,8 +142,8 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
     return controller
   }
 
-  static func initialPinnedState(defaultPinned: Bool) -> Bool {
-    defaultPinned
+  static func initialPinnedState(defaultPinned: Bool, pinnedOverride: Bool?) -> Bool {
+    pinnedOverride ?? defaultPinned
   }
 
   private func launcher(id: UUID?) -> LauncherPanelController? {
@@ -352,11 +312,6 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
     for launcher in launchers.values { launcher.setWindowMode(mode) }
   }
 
-  private func setCustomWindowResizeHandling(_ enabled: Bool) {
-    useCustomWindowResizeHandling = enabled
-    for launcher in launchers.values { launcher.setCustomWindowResizeHandling(enabled) }
-  }
-
   private func activeScreen() -> NSScreen? {
     let mouse = NSEvent.mouseLocation
     return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
@@ -369,12 +324,9 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   private func tearDownRuntime(stopDaemon: Bool) {
     for launcher in launchers.values { launcher.shutdown() }
     settings?.shutdown()
-    processes?.shutdown()
     launchers.removeAll()
     launcherRecency.removeAll()
     settings = nil
-    processes = nil
-    sharedMetrics = nil
     daemonReady = nil
     statusItem?.remove()
     statusItem = nil
@@ -393,11 +345,6 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func presentStartupError(_ error: Error) {
-    if let daemonError = error as? DaemonError,
-       case let .portInUse(port, _) = daemonError {
-      presentPortConflict(port: port)
-      return
-    }
     NSApp.setActivationPolicy(.regular)
     NSApp.activate(ignoringOtherApps: true)
     let alert = NSAlert()
@@ -415,11 +362,6 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func presentServiceError(_ error: Error) {
-    if let daemonError = error as? DaemonError,
-       case let .portInUse(port, _) = daemonError {
-      presentPortConflict(port: port)
-      return
-    }
     NSApp.setActivationPolicy(.regular)
     NSApp.activate(ignoringOtherApps: true)
     let alert = NSAlert()
@@ -432,50 +374,6 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
       NSApp.setActivationPolicy(.accessory)
       startDaemon()
     } else {
-      NSApp.terminate(nil)
-    }
-  }
-
-  private func presentPortConflict(port: Int) {
-    NSApp.setActivationPolicy(.regular)
-    NSApp.activate(ignoringOtherApps: true)
-    let listener = portInspector.listener(on: port)
-    let alert = NSAlert()
-    alert.alertStyle = .warning
-    alert.messageText = "Commander’s local port is busy"
-    if let listener {
-      alert.informativeText = "Port \(port) is currently used by \(listener.command) (PID \(listener.pid)). Choose how Commander should recover."
-    } else {
-      alert.informativeText = "Port \(port) is currently unavailable. Choose how Commander should recover."
-    }
-    alert.addButton(withTitle: "Close Commander")
-    alert.addButton(withTitle: "Start on Next Available Port")
-    if let listener {
-      alert.addButton(withTitle: "Close \(listener.command) (PID \(listener.pid))")
-    }
-    switch alert.runModal() {
-    case .alertSecondButtonReturn:
-      guard let nextPort = portInspector.nextAvailablePort(after: port) else {
-        presentStartupError(LoopbackPortInspectorError.listenerChanged(port: port))
-        return
-      }
-      NSApp.setActivationPolicy(.accessory)
-      startDaemon(port: nextPort)
-    case .alertThirdButtonReturn:
-      guard let listener else {
-        NSApp.terminate(nil)
-        return
-      }
-      do {
-        try portInspector.terminate(listener, listeningOn: port)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-          NSApp.setActivationPolicy(.accessory)
-          self?.startDaemon(port: port)
-        }
-      } catch {
-        presentStartupError(error)
-      }
-    default:
       NSApp.terminate(nil)
     }
   }

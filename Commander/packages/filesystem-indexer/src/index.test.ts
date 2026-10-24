@@ -48,49 +48,6 @@ describe('FileSystemIndexerClient', () => {
     }
   });
 
-  it('coalesces overlapping index requests into one worker operation', async () => {
-    const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'test-fixtures/fake-indexer.mjs');
-    const client = new FileSystemIndexerClient({
-      binaryPath: process.execPath,
-      databasePath: '/tmp/test-index-single-flight.sqlite3',
-      prefixArguments: [fixture],
-      indexTimeoutMs: 1_000,
-    });
-    try {
-      const configuration = { sources: [{ id: 'hang', root: '/tmp', kinds: ['file' as const] }] };
-      const first = client.index(configuration, 20);
-      const second = client.index(configuration, 20);
-      expect(second).toBe(first);
-      await expect(first).rejects.toThrow('timed out after 20ms');
-    } finally {
-      await client.close();
-    }
-  });
-
-  it('runs the active query and only the latest queued query', async () => {
-    const fixture = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      'test-fixtures/slow-query-indexer.mjs',
-    );
-    const client = new FileSystemIndexerClient({
-      binaryPath: process.execPath,
-      databasePath: '/tmp/test-index-latest-query.sqlite3',
-      prefixArguments: [fixture],
-    });
-    try {
-      const request = (query: string) => ({ query, kinds: ['file' as const], limit: 10 });
-      const active = client.query(request('active'));
-      const superseded = client.query(request('superseded'));
-      const latest = client.query(request('latest'));
-
-      await expect(superseded).resolves.toEqual({ records: [] });
-      await expect(active).resolves.toMatchObject({ records: [{ name: 'active.txt' }] });
-      await expect(latest).resolves.toMatchObject({ records: [{ name: 'latest.txt' }] });
-    } finally {
-      await client.close();
-    }
-  });
-
   it('passes standalone machine resource limits through the JSON-lines protocol', async () => {
     const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'test-fixtures/fake-indexer.mjs');
     const client = new FileSystemIndexerClient({
@@ -126,30 +83,6 @@ describe('FileSystemIndexerClient', () => {
         },
       });
       expect(progress).toEqual([12]);
-    } finally {
-      await client.close();
-    }
-  });
-
-  it('does not cancel an unlimited catalogue read when interactive queries change', async () => {
-    const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), 'test-fixtures/slow-query-indexer.mjs');
-    const client = new FileSystemIndexerClient({
-      binaryPath: process.execPath,
-      databasePath: '/tmp/test-index-catalogue.sqlite3',
-      prefixArguments: [fixture],
-    });
-    try {
-      const active = client.query({ query: 'active' });
-      const catalogue = client.catalogue(['application']);
-      const superseded = client.query({ query: 'superseded' });
-      const latest = client.query({ query: 'latest' });
-      await expect(superseded).resolves.toEqual({ records: [] });
-      await expect(catalogue).resolves.toMatchObject({
-        request: { query: '', kinds: ['application'], limit: null },
-        records: [{ name: '.txt' }],
-      });
-      await expect(active).resolves.toMatchObject({ records: [{ name: 'active.txt' }] });
-      await expect(latest).resolves.toMatchObject({ records: [{ name: 'latest.txt' }] });
     } finally {
       await client.close();
     }

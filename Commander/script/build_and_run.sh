@@ -2,22 +2,10 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-case "$MODE" in
-  --prepare|--package-only|--build-only|build|run|--verify|verify|--debug|debug|--logs|logs|--telemetry|telemetry) ;;
-  *) echo "Unknown Commander build mode: $MODE" >&2; exit 2 ;;
-esac
 APP_NAME="Commander"
 BUNDLE_ID="com.thingtime.Commander"
 MIN_SYSTEM_VERSION="14.0"
-# Direct-distribution builds must use a Developer ID Application identity.  Do
-# not silently substitute an Apple Development or Apple Distribution identity:
-# neither gives users the Gatekeeper trust contract of a notarized Developer ID
-# app.  Local development is available as an explicit opt-in below.
-SIGNING_MODE="${COMMANDER_SIGNING_MODE:-distribution}"
-SIGNING_IDENTITY="${COMMANDER_SIGNING_IDENTITY:-}"
-SIGNING_TIMESTAMP_ARGS=()
-NOTARIZATION_MODE="${COMMANDER_NOTARIZATION_MODE:-local}"
-NOTARY_PROFILE="${COMMANDER_NOTARY_PROFILE:-Commander Notarization}"
+SIGNING_IDENTITY="${COMMANDER_SIGNING_IDENTITY:-Apple Development: lopudesigns@gmail.com (9BTZ4XB356)}"
 NODE_VERSION="22.23.2"
 NODE_SHA256_ARM64="61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6"
 NODE_SHA256_X64="58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026"
@@ -41,79 +29,7 @@ if [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || [[ "$BUILD_NUMBER" == "0" ]]; then
   exit 1
 fi
 
-available_signing_identity() {
-  /usr/bin/security find-identity -v -p codesigning | /usr/bin/grep -F "\"$1\"" >/dev/null
-}
-
-default_developer_id_identity() {
-  /usr/bin/security find-identity -v -p codesigning \
-    | /usr/bin/sed -nE 's/.*"(Developer ID Application: [^"]+)".*/\1/p' \
-    | /usr/bin/head -n 1
-}
-
-resolve_signing_configuration() {
-  case "$SIGNING_MODE" in
-    distribution)
-      if [[ -z "$SIGNING_IDENTITY" ]]; then
-        SIGNING_IDENTITY="$(default_developer_id_identity)"
-      fi
-      if [[ -z "$SIGNING_IDENTITY" ]]; then
-        echo "Commander distribution builds require an installed Developer ID Application identity." >&2
-        echo "Install a Developer ID Application certificate with its private key, then retry." >&2
-        echo "For explicitly local-only development, use COMMANDER_SIGNING_MODE=development." >&2
-        exit 1
-      fi
-      if [[ "$SIGNING_IDENTITY" != Developer\ ID\ Application:* ]]; then
-        echo "Commander distribution builds require a Developer ID Application identity, not: $SIGNING_IDENTITY" >&2
-        exit 1
-      fi
-      if [[ "$NOTARIZATION_MODE" != "local" && "$NOTARIZATION_MODE" != "external" ]]; then
-        echo "COMMANDER_NOTARIZATION_MODE must be local or external: $NOTARIZATION_MODE" >&2
-        exit 1
-      fi
-      SIGNING_TIMESTAMP_ARGS=(--timestamp)
-      ;;
-    development)
-      if [[ -z "$SIGNING_IDENTITY" ]]; then
-        SIGNING_IDENTITY="Apple Development: lopudesigns@gmail.com (9BTZ4XB356)"
-      fi
-      SIGNING_TIMESTAMP_ARGS=(--timestamp=none)
-      ;;
-    *)
-      echo "COMMANDER_SIGNING_MODE must be distribution or development: $SIGNING_MODE" >&2
-      exit 1
-      ;;
-  esac
-
-  if [[ "$SIGNING_IDENTITY" != "-" ]] && ! available_signing_identity "$SIGNING_IDENTITY"; then
-    echo "Commander signing identity is unavailable: $SIGNING_IDENTITY" >&2
-    exit 1
-  fi
-  if [[ "$SIGNING_MODE" == "distribution" && "$SIGNING_IDENTITY" == "-" ]]; then
-    echo "Ad-hoc signing is not allowed for Commander distribution builds." >&2
-    exit 1
-  fi
-}
-
-notarize_distribution_bundle() {
-  [[ "$SIGNING_MODE" == "distribution" ]] || return 0
-  [[ "$NOTARIZATION_MODE" == "local" ]] || return 0
-
-  local archive_root archive
-  archive_root="$(mktemp -d "$HOME/Library/Caches/$BUNDLE_ID/Commander-notarization.XXXXXX")"
-  archive="$archive_root/$APP_NAME.zip"
-  trap '/bin/rm -rf "'"$archive_root"'"' RETURN
-  /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$archive"
-  /usr/bin/xcrun notarytool submit "$archive" --wait --keychain-profile "$NOTARY_PROFILE"
-  /usr/bin/xcrun stapler staple "$APP_BUNDLE"
-  /usr/bin/xcrun stapler validate "$APP_BUNDLE"
-  /usr/sbin/spctl -a -vv --type execute "$APP_BUNDLE"
-  trap - RETURN
-  /bin/rm -rf "$archive_root"
-}
-
-compile_all() {
-  node "$ROOT_DIR/script/release-version.mjs" check
+build_all() {
   corepack pnpm --dir "$ROOT_DIR" install --frozen-lockfile
   corepack pnpm --dir "$ROOT_DIR" typecheck
   corepack pnpm --dir "$ROOT_DIR" test
@@ -123,20 +39,12 @@ compile_all() {
     echo "Commander requires Cargo to build its bundled search and filesystem indexer binaries" >&2
     exit 1
   fi
-  cargo build --locked --release --manifest-path "$ROOT_DIR/crates/commander-core/Cargo.toml"
-  cargo build --locked --release --manifest-path "$ROOT_DIR/crates/commander-indexer/Cargo.toml"
-
-  cargo test --locked --manifest-path "$ROOT_DIR/crates/commander-core/Cargo.toml"
-  cargo test --locked --manifest-path "$ROOT_DIR/crates/commander-indexer/Cargo.toml"
-  swift test --package-path "$SWIFT_PACKAGE"
-  swift build --package-path "$SWIFT_PACKAGE" -c release
-}
-
-bundle_all() {
+  cargo build --release --manifest-path "$ROOT_DIR/crates/commander-core/Cargo.toml"
   local rust_binary="$ROOT_DIR/crates/commander-core/target/release/commander-search"
+  cargo build --release --manifest-path "$ROOT_DIR/crates/commander-indexer/Cargo.toml"
   local rust_indexer_binary="$ROOT_DIR/crates/commander-indexer/target/release/commander-indexer"
-  test -x "$rust_binary"
-  test -x "$rust_indexer_binary"
+
+  swift build --package-path "$SWIFT_PACKAGE" -c release
   local swift_binary
   swift_binary="$(swift build --package-path "$SWIFT_PACKAGE" -c release --show-bin-path)/Commander"
 
@@ -144,7 +52,7 @@ bundle_all() {
   local staged_bundle="$stage_root/$APP_NAME.app"
   mkdir -p "$stage_root"
   if [[ -e "$staged_bundle" ]]; then
-    /bin/rm -rf -- "$staged_bundle"
+    /usr/bin/osascript -e 'tell application "Finder" to delete POSIX file "'"$staged_bundle"'"' >/dev/null 2>&1 || /bin/rm -rf "$staged_bundle"
   fi
   mkdir -p "$staged_bundle/Contents/MacOS" "$staged_bundle/Contents/Resources/ui"
   /usr/bin/ditto "$swift_binary" "$staged_bundle/Contents/MacOS/$APP_NAME"
@@ -170,37 +78,35 @@ bundle_all() {
   /usr/bin/plutil -insert CFBundlePackageType -string APPL "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert CFBundleShortVersionString -string "$PACKAGE_VERSION" "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert CFBundleVersion -string "$BUILD_NUMBER" "$staged_bundle/Contents/Info.plist"
-  /usr/bin/plutil -insert ThingtimeBuildDate -string "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert LSMinimumSystemVersion -string "$MIN_SYSTEM_VERSION" "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert LSUIElement -bool true "$staged_bundle/Contents/Info.plist"
-  # Commander owns one daemon/loopback port. Let Launch Services reactivate the
-  # existing host rather than spawning a second instance that races for it.
-  /usr/bin/plutil -insert LSMultipleInstancesProhibited -bool true "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert NSHighResolutionCapable -bool true "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert NSPrincipalClass -string NSApplication "$staged_bundle/Contents/Info.plist"
-  /usr/bin/plutil -insert CFBundleURLTypes -json '[{"CFBundleURLName":"com.thingtime.Commander.oauth","CFBundleURLSchemes":["com.thingtime.commander"]}]' "$staged_bundle/Contents/Info.plist"
 
-  /usr/bin/plutil -insert ThingtimeReleaseVersion -string "${COMMANDER_RELEASE_VERSION:-$PACKAGE_VERSION}" "$staged_bundle/Contents/Info.plist"
-  /usr/bin/plutil -insert ThingtimeReleaseTag -string "commander-v${COMMANDER_RELEASE_VERSION:-$PACKAGE_VERSION}" "$staged_bundle/Contents/Info.plist"
-  /usr/bin/plutil -insert ThingtimeGitCommit -string "${COMMANDER_GIT_COMMIT:-$(git -C "$ROOT_DIR" rev-parse HEAD)}" "$staged_bundle/Contents/Info.plist"
-  /usr/bin/plutil -insert ThingtimeGitBranch -string "${COMMANDER_GIT_BRANCH:-$(git -C "$ROOT_DIR" branch --show-current)}" "$staged_bundle/Contents/Info.plist"
-
+  # An explicit `COMMANDER_SIGNING_IDENTITY=-` keeps local verification usable
+  # when the developer identity is present but its private key is locked behind
+  # an interactive SecurityAgent prompt. Release/default builds still require
+  # the configured Apple Development identity.
+  if [[ "$SIGNING_IDENTITY" != "-" ]] && ! /usr/bin/security find-identity -v -p codesigning | /usr/bin/grep -F "$SIGNING_IDENTITY" >/dev/null; then
+    echo "Commander signing identity is unavailable: $SIGNING_IDENTITY" >&2
+    exit 1
+  fi
   /usr/bin/xattr -cr "$staged_bundle"
   # Preserve Node.js Foundation's hardened-runtime signature and JIT entitlements.
   /usr/bin/codesign --verify --strict "$staged_bundle/Contents/Resources/node/bin/node"
   if [[ -x "$staged_bundle/Contents/Resources/commander-core" ]]; then
-    /usr/bin/codesign --force --options runtime "${SIGNING_TIMESTAMP_ARGS[@]}" --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/Resources/commander-core"
+    /usr/bin/codesign --force --options runtime --timestamp=none --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/Resources/commander-core"
   fi
   if [[ -x "$staged_bundle/Contents/Resources/commander-indexer" ]]; then
-    /usr/bin/codesign --force --options runtime "${SIGNING_TIMESTAMP_ARGS[@]}" --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/Resources/commander-indexer"
+    /usr/bin/codesign --force --options runtime --timestamp=none --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/Resources/commander-indexer"
   fi
-  /usr/bin/codesign --force --options runtime "${SIGNING_TIMESTAMP_ARGS[@]}" --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/MacOS/$APP_NAME"
-  /usr/bin/codesign --force --options runtime "${SIGNING_TIMESTAMP_ARGS[@]}" --sign "$SIGNING_IDENTITY" "$staged_bundle"
+  /usr/bin/codesign --force --options runtime --timestamp=none --sign "$SIGNING_IDENTITY" "$staged_bundle/Contents/MacOS/$APP_NAME"
+  /usr/bin/codesign --force --options runtime --timestamp=none --sign "$SIGNING_IDENTITY" "$staged_bundle"
   /usr/bin/codesign --verify --deep --strict "$staged_bundle"
 
   mkdir -p "$DIST_DIR"
   if [[ -e "$APP_BUNDLE" ]]; then
-    /bin/rm -rf -- "$APP_BUNDLE"
+    /usr/bin/osascript -e 'tell application "Finder" to delete POSIX file "'"$APP_BUNDLE"'"' >/dev/null 2>&1 || /bin/rm -rf "$APP_BUNDLE"
   fi
   /usr/bin/ditto "$staged_bundle" "$APP_BUNDLE"
   /usr/bin/codesign --verify --deep --strict "$APP_BUNDLE"
@@ -266,35 +172,6 @@ install_app() {
   test -x "$installed/Contents/MacOS/$APP_NAME"
 }
 
-launch_installed_app() {
-  local installed="$HOME/Applications/$APP_NAME.app"
-  local host_pattern="^$installed/Contents/MacOS/$APP_NAME$"
-  /usr/bin/open "$installed" >/dev/null 2>&1 &
-  local open_pid="$!"
-
-  # `open` can remain blocked waiting for a Launch Services XPC reply after it
-  # has already launched the app. Do not make packaging or verification wait
-  # forever on that helper: give it a short normal-completion window, then
-  # terminate only that helper once the installed host is confirmed running.
-  for _ in {1..20}; do
-    if ! /bin/kill -0 "$open_pid" >/dev/null 2>&1; then
-      if wait "$open_pid"; then return 0; fi
-      echo "Commander launch helper exited before the installed app was ready." >&2
-      return 1
-    fi
-    sleep 0.1
-  done
-  if /usr/bin/pgrep -f "$host_pattern" >/dev/null 2>&1; then
-    /bin/kill -TERM "$open_pid" >/dev/null 2>&1 || true
-    wait "$open_pid" 2>/dev/null || true
-    return 0
-  fi
-  /bin/kill -TERM "$open_pid" >/dev/null 2>&1 || true
-  wait "$open_pid" 2>/dev/null || true
-  echo "Commander launch helper did not start the installed app within two seconds." >&2
-  return 1
-}
-
 stop_installed_runtime() {
   local installed="$HOME/Applications/$APP_NAME.app"
   local host_pattern="^$installed/Contents/MacOS/$APP_NAME$"
@@ -329,31 +206,19 @@ stop_installed_runtime() {
   fi
 }
 
-# CI compiles and tests before importing any signing material. Packaging reuses
-# those exact outputs. Neither mode touches the installed app or its daemon.
-if [[ "$MODE" == "--prepare" ]]; then
-  compile_all
-  exit 0
-fi
-resolve_signing_configuration
-if [[ "$MODE" != "--package-only" ]]; then compile_all; fi
-bundle_all
-notarize_distribution_bundle
-case "$MODE" in
-  --build-only|build|--package-only) ;;
-  *) stop_installed_runtime ;;
-esac
+stop_installed_runtime
+build_all
 
 case "$MODE" in
-  --build-only|build|--package-only)
+  --build-only|build)
     ;;
   run)
     install_app
-    launch_installed_app
+    /usr/bin/open -n "$HOME/Applications/$APP_NAME.app"
     ;;
   --verify|verify)
     install_app
-    launch_installed_app
+    /usr/bin/open -n "$HOME/Applications/$APP_NAME.app"
     for _ in {1..30}; do
       if /usr/bin/pgrep -f "^$HOME/Applications/$APP_NAME.app/Contents/MacOS/$APP_NAME$" >/dev/null; then break; fi
       sleep 0.1
@@ -390,12 +255,12 @@ case "$MODE" in
     ;;
   --logs|logs)
     install_app
-    launch_installed_app
+    /usr/bin/open -n "$HOME/Applications/$APP_NAME.app"
     /usr/bin/log stream --info --style compact --predicate "process == \"$APP_NAME\""
     ;;
   --telemetry|telemetry)
     install_app
-    launch_installed_app
+    /usr/bin/open -n "$HOME/Applications/$APP_NAME.app"
     /usr/bin/log stream --info --style compact --predicate "subsystem == \"$BUNDLE_ID\""
     ;;
   *)
@@ -405,6 +270,6 @@ case "$MODE" in
 esac
 
 echo "Built: $APP_BUNDLE"
-if [[ "$MODE" != "--build-only" && "$MODE" != "build" && "$MODE" != "--package-only" && "$MODE" != "--debug" && "$MODE" != "debug" ]]; then
+if [[ "$MODE" != "--build-only" && "$MODE" != "build" && "$MODE" != "--debug" && "$MODE" != "debug" ]]; then
   echo "Installed: $HOME/Applications/$APP_NAME.app"
 fi

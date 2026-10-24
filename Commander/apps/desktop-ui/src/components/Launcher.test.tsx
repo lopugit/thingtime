@@ -5,8 +5,7 @@ import type { BootstrapResponse, SearchHit } from '@commander/protocol';
 import { DEFAULT_SETTINGS } from '@commander/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommanderState } from '../hooks/useCommander.js';
-import { resetNativeFileIconSchedulerForTests } from '../lib/nativeFileIcons.js';
-import { beginWindowDrag, hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
+import { beginWindowDrag, nativeRequest } from '../lib/nativeBridge.js';
 import { Launcher } from './Launcher.js';
 
 vi.mock('../lib/nativeBridge.js', () => ({
@@ -88,52 +87,8 @@ function state(overrides: Partial<CommanderState> = {}): CommanderState {
 }
 
 describe('Launcher keyboard navigation', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    resetNativeFileIconSchedulerForTests();
-  });
-  afterEach(() => {
-    cleanup();
-    resetNativeFileIconSchedulerForTests();
-  });
-
-  it('opens Settings without changing the query or running the selected result from keyboard focus', async () => {
-    const commander = state({ query: 'notes', selectedIndex: 1 });
-    render(<Launcher state={commander} />);
-    const button = screen.getByRole('button', { name: 'Open Commander Settings' });
-    button.focus();
-    fireEvent.keyDown(button, { key: 'Enter' });
-    expect(commander.executeCommand).not.toHaveBeenCalled();
-    fireEvent.click(button);
-    await waitFor(() =>
-      expect(commander.executeCommand).toHaveBeenCalledWith('builtin:settings', 'open-settings', ''),
-    );
-    expect(commander.setQuery).not.toHaveBeenCalled();
-    expect(commander.rememberRecentSearch).not.toHaveBeenCalled();
-  });
-
-  it('reports Settings failures through the existing error surface', async () => {
-    const commander = state({ executeCommand: vi.fn().mockRejectedValue(new Error('Settings unavailable')) });
-    render(<Launcher state={commander} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Open Commander Settings' }));
-    await waitFor(() => expect(commander.reportError).toHaveBeenCalledWith('Settings unavailable'));
-  });
-
-  it('returns focus to the previous app when Escape dismisses the launcher', async () => {
-    const commander = state();
-    render(<Launcher state={commander} />);
-    fireEvent.keyDown(window, { key: 'Escape' });
-    await waitFor(() => expect(hideLauncher).toHaveBeenCalledWith(true));
-    expect(commander.rememberRecentSearch).toHaveBeenCalledWith(commander.query);
-  });
-
-  it('keeps focus in Commander when Escape only closes the actions panel', () => {
-    const commander = state({ actionsOpen: true });
-    render(<Launcher state={commander} />);
-    fireEvent.keyDown(window, { key: 'Escape' });
-    expect(commander.setActionsOpen).toHaveBeenCalledWith(false);
-    expect(hideLauncher).not.toHaveBeenCalled();
-  });
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(cleanup);
 
   it('moves selection down and opens the actions panel with Command-K', () => {
     const commander = state();
@@ -222,12 +177,8 @@ describe('Launcher keyboard navigation', () => {
       subtitle: '/Applications/Preview.app',
       path: '/Applications/Preview.app',
     };
-    vi.mocked(nativeRequest).mockImplementation(async (method) => {
-      if (method === 'filesystem.icon') {
-        return { dataUrl: 'data:image/png;base64,aWNvbg==' };
-      }
-
-      return undefined;
+    vi.mocked(nativeRequest).mockResolvedValueOnce({
+      dataUrl: 'data:image/png;base64,aWNvbg==',
     });
     render(<Launcher state={state({ hits: [application], selectedIndex: 0 })} />);
 
@@ -241,71 +192,6 @@ describe('Launcher keyboard navigation', () => {
       expect(icon).toHaveAttribute('src', 'data:image/png;base64,aWNvbg==');
       expect(icon?.closest('.result-icon')).toHaveClass('native-file-icon');
     });
-  });
-
-  it('loads every result icon through a bounded, selected-first bridge queue', async () => {
-    const pathBackedHits: SearchHit[] = Array.from({ length: 30 }, (_, index) => ({
-      ...hits[1]!,
-      id: `file:batch-${index}`,
-      title: `batch-${index}.txt`,
-      subtitle: `/tmp/commander-batch-${index}.txt`,
-      kind: 'file',
-      path: `/tmp/commander-batch-${index}.txt`,
-      score: 1_000 - index,
-    }));
-    const requestedPaths: string[] = [];
-    const pendingReplies: Array<{
-      path: string;
-      resolve: (result: { dataUrl: string }) => void;
-    }> = [];
-    vi.mocked(nativeRequest).mockImplementation(((method: string, params?: unknown) => {
-      if (method !== 'filesystem.icon') return Promise.resolve(undefined);
-      const path = (params as { path: string }).path;
-      requestedPaths.push(path);
-      return new Promise((resolve: (result: { dataUrl: string }) => void) => {
-        pendingReplies.push({ path, resolve });
-      });
-    }) as typeof nativeRequest);
-    const selectedIndex = 17;
-    render(<Launcher state={state({ hits: pathBackedHits, selectedIndex })} />);
-
-    await waitFor(() => expect(requestedPaths).toHaveLength(2));
-    expect(requestedPaths[0]).toBe(pathBackedHits[selectedIndex]!.path);
-    expect(requestedPaths).toHaveLength(2);
-
-    let resolvedReplies = 0;
-    while (resolvedReplies < pathBackedHits.length) {
-      await waitFor(() => expect(pendingReplies.length).toBeGreaterThan(resolvedReplies));
-      const batch = pendingReplies.slice(resolvedReplies);
-      batch.forEach(({ path, resolve }) => resolve({ dataUrl: `data:image/png;base64,${btoa(path)}` }));
-      resolvedReplies += batch.length;
-    }
-
-    await waitFor(() => expect(requestedPaths).toHaveLength(pathBackedHits.length));
-    expect(new Set(requestedPaths)).toEqual(new Set(pathBackedHits.map((hit) => hit.path)));
-    await waitFor(() =>
-      expect(document.querySelectorAll('.result-native-icon')).toHaveLength(pathBackedHits.length),
-    );
-  });
-
-  it('reuses cached native Finder icons when a result is remounted', async () => {
-    const application = {
-      ...hits[1]!,
-      id: 'app:cached-preview',
-      path: '/Applications/Cached Preview.app',
-    };
-    vi.mocked(nativeRequest).mockResolvedValue({ dataUrl: 'data:image/png;base64,Y2FjaGVk' });
-    const nativeIconCalls = () =>
-      vi.mocked(nativeRequest).mock.calls.filter(([method]) => method === 'filesystem.icon');
-
-    const first = render(<Launcher state={state({ hits: [application], selectedIndex: 0 })} />);
-    await waitFor(() => expect(nativeIconCalls()).toHaveLength(1));
-    await waitFor(() => expect(document.querySelector('.result-native-icon')).toBeTruthy());
-    first.unmount();
-
-    render(<Launcher state={state({ hits: [application], selectedIndex: 0 })} />);
-    await waitFor(() => expect(document.querySelector('.result-native-icon')).toBeTruthy());
-    expect(nativeIconCalls()).toHaveLength(1);
   });
 
   it('runs the selected primary action with Return', async () => {
@@ -624,21 +510,6 @@ describe('Launcher keyboard navigation', () => {
     expect(commander.executeCommand).not.toHaveBeenCalled();
   });
 
-  it('keeps one fixed loading spinner mounted while search results stream', () => {
-    const commander = state({ hits: [], searchPending: true });
-    const view = render(<Launcher state={commander} />);
-
-    const spinner = screen.getByLabelText('Updating results');
-    expect(spinner).toHaveClass('search-spinner');
-    expect(view.container.querySelectorAll('.search-spinner')).toHaveLength(1);
-    expect(screen.getByText('Searching…')).toBeVisible();
-
-    view.rerender(<Launcher state={{ ...commander, hits }} />);
-
-    expect(screen.getByLabelText('Updating results')).toBe(spinner);
-    expect(view.container.querySelectorAll('.search-spinner')).toHaveLength(1);
-  });
-
   it('shows live index progress in the footer', () => {
     render(
       <Launcher
@@ -651,10 +522,7 @@ describe('Launcher keyboard navigation', () => {
             kinds: [],
             commands: { count: 20 },
             automaticRefresh: { applicationsMinutes: 5, filesystemMinutes: 360 },
-            customTimeoutMs: null,
             resourceLimits: DEFAULT_SETTINGS.indexing.resourceLimits,
-            timing: { samples: 0 },
-            timeoutAttempts: [],
             progress: {
               scope: 'files',
               label: 'Indexing Files',
@@ -687,59 +555,4 @@ describe('Launcher keyboard navigation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open New Window' }));
     await waitFor(() => expect(nativeRequest).toHaveBeenCalledWith('launcher.openNewWindow'));
   });
-
-  it.each([false, true])(
-    'toggles the shared new-window pin default from %s without pinning this window',
-    async (defaultPinned) => {
-      const settings = {
-        ...DEFAULT_SETTINGS,
-        windowPinning: { ...DEFAULT_SETTINGS.windowPinning, defaultPinned },
-      };
-      vi.mocked(nativeRequest).mockImplementation(async (method) =>
-        method === 'launcher.state'
-          ? { windowId: 'window-1', pinned: false, pinningEnabled: true }
-          : undefined,
-      );
-      const commander = state({ bootstrap: { ...bootstrap, settings } });
-      const view = render(<Launcher state={commander} />);
-      await waitFor(() =>
-        expect(screen.getByRole('button', { name: 'Pin Commander window' })).toHaveAttribute(
-          'aria-pressed',
-          'false',
-        ),
-      );
-      fireEvent.contextMenu(screen.getByRole('button', { name: 'Pin Commander window' }));
-      const toggle = screen.getByRole('switch', { name: 'Open New Windows Pinned' });
-      expect(toggle).toHaveAttribute('aria-checked', String(defaultPinned));
-      fireEvent.click(toggle);
-      const nextSettings = {
-        ...settings,
-        windowPinning: { ...settings.windowPinning, defaultPinned: !defaultPinned },
-      };
-      expect(commander.saveSettings).toHaveBeenCalledExactlyOnceWith(nextSettings);
-      expect(nativeRequest).not.toHaveBeenCalledWith('launcher.pin', expect.anything());
-      expect(screen.queryByRole('switch', { name: 'Open New Windows Pinned' })).not.toBeInTheDocument();
-
-      view.rerender(
-        <Launcher state={{ ...commander, bootstrap: { ...bootstrap, settings: nextSettings } }} />,
-      );
-      fireEvent.contextMenu(screen.getByRole('button', { name: 'Pin Commander window' }));
-      expect(screen.getByRole('switch', { name: 'Open New Windows Pinned' })).toHaveAttribute(
-        'aria-checked',
-        String(!defaultPinned),
-      );
-      expect(screen.getByRole('button', { name: 'Pin Commander window' })).toHaveAttribute(
-        'aria-pressed',
-        'false',
-      );
-
-      // A failed save/refetch (or a change from General settings) must update the
-      // checkmark from the shared settings, not leave a separate local toggle.
-      view.rerender(<Launcher state={commander} />);
-      expect(screen.getByRole('switch', { name: 'Open New Windows Pinned' })).toHaveAttribute(
-        'aria-checked',
-        String(defaultPinned),
-      );
-    },
-  );
 });

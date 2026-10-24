@@ -5,80 +5,6 @@ import XCTest
 
 @MainActor
 final class CommanderWebViewTests: XCTestCase {
-  func testExplicitDismissalReturnsFocusOnlyWhileLauncherOwnsIt() {
-    XCTAssertTrue(LauncherPanelController.shouldRestorePreviousApplication(
-      isPresented: true, applicationIsActive: true, hasOtherKeyWindow: false
-    ))
-    XCTAssertFalse(LauncherPanelController.shouldRestorePreviousApplication(
-      isPresented: false, applicationIsActive: true, hasOtherKeyWindow: false
-    ))
-    XCTAssertFalse(LauncherPanelController.shouldRestorePreviousApplication(
-      isPresented: true, applicationIsActive: false, hasOtherKeyWindow: false
-    ))
-    XCTAssertFalse(LauncherPanelController.shouldRestorePreviousApplication(
-      isPresented: true, applicationIsActive: true, hasOtherKeyWindow: true
-    ))
-  }
-
-  func testNativeOAuthCallbackOnlyAcceptsTheRegisteredCommanderRoute() {
-    XCTAssertTrue(
-      CommanderOAuthCallback.isValid(
-        URL(string: "com.thingtime.commander://oauth/callback?code=code-value&state=0123456789abcdef")!
-      )
-    )
-    XCTAssertTrue(
-      CommanderOAuthCallback.isValid(
-        URL(string: "com.thingtime.commander://oauth/callback?error=access_denied&state=0123456789abcdef")!
-      )
-    )
-    for raw in [
-      "commander://oauth/callback?code=code-value&state=0123456789abcdef",
-      "com.thingtime.commander://other/callback?code=code-value&state=0123456789abcdef",
-      "com.thingtime.commander://oauth/callback?code=code-value",
-      "com.thingtime.commander://oauth/callback?code=one&code=two&state=0123456789abcdef",
-      "com.thingtime.commander://oauth/callback?code=code-value&state=0123456789abcdef#fragment",
-    ] {
-      XCTAssertFalse(CommanderOAuthCallback.isValid(URL(string: raw)!))
-    }
-  }
-
-  func testKeychainEnvironmentParserRejectsAmbiguousKeys() {
-    XCTAssertEqual(
-      KeychainStore.environment(from: "https://dev.thingtime.com|ttapp_development|user-1"),
-      KeychainCredentialEnvironment(
-        issuer: "https://dev.thingtime.com",
-        clientID: "ttapp_development",
-        accountID: "user-1"
-      )
-    )
-    XCTAssertNil(KeychainStore.environment(from: "https://thingtime.com|ttapp|user|extra"))
-    XCTAssertNil(KeychainStore.environment(from: "https://thingtime.com||user"))
-  }
-
-  func testDeniedEmojiPasteDoesNotTouchTheClipboard() async {
-    let ready = DaemonReady(
-      type: "ready", protocolVersion: 1, port: 1, url: "http://127.0.0.1:1",
-      sessionToken: "test-session", nativeToken: "test-native", pid: 1
-    )
-    let bridge = CommanderNativeBridge(
-      ready: ready, keychain: KeychainStore(), loginItem: LaunchAtLoginService(),
-      showLauncher: {}, hideLauncher: {}, showSettings: { _ in },
-      updateHotKeys: { _, _ in }, updateMenuBar: { _ in }, updateWindowMode: { _ in }
-    )
-    let controller = LauncherPanelController(
-      ready: ready, bridge: bridge, isAccessibilityTrusted: { false }
-    )
-    defer { controller.shutdown() }
-    let changeCount = NSPasteboard.general.changeCount
-
-    let result = await controller.paste("❤️", preserveClipboard: true)
-
-    XCTAssertEqual(result["requiresAccessibility"] as? Bool, true)
-    XCTAssertEqual(result["copied"] as? Bool, false)
-    XCTAssertEqual(result["pasted"] as? Bool, false)
-    XCTAssertEqual(NSPasteboard.general.changeCount, changeCount)
-  }
-
   func testTransparentCanvasDoesNotPaintAnOuterRectangle() {
     let ready = DaemonReady(
       type: "ready",
@@ -181,12 +107,12 @@ final class CommanderWebViewTests: XCTestCase {
     controller.shutdown()
   }
 
-  func testNewWindowPinningUsesTheGlobalDefault() {
+  func testOpenNewWindowPinOverrideWinsOverTheGlobalDefault() {
     XCTAssertFalse(
-      CommanderAppDelegate.initialPinnedState(defaultPinned: false)
+      CommanderAppDelegate.initialPinnedState(defaultPinned: false, pinnedOverride: nil)
     )
     XCTAssertTrue(
-      CommanderAppDelegate.initialPinnedState(defaultPinned: true)
+      CommanderAppDelegate.initialPinnedState(defaultPinned: false, pinnedOverride: true)
     )
   }
 
@@ -263,147 +189,6 @@ final class CommanderWebViewTests: XCTestCase {
     )
   }
 
-  func testCustomResizeCancelsOnInputLifecycleChangesIncludingReturnAndCanBeDisabled() throws {
-    let ready = DaemonReady(
-      type: "ready",
-      protocolVersion: 1,
-      port: 1,
-      url: "http://127.0.0.1:1",
-      sessionToken: "test-session",
-      nativeToken: "test-native",
-      pid: 1
-    )
-    let bridge = CommanderNativeBridge(
-      ready: ready,
-      keychain: KeychainStore(),
-      loginItem: LaunchAtLoginService(),
-      showLauncher: {},
-      hideLauncher: {},
-      showSettings: { _ in },
-      updateHotKeys: { _, _ in },
-      updateMenuBar: { _ in },
-      updateWindowMode: { _ in }
-    )
-    let controller = LauncherPanelController(ready: ready, bridge: bridge)
-    let panel = controller.panelForTesting
-    defer { controller.shutdown() }
-    let location = NSPoint(
-      x: panel.frame.width - CommanderWebView.launcherSurfaceInset,
-      y: panel.frame.height / 2
-    )
-    func mouseEvent(_ type: NSEvent.EventType) throws -> NSEvent {
-      try XCTUnwrap(
-        NSEvent.mouseEvent(
-          with: type,
-          location: location,
-          modifierFlags: [],
-          timestamp: 0,
-          windowNumber: panel.windowNumber,
-          context: nil,
-          eventNumber: 0,
-          clickCount: 1,
-          pressure: 1
-        )
-      )
-    }
-    func returnKeyEvent() throws -> NSEvent {
-      try XCTUnwrap(
-        NSEvent.keyEvent(
-          with: .keyDown,
-          location: .zero,
-          modifierFlags: [],
-          timestamp: 0,
-          windowNumber: panel.windowNumber,
-          context: nil,
-          characters: "\r",
-          charactersIgnoringModifiers: "\r",
-          isARepeat: false,
-          keyCode: 36
-        )
-      )
-    }
-
-    panel.sendEvent(try mouseEvent(.leftMouseDown))
-    XCTAssertTrue(controller.resizeSessionActiveForTesting)
-    panel.sendEvent(try mouseEvent(.leftMouseUp))
-    XCTAssertFalse(controller.resizeSessionActiveForTesting)
-
-    panel.sendEvent(try mouseEvent(.leftMouseDown))
-    controller.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification, object: panel))
-    XCTAssertFalse(controller.resizeSessionActiveForTesting)
-
-    panel.sendEvent(try mouseEvent(.leftMouseDown))
-    panel.sendEvent(try returnKeyEvent())
-    XCTAssertFalse(controller.resizeSessionActiveForTesting)
-
-    panel.sendEvent(try mouseEvent(.leftMouseDown))
-    controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification, object: panel))
-    XCTAssertFalse(controller.resizeSessionActiveForTesting)
-
-    panel.sendEvent(try mouseEvent(.leftMouseDown))
-    controller.hide()
-    XCTAssertFalse(controller.resizeSessionActiveForTesting)
-
-    panel.sendEvent(try mouseEvent(.leftMouseDown))
-    panel.cancelOperation(nil)
-    XCTAssertFalse(controller.resizeSessionActiveForTesting)
-
-    panel.sendEvent(try mouseEvent(.leftMouseDown))
-    controller.setCustomWindowResizeHandling(false)
-    XCTAssertFalse(controller.resizeSessionActiveForTesting)
-    XCTAssertFalse(controller.customWindowResizeHandlingEnabledForTesting)
-    panel.sendEvent(try mouseEvent(.leftMouseDown))
-    XCTAssertFalse(controller.resizeSessionActiveForTesting)
-  }
-
-  func testCustomResizeCancelsWhenThePanelCloses() throws {
-    let ready = DaemonReady(
-      type: "ready",
-      protocolVersion: 1,
-      port: 1,
-      url: "http://127.0.0.1:1",
-      sessionToken: "test-session",
-      nativeToken: "test-native",
-      pid: 1
-    )
-    let bridge = CommanderNativeBridge(
-      ready: ready,
-      keychain: KeychainStore(),
-      loginItem: LaunchAtLoginService(),
-      showLauncher: {},
-      hideLauncher: {},
-      showSettings: { _ in },
-      updateHotKeys: { _, _ in },
-      updateMenuBar: { _ in },
-      updateWindowMode: { _ in }
-    )
-    let controller = LauncherPanelController(ready: ready, bridge: bridge)
-    let panel = controller.panelForTesting
-    defer { controller.shutdown() }
-    let event = try XCTUnwrap(
-      NSEvent.mouseEvent(
-        with: .leftMouseDown,
-        location: NSPoint(
-          x: panel.frame.width - CommanderWebView.launcherSurfaceInset,
-          y: panel.frame.height / 2
-        ),
-        modifierFlags: [],
-        timestamp: 0,
-        windowNumber: panel.windowNumber,
-        context: nil,
-        eventNumber: 0,
-        clickCount: 1,
-        pressure: 1
-      )
-    )
-    panel.sendEvent(event)
-    XCTAssertTrue(controller.resizeSessionActiveForTesting)
-
-    panel.close()
-
-    XCTAssertFalse(controller.resizeSessionActiveForTesting)
-  }
-
   func testSettingsDeepLinkDispatchesOnlyKnownTabs() {
     let script = SettingsWindowController.settingsTabScriptForTesting(.search)
     XCTAssertTrue(script.contains("commander:settings-tab"))
@@ -458,47 +243,6 @@ final class CommanderWebViewTests: XCTestCase {
     }
 
     XCTAssertThrowsError(try CommanderWebView.fileIconDataURL(for: "relative/file.txt"))
-  }
-
-  func testNativeFileIconQueueCoalescesAndCachesRepeatedPaths() async throws {
-    let file = FileManager.default.temporaryDirectory
-      .appendingPathComponent("commander-icon-cache-\(UUID().uuidString).txt")
-    XCTAssertTrue(FileManager.default.createFile(atPath: file.path, contents: Data("icon".utf8)))
-    defer { try? FileManager.default.removeItem(at: file) }
-
-    var renderedPaths: [String] = []
-    let queue = CommanderFileIconRequestQueue { path in
-      renderedPaths.append(path)
-      return "data:image/png;base64,Y2FjaGVk"
-    }
-
-    async let first = queue.dataURL(for: file.path)
-    async let duplicate = queue.dataURL(for: file.path)
-    let responses = try await (first, duplicate)
-    XCTAssertEqual(responses.0, "data:image/png;base64,Y2FjaGVk")
-    XCTAssertEqual(responses.1, "data:image/png;base64,Y2FjaGVk")
-    XCTAssertEqual(renderedPaths, [file.standardizedFileURL.path])
-
-    let cachedResponse = try await queue.dataURL(for: file.path)
-    XCTAssertEqual(cachedResponse, "data:image/png;base64,Y2FjaGVk")
-    XCTAssertEqual(renderedPaths.count, 1)
-  }
-
-  func testApplicationOpenSubmissionDoesNotWaitForLaunchServicesCompletion() {
-    let target = URL(fileURLWithPath: "/Applications/Notes.app")
-    var submittedURL: URL?
-    var activates: Bool?
-    let opener = CommanderApplicationOpener { url, configuration, _ in
-      submittedURL = url
-      activates = configuration.activates
-      // Deliberately never call the completion handler: this models a stuck
-      // Launch Services XPC reply, which must not hold Commander's UI thread.
-    }
-
-    opener.submit(target)
-
-    XCTAssertEqual(submittedURL, target)
-    XCTAssertEqual(activates, true)
   }
 
   func testPreparedFileDragKeepsLauncherVisibleUntilTheSessionEnds() throws {

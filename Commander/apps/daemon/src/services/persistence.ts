@@ -11,12 +11,9 @@ import type {
 import {
   addRecentSearch as prependRecentSearch,
   DEFAULT_SETTINGS,
-  normalizeActivitySettings,
   normalizeCalculatorSettings,
   normalizeCommandShortcuts,
   normalizeCommanderThingtimeClientId,
-  normalizeCommanderThingtimeCustomEnvironments,
-  normalizeCustomWindowResizeHandling,
   normalizeEmojiDefaultAction,
   normalizeIndexingSettings,
   normalizeRecentSearches,
@@ -42,12 +39,6 @@ interface PersistentState {
 
 type PersistentSnapshot = Omit<PersistentState, 'searchPreferences'>;
 
-export interface AccountEnvironmentUpdate {
-  accountId: string;
-  baseUrl: string;
-  clientId: string;
-}
-
 const statePath = () => path.join(commanderDataDirectory(), 'state.json');
 
 function normalizedSettings(settings: Partial<CommanderSettings> | undefined): CommanderSettings {
@@ -59,15 +50,8 @@ function normalizedSettings(settings: Partial<CommanderSettings> | undefined): C
     searchCache: normalizeSearchCacheSettings(settings?.searchCache),
     emojiDefaultAction: normalizeEmojiDefaultAction(settings?.emojiDefaultAction),
     calculator: normalizeCalculatorSettings(settings?.calculator),
-    activity: normalizeActivitySettings(settings?.activity),
-    useCustomWindowResizeHandling: normalizeCustomWindowResizeHandling(
-      settings?.useCustomWindowResizeHandling,
-    ),
     windowPinning: normalizeWindowPinningSettings(settings?.windowPinning),
     indexing: normalizeIndexingSettings(settings?.indexing),
-    thingtimeCustomEnvironments: normalizeCommanderThingtimeCustomEnvironments(
-      settings?.thingtimeCustomEnvironments,
-    ),
     thingtimeClientId: normalizeCommanderThingtimeClientId(merged.thingtimeClientId, merged.thingtimeBaseUrl),
   };
 }
@@ -104,12 +88,7 @@ export class PersistentStore {
         JSON.stringify(parsed.settings?.searchCache) !== JSON.stringify(settings.searchCache) ||
         parsed.settings?.emojiDefaultAction !== settings.emojiDefaultAction ||
         JSON.stringify(parsed.settings?.calculator) !== JSON.stringify(settings.calculator) ||
-        JSON.stringify(parsed.settings?.activity) !== JSON.stringify(settings.activity) ||
-        parsed.settings?.useCustomWindowResizeHandling !== settings.useCustomWindowResizeHandling ||
         JSON.stringify(parsed.settings?.windowPinning) !== JSON.stringify(settings.windowPinning);
-      const environmentsNeedMigration =
-        JSON.stringify(parsed.settings?.thingtimeCustomEnvironments ?? []) !==
-        JSON.stringify(settings.thingtimeCustomEnvironments);
       this.#indexingMigrationPending = indexingNeedsMigration;
       const recentSearches = normalizeRecentSearches(parsed.recentSearches);
       const historyNeedsMigration =
@@ -133,7 +112,6 @@ export class PersistentStore {
         shortcutsNeedMigration ||
         indexingNeedsMigration ||
         searchPresentationNeedsMigration ||
-        environmentsNeedMigration ||
         historyNeedsMigration ||
         preferencesNeedMigration
       )
@@ -179,35 +157,6 @@ export class PersistentStore {
     await this.#persist();
   }
 
-  async reconcileAccountEnvironments(updates: AccountEnvironmentUpdate[]): Promise<CommanderAccount[]> {
-    const environmentsByAccountID = new Map<string, Map<string, CommanderAccount['environment']>>();
-    for (const update of updates.slice(0, 64)) {
-      const environment = normalizedAccountEnvironment(update);
-      if (!environment) continue;
-      const environments = environmentsByAccountID.get(update.accountId) ?? new Map();
-      environments.set(`${environment.baseUrl}\u0000${environment.clientId}`, environment);
-      environmentsByAccountID.set(update.accountId, environments);
-    }
-
-    let changed = false;
-    this.#state.accounts = this.#state.accounts.map((account) => {
-      const environments = environmentsByAccountID.get(account.id);
-      // A user ID can theoretically exist in more than one deployment. Keep
-      // that legacy record unlabeled instead of assigning an arbitrary origin.
-      if (!environments || environments.size !== 1) return account;
-      const environment = [...environments.values()][0]!;
-      if (
-        account.environment?.baseUrl === environment.baseUrl &&
-        account.environment.clientId === environment.clientId
-      )
-        return account;
-      changed = true;
-      return { ...account, environment };
-    });
-    if (changed) await this.#persist();
-    return structuredClone(this.#state.accounts);
-  }
-
   async removeAccount(id: string): Promise<void> {
     this.#state.accounts = this.#state.accounts.filter((account) => account.id !== id);
     if (this.#state.settings.activeAccountId === id)
@@ -219,10 +168,6 @@ export class PersistentStore {
     const account = this.#state.accounts.find((item) => item.id === id);
     if (!account) throw new Error('Account not found');
     this.#state.settings.activeAccountId = id;
-    if (account.environment) {
-      this.#state.settings.thingtimeBaseUrl = account.environment.baseUrl;
-      this.#state.settings.thingtimeClientId = account.environment.clientId;
-    }
     await this.#persist();
     return structuredClone(account);
   }
@@ -316,21 +261,6 @@ export class PersistentStore {
       await rename(temporary, statePath());
     });
     await this.#writeQueue;
-  }
-}
-
-function normalizedAccountEnvironment(
-  value: AccountEnvironmentUpdate,
-): CommanderAccount['environment'] | undefined {
-  const accountId = typeof value.accountId === 'string' ? value.accountId.trim() : '';
-  const clientId = typeof value.clientId === 'string' ? value.clientId.trim() : '';
-  if (!accountId || accountId.length > 256 || !clientId || clientId.length > 256) return undefined;
-  try {
-    const url = new URL(value.baseUrl);
-    if (!url.origin || url.username || url.password) return undefined;
-    return { baseUrl: url.origin, clientId };
-  } catch {
-    return undefined;
   }
 }
 

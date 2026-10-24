@@ -8,7 +8,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-use std::collections::HashMap;
 
 const MAX_QUERY_CHARS: usize = 128;
 const MAX_FIELD_CHARS: usize = 512;
@@ -23,10 +22,6 @@ const KEYWORD_WEIGHT: u64 = 25;
 const FAVOURITE_BONUS: u64 = 25;
 const MAX_PREFERENCE_SCORE: u64 = 100_000;
 const EXACT_MATCH_SCORE: u64 = 100_000;
-// Keep complete app-name words close to exact titles. Category and learned
-// preferences decide the small remaining gap; never boost path/typo matches.
-// Keep in sync with the daemon's fallback search.
-const APPLICATION_NAME_WORD_SCORE: u64 = 99_300;
 const PREFIX_MATCH_SCORE: u64 = 80_000;
 const CONTAINED_MATCH_SCORE: u64 = 60_000;
 
@@ -307,17 +302,9 @@ fn rank_item<'a>(item: &'a SearchItem, query: &[char], ordinal: usize) -> Option
     }
 
     let title_match = match_text(query, &item.title);
-    let mut best_score = title_match.as_ref().map(|text_match| {
-        let score = if item.kind == SearchItemKind::Application
-            && text_match.score < APPLICATION_NAME_WORD_SCORE
-            && matches_application_name_words(query, &item.title)
-        {
-            APPLICATION_NAME_WORD_SCORE
-        } else {
-            text_match.score
-        };
-        weighted_score(score, TITLE_WEIGHT)
-    });
+    let mut best_score = title_match
+        .as_ref()
+        .map(|text_match| weighted_score(text_match.score, TITLE_WEIGHT));
 
     if let Some(subtitle_match) = item
         .subtitle
@@ -355,33 +342,6 @@ fn rank_item<'a>(item: &'a SearchItem, query: &[char], ordinal: usize) -> Option
         folded_title: fold_sort_key(&item.title),
         ordinal,
     })
-}
-
-fn matches_application_name_words(query: &[char], title: &str) -> bool {
-    let needle: Vec<char> = query
-        .iter()
-        .copied()
-        .filter(|ch| ch.is_alphanumeric())
-        .collect();
-    if needle.len() < 3 {
-        return false;
-    }
-    let name: Vec<FoldedGlyph> = fold_candidate(title)
-        .into_iter()
-        .filter(|glyph| glyph.value.is_alphanumeric())
-        .collect();
-    name.windows(needle.len())
-        .enumerate()
-        .any(|(start, window)| {
-            window[0].boundary
-                && name
-                    .get(start + needle.len())
-                    .map_or(true, |glyph| glyph.boundary)
-                && window
-                    .iter()
-                    .map(|glyph| glyph.value)
-                    .eq(needle.iter().copied())
-        })
 }
 
 fn compare_ranked_matches(left: &RankedMatch<'_>, right: &RankedMatch<'_>) -> Ordering {
@@ -495,9 +455,6 @@ fn match_text(query: &[char], candidate: &str) -> Option<TextMatch> {
     }
 
     if query.len() > candidate.len() {
-        return typo_match(query, &candidate);
-    }
-    if !contains_subsequence(query, &candidate) {
         return typo_match(query, &candidate);
     }
 
@@ -615,29 +572,19 @@ fn match_text(query: &[char], candidate: &str) -> Option<TextMatch> {
         _ => {}
     }
 
-    let compact_query: Vec<char> = query
-        .iter()
-        .copied()
-        .filter(|character| character.is_alphanumeric())
-        .collect();
-    let compact_query = if compact_query.is_empty() {
-        query.to_vec()
-    } else {
-        compact_query
-    };
     let compact_candidate: Vec<char> = candidate
         .iter()
-        .filter(|glyph| glyph.value.is_alphanumeric())
+        .filter(|glyph| !glyph.value.is_whitespace())
         .map(|glyph| glyph.value)
         .collect();
     let coverage_bonus =
-        (((compact_query.len() as u64) * 1_000) / compact_candidate.len().max(1) as u64).min(1_000);
+        (((query.len() as u64) * 1_000) / compact_candidate.len().max(1) as u64).min(1_000);
     let contained_at = compact_candidate
-        .windows(compact_query.len())
-        .position(|candidate_window| candidate_window == compact_query);
-    let score = if compact_candidate == compact_query {
+        .windows(query.len())
+        .position(|candidate_window| candidate_window == query);
+    let score = if compact_candidate.as_slice() == query {
         EXACT_MATCH_SCORE
-    } else if compact_candidate.starts_with(&compact_query) {
+    } else if compact_candidate.starts_with(query) {
         PREFIX_MATCH_SCORE.saturating_sub(compact_candidate.len() as u64)
     } else if let Some(index) = contained_at {
         CONTAINED_MATCH_SCORE.saturating_sub(index as u64)
@@ -657,19 +604,6 @@ fn match_text(query: &[char], candidate: &str) -> Option<TextMatch> {
 /// application, command, and extension search.
 pub fn fuzzy_text_score(query: &str, candidate: &str) -> Option<u64> {
     match_text(&fold_query(query), candidate).map(|text_match| text_match.score)
-}
-
-fn contains_subsequence(query: &[char], candidate: &[FoldedGlyph]) -> bool {
-    let mut query_index = 0;
-    for glyph in candidate {
-        if glyph.value == query[query_index] {
-            query_index += 1;
-            if query_index == query.len() {
-                return true;
-            }
-        }
-    }
-    false
 }
 
 #[derive(Clone, Copy)]
@@ -699,12 +633,6 @@ fn typo_match(query: &[char], candidate: &[FoldedGlyph]) -> Option<TextMatch> {
         .map(|(index, glyph)| (glyph.value, index))
         .collect();
     if compact_candidate.is_empty() {
-        return None;
-    }
-    let maximum_distance = maximum_typo_distance(compact_query.len());
-    if character_overlap(&compact_query, &compact_candidate)
-        < compact_query.len().saturating_sub(maximum_distance)
-    {
         return None;
     }
 
@@ -780,7 +708,7 @@ fn typo_match(query: &[char], candidate: &[FoldedGlyph]) -> Option<TextMatch> {
                 .then_with(|| left.start.cmp(&right.start))
         },
     )?;
-    if best.cost > maximum_distance || best.start >= end {
+    if best.cost > maximum_typo_distance(compact_query.len()) || best.start >= end {
         return None;
     }
     let start_glyph = compact_candidate[best.start].1;
@@ -792,21 +720,6 @@ fn typo_match(query: &[char], candidate: &[FoldedGlyph]) -> Option<TextMatch> {
         score: score.max(1),
         ranges: ranges_for_indices(candidate, &(start_glyph..=end_glyph).collect::<Vec<_>>()),
     })
-}
-
-fn character_overlap(query: &[char], candidate: &[(char, usize)]) -> usize {
-    let mut query_counts = HashMap::new();
-    for character in query {
-        *query_counts.entry(*character).or_insert(0_usize) += 1;
-    }
-    let mut candidate_counts = HashMap::new();
-    for (character, _) in candidate {
-        *candidate_counts.entry(*character).or_insert(0_usize) += 1;
-    }
-    query_counts
-        .into_iter()
-        .map(|(character, count)| count.min(candidate_counts.get(&character).copied().unwrap_or(0)))
-        .sum()
 }
 
 fn best_edit_cell(left: EditCell, right: EditCell, _end: usize) -> EditCell {
@@ -1024,103 +937,6 @@ mod tests {
     }
 
     #[test]
-    fn complete_app_name_words_survive_the_file_result_limit() {
-        for (query, title, filename) in [
-            ("magician", "SamsungMagician", "Magician.png"),
-            ("recovery", "Thingtime Recovery", "Recovery"),
-        ] {
-            let mut application = item("application", title);
-            application.kind = SearchItemKind::Application;
-            application.preference_score = 1_200;
-            let mut items: Vec<SearchItem> = (0..40)
-                .map(|index| {
-                    let mut file = item(&format!("file:{index}"), filename);
-                    file.kind = SearchItemKind::File;
-                    file
-                })
-                .collect();
-            items.push(application);
-            let mut query_request = request(query, items);
-            query_request.limit = Some(30);
-            let hits = search(&query_request);
-            assert_eq!(hits.len(), 30);
-            assert_eq!(hits[0].item.id, "application", "{query}");
-            assert_eq!(hits[0].score, APPLICATION_NAME_WORD_SCORE + 1_200);
-            assert!(!hits[0].matched_ranges.is_empty());
-        }
-    }
-
-    #[test]
-    fn app_name_word_boost_requires_complete_words_not_substrings_or_typos() {
-        for (query, title, expected) in [
-            ("magician", "SamsungMagician", true),
-            ("recovery", "Thingtime Recovery.app", true),
-            ("recovery tools", "Thingtime Recovery-Tools", true),
-            ("recoverytools", "Thingtime Recovery Tools", true),
-            ("recovery", "🪄 Recovery Tools", true),
-            ("café", "MonCafé", true),
-            ("cover", "Thingtime Recovery", false),
-            ("magic", "SamsungMagician", false),
-            ("recvoery", "Thingtime Recovery", false),
-            ("go", "Go Tools", false),
-        ] {
-            assert_eq!(
-                matches_application_name_words(&fold_query(query), title),
-                expected,
-                "{query}: {title}"
-            );
-            let mut application = item("application", title);
-            application.kind = SearchItemKind::Application;
-            let hits = search(&request(query, vec![application]));
-            assert_eq!(
-                hits.first()
-                    .map_or(false, |hit| hit.score >= APPLICATION_NAME_WORD_SCORE),
-                expected,
-                "{query}: {title}"
-            );
-        }
-    }
-
-    #[test]
-    fn exact_app_names_files_and_user_preferences_still_win() {
-        let mut application = item("application", "Thingtime Recovery");
-        application.kind = SearchItemKind::Application;
-        application.preference_score = 1_200;
-        let mut exact_app = item("exact", "Recovery");
-        exact_app.kind = SearchItemKind::Application;
-        exact_app.preference_score = 1_200;
-        let mut file = item("file", "recovery.c");
-        file.kind = SearchItemKind::File;
-        let mut folder = item("folder", "Recovery");
-        folder.kind = SearchItemKind::Directory;
-        folder.preference_score = 2_000;
-        assert_eq!(
-            search(&request("recovery", vec![application.clone(), exact_app]))[0]
-                .item
-                .id,
-            "exact"
-        );
-        assert_eq!(
-            search(&request("recovery.c", vec![application.clone(), file]))[0]
-                .item
-                .id,
-            "file"
-        );
-        assert_eq!(
-            search(&request("recovery", vec![application.clone(), folder]))[0]
-                .item
-                .id,
-            "folder"
-        );
-        application.title = "Unrelated".to_owned();
-        application.subtitle = Some("/Applications/Recovery/Unrelated.app".to_owned());
-        application.keywords = vec!["recovery".to_owned()];
-        assert!(
-            search(&request("recovery", vec![application]))[0].score < APPLICATION_NAME_WORD_SCORE
-        );
-    }
-
-    #[test]
     fn searches_subtitles_and_keywords() {
         let mut settings = item("settings", "Commander");
         settings.subtitle = Some("Application settings".to_owned());
@@ -1195,21 +1011,6 @@ mod tests {
         assert_eq!(hits[0].item.id, "system");
         assert_eq!(hits[0].item.title, "Displays Settings");
         assert!(hits[0].score > hits[1].score);
-    }
-
-    #[test]
-    fn separator_equivalent_exact_title_beats_typo_siblings() {
-        let hits = search(&request(
-            "raycast stop",
-            vec![
-                item("start", "raycast-start"),
-                item("status", "raycast-status"),
-                item("stop", "raycast-stop"),
-            ],
-        ));
-
-        assert_eq!(hits[0].item.id, "stop");
-        assert_eq!(hits[0].score, EXACT_MATCH_SCORE);
     }
 
     #[test]
