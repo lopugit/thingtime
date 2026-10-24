@@ -85,12 +85,8 @@ import {
   sanitizeExtended,
   validateThingtimeCrystal,
   visibilityFromAcl,
-  type FeedScope,
   type NotificationType,
-  type PostMediaLayout,
-  type ThingVisibility,
-  SUBSPACE_THINGTIME,
-  UPDOWN_THINGTIME
+  type ThingVisibility
 } from '~/schemas/registry';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
 import { pollShapeOfCrystal, tallyPollVotes, type PollVoteEntry, type PublicPollVotes } from './pollCore';
@@ -120,29 +116,9 @@ import {
 } from '../subspaces/gate';
 import { liveUserFlair, toPublicUserFlair, type PublicUserFlair } from '../subspaces/subspaceCore';
 import { resolveInheritChain } from './aclChainCore';
-import {
-  appAclEntry,
-  appNamespaceClauses,
-  appNamespaceStamp,
-	APP_STORAGE_ACCOUNTING_VERSION,
-	applyAppStorageDeltaTransaction,
-	appStorageCounterFenceMatch,
-	appStorageCounterMatch,
-  chargeAppStorage,
-  filterByLiveAuthors,
-  liveSandboxAuthors,
-  liveSharingAuthors,
-  refundAppStorage,
-  sandboxDisplayName
-} from '../apps/namespace';
-import type { AppNamespaceScope } from '../apps/namespace';
-import { scopeCovers } from '../apps/scopes';
-import { resolveAppScopedAcl } from '../apps/namespace';
 import { resolveViewStats } from './views';
-import { emitNotification, emitNotificationsBulk, type NotificationActor } from '../notifications/notifications';
-import { emitMentionNotifications } from '../notifications/mentions';
-import { followerIdsOf, friendIdsOf, groupIdsOf } from '../users/social';
-import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
+import { emitNotification, emitNotificationsBulk } from '../notifications/notifications';
+import { followerIdsOf, friendIdsOf } from '../users/social';
 
 // Everything in thingtime.things is a thing (see app/schemas/registry.ts):
 // one root Thing schema, sub-schemas applied via the `thingtime` array of
@@ -428,12 +404,6 @@ export type PublicPost = {
   // (the manipulation-resistant number), impressions/avgDwellMs secondary
   viewCount: number;
   viewStats: { impressions: number; avgDwellMs: number };
-  // poll posts only (crystal.thing carries question/options): live per-option
-  // vote counts + the viewer's own vote, batch-aggregated from vote things
-  pollVotes?: PublicPollVotes;
-  // logged-in viewers only: has the viewer saved this post to their library?
-  // (batched savedTargetIds lookup — anonymous projections omit the field)
-  viewerSaved?: boolean;
   extended: unknown | null;
   geo?: GeoLocation | null;
   createdAt: string;
@@ -505,214 +475,19 @@ export type PublicThing = {
 // Who is looking. Routes pass { id, username } from the authed PublicUser;
 // internal callers may only have an id (username-specific acl exclusions
 // simply can't match then). Plain string ids are accepted for compat.
-// When the actor is a personal access token, `pat` rides along: tokenId
-// stamps everything the token creates (createdByTokenId), onlyCreatedThings
-// sandboxes its mutations to those stamped things, and visibility fences it
-// to one audience of things ('public' = world-visible only, 'private' = the
-// rest only; 'all'/absent = unrestricted).
 // friendIds is the viewer's accepted-friend set, loaded once per request path
 // by withFriendIds so sync acl checks can resolve tt:userFriends.
-export type Viewer = {
-  id: string;
-  username?: string | null;
-  pat?: { tokenId: string; onlyCreatedThings: boolean; visibility?: 'all' | 'public' | 'private' | 'hidden' } | null;
-  friendIds?: ReadonlySet<string>;
-  // external-account shareIds the viewer holds connections links to — serves
-  // LEGACY tt:extacct/ audiences; loaded LAZILY (ensureExtAccountIds) only
-  // when a doc under evaluation actually carries the prefix
-  extAccountIds?: ReadonlySet<string>;
-  // external-post shareIds this viewer sources — serves the constant
-  // tt:extsourced audience. Grows only with the posts actually evaluated in
-  // this request (ensureExtSourced), and the feed primes it in bulk from the
-  // membership page it already read.
-  extSourcedPostIds?: ReadonlySet<string>;
-  // the viewer's subspace memberships (api/utils/subspaces/gate.ts), loaded
-  // beside friendIds so private-subspace posts resolve for real members
-  subspaceRoles?: ViewerSubspaceRoles;
-  // audience-group memberships (tt:group/<id> acl entries resolve against
-  // this) — loaded alongside friendIds by withFriendIds
-  groupIds?: ReadonlySet<string>;
-  // hidden-link keys presented with THIS request (?key= / body.key) — canView
-  // grants a hidden thing to whoever carries its linkKey here
-  linkKeys?: ReadonlySet<string>;
-  // Exact first-party permalink targets, never populated by feeds/search.
-  linkThingIds?: ReadonlySet<string>;
-  foundPosts?: ReadonlyMap<string, string>;
-  anonymousId?: string;
-} | null;
-export const asViewer = (value: string | Viewer | null | undefined): Viewer => (typeof value === 'string' ? { id: value } : value || null);
-
-// 32 base64url chars (~192 bits) — the whole security of a hidden link is
-// this string being unguessable
-const generateLinkKey = (): string => randomBytes(24).toString('base64url');
-
-// Attach presented hidden-link keys to a viewer. Works for logged-out callers
-// too: an anonymous key-holder rides an id-less viewer shell (id '' is falsy,
-// so every viewer?.id check still reads it as anonymous — the key is its only
-// power). No keys = the viewer passes through untouched.
-export const withLinkKeys = (viewer: Viewer, keys: readonly string[]): Viewer => {
-  const presented = keys.map((key) => key.trim()).filter(Boolean);
-  if (!presented.length) return viewer;
-  return viewer ? { ...viewer, linkKeys: new Set(presented) } : { id: '', linkKeys: new Set(presented) };
-};
-
-// Knowing an unlisted Thing's canonical id is sufficient to open its URL.
-// Keep this request-local and exact-id scoped so listing/projection of unrelated
-// hidden Things does not accidentally become public.
-export const withThingLink = (viewer: Viewer, id: string): NonNullable<Viewer> => ({
-  id: '', ...viewer, linkThingIds: new Set([...(viewer?.linkThingIds || []), id])
-});
+export type Viewer = { id: string; username?: string | null; friendIds?: ReadonlySet<string> } | null;
+export const asViewer = (value: string | Viewer | null | undefined): Viewer =>
+  typeof value === 'string' ? { id: value } : value || null;
 
 // Attach the viewer's accepted-friend set (one indexed query, memoised on the
 // viewer object — already-enriched viewers pass straight through). Read paths
 // call this before acl evaluation so friends-only things resolve for real
 // friends instead of only their owner.
 export const withFriendIds = async (viewer: Viewer): Promise<Viewer> => {
-  if (!viewer?.id || (viewer.friendIds && viewer.subspaceRoles && viewer.groupIds)) return viewer;
-  // the subspace roster and the audience-group set ride along (one indexed
-  // query each, same memo) so the sync canView can fence private-subspace
-  // posts, let moderators see removed ones, and resolve tt:group/<id>
-  const [friendIds, subspaceRoles, groupIds] = await Promise.all([
-    viewer.friendIds ? Promise.resolve(viewer.friendIds) : friendIdsOf(viewer.id),
-    viewer.subspaceRoles ? Promise.resolve(viewer.subspaceRoles) : loadViewerSubspaceRoles(viewer.id),
-    viewer.groupIds ? Promise.resolve(viewer.groupIds) : groupIdsOf(viewer.id)
-  ]);
-  return { ...viewer, friendIds, subspaceRoles, groupIds };
-};
-
-// In-flight load of a viewer's linked external-account ids, keyed weakly on
-// the viewer object. The memo has to be the PROMISE, not the finished field:
-// the callers below run concurrently (getThing's chain Promise.all, listThings'
-// page map), so a second caller routinely arrives while the first is still
-// awaiting its query and would otherwise start a duplicate one.
-const extAccountIdsLoad = new WeakMap<object, Promise<void>>();
-
-// Lazily attach the viewer's linked external-account ids the first time a doc
-// carrying a tt:extacct/ audience is evaluated. Deliberately MUTATES the
-// enriched viewer object (single monotone assignment): page loops pass the
-// same viewer reference per doc, so the home-DB links query runs at most once
-// per request path instead of once per external post on the page.
-const ensureExtAccountIds = async (viewer: Viewer): Promise<Viewer> => {
-  if (!viewer?.id || viewer.extAccountIds) return viewer;
-  let load = extAccountIdsLoad.get(viewer);
-  if (!load) {
-    load = (async () => {
-      const home = await getHomeThingsCollection();
-      const links = await home
-        .find({ thingtime: 'external-account-link', ownerId: viewer.id }, { projection: { 'crystal.accountId': 1 } })
-        .toArray();
-      (viewer as { extAccountIds?: ReadonlySet<string> }).extAccountIds = new Set(
-        links.map((link: any) => String(link?.crystal?.accountId || '')).filter(Boolean)
-      );
-    })();
-    extAccountIdsLoad.set(viewer, load);
-  }
-  // A failed load must not be cached: the next evaluation on this request
-  // should get a real attempt rather than replaying a stale rejection.
-  try {
-    await load;
-  } catch (err) {
-    extAccountIdsLoad.delete(viewer);
-    throw err;
-  }
-  return viewer;
-};
-
-const hasExtacctAudience = (doc: ThingDoc): boolean => {
-  const acl = Array.isArray(doc.acl) ? doc.acl : [];
-  return acl.some((entry) => typeof entry === 'string' && entry.includes(ACL_EXTACCT_PREFIX));
-};
-
-const hasExtSourcedAudience = (doc: ThingDoc): boolean => {
-  const acl = Array.isArray(doc.acl) ? doc.acl : [];
-  return acl.some((entry) => typeof entry === 'string' && entry.includes(ACL_EXT_SOURCED));
-};
-
-// Prime the viewer's sourced-post set for a known batch of external post ids.
-// The connections feed already paged the membership docs to build its page, so
-// it seeds the answer for free; other paths (permalinks, comment chains) come
-// through ensureExtSourced below with a single id.
-export const primeExtSourcedPostIds = (viewer: Viewer, postIds: Iterable<string>): void => {
-  if (!viewer?.id) return;
-  const known = new Set(viewer.extSourcedPostIds || []);
-  for (const id of postIds) if (id) known.add(id);
-  (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = known;
-  const asked = extSourcedResolution.get(viewer) || new Map<string, Promise<void>>();
-  const settled = Promise.resolve();
-  for (const id of postIds) if (id) asked.set(id, settled);
-  extSourcedResolution.set(viewer, asked);
-};
-
-// Which post ids we have already resolved for this viewer, held as the
-// RESOLUTION PROMISE rather than a bare "already asked" marker — distinct from
-// the positive set, so a miss is cached too and never re-queried. Keyed weakly
-// on the viewer object, which read paths already thread per request.
-//
-// The promise is load-bearing. ensureExtSourced publishes its memo entry before
-// the membership query it stands for has come back, and its callers run
-// CONCURRENTLY over entries that converge on the same post: getThing checks a
-// comment chain with one Promise.all, and every entry in that chain inherits
-// its acl from the same external post. Those entries sit at different inherit
-// depths, so their chain walks finish at different times — the shallow one can
-// reach the memo, claim the post, and still be awaiting Mongo when a deeper one
-// arrives. A bare marker sends that second caller straight on to canView with
-// the answer not yet loaded, and an unloaded set denies (deliberately, like
-// friendIds), so the viewer's own comment thread on a personal external post
-// intermittently loses its parent/root. Awaiting the same promise makes the
-// memo mean "resolved" instead of "claimed", and collapses the duplicate
-// queries the memo existed to avoid in the first place.
-const extSourcedResolution = new WeakMap<object, Map<string, Promise<void>>>();
-
-// Lazily resolve whether the viewer sources ONE external post, memoised per
-// request path (the same viewer object is threaded through page loops). One
-// indexed existence check per previously-unseen post; the feed path primes
-// instead, so this only ever fires for single-doc reads.
-const ensureExtSourced = async (viewer: Viewer, postId: string): Promise<Viewer> => {
-  if (!viewer?.id || !postId) return viewer;
-  let asked = extSourcedResolution.get(viewer);
-  if (!asked) {
-    asked = new Map<string, Promise<void>>();
-    extSourcedResolution.set(viewer, asked);
-  }
-  let resolving = asked.get(postId);
-  if (!resolving) {
-    resolving = (async () => {
-      await ensureExtAccountIds(viewer);
-      const accountIds = [...(viewer.extAccountIds || [])];
-      if (accountIds.length) {
-        const things = await getThingsCollection();
-        const hit = await things.findOne(
-          // (targetId, thingtime) is already this exact post's membership rows —
-          // one per sourcing account — so parentId is a residual over a handful of
-          // docs on the existing index, not a new one.
-          { thingtime: 'external-post-source', targetId: postId, parentId: { $in: accountIds } } as any,
-          { projection: { _id: 1 } }
-        );
-        if (hit) {
-          const known = new Set(viewer.extSourcedPostIds || []);
-          known.add(postId);
-          (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = known;
-          return;
-        }
-      }
-      // resolved-and-absent still needs an initialized set, or aclAllows can't
-      // tell "loaded, not a member" from "never loaded"
-      if (!viewer.extSourcedPostIds) {
-        (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = new Set<string>();
-      }
-    })();
-    asked.set(postId, resolving);
-  }
-  // A failed probe must not be cached as a resolved answer — drop it so this
-  // request can try again rather than treating a transient DB fault as "not a
-  // member" for the rest of the page.
-  try {
-    await resolving;
-  } catch (err) {
-    asked.delete(postId);
-    throw err;
-  }
-  return viewer;
+  if (!viewer?.id || viewer.friendIds) return viewer;
+  return { ...viewer, friendIds: await friendIdsOf(viewer.id) };
 };
 
 export const POST_TYPES: PostType[] = [...REGISTRY_POST_TYPES];
@@ -1861,6 +1636,35 @@ export const emitCreationNotifications = async (doc: ThingDoc, target: ThingDoc 
     });
     return;
   }
+  // notification side effects — emit* never throws, so a notification hiccup
+  // can't fail the write that triggered it
+  await emitCreationNotifications(doc, target, asOwner);
+  return { ok: true, doc };
+};
+
+// Posts land in followers'/friends' notification feeds, capped — big accounts
+// notify their newest FANOUT_CAP connections rather than block the write.
+const FANOUT_CAP = 200;
+
+// Notifications for a freshly created thing. createThing is the single funnel
+// for posts, comments (plain + rich), shares AND reaction things, so this one
+// hook covers every creation path — dedicated routes and generic POST alike.
+const emitCreationNotifications = async (doc: ThingDoc, target: ThingDoc | null, actor: Viewer): Promise<void> => {
+  if (!actor?.id) return;
+  const kinds = thingtimeOf(doc);
+  const actorRef = { id: actor.id, username: actor.username || null };
+
+  if (target && kinds.includes('reaction')) {
+    await emitNotification({
+      recipientId: target.ownerId,
+      type: 'reaction',
+      actor: actorRef,
+      targetId: target.shareId,
+      postId: target.shareId,
+      preview: String(crystalOf(doc).emoji || '')
+    });
+    return;
+  }
   if (target && kinds.includes('comment')) {
     await emitNotification({
       recipientId: target.ownerId,
@@ -1896,14 +1700,13 @@ export const emitCreationNotifications = async (doc: ThingDoc, target: ThingDoc 
   const recipients: Array<{ recipientId: string; type: NotificationType }> = [];
   for (const id of friends) {
     if (recipients.length >= FANOUT_CAP) break;
-    if (mentioned.has(id)) continue;
     recipients.push({ recipientId: id, type: 'post-from-friend' });
   }
   if (isPublic && recipients.length < FANOUT_CAP) {
     const followers = await followerIdsOf(actor.id, FANOUT_CAP);
     for (const id of followers) {
       if (recipients.length >= FANOUT_CAP) break;
-      if (friends.has(id) || mentioned.has(id)) continue;
+      if (friends.has(id)) continue;
       recipients.push({ recipientId: id, type: 'post-from-followed' });
     }
   }
@@ -2456,87 +2259,7 @@ const viewerReactionsOf = (entries: ReactionEntry[], viewerId: string | null): s
 
 const liveShareCountOf = (doc: ThingDoc, related: RelatedThings): number => related.shareCountByTarget.get(doc.shareId) || 0;
 
-// The root post's subspace for every COMMENT doc on a page that carries no
-// crystal.subspaceId of its own: parents are fetched one reply level at a
-// time ({ shareId: $in } per hop, bounded), so a page of N comment docs costs
-// at most MAX_ROOT_HOPS queries instead of N walks. Docs that are not
-// comments, or already carry a subspaceId, are skipped.
-const MAX_ROOT_HOPS = 16;
-const resolveCommentRootSubspaces = async (things: Awaited<ReturnType<typeof getThingsCollection>>, docs: ThingDoc[]): Promise<Map<string, string | null>> => {
-  const roots = new Map<string, string | null>();
-  // parentId → the comment docs waiting on it
-  let frontier = new Map<string, string[]>();
-  const waitOn = (map: Map<string, string[]>, parentId: string, docId: string) => map.set(parentId, [...(map.get(parentId) || []), docId]);
-  for (const doc of docs) {
-    const parentId = targetIdOf(doc);
-    if (parentId && thingtimeOf(doc).includes('comment') && !subspaceIdOfDoc(doc)) waitOn(frontier, parentId, doc.shareId);
-  }
-  const seen = new Set<string>();
-  for (let hop = 0; hop < MAX_ROOT_HOPS && frontier.size; hop++) {
-    const parentIds = [...frontier.keys()].filter((id) => !seen.has(id));
-    if (!parentIds.length) break;
-    parentIds.forEach((id) => seen.add(id));
-    const parents = (await things
-      .find({ shareId: { $in: parentIds } } as any)
-      .project({ shareId: 1, thingtime: 1, targetId: 1, 'crystal.subspaceId': 1 })
-      .toArray()) as any[];
-    const next = new Map<string, string[]>();
-    for (const parent of parents) {
-      const waiting = frontier.get(String(parent.shareId)) || [];
-      const grandparentId = typeof parent.targetId === 'string' ? parent.targetId : null;
-      const subspaceId = subspaceIdOfDoc(parent);
-      if (!subspaceId && grandparentId && thingtimeOf(parent).includes('comment')) {
-        for (const docId of waiting) waitOn(next, grandparentId, docId);
-      } else {
-        for (const docId of waiting) roots.set(docId, subspaceId);
-      }
-    }
-    frontier = next;
-  }
-  return roots;
-};
-
-// an author's user flair in one subspace, from the page's batched member-row
-// lookup, resolved against the embed's live templates (a renamed template
-// updates every wearer; a deleted one keeps its snapshot)
-const authorFlairFor = (flairs: AuthorFlairs, embed: SubspaceEmbed | null, subspaceId: string, userId: string): PublicAuthorFlair | null =>
-  toPublicUserFlair(liveUserFlair(flairs.get(authorFlairKey(subspaceId, userId)) || null, embed?.userFlairs));
-
-// Per-read projection options. `commentSort` (GET /api/v1/things?id=…&
-// commentSort=top|new|old — round 2 S7) re-orders the SHIPPED comment page:
-// null keeps the default (the newest RETURNED_COMMENTS, oldest → newest);
-// `top` = votes.score desc then older-first, `new` / `old` = by createdAt.
-// Level 1 is loaded whole per post (MAX_COMMENTS_PER_POST bounds it), so a
-// sorted page is the true best / newest / oldest of the level. The deeper
-// shipped levels are DB-sliced to the newest REPLIES_PER_LEVEL per parent
-// before any score is known (resolveRelated), so they re-order among the
-// replies that already ship rather than re-querying per parent — the
-// non-intrusive half the spec allowed; the docs say so.
-export type PostProjectionOptions = {
-  resolveAudience?: boolean;
-  rememberDiscovery?: boolean;
-  discoveryIp?: string;
-  commentSort?: CommentSort | null;
-};
-
-// One Viewer per reference page preserves request-local membership caches.
-// Every source still passes its own live ACL check; the ids only grant the same
-// canonical unlisted links explicitly attached by the author.
-export const resolvePostLinkedThings = async (
-  ids: readonly string[], viewer: Viewer,
-  lookup = batchedThingLookup(), authorize = canViewInherited
-): Promise<ThingDoc[]> => {
-  const uniqueIds = [...new Set(ids)];
-  const linkedViewer: NonNullable<Viewer> = { id: '', ...viewer, linkThingIds: new Set([...(viewer?.linkThingIds || []), ...uniqueIds]) };
-  const docs = await Promise.all(uniqueIds.map(async id => {
-    const doc = await lookup(id);
-    if (!doc || isProtectedThingtime(thingtimeOf(doc)) || thingtimeOf(doc).some(kind => MESSENGER_THINGTIME.includes(kind as any))) return null;
-    return await authorize(doc, linkedViewer, lookup) ? doc : null;
-  }));
-  return docs.filter((doc): doc is ThingDoc => !!doc);
-};
-
-export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer, options: PostProjectionOptions = {}): Promise<PublicPost[]> => {
+export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer): Promise<PublicPost[]> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
   const viewerId = viewer?.id || null;
   if (!docs.length) return [];
@@ -2554,22 +2277,13 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   const originalsById = new Map(originals.map((doc) => [doc.shareId, doc]));
 
   const allDocs = [...docs, ...originals];
-  const audiences = options.resolveAudience ? await resolvePublicAudiences(allDocs, viewer) : new Map<string, ResolvedAudience>();
-  // One batched pass each: interactions, whole-thread comment totals,
-  // protected attachment metadata, and public view stats. Run them together
-  // so neither attachments nor views add serial read latency.
-	const [related, threadCounts, viewStats, savedIds] = await Promise.all([
-    resolveRelated(allDocs, viewerId),
-    resolveThreadCounts(allDocs.map((doc) => doc.shareId), viewerId),
-    resolveViewStats(allDocs.map((doc) => doc.shareId)),
-    // the viewer's library saves across the page (one query, never N+1);
-    // anonymous viewers skip the read entirely and get no viewerSaved field
-    viewer?.id ? savedTargetIds(viewer, allDocs.map((doc) => doc.shareId)) : Promise.resolve(new Set<string>())
+  // one batched pass each: interactions, whole-thread comment totals, and the
+  // public view stats — concurrent so views add no read latency
+  const [related, threadCounts, viewStats] = await Promise.all([
+    resolveRelated(allDocs),
+    resolveThreadCounts(allDocs.map((doc) => doc.shareId)),
+    resolveViewStats(allDocs.map((doc) => doc.shareId))
   ]);
-  const linkedIds = [...new Set([...allDocs, ...Array.from(related.commentsByTarget.values()).flatMap(entries => entries.flatMap(entry => entry.doc ? [entry.doc] : []))].flatMap(doc => postThingReferences(crystalOf(doc).thing).map(item => item.id)))];
-  const linkedDocs = await resolvePostLinkedThings(linkedIds, viewer);
-  const linkedPublic = await toPublicThings(linkedDocs, viewer);
-  const linkedById = new Map(linkedPublic.map(thing => [thing.id, thing]));
 
 
 	const attachmentTargetIds = [
@@ -2830,10 +2544,6 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
           avgDwellMs: stats?.viewCount ? Math.round(stats.totalDwellMs / stats.viewCount) : 0
         };
       })(),
-      ...(pollVotes ? { pollVotes } : {}),
-      // viewer-personalised like viewerReactions — logged-out viewers get no
-      // field at all (nothing to bookmark without a library)
-      ...(viewerId ? { viewerSaved: savedIds.has(doc.shareId) } : {}),
       extended: doc.extended ?? null,
       geo: publicGeo(doc.geo),
       createdAt: new Date(doc.createdAt).toISOString()
@@ -3235,20 +2945,6 @@ export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) =>
   if (viewer?.id && viewer.friendIds?.size && wanted.includes('friends')) {
     clauses.push({ $and: [{ ownerId: { $in: [...viewer.friendIds] } }, circleClause('friends')] });
   }
-  // The unnarrowed shortcut is only sound when the caller asked for NO filter,
-  // or asked for every circle they could ask for. A bare length comparison
-  // would also fire for a same-sized but different selection (say
-  // public+friends+family+hidden), silently pulling the viewer's private
-  // things back into a feed they filtered them out of — and covering only the
-  // DEFAULT set has the same shape of bug one circle over: ticking exactly
-  // public+friends+family+private (i.e. everything except 🕵️ Hidden) would
-  // take the shortcut and hand back the hidden things the caller just
-  // excluded. An omitted circle must always really be omitted, so only the two
-  // genuinely unfiltered cases skip narrowing (fleet review fix, extended for
-  // 🎭).
-  const unfiltered = !circles.length || REQUESTABLE_VISIBILITIES.every((circle) => wanted.includes(circle));
-  const narrowToWanted = (clause: Record<string, any>) =>
-    unfiltered ? clause : { $and: [clause, { $or: wanted.map((circle) => circleClause(circle)) }] };
   if (viewer?.id) {
     // the viewer's own things, optionally narrowed to the requested circles
     clauses.push(
@@ -3297,7 +2993,7 @@ export const findViewableThing = async (shareId: unknown, viewer: Viewer): Promi
   const doc = await findThing(shareId);
   // friend enrichment happens here so every interaction path (react, comment,
   // share, save, view) resolves friends-only targets for real friends
-  if (!doc || !(await canViewInherited(doc, withThingLink(await withFriendIds(viewer), doc.shareId)))) return null;
+  if (!doc || !(await canViewInherited(doc, await withFriendIds(viewer)))) return null;
   return doc;
 };
 
@@ -3551,9 +3247,8 @@ export const typeClause = (types: PostType[]) => (types.length ? { $or: [{ 'crys
 export const getFeed = async (
   viewerInput: string | Viewer,
   query: FeedQuery
-): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; ranked: boolean; scope: FeedScope } | Fail> => {
+): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; ranked: boolean } | Fail> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
-  const scope: FeedScope = query.scope === 'subspaces' ? 'subspaces' : 'all';
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const types = (query.types || []).filter((type) => POST_TYPES.includes(type));
   // REQUESTABLE, not the default set — 'hidden' and 'custom' are chips the
@@ -3677,7 +3372,7 @@ export const listUserPosts = async (
   cursor: string | null,
   limit = DEFAULT_FEED_LIMIT
 ): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; postCount?: number } | Fail> => {
-  let viewer = await withFriendIds(asViewer(viewerInput));
+  const viewer = await withFriendIds(asViewer(viewerInput));
   if (typeof username !== 'string' || !username.trim()) return fail(400, 'username is required');
   // dual-era: findUserByUsername resolves user things first, legacy second —
   // a bare users.findOne would 404 every things-era + migrated account
@@ -3688,19 +3383,13 @@ export const listUserPosts = async (
   const discoveryId = foundPostViewerId(viewer);
   if (discoveryId && !isCustomMongoEndpointActive()) viewer = { id: '', ...viewer, foundPosts: await loadFoundPostsForAuthor(discoveryId, ownerId) };
   const own = viewer?.id === ownerId;
-  // Use the same candidate audience as the feed: direct/group grants and
-  // mixed custom audiences must reach the exact canView check below.
-  const baseMatch = withMatch(await postMatch(), profilePostsAudienceQuery(viewer, ownerId));
-  // visibility-restricted tokens: conjoin the audience fence the same way
-  // listThings does. Not just paging hygiene (without it a public-only token
-  // pages an owner's mostly-private profile in near-empty slices while the
-  // cursor advances) — postCount below is computed from this match, so an
-  // unfenced match would report the owner's private posts to a token that
-  // must never learn they exist.
-  const fence = patVisibilityMatchClause(viewer);
-  // subspace fences (removed / private-subspace posts) apply to every visitor
-  // but the owner, who keeps seeing their own removed posts on their profile
-  const match = withMatch(baseMatch, fence || {}, ...(own ? [] : subspaceFeedClauses(viewer)));
+  // a friend browsing this profile also sees the owner's friends-circle posts
+  const friendOfOwner = !!viewer?.friendIds?.has(ownerId);
+  const match = own
+    ? withMatch(postMatch(), { ownerId })
+    : friendOfOwner
+      ? withMatch(postMatch(), { ownerId }, { $or: [circleClause('public'), circleClause('friends')] })
+      : withMatch(postMatch(), { ownerId }, circleClause('public'));
 
   const things = await getThingsCollection();
   const parsed = parseChronoCursor(cursor);
@@ -3734,38 +3423,14 @@ export function getThing(viewer: string | Viewer, shareId: unknown, app?: AppLen
 export function getThing(viewer: string | Viewer, shareId: unknown, app: AppLens, options: PostProjectionOptions & { commentProjection?: boolean }): Promise<Fail | ThingRead<PublicPost | PublicDiscussion>>;
 export async function getThing(
   viewerInput: string | Viewer,
-  shareId: unknown,
-  app: AppLens = null,
-  options: PostProjectionOptions & { commentProjection?: boolean } = {}
-): Promise<Fail | ThingRead<PublicPost | PublicDiscussion>> {
-  if (options.commentProjection && (app || isCustomMongoEndpointActive())) return fail(400, 'Discussion projection requires first-party home storage');
-  let viewer = await withFriendIds(asViewer(viewerInput));
-  const doc = await findViewableThingAs(shareId, viewer, app);
-  if (!doc || isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['draft', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return fail(404, 'Thing not found');
-  if (options.commentProjection && doc.appId) return fail(404, 'Thing not found');
-  if (!app) {
-    const terminal = await resolveInheritChain(doc, d => aclOf(d).includes(ACL_INHERIT), findThing);
-    viewer = withThingLink(viewer, terminal?.shareId || doc.shareId);
-  }
-  if (!app && options.rememberDiscovery && !isCustomMongoEndpointActive()) {
-    const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing);
-    if (terminal && canView(terminal, viewer)) await rememberFoundPost(viewer, terminal, options.discoveryIp);
-  }
-  const thing = (await toPublicThings([doc], viewer, !app))[0];
-  if (!app && !viewer?.pat) {
-    const origin = ownerFileSyncUploadOrigin(doc as any, viewer?.id);
-    if (origin) thing.fileSyncOrigin = origin;
-  }
-
-  // App consumers get the generic thing shape only: the PublicPost projection
-  // batch-embeds comments/reactions across ALL viewers (scope-blind), so it
-  // must never ride an app response — apps read children relationally via
-  // GET /api/v1/things?target=… inside their namespace instead.
-  if (app) {
-    await appShapeProjections(app, [doc], [thing]);
-    return { ok: true, thing, post: null, discussion: null, parent: null, root: null };
-  }
-
+  shareId: unknown
+): Promise<
+  Fail | { ok: true; thing: PublicThing; post: PublicPost | null; parent: PublicPost | null; root: PublicPost | null }
+> => {
+  const viewer = await withFriendIds(asViewer(viewerInput));
+  const doc = await findViewableThing(shareId, viewer);
+  if (!doc) return fail(404, 'Thing not found');
+  const thing = (await toPublicThings([doc], viewer))[0];
   const isComment = thingtimeOf(doc).includes('comment');
 	// Media attachments are Things with their own /media/:id page: the
 	// post-shaped projection carries their reactions, comments, and view
@@ -3847,20 +3512,9 @@ export type ListThingsQuery = {
 // Under the app lens both modes are namespace-conjoined and liveness-gated.
 export const listThings = async (
   viewerInput: string | Viewer,
-  query: ListThingsQuery,
-  app: AppLens = null,
-  context: { archiveOwnerId?: string } = {}
-): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null; comments?: PublicCommentPageItem[] }> => {
-  const cursorScope = { targetId: query.targetId || '', viewerId: asViewer(viewerInput)?.id || '', tokenId: asViewer(viewerInput)?.pat?.tokenId || '' };
-  const discussionCursor = query.commentProjection && query.cursor != null ? decodeDiscussionCursor(query.cursor, cursorScope) : null;
-  if (query.commentProjection) {
-    if (app || query.appId != null || isCustomMongoEndpointActive()) return fail(400, 'Discussion projection requires first-party home storage');
-    if (!query.targetId || query.folder || query.thingtime?.length !== 1 || query.thingtime[0] !== 'comment') return fail(400, 'Discussion projection requires target and thingtime=comment');
-    if (query.limit !== undefined && (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > 20)) return fail(400, 'limit must be an integer between 1 and 20');
-    if (query.cursor != null && !discussionCursor) return fail(400, 'Invalid discussion cursor');
-    if (!discussionCursorConfigured()) return fail(503, 'Discussion pagination is unavailable');
-  }
-  let viewer = await withFriendIds(asViewer(viewerInput));
+  query: ListThingsQuery
+): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null }> => {
+  const viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const thingtime = (query.thingtime || []).filter((id) => typeof id === 'string' && id.trim());
 

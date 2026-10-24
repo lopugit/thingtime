@@ -6746,54 +6746,75 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       intent stays ANONYMOUS on purpose — being locked out is the reason to
       reach for it — and never reads or writes the database.
 
-## Linked deployments (Settings → Linked deployments, `api/utils/deployments/*`, `/api/v1/deployment-links*`)
+## Social graph — follows + friends (`api/utils/users/social.ts`, `/api/v1/users/{follow,friend,relationships,connections}`)
 
-- [ ] Two isolated stacks for testing: second mongod (`mongod --port 27018
-      --dbpath <tmp> --fork ...`) + second dev stack (`TT_WEB_PORT=11120
-      TT_HMR_PORT=11121 TT_API_PORT=11122
-      MONGODB_CONNECTION_STRING=mongodb://localhost:27018/ npm run dev`).
-      `/api/v1/health/mongodb` on each stack must report its OWN host.
-- [ ] Link via password: Settings → Linked deployments → Link a deployment →
-      URL + remote username/password → row appears with the remote @username
-      and a success toast. With email-2FA enabled on the remote account, the
-      form asks for the emailed code first (`requiresOtp` branch).
-- [ ] Token upgrade at link time: a password link against a deployment that
-      HAS this feature stores a non-expiring link token (`tokenExpiresAt:
-      null` in GET /api/v1/deployment-links); the login-derived 30-day
-      session is revoked after the swap. Against an OLDER deployment the
-      30-day token is kept and `tokenExpiresAt` shows its expiry.
-- [ ] Link via token: Create a link token 🔑 on deployment B (shown exactly
-      once), paste into deployment A's "Paste a token" form → link works
-      without a password crossing between deployments.
-- [ ] Sync now (two-way): things move BOTH ways keyed by shareId; a comment
-      never lands before its post (dependency ordering); schemas land before
-      data things citing them. Immediately re-running sync reports planned 0
-      / everything unchanged — copied things must never ping-pong (content
-      equality beats updatedAt).
-- [ ] Conflict: edit the SAME thing on both sides → two-way keeps the newest
-      edit on both, `conflictsResolved` increments. Push/pull modes only ever
-      move data in their one direction.
-- [ ] Profile path: displayName/bio/avatar/banner sync; two-way prefers the
-      non-empty side (a fresh local account pulls the remote profile instead
-      of blanking it).
-- [ ] Path rules: `things/<kind>: off` suppresses exactly that kind (preview
-      shows planned 0 for its pending changes); first matching rule wins,
-      then `things`, then the link mode. Invalid paths (`nonsense path!`)
-      are rejected with the profile/things/things/<kind> hint.
-- [ ] Collisions + skew are AUDIBLE: a shareId owned by a DIFFERENT account
-      on the destination reports "belongs to a different account — skipped";
-      a kind unknown to the destination registry reports its schema error.
-      Sync continues past per-thing errors; 401/429 from the remote abort
-      with `remaining` > 0 and re-running continues.
-- [ ] Guards: base URL must be https (http only for localhost), an origin
-      only (no path/query/credentials); redirects are refused. Link/unlink/
-      token-mint ride `deployments.link` (10/5min) and sync rides
-      `deployments.sync` (6/5min), both fail-closed — hammering Sync now
-      429s with the breather toast.
-- [ ] Secrecy: remote tokens live only in the user thing's `secure` blob
-      (meta.deploymentLinks) — GET /api/v1/deployment-links never returns a
-      token field, and unlinking best-effort revokes the remote session.
-- [ ] Optimistic UI: the section paints its last-known roster from
-      `tt-deployment-links-<userId>` localCache instantly; mode taps apply
-      optimistically and revert on failure; sync summary line updates after
-      each run. Mobile (375px): rows wrap, no horizontal scroll.
+- [ ] Follow is ONE-WAY and instant: user B POSTs `/users/follow { username: A }`
+      → `{ following: true, followerCount }`; A's profile shows the count and B
+      sees "Following ✓" immediately (optimistic, reverts on failure). Repeat
+      with `follow: true` is idempotent; `follow: false` (or toggle) unfollows.
+- [ ] Friendship needs APPROVAL: B `intent: request` → `pending-outgoing`; A's
+      own profile shows the "Friend requests 🤝" inbox with Accept/Decline; A
+      accepts → both sides read `friendState: friends` and friend counts bump.
+      Requesting someone who already requested YOU accepts instead of duping
+      (one doc per pair — `crystal.friendKey`, unique index).
+- [ ] Self-actions rejected: following or friending yourself 400s.
+- [ ] `tt:userFriends` acl is REAL now: a friends-visibility post is readable
+      by an accepted friend (permalink AND feed AND the owner's profile as
+      seen by the friend), 404s for strangers/anonymous, and stops resolving
+      the moment either side unfriends.
+- [ ] Relationship reads are public: `/users/relationships?username=` returns
+      counts logged out (`viewer: null`); logged in it adds following /
+      followedBy / friendState, and `incomingRequests` on your own profile.
+      `/users/connections` lists followers/following/friends publicly;
+      `type=requests` is your-own-account-only (403 otherwise).
+- [ ] Forged edges impossible: `follow`/`friend`/`notification` are PROTECTED
+      kinds — generic `POST /api/v1/things` refuses them (a forged accepted
+      `friend` doc would fake acl visibility).
+
+## Notifications (`api/utils/notifications/notifications.ts`, `/api/v1/notifications*`, nav bell)
+
+- [ ] Emission: new follower, friend request, friend accepted, comment on your
+      post, reply to your comment, reaction (preview = the token), repost, and
+      capped fan-out (≤200 newest connections) of new posts to followers
+      (`post-from-followed`) and friends (`post-from-friend`). Own actions
+      never notify yourself; a failed emit never fails the triggering action.
+- [ ] Fan-out respects the post's audience: public posts notify followers +
+      friends, friends-only posts notify friends only, private posts fan out
+      to nobody.
+- [ ] The bell 🔔 (auth only) shows the unread badge (seeded from localCache —
+      no flash), reconciles on mount/focus/slow poll, opens a popover of the
+      latest 20 (unread rows tinted, actor avatar + type emoji, preview,
+      time-ago), zeroes the badge on open (mark-all-read), and click-through
+      goes to `/post/<id>` or the actor's profile. Works within a 375px
+      viewport with no overflow.
+- [ ] Settings → Notifications: one switch per type (defaults ON), optimistic
+      flip + revert on failure, per-user localCache seed, merge-patch POST
+      (unknown types 400). Disabling a type hides even ALREADY-WRITTEN
+      notifications of that type from the list and unread count (read-time
+      filtering), and single-recipient emits skip writing it entirely.
+- [ ] Mobile nav overlap regression: the centered commander pill must NOT
+      cover the bell / username (they sit above it via `.nav-right-section`
+      z-index, and the pill reserves 148px on the right). Regression class:
+      nav-right controls rendered under the absolutely-positioned commander
+      host and were untappable on mobile (2026-08).
+
+## Post views (`api/utils/things/views.ts`, `/api/v1/things/views`, `useViewTracking`)
+
+- [ ] Public stats on every post payload: `viewCount` (unique viewer
+      identities) + `viewStats { impressions, avgDwellMs }`; the card's action
+      row shows 👁 + compact count with the full stats in the tooltip, for
+      everyone (logged out included).
+- [ ] Counting is honest: a card must be ≥50% visible for ≥1s to count; one
+      event per post per pageview; batches flush every 10s and on page hide
+      via sendBeacon. Dwell (time on screen), max visible ratio, and viewport
+      position (0..1) ride along.
+- [ ] Manipulation resistance (all server-side, client untrusted): one
+      postViews doc per (postId, viewerKey) — replays bump impressions only,
+      never uniques; owner self-views dropped entirely; anonymous identities
+      dedup on salted sha256(ip|UA) with NO raw IP at rest; UA-less requests
+      dropped; dwell clamped (≤120s/event); batch ≤50; unknown or
+      not-viewable posts dropped (a view write only lands where a read would
+      succeed); rate limited `things.views` per user-or-IP; headless
+      (`navigator.webdriver`) browsers skip client-side too.
+- [ ] Views are tracked on every post surface: feed, profiles (both wired via
+      PostList) and the `/post/:id` permalink page.

@@ -51,8 +51,6 @@ const WorkspacePostPage = () => {
   const [data, setData] = React.useState<ThingResponse | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [workspaceRevision, refreshWorkspace] = React.useReducer(value => value + 1, 0);
-  React.useEffect(() => { window.addEventListener(LOCAL_WORKSPACE_CHANGED, refreshWorkspace); return () => window.removeEventListener(LOCAL_WORKSPACE_CHANGED, refreshWorkspace); }, []);
   // permalink pages count as views too (feed/profile wire this via PostList)
   const { observeView } = useViewTracking();
 

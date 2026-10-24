@@ -348,14 +348,6 @@ export const getAuthOtpsCollection = async () => getHomeCollection('authOtps');
 // counts (an anti-manipulation surface) stay under platform control even when
 // a request carries a custom data-endpoint override.
 export const getPostViewsCollection = async () => getHomeCollection('postViews');
-// CI control plane (api/utils/ciControl): every ci-* Thing — current-state
-// projections AND the append-only ci-event history — lives in its own
-// home-pinned satellite, never in `things`. Measured in production
-// (2026-09-02): 1.82M of things_v2's 1.82M docs were CI telemetry, and every
-// one of the collection's 60+ indexes paid an entry per row (3.1 GB of index
-// for ~4.5k real content docs). A satellite gets a six-index plan sized for
-// its two readers (dashboard + per-parent history) and TTL retention.
-export const getCiControlCollection = async () => getHomeCollection('ciControl');
 
 // Idempotently create server-side collections + their indexes. createIndex
 // creates the collection if it doesn't exist yet, so this also bootstraps an
@@ -1084,27 +1076,31 @@ export const createThingsDataIndexes = (db: any, { relationshipLookups = false, 
       },
       ['targetId_1_ownerId_1_crystal.emoji_1']
     ),
-    // Retire the superseded follow-marker generation. Current follow writers
-    // use protected root uniqueKeys for lookup and dedupe (custom endpoints
-    // retain crystal lookups); no registered schema mints crystal.follow. Leaving this old
-    // kind-blind unique index behind would needlessly constrain ordinary data
-    // Things after the crystal namespace reopens in phase 2.
-    dropIndexRetrying(col, 'things_follow_unique'),
+    // One follow edge per (followed, follower): toggle-on is an idempotent
+    // upsert, deduped under races. Only follow things carry crystal.follow
+    // (constant true) — same marker-field trick as the reaction index, since
+    // partial filters can't reliably scope on the multikey thingtime array.
+    createIndexReplacing(
+      col,
+      { targetId: 1, ownerId: 1 },
+      {
+        name: 'things_follow_unique',
+        unique: true,
+        partialFilterExpression: { targetId: { $type: 'string' }, 'crystal.follow': { $exists: true } }
+      }
+    ),
     // One friendship doc per unordered user pair, regardless of who asked:
     // crystal.friendKey is '<minId>~<maxId>', written only by the friend
-    // endpoint. Uniqueness rides uniqueKeys ('friendKey:<min>~<max>', stamped
-    // at insert) so duplicate/crossed requests still die structurally; this
-    // index is retained only for custom endpoints / an unready home layout.
-    // The steady-state home reader shares uniqueKeys_1 after awaited repair.
-    ...(relationshipLookups ? [createIndexReplacing(
+    // endpoint. Uniqueness kills duplicate/crossed requests structurally.
+    createIndexReplacing(
       col,
       { 'crystal.friendKey': 1 },
       {
-        name: 'things_friend_key_lookup',
+        name: 'things_friend_unique',
+        unique: true,
         partialFilterExpression: { 'crystal.friendKey': { $exists: true } }
-      },
-      ['things_friend_unique']
-    )] : []),
+      }
+    ),
     // (Notification list/unread queries are served by the general
     // { thingtime, ownerId, createdAt desc, shareId } index above.)
     // Legacy relational era (kind:'reaction'/'comment' docs written by the
@@ -1610,34 +1606,6 @@ export const ensureIndexes = async () => {
         // general per-endpoint rate-limit windows; TTL reaps expired windows
         col('rateLimits').createIndex({ key: 1 }, { unique: true }),
         col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-        col('deploymentPeers').createIndex({ origin: 1 }, { unique: true }),
-        col('deploymentPeers').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-        // listActivePeers filters by federationId, then pages lastSeenAt desc /
-        // origin asc. The federation prefix is new: name the index and retire
-        // the auto-named `lastSeenAt_-1_origin_1` it supersedes, or every
-        // already-deployed database keeps both forever (a plain createIndex
-        // with a new key shape never drops the old one).
-        createIndexReplacing(
-          col('deploymentPeers'),
-          { federationId: 1, lastSeenAt: -1, origin: 1 },
-          { name: 'deployment_peers_federation_recent' },
-          ['lastSeenAt_-1_origin_1']
-        ),
-        // Admin integration vault: write-only encrypted values, endpoint policy,
-        // short create-only claims, and redacted, expiring audit evidence.
-        col('adminIntegrationSecrets').createIndex({ id: 1 }, { unique: true }),
-        col('adminIntegrationSecrets').createIndex({ label: 1 }, { unique: true }),
-        col('adminIntegrationEndpoints').createIndex({ id: 1 }, { unique: true }),
-        col('adminIntegrationEndpoints').createIndex({ secretId: 1 }),
-        col('adminIntegrationClaims').createIndex({ endpointId: 1, resourceKey: 1 }, { unique: true }),
-        col('adminIntegrationClaims').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-        col('adminIntegrationAudit').createIndex({ createdAt: -1 }),
-        col('adminIntegrationAudit').createIndex({ endpointId: 1, createdAt: -1 }),
-        col('adminIntegrationAudit').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-        col('lopuCredentials').createIndex({ id: 1 }, { unique: true }),
-        col('lopuCredentials').createIndex({ name: 1 }, { unique: true }),
-        col('lopuCredentials').createIndex({ priority: 1 }),
-        col('lopuCredentials').createIndex({ enabled: 1, priority: 1 }),
         // post view telemetry: one doc per (post, viewer identity) — the
         // unique index IS the dedup that keeps unique-viewer counts honest
         // under racing writes; its postId prefix serves the per-post stats
