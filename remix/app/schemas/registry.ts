@@ -1716,7 +1716,123 @@ const folderSchema: ThingtimeSchema = {
     { name: 'icon', type: 'string', required: false, max: MAX_FOLDER_ICON_CHARS, description: 'Optional emoji shown instead of the default 📁.' },
     { name: 'description', type: 'string', required: false, max: MAX_FOLDER_DESCRIPTION_CHARS, description: 'Optional note about what lives here.' }
   ],
-  example: { name: 'Recipes', icon: '🍜', description: 'Everything I want to cook someday.' }
+  example: { follow: true }
+};
+
+// One friendship per unordered pair: ownerId sent the request, targetId
+// received it. status flips pending → accepted; decline/cancel/unfriend
+// deletes the doc. crystal.friendKey = '<minId>~<maxId>' makes the pair
+// unique regardless of direction (unique partial index).
+const friendThingSchema: ThingtimeSchema = {
+  id: 'friend',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Friendship',
+  summary: 'A friendship (or pending friend request) between two users — one doc per pair.',
+  detail:
+    'Driven by POST /api/v1/users/friend { userId, intent }. ownerId is the requester, targetId ' +
+    'the recipient; crystal.status is pending until the recipient accepts. Accepted friendships ' +
+    'power the tt:userFriends acl circle (friends-only posts). Private to the pair (served via ' +
+    'the users endpoints); the generic things CRUD refuses this kind.',
+  requiresTarget: true,
+  createdVia: 'POST /api/v1/users/friend',
+  fields: [
+    { name: 'status', type: 'enum', required: true, values: ['pending', 'accepted'], description: 'Request state.' },
+    { name: 'friendKey', type: 'string', required: true, description: 'Canonical unordered pair key <minId>~<maxId> — unique per pair.' }
+  ],
+  example: { status: 'accepted', friendKey: '664f1c2a9d3e5b0012345678~664f1c2a9d3e5b0012345679' }
+};
+
+// Per-type notification switches users can flip in Settings → Notifications.
+// 'groups' is reserved for the future groups feature (the pref persists, no
+// emitter exists yet). Reads ALWAYS filter by the recipient's prefs, so a
+// fanned-out notification written before a pref flip stays hidden.
+export const NOTIFICATION_TYPES = [
+  'friend-request',
+  'friend-accepted',
+  'new-follower',
+  'post-from-followed',
+  'post-from-friend',
+  'comment',
+  'reply',
+  'reaction',
+  'share',
+  'groups'
+] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+// Email-channel notification switches. Every bell type can also send an email,
+// plus email-only types (weekly-summary) that never mint a bell notification.
+export const EMAIL_ONLY_NOTIFICATION_TYPES = ['weekly-summary'] as const;
+export const EMAIL_NOTIFICATION_TYPES = [...NOTIFICATION_TYPES, ...EMAIL_ONLY_NOTIFICATION_TYPES] as const;
+export type EmailNotificationType = (typeof EMAIL_NOTIFICATION_TYPES)[number];
+
+// High-volume types whose EMAIL channel defaults OFF (the bell stays ON): a
+// busy follow graph would otherwise turn every post into an email.
+export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend'];
+
+export type NotificationChannelMasters = { push: boolean; email: boolean };
+export type NormalizedNotificationPrefs = {
+  push: Record<string, boolean>;
+  email: Record<string, boolean>;
+  masters: NotificationChannelMasters;
+};
+
+// Stored shape (meta.notificationPrefs): the flat { [type]: boolean } keys are
+// the push/in-app channel — unchanged from the original shape, so prefs saved
+// before channels existed keep working with zero migration — plus nested
+// email: { [type]: boolean } and masters: { push, email }. Absent = ON,
+// except EMAIL_DEFAULT_OFF_TYPES whose email channel is opt-in. Shared by the
+// server (write/read gating) and the settings UI (defaults) so both sides
+// agree on what absent keys mean. Also accepts an already-normalized matrix
+// (nested push object) so the wire shape round-trips: normalize(normalize(x))
+// === normalize(x), which lets the client cache the GET response as-is.
+export const normalizeNotificationPrefs = (
+  stored: Record<string, any> | null | undefined
+): NormalizedNotificationPrefs => {
+  const source = stored && typeof stored === 'object' ? stored : {};
+  const emailStored = source.email && typeof source.email === 'object' ? source.email : {};
+  const mastersStored = source.masters && typeof source.masters === 'object' ? source.masters : {};
+  const pushStored = source.push && typeof source.push === 'object' ? source.push : source;
+  const push: Record<string, boolean> = {};
+  for (const type of NOTIFICATION_TYPES) push[type] = pushStored[type] !== false;
+  const email: Record<string, boolean> = {};
+  for (const type of EMAIL_NOTIFICATION_TYPES) {
+    email[type] = EMAIL_DEFAULT_OFF_TYPES.includes(type)
+      ? emailStored[type] === true
+      : emailStored[type] !== false;
+  }
+  return {
+    push,
+    email,
+    masters: { push: mastersStored.push !== false, email: mastersStored.email !== false }
+  };
+};
+
+const notificationThingSchema: ThingtimeSchema = {
+  id: 'notification',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Notification',
+  summary: 'A server-minted in-app notification for one recipient (ownerId).',
+  detail:
+    'Minted by the server when someone else follows you, sends/accepts a friend request, ' +
+    'comments, replies, reacts, shares, or (fan-out, capped) posts while you follow them. ' +
+    'ownerId is the recipient, targetId the subject thing (post/comment/user), root readAt ' +
+    'flips when read. Listed via GET /api/v1/notifications (filtered by the recipient\'s ' +
+    'meta.notificationPrefs), marked via POST /api/v1/notifications/read. Always acl ' +
+    '["tt:user"]; the generic things CRUD refuses this kind.',
+  createdVia: 'server-side emission (social/engagement events)',
+  fields: [
+    { name: 'type', type: 'enum', required: true, values: [...NOTIFICATION_TYPES], description: 'Notification type (drives prefs + copy).' },
+    { name: 'actorId', type: 'id', required: true, description: 'The user whose action triggered this.' },
+    { name: 'actorName', type: 'string', required: false, description: 'Actor display name snapshot.' },
+    { name: 'postId', type: 'id', required: false, description: 'Related post for click-through.' },
+    { name: 'preview', type: 'string', required: false, max: 140, description: 'Short content preview.' }
+  ],
+  example: { type: 'new-follower', actorId: '664f1c2a9d3e5b0012345678', actorName: 'Rick Deckard' }
 };
 
 const sessionSchema: ThingtimeSchema = {

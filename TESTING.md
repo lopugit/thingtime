@@ -5309,92 +5309,161 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
 
 ## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
 
-- [ ] `/things` seeds instantly from `tt-things-<userId>` localStorage cache
-      (no skeleton flash when prior state exists) and background-refetches;
-      logged-out visitors get the sign-in hero, never a spinner.
-- [ ] Folder CRUD: New → New folder creates a `["folder"]` thing (private by
-      default) inside the CURRENT folder; rename edits `crystal.name`; folders
-      never combine with other schemas (`["post","folder"]` 400s).
-- [ ] Containment is a `folderId` pointer on the child: move = PATCH
-      `{ id, folderId }` (null = root); a folder can never move into itself or
-      its own subtree (400, cycle-safe ancestor walk); reactions/saves refuse
-      folderId; deleting a folder RE-PARENTS its contents to the folder's
-      parent instead of deleting them.
-- [ ] `GET /api/v1/things?folder=root|<id>` lists only that folder level for
-      the owner; v1/pre-folder docs read as root; `folderId` is a searchable
-      root field on /search conditions.
-- [ ] Bulk ops (`POST /api/v1/things/bulk`, ≤100 ids): move/copy/delete/share
-      run the SAME single-item paths (updateThing/createThing/deleteThing)
-      with per-item ok/error results — one bad id never fails the batch, and
-      the toast reports "N done, M skipped" honestly. Copy refuses
-      comment/reaction/save/share things and mints fresh shareIds ("Copy of"
-      name hint on data things and folders).
-- [ ] Recursive folder copy: copying a FOLDER duplicates its whole subtree
-      through the same per-item create path (snapshot-first, so copying a
-      folder into itself terminates), skips uncopyable kinds with honest
-      copied/skipped counts, and refuses trees over 500 things BEFORE copying
-      anything (never a half-copied tree).
-- [ ] Bulk share (`op: 'share'` + acl/visibility): applies the audience per
-      item via updateThing; `recursive: true` flows a folder's audience to
-      everything inside (same 500 bound, refused past it), counting
-      inherit-locked things as skipped, never silently changing them. Missing
-      acl 400s the whole batch loudly.
-- [ ] Selection: click selects, Cmd/Ctrl toggles, Shift ranges, Cmd/Ctrl+A
-      selects all loaded, Escape clears; the contextual toolbar replaces the
-      view pills while anything is selected. Mobile: tap OPENS, checkboxes
-      select.
-- [ ] Clipboard: Copy/Cut (toolbar or Cmd/Ctrl+C/X) then Paste into any folder
-      (Cmd/Ctrl+V or the Paste pill); cut items dim until pasted; cut+paste
-      moves, copy+paste duplicates.
-- [ ] Delete always confirms first (permanent — cascade note; folder
-      re-parenting note when folders are selected); optimistic removal
-      reconciles by refetch.
-- [ ] Views: grid / list (name-kind-audience-tags-updated columns) / Miller
-      columns (click folder opens next column, path highlighted). The
-      Names/Previews toggle applies to ALL views: previews live-render each
-      thing through the kind registry (crystal.render templates win, then
-      crystal.thing, then the crystal itself) inside bounded, pointer-inert
-      boxes, falling back to icon+name per item; folders always show as icons.
-- [ ] Preview modal deep link `/things?preview=<id>` opens any viewable thing
-      (ThingView tree + Move/Share/Delete actions) and is what Copy link hands
-      out for non-post things (posts link `/post/:id`).
-- [ ] Share dialog: audience select initialises from the thing's acl; person
-      grants add `tt:user/<username>` entries via people search;
-      inherit-locked (attached) things are warned about and skipped, not
-      silently changed. Selecting folders reveals the "Also apply to
-      everything inside" checkbox (off by default) — applying with it on
-      updates deep descendants' acls and toasts the applied/skipped counts.
-- [ ] Right-click context menus (the design-system Thing Context Menu):
-      right-clicking a thing selects it (Finder semantics) and opens
-      Open/Copy link · Rename/Move/Share · Copy/Cut/Paste-into-folder ·
-      Delete, acting on the whole selection when the target is part of one
-      ("Copy 4 things"); right-clicking empty canvas opens New folder / Paste
-      / Sort by / Group by / View / Select all with radio-checked current
-      states. Text selections and editable fields keep the BROWSER menu; any
-      outside press closes the surface; page keyboard shortcuts pause while a
-      menu is open.
-- [ ] Sort (Newest/Oldest/Name A–Z/Z–A/Kind) and Group by (None/Kind) apply
-      across grid+list (columns stays hierarchical), folders always first,
-      persisted in the tt-things cache; a non-default arrangement eagerly
-      loads the folder's remaining pages (bounded at 1000) so ordering is
-      honest, and group sections show "📁 Folders · N"-style counts with
-      correct plurals ("Data", not "Datas").
-- [ ] Drag-and-drop: dragging a selected thing drags the whole selection
-      (desktop only); folder tiles/rows, tree nodes, and every breadcrumb
-      (including "All things" = root) highlight with the accent inset ring on
-      dragover, clear on dragleave, and drop = the same bulk move path as
-      Move to… (server still cycle-checks); a folder can't be dropped onto
-      itself.
-- [ ] Schema render-template previews: in Previews mode, data things stamped
-      with crystal.schemaId render through that schema's crystal.render tree
-      with `{field}` tokens interpolated from the data thing's crystal —
-      always through the sanitising Chakra/Html allowlist renderers
-      (interpolation runs BEFORE the gates, so injected values can't bypass
-      URL/CSS screening); schemas are fetched once each and cached (null
-      cached for schemas without templates); everything else keeps the
-      existing kind-registry preview with per-item icon+name fallback.
-- [ ] Deep search (top input) queries /api/v1/things/search scoped to the
-      viewer's username across ALL folders, debounced, with kind-filter
-      composition; browse mode filters kinds client-side over loaded pages.
-- [ ] Columns-view folder loading happens in an effect, never during render
-      (React "setState while rendering" stays fixed).
+- [ ] Healthy path: burst a rate-limited endpoint past its limit (e.g.
+      `things.search`, 120/min → 121 requests) → 429 with `Retry-After`,
+      and NO `[rate-limit]`/`[mongodb]` error lines in the logs.
+- [ ] Index-ensure failure is AUDIBLE, never silent: break the index battery
+      (drop `things_v2`'s `ownerId_1_crystal.appId_1_crystal.key_1` unique
+      index, insert two docs sharing `(ownerId, crystal.appId, crystal.key)`),
+      start a FRESH API process → the boot-time warmup run logs one
+      line beginning `[mongodb] ensureIndexes failed building things.<index>`
+      and saying the next bootstrap call will retry. The cold-start PR moved
+      the battery off the request path, so ordinary API traffic neither retries
+      it nor logs; only the awaited bootstrap callers (`registerUser`, admin
+      migrations) can trigger another attempt.
+- [ ] In-flight work is shared, but failures are retryable immediately: while
+      one ensureIndexes battery is running, concurrent bootstrap callers await
+      that same promise; after it fails, the next explicit bootstrap caller
+      starts one fresh attempt instead of inheriting a rejected promise for a
+      fixed cooldown.
+- [ ] Self-heals after cleanup: delete the duplicate docs, then hit an awaited
+      ensureIndexes caller (register a user / run an admin migration) or restart
+      the process → the unique index is rebuilt immediately (`getIndexes()`
+      shows it) and no stale cooldown blocks the recovered database.
+- [ ] Limiter outage is AUDIBLE, never silent: with the limiter's own DB ops
+      failing (e.g. Mongo down/unreachable), a limited endpoint logs
+      `[rate-limit] enforcement unavailable for <rule> — failing open` per
+      request; ordinary actions fail open (the route then surfaces its own DB
+      error), `failClosed` routes return the 429 unavailable shape. Regression
+      class: a bare `catch {}` fail-open invisibly disabled ALL rate limiting
+      (2026-07 perf audit).
+
+## Password hasher (`/crypto` Password Hasher panel, `api/utils/crypto/passwordHasher.server.ts`)
+
+- [ ] `/crypto` → Password Hasher: enter a username + password → the panel
+      shows a VERIFIED badge, `bcrypt cost 10`, the `$2b$10$…` hash, and a
+      mongosh snippet templated with that username. A supplied password is
+      NEVER echoed back in the response; only a generated one is.
+- [ ] "Generate a strong one" + a length (12–64) returns a password shown
+      exactly once ("save it now") whose hash verifies against it — check
+      independently with `bcrypt.compare` if in doubt.
+- [ ] The hash is self-verified server-side before return (`verified: true`);
+      a password under 6 chars still hashes but is flagged (register's
+      minimum), because an existing account may predate any policy.
+- [ ] END-TO-END (the point of the tool): register a throwaway user via the
+      real API, hash a NEW password, run the returned snippet VERBATIM in
+      mongosh, then log in — the new password works and the old one is
+      rejected. The snippet must report `things: matched 1, modified 1`.
+- [ ] Blob integrity: after the snippet runs, the user's `secure` BinData
+      blob still holds email / accountKind / emailVerified / meta, and
+      `secureVersion` incremented by 1 (matching the app's CAS write). A
+      plain `$set: { passwordHash }` on a things-era user writes a field
+      NOTHING reads — the snippet must unpack → edit → repack instead.
+- [ ] Snippet handles both stores and a miss: an unknown username reports
+      "No user named …" AND lists the usernames that do exist, instead of
+      silently modifying 0 docs.
+- [ ] Collection names in the snippet come from `physicalCollectionName()`
+      (currently `things_v2` / `users_v2`) — never hardcoded, so a version
+      bump can't hand out a snippet that edits a frozen generation.
+- [ ] Rate limited per IP (`crypto.hashPassword`, 20/min): bcrypt is the CPU
+      cost, so a burst past the limit 429s with the hashing message. The
+      intent stays ANONYMOUS on purpose — being locked out is the reason to
+      reach for it — and never reads or writes the database.
+
+## Social graph — follows + friends (`api/utils/users/social.ts`, `/api/v1/users/{follow,friend,relationships,connections}`)
+
+- [ ] Follow is ONE-WAY and instant: user B POSTs `/users/follow { username: A }`
+      → `{ following: true, followerCount }`; A's profile shows the count and B
+      sees "Following ✓" immediately (optimistic, reverts on failure). Repeat
+      with `follow: true` is idempotent; `follow: false` (or toggle) unfollows.
+- [ ] Friendship needs APPROVAL: B `intent: request` → `pending-outgoing`; A's
+      own profile shows the "Friend requests 🤝" inbox with Accept/Decline; A
+      accepts → both sides read `friendState: friends` and friend counts bump.
+      Requesting someone who already requested YOU accepts instead of duping
+      (one doc per pair — `crystal.friendKey`, unique index).
+- [ ] Self-actions rejected: following or friending yourself 400s.
+- [ ] `tt:userFriends` acl is REAL now: a friends-visibility post is readable
+      by an accepted friend (permalink AND feed AND the owner's profile as
+      seen by the friend), 404s for strangers/anonymous, and stops resolving
+      the moment either side unfriends.
+- [ ] Relationship reads are public: `/users/relationships?username=` returns
+      counts logged out (`viewer: null`); logged in it adds following /
+      followedBy / friendState, and `incomingRequests` on your own profile.
+      `/users/connections` lists followers/following/friends publicly;
+      `type=requests` is your-own-account-only (403 otherwise).
+- [ ] Forged edges impossible: `follow`/`friend`/`notification` are PROTECTED
+      kinds — generic `POST /api/v1/things` refuses them (a forged accepted
+      `friend` doc would fake acl visibility).
+
+## Notifications (`api/utils/notifications/notifications.ts`, `/api/v1/notifications*`, nav bell)
+
+- [ ] Emission: new follower, friend request, friend accepted, comment on your
+      post, reply to your comment, reaction (preview = the token), repost, and
+      capped fan-out (≤200 newest connections) of new posts to followers
+      (`post-from-followed`) and friends (`post-from-friend`). Own actions
+      never notify yourself; a failed emit never fails the triggering action.
+- [ ] Fan-out respects the post's audience: public posts notify followers +
+      friends, friends-only posts notify friends only, private posts fan out
+      to nobody.
+- [ ] The bell 🔔 (auth only) shows the unread badge (seeded from localCache —
+      no flash), reconciles on mount/focus/slow poll, opens a popover of the
+      latest 20 (unread rows tinted, actor avatar + type emoji, preview,
+      time-ago), zeroes the badge on open (mark-all-read), and click-through
+      goes to `/post/<id>` or the actor's profile. Works within a 375px
+      viewport with no overflow.
+- [ ] Settings → Notifications: a per-type × per-channel matrix — Push and
+      Email switches per row plus a master switch per channel (top row).
+      Defaults ON except email for `post-from-followed`/`post-from-friend`
+      (opt-in) — and `weekly-summary` is email-only (push cell shows —).
+      Optimistic flip + revert on failure, per-user localCache seed
+      (`tt-notif-prefs-v2-*`), merge-patch POST in the channel shape
+      (`{ prefs: { push/email/masters } }`) with the flat legacy body still
+      patching push; unknown keys 400. Disabling a push type hides even
+      ALREADY-WRITTEN notifications of that type (read-time filtering) and
+      single-recipient emits skip writing it; push master OFF empties the bell
+      entirely. Master OFF dims + disables that channel's column. No overflow
+      or column misalignment at 375px.
+- [ ] Notification emails (SES `notification` stream): each single-recipient
+      emit also emails the recipient when their email master + per-type switch
+      are on AND their address is verified — check the `email_messages` outbox
+      row (`templateKey notification.<type>`, `metadata.notificationType`,
+      manage + unsubscribe links in both html and text). Fan-out post emails
+      only reach explicit opt-ins. Throttle: >10 notification emails to one
+      recipient within an hour are silently skipped (digest excluded). A
+      failed/slow send never fails or delays the triggering action.
+- [ ] One-click unsubscribe: the footer link (`/api/v1/notifications/email/
+      unsubscribe?uid&token`) flips ONLY the email master off, renders the
+      confirmation page (mobile viewport included), is idempotent, and rejects
+      a tampered token with the 400 page. Bell/push switches are untouched;
+      re-enabling from Settings works.
+- [ ] Weekly summary digest: admin `GET …/weekly-summary?dryRun=1` previews
+      counts without sending; a real run emails only opted-in verified users
+      with ≥1 nonzero stat, records `notification.weekly_summary` outbox rows,
+      and a second run within 6 days skips everyone (`alreadySent`). Anonymous
+      and non-admin callers get 401/403 (CRON_SECRET bearer also accepted).
+- [ ] Mobile nav overlap regression: the centered commander pill must NOT
+      cover the bell / username (they sit above it via `.nav-right-section`
+      z-index, and the pill reserves 148px on the right). Regression class:
+      nav-right controls rendered under the absolutely-positioned commander
+      host and were untappable on mobile (2026-08).
+
+## Post views (`api/utils/things/views.ts`, `/api/v1/things/views`, `useViewTracking`)
+
+- [ ] Public stats on every post payload: `viewCount` (unique viewer
+      identities) + `viewStats { impressions, avgDwellMs }`; the card's action
+      row shows 👁 + compact count with the full stats in the tooltip, for
+      everyone (logged out included).
+- [ ] Counting is honest: a card must be ≥50% visible for ≥1s to count; one
+      event per post per pageview; batches flush every 10s and on page hide
+      via sendBeacon. Dwell (time on screen), max visible ratio, and viewport
+      position (0..1) ride along.
+- [ ] Manipulation resistance (all server-side, client untrusted): one
+      postViews doc per (postId, viewerKey) — replays bump impressions only,
+      never uniques; owner self-views dropped entirely; anonymous identities
+      dedup on salted sha256(ip|UA) with NO raw IP at rest; UA-less requests
+      dropped; dwell clamped (≤120s/event); batch ≤50; unknown or
+      not-viewable posts dropped (a view write only lands where a read would
+      succeed); rate limited `things.views` per user-or-IP; headless
+      (`navigator.webdriver`) browsers skip client-side too.
+- [ ] Views are tracked on every post surface: feed, profiles (both wired via
+      PostList) and the `/post/:id` permalink page.
