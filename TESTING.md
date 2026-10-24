@@ -12978,12 +12978,7 @@ separate from deterministic discovery/lease tests.
   cursors and cancels pending reads on account change/unmount.
 
 - Device sync correction: a fresh dedicated sync page keeps Manage sync connections collapsed; the Thing page exposes Parent paths with raw Thing data switched off. Explicit scanning remains required.
-
 # Prebuilt-only Vercel deployments (2026-10-23)
-
-- The sync coalescing change-storm regression waits for the actual trailing read
-  with a bounded test timeout; it must not assume a busy runner schedules it
-  before a separate five-millisecond timer.
 
 - Run `node --test scripts/vercel-root-flow.test.mjs`: all source-build ignore
   decisions skip, remote source compilation refuses, and symlinks survive
