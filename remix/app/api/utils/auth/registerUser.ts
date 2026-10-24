@@ -64,7 +64,7 @@ const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 // their own admin-gated / authenticated endpoints). `publicUploads` and
 // `privateUploads` join `admin` here: a public signup body must not be able to
 // hand itself the upload permissions this hotfix exists to withhold.
-const PRIVILEGED_META_KEYS = ['admin', 'publicUploads', 'privateUploads', 'character'];
+const PRIVILEGED_META_KEYS = ['admin', 'publicUploads', 'privateUploads'];
 
 // Drop privileged keys from any caller-supplied meta before it's persisted.
 const sanitizeCreateMeta = (meta: unknown): Record<string, any> => {
@@ -138,7 +138,6 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
     // predate the hotfix have no flags at all and stay enabled.
     meta: {
       ...sanitizeCreateMeta(input.meta),
-      ...(input.character ? { character: input.character } : {}),
       publicUploads: input.publicUploads === true,
       privateUploads: input.privateUploads === true
     }

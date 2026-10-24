@@ -69,11 +69,11 @@ const defaultDependencies: AttachmentMutationDependencies = {
 // on publicly viewable surfaces, private ones only in the account's own DMs or
 // profile. An unknown purpose is left to the service's own 400 — nothing is
 // reserved either way.
-const PUBLIC_UPLOAD_PURPOSES = new Set<unknown>([undefined, 'post', 'comment', 'custom-emoji', 'subspace-icon', 'subspace-banner']);
-const PRIVATE_UPLOAD_PURPOSES = new Set<unknown>(['message', 'profile-avatar', 'profile-banner', 'recording', 'recording-import', 'file', 'file-import']);
+const PUBLIC_UPLOAD_PURPOSES = new Set<unknown>([undefined, 'post', 'comment', 'custom-emoji']);
+const PRIVATE_UPLOAD_PURPOSES = new Set<unknown>(['message', 'profile-avatar', 'profile-banner']);
 
 export const createAttachmentMutationAction = (
-	options: { rateKey: string; service: MutationService; requireUploadPermission?: boolean; requestIdRequiresFullUser?: boolean },
+	options: { rateKey: string; service: MutationService; requireUploadPermission?: boolean },
 	overrides: Partial<AttachmentMutationDependencies> = {}
 ) => {
 	const dependencies = { ...defaultDependencies, ...overrides };
@@ -103,11 +103,6 @@ export const createAttachmentMutationAction = (
 			}
 
 			const body = await dependencies.readBody(request, ATTACHMENT_JSON_BODY_BYTES);
-			// Both durable modes are full-user operations; legacy Watch post cleanup
-			// remains available without either receipt control.
-			if (options.requestIdRequiresFullUser && usesDeviceCredential(request) && body && typeof body === 'object' && ('requestId' in body || 'retainReceipt' in body)) {
-				return json({ ok: false, error: 'Durable attachment requests require a full user session' }, { status: 403 });
-			}
 			// File/media uploads are withheld per SCOPE from new accounts until an
 			// admin grants them (auth/users.ts userPublicUploadsEnabled /
 			// userPrivateUploadsEnabled): the requested purpose decides which flag
@@ -120,9 +115,6 @@ export const createAttachmentMutationAction = (
 			// mid-upload can't strand a paid-for reservation.
 			if (options.requireUploadPermission) {
 				const purpose = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>).purpose : undefined;
-				if (usesDeviceCredential(request) && purpose !== undefined && purpose !== 'post') {
-					return json({ ok: false, error: 'Apple Watch credentials can only start post-purpose uploads' }, { status: 403 });
-				}
 				const needsPublic = PUBLIC_UPLOAD_PURPOSES.has(purpose) && !user.publicUploadsEnabled;
 				const needsPrivate = PRIVATE_UPLOAD_PURPOSES.has(purpose) && !user.privateUploadsEnabled;
 				if (needsPublic || needsPrivate) {

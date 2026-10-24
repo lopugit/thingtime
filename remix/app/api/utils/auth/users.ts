@@ -118,9 +118,6 @@ export type PublicUser = {
 	};
 	activeThemeId: string | null;
 	activeFeedAlgorithmId: string | null;
-	// Private, owner-facing profile preference. It is safe by default: only an
-	// explicit false permits the public profile projection to include email.
-	hideEmailOnProfile?: boolean;
 	// Upload permissions are OFF for every account created after the
 	// signup-permissions hotfix; an admin turns them on per user from /admin
 	// (see setUserUploadPermissions), per scope or all at once. Accounts
@@ -129,10 +126,6 @@ export type PublicUser = {
 	// = message attachments + own profile avatar/banner.
 	publicUploadsEnabled: boolean;
 	privateUploadsEnabled: boolean;
-	// Lopu is invite-only (meta.lopuVerified, absent = false; admins always
-	// verified) — the client renders the locked state from this, the server
-	// gates every turn (api/utils/lopu/access.ts). Self projection only.
-	lopuVerified: boolean;
 	// true when meta.admin OR the ADMIN_USERNAMES env allowlist — the client uses
 	// it to reveal the admin panel; the server always re-checks server-side.
 	isAdmin: boolean;
@@ -167,21 +160,8 @@ export type PublicProfile = {
 // own circles see (message attachments, own profile avatar/banner). "All" is
 // simply both flags. Admins are always allowed regardless of the flags, so a
 // locked-out admin can never be unable to fix the account that grants them.
-// These two flags are the ONE enforcement path, and they also feed the
-// any-scope `canUploadMediaDoc` predicate (auth/mediaUpload.ts) that
-// PublicUser.canUploadMedia and the parts/complete grant check read — so
-// approving a scope needs no second grant, and the separate `meta.mediaUpload`
-// record (its own admin setter) never gates an upload.
 export const userPublicUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.publicUploads !== false;
 export const userPrivateUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.privateUploads !== false;
-
-// Lopu verified access (design note "Lopu verified access, usage accounting
-// and credits" §1): meta.lopuVerified is a plain opt-in — absent or anything
-// but an exact true reads as NOT verified (new accounts start locked, exactly
-// like meta.publicUploads after the signup-permissions hotfix). Admins are
-// always verified, so a locked-out admin can never be unable to fix the
-// account that verifies them.
-export const userLopuVerified = (user: any): boolean => isAdminDoc(user) || user?.meta?.lopuVerified === true;
 
 export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null): PublicUser => {
 	const source = subscription?.subjectType === 'user' ? subscription.storage : null;
@@ -229,8 +209,7 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		hideEmailOnProfile: user.meta?.hideEmailOnProfile !== false,
 		publicUploadsEnabled: userPublicUploadsEnabled(user),
 		privateUploadsEnabled: userPrivateUploadsEnabled(user),
-		isAdmin: isAdminDoc(user),
-		canUploadMedia: canUploadMediaDoc(user)
+		isAdmin: isAdminDoc(user)
 	};
 };
 
@@ -1854,7 +1833,6 @@ export type AdminUserRow = {
 	// signup), so the UI can tell "awaiting approval" from "grandfathered".
 	publicUploadsPending: boolean;
 	privateUploadsPending: boolean;
-	mediaUpload: boolean; // the stored grant flag (admins can upload regardless)
 };
 
 // Escape user-supplied text before embedding it in a Mongo $regex — shared with
@@ -1879,8 +1857,7 @@ const toAdminRow = (doc: any): AdminUserRow => ({
 	publicUploadsEnabled: userPublicUploadsEnabled(doc),
 	privateUploadsEnabled: userPrivateUploadsEnabled(doc),
 	publicUploadsPending: doc?.meta?.publicUploads === false && !isAdminDoc(doc),
-	privateUploadsPending: doc?.meta?.privateUploads === false && !isAdminDoc(doc),
-	mediaUpload: doc.meta?.mediaUpload === true
+	privateUploadsPending: doc?.meta?.privateUploads === false && !isAdminDoc(doc)
 });
 
 // The admin row for a user doc already in hand (the Lopu accounts directory
@@ -1924,10 +1901,6 @@ export const setUserAdmin = async (userId: string, admin: boolean): Promise<Admi
 // twin left by an interrupted users→things migration would otherwise keep a
 // stale value that the dual-store read resurrects, so a grant would appear not
 // to take. Best-effort per store; either matching counts as applied.
-//
-// This is the ONE upload-permission setter: the scopes it writes are what the
-// upload gates enforce (and what PublicUser.canUploadMedia derives from), so
-// no second grant has to be flipped to unblock an account.
 export type UploadPermissionUpdates = { publicUploads?: boolean; privateUploads?: boolean };
 export const setUserUploadPermissions = async (userId: string, updates: UploadPermissionUpdates): Promise<AdminUserRow | null> => {
 	const keys = (['publicUploads', 'privateUploads'] as const).filter((key) => typeof updates[key] === 'boolean');
@@ -1945,37 +1918,6 @@ export const setUserUploadPermissions = async (userId: string, updates: UploadPe
 		const $set: Record<string, unknown> = { updatedAt: new Date() };
 		for (const key of keys) $set[`meta.${key}`] = updates[key] === true;
 		const legacy = await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId) }, { $set });
-		if (legacy.matchedCount) applied = true;
-	}
-
-	if (!applied) return null;
-	const updated = await findUserById(userId);
-	return updated ? toAdminRow(updated) : null;
-};
-
-// Verify (or un-verify) a user's Lopu access — meta.lopuVerified plus the
-// audit pair meta.lopuVerifiedAt / meta.lopuVerifiedBy — with exactly the
-// dual-store, CAS-guarded write setUserUploadPermissions uses (the flag rides
-// the secure blob's meta: no new index, no collection generation, and a
-// dual-era twin can never resurrect a stale value). Returns the admin row,
-// or null when no store holds the user.
-export const setUserLopuVerified = async (userId: string, verified: boolean, actorId: string): Promise<AdminUserRow | null> => {
-	const now = new Date();
-	const stamp = { lopuVerified: verified === true, lopuVerifiedAt: now.toISOString(), lopuVerifiedBy: String(actorId || '').slice(0, 128) || 'system' };
-	let applied = false;
-	const result = await mutateUserThingSecure(userId, (secure) => {
-		secure.meta = { ...(secure.meta || {}), ...stamp };
-	});
-	if (result === 'contended') throw new SecureWriteContendedError(userId);
-	if (result === 'mutated') applied = true;
-
-	if (ObjectId.isValid(userId)) {
-		const legacy = await (
-			await getUsersCollection()
-		).updateOne(
-			{ _id: new ObjectId(userId) },
-			{ $set: { 'meta.lopuVerified': stamp.lopuVerified, 'meta.lopuVerifiedAt': stamp.lopuVerifiedAt, 'meta.lopuVerifiedBy': stamp.lopuVerifiedBy, updatedAt: now } }
-		);
 		if (legacy.matchedCount) applied = true;
 	}
 
