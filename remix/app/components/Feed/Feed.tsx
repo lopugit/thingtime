@@ -333,11 +333,14 @@ export const FeedPage = () => {
         });
         if (seq !== requestSeqRef.current) return;
 
+        const pagePosts: PublicPost[] = resp.posts || [];
         setPosts((prev) => {
-          // `feed` responses are untyped JSON; name the projection the same way
-          // the advanced-search branch above does so the pager stays PublicPost[].
-          const page: PublicPost[] = mergeReactionOverlays<PublicPost>(startedAt, (resp.posts || []) as PublicPost[]);
-          return appendPostsDeduped(reset ? [] : prev, page);
+          if (reset) return pagePosts;
+          // ranked pagination re-scores a moving candidate window (and training
+          // flushes mutate weights mid-scroll), so a later page can resurface an
+          // already-rendered post.id — dedupe or PostList gets duplicate keys
+          const seen = new Set(prev.map((post) => post.id));
+          return [...prev, ...pagePosts.filter((post) => !seen.has(post.id))];
         });
         setNextCursor(resp.nextCursor ?? null);
         setDeviceCoverage(resp.source === 'device');
