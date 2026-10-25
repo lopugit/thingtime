@@ -49,13 +49,35 @@ let browser, server;
     const editTitle = async (selector, value) => { await page.click(selector); await page.waitForSelector('input[aria-label="Element title"]'); await replace('input[aria-label="Element title"]', value); await page.keyboard.press('Escape'); };
     const saveLayout = async scope => { await clickText(scope, 'Save layout'); await page.waitForFunction(scope => !document.querySelector(scope).textContent.includes('Unsaved layout'), {}, scope); await clickText(scope, 'Done editing layout'); };
     const openEntry = async () => { await page.waitForSelector(block('password-record')); await page.click(block('password-record')); await page.waitForSelector('input[name="field-password"]'); await page.waitForSelector(`${attachments} ${block('attachment-name')}`); };
-    const assertWidth = async () => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'horizontal overflow');
+    const assertWidth = async () => {
+      const height = await page.evaluate(() => document.documentElement.scrollHeight);
+      for (let top = 0; top < height; top += 750) {
+        await page.evaluate(top => window.scrollTo(0, top), top);
+        await delay();
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'horizontal overflow while scrolling');
+      }
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      assert.ok(await page.evaluate(() => scrollY + innerHeight >= document.documentElement.scrollHeight - 1), 'bottom of page reached');
+      await page.evaluate(() => window.scrollTo(0, 0));
+    };
     for (const width of [1440, 390]) {
       await page.setViewport({ width, height: 1000 });
       await page.goto(origin, { waitUntil: 'domcontentloaded' });
       await openEntry();
       assert.equal(await page.$eval('input[name="field-password"]', input => input.type), 'password');
       assert.equal(await page.$eval('input[name="field-password"]', input => input.value), 'fixture-password-value');
+      await page.click('button[aria-label="Copy Password"]');
+      await page.waitForFunction(() => window.passwordFixture.clipboardValue() === 'fixture-password-value');
+      assert.equal(await page.$eval('input[name="field-password"]', input => input.type), 'password');
+      assert.ok(await page.$eval(block('password-editor'), node => node.textContent.includes('Copied.')));
+      await page.click('button[aria-label="Copy current verification code"]');
+      await page.waitForFunction(() => /^\d{6}$/.test(window.passwordFixture.clipboardValue()));
+      assert.notEqual(await page.evaluate(() => window.passwordFixture.clipboardValue()), 'JBSWY3DPEHPK3PXP');
+      await page.evaluate(() => window.passwordFixture.rejectClipboard(true));
+      await page.click('button[aria-label="Copy Password"]');
+      await page.waitForFunction(() => document.body.textContent.includes('Could not copy. Try again.'));
+      assert.ok(!(await page.content()).includes('fixture-secret-error-must-not-render'));
+      await page.evaluate(() => window.passwordFixture.rejectClipboard(false));
       await page.click('button[aria-label="Show Password"]');
       assert.equal(await page.$eval('input[name="field-password"]', input => input.type), 'text');
       await page.click('button[aria-label="Hide Password"]');
@@ -131,6 +153,7 @@ let browser, server;
     await editText(`${main} ${block('password-heading')}`, 'My passwords');
     await editText(`${main} ${block('password-record-title')}`, 'Saved {item.title}');
     await editText(`${main} ${block('password-field-caption')}`, 'Field {item.label}');
+    await editText(`${main} ${block('password-field-copy-label')}`, 'Use {item.copyLabel}');
     await editTitle(`${main} ${block('password-title')}`, 'Choose a private entry title');
     await saveLayout(main);
     await clickText(source, 'Edit layout');
@@ -154,6 +177,7 @@ let browser, server;
     await openEntry();
     assert.equal(await page.$eval(block('password-record-title'), node => node.textContent), 'Saved Synthetic login');
     assert.equal(await page.$eval(block('password-field-caption'), node => node.textContent), 'Field Username');
+    assert.equal(await page.$eval(block('password-field-copy-label'), node => node.textContent), 'Use Copy');
     assert.equal(await page.$eval(block('password-title'), node => node.title), 'Choose a private entry title');
     assert.equal(await page.$eval(`${source} ${block('source-account')}`, node => node.title), 'Original account label');
     assert.equal(await page.$eval(`${source} ${block('source-history-heading')}`, node => node.textContent), 'Earlier passwords (1)');
@@ -193,6 +217,22 @@ let browser, server;
     await delay();
     assert.equal(await page.$(block('password-editor')), null);
     await record('Entering Builder cancels a pending synthetic vault read; late response cannot reopen the private editor');
+    // The writable attachment was intentionally removed above; reopening only
+    // depends on the entry and its private control, not the old file fixture.
+    await page.click(block('password-record'));
+    await page.waitForSelector(block('password-editor'));
+    await page.waitForSelector('input[name="field-password"]');
+    await page.evaluate(() => window.passwordFixture.pauseClipboard());
+    await page.click('button[aria-label="Copy Password"]');
+    await page.waitForFunction(() => window.passwordFixture.clipboardPending());
+    await clickText(main, 'Edit layout');
+    await page.evaluate(() => window.passwordFixture.releaseClipboard());
+    await delay();
+    await clickText(main, 'Done editing layout');
+    assert.ok(!(await page.$eval(block('password-editor'), node => node.textContent)).includes('Copied.'));
+    await page.click(block('password-editor-close'));
+    await record('Copy keeps concealed passwords masked, copies TOTP codes only, sanitizes rejection and drops stale feedback after Builder entry');
+
 
     await page.click(block('password-import'));
     await page.waitForSelector(block('password-import-file'), { visible: true });

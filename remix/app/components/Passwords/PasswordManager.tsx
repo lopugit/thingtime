@@ -44,9 +44,14 @@ function PasswordManagerScope({ ownerId, scopeKey }: { ownerId: string; scopeKey
   const importRead = React.useRef<AbortController | null>(null);
   const [deleteConfirm, setDeleteConfirm] = React.useState(false);
   const [revealed, setRevealed] = React.useState<Record<string, boolean>>({});
+  const [copyFeedback, setCopyFeedback] = React.useState<Record<string, string>>({});
+  const copyEpoch = React.useRef(0), copyCleanup = React.useRef<(() => void) | null>(null);
+  const currentDraft = React.useRef(draft); currentDraft.current = draft;
+  const resetCopy = React.useCallback(() => { copyEpoch.current++; copyCleanup.current?.(); copyCleanup.current = null; setCopyFeedback({}); }, []);
+  React.useEffect(() => { resetCopy(); }, [draft, resetCopy]);
   const [codes, setCodes] = React.useState<Record<string, string>>({});
   React.useEffect(() => {
-    const mask = () => setRevealed({});
+    const mask = () => { setRevealed({}); resetCopy(); };
     window.addEventListener('blur', mask); window.addEventListener('thingtime:mask-vault-values', mask);
     return () => { window.removeEventListener('blur', mask); window.removeEventListener('thingtime:mask-vault-values', mask); };
   }, []);
@@ -74,9 +79,9 @@ function PasswordManagerScope({ ownerId, scopeKey }: { ownerId: string; scopeKey
   const retry = React.useRef<{ payload: string; writeId: string } | null>(null), importSource = React.useRef<{ file: File; count: number; saved: number; archive?: { id: string; writeId: string; saved: boolean }; filesSaved?: number; entryIds?: Map<number, string>; restoredIds?: Map<string, string>; pendingFile?: PasswordFile; pending?: { id: string; writeId: string; entry: PasswordEntry } } | null>(null);
   const clear = React.useCallback(() => {
     listEpoch.current++; setListLoading(false); generation.current++; controllers.current.forEach(controller => controller.abort()); controllers.current.clear(); runSignal.current = null;
-    setRevealed({}); setCodes({}); setDraft(null); setImported(null); importSource.current = null; importRead.current?.abort(); importRead.current = null; setReadingImport(false); retry.current = null; setTransfer(null); setBusy(false); setDeleteConfirm(false); setCustomLabel(''); setAcknowledged(false); setProgress('');
+    resetCopy(); setRevealed({}); setCodes({}); setDraft(null); setImported(null); importSource.current = null; importRead.current?.abort(); importRead.current = null; setReadingImport(false); retry.current = null; setTransfer(null); setBusy(false); setDeleteConfirm(false); setCustomLabel(''); setAcknowledged(false); setProgress('');
   }, []);
-  const retire = React.useCallback(() => { active.current = false; generation.current++; controllers.current.forEach(controller => controller.abort()); controllers.current.clear(); }, []);
+  const retire = React.useCallback(() => { copyEpoch.current++; copyCleanup.current?.(); active.current = false; generation.current++; controllers.current.forEach(controller => controller.abort()); controllers.current.clear(); }, []);
   React.useEffect(() => {
     active.current = true;
     // Tab switching and the screen picker must not silently discard unsaved
@@ -126,7 +131,7 @@ function PasswordManagerScope({ ownerId, scopeKey }: { ownerId: string; scopeKey
     catch (reason) { if (!signal.aborted && version === generation.current) showError(reason); }
     finally { signal.removeEventListener('abort', release); controllers.current.delete(controller); release(); }
   };
-  const updateEntry = (entry: PasswordEntry) => setDraft(prev => prev ? { ...prev, entry } : prev);
+  const updateEntry = (entry: PasswordEntry) => { resetCopy(); setDraft(prev => prev ? { ...prev, entry } : prev); };
   const addTotp = (value: string) => setDraft(prev => prev ? { ...prev, entry: { ...prev.entry, fields: [...prev.entry.fields, { id: crypto.randomUUID(), label: 'Verification code', type: 'totp', value }] } } : prev);
   const save = () => run(async () => {
     if (!draft) return;
@@ -135,7 +140,7 @@ function PasswordManagerScope({ ownerId, scopeKey }: { ownerId: string; scopeKey
     retry.current = null; setDraft(prev => prev?.id === draft.id ? { ...prev, revision: result.record.revision } : prev);
     setRecords(prev => [...prev.filter(item => item.id !== result.record.id), result.record]); changed(); lopu({ title: 'Password entry saved', status: 'success' });
   });
-  const read = (record: PasswordMetadata) => run(async () => { const result = await request({ operation: 'read', id: record.id }); setRevealed({}); setDraft({ id: result.id, revision: result.revision, entry: result.entry }); retry.current = null; setDeleteConfirm(false); });
+  const read = (record: PasswordMetadata) => run(async () => { resetCopy(); const result = await request({ operation: 'read', id: record.id }); setRevealed({}); setDraft({ id: result.id, revision: result.revision, entry: result.entry }); retry.current = null; setDeleteConfirm(false); });
   const loadImport = async (file?: File) => {
     if (!file || busy) return;
     importRead.current?.abort();
@@ -203,7 +208,7 @@ function PasswordManagerScope({ ownerId, scopeKey }: { ownerId: string; scopeKey
     setTransfer(null); setAcknowledged(false); setProgress('');
   });
   const visible = records.filter(record => record.title.toLowerCase().includes(search.trim().toLowerCase())).sort((a, b) => sort === 'updated' ? b.updatedAt.localeCompare(a.updatedAt) : a.title.localeCompare(b.title));
-  const entryDisplay = passwordEntryDisplay(draft?.entry, revealed);
+  const entryDisplay = passwordEntryDisplay(draft?.entry, revealed, copyFeedback);
   const scope = { passwords: {
     ...entryDisplay, busy, cannotAdd: busy || configured === false, unconfigured: configured === false,
     nativeAvailable, nativeMessage, error, search, sort, listLoading,
@@ -251,6 +256,33 @@ function PasswordManagerScope({ ownerId, scopeKey }: { ownerId: string; scopeKey
     'entry.keep': () => setDeleteConfirm(false),
     'entry.confirm-delete': () => run(async () => { if (!draft || !deleteConfirm) return; await request({ operation: 'delete', id: draft.id, revision: draft.revision }); setRecords(prev => prev.filter(record => record.id !== draft.id)); changed(); clearAndRefresh(); }),
     'field.change': ({ inputs, value }) => { const id = fieldId(inputs.id); if (id) edit(entry => ({ ...entry, fields: entry.fields.map(field => field.id === id ? { ...field, value: String(value || '') } : field) })); },
+    'field.copy': async ({ inputs, signal }) => {
+      const id = fieldId(inputs.id), source = draft;
+      // Resolve values only inside this transient adapter. Passkey fields are
+      // deliberately excluded: Copy must never become a signing-key export.
+      if (!id || !source || source.entry.passwordType === 'passkey' || busy) return;
+      const field = source.entry.fields.find(field => field.id === id)!;
+      resetCopy();
+      const epoch = copyEpoch.current;
+      const current = () => active.current && !signal.aborted && epoch === copyEpoch.current && currentDraft.current === source;
+      const cancel = () => { if (epoch === copyEpoch.current) resetCopy(); };
+      signal.addEventListener('abort', cancel, { once: true });
+      copyCleanup.current = () => signal.removeEventListener('abort', cancel);
+      try {
+        if (!current()) return;
+        // Authenticator Copy always means the current code, never its seed or
+        // the countdown text displayed alongside it.
+        const value = field.type === 'totp' ? (await totpCode(field.value)).code : field.value;
+        if (!current()) return;
+        if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+        await navigator.clipboard.writeText(value);
+        if (current()) setCopyFeedback({ [id]: field.type === 'totp' ? 'Verification code copied.' : 'Copied.' });
+      } catch {
+        // Clipboard/crypto exceptions may include sensitive input. Never show
+        // their messages or send them through generic Action error reporting.
+        if (current()) setCopyFeedback({ [id]: 'Could not copy. Try again.' });
+      }
+    },
     'field.reveal': ({ inputs }) => { const id = fieldId(inputs.id); if (id) setRevealed(prev => ({ ...prev, [id]: !prev[id] })); },
     'field.up': ({ inputs }) => move(inputs.id, -1), 'field.down': ({ inputs }) => move(inputs.id, 1),
     'field.remove': ({ inputs }) => edit(entry => ({ ...entry, fields: entry.fields.filter(field => field.id !== inputs.id) })),

@@ -7,6 +7,28 @@ Branch: `codex/password-manager` (base `develop`)
 
 The web vault was merged into main at `998bdb83c` by [PR #997](https://github.com/lopugit/thingtime/pull/997). This branch incorporates that web base and retains the Apple providers, native packaging and signing setup. It is open for review. Historical October 2026 local evidence below recorded a signed installation; this cloud reconciliation has no Swift/Xcode or current signed-device acceptance. Actual OS fill/passkey ceremonies remain acceptance gates. The evidence below includes the shared web prerequisite.
 
+## Password Copy controls — 26 October 2026
+
+Added independently editable field Copy buttons and status blocks. The transient
+binding carries only a field ID; values remain in the adapter closure. Concealed
+passwords copy while masked, TOTP Copy returns the current code rather than its
+seed/countdown, and passkey entries cannot copy signing fields. Clipboard errors
+use fixed non-secret text. Entry edits, masking, entry/account/data-plane changes
+and Builder mode invalidate pending work and feedback. Submitted clipboard
+writes cannot be revoked; late completion cannot show stale status.
+
+The current `npm --prefix remix run test:passwords` run passed 56 tests with zero
+skips, including editable Copy bindings and passkey/TOTP display contracts.
+The isolated Chromium run passed all 11 acceptance groups, including masked
+copying, TOTP codes, sanitized rejection, late feedback and independent Copy-label
+save/reload. Desktop (1440px) and mobile (390px) layouts were scrolled from top to
+bottom and inspected. The browser and synthetic backend had no external network,
+no host mounts or published ports, and retained the Chromium sandbox. The native
+manager control session could not be claimed reliably, so the existing
+network-none harness supplied the task-owned fallback. Real clipboard delivery,
+installed/native and production acceptance of Copy remain pending. This change
+is not yet deployed or installed.
+
 ## Local native verification — 25 October 2026
 
 Rechecked cloud head `ab9d39965d8bc94a2063bfcf6ffc862a2289cb91` in an isolated

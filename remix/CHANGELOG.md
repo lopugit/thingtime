@@ -104,6 +104,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26 — **Codex (AI)**: Add individually editable password-field Copy
+  controls with masked copying, current-code TOTP handling, fixed feedback and
+  scope cancellation. Passkey signing fields exclude Copy. Password suite:
+  56 passes, zero skips; all 11 isolated browser groups passed at desktop/mobile
+  sizes. Real clipboard, native and production acceptance remain open. [PR #996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+
 - 2026-10-25 — **Codex (AI)**: Restore iOS test-target compilation by gating the
   shared live Git oracle to macOS. Verify native password-core checks,
   destination-failure regression logic and the full simulator test build;

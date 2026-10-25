@@ -37,3 +37,29 @@ test('persisted layouts refuse values on opted-in controls including revealed te
   }
   assert.throws(() => settingsDocumentBlocks([{ id: 'private', type: 'element', tag: 'textarea', text: 'secret', props: { name: 'source', 'data-tt-private-control': '' } }]), /Private input/);
 });
+
+test('Copy is an editable ordinary button with only a field id in its transient binding', () => {
+  const nodes = walk(settingsDocumentBlocks(passwordManagerBlocks));
+  const button = nodes.find(node => node.id === 'password-field-copy')!;
+  assert.equal(button.type, 'element'); assert.equal(button.tag, 'button');
+  assert.equal(button.props?.['data-tt-action'], '$transient');
+  assert.deepEqual(button.props?.['data-tt-action-inputs'], { operation: 'field.copy', id: '{item.id}' });
+  assert.equal(button.props?.['aria-label'], '{item.copyAccessibleLabel}');
+  assert.ok(button.children?.some(node => node.id === 'password-field-copy-label'));
+  assert.equal(nodes.find(node => node.id === 'password-field-copy-feedback')?.props?.role, 'status');
+});
+test('Copy projection distinguishes verification codes and excludes passkey signing fields', () => {
+  const entry = { title: 'Synthetic', passwordType: 'login' as const, fields: [
+    { id: 'password', label: 'Password', type: 'password' as const, value: 'PRIVATE_PASSWORD' },
+    { id: 'totp', label: 'Authenticator seed', type: 'totp' as const, value: 'PRIVATE_SEED' }
+  ] };
+  const display = passwordEntryDisplay(entry, {}, { password: 'Copied.' });
+  assert.ok(display.fields.every(field => field.copyable));
+  assert.equal(display.fields[0].copyAccessibleLabel, 'Copy Password');
+  assert.equal(display.fields[0].copyFeedback, 'Copied.');
+  assert.equal(display.fields[0].inputType, 'password');
+  assert.equal(display.fields[1].copyAccessibleLabel, 'Copy current verification code');
+  assert.equal(display.fields[1].copyLabel, 'Copy verification code');
+  assert.ok(!JSON.stringify(display).includes('PRIVATE_'));
+  assert.ok(passwordEntryDisplay({ ...entry, passwordType: 'passkey' }).fields.every(field => !field.copyable));
+});

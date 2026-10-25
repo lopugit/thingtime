@@ -23,6 +23,13 @@ const initial: PasswordEntry = {
 const entries = new Map([[entryId, { entry: initial, revision: 1 }]]);
 const files = new Map([[entryId, [{ id: '33333333-3333-4333-8333-333333333333', metadata: newPasswordFile('Synthetic attachment.txt', 17) }]], [archiveId, [{ id: '44444444-4444-4444-8444-444444444444', metadata: { ...newPasswordFile('Synthetic source.txt', 9), archivePath: 'files/fixture-file___source.txt' } }]]]);
 const operations: string[] = [], nativeOperations: string[] = [];
+// Clipboard is a synthetic device boundary; never reaches the host clipboard.
+let copiedValue = '', clipboardReject = false, clipboardPause = false, clipboardRelease: (() => void) | null = null;
+Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value: string) => {
+  if (clipboardReject) throw new Error('fixture-secret-error-must-not-render');
+  if (clipboardPause) { clipboardPause = false; await new Promise<void>(resolve => { clipboardRelease = resolve; }); clipboardRelease = null; }
+  copiedValue = value;
+} } });
 const layoutKey = 'synthetic-password-layouts', originalFetch = window.fetch.bind(window);
 let layoutRevision = 0;
 let pausedOperation: string | null = null, pendingRelease: (() => void) | null = null;
@@ -82,6 +89,11 @@ const router = createMemoryRouter([{ id: 'root', path: '*', loader: () => ({ use
 createRoot(document.getElementById('root')!).render(<ChakraProvider><RouterProvider router={router} /></ChakraProvider>);
 Object.assign(window, { passwordFixture: {
   qrFixtureUrl,
+  clipboardValue: () => copiedValue,
+  rejectClipboard: (value: boolean) => { clipboardReject = value; },
+  pauseClipboard: () => { clipboardPause = true; },
+  clipboardPending: () => clipboardRelease !== null,
+  releaseClipboard: () => clipboardRelease?.(),
   pauseNext: (operation: string) => { if (!['read', 'save'].includes(operation)) throw Error('Unsupported fixture pause'); pausedOperation = operation; },
   pending: () => pendingRelease !== null, releasePending: () => pendingRelease?.(),
   operations: () => [...operations], nativeOperations: () => [...nativeOperations],

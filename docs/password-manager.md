@@ -14,6 +14,28 @@ required-field validation. Hide/owner/origin changes revoke private controls;
 backgrounding masks them without discarding unsaved drafts. Entering Builder
 mode clears control values and cancels the adapter lifetime.
 
+## Copy field values
+
+Each ordinary field has an individually editable **Copy** button. Concealed
+values stay masked while copying. TOTP fields use **Copy verification code**
+to copy the current code only, without its countdown or setup seed. Passkey
+entries do not expose Copy controls for signing fields.
+
+The transient `field.copy` binding contains only the field ID; its adapter reads
+the current value from component memory and writes directly to the clipboard.
+Values never enter Builder scope, saved layouts or Action history. Success and
+failure use fixed, non-secret status text. Editing a value, changing entries,
+masking, closing, changing account/data plane or entering Builder invalidates
+pending work and feedback. A clipboard write already submitted to the browser
+cannot be revoked; its late completion cannot restore stale feedback.
+
+Verification on 26 October 2026: the focused password suite passed 56 tests with
+zero skips. All 11 isolated Chromium acceptance groups passed, covering masked
+copying, TOTP codes, clipboard rejection, stale feedback, independent Copy-label
+editing and desktop/mobile page scrolling. The clipboard device boundary was
+synthetic; real clipboard delivery, installed/native and production acceptance
+remain separate gates.
+
 ## Storage and access
 
 `api.passwords` 1.2.1 uses the home data plane. GET returns 50 metadata records

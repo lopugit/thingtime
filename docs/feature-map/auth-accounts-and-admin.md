@@ -84,6 +84,13 @@ fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
 intentionally bypasses general request diagnostics and automatic origin fallback
 so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
+`components/Passwords/passwordManagerBlocks.ts` defines individually editable
+Copy buttons/status blocks; `PasswordManager.tsx` resolves `field.copy` by field
+ID in a transient closure. `passwordEntryDisplay.ts` exposes labels and fixed
+feedback only. Concealed values stay masked, TOTP Copy yields a code rather than
+its seed, and passkey entries cannot copy signing fields. Scope changes suppress
+stale work/feedback. See the Copy regression in `TESTING.md` and the synthetic
+browser harness in `scripts/check-password-manager-browser.cjs`.
 Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 `iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
 Native provider implementation and signed release are tracked separately in

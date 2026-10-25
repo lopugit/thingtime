@@ -13034,6 +13034,18 @@ separate from deterministic discovery/lease tests.
   report failure, preserve the old authority, and allow retry after unlock;
   verify the picker continues to identify the actual active destination.
 
+- Password Copy regression (2026-10-26): copy a concealed field without revealing
+  it, and compare the clipboard result with the synthetic source value. TOTP Copy
+  must contain only the current code, never the setup seed/countdown. Check fixed,
+  non-secret rejection feedback and no Copy controls for passkey signing fields.
+  While work is pending, edit/switch/close the entry, change account/data plane,
+  or enter Builder; no late TOTP write or stale status may appear in the new
+  scope. A clipboard write already submitted cannot be revoked. Edit the Copy
+  label independently, save/reload, and verify no private value entered layouts
+  or Action history. The password unit suite passed 56 tests, zero skips, on
+  26 October. All 11 isolated Chromium acceptance groups passed at desktop/mobile
+  sizes; real clipboard, installed/native and production acceptance remain pending.
+
 - Password Builder regression: run `npm --prefix remix run test:passwords` inside
   a loopback-only namespace, then the isolated password-manager browser fixture.
   Edit nested title/field/reveal labels and repeated entry/file/history templates;
