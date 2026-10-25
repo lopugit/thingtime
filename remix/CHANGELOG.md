@@ -104,6 +104,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-25: Preserve the negotiated remote sync-control capability in the Mac
+  host and repair fresh-worktree dependencies before desktop resource staging.
+  Added native-host regression coverage. Installed acceptance is recorded in
+  [PR 1216](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
 - 2026-10-23: Make owned-device folder sync settings available in web browsers,
   including offline edits, and relay live folder access, transfer/automation,
   conflict, recovery, progress and priority controls to the installed app.

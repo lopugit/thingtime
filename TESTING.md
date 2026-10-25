@@ -12913,6 +12913,21 @@ separate from deterministic discovery/lease tests.
 
 ### Browser management and remote execution — 2026-10-23
 
+- Installed checkpoint, 2026-10-25: 326 Electron tests passed; canonical
+  Developer ID build/install and installed signature passed with an unchanged
+  designated requirement. Existing account and paused Home state survived.
+  Native source-choice prompt appeared in the embedded Node app, but folder
+  chooser control timed out and cancelled without granting access. Actual
+  browser-to-device transfer, recovery and window-close checks remain open;
+  see the PR 1216 note for the precise evidence boundary.
+- [ ] On the signed Mac, negotiate the selected origin through the actual
+  desktop folder host. Confirm `api.devices-sync-control` survives its
+  allowlisted projection so the remote worker can start. Missing/malformed
+  versions and foreign-origin manifests must still fail closed. Run
+  `node --test electron/test/folder-sync.test.cjs` for this boundary regression.
+- [ ] Build from a fresh worktree with missing Remix dependencies. The canonical
+  Electron build must repair them before staging the mail/database resources,
+  without manual dependency copying or weakening the signed build checks.
 - [ ] In a fresh browser without an Electron bridge or local pairing, open an
   owned device's dedicated sync page and expand Manage sync connections. Verify
   saved connections, all configuration fields, drafts and revision-conflict
