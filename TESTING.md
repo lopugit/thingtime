@@ -10153,6 +10153,12 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [x] Native test-target compilation (2026-10-25): regenerate with XcodeGen and
+  run `build-for-testing` for the iOS Simulator, including password provider,
+  Watch and widget targets. Shared tests must not compile macOS-only `Process`
+  APIs on iOS. The live Git oracle remains exercised on macOS (4/4 ignore-rule
+  tests pass); its unsupported iOS case explicitly skips while fixture tests remain.
+
 - [ ] Search regression: create a title match older than 50 nonmatching entries.
   Search must find it without Load more; case and literal regex punctuation work.
   With more than 50 matches, pagination contains only matches, once each. Clear

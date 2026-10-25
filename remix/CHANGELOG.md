@@ -104,6 +104,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-25 — **Codex (AI)**: Restore iOS test-target compilation by gating the
+  shared live Git oracle to macOS. Verify native password-core checks,
+  destination-failure regression logic and the full simulator test build;
+  signed-device acceptance remains open. [PR #996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+
 - 2026-10-23 — **Codex (AI)**: Make password-manager controls, repeated fields, transfer dialogs, attachments and imported source/history individually editable through saved block templates. Keep decrypted values in transient controls, cancel operations on Builder mode changes, and provide native unlock/retry feedback for failed destination changes. Cloud checks use synthetic data; installed Apple credential acceptance remains pending. [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
 
 - 2026-10-18: Restore installed desktop password/mail requests by preserving Nitro request interfaces during the selected-origin handoff; add Passwords to sidebar and Commander navigation. See [PR #996 notes](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).

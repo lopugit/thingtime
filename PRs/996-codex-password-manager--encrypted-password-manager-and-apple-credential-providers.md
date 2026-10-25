@@ -7,6 +7,43 @@ Branch: `codex/password-manager` (base `develop`)
 
 The web vault was merged into main at `998bdb83c` by [PR #997](https://github.com/lopugit/thingtime/pull/997). This branch incorporates that web base and retains the Apple providers, native packaging and signing setup. It is open for review. Historical October 2026 local evidence below recorded a signed installation; this cloud reconciliation has no Swift/Xcode or current signed-device acceptance. Actual OS fill/passkey ceremonies remain acceptance gates. The evidence below includes the shared web prerequisite.
 
+## Local native verification — 25 October 2026
+
+Rechecked cloud head `ab9d39965d8bc94a2063bfcf6ffc862a2289cb91` in an isolated
+checkout. Xcode 27.0 (27A5194q) exposed a shared-test compilation failure:
+`MobileFolderIgnoreRulesTests` invoked Foundation `Process`, unavailable on iOS.
+Only the live Git-oracle helper/case is now macOS-gated; iOS retains the shared
+fixture tests and reports an explicit skip for the unsupported live oracle.
+
+- `swift test --package-path apple/Passwords`: seven passes, two explicit skips
+  (optional HTTPS preview session and WebAuthn interoperability export).
+- The four unchanged `DestinationNavigationFenceTests` pass on macOS against
+  the exact production state-machine declaration compiled in a temporary Swift
+  package. This is state-machine execution, not an iOS UI/Keychain ceremony.
+- `swift test --package-path apple/FileSync --filter MobileFolderIgnoreRulesTests`:
+  four passes, including the real Git oracle and shared corpus.
+- XcodeGen regeneration followed by the full `Thingtime` scheme's iOS Simulator
+  `build-for-testing` passes with signing disabled. The compiled Info.plist
+  retains the explicit loopback destination. No simulator app was launched,
+  no physical-device test ran, and the installed user app was not replaced.
+- [CodeQL alert #140](https://github.com/lopugit/thingtime/security/code-scanning/140)
+  was reviewed and dismissed as a false positive. The reported getItem/setItem
+  flow copies synthetic Builder layouts; vault entries remain in a separate
+  in-memory map and the harness checks exclusion of private values, source,
+  history, TOTP and attachment keys/nonces. No production rule or query was
+  disabled. GitHub confirmed the disposition on 25 October.
+
+The installed Thingtime window is now available, but displays another workstream
+(`codex/device-activity-library`, `4a27f52e3`). Current signed-provider, real OAuth,
+actual AutoFill/passkey and screen-chooser acceptance remain open. The assigned
+Chrome profile was visibly verified as the Thingtime account; tab-bound actions
+timed out and native focus moved between profiles, so credential entry stopped.
+The public production/preview manifests remain reachable; public discovery does
+not establish authenticated Character or private task-workspace access.
+Graphify semantic refresh returned empty extraction payloads and was stopped;
+its prior semantic data is retained. Structural outputs are refreshed separately,
+so updated documentation semantics are not claimed as re-indexed.
+
 ## Cloud reconciliation — 23 October 2026
 
 Integrated develop `f41cf65629fe98423405de4bea4e5894f59ccb46` into the existing
