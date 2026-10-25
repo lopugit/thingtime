@@ -3183,6 +3183,13 @@ email whose link points at the attacker.
       cannot restore the completed draft or overwrite the new editor. Keep
       attachment ownership/binding and concurrent-device revision checks intact.
 
+- [x] Regression harness: comment/reply submissions use their selected Character
+      client, never the session-principal or other composer's client. Held or
+      rejected draft saves cannot delay content acceptance; a rejected content
+      write after a successful draft save preserves the draft and removes only
+      the optimistic pending row. `npm --prefix remix run test:feed` verifies
+      these callbacks; it does not replace the browser checklist above.
+
 - [ ] Signed in, type rich text, partial marketplace values, tags, an audience,
       empty poll options and a nested Thing. Wait for “Saved to your drafts”,
       close/reopen and reload: all values recover. No post is published by typing.

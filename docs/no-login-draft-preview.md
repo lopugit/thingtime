@@ -210,6 +210,14 @@ reload was performed. [Verified JSON, PNGs, metadata and observed calls](
 ../artifacts/anonymous-local-first-2026-10-25/cli-agent-host/verification.json)
 are retained; the raw CLI event stream is private and is never committed.
 
+For Codex desktop, registering the server in the shared configuration does not
+prove that an existing chat has loaded it. Use **Settings → MCP servers →
+Restart**, then `/mcp` to inspect the connection. This is a host operation;
+it does not require a Thingtime account. See the [Codex MCP connection guide](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
+The Docker daemon still needs free disk space for the isolated runtime. A full
+daemon must be repaired before retrying; do not substitute an unrestricted
+renderer or prune resources belonging to other tasks.
+
 With that local server already configured, the supported noninteractive command
 is below. Set `CODEX_BIN` to the installed CLI's absolute executable and
 `CODEX_HOME` to the intended instance's existing home. No credentials belong in

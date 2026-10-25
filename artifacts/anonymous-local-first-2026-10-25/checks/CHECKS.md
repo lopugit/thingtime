@@ -16,8 +16,21 @@ These are local verification results for the source/package snapshot captured by
 | MCP artifact extractor | 3 pass, 0 skipped, 0 fail | [mcp-security-extractor.log](mcp-security-extractor.log) |
 | MCP stdio framing | 2 pass, 0 fail | [renderer-framing-tests.log](renderer-framing-tests.log) |
 | MCP package audit | 0 vulnerabilities | [mcp-security-audit.json](mcp-security-audit.json) |
+| Feed acceptance after CI harness repair | 96 pass, 1 existing skip, 0 fail | [post-comment-feed.log](post-comment-feed.log) |
+| Draft regression | 50 pass, 9 existing opt-in skips, 0 fail | [post-comment-drafts.log](post-comment-drafts.log) |
+| Character callbacks/delegation | 3 pass, 0 fail | [post-comment-characters.log](post-comment-characters.log) |
 
 The skipped tests depend on external runtime surfaces. They remain skipped, not accepted. The lint warnings are existing baseline warnings, not errors. Typecheck equality is based on the normalized diagnostic comparison, ignoring only source line/column offsets while retaining diagnostic file, code, and message.
+
+Web CI on integration commit `7621d62114789ea6cd171fc7e11a287aac7d7787`
+exposed seven failures in an outdated PostCard acceptance harness. It supplied
+only the principal client while the production handlers use selected-Character
+clients. The repaired harness verifies both clients explicitly and adds both
+directions of independent draft/content failure coverage. Production PostCard
+code was unchanged. The earlier failure is retained in
+[post-comment-before.log](post-comment-before.log). These local passes do not
+retroactively turn that CI run green. CodeQL passed for that integration commit;
+its exact preview identity was verified separately in [ci-preview.json](ci-preview.json).
 
 ## MCP CLI host evidence
 
