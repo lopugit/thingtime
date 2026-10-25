@@ -1,13 +1,11 @@
+import { oauthClientConfig } from './oauthConfig';
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import type { ConnectionProvider, OAuthTokens } from './providers';
 import { fail } from './shared';
 
 const ISSUER = 'https://auth.openai.com';
 const jwks = createRemoteJWKSet(new URL(`${ISSUER}/.well-known/jwks.json`), { timeoutDuration: 8000 });
-const authMethod = () => process.env.CHATGPT_OAUTH_AUTH_METHOD || 'client_secret_basic';
-const configured = () =>
-  Boolean(process.env.CHATGPT_OAUTH_CLIENT_ID?.trim()) &&
-  (authMethod() === 'none' || (authMethod() === 'client_secret_basic' && Boolean(process.env.CHATGPT_OAUTH_CLIENT_SECRET?.trim())));
+const configured = async (origin?: string) => Boolean(await oauthClientConfig('CHATGPT_OAUTH_CLIENT_ID', origin));
 
 export const verifyChatGPTIdentity = async (idToken: string, clientId: string, nonce: string, key: JWTVerifyGetKey = jwks) => {
   const { payload } = await jwtVerify(idToken, key, {
@@ -39,7 +37,6 @@ export const chatgptIdentityProvider: ConnectionProvider = {
   oauth: {
     clientIdEnv: 'CHATGPT_OAUTH_CLIENT_ID',
     clientSecretEnv: 'CHATGPT_OAUTH_CLIENT_SECRET',
-    clientSecretOptional: () => authMethod() === 'none',
     pkce: true,
     buildAuthorizeUrl: ({ clientId, redirectUri, state, codeChallenge, nonce }) => {
       const url = new URL(`${ISSUER}/api/accounts/authorize`);
@@ -55,11 +52,11 @@ export const chatgptIdentityProvider: ConnectionProvider = {
       }).toString();
       return url.toString();
     },
-    exchangeCode: async ({ code, clientId, clientSecret, redirectUri, codeVerifier, nonce }) => {
-      if (!configured() || !codeVerifier || !nonce) return fail(503, 'ChatGPT sign-in is not configured.');
+    exchangeCode: async ({ code, clientId, clientSecret, redirectUri, codeVerifier, nonce, authMethod = clientSecret ? 'client_secret_basic' : 'none' }) => {
+      if (!clientId || (authMethod === 'client_secret_basic' && !clientSecret) || !codeVerifier || !nonce) return fail(503, 'ChatGPT sign-in is not configured.');
       try {
         const headers: Record<string, string> = { accept: 'application/json', 'content-type': 'application/x-www-form-urlencoded' };
-        if (authMethod() === 'client_secret_basic') {
+        if (authMethod === 'client_secret_basic') {
           const encode = (value: string) => new URLSearchParams({ value }).toString().slice(6);
           headers.authorization = `Basic ${Buffer.from(`${encode(clientId)}:${encode(clientSecret)}`).toString('base64')}`;
         }

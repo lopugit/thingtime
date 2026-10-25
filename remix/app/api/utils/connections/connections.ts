@@ -1,3 +1,4 @@
+import { oauthGrantMatches } from './oauthConfig';
 
 import { randomUUID } from 'node:crypto';
 import { fromBin, toBin } from '../auth/users';
@@ -156,7 +157,7 @@ const toPublicConnection = (linkDoc: any, accountDoc: any, provider: ConnectionP
   createdAt: linkDoc?.createdAt instanceof Date ? linkDoc.createdAt.toISOString() : null
 });
 
-export const listProviders = () => publicProviders();
+export const listProviders = (origin?: string) => publicProviders(origin);
 
 // --- connect / list / unlink ------------------------------------------------
 
@@ -212,7 +213,8 @@ export const upsertAccountAndLink = async (
         ? await home.findOne({ shareId: accountShareId, thingtime: EXTERNAL_ACCOUNT_KIND, ownerId: user.id }, { session })
         : null;
       const previousTokens = previous ? await unpackConnectionTokens(previous) : null;
-      const savedTokens = tokens ? { ...tokens, refreshToken: tokens.refreshToken || previousTokens?.refreshToken || null } : null;
+      const sameGrant = !provider.oauth || Boolean(tokens?.oauthBinding && tokens.oauthBinding === previousTokens?.oauthBinding);
+      const savedTokens = tokens ? { ...tokens, refreshToken: tokens.refreshToken || (sameGrant ? previousTokens?.refreshToken : null) || null } : null;
       const now = new Date();
       // Account and link commit together, serialized against disconnect. Public
       // identities can be shared; authenticated identities are owner-private.
@@ -311,7 +313,7 @@ export const connectProvider = async (
     return fail(400, `${provider.name} links through its own sign-in — use POST /api/v1/connections/oauth/begin`);
   }
   if (provider.auth !== 'none' && !connectionVaultConfigured()) return fail(503, 'Secure account storage is unavailable.');
-  if (!provider.configured()) return fail(400, `${provider.name} is not configured on this deployment yet`);
+  if (!await provider.configured()) return fail(400, `${provider.name} is not configured on this deployment yet`);
 
   const rawFields = input.fields && typeof input.fields === 'object' && !Array.isArray(input.fields) ? (input.fields as Record<string, unknown>) : {};
   const fields: Record<string, string> = {};
@@ -610,6 +612,15 @@ const liveTokensFor = async (provider: ConnectionProvider, accountDoc: any, owne
   if ((!provider.oauth && provider.auth !== 'credential') || accountDoc?.ownerId !== ownerId) return null;
   const tokens = await unpackConnectionTokens(accountDoc);
   if (!tokens || (!tokens.accessToken && !(provider.id === 'chatgpt' && tokens.idToken))) return null;
+  // Background work uses the persisted origin; never guess a selected deployment.
+  const client = provider.oauth ? await oauthCredsFor(provider, tokens.oauthOrigin) : null;
+  if (provider.oauth && (!client || !oauthGrantMatches(tokens, client))) return null;
+  const creds = client || { clientId: '', clientSecret: '' };
+  const currentTokens = async (doc: any) => {
+    if (doc?.ownerId !== ownerId) return null;
+    const next = await unpackConnectionTokens(doc);
+    return next && (!provider.oauth || (client && oauthGrantMatches(next, client))) ? next : null;
+  };
   // Lazily migrate only this exact legacy grant. A concurrent reconnect or
   // disconnect wins; never resurrect or use a grant after losing the CAS.
   if (JSON.parse(fromBin(accountDoc.secure)).version === 1) {
@@ -623,8 +634,6 @@ const liveTokensFor = async (provider: ConnectionProvider, accountDoc: any, owne
   const expiring = !Number.isFinite(expiresAt) || expiresAt - Date.now() < TOKEN_REFRESH_MARGIN_MS;
   const refreshFn = provider.oauth?.refreshTokens ?? provider.refreshTokens;
   if (!expiring || !refreshFn) return tokens;
-  const creds = provider.oauth ? oauthCredsFor(provider) : { clientId: '', clientSecret: '' };
-  if (!creds) return tokens;
   const home = await getHomeThingsCollection();
   const identity = { shareId: String(accountDoc.shareId), thingtime: EXTERNAL_ACCOUNT_KIND, ownerId };
   const lease = randomUUID();
@@ -634,16 +643,18 @@ const liveTokensFor = async (provider: ConnectionProvider, accountDoc: any, owne
   if (!claimed.matchedCount) {
     // Another request is refreshing. Still-live credentials can be used; an
     // expired grant fails closed and the caller may retry after refresh finishes.
-    return unpackConnectionTokens(await home.findOne(identity));
+    return currentTokens(await home.findOne(identity));
   }
   try {
-    const refreshed = await refreshFn(tokens, creds);
-    if (!refreshed) return tokens;
+    const response = await refreshFn(tokens, creds);
+    if (!response) return currentTokens(await home.findOne(identity));
+    const refreshed = { ...tokens, ...response, refreshToken: response.refreshToken || tokens.refreshToken,
+      clientId: tokens.clientId, oauthBinding: tokens.oauthBinding, oauthOrigin: tokens.oauthOrigin, oauthEnvironment: tokens.oauthEnvironment };
     const result = await home.updateOne({ ...identity, secure: accountDoc.secure, 'credentialRefreshLease.id': lease }, {
       $set: { secure: await packConnectionTokens(ownerId, identity.shareId, refreshed), 'crystal.scopes': refreshed.scopes || [], 'crystal.expiresAt': refreshed.expiresAt || null, updatedAt: new Date() }
     });
     // A reconnect or disconnect wins over a refresh started with older credentials.
-    return result.matchedCount ? refreshed : unpackConnectionTokens(await home.findOne(identity));
+    return result.matchedCount ? refreshed : currentTokens(await home.findOne(identity));
   } finally {
     await home.updateOne({ ...identity, 'credentialRefreshLease.id': lease }, { $unset: { credentialRefreshLease: '' } });
   }

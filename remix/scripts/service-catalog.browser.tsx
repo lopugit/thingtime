@@ -9,6 +9,7 @@ import { AIServiceAccounts } from '../app/components/Connections/AIServiceAccoun
 import { ConnectionsDocument } from '../app/components/Connections/ConnectionsDocument';
 import { connectionsOverviewBlocks, connectionToolsBlocks } from '../app/components/Connections/connectionToolsBlocks';
 import type { TransientBlockActions } from '../app/components/Builder/TransientBlockHost';
+import { useApi } from '../app/hooks/useApi';
 import type { Connection } from '../app/components/Connections/shared';
 Object.defineProperty(window, 'SharedWorker', { value: undefined });
 Object.defineProperty(navigator, 'onLine', { get: () => true });
@@ -20,6 +21,7 @@ const providers: Provider[] = [
 ];
 const initial: Connection[] = ['one', 'two'].map(id => ({ id, provider: 'google-drive', providerName: 'Google Drive', providerIcon: '📁', contentVisibility: 'personal', auth: 'oauth2', account: { id, displayName: `Account ${id}`, handle: `${id}@example.test`, avatarUrl: null, profileUrl: null }, credentialStatus: 'connected', scopes: ['drive.readonly'], lastSyncedAt: null, lastSyncError: null }));
 function App() {
+  (window as any).__connectionsApi = useApi().v1.connections;
   const [connections, setConnections] = React.useState(initial);
   const [connecting, setConnecting] = React.useState<string>();
   const [events, setEvents] = React.useState<string[]>([]);

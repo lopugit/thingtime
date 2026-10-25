@@ -1,3 +1,4 @@
+import { oauthClientConfig } from './oauthConfig';
 import { chatgptIdentityProvider } from './chatgptIdentity';
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
@@ -12,8 +13,8 @@ import { ownerVaultConfigured } from '../auth/vaultCipher';
 // external account identity and pulls a normalized feed page for it. All
 // providers here are keyless (public content APIs / RSS), so every one is
 // live-testable with zero configuration; OAuth2 providers (Facebook,
-// Instagram, X, …) join this registry config-gated by env credentials and
-// report configured:false until those are present.
+// Instagram, X, …) join this registry gated by origin-scoped server-vault
+// credentials and report configured:false until those are present.
 
 // One shared depth contract for feed deepening: connections.ts stores
 // per-account syncDepth against this same cap, and every provider clamps its
@@ -41,6 +42,9 @@ export type OAuthTokens = {
   idToken?: string;
   clientId?: string;
   oidcNonce?: string;
+  oauthBinding?: string;
+  oauthOrigin?: string;
+  oauthEnvironment?: string;
   tokenType?: string;
   refreshToken?: string | null;
   // ISO timestamp; adapters refresh (when the provider supports it) once this
@@ -100,7 +104,7 @@ export type ConnectionProvider = {
   // acl-granted per linked Thingtime user only.
   contentVisibility: 'public' | 'personal';
   about: string;
-  configured: () => boolean;
+  configured: (origin?: string) => boolean | Promise<boolean>;
   fields: ConnectField[];
   // fields-based connect (absent on SSO providers — they resolve identity
   // from tokens in the OAuth callback instead)
@@ -124,6 +128,7 @@ export type ConnectionProvider = {
   // response is saved to the Thingtime account (secure blob) and the
   // personalized feed syncs with those credentials.
   oauth?: {
+    ready?: () => boolean;
     clientIdEnv: string;
     clientSecretEnv: string;
     clientSecretOptional?: () => boolean;
@@ -138,6 +143,7 @@ export type ConnectionProvider = {
       redirectUri: string;
       codeVerifier?: string;
       nonce?: string;
+      authMethod?: 'none' | 'client_secret_basic';
     }) => Promise<{ ok: true; tokens: OAuthTokens } | Fail>;
     resolveAccountFromTokens: (tokens: OAuthTokens) => Promise<{ ok: true; account: ResolvedExternalAccount } | Fail>;
     refreshTokens?: (tokens: OAuthTokens, creds: { clientId: string; clientSecret: string }) => Promise<OAuthTokens | null>;
@@ -670,14 +676,9 @@ const expiresAtFrom = (expiresInSeconds: unknown): string | null => {
 
 const envValue = (name: string): string => (process.env[name] || '').trim();
 
-// One place resolves an SSO provider's client credentials from env — begin,
-// callback, AND token refresh must always agree on the env names.
-export const oauthCredsFor = (provider: ConnectionProvider): { clientId: string; clientSecret: string } | null => {
-  if (!provider.oauth) return null;
-  const clientId = envValue(provider.oauth.clientIdEnv);
-  const clientSecret = envValue(provider.oauth.clientSecretEnv);
-  return clientId && (clientSecret || provider.oauth.clientSecretOptional?.()) ? { clientId, clientSecret } : null;
-};
+// All grant stages and the catalog use the same origin/environment vault lookup.
+export const oauthCredsFor = (provider: ConnectionProvider, origin?: string) =>
+  provider.oauth && provider.oauth.ready?.() !== false ? oauthClientConfig(provider.oauth.clientIdEnv, origin) : Promise.resolve(null);
 
 // Form-style OAuth grant factory: one implementation of the
 // authorization-code exchange + refresh for every provider whose token
@@ -1697,7 +1698,7 @@ const facebookProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with Facebook to link your account and sync your own timeline posts. (Meta’s API no longer exposes the friends News Feed — this pulls your posts and tagged posts.)',
-  configured: () => !!envValue('FACEBOOK_APP_ID') && !!envValue('FACEBOOK_APP_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('FACEBOOK_APP_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'FACEBOOK_APP_ID',
@@ -1793,7 +1794,7 @@ const instagramProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with Instagram (professional account) to link and sync your own media. (Instagram’s API exposes your posts — not the home feed of accounts you follow.)',
-  configured: () => !!envValue('INSTAGRAM_APP_ID') && !!envValue('INSTAGRAM_APP_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('INSTAGRAM_APP_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'INSTAGRAM_APP_ID',
@@ -1893,7 +1894,7 @@ const tiktokProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with TikTok to link your account and sync your own videos. (TikTok’s API exposes your videos — the For You feed is not available to apps.)',
-  configured: () => !!envValue('TIKTOK_CLIENT_KEY') && !!envValue('TIKTOK_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('TIKTOK_CLIENT_KEY', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'TIKTOK_CLIENT_KEY',
@@ -1995,7 +1996,7 @@ const googleOAuth = (serviceScopes: readonly string[]): NonNullable<ConnectionPr
 const googleProviders: ConnectionProvider[] = GOOGLE_SERVICES.map((service) => ({
   id: service.id, name: service.name, icon: '🌈', about: service.about,
   auth: 'oauth2', contentVisibility: 'personal', accountOnly: true, fields: [],
-  configured: () => !!envValue('GOOGLE_CLIENT_ID') && !!envValue('GOOGLE_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('GOOGLE_CLIENT_ID', origin)),
   oauth: googleOAuth(service.scopes), fetchFeed: async () => ({ ok: true, items: [] })
 }));
 
@@ -2010,7 +2011,7 @@ const youtubeAccountProvider: ConnectionProvider = {
   // channel list AND a real subscription stays ONE post with unified comments
   postNamespace: 'youtube',
   about: 'Sign in with Google to link your real YouTube account and sync the latest uploads from your actual subscriptions.',
-  configured: () => !!envValue('GOOGLE_CLIENT_ID') && !!envValue('GOOGLE_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('GOOGLE_CLIENT_ID', origin)),
   fields: [],
   oauth: googleOAuth(['https://www.googleapis.com/auth/youtube.readonly']),
   fetchFeed: async (_account, opts) => {
@@ -2082,7 +2083,7 @@ const redditAccountProvider: ConnectionProvider = {
   contentVisibility: 'personal',
   postNamespace: 'reddit',
   about: 'Sign in with Reddit to sync your REAL personalized front page (the best-of feed your subscriptions and activity shape).',
-  configured: () => !!envValue('REDDIT_CLIENT_ID') && !!envValue('REDDIT_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('REDDIT_CLIENT_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'REDDIT_CLIENT_ID',
@@ -2175,9 +2176,10 @@ const mastodonAccountProvider: ConnectionProvider = {
   about: 'Sign in on your Mastodon instance to sync your REAL home timeline (the accounts you follow).',
   // the deployment registers one app on ONE instance (MASTODON_INSTANCE) —
   // users of that instance sign in there
-  configured: () => !!mastodonInstance() && !!envValue('MASTODON_CLIENT_ID') && !!envValue('MASTODON_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(mastodonInstance() && await oauthClientConfig('MASTODON_CLIENT_ID', origin)),
   fields: [],
   oauth: {
+    ready: () => Boolean(mastodonInstance()),
     clientIdEnv: 'MASTODON_CLIENT_ID',
     clientSecretEnv: 'MASTODON_CLIENT_SECRET',
     buildAuthorizeUrl: ({ clientId, redirectUri, state }) =>
@@ -2343,7 +2345,7 @@ const twitchProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with Twitch to sync the channels you follow that are LIVE right now.',
-  configured: () => !!envValue('TWITCH_CLIENT_ID') && !!envValue('TWITCH_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('TWITCH_CLIENT_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'TWITCH_CLIENT_ID',
@@ -2354,7 +2356,7 @@ const twitchProvider: ConnectionProvider = {
     resolveAccountFromTokens: async (tokens) => {
       const me = await authedJson('https://api.twitch.tv/helix/users', {
         token: tokens.accessToken,
-        headers: { 'Client-Id': envValue('TWITCH_CLIENT_ID') }
+        headers: { 'Client-Id': tokens.clientId || '' }
       });
       if (me.ok === false) return me;
       const user = me.data?.data?.[0];
@@ -2376,7 +2378,7 @@ const twitchProvider: ConnectionProvider = {
     if (!opts.tokens?.accessToken) return fail(401, 'Twitch needs a reconnect — its saved sign-in is missing or expired');
     const fetched = await authedJson(
       `https://api.twitch.tv/helix/streams/followed?user_id=${encodeURIComponent(account.config.userId || '')}&first=${Math.min(targetCount(opts), 100)}`,
-      { token: opts.tokens.accessToken, headers: { 'Client-Id': envValue('TWITCH_CLIENT_ID') } }
+      { token: opts.tokens.accessToken, headers: { 'Client-Id': opts.tokens.clientId || '' } }
     );
     if (fetched.ok === false) return fetched;
     const items: ExternalFeedItem[] = [];
@@ -2410,7 +2412,7 @@ const xProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with X to sync your home timeline. (X gates timeline reads behind its paid API tiers — a Basic-tier app key or above is required for the pull to work.)',
-  configured: () => !!envValue('X_CLIENT_ID') && !!envValue('X_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('X_CLIENT_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'X_CLIENT_ID',
@@ -2491,7 +2493,7 @@ const tumblrProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with Tumblr to sync your REAL dashboard (the blogs you follow).',
-  configured: () => !!envValue('TUMBLR_CLIENT_ID') && !!envValue('TUMBLR_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('TUMBLR_CLIENT_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'TUMBLR_CLIENT_ID',
@@ -2562,7 +2564,7 @@ const pinterestProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with Pinterest to sync your own pins. (Pinterest’s API exposes your pins and boards — not the home feed.)',
-  configured: () => !!envValue('PINTEREST_CLIENT_ID') && !!envValue('PINTEREST_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('PINTEREST_CLIENT_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'PINTEREST_CLIENT_ID',
@@ -2625,7 +2627,7 @@ const linkedinProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with LinkedIn to link your account. (LinkedIn does not expose feed content to standard API apps — account linking only for now.)',
-  configured: () => !!envValue('LINKEDIN_CLIENT_ID') && !!envValue('LINKEDIN_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('LINKEDIN_CLIENT_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'LINKEDIN_CLIENT_ID',
@@ -2678,7 +2680,7 @@ const spotifyProvider: ConnectionProvider = {
   auth: 'oauth2',
   contentVisibility: 'personal',
   about: 'Sign in with Spotify to sync your recently played tracks and new releases from artists you follow.',
-  configured: () => !!envValue('SPOTIFY_CLIENT_ID') && !!envValue('SPOTIFY_CLIENT_SECRET'),
+  configured: async (origin) => Boolean(await oauthClientConfig('SPOTIFY_CLIENT_ID', origin)),
   fields: [],
   oauth: {
     clientIdEnv: 'SPOTIFY_CLIENT_ID',
@@ -2801,17 +2803,14 @@ export const connectionProviderById = (id: unknown): ConnectionProvider | null =
   typeof id === 'string' ? CONNECTION_PROVIDERS.find((provider) => provider.id === id.trim().toLowerCase()) || null : null;
 
 // The public projection the providers list endpoint returns.
-export const publicProviders = () =>
-  CONNECTION_PROVIDERS.map((provider) => ({
-    id: provider.id,
-    name: provider.name,
-    icon: provider.icon,
-    auth: provider.auth,
-    contentVisibility: provider.contentVisibility,
-    about: provider.about,
-    configured: provider.configured() && (provider.auth === 'none' || ownerVaultConfigured()),
-    setupRequired: !provider.configured() ? 'provider' : provider.auth !== 'none' && !ownerVaultConfigured() ? 'vault' : null,
-    service: serviceGroupFor(provider),
-    accountOnly: provider.accountOnly === true,
-    fields: provider.fields
+export const publicProviders = async (origin?: string) =>
+  Promise.all(CONNECTION_PROVIDERS.map(async (provider) => {
+    const configured = provider.oauth ? Boolean(await oauthCredsFor(provider, origin)) : await provider.configured(origin);
+    return {
+      id: provider.id, name: provider.name, icon: provider.icon, auth: provider.auth,
+      contentVisibility: provider.contentVisibility, about: provider.about,
+      configured: configured && (provider.auth === 'none' || ownerVaultConfigured()),
+      setupRequired: !configured ? 'provider' : provider.auth !== 'none' && !ownerVaultConfigured() ? 'vault' : null,
+      service: serviceGroupFor(provider), accountOnly: provider.accountOnly === true, fields: provider.fields
+    };
   }));

@@ -13,6 +13,8 @@ const pages = new Map();
 let revision = 0;
 let entries = [{ id: 'ai-one', name: 'Personal', kind: 'provider', provider: 'openai' }];
 const vaultActions = [];
+const connectionCalls = [];
+let connectionVersion = '2.0.0';
 const report = { outcome: 'running', checks: [], errors: [], scope: 'Real service/AI account, overview, channel/filter blocks and Builder; synthetic identities, callbacks and HTTP responses only.' };
 const record = async (check) => { report.checks.push(check); await fs.writeFile(`${results}/report.json`, JSON.stringify(report, null, 2)); console.log(check); };
 
@@ -27,9 +29,18 @@ async function api(req, res, url) {
     res.end(encoded);
   };
   if (url.pathname.includes('well-known')) return send({ schemaVersion: 1, origin, features: Object.fromEntries(Object.entries({
-    'api.webpages-resolve': '1.6.0', 'api.actions-run': '1.7.0', 'api.mongodb-endpoint': '1.1.0',
-    'api.things': '1.36.0', 'api.lopu-vault': '1.4.0'
+    'api.webpages-resolve': '1.6.0', 'api.actions-run': '1.39.0', 'api.mongodb-endpoint': '1.1.0',
+    'api.things': '1.42.0', 'api.things-update': '1.13.0', 'api.lopu-vault': '1.4.0',
+    ...Object.fromEntries(['connections-providers', 'connections', 'connections-oauth-begin', 'connections-oauth-callback', 'connections-feed', 'connections-request'].map(feature => [`api.${feature}`, connectionVersion]))
   }).map(([key, version]) => [key, { version }])) });
+  if (url.pathname.startsWith('/api/v1/connections')) {
+    connectionCalls.push(url.pathname);
+    if (url.pathname.endsWith('/oauth/begin')) {
+      assert.equal(body.provider, 'google-drive');
+      return send({ ok: true, provider: body.provider, authorizeUrl: 'https://provider.invalid/synthetic-consent' });
+    }
+    return send({ ok: true, ownerId: owner, providers: [], connections: [], posts: [], data: { subject: 'synthetic-only' } });
+  }
   if (url.pathname.endsWith('/webpages/resolve')) {
     if (req.headers['x-thingtime-expected-actor'] !== owner || req.headers['x-thingtime-expected-data-plane'] !== 'home') return send({ ok: false }, 409);
     const page = pages.get(url.searchParams.get('id'));
@@ -112,6 +123,18 @@ let browser, server;
     };
     const eventList = () => page.$eval('[data-testid="events"]', element => JSON.parse(element.textContent));
     const assertWidth = () => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1).then(value => assert.ok(value, 'horizontal overflow'));
+    const scrollPage = () => page.evaluate(async () => {
+      const bottom = Math.max(0, document.documentElement.scrollHeight - innerHeight);
+      for (let top = 0; top < bottom; top += Math.max(1, innerHeight * 0.75)) {
+        window.scrollTo(0, top);
+        await new Promise(resolve => setTimeout(resolve, 40));
+        if (document.documentElement.scrollWidth > innerWidth + 1) throw new Error('horizontal overflow while scrolling');
+      }
+      window.scrollTo(0, bottom);
+      await new Promise(resolve => setTimeout(resolve, 80));
+      if (Math.abs(window.scrollY - bottom) > 2) throw new Error('page bottom was not reached');
+      window.scrollTo(0, 0);
+    });
     const editText = async (selector, value) => {
       await page.click(selector);
       await page.waitForSelector('textarea[aria-label="Block text"]');
@@ -120,12 +143,39 @@ let browser, server;
       await page.type('textarea[aria-label="Block text"]', value);
       await page.keyboard.press('Escape');
     };
+    // Execute the actual shared hook used by Connections, including the new
+    // major requirement map. No provider URL is opened by this probe.
+    const probeConnections = () => page.evaluate(async () => {
+      const api = window.__connectionsApi;
+      const operations = [() => api.providers(), () => api.list(),
+        () => api.connect({ provider: 'demo', fields: { handle: 'synthetic-only' }, expectedOwnerId: 'synthetic-service-owner' }),
+        () => api.oauthBegin({ provider: 'google-drive', expectedOwnerId: 'synthetic-service-owner' }),
+        () => api.feed({ limit: 1 }), () => api.request({ connectionId: 'synthetic-one', operation: 'account.profile' })];
+      const results = [];
+      for (const operation of operations) {
+        try { await operation(); results.push('accepted'); } catch { results.push('refused'); }
+      }
+      return results;
+    });
+    connectionVersion = '1.1.1';
+    await page.goto(origin, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => Boolean(window.__connectionsApi));
+    assert.deepEqual(await probeConnections(), Array(6).fill('refused'));
+    assert.equal(connectionCalls.length, 0, 'legacy manifest allowed a Connections HTTP operation');
+    connectionVersion = '2.0.0';
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => Boolean(window.__connectionsApi));
+    assert.deepEqual(await probeConnections(), Array(6).fill('accepted'));
+    assert.deepEqual(connectionCalls, ['/api/v1/connections/providers', '/api/v1/connections', '/api/v1/connections',
+      '/api/v1/connections/oauth/begin', '/api/v1/connections/feed', '/api/v1/connections/request']);
+    await record('actual shared Connections API refuses all six operations before HTTP on legacy manifests and accepts the origin-scoped major-2 synthetic contract');
     for (const width of [1440, 390]) {
       await page.setViewport({ width, height: 1000 });
       await page.goto(origin, { waitUntil: 'domcontentloaded' });
       await page.waitForSelector(`${google} ${block('account-name')}`);
       assert.equal(await page.$$eval(`${google} ${block('account-name')}`, nodes => nodes.length), 2);
       await assertWidth();
+      await scrollPage();
       await page.click(`${appPassword} ${block('provider-add')}`);
       await page.waitForSelector(`${appPassword} input[name="login"]`);
       await page.click(`${appPassword} ${block('provider-submit')}`);
@@ -237,6 +287,7 @@ let browser, server;
     await page.click(`${catalog} ${block('account-name')}`);
     await page.waitForSelector('textarea[aria-label="Block text"]');
     await assertWidth();
+      await scrollPage();
     await page.screenshot({ path: `${results}/390-builder.png` });
     await record('Builder independently edits repeated account-name template, provider icon and credential field; private default injection is rejected before storage; layout saves/reloads without live identities/secrets; credential action still works; mobile inspector checked');
     await page.keyboard.press('Escape');
@@ -277,6 +328,7 @@ let browser, server;
     await page.screenshot({ path: `${results}/1440-full-saved.png`, fullPage: true });
     await page.setViewport({ width: 390, height: 1000 });
     await assertWidth();
+      await scrollPage();
     await page.screenshot({ path: `${results}/390-full-saved.png`, fullPage: true });
     await record('Page heading, channel heading/repeated template and filter field independently save/reload; callbacks still work; desktop/mobile full-page layout fits');
     await page.tracing.stop();

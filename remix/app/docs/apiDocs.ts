@@ -14064,8 +14064,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-providers',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '2.0.0',
+    featureVersion: '2.0.0',
     group: 'connections',
     title: 'Connection providers',
     endpoint: '/api/v1/connections/providers',
@@ -14074,7 +14074,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'The provider catalog behind "connect a 3rd party app": Reddit, YouTube, Mastodon, Bluesky, RSS, Hacker News, ' +
       'Lemmy, GitHub, and a demo personal-algorithm provider. Each entry declares its connect fields, whether its ' +
       'content is public or personal, and whether it is configured on this deployment (OAuth providers appear ' +
-      'unconfigured until their credentials are set).',
+      'unconfigured until valid encrypted-vault credentials and callback are present for the exact requested origin and selected data environment).',
     auth: {
       mode: 'none',
       description: 'Public — the catalog holds no user data.'
@@ -14115,8 +14115,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '2.0.0',
+    featureVersion: '2.0.0',
     group: 'connections',
     title: 'Connections',
     endpoint: '/api/v1/connections',
@@ -14174,9 +14174,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'connections-request', contractVersion: '1.1.1', featureVersion: '1.1.1', group: 'connections', title: 'Use a saved service account',
+    id: 'connections-request', contractVersion: '2.0.0', featureVersion: '2.0.0', group: 'connections', title: 'Use a saved service account',
     endpoint: '/api/v1/connections/request', summary: 'Runs a fixed read-only operation with an owned saved authorization.',
-    detail: 'Credentials are decrypted and refreshed on the server after checking the link owner. The browser and Actions pass connectionId, never an access token. No arbitrary URL, method or header is accepted. Responses are private/no-store; API data is not truncated into log summaries. Supported operations: account.profile for OAuth providers; drive.list-files, gmail.list-messages, calendar.list-calendars, docs.get-document, sheets.get-spreadsheet, contacts.list-contacts for the corresponding Google service. List operations return one provider page: pass data.nextPageToken unchanged as pageToken with the same connectionId and operation until it is absent. Batch sizes control processing, not the total number of records. Clients using pagination negotiate api.connections-request >=1.1.0 within major version 1. Docs and Sheets require resourceId and do not accept pageToken. The service-specific grant must include the required scope. Credential fields and known saved tokens in string values and property names are redacted. Opaque tokens cannot corrupt JSON syntax or change typed numbers, booleans and null; overlapping tokens are removed in full. Ordinary key/value fields and pagination tokens remain intact. Cancellation reaches the provider transport; provider timeouts and deployment constraints still apply. Disconnecting removes future access from Thingtime; it does not revoke the provider app globally.',
+    detail: 'Credentials are decrypted and refreshed on the server after checking the link owner and encrypted client/origin/environment binding against the current server vault configuration. Old unbound grants and rotated client registrations require reconnect; partial refresh responses preserve binding and omitted token metadata. The browser and Actions pass connectionId, never an access token. No arbitrary URL, method or header is accepted. Responses are private/no-store; API data is not truncated into log summaries. Supported operations: account.profile for OAuth providers; drive.list-files, gmail.list-messages, calendar.list-calendars, docs.get-document, sheets.get-spreadsheet, contacts.list-contacts for the corresponding Google service. List operations return one provider page: pass data.nextPageToken unchanged as pageToken with the same connectionId and operation until it is absent. Batch sizes control processing, not the total number of records. Clients using saved grants negotiate api.connections-request >=2.0.0 within major version 2; major 2 requires the origin/environment vault configuration and bound grants. Docs and Sheets require resourceId and do not accept pageToken. The service-specific grant must include the required scope. Credential fields and known saved tokens in string values and property names are redacted. Opaque tokens cannot corrupt JSON syntax or change typed numbers, booleans and null; overlapping tokens are removed in full. Ordinary key/value fields and pagination tokens remain intact. Cancellation reaches the provider transport; provider timeouts and deployment constraints still apply. Disconnecting removes future access from Thingtime; it does not revoke the provider app globally.',
     auth: { mode: 'session', description: 'An authenticated first-party user. Foreign connections return 404; service accounts and scoped tokens are refused.' },
     methods: ['POST'],
     steps: ['Choose a connection ID from GET /api/v1/connections.', 'POST its connectionId and a supported operation.', 'For lists, repeat with pageToken from data.nextPageToken until it is absent. Treat it as opaque and keep the connection and operation unchanged.', 'Reconnect if the grant expired or a required permission was declined.'],
@@ -14227,8 +14227,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-feed',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '2.0.0',
+    featureVersion: '2.0.0',
     group: 'connections',
     title: 'Connections feed',
     endpoint: '/api/v1/connections/feed',
@@ -14294,8 +14294,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'connections-oauth-begin',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '2.0.0',
+    featureVersion: '2.0.0',
     group: 'connections',
     title: 'Begin SSO connect',
     endpoint: '/api/v1/connections/oauth/begin',
@@ -14305,7 +14305,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'own sign-in page collects credentials (Thingtime never sees a third-party password) and returns to the ' +
       'callback endpoint, which saves the token response into the linked external account’s sealed secure storage. ' +
       'The state parameter is a short-lived signed JWT bound to the beginning session. Providers report ' +
-      'configured:false until their app credentials and vault key are configured. Hosted deployments require CONNECTIONS_OAUTH_REDIRECT_BASE. The callback is bound to the exact starting session and deployment, consumes its nonce once, and uses PKCE where supported. Google always offers account selection and requests each service permission separately. Facebook basic identity does not request posts. Hosted ChatGPT sign-in requires an approved OpenAI client and supplies identity only. Optional expectedOwnerId rejects a stale account context with 409. Open authorizeUrl in a new tab.',
+      'configured:false until their app credentials and vault key are configured. App credentials and callbacks are resolved from the encrypted admin vault by exact origin and explicit data environment; no provider-secret environment fallback exists. CONNECTIONS_OAUTH_REDIRECT_BASE is optional and must match that origin. State and encrypted grants bind client, origin, callback and environment; older unbound flows/grants require restart/reconnect. Client rotation invalidates the binding; same-client secret rotation remains supported. The callback is bound to the exact starting session and deployment, consumes its nonce once, and uses PKCE where supported. Google always offers account selection and requests each service permission separately. Facebook basic identity does not request posts. Hosted ChatGPT sign-in requires an approved OpenAI client and supplies identity only. Optional expectedOwnerId rejects a stale account context with 409. Open authorizeUrl in a new tab.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -14315,7 +14315,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST the provider id (an oauth2 provider from /api/v1/connections/providers).',
       'Navigate the browser to the returned authorizeUrl.',
       'The provider redirects to /api/v1/connections/oauth/callback, which finishes the link and lands on /connections.',
-      'Handle 400 for unconfigured providers (the error names the env credentials to set).'
+      'Handle 503 when the origin/environment vault configuration is unavailable; errors never name secret values.'
     ],
     requestExamples: [
       {
@@ -14332,16 +14332,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: true, provider: 'facebook', authorizeUrl: 'https://www.facebook.com/v23.0/dialog/oauth?...' }
       },
       {
-        status: 400,
-        description: 'Provider not configured on this deployment.',
-        body: { ok: false, error: 'Facebook is not configured on this deployment yet (set FACEBOOK_APP_ID and FACEBOOK_APP_SECRET)' }
+        status: 503,
+        description: 'Provider not configured for this origin and environment.',
+        body: { ok: false, error: 'This service is not configured for this Thingtime origin and environment.' }
       }
     ]
   }),
   endpoint({
     id: 'connections-oauth-callback',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '2.0.0',
+    featureVersion: '2.0.0',
     group: 'connections',
     title: 'SSO connect callback',
     endpoint: '/api/v1/connections/oauth/callback',

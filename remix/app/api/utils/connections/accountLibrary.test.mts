@@ -4,7 +4,16 @@ import { randomBytes } from 'node:crypto';
 import dns from 'node:dns/promises';
 import { syncBuiltinESMExports } from 'node:module';
 process.env.THINGTIME_USER_VAULT_KEY = randomBytes(32).toString('base64url');
+process.env.THINGTIME_DATA_ENV = 'custom:oauth-test';
+process.env.THINGTIME_DATA_AUTHORITY_ORIGIN = 'https://thingtime.test';
+let configuredClientId = 'test-client', missingVault = false;
+mock.module(new URL('../admin/integrations.ts', import.meta.url).href, { namedExports: {
+  readAdminAutomationSecret: async () => missingVault ? null : JSON.stringify({ environments: { 'oauth-test': { origins: {
+    'https://thingtime.test': { clientId: configuredClientId, clientSecret: 'test-secret', redirectUri: 'https://thingtime.test/api/v1/connections/oauth/callback' }
+  } } } })
+} });
 let docs: any[] = [];
+let interfere: ((query: any, patch: any) => Promise<void>) | undefined;
 const valueAt = (doc: any, key: string) => key.split('.').reduce((obj, key) => obj?.[key], doc);
 const matches = (doc: any, query: any): boolean =>
   Object.entries(query).every(([key, expected]: any) => {
@@ -36,6 +45,7 @@ const collection = {
     return cursor;
   },
   async updateOne(query: any, patch: any, options?: any) {
+    await interfere?.(query, patch);
     let doc = docs.find((doc) => matches(doc, query));
     const inserted = !doc;
     if (!doc && !options?.upsert) return { matchedCount: 0, upsertedCount: 0 };
@@ -71,6 +81,8 @@ const { fromBin, toBin } = await import('../auth/users.ts');
 const { unpackConnectionTokens } = await import('./tokenVault.ts');
 const { runConnectionRequest } = await import('./requests.ts');
 const provider = connectionProviderById('google')!;
+const { oauthCredsFor } = await import('./providers.ts');
+const config = (await oauthCredsFor(provider, 'https://thingtime.test'))!;
 const user = { id: 'owner-a', username: 'a' },
   other = { id: 'owner-b', username: 'b' };
 const account = (id = 'google-one') => ({
@@ -82,12 +94,14 @@ const account = (id = 'google-one') => ({
   config: {}
 });
 const tokens = {
+  clientId: config.clientId, oauthBinding: config.binding, oauthOrigin: config.origin, oauthEnvironment: config.environment,
   accessToken: 'private-access-value',
   refreshToken: 'private-refresh-value',
   expiresAt: new Date(Date.now() + 3600_000).toISOString(),
   scopes: ['openid', 'profile']
 };
 beforeEach(() => {
+  configuredClientId = 'test-client'; missingVault = false; interfere = undefined;
   docs = ['owner-a', 'owner-b'].map((shareId) => ({
     shareId,
     thingtime: ['user'],
@@ -365,4 +379,76 @@ test('invalid persisted key registries fail closed without replacing credentials
     assert.equal(fromBin(owner.secure), payload);
     assert.equal(docs.filter((doc) => doc.thingtime.includes('external-account')).length, 0);
   }
+});
+
+test('saved grants fail closed on client rotation, missing vault, wrong environment and unbound legacy tokens', async () => {
+  const linked = await upsertAccountAndLink(user, provider, account(), tokens);
+  assert.ok(linked.ok);
+  configuredClientId = 'other-client';
+  assert.equal((await resolveConnectionCredential(user, linked.connection.id)).ok, false);
+  configuredClientId = 'test-client';
+  process.env.THINGTIME_DATA_ENV = 'development';
+  assert.equal((await resolveConnectionCredential(user, linked.connection.id)).ok, false);
+  process.env.THINGTIME_DATA_ENV = 'custom:oauth-test';
+  missingVault = true;
+  assert.equal((await resolveConnectionCredential(user, linked.connection.id)).ok, false);
+  missingVault = false;
+  const legacy = { ...tokens, oauthBinding: undefined };
+  await upsertAccountAndLink(user, provider, account(), legacy);
+  assert.equal((await resolveConnectionCredential(user, linked.connection.id)).ok, false);
+});
+test('partial refresh retains origin, client, environment, refresh grant and scope metadata', async () => {
+  const original = provider.oauth!.refreshTokens;
+  provider.oauth!.refreshTokens = async () => ({ accessToken: 'partial-refreshed', expiresAt: new Date(Date.now() + 3600_000).toISOString() });
+  try {
+    const linked = await upsertAccountAndLink(user, provider, account(), { ...tokens, expiresAt: new Date(0).toISOString() });
+    assert.ok(linked.ok);
+    const result = await resolveConnectionCredential(user, linked.connection.id);
+    assert.ok(result.ok);
+    assert.equal(result.tokens.accessToken, 'partial-refreshed');
+    for (const key of ['clientId', 'oauthBinding', 'oauthOrigin', 'oauthEnvironment', 'refreshToken', 'scopes'] as const)
+      assert.deepEqual(result.tokens[key], tokens[key]);
+  } finally { provider.oauth!.refreshTokens = original; }
+});
+
+const testRefreshLoser = (phase: 'lease' | 'write') => test(`refresh ${phase} loser refuses a concurrent reconnect with another binding`, async () => {
+  const original = provider.oauth!.refreshTokens;
+  let refreshes = 0;
+  provider.oauth!.refreshTokens = async () => {
+    refreshes++;
+    if (phase === 'write') await upsertAccountAndLink(user, provider, account(), { ...tokens, oauthBinding: 'other-deployment', accessToken: 'foreign' });
+    return { accessToken: 'refreshed', expiresAt: new Date(Date.now() + 3600_000).toISOString() };
+  };
+  try {
+    const linked = await upsertAccountAndLink(user, provider, account(), { ...tokens, expiresAt: new Date(0).toISOString() });
+    assert.ok(linked.ok);
+    if (phase === 'lease') interfere = async (_query, patch) => {
+      if (!patch.$set?.credentialRefreshLease) return;
+      interfere = undefined;
+      await upsertAccountAndLink(user, provider, account(), { ...tokens, oauthBinding: 'other-deployment', accessToken: 'foreign' });
+    };
+    assert.equal((await resolveConnectionCredential(user, linked.connection.id)).ok, false);
+    assert.equal(refreshes, phase === 'lease' ? 0 : 1);
+  } finally { provider.oauth!.refreshTokens = original; interfere = undefined; }
+});
+testRefreshLoser('lease');
+testRefreshLoser('write');
+test('a request on another origin cannot reuse a stored production grant', async () => {
+  const { withVaultRequest } = await import('../auth/vaultRequest.ts');
+  const linked = await upsertAccountAndLink(user, provider, account(), tokens);
+  assert.ok(linked.ok);
+  await withVaultRequest(new Request('https://preview.test'), async () => assert.equal((await resolveConnectionCredential(user, linked.connection.id)).ok, false));
+});
+
+test('failed refresh revalidates a concurrent reconnect before returning credentials', async () => {
+  const original = provider.oauth!.refreshTokens;
+  provider.oauth!.refreshTokens = async () => {
+    await upsertAccountAndLink(user, provider, account(), { ...tokens, oauthBinding: 'another-client', accessToken: 'foreign' });
+    return null;
+  };
+  try {
+    const linked = await upsertAccountAndLink(user, provider, account(), { ...tokens, expiresAt: new Date(Date.now() + 1000).toISOString() });
+    assert.ok(linked.ok);
+    assert.equal((await resolveConnectionCredential(user, linked.connection.id)).ok, false);
+  } finally { provider.oauth!.refreshTokens = original; }
 });

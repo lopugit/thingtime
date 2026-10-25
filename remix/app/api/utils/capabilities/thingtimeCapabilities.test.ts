@@ -8,20 +8,20 @@ import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from 
 test('service-account clients negotiate owner-fenced writes and scoped credential reuse on both manifests', () => {
   const api = createApiCapabilitiesManifest(), origin = thingtimeCapabilityManifest('https://accounts.test');
   for (const [feature, required, previous] of [
-    ['api.connections-providers', '1.1.0', '1.0.0'],
-    ['api.connections', '1.1.0', '1.0.0'],
-    ['api.connections-oauth-begin', '1.1.0', '1.0.0'],
-    ['api.connections-oauth-callback', '1.1.0', '1.0.0'],
-    ['api.connections-feed', '1.1.0', '1.0.0'],
+    ['api.connections-providers', '2.0.0', '1.1.1'],
+    ['api.connections', '2.0.0', '1.1.1'],
+    ['api.connections-oauth-begin', '2.0.0', '1.1.1'],
+    ['api.connections-oauth-callback', '2.0.0', '1.1.1'],
+    ['api.connections-feed', '2.0.0', '1.1.1'],
     ['api.connections-filters', '1.1.0', '1.0.0'],
     ['api.lopu-vault', '1.4.0', '1.3.1'],
-    ['api.connections-request', '1.1.1', '1.0.0'],
+    ['api.connections-request', '2.0.0', '1.1.1'],
   ]) {
     assert.equal(api.features[feature], required);
     assert.equal(origin.features[feature]?.version, required);
     assert.equal(capabilitySatisfies(previous, required), false);
     assert.equal(capabilitySatisfies(undefined, required), false);
-    assert.equal(capabilitySatisfies('2.0.0', required), false);
+    assert.equal(capabilitySatisfies(required.startsWith('2.') ? '3.0.0' : '2.0.0', required), false);
   }
 });
 
@@ -30,15 +30,16 @@ test('provider token replacement requires the corrected vault contract and accep
   for (const version of [undefined, '1.2.0', '1.3.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.3.1'), false);
 });
 
-test('saved-account response redaction is a compatible patch for pagination clients', () => {
+test('saved-account clients require the bound-grant major contract', () => {
   for (const version of [
     createApiCapabilitiesManifest().features['api.connections-request'],
     thingtimeCapabilityManifest('https://accounts.test').features['api.connections-request'].version,
   ]) {
-    assert.equal(version, '1.1.1');
-    assert.equal(capabilitySatisfies(version, '1.1.0'), true);
+    assert.equal(version, '2.0.0');
+    assert.equal(capabilitySatisfies(version, '2.0.0'), true);
+    assert.equal(capabilitySatisfies(version, '1.1.0'), false);
   }
-  for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
+  for (const version of [undefined, '1.1.1', '3.0.0']) assert.equal(capabilitySatisfies(version, '2.0.0'), false);
 });
 
 test('archive import clients reject missing, pre-archive and breaking contracts on both manifests', () => {
@@ -127,7 +128,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
     assert.equal(manifest.features[feature]?.version, required);
     assert.equal(capabilitySatisfies(required, required), true);
     assert.equal(capabilitySatisfies(previous, required), false);
-    assert.equal(capabilitySatisfies('2.0.0', required), false);
+    assert.equal(capabilitySatisfies(required.startsWith('2.') ? '3.0.0' : '2.0.0', required), false);
   }
   assert.equal(manifest.features['api.things-bulk']?.version, '1.6.0');
   for (const version of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), true);
@@ -555,7 +556,7 @@ test('sync upload provenance clients require compatible contracts on the selecte
  for (const [feature, required, old] of [['api.attachment-uploads', '1.7.0', '1.6.2'], ['api.things', '1.42.0', '1.39.1'], ['api.files', '1.8.1', '1.8.0'], ['api.file-sync-batches', '1.2.1', '1.2.0']]) {
   assert.equal(manifest.features[feature].version, required);
   assert.equal(capabilitySatisfies(old, required), false);
-  assert.equal(capabilitySatisfies('2.0.0', required), false);
+  assert.equal(capabilitySatisfies(required.startsWith('2.') ? '3.0.0' : '2.0.0', required), false);
  }
 });
 

@@ -72,6 +72,7 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
   const refresh = React.useCallback(async () => {
     const generation = ++refreshGeneration.current;
     try {
+      await requireThingtimeCapability('api.connections-providers', '2.0.0');
       const [providersResp, connectionsResp, filtersResp] = await Promise.all([
         api.v1.connections.providers(),
         (ownerId ? api.v1.connections.list() : Promise.resolve({ connections: null })).catch((err: any) => {
@@ -145,7 +146,7 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
       tab.opener = null;
       setBusy(true);
       try {
-        await requireThingtimeCapability('api.connections-oauth-begin', '1.1.0');
+        await requireThingtimeCapability('api.connections-oauth-begin', '2.0.0');
         if (!active.current || signal?.aborted) { tab.close(); return; }
         const resp = await api.v1.connections.oauthBegin({ provider: provider.id, expectedOwnerId: ownerId, signal });
         if (!active.current || signal?.aborted) {
@@ -170,7 +171,7 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
     if (!connecting) return;
     setBusy(true);
     try {
-      await requireThingtimeCapability('api.connections', '1.1.0');
+      await requireThingtimeCapability('api.connections', '2.0.0');
       if (!active.current || signal?.aborted) return;
       const resp = await api.v1.connections.connect({ provider: connecting.id, fields: fieldValues, expectedOwnerId: ownerId, signal });
       if (!active.current || signal?.aborted) return;
@@ -339,7 +340,7 @@ const ConnectionsContent = ({ ownerId }: { ownerId: string | null }) => {
   const verifyConnection = async (connection: Connection) => {
     setBusy(true);
     try {
-      await requireThingtimeCapability('api.connections-request', '1.0.0');
+      await requireThingtimeCapability('api.connections-request', '2.0.0');
       if (!active.current) return;
       await api.v1.connections.request({ connectionId: connection.id, operation: 'account.profile' });
       if (active.current) lopu({ title: `${connection.account.displayName} is connected`, status: 'success' });

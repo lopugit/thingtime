@@ -3059,74 +3059,33 @@ be reconnected: they are never silently imported into another owner's vault.
 Disconnect removes the local credential and link; revoke the app in the
 provider's dashboard too if you want to withdraw the provider-side grant.
 
-Set the following **server-only** environment variables in your ignored
-`remix/.env` locally or your deployment's secret manager. OAuth cards stay
-disabled until both provider credentials and a valid vault key are available:
+Configure OAuth apps through **Admin → Integrations → Secrets** using the existing encrypted server vault. Provider secrets must not be added to Vercel variables. Each provider family has one fixed label: `connections-google-oauth` (Google identity, Google services and YouTube account), `connections-facebook-oauth` (Facebook identity/posts), or `connections-<family>-oauth` for `instagram`, `tiktok`, `reddit`, `mastodon`, `x`, `twitch`, `tumblr`, `pinterest`, `linkedin`, `spotify`, and `chatgpt`. Do not change the separate mail integration's `google-mail-oauth` record.
 
+Each secret is JSON with explicit data-environment IDs and exact origins. Example placeholders for `connections-google-oauth`:
 
-```sh
-# Meta app (facebook-account: public_profile; facebook posts also asks user_posts)
-FACEBOOK_APP_ID="<meta-app-id>"
-FACEBOOK_APP_SECRET="<meta-app-secret>"
-# Instagram API with Instagram Login (professional accounts)
-INSTAGRAM_APP_ID="<instagram-app-id>"
-INSTAGRAM_APP_SECRET="<instagram-app-secret>"
-# TikTok Login Kit (scopes user.info.basic,video.list)
-TIKTOK_CLIENT_KEY="<tiktok-client-key>"
-TIKTOK_CLIENT_SECRET="<tiktok-client-secret>"
-# Google Web application OAuth client (Google identity and Google subservices)
-GOOGLE_CLIENT_ID="<google-oauth-client-id>"
-GOOGLE_CLIENT_SECRET="<google-oauth-client-secret>"
-# Reddit script app (reddit-account provider — syncs your REAL front page)
-REDDIT_CLIENT_ID="<reddit-app-client-id>"
-REDDIT_CLIENT_SECRET="<reddit-app-secret>"
-# Mastodon app registered on ONE instance (mastodon-account provider — syncs
-# your REAL home timeline; users of that instance sign in there)
-MASTODON_INSTANCE="mastodon.social"
-MASTODON_CLIENT_ID="<mastodon-app-client-id>"
-MASTODON_CLIENT_SECRET="<mastodon-app-secret>"
-# X app (x provider — home timeline; requires a PAID X API tier to read)
-X_CLIENT_ID="<x-oauth2-client-id>"
-X_CLIENT_SECRET="<x-oauth2-client-secret>"
-# Twitch app (twitch provider — followed channels that are live)
-TWITCH_CLIENT_ID="<twitch-client-id>"
-TWITCH_CLIENT_SECRET="<twitch-client-secret>"
-# Tumblr app (tumblr provider — your REAL dashboard feed)
-TUMBLR_CLIENT_ID="<tumblr-consumer-key>"
-TUMBLR_CLIENT_SECRET="<tumblr-consumer-secret>"
-# Pinterest app (pinterest provider — your own pins; no home-feed API)
-PINTEREST_CLIENT_ID="<pinterest-app-id>"
-PINTEREST_CLIENT_SECRET="<pinterest-app-secret>"
-# LinkedIn app (linkedin provider — account linking only; feeds are partner-gated)
-LINKEDIN_CLIENT_ID="<linkedin-client-id>"
-LINKEDIN_CLIENT_SECRET="<linkedin-client-secret>"
-# Spotify app (spotify provider — recently played + followed-artist releases)
-SPOTIFY_CLIENT_ID="<spotify-client-id>"
-SPOTIFY_CLIENT_SECRET="<spotify-client-secret>"
-# Optional: YouTube Data API key — lights up channel NAME search for the
-# Thingtime-managed virtual subscription list (ids/URLs/@handles work keyless)
-YOUTUBE_API_KEY="<youtube-data-api-key>"
-# Required for hosted OAuth: the exact origin serving the signed-in account.
-# Register its callback with every provider; no path/query/fragment in this value.
-CONNECTIONS_OAUTH_REDIRECT_BASE="https://your-host.example.com"
-# Required: stable 32-byte base64url vault key. Reuse an existing key; do not
-# regenerate it on deployments or existing saved credentials become unreadable.
-THINGTIME_USER_VAULT_KEY="<32-byte-base64url-key>"
-# Optional: dedicated HMAC key the PKCE code verifier is derived from. Falls
-# back to JWT_SECRET / JWT_PRIVATE_KEY, so every deployment already has one;
-# set it only to rotate PKCE independently of the auth signing key. Any
-# in-flight connect started before a rotation just has to be retried.
-CONNECTIONS_PKCE_SECRET="<random-32-byte-secret>"
+```json
+{
+  "environments": {
+    "production": {
+      "origins": {
+        "https://your-host.example.com": {
+          "clientId": "<provider-client-id>",
+          "clientSecret": "<provider-client-secret>",
+          "redirectUri": "https://your-host.example.com/api/v1/connections/oauth/callback"
+        }
+      }
+    }
+  }
+}
 ```
 
-Generate a key **once** for a new installation with
-`node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
-Store it privately. An existing `THINGTIME_ADMIN_VAULT_KEY` is accepted as a
-fallback. Changing either the vault key or the JWT/PKCE key invalidates pending
-sign-in attempts. Restart the PM2-managed app after changing local env values.
-Loopback development may infer its origin; hosted deployments fail closed when
-the redirect env is absent. Use the same host for beginning and finishing OAuth
-so the initiating Thingtime session cookie reaches the callback.
+The environment ID comes from the existing `THINGTIME_DATA_ENV` bootstrap: `production`, `development`, or the stable ID in `custom:<id>` (custom environments also need `THINGTIME_DATA_AUTHORITY_ORIGIN`). Each preview, development, local and production origin needs its own explicitly approved entry under its selected environment; there is no wildcard, alias, parent-origin or cross-environment fallback. Background refresh uses the encrypted grant's persisted origin and environment. A live request must also match that origin. Missing environment, locked/unavailable vault, missing/duplicate labels, malformed values, empty required secrets and mismatched callbacks all fail closed. The catalog reports setup required and never reveals credentials. Reads coalesce only during a request, bounded by the fixed label set; the next request observes vault rotation.
+
+Register the exact callback with the provider. The optional legacy `CONNECTIONS_OAUTH_REDIRECT_BASE` setting is accepted only as an exact same-origin pin (an optional final slash is allowed); it cannot move a preview/local request to production. It is no longer required when the vault contains the callback. Public ChatGPT clients require `authMethod: "none"` and `clientSecret: ""`; confidential clients use `authMethod: "client_secret_basic"` with a nonempty secret. Hosted ChatGPT identity still requires an approved OpenAI registration. Mastodon's existing `MASTODON_INSTANCE` identifies the single supported instance; optional `YOUTUBE_API_KEY` is unrelated to OAuth account credentials.
+
+Keep only irreducible database/authentication/environment and vault-unlock bootstrap values in the deployment. Reuse the existing `THINGTIME_ADMIN_VAULT_KEY` and owner-vault/auth keys; do not rotate encryption keys during this migration. `THINGTIME_USER_VAULT_KEY` can remain an existing dedicated owner-vault bootstrap. PKCE uses the existing auth signing key unless a dedicated existing `CONNECTIONS_PKCE_SECRET` is configured.
+
+Migration/recovery: save each environment's existing credentials through the canonical vault UI before deploying this resolver; verify catalog readiness, a new consent/callback, saved-account use and refresh separately on each origin. Provider-secret environment variables are never read as a fallback, including when a vault record is invalid. Older in-flight states must restart and encrypted OAuth grants without the client/origin/environment binding must reconnect; owner data and account links are preserved. Changing client ID, callback, origin, environment or ChatGPT auth method invalidates pending flows and saved grants. Same-client secret rotation uses the current secret without discarding refresh grants. Refresh responses retain omitted scope, refresh-token and binding metadata; reconnect never carries a refresh token between different bindings. A bounded rollback is to retain the previous deployment and its original environment configuration until the new vault path passes acceptance, then remove the old provider variables. Rolling back does not establish compatibility for newly bound grants; verify the previous release's behavior before using it. Never copy credentials between environments to repair a failure.
 
 Saved credential names, keys, provider endpoint paths/model IDs and values have
 no arbitrary character or byte limits. The saved-value envelope and generic

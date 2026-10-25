@@ -86,17 +86,40 @@ private draft API, editor recovery, account isolation and independent media copi
 provider boundary is `api/utils/connections/{providers,oauth,connections}.ts`;
 `tokenVault.ts` and `lopu/userVault.ts` use the shared account-key envelope. Public sources
 retain shared accounts; authenticated grants are separate Things per owner.
-OAuth uses a deployment env callback, session binding and one-use nonce; refresh
-is serialized with a home-database lease. `connections/request` exposes only
+OAuth resolves fixed per-provider-family encrypted admin-vault labels (for example
+`connections-google-oauth` and `connections-facebook-oauth`) using
+`environments[environmentId].origins[exactOrigin]` entries containing
+`clientId`, `clientSecret` and the exact `redirectUri`. `oauthConfig.ts` selects
+the explicit data environment, validates the origin and callback, and coalesces
+reads only for the current request. Missing, malformed, duplicate or mismatched
+configuration fails closed; provider-secret environment variables never supply
+a fallback. The optional legacy callback-base setting is a same-origin pin.
+Session-bound one-use state and encrypted grants bind client, origin, callback
+and environment. Older unbound flows/grants must restart/reconnect. Refresh is
+serialized with a home-database lease and revalidates concurrent reconnects on
+lease/write loss or failed refresh; partial replies preserve grant metadata. `connections/request` exposes only
 fixed, scope-checked operations and never returns credential material.
-Its 1.1.1 contract preserves complete API payloads and forwards opaque
+Catalog, Connections, OAuth begin/callback, feed and saved-account request
+contracts deliberately require major `2.0.0`, including in the shared browser
+API helper: removing env-only setup and rejecting unbound legacy grants changes
+behavior. The request contract preserves complete API payloads and forwards opaque
 `pageToken`/`data.nextPageToken` cursors for Google lists. The bounded logging
 redactor is not an API serializer. Token redaction operates on string values
 and property names, preserves typed scalars and JSON syntax, and removes
 overlapping tokens in full without rewriting generated replacement markers. Fixed-target requests reject cross-origin
 redirects and propagate cancellation; ordinary key/value fields are data.
 OpenAI API/Claude Code OAuth cards reuse `lopu/vault`, keeping Lopu's selectable providers
-and Secure Vault as the same records. See README's third-party setup section
+and Secure Vault as the same records. Run `test:connections`,
+`test:api-capabilities`, `test:admin-integrations` and `test:mail`; after the
+canonical Vercel build, `smoke:built-connections`
+(`scripts/smoke-built-connections.mjs`) checks both compiled manifests with
+synthetic bootstrap and all network access denied on macOS. The existing
+`TT_QA_SUITE=service-catalog node scripts/run-lopu-credentials-browser.mjs` harness
+(with its installed `TT_QA_IMAGE` and Chromium `TT_QA_SECCOMP` profile)
+exercises actual editable Connections components at desktop/mobile sizes using
+a task-owned network-none Chromium container and synthetic responses. It also
+checks all six shared Connections API operations against legacy/major-2
+manifests and scrolls desktop/mobile pages from top to bottom. See README's third-party setup section
 and TESTING's multi-account, callback, rotation and cache isolation checklist. The uncapped-data integration negotiates Things 1.42.0, Things update 1.13.0 and Actions run 1.39.0 to avoid collisions with independently shipped media/sync contracts; saved-service browser requests preserve opaque pagination tokens.
 Connections layouts are intrinsic editable documents (`serviceCatalogBlocks`,
 `aiServiceBlocks`, `connectionToolsBlocks`). `TransientBlockHost` exposes only

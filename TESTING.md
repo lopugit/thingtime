@@ -13138,3 +13138,13 @@ separate from deterministic discovery/lease tests.
   stable domains. Inspect the source-build controls and confirm no native Git
   link or source deploy hook remains. A repeated unchanged request must skip
   compilation. Keep production runtime charges distinct from build charges.
+
+
+### Connections OAuth vault configuration (26 October 2026)
+
+Automated: `npm --prefix remix run test:connections`, `test:api-capabilities`, `test:admin-integrations`, `test:mail`; after the canonical Vercel build, `npm --prefix remix run smoke:built-connections` checks both compiled manifests on macOS with all network access denied and synthetic bootstrap only.
+
+- Verify the selected origin's manifest advertises catalog/begin/callback/feed/Connections and saved-account requests 2.0.0. Create synthetic per-environment vault entries; confirm catalog/begin agree, invalid/missing/duplicate labels fail closed without secret-bearing errors, and preview/local requests cannot borrow production grants.
+- Begin with a valid session, rotate the client ID before callback, and verify no provider exchange. Restart and finish with the same client; verify replay and another session are refused. Same-client secret rotation should work using the current vault value.
+- Refresh a synthetic expiring grant with only access token/expiry returned: binding, scopes and refresh token survive. Race reconnect against both refresh lease acquisition and write completion; a different binding must never be returned. Old unbound grants require reconnect.
+- Live acceptance remains separate: on each intended origin compare provider account identity with the developer dashboard and verify two Google/Facebook accounts, callbacks and refresh using that environment's authorized session. Synthetic tests do not establish provider acceptance.

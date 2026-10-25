@@ -71,6 +71,7 @@
     "test:characters-preflight": "node --import tsx --test scripts/character-coordination-preflight.test.ts",
     "test:characters": "node --experimental-test-module-mocks --import tsx --test app/api/utils/auth/characters.test.mts app/api/utils/auth/characterLogin.test.mts",
     "test:auth-introspection": "node --experimental-test-module-mocks --import tsx --test app/api/utils/auth/getCurrentUser.introspection.test.mts",
+    "smoke:built-connections": "node scripts/smoke-built-connections.mjs",
     "verify:connections": "node scripts/verify-connections.mjs",
     "test:autosave": "node --import tsx --test app/Providers/*.test.ts",
     "test:branding": "node --import tsx --test app/components/Branding/*.test.ts",

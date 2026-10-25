@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Resolve Connections OAuth clients and callbacks from the encrypted server vault by exact origin and explicit data environment, bind pending/saved grants, and reject ambiguous configuration and refresh races. Old unbound grants require reconnect; real provider acceptance remains pending. [PR 992 details](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). **Codex (AI)**
+
 - 2026-10-23: Make service/account cards, credential forms and Connections tools individually editable in Builder; keep secrets in transient form state and out of request logs. Reconcile current develop, assign distinct capability versions for uncapped writes, and preserve saved-service pagination. Current provider configuration and validation evidence are recorded in [PR 992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md); real-account acceptance remains open. **Codex (AI)**
 
 - 2026-10-23: Limit PR 1164 to reusable local-media and editable Builder primitives. Author compressor Pages/Components directly as saved Things; retain the legacy suite and fix capability-compatible file-sync assertions.
