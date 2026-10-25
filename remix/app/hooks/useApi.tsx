@@ -1,3 +1,4 @@
+import { requireMediaSizeWriteCapability } from '~/webPlatform/mediaSizeRequirements';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { FILE_SYNC_REQUIREMENTS } from '~/fileSync/configuration';
 import { parseCloudFile, parseCloudFileCommit, type CloudFileCommit } from '~/fileSync/cloudFile';
@@ -1180,6 +1181,7 @@ export function useApi() {
       }, []),
       update: useCallback(
         async (args, options?: ThingRequestOptions) => {
+          await requireMediaSizeWriteCapability(args?.crystal, 'update', requireThingtimeCapability);
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
           if (args?.crystal?.configurationVersion !== undefined && args?.crystal?.localRootId !== undefined) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
@@ -1241,8 +1243,9 @@ export function useApi() {
         [asyncFetcher]
       ),
       upsert: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          await requireMediaSizeWriteCapability(args?.crystal, 'upsert', requireThingtimeCapability);
+          return asyncFetcher.submit(
             {
               id: args?.id,
               thingtime: args?.thingtime,
@@ -1254,12 +1257,14 @@ export function useApi() {
               tokenAcl: args?.tokenAcl
             },
             { action: '/api/v1/things', method: 'PUT' }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args, options?: ThingRequestOptions) => {
+          await requireMediaSizeWriteCapability(args?.crystal, 'create', requireThingtimeCapability);
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
           if (args?.thingtime?.includes('file-sync')) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);

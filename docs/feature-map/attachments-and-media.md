@@ -659,3 +659,13 @@ main bundle; `imageAssets.ts` fetches pinned same-origin WASM only;
 frames, alpha and timing inside the network-disabled worker. See README for
 format/animation/SVG limits. Run the media/image tests, template-block tests,
 capability coverage and the isolated Chrome acceptance runner.
+
+### Maximum local output bytes (2026-10-23)
+
+Optional authored `maxOutputSize` / `maxOutputUnit` normalize to worker
+`maxOutputBytes`. `mediaSizeBudget.ts` reserves audio/overhead and adjusts video
+retries from actual bytes. `imagePipeline.ts` retries whole-frame quality and
+dimensions. `hostMediaPipeline.ts` independently fences oversized completions
+before preview/download. Things 1.42.0, update 1.13.0 and webpage resolve 1.9.0
+cover the saved contract. Run the media/image and size-budget tests through
+`test:web-platform`; see the maximum-size checklist in TESTING.md.
