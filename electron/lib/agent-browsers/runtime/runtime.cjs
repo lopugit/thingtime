@@ -37,7 +37,8 @@ async function dispatch(method, params = {}) {
   if (method === 'preflight') return preflight();
   if (method === 'launch') {
     await preflight();
-    const application = await startApplication(process.env.THINGTIME_AGENT_SESSION);
+    if (params.applicationOrigin !== undefined && networkMode !== 'isolated') throw new Error('Desktop acceptance requires isolated networking.');
+    const application = await startApplication(process.env.THINGTIME_AGENT_SESSION, params.applicationOrigin);
     const descriptor = JSON.parse(await fs.readFile('/opt/thingtime-browser/browser.json', 'utf8'));
     const result = await driver.launch({ executable: descriptor.executable, root: '/home/pwuser', build: descriptor });
     if (application) await driver.call('navigate', { pageId: result.tabs[0].id, url: application.origin }, { navigationTimeoutMs: 60000 });

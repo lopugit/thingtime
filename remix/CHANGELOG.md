@@ -104,6 +104,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-25: Add a private browser/backend relay for signed-Mac sync acceptance,
+  with exact loopback authority, lease fencing and bounded private diagnostics.
+  Native folder selection now passes; end-to-end transfer acceptance remains
+  tracked separately. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
 - 2026-10-25: Preserve the negotiated remote sync-control capability in the Mac
   host and repair fresh-worktree dependencies before desktop resource staging.
   Added native-host regression coverage. Installed acceptance is recorded in

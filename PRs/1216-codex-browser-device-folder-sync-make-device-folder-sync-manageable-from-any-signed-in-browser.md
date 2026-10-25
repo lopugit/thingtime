@@ -51,13 +51,13 @@ an independent receipt and remains available during an unacknowledged Start.
 ## Remaining acceptance
 
 Installed-Mac acceptance remains incomplete in the dedicated
-`browser-device-folder-sync-mac` worktree. The signed app is installed, its
-existing session is preserved, and a native source-choice prompt was observed.
-Folder selection then hit native-control timeouts; browser sign-in could not
-be completed through the available controls. No test folder was granted and no
-test transfer occurred. Browser-to-device start/pause, transferred bytes,
-recovery and window-close behavior remain open. This PR has not been merged or
-deployed to production.
+`browser-device-folder-sync-mac` worktree. The signed app is installed and its
+existing session is preserved. Native folder selection now passes: the actual
+macOS chooser granted only the synthetic two-file fixture. Home remains paused
+with its source grant absent. Browser-to-device start/pause, transferred bytes,
+recovery and window-close behavior remain open; a private browser/backend
+harness is being used for those checks. This PR has not been merged or deployed
+to production.
 
 ### Local Mac follow-up — 2026-10-25
 
@@ -101,6 +101,39 @@ deployed to production.
   `/tmp/pr1216-signed-build.log`, `/tmp/pr1216-install-retry.log` and
   `/tmp/pr1216-electron-tests.log`. These distinguish actual installed results
   from the existing synthetic browser/server harness evidence.
+
+### Installed acceptance recovery — 2026-10-25
+
+- Native Computer Use recovered after cancelling a stuck application menu.
+  Selecting the embedded Node helper exposed the real macOS folder chooser;
+  selecting the exact synthetic fixture produced a visible native grant.
+  The earlier timeout did not justify changing the picker implementation.
+- Personal Chrome could not reliably retain the assigned window across actions.
+  Task-created blank tabs were closed, with existing tabs and sessions preserved.
+  The [private installed acceptance harness](../docs/installed-sync-acceptance.md)
+  instead keeps a task-owned browser and real backend in one network-isolated
+  container and exposes only a loopback relay to the installed signed app.
+- Full Electron suite: 331 tests passed, none failed or skipped. New regressions
+  cover exact loopback authority selection, lease/Host fencing and private bounded
+  failure diagnostics. These tests do not establish installed transfer success.
+- The immutable test image built successfully after non-destructively growing
+  the dedicated test VM disk. Existing images and unrelated runtimes were kept.
+- Real startup exposed a second acceptance-runtime bug: packaged Mac output
+  exports Nitro `node_middleware` and does not listen when executed directly.
+  The isolated runtime now reuses the installed app's canonical
+  `renderer-server.cjs` listener. A real HTTP regression checks health, assets
+  and error redaction for that export shape; the installed app itself did not
+  require a speculative rebuild.
+- The corrected immutable image started the actual packaged backend and
+  rendered client. Its browser and backend share a private loopback authority;
+  container preflight confirmed no external routes and IPv4/IPv6 egress refusal.
+  The packaging regression also checks that every local Docker COPY source is
+  staged and allowlisted. Thirteen focused acceptance tests passed after that
+  packaging correction. This establishes harness readiness, not native transfer
+  acceptance.
+- Published head `f38af78b4ff8775908ae695e2291d8dadba2f82d` passed web/API,
+  CodeQL, secret-scanning and preview checks. Subsequent acceptance-tooling work
+  requires its own pushed-head checks before delivery.
 
 Graphify refresh and the remaining installed acceptance evidence are tracked
 separately from the historical browser/compiled-server harness results above.

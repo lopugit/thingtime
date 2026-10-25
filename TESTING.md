@@ -12913,13 +12913,32 @@ separate from deterministic discovery/lease tests.
 
 ### Browser management and remote execution — 2026-10-23
 
-- Installed checkpoint, 2026-10-25: 326 Electron tests passed; canonical
+- Installed checkpoint, 2026-10-25: 331 Electron tests passed; canonical
   Developer ID build/install and installed signature passed with an unchanged
   designated requirement. Existing account and paused Home state survived.
-  Native source-choice prompt appeared in the embedded Node app, but folder
-  chooser control timed out and cancelled without granting access. Actual
+  After recovering a stuck native menu, the real macOS folder chooser granted
+  only the synthetic two-file fixture through the embedded Node app. Actual
   browser-to-device transfer, recovery and window-close checks remain open;
   see the PR 1216 note for the precise evidence boundary.
+- [x] Native folder selection: verify the exact synthetic directory and child
+  names in the macOS chooser, select it, then independently confirm the new
+  native root. Preserve the absent Home grant, paused state and existing draft.
+- [x] Private acceptance relay regressions: reject foreign/path-bearing origins,
+  incorrect Host headers and expired/released ownership. Keep generated test
+  credentials private and write bounded failure diagnostics with exclusive
+  owner-only permissions. Full suite: `node --test electron/test/*.test.cjs`.
+- [x] `node_middleware` regression: serve a fixture with the packaged entry's
+  export shape through the canonical desktop listener. Check real HTTP health
+  and static assets, and ensure exceptions return redacted errors. Actual
+  packaged-backend acceptance is tracked separately below.
+- [x] Actual packaged-backend readiness: the immutable image rendered its client
+  and passed manifest checks on the shared private loopback origin. Browser and
+  backend preflight confirmed no external routes and refused IPv4/IPv6 egress.
+  Every local Docker COPY input is staged and allowlisted; 13 focused tests pass.
+- [ ] Run the same-browser/backend installed acceptance in
+  `docs/installed-sync-acceptance.md`. Verify the enforced network boundary,
+  disposable full-account registration, genuine installed Node pairing, actual
+  byte hashes and restoration of the original endpoint/session before cleanup.
 - [ ] On the signed Mac, negotiate the selected origin through the actual
   desktop folder host. Confirm `api.devices-sync-control` survives its
   allowlisted projection so the remote worker can start. Missing/malformed
