@@ -164,7 +164,7 @@ export function parsePublishedVersionPreview(input: unknown, eventId: string, th
 		throw new Error('Invalid deleted Thing preview.');
 	const contentAdapter = value.result?.adapter;
 	const protectedContent = contentAdapter === THEME_CONTENT_ADAPTER || contentAdapter === ALGORITHM_CONTENT_ADAPTER;
-	if (protectedContent && value.current === null) throw new Error('Protected content requires its dedicated recovery editor.');
+	if (protectedContent && value.current === null && !request.componentMode) throw new Error('Protected recovery requires a complete dedicated design preview.');
 	for (const side of ['current', 'incoming', 'result']) {
 		if (side === 'current' && value.current === null) continue;
 		if (!keys(value[side], ['adapter', 'version', 'value']) || value[side].adapter !== contentAdapter || value[side].version !== 1)
@@ -177,7 +177,8 @@ export function parsePublishedVersionPreview(input: unknown, eventId: string, th
 			versionContent(value[side]);
 		}
 	}
-	if (value.recovery && JSON.stringify(value.result.value.acl) !== JSON.stringify(['tt:user'])) throw new Error('Recovered Things must be private.');
+	if (value.recovery && (contentAdapter === THEME_CONTENT_ADAPTER ? value.result.value.visibility !== 'private' : !protectedContent && JSON.stringify(value.result.value.acl) !== JSON.stringify(['tt:user']))) throw new Error('Recovered Things must be private.');
+	if (value.recovery && protectedContent && (value.thingtime?.length !== 1 || value.thingtime[0] !== (contentAdapter === THEME_CONTENT_ADAPTER ? 'theme' : 'feed-algorithm'))) throw new Error('Protected recovery requires its exact dedicated schema.');
 	checkConflicts(value.conflicts);
 	if (request.componentMode) {
 		if (

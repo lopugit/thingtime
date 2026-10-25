@@ -1,4 +1,5 @@
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
+import type { ModuleOptions as WorkflowModuleOptions } from 'workflow/nitro';
 import { defineNitroConfig } from 'nitro/config';
 
 import { apiV1DocsRouteKeys, apiV1RouteKeys } from './app/docs/apiDocs.ts';
@@ -18,6 +19,9 @@ const apiHandler = './server/routes/api/[...].ts';
 const chatGptDiscoveryHandler = './server/routes/chatgpt-discovery.ts';
 const thingtimeCapabilitiesHandler = './server/handlers/thingtime-capabilities.ts';
 const apiRoutes = [...apiV1RouteKeys, ...apiV1DocsRouteKeys];
+const workflowModuleConfig = {
+  workflow: { dirs: ['workflows', 'app/api/utils'] }
+} satisfies { workflow: WorkflowModuleOptions };
 
 export default defineNitroConfig({
   serverDir: 'server',
@@ -25,6 +29,7 @@ export default defineNitroConfig({
   // host serves public assets unless explicitly enabled. Keep cloud defaults.
   ...(/^node[_-]middleware$/.test(process.env.NITRO_PRESET ?? '') ? { serveStatic: true } : {}),
   modules: ['workflow/nitro'],
+  ...workflowModuleConfig,
   compatibilityDate: '2026-07-02',
   // Node/packaged builds serve these files directly, without Vite or Vercel's
   // header middleware. The draft document must retain its opaque origin here.

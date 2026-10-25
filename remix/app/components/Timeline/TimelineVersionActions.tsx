@@ -132,7 +132,7 @@ export function TimelineVersionActions({ event, onApplied }: { event: TimelineEv
 	if (
 		!content ||
 		event.mode === 'effect' ||
-		(protectedDesign && (!localChanges || event.operation === 'delete')) ||
+		(protectedDesign && !localChanges) ||
 		!['theme-content', 'algorithm-content', 'thing-content', 'webpage-draft', 'definition-source', 'folder-placement', TIMELINE_SNAPSHOT_PARTS_ADAPTER].includes(content.adapter)
 	)
 		return null;

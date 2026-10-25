@@ -5108,3 +5108,41 @@ Protected theme/algorithm restore, undo and merge, native import/move/title/dele
 History coverage, selected-custom-plane History acceptance, the broader local
 matrix, target-host MCP artifacts and final CI/deployed verification remain open.
 No merge, manual deployment, existing-account data or installed-app change occurs.
+
+## 25 October continuation from the delivered cloud branch
+
+The clean continuation starts at `5ab9283a19feca1a8328aa066ed037435032a9e8`,
+with develop `f41cf65629fe98423405de4bea4e5894f59ccb46` merged locally. The
+older local worktree and unfinished edits are preserved. PR #1000 remains open
+against develop; no protected-branch update or manual deployment is authorized.
+
+Shared Copy now completes through the workspace API without a sign-in gate.
+Anonymous shared exports omit credentials, refuse redirects, validate required
+dependencies/files and reauthorize the full plan after byte staging before an
+atomic fresh-ID import. Local-owned copies remain offline. Dedicated saved
+browser Actions reuse theme/algorithm writers and independent account content,
+selection and History queues. Deleted themes/algorithms recover privately via
+the existing History review UI and dedicated writers; account recovery requires
+an acknowledged home deletion without pending writes/claims.
+
+The isolated render-only stdio launcher exposes two tools and uses a bounded
+network-none container, sanitized staged inputs, read-only runtime files and
+scoped cleanup. SDK native artifacts pass. An actual ephemeral Codex CLI agent
+also called the registered capabilities/render tools and received canonical
+JSON plus four PNG resources; malformed input produced an error and no artifacts.
+The bounded extractor verifies and saves actual host resource bytes. This
+establishes CLI host transport, separately from the original desktop chat MCP
+reload and from deployed acceptance.
+
+Current test/build/native/CI boundaries and limitations are maintained in the
+[25 October evidence](../artifacts/anonymous-local-first-2026-10-25/README.md).
+Shared original streaming now negotiates attachment-content 1.18.0, checks exact
+receipts/lengths and rechecks current authorization before completion; 97 focused
+checks pass. Native normal Copy also passes with a 17 MiB original, edited
+heading, fresh dependencies and exact bytes after cold offline reload. The broader source
+matrix stays open, including remote catalogue/instruction contracts and
+additional device/service/identity transitions. No unrelated account or private coordination write is claimed.
+
+The continuation also adds standalone file annotation/deletion Actions through dedicated leased local writers, preserving generic protected-kind guards and independent account queues. Binary attachment HTTP responses remain unsupported by the JSON Action interpreter. Oversized account instruction requests are refused before transport while keeping the edit locally; normal Settings behavior passes with 119,104 bytes, cold offline retention, no retries over 65 seconds, and recovery after shortening. The larger remote transport is still open.
+
+The MCP lockfile audit now reports zero findings; current MCP checks pass 42 tests with three native opt-in skips, plus three extractor checks. The actual CLI render/artifact proof exposed abrupt-host cleanup failure. The new detached guardian passes five focused ownership, expiry and process-group loss checks; actual Docker lifecycle and final visual reruns are blocked by its full 20 GiB data disk. The 390px instructions capture correction and 12,000-line performance limit are recorded without treating the old screenshot as a pass. PR #1000 has the `no-ai-merge` hold; native auto-merge remains disabled.

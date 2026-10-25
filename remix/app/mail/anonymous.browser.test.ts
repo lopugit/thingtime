@@ -56,8 +56,14 @@ for (const scenario of ['settings', 'reader'] as const) test(`native anonymous m
    await summary.dispose();
   };
   const field = async (tab: any, text: string) => {
-   await tab.waitForFunction((label: string) => [...document.querySelectorAll('label')].some(el => el.textContent?.replace('*', '').trim() === label && el.checkVisibility()), {}, text);
-   const id = await tab.evaluate((label: string) => [...document.querySelectorAll('label')].find(el => el.textContent?.replace('*', '').trim() === label)?.htmlFor, text);
+   await tab.waitForFunction((label: string) => [...document.querySelectorAll('label')].some(el => {
+    const actual = el.textContent?.trim();
+    return (actual === label || actual === `${label}*`) && el.checkVisibility();
+   }), {}, text);
+   const id = await tab.evaluate((label: string) => [...document.querySelectorAll('label')].find(el => {
+    const actual = el.textContent?.trim();
+    return actual === label || actual === `${label}*`;
+   })?.htmlFor, text);
    assert.ok(id, `Missing field ${text}`); return tab.$(`[id="${id}"]`);
   };
   const fill = async (tab: any, label: string, value: string) => {

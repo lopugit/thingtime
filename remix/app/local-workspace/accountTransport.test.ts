@@ -23,9 +23,9 @@ test('transport pins account and database on reads and writes and retires mismat
  bindLocalWorkspace(false, rootIdentity.read().generation, scope);
  const generation = rootIdentity.read().generation, calls: any[] = [], events: string[] = [];
  const lease = { assertCurrent() { if (rootIdentity.read().generation !== generation) throw new Error('Retired workspace'); }, onInvalidate: () => () => {} };
- let result = Response.json({ ok: true, thing: { id: 'thing' } });
+ let result = Response.json({ ok: true, thing: { id: 'thing' } }), thingVersion = '1.34.0';
  Object.assign(globalThis, { window: { location: { origin }, dispatchEvent(event: Event) { events.push(event.type); } }, fetch: async (url: string, init: RequestInit) => {
-  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.drafts': { version: '1.1.0' }, 'api.attachment-delete': { version: '1.5.0' }, 'api.attachment-upload-abort': { version: '1.2.0' }, 'api.attachment-annotate': { version: '1.2.0' }, 'api.things-bulk': { version: '1.6.0' }, 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.things-comment': { version: '1.8.0' }, 'api.things': { version: '1.34.0' }, 'api.things-update': { version: '1.10.0' }, 'api.things-export': { version: '1.16.0' }, 'api.things-fork': { version: '1.6.0' }, 'api.components-browse': { version: '1.0.0' }, 'api.schemas-browse': { version: '1.0.0' }, 'api.attachment-content': { version: '1.11.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.drafts': { version: '1.1.0' }, 'api.attachment-delete': { version: '1.5.0' }, 'api.attachment-upload-abort': { version: '1.2.0' }, 'api.attachment-annotate': { version: '1.2.0' }, 'api.things-bulk': { version: '1.6.0' }, 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.things-comment': { version: '1.8.0' }, 'api.things': { version: thingVersion }, 'api.things-update': { version: '1.10.0' }, 'api.things-export': { version: '1.16.0' }, 'api.things-fork': { version: '1.6.0' }, 'api.components-browse': { version: '1.0.0' }, 'api.schemas-browse': { version: '1.0.0' }, 'api.attachment-content': { version: '1.11.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
   calls.push({ url, init }); return result.clone();
  } });
  try {
@@ -54,7 +54,10 @@ test('transport pins account and database on reads and writes and retires mismat
   result=Response.json({ok:true,thing:{id:'thing'},post:{id:'other',attachments:[attachment]}});
   assert.equal((await transport.get('thing',new AbortController().signal) as any).attachments,undefined);
   result = Response.json({ ok: true });
-  await transport.remove!({ id: 'thing', operationId: 'delete', version: 1, method: 'delete', body: { id: 'thing', expectedUpdatedAt: '2026-01-01T00:00:00.000Z' } }, new AbortController().signal);
+  const deletion = { id: 'thing', operationId: 'delete', version: 1, method: 'delete' as const, body: { id: 'thing', expectedUpdatedAt: '2026-01-01T00:00:00.000Z' } };
+  await assert.rejects(transport.remove!(deletion, new AbortController().signal), /incompatible/);
+  thingVersion = '1.42.0';
+  await transport.remove!(deletion, new AbortController().signal);
   assert.equal(calls.at(-1).init.method, 'DELETE');
   assert.equal(JSON.parse(calls.at(-1).init.body).retainAttachmentReceipts,true);
   assert.equal(JSON.parse(calls.at(-1).init.body).expectedUpdatedAt, '2026-01-01T00:00:00.000Z');
@@ -265,7 +268,11 @@ test('parent deletion refuses an origin without durable cascade receipts and per
   // The checker first rejects any cached manifest from another origin.
   await assert.rejects(transport.remove!(op,new AbortController().signal),/incompatible/);
   await assert.rejects(transport.remove!(op,new AbortController().signal),/incompatible/);assert.deepEqual(mutations,[]);
-  version='1.34.0';await transport.remove!(op,new AbortController().signal);
+  for (const older of ['1.40.0', '1.41.0', '2.0.0']) {
+   version=older; await assert.rejects(transport.remove!(op,new AbortController().signal),/incompatible/);
+   assert.deepEqual(mutations,[]);
+  }
+  version='1.42.0';await transport.remove!(op,new AbortController().signal);
   assert.deepEqual(JSON.parse(mutations[0].body),{...op.body,retainAttachmentReceipts:true});
  }finally{Object.assign(globalThis,saved);}
 });
@@ -294,4 +301,29 @@ test('owned-original transport negotiates before fetching and accepts streamed f
   assert.ok(blob instanceof Blob); assert.equal(blob.size, size); assert.equal(consumed, size); assert.equal(requests, 1);
   assert.deepEqual(new Uint8Array(await blob.slice(-5).arrayBuffer()), new Uint8Array(5).fill(137));
  } finally {Object.assign(globalThis, saved);}
+});
+
+
+test('atomic attachment edits refuse media-only update contracts before transport', async () => {
+ const saved={window:globalThis.window,fetch:globalThis.fetch};
+ const origin='https://atomic-binding.test',scope={kind:'account' as const,origin,ownerId:'owner',dataPlane:'home'};
+ let version='1.12.0';const mutations:any[]=[];
+ Object.assign(globalThis,{window:{location:{origin},dispatchEvent(){}},fetch:async(url:string,init:RequestInit)=>{
+  if(url.includes('capabilities'))return Response.json({schemaVersion:1,origin,features:{'api.things':{version:'1.42.0'},'api.things-update':{version},'api.mongodb-endpoint':{version:'1.1.0'}}});
+  mutations.push(init);return Response.json({ok:true,thing:{id:'post'}});
+ }});
+ try{
+  rootIdentity.confirm(rootIdentity.read().generation);bindLocalWorkspace(false,rootIdentity.read().generation,scope);
+  const transport=accountThingTransport(scope,{assertCurrent(){},onInvalidate:()=>()=>{}});
+  const op={id:'post',operationId:'binding',version:1,method:'update' as const,body:{id:'post',attachmentIds:['file'],expectedUpdatedAt:'2026-10-17T00:00:00.000Z'}};
+  // First refusal also discards a cached manifest belonging to another origin.
+  await assert.rejects(transport.write(op,new AbortController().signal),/incompatible/);
+  for(const older of ['1.11.0','1.12.0','2.0.0']){
+   version=older;await assert.rejects(transport.write(op,new AbortController().signal),/incompatible/);assert.deepEqual(mutations,[]);
+  }
+  version='1.13.0';await transport.write(op,new AbortController().signal);
+  const writes=mutations.filter(init=>init.method==='PATCH');
+  assert.equal(writes.length,1);assert.equal(mutations.length,2);
+  assert.deepEqual(JSON.parse(writes[0].body),op.body);
+ }finally{Object.assign(globalThis,saved);}
 });

@@ -1,0 +1,7 @@
+{
+  "remainingRenderContainers": [],
+  "remainingRenderVolumes": [],
+  "cleanup": "Explicit cleanup of exact owned UUID container and volume after successful CLI exit; no members remained in owned CLI process group",
+  "ownedRuntime": "thingtime-render-5ca0537b-54e6-4a0f-99c4-7e7c4fdde0a5",
+  "limitation": "CLI process exit alone did not prove daemon runtime cleanup; exact labeled resources were inspected and removed, not globally pruned"
+}

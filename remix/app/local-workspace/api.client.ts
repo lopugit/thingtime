@@ -21,6 +21,7 @@ import { LocalAlgorithms } from './algorithms';
 import { LocalThemes } from './themes';
 import { isLocalMediaAttachment, localMediaInfo } from './attachments';
 import { WorkspaceError } from './storage';
+import { copyPublicThing } from './publicCopy.client';
 import { crystalSchemas } from '../schemas/registry';
 
 const unavailable = async () => { throw new WorkspaceError('REMOTE_ACCOUNT_REQUIRED', 'This operation needs a signed-in account. Your local workspace has not been uploaded.', 401); };
@@ -184,8 +185,15 @@ export function anonymousApi<T extends Record<string, any>>(remote: T): T {
 			announceLocalWorkspaceChange([row.id]);
 			return changed({ ok: true, id: row.id, title: row.crystal.title, updatedAt: row.updatedAt, thing: project(row) });
 		},
-		fork: async ({ id }: { id: string; key?: string }) => {
-			const things = service(), bundle = await things.export([id]);
+		fork: async (input: { id: string; key?: string }) => {
+			const things = service(), { id } = input;
+			try { await things.get(id); }
+			catch (error) {
+				if (!(error instanceof WorkspaceError) || error.code !== 'NOT_FOUND' || id.startsWith('local-') || await things.hasReference(id)) throw error;
+				return changed(await copyPublicThing(input, { origin: window.location.origin, things, lease }));
+			}
+			const bundle = await things.export([id]);
+			await bundle.assertCurrent();
 			const result = await things.import(bundle.manifest, null, bundle.files);
 			return changed({ ...result, id: result.idMap[id] });
 		},

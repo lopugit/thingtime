@@ -107,13 +107,13 @@ test('algorithm undo and three-way merge preserve independent edits and require 
 	assert.equal((await f.things.get(algorithm.id)).crystal.emoji, '📚');
 });
 
-test('algorithm History refuses deleted recovery, forged protected kinds and retired identity', async t => {
+test('algorithm History requires complete recovery previews and refuses forged kinds and retired identity', async t => {
 	let active = true;
 	const f = fixture({ assertCurrent() { if (!active) throw Error('Retired identity'); }, onInvalidate: () => () => {} }); t.after(() => f.db.close());
 	const { algorithm } = await f.algorithms.create({ name: 'Original' }), base = await f.head(algorithm.id);
 	await assert.rejects(f.things.update({ id: algorithm.id, crystal: { name: 'Generic bypass' } }), /dedicated/);
 	await f.algorithms.remove(algorithm.id);
-	await assert.rejects(f.versions.request({ command: 'preview-version', mode: 'restore', eventId: base.id, recover: true }), /own editor/);
+	await assert.rejects(f.versions.request({ command: 'preview-version', mode: 'restore', eventId: base.id, recover: true }), /complete protected design/);
 	const row = { id: 'forged', thingtime: ['feed-algorithm', 'user'], crystal: {}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), revision: 1 };
 	await f.db.transaction(anonymous, 'readwrite', lease, tx => recordLocalThingChanges(tx, new Map([[row.id, { before: null, after: row }]]), () => row.updatedAt, randomUUID));
 	assert.deepEqual((await f.history.page(query(row.id))).entries, []);

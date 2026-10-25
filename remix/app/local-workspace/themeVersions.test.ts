@@ -198,7 +198,7 @@ test('theme previews fence concurrent changes, deletion and identity retirement'
 		await f.themes.remove(f.saved.id);
 		await assert.rejects(
 			f.versions.request({ command: 'preview-version', mode: 'restore', eventId: f.base, recover: true }),
-			/own editor|recorded deletion|recovery/i
+			/own editor|recorded deletion|recovery|acknowledged/i
 		);
 		f.retire();
 		await assert.rejects(f.versions.request(compared.apply), /Retired workspace/);

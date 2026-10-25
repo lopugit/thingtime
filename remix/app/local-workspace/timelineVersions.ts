@@ -1,3 +1,5 @@
+import { workspaceScopeKey } from './storage';
+import type { TimelineSnapshot } from '../timeline/contract';
 import { prepareVersionChange, type VersionContentAdapter } from '../timeline/versionPlan';
 import { parseVersionRequest, versionRequestIdentity, TIMELINE_UNDO_LABEL, type VersionRequest } from '../timeline/publishedVersion';
 import { createPublishedComponentTools, componentComparisonText, componentDefinitionFields } from '../timeline/publishedComponentTools';
@@ -14,11 +16,14 @@ import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type Works
 
 export type LocalVersionUpdateWriter = {
  tx: WorkspaceTransaction;
+ recover?(input: any, id: string, capture: LocalMutationCapture): Promise<unknown>;
  update(input: { id: string; crystal: any; expectedUpdatedAt?: string }, capture: LocalMutationCapture): Promise<unknown>;
 };
 /** Only dedicated writers can opt exact protected kinds into History edits. */
 export type LocalProtectedVersionWriter = {
  matches(doc: LocalThing): boolean;
+ scope?: WorkspaceScope;
+ recovery?: { adapter: string; read(tx: WorkspaceTransaction, id: string, snapshot: TimelineSnapshot): Promise<{ doc: LocalThing; content: VersionContentAdapter }> };
  content(doc: any): VersionContentAdapter;
  read?(tx: WorkspaceTransaction, id: string): Promise<LocalThing | undefined>;
  transaction<T>(run: (writer: LocalVersionUpdateWriter) => Promise<T>, signal?: AbortSignal): Promise<T>;
@@ -72,11 +77,18 @@ const liveValues = (all: LocalThing[], page: any, current: any, result: any, own
 	result: liveVersion(all, page, result, owner)
 });
 const allThings = async (tx: WorkspaceTransaction) => (await tx.list<LocalThing>('things')).map((row) => row.value);
-async function deletedState<Entry extends VersionEntry>(tx: WorkspaceTransaction, id: string, authority: LocalVersionAuthority<Entry>) {
+async function deletedState<Entry extends VersionEntry>(tx: WorkspaceTransaction, id: string, authority: LocalVersionAuthority<Entry>, writers: LocalProtectedVersionWriter[]) {
 	if (await tx.get('things', id)) reject(409, 'This Thing is already present. Refresh History before restoring it.');
 	const entry = await authority.head(tx, id);
 	if (!entry || entry.event.operation !== 'delete' || entry.event.after !== null || !entry.event.before)
 		reject(409, 'A recorded deletion is required to recover this Thing.');
+	const writer = writers.find(writer => writer.recovery?.adapter === entry.event.before!.adapter);
+	if (writer?.recovery) {
+		if (writer.scope && workspaceScopeKey(writer.scope) !== workspaceScopeKey(authority.scope)) reject(409, 'Recovery belongs to another workspace.');
+		const recovered = await writer.recovery.read(tx, id, entry.event.before!);
+		if (!writer.matches(recovered.doc)) reject(409, 'This recovery belongs to another dedicated writer.');
+		return { entry, thingtime: recovered.doc.thingtime, doc: recovered.doc, content: recovered.content, writer };
+	}
 	const value = entry.event.before!.value as any;
 	if (
 		entry.event.before!.adapter !== 'thing-content' ||
@@ -162,7 +174,11 @@ export class LocalTimelineVersions<Entry extends VersionEntry = TimelineEntry> {
 					await entries(owner, ids)
 				).map(({ event }) => ({ id: event.id, thingId: event.thingId, parentIds: event.parentIds, afterAdapter: event.after?.adapter ?? null })),
 			snapshot: async (_owner, entry, side) => entry.event[side],
-			deleted: (_owner, id) => read((tx) => deletedState(tx, id, this.authority)),
+			deleted: (_owner, id) => read(async (tx) => {
+				const state = await deletedState(tx, id, this.authority, this.protectedWriters);
+				if ('writer' in state) protectedWriter = state.writer;
+				return state;
+			}),
 			folderExists: (_owner, id) => read(async (tx) => !!(await tx.get<LocalThing>('things', id))?.thingtime.includes('folder')),
 			recorded: async (_owner, sources) => {
 				if (sources.some(({ event }) => event.dependencies.some((link) => !link.thingId.startsWith(COMPONENT_BINDING_PREFIX))))
@@ -243,7 +259,9 @@ export class LocalTimelineVersions<Entry extends VersionEntry = TimelineEntry> {
 				reject(409, 'Thing changed after the version preview. Refresh and compare again.');
 			if (components) {
 				const values = liveValues(await allThings(writer.tx), doc, current, merged.value, owner);
-				const actual = protectedWriter ? { ...values, protectedContent: protectedWriter.content((await this.authority.thing(writer.tx, source.event.thingId))!).current, updatedAt: existing!.updatedAt } : values;
+				const recoveryState = recovery && protectedWriter ? await deletedState(writer.tx, source.event.thingId, this.authority, this.protectedWriters) : null;
+				const protectedDoc = recoveryState && 'doc' in recoveryState ? recoveryState.doc : protectedWriter ? await this.authority.thing(writer.tx, source.event.thingId) : null;
+				const actual = protectedWriter ? { ...values, protectedContent: protectedWriter.content(protectedDoc!).current, updatedAt: protectedDoc!.updatedAt } : values;
 				if (componentComparisonText(actual) !== liveText) reject(409, protectedWriter ? 'Content changed after the preview. Refresh and compare again.' : 'A component changed after the preview. Refresh and compare again.');
 			}
 			if ((copies.copies.length && !writer.create) || (recovery && !writer.recover)) reject(422, 'This protected content requires its dedicated recovery editor.');

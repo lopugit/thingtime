@@ -27,7 +27,7 @@ type Dependencies<Entry extends VersionSource> = {
 	entries(owner: string, ids: string[]): Promise<Entry[]>;
 	nodes(owner: string, ids: string[]): Promise<TimelineGraphNode[]>;
 	snapshot(owner: string, entry: Entry, side: 'before' | 'after'): Promise<TimelineSnapshot | null>;
-	deleted(owner: string, id: string): Promise<{ entry: Entry; thingtime: string[] } | null>;
+	deleted(owner: string, id: string): Promise<{ entry: Entry; thingtime: string[]; doc?: any; content?: VersionContentAdapter } | null>;
 	folderExists(owner: string, id: string): Promise<boolean>;
 	recorded(owner: string, sources: { event: TimelineEvent; content: any }[]): Promise<ComponentDefinitionVersion[]>;
 	live(
@@ -55,19 +55,20 @@ export async function prepareVersionChange<Entry extends VersionSource = Timelin
 		liveDoc ??
 		(recovery
 			? ({
+					...recovery.doc,
 					ownerId,
 					shareId: source.event.thingId,
 					thingtime: recovery.thingtime,
-					crystal: {},
+					crystal: recovery.doc?.crystal ?? {},
 					acl: ['tt:user'],
 					extended: null,
 					tags: [],
-					folderId: null,
+					folderId: recovery.doc?.folderId ?? null,
 					targetId: null,
 					geo: null
 			  } as any)
 			: null);
-	const adapter = doc && !recovery ? deps.contentAdapter?.(doc) : null;
+	const adapter = recovery?.content ?? (doc && !recovery ? deps.contentAdapter?.(doc) : null);
 	if (!doc || doc.ownerId !== ownerId || (isProtectedThingtime(doc.thingtime ?? []) && !adapter))
 		reject(404, 'This Thing is not available for version changes.');
 	const { restorableContent, loadVersionGraph, versionMergeBase, versionContentSources, createVersionContentReader } = createVersionGraphTools(

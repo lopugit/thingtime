@@ -3,7 +3,8 @@ import { requireThingtimeCapability } from '../api/utils/capabilities/requireCap
 import { EXPECTED_ACTOR_HEADER } from '../api/utils/auth/expectedActor';
 import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
 import { rootIdentity } from '../utils/rootIdentity';
-import { LocalLopuInstructions, instructionSettings, promptSnapshot, type InstructionTransport } from './lopuInstructions';
+import { LocalLopuInstructions, instructionSettings, promptSnapshot, serializeInstructionWrite, type InstructionTransport } from './lopuInstructions';
+import type { LopuInstructionSettings } from '../api/utils/lopu/promptSettingsCore';
 import { accountRemoteWorkspaceLease, accountWorkspaceLease, anonymousWorkspaceLease, canSyncAccountWorkspace, currentAccountWorkspace, isAnonymousWorkspace, subscribeWorkspaceBinding, subscribeWorkspaceIdentity, workspaceDatabase, workspaceIdentityKey } from './runtime.client';
 import { workspaceScopeKey, WorkspaceError, type WorkspaceScope } from './storage';
 import { createSyncPump } from './syncPump';
@@ -25,7 +26,7 @@ export function announceLopuInstructions(scope: WorkspaceScope, sync = false) {
  try { channel?.postMessage({ scope: homeKey(scope), sync }); } catch { /* Saved content is already durable. */ }
 }
 export function instructionTransport(scope: Extract<WorkspaceScope, { kind: 'account' }>): InstructionTransport {
- const request = async (body: unknown, signal: AbortSignal) => {
+ const request = async (value: LopuInstructionSettings | undefined, signal: AbortSignal) => {
   const lease = accountRemoteWorkspaceLease(scope), retired = new AbortController(), off = lease.onInvalidate(() => retired.abort());
   try {
    lease.assertCurrent();
@@ -34,8 +35,9 @@ export function instructionTransport(scope: Extract<WorkspaceScope, { kind: 'acc
    lease.assertCurrent();
    const requestSignal = AbortSignal.any([signal, retired.signal, AbortSignal.timeout(20_000)]);
    requestSignal.throwIfAborted();
+   const body = value === undefined ? undefined : serializeInstructionWrite(value);
    const response = await fetch('/api/v1/settings/lopu-prompt', { method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', redirect: 'error', cache: 'no-store', signal: requestSignal,
-    headers: { 'Content-Type': 'application/json', [EXPECTED_ACTOR_HEADER]: scope.ownerId, [EXPECTED_DATA_PLANE_HEADER]: scope.dataPlane }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    headers: { 'Content-Type': 'application/json', [EXPECTED_ACTOR_HEADER]: scope.ownerId, [EXPECTED_DATA_PLANE_HEADER]: scope.dataPlane }, ...(body === undefined ? {} : { body }) });
    const result = await response.json().catch(() => null);
    lease.assertCurrent(); requestSignal.throwIfAborted();
    if (response.status === 401 || ['ACTOR_CHANGED', 'DATA_PLANE_CHANGED'].includes(result?.code)) {
@@ -46,7 +48,7 @@ export function instructionTransport(scope: Extract<WorkspaceScope, { kind: 'acc
    return result;
   } finally { off(); }
  };
- return { read: async signal => promptSnapshot(await request(undefined, signal)), write: async (value, signal) => instructionSettings((await request({ scope: 'personal', ...value }, signal)).personal) };
+ return { read: async signal => promptSnapshot(await request(undefined, signal)), write: async (value, signal) => instructionSettings((await request(value, signal)).personal) };
 }
 
 /** Independent from post, draft and Thing sync. Network never holds the local

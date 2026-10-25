@@ -1,4 +1,4 @@
-import type { InstructionTransport, LocalLopuInstructions } from './lopuInstructions';
+import { instructionSyncBlocked, type InstructionTransport, type LocalLopuInstructions } from './lopuInstructions';
 
 /** One pass of the independent settings worker. Failed initial reads and a
  * claim held by another tab must keep retrying even before a device edit exists.
@@ -14,5 +14,5 @@ export async function syncLopuInstructionPass(
  await service.sync(transport, signal);
  const after = await service.read();
  if (JSON.stringify(before) !== JSON.stringify(after)) changed();
- return !after.conflict && (after.pending || after.error || after.claim) ? 60_000 : null;
+ return !after.conflict && !instructionSyncBlocked(after) && (after.pending || after.error || after.claim) ? 60_000 : null;
 }

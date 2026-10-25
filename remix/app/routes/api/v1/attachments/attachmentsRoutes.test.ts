@@ -840,6 +840,83 @@ test('owned-original streaming preserves rate refusal and ordinary media cache b
  assert.equal(fetched, 0);
 });
 
+test('shared original streams pin receipts, preserve backpressure above 16 MiB and reauthorize before EOF', async () => {
+ const size = 17 * 1024 * 1024, block = new Uint8Array(1024 * 1024).fill(37);
+ let fetched = 0, produced = 0, reads = 0, cancelled = 0;
+ const route = createAttachmentContentLoader({getUser: async () => null, enforceLimit: allowed as any, enrichViewer: async viewer => viewer,
+  download: async (viewer, id, download, retainedVersion, retain) => {
+   reads++; assert.equal(viewer?.sharedRoot, 'page'); assert.equal(viewer?.id, ''); assert.ok(viewer?.linkKeys?.has('synthetic-link'));
+   assert.equal(id, 'file'); assert.equal(download, true); assert.equal(retainedVersion, undefined); assert.ok(!retain);
+   return {ok: true, url: 'https://private.test/pinned', expiresAt: 'later', cacheKey: 'a'.repeat(64), version: 'b'.repeat(64), size,
+    contentType: 'application/octet-stream', disposition: 'attachment', image: false};
+  }, fetchObject: async (_url, init) => {
+   fetched++; assert.equal(init?.redirect, 'error');
+   return new Response(new ReadableStream({pull(controller) {
+    if (produced === 17) controller.close(); else { produced++; controller.enqueue(block); }
+   }, cancel() {cancelled++;}}, {highWaterMark: 0}), {headers: {'Content-Length': String(size)}});
+  }});
+ const url = 'https://thingtime.example/api/v1/attachments/content?id=file&download=1&cache=original-bytes&sharedRoot=page&key=synthetic-link';
+ assert.equal((await route({request: new Request(url)})).status, 412); assert.equal(fetched, 0);
+ const response = await route({request: new Request(url, {headers: {'If-Match': '"' + 'a'.repeat(64) + ':original:v1"'}})});
+ assert.equal(response.status, 200); assert.equal(produced, 0); assert.equal(response.headers.get('Location'), null);
+ assert.match(response.headers.get('Cache-Control')!, /private.*no-store/); assert.equal(response.headers.get('Content-Length'), String(size));
+ const reader = response.body!.getReader(); let bytes = 0;
+ for (;;) {const part = await reader.read(); if (part.done) break; bytes += part.value.length;}
+ assert.equal(bytes, size); assert.equal(reads, 3); assert.equal(cancelled, 0);
+});
+
+test('shared original streams reject mixed modes, changed authority/version and malformed storage bytes', async () => {
+ const url = 'https://thingtime.example/api/v1/attachments/content?id=file&download=1&cache=original-bytes&sharedRoot=page';
+ const headers = {'If-Match': '"' + 'a'.repeat(64) + ':original:v1"'};
+ for (const failure of ['revoked', 'changed', 'truncated', 'excess', 'encoding', 'upstream-length', 'rate', 'cancel'] as const) {
+  let downloads = 0, cancelled = 0;
+  const route = createAttachmentContentLoader({getUser: async () => null,
+   enforceLimit: (async () => failure === 'rate' ? {allowed: false, unavailable: true} : {allowed: true}) as any,
+   enrichViewer: async viewer => viewer,
+   download: async () => {
+    if (++downloads > 1 && failure === 'revoked') return {ok: false, status: 404, error: 'Attachment not found'};
+    return {ok: true, url: 'https://private.test/pinned', expiresAt: 'later', cacheKey: 'a'.repeat(64),
+     version: (downloads > 1 && failure === 'changed' ? 'c' : 'b').repeat(64), size: failure === 'cancel' ? 6 : 3, contentType: 'application/octet-stream', disposition: 'attachment', image: false};
+   }, fetchObject: async () => {
+    let sent = false;
+    return new Response(new ReadableStream({pull(controller) {if (sent) controller.close(); else {sent = true; controller.enqueue(new Uint8Array(failure === 'truncated' ? 1 : failure === 'excess' ? 4 : 3));}}, cancel() {cancelled++;}}, {highWaterMark: 0}),
+     {headers: failure === 'encoding' ? {'Content-Encoding': 'gzip'} : failure === 'upstream-length' ? {'Content-Length': '9'} : {}});
+   }});
+  for (const suffix of ['&width=64', '&cache=bytes', '&fingerprint=1', '&retained=1', '&range=1', '&character=other', '&id=other'])
+   assert.equal((await route({request: new Request(url + suffix, {headers})})).status, 400);
+  const abort = new AbortController(), response = await route({request: new Request(url, {headers, signal: abort.signal})});
+  if (failure === 'rate') {assert.equal(response.status, 503); assert.equal(downloads, 0);}
+  else if (['encoding', 'upstream-length'].includes(failure)) {assert.equal(response.status, 502); assert.equal(cancelled, 1);}
+  else if (failure === 'cancel') {const reader = response.body!.getReader(); await reader.read(); abort.abort(); await reader.cancel(); assert.equal(cancelled, 1);}
+  else await assert.rejects(response.arrayBuffer(), /Original stream/);
+ }
+});
+
+test('shared original progress budgets distinguish upstream inactivity, consumer backpressure and total expiry', async () => {
+ const url = 'https://thingtime.example/api/v1/attachments/content?id=file&download=1&cache=original-bytes';
+ const headers = {'If-Match': '"' + 'a'.repeat(64) + ':original:v1"'};
+ const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+ for (const mode of ['idle', 'progress', 'total', 'authority', 'bad-length'] as const) {
+  let count = 0, cancelled = 0, principals = 0;
+  const route = createAttachmentContentLoader({getUser: async () => { if (++principals > 1 && mode === 'authority') await new Promise(() => {}); return null; }, enforceLimit: allowed as any, enrichViewer: async viewer => viewer,
+   originalStreamPolicy: {idleMs: mode === 'idle' ? 5 : 30, totalMs: mode === 'total' ? 20 : mode === 'authority' ? 60 : 500},
+   download: async () => ({ok: true, url: 'https://private.test/original', expiresAt: 'later', cacheKey: 'a'.repeat(64), version: 'b'.repeat(64), size: 6, contentType: 'application/octet-stream', disposition: 'attachment', image: false}),
+   fetchObject: async () => new Response(new ReadableStream({async pull(controller) {
+    if (mode === 'idle') return new Promise(() => {});
+    await pause(5); if (count++ === 6) controller.close(); else controller.enqueue(new Uint8Array([count]));
+   }, cancel() {cancelled++; return new Promise<void>(() => {});}}, {highWaterMark: 0}), {headers: mode === 'bad-length' ? {'Content-Length': '99'} : {}})
+  });
+  const response = await Promise.race([route({request: new Request(url, {headers})}), pause(100).then(() => {throw Error('Cancellation delayed the response');})]);
+  if (mode === 'bad-length') {assert.equal(response.status, 502); assert.equal(cancelled, 1); continue;}
+  if (mode === 'idle') {await assert.rejects(response.arrayBuffer(), /Original stream/); assert.equal(cancelled, 1); continue;}
+  if (mode === 'authority') {await assert.rejects(response.arrayBuffer(), /Original stream/); continue;}
+  const reader = response.body!.getReader(); await reader.read();
+  await pause(mode === 'total' ? 30 : 60);
+  if (mode === 'total') await assert.rejects(reader.read(), /Original stream/);
+  else {let bytes = 1; for (;;) {const part = await reader.read(); if (part.done) break; bytes += part.value.length;} assert.equal(bytes, 6);}
+ }
+});
+
 test('Character media selectors reuse session authorization and never fall back to public access', async () => {
   let header: string | null = null;
   let downloaded = false;

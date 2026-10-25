@@ -38,6 +38,19 @@ no-store headers; generic media-cache policy is unchanged. Run `test:attachments
 `test:api-capabilities`, `test:local-workspace` and the isolated built-manifest smoke.
 See the [streaming checkpoint](../local-workspaces.md#owned-originals-stream-into-blob-storage--2026-10-18).
 
+Attachment content 1.18.0 adds `cache=original-bytes&download=1` for existing
+shared/public read authority. A fresh `cache=validate&download=1` receipt supplies
+the required exact `If-Match`; no owner retention exemption is granted. The
+stream stays on the selected origin, rejects redirects, counts exact original
+bytes and withholds its last chunk until EOF plus current ACL/version checks.
+Server and negotiated client allow ten minutes per file and thirty seconds
+waiting for upstream progress; consumer backpressure does not spend that idle
+budget. Metadata reads retain their separate thirty-second budget. Cancellation,
+revocation, replacement, short/extra bytes and stalled cleanup/authentication
+are regressions in the existing route and transfer suites. Anonymous Shared
+Copy negotiates 1.18.0 for larger files, rechecks receipts and the full export,
+then imports privately and atomically. Portable JSON includes no access receipts.
+
 Conditional file sync prerequisites reuse `attachmentStore.annotateOwnedAttachment`
 and `managedPlacement.moveManagedContent`. Annotation 1.2.0 accepts optional
 `expectedUpdatedAt` and returns the committed timestamp; bulk 1.6.0 accepts it
@@ -561,3 +574,14 @@ negotiate those contracts and `api.auth-characters` 1.0.0. Both manifests derive
 versions from `apiEndpointDocs`. Run the route `sync.test.ts` suites,
 `characterProfileSync.test.ts`, capability coverage, and the opt-in native
 `characterProfileSync.browser.test.ts`; see [Characters](../characters.md).
+
+The combined storage contract publishes `api.things` 1.42.0 and
+`api.things-update` 1.13.0, retaining durable local-first deletion receipts, Vault
+membership safety and transactional attachment binding alongside intrinsic media
+containers. General compressor storage also uses `api.webpages-resolve` 1.8.0
+for separately editable children. The account transport requires the combined
+versions for retained deletion receipts and atomic attachment edits; tests reject
+the uncombined 1.41.0/1.12.0 contracts before mutation. `api.webpages-suites-install` 1.6.0 installs
+the upgraded media-tools definitions. Both manifest generators consume the
+canonical endpoint registry; media suite clients require the new minor before
+installation. No image-byte HTTP endpoint is introduced.

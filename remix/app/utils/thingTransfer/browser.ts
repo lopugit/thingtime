@@ -2,12 +2,14 @@ import { binaryBlob, type TransferBinary } from './binary';
 import { decodeTransferArchiveBlob, encodeTransferArchive, encodeTransferArchiveBlob, transferChecksum, type TransferBundle } from './archive';
 import { parseTransfer, serializeTransfer, transferAnnotations, TRANSFER_FORMAT, TRANSFER_LIMITS, TransferFormatError, validateTransfer } from './format';
 import type { TransferPlan } from './plan';
+import { withExportDeadline } from './exportDeadline';
+import { ORIGINAL_STREAM_POLICY } from './originalStreamPolicy';
 
 const ZIP_TEXT_PREFIX = 'thingtime:zip:v1:';
 export const MAX_CLIPBOARD_BYTES = 32 * 1024 * 1024;
 const invalid = (message: string): never => { throw new TransferFormatError(message); };
 
-export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string; signal?: AbortSignal; fetch?: typeof fetch } = {}): Promise<TransferBundle<Blob>> => {
+export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string; signal?: AbortSignal; fetch?: typeof fetch; originalStream?: boolean } = {}): Promise<TransferBundle<Blob>> => {
   options.signal?.throwIfAborted();
   const assertCurrent = typeof plan.assertCurrent === 'function' ? plan.assertCurrent : undefined;
   const readLocalFile = typeof plan.readLocalFile === 'function' ? plan.readLocalFile : undefined;
@@ -18,6 +20,7 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
       path: `files/${index.toString().padStart(6, '0')}`, sha256: '0'.repeat(64) })) })));
   await assertCurrent?.(options.signal);
   const files = new Map<string, Blob>();
+  const originalChecks: ((signal?: AbortSignal) => Promise<void>)[] = [];
   for (const [index, entry] of sources.entries()) {
     options.signal?.throwIfAborted();
     if (readLocalFile) {
@@ -49,10 +52,29 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
     const sourceId = entry.sourceId ?? entry.id;
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(sourceId)) invalid('Invalid file source');
     const query = new URLSearchParams({ id: sourceId, download: '1' });
-    if (entry.bytes <= 16 * 1024 * 1024) query.set('cache', 'bytes');
+    if (!options.originalStream && entry.bytes <= 16 * 1024 * 1024) query.set('cache', 'bytes');
     if (entry.sharedRoot) query.set('sharedRoot', entry.sharedRoot);
     if (options.key) query.set('key', options.key);
-    const response = await (options.fetch || fetch)(`/api/v1/attachments/content?${query}`, { signal: options.signal, credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer' });
+    const receipt = async (parent = options.signal) => withExportDeadline(async signal => {
+      const selected = new URLSearchParams(query); selected.set('cache', 'validate');
+      const response = await (options.fetch || fetch)(`/api/v1/attachments/content?${selected}`, { signal, credentials: 'same-origin', redirect: 'error', cache: 'no-store', referrerPolicy: 'no-referrer' });
+      if (!response.ok || response.redirected) invalid('The original file is no longer readable');
+      const value = await response.json();
+      signal.throwIfAborted();
+      if (value?.ok !== true || !/^[a-f0-9]{64}:original$/.test(value.cacheKey) || value.size !== entry.bytes) invalid('The original file receipt changed');
+      return { cacheKey: value.cacheKey as string, size: value.size as number };
+    }, parent);
+    const pinned = options.originalStream ? await receipt() : null;
+    const etag = pinned ? `"${pinned.cacheKey}:v1"` : null;
+    if (pinned) query.set('cache', 'original-bytes');
+    const streamSignal = pinned ? AbortSignal.any([...(options.signal ? [options.signal] : []), AbortSignal.timeout(ORIGINAL_STREAM_POLICY.totalMs)]) : options.signal;
+    const response = await (options.fetch || fetch)(`/api/v1/attachments/content?${query}`, { signal: streamSignal, credentials: 'same-origin', cache: 'no-store', referrerPolicy: 'no-referrer',
+      ...(etag ? { redirect: 'error', headers: { 'If-Match': etag } } : {}) });
+    if (pinned && (response.status !== 200 || response.redirected || response.headers.get('ETag') !== etag ||
+      response.headers.get('Content-Length') !== String(entry.bytes) ||
+      (response.headers.has('Content-Encoding') && response.headers.get('Content-Encoding') !== 'identity'))) {
+      await response.body?.cancel().catch(() => {}); invalid('The original stream does not match its receipt');
+    }
     if (!response.ok || !response.body) {
       await response.body?.cancel().catch(() => {});
       invalid('A file is no longer readable; no partial export was created');
@@ -61,12 +83,12 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
     const chunks: Blob[] = [];
     let size = 0;
     const cancel = () => { void reader.cancel().catch(() => {}); };
-    options.signal?.addEventListener('abort', cancel, { once: true });
+    streamSignal?.addEventListener('abort', cancel, { once: true });
     try {
       while (true) {
-        options.signal?.throwIfAborted();
+        streamSignal?.throwIfAborted();
         const part = await reader.read();
-        options.signal?.throwIfAborted();
+        streamSignal?.throwIfAborted();
         if (part.done) break;
         size += part.value.byteLength;
         if (size > entry.bytes || size > TRANSFER_LIMITS.fileBytes) invalid('A file grew beyond its export limit');
@@ -74,16 +96,29 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
       }
       if (size !== entry.bytes) invalid('A file changed size during export');
     } finally {
-      options.signal?.removeEventListener('abort', cancel);
+      streamSignal?.removeEventListener('abort', cancel);
       await reader.cancel().catch(() => {}); reader.releaseLock();
     }
     const bytes = new Blob(chunks);
+    if (pinned) {
+      const recheck = async (signal?: AbortSignal) => {
+        const checkSignal = signal ? AbortSignal.any([...(options.signal ? [options.signal] : []), signal]) : options.signal;
+        const current = await receipt(checkSignal); checkSignal?.throwIfAborted();
+        if (current.cacheKey !== pinned.cacheKey || current.size !== pinned.size) invalid('The original file changed during export');
+      };
+      await recheck(); originalChecks.push(recheck);
+    }
     manifest.files[index].sha256 = await transferChecksum(bytes, options.signal);
     files.set(entry.id, bytes);
   }
   options.signal?.throwIfAborted();
   await assertCurrent?.(options.signal);
-  return { manifest, files, ...(assertCurrent ? { assertCurrent } : {}) };
+  const recheck = async (signal?: AbortSignal) => {
+    const check = () => { options.signal?.throwIfAborted(); signal?.throwIfAborted(); };
+    check(); await assertCurrent?.(signal); check();
+    for (const verify of originalChecks) { check(); await verify(signal); check(); }
+  };
+  return { manifest, files, ...(assertCurrent || originalChecks.length ? { assertCurrent: recheck } : {}) };
 };
 
 export const transferClipboardText = async (bundle: TransferBundle<TransferBinary>, signal?: AbortSignal): Promise<string> => {

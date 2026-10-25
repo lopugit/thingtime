@@ -5,7 +5,63 @@ Thingtime application, separate from the stateless agent export sandbox in
 [no-login-draft-preview.md](no-login-draft-preview.md). The full local-first
 rollout is **not ready to merge** until the outstanding rows below are verified.
 
-## Current implementation and evidence — 2026-10-23
+## Current continuation — 2026-10-25
+
+The continuation starts from `5ab9283a19feca1a8328aa066ed037435032a9e8`
+and reconciles `origin/develop` at `f41cf65629fe98423405de4bea4e5894f59ccb46`.
+The earlier dated evidence below remains historical. See the [current evidence
+index](../artifacts/anonymous-local-first-2026-10-25/README.md) for verification
+status; implementation alone does not close the native or deployed gates.
+
+Ordinary browser Actions can now read, save, select and delete device themes
+and algorithms through their dedicated writers. They preserve independent
+History and account synchronization. Public/search operations and arbitrary
+managed endpoints remain outside this adapter. Account-backed profiles require
+Home; changing a selected data plane does not silently move their storage.
+
+Saved Actions can also annotate or remove standalone files through the existing
+leased library writers. Annotation preserves the canonical `updatedAt` response;
+local deletion retains normal child cleanup and refuses protected run history.
+Account metadata/deletion queues remain independent from the Action result.
+Bound, draft, expired and foreign files fail closed. Raw attachment bytes remain
+on the dedicated file-reader path: the HTTP Action interpreter accepts JSON and
+must not invent a binary response contract.
+
+Account instructions larger than the existing 96 KiB atomic request boundary
+remain editable and saved locally. Exact serialized UTF-8 preflight records a
+revision-specific refusal and stops guaranteed retries. A later edit resumes
+sync, while an uncertain earlier write is retained for receipt reconciliation.
+This improves local completion and failure handling; it does not add larger
+remote instruction transport.
+
+Shared Fork now makes a private local copy for an anonymous user through the
+normal validated importer. The selected origin's export capability is negotiated;
+the complete root/dependency/file closure is read without account credentials,
+reauthorized, then imported atomically with fresh legitimate IDs. A failure or
+source change leaves no partial copy. This never creates or publishes an
+account Thing. Signed-in behavior retains the existing account route. Larger originals use negotiated
+`api.attachment-content` 1.18.0 streams with exact receipt/length checks and
+fresh access checks before completion. Older origins refuse unsupported large
+copies before downloading. Existing format, quota and receiving limits remain.
+
+
+History can recover deleted device themes and algorithms through dedicated
+protected writers. The recovery preserves their local identity, design, title
+and surviving folder, restores private sharing, and leaves selection unchanged.
+It does not reopen generic protected-Thing mutation. Account deletion must have
+been acknowledged with no pending queue item or claim before recovery; an
+unsent local create/delete has no retained tombstone and is refused explicitly.
+
+The render-only MCP launcher runs the existing native renderer in a network-none
+container with bounded resources and no host credentials or writable host mount.
+An actual Codex CLI agent host now calls capabilities and render, receives embedded
+JSON/PNG resources and reports malformed input without artifacts. The documented
+extractor validates and saves those resources as downloadable files. This is
+separate from the passing SDK acceptance and from the original desktop chat,
+which has not reloaded its configured MCP tools. See the
+[actual host proof](../artifacts/anonymous-local-first-2026-10-25/cli-agent-host/verification.json).
+
+## Historical implementation and evidence — 2026-10-23
 
 This checkpoint continues remote `fd49b8d1e63d106ad20d67a77271aaa2a2e4bf4d`.
 Current `main` and feature refs were fetched and the newer main commits inspected;
@@ -5581,3 +5637,9 @@ skips; the runs overlap. It includes lost registration/deletion replies, reorder
 newer metadata edits, refusal, quota rollback, expired selections and identity/
 abort races. Four native mixed-import and direct-composer scenarios are prepared
 in linkedGallery.browser.test.ts; final-package native evidence remains pending.
+
+### 25 October capacity and cleanup acceptance
+
+The normal instruction editor preserves a 119,104-byte paragraph locally across an offline cold reload, keeps account content unchanged, sends no repeated request during a measured 65,008 ms interval, and resumes synchronization after a shorter edit. The existing 96 KiB account transport limit is unchanged. The first 390 px capture clipped one line behind the fixed header; the corrected all-lines-visible test still needs its final run. An earlier 12,000-line textarea case became unresponsive and remains an unverified performance limit. See the current [evidence boundaries](../artifacts/anonymous-local-first-2026-10-25/README.md).
+
+The real CLI agent retrieved native JSON/PNG artifacts. Its abrupt shutdown exposed missing Docker cleanup; a detached, ownership-checked guardian and independent runtime timeout now pass five focused regressions. Actual lifecycle acceptance is pending recovery of the dedicated Docker data disk (20 GiB, zero free bytes). No unrelated resources were pruned.

@@ -166,6 +166,41 @@ test('streamed file chunks become exact immutable Blobs with the same download a
   assert.deepEqual(new Uint8Array(await copied.files.get('file')!.arrayBuffer()), new Uint8Array([1, 2, 3, 4]));
 });
 
+test('negotiated original streams pin source receipts and recheck them before later export, including empty files', async () => {
+ for (const size of [0, 3]) {
+  const original = plan(); original.files = [{id: 'file', sourceId: 'source', sharedRoot: 'note', targetId: 'note', name: 'a.bin', mime: 'application/octet-stream', bytes: size}];
+  const modes: string[] = []; let key = 'a'.repeat(64);
+  const bundle = await bundleFromPlan(original, {originalStream: true, key: 'presented-only', fetch: async (input, init) => {
+   const url = new URL(String(input), 'https://fixture.invalid'), mode = url.searchParams.get('cache')!; modes.push(mode);
+   assert.equal(url.searchParams.get('id'), 'source'); assert.equal(url.searchParams.get('sharedRoot'), 'note'); assert.equal(url.searchParams.get('key'), 'presented-only');
+   assert.equal(init?.redirect, 'error'); assert.equal(init?.referrerPolicy, 'no-referrer');
+   if (mode === 'validate') return Response.json({ok: true, cacheKey: key + ':original', size});
+   assert.equal(mode, 'original-bytes'); assert.equal(new Headers(init?.headers).get('If-Match'), '"' + key + ':original:v1"');
+   return new Response(new Uint8Array(size), {headers: {ETag: '"' + key + ':original:v1"', 'Content-Length': String(size)}});
+  }});
+  assert.equal(bundle.files.get('file')!.size, size);
+  await bundle.assertCurrent!(); assert.deepEqual(modes, ['validate', 'original-bytes', 'validate', 'validate']);
+  assert.equal(JSON.stringify(bundle.manifest).includes('presented-only'), false); assert.equal(JSON.stringify(bundle.manifest).includes(key), false);
+  key = 'b'.repeat(64); await assert.rejects(bundle.assertCurrent!(), /changed during export/);
+ }
+});
+
+test('a new bundle recheck signal cancels receipt requests even when the fetch ignores cancellation', async () => {
+ const original = plan(); original.files = [{id: 'file', targetId: 'note', name: 'a.bin', mime: 'application/octet-stream', bytes: 1}];
+ let stalled = false, entered!: () => void;
+ const waiting = new Promise<void>(resolve => {entered = resolve;});
+ const bundle = await bundleFromPlan(original, {originalStream: true, fetch: async input => {
+  const url = new URL(String(input), 'https://fixture.invalid');
+  if (url.searchParams.get('cache') === 'validate') {
+   if (stalled) {entered(); await new Promise(() => {});}
+   return Response.json({ok: true, cacheKey: 'a'.repeat(64) + ':original', size: 1});
+  }
+  return new Response(new Uint8Array([1]), {headers: {ETag: '"' + 'a'.repeat(64) + ':original:v1"', 'Content-Length': '1'}});
+ }});
+ stalled = true; const controller = new AbortController(), pending = bundle.assertCurrent!(controller.signal);
+ await waiting; controller.abort(); await assert.rejects(pending, {name: 'AbortError'});
+});
+
 test('cancelling a stalled stream releases the reader without waiting for the server', async () => {
   const original = plan(); original.files = [{ id: 'file', targetId: 'note', name: 'a.bin', mime: 'application/octet-stream', bytes: 4 }];
   const controller = new AbortController(); let cancelled = false;

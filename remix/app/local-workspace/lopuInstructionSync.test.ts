@@ -51,3 +51,36 @@ test('anonymous and explicit-conflict workers do not schedule remote retries', a
   assert.equal(await syncLopuInstructionPass(account, transport, new AbortController().signal, () => {}), null); assert.equal(reads, 1);
  } finally { await db.close(); }
 });
+
+test('oversized revisions survive reopen without timer retries and an edited revision resumes sync', async t => {
+ const db = new WorkspaceDatabase(new IDBFactory()), service = new LocalLopuInstructions(db, scope, lease);
+ let reads = 0, writes = 0, passes = 0;
+ let personal = { revision: 'initial', instructions: [] as { id: string; text: string; enabled: boolean }[] };
+ const transport: InstructionTransport = { read: async () => { reads++; return { ...snapshot, personal: structuredClone(personal) }; }, write: async value => {
+  writes++; personal = { revision: 'saved', instructions: value.instructions }; return structuredClone(personal);
+ } };
+ const instructions = [{ id: 'large', text: '🌟'.repeat(30_000), enabled: true }];
+ await service.save({ revision: null, instructions });
+ t.mock.timers.enable({ apis: ['setTimeout'] });
+ const pump = createSyncPump(() => true, async () => { const next = await syncLopuInstructionPass(service, transport, new AbortController().signal, () => {}); passes++; return next; });
+ const finished = async (count: number) => { for (let i = 0; i < 100 && passes < count; i++) await new Promise<void>(r => setImmediate(r)); assert.equal(passes, count); };
+ try {
+  pump.wake(); t.mock.timers.tick(0); await finished(1);
+  const blocked = await service.read();
+  assert.deepEqual(blocked.personal.instructions, instructions); assert.equal(blocked.blocked?.revision, blocked.personal.revision);
+  assert.match(blocked.error!, /saved on this device.*96 KiB.*Shorten/); assert.equal(blocked.attempt, undefined);
+  assert.equal(writes, 0); assert.equal(reads, 1);
+  t.mock.timers.tick(180_000); await new Promise<void>(r => setImmediate(r)); assert.equal(passes, 1, 'no guaranteed-failure retry timer');
+  await db.close();
+  const reopened = new LocalLopuInstructions(db, scope, lease);
+  assert.deepEqual(await reopened.read(), blocked);
+  assert.equal(await syncLopuInstructionPass(reopened, transport, new AbortController().signal, () => {}), null);
+  assert.equal(reads, 1, 'a persisted block also suppresses focus/reopen requests');
+  await assert.rejects(reopened.save({ revision: 'stale', instructions: [{ id: 'small', text: 'Stale edit', enabled: true }] }), /another tab/);
+  assert.deepEqual((await reopened.read()).blocked, blocked.blocked, 'stale edits cannot clear the current block');
+  await reopened.save({ revision: blocked.personal.revision, instructions: [{ id: 'small', text: 'Fits', enabled: true }] });
+  assert.equal((await reopened.read()).blocked, undefined);
+  pump.wake(); t.mock.timers.tick(0); await finished(2);
+  assert.equal(writes, 1); assert.equal((await reopened.read()).pending, false); assert.equal((await reopened.read()).error, undefined);
+ } finally { pump.stop(); t.mock.timers.reset(); await db.close(); }
+});

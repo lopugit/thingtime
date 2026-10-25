@@ -28,6 +28,8 @@ import { localActionRequests, localActionRequestSupported } from './actionReques
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { LocalThings, localThingProjection, type LocalThing } from './things';
 import type { AccountThingSync } from './accountSync';
+import { AccountFileSync } from './accountFiles';
+import { isLocalAttachment, localAttachmentExpired } from './attachments';
 import { exportAccountThings } from './accountExport';
 import { bundleFromPlan } from '../utils/thingTransfer/browser';
 import { WorkspaceError, workspaceScopeKey, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope } from './storage';
@@ -76,6 +78,23 @@ export class LocalActions {
 			}
 		};
 	}
+	private fileActions(lease: WorkspaceLease) {
+		if (this.scope.kind === 'account') {
+			const files = new AccountFileSync(this.db, this.scope, lease);
+			return {
+				library: () => files.library(),
+				annotateFile: (input: Parameters<LocalThings['annotateFile']>[0]) => files.things.annotateLibraryFile(input),
+				remove: (id: string) => files.remove(id)
+			};
+		}
+		const things = new LocalThings(this.db, this.scope, lease);
+		return {
+			library: async () => ({ things: (await things.snapshot()).filter(row => isLocalAttachment(row) &&
+				['file', 'recording'].includes(row.localAttachment.purpose) && !row.targetId && !row.localAttachment.draftId && !row.localAttachment.expiresAt && !localAttachmentExpired(row)) }),
+			annotateFile: (input: Parameters<LocalThings['annotateFile']>[0]) => things.annotateLibraryFile(input),
+			remove: (id: string) => things.removeLibraryFile(id)
+		};
+	}
 	private assert() {
 		this.lease.assertCurrent();
 		if (this.scope.kind === 'account' && (!this.account || workspaceScopeKey(this.account.scope) !== workspaceScopeKey(this.scope))) fail('Account Actions require their matching sync adapter', 403);
@@ -119,7 +138,7 @@ export class LocalActions {
 			for (const step of program.steps) {
 				if (step.op === 'lookup' || (step.op === 'things.search' && ['public', 'system'].includes(String(step.scope)))) return false;
 				if (step.op === 'http.request') {
-					if (!localActionRequestSupported(step)) return false;
+					if (!localActionRequestSupported(step, this.scope)) return false;
 					if (step.path === '/api/v1/actions/run') {
 						const action = (step.body as any)?.action;
 						if (typeof action !== 'string' || action.startsWith('$') || !await visit(action)) return false;
@@ -283,7 +302,7 @@ export class LocalActions {
 					const target = await child.resolve(body.action);
 					if (target.crystal.runtime === 'browser') fail('Use actions.invoke for browser composition so its shared budgets are retained');
 					return child.run(body);
-				}, lease => this.store(lease))
+				}, lease => this.store(lease), lease => this.fileActions(lease))
 			});
 		} else {
 			let result: unknown = null,

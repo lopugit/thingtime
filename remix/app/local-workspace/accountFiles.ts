@@ -7,7 +7,7 @@ import { transferChecksum } from '../utils/thingTransfer/archive';
 import { compositionAttachmentIds } from '../api/utils/actions/compositionMediaCore';
 import { rewriteTransferMedia } from '../api/utils/things/transferMediaCore';
 import { LocalThings, type LocalThing } from './things';
-import { createLocalAttachment, isLocalAttachment, isLocalLinkedAttachment, isLocalMediaAttachment, localMediaInfo, localMediaExpired, localMediaOrder, publicAttachmentCrystal, type LocalAttachment, type LocalLinkedAttachment, type LocalMediaAttachment } from './attachments';
+import { createLocalAttachment, isLocalAttachment, isLocalLinkedAttachment, isLocalMediaAttachment, localMediaInfo, localMediaExpired, localAttachmentExpired, localMediaOrder, publicAttachmentCrystal, type LocalAttachment, type LocalLinkedAttachment, type LocalMediaAttachment } from './attachments';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { accountReadRefusals, forgetAccountConversation } from './accountReadRevocation';
 import { remapPostDraftAttachments } from '../drafts/postDraft';
@@ -532,7 +532,7 @@ export class AccountFileSync {
 			if (!row) throw new WorkspaceError('MISSING_UPLOAD', 'This workspace has no matching file.', 404);
 			if (row.cancelled || row.deleteRequested) return;
 			const local = await tx.get<LocalAttachment>('things', id);
-			if (!local || !isStandaloneAttachmentPurpose(row.request.purpose) || local.targetId || local.localAttachment.draftId)
+			if (!local || !isStandaloneAttachmentPurpose(row.request.purpose) || local.targetId || local.localAttachment.draftId || local.localAttachment.expiresAt || localAttachmentExpired(local, this.now()))
 				throw new WorkspaceError('BOUND_UPLOAD', 'Remove this file through its owning editor.', 409);
 			if (!row.remote) throw new WorkspaceError('UPLOAD_UNFINISHED', 'Cancel the unfinished upload instead.', 409);
 			await tx.delete('things', id);

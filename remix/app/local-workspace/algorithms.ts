@@ -1,3 +1,5 @@
+import { recoveredProtectedRow } from './protectedRecovery';
+import type { LocalVersionUpdateWriter } from './timelineVersions';
 import { applyEventsToWeights, emptyWeights, scorePost, topInterests, type PostFeatures } from '../api/utils/things/feedRanking';
 import {
 	normalizeAlgorithmName,
@@ -68,7 +70,7 @@ const project = (row: LocalThing) => ({
  * come from credential-free public feeds; account observations are bounded and
  * isolated by their authorized source plane, even though profiles live at home. */
 export class LocalAlgorithms {
-	private scope: WorkspaceScope;
+	readonly scope: WorkspaceScope;
 	private featureCollection: string;
 	constructor(private db: WorkspaceDatabase, private lease: WorkspaceLease, private options: LocalAlgorithmOptions = {}) {
 		this.scope = options.scope ?? { kind: 'anonymous' };
@@ -99,10 +101,7 @@ export class LocalAlgorithms {
 	}
 	/** History uses the dedicated profile writer, within the same transaction as
 	 * its authored event and optional account intent. Selection is untouched. */
-	async versionTransaction<T>(run: (writer: {
-		tx: WorkspaceTransaction;
-		update(input: { id: string; crystal: any; expectedUpdatedAt?: string }, capture: LocalMutationCapture): Promise<unknown>;
-	}) => Promise<T>, signal?: AbortSignal): Promise<T> {
+	async versionTransaction<T>(run: (writer: LocalVersionUpdateWriter) => Promise<T>, signal?: AbortSignal): Promise<T> {
 		const lease: WorkspaceLease = {
 			assertCurrent: () => { this.lease.assertCurrent(); signal?.throwIfAborted(); },
 			onInvalidate: callback => {
@@ -127,6 +126,14 @@ export class LocalAlgorithms {
 				const result = await this.save(tx, row, previous, capture);
 				lease.assertCurrent();
 				return result;
+			}, recover: async (input, id, capture) => {
+				lease.assertCurrent();
+				const row = await recoveredProtectedRow(tx, this.scope, id, input, 'feed-algorithm', new Date(this.now()).toISOString());
+				captures.set(id, capture);
+				await tx.put('things', id, row);
+				await this.options.onWrite?.(tx, row, null, capture);
+				lease.assertCurrent();
+				return project(row);
 			} });
 			return this.scope.kind === 'anonymous'
 				? captureThingChanges(tx, apply, (tx, changes) => recordLocalThingChanges(tx, changes, () => new Date(this.now()).toISOString(), this.options.uuid ?? (() => crypto.randomUUID()), captures))

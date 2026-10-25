@@ -41,7 +41,9 @@ test('emitted Web Platform routes prevent stale compiler reuse and keep document
 	assert.ok(routes.indexOf(media) < routes.findIndex(route => route.handle === 'filesystem'));
 	assert.match(mediaWorkerCsp, /connect-src 'none'/);
 	assert.match(mediaWorkerCsp, /worker-src 'none'/);
-	assert.ok(!mediaWorkerCsp.includes('unsafe-eval'));
+	assert.ok(!mediaWorkerCsp.includes("'unsafe-eval'"));
+	assert.match(mediaWorkerCsp, /script-src 'self' 'wasm-unsafe-eval'/);
+	assert.ok(!prodCsp.includes('wasm-unsafe-eval'));
 	const draft = routes.find(route => route.src === '^/draft-preview(?:/.*)?$');
 	assert.equal(draft.headers['Content-Security-Policy'], draftPreviewCsp);
 	assert.equal(draft.headers['Cache-Control'], 'no-store');

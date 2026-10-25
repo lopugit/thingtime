@@ -323,7 +323,8 @@ if (mcpLabHeadersIndex < cspHeadersIndex || mcpLabHeadersIndex > spaIndex) {
 for (const route of routes) {
 	const csp = route.headers?.['Content-Security-Policy'];
 	const isolatedSdk = route.src === '^/library/sdk\\.html$' && csp === librarySdkCsp;
-	if (typeof csp === 'string' && csp.includes('unsafe-eval') && csp !== designBundlesCsp && !isolatedSdk) {
+	if (typeof csp === 'string' && csp.includes('wasm-unsafe-eval') && !(route.src === '^/assets/mediaWorker-[A-Za-z0-9_-]+\\.js$' && csp === mediaWorkerCsp)) throw new Error('WebAssembly compilation permission must stay scoped to the fixed media worker.');
+	if (typeof csp === 'string' && getDirectiveSources(csp, 'script-src').includes("'unsafe-eval'") && csp !== designBundlesCsp && !isolatedSdk) {
 		throw new Error(`Vercel output CSP re-introduces 'unsafe-eval' outside isolated design/SDK documents (route ${route.src}).`);
 	}
 }

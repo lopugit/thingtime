@@ -1,3 +1,4 @@
+import { protectedRecoveryDocument } from './protectedRecovery';
 import { themeContentSnapshot, themeContentValue, THEME_CONTENT_ADAPTER } from '../timeline/themeContent';
 import { isTransferTheme } from '../utils/thingTransfer/theme';
 import type { LocalProtectedVersionWriter } from './timelineVersions';
@@ -8,6 +9,8 @@ import type { AccountThemeSync } from './accountThemes';
  * remain the current writer's intent, even when an old snapshot recorded them. */
 export function themeVersionWriter(themes: LocalThemes, account?: AccountThemeSync): LocalProtectedVersionWriter {
 	return {
+		scope: themes.scope,
+		recovery: { adapter: THEME_CONTENT_ADAPTER, read: (tx, id, snapshot) => protectedRecoveryDocument(tx, themes.scope, id, snapshot, 'theme') },
 		matches: isTransferTheme,
 		read: account ? async (tx, id) => (await account.viewIn(tx, id)) ?? undefined : undefined,
 		transaction: (run, signal) => themes.versionTransaction(run, signal),

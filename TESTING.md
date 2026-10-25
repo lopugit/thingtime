@@ -505,11 +505,25 @@ checks against existing personal data. Full feature coverage is tracked in
 - [ ] All local feature families, queue deletion/import/move semantics and
       multi-tab UI refresh require separate acceptance before rollout merge.
 
-## Reusable local video compression
+## Reusable local image and video compression
 
+- [ ] File selection is visible immediately on both the intrinsic page and a
+      previously saved Web Platform media program, without Run example. Change
+      settings after selecting a file; Start must use them without losing it.
+- [ ] Compress PNG/JPEG/TIFF/HEIC and animated GIF fixtures locally. Independently
+      decode outputs: compare dimensions, alpha, orientation, frames, delays and
+      loops, including optimized delta rectangles. Duplicate two compressor instances; each native file label must target its own input. JPEG transparency requires an explicit background. APNG, layered or
+      multi-page images, unsupported SVG and invalid files fail clearly.
+- [ ] Cancel while image codecs load and while encoding; stale jobs cannot
+      publish a preview/download. Asset loading fetches public same-origin WASM
+      only; selected bytes never enter a request. The worker still denies network.
+- [ ] In the actual Builder, edit nested heading text, a label, a numeric field,
+      a button and image preview independently; move/duplicate a control, save,
+      reload and verify the live compressor. Keep installed/deployed acceptance
+      separate from the isolated regression fixture.
 - [ ] Install `media-tools` as the intended account; inspect the returned owned
-      Page, Component and Action. An origin with suite capability 1.3.0 refuses
-      this install before mutation; 1.4.0 accepts it.
+      Page, Component and Action. An origin with suite capability below 1.7.0 refuses
+      this install before mutation; compatible 1.7.0 accepts it.
 - [ ] Run the isolated browser flow documented in README: actual WebCodecs
       conversion, MP4 H.264/AAC, WebM VP9/Opus and explicit audio removal. Compare
       downloaded bytes, codecs, dimensions, duration and tracks using ffprobe.
@@ -8687,6 +8701,25 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
+- [ ] Credential defaults: choose a catalog model and a saved ChatGPT connection
+      in Settings → Lopu; reload. Existing chats retain their override; new chats
+      use the device/account defaults. Another owner sees no previous choice.
+- [ ] In each composer gear, switch between two saved connections and Thingtime
+      credits. Compare the saved chat readback and actual provider receipt;
+      model/endpoint/billing labels match the selected connection. Revoked or
+      removed credentials never silently spend credits. Cold deep links and
+      background sends use the target conversation's choice.
+- [ ] Change a choice immediately before sending, refuse a save, queue rapid
+      selections and switch accounts while saving. Requests wait for saves;
+      a refusal cancels that send and stale responses cannot overwrite newer
+      choices or another account. Regression coverage: `test:lopu-ui`.
+- [ ] At desktop and 390px, scroll defaults and open chat settings top to bottom;
+      select credentials/models, reopen and reload. Edit nested label/control
+      blocks with Builder, save, reload and confirm credential actions still
+      work. Synthetic isolated fixture: `scripts/lopu-credentials.browser.html`
+      and `scripts/check-lopu-credentials-browser.cjs` (container-only).
+
+
 - [ ] GPT-6 Astra: choose provider-default, High and Max reasoning; only Low/Medium/High/Extra high/Max are offered, never None/Minimal/Ultra. On an authorized deployment, verify a plain reply and a harmless read-only tool round trip, keeping the selected model and effort. Native calls must use Responses with `store:false`; encrypted reasoning stays server-side and failed requests never retry with weaker reasoning. Reload to confirm saved model choices and terminal replies. Public catalogue 1.5.1 and reply 1.19.3 must agree in both manifests.
 
 - [ ] Action discovery: inspect an owned server/browser Action in Ask mode;
@@ -15299,7 +15332,8 @@ Local results do not establish current-head CI or deployed acceptance.
   dedicated writer. Verify conflicts, exact concurrent retries, stale previews
   after same-head hydration, identity retirement and atomic quota rollback.
   Current sharing, library title, placement, lineage and selection must survive.
-  Deleted protected kinds remain refused until a dedicated recovery path exists.
+  Deleted protected themes/algorithms use the dedicated recovery path added on
+  25 October; other protected kinds remain refused.
 - Test independent content and History queues through actual isolated API
   receipts. A content 503 must not acknowledge or prevent History, and History
   failure must not block a local content save. Download the canonical archive
@@ -15339,3 +15373,77 @@ Local results do not establish current-head CI or deployed acceptance.
   conflict and both explicit choices, plus guest read/write refusal. Preserve
   zero offline writes and page errors at 1440, 390 and 320px. Synthetic settings
   alone require no provider connection, mail synchronization or delivery.
+
+# Prebuilt-only Vercel deployments (2026-10-23)
+
+- The sync coalescing change-storm regression waits for the actual trailing read
+  with a bounded test timeout; it must not assume a busy runner schedules it
+  before a separate five-millisecond timer.
+
+- Run `node --test scripts/vercel-root-flow.test.mjs`: all source-build ignore
+  decisions skip, remote source compilation refuses, and symlinks survive
+  staging without replacing a known-good artifact after a failed build.
+- Run the protected controller's `deploy-vercel-prebuilt.test.mjs` and the
+  existing preview/extractor self-tests. Check production-source restrictions,
+  custom-environment matching, fork/stale-event rejection, exact deployment
+  identity, and absence of credentials in the GitHub build job.
+- Deploy a preview, the stable custom develop environment and production from
+  Actions. Verify each exact source SHA and target in Vercel, the GitHub runner
+  build log, prebuilt upload metadata, root/index/assets/API and the relevant
+  stable domains. Inspect the source-build controls and confirm no native Git
+  link or source deploy hook remains. A repeated unchanged request must skip
+  compilation. Keep production runtime charges distinct from build charges.
+
+
+## Combined local-first and media capability contracts
+
+- Run `test:api-capabilities` and `local-workspace/accountTransport.test.ts`.
+  Both manifests publish Things 1.42.0 and update 1.13.0 while keeping transfer
+  export 1.17.0/import 1.13.0. Retained parent deletion must refuse media-only
+  Things 1.41.0; atomic attachment edits must refuse update 1.12.0 before any
+  mutation. Compatible retries keep the original conditional payload.
+
+## Anonymous/local-first continuation — 25 October 2026
+
+- Invoke saved browser profile Actions anonymously and in account Home. Verify
+  dedicated content/selection queues and immutable History, JSON-safe outputs
+  and saved run history; unsupported public/shared/custom-plane steps must
+  refuse before any earlier program effect. Test cancellation and quota rollback.
+- Use the actual Shared Copy button without a session. Check credential-free
+  selected-origin export, required dependencies and bytes, full reauthorization
+  after download, fresh IDs, independent Builder editing and cold offline reload.
+  Refuse revoked/changed sources, redirects, partial media and stale leases with
+  no partial import. Keep the existing large shared-stream limitation explicit.
+- Recover deleted themes and algorithms through normal History review controls.
+  Verify same identity, private content, surviving folder/title, preserved
+  deletion history, unchanged selection, retry/redo and atomic rollback. Account
+  recovery requires acknowledged home deletion and no outstanding claim/write;
+  occupied IDs, different kinds/scopes and unacknowledged deletions must refuse.
+- Run the render-only Docker stdio wrapper with the exact built renderer. Check
+  only capabilities/render are exposed, no account paths leak, input failures
+  return no artifacts, native JSON/PNG hashes and dimensions are correct, and
+  EOF/error/signal/deadline cleanup removes only its owned container/volume.
+  SDK checks are separate from an actual host tool call and downloadable files.
+- Build with copied dotenv files excluded and a sanitized environment. Workflow
+  discovery must include authored workflow/step entry points and exclude
+  generated preview bundles. Verify the built server capability manifest.
+
+- Resize History while a protected-deletion recovery comparison is open. Wait for
+  the active desktop aside or mobile dialog to remount, reopen its comparison,
+  and complete recovery at 1440/390/320px; do not accept an outgoing hidden editor
+  as evidence that the current viewport exposes the controls.
+- Negotiate attachment-content 1.18.0 and copy a shared original larger than
+  16 MiB through the normal anonymous Fork control. Verify exact private local
+  bytes after a cold offline reload; revoked/replaced/truncated sources and
+  caller cancellation must leave no partial import.
+
+- Local attachment Actions: annotate a standalone anonymous and account file,
+  verify the canonical `updatedAt`, and remove it while remote sync is unavailable.
+  Confirm child cleanup, independent account metadata/deletion queues, no anonymous
+  transport, and atomic refusal for bound/draft/expired/foreign files or protected
+  run history. Binary attachment-content HTTP Actions remain explicitly unsupported.
+- Oversized account instructions: save Unicode/escaped JSON above the 96 KiB
+  atomic request boundary through Settings; retain exact content after offline
+  reload, show the account-size explanation and make no repeated requests. Shorten
+  and save to resume account sync. Reconcile an earlier lost reply before refusing
+  newer oversized content; retain uncertain legacy attempts without replay loops.

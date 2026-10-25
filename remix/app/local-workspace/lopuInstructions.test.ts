@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
-import { LocalLopuInstructions, type InstructionTransport } from './lopuInstructions';
+import { instructionSyncBlocked, LocalLopuInstructions, type InstructionTransport } from './lopuInstructions';
 import { WorkspaceDatabase, type WorkspaceScope } from './storage';
 
 const account: WorkspaceScope = { kind: 'account', origin: 'https://instructions.test', ownerId: 'alice', dataPlane: 'selected' };
@@ -109,5 +109,50 @@ test('invalid instruction input cannot replace saved content', async () => {
   const saved = await f.service.save({ revision: null, instructions: rows('Kept') });
   await assert.rejects(async () => f.service.save({ revision: saved.personal.revision, instructions: [{ id: 'x', text: '', enabled: true }] }), /needs text/);
   assert.deepEqual((await f.service.read()).personal, saved.personal);
+ } finally { await f.close(); }
+});
+
+test('an uncertain earlier write reconciles before a newer oversized revision is blocked', async () => {
+ const f = fixture(), remote = server([]);
+ try {
+  await f.service.sync(remote.transport, signal());
+  const first = await f.service.save({ revision: (await f.service.read()).personal.revision, instructions: rows('Sent before the new edit') });
+  let entered!: () => void, release!: () => void;
+  const started = new Promise<void>(r => { entered = r; }), held = new Promise<void>(r => { release = r; });
+  const uncertain: InstructionTransport = { ...remote.transport, write: async (value, sig) => { await remote.transport.write(value, sig); entered(); await held; throw Error('Lost reply'); } };
+  const running = f.service.sync(uncertain, signal()); await started;
+  const huge = rows('x'.repeat(100_000));
+  await f.service.save({ revision: first.personal.revision, instructions: huge }); release(); await running;
+  assert.ok((await f.service.read()).attempt);
+  await f.service.sync(remote.transport, signal());
+  const reconciled = await f.service.read();
+  assert.equal(remote.writes, 1); assert.equal(reconciled.attempt, undefined); assert.equal(reconciled.blocked, undefined); assert.equal(reconciled.pending, true);
+  await f.service.sync(remote.transport, signal());
+  const blocked = await f.service.read();
+  assert.equal(remote.writes, 1); assert.equal(blocked.blocked?.revision, blocked.personal.revision); assert.deepEqual(blocked.personal.instructions, huge);
+  assert.equal(remote.personal.instructions[0].text, 'Sent before the new edit');
+ } finally { await f.close(); }
+});
+
+test('a pre-existing oversized uncertain attempt is retained until a later account read proves completion', async () => {
+ const f = fixture(), remote = server([]);
+ try {
+  await f.service.sync(remote.transport, signal());
+  const text = 'x'.repeat(100_000), local = await f.service.save({ revision: (await f.service.read()).personal.revision, instructions: rows(text) });
+  // Reopen state written by a previous client after freezing its request but
+  // before it could durably identify the remote outcome.
+  const attempt = { personal: local.personal, revision: remote.personal.revision };
+  await f.db.transaction({ ...account, dataPlane: 'home' }, 'readwrite', f.lease, tx => tx.put('lopu-instructions', 'personal', { ...local, attempt }));
+  await f.service.sync(remote.transport, signal());
+  let state = await f.service.read();
+  assert.deepEqual(state.attempt, attempt); assert.equal(instructionSyncBlocked(state), true); assert.equal(remote.writes, 0);
+  state = await f.service.save({ revision: state.personal.revision, instructions: rows('Newer small edit') });
+  assert.deepEqual(state.attempt, attempt); assert.equal(instructionSyncBlocked(state), true, 'editing cannot discard an older uncertain attempt');
+  remote.change(text);
+  await f.service.sync(remote.transport, signal());
+  state = await f.service.read();
+  assert.equal(state.attempt, undefined); assert.equal(state.blocked, undefined); assert.equal(state.pending, true); assert.equal(remote.writes, 0);
+  await f.service.sync(remote.transport, signal());
+  assert.equal(remote.personal.instructions[0].text, 'Newer small edit'); assert.equal(remote.writes, 1);
  } finally { await f.close(); }
 });

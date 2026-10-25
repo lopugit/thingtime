@@ -1,0 +1,10 @@
+{
+  "error": "TimeoutError: page.goto: Timeout 30000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:18724/settings/lopu#lopu-instructions\", waiting until \"networkidle\"\n",
+  "phase": "account setup and prior instruction regressions",
+  "checks": [],
+  "errors": [],
+  "offlineWrites": [],
+  "instructionRequests": [],
+  "writes": 0,
+  "body": "🦄\ninstructions-e9e2653f\n🌈\n🦄\nSettings\nAccount\nCharacters\nEmail\nProfile\nThings\nAppearance\nNotifications\nSecurity\nConnections\nLopu\nAI waterfalls\nLopu 🦄\nYour Thingtime assistant: the floating bubble, how its chat window sits, whether its builder edits paint live, its voice, and the model it thinks with.\nLopu prompt\nShared guidance and your personal instructions.\n\nLopu · Instructions\n\nSave custom instructions in this workspace. Signed-in accounts sync independently; account replies use them after sync completes. Task-specific guidance and tool permissions also apply. Canned messages do not use an AI prompt.\n\nView base prompt\n\nYour custom instructions\n\nTick the instructions you want Lopu to use, then save. Unticked instructions stay in your list.\n\nNo custom instructions yet.\n\nAdd instruction\n\nDevice instructions are available. Account settings have not been checked.\n\nSave instructions\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 9ms\n\nMongoDB: connected (2ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nINSTRUCTIONS-E9E2653F\n\nProfile\n\nLog out\n\n✉️ email unverified\n\n🦄"
+}

@@ -1,3 +1,4 @@
+import { recoveredProtectedRow } from './protectedRecovery';
 import { captureThingChanges } from './thingChanges';
 import { recordLocalThingChanges, type LocalMutationCapture } from './timeline';
 import { normalizeSavedTheme } from '../theme/savedTheme';
@@ -33,7 +34,7 @@ const project = (row: LocalThing) => ({
 
 /** Dedicated theme writer. Generic Thing mutations still reject protected kinds. */
 export class LocalThemes {
-	private scope: WorkspaceScope;
+	readonly scope: WorkspaceScope;
 	constructor(private db: WorkspaceDatabase, private lease: WorkspaceLease, private options: LocalThemeOptions = {}) {
 		this.scope = options.scope ?? { kind: 'anonymous' };
 	}
@@ -110,6 +111,15 @@ export class LocalThemes {
 							{ id: input.id, name: input.crystal.name, theme: input.crystal.theme, expectedUpdatedAt: input.expectedUpdatedAt },
 							capture
 						);
+					},
+					recover: async (input, id, capture) => {
+						const row = await recoveredProtectedRow(tx, this.scope, id, input, 'theme', new Date(this.options.now?.() ?? Date.now()).toISOString());
+						const normalized = normalizeSavedTheme({ name: row.crystal.name, theme: row.crystal.theme });
+						if (!normalized.ok) throw new WorkspaceError('INVALID_THEME', normalized.error, normalized.status);
+						captures.set(id, capture);
+						await tx.put('things', id, row);
+						await this.options.onWrite?.(tx, row, null, { visibility: 'private' }, capture);
+						return { ok: true, theme: project(row) };
 					}
 				}),
 			captures,

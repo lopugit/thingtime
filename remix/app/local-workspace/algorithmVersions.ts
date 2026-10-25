@@ -1,3 +1,4 @@
+import { protectedRecoveryDocument } from './protectedRecovery';
 import { ALGORITHM_CONTENT_ADAPTER, algorithmContentSnapshot, algorithmContentValue } from '../timeline/algorithmContent';
 import type { VersionContentAdapter } from '../timeline/versionPlan';
 import { isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
@@ -28,6 +29,8 @@ export function algorithmVersionContent(doc: LocalThing): VersionContentAdapter 
 
 export function algorithmVersionWriter(algorithms: LocalAlgorithms, account = false): LocalProtectedVersionWriter {
 	return {
+		scope: algorithms.scope,
+		recovery: { adapter: ALGORITHM_CONTENT_ADAPTER, read: (tx, id, snapshot) => protectedRecoveryDocument(tx, algorithms.scope, id, snapshot, 'feed-algorithm') },
 		matches: isTransferAlgorithm,
 		content: algorithmVersionContent,
 		transaction: (run, signal) => algorithms.versionTransaction(run, signal),

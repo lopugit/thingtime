@@ -1,0 +1,63 @@
+{
+  "hostBoundary": "Actual ephemeral Codex CLI agent host; current desktop chat tool reload remains unverified",
+  "executableVersion": "0.163.0-alpha.11.1",
+  "requestedModel": "gpt-6-luna",
+  "requestedReasoningEffort": "low",
+  "observedCalls": [
+    {
+      "id": "item_1",
+      "server": "thingtime-drafts",
+      "tool": "thingtime_capabilities",
+      "status": "completed",
+      "error": null
+    },
+    {
+      "id": "item_2",
+      "server": "thingtime-drafts",
+      "tool": "thingtime_render_and_export",
+      "status": "completed",
+      "error": null
+    },
+    {
+      "id": "item_3",
+      "server": "thingtime-drafts",
+      "tool": "thingtime_render_and_export",
+      "status": "failed",
+      "error": null
+    }
+  ],
+  "invalidRequestRejectedWithoutArtifacts": true,
+  "completion": {
+    "code": 0,
+    "signal": null
+  },
+  "deadlineExceeded": false,
+  "usage": {
+    "input_tokens": 205400,
+    "cached_input_tokens": 160256,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 656,
+    "reasoning_output_tokens": 0
+  },
+  "dependencyVersions": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7",
+    "playwright": "1.61.1",
+    "body-parser": "2.4.0",
+    "fast-uri": "3.1.9",
+    "hono": "4.13.14",
+    "ip-address": "10.7.5",
+    "proxy-addr": "2.0.8",
+    "qs": "6.16.1"
+  },
+  "lockfileSha256": "fead51cde3bcfa2c48515c3fbe3899ab48d46937d2f690abf72acbde320f6fdd",
+  "rendererHash": "7e4153b5178a1c831556b48eda5cd8100688e5418b768fe74a271b73cf658bc8",
+  "canonicalHash": "a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c",
+  "privateRawCaptureRetainedOutsideRepository": true,
+  "observedCapabilities": {
+    "accountAccess": false,
+    "persistence": false,
+    "renderExport": "thingtime_render_and_export"
+  },
+  "runtimeImage": "sha256:5c17ff3d0158b726b014ea37d18286ed6bf9187db9f650ff51e17b35f4a315be"
+}

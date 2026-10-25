@@ -4,6 +4,14 @@ import { localThingProjection, LocalThings, type ThingWrite } from './things';
 import { WorkspaceError, workspaceScopeKey, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { searchLocalThings } from './structuredSearch';
 import { localPostProjection, localTargetIndex } from './posts';
+import { localProfileRequestSupported, localProfileRequest } from './actionProfileRequests';
+import type { LocalThing } from './things';
+
+type LocalFileActions = {
+	library(): Promise<{ things: LocalThing[] }>;
+	annotateFile(input: { id: string; title?: string | null; description?: string | null; filenamePreview?: string | null }): Promise<LocalThing>;
+	remove(id: string): Promise<unknown>;
+};
 
 const refuse = (message: string): never => {
 	throw new WorkspaceError('LOCAL_ACTION_REQUEST', message, 409);
@@ -42,7 +50,12 @@ const localBulkSupported = (step: Record<string, unknown>) => {
 		&& capabilitySatisfies('1.6.0', String(step.minimumVersion)) && onlyFields(step.query, [])
 		&& onlyFields(body, ['op', 'ids', 'folderId']) && ['move', 'copy', 'delete'].includes(String(body?.op));
 };
-export const localActionRequestSupported = (step: Record<string, unknown>) => {
+export const localActionRequestSupported = (step: Record<string, unknown>, scope?: WorkspaceScope) => {
+	if (localProfileRequestSupported(step, scope)) return true;
+	if (step.path === '/api/v1/attachments/annotate' && step.method === 'POST' && step.feature === 'api.attachment-annotate' && capabilitySatisfies('1.2.0', String(step.minimumVersion)))
+		return onlyFields(step.query, []) && onlyFields(step.body, ['id', 'title', 'description', 'filenamePreview']) && typeof (step.body as Record<string, unknown> | undefined)?.id === 'string';
+	if (step.path === '/api/v1/attachments/delete' && step.method === 'POST' && step.feature === 'api.attachment-delete' && capabilitySatisfies('1.8.0', String(step.minimumVersion)))
+		return onlyFields(step.query, []) && onlyFields(step.body, ['id']) && typeof (step.body as Record<string, unknown> | undefined)?.id === 'string';
 	if (localSearchSupported(step) || localBulkSupported(step)) return true;
 	if (step.path === '/api/v1/actions/run' && step.method === 'POST' && step.feature === 'api.actions-run' && capabilitySatisfies('1.10.0', String(step.minimumVersion)))
 		return onlyFields(step.query, []) && onlyFields(step.body, ['action', 'inputs', 'source']);
@@ -65,7 +78,7 @@ export function localActionRequests(
 	store?: (lease: WorkspaceLease) => Pick<LocalThings, 'get' | 'list' | 'snapshot' | 'create' | 'update' | 'move' | 'import'> & {
 		remove(ids: string[]): Promise<unknown>;
 		export: (...args: Parameters<LocalThings['export']>) => Promise<Awaited<ReturnType<LocalThings['export']>> & { assertCurrentInTransaction?: (tx: WorkspaceTransaction) => Promise<void> }>;
-	}
+	}, fileActions?: (lease: WorkspaceLease) => LocalFileActions
 ): BrowserActionHost['request'] {
 	return async (step, actor, signal) => {
 		const active: WorkspaceLease = {
@@ -86,9 +99,34 @@ export function localActionRequests(
 		};
 		active.assertCurrent();
 		const things = store ? store(active) : new LocalThings(db, scope, active);
+		const files = fileActions?.(active);
 		const query = object(step.query || {});
 		let result: unknown;
-		if (localSearchSupported(step)) {
+		if (localProfileRequestSupported(step, scope)) {
+			// Match the endpoint's JSON projection. Dedicated account view models
+			// include absent optional fields; retaining undefined would break the
+			// browser interpreter's lossless run-history snapshot.
+			result = JSON.parse(JSON.stringify(await localProfileRequest(db, scope, active, step)));
+		} else if (step.path === '/api/v1/attachments/annotate' && step.method === 'POST' && step.feature === 'api.attachment-annotate' && capabilitySatisfies('1.2.0', String(step.minimumVersion))) {
+			fields(query, []);
+			if (!files) refuse('This local workspace has no dedicated attachment editor');
+			const body = object(step.body); fields(body, ['id', 'title', 'description', 'filenamePreview']);
+			const fileId = id(body.id);
+			const library = await files.library();
+			if (!library.things.some(row => row.id === fileId)) refuse('File is not in this workspace library');
+			const { id: _id, ...patch } = body;
+			const row = await files.annotateFile({ id: fileId, ...patch } as Parameters<LocalFileActions['annotateFile']>[0]);
+			result = { ok: true, attachment: { id: row.id, ...row.crystal }, updatedAt: row.updatedAt };
+		} else if (step.path === '/api/v1/attachments/delete' && step.method === 'POST' && step.feature === 'api.attachment-delete' && capabilitySatisfies('1.8.0', String(step.minimumVersion))) {
+			fields(query, []);
+			if (!files) refuse('This local workspace has no dedicated attachment remover');
+			const body = object(step.body); fields(body, ['id']);
+			const fileId = id(body.id);
+			const library = await files.library();
+			if (!library.things.some(row => row.id === fileId)) refuse('File is not in this workspace library');
+			const outcome = await files.remove(fileId);
+			result = scope.kind === 'account' ? { ok: true, local: true, queued: true } : { ok: true, local: true, deleted: true, outcome };
+		} else if (localSearchSupported(step)) {
 			const { scope: _scope, ...search } = object(step.body);
 			const all = await things.snapshot();
 			active.assertCurrent();

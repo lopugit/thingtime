@@ -315,6 +315,14 @@ export class LocalThings {
 	 * annotation patch. Bytes, purpose, placement and device bookkeeping are
 	 * untouched; the file's immutable original name stays the download name. */
 	async annotateFile(input: { id: string; title?: string | null; description?: string | null; filenamePreview?: string | null }) {
+		return this.annotateFileWithPolicy(input, false);
+	}
+	/** Action-facing library edit: revalidate standalone placement and expiry in
+	 * the same transaction that applies metadata and queues account sync. */
+	async annotateLibraryFile(input: { id: string; title?: string | null; description?: string | null; filenamePreview?: string | null }) {
+		return this.annotateFileWithPolicy(input, true);
+	}
+	private async annotateFileWithPolicy(input: { id: string; title?: string | null; description?: string | null; filenamePreview?: string | null }, standaloneOnly: boolean) {
 		this.lease.assertCurrent();
 		if (this.scope.kind !== 'anonymous' && !this.onFileWrite) fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
 		if (Object.keys(input).some(key => !['id','title','description','filenamePreview'].includes(key))) fail('INVALID_ATTACHMENT', 'Unsupported file annotation fields');
@@ -331,11 +339,26 @@ export class LocalThings {
 		return this.transaction('readwrite', async tx => {
 			const previous = await tx.get<LocalThing>('things', input.id);
 			if (!previous || !isLocalMediaAttachment(previous) || localMediaExpired(previous, Date.parse(this.now()))) return fail('MISSING_LOCAL_FILE', 'File is not stored in this workspace', 404);
+			if (standaloneOnly && (!isLocalAttachment(previous) || !isStandaloneAttachmentPurpose(previous.localAttachment.purpose) || previous.targetId || previous.localAttachment.draftId || previous.localAttachment.expiresAt || localAttachmentExpired(previous, Date.parse(this.now()))))
+				return fail('FILE_NOT_IN_LIBRARY', 'Only an available standalone library file can be edited', 409);
 			const annotated = applyAttachmentAnnotationPatch(previous.crystal, patch);
 			if (annotated.ok === false) return fail('INVALID_ATTACHMENT', annotated.error);
 			const row = { ...previous, crystal: { ...annotated.crystal },
 				updatedAt: new Date(Math.max(Date.parse(this.now()), Date.parse(previous.updatedAt) + 1)).toISOString(), revision: previous.revision + 1 };
 			await tx.put('things', row.id, row); await this.onFileWrite?.(tx, row, previous); return row;
+		});
+	}
+	/** Anonymous Action-facing file removal. Account removals must use
+	 * AccountFileSync.remove so the remote deletion intent and recovery record
+	 * are committed together. */
+	async removeLibraryFile(id: string) {
+		this.lease.assertCurrent();
+		if (this.scope.kind !== 'anonymous') fail('LOCAL_OPERATION_UNAVAILABLE', 'Account files require their dedicated sync adapter');
+		return this.transaction('readwrite', async tx => {
+			const row = await tx.get<LocalThing>('things', id);
+			if (!row || !isLocalAttachment(row) || !isStandaloneAttachmentPurpose(row.localAttachment.purpose) || row.targetId || row.localAttachment.draftId || localAttachmentExpired(row, Date.parse(this.now())) || row.localAttachment.expiresAt)
+				return fail('FILE_NOT_IN_LIBRARY', 'Only an available standalone library file can be removed', 409);
+			return this.removeInTransaction(tx, [id], false, true);
 		});
 	}
 	async readFileBlob(id: string, signal?: AbortSignal) {
@@ -419,7 +442,9 @@ export class LocalThings {
 	async remove(ids: string[], recursive = false) {
 		if (Array.isArray(ids) && ids.includes(LOCAL_TIMELINE_FOLDER)) fail('MANAGED_KIND', 'Timeline is managed by History.');
 		if (!Array.isArray(ids) || !ids.length) fail('INVALID_IDS', 'Choose Things from this workspace');
-		return this.transaction('readwrite', async tx => {
+		return this.transaction('readwrite', tx => this.removeInTransaction(tx, ids, recursive));
+	}
+	private async removeInTransaction(tx: WorkspaceTransaction, ids: string[], recursive: boolean, protectRunHistory = false) {
 			const all = await tx.list<LocalThing>('things'); const selected = new Set(ids);
 			for (const id of selected) {
  const row = all.find(row => row.id === id)?.value;
@@ -430,6 +455,7 @@ export class LocalThings {
 			while (changed) {
 				changed = false;
 				for (const { value: row } of all) if (!selected.has(row.id) && ((recursive && row.folderId && selected.has(row.folderId)) || (row.targetId && selected.has(row.targetId)))) {
+					if (protectRunHistory && row.thingtime.includes('action-run') && row.targetId && selected.has(row.targetId)) fail('MANAGED_KIND', 'A file with protected run history cannot be removed through this adapter');
 					if (!recursive && !((isLocalMediaAttachment(row) || isLocalActivity(row) || row.thingtime.includes('comment')) && row.targetId && selected.has(row.targetId))) fail('HAS_CHILDREN', 'This Thing has children. Choose recursive deletion to remove them.');
 					selected.add(row.id); changed = true;
 				}
@@ -451,7 +477,6 @@ export class LocalThings {
 			}
 
 			return { ok: true, deleted: [...selected] };
-		});
 	}
 	async move(ids: string[], folderId: string | null) {
 		if (Array.isArray(ids) && ids.includes(LOCAL_TIMELINE_FOLDER)) fail('MANAGED_KIND', 'Timeline is managed by History.');
