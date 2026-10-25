@@ -29,11 +29,17 @@ struct DestinationNavigationFence {
     }
 }
 
+struct AuthenticatorSetupDelivery {
+    let id = UUID()
+    let url: URL
+}
+
 struct WebView: UIViewRepresentable {
     private static let nativeMessageHandlerName = "thingtimeNative"
 
     let url: URL
     @Binding var widgetPath: String?
+    @Binding var authenticatorSetup: AuthenticatorSetupDelivery?
     var destinationRequestID = UUID()
     var onDestinationResult: (URL, UUID, URL, Bool) -> Void = { _, _, _, _ in }
 
@@ -61,6 +67,8 @@ struct WebView: UIViewRepresentable {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
         configuration.userContentController.addUserScript(Self.bridgeUserScript)
+        configuration.userContentController.addUserScript(AuthenticatorSetupBridge.script)
+        configuration.userContentController.add(context.coordinator, name: AuthenticatorSetupBridge.handler)
         configuration.userContentController.addUserScript(MobileDeviceBridge.script)
         configuration.userContentController.addUserScript(MobileFolderBridge.script)
         configuration.userContentController.addUserScript(FileExportBridge.script)
@@ -68,6 +76,7 @@ struct WebView: UIViewRepresentable {
 
         let webView = ThingtimeWKWebView(frame: .zero, configuration: configuration)
         context.coordinator.webView = webView
+        context.coordinator.authenticatorSetup.configure(webView: webView, origin: url)
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
@@ -90,9 +99,10 @@ struct WebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         let rootChanged = context.coordinator.loadedRootURL != url
+        if rootChanged { context.coordinator.authenticatorSetup.cancel() }
         // Consume a pending widget request even when it cannot resolve, so a stale
         // value cannot suppress the teardown for a later destination change.
-        let widgetTarget = widgetPath.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }
+        var widgetTarget = widgetPath.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }
         if widgetPath != nil { DispatchQueue.main.async { widgetPath = nil } }
         let passwordBridge = context.coordinator.passwordBridge
         let outcome = context.coordinator.destinationNavigation.prepare(
@@ -103,6 +113,15 @@ struct WebView: UIViewRepresentable {
             return
         }
         guard outcome != .blocked else { return }
+        if let delivery = authenticatorSetup, let loaded = context.coordinator.loadedRootURL {
+            context.coordinator.authenticatorSetup.configure(webView: webView, origin: loaded)
+            context.coordinator.authenticatorSetup.offer(delivery.url, deliveryID: delivery.id)
+            // A second setup must not reload the current editor and discard its
+            // unsaved draft. Cold/non-editor intake navigates without a seed URL.
+            if webView.url?.path != "/passwords" { widgetTarget = loaded.appendingPathComponent("passwords") }
+            DispatchQueue.main.async { if authenticatorSetup?.id == delivery.id { authenticatorSetup = nil } }
+        }
+
         guard rootChanged || widgetTarget != nil else {
             reportDestinationResult(context.coordinator, succeeded: true)
             return
@@ -136,6 +155,7 @@ struct WebView: UIViewRepresentable {
         private let lopuVoice = LopuVoiceSessionController()
         private let lopuChats = LopuChatActivityController()
         let passwordBridge = PasswordBridge()
+        let authenticatorSetup = AuthenticatorSetupBridge()
 
         func resetChatActivity() { lopuChats.reset() }
         private var pendingVoiceStart = UUID()
@@ -161,6 +181,7 @@ struct WebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            authenticatorSetup.navigationStarted()
             mobileDevice.suspend()
             mobileFolders.suspend()
             fileExports.suspend()
@@ -200,6 +221,7 @@ struct WebView: UIViewRepresentable {
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == AuthenticatorSetupBridge.handler { authenticatorSetup.handle(message); return }
             guard message.name == WebView.nativeMessageHandlerName else { return }
             guard let body = message.body as? [String: Any], let type = body["type"] as? String else {
                 sendToWeb(type: "native-ack", payload: ["received": jsonCompatibleValue(message.body)])

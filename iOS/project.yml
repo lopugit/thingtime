@@ -42,6 +42,7 @@ targets:
     platform: iOS
     sources:
       - path: Thingtime
+      - path: ../apple/Passwords/Host/AuthenticatorSetupBridge.swift
       - path: ../apple/Shared
       - path: ../apple/Widgets
       - path: Shared
@@ -54,6 +55,9 @@ targets:
         ThingtimeWidgetGroup: $(THINGTIME_WIDGET_GROUP)
         CFBundleURLTypes:
           - CFBundleURLSchemes: [thingtime]
+          - CFBundleURLName: com.thingtime.authenticator
+            CFBundleTypeRole: Editor
+            CFBundleURLSchemes: [otpauth]
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
         ThingtimePasswordKeychainGroup: $(THINGTIME_PASSWORD_KEYCHAIN_GROUP)
         NSFaceIDUsageDescription: Thingtime verifies you before filling saved passwords or using a passkey.

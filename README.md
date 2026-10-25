@@ -46,6 +46,26 @@ wrappers unreadable; do not generate a new key on each deploy. The server-assist
 recovery model is documented above. No provider developer accounts are required
 for storing passwords or importing TOTP setup codes.
 
+Native verification-code setup uses the `otpauth` scheme declared in the iOS and
+macOS password-host XcodeGen specs. Regenerate each project after changing the
+spec; keep the generated Info.plist scheme declarations with that change. Forks
+must configure `ThingtimeWebURL` to their own canonical HTTPS origin, provision
+the host's Keychain group and deploy the matching web editor. The companion
+opens `/passwords` in a nonpersistent WKWebView and requires normal sign-in. It
+reads only the existing native connection's destination/owner metadata; it never
+imports that connection's credential into the browser. A locked or malformed
+native destination fails closed rather than switching to the build's default.
+When there is no native connection, the explicit build origin is used.
+
+The web editor and host negotiate a separate `authenticatorSetupVersion` 1.0.0
+contract and existing `api.passwords` 1.2.0 or later in major 1. Setup is restricted
+to the home data plane. No new server endpoints, developer-service credentials
+or additional device-token grants are required. Incoming codes stay in memory
+for up to ten minutes, including during normal login, and require a deliberate
+entry choice and Save. Only TOTP `otpauth` links are registered; HOTP, authenticator
+migration and passkey pairing QR payloads are unsupported. Real OS menu/QR and
+signed-device acceptance must be checked after installing a verified release.
+
 For native AutoFill, register your app and credential-provider extension bundle
 identifiers in your Apple Developer team, enable **AutoFill Credential Provider**
 for the containing app and extension, and provision the same Keychain access

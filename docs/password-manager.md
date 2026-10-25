@@ -36,6 +36,52 @@ editing and desktop/mobile page scrolling. The clipboard device boundary was
 synthetic; real clipboard delivery, installed/native and production acceptance
 remain separate gates.
 
+## Native verification-code setup
+
+The iOS host and the separate macOS Thingtime Passwords companion register
+`otpauth` for TOTP setup. AutoFill's `ProvidesOneTimeCodes` capability fills saved
+codes; URL registration and an actual intake handler provide the separate
+system **Set Up Codes In** path. Migration and HOTP schemes are not registered.
+Apple describes scheme registration in its [default-app updates](https://developer.apple.com/documentation/updates/defaultapps).
+
+The shared parser rejects duplicate/unknown query options, invalid Base32
+padding/residual bits, unsupported parameters and non-TOTP payloads. A native
+memory-only inbox retains one setup for at most ten minutes. Another incoming
+setup cannot replace it, and warm delivery does not reload an existing editor.
+Unbound input survives normal login navigation; navigation after owner/document
+binding cancels it. No setup value enters a navigation URL, generic bridge log,
+clipboard, persisted layout, Timeline or restoration state.
+
+The companion uses `WKWebsiteDataStore.nonPersistent()` and normal sign-in.
+The configured linked origin and owner constrain that sign-in, but its stored
+native credential is never injected into the new browser. Missing native
+metadata uses the build's explicit HTTPS origin; locked/unreadable metadata
+never silently selects a different origin. Pending input remains in memory while
+the destination is unavailable and is retried when the app becomes active.
+
+The separate `window.thingtimeAuthenticatorSetup` version 1.0.0 surface supports
+`ready`, `consume` and `cancel`; native events are `available`, `setup`, `status`
+and `unavailable` (plus request-scoped `expired`). This narrow companion does not advertise the unrelated
+connect/sync bridge. Intake requires the exact configured HTTPS origin,
+main-frame `/passwords` without query/fragment, a fresh immutable document nonce,
+an editor nonce, the home data plane and a server-verified current owner. The
+host reads the existing paginated metadata GET using only that WK session's
+HttpOnly cookie, rejects redirects and negotiates `api.passwords` >=1.2.0 in
+major 1. It rechecks the cookie after verification. The setup URI is delivered
+only after an explicit create/attach choice, using WebKit arguments targeted at
+the captured frame. Execution-time origin/path/document/editor-scope guards
+prevent delayed delivery into a new page or account.
+
+The separate `password-authenticator-setup` settings document exposes the notice
+for accounts that already customized their password layout, without replacing
+those saved blocks. The existing individually editable PasswordManager notice, buttons and masked
+field controls hold the resulting draft in component memory. Existing drafts
+remain unchanged until explicitly selected; Save uses the existing owner and
+revision guards. Account/data-plane changes, logout, cancellation, expiry and
+navigation retire pending native authority. Full signed macOS/iOS menu, Safari
+QR handoff, sign-in and real saved-code acceptance remain separate from unit,
+JavaScript-model and unsigned build checks.
+
 ## Storage and access
 
 `api.passwords` 1.2.1 uses the home data plane. GET returns 50 metadata records
@@ -169,7 +215,13 @@ that signed OS registration or a third-party login ceremony works. iOS provider
 ceremonies require a physical device; the simulator is a compile/UI check.
 Record actual OS/device results separately in the delivery PR.
 
-Screen-capture QA can use a synthetic canvas video stream in a disposable test page to exercise the real decoder and cleanup paths without sharing a desktop. This verifies video processing, cancellation, and stopped tracks, but does not substitute for OS picker/permission validation. Closing the editor aborts its pending scan; a stream returned by a late browser picker is immediately stopped.
+QR uploads have no application-imposed byte or pixel limit. The decoder scans
+progressively larger overlapping image sections using a bounded working canvas,
+so small codes remain readable in large screenshots. Browser image-decoding and
+device resources still determine which files can be opened. Closing the editor
+aborts scanning and releases its bitmap.
+
+Screen-capture QA can use a synthetic canvas video stream in a disposable test page to exercise the real decoder and cleanup paths without sharing a desktop. This verifies video processing, cancellation, and stopped tracks, but does not substitute for OS picker/permission validation. Sharing stops as soon as one immutable frame is captured, before decoding. Closing the editor aborts its pending scan; a stream or bitmap returned by a late browser operation is immediately released.
 
 For file lifecycle QA, register three disposable accounts through `/api/v1/register`
 in an isolated localhost deployment, then configure the first username in

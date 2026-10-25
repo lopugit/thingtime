@@ -10153,6 +10153,27 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] In both signed native hosts, confirm Thingtime is selectable under **Set Up
+  Codes In**, then open a disposable TOTP QR/link cold and warm. Normal sign-in
+  returns to Passwords, create/attach requires a choice, and only Save persists.
+- [ ] An existing draft survives a second incoming setup; pending native setup
+  is not replaced. Cancel and reopen work without restarting the editor. Check
+  independently editable setup heading, helper, account caption and each button
+  in Builder, then save/reload without storing a setup value in the layout.
+- [ ] Reject HOTP, migration, malformed/duplicate options and noncanonical Base32
+  padding/residual bits. Exercise wrong owner, iframe, wrong origin/port/path,
+  local/custom/unknown data planes, logout and destination/account changes.
+  Delay delivery across navigation and a same-document account switch; no raw
+  setup event reaches the new document or account, even without a UI listener.
+- [ ] A locked native destination retains input in memory and fails closed;
+  unlock/reactivate retries the same destination. A new companion uses normal
+  sign-in in a nonpersistent store and never imports provider credentials.
+  Verify cancellation/ten-minute expiry, no secret logs/URLs/clipboard/history,
+  no automatic save, and that stored layouts contain no private control values.
+- [ ] Scroll the incoming notice, entry list and opened editor top to bottom at
+  desktop and mobile widths. Long destination/account labels wrap; focus and
+  create/attach/cancel states remain usable with keyboard and touch.
+
 - [x] Native test-target compilation (2026-10-25): regenerate with XcodeGen and
   run `build-for-testing` for the iOS Simulator, including password provider,
   Watch and widget targets. Shared tests must not compile macOS-only `Process`
@@ -13061,3 +13082,16 @@ separate from deterministic discovery/lease tests.
   the public test seed `JBSWY3DPEHPK3PXP`. The runner uses a task-owned clean
   Chromium profile, retains its sandbox, and proves network isolation before
   testing. Real Apple provider/chooser acceptance remains separate.
+
+- QR image capacity regression (2026-10-26): upload a valid PNG larger than
+  12 MiB with more than 20 megapixels and a small off-centre synthetic TOTP code.
+  The image must decode without a file/pixel rejection; overlapping scans must
+  reach original resolution while keeping each working canvas bounded. Close
+  the editor during scanning and during a pending bitmap creation: release late
+  bitmaps, clear pixels, preserve the existing draft and stop a captured screen
+  stream before decoding its immutable frame. Repeat the real OS chooser check
+  separately; a synthetic stream is not permission/picker acceptance.
+  Queue cancellation between an immediately resolved resource and the caller's
+  continuation: upload/screen bitmaps must close exactly once, and immediate or
+  late chooser streams must stop exactly once. A video-construction failure
+  after acquiring a stream must also stop sharing.

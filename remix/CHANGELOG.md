@@ -104,6 +104,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Remove QR upload byte/pixel rejection caps; scan large images in
+  cancellable overlapping sections and stop screen sharing before decoding.
+  See [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+  **Codex (AI)**
+
+- 2026-10-26: Add native TOTP setup intake and a separate authenticated,
+  memory-only editor handoff. The macOS password companion uses normal sign-in
+  in an ephemeral web view; editable create/attach/cancel controls preserve
+  drafts and require Save. The signed macOS companion appears in Set Up Codes
+  In; live setup, fill and physical iPhone acceptance remain pending.
+  [PR #996 details](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md). **Codex (AI)**
+
 - 2026-10-26 — **Codex (AI)**: Add individually editable password-field Copy
   controls with masked copying, current-code TOTP handling, fixed feedback and
   scope cancellation. Passkey signing fields exclude Copy. Password suite:

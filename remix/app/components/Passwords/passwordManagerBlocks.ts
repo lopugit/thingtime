@@ -18,6 +18,16 @@ const select = (id: string, name: string, operation: string, value: string, chil
 
 /** Live field values are hydrated into transient DOM controls only. This
  * document contains editable ordinary templates and display bindings. */
+export const passwordAuthenticatorSetupBlocks: WebpageBlock[] = [el('password-authenticator-setup', 'section', '', { 'aria-label': 'Authenticator setup' }, [
+    when('password-setup-pending', 'passwords.setupPending', [el('password-setup-notice', 'section', '', { role: 'region', 'aria-label': 'Incoming authenticator setup' }, [
+      text('password-setup-heading', 'Authenticator setup received', 'h2'),
+      text('password-setup-help', 'Choose an entry below or create a new one. Your existing draft stays unchanged until you choose Add to current draft. Review the account before saving.'),
+      text('password-setup-account', '{passwords.setupAccount}'),
+      el('password-setup-actions', 'div', '', {}, [button('password-setup-create', 'Create new entry', 'setup.create', '{passwords.setupCannotCreate}'), button('password-setup-attach', 'Add to current draft', 'setup.attach', '{passwords.setupCannotAttach}'), button('password-setup-cancel', 'Cancel setup', 'setup.cancel', false)], row)
+    ], card)]),
+    when('password-setup-message-visible', 'passwords.setupMessage', [text('password-setup-message', '{passwords.setupMessage}', 'p', { role: 'status' }), button('password-setup-retry', 'Retry setup', 'setup.retry')]),
+], { ...stack, 'max-width': '1100px', margin: '0 auto', padding: '24px 16px 0', 'box-sizing': 'border-box', width: '100%' })];
+
 export const passwordManagerBlocks: WebpageBlock[] = [el('password-manager', 'section', '', { 'aria-label': 'Password manager' }, [
   el('password-heading-row', 'div', '', {}, [
     el('password-heading-copy', 'div', '', {}, [text('password-heading', 'Passwords', 'h1'), text('password-session-caption', 'Unlocked with your Thingtime session')], stack),

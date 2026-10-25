@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { passwordManagerBlocks, passwordSignInBlocks } from './passwordManagerBlocks';
+import { passwordAuthenticatorSetupBlocks, passwordManagerBlocks, passwordSignInBlocks } from './passwordManagerBlocks';
 import { passwordEntryDisplay } from './passwordEntryDisplay';
 import { settingsDocumentBlocks } from '../Settings/settingsDocument';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 const walk = (blocks: WebpageBlock[]): WebpageBlock[] => blocks.flatMap(block => [block, ...walk(block.children || [])]);
 test('password layouts retain independently editable controls and repeated field/card templates', () => {
-  for (const blocks of [passwordManagerBlocks, passwordSignInBlocks]) {
+  for (const blocks of [passwordAuthenticatorSetupBlocks, passwordManagerBlocks, passwordSignInBlocks]) {
     const saved = settingsDocumentBlocks(blocks);
     assert.deepEqual(settingsDocumentBlocks(saved), saved);
     const nodes = walk(saved);
@@ -62,4 +62,15 @@ test('Copy projection distinguishes verification codes and excludes passkey sign
   assert.equal(display.fields[1].copyLabel, 'Copy verification code');
   assert.ok(!JSON.stringify(display).includes('PRIVATE_'));
   assert.ok(passwordEntryDisplay({ ...entry, passwordType: 'passkey' }).fields.every(field => !field.copyable));
+});
+
+test('incoming native setup controls are individually editable and bind no secret payload', () => {
+  const saved = settingsDocumentBlocks(passwordAuthenticatorSetupBlocks), nodes = walk(saved);
+  for (const id of ['password-setup-heading', 'password-setup-help', 'password-setup-account', 'password-setup-create', 'password-setup-attach', 'password-setup-cancel', 'password-setup-message']) assert.ok(nodes.some(node => node.id === id));
+  for (const operation of ['setup.create', 'setup.attach', 'setup.cancel']) {
+    const button = nodes.find(node => (node.props?.['data-tt-action-inputs'] as any)?.operation === operation)!;
+    assert.equal(button.tag, 'button'); assert.deepEqual(button.props?.['data-tt-action-inputs'], { operation, id: '{item.id}' });
+    assert.ok(button.children?.some(child => child.tag === 'span'));
+  }
+  assert.ok(!JSON.stringify(saved).includes('otpauth://'));
 });

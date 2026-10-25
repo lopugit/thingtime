@@ -5,7 +5,80 @@ Branch: `codex/password-manager` (base `develop`)
 
 ## Release split
 
-The web vault was merged into main at `998bdb83c` by [PR #997](https://github.com/lopugit/thingtime/pull/997). This branch incorporates that web base and retains the Apple providers, native packaging and signing setup. It is open for review. Historical October 2026 local evidence below recorded a signed installation; this cloud reconciliation has no Swift/Xcode or current signed-device acceptance. Actual OS fill/passkey ceremonies remain acceptance gates. The evidence below includes the shared web prerequisite.
+The web vault was merged into main at `998bdb83c` by [PR #997](https://github.com/lopugit/thingtime/pull/997). This branch incorporates that web base and retains the Apple providers, native packaging and signing setup. It is open for review. The 26 October local continuation ran Xcode checks and updated the signed macOS companion; the earlier cloud-only checkpoints remain historical evidence. Actual OS fill/passkey ceremonies remain acceptance gates. The evidence below includes the shared web prerequisite.
+
+## Native TOTP setup intake — 26 October 2026
+
+The installed provider was enabled for AutoFill but absent from **Set Up Codes
+In**. The native hosts now declare only the implemented `otpauth` scheme and
+route received TOTP setup into an owner/document-bound, memory-only inbox.
+HOTP, migration and pairing payloads are rejected. Shared validation checks
+query uniqueness, parameters, Base32 padding and residual bits.
+
+The separate macOS companion hosts the existing editable password editor in a
+nonpersistent WKWebView with normal sign-in; its native provider connection
+supplies destination/owner metadata only. Locked metadata fails closed and input
+is retained until retry/expiry. The host never imports native credentials into
+that web session. No Electron changes or new server endpoints are included.
+
+Main-frame, exact origin/path, home data-plane, server owner and cookie checks
+precede explicit consumption. Captured WebKit frames plus execution-time
+immutable document/editor-scope checks fence delayed callbacks. Setup remains
+outside URLs, generic Action/bridge logs and persisted layouts. The notice and
+create/attach/cancel controls are individual Builder blocks. Warm intake preserves
+an existing draft, and only the existing revision-aware Save writes an entry.
+
+Validation and signed installation/OS acceptance are recorded separately below;
+unsigned builds and model tests alone do not establish system-menu, QR, native
+login or real-provider acceptance.
+
+Final local checkpoint: ten synthetic native XCTest cases passed under denied
+network, and 76 password-suite tests passed with zero skips after the QR follow-up.
+The actual injected
+native JavaScript is executed in model tests for delayed navigation, changed
+owner/document and persistence refusal. Both unsigned macOS companion and full
+iOS Simulator builds passed. Fourteen isolated Chromium acceptance groups passed,
+including setup creation/attachment/cancel/expiry, no automatic save, cold login,
+unconfigured-vault recovery, independent Builder save/reload and 1440px/390px
+full-page scrolling. The container had no external network, mounts or published
+ports and retained Chromium's sandbox. Full typecheck still reports unrelated
+existing errors; changed password/setup/bridge files had no diagnostics. Lint has
+zero errors and two existing hook-dependency warnings. The canonical production
+web build and Vercel output verification passed.
+
+The canonical companion archive/export passed with the existing Developer ID
+identity. Both host and extension preserved their installed designated
+requirements, bundle IDs, shared Keychain groups and AutoFill entitlements;
+secure timestamps and strict signatures verified. Only the companion was
+installed, with a recoverable backup. Its running executable is the installed
+copy. AutoFill remained enabled, and after reopening System Settings,
+**Thingtime Passwords appeared in Set Up Codes In**. The existing default was
+unchanged. The main Electron app was not replaced. Normal companion sign-in,
+real setup-to-save, native fill/passkey ceremonies and physical iPhone acceptance
+remain pending; the companion currently shows the deployed production login UI.
+
+## QR upload capacity and capture cleanup — 26 October 2026
+
+Removed the remaining 12 MiB upload and 20 megapixel rejection caps. Progressive
+overlapping scans reach original resolution with a bounded working canvas and
+yield for cancellation between scans. Browser/device decoding capacity remains a
+natural constraint. Screen capture stops after taking one immutable frame,
+before scanning, and late bitmaps are closed when the editor cancels.
+
+The real decoder and editable password UI accepted a valid 24-megapixel PNG over
+14 MiB containing a small off-centre synthetic TOTP code. The fourteen browser
+groups passed after this change; eight QR image unit tests verify cancellation,
+bounded pixel memory, stopped capture and late-bitmap cleanup. The final review
+caught an abort between promise callbacks that could orphan a bitmap or stream;
+four new regressions failed before the ownership fix and passed afterward.
+Real OS chooser
+acceptance remains pending: the browser tool rejected opening the local synthetic
+fixture and explicitly prohibited indirect/alternate-surface workarounds.
+
+The final documentation semantic refresh encountered repeated hollow responses
+from the configured local LLM proxy and was stopped without publishing partial
+semantic state. The structural snapshot/report/HTML refresh is retained as the
+fallback; documentation semantic freshness is not claimed.
 
 ## Password Copy controls — 26 October 2026
 

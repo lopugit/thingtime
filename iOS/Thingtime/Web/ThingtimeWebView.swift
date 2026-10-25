@@ -22,6 +22,7 @@ struct ThingtimeWebView: View {
     @AppStorage(StorageKey.hasExplicitDestinationSelection) private var hasExplicitDestinationSelection = false
 
     @Environment(\.scenePhase) private var scenePhase
+    @State private var authenticatorSetup: AuthenticatorSetupDelivery?
     @State private var widgetPath: String?
     @State private var widgetSettingsOpen = false
     @State private var deploymentGroups: [ThingtimeWebDestination.DeploymentGroup] = []
@@ -74,6 +75,7 @@ struct ThingtimeWebView: View {
                 WebView(
                     url: selectedDestination.url,
                     widgetPath: $widgetPath,
+                    authenticatorSetup: $authenticatorSetup,
                     destinationRequestID: destinationRequestID,
                     onDestinationResult: destinationResult
                 )
@@ -118,7 +120,13 @@ struct ThingtimeWebView: View {
                     }
                 }
             }
-            .onOpenURL { url in widgetPath = WidgetRoute.path(for: url) }
+            .onOpenURL { url in
+                if ["otpauth", "otpauth-migration"].contains(url.scheme?.lowercased() ?? "") {
+                    // Validation and warm-delivery conflict handling live in the
+                    // native inbox. Never reinterpret setup data as a route.
+                    authenticatorSetup = AuthenticatorSetupDelivery(url: url)
+                } else { widgetPath = WidgetRoute.path(for: url) }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .thingtimeWidgetAction)) { _ in receiveWidgetAction() }
             .onChange(of: scenePhase) { _, phase in if phase == .active { receiveWidgetAction() } }
             .onAppear { prepareDestinationState(); receiveWidgetAction() }

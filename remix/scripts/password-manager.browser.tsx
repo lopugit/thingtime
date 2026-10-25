@@ -10,6 +10,9 @@ import { newPasswordFile } from '../app/passwords/fileCrypto';
 import type { PasswordEntry } from '../app/passwords/model';
 Object.defineProperty(window, 'SharedWorker', { value: undefined });
 Object.defineProperty(navigator, 'onLine', { get: () => true });
+const fixtureQuery = new URL(location.href).searchParams;
+history.replaceState(null, '', '/passwords' + location.search);
+let signedIn = true, vaultConfigured = fixtureQuery.get('vaultConfigured') !== '0';
 const owner = 'synthetic-password-owner', entryId = '11111111-1111-4111-8111-111111111111', archiveId = '22222222-2222-4222-8222-222222222222';
 const initial: PasswordEntry = {
   title: 'Synthetic login', passwordType: 'login', tags: ['fixture-private-tag'], importArchiveId: archiveId,
@@ -63,7 +66,7 @@ window.fetch = async (input, init) => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     if (body && body.expectedOwnerId !== owner) return response({ ok: false, error: 'Account changed' }, 409);
     const result = (rest: object) => response({ ok: true, ownerId: owner, ...rest });
-    if (!body) return result({ configured: true, entries: Array.from(entries).map(metadata).filter(item => item.title.toLowerCase().includes((url.searchParams.get('q') || '').toLowerCase())), nextCursor: null });
+    if (!body) return result({ configured: vaultConfigured, entries: Array.from(entries).map(metadata).filter(item => item.title.toLowerCase().includes((url.searchParams.get('q') || '').toLowerCase())), nextCursor: null });
     operations.push(body.operation);
     if (body.operation === pausedOperation) { pausedOperation = null; await new Promise<void>(resolve => { pendingRelease = resolve; }); pendingRelease = null; init?.signal?.throwIfAborted(); }
     if (body.operation === 'read') { const saved = entries.get(body.id); return result({ id: body.id, ...saved }); }
@@ -80,15 +83,37 @@ window.fetch = async (input, init) => {
 Object.assign(window, { thingtimeDesktop: { passwordsVersion: '1.0.0', passwordProvider: async ({ action, ownerId }: { action: string; ownerId: string }) => {
   if (ownerId !== owner) throw Error('Synthetic native owner mismatch'); nativeOperations.push(action); return { ok: true, message: `Synthetic AutoFill ${action} completed.` };
 } } });
+// Native transport simulation only. Real owner/URL/nonce verification is
+// separately tested in the native adapter and the actual injected JS model.
+let setupPending: { id: string; value: string } | null = null;
+let setupScope: Record<string, string> | null = null;
+const setupMessage = (detail: Record<string, unknown>) => window.dispatchEvent(new CustomEvent('thingtime:authenticator-setup', { detail: { nonce: setupScope?.nonce, ownerId: owner, ...detail } }));
+const announceSetup = () => { if (setupScope && signedIn) {
+  if (!vaultConfigured) setupMessage({ kind: 'unavailable' });
+  else if (setupPending) setupMessage({ kind: 'available', requestId: setupPending.id });
+} };
+Object.assign(window, { thingtimeAuthenticatorSetup: { version: '1.0.0', postMessage: (message: Record<string, string>) => {
+  if (message.operation === 'ready') { setupScope = message; queueMicrotask(announceSetup); }
+  if (message.operation === 'cancel') { setupPending = null; setupScope = null; }
+  if (message.operation === 'consume' && signedIn && vaultConfigured && message.ownerId === owner && message.dataPlane === 'home' && setupPending?.id === message.requestId) {
+    const pending = setupPending; setupPending = null; setupMessage({ kind: 'setup', requestId: pending.id, setup: pending.value });
+  }
+} } });
 Object.defineProperty(navigator, 'mediaDevices', { value: { getDisplayMedia: async () => { throw new DOMException('Synthetic screen chooser cancelled', 'NotAllowedError'); } } });
 function Fixture() {
   const [thingtime, setThingtime] = React.useState({ settings: {} });
   return <ThingtimeContext.Provider value={{ Everything: { thingtime, setThingtime, loading: false } } as any}><PasswordManager /></ThingtimeContext.Provider>;
 }
-const router = createMemoryRouter([{ id: 'root', path: '*', loader: () => ({ user: { id: owner, username: 'synthetic', temporary: false, privateUploadsEnabled: true }, dataPlane: 'home' }), Component: Fixture }]);
+const router = createMemoryRouter([{ id: 'root', path: '*', loader: () => ({ user: signedIn ? { id: owner, username: 'synthetic', temporary: false, privateUploadsEnabled: true } : null, dataPlane: 'home' }), Component: Fixture }]);
 createRoot(document.getElementById('root')!).render(<ChakraProvider><RouterProvider router={router} /></ChakraProvider>);
 Object.assign(window, { passwordFixture: {
   qrFixtureUrl,
+  offerSetup: () => { if (setupPending) return false; setupPending = { id: crypto.randomUUID(), value: `otpauth://totp/Synthetic:setup?secret=${'A'.repeat(32)}` }; if (setupScope) announceSetup(); else window.dispatchEvent(new Event('thingtime:authenticator-setup-ready')); return true; },
+  setupPending: () => Boolean(setupPending),
+  expireSetup: () => { const id = setupPending?.id; setupPending = null; if (id) setupMessage({ kind: 'expired', requestId: id }); return id; },
+  emitExpired: (id: string) => setupMessage({ kind: 'expired', requestId: id }),
+  setSignedIn: (value: boolean) => { signedIn = value; router.revalidate(); },
+  setVaultConfigured: (value: boolean) => { vaultConfigured = value; router.revalidate(); window.dispatchEvent(new Event('thingtime:authenticator-setup-ready')); },
   clipboardValue: () => copiedValue,
   rejectClipboard: (value: boolean) => { clipboardReject = value; },
   pauseClipboard: () => { clipboardPause = true; },
@@ -102,7 +127,7 @@ Object.assign(window, { passwordFixture: {
   layouts: () => JSON.parse(localStorage.getItem(layoutKey) || '{}'),
   hasPrivateLayoutValues: () => {
     const stored = JSON.stringify(JSON.parse(localStorage.getItem(layoutKey) || '{}'));
-    const privateValues = ['fixture-user@example.test', 'fixture-password-value', 'fixture-old-password', 'fixture-private-note', 'fixture-source-secret', 'fixture-vault-secret', 'fixture-account-private', 'fixture-private-tag', 'JBSWY3DPEHPK3PXP', ...Array.from(files.values()).flat().flatMap(file => [file.metadata.key, file.metadata.nonce])];
+    const privateValues = ['A'.repeat(32), 'fixture-user@example.test', 'fixture-password-value', 'fixture-old-password', 'fixture-private-note', 'fixture-source-secret', 'fixture-vault-secret', 'fixture-account-private', 'fixture-private-tag', 'JBSWY3DPEHPK3PXP', ...Array.from(files.values()).flat().flatMap(file => [file.metadata.key, file.metadata.nonce])];
     return privateValues.some(value => stored.includes(value));
   }
 } });

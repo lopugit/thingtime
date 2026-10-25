@@ -11,7 +11,7 @@ import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { TransientBlockHost, type TransientBlockActions } from '../Builder/TransientBlockHost';
 import { TransientPrivateControls } from '../Builder/TransientPrivateControls';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
-import { passwordManagerBlocks, passwordSignInBlocks } from './passwordManagerBlocks';
+import { passwordAuthenticatorSetupBlocks, passwordManagerBlocks, passwordSignInBlocks } from './passwordManagerBlocks';
 import { passwordEntryDisplay } from './passwordEntryDisplay';
 import { totpCode } from '~/passwords/totp';
 import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
@@ -22,15 +22,16 @@ import { passwordRequest } from '~/passwords/client';
 import { previewPasswordFile, visitPasswordFile, passwordImportErrorMessage, exportPasswordBackup, type PasswordFormat, type PasswordImportPreview } from '~/passwords/transfer';
 import { scanQrFile, scanQrScreen } from '~/passwords/qr.client';
 import { hasNativePasswordProvider, nativePasswordProvider } from '~/passwords/native.client';
+import { AuthenticatorSetupSession, supportsAuthenticatorSetup, type SetupNotice } from '~/passwords/authenticatorSetup.client';
 
 type Draft = { id: string; revision: number; entry: PasswordEntry };
 const changed = () => window.dispatchEvent(new Event('thingtime:passwords-changed'));
 export function PasswordManager() {
   const user = useCurrentUser(), location = useLocation(), plane = useDataPlane();
   const scopeKey = `${user?.id || 'guest'}:${plane || ''}:${typeof window === 'undefined' ? '' : window.location.origin}:${location.key}`;
-  return <Box width="100%" pt="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))">{user && !user.temporary ? <PasswordManagerScope key={scopeKey} ownerId={user.id} scopeKey={scopeKey} /> : <SettingsDocumentHost documentKey="password-sign-in" defaultDocument={passwordSignInBlocks} scopeKey={scopeKey} title="Password sign-in layout">{({ blocks, chrome, editing }) => <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />}</SettingsDocumentHost>}</Box>;
+  return <Box width="100%" pt="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))">{user && !user.temporary ? <PasswordManagerScope key={scopeKey} ownerId={user.id} scopeKey={scopeKey} dataPlane={plane} accountLabel={user.username || user.displayName || user.email || "Signed-in account"} /> : <SettingsDocumentHost documentKey="password-sign-in" defaultDocument={passwordSignInBlocks} scopeKey={scopeKey} title="Password sign-in layout">{({ blocks, chrome, editing }) => <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />}</SettingsDocumentHost>}</Box>;
 }
-function PasswordManagerScope({ ownerId, scopeKey }: { ownerId: string; scopeKey: string }) {
+function PasswordManagerScope({ ownerId, scopeKey, dataPlane, accountLabel }: { ownerId: string; scopeKey: string; dataPlane: string | null; accountLabel: string }) {
   const lopu = useLopu();
   const [records, setRecords] = React.useState<PasswordMetadata[]>([]), [cursor, setCursor] = React.useState<string | null>(null);
   const [configured, setConfigured] = React.useState<boolean | null>(null), [busy, setBusy] = React.useState(false), [error, setError] = React.useState('');
@@ -47,6 +48,24 @@ function PasswordManagerScope({ ownerId, scopeKey }: { ownerId: string; scopeKey
   const [copyFeedback, setCopyFeedback] = React.useState<Record<string, string>>({});
   const copyEpoch = React.useRef(0), copyCleanup = React.useRef<(() => void) | null>(null);
   const currentDraft = React.useRef(draft); currentDraft.current = draft;
+  const [setupNotice, setSetupNotice] = React.useState<SetupNotice | null>(null);
+  const [setupMessage, setSetupMessage] = React.useState('');
+  const [setupShown, setSetupShown] = React.useState(false);
+  const setupSession = React.useRef<AuthenticatorSetupSession | null>(null);
+  React.useEffect(() => {
+    let current = true;
+    const bridge = window.thingtimeAuthenticatorSetup;
+    if (!supportsAuthenticatorSetup(bridge) || window.location.pathname !== '/passwords') return;
+    if (dataPlane !== 'home') { setSetupShown(true); setSetupMessage('Switch to the home data plane to receive native setup codes.'); return; }
+    const session = new AuthenticatorSetupSession({ ownerId, dataPlane, bridge, events: window,
+      current: () => current && window.location.pathname === '/passwords',
+      onNotice: notice => { if (notice) setSetupShown(true); setSetupNotice(notice); },
+      onStatus: message => { setSetupShown(true); setSetupMessage(message); },
+      onError: () => { if (current) { setSetupShown(true); setSetupMessage('Could not receive the setup code. Check the destination and signed-in account, then retry or reopen the code.'); } }
+    });
+    setupSession.current = session;
+    return () => { session.dispose(); current = false; setupSession.current = null; };
+  }, [ownerId, scopeKey, dataPlane]);
   const resetCopy = React.useCallback(() => { copyEpoch.current++; copyCleanup.current?.(); copyCleanup.current = null; setCopyFeedback({}); }, []);
   React.useEffect(() => { resetCopy(); }, [draft, resetCopy]);
   const [codes, setCodes] = React.useState<Record<string, string>>({});
@@ -109,7 +128,7 @@ function PasswordManagerScope({ ownerId, scopeKey }: { ownerId: string; scopeKey
     } catch (reason) { if (current()) throw reason; }
     finally { controllers.current.delete(controller); if (active.current && epoch === listEpoch.current && version === generation.current) setListLoading(false); }
   }, [ownerId, search]);
-  const showError = React.useCallback((reason: any) => { if (reason?.name === 'AbortError' || !active.current) return; if (reason?.status === 401 || (reason?.status === 409 && /account/.test(reason.message))) { clear(); setRecords([]); } setError(reason instanceof Error ? reason.message : 'Please try again.'); }, [clear]);
+  const showError = React.useCallback((reason: any) => { if (reason?.name === 'AbortError' || !active.current) return; if (reason?.status === 401 || (reason?.status === 409 && /account/.test(reason.message))) { setupSession.current?.cancel(); clear(); setRecords([]); } setError(reason instanceof Error ? reason.message : 'Please try again.'); }, [clear]);
   React.useEffect(() => {
     const timer = setTimeout(() => refresh().catch(showError), 200);
     const check = () => { clearTimeout(timer); refresh().catch(showError); };
@@ -212,6 +231,10 @@ function PasswordManagerScope({ ownerId, scopeKey }: { ownerId: string; scopeKey
   const scope = { passwords: {
     ...entryDisplay, busy, cannotAdd: busy || configured === false, unconfigured: configured === false,
     nativeAvailable, nativeMessage, error, search, sort, listLoading,
+    setupPending: Boolean(setupNotice), setupMessage, setupHasDraft: Boolean(draft), setupCanCreate: !draft && !busy && configured !== false,
+    setupCannotCreate: Boolean(draft) || busy || configured === false, setupCannotAttach: !draft || busy || draft.entry.passwordType === 'passkey',
+    setupAccount: `Destination: ${typeof window === 'undefined' ? '' : window.location.origin} · Account: ${accountLabel}`,
+
     records: visible.map(record => ({ id: record.id, title: record.title, type: record.passwordType.replace(/-/g, ' ') })),
     loadingMessage: search.trim() ? 'Searching all password titles…' : 'Refreshing passwords…',
     empty: !listLoading && settledSearch === search && !visible.length,
@@ -234,7 +257,25 @@ function PasswordManagerScope({ ownerId, scopeKey }: { ownerId: string; scopeKey
     if (index < 0 || target < 0 || target >= entry.fields.length) return entry;
     const fields = [...entry.fields]; [fields[index], fields[target]] = [fields[target], fields[index]]; return { ...entry, fields };
   });
+  const receiveSetup = (create: boolean) => run(async () => {
+    if (!setupNotice || !setupSession.current || (create ? Boolean(currentDraft.current) : !currentDraft.current || currentDraft.current.entry.passwordType === 'passkey')) return;
+    const previous = currentDraft.current, version = generation.current;
+    const signal = runSignal.current!, session = setupSession.current;
+    const cancel = () => session.cancel();
+    signal.addEventListener('abort', cancel, { once: true });
+    let value: string;
+    try { value = await session.consume(setupNotice.requestId); signal.throwIfAborted(); }
+    finally { signal.removeEventListener('abort', cancel); }
+    if (!active.current || version !== generation.current || currentDraft.current !== previous) return;
+    const base = create ? { id: crypto.randomUUID(), revision: 0, entry: emptyPasswordEntry() } : previous!;
+    setDraft({ ...base, entry: { ...base.entry, fields: [...base.entry.fields, { id: crypto.randomUUID(), label: 'Verification code', type: 'totp', value }] } });
+    setSetupMessage('Setup added to this draft. Review the account and select Save to keep it.');
+  });
   const actions: TransientBlockActions = {
+    'setup.create': () => receiveSetup(true),
+    'setup.attach': () => receiveSetup(false),
+    'setup.retry': () => run(async () => { await refresh(undefined, runSignal.current || undefined); runSignal.current?.throwIfAborted(); setupSession.current?.retry(); }),
+    'setup.cancel': () => { setupSession.current?.cancel(); setSetupMessage('Setup cancelled. Your existing draft is unchanged.'); },
     'password.add': () => { if (busy || configured === false) return; clearAndRefresh(); setDraft({ id: crypto.randomUUID(), revision: 0, entry: emptyPasswordEntry() }); },
     'password.import': () => { if (!busy) { clearAndRefresh(); setTransfer('import'); } },
     'password.export': () => { if (!busy) { clearAndRefresh(); setTransfer('export'); } },
@@ -291,7 +332,7 @@ function PasswordManagerScope({ ownerId, scopeKey }: { ownerId: string; scopeKey
     'field.add': () => { if (!customLabel.trim()) return; edit(entry => ({ ...entry, fields: [...entry.fields, { id: crypto.randomUUID(), label: customLabel.trim(), type: customType, value: '' }] })); setCustomLabel(''); },
     'field.noop': () => {},
     'qr.screen': () => run(async () => { const version = generation.current, controller = new AbortController(); controllers.current.add(controller); try { const signal = operationSignal(controller.signal); const result = await scanQrScreen(signal); if (!signal.aborted && version === generation.current) addTotp(result); } finally { controllers.current.delete(controller); } }),
-    'qr.file': ({ readFile }) => { const file = readFile('qr-file'); if (file) return run(async () => { const version = generation.current, signal = runSignal.current!, result = await scanQrFile(file); if (!signal.aborted && version === generation.current) addTotp(result); }); },
+    'qr.file': ({ readFile }) => { const file = readFile('qr-file'); if (file) return run(async () => { const version = generation.current, signal = runSignal.current!, result = await scanQrFile(file, signal); if (!signal.aborted && version === generation.current) addTotp(result); }); },
     'transfer.file': ({ readFile }) => loadImport(readFile('import-file')),
     'transfer.format': ({ value }) => { if (['1pux', '1password', 'chrome', 'apple'].includes(String(value))) setFormat(value as PasswordFormat); },
     'transfer.acknowledge': ({ value }) => setAcknowledged(value === true),
@@ -311,6 +352,11 @@ function PasswordManagerScope({ ownerId, scopeKey }: { ownerId: string; scopeKey
   };
   const privateScope = `${scopeKey}:${draft?.id || ''}`;
   return <>
+    {setupShown && <SettingsDocumentHost documentKey="password-authenticator-setup" defaultDocument={passwordAuthenticatorSetupBlocks} scopeKey={scopeKey} title="Authenticator setup layout">
+      {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={privateScope} scope={scope} actions={scopedActions} enabled={!editing} onError={() => setSetupMessage('Please retry the setup.')}>
+        <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
+      </TransientBlockHost>}
+    </SettingsDocumentHost>}
     <SettingsDocumentHost documentKey="password-manager" defaultDocument={passwordManagerBlocks} scopeKey={scopeKey} title="Password manager layout">
       {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={privateScope} scope={scope} actions={scopedActions} enabled={!editing} onError={() => setError('Please try again.')}>
         <TransientPrivateControls scopeKey={privateScope} readValue={readPrivateValue} enabled={!editing}>
