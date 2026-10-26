@@ -110,7 +110,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   including old-ID lookup and reviewed settled-write recovery regressions.
   Mobile conflict rows and vault controls remain usable at 320px; sandboxed
   66 MiB vault cold reload/download passes. Large-note memory diagnosis remains
-  separate. [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+  separate. Capability tests distinguish the published suite-install version
+  from existing clients' minimum requirements after the 1.7.0 addition.
+  [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
 
 - 2026-10-27: Account pages wait for newly created saved Components, while lost-response retries use their frozen dependencies and preserve newer edits. Native instruction and vault mechanism evidence now separates passing runs from intermittent paste and large-editor OOM failures; signed-in offline suite reconciliation remains open. [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
 

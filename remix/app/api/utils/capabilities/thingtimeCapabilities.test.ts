@@ -426,9 +426,14 @@ test('Thing discussions and linked post references negotiate additive contracts 
 
 test('functional demo capabilities advertise compatible catalog and install contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.com');
-  for (const feature of ['api.webpages-demos', 'api.webpages-suites-install', 'api.admin-webpages-seed-demos']) {
-    assert.equal(manifest.features[feature]?.version, feature === 'api.webpages-demos' ? '1.1.0' : feature === 'api.webpages-suites-install' ? '1.6.0' : '1.2.0');
-    assert.ok(capabilitySatisfies(manifest.features[feature].version, '1.1.0'));
+  for (const [feature, publishedVersion, minimum] of [
+    ['api.webpages-demos', '1.1.0', '1.1.0'],
+    ['api.webpages-suites-install', '1.7.0', '1.1.0'],
+    ['api.admin-webpages-seed-demos', '1.2.0', '1.1.0']
+  ]) {
+    assert.equal(manifest.features[feature]?.version, publishedVersion);
+    assert.ok(capabilitySatisfies(manifest.features[feature].version, minimum));
+    assert.equal(capabilitySatisfies('1.0.0', minimum), false);
   }
   assert.equal(capabilitySatisfies('1.0.0', '1.1.0'), false);
   assert.equal(capabilitySatisfies('2.0.0', '1.1.0'), false);
@@ -579,15 +584,19 @@ test('retry-safe linked galleries require additive link and delete contracts on 
 test('editable media containers require compatible element storage contracts on both manifests', () => {
  const generated=createApiCapabilitiesManifest();
  const runtime=thingtimeCapabilityManifest('https://media.test');
- for(const [feature,minimum] of [['api.things','1.42.0'],['api.things-update','1.13.0'],['api.webpages-resolve','1.8.0'],['api.webpages-suites-install','1.6.0']]) {
-  assert.equal(generated.features[feature],minimum);
-  assert.equal(runtime.features[feature].version,minimum);
-  assert.equal(capabilitySatisfies(minimum,minimum),true);
+ for(const [feature,publishedVersion,minimum] of [
+  ['api.things','1.42.0','1.42.0'],
+  ['api.things-update','1.13.0','1.13.0'],
+  ['api.webpages-resolve','1.8.0','1.8.0'],
+  ['api.webpages-suites-install','1.7.0','1.6.0']
+ ]) {
+  assert.equal(generated.features[feature],publishedVersion);
+  assert.equal(runtime.features[feature].version,publishedVersion);
+  assert.equal(capabilitySatisfies(runtime.features[feature].version,minimum),true);
   assert.equal(capabilitySatisfies(undefined,minimum),false);
   assert.equal(capabilitySatisfies('2.0.0',minimum),false);
  }
- assert.equal(capabilitySatisfies('1.6.0','1.7.0'),false);
- assert.equal(capabilitySatisfies('1.7.1','1.7.0'),true);
+ assert.equal(capabilitySatisfies('1.5.9','1.6.0'),false);
 });
 
 

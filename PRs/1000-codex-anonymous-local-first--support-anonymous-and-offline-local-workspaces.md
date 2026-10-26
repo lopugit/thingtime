@@ -5534,3 +5534,11 @@ offline reload/unlock and exact readback of 2,800,039 string code units without
 OOM. Timestamped action phases are retained. This is a current pass, not an
 explanation or performance fix for earlier OOM events; account/provider and
 full capacity matrices remain open. [Diagnostic evidence](../artifacts/anonymous-local-first-2026-10-27-vault-large-note-phases/README.md).
+
+The first pushed suite checkpoint `b23b19d6` passed CodeQL, but Web CI exposed
+two stale suite-install version assertions. The tests now distinguish the
+published 1.7.0 contract from the catalog and media clients' unchanged minimums
+(1.1.0 and 1.6.0). Missing, incompatible-major and below-minimum contracts remain
+rejected. The full focused capability runner passes 136 tests; this correction
+changes test expectations only. Exact-head CI and preview results remain tracked
+on the PR rather than inferred from the earlier local or deployed checkpoint.
