@@ -11,6 +11,8 @@ import { deviceSyncOverviewBlocks } from './deviceSyncBlocks';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { SettingsSection } from '../Settings/SettingsSection';
 import { DesktopFolderAccess } from './DesktopFolderAccess';
+import { RemoteDeviceSync } from './RemoteDeviceSync';
+import { getElectronBridge } from '~/utils/electronBridge';
 import { deviceSyncPageHref } from './deviceNavigation';
 import { deviceSyncFolders, deviceSyncedFilesHref, type DeviceSyncFolder } from './deviceSyncNavigation';
 
@@ -150,19 +152,22 @@ export function DeviceSyncPanel({
 	ownedDeviceIds?: readonly string[];
 }) {
 	const [managing, setManaging] = React.useState(false);
+	const [visited, setVisited] = React.useState(false);
+	const bridge = getElectronBridge();
+	const local = bridge?.platform === 'darwin' && !!bridge.folderSyncRequest && pairedDeviceIds.includes(deviceId);
 	return (
 		<Box minWidth={0}>
 			<DeviceSyncBrowser deviceId={deviceId} />
-			{ownerId && pairedDeviceIds.includes(deviceId) && ownedDeviceIds.includes(deviceId) ? (
+			{ownerId && ownedDeviceIds.includes(deviceId) ? (
 				<SettingsSection
 					eyebrow="Manage sync connections"
 					description="Folders, progress, exclusions and resource limits for this device."
 					open={managing}
-					onToggle={setManaging}
+					onToggle={open => { setManaging(open); if (open) setVisited(true); }}
 				>
-					{managing ? (
-						<DesktopFolderAccess ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={pairedDeviceIds} ownedDeviceIds={ownedDeviceIds} />
-					) : null}
+					{visited && local ? (
+						<DesktopFolderAccess active={managing} ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={pairedDeviceIds} ownedDeviceIds={ownedDeviceIds} />
+					) : visited ? <RemoteDeviceSync active={managing} ownerId={ownerId} deviceId={deviceId} /> : null}
 				</SettingsSection>
 			) : null}
 		</Box>

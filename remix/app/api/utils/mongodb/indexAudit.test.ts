@@ -53,6 +53,6 @@ test('invite expiry is home-only and never deletes escrow before its refund', as
    assert.equal(entries.some(({ name }) => ['error_log_recent', 'error_log_expires_at', 'migration_diagnostic_expires_at'].includes(name)), false);
    const ttl = entries.find(({ name }) => name === 'things_ephemeral_expires_at')!;
    assert.deepEqual(ttl.keys, { expiresAt: 1 });
-   assert.deepEqual(ttl.options.partialFilterExpression, { thingtime: { $in: ['migration-diagnostic', 'error-log'] } });
+   assert.deepEqual(ttl.options.partialFilterExpression, { thingtime: { $in: ['migration-diagnostic', 'error-log', 'device-sync-control'] } });
    assert.equal(ttl.options.expireAfterSeconds, 0);
  });

@@ -96,6 +96,22 @@ async function cloudTemporaryFailure(response: Response, url: URL, mutation: boo
     error.message = `Cloud sync request failed (${response.status}; ${cloudOperation(url, mutation)}; ${code}; proxy-${proxy}); retain this run for retry or reconciliation.`;
     check(); return error;
 }
+const forbiddenCodes = new Set(['public_uploads_not_approved', 'private_uploads_not_approved']);
+const forbiddenErrors = new Map([
+    ['Cross-origin attachment requests are not allowed', 'attachment_origin_refused'],
+    ['Use the same Thingtime origin.', 'desktop_origin_refused'],
+    ['Attachments require a user account', 'user_account_required'],
+    ['Apple Watch credentials can only start post-purpose uploads', 'credential_purpose_refused']
+]);
+/** Refusals remain terminal. Expose only known policy reasons, never a server's
+ * arbitrary error text, identifiers, URLs or credential-bearing diagnostics. */
+async function cloudForbidden(response: Response, url: URL, mutation: boolean, check: () => void) {
+    const value = await readCloudFailure(response, check);
+    const code = value?.ok === false ?
+        (forbiddenCodes.has(value.code) ? value.code : forbiddenErrors.get(value.error) ?? 'forbidden_unknown') : 'forbidden_unknown';
+    check();
+    return Error(`Cloud sync request failed (403; ${cloudOperation(url, mutation)}; ${code}); retain this run for retry or reconciliation.`);
+}
 
 /** Authenticated JSON stays on one origin with server-enforced expected actor
  * and data-plane headers. Signed part requests carry no account credentials. */
@@ -139,6 +155,7 @@ export function cloudRequests(runtime: CloudTransportRuntime, scope: SyncScope, 
 		}
 		if (!response.ok) {
 			if (response.status === 409) throw await cloudConflict(response, url, body !== undefined, check);
+            if (response.status === 403) throw await cloudForbidden(response, url, body !== undefined, check);
             if (response.status === 408 || response.status === 429 || (response.status >= 500 && response.status <= 599))
                 throw await cloudTemporaryFailure(response, url, body !== undefined, scope, check);
 			await response.body?.cancel().catch(() => {});

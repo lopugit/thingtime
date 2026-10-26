@@ -5,7 +5,7 @@ import Foundation
 /// commands. The desktop host must also verify its active browser account.
 @MainActor
 public final class MacFolderSync {
-    public static let version = "1.14.0"
+    public static let version = "1.15.0"
     private static let supportedActions: Set<String> = ["validate-folder-batch", "upload-batch", "context", "conditions", "list", "choose", "remove", "scan", "scan-stream", "scan-stream-finish", "scan-changes", "scan-capture", "scan-status", "scan-cancel", "scan-skips", "scan-page", "scan-discard", "inspect", "read", "read-range", "stage-begin", "stage-append", "stage-range", "stage-finish", "write-approve", "write-check", "publication-lookup", "publish", "trash", "trash-lookup", "trash-expected", "trash-inspect", "trash-restore", "trash-restore-reviewed", "trash-list"]
     public enum SourceSelection { case folder(URL), photos }
     public struct Conditions: Codable, Sendable {
@@ -850,7 +850,10 @@ public final class MacFolderSync {
             var row: [String: JSONValue] = ["id": .string(grant.id), "name": .string(grant.name)]
             if grant.sourceKind == "photos" {
                 row["sourceKind"] = .string("photos"); row["photoAccess"] = .string(photos.access())
-            } else { row["publicationVersion"] = .string("1.0.0") }
+            } else {
+                row["publicationVersion"] = .string("1.0.0")
+                if let sourcePath = try store.sourcePath(owner, id: grant.id) { row["sourcePath"] = .string(sourcePath) }
+            }
             return .object(row)
         })
         let response = JSONValue.object(result)

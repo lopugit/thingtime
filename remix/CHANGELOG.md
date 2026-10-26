@@ -104,6 +104,51 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Install merged PR 1216 source `48925abc`; strict/deep signature and unchanged designated requirement passed. DJ DODA resumed across the update and window reopen; Home remained paused with its source grant absent. Full synthetic acceptance still awaits fresh native pairing confirmation. Exact-commit preview returned HTTP 200; CI remains mixed, not green. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+- 2026-10-26: Add an explicit isolated installed-sync fixture bootstrap: canonical admin registration, one supervised API restart preserving its private database/session, and private-only upload approval for an exact UI-registered non-admin account. Ordinary launches retain existing behavior; real installed transfer acceptance remains separate. **Codex (AI)**
+
+- 2026-10-26: Replace expanded folder-sync panels and Home presets with generic,
+  individually editable folder cards. Preserve drafts across disclosure changes
+  while stopping hidden progress work. New Mac connections can retain their
+  authorized absolute source hierarchy as private Folder Things; existing
+  destinations stay unchanged. Native location metadata requires Mac 1.15.0
+  and, remotely, sync-control 1.1.0. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+- 2026-10-26: Report terminal cloud-sync 403 failures with bounded operation and
+  policy codes; add isolated-viewer refusal diagnostics with a single safe
+  preflight recovery. Document upload approval as a fixture prerequisite.
+  Native pairing, folder permissions and paused-state recovery passed; actual
+  transfers remain unverified. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+- 2026-10-26: Align the native Mac pairing capability limit with the server's
+  128-entry contract. Macs advertising 65 capabilities previously failed after
+  native approval and server preparation. Add signed-claim and rejection
+  regressions; installed acceptance remains in progress. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+- 2026-10-26: Add an opt-in native test viewer for the existing private sync
+  acceptance browser, with masked transient credential entry and fixed
+  origin/task/session/tab controls. [Acceptance runbook](../docs/installed-sync-acceptance.md).
+  Correct Electron 43 entry detection so the viewer opens; its 11 focused tests
+  and real disposable browser sign-in pass. Installed transfers remain a
+  separate acceptance check. **Codex (AI)**
+
+- 2026-10-25: Add a private browser/backend relay for signed-Mac sync acceptance,
+  with exact loopback authority, lease fencing and bounded private diagnostics.
+  Native folder selection now passes; end-to-end transfer acceptance remains
+  tracked separately. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+- 2026-10-25: Preserve the negotiated remote sync-control capability in the Mac
+  host and repair fresh-worktree dependencies before desktop resource staging.
+  Added native-host regression coverage. Installed acceptance is recorded in
+  [PR 1216](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
+- 2026-10-23: Make owned-device folder sync settings available in web browsers,
+  including offline edits, and relay live folder access, transfer/automation,
+  conflict, recovery, progress and priority controls to the installed app.
+  Private leased requests preserve device-owned execution and account boundaries.
+  [Contract](../docs/browser-device-sync.md) and [PR 1216 validation](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
 - 2026-10-26: Integrate the reviewed environment gateway and dedicated connection policy into develop while preserving newer develop changes. Built sandboxed API acceptance and contract tests pass; canonical-owner activation remains pending. [PR #1224 details](../PRs/1224-codex-gateway-develop-integration-environment-gateways-and-dedicated-policy.md). **Codex (AI)**
 
 - 2026-10-26: Add the server-only `THINGTIME_MONGODB_CONNECTION_MODE` override for `proxy` or opt-in `dedicated` MongoDB connections, with a branch-bundled default. Document the audited preview/develop database relationship, proposed gateway mapping and gradual pool draining; gateway activation remains pending. **Codex (AI)**

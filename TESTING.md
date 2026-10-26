@@ -10306,6 +10306,13 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ### Cloud sync transport and interrupted execution
 
+- [ ] Refuse a file upload for an account without private-upload approval. The
+  retained run reports `403; upload-start; private_uploads_not_approved` without
+  exposing response text, paths or account details, and does not automatically
+  retry a policy refusal. Distinguish origin refusals and unknown responses;
+  cancellation/account changes must still take precedence. Provision approved
+  disposable upload accounts through the existing admin API before positive
+  byte-transfer acceptance; never bypass the approval gate.
 - [ ] Run `test:file-sync`: close/reopen IndexedDB after an accepted commit loses
   its response; resume with the same pinned folder/file identity and confirm that
   no source is opened and no bytes are uploaded again.
@@ -12946,7 +12953,108 @@ separate from deterministic discovery/lease tests.
 
 ## Device sync browsing and collapsed settings — 2026-10-22
 
+### Browser management and remote execution — 2026-10-23
+
+- [x] Native pairing capability bound regression (2026-10-26): bind and verify
+  the signature of a 65-capability claim, reject 129 capabilities and malformed
+  identifiers. Native normalization must match the backend's 128-entry limit.
+  The signed installed helper must also complete pairing on a fully equipped
+  Mac; a successful server prepare or native approval alone is insufficient.
+
+- Installed checkpoint, 2026-10-25: 331 Electron tests passed; canonical
+  Developer ID build/install and installed signature passed with an unchanged
+  designated requirement. Existing account and paused Home state survived.
+  After recovering a stuck native menu, the real macOS folder chooser granted
+  only the synthetic two-file fixture through the embedded Node app. Actual
+  browser-to-device transfer, recovery and window-close checks remain open;
+  see the PR 1216 note for the precise evidence boundary.
+- [x] Native folder selection: verify the exact synthetic directory and child
+  names in the macOS chooser, select it, then independently confirm the new
+  native root. Preserve the absent Home grant, paused state and existing draft.
+- [x] Private acceptance relay regressions: reject foreign/path-bearing origins,
+  incorrect Host headers and expired/released ownership. Keep generated test
+  credentials private and write bounded failure diagnostics with exclusive
+  owner-only permissions. Full suite: `node --test electron/test/*.test.cjs`.
+- [x] `node_middleware` regression: serve a fixture with the packaged entry's
+  export shape through the canonical desktop listener. Check real HTTP health
+  and static assets, and ensure exceptions return redacted errors. Actual
+  packaged-backend acceptance is tracked separately below.
+- [x] Actual packaged-backend readiness: the immutable image rendered its client
+  and passed manifest checks on the shared private loopback origin. Browser and
+  backend preflight confirmed no external routes and refused IPv4/IPv6 egress.
+  Every local Docker COPY input is staged and allowlisted; 13 focused tests pass.
+- [ ] Opt-in isolated upload fixture: rebuild the immutable image, launch the
+  relay with the exact disposable username as fourth argument and register that
+  user in the bound browser. Verify canonical admin bootstrap registration
+  precedes its supervised API-only restart, ordinary launches remain unchanged,
+  and network preflight rejects the option outside isolation. Check the actual
+  test user's `/api/v1/auth/me`: full user, non-admin, private uploads enabled,
+  public uploads withheld. Wrong targets, API errors and timeout must fail closed;
+  no bootstrap credentials/session/signing material may appear in output. Run
+  `node --test electron/test/agent-browser-application.test.cjs`. This prerequisite
+  does not prove native pairing, transferred bytes or active window continuity.
+- [ ] Run the same-browser/backend installed acceptance in
+  `docs/installed-sync-acceptance.md`. Verify the enforced network boundary,
+  disposable full-account registration, genuine installed Node pairing, actual
+  byte hashes and restoration of the original endpoint/session before cleanup.
+- [ ] Acceptance viewer: run `node --test electron/test/acceptance-viewer.test.cjs`;
+  exercise the actual local GUI against its bound isolated tab at port 28671.
+  Verify masked credential entry clears on submission/focus loss, off-origin
+  input is refused, frames/clicks/keyboard/scroll/mobile viewport work, and
+  quitting removes only its private viewer profile while retaining the relay.
+  Keep other controllers idle during credential entry. Unit boundaries alone
+  do not prove sign-in or installed-device sync.
+- [x] Electron viewer startup regression: recognize the explicit script when
+  Electron owns `require.main`, keep imports side-effect free, and launch the
+  actual installed Electron binary to verify that the GUI appears. The focused
+  suite passes 11 tests; actual disposable full-account registration through
+  the viewer also passed. This does not prove installed native file transfer.
+- [ ] On the signed Mac, negotiate the selected origin through the actual
+  desktop folder host. Confirm `api.devices-sync-control` survives its
+  allowlisted projection so the remote worker can start. Missing/malformed
+  versions and foreign-origin manifests must still fail closed. Run
+  `node --test electron/test/folder-sync.test.cjs` for this boundary regression.
+- [ ] Build from a fresh worktree with missing Remix dependencies. The canonical
+  Electron build must repair them before staging the mail/database resources,
+  without manual dependency copying or weakening the signed build checks.
+- [ ] In a fresh browser without an Electron bridge or local pairing, open an
+  owned device's dedicated sync page and expand Manage sync connections. Verify
+  saved connections, all configuration fields, drafts and revision-conflict
+  recovery at desktop and narrow mobile widths. Reload a saved change.
+- [ ] Disconnect the target device. Existing unchanged folder bindings remain
+  editable; changing a device root requires live verification. Keep saved data
+  visible and distinguish offline/timeout from an empty list or successful job.
+- [ ] Run the updated installed app on the paired device and use another
+  browser/computer to request folder selection, add a connection, start/pause/
+  resume a transfer, change an automatic interval and review live progress.
+  Native selection/permission dialogs must appear on the target device. Closing
+  the browser must leave device-owned work running; reconnect and inspect it.
+- [ ] Exercise remote conflict review, paged progress/coverage, upload priority
+  revision conflicts and recoverable file restoration. Verify current native
+  state against the browser and confirm that file bytes remain on the native
+  transfer path.
+- [ ] Sign out, switch accounts/origins/storage and revoke pairing during
+  pending requests. Old callbacks must not mutate the new view, and foreign,
+  temporary, app, Character and scoped-token callers must be refused. Repeated
+  request IDs must not replay native operations; crashed claims expire.
+- [ ] Edit nested remote headings, buttons and repeated connection fields in
+  Builder, save/reload, then exercise their live bindings. Run
+  `node remix/scripts/test-remote-device-sync-ui.mjs` for synthetic browser
+  regressions; record installed-device acceptance separately.
+
 - [ ] In grid, list and columns, single-click selects a device; double-click or Enter/Space opens its saved cloud folders. Touch opens directly. The context menu offers synced files, full settings and quick settings.
+- [ ] Folder sync cards start collapsed on desktop and phone. Only the selected
+  folder exposes its settings; optional details remain collapsed. Enter valid
+  and temporarily invalid form values, switch cards, collapse the parent, then
+  reopen: drafts, interval and unsaved upload priorities must survive without
+  saving or starting transfers. Hidden progress viewers must stop their work.
+  Edit the title and disclosure control independently in Builder.
+- [ ] On the signed Mac, verify a selected ordinary folder displays its actual
+  absolute source path. Explicitly save a new connection with no destination:
+  confirm private Folder Things reproduce that hierarchy and retries reuse the
+  same IDs. Existing destinations must never be moved. Denied/stale bookmarks,
+  Photos, missing location capability and older remote servers must not invent
+  paths or gain parent-directory access. Keep the existing Home connection paused.
 - [ ] Compare saved roots with private file-sync configuration records for the active owner/device. Opening an offline device must not start a transfer or grant filesystem access; cloud-folder descendants use ordinary Things permissions.
 - [ ] Fresh drawer and settings page start with every section collapsed. Verify the drawer Close and expand-to-page buttons have separate 44px targets and both work. Open File sync & backup, live filesystem and long sections on desktop/mobile, scroll top to bottom, and check focus, overflow and reduced motion. Legacy version-1 expansion flags reset once while width survives; explicit version-2 choices remain respected.
 - [ ] Edit the overview heading, a navigation link and a repeated folder field separately in Builder; save/reload and verify live bindings still work. Verify empty/error/account-change states without exposing the old account’s folders.

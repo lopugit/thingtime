@@ -10,6 +10,12 @@ worktree credentials. `agentTesting.ts` and `apiFallback.ts` fence the backend;
 commands live in [agent-browsers.md](../agent-browsers.md). Run the
 `electron/test/agent-browser-*.test.cjs` tests and full-app two-agent acceptance
 when changing allocation, networking, startup or cleanup.
+`electron/scripts/test-agent-acceptance-viewer.cjs` is an opt-in local test GUI
+for that existing isolated session, with fixed IPC and origin/task/tab fencing.
+Its supported startup, private-profile cleanup and exclusive credential-entry
+phase are in [installed-sync-acceptance.md](../installed-sync-acceptance.md).
+Run `node --test electron/test/acceptance-viewer.test.cjs` for its boundary checks;
+these do not establish GUI or installed-account sign-in acceptance.
 `runtime/prepare-native.cjs` replaces Mac-traced native packages with locked
 Linux package trees and loads them during image construction. Keep its runtime
 lock synchronized with app native dependency upgrades and exercise a packaged

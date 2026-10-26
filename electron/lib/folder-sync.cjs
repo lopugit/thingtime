@@ -87,7 +87,7 @@ async function readCapabilities(context, signal) {
             !manifest.features || typeof manifest.features !== 'object' || Array.isArray(manifest.features)) throw unavailable();
         // Only sync requirements are exposed. Never return arbitrary upstream data.
         const features = {};
-        for (const key of ['api.devices-node-identity', 'api.things', 'api.files', 'api.attachment-uploads', 'api.attachment-upload-parts',
+        for (const key of ['api.devices-node-identity', 'api.devices-sync-control', 'api.things', 'api.files', 'api.attachment-uploads', 'api.attachment-upload-parts',
             'api.attachment-upload-complete', 'api.attachment-content', 'api.file-sync-batches', 'api.actions-run', 'api.mongodb-endpoint']) {
             const version = manifest.features[key]?.version;
             if (typeof version === 'string' && /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(version) && version.length <= 32) features[key] = { version };

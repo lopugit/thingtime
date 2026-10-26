@@ -53,6 +53,82 @@ final class PairingManagerTests: XCTestCase {
         XCTAssertNil(deletedCredential)
     }
 
+    func testPairingClaimSigns65CapabilitiesAndRejectsBeyondBound() async throws {
+        let capabilities = (0..<65).map { "system.test-capability-\($0)" }
+        let now = Date(timeIntervalSince1970: 1_500)
+        let manager = PairingManager(store: InMemoryDeviceCredentialStore())
+        let challenge = try await manager.begin(pairingID: serverPairingSecret, now: now)
+        let complete = try await manager.bindPreparedClaim(
+            pairingID: challenge.pairingID,
+            serverProof: PairingPrepareResponse(
+                pairingID: "pairing-65",
+                serverNonce: Data(repeating: 5, count: 32),
+                expiresAt: now.addingTimeInterval(60)
+            ),
+            device: PairingDeviceDescriptor(
+                name: "Mac", platform: "macos", model: "Mac1,1", osVersion: "macOS", appVersion: "1.0.0"
+            ),
+            capabilities: capabilities,
+            now: now
+        )
+
+        XCTAssertEqual(complete.capabilities, capabilities.sorted())
+        let publicKey = try Curve25519.Signing.PublicKey(rawRepresentation: complete.proof.publicKey)
+        let message = PairingClaimProof.canonicalMessage(
+            pairingID: complete.proof.pairingID,
+            pairingSecret: complete.pairingSecret,
+            credential: complete.credential,
+            publicKey: complete.proof.publicKey,
+            nonce: complete.proof.nonce,
+            serverNonce: complete.proof.serverNonce,
+            device: complete.device,
+            capabilities: complete.capabilities
+        )
+        XCTAssertTrue(publicKey.isValidSignature(complete.proof.signature, for: message))
+
+        let overflowManager = PairingManager(store: InMemoryDeviceCredentialStore())
+        let overflowChallenge = try await overflowManager.begin(pairingID: serverPairingSecret, now: now)
+        do {
+            _ = try await overflowManager.bindPreparedClaim(
+                pairingID: overflowChallenge.pairingID,
+                serverProof: PairingPrepareResponse(
+                    pairingID: "pairing-overflow",
+                    serverNonce: Data(repeating: 6, count: 32),
+                    expiresAt: now.addingTimeInterval(60)
+                ),
+                device: PairingDeviceDescriptor(
+                    name: "Mac", platform: "macos", model: nil, osVersion: "macOS", appVersion: "1.0.0"
+                ),
+                capabilities: (0...PairingManager.maximumCapabilityCount).map { "system.test-capability-\($0)" },
+                now: now
+            )
+            XCTFail("Capability lists above the shared bound should fail.")
+        } catch {
+            XCTAssertEqual(error as? ThingtimeNodeError, .invalidRequest("The pairing capabilities are invalid."))
+        }
+
+        let invalidManager = PairingManager(store: InMemoryDeviceCredentialStore())
+        let invalidChallenge = try await invalidManager.begin(pairingID: serverPairingSecret, now: now)
+        do {
+            _ = try await invalidManager.bindPreparedClaim(
+                pairingID: invalidChallenge.pairingID,
+                serverProof: PairingPrepareResponse(
+                    pairingID: "pairing-invalid",
+                    serverNonce: Data(repeating: 7, count: 32),
+                    expiresAt: now.addingTimeInterval(60)
+                ),
+                device: PairingDeviceDescriptor(
+                    name: "Mac", platform: "macos", model: nil, osVersion: "macOS", appVersion: "1.0.0"
+                ),
+                capabilities: ["invalid capability"],
+                now: now
+            )
+            XCTFail("Invalid capability identifiers should still fail.")
+        } catch {
+            XCTAssertEqual(error as? ThingtimeNodeError, .invalidRequest("The pairing capabilities are invalid."))
+        }
+    }
+
     func testExpiredChallengeCannotComplete() async throws {
         let manager = PairingManager(store: InMemoryDeviceCredentialStore())
         let now = Date(timeIntervalSince1970: 2_000)
