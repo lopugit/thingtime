@@ -10271,6 +10271,13 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ### Cloud sync transport and interrupted execution
 
+- [ ] Refuse a file upload for an account without private-upload approval. The
+  retained run reports `403; upload-start; private_uploads_not_approved` without
+  exposing response text, paths or account details, and does not automatically
+  retry a policy refusal. Distinguish origin refusals and unknown responses;
+  cancellation/account changes must still take precedence. Provision approved
+  disposable upload accounts through the existing admin API before positive
+  byte-transfer acceptance; never bypass the approval gate.
 - [ ] Run `test:file-sync`: close/reopen IndexedDB after an accepted commit loses
   its response; resume with the same pinned folder/file identity and confirm that
   no source is opened and no bytes are uploaded again.

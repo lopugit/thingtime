@@ -2,7 +2,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 const call = async (operation, args = {}) => {
   const result = await ipcRenderer.invoke('acceptance-viewer:command', { operation, args });
-  if (!result?.ok) throw new Error('The isolated viewer request was refused. Inspect the task connection and current page before retrying.');
+  if (!result?.ok) {
+    const message = 'The isolated viewer request was refused. Inspect the task connection and current page before retrying.';
+    throw new Error(message + ' [' + result?.diagnostic?.operation + '/' + result?.diagnostic?.stage + ':' + result?.diagnostic?.code + ']');
+  }
   return result.value;
 };
 contextBridge.exposeInMainWorld('acceptanceViewer', Object.freeze({

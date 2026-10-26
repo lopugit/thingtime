@@ -190,3 +190,42 @@ separately from the historical browser/compiled-server harness results above.
   typecheck, unit/API, CodeQL, GitGuardian and Vercel checks. Its separate
   merge-conflict sweep failed with a GitHub installation API rate-limit 403;
   that is an automation access failure, not a failing feature assertion.
+
+### Real native pairing and upload refusal — 2026-10-26
+
+- Signed source `50fe2d907978d0258d6062324d4a1684054e46c8` is installed at
+  `~/Applications/Thingtime.app`. Strict/deep signature verification, helper
+  source SHA and unchanged designated requirement passed. Swift: 239 tests,
+  2 skipped, 0 failures. The 128-capability correction fixed the real native
+  pairing failure for this Mac's 65-capability claim.
+- The installed app paired the approved disposable full account. Native picker
+  grants were restricted to the synthetic fixture; the isolated browser saw the
+  actual Mac online and its saved connection. Native Start created a nested
+  directory, then failed with HTTP 403: **zero of two files and zero file bytes
+  were confirmed uploaded**. Source hashes alone are not transfer evidence.
+- Native Pause worked. Closing and reopening the installed window preserved the
+  pairing, fixture grant, paused connection and failed journal. This verifies
+  paused-state recovery only, not active-transfer or browser-close continuity.
+- Authenticated canonical `/api/v1/auth/me` returned the expected full user with
+  private and public uploads disabled. This is a definite fixture eligibility
+  gap; the original generic 403 did not identify its exact endpoint/reason.
+  No upload gate, credential boundary or account data was bypassed. Positive
+  tests need a normally approved disposable account; the existing runtime cannot
+  safely restart only its API to bootstrap one.
+- Cloud transport now retains only allowlisted operation/policy refusal codes,
+  never arbitrary response text. All 39 transport tests passed. The viewer now
+  reports fixed operation/stage/code diagnostics and retries only an explicit
+  page-context failure in the read-only tabs preflight, once, with all ownership
+  checks repeated. It never replays a dispatched input. All 17 viewer tests
+  passed. The observed viewer refusal remains unresolved; diagnostics are not
+  proof of successful browser control.
+- These latest diagnostic changes are tested source changes, not another signed
+  installed build. Real upload/download hashes, browser Start/Pause/resume and
+  active window-close continuity remain incomplete.
+- Production and the normal Nikk account were restored through the installed
+  app's controls. Fresh readback confirmed Home paused, source folder access
+  missing and its draft saved. The owned viewer, relay, lease and disposable
+  container were stopped; unrelated apps were untouched. The native synthetic
+  paused journal is retained. Local evidence:
+  `/tmp/pr1216-installed-final-evidence.json` and
+  `/tmp/pr1216-upload-eligibility.json`.

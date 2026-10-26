@@ -5,7 +5,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
-const { ORIGIN, FAILURE, allowedURL, assertSender, loadBinding, createBridge } = require('../scripts/acceptance-viewer-boundary.cjs');
+const { ORIGIN, FAILURE, allowedURL, assertSender, loadBinding, createBridge, diagnostic, refusalCode } = require('../scripts/acceptance-viewer-boundary.cjs');
 const binding = { leaseId: 'lease', token: 'PRIVATE_HANDLE', taskId: 'task', sessionId: 'session', pageId: '1' };
 test('Electron-owned require.main still recognizes the explicit viewer entry script', () => {
   const { isEntrypoint } = require('../scripts/test-agent-acceptance-viewer.cjs');
@@ -116,4 +116,96 @@ test('GUI contract keeps sandbox, fixed preload controls, CSP and masked immedia
   assert.equal(/executeJavaScript|loadRemoteModule|shell\.openExternal|createServer/.test(main + preload), false);
   assert.ok(html.includes('type="password"')); assert.ok(html.includes("connect-src 'none'")); assert.ok(js.indexOf("element('text').value = ''") < js.indexOf('api.type(text)'));
   assert.equal(/console\.|localStorage|sessionStorage/.test(js + preload), false);
+});
+
+test('diagnostic stages distinguish action failure from subsequent refresh without revealing raw errors', async () => {
+  for (const failing of ['manifest', 'status', 'tabs', 'click', 'frame']) {
+    const request = async (method, params) => {
+      if ((params?.operation || method) === failing) throw new Error('password=SECRET /private/path ?token=SECRET');
+      if (method === 'manifest') return { protocol: 'thingtime-agent-browser/1', features: { 'agent.browsers': '1.0.0', 'agent.network-policy': '1.0.0' } };
+      if (method === 'status') return { leases: [{ id: 'lease', taskId: 'task' }], sessions: [{ id: 'session', leaseId: 'lease', state: 'ready', proof: { isolated: true }, policy: { mode: 'isolated' }, application: { origin: ORIGIN } }] };
+      if (params.operation === 'tabs') return [{ id: '1', url: ORIGIN }];
+      return { ok: true };
+    };
+    const command = createBridge(binding, request);
+    await assert.rejects(command({ operation: failing === 'frame' ? 'frame' : 'click', args: failing === 'frame' ? {} : { x: 40.25, y: 17.5 } }), error => {
+      assert.equal(error.message, FAILURE);
+      assert.deepEqual(diagnostic(error), { operation: failing === 'frame' ? 'frame' : 'click', stage: ['click', 'frame'].includes(failing) ? 'command-' + failing : failing, code: 'refused' });
+      assert.equal(JSON.stringify(diagnostic(error)).includes('SECRET'), false);
+      return true;
+    });
+  }
+  assert.deepEqual(diagnostic({ diagnostic: { stage: 'password=SECRET', code: 'token=SECRET' } }), { operation: 'input', stage: 'input', code: 'refused' });
+});
+test('fractional clicks remain exact and a refused action is never retried or poisons the queue', async () => {
+  const { command, commands } = fixture();
+  await command({ operation: 'click', args: { x: 263.125, y: 701.75 } });
+  assert.deepEqual(commands.at(-1).args, { pageId: '1', x: 263.125, y: 701.75 });
+  await assert.rejects(command({ operation: 'click', args: { x: NaN, y: 0 } }));
+  assert.deepEqual(await command({ operation: 'frame' }), { image: 'YWJj', viewport: { width: 1280, height: 800 } });
+  assert.equal(commands.filter(value => value.operation === 'click').length, 1);
+});
+
+test('manager refusal classification exports categories only, including navigation context loss', () => {
+  for (const [message, code] of [['Execution context was destroyed, most likely because of a navigation.', 'page-context'], ['Protocol error: Target closed.', 'page-closed'], ['The browser operation timed out.', 'timeout'], ['This task runtime is unavailable.', 'runtime'], ['This browser lease has expired.', 'lease'], ['password=SECRET https://private/?token=SECRET', 'refused'], ['unrecognized private failure', 'refused']]) assert.equal(refusalCode(message), code);
+});
+
+test('one explicit context-loss preflight retry revalidates ownership and never repeats input', async () => {
+  let reads = 0, statusReads = 0, clicks = 0;
+  const request = async (method, params) => {
+    if (method === 'manifest') return { protocol: 'thingtime-agent-browser/1', features: { 'agent.browsers': '1.0.0', 'agent.network-policy': '1.0.0' } };
+    if (method === 'status') { statusReads++; return { leases: [{ id: 'lease', taskId: 'task' }], sessions: [{ id: 'session', leaseId: 'lease', state: 'ready', proof: { isolated: true }, policy: { mode: 'isolated' }, application: { origin: ORIGIN } }] }; }
+    if (params.operation === 'tabs') {
+      if (++reads === 1) { const error = new Error(FAILURE); error.diagnostic = { code: 'page-context' }; throw error; }
+      return [{ id: '1', url: ORIGIN }];
+    }
+    if (params.operation === 'click') clicks++;
+    return { ok: true };
+  };
+  await createBridge(binding, request)({ operation: 'click', args: { x: 12.5, y: 17 } });
+  assert.equal(reads, 2); assert.equal(statusReads, 2); assert.equal(clicks, 1);
+  const refused = createBridge(binding, async (method, params) => {
+    if (params?.operation === 'tabs') { const error = new Error(FAILURE); error.diagnostic = { code: 'page-context' }; throw error; }
+    return request(method, params);
+  });
+  await assert.rejects(refused({ operation: 'click', args: { x: 1, y: 1 } }), error => {
+    assert.deepEqual(diagnostic(error), { operation: 'click', stage: 'tabs', code: 'page-context' }); return true;
+  });
+  assert.equal(clicks, 1);
+});
+
+test('context recovery refuses a changed task binding and never retries a dispatched click', async () => {
+  for (const scenario of ['binding-change', 'click-failure', 'generic-tabs']) {
+    let statusReads = 0, clicks = 0, tabsReads = 0;
+    const command = createBridge(binding, async (method, params) => {
+      if (method === 'manifest') return { protocol: 'thingtime-agent-browser/1', features: { 'agent.browsers': '1.0.0', 'agent.network-policy': '1.0.0' } };
+      if (method === 'status') return { leases: [{ id: 'lease', taskId: scenario === 'binding-change' && ++statusReads === 2 ? 'foreign' : 'task' }], sessions: [{ id: 'session', leaseId: 'lease', state: 'ready', proof: { isolated: true }, policy: { mode: 'isolated' }, application: { origin: ORIGIN } }] };
+      if (params.operation === 'tabs') {
+        tabsReads++;
+        if (scenario !== 'click-failure') { const error = new Error(FAILURE); error.diagnostic = { code: scenario === 'binding-change' ? 'page-context' : 'refused' }; throw error; }
+        return [{ id: '1', url: ORIGIN }];
+      }
+      clicks++;
+      const error = new Error(FAILURE); error.diagnostic = { code: 'page-context' }; throw error;
+    });
+    await assert.rejects(command({ operation: 'click', args: { x: 1, y: 1 } }));
+    assert.equal(clicks, scenario === 'click-failure' ? 1 : 0);
+    assert.equal(tabsReads, 1);
+  }
+});
+test('renderer displays only allowlisted operation/stage/code and clears the frame on refusal', async () => {
+  const vm = require('node:vm');
+  const source = await fs.readFile(path.join(__dirname, '../scripts/acceptance-viewer/viewer.js'), 'utf8');
+  for (const message of ['raw password=SECRET [click/tabs:page-context]', 'raw password=SECRET [SECRET/SECRET:SECRET]']) {
+    const elements = new Map();
+    const element = id => { if (!elements.has(id)) elements.set(id, { hidden: false, value: '', textContent: '' }); return elements.get(id); };
+    vm.runInNewContext(source, {
+      window: { acceptanceViewer: { tabs: async () => { throw new Error(message); } }, addEventListener() {} },
+      document: { getElementById: element, querySelectorAll: () => [] }
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(element('frame').hidden, true);
+    assert.equal(element('status').textContent.includes('SECRET'), false);
+    assert.equal(element('status').textContent.includes('[click/tabs:page-context]'), message.includes('[click/tabs:page-context]'));
+  }
 });

@@ -1,5 +1,10 @@
 # Attachments and media
 
+Cloud sync HTTP 403 diagnostics retain only the operation and a closed policy
+reason (upload approval, origin, account or credential-purpose refusal).
+`cloudTransport.test.ts` verifies redaction and terminal refusal behavior; a
+refusal never bypasses the ordinary attachment upload-approval gate.
+
 Cloud JSON sync requests classify HTTP 408/429/5xx as temporary transport waits.
 `syncJobJournal.ts` persists an optional, revision-guarded `retryAt`; automatic
 discovery respects it across restart and repeated wake events. Retry-After is

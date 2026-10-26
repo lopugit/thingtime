@@ -125,6 +125,23 @@ full-account signup with freshly generated test-only credentials; its fabricated
 pairing is **not** suitable for this installed-device run. Temporary account
 sign-in is insufficient because remote sync workers require a full user.
 
+Before native pairing or positive transfer tests, negotiate the selected local
+origin's `api.auth-me` capability and check its authenticated `/api/v1/auth/me`
+projection: the identity must be the intended full user and
+`privateUploadsEnabled` must be true. Registration alone does not approve uploads.
+Provision private-upload approval through the documented local admin flow
+(`api.admin-users-public-uploads` 1.0.0 and
+`POST /api/v1/admin/users/public-uploads`, with `scope: "private"`), using only
+an authorized isolated administrator. Verify the test user is non-admin before
+acceptance. Do not directly modify encrypted account data or relax upload gates.
+
+The current acceptance runtime has no supported app-only restart: stopping its
+API child terminates the enclosing runtime and disposable database. A fixture
+that needs bootstrap-admin lifecycle support must have that support prepared
+before launch. Do not kill the API to change its environment, extract its signing
+secret, or claim readiness when upload approval is unavailable. Record this as a
+fixture prerequisite and preserve the separate negative-refusal evidence.
+
 Provision/access the disposable credentials through approved test-fixture
 handling or the executing device's supported Thingtime password-manager
 interface. Keep credentials out of CLI JSON echoed to stdout, browser screenshots,

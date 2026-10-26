@@ -4,7 +4,7 @@ const path = require('node:path');
 const fs = require('node:fs/promises');
 const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
-const { ORIGIN, CHANNEL, FAILURE, loadBinding, createBridge, assertSender } = require('./acceptance-viewer-boundary.cjs');
+const { ORIGIN, CHANNEL, FAILURE, loadBinding, createBridge, assertSender, diagnostic } = require('./acceptance-viewer-boundary.cjs');
 
 async function main() {
   const { app, BrowserWindow, ipcMain, session } = require('electron');
@@ -44,7 +44,7 @@ async function main() {
   const command = createBridge(binding);
   ipcMain.handle(CHANNEL, async (event, input) => {
     try { assertSender(event, contents, rendererURL); return { ok: true, value: await command(input) }; }
-    catch { return { ok: false, error: FAILURE }; }
+    catch (error) { return { ok: false, error: FAILURE, diagnostic: diagnostic(error) }; }
   });
   let cleaning = false, cleaned = false;
   app.on('before-quit', event => {

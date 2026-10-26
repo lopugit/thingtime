@@ -104,6 +104,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Report terminal cloud-sync 403 failures with bounded operation and
+  policy codes; add isolated-viewer refusal diagnostics with a single safe
+  preflight recovery. Document upload approval as a fixture prerequisite.
+  Native pairing, folder permissions and paused-state recovery passed; actual
+  transfers remain unverified. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+
 - 2026-10-26: Align the native Mac pairing capability limit with the server's
   128-entry contract. Macs advertising 65 capabilities previously failed after
   native approval and server preparation. Add signed-claim and rejection

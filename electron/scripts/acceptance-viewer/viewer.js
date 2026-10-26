@@ -15,7 +15,12 @@ async function act(operation) {
   document.querySelectorAll('button').forEach(button => { button.disabled = true; });
   element('status').textContent = 'Working…';
   try { await operation(); await refresh(); element('status').textContent = 'Ready'; }
-  catch { element('frame').hidden = true; frame = null; element('status').textContent = 'Request refused or disconnected. Inspect the task and refresh before retrying.'; }
+  catch (error) {
+    element('frame').hidden = true; frame = null;
+    // contextBridge retains Error.message, so display only our fixed operation/stage/code enums.
+    const code = /\[((?:input|tabs|frame|navigate|type|key|click|scroll|viewport))\/((?:input|manifest|status|binding|tabs|tab|arguments|frame-result|command-(?:frame|navigate|type|key|click|scroll|viewport))):((?:refused|invalid|timeout|disconnected|transport|protocol|page-context|page-closed|runtime|lease))\]/.exec(error?.message || '');
+    element('status').textContent = 'Request refused or disconnected' + (code ? ' [' + code[1] + '/' + code[2] + ':' + code[3] + ']' : '') + '. Inspect the task and refresh before retrying.';
+  }
   finally { busy = false; document.querySelectorAll('button').forEach(button => { button.disabled = false; }); }
 }
 element('go').onclick = () => act(() => api.navigate(element('url').value));
