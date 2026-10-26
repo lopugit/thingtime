@@ -60,6 +60,16 @@ let browser, server;
       assert.ok(await page.evaluate(() => scrollY + innerHeight >= document.documentElement.scrollHeight - 1), 'bottom of page reached');
       await page.evaluate(() => window.scrollTo(0, 0));
     };
+    const assertFocusVisible = async selector => {
+      await page.$eval(selector, node => node.scrollIntoView({ block: 'center' }));
+      await page.focus(selector);
+      assert.ok(await page.$eval(selector, node => {
+        const bounds = node.getBoundingClientRect(), style = getComputedStyle(node);
+        return document.activeElement === node && bounds.top >= 0 && bounds.bottom <= innerHeight && bounds.left >= 0 && bounds.right <= innerWidth &&
+          node.contains(document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)) &&
+          (parseFloat(style.outlineWidth) > 0 || style.boxShadow !== 'none');
+      }), 'focused Builder control must be visible, unobscured and visibly indicated');
+    };
     for (const width of [1440, 390]) {
       await page.setViewport({ width, height: 1000 });
       await page.goto(origin, { waitUntil: 'domcontentloaded' });
@@ -176,6 +186,35 @@ let browser, server;
     await editText(`${main} ${block('password-field-caption')}`, 'Field {item.label}');
     await editText(`${main} ${block('password-field-copy-label')}`, 'Use {item.copyLabel}');
     await editTitle(`${main} ${block('password-title')}`, 'Choose a private entry title');
+    // Use normal inspector/context-menu controls, never inject an authored layout.
+    const caption = `${main} ${block('password-field-caption')}`;
+    await page.click(caption);
+    await page.waitForSelector('[data-testid="css-custom-editor"]');
+    const captionCss = await page.$eval('[data-testid="css-custom-editor"]', node => node.value);
+    await replace('[data-testid="css-custom-editor"]', `${captionCss}\nfont-weight: 700`);
+    await page.keyboard.press('Tab'); // Normal blur commits the CSS editor.
+    await page.click('[data-testid="builder-move-down"]');
+    await page.waitForFunction(() => {
+      const heading = document.querySelector('[data-block-id="password-field-heading"]');
+      return !!(heading.querySelector('[data-block-id="password-field-actions"]').compareDocumentPosition(heading.querySelector('[data-block-id="password-field-caption"]')) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    await page.keyboard.press('Escape');
+    await page.click('button[aria-label="Close builder"]');
+    const captionText = await page.$eval(caption, node => node.textContent);
+    const priorBlockIds = await page.$$eval(`${main} [data-block-id]`, nodes => [...new Set(nodes.map(node => node.dataset.blockId))]);
+    await page.click(caption, { button: 'right' });
+    await page.waitForSelector('[data-testid="ctx-duplicate"]');
+    await page.click('[data-testid="ctx-duplicate"]');
+    await page.waitForFunction((scope, prior, text) => [...document.querySelectorAll(`${scope} [data-block-id]`)].some(node => !prior.includes(node.dataset.blockId) && node.textContent === text), {}, main, priorBlockIds, captionText);
+    const duplicateCaptionId = await page.$$eval(`${main} [data-block-id]`, (nodes, prior, text) => nodes.find(node => !prior.includes(node.dataset.blockId) && node.textContent === text).dataset.blockId, priorBlockIds, captionText);
+    await page.screenshot({ path: `${results}/1440-builder-duplicate.png`, fullPage: true });
+    await page.click('button[aria-label="Close builder"]');
+    await page.click(`${main} ${block(duplicateCaptionId)}`);
+    await page.waitForSelector('textarea[aria-label="Block text"]');
+    await assertFocusVisible('textarea[aria-label="Block text"]');
+    await page.click('[data-testid="builder-delete-block"]');
+    await page.waitForSelector(`${main} ${block(duplicateCaptionId)}`, { hidden: true });
+    await page.keyboard.press('Escape');
     await saveLayout(main);
     await clickText(source, 'Edit layout');
     await editText(`${source} ${block('source-history-heading')}`, 'Earlier passwords ({source.historyCount})');
@@ -199,6 +238,9 @@ let browser, server;
     assert.equal(await page.$eval(block('password-record-title'), node => node.textContent), 'Saved Synthetic login');
     assert.equal(await page.$eval(block('password-field-caption'), node => node.textContent), 'Field Username');
     assert.equal(await page.$eval(block('password-field-copy-label'), node => node.textContent), 'Use Copy');
+    assert.equal(await page.$eval(caption, node => getComputedStyle(node).fontWeight), '700');
+    assert.equal(await page.$(`${main} ${block(duplicateCaptionId)}`), null);
+    assert.ok(await page.$eval(block('password-field-heading'), heading => !!(heading.querySelector('[data-block-id="password-field-actions"]').compareDocumentPosition(heading.querySelector('[data-block-id="password-field-caption"]')) & Node.DOCUMENT_POSITION_FOLLOWING)));
     assert.equal(await page.$eval(block('password-title'), node => node.title), 'Choose a private entry title');
     assert.equal(await page.$eval(`${source} ${block('source-account')}`, node => node.title), 'Original account label');
     assert.equal(await page.$eval(`${source} ${block('source-history-heading')}`, node => node.textContent), 'Earlier passwords (1)');
@@ -207,6 +249,11 @@ let browser, server;
     await replace('input[name="field-username"]', 'fixture-reloaded@example.test');
     await page.click(block('password-save'));
     await page.waitForFunction(() => window.passwordFixture.savedEntry().fields.find(field => field.id === 'username').value === 'fixture-reloaded@example.test');
+    await page.click('button[aria-label="Copy Username"]');
+    await page.waitForFunction(() => window.passwordFixture.clipboardValue() === 'fixture-reloaded@example.test');
+    assert.equal(await page.evaluate(() => window.passwordFixture.savedEntry().fields.find(field => field.id === 'password').value), 'fixture-password-value');
+    assert.equal(await page.evaluate(() => window.passwordFixture.hasPrivateLayoutValues()), false);
+    assert.ok(!JSON.stringify(await page.evaluate(() => window.passwordFixture.layouts())).includes('fixture-reloaded@example.test'));
     await page.screenshot({ path: `${results}/1440-builder-saved.png`, fullPage: true });
     await page.setViewport({ width: 390, height: 1000 });
     await assertWidth();
@@ -214,11 +261,13 @@ let browser, server;
     await clickText(main, 'Edit layout');
     await page.click(block('password-field-caption'));
     await page.waitForSelector('textarea[aria-label="Block text"]');
+    await assertFocusVisible('textarea[aria-label="Block text"]');
     await assertWidth();
     await page.screenshot({ path: `${results}/390-builder.png` });
     await page.keyboard.press('Escape');
     await clickText(main, 'Done editing layout');
     await record('Builder independently edits main/repeated field/card controls and source/history/attachment panels; four layouts reload without live secrets, identities or file keys; saved input still works and mobile inspector fits');
+    await record('Normal Builder UI styles, reorders, duplicates and deletes a repeated field caption; save/reload preserves the template, original input/Copy/save targeting and secret-free layouts; desktop/mobile focus and scrolling remain usable');
 
     await page.click(`${attachments} ${block('attachment-remove')}`);
     await page.waitForSelector(`${attachments} ${block('attachment-name')}`, { hidden: true });

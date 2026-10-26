@@ -10153,6 +10153,15 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] In the normal Builder inspector/context menu, style and reorder a repeated
+  field caption, duplicate it, then delete only the duplicate. Save/reload and
+  confirm the original field's input, Copy and Save still target that field;
+  authored layouts contain no private values. At desktop/mobile sizes, scroll
+  the page and opened inspector, keeping focus visible and controls unobscured.
+  Close the inspector before targeting canvas content underneath it. The
+  synthetic `test:passwords-browser` harness covers this structural edit path;
+  real installed/deployed acceptance remains separate.
+
 - `npm --prefix remix run test:passwords` and the native `build:passwords`
   preflight automatically verify native ES256 registration/assertion against the
   independent WebAuthn server on macOS. The gate selects only the public fixture

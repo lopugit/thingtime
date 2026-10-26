@@ -3,6 +3,30 @@
 PR: https://github.com/lopugit/thingtime/pull/996
 Branch: `codex/password-manager` (base `develop`)
 
+## Structural Builder acceptance — 26 October 2026
+
+The isolated password browser harness now uses the actual Builder inspector and
+context menu to style/reorder a repeated field caption, duplicate it, and delete
+only the duplicate. Save/reload preserves the authored style/order; original
+username input, Copy and Save still target the right field, other field values
+remain unchanged, and saved layouts exclude private values. Desktop/mobile
+checks scroll the document and verify the focused inspector input is visible,
+unobscured and visibly indicated. Saved-layout and inspector screenshots were
+visually reviewed.
+
+All 15 browser groups passed with zero page errors using immutable runtime image
+`sha256:51f594d897c72bdb47d90e2da9141dee5b1ccc5bc32b0b1439852d3d2a0dac4b`
+and the installed Chromium seccomp profile. Docker inspection verified network
+none, no host mounts/published ports, read-only root, all capabilities dropped
+and no-new-privileges; the Chromium sandbox stayed enabled. Direct-IP and browser
+redirect probes were blocked. The exact container was removed after execution.
+
+An initial harness attempt clicked canvas content underneath the open inspector.
+The corrected path closes that inspector through its normal control before
+canvas actions; no product fix or security-policy change was needed. These are
+real Builder interactions with synthetic vault/clipboard/native boundaries,
+not installed/deployed or real-account acceptance.
+
 ## Automatic native interoperability gate — 26 October 2026
 
 The public Swift WebAuthn fixture previously required a manually supplied output
