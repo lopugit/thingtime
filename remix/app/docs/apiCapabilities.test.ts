@@ -351,14 +351,20 @@ test('storage-aware health and the corrected email environment gate publish thei
 
 test('pooled MongoDB diagnostics publish compatible patches in both manifests', () => {
 	const legacy = createApiCapabilitiesManifest(), manifest = thingtimeCapabilityManifest('https://thingtime.test');
-	for (const feature of ['api.health-mongodb', 'api.mongodb-status', 'api.mongodb-status-data']) {
-		assert.equal(legacy.features[feature], '1.0.1');
-		assert.equal(manifest.features[feature].version, '1.0.1');
-		assert.equal(capabilitySatisfies('1.0.1', '1.0.0'), true);
-		assert.equal(capabilitySatisfies('1.0.0', '1.0.1'), false);
-		assert.equal(capabilitySatisfies('2.0.0', '1.0.1'), false);
-		assert.equal(capabilitySatisfies(undefined, '1.0.1'), false);
+	for (const [feature, version] of [
+		['api.health-mongodb', '1.0.2'],
+		['api.mongodb-status', '1.0.1'],
+		['api.mongodb-status-data', '1.0.1']
+	] as const) {
+		assert.equal(legacy.features[feature], version);
+		assert.equal(manifest.features[feature].version, version);
+		assert.equal(capabilitySatisfies(version, '1.0.0'), true);
+		assert.equal(capabilitySatisfies('1.0.0', version), false);
+		assert.equal(capabilitySatisfies('2.0.0', version), false);
+		assert.equal(capabilitySatisfies(undefined, version), false);
 	}
+	assert.equal(capabilitySatisfies('1.0.2', '1.0.1'), true);
+	assert.equal(capabilitySatisfies('1.0.1', '1.0.2'), false);
 });
 
 test('subspace lifecycle + notification type additions publish their contract versions', () => {

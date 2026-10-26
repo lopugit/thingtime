@@ -57,7 +57,7 @@ corpus as changed (4,122 code files, 641 docs, 384 images) and was stopped befor
 dispatch; this update retained the documented structural-only limitation.
 
 The branch now includes freshly fetched `origin/main` at
-`789980d2e98ffa6bd63a84b6bf2a6da58e238b79`, preserving the drawer/shared-select,
+`3a5b10d538ba0ef9996f004492fe2dd1d8c1454c`, preserving the zero-TypeScript-diagnostic update, drawer/shared-select,
 Things/files/devices single-click browsing, canonical Component rendering and
 password updates. The preceding integration's gateway suite passed 14/14 and API capability
 suite passed 115/115. Gateway test fixtures explicitly choose the mode under
@@ -79,6 +79,18 @@ activation and live branch acceptance remain pending. A normal preview retry
 also exposed a separate protected-workflow expression error, being corrected
 on the controller branch. Do not merge the default-proxy runtime before the
 required canonical owners and publisher configuration are ready.
+
+The initial production/develop activation preserves legacy continuations. A
+focused source review verified production deployment `dpl_EsserNdfyVGY1GaHNQfZC1m29ZGs`
+at `70c0df25d33c225c6a6339b3717fc55c69ad2003` and development deployment
+`dpl_5t3m8HfMaSbscDaRubJ5eQ57CWBy` at `f41cf65629fe98423405de4bea4e5894f59ccb46`.
+Their unconfigured gateway paths leave database access intact, and continuation
+steps invoke local handlers without fetching through the moved public alias.
+Keeping the database/origin/task scope and old deployments intact preserves
+worker acknowledgments and shared locks. Production's authenticated Tasks UI
+showed no running root workflows but one running-status row; the API omits
+reservation fields, so no zero-reservation or fleet-drain claim is made. This
+first-activation allowance does not apply to later configured-owner promotions.
 
 ## Embed acceptance follow-up — 2026-10-26
 

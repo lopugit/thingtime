@@ -228,7 +228,19 @@ record observed status rather than claiming all old code is fenced. Strong
 enforcement across arbitrary code requires platform-level credential/network
 separation, potentially a dedicated backend project.
 
-Before moving an alias, negotiate `api.lopu-background-tasks` 1.3.2 and inspect
+For a first gateway activation, an audited legacy deployment can retain its
+in-flight work. Verify its immutable source has no active gateway settings,
+that Workflow steps invoke the original deployment's local handlers, and that
+the selected database, public origin and task scope stay unchanged. Preserve
+that deployment, its credentials, executor acknowledgments and shared
+conversation locks. In this case moving the alias does not fence or cancel the
+legacy callbacks. Public task counts cannot prove zero reservations, and old
+deployments can still hold direct MongoDB connections. Record the old deployment
+and source identities and this acceptance boundary before activation. Stop if
+the old owner has gateway settings or any of those assumptions cannot be verified.
+
+Before promoting a replacement for an already configured gateway owner,
+negotiate `api.lopu-background-tasks` 1.3.2 and inspect
 authenticated `GET /api/v1/lopu/tasks` for running server-managed roots and
 reservations. This is account/data-scope bounded, not a global fleet census.
 Drain those continuations or stop them through the normal owned-task control

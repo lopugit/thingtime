@@ -204,6 +204,17 @@ empty page; only known-clean saved pages may fetch their persisted tree.
   origin, not the SPA shell (`verify:vercel-output`, preview `curl`).
 - `curl <base>/api/v1/<group>/<name>-docs` returns the entry as JSON.
 
+## MongoDB health failure shape
+
+`app/routes/api/v1/health/mongodb/_mongodb.tsx` preserves the complete
+`MongoConnectionStatus` shape when remote probes fail. `api.health-mongodb` 1.0.2
+includes `custom: false` (the remote request has no viewer-selected database)
+and `replicaSet: null` (unknown), alongside the existing disconnected/null
+fields, timestamp and sanitized error. The status response remains HTTP 200;
+it does not imply the database is connected. Remote health/status-data probes
+must not forward the local session cookie. Run the adjacent `_mongodb.test.ts`
+through `node --import tsx --test` from `remix/`, plus `test:api-capabilities`.
+
 ## Gotchas
 
 - Auth modes: `none`, `optional`, `session`, `bearer`, `session-or-bearer`.
