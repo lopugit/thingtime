@@ -16,7 +16,7 @@ import { MongoClient } from 'mongodb';
 assert.equal(process.platform, 'darwin', 'Requires sandbox-exec; never run an unrestricted fallback.');
 const cwd = fileURLToPath(new URL('..', import.meta.url));
 const dir = await mkdtemp(join(tmpdir(), 'tt-environment-gateway-'));
-const ports = { alias: 19771, owner: 19772, follower: 19773, successor: 19774, db: 19775, trap: 19776 };
+const ports = { alias: 19771, owner: 19772, follower: 19773, successor: 19774, db: 19775, trap: 19776, vite: 19777, hmr: 19778 };
 const origin = key => `http://127.0.0.1:${ports[key]}`;
 const children = [];
 let routeTo = 'owner', followerDials = 0;
@@ -110,9 +110,17 @@ try {
     MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${ports.trap}/thingtime`, JWT_SECRET: randomBytes(48).toString('hex') }); await ready(follower, 'follower');
   const manifest = (await api('alias', '/.well-known/thingtime-capabilities.json')).data;
   assert.equal(manifest.gateway.deploymentId, 'owner'); assert.equal(manifest.features['api.environment-gateway'].version, '1.0.1');
-  for (const endpoint of ['/social-card', '/.well-known/thingtime-capabilities.json']) for (const method of ['GET', 'POST']) {
-    const response = await fetch(origin('follower') + endpoint + '-docs', { method, signal: AbortSignal.timeout(5000) });
-    assert.equal(response.status, 200, `${endpoint}-docs ${method}`);
+  // Exercise the real Vite config too: direct Nitro checks cannot catch a
+  // missing dev proxy rule that serves the SPA shell instead of root docs.
+  const vite = start(process.execPath, ['--input-type=module', '-e',
+    "const{createServer}=await import('vite');const server=await createServer({envFile:false,server:{host:'127.0.0.1'}});await server.listen();"], {
+    TT_WEB_PORT: String(ports.vite), TT_HMR_PORT: String(ports.hmr), TT_API_PORT: String(ports.follower)
+  });
+  await ready(vite, 'vite');
+  for (const transport of ['follower', 'vite']) for (const endpoint of ['/social-card', '/.well-known/thingtime-capabilities.json']) for (const method of ['GET', 'POST']) {
+    const response = await fetch(origin(transport) + endpoint + '-docs', { method, signal: AbortSignal.timeout(5000) });
+    assert.equal(response.status, 200, `${transport} ${endpoint}-docs ${method}`);
+    assert.match(response.headers.get('content-type'), /application\/json/, `${transport} ${endpoint}-docs ${method} must reach Nitro`);
     const doc = await response.json(); assert.equal(doc.ok, true); assert.equal(doc.docs.endpoint, endpoint);
     assert.equal(doc.docs.docsEndpoint, endpoint + '-docs'); assert.ok(doc.docs.steps.length);
     for (const platform of ['curl', 'node', 'python', 'ruby', 'wget']) assert.ok(doc.docs.platformExamples[platform]);
@@ -134,7 +142,7 @@ try {
   routeTo = 'owner'; await delay(5_100);
   assert.equal((await api('successor', '/api/root-data', { cookie: account.cookie })).data.user.id, account.data.user.id);
   assert.equal(followerDials, 0, 'Follower must never open its configured MongoDB socket.');
-  console.log(JSON.stringify({ ok: true, transport: 'built-nitro', registration: true, authCookies: true, crossSiteRefused: true, writes: true, promotion: true, rollback: true, followerMongoDials: followerDials,
+  console.log(JSON.stringify({ ok: true, transport: 'built-nitro', viteRootDocs: true, registration: true, authCookies: true, crossSiteRefused: true, writes: true, promotion: true, rollback: true, followerMongoDials: followerDials,
     initializedIndexCommands: initialized, unchangedColdIndexCommands: unchanged }));
 } finally {
   for (const child of children.reverse()) {

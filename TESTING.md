@@ -5292,7 +5292,8 @@ halves.
   and `test:api-capabilities`; build Nitro and run
   `node remix/scripts/environment-gateway-acceptance.mjs` under its OS boundary.
 - [ ] Root metadata/image routes expose their registered `-docs` twin for both
-  GET and POST without database admission; check JSON endpoint/method fields.
+  GET and POST without database admission, through both Nitro and the real Vite
+  dev proxy; check JSON endpoint/method fields and reject SPA HTML responses.
 - [ ] Confirm followers make zero MongoDB connections, preserve cookie/Bearer,
   Character, expected actor and custom data-plane selection, refuse forged hops
   and cross-site writes, and preserve OAuth redirect/cookie/stream cancellation.

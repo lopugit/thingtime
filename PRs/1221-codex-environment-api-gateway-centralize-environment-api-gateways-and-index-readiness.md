@@ -97,3 +97,10 @@ GET/POST cases exposed missing root `-docs` routing. The follow-up registers
 both twins in Nitro and the capability operations, bumps the affected contracts
 to 1.0.1, and checks all four real built responses against the generated docs
 shape. Required API CI must pass again at the final head.
+
+The next API run passed 934/936: Vite still served SPA HTML for the social-card
+docs twin because its proxy map omitted that root family. The acceptance runner
+now starts Vite with the real project config and checks both root docs families
+over GET/POST through Vite and directly through Nitro. The regression reproduced
+the HTML failure before adding the missing local proxy rule. No runtime API
+contract changes are introduced by this dev transport correction.
