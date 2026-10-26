@@ -106,8 +106,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   embedded Component definition, with an opt-in data inspector and independent
   Component access checks. Keep type aliases out of explicit renderer selection
   and document the authoring contract in global and repository AI guidance.
-  Preserve native child controls inside transient Action layouts.
-  **Codex (AI)**
+  Preserve native child controls inside transient Action layouts and prevent
+  hidden content containers retaining horizontal scroll after data inspection.
+  [Verification and limits](../PRs/1227-thing-render-components.md). **Codex (AI)**
 
 - 2026-10-26: Match custom drawer links and the final inline **➕ Add +** row to Thingtime navigation. Move menu layout editing into Settings and save the editable menu template as a private webpage Thing while retaining legacy device layouts. [Details](../PRs/1226-codex-drawer-renderable-row-match-the-final-add-drawer-row.md). **Codex (AI)**
 - 2026-10-26: Align shared native selects with Thingtime surfaces and radii; replace the black focus outline with a contrasting pink border and soft pink-to-violet glow. Theme Studio can customize both glow colours, softness and strength, including no glow. Add isolated desktop/mobile, light/dark and theme-editor save/reload coverage. **Codex (AI)**

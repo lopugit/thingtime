@@ -65,7 +65,9 @@ export const Main = (props) => {
 					// justifyContent="center"
 					justifyContent="flex-start"
 					flexDirection="column"
-					overflow="hidden"
+					// Clip overflow without creating a hidden scroll container. Focus
+					// inside a wide inspector must not pan the whole page sideways.
+					overflow="clip"
 					width="100%"
 					minH="var(--thingtime-page-height, 100dvh)"
 					maxWidth="100vw"

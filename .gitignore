@@ -85,8 +85,9 @@ graphify-out/.locks/
 graphify-out/cache/*
 !graphify-out/cache/semantic-cas/
 !graphify-out/cache/semantic-cas/**
-# Root HTML is a compatibility alias; retain portable HTML inside snapshots.
+# HTML is a regenerable visualization; retain it locally, outside source control.
 graphify-out/graph.html
+graphify-out/snapshots/**/graph.html
 graphify-out/snapshots/**/.graphify_*
 graphify-out/snapshots/**/.staging-*
 graphify-out/snapshots/**/cache/

@@ -360,6 +360,28 @@ async function browserAcceptance() {
   const viewGroup = () => page.getByRole('group', { name: 'Subspace view', exact: true });
   const mode = name => viewGroup().getByRole('button', { name, exact: true });
   const commentsToggle = () => page.getByRole('checkbox', { name: 'Automatically expand all comments', exact: true });
+  const assertControlGeometry = async label => {
+    const bounds = await viewGroup().boundingBox();
+    const viewportWidth = await page.evaluate(() => innerWidth);
+    const geometry = await page.evaluate(() => {
+      const target = document.querySelector('[role="group"][aria-label="Subspace view"]');
+      const ancestors = [];
+      let node = target;
+      for (let depth = 0; node && depth < 12; depth++, node = node.parentElement) {
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        ancestors.push({ tag: node.tagName, id: node.id, className: typeof node.className === 'string' ? node.className : '',
+          x: rect.x, y: rect.y, width: rect.width, height: rect.height, scrollLeft: node.scrollLeft,
+          scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, overflowX: style.overflowX, transform: style.transform });
+      }
+      return { scrollX, viewportLeft: visualViewport?.offsetLeft, ancestors };
+    });
+    if (bounds && (bounds.x < -1 || bounds.x + bounds.width > viewportWidth + 1)) {
+      await writeFile(join(out, `${label}-geometry.json`), JSON.stringify({ bounds, viewportWidth, ...geometry }, null, 2));
+    }
+    assert(bounds && bounds.x >= -1 && bounds.x + bounds.width <= viewportWidth + 1,
+      `${label}: controls escape viewport (${JSON.stringify(bounds)}, viewport ${viewportWidth}, ${JSON.stringify(geometry)})`);
+  };
   const openSpace = async space => {
     await page.goto(fixture.origin + '/s/' + space.slug, { waitUntil: 'domcontentloaded' });
     await viewGroup().waitFor({ timeout: 60000 });
@@ -375,28 +397,7 @@ async function browserAcceptance() {
       window.scrollTo(0, max);
     });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${label}: horizontal overflow`);
-    const bounds = await viewGroup().boundingBox();
-    const viewportWidth = await page.evaluate(() => innerWidth);
-    const geometry = await page.evaluate(() => {
-      const target = document.querySelector('[role="group"][aria-label="Subspace view"]');
-      const ancestors = [];
-      let node = target;
-      for (let depth = 0; node && depth < 12; depth++, node = node.parentElement) {
-        const style = getComputedStyle(node);
-        const rect = node.getBoundingClientRect();
-        ancestors.push({ tag: node.tagName, id: node.id, className: typeof node.className === 'string' ? node.className : '',
-          x: rect.x, y: rect.y, width: rect.width, height: rect.height, scrollLeft: node.scrollLeft,
-          scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, overflowX: style.overflowX, transform: style.transform });
-      }
-      const active = document.activeElement?.getBoundingClientRect();
-      return { scrollX, scrollY, viewportLeft: visualViewport?.offsetLeft, activeElement: { tag: document.activeElement?.tagName,
-        label: document.activeElement?.getAttribute('aria-label'), x: active?.x, y: active?.y, width: active?.width }, ancestors };
-    });
-    if (bounds && (bounds.x < -1 || bounds.x + bounds.width > viewportWidth + 1)) {
-      await writeFile(join(out, `${label}-geometry.json`), JSON.stringify(geometry, null, 2));
-    }
-    assert(bounds && bounds.x >= -1 && bounds.x + bounds.width <= viewportWidth + 1,
-      `${label}: controls escape viewport (${JSON.stringify(bounds)}, viewport ${viewportWidth}, ${JSON.stringify(geometry)})`);
+    await assertControlGeometry(label);
     await page.screenshot({ path: join(out, label + '.png'), fullPage: true });
     await page.evaluate(() => window.scrollTo(0, 0));
   };
@@ -425,6 +426,16 @@ async function browserAcceptance() {
     await openSpace(fixture.space);
     await assertMode('Posts');
     await page.getByText('Subspace acceptance discussion', { exact: true }).first().waitFor({ timeout: 30000 });
+    for (const width of [390, 1440, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+      await assertControlGeometry(`view-controls-${width}-posts`);
+      await mode('Messages').click();
+      await assertMode('Messages');
+      await assertControlGeometry(`view-controls-${width}-messages`);
+      await mode('Posts').click();
+      await assertMode('Posts');
+      await assertControlGeometry(`view-controls-${width}-posts-restored`);
+    }
     const sidebar = page.getByTestId('subspace-sidebar-embeds');
     await sidebar.getByText('Embedded acceptance component', { exact: true }).first().waitFor({ timeout: 30000 });
     const sidebarRead = await page.evaluate(async id => (await fetch('/api/v1/subspaces/embeds?id=' + id + '&region=sidebar')).json(), fixture.space.id);
@@ -490,8 +501,9 @@ async function browserAcceptance() {
     for (const region of ['feed', 'sidebar']) {
       const host = page.getByTestId(`subspace-${region}-embeds`);
       await host.getByText('This render Component is unavailable or invalid. Open the data view to inspect this Thing.', { exact: true }).waitFor({ timeout: 30000 });
-      assert.equal(await host.getByText(fixture.textFixtures[0].crystal.text, { exact: true }).count(), 0, 'Revoked renderer must not retain cached rendered output');
-      await host.getByText(fixture.textFixtures[1].crystal.text, { exact: true }).waitFor();
+      const rendered = host.locator('article').locator('p, blockquote');
+      assert.equal(await rendered.filter({ hasText: fixture.textFixtures[0].crystal.text }).count(), 0, 'Revoked renderer must not retain cached rendered output');
+      await rendered.filter({ hasText: fixture.textFixtures[1].crystal.text }).waitFor();
     }
     await page.screenshot({ path: join(out, 'render-component-source-acl-revoked.png'), fullPage: true });
     await setRendererAccess(['tt:all']);

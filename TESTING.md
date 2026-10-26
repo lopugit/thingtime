@@ -3402,13 +3402,17 @@ email whose link points at the attacker.
       rendered/data toggle and ordinary nested controls. The surrounding
       transient Action host handles only its own controls; it must not swallow
       native button events or intercept a nested host's Action.
+- [ ] Toggle the data inspector, switch Posts/Messages and resize desktop →
+      mobile → desktop → mobile. Hidden content containers must not retain
+      horizontal scroll offsets that shift controls outside the viewport;
+      check element bounds as well as document overflow, then scroll to bottom.
 - [ ] A thingtime post renders its thing as the NATIVE Thingtime tree in view
       mode — right-click opens the thing context menu, Toggle Edit Mode makes
       values editable (numbers get steppers, booleans a switch, Editor.js
       docs the block editor), and edits stay LOCAL: reloading the feed
       restores the server value, and neither the viewer's persisted
       thingtime blob nor the composer's tmp draft branch is touched.
-- [ ] A thing that resolves a kind renderer (a `render:` prop naming a kind,
+- [ ] A legacy Thing without `renderComponent` that resolves a kind renderer (a `render:` prop naming a kind,
       an explicit kind, or a structural match — in that priority order)
       shows the RENDERED form by default, with a small corner 🌀 icon back
       to the Thingtime view and ✨ back again; things resolving no renderer
