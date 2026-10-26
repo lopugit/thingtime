@@ -15751,3 +15751,18 @@ Local results do not establish current-head CI or deployed acceptance.
 
 Evidence: `artifacts/anonymous-protected-account-recovery-2026-10-27/README.md`.
 The account-only run intentionally skips the previously verified anonymous case.
+
+
+### Account feed partial membership — PR 1000
+
+- [x] Use separate disposable reader/author accounts and 25 private shared posts.
+  Visit only the first 20, then cold-reload offline: retain exactly those IDs,
+  exclude the five unvisited IDs, show the normal partial-coverage notice and
+  send no mutations. Scroll the actual page at 1440/390/320px.
+- [x] Reconnect through the real feed cursor to all 25; real logout followed by
+  cold offline guest reload must show none of the protected projections.
+- [ ] Broaden to other discovery/list surfaces, account switches, multiple tabs
+  and installed-device cold startup.
+
+Evidence: `artifacts/anonymous-account-feed-membership-2026-10-27/README.md`.
+The real packaged API is used; exact source parity covers six client modules only.

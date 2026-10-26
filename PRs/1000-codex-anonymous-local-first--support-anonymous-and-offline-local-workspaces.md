@@ -5631,3 +5631,30 @@ diagnostics, with no additions or removals; it is not a clean typecheck. Mail's
 post-acceptance destination guard separately passes deterministic rejection tests;
 its native flow evidence predates only that guard addition. Private Agent Overview
 reporting is unavailable; these are local parent-reported results.
+
+
+### 27 October — native partial account-feed membership
+
+Added a retained real-API test with separate synthetic author/reader accounts and
+25 private shared posts. The normal feed visits only the first 20; cold offline
+reload preserves exactly those IDs, shows partial coverage, excludes all five
+unvisited IDs and performs no writes. Reconnect uses a real cursor to retrieve
+all 25. Real logout and another cold offline reload show no protected projections.
+1440/390/320px full scrolling and affected-view top/bottom captures pass; zero
+page errors, OOM events or remaining task runtimes. Independent review confirmed
+that the assertions cover the proposed case. No product change was needed.
+
+The initial owned-post fixture was unsuitable because ordinary owned-library sync
+correctly retained its unvisited posts. Four fixture/harness failures and two
+successful runs are retained. Six client modules match archived source maps;
+server-source and whole-package identity remain unestablished. The TypeScript
+comparison adds/removes no diagnostics from the known 91-error baseline. Wider
+remote membership, other discovery surfaces and installed/deployed functional
+acceptance remain open.
+
+Evidence and host-specific reproduction: [native feed membership](../artifacts/anonymous-account-feed-membership-2026-10-27/README.md).
+The plan now records 65 completed, 16 partial and 8 planned checkpoints (24 remain).
+The preceding pushed `2366c088` preview and alias serve the app shell, boot/main
+assets and origin-scoped manifest, with source association supplied by GitHub
+preview metadata. A source audit confirms there is no public in-page Git SHA
+marker; HTTP availability is not deployed functional acceptance. That checkpoint passed [Web CI](https://github.com/lopugit/thingtime/actions/runs/40390728996) and [CodeQL](https://github.com/lopugit/thingtime/actions/runs/40391484620); its [immutable preview](https://thingtime-8ry23fcvp-lopugits-projects.vercel.app) and CI observation are retained separately from this new source.

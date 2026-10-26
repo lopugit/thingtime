@@ -1,0 +1,55 @@
+{
+  "source": "2366c08860dbe3a7a77a7234d34aed6b9dbbff69",
+  "origin": "https://thingtime-8ry23fcvp-lopugits-projects.vercel.app",
+  "observedAt": "2026-10-26T20:02:24.122707+00:00",
+  "scope": "Public HTTP only; source association comes from current GitHub PR deployment metadata, not an in-page source marker",
+  "index": {
+    "status": 200,
+    "bytes": 16687,
+    "sha256": "0a80a0ef7d967008f8315ca3ec2cf05f98ba20d06fa1abb094002486490236c9",
+    "cacheControl": "private, no-store",
+    "appShell": true,
+    "commitMarkerPresent": false
+  },
+  "capabilities": {
+    "status": 200,
+    "bytes": 74268,
+    "sha256": "3f97d0ba48051164ba1026f1bc786c7002bc737628b81da3176a5f42d2992223",
+    "cacheControl": "private, no-store",
+    "origin": "https://thingtime-8ry23fcvp-lopugits-projects.vercel.app",
+    "features": {
+      "api.webpages-suites-install": {
+        "version": "1.7.0"
+      },
+      "api.things-export": {
+        "version": "1.18.0"
+      },
+      "api.things-import": {
+        "version": "1.15.0"
+      },
+      "api.attachment-content": {
+        "version": "1.18.0"
+      }
+    }
+  },
+  "scripts": [
+    {
+      "path": "/tt-boot.js",
+      "status": 200,
+      "bytes": 3822,
+      "sha256": "39a5dfeca672ecb732a7a67facc4553a86993b026b361dd1709446380dbe8c83",
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "exactSourcePresent": false,
+      "shortSourcePresent": false
+    },
+    {
+      "path": "/assets/index-Bc2MY_2n.js",
+      "status": 200,
+      "bytes": 974423,
+      "sha256": "fd3510ccb2f9397752c5b3e8f0fee81428ddf4b467d18b9a7e02857ff1ad91b2",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "exactSourcePresent": false,
+      "shortSourcePresent": false
+    }
+  ]
+}
