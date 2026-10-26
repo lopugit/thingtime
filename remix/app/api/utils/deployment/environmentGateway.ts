@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+import { mongoConnectionPolicy } from './mongoConnectionPolicy';
+
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../capabilities/capabilityContract';
 
 export const ENVIRONMENT_GATEWAY_VERSION = '1.0.0';
@@ -28,11 +30,24 @@ export const gatewayOrigin = (value: string | undefined, env: Record<string, str
   return url.origin;
 };
 
-/** Explicit opt-in: no inference from NODE_ENV (Vercel previews also use production).
- * Partial configuration fails closed. Desktop-selected APIs remain independent. */
+export type MongoConnectionMode = 'proxy' | 'dedicated';
+/** Deployment configuration only; request headers cannot select database access. */
+export const getMongoConnectionMode = (env: Record<string, string | undefined> = process.env): MongoConnectionMode => {
+  const mode = env.THINGTIME_MONGODB_CONNECTION_MODE;
+  if (mode !== undefined && mode !== 'proxy' && mode !== 'dedicated') throw new GatewayUnavailable();
+  return mode || mongoConnectionPolicy;
+};
+
+/** Vercel builds default to the gateway. Local/desktop standalone runtimes retain
+ * their direct connection; partial deployment configuration always fails closed. */
 export const getGatewaySettings = (env: Record<string, string | undefined> = process.env): GatewaySettings | null => {
-  const keys = ['THINGTIME_GATEWAY_ENVIRONMENT', 'THINGTIME_GATEWAY_ORIGIN', 'THINGTIME_GATEWAY_SECRET'];
-  if (!keys.some(key => env[key])) return null;
+  const keys = ['THINGTIME_GATEWAY_ENVIRONMENT', 'THINGTIME_GATEWAY_ORIGIN', 'THINGTIME_GATEWAY_SECRET',
+    'THINGTIME_GATEWAY_DEPLOYMENT_ID', 'THINGTIME_GATEWAY_SOURCE_ORIGINS'];
+  getMongoConnectionMode(env);
+  if (!keys.some(key => env[key] !== undefined)) {
+    if (env.VERCEL || env.VERCEL_ENV || env.THINGTIME_MONGODB_CONNECTION_MODE === 'proxy') throw new GatewayUnavailable();
+    return null;
+  }
   const environment = env.THINGTIME_GATEWAY_ENVIRONMENT || '';
   const deploymentId = env.THINGTIME_GATEWAY_DEPLOYMENT_ID || env.VERCEL_DEPLOYMENT_ID || env.VERCEL_URL || '';
   const secret = env.THINGTIME_GATEWAY_SECRET || '';
@@ -43,7 +58,7 @@ export const getGatewaySettings = (env: Record<string, string | undefined> = pro
 
 export const gatewayDescriptor = (env: Record<string, string | undefined> = process.env): GatewayDescriptor | null => {
   const settings = getGatewaySettings(env);
-  if (!settings) return null;
+  if (!settings || getMongoConnectionMode(env) === 'dedicated') return null;
   const { secret: _secret, ...descriptor } = settings;
   return descriptor;
 };
@@ -112,7 +127,7 @@ export const createGatewayAuthority = (options: {
       throw new GatewayUnavailable();
     }
   };
-  return { current, requireDatabase: async () => { const authority = await current(); if (authority && !authority.owner) throw new GatewayUnavailable(); } };
+  return { current, requireDatabase: async () => { const authority = await current(); if (authority && !authority.owner && getMongoConnectionMode() !== 'dedicated') throw new GatewayUnavailable(); } };
 };
 
 let activeWork = 0;
