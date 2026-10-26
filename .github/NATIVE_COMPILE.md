@@ -77,7 +77,7 @@ the workflow's helper checkout and `CONTROL_SHA` literally to H1. The main
 listener pins its reusable implementation to H2. Preserve H1 ancestry through
 a normal merge; do not squash away the helper commit or silently rewrite pins.
 
-Current H1 is `c8a58081f29f6c140727eee78bd33ea7639a1a80`. The workflow does not
+Current H1 is `a0d410b29f251ffcc0ec399c085ea501b767379d`. The workflow does not
 resolve a mutable helper branch or use caller `github.sha`/`github.workflow_sha`
 to select helper code. It checks out H1 with credentials disabled and verifies
 HEAD equals H1 before invoking the supervisor. Caller input selects only the
