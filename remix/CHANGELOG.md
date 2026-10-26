@@ -102,6 +102,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Admit the reviewed Darwin kernel-group verification fix and bounded trusted failure diagnostics for the native compile runner. Preserve default inert preflight, immutable pinning, network denial, and separate hosted/native acceptance gates. **Codex (AI)**
+
 - 2026-10-27: Pin the native compile listener to the independently reviewed process-lifecycle repair: verified numeric identity drops, bounded watchdog readiness, separate denial-probe deadlines, and readable failure evidence. Hosted preflight and full native acceptance remain open. **Codex (AI)**
 
 - 2026-10-27: Default the owner-gated native compile listener to an inert isolation preflight and require an explicit mode choice for candidate compilation. Keep immutable controller pinning and record hosted transport/denial/cleanup gates separately from native and installed-device acceptance. **Codex (AI)**
