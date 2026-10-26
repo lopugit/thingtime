@@ -22,7 +22,8 @@ const WORKFLOW_DEPLOYMENT_MARKER = 'thingtimeDevelopPrPreview';
 const PREBUILT_DEPLOYMENT_MARKER = 'thingtimeGithubPrebuiltPreview';
 // v2 keeps the custom develop credential scope while routing gateway reads to
 // the controlled preview master. The two scopes must remain independent.
-const PR_PREVIEW_POLICY_VERSION = '2';
+const PR_PREVIEW_POLICY_VERSION = '3';
+const PREVIOUS_PR_PREVIEW_POLICY_VERSION = '2';
 const PR_PREVIEW_TARGET = Object.freeze({ slug: 'preview', kind: 'preview', id: '' });
 const PR_VERCEL_TARGET = 'develop';
 const CONTROLLER_DISPATCH_TYPE = 'develop-pr-preview-controller';
@@ -395,7 +396,7 @@ const deploymentMetadata = ({ pullRequest, config }) => {
 	};
 };
 
-const deploymentIdentityIssue = (deployment, config, { prNumber, expectedSha, expectedRef, expectedAttempt, legacyAlias = false } = {}) => {
+const deploymentIdentityIssue = (deployment, config, { prNumber, expectedSha, expectedRef, expectedAttempt, legacyAlias = false, allowPreviousPolicy = false } = {}) => {
 	if (!deployment || typeof deployment !== 'object') return 'missing-deployment';
 	if (!/^dpl_[A-Za-z0-9]+$/.test(deployment.id ?? '')) return 'invalid-deployment-id';
 	if (deployment.projectId !== config.projectId) return 'wrong-project';
@@ -409,7 +410,8 @@ const deploymentIdentityIssue = (deployment, config, { prNumber, expectedSha, ex
 		if (deployment.target === 'production') return 'wrong-target';
 		if (deployment.customEnvironment?.id !== config.customEnvironmentId || deployment.customEnvironment?.slug !== PR_VERCEL_TARGET ||
 			(deployment.customEnvironmentId && deployment.customEnvironmentId !== config.customEnvironmentId)) return 'wrong-environment';
-		if (deployment.meta?.thingtimePrPreviewPolicy !== PR_PREVIEW_POLICY_VERSION) return 'output-policy';
+		if (deployment.meta?.thingtimePrPreviewPolicy !== PR_PREVIEW_POLICY_VERSION &&
+			!(allowPreviousPolicy && deployment.meta?.thingtimePrPreviewPolicy === PREVIOUS_PR_PREVIEW_POLICY_VERSION)) return 'output-policy';
 		if (!/^[1-9][0-9]*-[1-9][0-9]*$/.test(deployment.meta?.thingtimePrPreviewAttempt || '') || (expectedAttempt && deployment.meta.thingtimePrPreviewAttempt !== expectedAttempt)) return 'upload-attempt';
 		if (deployment.meta?.thingtimeBuildTarget !== PR_VERCEL_TARGET || deployment.meta?.thingtimeCustomEnvironmentId !== config.customEnvironmentId) return 'metadata-environment-mismatch';
 	}
@@ -464,6 +466,12 @@ const choosePreferredDeployment = (deployments, config, expectedSha) =>
 			const readiness = Number(right.readyState === 'READY') - Number(left.readyState === 'READY');
 			return readiness || Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0);
 		})[0] ?? null;
+
+const retainPreviousPolicyAliasDuringRecovery = (binding, pullRequest) =>
+	binding && !binding.legacy && binding.deployment.readyState === 'READY' &&
+	binding.deployment.meta?.thingtimePrPreviewPolicy === PREVIOUS_PR_PREVIEW_POLICY_VERSION &&
+	workflowDeploymentCommitSha(binding.deployment) === pullRequest.head.sha &&
+	workflowDeploymentCommitRef(binding.deployment) === pullRequest.head.ref;
 
 const chooseStableDevelopDeployment = (deployments, config, expectedSha) =>
 	deployments
@@ -628,14 +636,11 @@ const runSelfTest = async () => {
 	equal(metadata[PREBUILT_DEPLOYMENT_MARKER], '1');
 	equal(Object.keys(metadata).length, 17);
 	equal(metadata.thingtimeBuildTarget, 'develop');
-	equal(metadata.thingtimePrPreviewPolicy, '2');
+	equal(metadata.thingtimePrPreviewPolicy, '3');
 	equal(metadata.thingtimeCustomEnvironmentId, config.customEnvironmentId);
 	equal(metadata.thingtimeGatewayOrigin, 'https://master.previews.thingtime.com');
 	equal(metadata.thingtimeGatewayOwner, 'false');
-	const runtimeEnvironment = {
-		THINGTIME_BRANCH_NAME: base.head.ref,
-		THINGTIME_GIT_COMMIT_SHA: base.head.sha
-	};
+	const runtimeEnvironment = prPreviewRuntimeEnvironment(config, base);
 	const prebuiltArgs = prebuiltDeploymentArgs({ config, prebuiltDirectory: '/tmp/prebuilt', metadata, runtimeEnvironment });
 	truthy(prebuiltArgs.includes('--target=develop'));
 	truthy(!prebuiltArgs.includes('--target=preview'));
@@ -654,6 +659,9 @@ const runSelfTest = async () => {
 	truthy(!prebuiltArgs.some((arg) => String(arg).startsWith('THINGTIME_GATEWAY_SECRET=')));
 	truthy(prebuiltArgs.includes(`THINGTIME_BRANCH_NAME=${base.head.ref}`));
 	truthy(prebuiltArgs.includes(`THINGTIME_GIT_COMMIT_SHA=${base.head.sha}`));
+	equal(runtimeEnvironment.THINGTIME_GATEWAY_SOURCE_ORIGINS, 'https://pr-201.previews.dev.thingtime.com');
+	equal(prebuiltArgs.filter((arg) => String(arg).startsWith('THINGTIME_GATEWAY_SOURCE_ORIGINS=')),
+		['THINGTIME_GATEWAY_SOURCE_ORIGINS=https://pr-201.previews.dev.thingtime.com']);
 	const uploadEnvironment = prebuiltUploadEnvironment(config, base.head.ref, 's'.repeat(32), 'synthetic-token', {
 		THINGTIME_GATEWAY_SECRET: 'wrong-custom-develop-secret',
 		THINGTIME_GATEWAY_ENVIRONMENT: 'develop',
@@ -782,6 +790,17 @@ const runSelfTest = async () => {
 		}),
 		null
 	);
+	const previousPolicyDeployment = { ...prebuiltDeployment, meta: { ...prebuiltDeployment.meta, thingtimePrPreviewPolicy: PREVIOUS_PR_PREVIEW_POLICY_VERSION } };
+	equal(deploymentIdentityIssue(previousPolicyDeployment, config, { prNumber: 201 }), 'output-policy');
+	equal(deploymentIdentityIssue(previousPolicyDeployment, config, { prNumber: 201, allowPreviousPolicy: true }), null);
+	equal(choosePreferredDeployment([previousPolicyDeployment], config, base.head.sha), null);
+	const previousPolicyBinding = await getAliasBinding(config, 201, {
+		readAlias: async () => ({ deploymentId: previousPolicyDeployment.id, uid: 'als_previous' }),
+		readDeployment: async () => previousPolicyDeployment
+	});
+	equal(previousPolicyBinding.legacy, false);
+	equal(retainPreviousPolicyAliasDuringRecovery(previousPolicyBinding, base), true);
+	equal(retainPreviousPolicyAliasDuringRecovery(previousPolicyBinding, { ...base, head: { ...base.head, sha: 'f'.repeat(40) } }), false);
 	for (const [changed, issue] of [
 		[{ target: 'production' }, 'wrong-target'],
 		[{ customEnvironment: null }, 'wrong-environment'],
@@ -1948,7 +1967,9 @@ const getAliasBinding = async (config, prNumber, { readAlias = getOwnedAlias, re
 	const deployment = await readDeployment(found.deploymentId);
 	if (deployment?.id !== found.deploymentId) throw new Error('Alias deployment ID mismatch');
 	const legacy = deployment.meta?.thingtimePrPreviewPolicy == null;
-	const issue = deploymentIdentityIssue(deployment, config, { prNumber, legacyAlias: legacy });
+	// A v2 alias remains identifiable for guarded replacement or alias removal.
+	// Only v3 deployments are eligible for reuse and managed backend cleanup.
+	const issue = deploymentIdentityIssue(deployment, config, { prNumber, legacyAlias: legacy, allowPreviousPolicy: true });
 	if (issue) throw new Error(`Alias deployment ownership check failed (${issue})`);
 	return { alias, record: found, deployment, legacy };
 };
@@ -2072,6 +2093,14 @@ const prebuiltDeploymentArgs = ({ config, prebuiltDirectory, metadata, runtimeEn
 	}
 	return args;
 };
+
+const prPreviewRuntimeEnvironment = (config, pullRequest) => ({
+	THINGTIME_BRANCH_NAME: pullRequest.head.ref,
+	THINGTIME_GIT_COMMIT_SHA: pullRequest.head.sha,
+	// The runtime accepts the one alias this publisher assigns. The direct
+	// Vercel URL is admitted independently through VERCEL_URL.
+	THINGTIME_GATEWAY_SOURCE_ORIGINS: `https://${previewAlias(pullRequest.number, config.previewAliasSuffix)}`
+});
 
 const prebuiltUploadEnvironment = (config, branch, gatewaySecret, token, inherited = process.env) => ({
 	...gatewayPublisherEnvironment(prGatewayPolicy(branch), {
@@ -2239,10 +2268,7 @@ const deployPrebuiltOutput = async (config, pullRequest, {
 	await prepare(config, prebuiltDirectory);
 	const gatewaySecret = await readPreviewGatewaySecret(config, readVariables);
 	const metadata = deploymentMetadata({ pullRequest, config });
-	const runtimeEnvironment = {
-		THINGTIME_BRANCH_NAME: pullRequest.head.ref,
-		THINGTIME_GIT_COMMIT_SHA: pullRequest.head.sha
-	};
+	const runtimeEnvironment = prPreviewRuntimeEnvironment(config, pullRequest);
 	const args = prebuiltDeploymentArgs({ config, prebuiltDirectory, metadata, runtimeEnvironment });
 
 	return guardPreviewUpload(config, pullRequest, async () => {
@@ -2408,12 +2434,13 @@ const reconcile = async (config) => {
 		let keeper = null;
 		if (
 			binding && !binding.legacy &&
+			binding.deployment.meta?.thingtimePrPreviewPolicy === PR_PREVIEW_POLICY_VERSION &&
 			binding.deployment.readyState === 'READY' &&
 			workflowDeploymentCommitSha(binding.deployment) === pullRequest.head.sha &&
 			workflowDeploymentCommitRef(binding.deployment) === pullRequest.head.ref
 		) {
 			keeper = binding.deployment;
-		} else if (binding && !binding.legacy) {
+		} else if (binding && !binding.legacy && !retainPreviousPolicyAliasDuringRecovery(binding, pullRequest)) {
 			await vercelRequest(`/v2/aliases/${encodeURIComponent(binding.record.uid)}`, {
 				method: 'DELETE',
 				accept: [200, 204, 404]

@@ -15,6 +15,17 @@ verbatim, and CI changes are recorded here from now on.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 every entry is attributed the same way the app changelog attributes them.
 
+## 2026-10-26 — Admit the exact ordinary PR alias at the Preview gateway
+
+- Add each PR's verified public alias as its sole explicit relay source origin.
+  Previously the direct Vercel deployment URL worked while the published PR
+  alias returned HTTP 421 for API reads. Bump the PR upload policy so existing
+  same-head deployments rebuild, retaining their aliases until replacement.
+  Prior-policy backend deployments remain outside the new-policy cleanup sweep
+  and age out normally. Dedicated previews keep their own database path and
+  reject incoming relays.
+  **Codex (AI)**
+
 ## 2026-10-26 — Initialize preview upload receipts on the runner
 
 - Move the protected receipt path out of job-level expressions into a runner
