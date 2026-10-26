@@ -104,11 +104,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Reconcile PR992 with develop `cd6f8b8ab`: retain Connections2, gateway1.1's proxy default, explicit dedicated policy and Vercel fail-closed admission. Preserve signed OAuth fixtures and a bounded ten-port compiled acceptance runner. Canonical gateway/Connections rollout remains separate. [PR992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI)
+
 - 2026-10-26: Integrate canonical gateway ownership, signed origin-preserving relays, Mongo admission/draining and durable index readiness into PR992. Keep all six Connections contracts at major2; test restored frontend callbacks, exact data-environment vault selection and rotating refresh isolation. Roll out a compatible canonical backend before follower-dependent actions; current major1 refusal is expected. [Details](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md#environment-gateway-integration--26-october-2026). — Codex (AI)
 
 - 2026-10-26: Resolve Connections OAuth clients and callbacks from the encrypted server vault by exact origin and explicit data environment, bind pending/saved grants, and reject ambiguous configuration and refresh races. Old unbound grants require reconnect; real provider acceptance remains pending. [PR 992 details](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). **Codex (AI)**
 
 - 2026-10-23: Make service/account cards, credential forms and Connections tools individually editable in Builder; keep secrets in transient form state and out of request logs. Reconcile current develop, assign distinct capability versions for uncapped writes, and preserve saved-service pagination. Current provider configuration and validation evidence are recorded in [PR 992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md); real-account acceptance remains open. **Codex (AI)**
+
+- 2026-10-26: Integrate the reviewed environment gateway and dedicated connection policy into develop while preserving newer develop changes. Built sandboxed API acceptance and contract tests pass; canonical-owner activation remains pending. [PR #1224 details](../PRs/1224-codex-gateway-develop-integration-environment-gateways-and-dedicated-policy.md). **Codex (AI)**
+
+- 2026-10-26: Add the server-only `THINGTIME_MONGODB_CONNECTION_MODE` override for `proxy` or opt-in `dedicated` MongoDB connections, with a branch-bundled default. Document the audited preview/develop database relationship, proposed gateway mapping and gradual pool draining; gateway activation remains pending. **Codex (AI)**
+
+- 2026-10-26: Forward public social cards and generated docs through the local Vite proxy; verify root docs GET/POST through the actual Vite server as well as built Nitro. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
+
+- 2026-10-26: Add explicit per-environment API gateway ownership, signed origin-preserving forwarding, safe pool draining and bounded shared index-plan readiness. Branch frontends use the selected environment backend; live alias acceptance remains pending, and older preview deployments may age out naturally. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
 
 - 2026-10-23: Limit PR 1164 to reusable local-media and editable Builder primitives. Author compressor Pages/Components directly as saved Things; retain the legacy suite and fix capability-compatible file-sync assertions.
 

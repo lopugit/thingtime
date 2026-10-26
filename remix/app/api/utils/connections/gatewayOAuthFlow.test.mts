@@ -11,6 +11,7 @@ process.env.JWT_SECRET = randomBytes(32).toString('base64url');
 process.env.THINGTIME_USER_VAULT_KEY = randomBytes(32).toString('base64url');
 process.env.THINGTIME_DATA_ENV = `custom:${dataEnvironment}`;
 process.env.THINGTIME_DATA_AUTHORITY_ORIGIN = gateway;
+process.env.THINGTIME_MONGODB_CONNECTION_MODE = 'proxy';
 process.env.THINGTIME_GATEWAY_ENVIRONMENT = 'preview'; // Deliberately not the data-environment ID.
 process.env.THINGTIME_GATEWAY_ORIGIN = gateway;
 process.env.THINGTIME_GATEWAY_SECRET = randomBytes(48).toString('base64url');

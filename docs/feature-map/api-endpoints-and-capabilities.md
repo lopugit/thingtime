@@ -452,16 +452,30 @@ the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
 
-## Environment gateway
+## Environment gateway and index readiness
 
-`api.environment-gateway` 1.0.1 registers origin-scoped gateway metadata in both
-manifest generators. `deployment/environmentGateway.ts` resolves alias ownership;
-`server/utils/environmentGateway.ts` checks every semantic version, path and method
-before signing a one-hop relay. Nitro middleware restores the original URL before
-authentication and keeps streaming work admitted until completion. Discovery is
-private/no-store. Root social-card and manifest docs twins are explicitly routed.
-Run `test:environment-gateway`, `test:api-capabilities` and `test:collections`; see
-[environment gateway](../environment-api-gateway.md) for rollout boundaries.
+Environment API gateway ingress is negotiated through `api.environment-gateway`
+1.1.0 and `/.well-known/thingtime-capabilities.json`. Server deployments use
+the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by
+opt-in) with the `THINGTIME_MONGODB_CONNECTION_MODE` runtime override. Dedicated
+mode executes its own backend, advertises `gateway: null`, and refuses relay
+traffic; it does not imply an isolated database. See [the gateway runbook](../environment-api-gateway.md)
+for the audited environment mapping and pending activation evidence.
+
+`app/api/utils/deployment/environmentGateway.ts` owns bounded discovery,
+admission and pool draining; `server/utils/environmentGateway.ts` validates
+origin-preserving signed relays before the normal route authorization path.
+`server/middleware/environment-gateway.ts`, the SPA fallback and capability
+handler retain local discovery/static serving while routing data operations.
+`mongodb/indexLifecycle.ts` and `indexMaintenance.mts` coordinate durable index
+readiness without blocking read-only authentication. Existing admin migration
+status/run contracts and Lopu background-task contracts carry their deliberate
+compatible patch versions in both generated manifests.
+
+Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
+the built `test:environment-gateway:acceptance` runner. See
+[the gateway runbook](../environment-api-gateway.md) for server settings,
+environment partitioning and outstanding live rollout acceptance.
 
 Connections gateway clients retain all six major2 requirements. The synthetic
 `connections/gatewayOAuthFlow.test.mts` uses the signed H3 relay and actual

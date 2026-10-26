@@ -440,3 +440,39 @@ were run through clean-environment `sandbox-exec` with networking denied.
 `NITRO_PRESET=node-server ... build:server` used the same restriction.
 `THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE=19971 THINGTIME_GATEWAY_ACCEPTANCE_CONNECTIONS=1 node remix/scripts/environment-gateway-acceptance.mjs`
 ran the compiled acceptance with its own verified OS network policy.
+
+
+## Develop gateway1.1 merge — 26 October 2026
+
+Started from tracked-clean `675b95fd549bfb1a967ae5bb7135267fe770712c` on
+`codex/service-account-library`, freshly fetched and locally merged develop
+`cd6f8b8abc94270980bac216da2412ffef8578b1` with snapshot retention50. Resolved
+15 conflicts while preserving the six Connections2 contracts, exact frontend /
+data-environment OAuth binding, newer fail-closed Vercel configuration and the
+explicit deployment-only connection policy. The branch default remains `proxy`;
+dedicated mode is not selected to bypass compatibility or origin refusals.
+
+Retained the deterministic index-lease timer regression, signed relay and
+synthetic provider tests, and bounded acceptance port override. The merged
+runner validates all ten ports (19971–19980 for this check), including the
+explicit dedicated worker and second replica set. No shared renderer/UI source
+changed in this merge; dedicated/proxy public shell behavior is exercised by
+the compiled acceptance runner. Main was not merged or replaced. The current
+reported master gateway1.0.1 / Connections1 remains behind this branch's
+contracts; source integration does not establish deployed provider acceptance.
+
+
+Merge validation: 275 gateway/capability/Mongo/admin checks and 242 Connections /
+workflow/migration/readiness checks passed with networking denied. The final
+connection-mode type correction preserves runtime validation through explicit
+return branches; the 54 affected gateway/OAuth cases passed again. Eight changed
+TS/TSX files passed lint with two pre-existing docs warnings; the corrected
+helper also passed targeted lint. Sanitized `node-server` builds passed before
+and after the correction. Compiled acceptance before the correction verified
+proxy, explicitly dedicated/independent database and shell behavior together
+with synthetic Connections2 OAuth. Final source compiled acceptance passed again with proxy and dedicated
+independent databases, public shell metadata, synthetic Connections2 OAuth,
+promotion/rollback and zero follower Mongo dials. Raw TypeScript returned to
+92 diagnostics, with zero on merge-added/modified lines; the incoming
+connection-mode diagnostic is repaired. This is not a clean branch typecheck. No merge commit, push,
+remote merge or deployment was performed by this integration worker.

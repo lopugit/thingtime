@@ -1,11 +1,13 @@
 # Environment API gateways and index lifecycle
 
-The gateway is an explicit server configuration. Each environment chooses one
-stable HTTPS alias. The deployment currently served by that alias executes
-database-backed HTTP operations; other configured deployments forward those
-operations to it. No raw database RPC is exposed. Existing request handlers
-still enforce authentication, revocation, Character, ACL, quota and selected
-custom-data-endpoint boundaries.
+The environment gateway is an HTTP API proxy, not a MongoDB wire-protocol
+proxy. Each deployment selects a server-only MongoDB connection mode:
+`proxy` forwards database-backed HTTP operations to the configured canonical
+environment alias, while `dedicated` runs its own HTTP handlers against that
+deployment's configured MongoDB connection and owns its MongoDB pools. No raw
+database RPC is exposed.
+Existing request handlers still enforce authentication, revocation, Character,
+ACL, quota and selected custom-data-endpoint boundaries.
 
 ## Configuration and environment partitioning
 
@@ -21,25 +23,59 @@ THINGTIME_GATEWAY_DEPLOYMENT_ID="<unique-runtime-deployment-id>"
 THINGTIME_GATEWAY_SOURCE_ORIGINS="https://branch.example.test"
 ```
 
-Production, development and previews each need their own explicitly selected
-alias, environment identifier and relay secret. Do not infer the data plane
-from `NODE_ENV`: deployed previews use production mode too. Preserve existing
-`THINGTIME_DATA_ENV`, federation and database/authentication assignments; moving
-a deployment to another gateway is a data-authority decision, not a new database
-or an implicit database migration. A custom Vercel target or a preview of a
-development branch may need a different assignment from a main-target preview.
-Never reuse a production relay secret to give a development backend production
-authority. The gateway owner retains its normal MongoDB, signing, encryption,
-email, cron and integration configuration. Followers do not need MongoDB or
+Do not infer the data plane from `NODE_ENV`: deployed previews use production
+mode too. Preserve existing `THINGTIME_DATA_ENV`, federation and
+database/authentication assignments; moving a deployment to another gateway is
+a data-authority decision, not a new database or an implicit database
+migration. A custom Vercel target or a preview of a development branch may need
+a different assignment from a main-target preview. Never reuse a production
+relay secret to give a development backend production authority. The gateway
+owner retains its normal MongoDB, signing, encryption, email, cron and
+integration configuration. Proxy followers do not need MongoDB or
 authentication-signing credentials for forwarded HTTP work.
 
-No settings means the existing self-hosted mode remains available. Partial or
-malformed settings fail closed. Desktop endpoint selection stays separate;
-gateway configuration is rejected in the desktop shell. HTTPS is mandatory;
-HTTP loopback is permitted only in the explicit Node test fixture.
+### Select the connection mode
+
+The server-only `THINGTIME_MONGODB_CONNECTION_MODE` runtime setting overrides
+the bundled branch policy when it is set. Use `dedicated` to run this
+deployment's own handlers and MongoDB pools, or `proxy` to route database-backed
+HTTP operations through its canonical environment alias:
+
+```sh
+THINGTIME_MONGODB_CONNECTION_MODE=dedicated
+# Or:
+THINGTIME_MONGODB_CONNECTION_MODE=proxy
+```
+
+Without the runtime override, the build-bundled
+`mongoConnectionPolicy` in `remix/app/api/utils/deployment/mongoConnectionPolicy.ts`
+sets the mode. To make dedicated mode the branch default, change its exported
+constant before building:
+
+```ts
+export const mongoConnectionPolicy: 'proxy' | 'dedicated' = 'dedicated';
+```
+
+The choice is captured in the Nitro bundle; changing it requires a redeploy.
+Restore the constant to `proxy` before promoting that branch as the environment
+gateway owner. Neither setting can be selected by a request or browser flag.
+
+Both `proxy` and `dedicated` Vercel deployments require complete canonical
+gateway settings: environment, HTTPS alias, and secret, plus a deployment
+identity (Vercel supplies one). Missing or partial settings, unknown runtime
+modes, invalid aliases, and environment mismatches fail closed. In configured
+dedicated mode, the deployment validates its canonical alias/environment but
+does not relay requests; its advertised `gateway: null` makes a proxy worker
+pointed at it fail closed. Dedicated deployments can still use the same
+configured environment database, so separate connection pools do not establish
+database isolation.
+Local and self-hosted runtimes with no gateway settings retain direct-connection
+behavior unless proxy mode is explicitly requested. Desktop endpoint selection
+stays separate, and gateway settings are rejected in the desktop shell. HTTPS is
+mandatory; HTTP loopback is permitted only in the explicit Node test fixture.
 
 `/.well-known/thingtime-capabilities.json` publishes `api.environment-gateway`
-1.0.1 (minimum negotiated version 1.0.0) and an optional `gateway` descriptor containing only environment, stable
+1.1.0 and an optional `gateway` descriptor containing only environment, stable
 origin and deployment identity. This metadata is private/no-store to prevent a
 CDN pinning the previous alias owner. Discovery itself neither authenticates an
 agent nor grants access to private Things.
@@ -90,8 +126,8 @@ PR992 deliberately requires major version 2 for `api.connections`,
 `api.connections-oauth-callback` and `api.connections-request`. Missing or major1
 backend contracts fail closed before forwarding credentials or consuming the
 request body; matching major2 still requires the advertised path and method.
-Never downgrade these requirements or opt out of the gateway to make a preview
-appear accepted. The current preview master advertises Connections 1.0.0; that
+Never downgrade these requirements or select dedicated mode merely to make a
+preview appear accepted; this branch retains its intended proxy policy. The current preview master advertises Connections 1.0.0; that
 refusal is an expected compatibility gate and is not end-to-end completion.
 
 Deploy and verify a canonical environment backend implementing Connections 2
@@ -106,23 +142,31 @@ Register each exact callback with the provider. Old env-only clients and
 unbound saved grants must reconnect through the major2 flow; never copy secrets
 between origins/environments or widen a network boundary as recovery.
 
-## Required rollout boundaries
+## Rollout and environment mapping
 
-Deploy this implementation to each selected gateway first, verify the public
-manifest, then enable its environment configuration and redeploy followers.
-Configure exact additional source origins as needed. Verify real registration,
-cookie/Bearer sessions, custom data selection, callbacks, streams and cron
-authorization on each intended alias. Promote and roll back once before treating
-the deployment control as accepted.
+The intended public mapping is production/main → `thingtime.com` with gateway
+environment `production` → production database; custom develop/develop →
+`dev.thingtime.com` with environment `develop` → development database; and
+standard previews → controlled `master.previews.thingtime.com` with environment
+`preview` → development database. The latest configuration audit confirmed that
+custom develop and previews currently use the same development cluster, separate
+from the production cluster. The coordinating task subsequently verified the
+master preview public manifest at gateway 1.0.1 and Connections 1.0.0. This branch
+advertises gateway 1.1.0 and retains Connections2; the newer policy and Connections
+contracts remain rollout gates. Public metadata does not prove authenticated
+provider, origin-allowlist or installed-client acceptance.
+Preserve existing data/authentication assignments unless an explicit data
+migration is authorized.
 
-Immutable deployments built before this implementation do not obey new gateway
-variables. Existing warm pools and already running work also cannot be revoked
-instantaneously by an alias change. Retire, restrict, replace or redeploy those
-old deployments through supported platform controls; remove their direct DB
-access only with an assessed credential/network rollout. Project routing changes
-alone do not stop their startup/background code. Implementation tests do not
-prove fleet-wide MongoDB enforcement. Keep the prior working deployment and
-configuration available until the chosen environment passes acceptance.
+Deploy the selected gateway implementation before enabling proxy followers.
+Configure exact additional source origins as needed and verify the public
+manifest and real API paths on each intended alias. Promotion moves new
+requests after the bounded ownership cache expires. Already admitted requests,
+streams, notifications and Lopu waitUntil work can finish on the previous
+deployment; its pools drain after that work ends. Old preview deployments can
+age out naturally. Do not claim that an alias move instantly closes every pool,
+fences the whole fleet, or proves fleet-wide MongoDB enforcement. No mandatory
+old-preview credential retirement is part of this rollout checklist.
 
 ## Index readiness
 
@@ -153,54 +197,46 @@ npm --prefix remix run test:collections
 npm --prefix remix run test:api-capabilities
 NITRO_PRESET=node-server npm --prefix remix run build:server
 node remix/scripts/environment-gateway-acceptance.mjs
-# Connections2 built runtime, synthetic provider/vault adapters, real API storage:
+# Optional synthetic Connections2 provider with real API sessions and storage:
 THINGTIME_GATEWAY_ACCEPTANCE_CONNECTIONS=1 node remix/scripts/environment-gateway-acceptance.mjs
 ```
 
 The built transport runner requires macOS sandbox-exec and local mongod. It
-creates disposable API identities and a temporary replica set on 19771–19778,
+creates disposable API identities and two temporary replica sets on 19771–19780,
 proves direct-IP outbound denial, uses separate synthetic signing credentials
 on the follower, verifies cookie-authenticated writes and promotion/rollback,
 and counts any forbidden follower MongoDB dial. It fails on occupied ports and
 removes its own processes and temporary data. It does not use production data
 or credentials and does not expose a public dev server.
 
-The disposable runner accepts `THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE` to choose
-an independent eight-port range when another task owns the default range. It
-validates every port before creating temporary state and refuses collisions;
-it never takes over a listener. The optional Connections2 mode locates built
-adapter exports before launch and injects synthetic provider/vault adapters only
-inside test processes. It retains the real gateway, session authentication,
-one-use state, encrypted account persistence and refresh-lease implementation.
-No product test route or authentication bypass is added.
+The runner accepts `THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE` for an independent
+ten-port range. It validates all ten ports before creating temporary state and
+never takes over listeners. The first eight serve the proxy/gateway fixture;
+the last two serve an explicitly dedicated worker and its independent test
+replica set. `THINGTIME_GATEWAY_ACCEPTANCE_CONNECTIONS=1` retains the generated
+synthetic provider/vault adapters while exercising real HTTP sessions, one-use
+state, encrypted storage and refresh leases. Product routes and authentication
+are unchanged.
 
-## Suggested project assignment and promotion
+## Promotion procedure
 
-For this project, retain `thingtime.com` on `main` for production and
-`dev.thingtime.com` on the custom `develop` target. For standard previews,
-provision and verify a dedicated alias such as `preview-gateway.thingtime.com`
-on a controlled gateway branch. That proposed alias is not an already verified
-deployment. Do not select whichever arbitrary PR deployed last as the shared
-preview backend. Existing staging/wildcard aliases are not acceptance evidence.
+Verify the selected origin and required contracts against the mapping above. Do not select an
+arbitrary PR deployment as the shared preview backend or treat staging/wildcard
+aliases as acceptance evidence. Build the gateway from the intended integration
+branch, run contract and real API acceptance, then promote that immutable
+deployment to its stable environment alias. Keep its previous immutable
+identity for rollback. Dedicated deployments can still use a shared environment
+database; independent gateway identities do not create database isolation.
 
-Build the gateway from the intended integration branch, run contract/real API
-acceptance, then promote that immutable deployment to its stable environment
-alias. Keep its previous immutable identity for rollback. Standard preview and
-custom develop currently inherit the same Mongo credential records; independent
-gateway identities do not make their physical databases isolated. Preserve that
-data mapping unless an explicit data migration is authorized.
-
-Remove Mongo credentials from broad follower/PR environment scopes and retain
-them only in the exact supported canonical gateway branch/target scopes. This
-also prevents future pre-gateway PR branches from opening pools: those bundles
-ignore new gateway variables, but cannot connect without database credentials.
-They may require a supported platform HTTP rewrite or redeployment to remain
-functional; never claim old API compatibility merely because forwarding exists.
-Already built immutable deployments retain their captured environment and still
-require retirement/restriction. Production deployment of older code must not be
-promoted without the gateway contract; env variables cannot teach an old bundle
-new behavior. Strong enforcement across arbitrary code requires platform-level
-credential/network separation, potentially a dedicated backend project.
+For new deployments, scope Mongo credentials according to the selected
+connection mode and environment. Changing credentials on existing previews is
+an optional, separately assessed rollout choice; it is not required to finish
+this code change. Immutable deployments built before the gateway implementation
+do not learn its behavior from new environment variables. A deployment may
+continue using its already configured connection until its work and pools end;
+record observed status rather than claiming all old code is fenced. Strong
+enforcement across arbitrary code requires platform-level credential/network
+separation, potentially a dedicated backend project.
 
 Before moving an alias, negotiate `api.lopu-background-tasks` 1.3.2 and inspect
 authenticated `GET /api/v1/lopu/tasks` for running server-managed roots and
@@ -233,7 +269,6 @@ Fencing and bounded commands reduce overlap risk but are not an absolute
 distributed cancellation guarantee. Preserve failed/unknown readiness and
 reconcile server state before retrying.
 
-
 ## PR992 integration verification — 26 October 2026
 
 Network-denied gateway/capability/Mongo/admin-integration checks passed 272/272.
@@ -256,3 +291,26 @@ zero MongoDB dials; initial DDL recorded 138 creates/51 drops with peak2, while
 an unchanged cold owner issued zero commands. Processes and disposable state
 were cleaned up. These local tests do not establish actual provider consent,
 current preview Connections2 support or installed native acceptance.
+
+
+## PR992 develop integration verification — 26 October 2026
+
+Fresh develop `cd6f8b8abc94270980bac216da2412ffef8578b1` was merged locally into
+PR992's existing branch. All 15 conflicts were resolved without changing its
+proxy default, Connections2 contracts or frontend/session/data-environment fences.
+Incoming gateway1.1 policy and explicit dedicated mode remain intact; the mode
+helper uses explicit validated return branches to avoid an incoming TS2322.
+The final 54 gateway/OAuth checks passed after that correction, alongside 517
+focused checks across gateway, capability, index, admin, Connections and workflow
+paths. Lint passed eight changed TS/TSX files with two existing docs warnings;
+raw TypeScript has 92 diagnostics and none on merge-added/modified lines.
+
+Final sanitized Nitro build and ten-port compiled acceptance passed on
+19971–19980. The runner verified an explicitly dedicated worker's independent
+replica and public shell metadata, proxy and signed Connections2 synthetic OAuth,
+callback replay refusal, concurrent rotating refresh, promotion/rollback and zero
+follower Mongo dials. Both initial index plans peaked at two commands; unchanged
+cold owner DDL remained zero. Processes and temporary data were cleaned up.
+This is local test evidence, not live canonical gateway1.1 / Connections2 or real
+provider/native acceptance. Graph refresh, merge completion and publication are
+handled separately by the coordinating task.

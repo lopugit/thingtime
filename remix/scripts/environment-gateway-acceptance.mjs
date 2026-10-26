@@ -16,8 +16,8 @@ import { MongoClient } from 'mongodb';
 assert.equal(process.platform, 'darwin', 'Requires sandbox-exec; never run an unrestricted fallback.');
 const cwd = fileURLToPath(new URL('..', import.meta.url));
 const portBase = Number(process.env.THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE || 19771);
-assert.ok(Number.isSafeInteger(portBase) && portBase >= 1024 && portBase <= 65528, 'Choose a valid eight-port acceptance range.');
-const ports = Object.fromEntries(['alias', 'owner', 'follower', 'successor', 'db', 'trap', 'vite', 'hmr'].map((key, offset) => [key, portBase + offset]));
+assert.ok(Number.isSafeInteger(portBase) && portBase >= 1024 && portBase <= 65526, 'Choose a valid ten-port acceptance range.');
+const ports = Object.fromEntries(['alias', 'owner', 'follower', 'successor', 'db', 'trap', 'vite', 'hmr', 'dedicated', 'dedicatedDb'].map((key, offset) => [key, portBase + offset]));
 const origin = key => `http://127.0.0.1:${ports[key]}`;
 const children = [];
 let routeTo = 'owner', followerDials = 0;
@@ -33,6 +33,7 @@ await writeFile(policy, `(version 1)(allow default)(deny network*)
 (allow network-inbound ${Object.values(ports).map(port => `(local ip "localhost:${port}")`).join(' ')})
 (allow network-outbound ${Object.values(ports).map(port => `(remote ip "localhost:${port}")`).join(' ')})`);
 const mongoUri = `mongodb://127.0.0.1:${ports.db}/thingtime?replicaSet=gateway-test`;
+const dedicatedMongoUri = `mongodb://127.0.0.1:${ports.dedicatedDb}/thingtime?replicaSet=gateway-dedicated-test`;
 const relaySecret = randomBytes(48).toString('hex');
 const jwt = randomBytes(48).toString('hex');
 const userVaultKey = randomBytes(32).toString('base64url');
@@ -86,9 +87,9 @@ function start(executable, args, extra = {}) {
   const child = spawn('/usr/bin/sandbox-exec', ['-f', policy, executable, ...args], { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
     PATH: process.env.PATH, HOME: dir, TMPDIR: dir, NODE_ENV: 'test', HOST: '127.0.0.1',
     MONGODB_CONNECTION_STRING: mongoUri, JWT_SECRET: jwt, THINGTIME_USER_VAULT_KEY: userVaultKey, THINGTIME_DATA_ENV: 'development',
-    THINGTIME_GATEWAY_ENVIRONMENT: 'acceptance', THINGTIME_GATEWAY_ORIGIN: origin('alias'),
+    THINGTIME_MONGODB_CONNECTION_MODE: 'proxy', THINGTIME_GATEWAY_ENVIRONMENT: 'acceptance', THINGTIME_GATEWAY_ORIGIN: origin('alias'),
     THINGTIME_GATEWAY_SECRET: relaySecret, THINGTIME_GATEWAY_TEST_LOOPBACK: '1',
-    THINGTIME_GATEWAY_SOURCE_ORIGINS: ['owner', 'follower', 'successor'].map(origin).join(','), ...extra
+    THINGTIME_GATEWAY_SOURCE_ORIGINS: ['owner', 'follower', 'successor', 'dedicated'].map(origin).join(','), ...extra
   } });
   let log = ''; child.stdout.on('data', value => { log += value; }); child.stderr.on('data', value => { log += value; });
   children.push(child); return { child, log: () => log };
@@ -135,18 +136,20 @@ try {
   assert.equal((await once(boundary.child, 'exit'))[0], 0, 'Backend direct-IP boundary must refuse external traffic.');
   await new Promise(resolve => trap.listen(ports.trap, '127.0.0.1', resolve));
   await new Promise(resolve => alias.listen(ports.alias, '127.0.0.1', resolve));
-  await mkdir(join(dir, 'db'));
-  start('/opt/homebrew/bin/mongod', ['--dbpath', join(dir, 'db'), '--port', String(ports.db), '--bind_ip', '127.0.0.1', '--replSet', 'gateway-test', '--nounixsocket']);
-  const client = new MongoClient(`mongodb://127.0.0.1:${ports.db}/?directConnection=true`, { serverSelectionTimeoutMS: 500 });
-  for (let attempt = 0; ; attempt++) { try { await client.connect(); break; } catch (error) { if (attempt > 40) throw error; await delay(200); } }
-  await client.db('admin').command({ replSetInitiate: { _id: 'gateway-test', members: [{ _id: 0, host: `127.0.0.1:${ports.db}` }] } });
-  for (let attempt = 0; ; attempt++) { if ((await client.db('admin').command({ hello: 1 })).isWritablePrimary) break; if (attempt > 100) throw new Error('Replica not primary.'); await delay(200); }
-  await client.close();
+  for (const [key, replica] of [['db', 'gateway-test'], ['dedicatedDb', 'gateway-dedicated-test']]) {
+    await mkdir(join(dir, key));
+    start('/opt/homebrew/bin/mongod', ['--dbpath', join(dir, key), '--port', String(ports[key]), '--bind_ip', '127.0.0.1', '--replSet', replica, '--nounixsocket']);
+    const client = new MongoClient(`mongodb://127.0.0.1:${ports[key]}/?directConnection=true`, { serverSelectionTimeoutMS: 500 });
+    for (let attempt = 0; ; attempt++) { try { await client.connect(); break; } catch (error) { if (attempt > 40) throw error; await delay(200); } }
+    await client.db('admin').command({ replSetInitiate: { _id: replica, members: [{ _id: 0, host: `127.0.0.1:${ports[key]}` }] } });
+    for (let attempt = 0; ; attempt++) { if ((await client.db('admin').command({ hello: 1 })).isWritablePrimary) break; if (attempt > 100) throw new Error('Replica not primary.'); await delay(200); }
+    await client.close();
+  }
   const owner = startNitro('owner'); await ready(owner, 'owner');
   const follower = startNitro('follower', {
     MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${ports.trap}/thingtime`, JWT_SECRET: randomBytes(48).toString('hex') }); await ready(follower, 'follower');
   const manifest = (await api('alias', '/.well-known/thingtime-capabilities.json')).data;
-  assert.equal(manifest.gateway.deploymentId, 'owner'); assert.equal(manifest.features['api.environment-gateway'].version, '1.0.1');
+  assert.equal(manifest.gateway.deploymentId, 'owner'); assert.equal(manifest.features['api.environment-gateway'].version, '1.1.0');
   // Exercise the real Vite config too: direct Nitro checks cannot catch a
   // missing dev proxy rule that serves the SPA shell instead of root docs.
   const vite = start(process.execPath, ['--input-type=module', '-e',
@@ -170,6 +173,31 @@ try {
   const saved = await api('follower', '/api/v1/things', { cookie: account.cookie, body: { thingtime: ['post'], crystal: { type: 'text', text: 'Gateway acceptance' }, acl: ['tt:all'] } });
   assert.ok(saved.data.post?.id || saved.data.thing?.id);
   await api('follower', '/api/v1/things', { headers: { 'x-thingtime-gateway-relay': 'forged' }, status: 508 });
+  const dedicated = startNitro('dedicated', {
+    THINGTIME_MONGODB_CONNECTION_MODE: 'dedicated', MONGODB_CONNECTION_STRING: dedicatedMongoUri,
+    JWT_SECRET: randomBytes(48).toString('hex')
+  }); await ready(dedicated, 'dedicated');
+  assert.equal((await api('dedicated', '/.well-known/thingtime-capabilities.json')).data.gateway, null);
+  // The same username is independently registered in a separate disposable DB.
+  // If this branch accidentally forwarded to the gateway, this would conflict.
+  const branchAccount = await api('dedicated', '/api/v1/auth/register', { body: {
+    username: 'gateway-acceptance', email: 'gateway@example.invalid', password: randomBytes(32).toString('hex')
+  } });
+  assert.notEqual(branchAccount.data.user.id, account.data.user.id);
+  assert.equal((await api('dedicated', '/api/root-data', { cookie: branchAccount.cookie })).data.user.id, branchAccount.data.user.id);
+  const branchPost = await api('dedicated', '/api/v1/things', { cookie: branchAccount.cookie, body: {
+    thingtime: ['post'], crystal: { type: 'text', text: 'Dedicated branch acceptance' }, acl: ['tt:all']
+  } });
+  const branchPostId = branchPost.data.post?.id || branchPost.data.thing?.id;
+  assert.ok(branchPostId);
+  const dedicatedShell = await fetch(origin('dedicated') + '/post/' + branchPostId);
+  assert.equal(dedicatedShell.headers.get('x-tt-shell'), 'social-meta');
+  assert.match(await dedicatedShell.text(), /Dedicated branch acceptance/, 'Dedicated shell must resolve its own public post metadata.');
+  const followerShell = await fetch(origin('follower') + '/post/' + branchPostId);
+  assert.doesNotMatch(await followerShell.text(), /Dedicated branch acceptance/, 'Proxy follower shell stays generic.');
+  assert.equal((await api('follower', '/api/root-data', { cookie: account.cookie })).data.user.id, account.data.user.id);
+  await api('dedicated', '/api/v1/things', { headers: { 'x-thingtime-gateway-relay': 'forged' }, status: 403 });
+  const dedicatedIndex = await indexTrace('dedicated'); assert.ok(dedicatedIndex.creates > 0);
   if (testConnections) {
     for (const id of ['connections', 'connections-providers', 'connections-feed', 'connections-oauth-begin', 'connections-oauth-callback', 'connections-request'])
       assert.equal(manifest.features[`api.${id}`].version, '2.0.0');
@@ -205,7 +233,7 @@ try {
   routeTo = 'owner'; await delay(5_100);
   assert.equal((await api('successor', '/api/root-data', { cookie: account.cookie })).data.user.id, account.data.user.id);
   assert.equal(followerDials, 0, 'Follower must never open its configured MongoDB socket.');
-  console.log(JSON.stringify({ ok: true, transport: 'built-nitro', syntheticConnectionsOAuth: testConnections, viteRootDocs: true, registration: true, authCookies: true, crossSiteRefused: true, writes: true, promotion: true, rollback: true, followerMongoDials: followerDials,
+  console.log(JSON.stringify({ ok: true, transport: 'built-nitro', syntheticConnectionsOAuth: testConnections, viteRootDocs: true, registration: true, authCookies: true, crossSiteRefused: true, writes: true, dedicatedOwnHandler: true, dedicatedShellMetadata: true, independentDedicatedDatabase: true, dedicatedIndexCommands: dedicatedIndex, promotion: true, rollback: true, followerMongoDials: followerDials,
     initializedIndexCommands: initialized, unchangedColdIndexCommands: unchanged }));
 } finally {
   for (const child of children.reverse()) {

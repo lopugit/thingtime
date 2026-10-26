@@ -1499,17 +1499,24 @@ see [the rollout contract](docs/environment-api-gateway.md#connections-major2-ro
 A major1 preview backend is deliberately refused and does not establish live
 OAuth acceptance.
 
-Configured branch deployments use the canonical environment API gateway for
-database-backed operations. See [gateway setup and rollout](docs/environment-api-gateway.md)
-for the server-only environment/origin/deployment settings, separate relay secret,
-exact source origins, per-operation capability negotiation, pool draining and
-index-readiness recovery. A gateway that lacks a branch operation fails closed;
-no production fallback or dedicated-backend opt-out is used.
+MongoDB powers database-backed API routes. Incomplete local or deployed servers
+return a configuration error; they do not silently forward to production. The
+installed desktop shell has its own explicit selected-API bridge. For one active
+database/API deployment per environment, see the
+[environment gateway configuration and rollout](docs/environment-api-gateway.md).
+That runbook covers stable aliases, separate environment secrets, capability
+negotiation, `proxy` and opt-in `dedicated` connection modes, promotion/rollback
+and gradual pool draining. Vercel defaults to proxy mode; local and self-hosted
+servers without gateway settings retain direct connections. Dedicated mode
+owns its MongoDB pools but uses the configured environment database, so it does
+not imply database isolation or an Atlas tier change. The intended mapping is
+`thingtime.com`/production to production data, `dev.thingtime.com`/develop to
+development data, and standard previews to `master.previews.thingtime.com` /
+preview on development data. A recent configuration audit found previews and
+custom develop already share the development cluster, separate from production;
+current master support still requires separate compatibility and acceptance checks.
 
-MongoDB powers database-backed API routes. Incomplete local or deployed APIs
-return a configuration error rather than implicitly forwarding to production.
-The installed desktop shell retains its explicit selected-API bridge. Configure
-the canonical environment owner or a deliberate self-hosted API with:
+Configure a self-hosted API or the environment gateway owner with:
 
 ```sh
 MONGODB_CONNECTION_STRING="mongodb+srv://<user>:<db_password>@<cluster>/<database>?retryWrites=true&w=majority"
