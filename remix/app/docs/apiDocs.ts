@@ -669,7 +669,7 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
-    id: 'social-card', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'root',
+    id: 'social-card', contractVersion: '1.0.1', featureVersion: '1.0.1', group: 'root',
     title: 'Public social card', endpoint: '/social-card', summary: 'Renders an anonymous public social preview PNG.',
     detail: 'GET accepts a normalized local path query; the controller resolves only public home-plane metadata. It ignores custom database selection and falls back to a safe generic card. HEAD returns image headers without resolving data. No arbitrary remote image URL is accepted.',
     auth: { mode: 'none', description: 'Anonymous public projection only.' }, methods: ['GET'],
@@ -677,7 +677,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'PNG image.', headers: { 'Content-Type': 'image/png' } }]
   }),
   endpoint({
-    id: 'environment-gateway', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'deployment',
+    id: 'environment-gateway', contractVersion: '1.0.1', featureVersion: '1.0.1', group: 'deployment',
     title: 'Environment API gateway', endpoint: '/.well-known/thingtime-capabilities.json',
     summary: 'Publishes the explicitly configured environment gateway and this deployment identity.',
     detail: 'The origin-scoped manifest includes gateway: null when disabled, or environment, origin and deploymentId metadata. The stable configured alias selects its current deployment owner. Other deployments proxy documented semantic operations only after compatible feature negotiation. Signed one-hop relays preserve the original URL and authentication context; neither metadata nor relay signatures grant user access. Discovery failures and environment/version mismatches fail closed without a MongoDB connection. No secrets or database configuration are published.',

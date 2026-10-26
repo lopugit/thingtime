@@ -8,7 +8,7 @@ const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 
 // Root-path (non-/api/v1) endpoints whose `-docs` twin is also routed to the
 // API catch-all in nitro.config.ts, so the manifest must list that twin too.
-export const ROOT_DOCS_TWIN_IDS: ReadonlySet<string> = new Set(['apple-app-association', 'seo-robots', 'seo-sitemap']);
+export const ROOT_DOCS_TWIN_IDS: ReadonlySet<string> = new Set(['apple-app-association', 'seo-robots', 'seo-sitemap', 'social-card', 'environment-gateway']);
 
 export const thingtimeCapabilityManifest = (origin: string) => {
   const normalizedOrigin = new URL(origin).origin;
@@ -28,7 +28,7 @@ export const thingtimeCapabilityManifest = (origin: string) => {
     ...apiEndpointDocs.flatMap((doc) => [
       { feature: `api.${doc.id}`, methods: doc.methods, path: doc.endpoint },
       ...(doc.endpoint.startsWith('/api/v1/') || ROOT_DOCS_TWIN_IDS.has(doc.id)
-        ? [{ feature: `api.${doc.id}`, methods: doc.id === 'apple-app-association' ? ['GET', 'POST'] : ['GET'], path: doc.docsEndpoint }]
+        ? [{ feature: `api.${doc.id}`, methods: ['apple-app-association', 'social-card', 'environment-gateway'].includes(doc.id) ? ['GET', 'POST'] : ['GET'], path: doc.docsEndpoint }]
         : [])
     ])
   ];

@@ -5276,6 +5276,8 @@ halves.
 - [ ] Run `npm --prefix remix run test:environment-gateway`, `test:collections`
   and `test:api-capabilities`; build Nitro and run
   `node remix/scripts/environment-gateway-acceptance.mjs` under its OS boundary.
+- [ ] Root metadata/image routes expose their registered `-docs` twin for both
+  GET and POST without database admission; check JSON endpoint/method fields.
 - [ ] Confirm followers make zero MongoDB connections, preserve cookie/Bearer,
   Character, expected actor and custom data-plane selection, refuse forged hops
   and cross-site writes, and preserve OAuth redirect/cookie/stream cancellation.

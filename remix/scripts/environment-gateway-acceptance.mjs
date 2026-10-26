@@ -109,7 +109,14 @@ try {
   const follower = startNitro('follower', {
     MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${ports.trap}/thingtime`, JWT_SECRET: randomBytes(48).toString('hex') }); await ready(follower, 'follower');
   const manifest = (await api('alias', '/.well-known/thingtime-capabilities.json')).data;
-  assert.equal(manifest.gateway.deploymentId, 'owner'); assert.equal(manifest.features['api.environment-gateway'].version, '1.0.0');
+  assert.equal(manifest.gateway.deploymentId, 'owner'); assert.equal(manifest.features['api.environment-gateway'].version, '1.0.1');
+  for (const endpoint of ['/social-card', '/.well-known/thingtime-capabilities.json']) for (const method of ['GET', 'POST']) {
+    const response = await fetch(origin('follower') + endpoint + '-docs', { method, signal: AbortSignal.timeout(5000) });
+    assert.equal(response.status, 200, `${endpoint}-docs ${method}`);
+    const doc = await response.json(); assert.equal(doc.ok, true); assert.equal(doc.docs.endpoint, endpoint);
+    assert.equal(doc.docs.docsEndpoint, endpoint + '-docs'); assert.ok(doc.docs.steps.length);
+    for (const platform of ['curl', 'node', 'python', 'ruby', 'wget']) assert.ok(doc.docs.platformExamples[platform]);
+  }
   const account = await api('follower', '/api/v1/auth/register', { body: { username: 'gateway-acceptance', email: 'gateway@example.invalid', password: randomBytes(24).toString('hex') } });
   assert.ok(account.data.user.id); assert.ok(account.cookie);
   const root = await api('follower', '/api/root-data', { cookie: account.cookie }); assert.equal(root.data.user.id, account.data.user.id);

@@ -89,3 +89,11 @@ Preview at the implementation head: https://thingtime-91eb7nm4v-lopugits-project
 The public manifest returned HTTP 200, matching origin and api.environment-gateway
 1.0.0, with gateway:null (configuration not yet activated). CI was pending at
 publication; exact-head required checks still need review before integration.
+
+## CI docs-route correction
+
+The first API CI run passed 932/936 cases; four generated root documentation
+GET/POST cases exposed missing root `-docs` routing. The follow-up registers
+both twins in Nitro and the capability operations, bumps the affected contracts
+to 1.0.1, and checks all four real built responses against the generated docs
+shape. Required API CI must pass again at the final head.
