@@ -238,6 +238,12 @@ pre-queued with no jobs, logs, or cancellable run graph.
   select the logical Preview gateway, inject only its unbranched scoped signing
   secret into the upload child, and require the controlled main-source preview
   master. Legacy PR deployments must not be reused or mass-deleted.
+- Request `/api/root-data` through the exact published `pr-N.previews.dev.thingtime.com`
+  alias, not only the deployment URL. A proxy PR must admit only that exact
+  source origin for its signed Preview relay; an older preview policy is
+  rebuilt without deleting its same-head alias before replacement. A dedicated
+  PR stays on its own configured develop database and rejects incoming relay
+  headers. Confirm neither response exposes gateway or Mongo credentials.
 - Verify production and preview master are separately built with their own target
   metadata and no provider/gateway secrets in either build or artifact.
 - Missing encrypted scope bootstrap, unknown target, arbitrary PR master selection,
