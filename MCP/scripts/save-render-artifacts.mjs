@@ -77,7 +77,12 @@ export function decodeRenderResult(result, provenance) {
   requireThat(metadata?.ok === true && /^[a-f0-9]{64}$/.test(metadata.hash) && Array.isArray(metadata.viewports) && metadata.viewports.length >= 1 && metadata.viewports.length <= 4, 'Invalid render metadata');
   requireThat(metadata.viewports.every(v => Number.isInteger(v.width) && v.width >= 320 && v.width <= 1920 && Number.isInteger(v.height) && v.height >= 320 && v.height <= 1440 && v.deviceScaleFactor === 1), 'Invalid viewport metadata');
   requireThat(Array.isArray(metadata.artifacts) && metadata.artifacts.length >= 2 && metadata.artifacts.length <= 6 && new Set(metadata.artifacts).size === metadata.artifacts.length, 'Invalid artifact manifest');
-  const expectedNames = ['thingtime-draft.json', ...metadata.viewports.map(v => `viewport-${v.width}x${v.height}.png`), ...(metadata.viewports[0].crop ? ['card.png'] : [])];
+  requireThat(metadata.cropEnabled === undefined || typeof metadata.cropEnabled === 'boolean', 'Invalid crop metadata');
+  // Older workers only advertised crop geometry. New workers explicitly say
+  // whether a card was requested; geometry remains useful even without a card.
+  const cropEnabled = metadata.cropEnabled ?? !!metadata.viewports[0].crop;
+  requireThat(!cropEnabled || !!metadata.viewports[0].crop, 'Missing crop geometry');
+  const expectedNames = ['thingtime-draft.json', ...metadata.viewports.map(v => `viewport-${v.width}x${v.height}.png`), ...(cropEnabled ? ['card.png'] : [])];
   requireThat(new Set(expectedNames).size === expectedNames.length && expectedNames.length === metadata.artifacts.length && expectedNames.every(name => metadata.artifacts.includes(name)), 'Incomplete artifact manifest');
   const resources = result.content.filter(c => c.type === 'resource').map(c => c.resource);
   requireThat(resources.length === metadata.artifacts.length, 'Missing or extra resources');

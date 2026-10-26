@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Make disabled MCP card crops extractable with explicit result metadata, reject duplicate viewport dimensions before launch, and withhold artifacts after truncated worker output. Artifact extractor regressions now run in the default MCP suite. [PR 1000 evidence](../artifacts/anonymous-local-first-2026-10-26-mcp-options/README.md). **Codex (AI)**
+
 - 2026-10-26: Prevent repeated instruction saves from stacking the same editor’s success notifications. Native clipboard/undo/save/reload now covers 12,002 hard lines; saved profile Actions pass through the normal offline Run button with retained history and responsive checks. [PR 1000 follow-up evidence](../artifacts/anonymous-local-first-2026-10-26-followup-final/README.md). **Codex (AI)**
 
 - 2026-10-26: Integrate isolated native rendering into the existing Thingtime MCP, verify real agent artifacts and owned cleanup, correct read-only discovery metadata and the stale Nav acceptance assertion. Native instruction guidance passes all three widths; unified desktop reload and broader acceptance remain separate. [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**

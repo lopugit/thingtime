@@ -12,7 +12,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { createIsolatedRenderer, isolatedRenderConfiguration, IsolatedRenderTransport, ISOLATED_RENDER_OUTPUT_BYTES, type RenderLaunch } from '../src/isolatedRender.js';
-import { renderInput } from '../src/renderExport.js';
+import { parseRenderInput, renderInput, renderViewports } from '../src/renderExport.js';
 import { createServer } from '../src/server.js';
 import { SnapshotStore } from '../src/store.js';
 
@@ -104,12 +104,23 @@ test('isolated delegate lazily forwards resources exactly, closes each session a
     await assert.rejects(fixture.renderer.execute({ ...input, content: 'x'.repeat(280000) }), /Too big|256 KiB/);
     await assert.rejects(fixture.renderer.execute({ ...input, content: 'é'.repeat(131073) }), /256 KiB/);
     await assert.rejects(fixture.renderer.execute({ ...input, content: { text: 'x'.repeat(262144) } }), /256 KiB/);
+    await assert.rejects(fixture.renderer.execute({ ...input, viewports: [{ width: 390, height: 844 }, { width: 390, height: 844 }] }), /Duplicate viewport dimensions/);
     assert.equal(fixture.starts(), 0);
     assert.deepEqual(await fixture.renderer.execute(input), artifact);
     assert.equal(fixture.starts(), 1); assert.ok(fixture.closes() >= 1);
     assert.deepEqual(await fixture.renderer.execute(input), artifact);
     assert.equal(fixture.starts(), 2);
   } finally { await fixture.cleanup(); }
+});
+
+test('viewport expansion keeps an explicit 320px viewport exactly once', () => {
+  const explicit = parseRenderInput({ content: { id: 'caller-provided' }, viewports: [{ width: 320, height: 600 }, { width: 390, height: 844 }] });
+  assert.deepEqual(renderViewports(explicit), explicit.viewports);
+  assert.equal(renderViewports(explicit).filter(viewport => viewport.width === 320).length, 1);
+  const expanded = renderViewports(input);
+  assert.deepEqual(expanded.at(-1), { width: 320, height: 844 });
+  assert.equal(expanded.filter(viewport => viewport.width === 320).length, 1);
+  assert.equal(input.viewports.length, 2, 'Expansion does not mutate the parsed request');
 });
 
 test('identity and broad tool surfaces fail closed and clean up', async () => {
@@ -163,6 +174,29 @@ test('transport bounds raw bytes before parsing and reports no stderr contents',
   await transport.start();
   assert.match((await error).message, /invalid or excessive/);
   await assert.rejects(transport.close(), /invalid or excessive/);
+});
+
+test('valid tool artifacts followed by a truncated frame are withheld after cleanup', { timeout: 5000 }, async () => {
+  const script = `
+    const artifact = ${JSON.stringify(artifact)};
+    require('node:readline').createInterface({ input: process.stdin }).on('line', line => {
+      const request = JSON.parse(line);
+      if (!('id' in request)) return;
+      let result;
+      if (request.method === 'initialize') result = { protocolVersion: request.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: 'thingtime-draft-renderer', version: '0.1.0' } };
+      else if (request.method === 'tools/list') result = { tools: ['thingtime_capabilities', 'thingtime_render_and_export'].map(name => ({ name, inputSchema: { type: 'object' } })) };
+      else if (request.method === 'tools/call') result = artifact;
+      else throw new Error('Unexpected fixture request');
+      process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\n');
+      if (request.method === 'tools/call') process.stdout.write('{"jsonrpc":');
+    });
+    process.stdin.on('end', () => process.exit(0));
+  `;
+  const renderer = createIsolatedRenderer(configuration, { transport: () => new IsolatedRenderTransport({
+    command: process.execPath, args: ['-e', script], cwd: tmpdir(), env: { PATH: '/usr/bin:/bin' }
+  }) });
+  try { await assert.rejects(renderer.execute(input), /truncated protocol frame; no artifacts returned/); }
+  finally { await renderer.close(); }
 });
 
 test('cancellation while launcher initialization is pending closes the transport', async () => {

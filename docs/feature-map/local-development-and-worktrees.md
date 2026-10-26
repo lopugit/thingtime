@@ -52,6 +52,7 @@ process can run a second foreground stack: `TT_WEB_PORT=… npm --prefix remix r
 | What | Command |
 | --- | --- |
 | Unit suites (node --test via tsx) | `npm --prefix remix run test:<suite>` — `test:attachments`, `test:things`, `test:feed`, `test:api-capabilities`, `test:acl`, … (`test:unit` runs them all) |
+| Unified Thingtime MCP | `npm --prefix MCP test` includes the artifact extractor and isolated transport regressions. `MCP/test/render-export.integration.test.ts` additionally needs explicit pinned-image/socket settings and `TT_DRAFT_BROWSER_TEST=1`; it verifies actual native crop-enabled/disabled resources. See `MCP/README.md` for host configuration and the desktop acceptance boundary. |
 | Headless API suite against a live stack | `npm --prefix remix run test:api -- --base http://127.0.0.1:<nitro>` |
 | Editable app composition fixture | `remix/scripts/test-builder-app-local.ts`, with explicit `TT_BUILDER_QA_ORIGIN` and private `TT_BUILDER_QA_SESSION`; loopback-only, real API, stable synthetic IDs. See README "Builder component SDK". |
 | Lint changed files | `corepack pnpm --dir remix run lint:files -- <files>` |

@@ -10,13 +10,21 @@ export const renderInput = z.object({
   crop: z.object({ enabled: z.boolean().default(true), blockId: z.string().regex(/^[\w-]{1,128}$/).optional() }).strict().default({ enabled: true })
 }).strict();
 export type RenderInput = z.infer<typeof renderInput>;
-export type RenderOutput = { ok: true; rendererHash: string; browserVersion: string; json: string; hash: string; diagnostics: unknown[]; viewports: unknown[]; images: { name: string; data: string; width: number; height: number }[] };
+export type RenderOutput = { ok: true; rendererHash: string; browserVersion: string; cropEnabled: boolean; json: string; hash: string; diagnostics: unknown[]; viewports: unknown[]; images: { name: string; data: string; width: number; height: number }[] };
 let active = false;
 
 export function parseRenderInput(raw: unknown): RenderInput {
   const input = renderInput.parse(raw);
   if (Buffer.byteLength(typeof input.content === 'string' ? input.content : JSON.stringify(input.content)) > 262144) throw new Error('Draft input exceeds 256 KiB');
+  const dimensions = input.viewports.map(viewport => `${viewport.width}x${viewport.height}`);
+  if (new Set(dimensions).size !== dimensions.length) throw new Error('Duplicate viewport dimensions; request each width and height pair only once');
   return input;
+}
+
+export function renderViewports(input: RenderInput): RenderInput['viewports'] {
+  const viewports = [...input.viewports];
+  if (!viewports.some(viewport => viewport.width === 320)) viewports.push({ width: 320, height: 844 });
+  return viewports;
 }
 
 /** A separate process bounds validation, browser startup, rendering and encoding.

@@ -5172,3 +5172,27 @@ A real clipboard paste closes the 12,002-hard-line Settings case: exact undo/red
 Saved Action acceptance now clicks the normal Run action button offline instead of invoking the interpreter from a fixture. Exact theme/algorithm results, retained execution/history, offline reload and desktop/mobile scrolling pass; large Shared Copy still retains independent bytes and editable closure. Execution makes zero API requests. Cold shell reloads produce read-only request events and no mutations, reported separately.
 
 Client/server builds and 63 client-error tests pass; raw TypeScript matches the exact 91-diagnostic baseline with zero additions/removals. Exact baseline 64a53cba passed Web CI, CodeQL and preview identity. Follow-up CI and unified desktop MCP loading remain separate. [Evidence and failures](../artifacts/anonymous-local-first-2026-10-26-followup-final/README.md).
+
+
+## Crop options and complete worker protocol — 26 October 2026
+
+Fixed a real unified MCP export mismatch: disabling the card crop returned
+valid viewport screenshots but the artifact extractor inferred a missing card
+from diagnostic geometry. The worker now emits `cropEnabled`; extraction keeps
+legacy crop-enabled compatibility and strictly checks the requested artifact
+set. Duplicate viewport dimensions are refused before launch. A valid response
+followed by a truncated JSON-RPC frame now fails after cleanup instead of
+returning its artifacts. Extractor regressions are part of the default MCP suite.
+
+MCP build/typecheck, 60 unit tests (3 explicit gated skips), the actual native
+SDK suite and actual CLI-agent crop-disabled delivery pass. The latter returned
+canonical JSON and all three viewport PNGs; the enabled SDK call also returned
+the 400×560 card. [Evidence and retained first-attempt failure](../artifacts/anonymous-local-first-2026-10-26-mcp-options/README.md).
+Read-only serving checks match pre-follow-up head `16984b13` and its sandbox
+headers; new pushed-revision CI and deployed browser checks remain separate.
+
+The account-instruction transport audit found additional secure-metadata BSON,
+account snapshot and accounting boundaries. A request-cap-only patch would not
+meet the requirement. The [recorded implementation gates](../docs/local-workspaces.md#account-instruction-transport-audit--26-october-2026)
+retain the complete storage/backup/inference work; no new capability was
+advertised. Unified desktop namespace loading and the wider matrix remain open.

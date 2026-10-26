@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+// @ts-expect-error Artifact extractor is also a standalone JavaScript CLI.
+import { decodeRenderResult, saveRenderResult } from '../scripts/save-render-artifacts.mjs';
 
 const enabled = process.env.TT_DRAFT_BROWSER_TEST === '1';
 test('unified stdio agent: isolated native PNGs, canonical dependencies and failures', { skip: !enabled, timeout: 1800000 }, async () => {
@@ -32,6 +34,7 @@ test('unified stdio agent: isolated native PNGs, canonical dependencies and fail
     const result: any = await callTool({ name: 'thingtime_render_and_export', arguments: { content: fixture, crop: { enabled: true, blockId: 'card' } } });
     assert.equal(result.isError, undefined, JSON.stringify(result));
     const metadata = result.structuredContent;
+    assert.equal(metadata.cropEnabled, true);
     assert.match(metadata.hash, /^[a-f0-9]{64}$/);
     assert.match(metadata.rendererHash, /^[a-f0-9]{64}$/);
     assert.deepEqual(metadata.viewports.map((v: any) => [v.width, v.height]), [[1440, 1000], [390, 844], [320, 844]]);
@@ -67,6 +70,15 @@ test('unified stdio agent: isolated native PNGs, canonical dependencies and fail
     const repeat: any = await callTool({ name: 'thingtime_render_and_export', arguments: { content: exported } });
     assert.equal(repeat.isError, undefined, JSON.stringify(repeat));
     assert.equal(repeat.structuredContent.hash, metadata.hash);
+    const noCrop: any = await callTool({ name: 'thingtime_render_and_export', arguments: { content: exported, crop: { enabled: false } } });
+    assert.equal(noCrop.isError, undefined, JSON.stringify(noCrop));
+    assert.equal(noCrop.structuredContent.cropEnabled, false);
+    assert.ok(noCrop.structuredContent.viewports[0].crop, 'Geometry remains diagnostic when crop export is disabled');
+    const noCropArtifacts = decodeRenderResult(noCrop, { host: 'Unified SDK native acceptance', server: 'thingtime' });
+    assert.equal(noCropArtifacts.files.has('card.png'), false);
+    assert.equal(noCropArtifacts.files.size, 4);
+    if (process.env.TT_DRAFT_ARTIFACT_DIR) await saveRenderResult(noCrop,
+      join(process.env.TT_DRAFT_ARTIFACT_DIR, 'no-crop'), { host: 'Unified SDK native acceptance', server: 'thingtime' });
     const concurrent: any[] = await Promise.all([0, 1].map(() => callTool({ name: 'thingtime_render_and_export', arguments: { content: exported } })));
     assert.equal(concurrent.filter(result => result.isError).length, 1,
       JSON.stringify(concurrent.map(result => result.isError ? result.content : { ok: true })));

@@ -51,6 +51,33 @@ test('CLI extraction selects the configured unified server explicitly', () => {
   assert.throws(() => decodeRenderEvents(encode(events)), /exactly one/);
 });
 
+test('explicit crop selection preserves diagnostic geometry and strict card validation', () => {
+  const result = fixture()[0].item.result;
+  const metadata = result.structured_content;
+  const provenance = { host: 'crop regression fixture', server: 'thingtime' };
+  metadata.viewports[0].crop = { x: 0, y: 0, width: 320, height: 320 };
+  metadata.cropEnabled = false;
+  assert.equal(decodeRenderResult(result, provenance).files.size, 2,
+    'Disabled crop still exposes geometry without requiring a card artifact');
+  metadata.cropEnabled = true;
+  assert.throws(() => decodeRenderResult(result, provenance), /Incomplete artifact manifest/);
+  metadata.artifacts.push('card.png');
+  const card = structuredClone(result.content[2]);
+  card.resource.uri = card.resource.uri.replace('viewport-320x320.png', 'card.png');
+  result.content.push(card);
+  assert.equal(decodeRenderResult(result, provenance).files.size, 3);
+  delete metadata.cropEnabled;
+  assert.equal(decodeRenderResult(result, provenance).files.size, 3,
+    'Legacy crop-enabled results remain extractable');
+  metadata.cropEnabled = false;
+  assert.throws(() => decodeRenderResult(result, provenance), /Incomplete artifact manifest/);
+  metadata.cropEnabled = 'false';
+  assert.throws(() => decodeRenderResult(result, provenance), /Invalid crop metadata/);
+  metadata.cropEnabled = true;
+  delete metadata.viewports[0].crop;
+  assert.throws(() => decodeRenderResult(result, provenance), /Missing crop geometry/);
+});
+
 test('extracts actual CLI event shape and accepts clean expected invalid-call result', () => {
   const events = fixture();
   events.splice(1, 0, { type: 'item.completed', item: { ...events[0].item, id: 'invalid', status: 'failed', result: { content: [{ type: 'text', text: 'Invalid input' }] } } });

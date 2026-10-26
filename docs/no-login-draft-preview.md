@@ -337,6 +337,15 @@ that stale result. A crop uses the selected block's first authored component
 root; without `blockId`, the first component, or the root element for a single
 component. It is captured at the first requested viewport.
 
+The MCP response reports `cropEnabled` separately from measured viewport crop
+geometry. With `crop: { enabled: false }`, it returns JSON and viewport PNGs
+without `card.png`; geometry remains available for diagnostics. Artifact
+extraction uses this explicit flag and still accepts older crop-enabled results
+that predate the flag. Duplicate requested width/height pairs fail validation
+before rendering, and an explicit 320px viewport satisfies the narrow check.
+The unified adapter withholds artifacts if the worker exits with a truncated
+stdio frame, even if a complete result preceded that frame.
+
 Production/static hosting must serve the generated CSP headers. The existing
 Vite, Nitro Node-server and Vercel packaging paths set them; `dist/draft-preview/policy.json`
 contains the same generated policy for the offline MCP host. Do not serve the

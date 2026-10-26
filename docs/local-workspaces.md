@@ -5649,3 +5649,37 @@ The real CLI agent retrieved native JSON/PNG artifacts. Its abrupt shutdown expo
 Normal Settings now preserves 12,002 hard lines (120,068 UTF-8 bytes after editing), including native clipboard paste, undo/redo, subsequent typing, local save and exact offline cold reload. The local run measured paste at 1,549 ms and save at 368 ms; no repeated account instruction request occurred over 64,213 ms. Repeated saves now update that editor's active success toast instead of stacking notifications over mobile guidance. All nine guidance hit-points pass at 1440/390/320px. The earlier 12,000-line failure was reproduced in Chromium's CDP insertion path; actual paste succeeds. The existing 96 KiB account transport boundary still needs larger transport.
 
 The saved profile Action now runs through the normal Action page's **Run action** button offline, with zero API requests during execution and retained theme/algorithm changes and history after reload. The fixture performs setup/readback only. Cold shell reloads still emit read-only request events, separately recorded; no offline mutation request occurs. Shared Copy retains its independent 17,825,795-byte original, fresh dependencies and individually editable heading. [Current native evidence and retained failure boundaries](../artifacts/anonymous-local-first-2026-10-26-followup-final/README.md).
+
+
+## Account instruction transport audit — 26 October 2026
+
+The 96 KiB preflight remains an explicit incomplete remote capability; the
+12,002-line native save/reload test proves local retention only. Simply raising
+the request limit would move the failure into other canonical boundaries:
+
+- `api/utils/auth/users.ts` reads and atomically replaces the complete private
+  checklist inside user secure metadata. The BSON document constraint remains.
+- `timeline/accountContent.ts` bounds an account snapshot to 1 MiB and 6,000
+  nodes. Moving live content requires an accompanying backup/history adapter.
+- `api/utils/timeline/snapshotParts.ts` and `backups/portableBackup.ts` offer
+  verified immutable-part patterns, but their current contracts are snapshot
+  transports, not a live resumable account-instruction store.
+- The existing settings rate limit must remain effective. Upload progress must
+  resume across bounded passes instead of sending an unbounded burst.
+
+Next implementation gates (not delivered by this audit):
+
+1. Reuse the frozen local attempt identity for resumable, owner-scoped part
+   admission, status and integrity checking, with bounded per-request work.
+2. Commit a protected manifest using canonical accounted-Thing transactions and
+   revision CAS; meter retained bytes and clean abandoned staging transactionally.
+3. Preserve legacy inline reads, lost-response reconciliation, newer local edits,
+   reviewed conflicts, origin/data-plane identity and private projections.
+4. Add paged canonical backup/restore inventory and update inference consumers
+   before enabling the new storage contract. Respect real provider context limits.
+5. Register/version the complete API and client requirements; prove resume,
+   corruption, cancellation, revocation, quota rollback and exact large-content
+   readback in an isolated synthetic account through the normal Settings UI.
+
+No transport/storage/API change was made during this audit. No capability is
+advertised early, and the existing safe local retention behavior remains intact.

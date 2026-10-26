@@ -117,4 +117,12 @@ the supplied extractor with this shared server, select it with
 tool call or host artifact delivery. See the unified-host checklist in
 [`TESTING.md`](../TESTING.md#unified-local-mcp-draft-rendering--26-october-2026).
 
+Set `crop: { enabled: false }` to export only the canonical JSON and viewport
+PNGs. The response's `cropEnabled` boolean determines whether `card.png` is
+included; `viewports[].crop` retains measured geometry for diagnostics even
+when no crop is exported. Each requested width/height pair must be unique;
+duplicates fail validation before a renderer starts. The automatic 320px check
+reuses an explicitly requested 320px viewport. Incomplete stdio frames fail
+closed, including a truncated frame after an otherwise valid result.
+
 26 October verification: the normal `thingtime` connection passed actual CLI-agent capabilities, native rendering and malformed-input refusal. [Artifacts and boundaries](../artifacts/anonymous-local-first-2026-10-26/README.md). Desktop discovery of the unified namespace remains a separate host check.

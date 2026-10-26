@@ -15446,6 +15446,15 @@ Local results do not establish current-head CI or deployed acceptance.
 
 ### Unified local MCP draft rendering — 26 October 2026
 
+- Render with crop enabled and disabled through the normal `thingtime` host.
+  Extract the actual results: enabled includes the card, disabled includes only
+  JSON and viewport PNGs even though geometry remains present. Reject missing
+  requested cards, unexpected cards and non-boolean `cropEnabled`; keep legacy
+  crop-enabled artifacts readable. Reject duplicate viewport pairs before
+  launching a worker and avoid adding a second explicit 320px viewport.
+- Exercise a worker that writes a complete result followed by an unterminated
+  JSON-RPC frame and exits successfully. The unified adapter must report failure
+  and return no artifacts after cleanup; a valid prefix is insufficient proof.
 - Register the regular `thingtime` MCP host against `MCP/dist/index.js` with
   its existing tools intact. Verify `thingtime_capabilities` reports the
   render configuration and tool discovery includes the prior import tools plus

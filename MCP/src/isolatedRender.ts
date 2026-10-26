@@ -48,6 +48,7 @@ export class IsolatedRenderTransport implements Transport {
   private closing?: Promise<void>;
   private terminalError?: Error;
   private bytes = 0;
+  private pendingFrameBytes = 0;
   private buffer = new ReadBuffer({ maxBufferSize: ISOLATED_RENDER_OUTPUT_BYTES });
   constructor(private launch: RenderLaunch) {}
 
@@ -58,6 +59,7 @@ export class IsolatedRenderTransport implements Transport {
     });
     this.exited = new Promise(resolve => child.once('close', (code, signal) => {
       if (code !== 0 || signal) this.terminalError ||= new Error('Isolated renderer exited unsuccessfully; verify Docker, pinned image, assets and owned cleanup.');
+      if (this.pendingFrameBytes) this.terminalError ||= new Error('Isolated renderer returned a truncated protocol frame; no artifacts returned');
       this.onclose?.(); resolve();
     }));
     // Diagnostics may contain local paths or private configuration. Drain them
@@ -68,6 +70,10 @@ export class IsolatedRenderTransport implements Transport {
       try {
         this.bytes += chunk.length;
         if (this.bytes > ISOLATED_RENDER_OUTPUT_BYTES) throw new Error('Isolated renderer exceeded its 10 MiB protocol output budget');
+        // Stdio frames must end with a newline. Track the raw boundary without
+        // depending on SDK buffer internals so a clean exit cannot hide a tail.
+        const newline = chunk.lastIndexOf(10);
+        this.pendingFrameBytes = newline < 0 ? this.pendingFrameBytes + chunk.length : chunk.length - newline - 1;
         this.buffer.append(chunk);
         let message: JSONRPCMessage | null;
         while ((message = this.buffer.readMessage()) !== null) this.onmessage?.(message);
