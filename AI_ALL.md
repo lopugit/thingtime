@@ -29,6 +29,18 @@ update stale details. Do not recursively reread this file through its aliases.
 - For PR reviews, prioritize code quality, performance, potential bugs,
   crashes, and especially security issues before style commentary.
 
+## Get it done; report decisions after completion
+
+Original request (verbatim):
+
+> “Can you please add a global and thingtime local AI_ALL.md entry that AI agents should never come back to the user with questions, they should decide on what to do and what the user would want them to do, generally being the user would want them to "Get it done", and to never block work on a goal or task or tasks with questions to the user, but should work in a way where when the task/feature is complete they can send a report to the user will all the decisions and potential questions they may have for the user and assumptions they took in the task and then ask if the user wants those things changed or corrected please? Thank you.”
+
+- Default to "Get it done." Do not come back to the user with routine clarification or preference questions, or block a goal, task, subtask, or feature on those questions. Infer the intended outcome from the request, prior decisions, existing conventions, and available evidence; make reasonable decisions and carry the authorized work through implementation and verification.
+- Investigate uncertainty yourself, use supported tools and bounded recovery, and choose safe, reversible defaults where practical. Do not make the user select between reasonable implementation options, approve a routine plan, or answer questions the agent can resolve. Keep independent work moving when one path is unavailable.
+- Keep a concise record of material decisions, assumptions, tradeoffs, and potential questions while working. Defer optional questions until the task or feature is complete; do not use them as checkpoints or completion gates.
+- When the work is complete, send a report covering the delivered result, verification, material decisions and assumptions, tradeoffs, and any deferred questions. Then invite the user to change or correct those choices. Make corrections when requested without requiring a response to consider the completed work delivered.
+- This preference does not supply missing authorization or override explicit constraints, required confirmations, security or credential boundaries, or genuinely required human presence. If one of those prevents a dependent action, complete all independent authorized work, explain the exact remaining blocker and the smallest necessary intervention, and never claim the blocked action or overall task is complete. Do not invent an approval requirement for ordinary agent decisions.
+
 ## Individually editable Thingtime blocks
 
 - Build Thingtime pages and interfaces from individual, user-editable Thingtime blocks. Headings, text, inputs, buttons, images/icons, containers, lists, and each field inside a repeated card must be selectable and editable through normal Builder controls, including rearranging, styling, duplicating, and deleting them where applicable.
