@@ -11,9 +11,14 @@ import { accountWorkspaceWorker } from './accountApi.client';
 import { LOCAL_WORKSPACE_CHANGED, announceLocalWorkspaceChange } from './runtime.client';
 import type { AccountThingSync } from './accountSync';
 import type { AccountInteractionSync } from './accountInteractions';
+import { AccountConflictVersion, AccountSuiteConflictAlternatives } from './AccountSuiteConflictAlternatives';
 
 type Review = Awaited<ReturnType<AccountThingSync['inspectConflict']>>;
-type Status = Awaited<ReturnType<AccountThingSync['status']>>;
+type Status = Array<Awaited<ReturnType<AccountThingSync['status']>>[number] & { queue?: 'suite'; errorCode?: string }>;
+const workspaceStatus = async (service: ReturnType<typeof accountWorkspaceWorker>): Promise<Status> => {
+ const [content, suites] = await Promise.all([service.sync.status(), service.suites.status()]);
+ return [...suites.map(row => ({...row, deleted: false, queue: 'suite' as const})), ...content].filter(row => row.state !== 'synced');
+};
 export function AccountSyncStatus({actorId}: {actorId?:string} = {}) {
  const user = useRootUser(), dataPlane = useDataPlane(), offline = useOfflineWorkspace();
  const principal = offline?.ownerId || (user && !user.temporary ? user.id : null);
@@ -34,7 +39,7 @@ function WorkspaceStatus({ ownerId, dataPlane, unconfirmed, delegatedBy }: Statu
   mounted.current = true;
   const service = accountWorkspaceWorker({ kind: 'account', ownerId, dataPlane, delegatedBy, origin: window.location.origin });
   serviceRef.current = service;
-  const update = () => { setOnline(navigator.onLine); void service.sync.status().then(value => { if (mounted.current) setRows(value.filter(row => row.state !== 'synced')); }).catch(() => {}); };
+  const update = () => { setOnline(navigator.onLine); void workspaceStatus(service).then(value => { if (mounted.current) setRows(value); }).catch(() => {}); };
   update();
   window.addEventListener(LOCAL_WORKSPACE_CHANGED, update); window.addEventListener('online', update); window.addEventListener('offline', update);
   return () => { mounted.current = false; window.removeEventListener(LOCAL_WORKSPACE_CHANGED, update); window.removeEventListener('online', update); window.removeEventListener('offline', update); };
@@ -42,7 +47,7 @@ function WorkspaceStatus({ ownerId, dataPlane, unconfirmed, delegatedBy }: Statu
  const act = async (run: (service: ReturnType<typeof accountWorkspaceWorker>) => Promise<unknown>) => {
   const service = serviceRef.current; if (!service) return;
   setBusy(true); setError('');
-  try { await run(service); if (mounted.current) { setRows((await service.sync.status()).filter(row => row.state !== 'synced')); announceLocalWorkspaceChange(); service.wake(); } }
+  try { await run(service); if (mounted.current) { setRows(await workspaceStatus(service)); announceLocalWorkspaceChange(); service.wake(); } }
   catch (failure) { if (mounted.current) setError(failure instanceof Error ? failure.message : 'Could not complete sync. Your local edits are preserved.'); }
   finally { if (mounted.current) setBusy(false); }
  };
@@ -52,24 +57,30 @@ function WorkspaceStatus({ ownerId, dataPlane, unconfirmed, delegatedBy }: Statu
   {unconfirmed && !delegatedBy ? <Flex gap={3} flexWrap="wrap" align="center"><Text flex="1">Offline account workspace. Local edits are available; account sync is paused until your session is verified.</Text><Button size="sm" isDisabled={!online} onClick={() => window.dispatchEvent(new Event('thingtime:root-data-refresh'))}>Reconnect</Button></Flex> : null}
   {rows.length ? <Text role="status">{conflicts ? `${conflicts} sync conflict${conflicts === 1 ? '' : 's'}. Your local edits are preserved.` : rows.some(row => row.state === 'error') ? 'Account sync needs attention. Your local edits are preserved.' : `${rows.length} change${rows.length === 1 ? '' : 's'} saved on this device. ${online ? 'Waiting to sync with your account.' : 'Offline — sync will resume when connected.'}`}</Text> : null}
   <details><summary>Review sync</summary>
-   {rows.slice(0, 20).map(row => <Flex key={row.id} gap={3} align="center" flexWrap="wrap" py={2}>
-    <Text fontSize="sm" flex="1" minW={0} overflowWrap="anywhere">{row.id}: {row.error || row.state}</Text>
-    {row.state === 'conflict' ? <Button size="sm" isDisabled={busy || !online || unconfirmed} onClick={() => void act(async service => { const next = await service.sync.inspectConflict(service.transport, row.id); if (mounted.current) setReview(next); })}>Compare versions</Button> :
-     <Button size="sm" isDisabled={busy || !online || unconfirmed || row.state === 'syncing'} onClick={() => void act(service => service.sync.retry(row.id))}>Retry sync</Button>}
+   {rows.slice(0, 20).map(row => <Flex key={`${row.queue || 'thing'}:${row.id}`} gap={3} align="center" flexWrap="wrap" py={2}>
+    <Text fontSize="sm" flex="1" flexBasis={{ base: '100%', md: 'auto' }} minW={0} overflowWrap="anywhere">{row.queue === 'suite' ? `Suite ${row.id}` : row.id}: {row.error || row.state}</Text>
+    {row.errorCode === 'SUITE_BUNDLE_CHANGED' ? <Text fontSize="sm">Version recovery required</Text> : row.state === 'conflict' ? <Button size="sm" isDisabled={busy || !online || unconfirmed} onClick={() => void act(async service => { const next = await service.sync.inspectConflict(service.transport, row.id); if (mounted.current) setReview(next); })}>Compare versions</Button> :
+     <Button size="sm" isDisabled={busy || !online || unconfirmed || row.state === 'syncing'} onClick={() => void act(service => row.queue === 'suite' ? service.suites.retry(row.id) : service.sync.retry(row.id))}>Retry sync</Button>}
     {row.state === 'conflict' && row.deleted ? <Button size="sm" isDisabled={busy || !online || unconfirmed} onClick={() => void act(service => service.sync.retry(row.id))}>Check deletion again</Button> : null}
    </Flex>)}
    {rows.length > 20 ? <Text fontSize="sm">Showing the first 20 of {rows.length} pending Things.</Text> : null}
   </details>
-  {review ? <Box mt={3}>
+  {review ? <Box mt={3} data-lopu-launcher-clearance>
    <Text fontWeight="bold">{review.deleted ? 'Review this deletion' : 'Choose the version to keep'}</Text>
    <Text fontSize="sm">{review.deleted ? 'This Thing was deleted on this device, but its account version changed. Delete the reviewed version or restore the account version to this device.' : 'Keeping this device’s version will replace the reviewed account version. Keeping the account version will replace this device’s edits.'}</Text>
    <Flex gap={3} flexWrap="wrap" my={3}>
-    {([{ name: 'This device', row: review.local }, { name: 'Account', row: review.remote }]).map(({ name, row }) => <Box key={name} flex="1" minW="min(260px, 100%)" maxW="100%"><Text>{name}</Text><Box as="pre" maxH="240px" overflow="auto" whiteSpace="pre-wrap" overflowWrap="anywhere" fontSize="xs">{JSON.stringify({ thingtime: row.thingtime, crystal: row.crystal, extended: row.extended, tags: row.tags, folderId: row.folderId, targetId: row.targetId, acl: row.acl }, null, 2)}</Box></Box>)}
+    {([{ name: 'This device', row: review.local }, { name: 'Account', row: review.remote }]).map(({ name, row }) => <AccountConflictVersion key={name} label={name} row={row} />)}
    </Flex>
    <Flex gap={3} flexWrap="wrap">
     {(['local', 'remote'] as const).map(keep => <Button key={keep} size="sm" isDisabled={busy || !online || unconfirmed} onClick={() => void act(async service => { await service.sync.resolveConflict(service.transport, { id: review.local.id, keep, localRevision: review.localRevision, remoteUpdatedAt: review.remote.updatedAt }); if (mounted.current) setReview(null); })}>{keep === 'local' ? review.deleted ? 'Delete reviewed account version' : 'Keep this device’s version' : 'Keep account version'}</Button>)}
     <Button size="sm" variant="ghost" onClick={() => setReview(null)}>Cancel</Button>
    </Flex>
+   {review.suiteAlternatives ? <AccountSuiteConflictAlternatives alternatives={review.suiteAlternatives} disabled={busy || !online || unconfirmed}
+    onChoose={source => void act(async service => {
+     await service.sync.restoreSuiteAlternative(service.transport, { id: review.local.id, source, requestId: review.suiteAlternatives!.requestId,
+      localRevision: review.localRevision, remoteUpdatedAt: review.remote.updatedAt });
+     if (mounted.current) setReview(null);
+    })} /> : null}
   </Box> : null}
   {error ? <Text role="alert" mt={2}>{error}</Text> : null}
  </Box>;

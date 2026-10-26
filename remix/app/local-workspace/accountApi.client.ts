@@ -40,6 +40,8 @@ import { parseTransfer, serializeTransfer, validateTransfer } from '../utils/thi
 import { resolveWorkspacePage, type LocalWebpageTarget } from './webpageResolution';
 import { accountWriteSupported, accountThingCanCache, AccountThingSync, type AccountThingWrite } from './accountSync';
 import { accountThingTransport } from './accountTransport.client';
+import { AccountSuiteSync } from './accountSuites';
+import { accountSuiteTransport } from './suiteTransport.client';
 import { assertAccountSyncAllowed, canSyncAccountWorkspace, subscribeWorkspaceBinding, accountWorkspaceLease, accountRemoteWorkspaceLease, announceLocalWorkspaceChange, announceAccountHomeThemeChange, workspaceDatabase } from './runtime.client';
 import { rootIdentity } from '../utils/rootIdentity';
 import { WorkspaceError, workspaceScopeKey, type WorkspaceScope, type WorkspaceTransaction } from './storage';
@@ -70,6 +72,7 @@ function createWorker(scope: AccountScope, dispose: () => void, authorityScope: 
  const algorithms = algorithmWorker?.algorithms;
 	const themes = new AccountThemeSync(db,scope,lease), themeTransport = accountThemeTransport(authorityScope,lease);
 	const sync = new AccountThingSync(db, scope, lease, undefined, undefined, files.contentHooks, themes, algorithms), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease);
+	const suites = new AccountSuiteSync(db, scope, lease, sync, (tx, intent, remote) => sync.reconcileSuiteIn(tx, intent, remote)), suiteTransport = accountSuiteTransport(scope, lease);
 	const drafts = new AccountDraftSync(db, scope, lease, files.draftHooks), catalog = new AccountDraftCatalog(db, scope, lease);
 	const discussions = new AccountDiscussionCache(db, scope, lease);
  const themeErrors = {catalog: '', selection: ''};
@@ -92,6 +95,17 @@ function createWorker(scope: AccountScope, dispose: () => void, authorityScope: 
   }, signal);
  };
 	let running = false, wakeRequested = false, timer: ReturnType<typeof setTimeout> | null = null, stopped = false;
+	const suitePump = createSyncPump(() => !stopped && navigator.onLine !== false && canSyncAccountWorkspace(scope), async () => {
+		lease.assertCurrent();
+		const before = JSON.stringify(await suites.status());
+		const result = await suites.sync(suiteTransport, controller.signal), status = await suites.status();
+		if (JSON.stringify(status) !== before) announceLocalWorkspaceChange();
+		if (result.completed) wake();
+		const pending = status.filter(row => row.state === 'pending' || row.state === 'syncing');
+		if (!pending.length) return null;
+		const waits = pending.map(row => row.retryAt - Date.now()).filter(wait => wait > 0);
+		return result.completed ? 0 : waits.length ? Math.min(...waits) : BLOCKED_RETRY_MS;
+	});
 	const draftPump = createSyncPump(() => !stopped && navigator.onLine !== false && canSyncAccountWorkspace(scope), async () => {
 		lease.assertCurrent(); const before = JSON.stringify(await drafts.status());
 		const result = await drafts.sync(transport.drafts, controller.signal), status = await drafts.status();
@@ -132,7 +146,7 @@ function createWorker(scope: AccountScope, dispose: () => void, authorityScope: 
 		algorithmWorker?.wake();themePump.wake();themeSelectionPump.wake();void refreshThemes().catch(()=>{});void refreshThemeSelection().catch(()=>{});
 		// A home view grants local access only. Generic queues wait for home to be selected.
 		if (!canSyncAccountWorkspace(scope)) return;
-		draftPump.wake();
+		draftPump.wake(); suitePump.wake();
 		if (running) { wakeRequested = true; return; }
 		if (timer) clearTimeout(timer);
 		timer = setTimeout(() => { timer = null; void drain(); }, 0);
@@ -185,12 +199,12 @@ function createWorker(scope: AccountScope, dispose: () => void, authorityScope: 
 	const unbind = subscribeWorkspaceBinding(wake);
 	const stop = () => {
 		if (stopped) return;
-		stopped = true; controller.abort(); void historyBackend?.close().catch(() => {}); draftPump.stop(); algorithmWorker?.stop(); themePump.stop(); themeSelectionPump.stop(); if (timer) clearTimeout(timer);
+		stopped = true; controller.abort(); void historyBackend?.close().catch(() => {}); draftPump.stop(); suitePump.stop(); algorithmWorker?.stop(); themePump.stop(); themeSelectionPump.stop(); if (timer) clearTimeout(timer);
 		window.removeEventListener('online', reconnect); window.removeEventListener('focus', wake); unsubscribe(); unbind(); dispose();
 	};
 	window.addEventListener('online', reconnect); window.addEventListener('focus', wake);
 	const draftClient = new AccountDraftClient({ drafts, catalog, files, transport, db, lease, wake }, scope, () => navigator.onLine !== false && canSyncAccountWorkspace(scope), () => announceLocalWorkspaceChange());
-	return { sync, interactions, posts, discussions, files, drafts, catalog, draftClient, historyExport, historyVersion, fileRetentionErrors, transport, db, lease, wake, stop, themes, themeTransport, themeErrors, refreshThemes, refreshThemeSelection, algorithms, algorithmWorker };
+	return { sync, suites, interactions, posts, discussions, files, drafts, catalog, draftClient, historyExport, historyVersion, fileRetentionErrors, transport, db, lease, wake, stop, themes, themeTransport, themeErrors, refreshThemes, refreshThemeSelection, algorithms, algorithmWorker };
 }
 export type AccountLocalView = { localPlane?: 'home' };
 export const accountWorkspaceWorker = (authorityScope: AccountScope, view: AccountLocalView = {}) => {
@@ -276,7 +290,8 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		const { sync, files } = worker();
 		const library = new Map((await files.views(ids)).map(row => [row.id, row]));
 		const content = new Map((await sync.views(ids)).map(row => [row.id, row]));
-		return ids.flatMap(id => library.has(id) ? [projectFile(library.get(id))] : content.has(id) ? [project(content.get(id))] : []);
+		const canonical = new Map(await Promise.all(ids.map(async id => [id, await sync.canonicalId(id)] as const)));
+		return ids.flatMap(id => library.has(id) ? [projectFile(library.get(id))] : content.has(canonical.get(id)!) ? [project(content.get(canonical.get(id)!))] : []);
 	};
 	const retainInteractionProjection = async (row: any, startedAt: number) => {
 		if (!row || typeof row.id !== 'string' || !Array.isArray(row.viewerReactions) || !row.reactionCounts) return;
@@ -501,6 +516,13 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 	const browse = (kind: 'schema' | 'component') => async (args: Record<string, unknown> = {}) => {
 		facadeLease.assertCurrent();
 		const { sync, transport } = worker();
+		// Component URLs can retain a provisional suite identity after canonical
+		// adoption. Resolve only scoped recorded aliases; ordinary family keys
+		// stay unchanged, and never mutate the caller's frozen read arguments.
+		if (kind === 'component' && typeof args.family === 'string') {
+			args = { ...args, family: await sync.canonicalId(args.family) };
+			facadeLease.assertCurrent();
+		}
 		if (args.device !== true) {
 			const result = await transport.browse(kind, args);
 			const key = kind === 'schema' ? 'schemas' : 'components';
@@ -1114,6 +1136,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
  * resolution remains responsible for shared/system dependencies. */
 export async function resolveAccountWebpage(scope: AccountScope, target: LocalWebpageTarget) {
  const { sync, transport, db, lease } = accountWorkspaceWorker(scope);
+ if (target.kind === 'id') target = { ...target, id: await sync.canonicalId(target.id) };
  const args = target.kind === 'id' ? { id: target.id, ...(target.key ? { key: target.key } : {}) } : target.kind === 'path' ? { path: target.path } : { global: '1' };
  if (target.kind === 'id' && target.key) return transport.resolve(args);
  const refresh = async () => {

@@ -15684,3 +15684,37 @@ Local results do not establish current-head CI or deployed acceptance.
 - Native vault capacity: opt into `passwordCapacity.browser.test.ts` only in the isolated synthetic environment. Distinguish the passing native IndexedDB/synthetic-transport mechanisms from large-note/66 MiB UI OOM failures and injected quota rollback; a CDP override that does not reject a write is not quota-enforcement proof. Retain cleanup and exact package/source receipts.
 
 - Progress tracker filters: Remaining includes partial and todo rows; Completed includes only done rows. The static current-verification summary stays visible when filtering or searching, and empty search hides checklist sections without hiding that overview. Verify counts, keyboard/search controls and full-page scrolling at 1440/390/320 px.
+
+### Account suites and offline identity adoption — PR 1000
+
+- Preserved-version recovery must cover a real conditional-write 409 that retains
+  its frozen request, then a fresh explicit choice of the original device version.
+  Do not reject every retained request as active: settled conflicts may be replaced
+  after revision/audience review, while uncertain retries keep the same operation
+  and body. Refuse stale remote/local reviews and active claims before replacement.
+- [x] Seed an existing customized suite in an isolated synthetic account, then
+  install normally from a device with an incomplete cache while offline. Run
+  its example, edit separate nested fields, reload and verify local persistence.
+- [x] Reconnect and verify exact canonical schema/Component/Action/data/page IDs,
+  preserved account customizations, later local edits, explicit overlapping-edit
+  choices and working earlier local URLs. No duplicate definition creates.
+- [ ] Exercise concurrent installs, a lost response, a changed bundle digest,
+  account/Character/origin/plane changes and quota rollback with the same frozen
+  request; no partial graph or unrelated queue stalls.
+- [ ] Race canonical cache refresh with receipt adoption. Verify History hashes
+  remain immutable and restore/undo target canonical identities. Check tombstones,
+  drafts, files and linked Things for stale provisional references.
+- [x] Run at 1440/390/320px, scroll the whole page and open sync/conflict controls.
+  Record native fixture, CI and deployed gateway results independently.
+- [x] File-only anonymous vault: normal 66 MiB upload, offline cold reload and
+  byte-exact download passed with no OOM on source9f241; actual full-page captures
+  exist at all three widths. This does not pass the large-note or full vault matrix.
+- [x] Password editor at 1440/390/320px: full scrolling, keyboard focus and
+  reveal/hide pass in the actual sandboxed browser. The Lopu shortcut hides
+  while intersecting the marked mobile editor and returns once clear; its
+  navbar entry remains available. DevKit is absent on this route at every
+  viewport. Evidence: `artifacts/anonymous-local-first-2026-10-27-vault-clearance-r3/`.
+- [x] Account conflict layout at 1440/390/320px: status text and the comparison
+  button stack on narrow screens; every visible version pane reaches its scroll
+  endpoints without launcher overlap. Retry7 retains the captures and geometry.
+  Retry9 subsequently passes the full preserved-version recovery and cold reload.

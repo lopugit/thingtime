@@ -2,6 +2,27 @@ import { bindSuiteComponentRefs } from './suiteComponentBindings';
 import type { DemoBlock } from './webpageDemos';
 import { materializeSuite, suiteEntryPageKey, suiteSlug, type BehaviourSuite } from './behaviourSuites';
 import { validateThingtimeCrystal } from './registry';
+import type { PublicThing } from '../api/utils/things/things';
+
+/** Canonical installer acknowledgement. These are server snapshots, never
+ * inferred ownership or revisions from the local materialized bundle. */
+export type SuiteInstallReceipt = {
+	requestId: string;
+	ownerId: string;
+	origin: string;
+	dataPlane: string;
+	bundleVersion: string;
+	snapshots: PublicThing[];
+};
+
+/** Bind a durable local install to the exact bundled plan. Object insertion
+ * order cannot change identity; array order and all executable values do. */
+export async function suiteBundleVersion(suite: BehaviourSuite): Promise<string> {
+	const text = JSON.stringify(materializeSuite(suite, 'own'), (_key, value) => value && typeof value === 'object' && !Array.isArray(value)
+		? Object.fromEntries(Object.keys(value).sort().map(key => [key, value[key]])) : value);
+	const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
+	return `suite-bundle-v1:${Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')}`;
+}
 
 // One installation plan for remote accounts and local workspaces. Storage
 // adapters retain their own authority, validation, quotas and transactions.
@@ -20,6 +41,7 @@ export type InstallSuiteResult = {
 	entryPageId: string;
 	// the URL every viewer's copy answers at (/p/<entryPageKey>)
 	entryPageKey: string;
+	receipt?: SuiteInstallReceipt;
 };
 
 export type SuiteOwnDoc = { shareId: string; crystal: Record<string, unknown> };

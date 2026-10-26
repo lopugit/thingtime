@@ -5901,3 +5901,12 @@ for exact verification and platform limits. Native instruction paste remains a
 separate open gate: the same-document trace localizes its large delay to
 Chromium selection replacement, without yet identifying a safe editor fix. See
 [paste diagnosis](../artifacts/anonymous-local-first-2026-10-27-paste-comparison-r3/README.md).
+
+## 27 October — account suite identity reconciliation
+
+See [account suite sync](account-suite-sync.md) for the durable local intent,
+canonical transactional receipt and identity-adoption contract. Normal UI and
+real Mongo acceptance remain separate from focused implementation checks.
+The [vault file-only acceptance](../artifacts/anonymous-local-first-2026-10-27-vault-file/README.md)
+now passes 66 MiB upload, offline cold reload and byte-exact download; the
+large-note OOM and phone floating-control overlap remain unresolved.

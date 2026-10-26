@@ -201,7 +201,7 @@ export function PasswordManagerScope({ ownerId, localVault }: { ownerId: string;
         {cursor && settledSearch === search && <Button mt={3} onClick={() => run(() => refresh(cursor))} isDisabled={listLoading || busy}>Load more</Button>}
         {error && !listLoading && <Button mt={3} variant="outline" onClick={() => { setError(''); refresh().catch(showError); }}>Retry search</Button>}
       </Box>
-      {draft && <Box {...card} flex={1} width={{ base: '100%', md: 'auto' }} minWidth={0}>
+      {draft && <Box {...card} data-lopu-launcher-clearance flex={1} width={{ base: '100%', md: 'auto' }} minWidth={0}>
         <Flex justifyContent="space-between" mb={4}><Heading size="md">{draft.revision ? 'Edit entry' : 'New entry'}</Heading><Button size="sm" onClick={clearAndRefresh}>Close</Button></Flex>
         <Text as="label" htmlFor="password-title">Title</Text><Input id="password-title" value={draft.entry.title} onChange={event => updateEntry({ ...draft.entry, title: event.target.value })} mb={3} />
         <Text as="label" htmlFor="password-type">Password type</Text><Select id="password-type" isDisabled={draft.entry.passwordType === 'passkey'} value={draft.entry.passwordType} onChange={event => updateEntry({ ...draft.entry, passwordType: event.target.value as PasswordEntry['passwordType'] })} mb={4}>{PASSWORD_TYPES.filter(type => type !== 'passkey' || draft.entry.passwordType === 'passkey').map(type => <option key={type} value={type}>{type.replace(/-/g, ' ')}</option>)}</Select>

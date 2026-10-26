@@ -6,6 +6,7 @@ import { accountApi, accountWorkspaceWorker, resolveAccountWebpage } from './acc
 import { bindLocalWorkspace, workspaceDatabase } from './runtime.client';
 import { rootIdentity } from '../utils/rootIdentity';
 import { AccountTimeline } from './accountTimeline';
+import type { AccountThing } from './accountSync';
 
 test('account local facade and native page resolution work offline without uploading anonymous content', async () => {
  const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB, oldFetch = globalThis.fetch;
@@ -464,5 +465,45 @@ test('normal account History facade restores offline without sync, and retires b
  }finally{
   rootIdentity.changed();await workspaceDatabase().close();Object.assign(globalThis,{window:saved.window,indexedDB:saved.indexedDB,fetch:saved.fetch});
   if(saved.navigator)Object.defineProperty(globalThis,'navigator',saved.navigator);else Reflect.deleteProperty(globalThis,'navigator');
+ }
+});
+
+test('component catalogue resolves retired suite IDs locally and remotely within the exact workspace', async () => {
+ const saved = { window: globalThis.window, indexedDB: globalThis.indexedDB, navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator') };
+ const target = new EventTarget(), scope = { kind: 'account', origin: 'https://thingtime.example', ownerId: 'alias-catalog-owner', dataPlane: 'home' } as const;
+ Object.assign(globalThis, { window: { location: { origin: scope.origin }, addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target), dispatchEvent: target.dispatchEvent.bind(target) }, indexedDB: new IDBFactory() });
+ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false } });
+ const oldId = 'retired-suite-component', canonicalId = 'canonical-suite-component';
+ const unfencedBrowse = async (_args: Record<string, unknown>): Promise<{ ok: true; components: AccountThing[] }> => { throw Error('Unfenced remote path'); };
+ try {
+  bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
+  const worker = accountWorkspaceWorker(scope), stamp = new Date().toISOString();
+  const definition: AccountThing = { id: canonicalId, author: { id: scope.ownerId }, thingtime: ['component'], crystal: { name: 'Canonical component', componentKey: 'stable-key', familyKey: 'ordinary-family', version: 1, render: { tag: 'p', children: 'Preserved definition' } }, createdAt: stamp, updatedAt: stamp, revision: 1, acl: ['tt:user'], visibility: 'private' };
+  await worker.sync.rememberMany([definition]);
+  await worker.db.transaction(scope, 'readwrite', worker.lease, tx => tx.put('account-suite-aliases', oldId, { id: oldId, canonicalId, requestId: 'committed-suite-operation' }));
+  const api = accountApi({ components: { browse: unfencedBrowse } }, { id: scope.ownerId }, scope.dataPlane);
+  const frozen = Object.freeze({ family: oldId, device: true, mine: true });
+  const local = await api.components.browse(frozen);
+  assert.equal(local.components[0].id, canonicalId);
+  assert.equal(local.components[0].crystal.name, 'Canonical component');
+  assert.equal(frozen.family, oldId);
+  assert.equal((await api.components.browse({ family: 'ordinary-family', device: true })).components[0].id, canonicalId);
+  const remoteFamilies: unknown[] = [];
+  worker.transport.browse = async (_kind, args) => { remoteFamilies.push(args.family); return { ok: true, components: [] }; };
+  await api.components.browse(Object.freeze({ family: oldId }));
+  await api.components.browse({ family: 'ordinary-family' });
+  assert.deepEqual(remoteFamilies, [canonicalId, 'ordinary-family']);
+  for (const other of [{ ...scope, ownerId: 'different-owner' }, { ...scope, dataPlane: `custom-${'a'.repeat(64)}` }, { ...scope, origin: 'https://different.example' }]) {
+   Object.assign(globalThis.window.location, { origin: other.origin });
+   rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation, other); rootIdentity.confirm(rootIdentity.read().generation);
+   const isolated = accountWorkspaceWorker(other), isolatedApi = accountApi({ components: { browse: unfencedBrowse } }, { id: other.ownerId }, other.dataPlane);
+   assert.deepEqual((await isolatedApi.components.browse({ family: oldId, device: true })).components, []);
+   isolated.transport.browse = async (_kind, args) => { assert.equal(args.family, oldId, 'Another account, origin or plane alias must not rewrite this read.'); return { ok: true, components: [] }; };
+   await isolatedApi.components.browse({ family: oldId });
+   await assert.rejects(api.components.browse({ family: oldId, device: true }), /changed/i);
+  }
+ } finally {
+  rootIdentity.changed(); await workspaceDatabase().close(); Object.assign(globalThis, { window: saved.window, indexedDB: saved.indexedDB });
+  if (saved.navigator) Object.defineProperty(globalThis, 'navigator', saved.navigator); else Reflect.deleteProperty(globalThis, 'navigator');
  }
 });

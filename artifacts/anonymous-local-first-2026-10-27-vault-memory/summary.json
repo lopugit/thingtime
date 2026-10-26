@@ -1,0 +1,431 @@
+{
+  "sourceHead": "9f24113dd883b450e9d3086753b6cfd027d175a8",
+  "scope": "Diagnostic trials;not complete UI acceptance",
+  "runs": {
+    "small-note-file": {
+      "result": {
+        "kind": "small-note-file",
+        "passed": false,
+        "message": "locator.click: Error: strict mode violation: getByRole('button', { name: 'Close', exact: true }) resolved to 2 elements:\n    1) <button type=\"button\" class=\"chakra-button cha-e8ab4z\">Close</button> aka getByText('Close')\n    2) <button type=\"button\" aria-label=\"Close\" class=\"cha-8k3i6n\">✕</button> a"
+      },
+      "package": {
+        "applicationTarSha256": "12650d435d86b38d45b7f0078be4a9ac73f97c2e810b5701d66d0e6fca42299e",
+        "session": "7ac5499d-432a-4745-aafe-17c19bf89ebd",
+        "origin": "http://127.0.0.1:18724",
+        "source": "current sanitized package in task tmpfs"
+      },
+      "cleanup": {
+        "session": "7ac5499d-432a-4745-aafe-17c19bf89ebd",
+        "remaining": ""
+      },
+      "samples": 20,
+      "maxSampledCurrentBytes": 2497482752,
+      "cgroupPeakBytes": 2513661952,
+      "lastMemoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+      "topPerProcessRss": [
+        {
+          "pid": 643,
+          "ppid": 563,
+          "comm": "chrome",
+          "rssKiB": 514244
+        },
+        {
+          "pid": 299,
+          "ppid": 287,
+          "comm": "MainThread",
+          "rssKiB": 319832
+        },
+        {
+          "pid": 111,
+          "ppid": 8,
+          "comm": "MainThread",
+          "rssKiB": 296044
+        },
+        {
+          "pid": 220,
+          "ppid": 145,
+          "comm": "chrome",
+          "rssKiB": 265816
+        },
+        {
+          "pid": 555,
+          "ppid": 543,
+          "comm": "chrome",
+          "rssKiB": 262848
+        },
+        {
+          "pid": 543,
+          "ppid": 532,
+          "comm": "MainThread",
+          "rssKiB": 223316
+        }
+      ],
+      "sampledPhaseTransitions": [
+        {
+          "elapsedMs": 1,
+          "currentBytes": 1534447616,
+          "peakBytes": 1723162624,
+          "topProcesses": [
+            {
+              "pid": 111,
+              "ppid": 8,
+              "comm": "MainThread",
+              "rssKiB": 295944
+            },
+            {
+              "pid": 299,
+              "ppid": 287,
+              "comm": "MainThread",
+              "rssKiB": 285852
+            },
+            {
+              "pid": 220,
+              "ppid": 145,
+              "comm": "chrome",
+              "rssKiB": 265812
+            }
+          ]
+        },
+        {
+          "phase": "before-browser",
+          "elapsedMs": 505,
+          "currentBytes": 1690337280,
+          "peakBytes": 1723162624,
+          "topProcesses": [
+            {
+              "pid": 111,
+              "ppid": 8,
+              "comm": "MainThread",
+              "rssKiB": 295964
+            },
+            {
+              "pid": 299,
+              "ppid": 287,
+              "comm": "MainThread",
+              "rssKiB": 285860
+            },
+            {
+              "pid": 220,
+              "ppid": 145,
+              "comm": "chrome",
+              "rssKiB": 265812
+            }
+          ]
+        },
+        {
+          "phase": "after-note-fill",
+          "elapsedMs": 6074,
+          "currentBytes": 2225659904,
+          "peakBytes": 2227400704,
+          "topProcesses": [
+            {
+              "pid": 643,
+              "ppid": 563,
+              "comm": "chrome",
+              "rssKiB": 454696
+            },
+            {
+              "pid": 299,
+              "ppid": 287,
+              "comm": "MainThread",
+              "rssKiB": 319832
+            },
+            {
+              "pid": 111,
+              "ppid": 8,
+              "comm": "MainThread",
+              "rssKiB": 296044
+            }
+          ]
+        },
+        {
+          "phase": "first-encrypted-file-frame-idb-put",
+          "elapsedMs": 6575,
+          "currentBytes": 2391072768,
+          "peakBytes": 2393165824,
+          "topProcesses": [
+            {
+              "pid": 643,
+              "ppid": 563,
+              "comm": "chrome",
+              "rssKiB": 486848
+            },
+            {
+              "pid": 299,
+              "ppid": 287,
+              "comm": "MainThread",
+              "rssKiB": 319700
+            },
+            {
+              "pid": 111,
+              "ppid": 8,
+              "comm": "MainThread",
+              "rssKiB": 295684
+            }
+          ]
+        },
+        {
+          "phase": "after-browser-cleanup",
+          "elapsedMs": 9580,
+          "currentBytes": 1895956480,
+          "peakBytes": 2513661952,
+          "topProcesses": [
+            {
+              "pid": 299,
+              "ppid": 287,
+              "comm": "MainThread",
+              "rssKiB": 300944
+            },
+            {
+              "pid": 111,
+              "ppid": 8,
+              "comm": "MainThread",
+              "rssKiB": 277228
+            },
+            {
+              "pid": 220,
+              "ppid": 145,
+              "comm": "chrome",
+              "rssKiB": 228664
+            }
+          ]
+        }
+      ]
+    },
+    "large-note": {
+      "result": {
+        "kind": "large-note",
+        "passed": false,
+        "message": "locator.click: Timeout 45000ms exceeded.\n"
+      },
+      "package": {
+        "applicationTarSha256": "12650d435d86b38d45b7f0078be4a9ac73f97c2e810b5701d66d0e6fca42299e",
+        "session": "8c43ffb9-a16c-43b3-b6cb-0b32e1a50296",
+        "origin": "http://127.0.0.1:18724",
+        "source": "current sanitized package in task tmpfs"
+      },
+      "cleanup": {
+        "session": "8c43ffb9-a16c-43b3-b6cb-0b32e1a50296",
+        "remaining": ""
+      },
+      "samples": 101,
+      "maxSampledCurrentBytes": 2939568128,
+      "cgroupPeakBytes": 2966077440,
+      "lastMemoryEvents": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 1\noom_group_kill 0",
+      "topPerProcessRss": [
+        {
+          "pid": 641,
+          "ppid": 563,
+          "comm": "chrome",
+          "rssKiB": 947004
+        },
+        {
+          "pid": 294,
+          "ppid": 282,
+          "comm": "MainThread",
+          "rssKiB": 325688
+        },
+        {
+          "pid": 109,
+          "ppid": 7,
+          "comm": "MainThread",
+          "rssKiB": 296872
+        },
+        {
+          "pid": 214,
+          "ppid": 145,
+          "comm": "chrome",
+          "rssKiB": 252912
+        },
+        {
+          "pid": 555,
+          "ppid": 543,
+          "comm": "chrome",
+          "rssKiB": 237392
+        },
+        {
+          "pid": 19,
+          "ppid": 7,
+          "comm": "mongod",
+          "rssKiB": 230516
+        }
+      ],
+      "sampledPhaseTransitions": [
+        {
+          "elapsedMs": 1,
+          "currentBytes": 1782202368,
+          "peakBytes": 1973780480,
+          "topProcesses": [
+            {
+              "pid": 109,
+              "ppid": 7,
+              "comm": "MainThread",
+              "rssKiB": 296664
+            },
+            {
+              "pid": 294,
+              "ppid": 282,
+              "comm": "MainThread",
+              "rssKiB": 288468
+            },
+            {
+              "pid": 214,
+              "ppid": 145,
+              "comm": "chrome",
+              "rssKiB": 252908
+            }
+          ]
+        },
+        {
+          "phase": "before-browser",
+          "elapsedMs": 503,
+          "currentBytes": 1943781376,
+          "peakBytes": 1973780480,
+          "topProcesses": [
+            {
+              "pid": 109,
+              "ppid": 7,
+              "comm": "MainThread",
+              "rssKiB": 296672
+            },
+            {
+              "pid": 294,
+              "ppid": 282,
+              "comm": "MainThread",
+              "rssKiB": 288472
+            },
+            {
+              "pid": 214,
+              "ppid": 145,
+              "comm": "chrome",
+              "rssKiB": 252908
+            }
+          ]
+        },
+        {
+          "phase": "before-note-fill",
+          "elapsedMs": 6063,
+          "currentBytes": 2442215424,
+          "peakBytes": 2460880896,
+          "topProcesses": [
+            {
+              "pid": 641,
+              "ppid": 563,
+              "comm": "chrome",
+              "rssKiB": 418596
+            },
+            {
+              "pid": 294,
+              "ppid": 282,
+              "comm": "MainThread",
+              "rssKiB": 325688
+            },
+            {
+              "pid": 109,
+              "ppid": 7,
+              "comm": "MainThread",
+              "rssKiB": 296872
+            }
+          ]
+        },
+        {
+          "phase": "after-note-fill",
+          "elapsedMs": 8581,
+          "currentBytes": 2912686080,
+          "peakBytes": 2912866304,
+          "topProcesses": [
+            {
+              "pid": 641,
+              "ppid": 563,
+              "comm": "chrome",
+              "rssKiB": 883064
+            },
+            {
+              "pid": 294,
+              "ppid": 282,
+              "comm": "MainThread",
+              "rssKiB": 280524
+            },
+            {
+              "pid": 109,
+              "ppid": 7,
+              "comm": "MainThread",
+              "rssKiB": 248408
+            }
+          ]
+        },
+        {
+          "phase": "after-entry-save",
+          "elapsedMs": 18342,
+          "currentBytes": 2538086400,
+          "peakBytes": 2966077440,
+          "topProcesses": [
+            {
+              "pid": 294,
+              "ppid": 282,
+              "comm": "MainThread",
+              "rssKiB": 275820
+            },
+            {
+              "pid": 109,
+              "ppid": 7,
+              "comm": "MainThread",
+              "rssKiB": 240068
+            },
+            {
+              "pid": 19,
+              "ppid": 7,
+              "comm": "mongod",
+              "rssKiB": 154548
+            }
+          ]
+        },
+        {
+          "phase": "after-browser-cleanup",
+          "elapsedMs": 56583,
+          "currentBytes": 1696075776,
+          "peakBytes": 2966077440,
+          "topProcesses": [
+            {
+              "pid": 294,
+              "ppid": 282,
+              "comm": "MainThread",
+              "rssKiB": 283232
+            },
+            {
+              "pid": 109,
+              "ppid": 7,
+              "comm": "MainThread",
+              "rssKiB": 255508
+            },
+            {
+              "pid": 19,
+              "ppid": 7,
+              "comm": "mongod",
+              "rssKiB": 178188
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "interpretation": {
+    "smallNoteUpload": "Reached after-file-upload-complete and failed at subsequent Close selector ambiguity. No OOM. No cold reload acceptance.",
+    "largeNote": "Large note fill/Save returned. Chrome PID641 RSS rose to947004KiB;at first observed OOM-kill increment it had0RSS. Strong victim candidate,not kernel-confirmed.",
+    "oomBoundary": "Recorded cgrouppeak2966077440 < configured4294967296; max=0 and oom=0 whileoom_kill=1. Consistent with parent/global/VM pressure,not proof task cgroup limit was exhausted.",
+    "unknown": [
+      "Exact kernel OOM victim/cause",
+      "Parent or VM memory pressure",
+      "Exact incremental memory around fast phase transitions",
+      "Large entry cold readback",
+      "Whether earlier combined-file OOM shares same cause"
+    ],
+    "observer": "500ms ordinary-code sampler,480s deadline;fast phases may be overwritten between samples. No process args/env/content captured."
+  },
+  "helpers": {
+    "vault-memory.test.mjs": "381828084078f8805f88a7b21ae1fd709d2121b793634698aa49726d89318256",
+    "vault-memory-observer.cjs": "d8cda3055f6b7b2b8f146ed3152280280bf3e0d607fe1ae20f35c1bbfebb91c1",
+    "vault-memory-run.cjs": "0e4e1527703426e69abc86ee170cf584a7afba2ec2986715220eedd47f2cd4bb"
+  },
+  "sanitizedPackageSha256": "12650d435d86b38d45b7f0078be4a9ac73f97c2e810b5701d66d0e6fca42299e"
+}

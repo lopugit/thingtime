@@ -23,6 +23,11 @@ type Dependencies<Entry extends VersionSource> = {
 	reject(status: number, message: string): never;
 	contentAdapter?: (doc: any) => VersionContentAdapter | null;
 	canUndoDraft?: (event: TimelineEvent) => boolean;
+	/** Trusted local identity adoption, never supplied by public request data.
+	 * Historical events remain immutable; only the mutation target and content
+	 * references used by this comparison are resolved. */
+	resolveTarget?: (owner: string, id: string) => Promise<string>;
+	normalizeContent?: (owner: string, content: any, thingtime: string[]) => Promise<any>;
 	find(id: string, owner: string): Promise<any>;
 	entries(owner: string, ids: string[]): Promise<Entry[]>;
 	nodes(owner: string, ids: string[]): Promise<TimelineGraphNode[]>;
@@ -49,15 +54,17 @@ export async function prepareVersionChange<Entry extends VersionSource = Timelin
 	const read = (ids: string[]) => deps.entries(ownerId, ids);
 	const source = (await read([request.eventId]))[0];
 	if (!source) reject(404, 'Version not found.');
-	const liveDoc = await deps.find(source.event.thingId, ownerId);
-	const recovery = !liveDoc && request.recover ? await deps.deleted(ownerId, source.event.thingId) : null;
+	const targetId = deps.resolveTarget ? await deps.resolveTarget(ownerId, source.event.thingId) : source.event.thingId;
+	if (targetId !== source.event.thingId && request.mode === 'merge') reject(409, 'These identities have separate History branches. Restore or Undo the original saved edit instead.');
+	const liveDoc = await deps.find(targetId, ownerId);
+	const recovery = !liveDoc && request.recover ? await deps.deleted(ownerId, targetId) : null;
 	const doc =
 		liveDoc ??
 		(recovery
 			? ({
 					...recovery.doc,
 					ownerId,
-					shareId: source.event.thingId,
+					shareId: targetId,
 					thingtime: recovery.thingtime,
 					crystal: recovery.doc?.crystal ?? {},
 					acl: ['tt:user'],
@@ -71,6 +78,7 @@ export async function prepareVersionChange<Entry extends VersionSource = Timelin
 	const adapter = recovery?.content ?? (doc && !recovery ? deps.contentAdapter?.(doc) : null);
 	if (!doc || doc.ownerId !== ownerId || (isProtectedThingtime(doc.thingtime ?? []) && !adapter))
 		reject(404, 'This Thing is not available for version changes.');
+	const normalize = (content: any) => deps.normalizeContent ? deps.normalizeContent(ownerId, content, doc.thingtime) : Promise.resolve(content);
 	const { restorableContent, loadVersionGraph, versionMergeBase, versionContentSources, createVersionContentReader } = createVersionGraphTools(
 		reject,
 		adapter ?? undefined
@@ -113,8 +121,9 @@ export async function prepareVersionChange<Entry extends VersionSource = Timelin
 			  restorableContent(source.event.before, basis);
 	// Undo never loads the head into the graph: every ancestor would be walked
 	// and long-lived Things would refuse as too far back where restore succeeds.
-	const baseContent = undo ? await contentFor(source) : base ? await contentFor(base) : null;
-	const incoming = undo ? await beforeContent(baseContent!) : source.event.after ? await contentFor(source) : await beforeContent();
+	const originalBase = undo ? await contentFor(source) : base ? await contentFor(base) : null;
+	const baseContent = originalBase ? await normalize(originalBase) : null;
+	const incoming = await normalize(undo ? await beforeContent(originalBase!) : source.event.after ? await contentFor(source) : await beforeContent());
 	let merged: ReturnType<typeof mergeVersionValues>;
 	try {
 		merged = baseContent ? mergeVersionValues(baseContent, current, incoming, request.choices) : { value: incoming, conflicts: [] };
@@ -225,7 +234,7 @@ export async function prepareVersionChange<Entry extends VersionSource = Timelin
 	} catch {
 		return reject(413, 'This comparison is too large to preview. Its recorded versions are still retained.');
 	}
-	if (request.command === 'preview-version') return { preview, source, doc, recovery, headId, current, merged, refs, components };
+	if (request.command === 'preview-version') return { preview, source, targetId, doc, recovery, headId, current, merged, refs, components };
 	if (components && components.fingerprint !== request.expectedComponents)
 		reject(409, 'A component changed after the preview. Refresh and compare again.');
 	if (components?.conflicts.length) reject(409, 'Choose which component definitions to keep before merging.');
@@ -234,5 +243,5 @@ export async function prepareVersionChange<Entry extends VersionSource = Timelin
 	if (merged.conflicts.length) reject(409, 'Choose which overlapping changes to keep before merging.');
 	if (request.mode === 'merge' && headId === source.event.id) reject(409, 'This version is already current.');
 
-	return { preview, source, doc, recovery, headId, current, merged, refs, components };
+	return { preview, source, targetId, doc, recovery, headId, current, merged, refs, components };
 }

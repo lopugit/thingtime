@@ -10,6 +10,7 @@ import { algorithmContentSnapshot } from '../timeline/algorithmContent';
 import { isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
 import type { LocalThing } from './things';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
+import { accountSuiteAliases } from './accountSuiteIdentity';
 
 type AccountScope = Extract<WorkspaceScope, {kind:'account'}>;
 const EVENTS='timeline-events', LINKS='timeline-links', INDEX='timeline-index', META='timeline-meta';
@@ -80,6 +81,17 @@ async function recordAccountChanges(tx:WorkspaceTransaction,scope:AccountScope,c
    read:id=>readAccountTimelineRow(tx,timeline,id),append:event=>append(tx,timeline,event)});
 }
 
+/** Identity adoption authors a device History head, never a server receipt.
+ * Existing event payloads, component captures and hashes stay byte-for-byte. */
+export async function recordAccountSuiteAdoptions(tx:WorkspaceTransaction,scope:AccountScope,changes:ThingChanges,now:()=>string,uuid:()=>string){
+ const captures=new Map<string,LocalMutationCapture>();
+ for(const [id,change] of changes){
+  const head=await tx.get<string>(META,`head:${id}`);
+  captures.set(id,{id:`device-event-${uuid()}`,operationId:uuid(),operation:change.after?'update':'delete',parentIds:head?[head]:[],label:'Adopted account suite identity'});
+ }
+ await recordAccountChanges(tx,scope,changes,now,uuid,captures);
+}
+
 /** Called only by the dedicated theme mutation, after its ownership/state
  * checks. Read hydration and remote acknowledgements never author a version.
  * Visibility comes from that writer's intent, not the generic Thing ACL. */
@@ -111,10 +123,11 @@ export class AccountTimeline {
  async rows(selection?:TimelineLocalSelection):Promise<LocalTimelineRow[]>{
   return this.tx('readonly',async tx=>{
    const result:LocalTimelineRow[]=[];
+   const aliases=await accountSuiteAliases(tx),canonical=(id:string)=>aliases.get(id)||id;
    for(const {id,value} of await tx.list<Header>(INDEX)){
     const key=timelineScopeKey(this.timelineScope),legacyKey=timelineScopeKey({...this.timelineScope,delegatedBy:undefined});
     validateTimelineIndex({...value,scope:value.scope===legacyKey?key:value.scope},key);
-    if((selection?.thingId&&value.thingId!==selection.thingId)||(selection?.thingIds&&!selection.thingIds.includes(value.thingId))||(selection?.status&&value.status!==selection.status))continue;
+    if((selection?.thingId&&canonical(value.thingId)!==canonical(selection.thingId))||(selection?.thingIds&&!selection.thingIds.some(id=>canonical(id)===canonical(value.thingId)))||(selection?.status&&value.status!==selection.status))continue;
     const row=await readAccountTimelineRow(tx,this.timelineScope,id);if(!row)failure('Account History payload is missing.');result.push(row!);
    }
    return result;

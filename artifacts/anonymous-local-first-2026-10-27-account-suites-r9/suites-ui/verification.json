@@ -1,0 +1,2225 @@
+{
+  "scope": "Installed manager network-none full-app synthetic account acceptance",
+  "ownerId": "6adf94bf2fe0ae616356b788",
+  "dataPlane": "home",
+  "existingUncachedCanonicalGraph": true,
+  "offlineNormalInstall": true,
+  "offlineRunEditSaveColdReload": true,
+  "concurrentTabsSingleGraphAndRequest": true,
+  "canonicalMapping": {
+    "ok": true,
+    "suite": "web-standards",
+    "title": "Web standards",
+    "created": 0,
+    "updated": 0,
+    "schemaIds": {},
+    "componentIds": {
+      "navigation": "6c125ce4-f7f7-40e1-b4f6-c10a16fd8c81",
+      "explorer": "6fe604d4-8f1e-4fcd-8616-65377fc00f16",
+      "workbench": "04599af8-eb47-4009-8a12-dd0d24ee2c1b"
+    },
+    "actionIds": {
+      "catalogue": "fedee5bb-e218-4a13-b071-a02e3b3fd406",
+      "save-component": "d9f6d1b4-87d5-452d-be35-493a38d7884b",
+      "save-draft": "80c23388-ba42-4bed-9148-d994c0f91b92"
+    },
+    "pageIds": {
+      "home": "2255537e-2058-4022-8f0b-6ab8ebe838c3"
+    },
+    "dataIds": [],
+    "entryPageId": "2255537e-2058-4022-8f0b-6ab8ebe838c3",
+    "entryPageKey": "web-standards",
+    "receipt": {
+      "requestId": "71263622-6efb-4868-ad5e-51d47cce07fe",
+      "ownerId": "6adf94bf2fe0ae616356b788",
+      "origin": "http://127.0.0.1:18724",
+      "dataPlane": "home",
+      "bundleVersion": "suite-bundle-v1:1c6b1c58fa95546e236d7f3c351f79677e2ed8204b404c40bd865927a8ae58b5",
+      "snapshots": [
+        {
+          "id": "04599af8-eb47-4009-8a12-dd0d24ee2c1b",
+          "thingtime": [
+            "component"
+          ],
+          "crystal": {
+            "name": "Feature workbench · Web standards demo",
+            "description": "A reusable feature detail layout. The isolated Web Platform primitive receives a complete editable program from the catalogue Action.",
+            "library": "thingtime",
+            "category": "demo suites",
+            "componentKey": "app-web-standards-workbench",
+            "version": 1,
+            "render": {
+              "tag": "section",
+              "props": {
+                "style": {}
+              },
+              "children": [
+                {
+                  "ttIf": {
+                    "arg": "result.selected",
+                    "then": {
+                      "tag": "article",
+                      "props": {
+                        "style": {
+                          "display": "grid",
+                          "gap": "16px",
+                          "padding": "28px 0",
+                          "minWidth": 0
+                        }
+                      },
+                      "children": [
+                        {
+                          "tag": "div",
+                          "props": {
+                            "style": {
+                              "fontSize": "11px",
+                              "letterSpacing": "0.12em",
+                              "textTransform": "uppercase",
+                              "color": "#71717a"
+                            }
+                          },
+                          "children": [
+                            "{result.selected.language} / {result.selected.kind}"
+                          ]
+                        },
+                        {
+                          "tag": "h2",
+                          "props": {
+                            "style": {
+                              "fontSize": "clamp(24px, 4vw, 36px)",
+                              "letterSpacing": "-0.04em",
+                              "margin": 0,
+                              "overflowWrap": "anywhere"
+                            }
+                          },
+                          "children": [
+                            "{result.selected.name}"
+                          ]
+                        },
+                        {
+                          "tag": "p",
+                          "props": {
+                            "style": {
+                              "color": "#52525b",
+                              "margin": 0
+                            }
+                          },
+                          "children": [
+                            "{result.selected.description}"
+                          ]
+                        },
+                        {
+                          "tag": "div",
+                          "props": {
+                            "style": {
+                              "display": "flex",
+                              "gap": "20px",
+                              "flexWrap": "wrap"
+                            }
+                          },
+                          "children": [
+                            {
+                              "tag": "span",
+                              "props": {
+                                "style": {
+                                  "fontSize": "12px"
+                                }
+                              },
+                              "children": [
+                                "{result.selected.status}"
+                              ]
+                            },
+                            {
+                              "tag": "a",
+                              "props": {
+                                "style": {
+                                  "color": "inherit",
+                                  "textDecoration": "underline",
+                                  "fontSize": "12px"
+                                },
+                                "href": "{result.selected.spec}"
+                              },
+                              "children": [
+                                "Read the standard ↗"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "p",
+                          "props": {
+                            "style": {
+                              "fontSize": "13px",
+                              "color": "#71717a",
+                              "padding": "12px 14px",
+                              "background": "#f4f4f5",
+                              "borderRadius": "8px"
+                            }
+                          },
+                          "children": [
+                            "{result.selected.note}"
+                          ]
+                        },
+                        {
+                          "tag": "tt-web-platform",
+                          "props": {
+                            "program": {
+                              "ttArg": "result.selected.program"
+                            },
+                            "name": "program"
+                          }
+                        },
+                        {
+                          "tag": "div",
+                          "props": {
+                            "style": {
+                              "display": "flex",
+                              "gap": "14px",
+                              "alignItems": "center",
+                              "flexWrap": "wrap",
+                              "paddingTop": "20px",
+                              "borderTop": "1px solid #e4e4e7"
+                            }
+                          },
+                          "children": [
+                            {
+                              "tag": "button",
+                              "props": {
+                                "type": "button",
+                                "style": {
+                                  "width": "auto",
+                                  "minWidth": 0,
+                                  "boxSizing": "border-box",
+                                  "fontSize": "14px",
+                                  "padding": "10px 12px",
+                                  "border": "1px solid #d4d4d8",
+                                  "borderRadius": "8px",
+                                  "background": "#18181b",
+                                  "color": "#fff",
+                                  "cursor": "pointer"
+                                }
+                              },
+                              "ttAction": "app-web-standards-save-draft",
+                              "ttActionInputs": {},
+                              "children": [
+                                "Save edited component"
+                              ]
+                            },
+                            {
+                              "ttIf": {
+                                "arg": "last.result.id",
+                                "then": {
+                                  "tag": "a",
+                                  "props": {
+                                    "style": {
+                                      "color": "inherit",
+                                      "textDecoration": "underline",
+                                      "fontSize": "13px"
+                                    },
+                                    "href": "/thing/{last.result.id}"
+                                  },
+                                  "children": [
+                                    "Open saved Thing →"
+                                  ]
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "p",
+                          "props": {
+                            "style": {
+                              "fontSize": "12px",
+                              "color": "#71717a"
+                            }
+                          },
+                          "children": [
+                            "Save your edited program and current inputs as a private Component Thing, then add it to any builder page."
+                          ]
+                        },
+                        {
+                          "tag": "details",
+                          "props": {
+                            "style": {}
+                          },
+                          "children": [
+                            {
+                              "tag": "summary",
+                              "props": {
+                                "style": {
+                                  "cursor": "pointer",
+                                  "fontSize": "13px"
+                                }
+                              },
+                              "children": [
+                                "Definition and source links"
+                              ]
+                            },
+                            {
+                              "tag": "pre",
+                              "props": {
+                                "style": {
+                                  "fontSize": "11px",
+                                  "whiteSpace": "pre-wrap",
+                                  "overflowWrap": "anywhere",
+                                  "maxHeight": "260px",
+                                  "overflow": "auto"
+                                }
+                              },
+                              "children": [
+                                {
+                                  "ttFormat": {
+                                    "arg": "result.selected.program",
+                                    "kind": "json"
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "ttEach": {
+                                "arg": "result.selected.references",
+                                "node": {
+                                  "tag": "a",
+                                  "props": {
+                                    "style": {
+                                      "display": "block",
+                                      "fontSize": "11px",
+                                      "overflowWrap": "anywhere"
+                                    },
+                                    "href": {
+                                      "ttArg": "item"
+                                    }
+                                  },
+                                  "children": [
+                                    {
+                                      "ttArg": "item"
+                                    }
+                                  ]
+                                },
+                                "max": 8
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "extended": null,
+          "tags": [],
+          "folderId": null,
+          "targetId": null,
+          "author": {
+            "id": "6adf94bf2fe0ae616356b788"
+          },
+          "acl": [
+            "tt:user"
+          ],
+          "visibility": "private",
+          "createdAt": "2026-10-26T17:58:23.683Z",
+          "updatedAt": "2026-10-26T17:58:23.683Z"
+        },
+        {
+          "id": "2255537e-2058-4022-8f0b-6ab8ebe838c3",
+          "thingtime": [
+            "webpage"
+          ],
+          "crystal": {
+            "name": "🧩 Web standards",
+            "description": "Explore the web platform through reusable Thingtime components.",
+            "pageKey": "web-standards",
+            "suiteKey": "web-standards",
+            "version": 1,
+            "forkOf": "webpage-web-standards",
+            "previewBg": "#fafafb",
+            "blocks": [
+              {
+                "id": "app-web-standards-home-shell",
+                "type": "container",
+                "align": "center",
+                "maxWidth": 1120,
+                "css": {
+                  "padding": "28px 20px 80px",
+                  "width": "100%",
+                  "min-width": "0",
+                  "color": "#18181b",
+                  "background": "#fff"
+                },
+                "direction": "column",
+                "gap": 0,
+                "children": [
+                  {
+                    "id": "app-web-standards-home-navigation",
+                    "type": "component",
+                    "component": "6c125ce4-f7f7-40e1-b4f6-c10a16fd8c81"
+                  },
+                  {
+                    "id": "app-web-standards-home-explorer",
+                    "type": "component",
+                    "source": {
+                      "action": "app-web-standards-catalogue",
+                      "inputs": {
+                        "q": "{query.q}",
+                        "language": "{query.language}",
+                        "coverage": "{query.coverage}",
+                        "page": "{query.page}",
+                        "feature": "{query.feature}"
+                      }
+                    },
+                    "component": "6fe604d4-8f1e-4fcd-8616-65377fc00f16"
+                  },
+                  {
+                    "id": "app-web-standards-home-workbench",
+                    "type": "component",
+                    "source": {
+                      "action": "app-web-standards-catalogue",
+                      "inputs": {
+                        "q": "{query.q}",
+                        "language": "{query.language}",
+                        "coverage": "{query.coverage}",
+                        "page": "{query.page}",
+                        "feature": "{query.feature}"
+                      }
+                    },
+                    "component": "04599af8-eb47-4009-8a12-dd0d24ee2c1b"
+                  }
+                ]
+              }
+            ]
+          },
+          "extended": null,
+          "tags": [],
+          "folderId": null,
+          "targetId": null,
+          "author": {
+            "id": "6adf94bf2fe0ae616356b788"
+          },
+          "acl": [
+            "tt:user"
+          ],
+          "visibility": "private",
+          "createdAt": "2026-10-26T17:58:23.883Z",
+          "updatedAt": "2026-10-26T17:58:23.883Z"
+        },
+        {
+          "id": "6c125ce4-f7f7-40e1-b4f6-c10a16fd8c81",
+          "thingtime": [
+            "component"
+          ],
+          "crystal": {
+            "name": "Account suite component offline-suite-35fc1265",
+            "description": "Existing account customization must survive reconciliation.",
+            "library": "thingtime",
+            "category": "demo suites",
+            "componentKey": "app-web-standards-navigation",
+            "version": 1,
+            "render": {
+              "tag": "header",
+              "props": {
+                "style": {
+                  "color": "#18181b"
+                }
+              },
+              "children": [
+                {
+                  "tag": "div",
+                  "props": {
+                    "style": {
+                      "display": "flex",
+                      "justifyContent": "space-between",
+                      "gap": "16px",
+                      "flexWrap": "wrap"
+                    }
+                  },
+                  "children": [
+                    {
+                      "tag": "a",
+                      "props": {
+                        "style": {
+                          "color": "inherit",
+                          "textDecoration": "none"
+                        },
+                        "href": "/p/web-standards"
+                      },
+                      "children": [
+                        "Thingtime / Web standards"
+                      ]
+                    },
+                    {
+                      "tag": "span",
+                      "props": {
+                        "style": {
+                          "fontSize": "10px",
+                          "letterSpacing": "0.15em",
+                          "color": "#71717a"
+                        }
+                      },
+                      "children": [
+                        "2026 EDITION"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "tag": "h1",
+                  "props": {
+                    "style": {
+                      "fontSize": "clamp(32px, 5vw, 58px)",
+                      "fontWeight": 650,
+                      "letterSpacing": "-0.055em",
+                      "lineHeight": 1.06,
+                      "margin": "30px 0 12px"
+                    }
+                  },
+                  "children": [
+                    "The web, made of Things."
+                  ]
+                },
+                {
+                  "tag": "p",
+                  "props": {
+                    "style": {
+                      "maxWidth": "650px",
+                      "fontSize": "17px",
+                      "lineHeight": 1.65,
+                      "color": "#71717a",
+                      "margin": 0
+                    }
+                  },
+                  "children": [
+                    "Explore HTML, CSS, JavaScript and Web APIs. Try a feature, change its inputs, and reuse its editable Component and Action definitions."
+                  ]
+                },
+                {
+                  "tag": "nav",
+                  "props": {
+                    "style": {
+                      "display": "flex",
+                      "gap": "20px",
+                      "flexWrap": "wrap",
+                      "padding": "24px 0",
+                      "borderBottom": "1px solid #e4e4e7",
+                      "fontSize": "14px"
+                    }
+                  },
+                  "children": [
+                    {
+                      "tag": "a",
+                      "props": {
+                        "style": {
+                          "color": "inherit",
+                          "textDecoration": "none"
+                        },
+                        "href": "/p/web-standards"
+                      },
+                      "children": [
+                        "All features"
+                      ]
+                    },
+                    {
+                      "tag": "a",
+                      "props": {
+                        "style": {
+                          "color": "inherit",
+                          "textDecoration": "none"
+                        },
+                        "href": "/p/web-standards?language=html"
+                      },
+                      "children": [
+                        "HTML"
+                      ]
+                    },
+                    {
+                      "tag": "a",
+                      "props": {
+                        "style": {
+                          "color": "inherit",
+                          "textDecoration": "none"
+                        },
+                        "href": "/p/web-standards?language=css"
+                      },
+                      "children": [
+                        "CSS"
+                      ]
+                    },
+                    {
+                      "tag": "a",
+                      "props": {
+                        "style": {
+                          "color": "inherit",
+                          "textDecoration": "none"
+                        },
+                        "href": "/p/web-standards?language=javascript"
+                      },
+                      "children": [
+                        "JavaScript"
+                      ]
+                    },
+                    {
+                      "tag": "a",
+                      "props": {
+                        "style": {
+                          "color": "inherit",
+                          "textDecoration": "none"
+                        },
+                        "href": "/p/web-standards?language=webapi"
+                      },
+                      "children": [
+                        "Web APIs"
+                      ]
+                    },
+                    {
+                      "tag": "a",
+                      "props": {
+                        "style": {
+                          "color": "inherit",
+                          "textDecoration": "none"
+                        },
+                        "href": "/p/web-standards?coverage=interactive"
+                      },
+                      "children": [
+                        "Interactive demos"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "extended": null,
+          "tags": [],
+          "folderId": null,
+          "targetId": null,
+          "author": {
+            "id": "6adf94bf2fe0ae616356b788"
+          },
+          "acl": [
+            "tt:user"
+          ],
+          "visibility": "private",
+          "createdAt": "2026-10-26T17:58:23.556Z",
+          "updatedAt": "2026-10-26T17:58:24.133Z"
+        },
+        {
+          "id": "6fe604d4-8f1e-4fcd-8616-65377fc00f16",
+          "thingtime": [
+            "component"
+          ],
+          "crystal": {
+            "name": "Standards catalogue · Web standards demo",
+            "description": "Search, language filters, coverage filters and pagination are authored Thingtime controls backed by a reusable catalogue Action.",
+            "library": "thingtime",
+            "category": "demo suites",
+            "componentKey": "app-web-standards-explorer",
+            "version": 1,
+            "render": {
+              "tag": "section",
+              "props": {
+                "style": {
+                  "minWidth": 0
+                }
+              },
+              "children": [
+                {
+                  "tag": "fieldset",
+                  "props": {
+                    "style": {
+                      "border": 0,
+                      "padding": 0,
+                      "margin": "24px 0",
+                      "display": "flex",
+                      "alignItems": "end",
+                      "gap": "12px",
+                      "flexWrap": "wrap",
+                      "minWidth": 0
+                    }
+                  },
+                  "children": [
+                    {
+                      "tag": "label",
+                      "props": {
+                        "style": {
+                          "display": "grid",
+                          "gap": "6px",
+                          "flex": "2 1 260px",
+                          "fontSize": "12px",
+                          "color": "#52525b"
+                        }
+                      },
+                      "children": [
+                        "Search features",
+                        {
+                          "tag": "input",
+                          "props": {
+                            "style": {
+                              "width": "100%",
+                              "minWidth": 0,
+                              "boxSizing": "border-box",
+                              "fontSize": "14px",
+                              "padding": "10px 12px",
+                              "border": "1px solid #d4d4d8",
+                              "borderRadius": "8px",
+                              "background": "#fff",
+                              "color": "#18181b"
+                            },
+                            "name": "q",
+                            "value": "{result.q}",
+                            "placeholder": "Try grid, dialog, Array, WebSocket…"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "label",
+                      "props": {
+                        "style": {
+                          "display": "grid",
+                          "gap": "6px",
+                          "flex": "1 1 140px",
+                          "fontSize": "12px",
+                          "color": "#52525b"
+                        }
+                      },
+                      "children": [
+                        "Language",
+                        {
+                          "tag": "select",
+                          "props": {
+                            "style": {
+                              "width": "100%",
+                              "minWidth": 0,
+                              "boxSizing": "border-box",
+                              "fontSize": "14px",
+                              "padding": "10px 12px",
+                              "border": "1px solid #d4d4d8",
+                              "borderRadius": "8px",
+                              "background": "#fff",
+                              "color": "#18181b"
+                            },
+                            "name": "language",
+                            "value": "{result.language}"
+                          },
+                          "children": [
+                            {
+                              "tag": "option",
+                              "props": {
+                                "style": {},
+                                "value": ""
+                              },
+                              "children": [
+                                "All languages"
+                              ]
+                            },
+                            {
+                              "tag": "option",
+                              "props": {
+                                "style": {},
+                                "value": "html"
+                              },
+                              "children": [
+                                "html"
+                              ]
+                            },
+                            {
+                              "tag": "option",
+                              "props": {
+                                "style": {},
+                                "value": "css"
+                              },
+                              "children": [
+                                "css"
+                              ]
+                            },
+                            {
+                              "tag": "option",
+                              "props": {
+                                "style": {},
+                                "value": "javascript"
+                              },
+                              "children": [
+                                "javascript"
+                              ]
+                            },
+                            {
+                              "tag": "option",
+                              "props": {
+                                "style": {},
+                                "value": "webapi"
+                              },
+                              "children": [
+                                "webapi"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "label",
+                      "props": {
+                        "style": {
+                          "display": "grid",
+                          "gap": "6px",
+                          "flex": "1 1 160px",
+                          "fontSize": "12px",
+                          "color": "#52525b"
+                        }
+                      },
+                      "children": [
+                        "Examples",
+                        {
+                          "tag": "select",
+                          "props": {
+                            "style": {
+                              "width": "100%",
+                              "minWidth": 0,
+                              "boxSizing": "border-box",
+                              "fontSize": "14px",
+                              "padding": "10px 12px",
+                              "border": "1px solid #d4d4d8",
+                              "borderRadius": "8px",
+                              "background": "#fff",
+                              "color": "#18181b"
+                            },
+                            "name": "coverage",
+                            "value": "{result.coverage}"
+                          },
+                          "children": [
+                            {
+                              "tag": "option",
+                              "props": {
+                                "style": {},
+                                "value": ""
+                              },
+                              "children": [
+                                "All coverage"
+                              ]
+                            },
+                            {
+                              "tag": "option",
+                              "props": {
+                                "style": {},
+                                "value": "interactive"
+                              },
+                              "children": [
+                                "Interactive demos"
+                              ]
+                            },
+                            {
+                              "tag": "option",
+                              "props": {
+                                "style": {},
+                                "value": "inspection"
+                              },
+                              "children": [
+                                "Inspection only"
+                              ]
+                            },
+                            {
+                              "tag": "option",
+                              "props": {
+                                "style": {},
+                                "value": "requires-context"
+                              },
+                              "children": [
+                                "Needs context"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "tag": "button",
+                      "props": {
+                        "type": "button",
+                        "style": {
+                          "width": "auto",
+                          "minWidth": 0,
+                          "boxSizing": "border-box",
+                          "fontSize": "14px",
+                          "padding": "10px 12px",
+                          "border": "1px solid #d4d4d8",
+                          "borderRadius": "8px",
+                          "background": "#18181b",
+                          "color": "#fff",
+                          "cursor": "pointer"
+                        }
+                      },
+                      "ttAction": "$ui",
+                      "ttActionInputs": {
+                        "op": "query",
+                        "form": true,
+                        "params": {
+                          "q": "{q}",
+                          "language": "{language}",
+                          "coverage": "{coverage}"
+                        }
+                      },
+                      "children": [
+                        "Explore"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "ttIf": {
+                    "arg": "result.selected",
+                    "then": {
+                      "tag": "a",
+                      "props": {
+                        "style": {
+                          "color": "inherit",
+                          "textDecoration": "none",
+                          "fontSize": "13px"
+                        },
+                        "href": "{result.back}"
+                      },
+                      "children": [
+                        "← Back to results"
+                      ]
+                    },
+                    "else": {
+                      "tag": "div",
+                      "props": {
+                        "style": {}
+                      },
+                      "children": [
+                        {
+                          "tag": "div",
+                          "props": {
+                            "style": {
+                              "display": "flex",
+                              "justifyContent": "space-between",
+                              "gap": "12px",
+                              "flexWrap": "wrap",
+                              "marginBottom": "16px"
+                            }
+                          },
+                          "children": [
+                            {
+                              "tag": "span",
+                              "props": {
+                                "style": {
+                                  "fontWeight": 600
+                                }
+                              },
+                              "children": [
+                                "{result.matched} entries"
+                              ]
+                            },
+                            {
+                              "tag": "span",
+                              "props": {
+                                "style": {
+                                  "color": "#71717a",
+                                  "fontSize": "12px"
+                                }
+                              },
+                              "children": [
+                                "Page {result.page} of {result.pages} · snapshot {result.generatedAt}"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "div",
+                          "props": {
+                            "style": {
+                              "display": "grid",
+                              "gridTemplateColumns": "repeat(auto-fit,minmax(min(100%,260px),1fr))",
+                              "gap": "12px"
+                            }
+                          },
+                          "children": [
+                            {
+                              "ttEach": {
+                                "arg": "result.cards",
+                                "node": {
+                                  "tag": "a",
+                                  "props": {
+                                    "style": {
+                                      "display": "grid",
+                                      "gap": "8px",
+                                      "padding": "18px",
+                                      "border": "1px solid #e4e4e7",
+                                      "borderRadius": "12px",
+                                      "color": "#18181b",
+                                      "textDecoration": "none",
+                                      "minWidth": 0
+                                    },
+                                    "href": "{item.href}"
+                                  },
+                                  "children": [
+                                    {
+                                      "tag": "div",
+                                      "props": {
+                                        "style": {
+                                          "display": "flex",
+                                          "justifyContent": "space-between",
+                                          "gap": "10px"
+                                        }
+                                      },
+                                      "children": [
+                                        {
+                                          "tag": "span",
+                                          "props": {
+                                            "style": {
+                                              "fontSize": "10px",
+                                              "textTransform": "uppercase",
+                                              "letterSpacing": "0.08em",
+                                              "color": "#71717a"
+                                            }
+                                          },
+                                          "children": [
+                                            "{item.language} / {item.kind}"
+                                          ]
+                                        },
+                                        {
+                                          "tag": "span",
+                                          "props": {
+                                            "style": {
+                                              "fontSize": "12px"
+                                            }
+                                          },
+                                          "children": [
+                                            "↗"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "tag": "strong",
+                                      "props": {
+                                        "style": {
+                                          "fontSize": "16px",
+                                          "fontWeight": 600,
+                                          "overflowWrap": "anywhere"
+                                        }
+                                      },
+                                      "children": [
+                                        "{item.name}"
+                                      ]
+                                    },
+                                    {
+                                      "tag": "span",
+                                      "props": {
+                                        "style": {
+                                          "fontSize": "12px",
+                                          "color": "#71717a",
+                                          "overflowWrap": "anywhere"
+                                        }
+                                      },
+                                      "children": [
+                                        "{item.group}"
+                                      ]
+                                    },
+                                    {
+                                      "tag": "span",
+                                      "props": {
+                                        "style": {
+                                          "fontSize": "11px",
+                                          "color": "#52525b",
+                                          "paddingTop": "10px"
+                                        }
+                                      },
+                                      "children": [
+                                        "{item.coverage}"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "max": 18
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "tag": "nav",
+                          "props": {
+                            "style": {
+                              "display": "flex",
+                              "justifyContent": "space-between",
+                              "padding": "24px 0",
+                              "fontSize": "14px"
+                            }
+                          },
+                          "children": [
+                            {
+                              "ttIf": {
+                                "arg": "result.hasPrevious",
+                                "then": {
+                                  "tag": "a",
+                                  "props": {
+                                    "style": {
+                                      "color": "inherit",
+                                      "textDecoration": "none"
+                                    },
+                                    "href": "{result.previous}"
+                                  },
+                                  "children": [
+                                    "← Previous"
+                                  ]
+                                }
+                              }
+                            },
+                            {
+                              "ttIf": {
+                                "arg": "result.hasNext",
+                                "then": {
+                                  "tag": "a",
+                                  "props": {
+                                    "style": {
+                                      "color": "inherit",
+                                      "textDecoration": "none"
+                                    },
+                                    "href": "{result.next}"
+                                  },
+                                  "children": [
+                                    "Next →"
+                                  ]
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "tag": "details",
+                  "props": {
+                    "style": {
+                      "marginTop": "24px"
+                    }
+                  },
+                  "children": [
+                    {
+                      "tag": "summary",
+                      "props": {
+                        "style": {
+                          "cursor": "pointer",
+                          "fontSize": "13px"
+                        }
+                      },
+                      "children": [
+                        "About this inventory"
+                      ]
+                    },
+                    {
+                      "tag": "p",
+                      "props": {
+                        "style": {
+                          "fontSize": "13px",
+                          "color": "#71717a"
+                        }
+                      },
+                      "children": [
+                        "Standards status and browser support are different. Published drafts are labelled as drafts. Internal specification clauses are references, not public APIs. “Inspection” and “needs context” entries are coverage gaps, not completed demonstrations."
+                      ]
+                    },
+                    {
+                      "tag": "div",
+                      "props": {
+                        "style": {
+                          "display": "flex",
+                          "gap": "14px",
+                          "flexWrap": "wrap"
+                        }
+                      },
+                      "children": [
+                        {
+                          "ttEach": {
+                            "arg": "result.standards",
+                            "node": {
+                              "tag": "a",
+                              "props": {
+                                "style": {
+                                  "color": "inherit",
+                                  "textDecoration": "underline",
+                                  "fontSize": "12px"
+                                },
+                                "href": "{item.href}"
+                              },
+                              "children": [
+                                "{item.name} ↗"
+                              ]
+                            },
+                            "max": 5
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          "extended": null,
+          "tags": [],
+          "folderId": null,
+          "targetId": null,
+          "author": {
+            "id": "6adf94bf2fe0ae616356b788"
+          },
+          "acl": [
+            "tt:user"
+          ],
+          "visibility": "private",
+          "createdAt": "2026-10-26T17:58:23.622Z",
+          "updatedAt": "2026-10-26T17:58:23.622Z"
+        },
+        {
+          "id": "80c23388-ba42-4bed-9148-d994c0f91b92",
+          "thingtime": [
+            "action"
+          ],
+          "crystal": {
+            "name": "Save edited web component · Web standards demo",
+            "runtime": "browser",
+            "description": "Save the complete authored Web Platform program, with current inputs as defaults, as a private reusable Component.",
+            "actionKey": "app-web-standards-save-draft",
+            "category": "Web standards",
+            "version": 1,
+            "inputs": [
+              {
+                "name": "program",
+                "type": "json",
+                "required": true,
+                "label": "Web Platform program"
+              }
+            ],
+            "capabilities": [
+              {
+                "capability": "http.request",
+                "endpoints": [
+                  "POST /api/v1/things"
+                ]
+              }
+            ],
+            "steps": [
+              {
+                "op": "http.request",
+                "method": "POST",
+                "path": "/api/v1/things",
+                "feature": "api.things",
+                "minimumVersion": "1.33.0",
+                "query": {},
+                "body": {
+                  "thingtime": [
+                    "component"
+                  ],
+                  "acl": [
+                    "tt:user"
+                  ],
+                  "crystal": {
+                    "name": {
+                      "ttExpr": [
+                        "slice",
+                        {
+                          "ttExpr": [
+                            "coalesce",
+                            {
+                              "ttExpr": [
+                                "get",
+                                "$input.program",
+                                "title"
+                              ]
+                            },
+                            "Web Platform program"
+                          ]
+                        },
+                        0,
+                        60
+                      ]
+                    },
+                    "description": "An editable Web Platform program with saved input defaults.",
+                    "category": "Web standards",
+                    "args": [],
+                    "render": {
+                      "tag": "tt-web-platform",
+                      "props": {
+                        "program": "$input.program"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "op": "return",
+                "value": {
+                  "id": "$step.1.thing.id",
+                  "name": "$step.1.thing.crystal.name",
+                  "silent": true
+                }
+              }
+            ],
+            "limits": {
+              "maxInputBytes": 65536
+            }
+          },
+          "extended": null,
+          "tags": [],
+          "folderId": null,
+          "targetId": null,
+          "author": {
+            "id": "6adf94bf2fe0ae616356b788"
+          },
+          "acl": [
+            "tt:user"
+          ],
+          "visibility": "private",
+          "createdAt": "2026-10-26T17:58:23.812Z",
+          "updatedAt": "2026-10-26T17:58:23.812Z"
+        },
+        {
+          "id": "d9f6d1b4-87d5-452d-be35-493a38d7884b",
+          "thingtime": [
+            "action"
+          ],
+          "crystal": {
+            "name": "Save web standard component · Web standards demo",
+            "runtime": "browser",
+            "description": "Create one private, editable component using the chosen standard feature’s full declarative program.",
+            "actionKey": "app-web-standards-save-component",
+            "category": "Web standards",
+            "version": 1,
+            "inputs": [
+              {
+                "name": "feature",
+                "type": "string",
+                "required": true,
+                "label": "Feature ID"
+              }
+            ],
+            "capabilities": [
+              {
+                "capability": "http.request",
+                "endpoints": [
+                  "POST /api/v1/actions/run",
+                  "POST /api/v1/things"
+                ]
+              }
+            ],
+            "steps": [
+              {
+                "op": "http.request",
+                "method": "POST",
+                "path": "/api/v1/actions/run",
+                "feature": "api.actions-run",
+                "minimumVersion": "1.10.0",
+                "query": {},
+                "body": {
+                  "action": "app-web-standards-catalogue",
+                  "inputs": {
+                    "feature": "$input.feature"
+                  }
+                }
+              },
+              {
+                "op": "http.request",
+                "method": "POST",
+                "path": "/api/v1/things",
+                "feature": "api.things",
+                "minimumVersion": "1.31.0",
+                "query": {},
+                "body": {
+                  "thingtime": [
+                    "component"
+                  ],
+                  "acl": [
+                    "tt:user"
+                  ],
+                  "crystal": "$step.1.result.selected.component"
+                }
+              },
+              {
+                "op": "return",
+                "value": {
+                  "id": "$step.2.thing.id",
+                  "name": "$step.2.thing.crystal.name",
+                  "silent": true
+                }
+              }
+            ]
+          },
+          "extended": null,
+          "tags": [],
+          "folderId": null,
+          "targetId": null,
+          "author": {
+            "id": "6adf94bf2fe0ae616356b788"
+          },
+          "acl": [
+            "tt:user"
+          ],
+          "visibility": "private",
+          "createdAt": "2026-10-26T17:58:23.763Z",
+          "updatedAt": "2026-10-26T17:58:23.763Z"
+        },
+        {
+          "id": "fedee5bb-e218-4a13-b071-a02e3b3fd406",
+          "thingtime": [
+            "action"
+          ],
+          "crystal": {
+            "name": "Browse web standards · Web standards demo",
+            "description": "Pure read-only search over the versioned standards snapshot; returns metadata and a declarative demo program.",
+            "actionKey": "app-web-standards-catalogue",
+            "category": "Web standards",
+            "version": 1,
+            "inputs": [
+              {
+                "name": "q",
+                "type": "string",
+                "label": "Search",
+                "default": ""
+              },
+              {
+                "name": "language",
+                "type": "string",
+                "label": "Language",
+                "default": ""
+              },
+              {
+                "name": "coverage",
+                "type": "string",
+                "label": "Coverage",
+                "default": ""
+              },
+              {
+                "name": "page",
+                "type": "number",
+                "label": "Page",
+                "default": 1
+              },
+              {
+                "name": "feature",
+                "type": "string",
+                "label": "Feature ID",
+                "default": ""
+              }
+            ],
+            "steps": [
+              {
+                "op": "return",
+                "value": {
+                  "ttExpr": [
+                    "webstandards.browse",
+                    {
+                      "q": "$input.q",
+                      "language": "$input.language",
+                      "coverage": "$input.coverage",
+                      "page": "$input.page",
+                      "feature": "$input.feature"
+                    }
+                  ]
+                }
+              }
+            ],
+            "limits": {
+              "maxResultBytes": 65536
+            }
+          },
+          "extended": null,
+          "tags": [],
+          "folderId": null,
+          "targetId": null,
+          "author": {
+            "id": "6adf94bf2fe0ae616356b788"
+          },
+          "acl": [
+            "tt:user"
+          ],
+          "visibility": "private",
+          "createdAt": "2026-10-26T17:58:23.721Z",
+          "updatedAt": "2026-10-26T17:58:23.721Z"
+        }
+      ]
+    }
+  },
+  "conflictReviewed": true,
+  "unrelatedAccountCustomizationPreservedBeforeExplicitRecovery": true,
+  "explicitOriginalDeviceRecoveryAfterSecondConflict": true,
+  "oldLocalPageUrlAfterColdReload": true,
+  "bounds": [
+    {
+      "label": "offline-installed-suite",
+      "bottom": false,
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "offline-installed-suite",
+      "bottom": true,
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "offline-installed-suite",
+      "bottom": false,
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "offline-installed-suite",
+      "bottom": true,
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "offline-installed-suite",
+      "bottom": false,
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "offline-installed-suite",
+      "bottom": true,
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "offline-saved-example",
+      "bottom": false,
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "offline-saved-example",
+      "bottom": true,
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "offline-saved-example",
+      "bottom": false,
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "offline-saved-example",
+      "bottom": true,
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "offline-saved-example",
+      "bottom": false,
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "offline-saved-example",
+      "bottom": true,
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "reconnected-suite-conflict",
+      "bottom": false,
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "reconnected-suite-conflict",
+      "bottom": true,
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "reconnected-suite-conflict",
+      "bottom": false,
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "reconnected-suite-conflict",
+      "bottom": true,
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "reconnected-suite-conflict",
+      "bottom": false,
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "reconnected-suite-conflict",
+      "bottom": true,
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "preserved-suite-version-recovery",
+      "bottom": false,
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "preserved-suite-version-recovery",
+      "bottom": true,
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "preserved-suite-version-recovery",
+      "bottom": false,
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "preserved-suite-version-recovery",
+      "bottom": true,
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "preserved-suite-version-recovery",
+      "bottom": false,
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "preserved-suite-version-recovery",
+      "bottom": true,
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "canonical-suite-after-reload",
+      "bottom": false,
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "canonical-suite-after-reload",
+      "bottom": true,
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "label": "canonical-suite-after-reload",
+      "bottom": false,
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "canonical-suite-after-reload",
+      "bottom": true,
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "label": "canonical-suite-after-reload",
+      "bottom": false,
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "label": "canonical-suite-after-reload",
+      "bottom": true,
+      "width": 320,
+      "scrollWidth": 320
+    }
+  ],
+  "connectivityEvents": [
+    {
+      "expectedOffline": true,
+      "online": [
+        {
+          "source": "primary",
+          "online": false
+        }
+      ],
+      "transportFailed": true,
+      "status": null,
+      "actorMatches": false,
+      "planeMatches": false,
+      "at": 1793037503382
+    },
+    {
+      "expectedOffline": false,
+      "online": [
+        {
+          "source": "primary",
+          "online": true
+        }
+      ],
+      "transportFailed": false,
+      "status": 200,
+      "actorMatches": true,
+      "planeMatches": true,
+      "at": 1793037503429
+    },
+    {
+      "expectedOffline": true,
+      "online": [
+        {
+          "source": "primary",
+          "online": false
+        },
+        {
+          "source": "concurrent",
+          "online": false
+        }
+      ],
+      "transportFailed": true,
+      "status": null,
+      "actorMatches": false,
+      "planeMatches": false,
+      "at": 1793037514368
+    },
+    {
+      "expectedOffline": false,
+      "online": [
+        {
+          "source": "primary",
+          "online": true
+        },
+        {
+          "source": "concurrent",
+          "online": true
+        }
+      ],
+      "transportFailed": false,
+      "status": 200,
+      "actorMatches": true,
+      "planeMatches": true,
+      "at": 1793037533465
+    },
+    {
+      "expectedOffline": true,
+      "online": [
+        {
+          "source": "primary",
+          "online": false
+        },
+        {
+          "source": "concurrent",
+          "online": false
+        }
+      ],
+      "transportFailed": true,
+      "status": null,
+      "actorMatches": false,
+      "planeMatches": false,
+      "at": 1793037553498
+    },
+    {
+      "expectedOffline": false,
+      "online": [
+        {
+          "source": "primary",
+          "online": true
+        },
+        {
+          "source": "concurrent",
+          "online": true
+        }
+      ],
+      "transportFailed": false,
+      "status": 200,
+      "actorMatches": true,
+      "planeMatches": true,
+      "at": 1793037555005
+    }
+  ],
+  "mutations": [
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/webpages/suites/install",
+      "offline": false,
+      "source": "concurrent",
+      "requestId": "71263622-6efb-4868-ad5e-51d47cce07fe",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/settings/lopu-prompt",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/drafts",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "concurrent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/settings/lopu-prompt",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/login",
+      "offline": false,
+      "source": "control",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/settings/lopu-prompt",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "source": "control",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/notifications/record",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/drafts",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/settings/lopu-prompt",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "source": "primary",
+      "status": 409
+    },
+    {
+      "path": "/api/v1/settings/lopu-prompt",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/timeline",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/settings/lopu-prompt",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/algorithms/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    },
+    {
+      "path": "/api/v1/themes/sync",
+      "offline": false,
+      "source": "primary",
+      "status": 200,
+      "failed": true
+    }
+  ],
+  "pageErrors": []
+}

@@ -5486,3 +5486,51 @@ acceptance remain separate. The shared LLM proxy service is unchanged.
 The progress tracker now shows all 25 unfinished rows under Remaining and keeps
 the current-verification overview visible while filtering or searching. Native
 static-page checks cover counts, controls and full scrolling at 1440/390/320 px.
+
+## 27 October — durable suite identity and vault-file follow-up
+
+The signed-in suite path now materializes locally through the existing suite
+framework, holds provisional definitions out of ordinary uploads, and reconciles
+an identity-bound canonical receipt. Server installation, quota, History and
+receipt persistence share an active-plane transaction. Reference adoption retains
+newer edits, explicit audience/content conflicts and immutable historical events.
+See [the protocol](../docs/account-suite-sync.md). Ten real replica-set scenarios
+and the complete normal UI flow now pass. The browser installs in two offline
+tabs, runs/edits/saves/reloads, adopts canonical IDs, resolves overlapping edits,
+recovers the preserved original private version and reopens old Component/page
+URLs. All five states are captured and scrolled at 1440/390/320px.
+[Final native suite evidence](../artifacts/anonymous-local-first-2026-10-27-account-suites-r9/README.md).
+
+Acceptance found and fixed old Component family lookups bypassing scoped aliases
+and explicit recovery incorrectly rejecting a settled 409's frozen request.
+Uncertain retries remain immutable; stale reviews and active claims are refused.
+The final focused sync/reconciliation run passes 39, capability registry coverage
+passes 82, the sanitized build passes and the same 91 typecheck diagnostics remain.
+Earlier broader local-workspace coverage passed 886 with 101 explicit skips,
+plus four offline-shell checks; Timeline passed 265 and Webpages 187 with five
+skips. These counts describe separate runs, not an aggregate unique-test total.
+
+The [native file-only vault check](../artifacts/anonymous-local-first-2026-10-27-vault-file/README.md)
+passes normal 66 MiB upload, cold offline readback and exact download at source
+`9f24113d`, with desktop/phone captures, no OOM and verified cleanup. Separate
+[memory diagnostics](../artifacts/anonymous-local-first-2026-10-27-vault-memory/README.md)
+reproduce a large-note failure without proving the container hit its own limit.
+The VM has about 4 GiB total RAM and no swap; it was inspected without changes.
+The subsequent sandboxed-browser run passes exact 66 MiB readback/download,
+password reveal/hide, keyboard focus and full scrolling at all three widths.
+The mobile Lopu shortcut hides only while intersecting the marked editor and
+returns when clear; its navbar entry remains available. DevKit is excluded from
+the password route at all widths. Conflict status text now stacks above its
+comparison button on phones.
+[Vault mobile evidence](../artifacts/anonymous-local-first-2026-10-27-vault-clearance-r3/README.md).
+
+Pushed `9f24113d` passed Web CI and CodeQL; its frontend alias and immutable
+preview returned HTTP 200. Later local suite code has separate verification.
+The shared LLM proxy/key is unchanged as explicitly requested. No merge, manual
+deployment or existing-account mutation occurred.
+
+A single subsequent large-note diagnostic passes normal no-login save, cold
+offline reload/unlock and exact readback of 2,800,039 string code units without
+OOM. Timestamped action phases are retained. This is a current pass, not an
+explanation or performance fix for earlier OOM events; account/provider and
+full capacity matrices remain open. [Diagnostic evidence](../artifacts/anonymous-local-first-2026-10-27-vault-large-note-phases/README.md).

@@ -40,3 +40,7 @@ Every run used the task manager's network-none, 4096 MiB, one-CPU, sandboxed con
 `provenance.json` distinguishes executed final package/bundle hashes, reconstructed executed final source hashes, current source hashes and earlier package digest receipts. Full noisy failure stdout remains only in ignored `tmp/continuation/vault-*.log`; published failure receipts contain compact messages. No secrets or real account data were used.
 
 The two opt-in source files pass scoped ESLint and bundle checks. Their UI test intentionally remains capable of failing on the observed stress path; no extra runtime retries or resource increases were made to obtain a pass.
+
+## Subsequent isolated diagnosis
+
+The later [memory trials](../anonymous-local-first-2026-10-27-vault-memory/README.md) did not show the failing container reaching its own 4 GiB limit. A [file-only normal UI run](../anonymous-local-first-2026-10-27-vault-file/README.md) then passed 66 MiB upload, offline cold reload and byte-exact download. The earlier combined/large-note failures remain failures; no product memory cause or complete capacity acceptance is established.

@@ -104,6 +104,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Add durable account suite receipts and canonical identity adoption,
+  with atomic server installation, frozen retries and explicit conflict recovery.
+  Real isolated API and normal offline/reconnect/recovery UI acceptance pass,
+  including old-ID lookup and reviewed settled-write recovery regressions.
+  Mobile conflict rows and vault controls remain usable at 320px; sandboxed
+  66 MiB vault cold reload/download passes. Large-note memory diagnosis remains
+  separate. [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
 - 2026-10-27: Account pages wait for newly created saved Components, while lost-response retries use their frozen dependencies and preserve newer edits. Native instruction and vault mechanism evidence now separates passing runs from intermittent paste and large-editor OOM failures; signed-in offline suite reconciliation remains open. [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
 
 - **Codex (AI), 2026-10-27:** Add known-length ZIP64 Blob export and refuse the

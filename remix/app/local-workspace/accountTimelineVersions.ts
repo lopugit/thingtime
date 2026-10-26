@@ -8,6 +8,11 @@ import { LocalTimelineVersions, type LocalVersionAuthority, type LocalProtectedV
 import { AccountTimeline, accountTimelineScope, readAccountTimelineRow } from './accountTimeline';
 import { WorkspaceError, workspaceScopeKey, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import type { LocalThings, LocalThing } from './things';
+import { accountSuiteAliases, resolveAccountSuiteId } from './accountSuiteIdentity';
+import { remapSuiteThing } from './accountSuiteReconcile';
+import { componentDefinitionFields } from '../timeline/publishedComponentTools';
+import { componentVersion, componentVersionBindings } from '../timeline/componentMerge';
+import { webpageComponentRefs } from '../timeline/componentBindings';
 
 type AccountScope = Extract<WorkspaceScope, {kind:'account'}>;
 const fail=(message:string):never=>{throw new WorkspaceError('ACCOUNT_HISTORY_VERSION',message,409);};
@@ -24,13 +29,28 @@ export class AccountTimelineVersions {
   this.history=new AccountTimeline(db,scope,lease);
   const entry=(tx:WorkspaceTransaction,id:string)=>readAccountTimelineRow(tx,timeline,id);
   const thing=async(tx:WorkspaceTransaction,id:string)=>{
+   id=await resolveAccountSuiteId(tx,id);
    for(const writer of this.protectedWriters){const doc=await writer.read?.(tx,id);if(doc&&writer.matches(doc))return doc;}
    const doc=await tx.get<LocalThing>('things',id),state=await tx.get<{audience:{acl:string[]};deleted?:unknown}>('thing-sync',id);
    if(!doc||!state||state.deleted)return undefined;
    return {...doc,acl:state.audience.acl};
   };
   this.authority={scope,ownerId:scope.ownerId,deviceDrafts:true,entry,thing,
+   resolveTarget:(tx,id)=>resolveAccountSuiteId(tx,id),
+   normalizeContent:async(tx,value,thingtime)=>{
+    const mapped=remapSuiteThing({...value,id:'version-content',thingtime,crystal:value.crystal||{}},await accountSuiteAliases(tx));
+    return {...value,crystal:mapped.crystal,...('folderId' in value?{folderId:mapped.folderId}:{}),...('targetId' in value?{targetId:mapped.targetId}:{})};
+   },
+   recordedDefinitions:async(tx,event,content,captures)=>{
+    const aliases=await accountSuiteAliases(tx);
+    const original=aliases.has(event.thingId)?new Map([...aliases].map(([from,to])=>[to,from])):new Map<string,string>();
+    const old=remapSuiteThing({id:'version',thingtime:['webpage'],crystal:content.crystal||{}} as LocalThing,original);
+    const bindings=componentVersionBindings(componentVersion(event,old.crystal.blocks,captures),captures);
+    const mapped=Object.fromEntries(Object.entries(bindings).map(([ref,binding])=>[aliases.get(ref)||ref,binding?{...binding,id:aliases.get(binding.id)||binding.id,crystal:remapSuiteThing({id:binding.id,thingtime:['component'],crystal:binding.crystal} as LocalThing,aliases).crystal}:binding]));
+    return componentDefinitionFields(webpageComponentRefs(content.crystal?.blocks),mapped);
+   },
    head:async(tx,id)=>{
+    id=await resolveAccountSuiteId(tx,id);
     const head=await tx.get<string>('timeline-meta',`head:${id}`);
     if(head){const row=await entry(tx,head);if(!row||row.event.thingId!==id)fail('The device History head is unavailable.');return row;}
     const doc=await thing(tx,id);
@@ -66,7 +86,8 @@ export class AccountTimelineVersions {
   if(!source)fail('This version is not retained on this device. Load it in History while connected.');
   const rows=await this.store.forThing(source.event.thingId);check();
   const basis=await this.db.transaction(this.scope,'readonly',this.lease,async tx=>{
-   const id=await tx.get<string>('timeline-meta',`head:${source.event.thingId}`);
+   const canonical=await resolveAccountSuiteId(tx,source.event.thingId);
+   const id=await tx.get<string>('timeline-meta',`head:${canonical}`);
    const doc=await this.authority.thing(tx,source.event.thingId);
    if(!doc&&!request.recover)fail('This Thing was deleted. Choose recovery in History to restore it.');
    const adapter=doc?this.protectedWriters.find(writer=>writer.matches(doc))?.content(doc):null;

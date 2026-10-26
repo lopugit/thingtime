@@ -103,6 +103,7 @@ export class LocalActions {
 	private async resolve(reference: string, snapshot?: LocalThing[]): Promise<ActionProgram> {
 		this.assert();
 		if (typeof reference !== 'string' || !reference.trim() || reference.length > 240) fail('Which action? Pass its id or actionKey');
+		if(this.scope.kind==='account'&&this.account)reference=await this.account.canonicalId(reference);
 		const rows = (snapshot ?? await this.things.snapshot()).filter((row) => row.thingtime.includes('action'));
 		const row =
 			rows.find((row) => row.id === reference) ||

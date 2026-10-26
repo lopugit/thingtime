@@ -25,6 +25,7 @@ import { algorithmTransferContent, isTransferAlgorithm, validateTransferAlgorith
 import { isTransferTheme, validateTransferTheme } from '../utils/thingTransfer/theme';
 import { normalizeSavedTheme } from '../theme/savedTheme';
 import { type WorkspaceDatabase, WorkspaceError, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
+import { accountSuiteAliases, resolveAccountSuiteId } from './accountSuiteIdentity';
 
 export type LocalThing = TransferThing & { createdAt: string; updatedAt: string; revision: number; localSubmission?: string };
 export type LocalFileMutation = (tx: WorkspaceTransaction, row: LocalAttachment | LocalLinkedAttachment, previous?: LocalAttachment | LocalLinkedAttachment) => Promise<void>;
@@ -86,6 +87,12 @@ export class LocalThings {
 		});
 	}
 	private async placement(tx: WorkspaceTransaction, row: TransferThing) {
+		if (this.scope.kind === 'account') {
+			const ids = await accountSuiteAliases(tx), resolve = (id: string) => ids.get(id) || id;
+			row.crystal = rewriteComposition(row.thingtime, row.crystal, (_kind, id) => resolve(id));
+			if (row.folderId) row.folderId = resolve(row.folderId);
+			if (row.targetId) row.targetId = resolve(row.targetId);
+		}
 		if (row.folderId === LOCAL_TIMELINE_FOLDER || row.targetId === LOCAL_TIMELINE_FOLDER) fail('MANAGED_KIND', 'Timeline is managed by History. Choose an ordinary folder or Thing.');
 		const seen = new Set([row.id]); let parent = row.folderId;
 		while (parent) {
@@ -113,8 +120,9 @@ export class LocalThings {
 	}
 	/** Trusted composition adapters can reuse ordinary validation and writes in
 	 * one transaction. The callback may await only these storage operations. */
-	async atomic<T>(run: (writer: Pick<LocalThings, 'snapshot' | 'create' | 'update'>) => Promise<T>): Promise<T> {
+	async atomic<T>(run: (writer: Pick<LocalThings, 'snapshot' | 'create' | 'update'> & { tx: WorkspaceTransaction }) => Promise<T>): Promise<T> {
 		return this.transaction('readwrite', tx => run({
+			tx,
 			snapshot: async () => (await tx.list<LocalThing>('things')).map(row => row.value),
 			create: input => this.createIn(tx, input),
 			update: input => this.updateIn(tx, input)
@@ -383,10 +391,11 @@ export class LocalThings {
 	 * history also keeps deleted local identities from falling through to public
 	 * reads. The actual operation still resolves/validates the scoped Thing. */
 	async hasReference(id: string): Promise<boolean> {
-		return this.transaction('readonly', async tx => (this.scope.kind === 'anonymous' && id === LOCAL_TIMELINE_FOLDER && !!await localTimelineFolder(tx)) || !!(await tx.get('things', id)) || !!(await tx.get('timeline-meta', `head:${id}`)));
+		return this.transaction('readonly', async tx => { if (this.scope.kind === 'account') id = await resolveAccountSuiteId(tx,id); return (this.scope.kind === 'anonymous' && id === LOCAL_TIMELINE_FOLDER && !!await localTimelineFolder(tx)) || !!(await tx.get('things', id)) || !!(await tx.get('timeline-meta', `head:${id}`)); });
 	}
 	async get(id: string): Promise<LocalThing> {
 		return this.transaction('readonly', async tx => {
+			if (this.scope.kind === 'account') id = await resolveAccountSuiteId(tx,id);
 			const found = this.scope.kind === 'anonymous' && id === LOCAL_TIMELINE_FOLDER ? await localTimelineFolder(tx) : await tx.get<LocalThing>('things', id);
 			if (!found || found.thingtime.includes('action-run')) return fail('NOT_FOUND', 'Thing is not in this workspace', 404);
 			return found;
@@ -409,6 +418,9 @@ export class LocalThings {
 		const limit = Math.max(1, Math.min(200, Number(query.limit) || 50));
 		const kinds = typeof query.thingtime === 'string' ? query.thingtime.split(',') : query.thingtime || [];
 		return this.transaction('readonly', async tx => {
+			if (this.scope.kind === 'account') {
+				query = { ...query, ...(query.folder ? { folder: await resolveAccountSuiteId(tx,query.folder) } : {}), ...(query.target ? { target: await resolveAccountSuiteId(tx,query.target) } : {}) };
+			}
 			let rows = (await this.librarySnapshotIn(tx, !query.target && (!query.folder || query.folder === 'root') && kinds.every(kind => kind === 'folder')))
 				.filter(row => isLocalLibraryThing(row, query.target) && kinds.every(kind => row.thingtime.includes(kind)) &&
 					(!query.folder || (query.folder === 'root' ? !row.folderId : row.folderId === query.folder)) &&
@@ -426,6 +438,7 @@ export class LocalThings {
 		return this.transaction('readwrite', tx => this.updateIn(tx, input));
 	}
 	private async updateIn(tx: WorkspaceTransaction, input: ThingWrite & { id: string }) {
+			if (this.scope.kind === 'account') input = { ...input, id: await resolveAccountSuiteId(tx, input.id) };
 			if (input.id === LOCAL_TIMELINE_FOLDER) fail('MANAGED_KIND', 'Timeline is managed by History.');
 			const previous = await tx.get<LocalThing>('things', input.id);
 			if (!previous) return fail('NOT_FOUND', 'Thing is not in this workspace', 404);
@@ -482,6 +495,11 @@ export class LocalThings {
 		if (Array.isArray(ids) && ids.includes(LOCAL_TIMELINE_FOLDER)) fail('MANAGED_KIND', 'Timeline is managed by History.');
 		if (!Array.isArray(ids) || !ids.length || new Set(ids).size !== ids.length) fail('INVALID_IDS', 'Choose distinct Things from this workspace');
 		return this.transaction('readwrite', async tx => {
+			if(this.scope.kind==='account'){
+				ids=await Promise.all(ids.map(id=>resolveAccountSuiteId(tx,id)));
+				if(new Set(ids).size!==ids.length)fail('INVALID_IDS','These aliases refer to the same Thing. Choose each Thing once.');
+				if(folderId)folderId=await resolveAccountSuiteId(tx,folderId);
+			}
 			const rows: LocalThing[] = [];
 			for (const id of ids) {
 				const previous = await tx.get<LocalThing>('things', id);

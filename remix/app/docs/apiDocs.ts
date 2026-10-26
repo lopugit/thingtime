@@ -13603,13 +13603,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-suites-install',
-    contractVersion: '1.6.0',
-    featureVersion: '1.6.0',
+    contractVersion: '1.7.0',
+    featureVersion: '1.7.0',
     group: 'webpages',
     title: 'Install a behaviour suite or app suite',
     endpoint: '/api/v1/webpages/suites/install',
     summary: 'Installs (or re-installs) one suite — schemas, components, actions, sample data, and every page — into the caller’s own things in one idempotent request.',
     detail:
+      '1.7.0 makes every installation atomic and serialized through canonical content transactions. Optional UUID requestId with frozen bundleVersion, onlyMissing: true and expected actor/data-plane headers returns a durable origin/owner/plane-bound receipt with exact per-part PublicThing snapshots. Retrying the same operation replays that receipt, even after bundle updates; request identity reuse for a different suite or scope is refused. A new-operation bundle digest mismatch returns 409 with SUITE_BUNDLE_CHANGED before content writes; WORKSPACE_CHANGED identifies a changed account/database instead. Receipts and content share quota accounting and rollback. Receipt mode requires same-origin JSON requests and a current account session; legacy { key, onlyMissing? } requests retain their existing admission contract. ' +
       '1.5.0 adds the agent-tasks installable suite: private task, todo and progress Data Things, editable Components and Actions, and links to the desktop browser adapter. Browser claims and network enforcement remain device operations and require the desktop agent-browser capability. ' +
       '1.4.0 adds the media-tools suite: editable local WebCodecs conversion programs with selected-file input, resize, MP4/WebM encoding, progress/cancel, preview, host download and a saved-component Action. No video bytes are uploaded or persisted by conversion; device codec support is required. ' +
       'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
@@ -13636,7 +13637,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Read created / updated counts, the per-part id maps (schemaIds, componentIds, actionIds, pageIds, dataIds), and entryPageKey.',
       'Open /p/<entryPageKey> — the resolver now answers with the caller’s own copy; every control runs their own programs.',
       'Call again after the catalog changes to refresh the copy in place (data things are never touched).',
-      'Handle 401 signed out, 404 for an unknown key, 422 when a part refuses to save (the message names the part), 429 when rate-limited (12/min).'
+      'Handle 401 signed out, 404 for an unknown key, a canonical validation/quota refusal, 409 when the operation identity changed, 503 for an unconfirmed transaction, 429 when rate-limited (12/min).'
     ],
     requestExamples: [
       { name: 'Install Pokeworld', description: 'Every page, control, and program of the game into your things.', method: 'POST', body: { key: 'pokeworld' } },

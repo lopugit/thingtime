@@ -6,9 +6,14 @@ import { WorkspaceError } from './storage';
 /** Bundled, editable definitions only. No remote catalogue or account access. */
 export async function installLocalSuite(things: LocalThings, key: string, options: { onlyMissing?: boolean } = {}) {
 	if (things.scope.kind !== 'anonymous') throw new WorkspaceError('LOCAL_OPERATION_UNAVAILABLE', 'Account suites require their sync adapter', 409);
+	return things.atomic(writer => installSuiteInWriter(writer, key, options));
+}
+
+/** Shared trusted local plan. The account adapter owns its durable intent and
+ * canonical identity reconciliation in the same writer transaction. */
+export async function installSuiteInWriter(writer: Pick<LocalThings, 'snapshot' | 'create' | 'update'>, key: string, options: { onlyMissing?: boolean } = {}) {
 	const suite = ALL_SUITES.find((suite) => suite.key === key);
 	if (!suite) throw new WorkspaceError('NOT_FOUND', 'This suite is not in the bundled catalogue', 404);
-	return things.atomic(async (writer) => {
 		const rows = (await writer.snapshot()).sort(
 			(a, b) => Number(b.crystal.version || 1) - Number(a.crystal.version || 1) || b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id)
 		);
@@ -32,5 +37,4 @@ export async function installLocalSuite(things: LocalThings, key: string, option
 			},
 			options
 		);
-	});
 }

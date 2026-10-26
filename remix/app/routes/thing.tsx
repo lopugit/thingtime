@@ -556,9 +556,8 @@ function GenericThingPage() {
 		[]
 	);
 
-	// Install a suite for the viewer — app suites through the one-request
-	// idempotent server install, demo suites part by part on the client — the
-	// same two paths /p/ takes, so both surfaces create exactly the same things.
+	// App and demo suites share the same atomic local installation and
+	// receipt-dependent account reconciliation as the gallery and /p/.
 	const installForViewer = React.useCallback(
 		async (key: string): Promise<{ href: string | null } | null> => {
 			if (!kit) return null;
@@ -570,23 +569,11 @@ function GenericThingPage() {
 				return null;
 			}
 			lopuRef.current({ title: `Installing ${suite.emoji} ${suite.title}…`, description: 'Your own schemas, controls, actions, and pages.', status: 'info', duration: 4000 });
-			if (suite.app) {
-				const installed = await kit.install.installSuiteForWorkspace(suite.key);
-				const href = `/p/${encodeURIComponent(installed.entryPageKey)}`;
-				lopuRef.current({
-					title: `${suite.emoji} ${suite.title} installed ✨`,
-					description: `${installed.created} things created · ${installed.updated} refreshed — its controls run as you now.`,
-					status: 'success',
-					duration: 6000,
-					link: { label: 'Open my app', href }
-				});
-				return { href };
-			}
-			const installed = await kit.install.installSuite((payload) => apiRef.current.v1.things.create(payload), suite, { seeded: true });
-			const href = `/p/${encodeURIComponent(installed.pageId)}`;
+			const installed = await kit.install.installSuiteForWorkspace(suite.key);
+			const href = `/p/${encodeURIComponent(installed.entryPageKey)}`;
 			lopuRef.current({
 				title: `${suite.emoji} ${suite.title} installed ✨`,
-				description: 'Your own copy of its page, controls and programs.',
+				description: `${installed.created} things created · ${installed.updated} refreshed — its controls run as you now.`,
 				status: 'success',
 				duration: 6000,
 				link: { label: 'Open my page', href }

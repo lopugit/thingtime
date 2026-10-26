@@ -4789,6 +4789,13 @@ agent host. No private environment variables are needed. See the
 
 ### Local workspace development (in progress)
 
+Bundled signed-in suites use a durable local install and a canonical account
+receipt before provisional definitions can upload. See the [suite sync contract
+and isolated acceptance requirements](docs/account-suite-sync.md). Native vault
+[file-only evidence](artifacts/anonymous-local-first-2026-10-27-vault-file/README.md)
+now covers 66 MiB upload, offline reload and exact download; it does not establish
+the unresolved large-note or full native-provider matrix.
+
 The account discussion browser check runs from `remix/` with
 `node --import tsx --test app/local-workspace/accountDiscussions.browser.test.ts`.
 Set `TT_LOCAL_DISCUSSIONS_URL` to your loopback production-client preview,

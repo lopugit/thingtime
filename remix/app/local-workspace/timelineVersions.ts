@@ -1,5 +1,6 @@
 import { workspaceScopeKey } from './storage';
 import type { TimelineSnapshot } from '../timeline/contract';
+import type { ComponentDefinitionVersion } from '../timeline/componentDefinitions';
 import { prepareVersionChange, type VersionContentAdapter } from '../timeline/versionPlan';
 import { parseVersionRequest, versionRequestIdentity, TIMELINE_UNDO_LABEL, type VersionRequest } from '../timeline/publishedVersion';
 import { createPublishedComponentTools, componentComparisonText, componentDefinitionFields } from '../timeline/publishedComponentTools';
@@ -38,6 +39,9 @@ export type LocalVersionAuthority<Entry extends VersionEntry> = {
  recorded(tx: WorkspaceTransaction, wanted: TimelineEvent['dependencies']): Promise<Pick<TimelineEntry, 'event'>[]>;
  thing(tx: WorkspaceTransaction, id: string): Promise<LocalThing | undefined>;
  deviceDrafts: boolean;
+ resolveTarget?(tx: WorkspaceTransaction, id: string): Promise<string>;
+ normalizeContent?(tx: WorkspaceTransaction, content: any, thingtime: string[]): Promise<any>;
+ recordedDefinitions?(tx: WorkspaceTransaction, event: TimelineEvent, content: any, captures: Pick<TimelineEntry,'event'>[]): Promise<ComponentDefinitionVersion>;
 };
 const anonymousAuthority: LocalVersionAuthority<TimelineEntry> = {
  scope: {kind:'anonymous'}, ownerId:LOCAL_TIMELINE_OWNER,
@@ -159,6 +163,8 @@ export class LocalTimelineVersions<Entry extends VersionEntry = TimelineEntry> {
 		try {
 		plan = await prepareVersionChange(owner, request, {
 			reject,
+			...(this.authority.resolveTarget ? { resolveTarget: (_owner: string, id: string) => read(tx => this.authority.resolveTarget!(tx,id)) } : {}),
+			...(this.authority.normalizeContent ? { normalizeContent: (_owner: string, value: any, thingtime: string[]) => read(tx => this.authority.normalizeContent!(tx,value,thingtime)) } : {}),
 			contentAdapter: doc => { protectedWriter = this.protectedWriters.find(writer => writer.matches(doc)); return protectedWriter?.content(doc) ?? null; },
 			canUndoDraft: event => this.authority.deviceDrafts && event.mode === 'draft' && event.source === 'client' && event.actorId === owner && event.ownerId === owner && !!event.clientId,
 			entries,
@@ -189,6 +195,7 @@ export class LocalTimelineVersions<Entry extends VersionEntry = TimelineEntry> {
 						sources.flatMap(({ event }) => event.dependencies)
 					)
 				);
+				if(this.authority.recordedDefinitions)return read(tx=>Promise.all(sources.map(({event,content})=>this.authority.recordedDefinitions!(tx,event,content,captures))));
 				return sources.map(({ event, content }) =>
 					componentDefinitionFields(
 						webpageComponentRefs(content.crystal?.blocks),
@@ -213,7 +220,7 @@ export class LocalTimelineVersions<Entry extends VersionEntry = TimelineEntry> {
 		}
 		checkedLease.assertCurrent();
 		if (request.command === 'preview-version') return { ok: true as const, preview: plan.preview };
-		const { source, doc, recovery, headId, current, merged, refs, components } = plan;
+		const { source, targetId, doc, recovery, headId, current, merged, refs, components } = plan;
 		// Precompute the exact server SHA-256 identities before entering IndexedDB.
 		const hashes = new Map<string, string>();
 		if (request.componentMode === 'recorded')
@@ -239,7 +246,7 @@ export class LocalTimelineVersions<Entry extends VersionEntry = TimelineEntry> {
 			operationId: signature,
 			...(!this.authority.deviceDrafts ? {source: 'api' as const, clientId: null} : {}),
 			operation: recovery ? 'create' : request.mode === 'undo' ? 'restore' : request.mode,
-			parentIds: [...new Set([headId, source.event.id])],
+			parentIds: [...new Set([headId, ...(targetId === source.event.thingId ? [source.event.id] : [])])],
 			label: recovery
 				? 'Recovered deleted Thing'
 				: request.mode === 'undo'
@@ -253,14 +260,15 @@ export class LocalTimelineVersions<Entry extends VersionEntry = TimelineEntry> {
 		const commit = async (writer: LocalVersionUpdateWriter & Partial<Pick<Parameters<Parameters<LocalThings['versionTransaction']>[0]>[0], 'create' | 'recover'>>) => {
 			checkedLease.assertCurrent();
 			if (await replay(writer.tx)) return;
-			const existing = await writer.tx.get<LocalThing>('things', source.event.thingId),
-				head = await this.authority.head(writer.tx, source.event.thingId);
+			if (this.authority.resolveTarget && await this.authority.resolveTarget(writer.tx,source.event.thingId) !== targetId) reject(409, 'Suite identity changed after the comparison.');
+			const existing = await writer.tx.get<LocalThing>('things', targetId),
+				head = await this.authority.head(writer.tx, targetId);
 			if (head?.event.id !== headId || (recovery ? !!existing : !existing || existing.updatedAt !== doc.updatedAt))
 				reject(409, 'Thing changed after the version preview. Refresh and compare again.');
 			if (components) {
 				const values = liveValues(await allThings(writer.tx), doc, current, merged.value, owner);
-				const recoveryState = recovery && protectedWriter ? await deletedState(writer.tx, source.event.thingId, this.authority, this.protectedWriters) : null;
-				const protectedDoc = recoveryState && 'doc' in recoveryState ? recoveryState.doc : protectedWriter ? await this.authority.thing(writer.tx, source.event.thingId) : null;
+				const recoveryState = recovery && protectedWriter ? await deletedState(writer.tx, targetId, this.authority, this.protectedWriters) : null;
+				const protectedDoc = recoveryState && 'doc' in recoveryState ? recoveryState.doc : protectedWriter ? await this.authority.thing(writer.tx, targetId) : null;
 				const actual = protectedWriter ? { ...values, protectedContent: protectedWriter.content(protectedDoc!).current, updatedAt: protectedDoc!.updatedAt } : values;
 				if (componentComparisonText(actual) !== liveText) reject(409, protectedWriter ? 'Content changed after the preview. Refresh and compare again.' : 'A component changed after the preview. Refresh and compare again.');
 			}
@@ -274,8 +282,9 @@ export class LocalTimelineVersions<Entry extends VersionEntry = TimelineEntry> {
 					label: 'Copied recorded component for restored page'
 				});
 			const content = copies.content as any;
-			if (recovery) await writer.recover!({ ...content, thingtime: recovery.thingtime }, source.event.thingId, capture);
-			else await writer.update({ ...content, id: source.event.thingId, expectedUpdatedAt: doc.updatedAt, ...(!protectedWriter ? { replaceCrystal: true } : {}) }, capture);
+			if (recovery) await writer.recover!({ ...content, thingtime: recovery.thingtime }, targetId, capture);
+			else await writer.update({ ...content, id: targetId, expectedUpdatedAt: doc.updatedAt, ...(!protectedWriter ? { replaceCrystal: true } : {}) }, capture);
+			if (targetId !== source.event.thingId) await writer.tx.put('suite-version-sources', committedId!, { targetId, sourceEventId: source.event.id, sourceThingId: source.event.thingId });
 			checkedLease.assertCurrent();
 		};
 		if (protectedWriter) await protectedWriter.transaction(commit, signal);

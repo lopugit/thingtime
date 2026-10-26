@@ -3,6 +3,8 @@ import { sanitizeReactionToken, MAX_REACTIONS_PER_USER_PER_POST } from '../utils
 import { accountSyncDeadline, type SyncState } from './accountSync';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import type { LocalThing } from './things';
+import { ACCOUNT_SUITE_PARTS } from './accountSuites';
+import { resolveAccountSuiteId } from './accountSuiteIdentity';
 
 const COLLECTION = 'account-interactions';
 type Changes = { saved?: boolean; reactions: Record<string, boolean> };
@@ -113,6 +115,7 @@ export class AccountInteractionSync {
 		const token = kind === 'reaction' ? sanitizeReactionToken(value) : null;
 		if (kind === 'reaction' && value !== null && !token) throw new WorkspaceError('INVALID_INTERACTION', 'Unsupported reaction');
 		return this.tx('readwrite', async (tx) => {
+			id=await resolveAccountSuiteId(tx,id);
 			const row = (await tx.get<RecordState>(COLLECTION, id)) || this.fresh(id),
 				state = apply(row);
 			if (kind === 'reaction' && value === null) return state;
@@ -133,7 +136,7 @@ export class AccountInteractionSync {
 	}
 	async discard(ids: string[]) {
 		return this.tx('readwrite', async (tx) => {
-			for (const id of ids) await tx.delete(COLLECTION, id);
+			for (const id of ids) await tx.delete(COLLECTION, await resolveAccountSuiteId(tx,id));
 		});
 	}
 	async states() {
@@ -162,6 +165,7 @@ export class AccountInteractionSync {
 	}
 	async retry(id: string) {
 		return this.tx('readwrite', async (tx) => {
+			id=await resolveAccountSuiteId(tx,id);
 			const row = await tx.get<RecordState>(COLLECTION, id);
 			if (!row) return;
 			if (row.state === 'conflict') throw new WorkspaceError('REVIEW_REQUIRED', 'Review changed account interactions before retrying', 409);
@@ -170,6 +174,7 @@ export class AccountInteractionSync {
 		});
 	}
 	async inspect(transport: InteractionTransport, id: string) {
+		id=await this.tx('readonly',tx=>resolveAccountSuiteId(tx,id));
 		const remote = interactionState((await transport.read([id]))[0]);
 		if (remote.id !== id) throw new WorkspaceError('SYNC_IDENTITY', 'Interaction target changed', 409);
 		return this.tx('readonly', async (tx) => {
@@ -215,6 +220,7 @@ export class AccountInteractionSync {
 			for (const id of ids) {
 				if (!(await ready(id))) continue;
 				claimed = await this.tx('readwrite', async (tx) => {
+					if (await tx.get(ACCOUNT_SUITE_PARTS, id)) return null;
 					const row = await tx.get<RecordState>(COLLECTION, id);
 					if (!row || !['pending', 'syncing'].includes(row.state) || row.retryAt > this.now() || (row.claim && row.claim.expiresAt > this.now()))
 						return null;

@@ -12,6 +12,10 @@ import { LocalThings, type LocalThing, type ThingWrite, type LocalFileMutation }
 import { type WorkspaceDatabase, WorkspaceError, workspaceScopeKey, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
 import { snapshotTransferValue } from '../utils/thingTransfer/value';
 import { aclFromVisibility, sanitizeAcl, visibilityFromAcl, isProtectedThingtime, validateThingtimeCrystal } from '../schemas/registry';
+import { ACCOUNT_SUITE_PARTS, type AccountSuiteIntent } from './accountSuites';
+import type { InstallSuiteResult } from '../schemas/suiteInstallation';
+import { ACCOUNT_SUITE_CONFLICTS, type AccountSuiteConflict, reconcileAccountSuite, suiteThingReferences } from './accountSuiteReconcile';
+import { resolveAccountSuiteId } from './accountSuiteIdentity';
 
 const WRITE_FIELDS = new Set(['thingtime', 'crystal', 'extended', 'tags', 'folderId', 'targetId', 'acl', 'visibility']);
 /** Unsupported fields must use their complete dedicated adapter. Never accept
@@ -28,12 +32,13 @@ const LOCAL_KINDS = new Set(['data', 'folder', 'webpage', 'component', 'schema',
 export const accountThingCanCache = (row: any): row is AccountThing => (!Array.isArray(row?.attachments) || row.attachments.length === 0) && Array.isArray(row?.thingtime) && row.thingtime.length > 0 && row.thingtime.every((kind: string) => LOCAL_KINDS.has(kind));
 type FrozenWrite = { id: string; operationId: string; version: number; method: 'create' | 'update'; body: Record<string, unknown> };
 type FrozenDelete = Omit<FrozenWrite, 'method'> & { method: 'delete' };
-type SyncRecord = {
+export type AccountSyncRecord = {
 	id: string; state: SyncState; base: AccountThing | null; audience: { acl: string[]; visibility: string };
 	/** Set only by atomic full-file retention or a confirmed local binding write. */
 	postAttachmentIds?: string[];
 	pending?: FrozenWrite | FrozenDelete; deleted?: Pick<LocalThing, 'id' | 'revision' | 'updatedAt'>; claim?: { token: string; expiresAt: number }; attempts: number; retryAt: number; error?: string;
 };
+type SyncRecord = AccountSyncRecord;
 export type AccountSyncTransport = {
 	/** Must pin expected actor + data plane on every request, including reads. */
 	get(id: string, signal: AbortSignal): Promise<AccountThing>;
@@ -120,6 +125,13 @@ export class AccountThingSync {
 			revision: Math.max(state?.deleted?.revision || 0, state?.pending?.version || 0, deleted?.revision || 0) + 1 };
 	}
 	private tx<T>(mode: IDBTransactionMode, run: (tx: WorkspaceTransaction) => Promise<T>) { return this.db.transaction(this.scope, mode, this.lease, run); }
+	async canonicalId(id: string) { return this.tx('readonly', tx => resolveAccountSuiteId(tx, id)); }
+	/** Called by the suite queue inside its current-claim transaction. */
+	async reconcileSuiteIn(tx: WorkspaceTransaction, intent: Readonly<AccountSuiteIntent>, remote: InstallSuiteResult) {
+		this.lease.assertCurrent();
+		await reconcileAccountSuite(tx, intent, remote, { scope: this.scope, checked: row => this.checked(row), now: this.now });
+		this.lease.assertCurrent();
+	}
 	private checked(input: AccountThing): AccountThing {
 		if (!input || input.author?.id !== this.scope.ownerId || typeof input.id !== 'string' || !Number.isFinite(Date.parse(input.updatedAt)))
 			throw new WorkspaceError('SYNC_IDENTITY', 'The remote Thing does not belong to this workspace', 409);
@@ -208,7 +220,7 @@ export class AccountThingSync {
 		lease.assertCurrent();
 		return new AccountThingSync(this.db, this.scope, lease, this.now, this.uuid, this.files, this.themes, this.algorithms);
 	}
-	async isDeleted(id: string) { return this.tx('readonly', async tx => !!(await tx.get<SyncRecord>(COLLECTION, id))?.deleted || (!!await this.themes?.isDeletedIn(tx,id) || !!await this.algorithms?.isDeletedIn(tx,id))); }
+	async isDeleted(id: string) { return this.tx('readonly', async tx => { id=await resolveAccountSuiteId(tx,id); return !!(await tx.get<SyncRecord>(COLLECTION, id))?.deleted || (!!await this.themes?.isDeletedIn(tx,id) || !!await this.algorithms?.isDeletedIn(tx,id)); }); }
 	/** Match canonical deletion: drain folder children to their surviving parent;
 	 * cascade target-linked content. Content removal and intent commit together. */
 	async remove(ids: string[], expectedUpdatedAt?: string) {
@@ -216,6 +228,7 @@ export class AccountThingSync {
 		if (!Array.isArray(ids) || !ids.length || ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(ids).size !== ids.length)
 			throw new WorkspaceError('INVALID_IDS', 'Choose distinct Things from this workspace.');
 		return this.tx('readwrite', tx => captureAccountThingChanges(tx, this.scope, async tx => {
+			ids=await Promise.all(ids.map(id=>resolveAccountSuiteId(tx,id)));
 			const all = (await tx.list<LocalThing>('things')).map(row => row.value), selected = new Set(ids);
 			const byId = new Map(all.map(row => [row.id, row]));
 			for (const id of ids) {
@@ -252,7 +265,7 @@ export class AccountThingSync {
 					const state = await tx.get<SyncRecord>(COLLECTION, row.id);
 					if (!state || isProtectedThingtime(row.thingtime)) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'This item requires its dedicated deletion adapter.', 409);
 					await tx.delete('things', row.id);
-					if (!state.base && !state.pending) await tx.delete(COLLECTION, row.id); // Never sent: nothing to delete remotely.
+					if (!state.base && !state.pending && !await tx.get(ACCOUNT_SUITE_PARTS,row.id)) await tx.delete(COLLECTION, row.id); // Never sent: nothing to delete remotely.
 					else {
 						await tx.put(DELETED_CONTENT, row.id, row);
 						await tx.put(COLLECTION, row.id, { ...state, deleted: { id: row.id, revision: row.revision, updatedAt: row.updatedAt }, state: state.state === 'syncing' ? 'syncing' : 'pending', error: undefined, retryAt: 0 });
@@ -289,6 +302,7 @@ export class AccountThingSync {
 	}
 	async view(id: string) {
 		return this.tx('readonly', async tx => {
+			id = await resolveAccountSuiteId(tx, id);
 			const thing = await tx.get<LocalThing>('things', id);
 			const sync = await tx.get<SyncRecord>(COLLECTION, id);
 			if (!sync) return await this.themes?.viewIn(tx,id) ?? await this.algorithms?.viewIn(tx,id) ?? null;
@@ -301,7 +315,8 @@ export class AccountThingSync {
 	async viewSnapshot(ids: string[]) {
 		return this.tx('readonly', async tx => {
 			const rows = [], deleted = new Set<string>();
-			for (const id of ids) {
+			for (const requested of ids) {
+				const id = await resolveAccountSuiteId(tx, requested);
 				const thing = await tx.get<LocalThing>('things', id), sync = await tx.get<SyncRecord>(COLLECTION, id);
 				if (sync?.deleted || await this.themes?.isDeletedIn(tx,id) || await this.algorithms?.isDeletedIn(tx,id)) deleted.add(id);
 				if (!sync) { const managed=await this.themes?.viewIn(tx,id) ?? await this.algorithms?.viewIn(tx,id); if (managed) rows.push(managed); }
@@ -313,6 +328,7 @@ export class AccountThingSync {
 	async status() { return this.tx('readonly', async tx => (await tx.list<SyncRecord>(COLLECTION)).map(({ value }) => ({ id: value.id, state: value.state, deleted: !!value.deleted, error: value.error, attempts: value.attempts, retryAt: value.retryAt }))); }
 	async retry(id: string) {
 		return this.tx('readwrite', async tx => {
+			id=await resolveAccountSuiteId(tx,id);
 			const value = await tx.get<SyncRecord>(COLLECTION, id);
 			if (!value || value.state === 'synced') return;
 			if (value.state === 'conflict' && !value.deleted) throw new WorkspaceError('SYNC_CONFLICT', 'Keep or compare the conflicting versions before syncing', 409);
@@ -320,17 +336,44 @@ export class AccountThingSync {
 		});
 	}
 	async inspectConflict(transport: AccountSyncTransport, id: string, signal = new AbortController().signal) {
+		id=await this.canonicalId(id);
 		const remote = this.checked(await accountSyncDeadline(child => transport.get(id, child), signal));
 		if (remote.id !== id) throw new WorkspaceError('SYNC_IDENTITY', 'Server returned a different Thing', 409);
 		return this.tx('readonly', async tx => {
 			const state = await tx.get<SyncRecord>(COLLECTION, id), local = await tx.get<LocalThing>(state?.deleted ? DELETED_CONTENT : 'things', id);
 			if (state?.state !== 'conflict' || !local) throw new WorkspaceError('SYNC_CONFLICT_CHANGED', 'This conflict changed. Review it again.', 409);
-			return { local: { ...local, ...state.audience }, remote, localRevision: local.revision, deleted: !!state.deleted };
+			return { local: { ...local, ...state.audience }, remote, localRevision: local.revision, deleted: !!state.deleted,
+				suiteAlternatives: await tx.get<AccountSuiteConflict>(ACCOUNT_SUITE_CONFLICTS,id) };
 		});
+	}
+	/** An explicit reviewed choice can recover either independently edited
+	 * device candidate. The exact audience is part of that user choice; neither
+	 * identity adoption nor queue retry selects it automatically. */
+	async restoreSuiteAlternative(transport: AccountSyncTransport, choice: { id:string; source:'provisional'|'canonical'; requestId:string; localRevision:number; remoteUpdatedAt:string }, signal = new AbortController().signal) {
+		if(!['provisional','canonical'].includes(choice.source))throw new WorkspaceError('INVALID_CONFLICT_CHOICE','Choose a saved suite version.');
+		const id=await this.canonicalId(choice.id),remote=this.checked(await accountSyncDeadline(child=>transport.get(id,child),signal));
+		if(remote.id!==id||remote.updatedAt!==choice.remoteUpdatedAt)throw new WorkspaceError('SYNC_CONFLICT_CHANGED','The account version changed. Review it again.',409);
+		return this.tx('readwrite',tx=>captureAccountThingChanges(tx,this.scope,async tx=>{
+			const state=await tx.get<SyncRecord>(COLLECTION,id),local=await tx.get<LocalThing>(state?.deleted?DELETED_CONTENT:'things',id),journal=await tx.get<AccountSuiteConflict>(ACCOUNT_SUITE_CONFLICTS,id);
+			// A settled conditional-write conflict retains its frozen request for
+			// inspection. This explicit, freshly checked choice supersedes that
+			// request, just like resolveConflict; uncertain retries and active
+			// claims remain fenced by state/claim and never get rewritten here.
+			if(state?.state!=='conflict'||state.claim||!local||local.revision!==choice.localRevision||journal?.requestId!==choice.requestId)
+				throw new WorkspaceError('SYNC_CONFLICT_CHANGED','Your saved suite versions changed. Review them again.',409);
+			const saved=journal[choice.source];
+			if(!saved||saved.id!==id)throw new WorkspaceError('SYNC_CONFLICT_CHANGED','This saved suite version is unavailable.',409);
+			const candidate=this.checked(saved);
+			if(candidate.thingtime.join('\0')!==local.thingtime.join('\0'))throw new WorkspaceError('SYNC_CONFLICT_CHANGED','This saved version has a different kind.',409);
+			await tx.put('things',id,{...candidate,createdAt:local.createdAt,revision:local.revision+1,updatedAt:new Date(Math.max(this.now(),Date.parse(local.updatedAt)+1)).toISOString()});
+			await tx.delete(DELETED_CONTENT,id);
+			await tx.put(COLLECTION,id,{id,state:'pending',base:remote,audience:{acl:candidate.acl,visibility:candidate.visibility},attempts:0,retryAt:0} satisfies SyncRecord);
+		},()=>new Date(this.now()).toISOString(),this.uuid));
 	}
 	/** Only an explicit reviewed choice may replace either version. Recheck both
 	 * sides so typing, another tab or another device invalidates an old review. */
 	async resolveConflict(transport: AccountSyncTransport, choice: { id: string; keep: 'local' | 'remote'; localRevision: number; remoteUpdatedAt: string }, signal = new AbortController().signal) {
+		choice={...choice,id:await this.canonicalId(choice.id)};
 		if (!['local', 'remote'].includes(choice.keep)) throw new WorkspaceError('INVALID_CONFLICT_CHOICE', 'Choose which version to keep');
 		const remote = this.checked(await accountSyncDeadline(child => transport.get(choice.id, child), signal));
 		if (remote.id !== choice.id || remote.updatedAt !== choice.remoteUpdatedAt) throw new WorkspaceError('SYNC_CONFLICT_CHANGED', 'The account version changed. Review it again.', 409);
@@ -357,8 +400,10 @@ export class AccountThingSync {
 			this.lease.assertCurrent(); signal.throwIfAborted();
 			const claimed = await this.tx('readwrite', async tx => {
 				const rows = (await tx.list<SyncRecord>(COLLECTION)).map(row => row.value);
+				const suiteHolds = new Set((await tx.list(ACCOUNT_SUITE_PARTS)).map(row => row.id));
 				let record: SyncRecord | undefined, row: (LocalThing & { attachmentIds?: string[] }) | undefined;
 				for (const candidate of rows) {
+					if (suiteHolds.has(candidate.id)) continue;
 					if (!['pending', 'syncing'].includes(candidate.state) || candidate.retryAt > this.now() || (candidate.claim && candidate.claim.expiresAt > this.now())) continue;
 					if (candidate.deleted && !candidate.base && !candidate.pending) {
 						await tx.delete(DELETED_CONTENT, candidate.id);
@@ -387,6 +432,7 @@ export class AccountThingSync {
 					// edit can gate the next write. All forward dependencies use the same
 					// request snapshot, including placement, schema and linked Things.
 					const dependencyContent = candidate.pending ? candidate.pending.body as unknown as Pick<LocalThing, 'folderId' | 'targetId' | 'thingtime' | 'crystal'> : content;
+					if (suiteThingReferences(dependencyContent).some(id => suiteHolds.has(id))) continue;
 					if (!deleting && [dependencyContent.folderId, dependencyContent.targetId, dependencyContent.thingtime.includes('data') ? dependencyContent.crystal.schemaId : null, ...(dependencyContent.thingtime.includes('webpage') ? compositionReferences(dependencyContent.thingtime, dependencyContent.crystal).filter(ref => ref.kind === 'component').map(ref => ref.ref) : []), ...((dependencyContent.thingtime.includes('post') || dependencyContent.thingtime.includes('comment')) ? postThingReferences(dependencyContent.crystal.thing).map(ref => ref.id) : [])].some(id => id && rows.some(other => other.id === id && (!other.base || other.pending?.method === 'delete')))) continue;
 					if (candidate.deleted && !candidate.pending && content.thingtime.includes('folder') && (this.themes || this.algorithms)) {
 						try {

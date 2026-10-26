@@ -408,10 +408,8 @@ export default function DemoLibraryPage() {
 		}
 	};
 
-	// Install = the suite's OWN-mode bundle created part by part through the
-	// ordinary things write path, in dependency order: schemas (their ids
-	// stamp the data), components, actions, data, then the page. The page's
-	// controls then run the viewer's own actions (owner-only resolution).
+	// Install materializes the complete editable graph atomically on-device.
+	// Account identity reconciliation runs independently after local admission.
 	const installSuite = async (suite: BehaviourSuite): Promise<boolean> => {
 		if (!requireUser('install a suite')) return false;
 		setBusyKey(`suite:${suite.key}`);
@@ -422,7 +420,7 @@ export default function DemoLibraryPage() {
 			navigate(`/p/${encodeURIComponent(installed.entryPageKey)}`);
 			return true;
 		} catch (err: any) {
-			lopu({ title: err?.error || 'Couldn’t install the suite — try again 🌈', description: err?.error ? undefined : 'Some parts may have been created; check /things.', status: 'error' });
+			lopu({ title: err?.error || 'Couldn’t install the suite — try again 🌈', description: err?.error ? undefined : 'The installation could not be saved. Your existing Things are preserved.', status: 'error' });
 			return false;
 		} finally {
 			setBusyKey(null);

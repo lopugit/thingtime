@@ -3,6 +3,7 @@ import { validateDraftContent, validDraftId, type AccountDraft, type DraftConten
 import { LocalDrafts, type LocalDraftHooks, type StoredDraft } from './drafts';
 import { accountSyncDeadline, type SyncState } from './accountSync';
 import { WorkspaceError, type WorkspaceDatabase, type WorkspaceLease, type WorkspaceScope, type WorkspaceTransaction } from './storage';
+import { ACCOUNT_SUITE_PARTS } from './accountSuites';
 
 const COLLECTION = 'account-drafts';
 type Command = { operation: 'save'; id: string; revision: number; writeId: string; mode: AccountDraft['mode']; content: DraftContent } |
@@ -139,6 +140,9 @@ export class AccountDraftSync {
      if (!['pending','syncing'].includes(row.state) || row.retryAt > this.now() || (row.claim && row.claim.expiresAt > this.now())) continue;
      const local = await tx.get<StoredDraft>('drafts', row.id);
      if (!local) throw new WorkspaceError('DRAFT_MISSING', 'Queued draft content is unavailable.', 409);
+     const holds=await tx.list(ACCOUNT_SUITE_PARTS);
+     const frozen=row.pending?.command.operation==='save'?row.pending.command.content:local.draft;
+     if(holds.some(({id})=>frozen.context.split(':').includes(id)||frozen.snapshot.includes(JSON.stringify(id))))continue;
      let pending = row.pending;
      if (!pending) {
       if (local.deleted && row.baseRevision === null) { await tx.put(COLLECTION, row.id, { ...row, state: 'synced' }); continue; }

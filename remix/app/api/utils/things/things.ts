@@ -1392,13 +1392,16 @@ const resolveInputAcl = (input: { acl?: unknown; visibility?: unknown }): string
 // writer can see, and the display name is overwritten from that schema, so no
 // client can attribute its data to a schema under a mismatched schemaId/name
 // pair. Mutates `crystal` in place; a data thing with no schemaId is untouched.
-const resolveDataSchemaProvenance = async (thingtime: string[], crystal: Record<string, unknown>, asOwner: Viewer): Promise<{ ok: true } | Fail> => {
+const resolveDataSchemaProvenance = async (thingtime: string[], crystal: Record<string, unknown>, asOwner: Viewer, transaction?: ThingWriteTransaction): Promise<{ ok: true } | Fail> => {
   if (!thingtime.includes('data') || crystal.schemaId === undefined) return { ok: true };
   const rawSchemaId = crystal.schemaId;
   if (typeof rawSchemaId !== 'string' || !rawSchemaId.trim()) {
     return fail(400, 'crystal.schemaId must be a schema thing id');
   }
-  const schemaThing = await findViewableThing(rawSchemaId.trim(), asOwner);
+  const candidate = transaction ? await (await getThingsCollection()).findOne({ shareId: rawSchemaId.trim() } as any, { session: transaction.session }) as ThingDoc | null : null;
+  const schemaThing = transaction
+    ? candidate && await canViewInherited(candidate, withThingLink(await withFriendIds(asOwner), candidate.shareId)) ? candidate : null
+    : await findViewableThing(rawSchemaId.trim(), asOwner);
   if (!schemaThing || !thingtimeOf(schemaThing).includes('schema')) {
     return fail(400, 'crystal.schemaId does not resolve to a schema you can see');
   }
@@ -1438,7 +1441,7 @@ export const createThing = async (
     return fail(403, `${validated.thingtime.join('+')} things are first-party surfaces — not available to app tokens`);
   }
 
-  const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, asOwner);
+  const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, asOwner, hooks.transaction);
   if (isFail(provenance)) return provenance;
 
   // subspace posting gate (api/utils/subspaces/gate.ts): membership, ban,
@@ -5408,15 +5411,16 @@ export const updateThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   input: UpdateThingInput,
-  options: { replaceCrystal?: boolean; expectedUpdatedAt?: unknown; attachmentIds?: readonly unknown[]; mutation?: ThingUpdateMutationHooks; timeline?: { expectedHeadId: string; capture: ThingMutationCapture; beforeCommit?: (transaction: ThingWriteTransaction) => Promise<void> } } = {},
+  options: { transaction?: ThingWriteTransaction; replaceCrystal?: boolean; expectedUpdatedAt?: unknown; attachmentIds?: readonly unknown[]; mutation?: ThingUpdateMutationHooks; timeline?: { expectedHeadId: string; capture: ThingMutationCapture; beforeCommit?: (transaction: ThingWriteTransaction) => Promise<void> } } = {},
   app: AppLens = null
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null }> => {
+  if (options.transaction && (!options.transaction.session?.inTransaction() || app?.sandbox)) throw new Error('A composed Thing update requires the active content transaction');
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
   if (shareId.trim().startsWith('timeline-')) return fail(403, 'Timeline records are managed through History');
   const things = await getThingsCollection();
-  const doc = (await things.findOne({ shareId: shareId.trim() } as any)) as any as ThingDoc | null;
+  const doc = (await things.findOne({ shareId: shareId.trim() } as any, options.transaction ? { session: options.transaction.session } : {})) as any as ThingDoc | null;
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
   if (options.timeline && (doc.ownerId !== viewer.id || doc.timelineHeadId !== options.timeline.expectedHeadId)) return fail(409, 'Thing changed after the version preview. Refresh and compare again.');
   if (String(doc.ownerId) !== viewer.id) {
@@ -5530,7 +5534,7 @@ export const updateThing = async (
       ? ((crystalOf(doc) as Record<string, unknown>).schemaId as string)
       : undefined;
   if (validated.crystal.schemaId !== undefined && validated.crystal.schemaId !== prevSchemaId) {
-    const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, viewer);
+    const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, viewer, options.transaction);
     if (isFail(provenance)) return provenance;
   }
 
@@ -5736,8 +5740,8 @@ export const updateThing = async (
   let writeResult;
   let afterCommit: (() => Promise<void>)[] = [];
   try {
-		if (options.mutation || options.attachmentIds !== undefined || wasBillable || isBillable || registeredStorageScope || hasFolderChange || timelineCapture || (doc.targetId && doc.thingtime?.some(kind => kind === 'save' || kind === 'reaction'))) {
-			await withMongoTransaction(async (session) => {
+		if (options.transaction || options.mutation || options.attachmentIds !== undefined || wasBillable || isBillable || registeredStorageScope || hasFolderChange || timelineCapture || (doc.targetId && doc.thingtime?.some(kind => kind === 'save' || kind === 'reaction'))) {
+			const write = async (session: any) => {
         // A retry owns a fresh effect list; aborted attempts cannot notify.
         afterCommit = [];
         await options.mutation?.beforeWrite?.(doc, session);
@@ -5773,7 +5777,9 @@ export const updateThing = async (
 					if (entry) set.timelineHeadId = entry.event.id;
 				}
         await options.mutation?.afterWrite?.(session);
-			});
+			};
+      if (options.transaction) await write(options.transaction.session);
+      else await withMongoTransaction(write);
 		} else {
     writeResult = await things.updateOne(
       {
@@ -5797,7 +5803,8 @@ export const updateThing = async (
   }
 	if (storageScope?.sandbox && appDelta < 0) await refundAppStorage(storageScope, -appDelta);
 
-  for (const effect of afterCommit) await effect();
+  if (options.transaction) for (const effect of afterCommit) options.transaction.afterCommit(effect);
+  else for (const effect of afterCommit) await effect();
   const updated = { ...doc, ...set } as ThingDoc;
   delete (updated as any).kind;
   delete (updated as any).type;
@@ -5816,6 +5823,7 @@ export const updateThing = async (
 		if (!storageScope) delete updated.sizeBytes;
 	}
 
+  const notifyAfterCommit = async () => {
   // A text-changing edit notifies newly ADDED @mentions (posts + comments):
   // the composer autocomplete and PostCard linkification treat edited text
   // exactly like created text, so the notification contract must too. Same
@@ -5844,6 +5852,10 @@ export const updateThing = async (
 	) {
 		queueTextModeration(doc.shareId);
 	}
+
+  };
+  if (options.transaction) options.transaction.afterCommit(notifyAfterCommit);
+  else await notifyAfterCommit();
 
   const thing = (await toPublicThings([updated], viewer))[0];
   if (app) {

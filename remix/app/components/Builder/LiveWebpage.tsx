@@ -11,7 +11,7 @@ import { ALL_SUITES } from '~/schemas/appSuites/index';
 import { isSafeCssText } from '../Kinds/safeUrl';
 import { PageShell } from '../Layout/PageShell';
 import { WebpageBlocksRenderer, type BuilderChrome } from './WebpageBlocksRenderer';
-import { installSuite, installSuiteForWorkspace, suiteKeyFromActionKey, suiteKeyOfPage } from './installSuite';
+import { installSuiteForWorkspace, suiteKeyFromActionKey, suiteKeyOfPage } from './installSuite';
 import { useWebpageDraft, type UseWebpageDraft } from './useWebpage';
 import { WebpageRuntimeProvider } from './webpageRuntime';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
@@ -146,10 +146,8 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 		[]
 	);
 
-	// Install the page's suite for the viewer. App suites go through the
-	// one-request idempotent server install (every page keeps its key, so the
-	// current URL now serves the viewer's own copy); the demo suites keep the
-	// part-by-part client install and open the personal copy by id.
+	// All bundled suites use the same atomic workspace installation. Their
+	// keyed pages resolve the editable local copy, including while offline.
 	const installForViewer = React.useCallback(
 		async (key: string): Promise<{ href: string | null } | null> => {
 			const suite = ALL_SUITES.find((entry) => entry.key === key) || null;
@@ -165,27 +163,16 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 				status: 'info',
 				duration: 4000
 			});
-			if (suite.app || user?.localOnly) {
-				const installed = await installSuiteForWorkspace(suite.key);
-				lopu({
-					title: `${suite.emoji} ${suite.title} installed ✨`,
-					description: `${installed.created} things created · ${installed.updated} refreshed — this page is yours now.`,
-					status: 'success',
-					duration: 6000
-				});
-				return { href: `/p/${encodeURIComponent(installed.entryPageKey)}` };
-			}
-			const installed = await installSuite((payload) => apiRef.current.v1.things.create(payload), suite, { seeded: true });
+			const installed = await installSuiteForWorkspace(suite.key);
 			lopu({
 				title: `${suite.emoji} ${suite.title} installed ✨`,
-				description: 'Opening your own copy of this page.',
+				description: `${installed.created} things created · ${installed.updated} refreshed — this page is yours now.`,
 				status: 'success',
-				duration: 6000,
-				link: { label: 'Open my page', href: `/p/${encodeURIComponent(installed.pageId)}` }
+				duration: 6000
 			});
-			return { href: `/p/${encodeURIComponent(installed.pageId)}` };
+			return { href: `/p/${encodeURIComponent(installed.entryPageKey)}` };
 		},
-		[lopu, navigate, user?.id, user?.localOnly]
+		[lopu, navigate, user?.id]
 	);
 
 	// a seeded suite control the viewer has no program for: install the suite

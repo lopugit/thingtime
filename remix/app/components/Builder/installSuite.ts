@@ -4,13 +4,11 @@ import {
 	announceLocalWorkspaceChange,
 	isAnonymousWorkspace,
 	currentAccountWorkspace,
-	accountRemoteWorkspaceLease
+	accountWorkspaceLease
 } from '~/local-workspace/runtime.client';
 import { WorkspaceError } from '~/local-workspace/storage';
-import { EXPECTED_ACTOR_HEADER } from '~/api/utils/auth/expectedActor';
-import { EXPECTED_DATA_PLANE_HEADER } from '~/utils/dataPlane';
-import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { materializeSuite, type BehaviourSuite } from '~/schemas/behaviourSuites';
+import type { InstallSuiteResult } from '~/schemas/suiteInstallation';
 
 // Install a behaviour suite into the viewer's own things = the suite's
 // OWN-mode bundle created part by part through the ordinary things write
@@ -56,19 +54,9 @@ export const installSuite = async (create: CreateThing, suite: BehaviourSuite, o
 	return { pageId, actionIds, schemaIds };
 };
 
-// Workspace installation uses one shared plan: an atomic local transaction
-// for anonymous work, or the existing authorized server endpoint for accounts.
-export type ServerInstalledSuite = {
-	ok: true;
-	suite: string;
-	title: string;
-	created: number;
-	updated: number;
-	pageIds: Record<string, string>;
-	componentIds: Record<string, string>;
-	entryPageId: string;
-	entryPageKey: string;
-};
+// Both workspaces materialize atomically on-device. Accounts retain a durable
+// suite intent whose independent queue later reconciles canonical identities.
+export type ServerInstalledSuite = InstallSuiteResult;
 
 export const installSuiteForWorkspace = async (key: string, options: { onlyMissing?: boolean } = {}): Promise<ServerInstalledSuite> => {
 	if (isAnonymousWorkspace()) {
@@ -82,28 +70,15 @@ export const installSuiteForWorkspace = async (key: string, options: { onlyMissi
 	}
 	const account = currentAccountWorkspace();
 	if (!account) throw new WorkspaceError('WORKSPACE_CHANGED', 'Reopen this workspace before installing a suite', 409);
-	const lease = accountRemoteWorkspaceLease(account);
+	const lease = accountWorkspaceLease(account);
 	lease.assertCurrent();
-	await requireThingtimeCapability('api.webpages-suites-install', key === 'mac-menu-bar' ? '1.6.0' : key === 'agent-tasks' ? '1.5.0' : key === 'media-tools' ? '1.4.0' : key === 'web-standards' ? '1.3.0' : '1.1.0');
+	const { accountWorkspaceWorker } = await import('~/local-workspace/accountApi.client');
 	lease.assertCurrent();
-	const retired = new AbortController();
-	const unsubscribe = lease.onInvalidate(() => retired.abort());
-	try {
-		const response = await fetch('/api/v1/webpages/suites/install', {
-			method: 'POST',
-			credentials: 'same-origin',
-			redirect: 'error',
-			signal: AbortSignal.any([retired.signal, AbortSignal.timeout(60_000)]),
-			headers: { 'content-type': 'application/json', [EXPECTED_ACTOR_HEADER]: account.ownerId, [EXPECTED_DATA_PLANE_HEADER]: account.dataPlane },
-			body: JSON.stringify({ key, ...(options.onlyMissing ? { onlyMissing: true } : {}) })
-		});
-		const data = await response.json().catch(() => null);
-		lease.assertCurrent();
-		if (!response.ok || !data?.ok) throw data || { error: `Install failed (${response.status})` };
-		return data as ServerInstalledSuite;
-	} finally {
-		unsubscribe();
-	}
+	const worker = accountWorkspaceWorker(account);
+	const result = await worker.suites.install(key);
+	lease.assertCurrent();
+	announceLocalWorkspaceChange(); worker.wake();
+	return result;
 };
 
 // A suite's own-mode actionKeys are `demo-<suite>-<key>`; recover the suite a

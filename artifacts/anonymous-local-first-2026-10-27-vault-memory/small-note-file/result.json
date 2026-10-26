@@ -1,0 +1,5 @@
+{
+  "kind": "small-note-file",
+  "passed": false,
+  "message": "locator.click: Error: strict mode violation: getByRole('button', { name: 'Close', exact: true }) resolved to 2 elements:\n    1) <button type=\"button\" class=\"chakra-button cha-e8ab4z\">Close</button> aka getByText('Close')\n    2) <button type=\"button\" aria-label=\"Close\" class=\"cha-8k3i6n\">✕</button> a"
+}

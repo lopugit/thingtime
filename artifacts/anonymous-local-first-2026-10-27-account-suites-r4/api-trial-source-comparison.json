@@ -1,0 +1,14 @@
+{
+  "previousBase": "9f24113dd883b450e9d3086753b6cfd027d175a8",
+  "currentBase": "9f24113dd883b450e9d3086753b6cfd027d175a8",
+  "changedSinceAPITrial": [
+    "remix/app/local-workspace/accountSuites.browser.test.ts"
+  ],
+  "addedSinceAPITrial": [
+    "remix/app/components/DevKit/DevKit.tsx",
+    "remix/app/components/Passwords/PasswordManager.tsx",
+    "remix/app/local-workspace/accountSuiteBrowserContract.test.ts",
+    "remix/app/local-workspace/accountSuiteBrowserContract.ts"
+  ],
+  "serverSuiteSourcesUnchanged": true
+}

@@ -14,6 +14,7 @@ import { remapPostDraftAttachments } from '../drafts/postDraft';
 import { validateDraftContent, type AccountDraft, type DraftContent } from '../drafts/draftCore';
 import type { StoredDraft } from './drafts';
 import { accountSyncDeadline, type SyncState } from './accountSync';
+import { ACCOUNT_SUITE_PARTS } from './accountSuites';
 
 const COLLECTION = 'account-files';
 const CLAIM_MS = 60_000;
@@ -618,6 +619,8 @@ export class AccountFileSync {
 				let row: FileRecord | undefined;
 				for (const { value } of await tx.list<FileRecord>(COLLECTION)) {
 					if (!['pending','syncing'].includes(value.state) || value.retryAt > this.now() || (value.claim && value.claim.expiresAt > this.now())) continue;
+					const binding = value.retainedTargetId || value.deletingLocal?.targetId || (await tx.get<LocalThing>('things', value.id))?.targetId;
+					if (binding && await tx.get(ACCOUNT_SUITE_PARTS, binding)) continue;
 					// Editor selections alone never upload. A committed post or an
 					// active private draft must bind them first. Once started,
 					// finish the same request even if a newer editor removes the file.
