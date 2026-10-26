@@ -746,13 +746,17 @@ points, not the individual files.
 
   This entry point also repairs missing pnpm links in fresh worktrees before
   ESLint starts.
-- Use `corepack pnpm --dir remix run typecheck` for raw TypeScript results and
-  `corepack pnpm --dir remix run typecheck:ratchet` for the tracked comparison.
-  The ratchet is warning-only, including increases: read its diagnostics rather
-  than treating exit 0 as a clean typecheck. Compare with the current base and
-  baseline file, fix errors introduced by the change, and report unrelated
-  failures precisely. Never raise a baseline merely to hide a regression or
-  reuse historical error counts without rerunning the check.
+- Run `corepack pnpm --dir remix run typecheck` and
+  `corepack pnpm --dir remix run typecheck:ratchet`. The tracked TypeScript
+  error baseline is zero; the ratchet is a failing gate, not warning-only.
+  Fix diagnostics rather than raising the baseline, suppressing errors,
+  excluding source or weakening compiler/lint settings. Baseline updates may
+  only preserve or lower the count and must reject compiler failures.
+- Run the full Remix lint command before delivery as well as focused checks.
+  ESLint errors fail; warnings currently have no numeric budget. Do not claim
+  zero warnings, formatting coverage or stronger compiler strictness from a
+  passing error gate. See `docs/static-analysis-baselines.md` for commands,
+  audit evidence, coverage limits and follow-up priorities.
 - Use the package manager already used by the workspace being changed. For
   Remix checks, prefer `pnpm --dir remix ...`. Avoid lockfile changes unless
   dependency changes are intentional.
