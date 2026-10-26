@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import dns from 'node:dns/promises';
+import { syncBuiltinESMExports } from 'node:module';
 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { connectionProviderById, parseRssOrAtom, stripHtml } from './providers.ts';
@@ -206,16 +208,22 @@ test('bare angle brackets do not make text stripping quadratic', () => {
   assert.ok(ms < BUDGET_MS, `tag stripping must stay linear (took ${ms.toFixed(1)}ms, was ~1511ms)`);
 });
 
-test('a hostile feed body does not stall a connect request', () => {
+test('a hostile feed body does not stall a connect request', (t) => {
+  // Timing this parser must not include live DNS or pass because DNS failed.
+  const originalLookup = dns.lookup;
+  dns.lookup = (async () => [{ address: '1.1.1.1', family: 4 }]) as unknown as typeof dns.lookup;
+  syncBuiltinESMExports();
+  t.after(() => { dns.lookup = originalLookup; syncBuiltinESMExports(); });
   // End to end through the real provider — the path an attacker actually
   // drives: POST /api/v1/connections with a feedUrl they control.
   const rss: any = connectionProviderById('rss');
   const body = `<?xml version="1.0"?><rss version="2.0"><channel>${'<title>'.repeat(Math.floor((512 * 1024) / 7))}`;
-  (globalThis as any).fetch = async () =>
-    new Response(body, { status: 200, headers: { 'content-type': 'application/xml' } });
+  const fetched = t.mock.method(globalThis, 'fetch', async () =>
+    new Response(body, { status: 200, headers: { 'content-type': 'application/xml' } }));
   return (async () => {
     const started = process.hrtime.bigint();
     await rss.resolveAccount({ feedUrl: 'https://example.com/feed.xml' });
+    assert.equal(fetched.mock.callCount(), 1, 'the hostile response reached the parser');
     const ms = Number(process.hrtime.bigint() - started) / 1e6;
     // 512KB took ~12s before the fix and is milliseconds after it. A whole
     // second is generous headroom for a loaded runner while still failing

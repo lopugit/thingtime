@@ -81,8 +81,9 @@ export const revealAdminSecret = async (id: string): Promise<string | null> => {
 // Server-only automation lookup. Callers must authenticate a purpose-scoped machine
 // identity and use fixed labels, never a request-controlled selector.
 export const readAdminAutomationSecret = async (label: string): Promise<string | null> => {
-  const record = await (await getAdminIntegrationSecretsCollection()).findOne({ label });
-  return record ? decryptSecret(record as StoredAdminSecret) : null;
+  const records = await (await getAdminIntegrationSecretsCollection()).find({ label }).limit(2).toArray();
+  // The unique index protects new writes; reject ambiguous legacy/corrupt data.
+  return records.length === 1 ? decryptSecret(records[0] as StoredAdminSecret) : null;
 };
 
 const encryptSecret = (id: string, value: string) => {
