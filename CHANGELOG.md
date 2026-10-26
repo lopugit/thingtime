@@ -1,5 +1,17 @@
 # Control-plane changelog
 
+## 2026-10-27 — Bound the negative native authority command
+
+- Let the trusted root supervisor register, time out, kill and reap the fixed
+  negative sudo command directly, without a nested unprivileged timeout or
+  captured command pipes. Preserve numeric credential checks and distinguish
+  launcher failures from normal refusal.
+- 48 safe regressions pass, including five new authority/lifecycle cases. This
+  partial repair is not admitted by existing immutable workflow pins. Launchd
+  service ownership/teardown and usable IPv6 denial proof remain release gates;
+  no hosted/native acceptance or dispatch is implied. See
+  [the repair note](PRs/codex-oauth-native-authority-lifecycle.md).
+
 ## 2026-10-27 — Verify Darwin kernel groups after numeric drop
 
 - Replace the invalid empty Python directory-group assertion with exact kernel

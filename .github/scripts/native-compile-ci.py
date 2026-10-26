@@ -371,6 +371,26 @@ def drop_identity(uid,gid,args):
         raise RuntimeError('Trusted numeric identity stage failed') from None
 
 
+
+def authority_drop(uid,gid,environment):
+    """Exec the fixed negative test; launcher failure must not look like sudo denial."""
+    try:
+        drop_identity(uid,gid,[*environment,'/usr/bin/sudo','-n','/usr/bin/true'])
+    except BaseException:
+        # sudo's normal refusal is 1. Any trusted launch/drop failure is distinct.
+        raise SystemExit(111) from None
+    raise SystemExit(111)  # exec must never return.
+
+
+def authority_probe(uid,gid,helper,environment):
+    """The root supervisor owns timeout/kill/reap; no nested unprivileged waiter."""
+    result=run([PYTHON,'-I','-S',str(helper),'authority-drop',str(uid),str(gid),*environment],
+               check=False,timeout=5,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    # Success, signals, launcher errors and timeout are never evidence of denial.
+    if result.returncode != 1:
+        raise RuntimeError('Trusted negative authority gate did not prove normal refusal')
+
+
 def cleanup(work,watchdog_parent=None):
     """Bounded cleanup; never restore networking with isolated descendants alive."""
     deadline = time.monotonic()+CLEANUP_SECONDS
@@ -577,10 +597,7 @@ PROBE = r'''
 import json, os, socket, subprocess, sys
 expected_uid = int(sys.argv[1]); part=sys.argv[2]
 assert os.geteuid() == expected_uid
-if part == 'authority':
-    assert expected_uid != 0  # Canonical numeric drop already verified kernel groups.
-    assert subprocess.run(['/usr/bin/sudo','-n','/usr/bin/true'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,timeout=5).returncode != 0
-elif part == 'sandbox':
+if part == 'sandbox':
     subprocess.run(['/usr/bin/sandbox-exec','-p','(version 1)(allow default)', '/usr/bin/true'],check=True,timeout=5)
 elif part in ('tcp4','tcp6','udp'):
     family=socket.AF_INET6 if part == 'tcp6' else socket.AF_INET
@@ -738,7 +755,7 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
         (report/'positive-controls.json').write_text(baseline.stdout)
         phase(report,'authority-probe-started-before-policy')
         try:
-            as_build([PYTHON,'-I','-S',str(work/'probe.py'),str(uid),'authority'],capture_output=True,timeout=12)
+            authority_probe(uid,uid,trusted_helper,build_environment(home,user,developer))
         except BaseException as error:
             (report/'trusted-failure.json').write_text(json.dumps(preflight_failure(error,'authority-before-policy'))+'\n')
             raise RuntimeError('Trusted authority gate failed; see fixed-label evidence') from None
@@ -838,7 +855,9 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
 
 
 def main():
-    if len(sys.argv) >= 6 and sys.argv[1] == 'drop':
+    if len(sys.argv) >= 5 and sys.argv[1] == 'authority-drop':
+        authority_drop(int(sys.argv[2]),int(sys.argv[3]),sys.argv[4:])
+    elif len(sys.argv) >= 6 and sys.argv[1] == 'drop':
         drop_identity(int(sys.argv[2]),int(sys.argv[3]),sys.argv[4:])
     elif len(sys.argv) >= 4 and sys.argv[1] == 'spawn':
         if os.geteuid() != 0:raise RuntimeError('Trusted command gate requires root supervisor')

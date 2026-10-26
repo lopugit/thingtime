@@ -267,12 +267,50 @@ class NativeCompileBoundaryTests(unittest.TestCase):
                     except ProcessLookupError:pass
                 if process.poll() is None:process.kill();process.wait(timeout=2)
 
+    def test_authority_probe_is_direct_fixed_command_with_no_capture_pipes(self):
+        environment=['/usr/bin/env','-i','PATH=/usr/bin:/bin']
+        with patch.object(native,'run',return_value=subprocess.CompletedProcess([],1)) as run:
+            native.authority_probe(5500,5500,Path('/trusted/helper.py'),environment)
+        run.assert_called_once_with([native.PYTHON,'-I','-S','/trusted/helper.py','authority-drop','5500','5500',*environment],
+                                    check=False,timeout=5,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+
+    def test_authority_probe_rejects_success_signal_and_launcher_failure(self):
+        for code in [0,-9,111,2,127]:
+            with self.subTest(code=code),patch.object(native,'run',return_value=subprocess.CompletedProcess([],code)),self.assertRaises(RuntimeError):
+                native.authority_probe(5500,5500,Path('/trusted/helper.py'),[])
+        with patch.object(native,'run',side_effect=subprocess.TimeoutExpired('fixed-fixture',5)),self.assertRaises(subprocess.TimeoutExpired):
+            native.authority_probe(5500,5500,Path('/trusted/helper.py'),[])
+
+    def test_authority_drop_cannot_alias_identity_error_to_normal_refusal(self):
+        for error in [RuntimeError('fixed-fixture'),SystemExit(1),OSError(1,'fixed-fixture')]:
+            with self.subTest(error=type(error).__name__),patch.object(native,'drop_identity',side_effect=error),self.assertRaises(SystemExit) as result:
+                native.authority_drop(5500,5500,[])
+            self.assertEqual(result.exception.code,111)
+
+    def test_authority_drop_has_only_fixed_sudo_target_and_fails_if_exec_returns(self):
+        environment=['/usr/bin/env','-i','PATH=/usr/bin:/bin']
+        with patch.object(native,'drop_identity') as drop,self.assertRaises(SystemExit) as result:
+            native.authority_drop(5500,5500,environment)
+        drop.assert_called_once_with(5500,5500,[*environment,'/usr/bin/sudo','-n','/usr/bin/true'])
+        self.assertEqual(result.exception.code,111)
+
+    def test_direct_authority_supervision_reaps_only_own_timeout_fixture(self):
+        # No sudo, identity change or process enumeration. Only this fixture group.
+        with patch.object(native,'GROUP_REGISTRAR',None),patch.object(native,'COMMAND_CONTEXT',None):
+            result=native.run([sys.executable,'-I','-S','-c','raise SystemExit(1)'],check=False,timeout=2,
+                              stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            self.assertEqual(result.returncode,1)
+            with self.assertRaises(subprocess.TimeoutExpired):
+                native.run([sys.executable,'-I','-S','-c','import time; time.sleep(30)'],timeout=.05,
+                           stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+
     def test_each_denial_subprobe_has_its_own_budget_and_no_sudo_or_lookup(self):
         self.assertNotIn('check_output',native.PROBE)
-        self.assertIn("part == 'authority'",native.PROBE)
+        self.assertNotIn("part == 'authority'",native.PROBE)
+        self.assertNotIn('/usr/bin/sudo',native.PROBE)
         # Network arms do not execute subprocesses or use host DNS.
         self.assertIn("s.settimeout(3)",native.PROBE)
-        self.assertIn("timeout=12",HELPER.read_text())
+        self.assertIn("timeout=5,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL",HELPER.read_text())
         workflow=(HELPER.parent.parent/'workflows/native-compile.yml').read_text()
         self.assertIn("inputs.mode == 'native' && 65 || 10",workflow)
 

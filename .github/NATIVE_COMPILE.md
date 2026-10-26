@@ -10,6 +10,16 @@ simulator scheme and tests the local PasswordCore/FileSync packages only after
 all gates pass. Neither mode signs, installs, launches apps, uses Apple
 credentials, publishes releases, or uploads to TestFlight.
 
+## Current acceptance limit
+
+The reviewed authority-supervision continuation is a partial source repair,
+not a usable admitted fallback. Existing immutable H1/H2 pins are unchanged.
+The observed authority timeout/remaining-UID cleanup failure still requires
+supported launchd service ownership/teardown and usable IPv6 policy proof
+before any newly authorized hosted preflight or native execution. See
+[the repair note](../PRs/codex-oauth-native-authority-lifecycle.md) and
+[the regression checklist](../TESTING.md).
+
 ## Admission and entry point
 
 Review the controller workflow, Python supervisor, archive extractor, probes,
