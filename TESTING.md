@@ -15644,8 +15644,14 @@ Local results do not establish current-head CI or deployed acceptance.
 - Verify ZIP manifest discovery consumes skipped entries without retaining their
   payloads or inflating them; test both stored and compressed entries, manifest
   ordering, cancellation, unsafe names, undeclared entries and truncated input.
-- Refuse unsafe integer aggregates and unrepresentable ZIP32 size/offset fields
-  before file reads. Consumer budget failures must happen before import writes.
+- Refuse unsafe integer aggregates before file reads. Exercise ZIP64 size and
+  offset sentinels, directory/footer records and embedded ZIP signatures in
+  stored payloads. Consumer budget failures must happen before import writes.
+- On the Node Blob backend, refuse files/archives at 4 GiB before reads and
+  declared oversized output before inflation. Test Chromium Blob identity
+  separately, including Electron with Node globals; an unsupported Node fixture
+  skip never proves browser capacity. Verify genuine large browser output with
+  an independent ZIP reader and streamed CRC/SHA before removing its fixture.
 - Preserve buffered/clipboard limits, canonical storage/quota rollback, and
   anonymous renderer file/Action/input restrictions. Larger remote transfers
   must negotiate the separate contract below before starting work.

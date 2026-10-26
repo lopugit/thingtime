@@ -1,6 +1,7 @@
-import { Unzip, UnzipInflate, UnzipPassThrough, Zip, ZipPassThrough, type UnzipDecoder, type UnzipDecoderConstructor } from 'fflate';
+import { Unzip, UnzipInflate, UnzipPassThrough, ZipPassThrough, type UnzipDecoder, type UnzipDecoderConstructor } from 'fflate';
 import { parseTransfer, serializeTransfer, TRANSFER_LIMITS, TransferFormatError, type ThingTransfer, type TransferValidationOptions } from './format';
-import { binaryBlob, binarySize, blobChecksum, type TransferBinary } from './binary';
+import { planStoredZip, storedZipBlob } from './storedZip';
+import { assertBinaryPlatformSize, binaryBlob, binarySize, blobChecksum, type TransferBinary } from './binary';
 
 export const TRANSFER_MANIFEST_PATH = 'thingtime.json';
 /** Buffered compatibility budget. Blob paths use explicit consumer budgets. */
@@ -28,25 +29,6 @@ const checkArchiveSize = (size: number, options: TransferArchiveOptions) => {
   if (!Number.isSafeInteger(size) || size <= 0) fail('Invalid archive size');
   if (size > archiveByteLimit(options)) fail('Transfer archive exceeds the consumer byte budget');
 };
-// fflate's encoder writes 32-bit sizes and offsets, not ZIP64 records. Account
-// for every local header, data descriptor, central record and the ZIP footer
-// before reading files, so a large Blob cannot produce a wrapped/corrupt ZIP.
-const zip32Size = (manifest: ThingTransfer, manifestBytes: number): number => {
-  const entries = [{ path: TRANSFER_MANIFEST_PATH, bytes: manifestBytes }, ...manifest.files];
-  let localBytes = 0, directoryBytes = 0;
-  const requireZip64 = () => fail('This archive requires ZIP64; the current ZIP encoder supports only ZIP32 sizes and offsets');
-  if (entries.length >= 0xffff) requireZip64();
-  for (const entry of entries) {
-    const nameBytes = new TextEncoder().encode(entry.path).byteLength;
-    if (entry.bytes >= 0xffffffff || localBytes >= 0xffffffff) requireZip64();
-    localBytes += 30 + nameBytes + entry.bytes + 16;
-    directoryBytes += 46 + nameBytes;
-  }
-  // The footer stores directory start and length independently as uint32.
-  if (localBytes >= 0xffffffff || directoryBytes >= 0xffffffff) requireZip64();
-  return localBytes + directoryBytes + 22;
-};
-
 /** Validate actual bytes, not the ZIP headers' untrusted size claims. */
 export const verifyTransferFiles = async (bundle: TransferBundle<TransferBinary>, signal?: AbortSignal): Promise<void> => {
   if (bundle.files.size !== bundle.manifest.files.length) fail('The transfer has missing or unexpected files');
@@ -75,51 +57,39 @@ export const encodeTransferArchiveBlob = async (bundle: TransferBundle<TransferB
   abort(signal);
   const manifest = new TextEncoder().encode(serializeTransfer(bundle.manifest, options));
   const metadata = parseTransfer(new TextDecoder().decode(manifest), options);
-  const expectedSize = zip32Size(metadata, manifest.byteLength);
+  const entries = [{ path: TRANSFER_MANIFEST_PATH, bytes: manifest.byteLength }, ...metadata.files];
+  const plan = planStoredZip(entries);
+  const expectedSize = plan.size;
   checkArchiveSize(expectedSize, options);
+  assertBinaryPlatformSize(expectedSize);
+  for (const file of metadata.files) assertBinaryPlatformSize(file.bytes);
   if (bundle.files.size !== metadata.files.length) fail('The transfer has missing or unexpected files');
   // Freeze caller-owned arrays and map membership before the first async read.
   const files = new Map([...bundle.files].map(([id, data]) => [id, binaryBlob(data)]));
   const assertCurrent = bundle.assertCurrent;
   await assertCurrent?.(signal);
   await verifyTransferFiles({ manifest: metadata, files }, signal);
-  const parts: Blob[] = [];
-  let size = 0, complete = false;
-  let failure: Error | undefined;
-  const zip = new Zip((error, data, final) => {
-    if (failure) return;
-    if (error) { failure = error; return; }
-    size += data.byteLength;
-    if (size > expectedSize) { failure = new TransferFormatError('Transfer archive exceeds its expected size'); return; }
-    parts.push(new Blob([Uint8Array.from(data)]));
-    complete = final;
-  });
-  try {
-    const entries: [string, TransferBinary][] = [[TRANSFER_MANIFEST_PATH, manifest],
-      ...metadata.files.map((file): [string, TransferBinary] => [file.path, files.get(file.id)!])];
-    for (const [path, data] of entries) {
+  const payloads = [new Blob([manifest]), ...metadata.files.map(file => files.get(file.id)!)];
+  const checked: { blob: Blob; crc: number }[] = [];
+  for (let index = 0; index < payloads.length; index++) {
+    const blob = payloads[index];
+    const checksum = new ZipPassThrough(entries[index].path);
+    checksum.ondata = error => { if (error) throw error; };
+    if (!blob.size) checksum.push(new Uint8Array(), true);
+    for (let offset = 0; offset < blob.size; offset += 256 * 1024) {
       abort(signal);
-      const file = new ZipPassThrough(path);
-      zip.add(file);
-      const length = binarySize(data);
-      if (!length) file.push(new Uint8Array(), true);
-      for (let offset = 0; offset < length; offset += 256 * 1024) {
-        abort(signal);
-        const chunk = data instanceof Blob ? new Uint8Array(await data.slice(offset, offset + 256 * 1024).arrayBuffer())
-          : data.subarray(offset, offset + 256 * 1024);
-        abort(signal);
-        file.push(chunk, offset + chunk.byteLength >= length);
-        if (failure) throw failure;
-        await new Promise<void>(resolve => setTimeout(resolve, 0));
-      }
+      const chunk = new Uint8Array(await blob.slice(offset, offset + 256 * 1024).arrayBuffer());
+      abort(signal);
+      checksum.push(chunk, offset + chunk.byteLength >= blob.size);
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
     }
-    abort(signal); zip.end();
-    if (failure) throw failure;
-    if (!complete || size !== expectedSize) fail('The archive is incomplete');
-    await assertCurrent?.(signal);
-    abort(signal);
-    return new Blob(parts, { type: 'application/zip' });
-  } finally { zip.terminate(); }
+    checked.push({ blob, crc: checksum.crc });
+  }
+  abort(signal);
+  const archive = storedZipBlob(plan, checked);
+  await assertCurrent?.(signal);
+  abort(signal);
+  return archive;
 };
 
 /** Starting every entry is essential: fflate buffers all compressed input for
@@ -266,8 +236,12 @@ export const decodeTransferArchive = async (archive: Uint8Array, signal?: AbortS
 export const decodeTransferArchiveBlob = async (archive: Blob, signal?: AbortSignal, options: TransferArchiveOptions = {}): Promise<TransferBundle<Blob>> => {
   abort(signal);
   checkArchiveSize(archive.size, options);
+  assertBinaryPlatformSize(archive.size);
   const first = await readEntries(archive, new Map([[TRANSFER_MANIFEST_PATH, TRANSFER_LIMITS.manifestBytes]]), byteCollector, signal);
   const manifest = parseTransfer(new TextDecoder('utf-8', { fatal: true }).decode(first.get(TRANSFER_MANIFEST_PATH)), options);
+  // Compressed input can fit the backend while its declared output cannot.
+  // Refuse before inflation or constructing an unsupported Node Blob.
+  for (const file of manifest.files) assertBinaryPlatformSize(file.bytes);
   const limits = new Map([[TRANSFER_MANIFEST_PATH, TRANSFER_LIMITS.manifestBytes as number], ...manifest.files.map((file): [string, number] => [file.path, file.bytes])]);
   const entries = await readEntries(archive, limits, blobCollector, signal, true);
   const bundle = { manifest, files: new Map(manifest.files.map(file => [file.id, entries.get(file.path)!])) };

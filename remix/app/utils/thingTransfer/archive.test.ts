@@ -98,14 +98,31 @@ test('large Blob manifests pass the former aggregate ceiling and still require e
   await assert.rejects(encodeTransferArchive(bundle), /too large/);
 });
 
-test('ZIP32 output rejects unrepresentable offsets including overhead before reading Blob bytes', async () => {
+test('ZIP64 preflight honors consumer budgets before reading huge files', async () => {
   const bundle = await fixture();
-  bundle.manifest.files[0].bytes = 0xffffffff - 100;
+  bundle.manifest.files[0].bytes = 0x100000001;
   const data = new Blob();
   Object.defineProperty(data, 'size', { value: bundle.manifest.files[0].bytes });
   Object.defineProperty(data, 'slice', { value: () => { throw new Error('must not read huge file'); } });
   const large = { manifest: bundle.manifest, files: new Map([['photo', data]]) };
-  await assert.rejects(encodeTransferArchiveBlob(large), /requires ZIP64/);
+  await assert.rejects(encodeTransferArchiveBlob(large, undefined, { maxArchiveBytes: 0x100000001 }), /consumer byte budget/);
+});
+
+test('stored payload ZIP signatures cannot terminate known-length entries', async () => {
+  const bundle = await fixture();
+  const bytes = new Uint8Array(256 * 1024 + 64);
+  const signatures = [0x08074b50, 0x04034b50, 0x02014b50, 0x06064b50, 0x06054b50];
+  for (const offset of [0, 4093, 256 * 1024 - 3]) {
+    signatures.forEach((signature, index) => new DataView(bytes.buffer).setUint32(offset + index * 4, signature, true));
+  }
+  bundle.files.set('photo', bytes);
+  bundle.manifest.files[0].bytes = bytes.length;
+  bundle.manifest.files[0].sha256 = await transferChecksum(bytes);
+  const archive = await encodeTransferArchiveBlob(bundle);
+  const header = new DataView(await archive.slice(0, 30).arrayBuffer());
+  assert.equal(header.getUint16(6, true) & 8, 0);
+  const decoded = await decodeTransferArchiveBlob(archive);
+  assert.deepEqual(new Uint8Array(await decoded.files.get('photo')!.arrayBuffer()), bytes);
 });
 
 test('consumer archive budgets reject before reading and Blob processing remains cancellable beyond the old cap', async () => {
@@ -187,3 +204,27 @@ for (const level of [0, 6] as const) for (const manifestFirst of [true, false]) 
     } finally { context.mock.restoreAll(); }
   });
 }
+
+test('Node refuses unsupported ZIP64 Blob offsets before payload reads while consumer budgets retain priority', async () => {
+  const bundle = await fixture();
+  const blob = new Blob();
+  Object.defineProperty(blob, 'size', { value: 0x100000000 });
+  Object.defineProperty(blob, 'slice', { value: () => { throw new Error('must not read unsupported Blob'); } });
+  bundle.manifest.files[0].bytes = blob.size;
+  const large = { manifest: bundle.manifest, files: new Map([['photo', blob]]) };
+  await assert.rejects(encodeTransferArchiveBlob(large), /Node.js Blob backend/);
+  await assert.rejects(decodeTransferArchiveBlob(blob), /Node.js Blob backend/);
+  await assert.rejects(decodeTransferArchiveBlob(blob, undefined, { maxArchiveBytes: 100 }), /consumer byte budget/);
+  await assert.rejects(encodeTransferArchiveBlob(large, undefined, { maxArchiveBytes: 100 }), /consumer byte budget/);
+});
+
+test('Node rejects oversized declared output before inflating a small input', async context => {
+  const bundle = await fixture();
+  bundle.manifest.files[0].bytes = 0x100000000;
+  const manifest = new TextEncoder().encode(serializeTransfer(bundle.manifest));
+  const archive = zipSync({ 'thingtime.json': [manifest, { level: 0 }], 'files/000000': new Uint8Array(1024) });
+  let inflaterCalls = 0;
+  context.mock.method(UnzipInflate.prototype, 'push', () => { inflaterCalls++; throw new Error('must not inflate unsupported output'); });
+  await assert.rejects(decodeTransferArchiveBlob(new Blob([Uint8Array.from(archive)])), /Node.js Blob backend/);
+  assert.equal(inflaterCalls, 0);
+});

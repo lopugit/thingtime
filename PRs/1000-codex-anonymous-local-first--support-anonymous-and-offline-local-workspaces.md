@@ -5419,3 +5419,33 @@ offline reload and 1440/390/320px layouts on the new package. See the
 [remote checkpoint](../artifacts/anonymous-local-first-2026-10-27-remote-transfer/README.md).
 The shared preview gateway remains below these versions. This does not close
 deployed, installed-device, ZIP64, paste-performance or broader matrix work.
+
+
+## ZIP64 and native paste diagnosis — 27 October 2026
+
+The canonical Blob exporter now writes known-length ZIP32/ZIP64 framing around
+verified immutable payloads. Safe integer planning, SHA/CRC, cancellation,
+availability fences, consumer budgets and portable v1 remain intact. ZIP-like
+payload bytes no longer collide with descriptor scanning.
+
+Real Node 24.18.0 trials exposed `openAsBlob` length truncation and a native
+`ToSlice` assertion at 4 GiB. The exact synthetic crash fixture was cleaned up.
+A backend-identity guard now refuses unsupported Node input/output before reads
+or inflation, while preserving Chromium native Blob support. The review caught
+the compressed-input/oversized-declared-output case; its regression is included.
+See [ZIP64 evidence](../artifacts/anonymous-local-first-2026-10-27-zip64/README.md)
+for verification, limitations and retained failed attempts. Genuine Chromium
+export of 4 GiB + 1 byte now passes independent Python CRC/SHA and ZIP64 offset
+verification within the unchanged 4 GiB memory boundary; all owned fixtures were
+removed. Full multi-gigabyte import and product journeys remain separate.
+
+Native paste remains incomplete: Settings after edit history took 8,758 ms;
+a same-document trace took 10,388 ms with 9,992.707 ms in Chromium selection
+replacement. Exact text and undo/redo survived. The five-second gate is unchanged;
+no speculative editor replacement is shipped. [Diagnostic evidence](../artifacts/anonymous-local-first-2026-10-27-paste-comparison-r3/README.md).
+
+Prior pushed head `b5ed654c` passed Web CI and CodeQL. Its preview alias and
+immutable frontend advertise export 1.18/import 1.15/content 1.18; the shared
+gateway still advertises export 1.15/import 1.11/content 1.17 and lacks the
+profile sync features. No shared LLM proxy change, manual deployment, merge or
+existing-account mutation is part of this checkpoint.

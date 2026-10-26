@@ -5837,8 +5837,8 @@ arithmetic separately from a consumer's byte budget. Normal local Blob collectio
 export plans and selected-file ZIP decoding no longer reject a valid transfer
 solely for exceeding 512 MiB. Processing buffers and manifest, entry-count, path,
 exact-size and checksum validation remain bounded. The encoder checks each real
-ZIP32 size and offset before reading files; exports requiring ZIP64 are refused
-explicitly until an encoder supporting that format is available.
+ZIP sizes and offsets before reading files. The later ZIP64 checkpoint below
+replaces the ZIP32-only encoder while retaining these admission checks.
 
 Buffered byte/clipboard paths and existing account import/export contracts retain
 their explicit budgets. Account storage admission, atomic import, permissions and
@@ -5870,8 +5870,29 @@ as well as before import, with cancellation and selected-bundle fences. An old
 origin leaves the local bundle intact.
 
 These versions do not change the portable format, manifest/count/depth budgets,
-upload storage platform limits, existing clipboard/byte-array envelopes, ZIP32
-representation or anonymous renderer restrictions. ZIP64 encoding and wider
-device/account coverage remain open. See the
+upload storage platform limits, existing clipboard/byte-array envelopes or
+anonymous renderer restrictions. Wider device/account coverage remains open. See the
 [remote transfer evidence](../artifacts/anonymous-local-first-2026-10-27-remote-transfer/README.md)
 for exact tests, package boundaries and deployed limitations.
+
+
+### ZIP64 and explicit runtime limits — 27 October 2026
+
+The canonical Blob exporter uses known-length stored ZIP entries, CRC32, ZIP64
+size/offset extras and end records when required. Original immutable Blob payloads
+remain referenced; bounded SHA verification and CRC reads, cancellation, source
+availability fences and consumer budgets still apply. Known lengths prevent ZIP
+signatures inside file content from being mistaken for data descriptors.
+
+Actual Node 24.18.0 testing exposed truncated file-backed Blob lengths and a
+native assertion at the 4 GiB offset boundary. The Node Blob backend therefore
+returns a clear unsupported-runtime error before processing files or archives at
+that boundary. Import also checks manifest-declared output before inflation.
+This guard checks Blob implementation identity so Chromium/Electron native Blobs
+retain their own capacity. It is not a larger anonymous-renderer input allowance.
+
+See [ZIP64 evidence](../artifacts/anonymous-local-first-2026-10-27-zip64/README.md)
+for exact verification and platform limits. Native instruction paste remains a
+separate open gate: the same-document trace localizes its large delay to
+Chromium selection replacement, without yet identifying a safe editor fix. See
+[paste diagnosis](../artifacts/anonymous-local-first-2026-10-27-paste-comparison-r3/README.md).

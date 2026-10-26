@@ -104,6 +104,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **Codex (AI), 2026-10-27:** Add known-length ZIP64 Blob export and refuse the
+  observed Node Blob 4 GiB crash boundary before reads or inflation. Preserve
+  canonical validation, checksums, cancellation and consumer limits. Record
+  isolated large-file evidence and the still-open native paste diagnosis in
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - 2026-10-27 — Negotiate larger remote Thing bundles through metadata-only
   import/export and pinned original streams, preserving upload quotas, ownership,
   atomic binding and anonymous renderer limits. Add an isolated real-byte
