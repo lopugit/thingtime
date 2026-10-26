@@ -76,3 +76,24 @@ export function localSettingsDocumentAdapter(scope: SettingsDocumentScope, stora
     }
   };
 }
+
+/** Import only this account/origin/data-plane's old device layout. Its local
+ * revision and identity never become authority for an account Thing write. */
+export function legacyDeviceSettingsDocument(scope: SettingsDocumentScope, storage: Pick<Storage, 'getItem'>): SettingsDocument | null {
+  if (!scope.ownerId || ['anonymous', 'device'].includes(scope.ownerId) || !scope.dataPlane || scope.dataPlane === 'unavailable') return null;
+  const key = settingsDocumentKey({ ...scope, ownerId: 'device', dataPlane: `${scope.origin}:${scope.ownerId}:${scope.dataPlane}` });
+  const raw = storage.getItem(key);
+  if (!raw) return null;
+  const previous = parseSettingsDocument(JSON.parse(raw));
+  return { name: previous.name, blocks: previous.blocks, revision: null };
+}
+
+/** Synchronous view seed only. Durable account load remains authoritative. */
+export function settingsDocumentSeed(blocks: WebpageBlock[], name: string, cached: unknown, fallback?: () => SettingsDocument | null): SettingsDocument {
+  try { if (cached) return parseSettingsDocument(cached); } catch { /* invalid cache is not authority */ }
+  try {
+    const previous = fallback?.();
+    if (previous) return { blocks: settingsDocumentBlocks(previous.blocks), name: previous.name, revision: null };
+  } catch { /* invalid legacy data must not prevent rendering */ }
+  return { blocks, name, revision: null };
+}
