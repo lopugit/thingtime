@@ -5286,6 +5286,28 @@ halves.
       `opens.direction` in Tab A and confirm Tab B follows without a reload.
       (This is the pair that distinguishes the fix from over-blocking.)
 
+## Environment gateway and index lifecycle
+
+- [ ] Run `npm --prefix remix run test:environment-gateway`, `test:collections`
+  and `test:api-capabilities`; build Nitro and run
+  `node remix/scripts/environment-gateway-acceptance.mjs` under its OS boundary.
+- [ ] Root metadata/image routes expose their registered `-docs` twin for both
+  GET and POST without database admission, through both Nitro and the real Vite
+  dev proxy; check JSON endpoint/method fields and reject SPA HTML responses.
+- [ ] Confirm followers make zero MongoDB connections, preserve cookie/Bearer,
+  Character, expected actor and custom data-plane selection, refuse forged hops
+  and cross-site writes, and preserve OAuth redirect/cookie/stream cancellation.
+- [ ] Switch the alias and roll back with an admitted stream and detached
+  notification/Lopu save outstanding. Confirm pools close after work drains,
+  the old worker cannot create a new pool, and re-promotion opens a usable pool.
+- [ ] Verify missing/different-environment/incompatible manifests fail closed;
+  unchanged index plans skip DDL across instances, changed plans coordinate,
+  failed unique builds block constrained writes, and authenticated repair stays
+  reachable. Exercise lease expiry, failed-plan retry and manual invalidation.
+- [ ] Retire/restrict legacy immutable deployments before claiming fleet-wide
+  enforcement. Record real alias/API and Atlas connection evidence separately
+  from isolated tests; leave the Atlas tier unchanged.
+
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
 - [ ] Logged OUT: paste a reachable `mongodb://` URL → "Use for this session"

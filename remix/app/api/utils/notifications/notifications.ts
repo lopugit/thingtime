@@ -1,3 +1,4 @@
+import { withGatewayWork } from '../deployment/environmentGateway';
 import { waitUntil } from '@vercel/functions';
 import { randomUUID } from 'node:crypto';
 import type { NotificationDelivery } from '../lopu/remindersCore';
@@ -140,7 +141,7 @@ export const notificationDoc = (input: EmitNotificationInput, now: Date) => ({
 // must not fail the social action that triggered it (the action is the
 // product; the notification is a side effect).
 export const emitNotification = (input: EmitNotificationInput): Promise<void> => {
-  const task = emitNotificationNow(input);
+  const task = withGatewayWork(() => emitNotificationNow(input));
   waitUntil(task);
   return task;
 };
@@ -281,7 +282,7 @@ export const emitNotificationsBulk = (
   recipients: BulkRecipient[], base: Omit<EmitNotificationInput, 'recipientId' | 'type'>,
   options: EmitNotificationsBulkOptions = {}
 ): Promise<void> => {
-  const task = emitNotificationsBulkNow(recipients, base, options);
+  const task = withGatewayWork(() => emitNotificationsBulkNow(recipients, base, options));
   waitUntil(task);
   return task;
 };

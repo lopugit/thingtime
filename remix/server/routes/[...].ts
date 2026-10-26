@@ -4,6 +4,7 @@ import { useStorage } from 'nitro/storage';
 import { fallbackSocialMeta, injectSocialMeta, renderSocialMetaHtml, resolveSocialMeta } from '../../app/api/utils/meta/socialMeta';
 import { normaliseSocialPreviewPath, resolveSocialPreview, staticSocialPreview } from '../../app/api/utils/meta/socialPreview';
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
+import { gatewayAuthority } from '../../app/api/utils/deployment/environmentGateway';
 
 // The SPA shell for every non-API, non-static path. Nitro compiles this route
 // as MIDDLEWARE ahead of its built-in SPA renderer (rootDir/index.html), and
@@ -88,6 +89,12 @@ export default defineHandler(async (event) => {
 	// is best-effort: a data-plane hiccup must never take down page serving.
 	let body = html;
 	try {
+		// Followers keep their branch's shell and assets. Dynamic API/card/SEO
+		// reads go to the gateway; shell metadata remains safely generic here.
+		const authority = await gatewayAuthority.current();
+		if (authority && !authority.owner) return new Response(injectSocialMeta(html, renderSocialMetaHtml(fallbackSocialMeta(event.req))), {
+			headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-TT-Shell': 'social-meta', 'Cache-Control': 'private, no-store' }
+		});
 		// same endpoint context as the API catch-all, so shell meta and the SPA's
 		// own follow-up API reads resolve against the same data plane
 		const mongoEndpoint = await getRequestMongoEndpoint(event.req);
