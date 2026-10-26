@@ -33,6 +33,7 @@ import { useApi } from '~/hooks/useApi';
 import { useTtTheme } from '~/hooks/useTtTheme';
 import { SETTINGS_TABS, settingsTabHref, type SettingsTab } from './settingsTabs';
 import { DesktopSettings } from './DesktopSettings';
+import { CustomDrawerItems } from '~/components/Nav/Drawer/CustomDrawerItems';
 import { DrawerItemSettings } from './DrawerItemSettings';
 import { ThingsSettings } from './ThingsSettings';
 import { ProfileMediaField, type ProfileMediaFieldHandle } from '~/components/Profile/ProfileMediaField';
@@ -769,6 +770,9 @@ export const SettingsContent = ({
 									</Button>
 								</SettingRow>
 							</Flex>
+						</SettingsSection>
+						<SettingsSection eyebrow="Custom drawer items" description="Add links and Things to your drawer.">
+							<CustomDrawerItems settings />
 						</SettingsSection>
 						<SettingsSection eyebrow="Close menu after click" description="Choose which navigation items close the drawer on desktop and mobile.">
 							<DrawerItemSettings />

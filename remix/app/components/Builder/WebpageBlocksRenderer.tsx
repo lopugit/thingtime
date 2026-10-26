@@ -1025,7 +1025,7 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
    {editing && <small style={{ color: 'var(--tt-muted)' }}>{block.condition?.negate ? 'Otherwise' : 'When'} {String(block.condition?.arg || '')}</small>}{children}
   </div>;
  }
- if (block.type === 'collection' && attributes.transparent === true) return <ComponentCollection {...attributes} renderItem={() => children} />;
+ if (block.type === 'collection' && attributes.transparent === true && !editing) return <ComponentCollection {...attributes} renderItem={() => children} />;
  if (block.type === 'collection') return <div {...editorProps}>
   {editing ? <><small>List template · {String(attributes.label || 'Records')}</small>{children}</> :
    <ComponentCollection {...attributes} renderItem={() => children} />}
