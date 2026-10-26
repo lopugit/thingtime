@@ -27,9 +27,10 @@ The task branch started at that exact SHA with no tracked modifications or
 unmerged paths. Existing generated, untracked Graphify snapshots were preserved.
 The dirty primary checkout is not used for edits.
 
-The protected deployment publisher requires a separate change on its canonical
-controller branch. Future ordinary PR previews must use a controlled master
-preview build, never whichever arbitrary PR deployed most recently. A preview
+The protected deployment publisher was updated separately on its canonical
+controller branch and merged as PR #1232 at `9ff9d033`. Future ordinary PR
+previews must use a controlled master preview build, never whichever arbitrary
+PR deployed most recently. A preview
 master must be compiled with preview target settings; production-built client
 output must not be relabelled as a preview build. Ordinary PR deployments retain
 their existing custom develop credential target with explicit logical preview
