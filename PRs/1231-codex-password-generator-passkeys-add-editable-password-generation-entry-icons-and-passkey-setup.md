@@ -31,7 +31,8 @@ require anonymous CORS; encrypted uploads remain available when a site blocks it
 account/session boundaries, encryption purposes and retry identities are retained.
 
 Integrated freshly fetched `origin/main` at
-`79b46b081aaefa3dcb82c9f85a2926b9f0720436` inside the task worktree. Shared
+`21ac2cba8739a5ed578b46dee4bb8e4109113cff` inside the task worktree after the
+shared drawer update, following the earlier `79b46b081` integration. Shared
 Theme Studio/select contracts from main are retained alongside passwords 1.3.0.
 The unrelated primary checkout was not modified.
 
@@ -79,3 +80,18 @@ cannot limit its 547 unstamped historical Markdown files to these changed
 documents; the bounded structural refresh does not claim semantic indexing of
 changed documentation. The available portable report, manifest and HTML remain
 part of the refresh.
+
+## CI regression correction
+
+Exact-head Web CI found one owned failure in the builtin schema projection
+pin: adding optional `icon` to the password schema had not updated its expected
+field list. The fixture now includes the field and independently checks that
+its typed URL/attachment alternatives remain optional through the canonical
+schema-Thing write gate. The underlying password URL validation and vault
+encryption boundaries are unchanged. This failure was a feature regression,
+separate from the GitHub installation API rate limit seen in controller jobs.
+
+Validation after the correction and current-main integration: `test:schemas`
+passes 276/276, changed-file lint passes, and the complete canonical `test:unit`
+gate passes with a scrubbed environment. Exact-head required CI is verified
+separately after publishing this correction.

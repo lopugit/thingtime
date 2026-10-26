@@ -4100,6 +4100,15 @@ email whose link points at the attacker.
 
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
+- [ ] The inline **➕ Add +** row is the final navigation item after contextual,
+      editor and custom items, with More expanded or collapsed and zero or many
+      custom links. Compare its computed height, font, emoji size, padding and
+      hover/focus treatment with an ordinary top-level row on desktop and 390px.
+      Normal navigation must not show a layout-editing toolbar. In Settings →
+      Appearance, expand **Drawer menu template** and edit the actual menu's
+      separate icon, label and repeated-link fields; save, reload and compare
+      the private webpage Thing with the rendered drawer. An existing device
+      layout must survive migration; another account must not inherit it.
 - [ ] Custom drawer items: use **Add +** to save an emoji, title, hover tooltip
       and relative or absolute HTTP(S) link. Check URL validation, cancel,
       keyboard focus/Escape, navigation, edit/remove from Settings → Appearance →
@@ -10175,6 +10184,10 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 
 ## Password manager and native AutoFill
+
+- [ ] When adding optional password fields, run `pnpm --dir remix run test:schemas`
+  as well as the password tests. Keep the builtin schema projection pin current;
+  verify icon source choices and optional fields survive the schema write gate.
 
 - [ ] Generator: select each preset, adjust length/classes/symbols/exclusions,
   and target a second password field. Invalid settings must explain the issue;
