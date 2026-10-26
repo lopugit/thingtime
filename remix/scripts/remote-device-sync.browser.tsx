@@ -20,7 +20,7 @@ let rows: any[] = JSON.parse(localStorage.getItem('remote-sync-fixture-rows') ||
  { id: 'other-owner-sync', thingtime: ['file-sync'], author: { id: 'another-owner' }, acl: ['tt:user'], updatedAt: '2026-10-23T00:00:00.000Z', crystal: { ...configuration, name: 'Other owner private sync' } }
 ];
 const initialStatus = (): RemoteSyncStatus => ({ version: 1, deviceId, observedAt: new Date().toISOString(),
- roots: [{ id: 'local-documents', name: 'Documents on Mac', sourcePath: '/Users/example/Documents on Mac' }], rootsReady: true, capabilities: { platform: 'macos', fileAccessVersion: '1.15.0' }, jobs: [], task: null });
+ roots: [{ id: 'local-documents', name: 'Documents on Mac', sourcePath: '/Users/example/Documents on Mac' }], rootsReady: true, capabilities: { platform: 'macos', fileAccessVersion: '1.15.0', fileTrashVersion: '1.2.0', fileVersionsVersion: '1.0.0', fileStagingVersion: '1.0.0', filePublicationVersion: '1.2.0' }, jobs: [], task: null });
 let status = initialStatus(), offline = true, failure: string | null = null, writes = 0, holdNextStart = false;
 let priorities = { revision: 0, paths: [] as string[] };
 const commands: any[] = [], replies = new Map<string, any>();

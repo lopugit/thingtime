@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { findBlock } from '../Builder/webpageBlocks';
 import { settingsDocumentBlocks } from '../Settings/settingsDocument';
-import { readSpeedTrackers, speedTrackerBlocks, transferSpeedBlocks, updateSpeedTracker, MAX_SPEED_TRACKERS } from './transferSpeedBlocks';
+import { readSpeedTrackers, speedDraftBlocks, speedTrackerBlocks, transferSpeedBlocks, updateSpeedTracker, MAX_SPEED_TRACKERS } from './transferSpeedBlocks';
 
 test('speed preferences are independently editable blocks without runtime values', () => {
  const blocks = settingsDocumentBlocks(transferSpeedBlocks);
@@ -27,4 +27,15 @@ test('invalid authored tracker windows and units never reach arithmetic; list wo
  }
  const wrong = structuredClone(transferSpeedBlocks); findBlock(wrong, 'tracker-default-unit')!.props!.value = 'Physical IOPS';
  assert.deepEqual(readSpeedTrackers(wrong), []);
+});
+
+
+test('raw speed draft fields preserve incomplete values without changing applied tracker preferences', () => {
+ const fields = { 'tracker-default': { window: '0', time: 'hours', unit: 'Gbps' } };
+ const next = speedDraftBlocks(transferSpeedBlocks, fields);
+ assert.equal(findBlock(next, 'tracker-default-window')?.props?.value, '0');
+ assert.equal(findBlock(next, 'tracker-default-time')?.props?.value, 'hours');
+ assert.equal(findBlock(next, 'tracker-default-unit')?.props?.value, 'Gbps');
+ assert.deepEqual(findBlock(next, 'tracker-default-window')?.props?.['data-tt-action-inputs'], { operation: 'edit', id: 'tracker-default', field: 'window' });
+ assert.equal(findBlock(transferSpeedBlocks, 'tracker-default-window')?.props?.value, 10);
 });

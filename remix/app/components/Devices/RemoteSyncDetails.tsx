@@ -1,3 +1,4 @@
+import type { TransferSpeedDraftState } from './TransferSpeedTrackers';
 import React from 'react';
 import type { SavedFileSyncConfiguration } from '~/fileSync/configuredPlan';
 import type { RemoteSyncClient } from '~/fileSync/remoteSyncClient.client';
@@ -23,14 +24,14 @@ const metadataBlocks: WebpageBlock[] = [{ id: 'remote-details-metadata', type: '
 ] }];
 
 /** Shared viewers, with their journal operations executed by the paired app. */
-export function RemoteSyncDetails({ saved, scope, generation, status, command, draftState }: {
-	saved: SavedFileSyncConfiguration; scope: SyncScope; generation: number; status: RemoteSyncStatus | null; command: RemoteSyncClient['send']; draftState?: UploadPriorityDraftState;
+export function RemoteSyncDetails({ saved, scope, generation, status, command, draftState, speedDraftState }: {
+	saved: SavedFileSyncConfiguration; scope: SyncScope; generation: number; status: RemoteSyncStatus | null; command: RemoteSyncClient['send']; draftState?: UploadPriorityDraftState; speedDraftState?: TransferSpeedDraftState;
 }) {
 	const scopeKey = `${syncScopeKey(scope)}:${generation}`;
-	return <RemoteDetailsSession draftState={draftState} key={scopeKey} saved={saved} scope={scope} generation={generation} status={status} command={command} scopeKey={scopeKey} />;
+	return <RemoteDetailsSession speedDraftState={speedDraftState} draftState={draftState} key={scopeKey} saved={saved} scope={scope} generation={generation} status={status} command={command} scopeKey={scopeKey} />;
 }
-function RemoteDetailsSession({ saved, scope, generation, status, command, scopeKey, draftState }: {
-	saved: SavedFileSyncConfiguration; scope: SyncScope; generation: number; status: RemoteSyncStatus | null; command: RemoteSyncClient['send']; draftState?: UploadPriorityDraftState; scopeKey: string;
+function RemoteDetailsSession({ saved, scope, generation, status, command, scopeKey, draftState, speedDraftState }: {
+	saved: SavedFileSyncConfiguration; scope: SyncScope; generation: number; status: RemoteSyncStatus | null; command: RemoteSyncClient['send']; draftState?: UploadPriorityDraftState; speedDraftState?: TransferSpeedDraftState; scopeKey: string;
 }) {
 	const [metadata, setMetadata] = React.useState<Details>({}), [error, setError] = React.useState(''), [busy, setBusy] = React.useState(false);
 	const [refresh, setRefresh] = React.useState(0);
@@ -85,7 +86,7 @@ function RemoteDetailsSession({ saved, scope, generation, status, command, scope
 				<WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} />
 			</TransientBlockHost>}
 		</SettingsDocumentHost>
-		<SyncProgressViewer scopeKey={scopeKey} descriptor={progressDescriptor} progress={task?.progress} currentScope={currentScope}
+		<SyncProgressViewer speedDraftState={speedDraftState} scopeKey={scopeKey} descriptor={progressDescriptor} progress={task?.progress} currentScope={currentScope}
 			status={task?.status ?? 'paused'} message={task?.progress.message} readPage={readPage}
 			uploadPriorities={saved.configuration.mode === 'download' ? undefined : { draftState, scope: binding, excludedPaths: saved.configuration.excludedPaths, ignoreRules: saved.configuration.ignoreRules, transport: priorityTransport }} />
 		{inventoryDescriptor ? <BackupCoverageViewer scopeKey={scopeKey} descriptor={inventoryDescriptor} currentScope={currentScope} read={coverageRead} /> : null}

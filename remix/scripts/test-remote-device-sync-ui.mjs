@@ -116,6 +116,7 @@ try {
    await page.waitForFunction(() => window.remoteSyncFixture.state().status.task?.active === false, undefined, { timeout: 10_000 });
    state = await page.evaluate(() => window.remoteSyncFixture.state());
    assert.equal(state.status.jobs[0].state, 'paused');
+   await page.locator('article').filter({ has: page.getByRole('heading', { name: `${label} browser backup`, exact: true }) }).getByText('Paused', { exact: true }).waitFor();
    assert.equal(state.pendingStartRequests.length, 1, 'Pause must finish before the original Start acknowledgement');
    assert.ok(Date.now() - pauseAt < 10_000, 'Pause must not wait for the two-minute Start deadline');
    await page.screenshot({ path: join(evidence, `${label}-paused-before-start-ack.png`), fullPage: true });
@@ -130,7 +131,37 @@ try {
    await page.getByRole('button', { name: 'Pause sync', exact: true }).first().click();
    await page.waitForFunction(() => window.remoteSyncFixture.state().status.task?.active === false);
    await page.screenshot({ path: join(evidence, `${label}-remote-paused.png`), fullPage: true });
+   const recovery = page.locator('summary').filter({ hasText: /^Recover device files$/ }).locator('..');
+   await recovery.locator('summary').first().click();
+   await recovery.getByRole('combobox', { name: 'Device folder', exact: true }).selectOption('local-documents');
+   await recovery.getByText('Show replaced versions', { exact: true }).click();
+   await recovery.locator('summary').first().click(); await recovery.locator('summary').first().click();
+   assert.equal(await recovery.getByRole('combobox', { name: 'Device folder', exact: true }).inputValue(), 'local-documents');
+   assert.equal(await recovery.getByRole('checkbox', { name: 'Show replaced versions', exact: true }).isChecked(), true);
+   await recovery.locator('summary').first().click();
    await page.getByRole('button', { name: 'Progress, coverage & priorities', exact: true }).click();
+   const firstSpeed = page.getByRole('group', { name: 'Transfer speed tracker', exact: true }).first();
+   await firstSpeed.getByRole('spinbutton', { name: 'Averaging timeframe', exact: true }).fill('2.5');
+   await firstSpeed.getByRole('combobox', { name: 'Averaging time unit', exact: true }).selectOption('minutes');
+   await firstSpeed.getByRole('combobox', { name: 'Transfer rate unit', exact: true }).selectOption('Files/ps');
+   await firstSpeed.getByRole('button', { name: 'Apply tracker', exact: true }).click();
+   await page.getByRole('button', { name: 'Add tracker', exact: true }).click();
+   const secondSpeed = page.getByRole('group', { name: 'Transfer speed tracker', exact: true }).nth(1);
+   await secondSpeed.getByRole('spinbutton', { name: 'Averaging timeframe', exact: true }).fill('0');
+   await secondSpeed.getByRole('combobox', { name: 'Averaging time unit', exact: true }).selectOption('hours');
+   await secondSpeed.getByRole('combobox', { name: 'Transfer rate unit', exact: true }).selectOption('Gbps');
+   await secondSpeed.getByRole('button', { name: 'Apply tracker', exact: true }).click();
+   await page.locator('summary').filter({ hasText: '· Progress, coverage & priorities' }).click();
+   assert.equal(await page.getByRole('group', { name: 'Transfer speed tracker', exact: true }).count(), 0, 'speed timers and reads unmount with the closed details session');
+   await page.getByRole('button', { name: 'Progress, coverage & priorities', exact: true }).click();
+   assert.equal(await page.getByRole('group', { name: 'Transfer speed tracker', exact: true }).count(), 2, 'unsaved Add tracker layout survives collapse');
+   assert.equal(await firstSpeed.getByRole('spinbutton', { name: 'Averaging timeframe', exact: true }).inputValue(), '2.5');
+   assert.equal(await firstSpeed.getByRole('combobox', { name: 'Averaging time unit', exact: true }).inputValue(), 'minutes');
+   assert.equal(await firstSpeed.getByRole('combobox', { name: 'Transfer rate unit', exact: true }).inputValue(), 'Files/ps');
+   assert.equal(await secondSpeed.getByRole('spinbutton', { name: 'Averaging timeframe', exact: true }).inputValue(), '0');
+   assert.equal(await secondSpeed.getByRole('combobox', { name: 'Averaging time unit', exact: true }).inputValue(), 'hours');
+   assert.equal(await secondSpeed.getByRole('combobox', { name: 'Transfer rate unit', exact: true }).inputValue(), 'Gbps');
+   await page.getByText('Choose an averaging timeframe from 1 second to 24 hours and a supported rate unit.', { exact: true }).waitFor();
    const priorityPaths = page.getByRole('textbox', { name: 'Priority paths', exact: true });
    await priorityPaths.fill('Important\nPhotos/Family');
    await page.locator('summary').filter({ hasText: '· Progress, coverage & priorities' }).click();
@@ -202,7 +233,7 @@ try {
    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
    results.push({ viewport: label, browserWithoutNativeBridge: true, offlineSettingsSave: true, savedSettingsReload: true,
     collapsedGenericCards: true, independentEditableCardFields: true, invalidResourceDraftRetained: true, siblingDraftRetained: true, privateDeviceScope: true, noTransferOnOpen: true, rejectedCommandVisible: true, remoteStart: true, remotePause: true, pauseBeforeStartAcknowledgement: true,
-    remoteAutomaticInterval: true, remotePriorities: true, unsavedPriorityDraftRetained: true, noBrowserSyncJournal: true, conflictPreservesDraft: true,
+    remoteAutomaticInterval: true, remotePriorities: true, unsavedPriorityDraftRetained: true, rawSpeedDraftRetained: true, unsavedSpeedLayoutRetained: true, recoverySelectionRetained: true, noBrowserSyncJournal: true, conflictPreservesDraft: true,
     newConnectionCreatesRealThingHierarchy: true, existingDestinationPreserved: true, remoteFolderSelection: true, newConnectionVerifiesRoots: true, noOverflow: true });
   } catch (error) {
    await page.screenshot({ path: join(evidence, `${label}-failure.png`), fullPage: true }).catch(() => {});

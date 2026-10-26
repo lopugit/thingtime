@@ -1,3 +1,4 @@
+import type { TransferSpeedDraftState } from './TransferSpeedTrackers';
 import { SyncEditorPlacement } from './SyncEditorPlacement';
 import type { UploadPriorityDraftState } from './SyncUploadPriorities';
 import { supportsNativeSourcePaths, validNativeSourcePath } from '~/fileSync/mobileFolders.client';
@@ -77,6 +78,7 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const editorPrefix = React.useId();
 	const resourceValidity = useRef(new Map<string, boolean>());
+	const speedDrafts = useRef(new Map<string, TransferSpeedDraftState>());
 	const priorityDrafts = useRef(new Map<string, UploadPriorityDraftState>());
 	const [storageError, setStorageError] = useState(initial.error), [draftReady, setDraftReady] = useState(!initial.error);
 	const [resourceValid, setResourceValid] = useState(true), [conflict, setConflict] = useState<ConfigurationConflict | null>(null);
@@ -243,6 +245,7 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 	};
 	const review = status?.task?.review;
 	const reviewSaved = connections.find(saved => saved.id === status?.task?.connectionId);
+	if (detailsId && !speedDrafts.current.has(detailsId)) speedDrafts.current.set(detailsId, {});
 	if (detailsId && !priorityDrafts.current.has(detailsId)) priorityDrafts.current.set(detailsId, {});
 	const detailsSaved = connections.find(saved => saved.id === detailsId);
 	const reviewAction = (operation: Extract<RemoteSyncCommand, { action: 'review' }>['operation'], extra: Record<string, unknown> = {}) => run(async () => {
@@ -260,7 +263,7 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 				const progress = task?.progress, active = !!task?.active;
 				const rates = task?.transferRates;
 				const rate = (reading: SpeedReading) => reading.status === 'known' ? `${reading.value.toFixed(2)} ${reading.unit}` : reading.status === 'paused' ? 'paused' : 'unavailable';
-				return { editorSlotId: `${editorPrefix}-${saved.id}`, editorHidden: selectedId !== saved.id, toggleGlyph: selectedId === saved.id ? '⌃' : '⌄', summaryStatus: saved.configuration.paused ? 'Paused' : !online ? 'Device offline' : active ? 'Running' : 'Ready', quickStats: progress ? `${progress.confirmed} / ${progress.total} confirmed` : 'No transfer statistics yet', expanded: selectedId === saved.id, expandLabel: selectedId === saved.id ? 'Collapse folder' : 'Expand folder', path: (sourcePathsReady && supportsNativeSourcePaths(status?.capabilities) ? roots.find(root => root.id === saved.configuration.localRootId)?.sourcePath : undefined) || 'Folder path unavailable', id: saved.id, name: saved.configuration.name, href: `/things?${new URLSearchParams({ folder: saved.configuration.remoteFolderId })}`,
+				return { editorSlotId: `${editorPrefix}-${saved.id}`, editorHidden: selectedId !== saved.id, toggleGlyph: selectedId === saved.id ? '⌃' : '⌄', summaryStatus: saved.configuration.paused || task?.status === 'paused' || job?.state === 'paused' ? 'Paused' : !online ? 'Device offline' : !roots.some(root => root.id === saved.configuration.localRootId) ? 'Folder access missing' : active ? 'Running' : 'No active transfer', quickStats: progress ? `${progress.confirmed} / ${progress.total} confirmed` : 'No transfer statistics yet', expanded: selectedId === saved.id, expandLabel: selectedId === saved.id ? 'Collapse folder' : 'Expand folder', path: (sourcePathsReady && supportsNativeSourcePaths(status?.capabilities) ? roots.find(root => root.id === saved.configuration.localRootId)?.sourcePath : undefined) || 'Folder path unavailable', id: saved.id, name: saved.configuration.name, href: `/things?${new URLSearchParams({ folder: saved.configuration.remoteFolderId })}`,
 					mode: ({ 'two-way': 'Two-way sync', upload: 'Device to cloud', download: 'Cloud to device', backup: 'Backup to cloud · keep deleted files' })[saved.configuration.mode],
 					status: saved.configuration.paused ? 'Saved configuration: paused' : !online ? 'Device unavailable · settings remain editable' : task?.stopping ? 'Pausing…' : task?.waiting ? 'Waiting for this device’s conditions' : active ? 'Transfer in progress' : task?.status === 'error' ? 'Needs attention' : task?.status === 'complete' ? 'Last transfer finished' : job?.state === 'paused' ? 'Sync is paused' : 'Ready to sync',
 					progress: progress ? progress.message || `${progress.stage} · ${progress.confirmed} of ${progress.total} operations confirmed${progress.path ? ` · ${progress.path}` : ''}` : 'No transfer statistics yet',
@@ -288,7 +291,7 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 			interval: ({ inputs, value }) => { const saved = selected(inputs.id), interval = Number(value); if (selectedId !== saved.id) return; if (!SYNC_INTERVALS.some(ms => ms === interval)) throw Error('Choose a supported interval.'); setIntervals(previous => ({ ...previous, [saved.id]: interval })); }
 		}} />
 		{active && detailsSaved && online && <SettingsSection eyebrow={`${detailsSaved.configuration.name} · Progress, coverage & priorities`} open onToggle={open => { if (!open) setDetailsId(null); }}>
-			<RemoteSyncDetails draftState={priorityDrafts.current.get(detailsSaved.id)} saved={detailsSaved} scope={{ ...scope, rootId: detailsSaved.id }} generation={generation} status={status} command={client.send} />
+			<RemoteSyncDetails speedDraftState={speedDrafts.current.get(detailsSaved.id)} draftState={priorityDrafts.current.get(detailsSaved.id)} saved={detailsSaved} scope={{ ...scope, rootId: detailsSaved.id }} generation={generation} status={status} command={client.send} />
 		</SettingsSection>}
 		{[...retainedDrafts.current.values()].filter(row => !connections.some(saved => saved.id === row.id)).map(row => <SettingsSection key={`draft-${row.id}`} eyebrow={row.configuration.name || 'New folder connection'} description="Unsaved connection settings" summary="Draft · no transfer started" open={selectedId === row.id} onToggle={expanded => { if (expanded) { setSelectedId(row.id); setDraft(row); } else if (selectedId === row.id) setSelectedId(null); }}><Box>Continue editing this draft below.</Box></SettingsSection>)}
 		{[...retainedDrafts.current.values()].map(draft => <SyncEditorPlacement key={draft.id} targetId={connections.some(saved => saved.id === draft.id) ? `${editorPrefix}-${draft.id}` : undefined}><Box hidden={selectedId !== draft.id} marginTop={4} padding={3} border="1px solid var(--tt-border, #ddd)" borderRadius="12px" minWidth={0}>
@@ -309,7 +312,7 @@ function RemoteConnections({ scope, generation, active }: { scope: Configuration
 				resolve: () => reviewAction('finish', { resolution: 'resolve', revision: review.view.page?.progress.revision }), retain: () => reviewAction('finish', { resolution: 'retain', revision: review.view.page?.progress.revision }), cancel: () => reviewAction('cancel'),
 				history: ({ inputs }) => { const row = review.view.page?.rows.find(row => row.conflict.path === inputs.path && row.revision === inputs.revision); if (row?.conflict.remote?.kind === 'file') openThingHistory(row.conflict.remote.id, ['file']); }
 			}} />}
-		{supportsMobileTrashRecovery(status?.capabilities) && <SyncDetailsSection title="Recover device files"><NativeFileRecovery roots={roots} busy={busy || !online}
+		{supportsMobileTrashRecovery(status?.capabilities) && <SyncDetailsSection title="Recover device files" retainChildren><NativeFileRecovery roots={roots} busy={busy || !online}
 			versionsScopeKey={supportsNativeFileVersions(status?.capabilities) ? scopeKey : undefined}
 			perform={work => run(async () => { await work(async request => send<FolderResult>(validateRemoteSyncCommand({ action: 'folders', request }))); })} /></SyncDetailsSection>}
 	</Box>;

@@ -1,3 +1,5 @@
+import { syncFolderActivityLabel } from './syncFolderCardBlocks';
+import type { TransferSpeedDraftState } from './TransferSpeedTrackers';
 import { SyncEditorPlacement } from './SyncEditorPlacement';
 import type { UploadPriorityDraftState } from './SyncUploadPriorities';
 import { supportsNativeSourcePaths, validNativeSourcePath } from '~/fileSync/mobileFolders.client';
@@ -147,6 +149,7 @@ function Connections({
 	const editorPrefix = useId();
 	const resourceValidity = useRef(new Map<string, boolean>());
 	const [intervalDrafts, setIntervalDrafts] = useState<Record<string, number>>({});
+	const speedDrafts = useRef(new Map<string, TransferSpeedDraftState>());
 	const priorityDrafts = useRef(new Map<string, UploadPriorityDraftState>());
 	const [resourceDraftValid, setResourceDraftValid] = useState(true);
 	const [ready, setReady] = useState(!initial.error),
@@ -638,7 +641,7 @@ function Connections({
 				{' '}Downloads and two-way sync require native folder approval and recoverable device Trash for deletion propagation. Conflicting changes preserve both copies for review.
 			</Text>
 			{scope.dataPlane === 'home' && supportsMobileTrashRecovery(capabilities) && (
-				<SyncDetailsSection title="Recover device files"><NativeFileRecovery
+				<SyncDetailsSection title="Recover device files" retainChildren><NativeFileRecovery
 					roots={roots.filter((root) => supportsMobileFolderPublication(root, capabilities))}
 					busy={busy}
 					versionsScopeKey={supportsNativeFileVersions(capabilities) ? key : undefined}
@@ -667,6 +670,7 @@ function Connections({
                     ? readStampedCache<SyncInventoryDescriptor>('tt:sync-inventory:' + syncScopeKey(progressScope)) ?? undefined : undefined);
 				const downloading = saved.configuration.mode === 'download';
 				const twoWay = saved.configuration.mode === 'two-way';
+				if (!speedDrafts.current.has(saved.id)) speedDrafts.current.set(saved.id, {});
 				if (!priorityDrafts.current.has(saved.id)) priorityDrafts.current.set(saved.id, {});
 				const nativeRoot = roots.find((root) => root.id === saved.configuration.localRootId);
 				let sourceAllowed = true;
@@ -694,7 +698,7 @@ function Connections({
 					<SyncFolderCard key={saved.id} title={saved.configuration.name} editorSlotId={`${editorPrefix}-${saved.id}`} scopeKey={`${key}:${generation}:${saved.id}`} accountTransport={reviewTransport}
 						path={(supportsNativeSourcePaths(capabilities) && validNativeSourcePath(nativeRoot?.sourcePath) && nativeRoot?.sourceKind !== 'photos' ? nativeRoot.sourcePath : undefined) || (nativeRoot ? 'Folder path unavailable' : 'Folder access missing')}
 						description={saved.configuration.mode === 'backup' ? 'Backup to cloud · keep deleted files' : twoWay ? 'Two-way sync' : downloading ? 'Cloud to device' : 'Device to cloud'}
-						stats={`${saved.configuration.paused ? 'Paused' : running ? 'Transfer in progress' : 'Ready'}${progress ? ` · ${progress.confirmed} of ${progress.total} operations confirmed` : ' · No transfer statistics yet'}`}
+						stats={`${syncFolderActivityLabel({ paused: saved.configuration.paused, rootsReady, hasRoot: !!nativeRoot, taskPaused: task?.status === 'paused' && !task.waiting, running })}${progress ? ` · ${progress.confirmed} of ${progress.total} operations confirmed` : ' · No transfer statistics yet'}`}
 						expanded={selectedId === saved.id} onToggle={expanded => { if (expanded) { if (!draft?.pending) { setSelectedId(saved.id); if (retainedDrafts.current.has(saved.id)) open(saved.id); } } else if (selectedId === saved.id) setSelectedId(null); }}>
 					<Flex align="center" gap={2} wrap="wrap">
 						<Box flex={{ base: '1 1 100%', sm: 1 }} minWidth={0} overflowWrap="anywhere">
@@ -787,7 +791,7 @@ function Connections({
 								disabled={!allowed || retainedDrafts.current.has(saved.id) || !ready} accountTransport={reviewTransport} intervalDraft={intervalDrafts[saved.id]} onIntervalDraftChange={value => setIntervalDrafts(previous => ({ ...previous, [saved.id]: value }))} /></SyncDetailsSection>
 						</Box>}
 						{active && selectedId === saved.id && (host || capabilities?.platform === 'ios') && (progress || progressDescriptor) && <Box width="100%" minW={0}>
-							<SyncDetailsSection title="Progress, speed and priorities"><SyncProgressViewer scopeKey={`${key}:${generation}:${saved.id}`} descriptor={progressDescriptor}
+							<SyncDetailsSection title="Progress, speed and priorities"><SyncProgressViewer speedDraftState={speedDrafts.current.get(saved.id)} scopeKey={`${key}:${generation}:${saved.id}`} descriptor={progressDescriptor}
 								uploadPriorities={!downloading ? { draftState: priorityDrafts.current.get(saved.id), scope: progressScope, excludedPaths: saved.configuration.excludedPaths, ignoreRules: saved.configuration.ignoreRules } : undefined}
 								series={task?.transferSeries ?? (transferSession.current?.id === saved.id ? transferSession.current.session.series : undefined)}
 								progress={progress ?? undefined} status={task?.status ?? (running ? 'running' : progress?.stage === 'complete' ? 'complete' : progress?.message && progress.stage !== 'retained' ? 'error' : 'paused')}

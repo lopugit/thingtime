@@ -239,7 +239,10 @@ separately from the historical browser/compiled-server harness results above.
   Only the selected folder exposes its editor. Optional viewers start closed.
 - Drafts survive switching folders, collapsing cards and closing the parent
   section, including temporarily invalid inputs, automatic intervals and
-  unsaved upload priorities. Read-heavy progress viewers unmount while hidden.
+  unsaved upload priorities. Speed-tracker field values, unsaved tracker layouts
+  and recovery selections also survive closing their sections. Read-heavy
+  progress viewers and speed timers unmount while hidden. Missing folder grants
+  and paused observations are not presented as ready to transfer.
 - Mac file-access 1.15.0 reports the current absolute location of the exact
   owner-authorized bookmark. It grants no parent-directory access. Remote
   projection additionally requires sync-control 1.1.0; ordinary controls retain
@@ -259,3 +262,9 @@ separately from the historical browser/compiled-server harness results above.
   recorded in the PR description and the existing HTML tracker after the build.
   Earlier installed transfer/hash and active window-close acceptance remains
   incomplete unless separately supported by new evidence there.
+- Installed source `686dc0beb` verified the actual authorized source location
+  and successfully saved an ordinary new connection with a matching private
+  cloud hierarchy. The existing Home source grant remained absent; no Home
+  settings were edited. A final follow-up preserves unsaved speed/recovery
+  fields and corrects compact pause summaries; its seven focused tests and
+  desktop/390px browser regressions passed before the final signed build.

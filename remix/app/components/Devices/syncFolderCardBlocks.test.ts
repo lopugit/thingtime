@@ -3,7 +3,7 @@ import test from 'node:test';
 import { findBlock } from '../Builder/webpageBlocks';
 import { settingsDocumentBlocks } from '../Settings/settingsDocument';
 import { resolveBlockProps } from '../Builder/templateBlocks';
-import { syncFolderCardBlocks } from './syncFolderCardBlocks';
+import { syncFolderCardBlocks, syncFolderActivityLabel } from './syncFolderCardBlocks';
 import { remoteSyncBlocks, remoteSyncDisclosureBlocks } from './remoteSyncBlocks';
 
 test('generic folder summaries expose separate editable fields and a typed expansion control', () => {
@@ -27,4 +27,13 @@ test('saved legacy connection layouts gain a disclosure without dropping custom 
  assert.ok(findBlock(guarded, 'custom-saved-description'));
  assert.equal(findBlock(guarded, 'remote-sync-start-selection')?.condition?.arg, 'item.expanded');
  assert.equal(findBlock(original, 'remote-sync-expand'), null);
+});
+
+
+test('historical progress never labels a missing grant as ready', () => {
+ const state = { paused: false, rootsReady: true, hasRoot: false, taskPaused: false, running: false };
+ assert.equal(syncFolderActivityLabel(state), 'Folder access missing');
+ assert.equal(syncFolderActivityLabel({ ...state, hasRoot: true, taskPaused: true }), 'Paused');
+ assert.equal(syncFolderActivityLabel({ ...state, hasRoot: true }), 'No active transfer');
+ assert.equal(syncFolderActivityLabel({ ...state, rootsReady: false }), 'Checking folder access');
 });

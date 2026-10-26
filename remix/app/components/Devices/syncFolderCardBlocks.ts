@@ -14,3 +14,13 @@ export const syncFolderCardBlocks: WebpageBlock[] = [{ id: 'folder-card-summary'
  { id: 'folder-card-stats', type: 'element', tag: 'p', text: '{folder.stats}', props: { role: 'status' }, css: { 'font-size': '12px', color: 'var(--tt-muted, #71717a)' } }
  ] }
 ] }];
+
+
+/** Cached progress is historical evidence; it cannot establish runnable access. */
+export function syncFolderActivityLabel(state: { paused: boolean; rootsReady: boolean; hasRoot: boolean; taskPaused: boolean; running: boolean }): string {
+ if (state.paused) return 'Paused';
+ if (!state.rootsReady) return 'Checking folder access';
+ if (!state.hasRoot) return 'Folder access missing';
+ if (state.taskPaused) return 'Paused';
+ return state.running ? 'Transfer in progress' : 'No active transfer';
+}
