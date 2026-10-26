@@ -104,6 +104,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Pin the two private instruction-transfer schemas to empty public
+  projections and assert their protected CRUD classification. Repair the three
+  schema assertions found by Web CI; all 277 schema checks pass locally.
+  Verify private instruction legacy refusal through the authenticated browser
+  path; the isolated protocol check passes without changing cookie security.
+  [PR 1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
 - 2026-10-26: Make sealed instruction recovery linear in inventory and selected
   content instead of rescanning for every part; preserve exact-byte, owner and
   generation validation and refuse inflated counts before large allocations.

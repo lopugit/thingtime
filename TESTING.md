@@ -15532,7 +15532,20 @@ Local results do not establish current-head CI or deployed acceptance.
 
 ## Progress plan artifact links — 26 October 2026
 
+- [x] Run `npm --prefix remix run test:schemas` after registering protected
+  instruction-transfer kinds. Their pinned projections must remain empty,
+  schema validation must reach a fixed point, and generic CRUD protection
+  must cover both manifests and parts. Local result: 277 passed, no skips.
+
 - [x] Verify every remaining local link resolves to a tracked or staged artifact.
   Current render JSON/PNG links retain their content hash and viewport dimensions.
   Missing historical temporary evidence must be labeled unavailable, never
   presented as a working download or silently promoted to a newer verification.
+
+- In the isolated production bundle, verify private instruction reads through
+  the browser's same-origin authenticated request path, pinning actor and plane.
+  A raw test client's empty anonymous HTTP 200 is not an authenticated read.
+  After canonical multipart commit, require browser HTTP 413 with
+  `USE_INSTRUCTION_TRANSFER`; separately assert anonymous responses contain no
+  instructions. Keep this protocol regression independently runnable without
+  replacing the full native clipboard, undo/redo and cold-reload test.

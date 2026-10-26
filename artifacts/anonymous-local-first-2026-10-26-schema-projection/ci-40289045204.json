@@ -1,0 +1,28 @@
+{
+  "conclusion": "success",
+  "headSha": "8c690d2984b0cff8322c408625fe2c36488232f5",
+  "jobs": [
+    {
+      "name": "control-plane / Select one analysis owner",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "pr-handoff",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "name": "control-plane / Analyze (javascript-typescript)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "control-plane / Analyze (actions)",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "status": "completed",
+  "url": "https://github.com/lopugit/thingtime/actions/runs/40289045204"
+}

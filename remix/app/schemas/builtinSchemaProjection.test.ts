@@ -21,6 +21,8 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   file: ['name', 'trashed', 'content'],
   'password-manager-entry': ['title', 'passwordType', 'fields'],
   draft: [], // Private snapshots never enter the public schema projection.
+  'lopu-instruction-transfer': [], // Private manifests and receipts live in secure records.
+  'lopu-instruction-part': [], // Instruction text never enters the schema projection.
   "timeline-snapshot-part": [],
   "timeline-branch": ["name"],
   "timeline-branch-head": [],
@@ -138,6 +140,8 @@ test('all builtin schema kinds matches the pinned projection table', () => {
 });
 
 test('registered server-owned Things are protected from generic Thing CRUD', () => {
+	assert.ok(PROTECTED_THINGTIME.includes('lopu-instruction-transfer'));
+	assert.ok(PROTECTED_THINGTIME.includes('lopu-instruction-part'));
 	assert.ok(PROTECTED_THINGTIME.includes('timeline-event'));
 	assert.ok(PROTECTED_THINGTIME.includes('timeline-link'));
 	assert.ok(PROTECTED_THINGTIME.includes('timeline-note'));

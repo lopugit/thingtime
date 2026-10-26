@@ -4,10 +4,89 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
+import { INSTRUCTION_CHAIN_SEED, instructionChainDigest, splitInstructionParts } from '../lopu/instructionTransfer';
 
 const base = process.env.TT_LOCAL_INSTRUCTIONS_URL;
 const artifacts = process.env.TT_LOCAL_INSTRUCTIONS_ARTIFACTS;
 const playwrightPath = process.env.TT_SHARED_PLAYWRIGHT_PATH;
+
+// Keep protocol acceptance independently runnable when editor performance
+// fails first. This does not replace the full native clipboard test below.
+test('native legacy instruction reads refuse transferred records in both authenticated request paths', {
+ skip: !base || !artifacts || !playwrightPath, timeout: 120_000
+}, async t => {
+ assert.equal(new URL(base!).hostname, '127.0.0.1');
+ assert.ok(process.env.TT_RENDER_SESSION);
+ const health = await (await fetch(base + '/api/v1/health/nitro')).json();
+ assert.equal(health.testEnvironment?.mode, 'isolated-agent-test');
+ assert.equal(health.testEnvironment?.sessionId, process.env.TT_RENDER_SESSION);
+ const manifest = await (await fetch(base + '/.well-known/thingtime-capabilities.json')).json();
+ assert.equal(manifest.origin, base);
+ assert.ok(capabilitySatisfies(manifest.features?.['api.settings-lopu-prompt']?.version, '2.0.0'));
+ const { chromium } = await import(playwrightPath!);
+ const browser = await chromium.launch({ executablePath: process.env.TT_SHARED_CHROME_PATH, headless: true, chromiumSandbox: true });
+ t.after(() => browser.close());
+ const context = await browser.newContext(), guest = await browser.newContext();
+ const username = 'instruction-read-' + randomUUID().slice(0, 8);
+ const registered = await context.request.post(base + '/api/v1/auth/register', {
+  headers: { Origin: base! }, data: { username, email: username + '@example.test', password: randomUUID() + randomUUID() }
+ });
+ assert.equal(registered.status(), 200, 'Isolated synthetic registration failed.');
+ const ownerId = (await registered.json()).user.id;
+ const page = await context.newPage();
+ await page.goto(base + '/api/v1/health/nitro');
+ // Exercise the browser's authenticated same-origin path. The isolated
+ // production bundle keeps Secure cookies; the raw test client's loopback
+ // cookie behavior is not evidence of the browser's authenticated response.
+ const command = async (command: unknown) => {
+  const response = await page.evaluate(async ({ ownerId, command }) => {
+   const response = await fetch('/api/v1/settings/lopu-prompt', { method: 'POST', credentials: 'same-origin', redirect: 'error',
+    headers: { 'Content-Type': 'application/json', 'X-Thingtime-Expected-Actor': ownerId, 'X-Thingtime-Expected-Data-Plane': 'home' },
+    body: JSON.stringify({ operation: 'instruction-transfer', expectedOwnerId: ownerId, command }) });
+   return { status: response.status, body: await response.json() };
+  }, { ownerId, command });
+  if (response.status !== 200) {
+   const code = typeof response.body?.code === 'string' && /^[A-Z_]{1,80}$/.test(response.body.code) ? response.body.code : 'UNAVAILABLE';
+   await mkdir(artifacts!, { recursive: true });
+   await writeFile(resolve(artifacts!, 'legacy-protocol-command-refusal.json'), JSON.stringify({ status: response.status, code }, null, 2));
+  }
+  assert.equal(response.status, 200, 'Isolated instruction command failed.');
+  return response.body;
+ };
+ const initial = await command({ action: 'snapshot' });
+ assert.deepEqual(initial.personal, { revision: null, instructions: [] });
+ const parts = [...splitInstructionParts([{ id: randomUUID(), text: 'Exact 🌟\n'.repeat(12_000), enabled: true }])];
+ let digest = INSTRUCTION_CHAIN_SEED;
+ for (const part of parts) digest = await instructionChainDigest(digest, part);
+ const attemptId = randomUUID();
+ await command({ action: 'begin', attemptId, expectedRevision: null, partCount: parts.length, digest });
+ for (let offset = 0; offset < parts.length; offset++) await command({ action: 'parts', attemptId, offset, parts: [parts[offset]] });
+ const receipt = await command({ action: 'commit', attemptId });
+ assert.equal(receipt.transfer.status, 'committed');
+ const snapshot = await command({ action: 'snapshot' });
+ assert.equal(snapshot.personal.reference.attemptId, attemptId);
+ assert.equal(snapshot.personal.reference.digest, digest);
+ const direct = await context.request.get(base + '/api/v1/settings/lopu-prompt');
+ const body = await direct.json();
+ const scoped = await page.evaluate(async ownerId => {
+  const response = await fetch('/api/v1/settings/lopu-prompt', { credentials: 'same-origin', cache: 'no-store', redirect: 'error',
+   headers: { 'X-Thingtime-Expected-Actor': ownerId, 'X-Thingtime-Expected-Data-Plane': 'home' } });
+  const body = await response.json();
+  return { status: response.status, code: body?.code, hasPersonal: !!body?.personal, rowCount: body?.personal?.instructions?.length };
+ }, ownerId);
+ const publicRead = await guest.request.get(base + '/api/v1/settings/lopu-prompt');
+ const publicBody = await publicRead.json();
+ await mkdir(artifacts!, { recursive: true });
+ await writeFile(resolve(artifacts!, 'legacy-protocol-result.json'), JSON.stringify({
+  direct: { status: direct.status(), code: body?.code, hasPersonal: !!body?.personal, rowCount: body?.personal?.instructions?.length },
+  scoped, guest: { status: publicRead.status(), personal: publicBody.personal },
+  transferredParts: parts.length, committed: receipt.transfer.status === 'committed'
+ }, null, 2));
+ if (direct.status() === 200) assert.deepEqual(body.personal, { revision: null, instructions: [] });
+ else { assert.equal(direct.status(), 413); assert.equal(body.code, 'USE_INSTRUCTION_TRANSFER'); }
+ assert.equal(scoped.status, 413); assert.equal(scoped.code, 'USE_INSTRUCTION_TRANSFER');
+ assert.equal(publicRead.status(), 200); assert.deepEqual(publicBody.personal, { revision: null, instructions: [] });
+});
 
 test('native account instructions save offline and reconcile lost replies and reviewed conflicts independently', {
  skip: !base || !artifacts || !playwrightPath, timeout: 420_000
@@ -388,7 +467,25 @@ test('native account instructions save offline and reconcile lost replies and re
   assert.notEqual(afterCapacity.revision, beforeCapacity.revision);
   assert.equal(afterCapacity.instructions[0].text.split('\n').length, 12_002);
   const legacyRead = await context.request.get(base + '/api/v1/settings/lopu-prompt');
-  assert.equal(legacyRead.status(), 413); assert.equal((await legacyRead.json()).code, 'USE_INSTRUCTION_TRANSFER');
+  const legacyBody = await legacyRead.json();
+  const legacySummary = (status: number, body: any) => ({ status, ok: body?.ok, code: body?.code,
+   hasPersonal: !!body?.personal, hasReference: !!body?.personal?.reference,
+   rowCount: body?.personal?.instructions?.length, characters: body?.personal?.instructions?.[0]?.text?.length,
+   revisionMatches: body?.personal?.revision === afterCapacity.revision });
+  const pageLegacy = await page.evaluate(async ownerId => {
+   const response = await fetch('/api/v1/settings/lopu-prompt', { credentials: 'same-origin', cache: 'no-store', redirect: 'error',
+    headers: { 'X-Thingtime-Expected-Actor': ownerId, 'X-Thingtime-Expected-Data-Plane': 'home' } });
+   const body = await response.json();
+   return { status: response.status, ok: body?.ok, code: body?.code, hasPersonal: !!body?.personal,
+    hasReference: !!body?.personal?.reference, rowCount: body?.personal?.instructions?.length,
+    characters: body?.personal?.instructions?.[0]?.text?.length };
+  }, ownerId);
+  // Diagnose the two normal request paths without retaining private text or
+  // credentials. A legacy read must refuse a reference, never flatten it.
+  await writeFile(resolve(artifacts!, 'legacy-read-result.json'), JSON.stringify({ request: legacySummary(legacyRead.status(), legacyBody), page: pageLegacy }, null, 2));
+  if (legacyRead.status() === 200) assert.deepEqual(legacyBody.personal, { revision: null, instructions: [] });
+  else { assert.equal(legacyRead.status(), 413); assert.equal(legacyBody.code, 'USE_INSTRUCTION_TRANSFER'); }
+  assert.equal(pageLegacy.status, 413); assert.equal(pageLegacy.code, 'USE_INSTRUCTION_TRANSFER');
   const publicBase = await guest.request.get(base + '/api/v1/settings/lopu-prompt?scope=base');
   assert.equal(publicBase.status(), 200); const publicBaseBody = await publicBase.json();
   assert.equal(typeof publicBaseBody.base.basePrompt, 'string'); assert.equal('personal' in publicBaseBody, false);

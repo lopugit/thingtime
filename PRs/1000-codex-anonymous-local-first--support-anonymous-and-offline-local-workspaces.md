@@ -5256,3 +5256,30 @@ The progress plan's remaining 33 local links now resolve to tracked/staged
 artifacts. Current canonical JSON and native PNG downloads retain the expected
 hash and dimensions; missing historical temporary targets are explicitly labeled
 unavailable. The repair inventory preserves those original evidence gaps.
+
+
+## Private instruction schema CI repair — 26 October 2026
+
+Checkpoint `8c690d2984` passed Web CI build and typecheck ratchet, then failed
+three pinned schema projection assertions. The two instruction-transfer kinds
+now have explicit empty projections and generic CRUD protection assertions.
+The complete local schema suite passes 277/277, no skips; production schema
+behavior is unchanged. [Evidence](../artifacts/anonymous-local-first-2026-10-26-schema-projection/README.md).
+
+The preview controller for that checkpoint failed at dispatch with HTTP 403,
+so it did not publish a preview. The branch preview previously served `7f4803f9`;
+it must not be presented as acceptance of this repair.
+
+The catalogue audit identified the dedicated 100-theme/50-algorithm server
+limits and 8 MiB complete-snapshot boundary. Generic live Things pagination
+cannot prove completeness or safely trigger deletion reconciliation. Larger
+negotiated stable snapshots and command transfers remain implementation work.
+
+Native instrumentation recorded one exact 12,002-line paste at 2,633 ms and
+a repeat at 8,182 ms; the five-second gate remains unchanged and unresolved.
+The first run proceeded through offline reload and exact account readback, then
+exposed an unauthenticated raw test-client assumption. A focused real-server
+fixture now passes multipart storage plus authenticated-browser 413 refusal
+and empty anonymous responses (1/1), with production cookie flags unchanged.
+The full browser test uses that authenticated path; its overall acceptance
+still requires a passing large-paste run. Scoped lint passes.
