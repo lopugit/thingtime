@@ -44,6 +44,7 @@ import { bundleFromPlan, readTransferClipboard, writeTransferClipboard, MAX_CLIP
 import { transferChecksum, type TransferBundle } from '~/utils/thingTransfer/archive';
 import { DeleteConfirmDialog, MoveDialog, NewFolderDialog, PreviewModal, RenameDialog, ShareDialog } from './ThingsDialogs';
 import { ThingsColumnsView, ThingsGridView, ThingsListView } from './ThingsViews';
+import { browseMenuPosition } from './browseInteraction';
 import type { ThingsItemAction, ThingsItemHandlers } from './ThingsViews';
 import { buildThingsBackgroundMenu, buildThingsItemMenu } from './thingsMenuModel';
 import {
@@ -734,10 +735,6 @@ const ThingsLibraryPage = () => {
 
   const clickSelect = useCallback(
     (thing: ThingsThing, event: React.MouseEvent) => {
-      if (isMobile) {
-        openThing(thing);
-        return;
-      }
       if (event.metaKey || event.ctrlKey) {
         toggleSelect(thing);
         return;
@@ -752,9 +749,10 @@ const ThingsLibraryPage = () => {
           return;
         }
       }
-      openThing(thing);
+      if (event.shiftKey) toggleSelect(thing);
+      else openThing(thing);
     },
-    [displayItems, isMobile, openThing, toggleSelect]
+    [displayItems, openThing, toggleSelect]
   );
 
   const selectAll = useCallback(() => {
@@ -1250,7 +1248,9 @@ const ThingsLibraryPage = () => {
 		closeItemMenu();
 		closeBackgroundMenu();
 		setMenuDeviceId(deviceId);
-		openDeviceMenu(event);
+		event.preventDefault();
+		event.stopPropagation();
+		openDeviceMenu(browseMenuPosition(event));
 	}, [closeItemMenu, closeBackgroundMenu, openDeviceMenu]);
 
   const menuActCount = menuThing && selection.has(menuThing.id) && selection.size > 1 ? selection.size : 1;
@@ -1514,7 +1514,8 @@ const ThingsLibraryPage = () => {
 		devices: visibleDevices,
 		deviceCounts: deviceStore.countsById,
 		selectedDeviceId: deviceParam || selectedDevice,
-		onDeviceSelect: setSelectedDevice,
+		deviceMenuId: deviceMenu.open ? menuDeviceId : null,
+		onDeviceSelect: (id: string) => setSelectedDevice(current => current === id ? null : id),
 		onDeviceOpen: (id: string) => navigate(deviceSyncedFilesHref(id)),
 		onDeviceContextMenu
 	};
@@ -1817,7 +1818,7 @@ const ThingsLibraryPage = () => {
           {/* folder tree sidebar (desktop, browse mode) */}
           {!isMobile && !searchMode && view !== 'columns' && (
             <Box flexShrink={0} paddingTop={1} width="220px">
-							<FolderTree currentFolderId={folderId} dnd={treeDnd} ensureLoaded={ensureLoaded} itemsFor={itemsFor} onPick={navigateToFolder} onNewFolder={openNewFolder} />
+							<FolderTree handlers={itemHandlers} currentFolderId={folderId} dnd={treeDnd} ensureLoaded={ensureLoaded} itemsFor={itemsFor} onPick={navigateToFolder} onNewFolder={openNewFolder} />
             </Box>
           )}
 

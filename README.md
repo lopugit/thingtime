@@ -27,6 +27,15 @@ Subspace membership remains authoritative for message access. Moderators can
 place accessible Things above posts or in the sidebar; each visitor still needs
 the referenced Thing's own permission.
 
+Display content in an ordinary Thing uses an explicit `crystal.renderComponent`:
+either `{ "thingId": "<accessible-component-id>" }` or
+`{ "definition": { "render": { "tag": "p", "children": ["{content.text}"] } } }`.
+The Component receives the editable `crystal.thing` object (or `crystal` when
+there is no nested object) as `content`. Missing or inaccessible renderers show
+an explanation and an opt-in data inspector. Saved Component and Webpage Things
+keep their existing canonical render definitions. See the
+[embed rendering contract](docs/feature-map/posts-comments-and-feed.md#subspace-messages-and-embedded-things).
+
 Run `npm --prefix remix run test:subspace-messages-acceptance` for the disposable
 local API acceptance harness. Browser acceptance uses its `--ui` option and a
 task-owned browser executable via `SUBSPACE_BROWSER_EXECUTABLE`; evidence goes

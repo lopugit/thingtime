@@ -8,6 +8,7 @@ import { useWebpageDraft } from '~/components/Builder/useWebpage';
 import { useActionRunConfirm } from '~/components/Actions/ActionRunConfirm';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import type { ThingsThing } from '~/components/Things/thingsCore';
+import { ExplicitThingRender } from '~/components/Builder/ExplicitThingRender';
 
 function LinkedComponent({ thing }: { thing: ThingsThing }) {
   const { argValues } = useComponentArgValues(thing.crystal, null);
@@ -27,10 +28,9 @@ export function PostInteractiveThing({ thing, compact }: { thing: ThingsThing; c
   const owner = !!user?.id && thing.author?.id === user.id;
   const component = thing.thingtime.includes('component');
   const webpage = thing.thingtime.includes('webpage');
-  if (!component && !webpage) return <ThingView thing={thing.crystal.thing || thing.crystal} compact={compact} />;
   // Reuse the canonical runtime: visitors execute only the shared read-only
   // composition, and owner mutations still go through the action confirmation.
   return <WebpageRuntimeProvider key={`${user?.id || 'anonymous'}:${thing.id}`} pageId={thing.id} pageKey={typeof thing.crystal.pageKey === 'string' ? thing.crystal.pageKey : null} suiteKey={null} source={owner ? 'user' : 'system'} shared={!owner}>
-    <Box minW={0}>{component ? <LinkedComponent thing={thing} /> : <LinkedPage thing={thing} />}</Box>
+    <Box minW={0}>{component ? <LinkedComponent thing={thing} /> : webpage ? <LinkedPage thing={thing} /> : <ExplicitThingRender thing={thing} compact={compact} />}</Box>
   </WebpageRuntimeProvider>;
 }

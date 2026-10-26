@@ -99,6 +99,24 @@ protected relational `subspace-embed` Thing. Readers must pass the subspace gate
 and the referenced Thing's independent ACL on every load. Embedding never
 changes an audience or shares a hidden link secret.
 
+`PostInteractiveThing` also renders ordinary Thing data through the shared
+`ExplicitThingRender` adapter. Set `crystal.renderComponent` to exactly one of
+`{ thingId: "<component-id>" }` or `{ definition: { render: <render-tree> } }`.
+Definitions use the canonical Component `tag`, `props`, and `children` syntax;
+`args` and `savedArgs` are optional. Bind display fields through `content`, which
+is the source Thing's editable `crystal.thing` object or its `crystal` object.
+The adapter never infers presentation from a data `type` or `kind`, and does not
+run a Component's saved source Action on mount.
+
+Saved references are fetched with the current actor and data plane, checked
+for exact identity and Component kind, and revalidated on focus, visibility,
+and a 60-second interval while visible. Missing, invalid, private, or wrong-kind
+references explain their state; data stays hidden until **Inspect data** is
+selected. An embedded definition can use its source owner's Action authority;
+a saved reference additionally requires that the viewer owns that Component.
+The canonical Action confirmation and server permissions still apply. Component
+and Webpage Things retain their existing renderer and editable definitions.
+
 Run `test:subspaces`, `test:messenger`, `test:feed`, `test:api-capabilities`, then
 `test:subspace-messages-acceptance` against the built server. The latter creates
 its own OS-fenced disposable replica and real API fixtures; `--ui` additionally

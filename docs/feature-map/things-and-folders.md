@@ -68,6 +68,16 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Universal Thing page `/thing/:id` | `app/routes/thing.tsx` |
 | Device page `/things?device=<id>&deviceView=page` | `app/components/Things/ThingsPage.tsx` selects the same `DeviceDetailsDrawer.tsx` content used in the drawer; device cards/rows have a navigation-only right-click menu |
 
+Shared item activation is defined in `browseInteraction.ts`: ordinary clicks
+open once; Cmd/Ctrl/Shift clicks select, and title links retain native
+middle-click navigation. `ThingsViews.tsx` supplies labelled hover/focus
+checkboxes and action menus for Things, files and devices in every layout;
+coarse-pointer controls remain visible. Device controls are siblings of their
+primary button to preserve independent keyboard and pointer actions.
+`FolderTree.tsx` reuses those controls only when browsing handlers are supplied;
+Move dialog pickers remain independent. Its folder button expands children in
+place, while modifier clicks select and context controls preserve location.
+
 Adding an item action: extend `ThingsItemAction` in `ThingsViews.tsx`, add the
 action to `buildThingsItemMenu`, handle it in both `onItemAction` and
 `onItemMenuAction` in `ThingsPage.tsx`, and keep bulk selections in mind
@@ -91,6 +101,9 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
 
 ## Tests
 
+- `scripts/things-single-click-acceptance.mjs` exercises the real isolated API
+  and browser click, selection, context-menu and file-download paths; prerequisites
+  and invocation are in the "Things page" section of `TESTING.md`.
 - `npm --prefix remix run test:things` (menu models, page cores, transfer),
   `test:acl`, `test:collections` (index registry), `test:transfer-binary` /
   `test:transfer-archives` (opt-in integration on a disposable replica set).

@@ -4,11 +4,13 @@ import test from 'node:test';
 import ts from 'typescript';
 import { applyLopuPatchEvent, getActiveWebpageDraft, registerWebpageDraft, resetLopuBuildBridge, type LopuDraftHandle } from '../Lopu/lopuBuildBridge';
 
+const postInteractiveThingSource = readFileSync(new URL('./PostInteractiveThing.tsx', import.meta.url), 'utf8');
+
 // A display surface must opt out at the hook call: its default depends on the
 // browser route, and feed/post/Thing pages are otherwise editable. Pin that
 // wiring as well as the actual registry behavior without a fake hook runtime.
 test('interactive webpage attachments cannot become or replace an editable builder target', () => {
-  const source = ts.createSourceFile('PostInteractiveThing.tsx', readFileSync(new URL('./PostInteractiveThing.tsx', import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const source = ts.createSourceFile('PostInteractiveThing.tsx', postInteractiveThingSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const linkedPage = source.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'LinkedPage');
   assert.ok(linkedPage);
   let options: ts.ObjectLiteralExpression | undefined;
@@ -19,7 +21,11 @@ test('interactive webpage attachments cannot become or replace an editable build
       if (argument && ts.isObjectLiteralExpression(argument)) options = argument;
     }
     if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(source) === 'WebpageBlocksRenderer') {
-      interactive = node.attributes.properties.some(prop => ts.isJsxAttribute(prop) && prop.name.getText(source) === 'interactive' && (!prop.initializer || ts.isJsxExpression(prop.initializer) && prop.initializer.expression?.kind === ts.SyntaxKind.TrueKeyword));
+      interactive = node.attributes.properties.some(prop =>
+        ts.isJsxAttribute(prop) &&
+        prop.name.getText(source) === 'interactive' &&
+        (!prop.initializer || (ts.isJsxExpression(prop.initializer) && prop.initializer.expression?.kind === ts.SyntaxKind.TrueKeyword))
+      );
     }
     ts.forEachChild(node, visit);
   };
@@ -49,4 +55,11 @@ test('interactive webpage attachments cannot become or replace an editable build
   } finally {
     resetLopuBuildBridge();
   }
+});
+
+test('canonical Component and Webpage Things keep their renderers ahead of explicit generic Thing presentation', () => {
+  assert.match(postInteractiveThingSource, /component\s*\?\s*<LinkedComponent/);
+  assert.match(postInteractiveThingSource, /:\s*webpage\s*\?\s*<LinkedPage/);
+  assert.match(postInteractiveThingSource, /:\s*<ExplicitThingRender/);
+  assert.match(postInteractiveThingSource, /<WebpageRuntimeProvider/);
 });
