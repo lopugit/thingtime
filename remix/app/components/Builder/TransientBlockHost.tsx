@@ -1,4 +1,5 @@
 import React from 'react';
+import { isPlainLinkClick } from '~/utils/linkNavigation';
 import { ComponentDataScope } from './ComponentSelect';
 import { NativeControlsEnabled } from './NativeComponentControls';
 import { createTransientLifetime, parseTransientBinding, TRANSIENT_BLOCK_ACTION, transientFieldValue, transientNamedField, type TransientBlockActions } from './transientBlockActions';
@@ -55,6 +56,10 @@ function TransientBlockSession({ scope, actions, enabled = true, onError, childr
 		event.stopPropagation();
 		if (!control || !root.contains(control)) return;
 		if (control.tagName === 'DIALOG' && event.type !== 'cancel') return;
+		// Authored links retain the browser's new-tab/window gestures. The
+		// adapter owns only an ordinary primary-button activation.
+		const mouse = event as unknown as MouseEvent;
+		if (control.tagName === 'A' && event.type === 'click' && !isPlainLinkClick(mouse)) return;
 		const field = ['INPUT', 'SELECT', 'TEXTAREA'].includes(control.tagName);
 		if (field !== change) return;
 		// A checkbox/radio change is derived from native click; cancelling its

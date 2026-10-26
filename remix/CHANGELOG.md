@@ -102,6 +102,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Add custom drawer links and attached Things, an Add + popup with
+  emoji/title/tooltip fields, and drawer settings management. Compose the new
+  controls from editable Builder blocks and reuse Commander search. Save, edit
+  and remove await durable device storage; retain drafts on failure. **Codex (AI)**
+
 - 2026-10-23: Add reusable local-media processing and individually editable Builder intrinsic controls. Compressor Pages and Components are authored directly as saved Things; retain the legacy suite. [Details](../PRs/1164-general-media-compressor-local-images-and-immediate-file-controls.md). **Codex (AI)**
 
 - 2026-10-23: Build Vercel production, custom environments and previews on GitHub

@@ -17,6 +17,8 @@ export type SettingsDocumentHostProps = {
   defaultDocument: WebpageBlock[];
   scopeKey: string;
   title?: string;
+  /** Keep a live commit's transient authority mounted until it settles. */
+  layoutEditingDisabled?: boolean;
   persistence?: 'account' | 'device';
   /** Native hosts provide their selected authenticated API transport. */
   accountTransport?: { origin: string; fetch: typeof fetch; currentOrigin: () => string };
@@ -61,7 +63,7 @@ function ScopedSettingsDocument(props: SettingsDocumentHostProps) {
     writable={props.persistence === 'device' || (!!user?.id && !!dataPlane && !user.temporary)} />;
 }
 
-function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', persistence = 'account', accountTransport, children, documentScope, writable }: SettingsDocumentHostProps & {
+function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', persistence = 'account', accountTransport, children, documentScope, writable, layoutEditingDisabled = false }: SettingsDocumentHostProps & {
   documentScope: Parameters<typeof settingsDocumentKey>[0]; writable: boolean;
 }) {
   const key = settingsDocumentKey(documentScope);
@@ -145,7 +147,7 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
   };
   return <Box minW={0} data-settings-document={documentScope.documentKey}>
     <Flex gap={2} mb={2} align="center" flexWrap="wrap">
-      <Button size="xs" variant="ghost" isDisabled={saveBusy} onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : 'Edit layout'}</Button>
+      <Button size="xs" variant="ghost" isDisabled={saveBusy || layoutEditingDisabled} onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : 'Edit layout'}</Button>
       {dirty && <Text fontSize="xs">Unsaved layout</Text>}
       {editing && <Button size="xs" isDisabled={!ready || !writable || !dirty || saveBusy} onClick={() => void save()}>Save layout</Button>}
       {!writable && <Text fontSize="xs">Sign in to save a personal layout.</Text>}
