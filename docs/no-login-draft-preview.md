@@ -215,12 +215,24 @@ transport/download limitations described above.
 
 The normal `thingtime` entry point is installed and an actual Codex CLI agent
 completed capability discovery, native affirmation rendering and invalid-JSON
-rejection. [Exported JSON, PNGs and host proof](../artifacts/anonymous-local-first-2026-10-26/README.md)
+rejection. [CLI-host results](../artifacts/anonymous-local-first-2026-10-26/README.md)
 come from its real MCP results. The first attempt identified missing read-only
 metadata on capability discovery; correcting that annotation resolved the host
 approval gate without changing approval policy. Import/delete consent rules
-remain in place. The prior render-only connection also passed in the current
-desktop chat; loading the new unified namespace there remains separate.
+remain in place. The unified `mcp__thingtime__thingtime_render_and_export` tool
+was then called successfully from this Codex desktop chat. The canonical
+editable fixture rendered at 1440×1000, 390×844, 320×844 and a 400×560 card
+crop, with exact text and no overflow. The exported JSON passes the current
+`parseTransfer`, byte-identical `serializeTransfer` round-trip and
+`prepareDraft`; returned PNG headers, dimensions and SHA-256 values match the
+host verification record, and the 390px, 320px and card views were visually
+checked. Malformed JSON and a nonexistent crop each returned an error and zero
+artifacts. The post-call inventory found no containers or asset volumes created
+since the source commit; three older volumes were preserved, so this is scoped
+cleanup evidence rather than a claim that the Docker daemon is empty. [Desktop-host
+artifacts and verification](../artifacts/anonymous-local-first-2026-10-26-desktop-mcp/README.md).
+This proves the tool call and artifact delivery in this chat, not installed
+macOS-app, CI, deployed or broader local-first acceptance.
 Actual Docker lifecycle checks now pass normal disconnect, process-group loss
 and expiry. Earlier failed cleanup evidence is retained below.
 

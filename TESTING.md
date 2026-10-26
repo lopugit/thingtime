@@ -15504,6 +15504,19 @@ Local results do not establish current-head CI or deployed acceptance.
   `image` blocks, and check artifact extraction with the optional `thingtime`
   server-name argument. HTTP reachability alone does not establish
   a successful MCP tool call or artifact delivery.
+- 26 October 2026: this Codex desktop chat successfully called
+  `mcp__thingtime__thingtime_render_and_export` through the unified `thingtime`
+  connection. The canonical editable fixture rendered at 1440×1000, 390×844,
+  320×844 and 400×560 card-crop sizes with exact text and no overflow. Exported
+  JSON passes `parseTransfer`, byte-identical `serializeTransfer` round-trip and
+  `prepareDraft`; PNG headers, dimensions and SHA-256 values match the host
+  record, and narrow/card views were visually checked. Malformed JSON and a
+  nonexistent crop each returned an error and zero artifacts. Post-call
+  inventory found no containers or asset volumes created since the source
+  commit; three older volumes were preserved. See
+  [saved desktop-host results](artifacts/anonymous-local-first-2026-10-26-desktop-mcp/README.md).
+  This evidence covers this desktop host only; installed macOS-app, exact-head
+  CI, deployed and broader local-first acceptance remain separate.
 - Confirm no credentials, import roots, state directory or other host env
   reaches the renderer child. Exercise invalid input, network isolation,
   EOF, error, signal and runtime timeout; each failure returns no artifacts,

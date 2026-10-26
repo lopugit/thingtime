@@ -2,7 +2,31 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
-## Current checkpoint — 2026-10-23
+## Current checkpoint — 2026-10-26
+
+The normal `thingtime` MCP is loaded in this Codex desktop chat. An actual
+`mcp__thingtime__thingtime_render_and_export` call rendered the canonical
+editable affirmation fixture at 1440×1000, 390×844, 320×844 and 400×560 card
+crop sizes. Exact text and no overflow were confirmed for every view; canonical
+hash is `a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c`
+and renderer hash is
+`d56b0a8f26925ff24f7f6df4253a50dbdffc22a471b5eae363ee9ab897275467`.
+Malformed JSON and a nonexistent crop each returned an error and zero
+artifacts. The exported JSON passes current `parseTransfer`, byte-identical
+`serializeTransfer` round-trip and `prepareDraft`; PNG headers, dimensions and
+SHA-256 values match the host verification record, and the 390px, 320px and
+card views were visually checked. Post-call inventory found no containers or
+asset volumes created since the source commit; three older volumes were
+preserved. [Saved desktop-host results and evidence boundaries](../artifacts/anonymous-local-first-2026-10-26-desktop-mcp/README.md).
+
+This proves the unified tool call and artifact delivery in this Codex desktop
+host. It does not prove installed macOS-app acceptance, newer exact-head CI or
+deployed behavior. Remaining work includes the native paste/undo 5,000 ms gate
+(the 2,633 ms paste passed before a separate legacy-read assertion failed; the 8,182 ms repeat exceeded the unchanged gate), broader
+catalogue/transfer coverage, and the provider/device matrix. No login, Action,
+real account data, merge or manual deployment was involved.
+
+## Earlier checkpoint — 2026-10-23
 
 This continues fetched feature head `fd49b8d1e63d106ad20d67a77271aaa2a2e4bf4d`.
 The attached brief was available; the referenced `HANDOFF.md` and
