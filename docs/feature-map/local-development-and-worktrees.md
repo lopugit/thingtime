@@ -1,5 +1,22 @@
 # Local development and worktrees
 
+## Offline native VM testing
+
+`apple/OfflineNativeVM` owns the host CLI, exact local manifest, fresh task-owned
+RAW disk/auxiliary/identity preparation, separate progress-cancel installer and bounded lifecycle scaffold. See
+[offline-native-vm.md](../offline-native-vm.md) and the root `TESTING.md` checklist.
+`apple/OfflineNativeVM/scripts/build_media.py` exports exact committed native source
+and hash-bound credential-free toolchain bytes into fresh RAW UDF media without
+mounting or starting a guest. Its fixed guest recipe checks vendor/toolchain and
+license prerequisites before unsigned Mac/iOS test-target compilation. Run
+`test_build_media.py` inert fixtures; actual attachment/setup/build/output
+acceptance remains separate. Feature `native.offline-vm` 1.1 adds explicit `attach-media` registration under
+the latest stopped checkpoint and exclusive lease, binding a fourth read-only
+USB image without changing the installed five-file pair or persistent format1.0.
+Viewer attempts/worker readback/checkpoints freeze and verify that binding;
+candidate admission remains closed. Its SwiftPM tests do not boot a guest. Real installer acceptance and guest setup/toolchain admission are
+an explicit remaining gate; there is no network/shared-directory enable option.
+
 ## Agent browser runtime
 
 `electron/lib/agent-browsers/` owns device installations, exclusive leases,
@@ -133,3 +150,5 @@ return `503 LOCAL_API_NOT_CONFIGURED`; neither server selects production implici
 a macOS OS network sandbox, including direct-IP and redirect denial. Fixture
 requests accept only a literal loopback HTTP origin and same-origin uploads.
 Keep backend/browser network isolation and dedicated test credentials in place.
+
+- Offline native VM first boot: `apple/OfflineNativeVM` `view` admits only the own installed final identity pair, with bounded AppKit framebuffer/input and stopped/reaped host checkpoints. Candidate run remains closed. See [runbook](../offline-native-vm.md) and `ViewerTests.swift`; real viewer acceptance requires separate authorization.

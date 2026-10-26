@@ -102,6 +102,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Add explicit leased registration of task-owned supplemental read-only VM media, preserving the original installed pair and format while advertising native.offline-vm1.1. Viewer attempts bind media provenance and require read-only stop/checkpoint evidence. Focused21/full68 tests and actual host-only stopped-task registration passed with original pair/manifest unchanged; fourth-device/guest acceptance remains open and no candidate execution is admitted. [Runbook](../docs/offline-native-vm.md). **Codex (AI)**
+
+- 2026-10-27: Add exact-commit native build-media staging with hash-bound vendor/toolchain inputs, archive and relocatability audits, and a fixed guest-only unsigned Mac/iOS compile recipe. No guest setup, license acceptance, VM launch, readiness or output acceptance is implied. [Runbook](../docs/offline-native-vm.md). **Codex (AI)**
+
+- 2026-10-27: Add exclusive task-cache `.app` packaging and inert validation for the reviewed offline VM viewer, with distinct stable task identity and no autostart or host environment/preferences copying. Signed CUA discovery remains a separate check. [Runbook](../docs/offline-native-vm.md); [bounded evidence](../PRs/1249-codex-oauth-offline-native-vm-add-offline-native-vm-harness.md). **Codex (AI)**
+
+- 2026-10-27: Add the source-tested offline VM first-boot viewer: final installed-pair admission, bounded native framebuffer/input and stopped/reaped checkpoint fencing. Real viewer/Setup Assistant and candidate readiness remain gated. [Runbook](../docs/offline-native-vm.md); [bounded evidence](../PRs/1249-codex-oauth-offline-native-vm-add-offline-native-vm-harness.md). **Codex (AI)**
+
+- 2026-10-27: Add the offline native VM host harness preparation milestone: private task manifests, fresh Apple VM identity/disks, fixed no-NIC configuration, read-only restore diagnostics, a distinct bounded progress-cancel installer and mocked deadline/cleanup tests. Real installation, toolchain readiness and native acceptance remain gated. [Runbook](../docs/offline-native-vm.md). **Codex (AI)**
+
 - 2026-10-27: Admit the reviewed Darwin kernel-group verification fix and bounded trusted failure diagnostics for the native compile runner. Preserve default inert preflight, immutable pinning, network denial, and separate hosted/native acceptance gates. **Codex (AI)**
 
 - 2026-10-27: Pin the native compile listener to the independently reviewed process-lifecycle repair: verified numeric identity drops, bounded watchdog readiness, separate denial-probe deadlines, and readable failure evidence. Hosted preflight and full native acceptance remain open. **Codex (AI)**
