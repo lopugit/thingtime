@@ -1,3 +1,4 @@
+import { renderComponentDeclaration } from '../components/Thingtime/renderComponentDeclaration';
 import { validateMediaPipeline } from '../webPlatform/mediaPipeline';
 import { validateLiveSource } from './liveSources';
 import { fileSyncSchema, parseFileSyncConfiguration, FILE_SYNC_KIND } from '../fileSync/configuration';
@@ -7138,6 +7139,28 @@ export const validateThingtimeCrystal = (
     const title = typeof input.title === 'string' ? input.title.trim() : '';
     if (title.length > 300) return fail(400, 'Thing title is too long (max 300)');
     if (title) merged.title = title;
+  }
+  // Presentation is common metadata, never a way around a typed content
+  // allowlist. Keep explicit null as an unavailable renderer (not permission
+  // to infer one); PATCH omission preserves the existing declaration, while a
+  // replacement crystal may omit it. This pointer grants no Component access.
+  if (Object.prototype.hasOwnProperty.call(input, 'renderComponent')) {
+    if (input.renderComponent === null) merged.renderComponent = null;
+    else {
+      const declaration = renderComponentDeclaration(input);
+      if (!declaration || declaration.kind === 'invalid') return fail(400, 'renderComponent must reference a Component id or embed a render template');
+      if (declaration.kind === 'reference') {
+        const id = declaration.id.trim();
+        if (/[$\s/\\]/.test(id)) return fail(400, 'renderComponent.id must be a Thing id');
+        merged.renderComponent = { id };
+      } else {
+        // Inline definitions use the same canonical Component sanitizer as
+        // saved Components, including the render/argument/source safety gates.
+        const component = sanitizeComponentCrystal({ name: 'Thing presentation', ...declaration.component });
+        if (component.ok === false) return component;
+        merged.renderComponent = component.crystal;
+      }
+    }
   }
   return { ok: true, thingtime: ids, crystal: merged, requiresTarget };
 };

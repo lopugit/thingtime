@@ -1,35 +1,11 @@
 import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '../ComponentsLibrary/componentTemplate';
+import { hasRenderComponent, renderComponentDeclaration, referencedRenderComponent, type ThingRenderComponent } from './renderComponentDeclaration';
 
 const recordOf = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
-export const hasRenderComponent = (thing: unknown): boolean => {
-  const record = recordOf(thing);
-  return !!record && Object.prototype.hasOwnProperty.call(record, 'renderComponent');
-};
-
-export type ThingRenderComponent =
-  | { kind: 'reference'; id: string }
-  | { kind: 'embedded'; component: Record<string, unknown> }
-  | { kind: 'invalid' };
-
-export const renderComponentDeclaration = (thing: unknown): ThingRenderComponent | null => {
-  if (!hasRenderComponent(thing)) return null;
-  const declaration = recordOf(recordOf(thing)!.renderComponent);
-  if (!declaration) return { kind: 'invalid' };
-  if (typeof declaration.id === 'string' && declaration.id.trim() && !('render' in declaration)) {
-    return { kind: 'reference', id: declaration.id };
-  }
-  if (!('id' in declaration) && recordOf(declaration.render)) return { kind: 'embedded', component: declaration };
-  return { kind: 'invalid' };
-};
-
-export const referencedRenderComponent = (thing: unknown): Record<string, unknown> | null => {
-  const record = recordOf(thing);
-  if (!record || !Array.isArray(record.thingtime) || !record.thingtime.includes('component')) return null;
-  const crystal = recordOf(record.crystal);
-  return crystal && recordOf(crystal.render) ? crystal : null;
-};
+export { hasRenderComponent, renderComponentDeclaration, referencedRenderComponent };
+export type { ThingRenderComponent };
 
 /** Same Component argument/template DSL as Builder. The display never runs a
  * Component source or Action, and bindings only receive the displayed data. */

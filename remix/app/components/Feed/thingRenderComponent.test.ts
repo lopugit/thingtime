@@ -1,3 +1,4 @@
+import { thingPresentationData } from '../Thingtime/renderComponentDeclaration';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import React from 'react';
@@ -31,9 +32,9 @@ test('malformed explicit Components remain authoritative instead of silently fal
 
 test('saved renderer reads only accept an actual Component Thing with a render definition', () => {
   const valid = { id: 'component', thingtime: ['component'], crystal: template };
-  assert.deepEqual(referencedRenderComponent(valid), template);
-  for (const invalid of [null, { ...valid, thingtime: ['data'] }, { ...valid, crystal: { render: [] } }, { crystal: template }]) {
-    assert.equal(referencedRenderComponent(invalid), null);
+  assert.deepEqual(referencedRenderComponent(valid, 'component'), template);
+  for (const invalid of [null, { ...valid, id: 'different-component' }, { ...valid, thingtime: ['data'] }, { ...valid, crystal: { render: [] } }, { ...valid, crystal: { render: {} } }, { ...valid, crystal: { render: { foo: 'bar' } } }, { crystal: template }]) {
+    assert.equal(referencedRenderComponent(invalid, 'component'), null);
   }
 });
 
@@ -133,4 +134,13 @@ test('explicit display resets inherited upload authority and supplies its own co
     assert.doesNotMatch(markup, /Unrelated parent private data|Choose files|Upload files/);
     assert.match(markup, /Own displayed record/);
   } finally { router.dispose(); }
+});
+
+test('root post declarations take precedence over nested legacy Thing payloads', () => {
+  for (const renderComponent of [{ id: 'saved-component' }, template, null, {}]) {
+    const crystal = { text: 'root data', renderComponent, thing: { type: 'text', text: 'nested data' } };
+    assert.equal(thingPresentationData(crystal), crystal);
+  }
+  const thing = { type: 'text', text: 'legacy data' };
+  assert.equal(thingPresentationData({ thing }), thing);
 });
