@@ -1,5 +1,16 @@
 # Control-plane changelog
 
+## 2026-10-27 — Preserve control transport during isolated native preflight
+
+- Verify actual Actions daemon UIDs, synchronize only runner TCP state after
+  PF flushing, and fail closed on bounded post-policy hostname/TLS checks.
+- Default to inert exact-source preflight, short bootstrap watchdog, owned
+  process-group reap and bounded cleanup. Keep candidate/root/broker egress
+  denied; no DNS exception, resolver change or hosted acceptance is claimed.
+- The earlier hosted run lost runner communication without build/cleanup
+  evidence; its exact runtime cause remains unproven.
+
+
 ## 2026-10-27 — Prepare protected unsigned native compilation
 
 - Separate admitted controller code from immutable candidate native source;
