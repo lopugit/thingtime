@@ -102,6 +102,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Eliminate existing TypeScript and ESLint errors, enforce a zero-error TypeScript baseline, and reject invalid compiler runs or baseline increases. Repair shared helper typing and behavior, complete unavailable MongoDB health responses, and emit parser-safe generated font data. [Static analysis audit](../docs/static-analysis-baselines.md); [validation and review boundary](../PRs/codex-typescript-zero-baseline.md). **Codex (AI)**
+
 - 2026-10-26: Forward public social cards and generated docs through the local Vite proxy; verify root docs GET/POST through the actual Vite server as well as built Nitro. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
 
 - 2026-10-26: Add explicit per-environment API gateway ownership, signed origin-preserving forwarding, safe pool draining and bounded shared index-plan readiness. Branch frontends use the selected environment backend; legacy deployment retirement and live alias acceptance remain separate rollout requirements. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**

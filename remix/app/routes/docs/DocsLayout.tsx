@@ -496,7 +496,7 @@ function DocsDrawerContent({
   const urlSearchQuery = searchParams.get('q') || '';
   const [searchQuery, setSearchQueryState] = React.useState(urlSearchQuery);
   const pendingUrlQueryRef = React.useRef<string | null>(null);
-  const urlSyncTimerRef = React.useRef<ReturnType<typeof window.setTimeout>>();
+  const urlSyncTimerRef = React.useRef<number | undefined>(undefined);
   const searching = searchQuery.trim().length > 0;
 
   const setSearchQuery = React.useCallback(
