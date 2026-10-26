@@ -104,6 +104,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27 — Negotiate larger remote Thing bundles through metadata-only
+  import/export and pinned original streams, preserving upload quotas, ownership,
+  atomic binding and anonymous renderer limits. Add an isolated real-byte
+  multipart/ZIP/copy fixture. Verification and remaining limits are in the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
 - **Codex (AI), 2026-10-27:** Separate local Blob archive capacity from existing buffered/account transfer budgets, with safe integer validation, real ZIP32 boundary checks and bounded manifest discovery. See [PR #1000 transfer notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#local-blob-archive-capacity--27-october-2026) for verification and remaining acceptance.
 
 - **Codex (AI), 2026-10-26:** Replace account theme/algorithm creation count ceilings with canonical byte-quota admission and negotiated bounded owned-list pagination. Preserve empty cursor pages, identity fencing, legacy lists and versioned focus-token History. Extend isolated gateway acceptance beyond the old counts. See [PR #1000 capacity notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#owned-profile-creation-and-paged-lists--26-october-2026).

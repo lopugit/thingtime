@@ -7183,3 +7183,18 @@ configuration; it never executes source in its credential-bearing job.
 See [Vercel deployment references](VERCEL_DEPLOYMENTS.md) for the project and
 verification receipts. Standard Actions usage for this public repository is
 subject to GitHub's current plan terms; Vercel hosting/runtime charges remain.
+
+### Isolated large transfer acceptance
+
+After building the web client and Nitro server, run
+`node remix/scripts/transfer-capacity-acceptance.mjs` on macOS with Node and
+MongoDB installed. The fixture requires `sandbox-exec`, reserves loopback ports
+19861/19862, and fails if either is occupied. It creates its own replica set,
+disk object store and disposable accounts, using the documented administrator
+bootstrap, upload approval and account-scoped quota APIs. It first proves quota
+refusal, then grants only its disposable account 4 GiB. It never loads local environment files or
+uses an existing account or object bucket. Run it separately from ordinary unit
+tests: it moves more than 512 MiB of actual bytes, has a bounded deadline, and
+verifies process, port and temporary-directory cleanup. See the
+[remote transfer checkpoint](artifacts/anonymous-local-first-2026-10-27-remote-transfer/README.md)
+for results and verification limits.

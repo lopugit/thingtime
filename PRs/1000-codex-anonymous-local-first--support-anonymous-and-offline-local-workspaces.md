@@ -5399,3 +5399,23 @@ first or last. See the
 [transfer checkpoint](../artifacts/anonymous-local-first-2026-10-27-transfer-capacity/README.md)
 for the final tests and evidence limits. This checkpoint does not close broader
 native/device acceptance, larger remote transfers or the paste performance gate.
+
+## 27 October — negotiated remote transfer capacity
+
+Export 1.18.0 and import 1.15.0 remove the aggregate 512 MiB metadata budget
+without moving bytes into JSON requests. Clients negotiate before uploads and
+use content 1.18.0 pinned original streams for larger downloads. Normal upload
+approval/quota checks, safe integers, ownership, atomic binding and remapping
+remain intact; old origins preserve local content. Network frames coalesce into
+immutable 1 MiB Blob segments. Buffered/clipboard, ZIP32 and anonymous renderer
+boundaries remain explicit.
+
+284 focused tests, scoped lint, sanitized build and an unchanged 91-diagnostic
+typecheck baseline are recorded. A real 514 MiB multipart/API/ZIP roundtrip
+passed on a disposable replica with disk storage; fresh copies survived source
+deletion, quota refusal was proved, and cleanup passed. The normal shared-copy
+browser flow separately passed 17 MiB originals, editable dependencies, cold
+offline reload and 1440/390/320px layouts on the new package. See the
+[remote checkpoint](../artifacts/anonymous-local-first-2026-10-27-remote-transfer/README.md).
+The shared preview gateway remains below these versions. This does not close
+deployed, installed-device, ZIP64, paste-performance or broader matrix work.

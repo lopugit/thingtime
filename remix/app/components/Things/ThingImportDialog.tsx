@@ -1,3 +1,5 @@
+import { requireRemoteTransferImport } from '~/utils/thingTransfer/remoteCapabilities';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { accountImportSupported } from '~/local-workspace/accountImport';
 import React, { useEffect, useRef, useState } from 'react';
 import { TRANSFER_DIALOG_Z } from './transferLayers';
@@ -52,6 +54,8 @@ const ThingImportStep = ({ ownerId, folderId, initialBundle, onClose, batch, com
   const api = useApi();
   const anonymous = !!useWorkspaceUser()?.localOnly;
   const [bundle, setBundle] = useState<TransferBundle | null>(initialBundle || null);
+  const currentBundle = useRef(bundle);
+  currentBundle.current = bundle;
   const localImport = anonymous || (!!bundle && accountImportSupported(bundle.manifest));
   const [destination, setDestination] = useState<string | null>(folderId);
   const [error, setError] = useState('');
@@ -127,14 +131,20 @@ const ThingImportStep = ({ ownerId, folderId, initialBundle, onClose, batch, com
       return [await readTransferClipboard(text, signal)];
     });
   };
-  const beginUploads = () => {
+  const beginUploads = async () => {
     if (localImport || !bundle || uploadDispatch.current) return;
+    const selected = bundle, controller = lifetime.current;
+    if (!controller) return;
+    const current = () => lifetime.current === controller && !controller.signal.aborted && currentBundle.current === selected;
+    uploadDispatch.current = true;
     try {
+      await requireRemoteTransferImport(selected.manifest, requireThingtimeCapability, controller.signal);
+      if (!current()) { uploadDispatch.current = false; return; }
       for (const thing of bundle.manifest.things.filter(isTransferRecording)) recordingTransferFile(thing, bundle.manifest);
       for (const thing of bundle.manifest.things.filter(isTransferEmoji)) emojiTransferFile(thing, bundle.manifest);
     }
-    catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid recording transfer'); return; }
-    uploadDispatch.current = true; setUploadStarted(true);
+    catch (cause) { uploadDispatch.current = false; if (current()) setError(cause instanceof Error ? cause.message : 'Invalid transfer'); return; }
+    setUploadStarted(true);
     const files = bundle.manifest.files.map((entry, index) => {
       // Distinct timestamps prevent the normal picker dedupe from dropping
       // two distinct archive entries with equal names and byte lengths.

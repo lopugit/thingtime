@@ -23,9 +23,9 @@ test('transport pins account and database on reads and writes and retires mismat
  bindLocalWorkspace(false, rootIdentity.read().generation, scope);
  const generation = rootIdentity.read().generation, calls: any[] = [], events: string[] = [];
  const lease = { assertCurrent() { if (rootIdentity.read().generation !== generation) throw new Error('Retired workspace'); }, onInvalidate: () => () => {} };
- let result = Response.json({ ok: true, thing: { id: 'thing' } }), thingVersion = '1.34.0';
+ let result = Response.json({ ok: true, thing: { id: 'thing' } }), thingVersion = '1.34.0', contentVersion = '1.11.0';
  Object.assign(globalThis, { window: { location: { origin }, dispatchEvent(event: Event) { events.push(event.type); } }, fetch: async (url: string, init: RequestInit) => {
-  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.drafts': { version: '1.1.0' }, 'api.attachment-delete': { version: '1.5.0' }, 'api.attachment-upload-abort': { version: '1.2.0' }, 'api.attachment-annotate': { version: '1.2.0' }, 'api.things-bulk': { version: '1.6.0' }, 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.things-comment': { version: '1.8.0' }, 'api.things': { version: thingVersion }, 'api.things-update': { version: '1.10.0' }, 'api.things-export': { version: '1.16.0' }, 'api.things-fork': { version: '1.6.0' }, 'api.components-browse': { version: '1.0.0' }, 'api.schemas-browse': { version: '1.0.0' }, 'api.attachment-content': { version: '1.11.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
+  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin, features: { 'api.drafts': { version: '1.1.0' }, 'api.attachment-delete': { version: '1.5.0' }, 'api.attachment-upload-abort': { version: '1.2.0' }, 'api.attachment-annotate': { version: '1.2.0' }, 'api.things-bulk': { version: '1.6.0' }, 'api.attachment-uploads': { version: '1.5.0' }, 'api.attachment-upload-parts': { version: '1.1.0' }, 'api.attachment-upload-complete': { version: '1.4.0' }, 'api.things-comment': { version: '1.8.0' }, 'api.things': { version: thingVersion }, 'api.things-update': { version: '1.10.0' }, 'api.things-export': { version: '1.18.0' }, 'api.things-fork': { version: '1.6.0' }, 'api.components-browse': { version: '1.0.0' }, 'api.schemas-browse': { version: '1.0.0' }, 'api.attachment-content': { version: contentVersion }, 'api.mongodb-endpoint': { version: '1.1.0' } } });
   calls.push({ url, init }); return result.clone();
  } });
  try {
@@ -66,6 +66,7 @@ test('transport pins account and database on reads and writes and retires mismat
   assert.equal(calls.length,beforeBoundDelete);
   await assert.rejects(transport.files.retention('file',new AbortController().signal,true),/incompatible/);
   assert.equal(calls.length,beforeBoundDelete);
+  contentVersion = '1.18.0';
   await transport.export({ ids: ['thing'] }, new AbortController().signal);
   assert.equal(calls.at(-1).url, '/api/v1/things/export'); assert.equal(calls.at(-1).init.method, 'POST');
   await transport.fork({ id: 'thing' });

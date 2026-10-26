@@ -25,7 +25,7 @@ export const ThingExportDialog = ({ ids, linkKey, onClose, localView }: { ids: s
     try {
       const result = await api.v1.things.export({ ids, key: linkKey, includeChildren: children, includeDependencies: dependencies, includeFiles: format === 'zip' && files, includeLinks: links }, { signal: controller.signal });
       if (!result?.ok) throw new Error(result?.error || 'Export failed');
-      const bundle = await bundleFromPlan(result.plan, { key: linkKey, signal: controller.signal });
+      const bundle = await bundleFromPlan(result.plan, { originalStream: true, key: linkKey, signal: controller.signal });
       controller.signal.throwIfAborted();
       await downloadTransfer(bundle, format, 'thingtime', controller.signal);
       if (!controller.signal.aborted) { lopu({ title: 'Download ready', description: result.localWorkspace ? 'Downloaded the saved device snapshot, including your local edits. Other devices may have newer changes.' : 'Import this file to create new private copies.', status: 'success' }); onClose(); }

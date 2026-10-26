@@ -1224,3 +1224,15 @@ checks, and `readFile.ts` selected-file decoding. Buffered/clipboard and account
 import/export budgets are explicit at their consumers; this does not change the
 remote API contract. Run the transfer unit tests and opt-in `capacity.test.ts`;
 see [the local archive checkpoint](../local-workspaces.md#local-blob-archive-capacity--27-october-2026).
+
+The subsequent remote contract removes the aggregate 512 MiB budget from
+metadata-only `importTransfer`/`chatArchiveTransfer` and `exportTransferPlan`.
+`utils/thingTransfer/remoteCapabilities.ts` centralizes export 1.18.0, large
+import 1.15.0 and pinned content 1.18.0 requirements. Normal UI/account clients
+negotiate before work; `ThingImportDialog` also checks before uploads and fences
+the dialog lifetime/bundle across negotiation. `browser.ts` uses immutable
+1 MiB Blob segments and retains the legacy budget for unpinned remote reads.
+Upload approval, quota accounting and transaction boundaries remain canonical.
+Run the transfer/capability tests and the opt-in
+`scripts/transfer-capacity-acceptance.mjs` real-byte fixture; see the
+[remote checkpoint](../../artifacts/anonymous-local-first-2026-10-27-remote-transfer/README.md).

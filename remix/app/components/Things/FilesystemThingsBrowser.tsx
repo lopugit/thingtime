@@ -195,7 +195,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
     return withRemote(signal, async remoteSignal => {
       const result = await apiRef.current.v1.things.export({ ids: [item.id], includeChildren: false, includeDependencies: false, includeLinks: false }, { signal: remoteSignal });
       if (!result?.ok) throw new Error(result?.error || 'The file could not be downloaded.');
-      const bundle = await bundleFromPlan(result.plan, { signal: remoteSignal });
+      const bundle = await bundleFromPlan(result.plan, { originalStream: true, signal: remoteSignal });
       const file = bundle.manifest.files[0];
       if (bundle.manifest.roots.length !== 1 || bundle.manifest.files.length !== 1 || file.targetId !== bundle.manifest.roots[0] || file.bytes !== Number(item.crystal.size))
         throw new Error('The file changed while downloading. Refresh and try again.');

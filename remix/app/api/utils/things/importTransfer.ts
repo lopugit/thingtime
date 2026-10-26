@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { moveManagedContent } from './managedPlacement';
 import { isProtectedThingtime } from '../../../schemas/registry';
-import { orderedTransferAttachments, serializeTransfer, transferAnnotations, TRANSFER_LIMITS, validateTransfer, type ThingTransfer, type TransferThing } from '../../../utils/thingTransfer/format';
+import { orderedTransferAttachments, serializeTransfer, transferAnnotations, validateTransfer, type ThingTransfer, type TransferThing } from '../../../utils/thingTransfer/format';
 import { importedThingCrystal, orderTransferImports } from '../../../utils/thingTransfer/importContent';
 import { rewriteTransferMedia } from './transferMediaCore';
 import { annotateAttachment, linkAttachment, deleteAttachment, createReadyAttachmentPostInsertHook, inspectReadyAttachmentsForPost, prepareAttachmentCascadeForThing } from '../attachments/attachments';
@@ -54,9 +54,10 @@ export const importTransfer = async (
   let ordered: TransferThing[];
   let archives: ChatArchiveGroup[];
   try {
-    // Keep the negotiated account import envelope independent of the local
-    // Blob archive codec. Larger remote imports need their own contract.
-    manifest = validateTransfer(input.manifest, { maxFileBytes: TRANSFER_LIMITS.fileBytes });
+    // This endpoint carries metadata and fresh ready-upload IDs, never bytes.
+    // The 1.15.0 contract removes the aggregate byte budget; normal upload,
+    // ownership, quota and transactional binding checks remain below.
+    manifest = validateTransfer(input.manifest);
     serializeTransfer(manifest);
     ordered = orderTransferImports(manifest);
     archives = validateChatArchives(manifest);

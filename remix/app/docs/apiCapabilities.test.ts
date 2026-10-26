@@ -57,15 +57,15 @@ test('JSON Action inputs and draft-saving suites negotiate both origin manifests
 });
 
 test('external avatar export requires the bounded-download contract on both manifests', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.17.0');
-  assert.equal(thingtimeCapabilityManifest('https://archive.test').features['api.things-export'].version, '1.17.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.18.0');
+  assert.equal(thingtimeCapabilityManifest('https://archive.test').features['api.things-export'].version, '1.18.0');
   for (const version of [undefined, '1.13.0', '1.13.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.14.0'), false);
   for (const version of ['1.14.0', '1.14.1', '1.15.0']) assert.equal(capabilitySatisfies(version, '1.14.0'), true);
 });
 
 test('emoji transfer, library and move capabilities reject pre-support origins', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, version] of [['api.things-export', '1.17.0'], ['api.things-import', '1.14.0'], ['api.things', '1.38.0'], ['api.things-bulk', '1.6.0']]) {
+  for (const [feature, version] of [['api.things-export', '1.18.0'], ['api.things-import', '1.15.0'], ['api.things', '1.38.0'], ['api.things-bulk', '1.6.0']]) {
     assert.equal(manifest.features[feature].version, feature === 'api.things' ? '1.42.0' : version);
     assert.equal(capabilitySatisfies(version, version), true);
     assert.equal(capabilitySatisfies('1.0.0', version), false);
@@ -83,25 +83,25 @@ test('archive root moves negotiate the additive bulk contract on both manifests'
 
 test('archive library and folder export reject origins without complete archive traversal', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, required, previous] of [['api.things', '1.38.0', '1.13.1'], ['api.things-export', '1.17.0', '1.9.0']]) {
+  for (const [feature, required, previous] of [['api.things', '1.38.0', '1.13.1'], ['api.things-export', '1.18.0', '1.9.0']]) {
     assert.equal(manifest.features[feature].version, feature === 'api.things' ? '1.42.0' : required);
     for (const version of [undefined, previous, '2.0.0']) assert.equal(capabilitySatisfies(version, required), false);
     assert.equal(capabilitySatisfies(required, required), true);
   }
   assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.42.0');
-  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.17.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.18.0');
 });
 
 test('archive re-export is advertised by both manifests and rejects incomplete older implementations', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.17.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-export'].version, '1.17.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.18.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-export'].version, '1.18.0');
   for (const version of [undefined, '1.8.0', '1.8.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.9.0'), false);
   for (const version of ['1.9.0', '1.9.1', '1.10.0']) assert.equal(capabilitySatisfies(version, '1.9.0'), true);
 });
 
 test('live-chat shared emoji export requires the additive contract on both manifests', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.17.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-export'].version, '1.17.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.18.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-export'].version, '1.18.0');
   for (const version of [undefined, '1.10.0', '1.11.0', '1.11.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.12.0'), false);
   for (const version of ['1.12.0', '1.12.1', '1.14.0']) assert.equal(capabilitySatisfies(version, '1.12.0'), true);
 });
@@ -800,7 +800,7 @@ test('conditional algorithm synchronization and atomic deletion are advertised b
 test('algorithm display titles require lossless normal transfer capabilities', () => {
   const route = createApiCapabilitiesManifest().features;
   const manifest = thingtimeCapabilityManifest('https://titles.test').features;
-  for (const [feature, minimum, prior] of [['api.things-export', '1.17.0', '1.16.0'], ['api.things-import', '1.14.0', '1.12.0']]) {
+  for (const [feature, minimum, prior] of [['api.things-export', '1.18.0', '1.16.0'], ['api.things-import', '1.15.0', '1.12.0']]) {
     assert.equal(route[feature], minimum);
     assert.equal(manifest[feature].version, minimum);
     assert.equal(capabilitySatisfies(prior, minimum), false);
@@ -921,7 +921,7 @@ test('owned pagination and count-free profile creation negotiate distinct additi
  for (const [feature, version, previous] of [
   ['api.themes', '1.3.0', '1.2.0'], ['api.algorithms', '1.2.0', '1.1.0'],
   ['api.themes-sync', '1.8.0', '1.7.0'], ['api.algorithms-sync', '1.6.0', '1.5.0'],
-  ['api.things-import', '1.14.0', '1.13.0']
+  ['api.things-import', '1.15.0', '1.13.0']
  ]) {
   assert.equal(route[feature], version); assert.equal(origin[feature].version, version);
   assert.equal(capabilitySatisfies(previous, version), false);
@@ -930,4 +930,16 @@ test('owned pagination and count-free profile creation negotiate distinct additi
   assert.equal(capabilitySatisfies(version, version), true);
  }
  assert.equal(capabilitySatisfies(route['api.themes'], '1.2.0'), true, 'Previously shipped focus-token contract remains supported.');
+});
+
+
+test('metadata-only large transfer contracts reject the previous aggregate-byte contracts in both manifests', () => {
+  const browser = createApiCapabilitiesManifest(), runtime = thingtimeCapabilityManifest('https://large-transfer.test');
+  for (const [feature, version, previous] of [['api.things-export', '1.18.0', '1.17.0'], ['api.things-import', '1.15.0', '1.14.0']]) {
+    assert.equal(browser.features[feature], version); assert.equal(runtime.features[feature].version, version);
+    assert.equal(capabilitySatisfies(previous, version), false);
+    assert.equal(capabilitySatisfies(undefined, version), false);
+    assert.equal(capabilitySatisfies('2.0.0', version), false);
+    assert.equal(capabilitySatisfies(version, version), true);
+  }
 });

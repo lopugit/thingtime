@@ -834,7 +834,7 @@ const ThingsLibraryPage = () => {
       const ticket = transferIntent.ticket(ownerId, destinationKey);
       const bundle = apiRef.current.v1.things.export({ ids }, { signal: controller.signal }).then(async (result) => {
         if (!result?.ok) throw new Error(result?.error || 'Export failed');
-        const value = await bundleFromPlan(result.plan, { signal: controller.signal });
+        const value = await bundleFromPlan(result.plan, { originalStream: true, signal: controller.signal });
         controller.signal.throwIfAborted();
         return value;
       });

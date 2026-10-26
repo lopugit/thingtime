@@ -85,9 +85,5 @@ export function createOwnedListClient({ resource, minimumVersion, request, requi
   };
 }
 
-/** Only protected profile imports need the capacity-removal contract. */
-export function ownedProfileImportMinimumVersion(manifest: unknown): string {
-  const things = manifest && typeof manifest === 'object' ? (manifest as { things?: unknown }).things : undefined;
-  return Array.isArray(things) && things.some(thing => Array.isArray(thing?.thingtime) &&
-    thing.thingtime.some((kind: unknown) => kind === 'theme' || kind === 'feed-algorithm')) ? '1.14.0' : '1.13.0';
-}
+/** Compatibility export for existing profile import consumers. */
+export { transferImportMinimumVersion as ownedProfileImportMinimumVersion } from '../utils/thingTransfer/remoteCapabilities';

@@ -14,7 +14,9 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
   const assertCurrent = typeof plan.assertCurrent === 'function' ? plan.assertCurrent : undefined;
   const readLocalFile = typeof plan.readLocalFile === 'function' ? plan.readLocalFile : undefined;
   const sources = structuredClone(plan.files);
-  const budget = readLocalFile ? {} : { maxFileBytes: TRANSFER_LIMITS.fileBytes };
+  // Only negotiated pinned original streams and local Blob readers can exceed
+  // the legacy remote budget. Buffered/redirecting consumers keep that budget.
+  const budget = readLocalFile || options.originalStream ? {} : { maxFileBytes: TRANSFER_LIMITS.fileBytes };
   const manifest = parseTransfer(serializeTransfer(validateTransfer({ format: TRANSFER_FORMAT, version: 1, roots: plan.roots, things: plan.things,
     ...(plan.links ? { links: plan.links } : {}), ...(plan.attachmentOrder ? { attachmentOrder: plan.attachmentOrder } : {}),
     files: plan.files.map((file, index) => ({ id: file.id, targetId: file.targetId, name: file.name, mime: file.mime, bytes: file.bytes, ...transferAnnotations(file),
@@ -82,6 +84,10 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
     }
     const reader = response.body!.getReader();
     const chunks: Blob[] = [];
+    // Network frames can be arbitrarily small. Coalesce them so retained Blob
+    // handles scale with file MiB rather than the number of received frames.
+    const pending = new Uint8Array(Math.min(entry.bytes, 1024 * 1024));
+    let pendingBytes = 0;
     let size = 0;
     const cancel = () => { void reader.cancel().catch(() => {}); };
     streamSignal?.addEventListener('abort', cancel, { once: true });
@@ -91,11 +97,17 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
         const part = await reader.read();
         streamSignal?.throwIfAborted();
         if (part.done) break;
+        if (part.value.byteLength > entry.bytes - size) invalid('A file grew beyond its export limit');
         size += part.value.byteLength;
-        if (size > entry.bytes) invalid('A file grew beyond its export limit');
-        chunks.push(new Blob([Uint8Array.from(part.value)]));
+        for (let offset = 0; offset < part.value.byteLength;) {
+          const length = Math.min(pending.length - pendingBytes, part.value.byteLength - offset);
+          pending.set(part.value.subarray(offset, offset + length), pendingBytes);
+          pendingBytes += length; offset += length;
+          if (pendingBytes === pending.length) { chunks.push(new Blob([pending])); pendingBytes = 0; }
+        }
       }
       if (size !== entry.bytes) invalid('A file changed size during export');
+      if (pendingBytes) chunks.push(new Blob([pending.subarray(0, pendingBytes)]));
     } finally {
       streamSignal?.removeEventListener('abort', cancel);
       await reader.cancel().catch(() => {}); reader.releaseLock();

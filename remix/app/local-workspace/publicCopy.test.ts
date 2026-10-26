@@ -25,7 +25,7 @@ function fixture(factory = new IDBFactory()) {
 	const callbacks = new Set<() => void>(), lease = { assertCurrent() { if (!live) throw new Error('Workspace changed'); },
 		onInvalidate(callback: () => void) { callbacks.add(callback); return () => { callbacks.delete(callback); }; } };
 	const things = new LocalThings(db, scope, lease), initial = plan();
-	const state = { manifestOrigin: origin, exportVersion: '1.17.0', bytes: new Uint8Array([1, 2, 3]),
+	const state = { manifestOrigin: origin, exportVersion: '1.18.0', bytes: new Uint8Array([1, 2, 3]),
 		plan: initial, final: initial, refusal: 0, afterBytes: () => {}, mediaUrl: '', fileVersion: '1.11.0', receiptKey: 'a'.repeat(64), receiptChanged: false, etagChanged: false };
 	const fetcher: typeof fetch = async (input, init: RequestInit = {}) => {
 		const url = new URL(String(input)); calls.push({ url, init });

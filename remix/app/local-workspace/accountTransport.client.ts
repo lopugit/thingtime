@@ -1,3 +1,4 @@
+import { REMOTE_TRANSFER_EXPORT_VERSION, REMOTE_TRANSFER_CONTENT_VERSION } from '../utils/thingTransfer/remoteCapabilities';
 import { requiresEditableBlockContract, type WebpageBlock } from '../components/Builder/webpageBlocks';
 import type { AccountDraftTransport } from './accountDrafts';
 import type { DraftSummary } from '../drafts/draftCore';
@@ -88,10 +89,10 @@ export function accountThingTransport(scope: Extract<WorkspaceScope, { kind: 'ac
 		if (window.location.origin !== scope.origin) throw new WorkspaceError('WORKSPACE_CHANGED', 'Account origin changed', 409);
 		if (scope.delegatedBy !== undefined) await requireThingtimeCapability('api.auth-characters', '1.0.0');
 		const endpointCapability = ({ 'drafts': ['api.drafts', '1.1.0'], 'things/comment': ['api.things-comment', '1.8.0'], 'attachments/content': ['api.attachment-content', '1.16.0'], 'attachments/delete': ['api.attachment-delete', '1.5.0'], 'attachments/uploads/abort': ['api.attachment-upload-abort', '1.2.0'], 'attachments/uploads': ['api.attachment-uploads', '1.5.0'], 'attachments/uploads/parts': ['api.attachment-upload-parts', '1.1.0'], 'attachments/uploads/complete': ['api.attachment-upload-complete', '1.4.0'], 'attachments/annotate': ['api.attachment-annotate', '1.2.0'], 'attachments/link': ['api.attachment-link', '1.1.0'], 'things/bulk': ['api.things-bulk', '1.6.0'] } as Record<string, string[]>)[endpoint];
-		const capability = endpointCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', '1.16.0'] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0']);
+		const capability = endpointCapability || (endpoint === 'things/interactions' ? ['api.things-interactions', '1.0.0'] : endpoint === 'components/browse' ? ['api.components-browse', '1.0.0'] : endpoint === 'schemas/browse' ? ['api.schemas-browse', '1.0.0'] : endpoint === 'things/fork' ? ['api.things-fork', '1.6.0'] : endpoint === 'things/export' ? ['api.things-export', REMOTE_TRANSFER_EXPORT_VERSION] : endpoint === 'things' ? ['api.things', '1.33.0'] : ['api.webpages-resolve', '1.3.0']);
 		await requireThingtimeCapability(capability[0], capability[1]);
 		if (endpoint === 'attachments/delete' && args.targetId !== undefined) await requireThingtimeCapability('api.attachment-delete', args.retainReceipt === true ? '1.7.0' : '1.6.0');
-		if (endpoint === 'things/export' && args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
+		if (endpoint === 'things/export' && args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', REMOTE_TRANSFER_CONTENT_VERSION);
 		const blocks = (args.crystal as { blocks?: unknown } | undefined)?.blocks;
 		if (endpoint === 'things' && ['POST', 'PATCH', 'PUT'].includes(method) && Array.isArray(blocks) && requiresEditableBlockContract(blocks as WebpageBlock[])) await requireThingtimeCapability('api.things', '1.35.0');
 		if (endpoint === 'things' && method === 'DELETE' && args.retainAttachmentReceipts === true) await requireThingtimeCapability('api.things', '1.42.0');

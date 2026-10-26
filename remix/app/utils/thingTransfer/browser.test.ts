@@ -248,3 +248,35 @@ test('large local Blob plans reach bounded hashing while remote plans keep their
   value.readLocalFile = async () => data;
   await assert.rejects(bundleFromPlan(value, { signal: controller.signal }), /cancelled local hash/);
 });
+
+
+test('remote aggregates above the legacy budget require pinned originals and never bypass read refusal', async () => {
+  const original = plan(); original.files = ['first', 'second'].map(id => ({ id, targetId: 'note', name: `${id}.bin`, mime: 'application/octet-stream', bytes: 300 * 1024 * 1024 }));
+  let reads = 0;
+  const fetcher: typeof fetch = async input => { reads++; assert.equal(new URL(String(input), 'https://fixture.test').searchParams.get('cache'), 'validate'); return new Response(null, { status: 403 }); };
+  await assert.rejects(bundleFromPlan(original, { fetch: fetcher }), /too large/); assert.equal(reads, 0);
+  await assert.rejects(bundleFromPlan(original, { fetch: fetcher, originalStream: true }), /no longer readable/); assert.equal(reads, 1);
+});
+
+
+test('many small network frames retain bounded immutable Blob chunks', async () => {
+  const OriginalBlob = Blob, sizes: number[] = [], bytes = 2 * 1024 * 1024 + 3;
+  const original = plan(); original.files = [{ id: 'file', targetId: 'note', name: 'frames.bin', mime: 'application/octet-stream', bytes }];
+  class ObservedBlob extends OriginalBlob {
+    constructor(parts: BlobPart[] = [], options?: BlobPropertyBag) {
+      super(parts, options);
+      if (parts[0] instanceof Uint8Array) sizes.push(parts[0].byteLength);
+    }
+  }
+  Object.defineProperty(globalThis, 'Blob', { configurable: true, value: ObservedBlob });
+  try {
+    let produced = 0;
+    const bundle = await bundleFromPlan(original, { fetch: async () => new Response(new ReadableStream({ pull(controller) {
+      if (produced === bytes) { controller.close(); return; }
+      const frame = new Uint8Array(Math.min(257, bytes - produced)); frame.fill(7); produced += frame.byteLength; controller.enqueue(frame);
+    } })) });
+    assert.equal(bundle.files.get('file')!.size, bytes);
+    assert.deepEqual(sizes, [1024 * 1024, 1024 * 1024, 3]);
+    assert.deepEqual(new Uint8Array(await bundle.files.get('file')!.slice(bytes - 3).arrayBuffer()), new Uint8Array([7, 7, 7]));
+  } finally { Object.defineProperty(globalThis, 'Blob', { configurable: true, value: OriginalBlob }); }
+});

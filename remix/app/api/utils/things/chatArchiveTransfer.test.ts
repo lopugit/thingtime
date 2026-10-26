@@ -62,12 +62,18 @@ const harness = () => {
 };
 const empty = (): ChatArchiveImportResources => ({ files: new Map() });
 
-test('direct account archive imports retain their byte budget before starting a transaction', async () => {
-  const { state, deps } = harness(); const input = fixture();
-  input.files.push({ id: 'large-file', targetId: 'first', path: 'files/000000', name: 'large.bin',
-    mime: 'application/octet-stream', bytes: TRANSFER_LIMITS.fileBytes + 1, sha256: 'a'.repeat(64) });
-  await assert.rejects(createTransferChatArchive('importer', input, 'chat', empty(), deps), /too large/);
-  assert.equal(state.attempts, 0); assert.equal(state.inserts, 0); assert.deepEqual(state.bindings, []);
+test('direct archive imports above 512 MiB still bind exact owned uploads inside the quota transaction', async () => {
+  for (const failure of ['', 'owner', 'quota', 'size']) {
+    const { state, deps } = harness(), input = fixture(), size = TRANSFER_LIMITS.fileBytes + 1;
+    input.files.push({ id: 'large-file', targetId: 'first', path: 'files/000000', name: 'large.bin',
+      mime: 'application/octet-stream', bytes: size, sha256: 'a'.repeat(64) });
+    state.records.set('uploaded-large', { shareId: 'uploaded-large', ownerId: failure === 'owner' ? 'another' : 'importer',
+      thingtime: ['attachment'], crystal: { size: failure === 'size' ? size - 1 : size, contentType: 'application/octet-stream' } });
+    if (failure === 'quota') state.failInsert = 2;
+    const run = () => createTransferChatArchive('importer', input, 'chat', { files: new Map([['large-file', 'uploaded-large']]) }, deps);
+    if (failure) { await assert.rejects(run(), failure === 'quota' ? /quota/ : /attachment does not match/); assert.deepEqual(state.committed, []); }
+    else { const result = await run(); assert.equal(result.imported, 6); assert.equal(state.bindings.length, 1); }
+  }
 });
 
 test('archive writer retains inert assistant presentation on fresh private rows', async () => {

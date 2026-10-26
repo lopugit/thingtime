@@ -42,7 +42,7 @@ const TransferControls = ({ id, linkKey, disabledReason, ownerId, onImported, ca
     operation.current?.abort(); operation.current = controller; setCopying(true);
     const bundle = api.v1.things.export({ ids: [id], key: linkKey }, { signal: controller.signal }).then(result => {
       if (!result?.ok) throw new Error(result?.error || 'Could not export this Thing');
-      return bundleFromPlan(result.plan, { key: linkKey, signal: controller.signal });
+      return bundleFromPlan(result.plan, { originalStream: true, key: linkKey, signal: controller.signal });
     });
     // Invoke within the click, retaining activation while the bundle loads.
     void writeTransferClipboard(bundle, controller.signal).then(async text => {

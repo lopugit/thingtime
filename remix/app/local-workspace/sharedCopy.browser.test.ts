@@ -19,7 +19,7 @@ test('native anonymous shared-copy button retains editable closure offline; norm
 	const health = await (await fetch(origin + '/api/v1/health/nitro')).json();
 	assert.equal(health.testEnvironment.mode, 'isolated-agent-test'); assert.equal(health.testEnvironment.sessionId, session);
 	const manifest = await (await fetch(origin + '/.well-known/thingtime-capabilities.json')).json();
-	assert.equal(manifest.origin, origin); assert.ok(capabilitySatisfies(manifest.features['api.things-export'].version, '1.17.0'));
+	assert.equal(manifest.origin, origin); assert.ok(capabilitySatisfies(manifest.features['api.things-export'].version, '1.18.0'));
 	if (largeFile) assert.ok(capabilitySatisfies(manifest.features['api.attachment-content'].version, '1.18.0'), 'Large shared files require the actual 1.18 stream contract');
 	const { default: puppeteer } = await import(puppeteerPath!);
 	const browser = await puppeteer.launch({ executablePath, headless: true, pipe: true, protocolTimeout: 30_000,

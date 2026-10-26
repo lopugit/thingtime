@@ -15646,7 +15646,30 @@ Local results do not establish current-head CI or deployed acceptance.
   ordering, cancellation, unsafe names, undeclared entries and truncated input.
 - Refuse unsafe integer aggregates and unrepresentable ZIP32 size/offset fields
   before file reads. Consumer budget failures must happen before import writes.
-- Preserve the account import/export and buffered/clipboard limits, canonical
-  storage/quota rollback, and anonymous renderer file/Action/input restrictions.
+- Preserve buffered/clipboard limits, canonical storage/quota rollback, and
+  anonymous renderer file/Action/input restrictions. Larger remote transfers
+  must negotiate the separate contract below before starting work.
 - After changing progress-plan task states, verify displayed summary totals and
   each status filter against the actual task rows at desktop and mobile widths.
+
+### Negotiated remote transfer capacity (PR #1000)
+
+- Negotiate `api.things-export` 1.18.0 and `api.attachment-content` 1.18.0
+  before reading large originals. Require live receipts, exact `If-Match`,
+  content length, identity encoding and no redirects; recheck after reading
+  and before using/exporting the bundle. Reject changed or inaccessible bytes.
+- Before uploading a bundle above 512 MiB, require `api.things-import` 1.15.0.
+  An older origin, cancellation or changed bundle must start no uploads and
+  preserve local content. Small ordinary/profile imports retain their existing
+  minimum contract requirements.
+- Test safe-integer overflow, owned ready-upload identity/purpose/size,
+  byte-quota refusal and transactional rollback. Metadata-only import does not
+  bypass normal upload admission or publish the imported content.
+- Run `node remix/scripts/transfer-capacity-acceptance.mjs` against its own
+  disposable built Nitro/replica/disk fixture. Verify real multipart bytes,
+  independent hashes, pinned export, Blob ZIP roundtrip and fresh copy IDs;
+  delete only the synthetic source and confirm the copy remains readable.
+  Confirm cleanup even on failure. This is distinct from deployed S3 acceptance.
+- Exercise the normal shared-copy/export/import controls in an isolated browser;
+  retain desktop/mobile screenshots, exact source package identity and network
+  boundary evidence. Skipped browser tests do not satisfy this check.

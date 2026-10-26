@@ -1,3 +1,4 @@
+import { requireRemoteTransferImport, REMOTE_TRANSFER_EXPORT_VERSION, REMOTE_TRANSFER_CONTENT_VERSION } from '~/utils/thingTransfer/remoteCapabilities';
 import { characterApi, withCharacterRequest } from '../local-workspace/characterRequest.client';
 import { useLocalApiView } from '../local-workspace/LocalApiView';
 import { parseTimelineVersionExport, timelineVersionExportRequirement } from '../timeline/exportVersion';
@@ -48,7 +49,7 @@ import { clearLocalCachePrefix } from './localCache';
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
 import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
 import { withExportDeadline } from '~/utils/thingTransfer/exportDeadline';
-import { createOwnedListClient, ownedProfileImportMinimumVersion } from './ownedListClient';
+import { createOwnedListClient } from './ownedListClient';
 
 const refreshRootData = () => {
   window.dispatchEvent(new Event('thingtime:root-data-refresh'));
@@ -1122,15 +1123,15 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       }, [asyncFetcher]),
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
         return withExportDeadline(async signal => {
-          await requireThingtimeCapability('api.things-export', '1.17.0');
-          if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.11.0');
+          await requireThingtimeCapability('api.things-export', REMOTE_TRANSFER_EXPORT_VERSION);
+          if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', REMOTE_TRANSFER_CONTENT_VERSION);
           signal.throwIfAborted();
           return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
         }, options?.signal);
       }, [asyncFetcher]),
       import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; localFiles?: Map<string, Uint8Array | Blob>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
         if (args.localFiles !== undefined) throw new Error('Local file bytes require the local workspace importer; they cannot be sent to an account endpoint');
-        await requireThingtimeCapability('api.things-import', ownedProfileImportMinimumVersion(args.manifest));
+        await requireRemoteTransferImport(args.manifest, requireThingtimeCapability, options?.signal);
         options?.signal?.throwIfAborted();
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),

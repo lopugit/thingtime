@@ -271,8 +271,9 @@ Ordinary account-file downloads now obtain the canonical scoped export plan inst
 of constructing a synthetic plan and inheriting the paired-device 32 MiB cap.
 They negotiate the export/content contracts they use; missing paired-device
 capabilities do not prevent a download. Account, Character, data-plane and abort
-leases remain enforced. Paired-device limits and the canonical transfer format's
-512 MiB per-file bound remain unchanged.
+leases remain enforced. Paired-device limits remain separate. The later local
+Blob and negotiated remote transfer capacity checkpoints below supersede the
+former aggregate 512 MiB consumer budget; it is not a portable-format limit.
 
 The new opt-in `accountLargeFiles.browser.test.ts` reproduces the previous failure:
 a 70 MiB file completes locally and uploads, but a clean browser displays
@@ -5849,3 +5850,28 @@ See [transfer capacity evidence](../artifacts/anonymous-local-first-2026-10-27-t
 for real-byte, memory-retention, negative-path and current verification results.
 Normal Builder/device/account acceptance and other traversal/transport envelopes
 remain separate checklist items.
+
+### Negotiated remote transfer capacity — 27 October 2026
+
+The account import/export endpoints now separate metadata from file transport.
+`api.things-import` 1.15.0 accepts safe-integer aggregate file sizes above
+512 MiB while receiving only the manifest and fresh ready-upload references.
+Uploads still enforce approval, ownership, purpose, exact size and actual byte
+quota; canonical import still binds and remaps them transactionally.
+`api.things-export` 1.18.0 plans those larger stored files without downloading
+them into the metadata handler.
+
+First-party remote download clients negotiate export 1.18.0 and content 1.18.0,
+then use pinned original streams with exact receipts, `If-Match`, content length,
+identity encoding, no redirects and post-read/pre-use checks. A 1 MiB collector
+coalesces small network frames into immutable Blob segments. Unpinned remote
+consumers keep the previous budget. Import negotiation happens before uploads
+as well as before import, with cancellation and selected-bundle fences. An old
+origin leaves the local bundle intact.
+
+These versions do not change the portable format, manifest/count/depth budgets,
+upload storage platform limits, existing clipboard/byte-array envelopes, ZIP32
+representation or anonymous renderer restrictions. ZIP64 encoding and wider
+device/account coverage remain open. See the
+[remote transfer evidence](../artifacts/anonymous-local-first-2026-10-27-remote-transfer/README.md)
+for exact tests, package boundaries and deployed limitations.
