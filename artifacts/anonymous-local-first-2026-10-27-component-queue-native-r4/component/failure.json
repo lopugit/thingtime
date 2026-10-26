@@ -1,0 +1,415 @@
+{
+  "error": "AssertionError [ERR_ASSERTION]: Original frozen create must be acknowledged via delivered replay",
+  "writes": [
+    {
+      "id": "1759ff46-1b9a-4f6c-8e6d-9b8915aa6be1",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "data"
+        ],
+        "crystal": {
+          "name": "Independent queue data"
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "1759ff46-1b9a-4f6c-8e6d-9b8915aa6be1"
+      },
+      "actor": "6adf9d135a5929aae970728c",
+      "plane": "home",
+      "at": 1793039640705,
+      "status": 200,
+      "delivery": "delivered"
+    },
+    {
+      "id": "e9b86d0a-82ba-42cf-bee9-0ab45ed58a52",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "component"
+        ],
+        "crystal": {
+          "name": "Acknowledged component control",
+          "library": "custom",
+          "category": "general",
+          "componentKey": "queue-d9815fdd-c4d1-437b-9097-67aabf65a880",
+          "version": 1,
+          "render": {
+            "tag": "p",
+            "children": "Acknowledged component control"
+          }
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "e9b86d0a-82ba-42cf-bee9-0ab45ed58a52"
+      },
+      "actor": "6adf9d135a5929aae970728c",
+      "plane": "home",
+      "at": 1793039641160,
+      "status": 422,
+      "delivery": "refused"
+    },
+    {
+      "id": "e9b86d0a-82ba-42cf-bee9-0ab45ed58a52",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "component"
+        ],
+        "crystal": {
+          "name": "Acknowledged component control",
+          "library": "custom",
+          "category": "general",
+          "componentKey": "queue-d9815fdd-c4d1-437b-9097-67aabf65a880",
+          "version": 1,
+          "render": {
+            "tag": "p",
+            "children": "Acknowledged component control"
+          }
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "e9b86d0a-82ba-42cf-bee9-0ab45ed58a52"
+      },
+      "actor": "6adf9d135a5929aae970728c",
+      "plane": "home",
+      "at": 1793039644201,
+      "status": 200,
+      "delivery": "delivered"
+    },
+    {
+      "id": "4bd2ada3-b109-4696-acc5-efc23d92151c",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "webpage"
+        ],
+        "crystal": {
+          "name": "Dependency queue page",
+          "version": 1,
+          "blocks": [
+            {
+              "id": "outer",
+              "type": "container",
+              "direction": "column",
+              "children": [
+                {
+                  "id": "inner",
+                  "type": "container",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "id": "control",
+                      "type": "component",
+                      "component": "e9b86d0a-82ba-42cf-bee9-0ab45ed58a52"
+                    },
+                    {
+                      "id": "text",
+                      "type": "element",
+                      "tag": "p",
+                      "text": "Original frozen content"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "4bd2ada3-b109-4696-acc5-efc23d92151c"
+      },
+      "actor": "6adf9d135a5929aae970728c",
+      "plane": "home",
+      "at": 1793039644362,
+      "status": 200,
+      "delivery": "delivered"
+    },
+    {
+      "id": "4e57d75c-ab60-4089-861f-6e5ee52a8b70",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "component"
+        ],
+        "crystal": {
+          "name": "Acknowledged component control",
+          "library": "custom",
+          "category": "general",
+          "componentKey": "queue-378d2892-2858-45ca-9e32-6f7a3320cbc6",
+          "version": 1,
+          "render": {
+            "tag": "p",
+            "children": "Acknowledged component control"
+          }
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "4e57d75c-ab60-4089-861f-6e5ee52a8b70"
+      },
+      "actor": "6adf9d135a5929aae970728c",
+      "plane": "home",
+      "at": 1793039654833,
+      "status": 200,
+      "delivery": "delivered"
+    },
+    {
+      "id": "4f5a96eb-2787-455e-9387-374bfc04aabf",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "webpage"
+        ],
+        "crystal": {
+          "name": "Dependency queue page",
+          "version": 1,
+          "blocks": [
+            {
+              "id": "outer",
+              "type": "container",
+              "direction": "column",
+              "children": [
+                {
+                  "id": "inner",
+                  "type": "container",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "id": "control",
+                      "type": "component",
+                      "component": "4e57d75c-ab60-4089-861f-6e5ee52a8b70"
+                    },
+                    {
+                      "id": "text",
+                      "type": "element",
+                      "tag": "p",
+                      "text": "Original frozen content"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "4f5a96eb-2787-455e-9387-374bfc04aabf"
+      },
+      "actor": "6adf9d135a5929aae970728c",
+      "plane": "home",
+      "at": 1793039655036,
+      "status": 200,
+      "delivery": "response-dropped",
+      "receipt": {
+        "ok": true,
+        "thing": {
+          "id": "4f5a96eb-2787-455e-9387-374bfc04aabf",
+          "thingtime": [
+            "webpage"
+          ],
+          "author": {
+            "id": "6adf9d135a5929aae970728c",
+            "username": "queue-33edf35d",
+            "displayName": null,
+            "temporary": false,
+            "avatarUrl": null
+          },
+          "visibility": "private",
+          "acl": [
+            "tt:user"
+          ],
+          "targetId": null,
+          "folderId": null,
+          "crystal": {
+            "name": "Dependency queue page",
+            "version": 1,
+            "blocks": [
+              {
+                "id": "outer",
+                "type": "container",
+                "direction": "column",
+                "children": [
+                  {
+                    "id": "inner",
+                    "type": "container",
+                    "direction": "column",
+                    "children": [
+                      {
+                        "id": "control",
+                        "type": "component",
+                        "component": "4e57d75c-ab60-4089-861f-6e5ee52a8b70"
+                      },
+                      {
+                        "id": "text",
+                        "type": "element",
+                        "tag": "p",
+                        "text": "Original frozen content"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "extended": null,
+          "geo": null,
+          "tags": [],
+          "createdAt": "2026-10-26T18:34:15.101Z",
+          "updatedAt": "2026-10-26T18:34:15.101Z",
+          "timelineHeadId": "0098a791-f20f-4aa1-a412-26ea49839fe3"
+        }
+      }
+    },
+    {
+      "id": "49fad7e5-6c50-409d-bd19-8fc10ce3dee6",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "component"
+        ],
+        "crystal": {
+          "name": "Second dependency control",
+          "library": "custom",
+          "category": "general",
+          "componentKey": "queue-4d2540a2-1419-4ce2-ba39-4ea88a85bd52",
+          "version": 1,
+          "render": {
+            "tag": "p",
+            "children": "Second dependency control"
+          }
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "49fad7e5-6c50-409d-bd19-8fc10ce3dee6"
+      },
+      "actor": "6adf9d135a5929aae970728c",
+      "plane": "home",
+      "at": 1793039660649,
+      "status": 422,
+      "delivery": "refused"
+    },
+    {
+      "id": "4f5a96eb-2787-455e-9387-374bfc04aabf",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "webpage"
+        ],
+        "crystal": {
+          "name": "Dependency queue page",
+          "version": 1,
+          "blocks": [
+            {
+              "id": "outer",
+              "type": "container",
+              "direction": "column",
+              "children": [
+                {
+                  "id": "inner",
+                  "type": "container",
+                  "direction": "column",
+                  "children": [
+                    {
+                      "id": "control",
+                      "type": "component",
+                      "component": "4e57d75c-ab60-4089-861f-6e5ee52a8b70"
+                    },
+                    {
+                      "id": "text",
+                      "type": "element",
+                      "tag": "p",
+                      "text": "Original frozen content"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "4f5a96eb-2787-455e-9387-374bfc04aabf"
+      },
+      "actor": "6adf9d135a5929aae970728c",
+      "plane": "home",
+      "at": 1793039720897,
+      "status": 409,
+      "delivery": "delivered"
+    },
+    {
+      "id": "cb89b0c0-9e3b-4f10-a1b5-8873ce1bb927",
+      "method": "POST",
+      "body": {
+        "thingtime": [
+          "data"
+        ],
+        "crystal": {
+          "name": "Independent queue data"
+        },
+        "extended": null,
+        "tags": [],
+        "folderId": null,
+        "targetId": null,
+        "acl": [
+          "tt:user"
+        ],
+        "visibility": "private",
+        "shareId": "cb89b0c0-9e3b-4f10-a1b5-8873ce1bb927"
+      },
+      "actor": "6adf9d135a5929aae970728c",
+      "plane": "home",
+      "at": 1793039721410,
+      "status": 200,
+      "delivery": "delivered"
+    }
+  ],
+  "errors": []
+}

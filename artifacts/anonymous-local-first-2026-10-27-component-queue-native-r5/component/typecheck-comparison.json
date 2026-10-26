@@ -1,0 +1,9 @@
+{
+  "exitCode": 2,
+  "previous": 91,
+  "current": 91,
+  "added": [],
+  "removed": [],
+  "baseline": "suite-readiness-final-typecheck.log",
+  "log": "tmp/continuation/component-native-typecheck.log"
+}

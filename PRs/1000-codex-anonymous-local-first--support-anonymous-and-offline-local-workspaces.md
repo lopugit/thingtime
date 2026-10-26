@@ -5542,3 +5542,19 @@ published 1.7.0 contract from the catalog and media clients' unchanged minimums
 rejected. The full focused capability runner passes 136 tests; this correction
 changes test expectations only. Exact-head CI and preview results remain tracked
 on the PR rather than inferred from the earlier local or deployed checkpoint.
+
+Saved Component queue native acceptance now passes through the normal app worker
+and real replica API: rejected Component creation holds its nested page while
+unrelated Data syncs; acknowledgment releases the page. A committed create with
+a lost reply preserves the entire frozen operation across a newer local edit and
+cold navigation, then recovers through create409 and authenticated same-content
+GET200. The newer edit waits for its second Component before a PATCH using the
+recovered revision. Exact readback, rendering, reload and full short-page scroll
+checks pass at 1440/390/320px. Earlier harness failures remain recorded.
+[Acceptance and source boundaries](../artifacts/anonymous-local-first-2026-10-27-component-queue-native/README.md).
+
+The suite capability correction `b23917ea9` passed Web CI and CodeQL, and its
+exact-commit frontend shell/manifest responded successfully. This subsequent
+test/evidence increment requires its own pushed-head checks. TypeScript retains
+exactly the same 91 baseline diagnostics; no product code changed. The shared
+LLM proxy/key and VM configuration remain unchanged.

@@ -1,0 +1,57 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+const origin=process.env.TT_COMPONENT_ORIGIN, session=process.env.TT_RENDER_SESSION, artifacts=process.env.TT_COMPONENT_ARTIFACTS, fixture=process.env.TT_COMPONENT_FIXTURE;
+test('normal account worker gates nested Components and recovers immutable page write after cold reload', {skip:!origin||!session||!artifacts||!fixture,timeout:300000},async t=>{
+ assert.equal(new URL(origin!).hostname,'127.0.0.1');
+ const health=await(await fetch(origin+'/api/v1/health/nitro')).json();assert.equal(health.testEnvironment.sessionId,session);assert.equal(health.testEnvironment.mode,'isolated-agent-test');
+ await mkdir(artifacts!,{recursive:true});
+ const {chromium}=await import(process.env.TT_SHARED_PLAYWRIGHT_PATH!);
+ const browser=await chromium.launch({executablePath:process.env.TT_SHARED_CHROME_PATH,headless:true,chromiumSandbox:true});t.after(()=>browser.close());
+ const context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage();page.setDefaultTimeout(20000);
+ let ownerId='',dataPlane='home',hold='',drop='',dropped=false,freeze=false;
+ const writes:any[]=[],errors:string[]=[],bounds:any[]=[];page.on('pageerror',(e:Error)=>errors.push(e.message));
+ await context.route(/\/api\/v1\/things(?:\?.*)?$/, async(route:any)=>{
+  const req=route.request();if(!['POST','PATCH'].includes(req.method())){
+   if(freeze&&new URL(req.url()).searchParams.get('id')===drop)return route.abort('failed');return route.continue();
+  }
+  const body=req.postDataJSON();const row={method:req.method(),body,actor:req.headers()['x-thingtime-expected-actor'],plane:req.headers()['x-thingtime-expected-data-plane'],at:Date.now(),status:0};writes.push(row);
+  if(body.id===hold){row.status=422;return route.fulfill({status:422,contentType:'application/json',body:JSON.stringify({ok:false,error:'Scoped acceptance Component refusal'})});}
+  if(body.id===drop&&!dropped){const response=await route.fetch();row.status=response.status();assert.equal(response.status(),200);dropped=true;freeze=true;return route.abort('failed');}
+  if(freeze&&body.id===drop){row.status=-1;return route.abort('failed');}
+  const response=await route.fetch();row.status=response.status();return route.fulfill({response});
+ });
+ const inject=async()=>{if(!await page.evaluate(()=>!!(window as any).componentQueueFixture))await page.addScriptTag({path:fixture});await page.evaluate(({ownerId,dataPlane})=>(window as any).componentQueueFixture.open(ownerId,dataPlane),{ownerId,dataPlane});};
+ const proof=async(ids:string[])=>{await inject();return page.evaluate(ids=>(window as any).componentQueueFixture.proof(ids),ids);};
+ const poll=async(read:()=>Promise<any>,accept:(v:any)=>boolean)=>{let last;for(let i=0;i<225;i++){last=await read();if(accept(last))return last;await page.waitForTimeout(400);}throw Error('Queue convergence failed: '+JSON.stringify(last));};
+ const remote=async(id:string)=>page.evaluate(async({id,ownerId,dataPlane})=>{const r=await fetch('/api/v1/things?id='+id,{headers:{'X-Thingtime-Expected-Actor':ownerId,'X-Thingtime-Expected-Data-Plane':dataPlane},cache:'no-store'});return {status:r.status,body:await r.json()};},{id,ownerId,dataPlane});
+ const capture=async(label:string,text:string)=>{for(const width of [1440,390,320]){await page.setViewportSize({width,height:width===1440?1000:844});await page.getByText(text,{exact:true}).waitFor();const b=await page.evaluate(()=>({width:innerWidth,scrollWidth:document.documentElement.scrollWidth,text:document.body.innerText}));assert.equal(b.scrollWidth,width);assert.ok(b.text.includes(text));bounds.push({label,width,scrollWidth:b.scrollWidth});for(const bottom of [false,true]){await page.evaluate(bottom=>{for(const el of [document.scrollingElement!,...document.querySelectorAll<HTMLElement>('body *')])if(el.scrollHeight>el.clientHeight&&el.scrollHeight<40000)el.scrollTop=bottom?el.scrollHeight:0;},bottom);await page.screenshot({path:resolve(artifacts!,`${label}-${width}${bottom?'-bottom':''}.png`)});}}};
+ try{
+  await page.goto(origin+'/.well-known/thingtime-capabilities.json');
+  const registered=await page.evaluate(async()=>{const username='queue-'+crypto.randomUUID().slice(0,8),password=crypto.randomUUID()+crypto.randomUUID();const r=await fetch('/api/v1/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,email:username+'@example.test'})});const b=await r.json();return {status:r.status,id:b.user?.id};});assert.equal(registered.status,200);ownerId=registered.id;
+  const root=await page.evaluate(async()=>await(await fetch('/api/root-data')).json());assert.equal(root.user.id,ownerId);dataPlane=root.dataPlane?.id||root.dataPlane||'home';assert.equal(typeof dataPlane,'string');
+  await inject();const seeded=await page.evaluate(()=>(window as any).componentQueueFixture.seed());const ids=[seeded.control.id,seeded.page.id,seeded.data.id];hold=seeded.control.id;
+  await page.goto(origin+'/things');
+  await poll(()=>proof(ids),(p:any)=>p.status.find((r:any)=>r.id===seeded.control.id)?.state==='error'&&p.status.find((r:any)=>r.id===seeded.data.id)?.state==='synced');
+  assert.equal(writes.some(w=>w.body.id===seeded.page.id),false);assert.equal((await remote(seeded.page.id)).status,404);assert.equal((await remote(seeded.data.id)).body.thing.crystal.name,'Independent queue data');
+  hold='';await page.evaluate(id=>(window as any).componentQueueFixture.retry(id),seeded.control.id);await page.reload();
+  await poll(()=>proof(ids),(p:any)=>p.status.filter((r:any)=>ids.includes(r.id)).every((r:any)=>r.state==='synced'));
+  const controlAck=writes.findIndex(w=>w.body.id===seeded.control.id&&w.status===200),pageCreate=writes.findIndex(w=>w.body.id===seeded.page.id);assert.ok(controlAck>=0&&controlAck<pageCreate);
+  assert.deepEqual((await remote(seeded.page.id)).body.thing.crystal.blocks,seeded.page.crystal.blocks);
+  await page.goto(origin+'/p/'+seeded.page.id);await capture('acknowledged','Acknowledged component control');await page.reload();await page.getByText('Original frozen content',{exact:true}).waitFor();
+  // Separate fresh page to produce an uncertain create, while keeping the first dependency acknowledged.
+  await page.goto(origin+'/.well-known/thingtime-capabilities.json');await inject();const second=await page.evaluate(()=>(window as any).componentQueueFixture.seed());drop=second.page.id;
+  await page.goto(origin+'/things');await poll(async()=>dropped,(v:any)=>v===true);const uncertain=await poll(()=>proof([drop]),(p:any)=>p.records[0].row?.pending);const frozenOperation=structuredClone(uncertain.records[0].row.pending);
+  const frozen=writes.find(w=>w.body.id===drop).body;const committed=await context.request.get(origin+'/api/v1/things?id='+drop,{headers:{'X-Thingtime-Expected-Actor':ownerId,'X-Thingtime-Expected-Data-Plane':dataPlane}});assert.equal(committed.status(),200);const committedPage=(await committed.json()).thing;
+  await page.goto(origin+'/.well-known/thingtime-capabilities.json');await inject();const newer=await page.evaluate(id=>(window as any).componentQueueFixture.newer(id),drop);hold=newer.control.id;const all=[second.control.id,drop,second.data.id,hold];
+  await page.goto(origin+'/things');const cold=await proof(all);assert.deepEqual(cold.records.find((r:any)=>r.id===drop).row.pending,frozenOperation);await page.evaluate(id=>(window as any).componentQueueFixture.retry(id),drop);freeze=false;await page.reload();
+  const recovered=await poll(()=>proof(all),(p:any)=>p.records.find((r:any)=>r.id===drop)?.row?.base?.updatedAt===committedPage.updatedAt&&p.status.find((r:any)=>r.id===hold)?.state==='error');
+  assert.deepEqual(writes.filter(w=>w.body.id===drop)[1].body,frozen);assert.equal(recovered.things.find((r:any)=>r.id===drop).crystal.name,'Newer local page');assert.equal(recovered.status.find((r:any)=>r.id===drop).state,'pending');assert.equal((await remote(drop)).body.thing.crystal.name,'Dependency queue page');
+  hold='';await page.evaluate(id=>(window as any).componentQueueFixture.retry(id),newer.control.id);await page.reload();await poll(()=>proof(all),(p:any)=>p.status.filter((r:any)=>all.includes(r.id)).every((r:any)=>r.state==='synced'));
+  const update=writes.find(w=>w.body.id===drop&&w.method==='PATCH');assert.equal(update?.body.expectedUpdatedAt,committedPage.updatedAt);const final=(await remote(drop)).body.thing;assert.deepEqual(final.crystal.blocks,newer.page.crystal.blocks);assert.equal(final.crystal.name,'Newer local page');
+  await page.goto(origin+'/p/'+drop);await capture('recovered','Second dependency control');await page.reload();await page.getByText('Newer pending content',{exact:true}).waitFor();
+  assert.ok(writes.every(w=>w.actor===ownerId&&w.plane===dataPlane));assert.deepEqual(errors,[]);
+  await writeFile(resolve(artifacts!,'verification.json'),JSON.stringify({scope:'normal app worker + real replica API + browser IndexedDB',ownerId,dataPlane,ids,secondPage:drop,component:newer.control.id,writes,bounds,errors,frozen,frozenOperation,coldPending: cold.records.find((r:any)=>r.id===drop).row.pending,committedRevision:committedPage.updatedAt,final},null,2));
+ }catch(e){await page.screenshot({path:resolve(artifacts!,'failure.png')}).catch(()=>{});await writeFile(resolve(artifacts!,'failure.json'),JSON.stringify({error:String(e),writes,errors},null,2));throw e;}
+});
