@@ -27,7 +27,13 @@ export function createPasswordHandler(overrides: Partial<typeof defaults> = {}) 
       return json({ ok: false, error: 'Please wait before trying again.' }, { ...init, headers: privateHeaders });
     }
     try {
-      if (request.method === 'GET') return json({ ok: true, ownerId: user.id, configured: deps.ownerVaultConfigured(), ...await deps.listPasswords(user.id, new URL(request.url).searchParams.get('cursor'), new URL(request.url).searchParams.get('q') || '') }, { headers });
+      if (request.method === 'GET') {
+        const result = await deps.listPasswords(user.id, new URL(request.url).searchParams.get('cursor'), new URL(request.url).searchParams.get('q') || '');
+        // Icon presentation is decrypted separately; recheck the live session
+        // before returning it, just as for explicit field and file reads.
+        if ((await deps.getCurrentUser(request))?.id !== user.id) return json({ ok: false, error: 'Your session ended.' }, { status: 401, headers });
+        return json({ ok: true, ownerId: user.id, configured: deps.ownerVaultConfigured(), ...result }, { headers });
+      }
       const origin = request.headers.get('Origin');
       if (request.headers.get('Sec-Fetch-Site') === 'cross-site' || (origin && origin !== resolvePublicOrigin(request).origin)) return json({ ok: false, error: 'Use the same Thingtime origin.' }, { status: 403, headers });
       const invalidType = requireJsonContentType(request);
