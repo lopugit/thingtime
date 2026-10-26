@@ -10,6 +10,11 @@ CI and nothing else:
 vercel.json          the Vercel Git-deployment kill-switch
 ```
 
+The [protected unsigned native compile lane](.github/NATIVE_COMPILE.md) accepts
+an explicit owner PR/head SHA after independent controller/listener admission.
+Candidate files remain opaque data until kernel network denial and a fresh
+unprivileged build identity are active; it has no signing or release path.
+
 Plus the repository's canonical AI instruction files (`AI_ALL.md`, with
 `AGENTS.md` and `CLAUDE.md` as symlinks to it), because agents work on this
 branch too.
