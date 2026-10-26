@@ -44,7 +44,7 @@ class NativeCompileBoundaryTests(unittest.TestCase):
     def test_workflow_pins_reviewed_helper_independently_of_candidate_and_caller(self):
         workflow=HELPER.parent.parent/'workflows/native-compile.yml'
         text=workflow.read_text()
-        helper_sha='d0dfbdbc89f039cb45ccbd9c4e4e3054937942b8'
+        helper_sha='4dddacc04ceb1c50762e42654f49ecc9585ec915'
         self.assertIn('ref: '+helper_sha,text)
         self.assertIn('CONTROL_SHA: '+helper_sha,text)
         self.assertIn('test "$(git -C trusted-controller rev-parse HEAD)" = "$CONTROL_SHA"',text)
