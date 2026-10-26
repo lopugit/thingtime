@@ -41,6 +41,18 @@ class NativeCompileBoundaryTests(unittest.TestCase):
             with self.subTest(key=key),self.assertRaises(RuntimeError):
                 native.require_hosted_runner(dict(valid,**{key:value}),lambda:'Darwin',lambda:0)
 
+    def test_workflow_pins_reviewed_helper_independently_of_candidate_and_caller(self):
+        workflow=HELPER.parent.parent/'workflows/native-compile.yml'
+        text=workflow.read_text()
+        helper_sha='d0dfbdbc89f039cb45ccbd9c4e4e3054937942b8'
+        self.assertIn('ref: '+helper_sha,text)
+        self.assertIn('CONTROL_SHA: '+helper_sha,text)
+        self.assertIn('test "$(git -C trusted-controller rev-parse HEAD)" = "$CONTROL_SHA"',text)
+        self.assertNotIn('commits/github-actions',text)
+        self.assertNotIn('ref: ${{ github.sha }}',text)
+        self.assertNotIn('ref: ${{ github.workflow_sha }}',text)
+        self.assertNotIn('steps.controller.outputs.sha',text)
+
     def test_source_identity_and_exact_sha_are_required(self):
         sha='a'*40
         pr={'state':'open','author_association':'OWNER','head':{'repo':{'full_name':'lopugit/thingtime'},'sha':sha},

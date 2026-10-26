@@ -61,13 +61,21 @@ in this workflow.
 
 ## Trust boundary
 
-Only protected code executes as the sudo-capable runner or root. The reusable
-workflow resolves the current `github-actions` SHA through GitHub's API, checks
-out that exact admitted controller revision with credentials disabled, and
-verifies its HEAD before invoking the trusted supervisor. Caller input can
-select only the candidate PR/SHA, never a controller/helper ref or path. The
-listener's reusable implementation is pinned separately. The artifact records
-the selected helper/controller SHA independently of the candidate SHA.
+Only protected code executes as the sudo-capable runner or root. Admission
+preserves two reviewed commits: H1 contains the trusted helper/tests; H2 pins
+the workflow's helper checkout and `CONTROL_SHA` literally to H1. The main
+listener pins its reusable implementation to H2. Preserve H1 ancestry through
+a normal merge; do not squash away the helper commit or silently rewrite pins.
+
+Current H1 is `d0dfbdbc89f039cb45ccbd9c4e4e3054937942b8`. The workflow does not
+resolve a mutable helper branch or use caller `github.sha`/`github.workflow_sha`
+to select helper code. It checks out H1 with credentials disabled and verifies
+HEAD equals H1 before invoking the supervisor. Caller input selects only the
+candidate PR/SHA, never a helper ref or path. The artifact's `controllerSha`
+identifies **helper H1**, while GitHub's reusable-workflow run provenance and
+the listener's immutable reference identify **workflow H2**. These are separate
+from the candidate source SHA. A helper update requires a new reviewed helper
+commit and a subsequent reviewed literal-pin change.
 
 The candidate tarball is downloaded by its immutable GitHub commit URL as
 opaque bytes. The runner/root never checks out, imports, tests, or executes its

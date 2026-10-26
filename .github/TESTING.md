@@ -302,7 +302,9 @@ pre-queued with no jobs, logs, or cancellable run graph.
 - Run `/usr/bin/python3 -I -S .github/scripts/native-compile-ci.test.py` and
   `actionlint .github/workflows/native-compile.yml` without privileged actions.
 - Independently review/admit protected supervisor code and a separately pinned
-  main listener before dispatch. Candidate helper imports must stay inert;
+  main listener before dispatch. Preserve reviewed helper H1 ancestry and
+  literal H1 checkout/provenance pins; the listener separately pins workflow H2.
+  Candidate helper imports must stay inert;
   native archive extraction and execution occur only after enforced isolation.
 - Follow [the native compile runbook](NATIVE_COMPILE.md) for exact-head admission,
   hosted direct IPv4/IPv6, UDP/DNS and child-sandbox checks, cancellation/watchdog
