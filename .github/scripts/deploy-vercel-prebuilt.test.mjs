@@ -4,7 +4,9 @@ import { readFileSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { verifyAlias, compatibilityAliasCandidates, applyOutputPolicy, policyVersion, runtimePolicyIssue, deploymentArgs, deploymentIssue, marker, planOutputs, publisherEnvironment, selectTarget, sourceFromEvent } from './deploy-vercel-prebuilt.mjs';
+import { publish, needsReleaseBuild, verifyAlias, compatibilityAliasCandidates, applyOutputPolicy, policyVersion, runtimePolicyIssue, deploymentArgs, deploymentIssue, marker, planOutputs, publisherEnvironment, selectTarget, sourceFromEvent } from './deploy-vercel-prebuilt.mjs';
+
+import { gatewayMetadata, gatewayPolicy } from './environment-gateway-policy.mjs';
 
 const custom = [{ id: 'env_develop', slug: 'develop', branchMatcher: { type: 'equals', pattern: 'develop' } }];
 test('a READY artifact still reconciles its aliases and status without rebuilding', () => {
@@ -58,6 +60,7 @@ test('every environment uploads only prebuilt output and stamps exact source ide
     assert.equal(args[args.indexOf('--regions') + 1], 'syd1');
     assert.ok(args.includes('THINGTIME_GIT_COMMIT_SHA=' + 'a'.repeat(40)));
     assert.equal(args.includes('--prod'), branch === 'main');
+    assert.equal(args.includes('--skip-domain'), branch === 'main');
     if (branch !== 'main') assert.ok(args.includes(`--target=${target.slug}`));
     assert.ok(!args.includes('--build-env'));
   }
@@ -65,7 +68,7 @@ test('every environment uploads only prebuilt output and stamps exact source ide
 
 test('deployment evidence rejects mismatched source, project and environments', () => {
   const plan = { branch: 'develop', sha: 'a'.repeat(40), target: selectTarget('develop', 'main', custom), projectId: 'prj_thingtime' };
-  const deployment = { projectId: plan.projectId, customEnvironment: { id: 'env_develop' }, target: null, meta: { [marker]: '1', thingtimePrebuiltPolicy: policyVersion, githubCommitRef: plan.branch, githubCommitSha: plan.sha, thingtimeBuildTarget: 'develop' } };
+  const deployment = { projectId: plan.projectId, customEnvironment: { id: 'env_develop' }, target: null, meta: { ...gatewayMetadata(gatewayPolicy(plan)), [marker]: '1', thingtimePrebuiltPolicy: policyVersion, githubCommitRef: plan.branch, githubCommitSha: plan.sha, thingtimeBuildTarget: 'develop' } };
   assert.equal(deploymentIssue(deployment, plan), null);
   assert.equal(deploymentIssue({ ...deployment, target: 'production' }, plan), 'production-target');
   assert.equal(deploymentIssue({ ...deployment, customEnvironment: null }, plan), 'custom-environment');
@@ -89,7 +92,7 @@ test('build job has no secrets/environment and publisher executes only protected
   // Shared installation-token quotas must not strand a READY deployment before
   // its final branch check or status receipt. Only protected jobs use the same
   // automation credential fallback as the existing PR preview controller.
-  assert.equal((yaml.match(/GH_TOKEN: \$\{\{ secrets\.CONFLICT_RESOLVER_PAT \|\| github\.token \}\}/g) || []).length, 2);
+  assert.equal((yaml.match(/GH_TOKEN: \$\{\{ secrets\.CONFLICT_RESOLVER_PAT \|\| github\.token \}\}/g) || []).length, 3);
 });
 
 test('prebuilt output carries trusted production crons and function regions', async () => {
@@ -136,4 +139,127 @@ test('alias propagation retries only reads and stops on persistent failure', asy
   let failures = 0;
   await assert.rejects(verifyAlias(async () => { failures++; throw new Error('persistent'); }, async () => {}), /persistent/);
   assert.equal(failures, 3);
+});
+
+
+test('preview master has a separate secretless preview build and all uploads snapshot aliases first', () => {
+  const yaml = readFileSync(new URL('../workflows/deploy-vercel-prebuilt.yml', import.meta.url), 'utf8');
+  const masterBuild = yaml.split('- name: Build controlled preview master')[1].split('  publish:')[0];
+  assert.match(masterBuild, /VERCEL_ENV: preview/);
+  assert.match(masterBuild, /VERCEL_TARGET_ENV: preview/);
+  assert.match(masterBuild, /vercel-preview-master-/);
+  assert.doesNotMatch(masterBuild, /secrets\./);
+  const source = readFileSync(new URL('./deploy-vercel-prebuilt.mjs', import.meta.url), 'utf8');
+  assert.ok(source.indexOf('const aliasBefore =') < source.indexOf("await exec(required('VERCEL_CLI_PATH')"));
+  assert.match(source, /Canonical gateway domain missing from project mapping/);
+  const prSource = readFileSync(new URL('./deploy-develop-pr-preview.mjs', import.meta.url), 'utf8');
+  const reconciliation = prSource.split('const reconcileStableDevelopAlias =')[1].split('const prepareDeployment =')[0];
+  assert.doesNotMatch(reconciliation, /assignStableDevelopAlias|method: 'POST'/);
+  assert.match(reconciliation, /stablePublisherDeploymentIssue/);
+});
+
+
+test('partial production success rebuilds the missing preview artifact before retry publication', () => {
+  const plan = { target: { kind: 'production' } };
+  assert.equal(needsReleaseBuild(plan, { id: 'production-ready' }, null), true);
+  assert.equal(needsReleaseBuild(plan, { id: 'production-ready' }, { id: 'master-ready' }), false);
+  assert.equal(needsReleaseBuild(plan, null, { id: 'master-ready' }), true);
+  assert.equal(needsReleaseBuild({ target: { kind: 'preview' } }, { id: 'preview-ready' }, null), false);
+});
+
+
+test('bootstrap can request secretless artifacts without enabling any publication job', () => {
+  const yaml = readFileSync(new URL('../workflows/deploy-vercel-prebuilt.yml', import.meta.url), 'utf8');
+  assert.match(yaml, /workflow_dispatch:/);
+  assert.match(yaml, /build_only:/);
+  assert.match(yaml, /BUILD_ONLY: \$\{\{ inputs.build_only \}\}/);
+  const source = readFileSync(new URL('./deploy-vercel-prebuilt.mjs', import.meta.url), 'utf8');
+  assert.match(source, /BUILD_ONLY === 'true'[\s\S]*should_publish: 'false'/);
+});
+
+
+test('READY reuse publishes alias, status and summary, then retries without another mutation', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'publisher-ready-reuse-'));
+  const summary = join(directory, 'summary.md');
+  const environment = {
+    GITHUB_REPOSITORY: 'lopugit/thingtime', GITHUB_API_URL: 'https://api.github.com',
+    GH_TOKEN: 'synthetic-github', VERCEL_API_TOKEN: 'synthetic-vercel',
+    VERCEL_TEAM_ID: 'team_test', VERCEL_TEAM_SLUG: 'team',
+    VERCEL_PROJECT_ID: 'prj_test', VERCEL_PROJECT_NAME: 'thingtime',
+    SOURCE_REF: 'main', SOURCE_SHA: 'a'.repeat(40), TARGET_ENVIRONMENT: 'production', TARGET_ID: '',
+    GITHUB_RUN_ID: '123', GITHUB_STEP_SUMMARY: summary
+  };
+  const originalEnvironment = Object.fromEntries(Object.keys(environment).map((key) => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch;
+  const sha = environment.SOURCE_SHA;
+  const policy = gatewayPolicy({ branch: 'main', target: { slug: 'production' } });
+  const deployment = {
+    id: 'dpl_ready', projectId: 'prj_test', url: 'thingtime-ready.vercel.app', readyState: 'READY',
+    target: 'production', regions: ['syd1'], crons: [],
+    meta: { ...gatewayMetadata(policy), [marker]: '1', thingtimePrebuiltPolicy: policyVersion,
+      thingtimeBuildTarget: 'production', githubCommitSha: sha, githubCommitRef: 'main' }
+  };
+  let binding = { projectId: 'prj_test', alias: 'thingtime.com', deploymentId: 'dpl_previous' };
+  const statuses = [];
+  const calls = [];
+  const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
+  Object.assign(process.env, environment);
+  globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(String(input));
+    const method = init.method || 'GET';
+    calls.push(`${method} ${url.origin}${url.pathname}`);
+    if (url.hostname === 'api.github.com') {
+      const path = url.pathname.replace('/repos/lopugit/thingtime', '');
+      if (path === '') return json({ full_name: 'lopugit/thingtime', owner: { login: 'lopugit' }, name: 'thingtime', default_branch: 'main' });
+      if (path === '/git/ref/heads/main') return json({ object: { sha } });
+      if (path === '/contents/vercel.json') return json({ content: Buffer.from(JSON.stringify({ regions: ['syd1'], crons: [] })).toString('base64') });
+      if (path === `/commits/${sha}/status`) return json({ statuses });
+      if (path === `/statuses/${sha}` && method === 'POST') { statuses.push(JSON.parse(init.body)); return json(statuses.at(-1), 201); }
+    }
+    if (url.hostname === 'api.vercel.com') {
+      const path = url.pathname;
+      if (path === '/v9/projects/prj_test') return json({ id: 'prj_test', name: 'thingtime', link: null });
+      if (path === '/v9/projects/prj_test/custom-environments') return json({ environments: [] });
+      if (path === '/v9/projects/prj_test/env') return json({ envs: [{ key: 'THINGTIME_GATEWAY_SECRET', type: 'encrypted', target: ['production'] }] });
+      if (path === '/v9/projects/prj_test/domains') return json({ domains: [{ name: 'thingtime.com', verified: true }] });
+      if (path === '/v7/deployments') return json({ deployments: [{ uid: deployment.id }] });
+      if (path === '/v13/deployments/dpl_ready') return json(deployment);
+      if (path === '/v4/aliases/thingtime.com') return json(binding);
+      if (path.startsWith('/v4/aliases/')) return json({}, 404);
+      if (path === '/v2/deployments/dpl_ready/aliases' && method === 'POST') {
+        assert.deepEqual(JSON.parse(init.body), { alias: 'thingtime.com' });
+        binding = { ...binding, deploymentId: deployment.id }; return json(binding);
+      }
+    }
+    if (['thingtime-ready.vercel.app', 'thingtime.com'].includes(url.hostname)) {
+      if (url.pathname === '/' || url.pathname === '/index.html') return new Response('<div id="root"></div><script src="/assets/app.js"></script>', { headers: { 'Content-Type': 'text/html' } });
+      if (url.pathname === '/assets/app.js') return new Response('console.log("fixture")', { headers: { 'Content-Type': 'application/javascript' } });
+      if (url.pathname === '/.well-known/thingtime-capabilities.json') return json({ origin: 'https://thingtime.com', gateway: { environment: 'production', origin: 'https://thingtime.com', deploymentId: deployment.id } });
+      if (url.pathname === '/api/root-data') return json({ ok: true });
+    }
+    throw new Error(`Unexpected fixture request: ${method} ${url.origin}${url.pathname}`);
+  };
+  try {
+    await publish();
+    assert.equal(binding.deploymentId, deployment.id);
+    assert.equal(statuses.length, 1);
+    assert.equal(statuses[0].target_url, 'https://thingtime-ready.vercel.app');
+    assert.equal(statuses[0].context, 'Vercel prebuilt (production)');
+    assert.match(await readFile(summary, 'utf8'), /Deployment: https:\/\/thingtime-ready\.vercel\.app/);
+    assert.ok(calls.includes('GET https://thingtime.com/.well-known/thingtime-capabilities.json'));
+    assert.ok(calls.includes('GET https://thingtime.com/api/root-data'));
+    assert.equal(calls.filter((call) => call.startsWith('POST ')).length, 2);
+    const firstCalls = calls.length;
+    await writeFile(summary, '');
+    await publish();
+    assert.equal(statuses.length, 1);
+    assert.equal(calls.slice(firstCalls).filter((call) => call.startsWith('POST ')).length, 0);
+    assert.match(await readFile(summary, 'utf8'), /Environment: `production`/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(originalEnvironment)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    await rm(directory, { recursive: true, force: true });
+  }
 });
