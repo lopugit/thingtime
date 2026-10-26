@@ -1,0 +1,10 @@
+{
+  "baselineCount": 91,
+  "currentCount": 91,
+  "sameNormalizedDiagnostics": true,
+  "added": [],
+  "removed": [],
+  "clean": false,
+  "exitCode": 2,
+  "scope": "Includes actual component browser fixture and tests"
+}

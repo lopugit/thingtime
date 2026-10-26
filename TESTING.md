@@ -15581,6 +15581,11 @@ Local results do not establish current-head CI or deployed acceptance.
   newer oversized content; retain uncertain legacy attempts without replay loops.
 
 - Repeat instruction saves quickly at 1440/390/320px: one editor replaces its own active success notification, unrelated notifications remain separate, and all account-size guidance lines remain unobscured without dismissing feedback. Paste 12,000 hard lines through the actual clipboard, verify native undo/redo and subsequent typing, then save and cold-reload exact content. CDP `fill` alone is not evidence of native paste performance.
+- Record paste/beforeinput/input/first-frame timings separately from host elapsed
+  time without retaining instruction contents in diagnostics. Keep the native
+  paste gate unchanged. The 27 October instrumented run passed 2/2 tests with
+  exact 12,002-line paste in 2,194 ms and local save in 114 ms; earlier slow runs
+  remain unexplained. See `artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/`.
 
 - Unified MCP discovery must advertise the read-only capabilities and rendering tools accurately; verify them from a read-only host without changing its approval policy. Import/delete tools retain their consent requirements.
 
@@ -15799,3 +15804,11 @@ archive/client parity limits and failed attempts.
 
 The native checklist is linked to its execution record rather than inferred from
 unit tests. Offline copies cannot discover an unobserved server ACL/content change.
+
+### Vault queue status — delayed and failed reads (27 October 2026)
+
+- Hold the initial local queue read: show checking, never claim an empty queue before it resolves. Fail that read and show unavailable with a working Refresh action.
+- Populate refused entries/attachments, then hold or fail a refresh: preserve known rows and label them last known. A successful retry clears the error.
+- Change the vault or canonical owner/origin/data-plane/delegation: the first committed frame contains no old titles/messages; late successes and failures cannot repopulate it. Equivalent scope props preserve the edited child form.
+- Run `npm --prefix remix run test:passwords` for reader regressions. Build the opt-in actual-component browser fixture with `node remix/scripts/build-password-queue-status-fixture.cjs`; run in the task-owned sandbox with its documented environment.
+- [Current normal API + component fault acceptance](artifacts/anonymous-vault-status-2026-10-27/README.md): full 1440/390/320px scroll, retry, preserved values, zero component network requests, canonical account readback and released runtime. Broader provider/device boundaries remain separate.

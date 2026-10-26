@@ -1,9 +1,10 @@
 import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import type { LocalPasswordVault } from '~/local-workspace/passwordVault';
-import type { WorkspaceScope } from '~/local-workspace/storage';
+import { workspaceScopeKey, type WorkspaceScope } from '~/local-workspace/storage';
 import { accountPasswordFileTransport } from '~/local-workspace/passwordFileTransport.client';
 import { accountPasswordTransport } from '~/local-workspace/passwordTransport.client';
+import { createQueueStatusReader, type QueueStatusSnapshot } from './queueStatusReader';
 import { createSyncPump } from '~/local-workspace/syncPump';
 import { accountWorkspaceLease, canSyncAccountWorkspace, subscribeWorkspaceBinding, announceLocalWorkspaceChange, LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
 type Scope = Extract<WorkspaceScope, { kind: 'account' }>;
@@ -13,24 +14,33 @@ type FileStatus = Awaited<ReturnType<LocalPasswordVault['fileSyncStatus']>>;
 /** Unlock grants local decryption only. Every network operation independently
  * requires the current confirmed account/origin/data-plane lease. */
 export function AccountPasswordWorkspace({ vault, scope, children }: { vault: LocalPasswordVault; scope: Scope; children: React.ReactNode }) {
- const [status, setStatus] = React.useState<Status>([]), [titles, setTitles] = React.useState<Record<string, string>>({});
- const [fileStatus, setFileStatus] = React.useState<FileStatus>([]), [fileError, setFileError] = React.useState('');
+ // Reset the entire presentation before committing another vault/scope's frame.
+ const scopeKey = workspaceScopeKey(scope);
+ const [owner, setOwner] = React.useState({ vault, scope, scopeKey, generation: 0 });
+ if (owner.vault !== vault || owner.scopeKey !== scopeKey) setOwner({ vault, scope, scopeKey, generation: owner.generation + 1 });
+ return <AccountPasswordWorkspaceStatus key={owner.generation} vault={owner.vault} scope={owner.scope}>{children}</AccountPasswordWorkspaceStatus>;
+}
+type Queue = { status: Status; fileStatus: FileStatus; titles: Record<string, string> };
+function AccountPasswordWorkspaceStatus({ vault, scope, children }: { vault: LocalPasswordVault; scope: Scope; children: React.ReactNode }) {
+ const [queue, setQueue] = React.useState<QueueStatusSnapshot<Queue>>({ value: null, failed: false });
+ const { status = [], fileStatus = [], titles = {} } = queue.value || {};
+ const [fileError, setFileError] = React.useState('');
  const [error, setError] = React.useState(''), [message, setMessage] = React.useState(''), [resolving, setResolving] = React.useState(false);
  const confirmed = React.useSyncExternalStore(subscribeWorkspaceBinding, () => canSyncAccountWorkspace(scope), () => false);
  const controls = React.useRef<{ wake: () => void; controller: AbortController; transport: ReturnType<typeof accountPasswordTransport> } | null>(null);
  React.useEffect(() => {
-  let active = true, sequence = 0;
+  let active = true;
   const controller = new AbortController(), transport = accountPasswordTransport(scope, accountWorkspaceLease(scope));
   const fileTransport = accountPasswordFileTransport(scope, accountWorkspaceLease(scope));
   const enabled = () => active && vault.isUnlocked() && navigator.onLine !== false && canSyncAccountWorkspace(scope);
-  const refresh = async () => {
-   const version = ++sequence, [next, nextFiles] = await Promise.all([vault.syncStatus(), vault.fileSyncStatus()]), names: Record<string,string> = {};
-   for (const row of next.filter(row => row.state === 'refused').slice(0,20)) {
-    try { names[row.recordId] = (await vault.read(row.recordId, controller.signal)).entry.title; } catch { names[row.recordId] = 'Deleted device entry'; }
+  const reader = createQueueStatusReader(async () => {
+   const [status, fileStatus] = await Promise.all([vault.syncStatus(), vault.fileSyncStatus()]), titles: Record<string, string> = {};
+   for (const row of status.filter(row => row.state === 'refused').slice(0,20)) {
+    try { titles[row.recordId] = (await vault.read(row.recordId, controller.signal)).entry.title; } catch { titles[row.recordId] = 'Deleted device entry'; }
    }
-   if (active && version === sequence) { setStatus(next); setFileStatus(nextFiles); setTitles(names); }
-   return next;
-  };
+   return { status, fileStatus, titles };
+  }, setQueue);
+  const refresh = async () => (await reader.refresh()).status;
   const pullFiles = createSyncPump(enabled, async () => {
    try {
     const result = await vault.reconcileFiles(fileTransport, controller.signal);
@@ -64,7 +74,7 @@ export function AccountPasswordWorkspace({ vault, scope, children }: { vault: Lo
   const off = subscribeWorkspaceBinding(wake);
   window.addEventListener('online', wake); window.addEventListener('focus', wake); window.addEventListener(LOCAL_WORKSPACE_CHANGED, changed);
   wake();
-  return () => { active = false; controls.current = null; controller.abort(); push.stop(); pull.stop(); pushFiles.stop(); pullFiles.stop(); off(); window.removeEventListener('online', wake); window.removeEventListener('focus', wake); window.removeEventListener(LOCAL_WORKSPACE_CHANGED, changed); };
+  return () => { active = false; reader.retire(); controls.current = null; controller.abort(); push.stop(); pull.stop(); pushFiles.stop(); pullFiles.stop(); off(); window.removeEventListener('online', wake); window.removeEventListener('focus', wake); window.removeEventListener(LOCAL_WORKSPACE_CHANGED, changed); };
  }, [vault, scope]);
  const resolve = async (row: Status[number], choice: 'account' | 'copy') => {
   const current = controls.current; if (!current || resolving) return;
@@ -83,7 +93,8 @@ export function AccountPasswordWorkspace({ vault, scope, children }: { vault: Lo
  const refused = status.filter(row => row.state === 'refused');
  return <>
   <Box mx={{ base: 3, md: 6 }} mt={4} p={3} border="1px solid var(--tt-border, #e6e6eb)" borderRadius="12px">
-   <Flex alignItems="center" gap={3} flexWrap="wrap"><Text role="status">{!confirmed ? 'Device vault · account confirmation needed for sync' : status.length + fileStatus.length ? `${status.length + fileStatus.length} device changes waiting for account sync` : 'Device vault · no pending account changes'}</Text><Button size="sm" variant="outline" onClick={() => controls.current?.wake()}>Refresh account sync</Button></Flex>
+   <Flex alignItems="center" gap={3} flexWrap="wrap"><Text role="status">{queue.failed ? 'Device vault · pending changes unavailable' : queue.value === null ? 'Device vault · checking pending changes…' : !confirmed ? 'Device vault · account confirmation needed for sync' : status.length + fileStatus.length ? `${status.length + fileStatus.length} device changes waiting for account sync` : 'Device vault · no pending account changes'}</Text><Button size="sm" variant="outline" onClick={() => controls.current?.wake()}>Refresh account sync</Button></Flex>
+   {queue.failed && <Text role="alert" mt={2}>Could not read pending device changes. {queue.value ? 'Showing the last known queue. ' : ''}Device entries remain saved. Use Refresh account sync to retry.</Text>}
    {fileError && <Text role="alert" mt={2}>{fileError}</Text>}
    {fileStatus.length > 0 && <Text mt={2} fontSize="sm">{fileStatus.length} attachment changes are saved on this device and waiting for account sync.</Text>}
    {fileStatus.filter(row => row.state === 'refused').slice(0,20).map(row => <Box key={row.id} mt={3} p={3} border="1px solid var(--tt-border, #e6e6eb)" borderRadius="8px"><Text fontWeight="bold">Attachment {row.operation === 'delete' ? 'removal' : 'upload'} needs review</Text><Text mt={1}>{row.status === 403 ? 'The account has not allowed this file operation. Check private-upload permission before retrying.' : 'The account refused this file operation. Open the entry to review its saved attachments, then refresh or retry when the account is ready.'}</Text><Button mt={2} size="sm" variant="outline" isDisabled={!confirmed || resolving} onClick={() => void retryFile(row.id)}>Retry attachment sync</Button></Box>)}

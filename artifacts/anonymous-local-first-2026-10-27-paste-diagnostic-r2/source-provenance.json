@@ -1,0 +1,11 @@
+{
+  "head": "99448760f5b49638a9979a81eda55805e994b709",
+  "basePackageSha256": "aea7f888d84c7976add09f1d1c5dff646677f086ff2d499ac39e3b466f7a4217",
+  "matches": [
+    {
+      "map": "index-Bzdj5Zvu.js.map",
+      "exact": true
+    }
+  ],
+  "testSha256": "288243209560726e6270c6461a75c07a4d9cf755a87762b5e62fec0dfa569e67"
+}

@@ -5752,9 +5752,29 @@ preserved 12,002 lines but took 6,665 ms, failing the unchanged five-second gate
 Renderer task time was 6.687 s, with 0.625 s layout and 0.0425 s JavaScript.
 Network isolation, no-OOM checks and owned-runtime cleanup passed.
 [Evidence](../artifacts/anonymous-local-first-2026-10-26-instruction-followup/README.md).
-The prior paragraph's older-build limitation is superseded by this fresh build;
-the performance failure, larger enabled inference and installed-app acceptance
-remain open. Added event/frame diagnostics are awaiting native execution.
+The prior paragraph's older-build limitation is superseded by this fresh build.
+The performance failure was still open at this checkpoint; the later
+instrumented run below records current evidence. Larger enabled inference and
+installed-app acceptance remain separate.
+
+### Instrumented instruction paste — 27 October 2026
+
+The unchanged editor passed both packaged native tests with the added event and
+frame diagnostics. Actual clipboard paste preserved all 12,002 lines in
+2,194 ms against the unchanged under-five-second requirement; local save took
+114 ms. Native undo/redo, subsequent typing, offline save/cold reload,
+lost-reply reconciliation, both reviewed conflict choices and independent
+account readback passed. Full scrolling and unobscured guidance were checked at
+1440, 390 and 320 pixels, with no offline writes or browser errors.
+
+The input event arrived at 2,076.9 ms and the first subsequent frame at
+2,098.7 ms; a 2,072 ms long task was observed. This is a passing measurement,
+not a demonstrated fix or an explanation of the earlier 6,665/9,114 ms failures.
+No editor source change was made. The packaged editor source matches the
+current source exactly; archive/test hashes, network and sandbox checks,
+screenshots, the pre-test staging failure and successful cleanup are retained in
+the [instrumented evidence](../artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/README.md).
+Installed macOS acceptance and larger enabled inference remain open.
 
 
 ## Streamed account catalogues — 26 October 2026
@@ -5991,3 +6011,9 @@ replacement that has not been observed while offline cannot be inferred. Wider
 managed/bound media, microphone capture, video, installed-device and provider
 acceptance remain separate. Native results and exact package/source provenance
 are recorded in the [audio evidence](../artifacts/anonymous-audio-cache-2026-10-27/README.md).
+
+### Vault identity and save retirement — 27 October 2026
+
+The normal Passwords UI passed an isolated native run (1 test, no failures/skips) against the prior reviewed product package: held root identity resolution clears the previous account fields, a save held before native encryption cannot commit after retirement, distinct accounts retain separate encrypted device vaults, and a cold offline edit persists through lock/unlock. Reconnection advances the second account's canonical revision from 1 to 2 while the first stays at revision 1. Cross-account access to the same globally owned server entry ID is refused. This is not proof of matching local IDs across partitions. Full scrolling at 1440/390/320px, masked fields, export-dialog focus and Escape passed.
+
+[Executed source, source-map parity, screenshots and cleanup](../artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/README.md) retain the setup corrections and premature-readback diagnosis; no server reversion was established. One loopback origin/default data plane was tested. Origin/plane transitions, attachment races, installed macOS/AutoFill and provider integration remain open. The initial queue label defect is fixed: unread queues show checking, failed reads show unavailable with retry guidance, and known rows survive refresh failures. Changed vault/account scopes clear old presentation before commit. [Fresh-package normal API acceptance plus actual-component fault regressions](../artifacts/anonymous-vault-status-2026-10-27/README.md) pass; TypeScript remains at the unchanged 91-diagnostic baseline.

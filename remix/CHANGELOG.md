@@ -104,6 +104,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Password queue status now distinguishes unread/failed queues from empty queues, preserves known rows through refresh errors, and retires prior account presentation. Fresh isolated API/native and actual-component fault checks pass; [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-27: Record instrumented native instruction paste, undo/redo and
+  offline/reconnect acceptance through the normal Settings editor. Exact
+  12,002-line paste passed in 2,194 ms without changing source or the performance
+  gate; previous slow runs and installed-app acceptance remain separate.
+  [PR #1000 evidence](../artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/README.md).
+  **Codex (AI)**
+
 - 2026-10-27: Scope explicit offline audio originals to the workspace identity,
   validate canonical bytes and fence playback/downloads across track and account
   transitions. Native correct-package playback, cold reload and removal pass;

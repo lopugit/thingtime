@@ -165,7 +165,7 @@
     "test:timeline:related": "node --import tsx scripts/timeline-related.integration.mts",
     "build:draft": "vite build --config vite.draft.config.ts",
     "test:draft": "node --import tsx --test app/draftPreview/*.test.ts",
-    "test:passwords": "node --experimental-test-module-mocks --import tsx --test app/passwords/*.test.ts app/routes/api/v1/passwords/*.test.ts app/api/utils/connections/vaultEnvelope.test.ts app/api/utils/connections/vaultKeys.test.mts scripts/worktree-ports.test.cjs",
+    "test:passwords": "node --experimental-test-module-mocks --import tsx --test app/passwords/*.test.ts app/components/Passwords/*.test.ts app/routes/api/v1/passwords/*.test.ts app/api/utils/connections/vaultEnvelope.test.ts app/api/utils/connections/vaultKeys.test.mts scripts/worktree-ports.test.cjs",
     "build:offline": "node scripts/build-offline-shell.mjs",
     "test:local-workspace": "node --import tsx --test app/local-workspace/*.test.ts && node --test scripts/offline-shell.test.mjs",
     "test:mail": "node --import tsx --test app/mail/*.test.ts app/api/utils/mail/*.test.ts app/routes/api/v1/mail/*.test.ts",

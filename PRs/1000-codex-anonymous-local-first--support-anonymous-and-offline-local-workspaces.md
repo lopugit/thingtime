@@ -2,7 +2,27 @@
 
 Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/pull/1000
 
-## Current checkpoint — 2026-10-26
+## Current checkpoint — 2026-10-27
+
+The existing Thingtime MCP has actual desktop-host and CLI-agent render/export
+proof. The broader anonymous/offline suite remains in progress. Product checkpoint
+`99448760f5b49638a9979a81eda55805e994b709` passes Web CI and CodeQL; its immutable
+preview and branch alias pass public shell, manifest and asset checks. The source
+association comes from GitHub deployment metadata, not an in-page commit marker.
+These HTTP checks do not establish deployed functional acceptance.
+
+The normal Settings editor also passes a fresh instrumented native run: both
+tests pass, exact 12,002-line clipboard paste takes 2,194 ms and local save takes
+114 ms. Native undo/redo, normal typing, offline reload, lost-response recovery,
+both conflict choices and independent account readback pass. Layout and guidance
+checks cover 1440/390/320px.
+No editor source change or performance-gate change was made. Earlier slow runs
+remain unexplained; installed macOS and larger enabled-inference acceptance remain
+open. [Instrumented native evidence and exact checkpoint CI/preview records](../artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/README.md).
+
+Native vault identity acceptance also passes (1 test): held root resolution clears account fields, an actual in-flight encryption/save retires, offline B edits reconcile to canonical revision 2, and A remains revision 1. Responsive scroll and masked-dialog focus/Escape pass. [Evidence and precise limits](../artifacts/anonymous-local-first-2026-10-27-vault-identity-final/vault-identity/README.md). The initially false-clean queue label is now fixed, with unknown/error states, preserved known rows and identity-safe retirement. [Fresh build and native/component regressions](../artifacts/anonymous-vault-status-2026-10-27/README.md) pass; 70 focused tests and 61 password-suite tests pass (overlapping), lint passes, and the 91 TypeScript baseline is unchanged. Origin/plane/provider/device dimensions remain open; the next pushed head requires separate hosted checks.
+
+## Earlier checkpoint — 2026-10-26
 
 The next capacity slice adds authenticated NDJSON catalogue reads, bounded
 home-snapshot paging and atomic scoped IndexedDB admission. It has codec,
