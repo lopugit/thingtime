@@ -660,8 +660,8 @@ const runSelfTest = async () => {
 	truthy(prebuiltArgs.includes(`THINGTIME_BRANCH_NAME=${base.head.ref}`));
 	truthy(prebuiltArgs.includes(`THINGTIME_GIT_COMMIT_SHA=${base.head.sha}`));
 	equal(runtimeEnvironment.THINGTIME_GATEWAY_SOURCE_ORIGINS, 'https://pr-201.previews.dev.thingtime.com');
-	truthy(prebuiltArgs.includes('THINGTIME_GATEWAY_SOURCE_ORIGINS=https://pr-201.previews.dev.thingtime.com'));
-	truthy(!prebuiltArgs.some((arg) => String(arg).includes('pr-202.previews.dev.thingtime.com') || String(arg).includes('*.previews.dev.thingtime.com')));
+	equal(prebuiltArgs.filter((arg) => String(arg).startsWith('THINGTIME_GATEWAY_SOURCE_ORIGINS=')),
+		['THINGTIME_GATEWAY_SOURCE_ORIGINS=https://pr-201.previews.dev.thingtime.com']);
 	const uploadEnvironment = prebuiltUploadEnvironment(config, base.head.ref, 's'.repeat(32), 'synthetic-token', {
 		THINGTIME_GATEWAY_SECRET: 'wrong-custom-develop-secret',
 		THINGTIME_GATEWAY_ENVIRONMENT: 'develop',
