@@ -233,3 +233,39 @@ and the exact cause were not captured; sudo/session and inherited-pipe hazards
 are source findings, not a proven explanation of that run. This repair still
 requires independent review and a new hosted preflight artifact before native
 mode can be attempted.
+
+## Darwin credential verification and trusted failures
+
+Modern macOS Python `os.getgroups()` is a directory group-access list, not a
+readback of cleared kernel credentials. The numeric drop retains
+`setgroups([])` → `setgid(target)` → `setuid(target)`, then requires expected
+real/effective UID/GID and exactly one kernel group slot containing the intended
+GID. Darwin stores the effective primary GID in slot zero; requiring an empty
+list was incorrect. No extra/root/admin group is admitted. `setgroups` opts out
+of memberd participation; do not substitute `initgroups` or restore directory
+memberships.
+
+The accessor uses only the unsuffixed public `getgroups` symbol from fixed
+`/usr/lib/libSystem.B.dylib`, with declared `int` / 32-bit `gid_t` ABI. Missing
+symbols, errno, invalid system/count limits, changed counts or extra groups fail
+closed. It does not invoke a raw syscall or inspect another process/account.
+The earlier Python directory-list assertion is removed from the redundant
+pre-policy authority probe; canonical numeric-drop verification runs before exec.
+
+Primary source revisions reviewed:
+
+- [CPython 3.9.6 getgroups implementation](https://github.com/python/cpython/blob/db3ff76da19004f266b62e98a81bdfd322861436/Modules/posixmodule.c#L6993-L7026)
+  and [Python's macOS contract](https://docs.python.org/3.9/library/os.html#os.getgroups).
+- [Apple Libc alias header](https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/unistd.h#L449-L453)
+  and [directory-backed extension](https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/sys/getgroups.c#L22-L54).
+- [XNU kernel credential groups](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_prot.c#L369-L427),
+  [zero-list normalization](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_prot.c#L1284-L1320)
+  and [memberd opt-out](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_prot.c#L1358-L1387).
+
+Inert run 40370525585 exited before authority/PF, with restored-state cleanup
+and no candidate extraction/execution. Its baseline child stderr was not retained,
+so this known source defect is not an observed diagnosis of that hosted exit.
+Trusted pre-policy failure evidence now accepts fixed stage/error enums, errno
+and exit codes only. It excludes arbitrary stderr/stdout, messages, arguments
+and environment values; candidate output is never parsed as trusted diagnostics.
+Hosted baseline, isolation and full native acceptance still require actual runs.

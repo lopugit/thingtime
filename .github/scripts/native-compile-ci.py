@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Protected-controller-only unsigned native compilation. No candidate imports."""
+import ctypes
 import fcntl
 import hashlib
 import json
@@ -289,15 +290,84 @@ def detach_watchdog_io(report,preserve=()):
     os.closerange(lower,max(65536,os.sysconf('SC_OPEN_MAX')))
 
 
+def kernel_groups():
+    """Darwin credential slots, never directory-service group membership."""
+    if platform.system() != 'Darwin':
+        return os.getgroups()
+    library=ctypes.CDLL('/usr/lib/libSystem.B.dylib',use_errno=True)
+    function=library.getgroups  # Unsuffixed public symbol: not $DARWIN_EXTSN.
+    function.argtypes=[ctypes.c_int,ctypes.POINTER(ctypes.c_uint32)]
+    function.restype=ctypes.c_int
+    count=function(0,None)
+    if count < 1:
+        raise OSError(ctypes.get_errno(),'Kernel group count failed')
+    # Darwin's actual kernel limit bounds allocation, independently of any
+    # directory service's unlimited access-list count.
+    maximum=os.sysconf('SC_NGROUPS_MAX')
+    if maximum < 1 or count > maximum:
+        raise RuntimeError('Kernel group count outside system limit')
+    buffer=(ctypes.c_uint32*count)()
+    actual=function(count,buffer)
+    if actual != count:
+        if actual < 0:raise OSError(ctypes.get_errno(),'Kernel group read failed')
+        raise RuntimeError('Kernel group count changed during credential verification')
+    return list(buffer)[:actual]
+
+
+def trusted_failure(label,error,returncode=None):
+    """Only fixed labels, exception type/errno/exit code; no messages or args."""
+    allowed={'identity-admission','groups-clear','gid-set','uid-set','credential-verify','identity-exec',
+             'runner-baseline','authority-before-policy'}
+    if label not in allowed:raise ValueError('Unknown trusted failure label')
+    names={'OSError','PermissionError','RuntimeError','CalledProcessError','TimeoutExpired','AssertionError'}
+    name=type(error).__name__
+    record={'stage':label,'errorType':name if name in names else 'OtherError'}
+    code=getattr(error,'errno',None)
+    if isinstance(code,int):record['errno']=code
+    exitcode=returncode if returncode is not None else getattr(error,'returncode',None)
+    if isinstance(exitcode,int):record['exitCode']=exitcode
+    return record
+
+
+def preflight_failure(error,label='runner-baseline'):
+    failure=trusted_failure(label,error)
+    accepted={'native-identity ':('identity',{'identity-admission','groups-clear','gid-set','uid-set','credential-verify','identity-exec'}),
+              'native-baseline ':('baseline',{'baseline-tcp4','baseline-udp-dns'})}
+    stderr=getattr(error,'stderr',None) or ''
+    if isinstance(stderr,bytes):stderr=stderr.decode('utf-8',errors='replace')
+    if not isinstance(stderr,str):stderr=''
+    for line in stderr.splitlines():
+        for prefix,(field,stages) in accepted.items():
+            if not line.startswith(prefix):continue
+            try:record=json.loads(line[len(prefix):])
+            except (ValueError,TypeError):continue
+            if (isinstance(record,dict) and set(record)<={'stage','errorType','errno','exitCode'} and
+                record.get('stage') in stages and record.get('errorType') in
+                {'OSError','PermissionError','RuntimeError','CalledProcessError','TimeoutExpired','AssertionError','OtherError'} and
+                all(type(record[k]) is int for k in set(record)&{'errno','exitCode'})):
+                failure[field]=record
+    return failure
+
+
 def drop_identity(uid,gid,args):
-    if os.geteuid()!=0 or uid<=0 or gid<=0 or not args:
-        raise RuntimeError('Trusted identity drop requires root and nonroot numeric identity')
-    os.setgroups([])
-    os.setgid(gid)
-    os.setuid(uid)
-    if os.getuid()!=uid or os.geteuid()!=uid or os.getgid()!=gid or os.getegid()!=gid or os.getgroups():
-        raise RuntimeError('Identity drop verification failed')
-    os.execv(args[0],args)
+    stage='identity-admission'
+    try:
+        if os.geteuid()!=0 or uid<=0 or gid<=0 or not args:
+            raise RuntimeError('Trusted identity drop requires root and nonroot numeric identity')
+        stage='groups-clear';os.setgroups([])
+        stage='gid-set';os.setgid(gid)
+        stage='uid-set';os.setuid(uid)
+        stage='credential-verify'
+        expected=[gid] if platform.system() == 'Darwin' else []
+        if (os.getuid()!=uid or os.geteuid()!=uid or os.getgid()!=gid or os.getegid()!=gid or
+                kernel_groups()!=expected):
+            raise RuntimeError('Identity drop verification failed')
+        stage='identity-exec';os.execv(args[0],args)
+    except BaseException as error:
+        # This is trusted code before exec. Never parse or publish the target
+        # command's arbitrary output as an identity diagnostic.
+        print('native-identity '+json.dumps(trusted_failure(stage,error)),file=sys.stderr,flush=True)
+        raise RuntimeError('Trusted numeric identity stage failed') from None
 
 
 def cleanup(work,watchdog_parent=None):
@@ -477,18 +547,26 @@ def start_watchdog(work):
     finally:
         os.close(ready_read)
 BASELINE = r'''
-import json, socket
+import json, socket, sys
+def failure(stage,error):
+    record={'stage':stage,'errorType':'OSError' if isinstance(error,OSError) else 'AssertionError'}
+    if isinstance(getattr(error,'errno',None),int):record['errno']=error.errno
+    print('native-baseline '+json.dumps(record),file=sys.stderr,flush=True)
 results=[]
 for family,host in [(socket.AF_INET,'1.1.1.1'),(socket.AF_INET6,'2606:4700:4700::1111')]:
     s=socket.socket(family,socket.SOCK_STREAM);s.settimeout(5)
     try: s.connect((host,443)); results.append({'family':family,'positiveTcp':True})
     except OSError as e:
-        if family == socket.AF_INET: raise
+        if family == socket.AF_INET:
+            failure('baseline-tcp4',e);raise
         results.append({'family':family,'positiveTcp':False,'errno':e.errno})
     finally: s.close()
 s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.settimeout(5)
-s.sendto(bytes.fromhex('123401000001000000000000076578616d706c6503636f6d0000010001'),('1.1.1.1',53))
-assert s.recvfrom(4096)[0][:2] == bytes.fromhex('1234')
+try:
+    s.sendto(bytes.fromhex('123401000001000000000000076578616d706c6503636f6d0000010001'),('1.1.1.1',53))
+    assert s.recvfrom(4096)[0][:2] == bytes.fromhex('1234')
+except (OSError,AssertionError) as error:
+    failure('baseline-udp-dns',error);raise
 s.close()
 print(json.dumps({'runnerPositiveControls':results,'positiveUdpDns':True}))
 '''
@@ -499,7 +577,7 @@ import json, os, socket, subprocess, sys
 expected_uid = int(sys.argv[1]); part=sys.argv[2]
 assert os.geteuid() == expected_uid
 if part == 'authority':
-    assert expected_uid != 0 and not os.getgroups()
+    assert expected_uid != 0  # Canonical numeric drop already verified kernel groups.
     assert subprocess.run(['/usr/bin/sudo','-n','/usr/bin/true'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,timeout=5).returncode != 0
 elif part == 'sandbox':
     subprocess.run(['/usr/bin/sandbox-exec','-p','(version 1)(allow default)', '/usr/bin/true'],check=True,timeout=5)
@@ -648,10 +726,21 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
         if not runner_home.is_relative_to('/Users') or runner_home == Path('/Users'):
             raise RuntimeError('Unexpected ephemeral runner home')
         runner_home.chmod(0o700)
-        baseline=as_runner([PYTHON,'-I','-S',str(work/'baseline.py')],capture_output=True,timeout=25)
+        phase(report,'runner-baseline-started')
+        try:
+            baseline=as_runner([PYTHON,'-I','-S',str(work/'baseline.py')],capture_output=True,timeout=25)
+        except BaseException as error:
+            failure=preflight_failure(error)
+            (report/'trusted-failure.json').write_text(json.dumps(failure)+'\n')
+            raise RuntimeError('Trusted runner baseline failed; see fixed-label evidence') from None
+        phase(report,'runner-baseline-passed')
         (report/'positive-controls.json').write_text(baseline.stdout)
         phase(report,'authority-probe-started-before-policy')
-        as_build([PYTHON,'-I','-S',str(work/'probe.py'),str(uid),'authority'],capture_output=True,timeout=12)
+        try:
+            as_build([PYTHON,'-I','-S',str(work/'probe.py'),str(uid),'authority'],capture_output=True,timeout=12)
+        except BaseException as error:
+            (report/'trusted-failure.json').write_text(json.dumps(preflight_failure(error,'authority-before-policy'))+'\n')
+            raise RuntimeError('Trusted authority gate failed; see fixed-label evidence') from None
         phase(report,'authority-probe-passed-before-policy')
         phase(report,'before-policy')
         run(['/sbin/pfctl','-n','-f',str(work/'pf.conf')],capture_output=True)

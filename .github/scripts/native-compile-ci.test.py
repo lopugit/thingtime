@@ -227,10 +227,10 @@ class NativeCompileBoundaryTests(unittest.TestCase):
 
     def test_numeric_identity_drop_clears_groups_and_verifies_real_and_effective_ids(self):
         events=[]
-        with patch.object(native.os,'geteuid',side_effect=[0,5500]),patch.object(native.os,'getuid',return_value=5500),patch.object(native.os,'getgid',return_value=5500),patch.object(native.os,'getegid',return_value=5500),patch.object(native.os,'getgroups',return_value=[]),patch.object(native.os,'setgroups',side_effect=lambda v:events.append(('groups',v))),patch.object(native.os,'setgid',side_effect=lambda v:events.append(('gid',v))),patch.object(native.os,'setuid',side_effect=lambda v:events.append(('uid',v))),patch.object(native.os,'execv',side_effect=lambda *v:events.append(('exec',v))):
+        with patch.object(native,'kernel_groups',return_value=[5500]),patch.object(native.platform,'system',return_value='Darwin'),patch.object(native.os,'geteuid',side_effect=[0,5500]),patch.object(native.os,'getuid',return_value=5500),patch.object(native.os,'getgid',return_value=5500),patch.object(native.os,'getegid',return_value=5500),patch.object(native.os,'getgroups',return_value=[]),patch.object(native.os,'setgroups',side_effect=lambda v:events.append(('groups',v))),patch.object(native.os,'setgid',side_effect=lambda v:events.append(('gid',v))),patch.object(native.os,'setuid',side_effect=lambda v:events.append(('uid',v))),patch.object(native.os,'execv',side_effect=lambda *v:events.append(('exec',v))):
             native.drop_identity(5500,5500,['/usr/bin/true'])
         self.assertEqual([e[0] for e in events],['groups','gid','uid','exec'])
-        with patch.object(native.os,'geteuid',return_value=0),patch.object(native.os,'setgroups'),patch.object(native.os,'setgid'),patch.object(native.os,'setuid'),patch.object(native.os,'getuid',return_value=0),patch.object(native.os,'execv') as execute,self.assertRaises(RuntimeError):
+        with patch.object(native.os,'geteuid',return_value=0),patch.object(native.os,'setgroups'),patch.object(native.os,'setgid'),patch.object(native.os,'setuid'),patch.object(native.os,'getuid',return_value=0),patch.object(native.os,'execv') as execute,patch.object(sys,'stderr',io.StringIO()),self.assertRaises(RuntimeError):
             native.drop_identity(5500,5500,['/usr/bin/true'])
         execute.assert_not_called()
 
@@ -348,6 +348,50 @@ class NativeCompileBoundaryTests(unittest.TestCase):
             finally:
                 os.kill(child,native.signal.SIGKILL)
                 os.waitpid(child,0)
+
+    def test_darwin_kernel_groups_use_fixed_public_symbol_and_exact_count(self):
+        function=Mock()
+        def call(count,buffer):
+            if count==0:return 1
+            buffer[0]=5500;return 1
+        function.side_effect=call;library=Mock(getgroups=function)
+        with patch.object(native.platform,'system',return_value='Darwin'),patch.object(native.ctypes,'CDLL',return_value=library) as load,patch.object(native.os,'sysconf',return_value=16),patch.object(native.os,'getgroups',return_value=[0,20,80]) as directory:
+            self.assertEqual(native.kernel_groups(),[5500])
+        directory.assert_not_called()
+        load.assert_called_once_with('/usr/lib/libSystem.B.dylib',use_errno=True)
+
+    @unittest.skipUnless(sys.platform=='darwin','Darwin kernel accessor read-only check')
+    def test_kernel_accessor_reads_only_current_process_without_identity_mutation(self):
+        groups=native.kernel_groups()
+        self.assertGreaterEqual(len(groups),1)
+        self.assertEqual(groups[0],os.getegid())
+
+    def test_kernel_accessor_errors_and_changed_or_excess_counts_fail_closed(self):
+        for responses in [[-1],[0],[17],[1,-1],[1,0],[1,2]]:
+            with self.subTest(responses=responses),patch.object(native.platform,'system',return_value='Darwin'),patch.object(native.ctypes,'CDLL',return_value=Mock(getgroups=Mock(side_effect=responses))),patch.object(native.os,'sysconf',return_value=16),self.assertRaises((OSError,RuntimeError)):
+                native.kernel_groups()
+        with patch.object(native.platform,'system',return_value='Darwin'),patch.object(native.ctypes,'CDLL',side_effect=OSError),self.assertRaises(OSError):native.kernel_groups()
+        with patch.object(native.platform,'system',return_value='Darwin'),patch.object(native.ctypes,'CDLL',return_value=object()),self.assertRaises(AttributeError):native.kernel_groups()
+        for maximum in [0,-1]:
+            with patch.object(native.platform,'system',return_value='Darwin'),patch.object(native.ctypes,'CDLL',return_value=Mock(getgroups=Mock(return_value=1))),patch.object(native.os,'sysconf',return_value=maximum),self.assertRaises(RuntimeError):native.kernel_groups()
+
+    def test_drop_rejects_extra_root_or_admin_groups_and_wrong_ids_before_exec(self):
+        for groups in [[5500,0],[5500,80],[],[20]]:
+            with self.subTest(groups=groups),patch.object(native.platform,'system',return_value='Darwin'),patch.object(native.os,'geteuid',side_effect=[0,5500]),patch.object(native.os,'getuid',return_value=5500),patch.object(native.os,'getgid',return_value=5500),patch.object(native.os,'getegid',return_value=5500),patch.object(native.os,'setgroups'),patch.object(native.os,'setgid'),patch.object(native.os,'setuid'),patch.object(native,'kernel_groups',return_value=groups),patch.object(native.os,'execv') as execute,patch.object(sys,'stderr',io.StringIO()),self.assertRaises(RuntimeError):
+                native.drop_identity(5500,5500,['/usr/bin/true'])
+            execute.assert_not_called()
+
+    def test_preflight_diagnostics_never_export_args_messages_or_arbitrary_output(self):
+        error=subprocess.CalledProcessError(1,['secret-command'],output='private stdout',stderr='private stderr\nnative-identity {"stage":"credential-verify","errorType":"RuntimeError"}\nnative-baseline {"stage":"baseline-tcp4","errorType":"OSError","errno":51}\nnative-identity {"stage":"identity-exec","errorType":"RuntimeError","secret":"must not escape"}')
+        result=native.preflight_failure(error)
+        self.assertEqual(result['identity'],{'stage':'credential-verify','errorType':'RuntimeError'})
+        self.assertEqual(result['baseline']['errno'],51)
+        rendered=json.dumps(result)
+        for forbidden in ['secret-command','private stdout','private stderr','must not escape']:
+            self.assertNotIn(forbidden,rendered)
+        with self.assertRaises(ValueError):native.trusted_failure('candidate-selected-label',error)
+        timeout=subprocess.TimeoutExpired(['private command'],25,stderr=b'private bytes')
+        self.assertEqual(native.preflight_failure(timeout),{'stage':'runner-baseline','errorType':'TimeoutExpired'})
 
     def command_fixture(self,root):
         (root/'cleanup.lock').touch()

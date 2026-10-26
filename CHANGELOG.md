@@ -1,5 +1,14 @@
 # Control-plane changelog
 
+## 2026-10-27 — Verify Darwin kernel groups after numeric drop
+
+- Replace the invalid empty Python directory-group assertion with exact kernel
+  credential verification through the fixed public system-library accessor.
+  Retain clearing and fail closed on unexpected groups, IDs or accessor errors.
+- Record allowlisted trusted pre-policy failure stages/errno/exit codes without
+  arbitrary output or arguments. The observed baseline exit remains unproven;
+  successful cleanup artifacts do not establish isolation or native acceptance.
+
 ## 2026-10-27 — Bound native probe and detached-process lifecycle
 
 - Replace post-policy sudo transitions with verified numeric identity drop,
