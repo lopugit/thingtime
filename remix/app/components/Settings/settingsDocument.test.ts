@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createDesktopOperationGate } from './desktopOperationGate';
-import { localSettingsDocumentAdapter, settingsDocumentBlocks, settingsDocumentKey } from './settingsDocument';
+import { legacyDeviceSettingsDocument, localSettingsDocumentAdapter, settingsDocumentBlocks, settingsDocumentKey, settingsDocumentSeed } from './settingsDocument';
 import { accountSettingsDocumentAdapter } from './settingsDocument.client';
 import { DESKTOP_CONNECTION_BLOCKS, DESKTOP_RECOVERY_BLOCKS } from './desktopSettingsDocuments';
 import { syncConflictReviewBlocks } from '../Devices/syncConflictReviewBlocks';
@@ -143,4 +143,25 @@ test('changing native authority releases old busy state without allowing stale c
   const current = gate.begin('second')!;
   assert.equal(gate.finish(old), false); assert.equal(gate.busy, true);
   assert.equal(gate.finish(current), true); assert.equal(gate.busy, false);
+});
+
+test('legacy device menu import preserves authored blocks but never imports identity or another authority', () => {
+ const menuScope = { ...scope, documentKey: 'custom-drawer-menu' };
+ const legacyScope = { ...menuScope, ownerId: 'device', dataPlane: `${scope.origin}:${scope.ownerId}:${scope.dataPlane}` };
+ const values = new Map([[settingsDocumentKey(legacyScope), JSON.stringify({ ...document, id: 'device-only', revision: 'local-revision' })]]);
+ const storage = { getItem: (key: string) => values.get(key) ?? null };
+ assert.deepEqual(legacyDeviceSettingsDocument(menuScope, storage), document);
+ for (const change of [{ ownerId: 'other' }, { origin: 'https://other.example.test' }, { dataPlane: 'other' }, { ownerId: 'anonymous' }])
+  assert.equal(legacyDeviceSettingsDocument({ ...menuScope, ...change }, storage), null);
+ assert.equal(values.size, 1);
+ assert.equal(JSON.parse(values.get(settingsDocumentKey(legacyScope))!).revision, 'local-revision');
+});
+
+test('first paint seeds scoped authored legacy blocks without borrowing local write authority', () => {
+ const legacy = { ...document, name: 'Authored menu', revision: 'local-revision', id: 'local-only' };
+ const defaults = [{ id: 'default', type: 'element' as const, tag: 'span', text: 'Default' }];
+ assert.deepEqual(settingsDocumentSeed(defaults, 'Default menu', null, () => legacy), { ...document, name: 'Authored menu' });
+ const cached = { ...document, id: 'account-thing', revision: 'account-revision' };
+ assert.deepEqual(settingsDocumentSeed(defaults, 'Default menu', cached, () => legacy), cached);
+ assert.deepEqual(settingsDocumentSeed(defaults, 'Default menu', { invalid: true }, () => { throw new Error('invalid legacy'); }), { blocks: defaults, name: 'Default menu', revision: null });
 });

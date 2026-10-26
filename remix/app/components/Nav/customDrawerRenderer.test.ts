@@ -42,3 +42,16 @@ test('drawer save refuses incomplete hydration before enqueueing preferences', a
  await assert.rejects(save([]), /not ready/);
  assert.equal(writes, 0);
 });
+
+test('menu Add and custom links use shared rows with independently editable icon and labels', () => {
+ const blocks = settingsDocumentBlocks(customDrawerBlocks(false));
+ const flat: any[] = []; const visit = (nodes: any[]) => nodes.forEach(node => { flat.push(node); if (node.children) visit(node.children); }); visit(blocks);
+ const byId = (id: string) => flat.find(block => block.id === id);
+ assert.equal(byId('custom-drawer-add').props.className, 'tt-drawer-row');
+ assert.equal(byId('custom-drawer-link').props.className, 'tt-drawer-row');
+ assert.equal(byId('custom-drawer-add-icon').text, '➕');
+ assert.equal(byId('custom-drawer-add-label').text, 'Add +');
+ const rootChildren = blocks[0].children!;
+ assert.ok(rootChildren.findIndex(block => block.id === 'custom-drawer-items') < rootChildren.findIndex(block => block.id === 'custom-drawer-add'));
+ assert.equal(byId('custom-drawer-add').css, undefined);
+});

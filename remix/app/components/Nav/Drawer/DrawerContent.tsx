@@ -369,24 +369,17 @@ export const DrawerContent = (props: DrawerContentProps) => {
 			<Flex
 				as={item.to ? 'a' : 'button'}
 				{...(item.to ? { href: item.to } : { type: 'button' as const })}
-				alignItems="center"
-				columnGap={2}
-				marginX={2}
-				paddingX={3}
-				paddingY="7px"
-				borderRadius="var(--tt-radius-sm, 9px)"
-				background={selected ? 'var(--tt-surface-alt, #f5f5f7)' : 'transparent'}
-				_hover={{ background: selected ? 'var(--tt-surface-alt, #f5f5f7)' : 'var(--tt-surface-hover, #ececee)' }}
-				transition="background 0.15s ease"
-				cursor="pointer"
+				className="tt-drawer-row"
+				data-selected={selected}
+
 				onClick={(event) => {
 					if (!isPlainLinkClick(event)) return;
 					event.preventDefault();
 					onTopItemClick(item);
 				}}
 			>
-				<Icon name={item.icon} size="13px"></Icon>
-				<Text fontSize="sm" fontWeight={selected ? 600 : 400}>
+				<span className="tt-drawer-row-icon"><Icon name={item.icon} size="13px"></Icon></span>
+				<Text className="tt-drawer-row-label" fontSize="sm" fontWeight={selected ? 600 : 400}>
 					{item.label}
 					{item.id === 'messages' ? <MessengerUnreadBadge /> : null}
 					{item.id === 'lopu' ? <LopuActivityBadge /> : null}
@@ -486,7 +479,6 @@ export const DrawerContent = (props: DrawerContentProps) => {
 
 			{/* scrollable menus */}
 			<Box className="drawerMenuScroll" flex={1} minHeight={0} overflowY="auto" overscrollBehaviorY="contain" paddingBottom={2}>
-				<CustomDrawerItems preview={variant === 'popup'} onNavigate={onNavigate} />
 				{/* top-level items (limited, with faint More) */}
 				<Flex flexDirection="column" rowGap="1px" paddingTop={1}>
 					<ReorderableList
@@ -623,6 +615,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 
 				{/* editor window/config management, shown with the Things menu */}
 				{selectedTopItem?.id === 'things' && <EditorDrawerSection onNavigate={dismissAfterNavigate} />}
+				<CustomDrawerItems preview={variant === 'popup'} onNavigate={onNavigate} />
 			</Box>
 
 			{/* sticky account footer: avatar + name open the profile page, the
