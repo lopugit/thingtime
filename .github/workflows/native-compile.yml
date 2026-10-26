@@ -13,6 +13,11 @@ on:
         description: Exact current 40-character PR head SHA
         required: true
         type: string
+      mode:
+        description: Inert preflight first; native requires separate explicit selection
+        required: false
+        default: preflight
+        type: string
   workflow_dispatch:
     inputs:
       source_pr:
@@ -23,6 +28,12 @@ on:
         description: Exact current 40-character PR head SHA
         required: true
         type: string
+      mode:
+        description: Inert preflight first; native requires separate explicit selection
+        required: false
+        default: preflight
+        type: choice
+        options: [preflight, native]
 
 permissions:
   contents: read
@@ -53,12 +64,15 @@ jobs:
           ref: d0dfbdbc89f039cb45ccbd9c4e4e3054937942b8 # H1: independently reviewed helper source
           path: trusted-controller
           persist-credentials: false
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            .github/workflows/native-compile.yml
       - name: Validate source and acquire candidate as opaque data
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_PR: ${{ inputs.source_pr }}
           SOURCE_SHA: ${{ inputs.source_sha }}
+          MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
           [[ "$SOURCE_PR" =~ ^[1-9][0-9]*$ ]]
@@ -66,17 +80,25 @@ jobs:
           gh api "repos/lopugit/thingtime/pulls/$SOURCE_PR" > "$RUNNER_TEMP/native-pr.json"
           /usr/bin/python3 -I -S trusted-controller/.github/scripts/native-compile-ci.py \
             validate "$RUNNER_TEMP/native-pr.json" "$SOURCE_SHA"
-          gh api "repos/lopugit/thingtime/tarball/$SOURCE_SHA" > "$RUNNER_TEMP/native-candidate.tar.gz"
+          [[ "$MODE" == preflight || "$MODE" == native ]]
+          if [[ "$MODE" == native ]]; then
+            gh api "repos/lopugit/thingtime/tarball/$SOURCE_SHA" > "$RUNNER_TEMP/native-candidate.tar.gz"
+          fi
       - name: Prepare trusted compiler tools before isolation
+        env:
+          MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
           test -d "$DEVELOPER_DIR"
           xcodebuild -version
-          command -v xcodegen >/dev/null || brew install xcodegen
+          if [[ "$MODE" == native ]]; then
+            command -v xcodegen >/dev/null || brew install xcodegen
+          fi
           /usr/bin/python3 -I -S trusted-controller/.github/scripts/native-compile-ci.test.py
       - name: Run admitted supervisor with an empty inherited environment
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
+          MODE: ${{ inputs.mode }}
           CONTROL_SHA: d0dfbdbc89f039cb45ccbd9c4e4e3054937942b8 # H1, independent of caller/candidate
         run: |
           set -euo pipefail
@@ -91,7 +113,7 @@ jobs:
             SUDO_UID="$(id -u)" SUDO_USER="$(id -un)" \
             /usr/bin/python3 -I -S trusted-controller/.github/scripts/native-compile-ci.py build \
             "$RUNNER_TEMP/native-candidate.tar.gz" "$RUNNER_TEMP/native-compile-report" \
-            "$SOURCE_SHA" "$CONTROL_SHA" "$RUNNER_TEMP/native-pr.json"
+            "$SOURCE_SHA" "$CONTROL_SHA" "$RUNNER_TEMP/native-pr.json" "$MODE"
       - name: Preserve sanitized compile and isolation evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -309,3 +309,20 @@ pre-queued with no jobs, logs, or cancellable run graph.
 - Follow [the native compile runbook](NATIVE_COMPILE.md) for exact-head admission,
   hosted direct IPv4/IPv6, UDP/DNS and child-sandbox checks, cancellation/watchdog
   cleanup, and full unsigned Xcode acceptance. Static tests do not prove these.
+
+## Native control continuity and bounded bootstrap
+
+- Run the trusted native helper tests and actionlint without privileged local
+  operations. Cover actual Runner.Listener/Worker UID admission, DNS broker UID
+  separation, runner-only TCP `flags any`, finite command/group reap and cleanup
+  lock deadlines, failed hostname controls, lost diagnostic pipes, and refusal
+  to restore policy while owned probes/isolated descendants remain.
+- After independent H1/helper and H2/pin admission, run **preflight first**:
+  exact-source validation but no candidate download/extraction/execution, two
+  separated control-host/TLS probes under PF, root/broker/isolated deny probes,
+  and explicitly requested detached-watchdog cleanup. Verify phase timestamps,
+  restored-state artifact upload and no surviving task-owned process groups.
+- Treat a DNS/UID/control failure as a fail-closed diagnostic, never as permission
+  for a broker exemption or native retry. Preflight success does not establish
+  authenticated long-poll, DNS expiry, parent-loss/cancellation, or compilation.
+  Native mode requires its separate explicit selection and later acceptance.

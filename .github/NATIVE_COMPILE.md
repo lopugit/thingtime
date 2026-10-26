@@ -1,10 +1,14 @@
 # Protected unsigned native compilation
 
-This compile-only lane builds the macOS password host/extension and iOS
-simulator scheme, then retains logs and isolation evidence. It tests the local
-PasswordCore and FileSync packages. It never signs, installs, launches apps,
-uses Apple credentials, publishes releases, or uploads to TestFlight. It is
-separate from signed installation and real-device acceptance.
+The default `preflight` mode checks control transport, isolation, and explicitly
+requested detached-watchdog cleanup using inert work only. It still requires
+an exact current owner PR/head SHA, but never downloads, extracts or executes
+candidate source. A green preflight is not native compilation acceptance.
+
+Explicit `native` mode builds the macOS password host/extension and iOS
+simulator scheme and tests the local PasswordCore/FileSync packages only after
+all gates pass. Neither mode signs, installs, launches apps, uses Apple
+credentials, publishes releases, or uploads to TestFlight.
 
 ## Admission and entry point
 
@@ -29,6 +33,11 @@ on:
       source_sha:
         required: true
         type: string
+      mode:
+        required: false
+        default: preflight
+        type: choice
+        options: [preflight, native]
 permissions:
   contents: read
   pull-requests: read
@@ -43,6 +52,7 @@ jobs:
     with:
       source_pr: ${{ inputs.source_pr }}
       source_sha: ${{ inputs.source_sha }}
+      mode: ${{ inputs.mode }}
 ```
 
 The exact listener filename is `.github/workflows/native-compile-listener.yml`.
@@ -96,8 +106,16 @@ the network boundary.
 
 ## Enforced network policy and cleanup
 
-On the dedicated ephemeral hosted macOS VM, trusted root code replaces the PF
-root rules: runner-UID TCP/UDP transport remains available for control, then
+On the dedicated ephemeral hosted macOS VM, trusted root code first verifies
+both Runner.Listener and Runner.Worker effective UIDs from PID/UID/executable
+metadata. They must match the proposed runner transport UID. The observed
+mDNSResponder UID must differ from it. Missing or conflicting identities fail
+before policy mutation with a diagnostic report. No process arguments or
+credentials are inspected.
+
+The PF root rules allow only that verified runner UID: TCP rules use explicit
+`flags any keep state` so a full state flush can synchronize established
+control connections; separate UDP rules retain their state contract. Then
 unconditional IPv4 and IPv6 rules deny all remaining outbound protocols.
 This also denies root/system brokers rather than relying on PF UID matching
 for ICMP. PF user association itself covers only TCP/UDP. Existing states are
@@ -107,7 +125,17 @@ sandboxes remain enabled.
 
 Before candidate execution, the lane checks PF enabled/loaded rules, fresh UID
 and denied sudo authority, direct IPv4/IPv6 TCP, direct UDP/DNS, and a nested
-child sandbox under the same UID. Trusted runner positive controls must reach
+child sandbox under the same UID. Direct denial probes also run as root and
+under the observed DNS broker UID using owned probe groups, without changing
+or killing the system broker. Two credential-free `api.github.com/meta` HTTPS
+probes run as the runner UID five seconds apart while PF remains active;
+system DNS, TLS hostname/certificate verification and HTTP 200 are required.
+A failed hostname/TLS gate aborts, reaps owned probes/isolated descendants,
+restores PF, and retains failure/cleanup evidence before artifact upload.
+There is no DNS broker exemption, arbitrary forwarding, endpoint/IP allowlist,
+or resolver change. These fixed documented GitHub control-host probes establish
+only immediate public control HTTPS. They do not authenticate the runner's
+long-poll protocol or establish DNS-cache-expiry continuity. Trusted runner positive controls must reach
 the same IPv4 TCP/UDP addresses first. IPv6 positive-control availability is
 reported separately; absence of an IPv6 route is not transport-level proof of
 IPv6 enforcement. The explicit loaded IPv6 deny rule remains mandatory.
@@ -115,11 +143,30 @@ Redirects and alternate DNS names do not grant an exception. A refused PF
 operation, failed required control, or child-sandbox failure stops compilation;
 there is no permissive fallback.
 
-A detached root watchdog starts before account/PF changes. It uses persisted,
-root-owned state and a cleanup lock. On completion, interruption, supervisor
-loss or deadline, cleanup kills and checks all build-UID descendants before
-restoring `/etc/pf.conf` and releasing the owned PF enable token. It removes
-only that run's temporary identity, group and source/home/build directories.
+A detached root watchdog starts before account/PF changes with a 120-second
+bootstrap deadline and persisted root-owned state. Only successful control and
+isolation gates permit `native` mode to extend it to the 45-minute build budget
+plus a 60-second cleanup reserve. In `preflight`, trusted code instead requests
+watchdog cleanup and waits for its completion marker. This exercises the real
+detached cleanup path; it is not a simulated supervisor-loss/cancellation test.
+
+Owned commands get separate process groups and a default 15-second timeout;
+probes have explicit 15–25-second bounds. A command timeout kills/reaps only
+its owned group; it never kills the runner UID. Cleanup has a 60-second budget
+and 10-second lock-acquisition bound, verifies owned probe groups and isolated
+UID descendants are gone, then restores `/etc/pf.conf` and releases its PF enable
+token. It removes only the temporary identity/group/source/home/build state.
+The final watchdog reap is bounded too. The same cleanup lock serializes native
+deadline promotion, cleanup claiming and command admission. A root-owned
+cleanup-start marker prevents any later launch. Each trusted command launcher
+waits on a private pipe until its process group is durably registered; parent
+loss before release produces EOF and no command execution. The watchdog
+rechecks the latest deadline under the lock, preventing a stale bootstrap
+cleanup decision from racing native promotion.
+
+Safe phase labels are flushed to stdout
+and a durable report. Lost stdout/report storage cannot prevent cleanup.
+No deadline or static test proves that a watchdog survived an actual VM loss.
 The GitHub job VM is disposable. Never run privileged helper operations on a
 developer Mac or a self-hosted runner.
 
