@@ -23,7 +23,7 @@ test('rendering requires the explicit Component pointer or embedded definition, 
 });
 
 test('malformed explicit Components remain authoritative instead of silently falling through', () => {
-  for (const renderComponent of [null, 'text', 'plain-text', [], {}, { id: '' }, { render: [] }, { id: 'component', render: {} }]) {
+  for (const renderComponent of [null, 'text', 'plain-text', [], {}, { id: '' }, { render: [] }, { render: {} }, { render: { foo: 'bar' } }, { id: 'component', render: {} }]) {
     const data = { renderComponent, type: 'text', kind: 'rich-text', text: 'Keep raw data available' };
     assert.equal(hasRenderComponent(data), true);
     assert.deepEqual(renderComponentDeclaration(data), { kind: 'invalid' });

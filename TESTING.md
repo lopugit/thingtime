@@ -4166,15 +4166,26 @@ email whose link points at the attacker.
 
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
-- [ ] The inline **➕ Add +** row is the final navigation item after contextual,
-      editor and custom items, with More expanded or collapsed and zero or many
-      custom links. Compare its computed height, font, emoji size, padding and
-      hover/focus treatment with an ordinary top-level row on desktop and 390px.
+- [ ] The inline **➕ Add +** row appears at the end of both the top-level list
+      and the active submenu, with More expanded or collapsed and zero or many
+      custom links. Each Add saves into its own parent. Compare its computed
+      height, font, emoji size, padding and hover/focus treatment with an
+      ordinary row at that level on desktop and 390px.
       Normal navigation must not show a layout-editing toolbar. In Settings →
       Appearance, expand **Drawer menu template** and edit the actual menu's
       separate icon, label and repeated-link fields; save, reload and compare
       the private webpage Thing with the rendered drawer. An existing device
       layout must survive migration; another account must not inherit it.
+- [ ] Create at least five nested custom levels, including a branch below a
+      built-in submenu item. Every level renders in the same section below the
+      top-level list. Check Back, ancestor breadcrumbs, sibling branches, route
+      navigation outside the built-in parent and immediate reload. Add at the
+      top still creates a root while a deep submenu is selected. Move an item
+      through Parent menu, reorder siblings and remove a parent; descendants
+      must remain reachable, and self/descendant parents must be unavailable.
+      Unauthorized built-in ancestors hide their custom descendants. Legacy
+      templates gain selectable, editable hierarchy controls; after an explicit
+      save, intentionally deleted template controls must not reappear.
 - [ ] Custom drawer items: use **Add +** to save an emoji, title, hover tooltip
       and relative or absolute HTTP(S) link. Check URL validation, cancel,
       keyboard focus/Escape, navigation, edit/remove from Settings → Appearance →
@@ -5374,19 +5385,32 @@ halves.
 - [ ] Root metadata/image routes expose their registered `-docs` twin for both
   GET and POST without database admission, through both Nitro and the real Vite
   dev proxy; check JSON endpoint/method fields and reject SPA HTML responses.
-- [ ] Confirm followers make zero MongoDB connections, preserve cookie/Bearer,
-  Character, expected actor and custom data-plane selection, refuse forged hops
-  and cross-site writes, and preserve OAuth redirect/cookie/stream cancellation.
+- [ ] In proxy mode, confirm followers make zero MongoDB connections, preserve
+      cookie/Bearer, Character, expected actor and custom data-plane selection,
+      refuse forged hops and cross-site writes, and preserve OAuth redirects,
+      cookies and stream cancellation.
+- [ ] In dedicated mode, confirm the deployment executes its own backend,
+      advertises `gateway: null`, owns its pools, and refuses relayed traffic.
+      Point a proxy worker at that dedicated alias and verify it fails closed.
+- [ ] Run the gateway suite with each bundled connection policy. Mode-specific
+      fixtures must select their mode explicitly, and runtime overrides must win
+      over either bundled default, so an opt-in branch can pass the same checks.
+- [ ] Verify unknown connection-mode values and incomplete gateway settings fail
+      closed; Vercel defaults to proxy while a local/self-hosted server without
+      gateway settings retains direct-connection behavior.
 - [ ] Switch the alias and roll back with an admitted stream and detached
-  notification/Lopu save outstanding. Confirm pools close after work drains,
-  the old worker cannot create a new pool, and re-promotion opens a usable pool.
+      notification/Lopu save outstanding. Confirm existing work can finish and
+      pools drain after it ends; verify new ownership and a usable pool after
+      re-promotion. Do not infer fleet-wide fencing from this bounded check.
 - [ ] Verify missing/different-environment/incompatible manifests fail closed;
-  unchanged index plans skip DDL across instances, changed plans coordinate,
-  failed unique builds block constrained writes, and authenticated repair stays
-  reachable. Exercise lease expiry, failed-plan retry and manual invalidation.
-- [ ] Retire/restrict legacy immutable deployments before claiming fleet-wide
-  enforcement. Record real alias/API and Atlas connection evidence separately
-  from isolated tests; leave the Atlas tier unchanged.
+      unchanged index plans skip DDL across instances, changed plans coordinate,
+      failed unique builds block constrained writes, and authenticated repair stays
+      reachable. Exercise lease expiry, failed-plan retry and manual invalidation.
+- [ ] Record observed alias-to-environment/database mapping separately from
+      proposed gateway activation and isolated tests. Confirm previews and custom
+      develop use the development cluster, separate from production; verify
+      `master.previews.thingtime.com` before treating it as operational. Treat
+      old-preview credential retirement as optional; leave the Atlas tier unchanged.
 
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
@@ -9141,6 +9165,7 @@ storage only; do not describe it as a production upload or provider acceptance.
 
 ## Background refresh and returning tabs
 
+- [ ] With `navigator.onLine === false` but the isolated same-origin API reachable, open and reload a subspace: both embed regions load without synthetic refresh events. Foreground return revalidates once; offline background polls remain paused, and reconnect resumes ordinary polling. Keep the enforced browser/backend network boundary unchanged.
 - [ ] Open an existing Lopu conversation in two clients. Create another conversation and append a message in the other client: the first client's list and selected timeline update without reload or changing the selected conversation. Repeat in the floating Lopu window and Messenger.
 - [ ] Leave the tab hidden, update from the other client, then return. Verify an immediate refresh on visibility/focus, reconnect and browser history restoration; hidden tabs poll at most once per minute per resource. Cached content remains during failures.
 - [ ] Keep a draft, scroll into history, open conversation/chat settings drawers, and let several polls run at desktop and phone widths. No draft loss, loading flash, pagination rewind, overlap or clipping. Rename/delete while an earlier read is delayed; an old result cannot undo the edit. Switch accounts away and back during a delayed read; old private data cannot reappear.

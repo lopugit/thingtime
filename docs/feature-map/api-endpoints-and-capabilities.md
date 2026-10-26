@@ -13,6 +13,14 @@ the declaration grammar and root-over-nested post precedence with rendering.
 Run `test:schemas`, `test:feed`, `test:api-capabilities` and the isolated
 `subspace-messages-acceptance.mjs` typed-post/comment persistence checks.
 
+Environment API gateway ingress is negotiated through `api.environment-gateway`
+1.1.0 and `/.well-known/thingtime-capabilities.json`. Server deployments use
+the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by
+opt-in) with the `THINGTIME_MONGODB_CONNECTION_MODE` runtime override. Dedicated
+mode executes its own backend, advertises `gateway: null`, and refuses relay
+traffic; it does not imply an isolated database. See [the gateway runbook](../environment-api-gateway.md)
+for the audited environment mapping and pending activation evidence.
+
 Mobile device descriptors use `app/devices/platform.ts` across validation,
 projection, schemas and client types. `api.devices` 1.10.0 and
 `api.devices-pairing-claim` 1.1.0 add iOS/Android to the existing signed pairing

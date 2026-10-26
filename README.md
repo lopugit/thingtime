@@ -27,6 +27,15 @@ Subspace membership remains authoritative for message access. Moderators can
 place accessible Things above posts or in the sidebar; each visitor still needs
 the referenced Thing's own permission.
 
+Human-facing Thing data declares `renderComponent` at its displayed data level:
+either `{ "id": "<accessible-component-id>" }` or a Component definition such as
+`{ "render": { "tag": "p", "children": ["{text}"] } }`.
+The shared `ThingView` binds editable fields directly and through the `thing`
+alias. References retain their own access checks, and display does not execute
+Component sources or Actions. Data inspection is an explicit choice. Saved
+Component and Webpage Things keep their canonical definitions. See the
+[embed rendering contract](docs/feature-map/posts-comments-and-feed.md#subspace-messages-and-embedded-things).
+
 Run `npm --prefix remix run test:subspace-messages-acceptance` for the disposable
 local API acceptance harness. Browser acceptance uses its `--ui` option and a
 task-owned browser executable via `SUBSPACE_BROWSER_EXECUTABLE`; evidence goes
@@ -1479,7 +1488,19 @@ installed desktop shell has its own explicit selected-API bridge. For one active
 database/API deployment per environment, see the
 [environment gateway configuration and rollout](docs/environment-api-gateway.md).
 That runbook covers stable aliases, separate environment secrets, capability
-negotiation, promotion/rollback and legacy deployment retirement.
+negotiation, `proxy` and opt-in `dedicated` connection modes, promotion/rollback
+and gradual pool draining. Vercel defaults to proxy mode; local and self-hosted
+servers without gateway settings retain direct connections. Dedicated mode
+owns its MongoDB pools but uses the configured environment database, so it does
+not imply database isolation or an Atlas tier change. The intended mapping is
+`thingtime.com`/production to production data, `dev.thingtime.com`/develop to
+development data, and ordinary PR previews to `master.previews.thingtime.com` /
+preview on development data. PR builds keep their existing custom develop
+credential scope; the publisher explicitly selects the logical preview gateway
+without exposing unrelated standard-preview settings to branch code. A recent
+configuration audit found previews and
+custom develop already share the development cluster, separate from production;
+the master preview alias and gateway activation are still pending.
 
 Configure a self-hosted API or the environment gateway owner with:
 
