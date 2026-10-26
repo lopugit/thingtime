@@ -143,7 +143,7 @@ Redirects and alternate DNS names do not grant an exception. A refused PF
 operation, failed required control, or child-sandbox failure stops compilation;
 there is no permissive fallback.
 
-A detached root watchdog starts before account/PF changes with a 120-second
+A detached root watchdog starts before account/PF changes with a 180-second
 bootstrap deadline and persisted root-owned state. Only successful control and
 isolation gates permit `native` mode to extend it to the 45-minute build budget
 plus a 60-second cleanup reserve. In `preflight`, trusted code instead requests
@@ -151,7 +151,11 @@ watchdog cleanup and waits for its completion marker. This exercises the real
 detached cleanup path; it is not a simulated supervisor-loss/cancellation test.
 
 Owned commands get separate process groups and a default 15-second timeout;
-probes have explicit 15–25-second bounds. A command timeout kills/reaps only
+each denial subprobe has a 3-second socket / 12-second process bound, separate
+started/passed markers, and no aggregate 25-second cliff. Control probes retain
+15-second bounds. The total bootstrap cap remains independent of subprobe
+budgets and may fail closed before all worst-case subprobes finish. Preflight
+has a 10-minute job ceiling; native keeps 65 minutes. A command timeout kills/reaps only
 its owned group; it never kills the runner UID. Cleanup has a 60-second budget
 and 10-second lock-acquisition bound, verifies owned probe groups and isolated
 UID descendants are gone, then restores `/etc/pf.conf` and releases its PF enable
@@ -163,6 +167,18 @@ waits on a private pipe until its process group is durably registered; parent
 loss before release produces EOF and no command execution. The watchdog
 rechecks the latest deadline under the lock, preventing a stale bootstrap
 cleanup decision from racing native promotion.
+
+After policy activation, identity transitions use a trusted numeric
+`setgroups([])` → `setgid` → `setuid` → verified real/effective IDs → exec
+path, preserving the registered process group without sudo/PAM monitor
+processes. The negative sudo-authority check runs before PF activation.
+The detached watchdog redirects stdin to null and stdout/stderr to its
+root-owned report log, closing other descriptors so it cannot retain the
+runner job capture pipes. Captured-command timeouts still reap the direct child
+when an inherited writer prevents pipe EOF. Failed reap diagnostics contain
+only PID/PPID/UID/PGID/state/executable metadata; zombies and escaped groups
+remain visible and never count as absence. Networking remains denied if any
+isolated UID process remains.
 
 Safe phase labels are flushed to stdout
 and a durable report. Lost stdout/report storage cannot prevent cleanup.
@@ -199,3 +215,11 @@ References: [GitHub hosted VM/privilege documentation](https://docs.github.com/e
 [reusable workflow caller context](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations),
 [macOS 15 Arm64 Xcode inventory](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md),
 and installed macOS `pf.conf(5)` / `pfctl(8)` manuals.
+
+Hosted inert run 40363777116 passed both runner HTTPS probes, then its first
+isolated aggregate probe timed out and cleanup still saw the isolated UID.
+No candidate was acquired or executed. Remaining processes' live/zombie state
+and the exact cause were not captured; sudo/session and inherited-pipe hazards
+are source findings, not a proven explanation of that run. This repair still
+requires independent review and a new hosted preflight artifact before native
+mode can be attempted.

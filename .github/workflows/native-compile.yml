@@ -54,7 +54,7 @@ jobs:
         (github.ref == 'refs/heads/main' &&
          github.workflow_ref == 'lopugit/thingtime/.github/workflows/native-compile-listener.yml@refs/heads/main'))
     runs-on: macos-15
-    timeout-minutes: 65
+    timeout-minutes: ${{ inputs.mode == 'native' && 65 || 10 }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     steps:

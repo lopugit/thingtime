@@ -1,5 +1,14 @@
 # Control-plane changelog
 
+## 2026-10-27 — Bound native probe and detached-process lifecycle
+
+- Replace post-policy sudo transitions with verified numeric identity drop,
+  split denial subprobes, detach watchdog capture pipes, and retain sanitized
+  process-state diagnostics without weakening absence or network denial.
+- Cap inert preflight jobs at 10 minutes. The observed inert timeout/remaining
+  UID failure is recorded separately from unproven runtime cause; hosted
+  preflight and native acceptance remain required.
+
 ## 2026-10-27 — Preserve control transport during isolated native preflight
 
 - Verify actual Actions daemon UIDs, synchronize only runner TCP state after

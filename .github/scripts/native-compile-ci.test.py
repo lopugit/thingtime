@@ -225,6 +225,57 @@ class NativeCompileBoundaryTests(unittest.TestCase):
                 native.cleanup(root)
             self.assertFalse(any(c[0]=='/sbin/pfctl' for c in calls))
 
+    def test_numeric_identity_drop_clears_groups_and_verifies_real_and_effective_ids(self):
+        events=[]
+        with patch.object(native.os,'geteuid',side_effect=[0,5500]),patch.object(native.os,'getuid',return_value=5500),patch.object(native.os,'getgid',return_value=5500),patch.object(native.os,'getegid',return_value=5500),patch.object(native.os,'getgroups',return_value=[]),patch.object(native.os,'setgroups',side_effect=lambda v:events.append(('groups',v))),patch.object(native.os,'setgid',side_effect=lambda v:events.append(('gid',v))),patch.object(native.os,'setuid',side_effect=lambda v:events.append(('uid',v))),patch.object(native.os,'execv',side_effect=lambda *v:events.append(('exec',v))):
+            native.drop_identity(5500,5500,['/usr/bin/true'])
+        self.assertEqual([e[0] for e in events],['groups','gid','uid','exec'])
+        with patch.object(native.os,'geteuid',return_value=0),patch.object(native.os,'setgroups'),patch.object(native.os,'setgid'),patch.object(native.os,'setuid'),patch.object(native.os,'getuid',return_value=0),patch.object(native.os,'execv') as execute,self.assertRaises(RuntimeError):
+            native.drop_identity(5500,5500,['/usr/bin/true'])
+        execute.assert_not_called()
+
+    def test_metadata_distinguishes_zombie_live_and_escaped_groups_without_args(self):
+        rows=native.process_inventory('10 1 5500 10 Z /usr/bin/python3\n11 1 5500 99 S /usr/bin/true\n')
+        self.assertEqual([r['state'] for r in rows],['Z','S'])
+        self.assertEqual(rows[1]['groupId'],99)
+        self.assertEqual(set(rows[0]),{'pid','parentPid','uid','groupId','state','executable'})
+        with self.assertRaises(RuntimeError):native.process_inventory('unparseable')
+
+    def test_inherited_pipe_timeout_still_reaps_direct_child(self):
+        process=Mock(pid=123,stdout=Mock(),stderr=Mock())
+        process.communicate.side_effect=subprocess.TimeoutExpired(['fixture'],.01)
+        with patch.object(native,'start_owned_command',return_value=process),patch.object(native.os,'killpg'),self.assertRaises(subprocess.TimeoutExpired):
+            native.run(['fixture'],timeout=.01)
+        process.wait.assert_called_once_with(timeout=5)
+        process.stdout.close.assert_called_once()
+        process.stderr.close.assert_called_once()
+
+    def test_detached_watchdog_does_not_retain_parent_capture_pipes(self):
+        # Only fixture fork/PID: no identity mutation, process scan or UID kill.
+        with tempfile.TemporaryDirectory() as directory:
+            script="import importlib.util,os,time; s=importlib.util.spec_from_file_location('n',%r); n=importlib.util.module_from_spec(s); s.loader.exec_module(n); p=os.fork(); (n.detach_watchdog_io(%r),time.sleep(2),os._exit(0)) if p==0 else print(p,flush=True)" % (str(HELPER),directory)
+            process=subprocess.Popen([sys.executable,'-I','-S','-c',script],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+            child=None
+            try:
+                output,error=process.communicate(timeout=1)
+                child=int(output.strip())
+                self.assertEqual(process.returncode,0,error)
+                self.assertTrue((Path(directory)/'watchdog.log').exists())
+            finally:
+                if child:
+                    try:os.kill(child,native.signal.SIGKILL)
+                    except ProcessLookupError:pass
+                if process.poll() is None:process.kill();process.wait(timeout=2)
+
+    def test_each_denial_subprobe_has_its_own_budget_and_no_sudo_or_lookup(self):
+        self.assertNotIn('check_output',native.PROBE)
+        self.assertIn("part == 'authority'",native.PROBE)
+        # Network arms do not execute subprocesses or use host DNS.
+        self.assertIn("s.settimeout(3)",native.PROBE)
+        self.assertIn("timeout=12",HELPER.read_text())
+        workflow=(HELPER.parent.parent/'workflows/native-compile.yml').read_text()
+        self.assertIn("inputs.mode == 'native' && 65 || 10",workflow)
+
     def command_fixture(self,root):
         (root/'cleanup.lock').touch()
         (root/'state.json').write_text(json.dumps({'watchdog_deadline':10**20,'watchdog_requested':False}))
