@@ -234,6 +234,10 @@ pre-queued with no jobs, logs, or cancellable run graph.
 
 - Run `node --test .github/scripts/environment-gateway-policy.test.mjs .github/scripts/deploy-vercel-prebuilt.test.mjs`
   and `node .github/scripts/deploy-develop-pr-preview.mjs --self-test`.
+- Verify ordinary PR builds and uploads retain custom `develop` credentials,
+  select the logical Preview gateway, inject only its unbranched scoped signing
+  secret into the upload child, and require the controlled main-source preview
+  master. Legacy PR deployments must not be reused or mass-deleted.
 - Verify production and preview master are separately built with their own target
   metadata and no provider/gateway secrets in either build or artifact.
 - Missing encrypted scope bootstrap, unknown target, arbitrary PR master selection,
@@ -245,6 +249,10 @@ pre-queued with no jobs, logs, or cancellable run graph.
 - A scheduled PR-preview reconciliation must never move the stable develop alias
   to a native or PR deployment. Verify canonical source and exact manifest owner,
   then ordinary API reads after the stable publisher's explicit alias assignment.
+- Simulate edge propagation beyond the former seven-second retry window; the
+  exact manifest owner must eventually pass without another upload or alias
+  assignment. Persistent mismatches stop at the 90-second deadline, abort any
+  in-flight read, preserve safe mismatch evidence and restore old bindings.
 - Activate each environment only after source support and independent review;
   preserve known production/develop bindings for rollback. Do not retire old
   immutable deployments or change Atlas tier/credentials for this rollout.
@@ -252,3 +260,9 @@ pre-queued with no jobs, logs, or cancellable run graph.
   no CLI or real network. Confirm canonical manifest/API acceptance reaches the
   success status and step-summary receipt, then repeat without another alias or
   status mutation. This guards receipt variables escaping their acceptance scope.
+
+## Existing workflow preflight verification
+
+- OpenAI preflight failures report the HTTP status and an allowlisted error code. Unknown codes and response messages must never enter logs; verify both quota classification and redaction before a bounded live vault probe.
+
+- Verify reusable workflows parse on GitHub before running a credential probe. Job-level environment expressions must not reference step outputs or runtime environment values; those belong in step inputs or step environments.

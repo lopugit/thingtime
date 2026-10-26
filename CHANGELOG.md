@@ -15,6 +15,23 @@ verbatim, and CI changes are recorded here from now on.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 every entry is attributed the same way the app changelog attributes them.
 
+## 2026-10-26 — Route ordinary PR previews through the controlled preview gateway
+
+- Keep future ordinary PR builds and deployments in the custom `develop`
+  credential scope while routing their logical gateway to the controlled
+  standard Preview owner. Retain existing PR hostnames as compatibility URLs,
+  preserve legacy deployments, and require the current trusted-main preview owner.
+
+## 2026-10-26 — Verify canonical alias propagation within a bounded deadline
+
+- Allow exact manifest/API/static acceptance up to 90 seconds after alias
+  publication, abort pending reads at the deadline and retain sanitized mismatch
+  evidence. Preserve pre-upload bindings and guarded rollback on failure.
+- Preserve existing preflight notes under `.github/TESTING.md`, removing the
+  root testing file that violated the bare controller tree contract.
+- Reproduce delayed edge readiness with a virtual-clock regression instead of
+  treating a successful upload as accepted gateway activation.
+
 ## 2026-10-26 — Publish environment gateway owners and explicit branch backends
 
 - Map production, custom develop and standard preview to controlled gateway

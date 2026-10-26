@@ -62,7 +62,12 @@ test('workflow keeps secretless builds while allowing protected comments and rec
   assert.match(adminPrepare, /pull-requests: write/);
   assert.match(workflow, /RECOVERY_GH_TOKEN: \$\{\{ github.token \}\}/);
   assert.match(develop, /pulls\?state=open&per_page=100/);
-  assert.match(develop, /Promise.allSettled\(\[reconcileStableDevelopAlias\(config\), reconcile\(config\)\]\)/);
+  assert.match(develop, /Promise.allSettled\(\[reconcile\(config\)\]\)/);
+  assert.doesNotMatch(develop.slice(develop.lastIndexOf('const main = async')), /reconcileStableDevelopAlias\(/);
+  const build = workflow.slice(workflow.indexOf('\n  build:'), workflow.indexOf('\n  controller:'));
+  assert.match(build, /VERCEL_TARGET_ENV: develop/);
+  assert.doesNotMatch(build, /secrets\.|THINGTIME_MONGODB_CONNECTION_MODE/);
+  assert.match(build, /VERCEL_GIT_COMMIT_REF: \$\{\{ needs.prepare.outputs.head_ref \}\}/);
   assert.match(admin, /commentWrite\.catch\(\(\) => undefined\)\.then/);
   assert.match(admin, /lane: row.environment === 'develop' \? 'admin-develop' : 'production'/);
 });
