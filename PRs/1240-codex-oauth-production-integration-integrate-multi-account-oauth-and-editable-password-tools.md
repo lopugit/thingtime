@@ -27,11 +27,15 @@ service/password/schema/settings/gateway suites, five client builds, both Nitro
 presets, Vercel output verification, compiled manifests and synthetic HTTP OAuth
 and gateway checks. The independent compatibility matrix passes 296 assertions.
 
-Task-owned, network-isolated Chromium passes 27 password-manager milestones and
+Task-owned, network-isolated Chromium passes 28 password-manager milestones and
 nine service-catalog groups with no page errors. This includes desktop/mobile,
-Builder editing, transfers, account switching, generator/icons/passkey controls
-and a synthetic QR image exceeding 14 MiB. Browser timeouts and nonterminal reports
-fail verification. No personal browser profile or production credential is copied.
+Builder editing, transfers, account switching, generator/icons/passkey controls,
+a synthetic QR image exceeding 14 MiB, and post-reload structured-field edits
+saved and reopened through the UI before same-item 1PUX export/reimport comparison
+and transfer completion. The password flow uses a synthetic in-memory API, vault
+and native bridge; it proves parser/export/UI behavior, not hosted or installed
+provider acceptance. Browser timeouts and nonterminal reports fail verification.
+No personal browser profile or production credential is copied.
 
 Swift core passes 17 tests with two opt-in skips, Electron bridge passes nine,
 and navigation fencing passes four. Native bridge typechecks pass. Full Xcode
@@ -61,6 +65,8 @@ hosted ChatGPT client approval, production rollout, and signed installed-device
 passkey/AutoFill/TOTP ceremonies remain distinct gates. No native installation or
 real-account authentication is established by the synthetic tests.
 
-Graph structural outputs and history are preserved. Changed documentation was
-not semantically reindexed: the incremental extractor attempted to revisit the
-whole non-code corpus, so that attempt stopped before semantic dispatch.
+The code-only structural refresh completed at 65,887 nodes and regenerated the
+aggregated HTML view. Changed documentation was not semantically reindexed: the
+supported wrapper update is code-only, and the earlier non-code attempt stopped
+before semantic dispatch. All existing snapshot directories remain preserved;
+the wrapper's tracked-path retention behavior is recorded as a tooling limitation.

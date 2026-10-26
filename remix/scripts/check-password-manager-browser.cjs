@@ -46,6 +46,14 @@ let browser, server;
     };
     const replace = async (selector, value) => { await page.click(selector); await page.keyboard.down('Control'); await page.keyboard.press('KeyA'); await page.keyboard.up('Control'); await page.keyboard.sendCharacter(value); };
     const editText = async (selector, value) => { await page.click(selector); await page.waitForSelector('textarea[aria-label="Block text"]'); await replace('textarea[aria-label="Block text"]', value); await page.keyboard.press('Escape'); };
+    const editTextFromBlockPicker = async (blockId, value) => {
+      const picker = 'select[aria-label="Select block"]';
+      await page.waitForFunction((selector, id) => [...document.querySelector(selector).options].some(option => option.value === id), {}, picker, blockId);
+      await page.select(picker, blockId);
+      await page.waitForSelector('textarea[aria-label="Block text"]');
+      await replace('textarea[aria-label="Block text"]', value);
+      await page.keyboard.press('Escape');
+    };
     const editTitle = async (selector, value) => { await page.click(selector); await page.waitForSelector('input[aria-label="Element title"]'); await replace('input[aria-label="Element title"]', value); await page.keyboard.press('Escape'); };
     const saveLayout = async scope => { await clickText(scope, 'Save layout'); await page.waitForFunction(scope => !document.querySelector(scope).textContent.includes('Unsaved layout'), {}, scope); await clickText(scope, 'Done editing layout'); };
     const openEntry = async () => { await page.waitForSelector(block('password-record')); await page.click(block('password-record')); await page.waitForSelector('input[name="field-password"]'); await page.waitForSelector(`${attachments} ${block('attachment-name')}`); };
@@ -333,7 +341,7 @@ let browser, server;
     await saveLayout(source);
     await clickText(attachments, 'Edit layout');
     await editText(`${attachments} ${block('attachment-heading')}`, 'My {files.heading}');
-    await editText(`${attachments} ${block('attachment-name')}`, 'File {item.name}');
+    await editTextFromBlockPicker('attachment-name', 'File {item.name}');
     await saveLayout(attachments);
     await clickText(sourceFiles, 'Edit layout');
     await editText(`${sourceFiles} ${block('attachment-name')}`, 'Source {item.name}');
@@ -417,7 +425,7 @@ let browser, server;
     await clickText(main, 'Done editing layout');
     assert.ok(!(await page.$eval(block('password-editor'), node => node.textContent)).includes('Copied.'));
     await page.click(block('password-editor-close'));
-    await record('Copy keeps concealed passwords masked, copies TOTP codes only, sanitizes rejection and drops stale feedback after Builder entry');
+    await record('Copy masks passwords, copies TOTP codes only, sanitizes failure, and cancels stale feedback when Builder entry interrupts a pending clipboard write');
 
 
     await page.click(block('password-import'));
@@ -442,6 +450,75 @@ let browser, server;
     await page.waitForSelector(block('password-transfer'), { hidden: true });
     assert.equal(await page.evaluate(() => window.passwordFixture.hasPrivateLayoutValues()), false);
     await record('Real CSV parser previews synthetic import before explicit save; synthetic CSV export requires acknowledgement; authored layouts remain private-data-free');
+
+    // Exercise the same edited structured item through the actual Thingtime
+    // 1PUX export and import UI. Keep the comparison inside the synthetic page
+    // so private fixture values never enter the browser report.
+    await page.evaluate(() => {
+      const record = [...document.querySelectorAll('[data-block-id="password-record"]')].find(node => node.querySelector('[data-block-id="password-record-title"]')?.textContent.trim() === 'Saved Synthetic login');
+      if (!record) throw new Error('Synthetic login entry is required for the structured round trip');
+      record.click();
+    });
+    await page.waitForSelector('input[name="property-import-1-0"]');
+    await replace('input[name="property-import-1-0"]', 'roundtrip-edited-city');
+    await replace('input[name="property-import-1-1.0.0"]', 'roundtrip-edited-nested');
+    await replace('input[name="property-import-1-1.0.1"]', 'false');
+    await replace('input[name="property-import-1-1.0.2"]', '73.25');
+    await page.click('button[aria-label="Show SSH key"]');
+    await page.waitForSelector('textarea[name="property-import-2-0"]');
+    await replace('textarea[name="property-import-2-0"]', 'roundtrip-edited-ssh-key');
+    await page.click(block('password-save'));
+    await page.waitForFunction(() => {
+      const entry = window.passwordFixture.savedEntry();
+      const address = JSON.parse(entry.fields.find(field => field.id === 'import-1').value);
+      const ssh = JSON.parse(entry.fields.find(field => field.id === 'import-2').value);
+      return address.city === 'roundtrip-edited-city' && address.unknown['fixture-private-property-name'][0] === 'roundtrip-edited-nested' &&
+        address.unknown['fixture-private-property-name'][1] === false && address.unknown['fixture-private-property-name'][2] === 73.25 && ssh.privateKey === 'roundtrip-edited-ssh-key';
+    });
+    assert.deepEqual(await page.evaluate(() => JSON.parse(window.passwordFixture.savedEntry().fields.find(field => field.id === 'import-1').value)), {
+      city: 'roundtrip-edited-city', unknown: { 'fixture-private-property-name': ['roundtrip-edited-nested', false, 73.25, null], empty: {}, sameType: ['fixture-array-first', 'fixture-array-second'] }
+    });
+    assert.deepEqual(await page.evaluate(() => JSON.parse(window.passwordFixture.savedEntry().fields.find(field => field.id === 'import-2').value)), {
+      privateKey: 'roundtrip-edited-ssh-key', metadata: { publicKey: 'fixture-ssh-public-key' }
+    });
+    await page.click(block('password-editor-close'));
+    await page.evaluate(() => {
+      const record = [...document.querySelectorAll('[data-block-id="password-record"]')].find(node => node.querySelector('[data-block-id="password-record-title"]')?.textContent.trim() === 'Saved Synthetic login');
+      if (!record) throw new Error('Synthetic login entry must remain available after save');
+      record.click();
+    });
+    await page.waitForFunction(() => document.querySelector('input[name="property-import-1-0"]')?.value === 'roundtrip-edited-city' && document.querySelector('input[name="property-import-1-1.0.0"]')?.value === 'roundtrip-edited-nested');
+    await page.click('button[aria-label="Show SSH key"]');
+    await page.waitForFunction(() => document.querySelector('textarea[name="property-import-2-0"]')?.value === 'roundtrip-edited-ssh-key');
+    assert.equal(await page.$eval('input[name="property-import-1-1.0.1"]', input => input.value), 'false');
+    assert.equal(await page.$eval('input[name="property-import-1-1.0.2"]', input => input.value), '73.25');
+    await page.click(block('password-editor-close'));
+    assert.equal(await page.evaluate(() => window.passwordFixture.prepareStructuredRoundTrip()), true);
+    await page.click(block('password-export'));
+    await page.waitForSelector(block('password-export-format'), { visible: true });
+    await page.select(block('password-export-format'), '1pux');
+    await page.click(block('password-export-acknowledgement'));
+    await page.click(block('password-transfer-confirm'));
+    await page.waitForFunction(() => !!window.passwordFixture.downloadedFile());
+    await page.waitForSelector(block('password-transfer'), { hidden: true });
+
+    await page.click(block('password-import'));
+    await page.waitForSelector(block('password-import-file'), { visible: true });
+    await page.$eval(block('password-import-file'), input => {
+      const file = window.passwordFixture.downloadedFile();
+      if (!file) throw new Error('Thingtime 1PUX export should be available to re-import');
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.waitForSelector(block('password-import-entry'));
+    assert.equal(await page.evaluate(() => window.passwordFixture.structuredRoundTripPreserved()), false);
+    await page.click(block('password-transfer-confirm'));
+    await page.waitForFunction(() => window.passwordFixture.structuredRoundTripPreserved());
+    await page.waitForSelector(block('password-transfer'), { hidden: true });
+    await record('Edited structured item retains value types and unknown siblings through same-item Thingtime 1PUX export and re-import');
+
     await page.goto(origin + '/?pauseCapability=1', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.passwordFixture?.pending());
     await page.click(block('password-add'));
