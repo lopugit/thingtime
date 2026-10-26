@@ -23,8 +23,8 @@ test('dedicated theme writers advertise durable history on both capability manif
 	const route = createApiCapabilitiesManifest().features;
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
 	for (const feature of ['api.themes', 'api.themes-delete']) {
-		assert.equal(route[feature], '1.1.0');
-		assert.equal(wellKnown[feature].version, '1.1.0');
+		assert.equal(route[feature], feature === 'api.themes' ? '1.2.0' : '1.1.0');
+		assert.equal(wellKnown[feature].version, feature === 'api.themes' ? '1.2.0' : '1.1.0');
 		assert.equal(capabilitySatisfies(route[feature], '1.1.0'), true);
 		for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
 	}

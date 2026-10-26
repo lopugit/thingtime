@@ -6491,12 +6491,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		notes: ['No response or log contains the cron secret. Free omni text screening makes draining the off-era backlog costless.']
 	}),
   endpoint({
-    id: 'themes', featureVersion: '1.1.0', contractVersion: '1.1.0',
+    id: 'themes', featureVersion: '1.2.0', contractVersion: '1.2.0',
     group: 'themes',
     title: 'Themes',
     endpoint: '/api/v1/themes',
     summary: 'Lists or saves themes for the authenticated user.',
-    detail: 'Theme records let Thingtime users save and share visual configurations. Reads and writes require an authenticated user. Modern saved themes record approved token content in private shared Timeline events in the same home transaction, even when a custom data plane is selected. Identical content adds no event; display-title and folder events retain one parent chain. Legacy storage retains its migration fences. Dedicated theme restoration and active-theme selection history remain in progress.',
+    detail: 'Theme records let Thingtime users save and share visual configurations. Version 1.2.0 adds optional colors.focusBorder, colors.focusGlowStart and colors.focusGlowEnd, plus general.focusGlowBlur (nonnegative finite pixels) and general.focusGlowOpacity (0–1; zero disables the decorative glow). Defaults are a contrasting pink border and a pink-to-violet blurred halo; omitted fields retain existing theme defaults.  Reads and writes require an authenticated user. Modern saved themes record approved token content in private shared Timeline events in the same home transaction, even when a custom data plane is selected. Identical content adds no event; display-title and folder events retain one parent chain. Legacy storage retains its migration fences. Dedicated theme restoration and active-theme selection history remain in progress.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -6506,7 +6506,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET with credentials to list themes owned by the current user.',
       'POST name, theme, and optional visibility to create or update a theme.',
       'Include id in POST only when updating one of the caller-owned themes.',
-      'Keep theme payloads below 64 KiB.'
+      'Negotiate api.themes 1.2.0 before saving focus preferences so older servers cannot silently omit them.'
     ],
     requestExamples: [
       {
@@ -6521,7 +6521,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: {
           name: 'Launch dark',
           visibility: 'private',
-          theme: { colors: { accent: '#008060', background: '#0f172a' } }
+          theme: { colors: { accent: '#008060', card: '#0f172a', focusBorder: '#d63384', focusGlowStart: '#ff69b4', focusGlowEnd: '#a555e8' }, general: { focusGlowBlur: 14, focusGlowOpacity: 0.24 } }
         }
       }
     ],
@@ -6618,13 +6618,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'themes-shared',
+    id: 'themes-shared', featureVersion: '1.1.0', contractVersion: '1.1.0',
     group: 'themes',
     title: 'Shared theme',
     endpoint: '/api/v1/themes/shared',
     summary: 'Reads a shared theme by id, or lists the public theme gallery without one.',
     detail:
-      'Anonymous callers can read public shared themes. Authenticated owners can also read their own private themes by id. Omitting id returns the public gallery: every public theme, newest-updated first, capped at 60 (optional limit query lowers it).',
+      'Version 1.1.0 includes optional focus border, gradient glow colours, blur and strength in returned theme documents; older documents remain compatible and resolve missing fields through theme defaults. Anonymous callers can read public shared themes. Authenticated owners can also read their own private themes by id. Omitting id returns the public gallery: every public theme, newest-updated first, capped at 60 (optional limit query lowers it).',
     auth: {
       mode: 'optional',
       description: 'Anonymous public reads are allowed; auth cookie or bearer token can reveal caller-owned private themes.'

@@ -26,6 +26,7 @@ import { rootIdentity } from '../utils/rootIdentity';
 import { createBrowserActionHost, finishBrowserAction } from '~/components/Actions/browserActionHost';
 import { withPostRequestDeadline } from './postRequest';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
+import { THEME_CAPABILITY_REQUIREMENTS } from '~/theme/capabilities';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
@@ -1618,6 +1619,7 @@ export function useApi() {
       save: useCallback(
         async (args) => {
           const { id, name, theme, visibility } = args;
+          await requireThingtimeCapability('api.themes', THEME_CAPABILITY_REQUIREMENTS['api.themes']);
           return asyncFetcher.submit({ id, name, theme, visibility }, { action: '/api/v1/themes' });
         },
         [asyncFetcher]

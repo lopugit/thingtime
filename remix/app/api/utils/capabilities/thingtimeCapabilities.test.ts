@@ -526,3 +526,20 @@ test('editable media containers require compatible element storage contracts on 
  assert.equal(capabilitySatisfies('1.6.0','1.7.0'),false);
  assert.equal(capabilitySatisfies('1.7.1','1.7.0'),true);
 });
+
+
+test('theme focus settings are additive and consistent across both manifests', async () => {
+  const { THEME_CAPABILITY_REQUIREMENTS } = await import('../../../theme/capabilities');
+  const requirements = { ...THEME_CAPABILITY_REQUIREMENTS, 'api.themes-shared': '1.1.0' };
+  const docs = createApiCapabilitiesManifest().features;
+  const discovery = thingtimeCapabilityManifest('https://themes.test');
+  assert.equal(discovery.origin, 'https://themes.test');
+  for (const [feature, minimum] of Object.entries(requirements)) {
+    assert.equal(docs[feature], minimum);
+    assert.equal(discovery.features[feature].version, minimum);
+    assert.equal(capabilitySatisfies('1.2.1', minimum), true);
+    assert.equal(capabilitySatisfies('1.3.0', minimum), true);
+    for (const incompatible of ['', '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(incompatible, minimum), false);
+  }
+  assert.equal(capabilitySatisfies('1.1.9', THEME_CAPABILITY_REQUIREMENTS['api.themes']), false);
+});
