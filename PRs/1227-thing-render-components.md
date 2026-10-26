@@ -1,7 +1,16 @@
 # PR 1227 — Explicit render Components for Things
 
 PR: https://github.com/lopugit/thingtime/pull/1227
-Branch: `codex/thing-render-components`; base: `develop`.
+Branch: `codex/thing-render-components`; base: `main`.
+
+On 26 October 2026 the owner explicitly requested this PR's merge into
+`lopugit/thingtime`'s `main`. Only the two owned feature commits were rebased onto
+the freshly fetched main commit `78f5c843828a284b9efe25e8d561ef06ef729c9c`;
+unrelated develop work is outside this PR. Main's newer native-link handling
+and Things capability gate are preserved, as is the subsequently merged
+single-click interaction. All affected tests, client/server builds and full
+isolated browser acceptance passed on the main integration. Final-head CI
+checks and evidence are recorded on the PR.
 
 ## Contract
 
@@ -78,7 +87,9 @@ authenticated Character/overview reporting and saved Thing writes did not.
 
 The initial PR preview controller dispatch failed with HTTP 403. A local build
 or isolated browser pass does not prove a preview or production deployment.
-No merge, primary-branch update or production deployment is authorized here.
+The requested main merge is authorized, subject to the repository's required
+checks. Production rendering and repair of the existing saved Thing remain
+separate acceptance work; a merge does not establish either result.
 
 Graphify's structural refresh is retained. The semantic path treated the corpus
 as broadly changed rather than incrementally reusing it; changed documentation
