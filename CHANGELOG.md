@@ -15,6 +15,12 @@ verbatim, and CI changes are recorded here from now on.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 every entry is attributed the same way the app changelog attributes them.
 
+## 2026-10-26 — Restore ordinary PR preview dispatch
+
+- Scope the protected preview upload receipt path to its runner steps. GitHub
+  rejected new PR preview runs while the job environment referenced
+  `runner.temp`, which is unavailable at that evaluation point.
+
 ## 2026-10-26 — Route ordinary PR previews through the controlled preview gateway
 
 - Keep future ordinary PR builds and deployments in the custom `develop`

@@ -215,7 +215,6 @@ jobs:
       PREVIEW_EXPECTED_BUILD_MINUTES: ${{ vars.PREVIEW_EXPECTED_BUILD_MINUTES }}
       PREVIEW_EXPECTED_READY_AT: ${{ needs.prepare.outputs.expected_ready_at }}
       PREVIEW_MISSING_BUILD_PAGE: ${{ vars.PREVIEW_MISSING_BUILD_PAGE }}
-      VERCEL_PREVIEW_RECEIPT_PATH: ${{ runner.temp }}/pr-preview-upload-receipt.json
       STABLE_DEVELOP_DOMAIN: ${{ vars.STABLE_DEVELOP_DOMAIN }}
     steps:
       - name: Check out protected deployment controller
@@ -249,6 +248,7 @@ jobs:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
+          VERCEL_PREVIEW_RECEIPT_PATH: ${{ runner.temp }}/pr-preview-upload-receipt.json
           VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
           VERCEL_PREBUILT_DIR: ${{ runner.temp }}/validated-prebuilt
         run: node .github/scripts/deploy-develop-pr-preview.mjs
@@ -260,6 +260,7 @@ jobs:
           RECOVERY_GH_TOKEN: ${{ github.token }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
+          VERCEL_PREVIEW_RECEIPT_PATH: ${{ runner.temp }}/pr-preview-upload-receipt.json
         run: node .github/scripts/deploy-develop-pr-preview.mjs
 
       - name: Report failed GitHub prebuild
@@ -268,6 +269,7 @@ jobs:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
+          VERCEL_PREVIEW_RECEIPT_PATH: ${{ runner.temp }}/pr-preview-upload-receipt.json
         run: node .github/scripts/deploy-develop-pr-preview.mjs
 
       - name: Preserve protected Preview upload receipt

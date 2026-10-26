@@ -232,6 +232,10 @@ pre-queued with no jobs, logs, or cancellable run graph.
 
 ## Environment gateway publication
 
+- Run `actionlint -ignore 'unexpected key "queue"' .github/workflows/develop-pr-preview.yml`
+  before dispatching a real PR preview. The installed actionlint predates
+  GitHub's concurrency queue key; other parse errors must still fail. Runner
+  paths belong in step environments so GitHub can parse the reusable workflow.
 - Run `node --test .github/scripts/environment-gateway-policy.test.mjs .github/scripts/deploy-vercel-prebuilt.test.mjs`
   and `node .github/scripts/deploy-develop-pr-preview.mjs --self-test`.
 - Verify ordinary PR builds and uploads retain custom `develop` credentials,
