@@ -271,10 +271,10 @@ test('an ORPHAN twin is left alone: it is the only thing holding a unique key mi
 	assert.equal(fixture.dropped.includes('uniqueKeys_1__rebuild'), false);
 });
 
-test('an orphan twin IS dropped when the collection has no free slot left', async () => {
-	// a stuck boot ensure (every createIndex failing with CannotCreateIndex) is
-	// the worse failure, and the plan recreates the original moments later
+test('an orphan twin remains protected when the collection has no free slot left', async () => {
+	// Bootstrap must fail safely rather than temporarily admit duplicate keys.
 	const filler = Array.from({ length: MONGODB_COLLECTION_INDEX_LIMIT - 2 }, (_value, index) => `filler_${index}`);
 	const fixture = twinPruneFixture(['_id_', ...filler, 'uniqueKeys_1__rebuild']);
-	assert.deepEqual(await pruneRebuildTwins(fixture.db), ['uniqueKeys_1__rebuild']);
+	assert.deepEqual(await pruneRebuildTwins(fixture.db), []);
+	assert.deepEqual(fixture.dropped, []);
 });
