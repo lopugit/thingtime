@@ -5286,6 +5286,9 @@ halves.
 - [ ] In dedicated mode, confirm the deployment executes its own backend,
       advertises `gateway: null`, owns its pools, and refuses relayed traffic.
       Point a proxy worker at that dedicated alias and verify it fails closed.
+- [ ] In `test:environment-gateway`, verify the bundled connection policy and
+      an explicitly selected proxy policy independently; alias-ownership fixtures
+      must set their intended policy so machine/build defaults cannot change them.
 - [ ] Verify unknown connection-mode values and incomplete gateway settings fail
       closed; Vercel defaults to proxy while a local/self-hosted server without
       gateway settings retains direct-connection behavior.

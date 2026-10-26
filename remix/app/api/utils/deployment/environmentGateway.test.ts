@@ -2,16 +2,26 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createGatewayAuthority, gatewayDescriptor, getGatewaySettings, getMongoConnectionMode, GATEWAY_OWNERSHIP_TTL_MS } from './environmentGateway';
+import { mongoConnectionPolicy } from './mongoConnectionPolicy';
 
 const selected = { environment: 'preview', origin: 'https://preview.test', deploymentId: 'deployment-new', secret: 's'.repeat(32) };
 const manifest = (deploymentId = selected.deploymentId) => ({ schemaVersion: 1, origin: selected.origin,
   gateway: { environment: selected.environment, origin: selected.origin, deploymentId },
   features: { 'api.environment-gateway': { version: '1.0.0' } }, operations: [] });
+const withConnectionMode = async (mode: 'proxy' | 'dedicated', run: () => Promise<void>) => {
+  const previous = process.env.THINGTIME_MONGODB_CONNECTION_MODE;
+  process.env.THINGTIME_MONGODB_CONNECTION_MODE = mode;
+  try { await run(); } finally {
+    if (previous === undefined) delete process.env.THINGTIME_MONGODB_CONNECTION_MODE;
+    else process.env.THINGTIME_MONGODB_CONNECTION_MODE = previous;
+  }
+};
 
 test('gateway is explicit, validates complete settings and exposes no secret', () => {
   assert.equal(getGatewaySettings({}), null);
   const env = { THINGTIME_GATEWAY_ENVIRONMENT: 'preview', THINGTIME_GATEWAY_ORIGIN: selected.origin,
-    THINGTIME_GATEWAY_DEPLOYMENT_ID: selected.deploymentId, THINGTIME_GATEWAY_SECRET: selected.secret };
+    THINGTIME_GATEWAY_DEPLOYMENT_ID: selected.deploymentId, THINGTIME_GATEWAY_SECRET: selected.secret,
+    THINGTIME_MONGODB_CONNECTION_MODE: 'proxy' };
   assert.deepEqual(getGatewaySettings(env), selected);
   assert.equal('secret' in gatewayDescriptor(env)!, false);
   for (const patch of [{ THINGTIME_GATEWAY_ORIGIN: 'https://u:p@preview.test' }, { THINGTIME_GATEWAY_ORIGIN: 'http://preview.test' },
@@ -21,7 +31,7 @@ test('gateway is explicit, validates complete settings and exposes no secret', (
   }
 });
 
-test('alias ownership is single-flight, bounded, demotes and supports rollback', async () => {
+test('alias ownership is single-flight, bounded, demotes and supports rollback', async () => withConnectionMode('proxy', async () => {
   let time = 100, owner = selected.deploymentId, requests = 0, demotions = 0;
   const authority = createGatewayAuthority({ settings: () => selected, now: () => time, demoted: () => { demotions++; },
     fetch: async (_url, init) => { requests++; assert.equal(init?.redirect, 'error'); assert.equal(new Headers(init?.headers).has('cookie'), false); return Response.json(manifest(owner)); } });
@@ -32,7 +42,7 @@ test('alias ownership is single-flight, bounded, demotes and supports rollback',
   await assert.rejects(authority.requireDatabase()); assert.equal(demotions, 1);
   owner = selected.deploymentId; time += GATEWAY_OWNERSHIP_TTL_MS + 1;
   await authority.requireDatabase(); assert.equal(requests, 3);
-});
+}));
 
 test('discovery outage never uses stale authorization and can recover', async () => {
   let time = 1, fail = false;
@@ -61,8 +71,9 @@ test('configuration cannot change while discovery authorizes an old endpoint', a
 });
 
 
-test('Vercel defaults to proxy and cannot silently fall through missing or malformed settings', () => {
-  assert.equal(getMongoConnectionMode({}), 'proxy');
+test('Vercel uses the bundled default and cannot silently fall through missing or malformed settings', () => {
+  assert.equal(getMongoConnectionMode({}), mongoConnectionPolicy);
+  assert.equal(getMongoConnectionMode({ THINGTIME_MONGODB_CONNECTION_MODE: 'proxy' }), 'proxy');
   for (const env of [{ VERCEL: '1' }, { VERCEL_ENV: 'preview' },
     { THINGTIME_MONGODB_CONNECTION_MODE: 'proxy' }, { THINGTIME_GATEWAY_ORIGIN: '' },
     { THINGTIME_GATEWAY_DEPLOYMENT_ID: 'partial' },

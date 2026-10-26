@@ -47,3 +47,11 @@ stopped before semantic dispatch instead of launching a whole-corpus LLM run.
 Markdown and other non-code content are not newly semantically indexed; prior
 semantic data is retained where available. The snapshot manifest records file
 coverage, not proof of refreshed semantic extraction for these documents.
+
+## Follow-up regression
+
+The alias-ownership test fixture now pins proxy mode, while a separate assertion
+checks the bundled connection policy and an explicit proxy override. This covers
+both build policies without changing runtime behavior. The default-policy gateway
+suite passed 14/14 after this fixture change. Local tests do not establish live
+alias acceptance; that remains pending rollout.
