@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Integrate the canonical environment gateway into PR996: signed per-operation forwarding, fail-closed Mongo admission, promotion/rollback draining, guarded warmup and durable index readiness/recovery. Preserve password contract 1.2.1 and reject incompatible gateway operations. [Runbook](../docs/environment-api-gateway.md). Deployed/native acceptance remains separate. — Codex (AI)
+
 - 2026-10-26: Add independently editable nested properties for imported
   structured password fields, transient private labels and preserved custom
   Builder layouts. Keep unsupported or unsafe JSON intact and reject stale

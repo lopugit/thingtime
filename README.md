@@ -1549,6 +1549,13 @@ on the same document. Docs: `/docs/api` → things.
 
 ## MongoDB
 
+Configured branch deployments use the canonical environment API gateway for
+database-backed operations. See [gateway setup and rollout](docs/environment-api-gateway.md)
+for the server-only environment/origin/deployment settings, separate relay secret,
+exact source origins, per-operation capability negotiation, pool draining and
+index-readiness recovery. A gateway that lacks a branch operation fails closed;
+no production fallback or dedicated-backend opt-out is used.
+
 MongoDB powers the app status checks and database-backed API routes. Local
 development does not require MongoDB env by default: when
 `MONGODB_CONNECTION_STRING` is missing, Vite and Nitro forward same-origin API

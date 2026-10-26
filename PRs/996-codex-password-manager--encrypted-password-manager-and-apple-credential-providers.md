@@ -3,6 +3,30 @@
 PR: https://github.com/lopugit/thingtime/pull/996
 Branch: `codex/password-manager` (base `develop`)
 
+## Environment gateway and index lifecycle — 26 October 2026
+
+This branch now integrates the environment-scoped API gateway and coordinated
+index lifecycle. Configured followers negotiate the stable gateway and each
+operation before forwarding HTTP work, without opening MongoDB themselves.
+Signed one-hop relays retain normal user authentication, origin/CSRF checks,
+cookies, streaming and selected data-plane authority. Alias promotion and
+rollback drain admitted background/request work before closing old pools.
+Durable index readiness and fenced leases bound DDL work and preserve the
+read/authentication and authenticated admin repair paths after a failed plan.
+The existing password contract remains `api.passwords` 1.2.1; compatible newer
+minor versions are accepted, older/missing/breaking contracts fail closed.
+
+Validation: 278 focused regressions and all 26 TS/TSX lint targets passed.
+The sanitized built server passed a real synthetic macOS OS-sandboxed gateway
+runner covering registration, cookie writes, cross-site refusal, promotion,
+rollback and zero follower MongoDB dials. Independent review found no actionable
+findings. TypeScript retains 96 pre-existing diagnostics, with none added or on
+modified lines; the current ESLint parser does not support the `.mts` targets.
+No existing test suite was rerun solely for publication. These checks establish
+local built transport behavior; shared-environment rollout, real sessions and
+installed native/provider acceptance remain separate open gates. No production
+configuration or credentials were changed by this source publication.
+
 ## Structured imported-field editing — 26 October 2026
 
 Imported addresses, SSH keys and other supported structured fields previously

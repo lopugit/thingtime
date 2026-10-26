@@ -268,6 +268,9 @@ export default defineConfig({
       // the robots Sitemap: line and every sitemap <loc> name this dev origin.
       [ROBOTS_PATH]: forwardHostProxy(localApiTarget),
       [SITEMAP_PATH]: forwardHostProxy(localApiTarget),
+      // Public cards and their generated -docs twin are Nitro responses too;
+      // letting Vite handle these paths returns the SPA shell (or POST 404).
+      '/social-card': forwardHostProxy(localApiTarget),
       [THINGTIME_CAPABILITY_MANIFEST_PATH]: {
         target: localApiTarget,
         changeOrigin: true,

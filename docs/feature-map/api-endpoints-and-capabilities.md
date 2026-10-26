@@ -451,3 +451,14 @@ with separately editable children. `api.webpages-suites-install` 1.7.0 installs
 the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
+
+## Environment gateway
+
+`api.environment-gateway` 1.0.1 registers origin-scoped gateway metadata in both
+manifest generators. `deployment/environmentGateway.ts` resolves alias ownership;
+`server/utils/environmentGateway.ts` checks every semantic version, path and method
+before signing a one-hop relay. Nitro middleware restores the original URL before
+authentication and keeps streaming work admitted until completion. Discovery is
+private/no-store. Root social-card and manifest docs twins are explicitly routed.
+Run `test:environment-gateway`, `test:api-capabilities` and `test:collections`; see
+[environment gateway](../environment-api-gateway.md) for rollout boundaries.

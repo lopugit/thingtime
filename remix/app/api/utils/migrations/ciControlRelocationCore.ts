@@ -8,6 +8,8 @@
 // written since August, growing ~270k/day. Every one of the collection's 64
 // indexes paid an entry per row: 3.15 GB of index for ~4.5k content docs.
 
+import { isDeepStrictEqual } from 'node:util';
+
 import { ciExpiresAt, ciRetentionPolicy, type CiRetentionPolicy } from '../ciControl/retentionCore';
 
 export type RelocationCursor = {
@@ -235,30 +237,35 @@ export const indexCreateSpecFromDefinition = (definition: Record<string, any>): 
   return { keys: { ...(key as Record<string, unknown>) }, options: rest };
 };
 
-// A previous run that stopped mid-way (deploy timeout, cap error) leaves
-// `__rebuild` twins behind, possibly without their originals. Restore the
-// plan first: twins whose original is back are simply dropped; orphan twins
-// are dropped and the plan recreates the originals (a brief window, taken
-// only on recovery — the normal path below never opens one).
+// Preserve an orphan twin until the canonical original exists again. Drop
+// redundant twins first to release capacity without removing a constraint.
 export const reconcileRebuildTwins = async (options: {
   collection: RebuildCollection;
   ensurePlan: () => Promise<unknown>;
   assertLease?: () => Promise<void>;
 }): Promise<string[]> => {
   const existing = await options.collection.indexes();
-  const names = new Set(existing.map((index) => index.name));
-  const twins = existing.filter((index) => index.name.endsWith('__rebuild'));
+  const originals = new Map(existing.map(index => [index.name, index]));
+  const twins = existing.filter(index => index.name.endsWith('__rebuild'));
   if (!twins.length) return [];
   const recovered: string[] = [];
-  let orphaned = false;
-  for (const twin of twins) {
-    if (options.assertLease) await options.assertLease();
-    const original = twin.name.slice(0, -'__rebuild'.length);
-    if (!names.has(original)) orphaned = true;
+  const orphaned = twins.filter(twin => !originals.has(twin.name.slice(0, -'__rebuild'.length)));
+  const dropProtectedTwin = async (twin: IndexDefinition, definitions: IndexDefinition[]) => {
+    const original = definitions.find(index => index.name === twin.name.slice(0, -'__rebuild'.length));
+    if (!original || (twin.unique && (!original.unique || !isDeepStrictEqual(original.key, twin.key))))
+      throw new Error(`Rebuild twin ${twin.name} remains the only verified constraint; restore its canonical original before retrying.`);
+    await options.assertLease?.();
     await dropIndexIfPresent(options.collection, twin.name);
     recovered.push(twin.name);
+  };
+  for (const twin of twins.filter(twin => originals.has(twin.name.slice(0, -'__rebuild'.length))))
+    await dropProtectedTwin(twin, existing);
+  if (orphaned.length) {
+    await options.assertLease?.();
+    await options.ensurePlan();
+    const restored = await options.collection.indexes();
+    for (const twin of orphaned) await dropProtectedTwin(twin, restored);
   }
-  if (orphaned) await options.ensurePlan();
   return recovered;
 };
 
@@ -269,9 +276,8 @@ export const reconcileRebuildTwins = async (options: {
 // One index at a time, so the collection never holds more than ONE extra
 // index (the twin) beyond its steady state — a collection parked near the
 // 64-index cap rebuilds without tripping CannotCreateIndex. When there is no
-// free slot at all, a unique index is rebuilt without a twin and reported as
-// `unprotected` (a brief constraint window, taken only in that degenerate
-// state).
+// free slot at all, fail before dropping any unique index. An operator must
+// first retire a verified redundant index; constraints never lapse for capacity.
 export const rebuildPlanIndexes = async (options: {
   collection: RebuildCollection;
   planNames: ReadonlySet<string>;
@@ -298,10 +304,12 @@ export const rebuildPlanIndexes = async (options: {
     .sort((a, b) => Number(isTextIndexDefinition(a)) - Number(isTextIndexDefinition(b)));
   report.skipped = existing.filter((index) => !options.planNames.has(index.name) && !index.name.endsWith('__rebuild')).map((index) => index.name);
   let count = existing.length + 1; // + _id_
+  if (count >= limit && owned.some(index => index.unique)) {
+    throw new Error('Unique index rebuild needs one free index slot for its protective twin; retire a verified redundant index before retrying.');
+  }
   if (options.dryRun) {
     report.rebuilt = owned.map((index) => index.name);
     report.twins = owned.filter((index) => index.unique).map((index) => rebuildTwinName(index.name));
-    if (count >= limit) report.unprotected = owned.filter((index) => index.unique).map((index) => index.name);
     return report;
   }
   for (const index of owned) {
@@ -315,7 +323,7 @@ export const rebuildPlanIndexes = async (options: {
         count += 1;
         report.twins.push(String(twin.name));
       } else {
-        report.unprotected.push(index.name);
+        throw new Error('Unique index rebuild lost its protective index slot; original preserved.');
       }
     }
     await dropIndexIfPresent(options.collection, index.name);
