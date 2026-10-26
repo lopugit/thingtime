@@ -615,3 +615,15 @@ Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
 the built `test:environment-gateway:acceptance` runner. See
 [the gateway runbook](../environment-api-gateway.md) for server settings,
 environment partitioning and outstanding live rollout acceptance.
+
+
+Owned theme/algorithm pagination uses the existing GET routes, shared
+`api/utils/ownedListPage.ts`, and `hooks/ownedListClient.ts`. Negotiate themes
+1.3.0 / algorithms 1.2.0; follow non-null cursors even after empty pages. Live
+pages do not authorize deletion. Canonical creation removes the old count
+ceilings while retaining byte quotas; sync 1.8.0 / 1.6.0 and things-import
+1.14.0 publish that change. Theme focus-token History uses optional v2 snapshots
+under timeline 1.23.0, preserving the frozen v1 reader. Run
+`test:owned-profiles`, `test:theme-sync`, `test:local-workspace`,
+`test:api-capabilities`, then built `test:environment-gateway:acceptance` in
+its disposable replica-set sandbox. See the local-workspace capacity checkpoint.

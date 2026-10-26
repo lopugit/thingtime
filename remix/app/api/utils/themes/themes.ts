@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { ownedListPage } from '../ownedListPage';
 import { ObjectId, type ClientSession } from 'mongodb';
 
 import type { TtTheme } from '../../../theme/tokens';
-import { normalizeSavedTheme, MAX_SAVED_THEMES } from '../../../theme/savedTheme';
+import { normalizeSavedTheme } from '../../../theme/savedTheme';
 // theme is a PROTECTED system kind: theme things stay on the home deployment
 // DB even while a data-plane endpoint override is active (see endpoint.ts).
 import { getHomeThingsCollection as getThingsCollection, getThemesCollection, withHomeMongoTransaction } from '../mongodb/collections';
@@ -62,7 +63,8 @@ export const toPublicTheme = (doc: any): PublicTheme => ({
   updatedAt: new Date(doc.updatedAt).toISOString()
 });
 
-const MAX_THEMES_PER_USER = MAX_SAVED_THEMES;
+// Explicit compatibility window for clients that do not request pagination.
+const LEGACY_OWNED_LIST_LIMIT = 100;
 
 // legacy visibility → theme-thing acl. Themes only ever use the two-value
 // subset: public is world-readable, everything else is owner-only. Exported so
@@ -280,11 +282,6 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput, boundary
 		await withHomeMongoTransaction(async (session) => {
    await boundary.beforeWrite?.(null, null, session);
    if (boundary.folderId !== undefined) Object.assign(thing, prepareManagedPlacement(thing, ownerId, await lockFolderDestination(things, ownerId, boundary.folderId, session), now));
-   // Count both storage eras inside the same transaction as the owner ledger
-   // and Timeline fence, so concurrent creates retry against the new count.
-   const thingCount = await things.countDocuments({ thingtime: 'theme', ownerId } as any, { session });
-   const legacyCount = await themes.countDocuments({ ownerId }, { session });
-   if (thingCount + legacyCount >= MAX_THEMES_PER_USER) throw new StorageMutationError(400, 'storage_conflict', `Theme limit reached (${MAX_THEMES_PER_USER})`);
 			await applyUserStorageDelta(ownerId, sizeBytes, session);
 			await things.insertOne(thing as any, { session });
 			await recordThemeMutation(things, null, thing, capture, session);
@@ -310,7 +307,7 @@ const mergeThemeDocs = (thingDocs: any[], legacyDocs: any[]): any[] => {
     seen.add(id);
     merged.push(doc);
   }
-	return merged.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, MAX_THEMES_PER_USER);
+	return merged.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, LEGACY_OWNED_LIST_LIMIT);
 };
 
 export const listThemesForUser = async (ownerId: string): Promise<PublicTheme[]> => {
@@ -319,12 +316,21 @@ export const listThemesForUser = async (ownerId: string): Promise<PublicTheme[]>
     await things
       .find({ thingtime: 'theme', ownerId } as any)
       .sort({ updatedAt: -1 })
-      .limit(MAX_THEMES_PER_USER)
+      .limit(LEGACY_OWNED_LIST_LIMIT)
       .toArray()
   ).map(themeThingToDoc);
   const themes = await getThemesCollection();
-  const legacyDocs = await themes.find({ ownerId }).sort({ updatedAt: -1 }).limit(MAX_THEMES_PER_USER).toArray();
+  const legacyDocs = await themes.find({ ownerId }).sort({ updatedAt: -1 }).limit(LEGACY_OWNED_LIST_LIMIT).toArray();
   return mergeThemeDocs(thingDocs, legacyDocs).map(toPublicTheme);
+};
+
+export const listThemesPageForUser = async (ownerId: string, cursor?: string | null, signal?: AbortSignal): Promise<{ themes: PublicTheme[]; nextCursor: string | null }> => {
+  signal?.throwIfAborted();
+  const page = await ownedListPage({ ownerId, purpose: 'themes', things: await getThingsCollection(), legacy: await getThemesCollection(),
+    kind: 'theme', field: 'updatedAt', direction: -1, cursor, signal, fromThing: themeThingToDoc });
+  const themes = page.items.map(toPublicTheme);
+  signal?.throwIfAborted();
+  return { themes, nextCursor: page.nextCursor };
 };
 
 // Public gallery list — every PUBLIC theme, newest-updated first, across both

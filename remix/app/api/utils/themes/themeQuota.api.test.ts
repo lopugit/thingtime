@@ -2,12 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { MAX_SAVED_THEMES } from '../../../theme/savedTheme';
 const base = process.env.TT_THEME_SYNC_API_URL,
 	artifacts = process.env.TT_THEME_SYNC_API_ARTIFACTS,
 	playwrightPath = process.env.TT_SHARED_PLAYWRIGHT_PATH;
 test(
-	'concurrent normal theme creates admit only one final quota slot',
+	'concurrent normal theme creates exceed the former count limit and drain bounded pages',
 	{ skip: !base || !artifacts || !playwrightPath, timeout: 240_000 },
 	async () => {
 		const origin = new URL(base!).origin;
@@ -16,7 +15,21 @@ test(
 			context = await request.newContext({ baseURL: origin });
 		const headers = { Origin: origin };
 		let registered = false;
-		const evidence: { limit: number; statuses?: number[]; count?: number; complete?: boolean; cleanup?: boolean } = { limit: MAX_SAVED_THEMES };
+		const fixtureCount = 103;
+		const evidence: { statuses?: number[]; count?: number; complete?: boolean; cleanup?: boolean } = {};
+		const listAll = async () => {
+			const rows: any[] = [];
+			let cursor: string | null = null;
+			do {
+				const response = await context.get('/api/v1/themes?page=1' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''));
+				assert.equal(response.status(), 200);
+				const page = await response.json();
+				assert.ok(page.themes.length <= 64);
+				rows.push(...page.themes);
+				cursor = page.nextCursor;
+			} while (cursor);
+			return rows;
+		};
 		const save = (index: number) =>
 			context.post('/api/v1/themes', { headers, data: { name: 'Quota fixture ' + index, theme: {}, visibility: 'private' } });
 		try {
@@ -34,35 +47,25 @@ test(
 			});
 			assert.equal(response.status(), 200);
 			registered = true;
-			for (let index = 0; index < MAX_SAVED_THEMES - 1; index++) {
+			for (let index = 0; index < fixtureCount - 2; index++) {
 				const response = await save(index);
 				assert.equal(response.status(), 200, 'seed only disposable owner through normal theme API');
 			}
-			const contenders = await Promise.all([save(MAX_SAVED_THEMES), save(MAX_SAVED_THEMES + 1)]);
+			const contenders = await Promise.all([save(fixtureCount - 2), save(fixtureCount - 1)]);
 			evidence.statuses = contenders.map((x) => x.status()).sort();
-			const list = await context.get('/api/v1/themes');
-			assert.equal(list.status(), 200);
-			evidence.count = (await list.json()).themes.length;
-			assert.deepEqual(evidence.statuses, [200, 400]);
-			assert.equal(evidence.count, MAX_SAVED_THEMES);
+			evidence.count = (await listAll()).length;
+			assert.deepEqual(evidence.statuses, [200, 200]);
+			assert.equal(evidence.count, fixtureCount);
 			evidence.complete = true;
 		} finally {
 			try {
 				if (registered) {
-					// List caps at 100; repeat so a pre-fix over-admission is also cleaned.
-					for (let pass = 0; pass < 3; pass++) {
-						const response = await context.get('/api/v1/themes');
-						assert.equal(response.status(), 200);
-						const themes = (await response.json()).themes;
-						if (!themes.length) break;
-						for (const theme of themes) {
-							assert.ok(theme.name.startsWith('Quota fixture '));
-							assert.equal((await context.post('/api/v1/themes/delete', { headers, data: { id: theme.id } })).status(), 200);
-						}
+					const themes = await listAll();
+					for (const theme of themes) {
+						assert.ok(theme.name.startsWith('Quota fixture '));
+						assert.equal((await context.post('/api/v1/themes/delete', { headers, data: { id: theme.id } })).status(), 200);
 					}
-					const response = await context.get('/api/v1/themes');
-					assert.equal(response.status(), 200);
-					assert.deepEqual((await response.json()).themes, []);
+					assert.deepEqual(await listAll(), []);
 					evidence.cleanup = true;
 				}
 				await mkdir(artifacts!, { recursive: true });

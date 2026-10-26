@@ -1,3 +1,7 @@
+import { createHash } from 'node:crypto';
+import { copyBoundedJson } from '../../../utils/boundedJson';
+import { normalizeSavedTheme } from '../../../theme/savedTheme';
+import { THEME_SYNC_MAX_BYTES } from './themeSyncContract';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseThemeWrite } from './themeSyncContract';
@@ -53,4 +57,34 @@ test('client imports, revision heads and altered acknowledgments cannot become s
 		{ ...receipt, after: { ...receipt.after, value: { ...result, requestDigest: digest, ownerId: 'forged' } } }
 	])
 		assert.throws(() => readThemeWriteReceipt(changed, 'owner', command, digest));
+});
+
+test('pre-focus frozen commands retain their exact v1 receipt across transport and server reparsing', () => {
+	const normalized = normalizeSavedTheme({ name: 'Peach', theme: {} });
+	assert.ok(normalized.ok);
+	const legacy = { ...command, theme: structuredClone(normalized.theme) };
+	for (const key of ['focusBorder', 'focusGlowStart', 'focusGlowEnd']) Reflect.deleteProperty(legacy.theme.colors, key);
+	for (const key of ['focusGlowBlur', 'focusGlowOpacity']) Reflect.deleteProperty(legacy.theme.general, key);
+	// This reproduces the pre-upgrade algorithm without calling the new parser.
+	const request = copyBoundedJson({ ownerId: 'owner', selectedPlane: 'home', storagePlane: 'home', command: legacy },
+		{ maxBytes: THEME_SYNC_MAX_BYTES + 4096, maxDepth: 12, maxNodes: 4096, sortKeys: true });
+	const admitted = 'theme-write-v1:' + createHash('sha256').update('thingtime:theme-write:v1\0').update(JSON.stringify(request)).digest('hex');
+	assert.equal(admitted, 'theme-write-v1:1f074268f8566c93ca8dc8df4e0eea43cbdb5404d88f12d81296fc604662a5f5', 'Frozen pre-focus v1 receipt digest');
+	const receipt = createThemeWriteReceipt('owner', result, admitted, time);
+	const wire = parseThemeWrite(JSON.parse(JSON.stringify(legacy)));
+	const reparsed = parseThemeWrite(wire);
+	assert.deepEqual(wire, legacy); assert.deepEqual(reparsed, legacy);
+	const digest = themeWriteDigest('owner', 'home', reparsed);
+	assert.equal(digest, admitted);
+	assert.deepEqual(readThemeWriteReceipt(receipt, 'owner', reparsed, digest), result);
+	assert.equal(JSON.stringify(receipt), JSON.stringify(createThemeWriteReceipt('owner', result, admitted, time)), 'No receipt mutation or alternate replay identity');
+	for (const [section, key, value] of [
+		['colors', 'focusBorder', normalized.theme.colors.focusBorder], ['colors', 'focusGlowStart', '#123456'], ['colors', 'focusGlowEnd', '#234567'],
+		['general', 'focusGlowBlur', 0], ['general', 'focusGlowOpacity', 0]
+	] as const) {
+		const changed = parseThemeWrite({ ...legacy, theme: { ...legacy.theme, [section]: { ...legacy.theme[section], [key]: value } } });
+		const wrong = themeWriteDigest('owner', 'home', changed);
+		assert.notEqual(wrong, admitted, 'An explicitly supplied focus field is distinct from an absent legacy field');
+		assert.throws(() => readThemeWriteReceipt(receipt, 'owner', changed, wrong));
+	}
 });

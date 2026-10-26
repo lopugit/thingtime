@@ -42,7 +42,7 @@ export function accountThemeTransport(
 			if (scope.delegatedBy !== undefined) await requireThingtimeCapability('api.auth-characters', '1.0.0');
 			await requireThingtimeCapability(
 				'api.themes-sync',
-				scope.delegatedBy !== undefined ? '1.6.0' : context ? '1.5.0' : operation === 'snapshot' ? '1.4.0' : operation === 'selection' || operation === 'select' ? '1.1.0' : command && 'title' in command ? '1.4.0' : command && 'folderId' in command ? '1.3.0' : '1.0.1'
+				operation === 'write' && command && 'action' in command && command.action === 'save' && (command.expectedVersion === null || (command.theme && (['focusBorder', 'focusGlowStart', 'focusGlowEnd'].some(key => Object.prototype.hasOwnProperty.call(command.theme.colors ?? {}, key)) || ['focusGlowBlur', 'focusGlowOpacity'].some(key => Object.prototype.hasOwnProperty.call(command.theme.general ?? {}, key))))) ? '1.8.0' : scope.delegatedBy !== undefined ? '1.6.0' : context ? '1.5.0' : operation === 'snapshot' ? '1.4.0' : operation === 'selection' || operation === 'select' ? '1.1.0' : command && 'title' in command ? '1.4.0' : command && 'folderId' in command ? '1.3.0' : '1.0.1'
 			);
 			await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 			lease.assertCurrent();

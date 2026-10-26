@@ -167,7 +167,7 @@ test('home algorithm sync keeps selected-plane authority and a slow profile uplo
 				return Response.json({
 					schemaVersion: 1,
 					origin: scope.origin,
-					features: { 'api.algorithms-sync': { version: '1.2.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } }
+					features: { 'api.algorithms-sync': { version: '1.6.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } }
 				});
 			assert.equal(url, '/api/v1/algorithms/sync');
 			assert.equal((init.headers as any)['X-Thingtime-Expected-Data-Plane'], scope.dataPlane);

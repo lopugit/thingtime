@@ -26,7 +26,7 @@ import { enqueueActionOutcomeRecovery } from '~/timeline/localBackend.client';
 import type { TimelinePageRequest } from '~/timeline/sync';
 import { announceTimelineScopeChange } from '~/timeline/clientEvents';
 import { ensureFoundPostBrowserIdentity } from './foundPostIdentity.client';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useCurrentUser, useRootUser } from './useCurrentUser';
 import { useDataPlane } from './useDataPlane';
 import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
@@ -48,6 +48,7 @@ import { clearLocalCachePrefix } from './localCache';
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
 import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
 import { withExportDeadline } from '~/utils/thingTransfer/exportDeadline';
+import { createOwnedListClient, ownedProfileImportMinimumVersion } from './ownedListClient';
 
 const refreshRootData = () => {
   window.dispatchEvent(new Event('thingtime:root-data-refresh'));
@@ -148,6 +149,13 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
   const actionPrincipal = useRef(principalId); actionPrincipal.current = principalId;
   const actionActor = useRef(actionUser?.id);
   actionActor.current = actionUser?.id;
+
+  // Full account adapters retain their existing local catalogues. These readers
+  // serve the ordinary remote fallback when no database is selected.
+  const ownedListScope = useCallback(() => ({ actor: actionActor.current, dataPlane: planeRef.current, ...rootIdentity.read() }), []);
+  const ownedIdentity = rootIdentity.read();
+  const ownedThemes = useMemo(() => createOwnedListClient({ resource: 'themes', minimumVersion: '1.3.0', request: getJson, requireCapability: requireThingtimeCapability, scope: ownedListScope, initialScope: { actor: actionUser?.id, dataPlane, ...ownedIdentity } }), [getJson, ownedListScope, actionUser?.id, dataPlane, ownedIdentity]);
+  const ownedAlgorithms = useMemo(() => createOwnedListClient({ resource: 'algorithms', minimumVersion: '1.2.0', request: getJson, requireCapability: requireThingtimeCapability, scope: ownedListScope, initialScope: { actor: actionUser?.id, dataPlane, ...ownedIdentity } }), [getJson, ownedListScope, actionUser?.id, dataPlane, ownedIdentity]);
 
   const v1 = {
     files: {
@@ -1122,7 +1130,8 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       }, [asyncFetcher]),
       import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; localFiles?: Map<string, Uint8Array | Blob>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
         if (args.localFiles !== undefined) throw new Error('Local file bytes require the local workspace importer; they cannot be sent to an account endpoint');
-        await requireThingtimeCapability('api.things-import', '1.13.0');
+        await requireThingtimeCapability('api.things-import', ownedProfileImportMinimumVersion(args.manifest));
+        options?.signal?.throwIfAborted();
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
@@ -1528,7 +1537,8 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         await requireThingtimeCapability('api.algorithms-search', '1.0.0');
         return getJson(`/api/v1/algorithms/search${toQuery(args)}`, options);
       }, [getJson]),
-      list: useCallback(async () => getJson('/api/v1/algorithms'), [getJson]),
+      list: ownedAlgorithms.list,
+      listPage: ownedAlgorithms.listPage,
       // share-link preview (identity + training size only, never weights)
       getShared: useCallback(
         async (args, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
@@ -1540,6 +1550,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       create: useCallback(
         async (args, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
           if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
+          await requireThingtimeCapability('api.algorithms', '1.2.0');
           const { name, emoji, branchFrom, events, description } = args;
           if (description !== undefined) await requireThingtimeCapability('api.algorithms', '1.1.0');
           options?.signal?.throwIfAborted();
@@ -1641,7 +1652,8 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       )
     },
     themes: {
-      list: useCallback(async () => getJson('/api/v1/themes'), [getJson]),
+      list: ownedThemes.list,
+      listPage: ownedThemes.listPage,
       getShared: useCallback(async (args, options?: ThingRequestOptions) => getJson(`/api/v1/themes/shared?id=${encodeURIComponent(args?.id || '')}`, options), [getJson]),
       // public gallery list (no id → every public theme, newest first). The
       // arg is optional: callers that want the server default call this with
@@ -1653,6 +1665,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       ),
       save: useCallback(
         async (args) => {
+          await requireThingtimeCapability('api.themes', '1.3.0');
           const { id, name, theme, visibility } = args;
           return asyncFetcher.submit({ id, name, theme, visibility }, { action: '/api/v1/themes' });
         },

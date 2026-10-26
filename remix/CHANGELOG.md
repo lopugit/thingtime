@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **Codex (AI), 2026-10-26:** Replace account theme/algorithm creation count ceilings with canonical byte-quota admission and negotiated bounded owned-list pagination. Preserve empty cursor pages, identity fencing, legacy lists and versioned focus-token History. Extend isolated gateway acceptance beyond the old counts. See [PR #1000 capacity notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#owned-profile-creation-and-paged-lists--26-october-2026).
+
 - 2026-10-26: Add negotiated theme/algorithm catalogue streams with one home
   snapshot, validated completion and atomic scoped device admission. Isolated
   Chromium and built owner/gateway HTTP checks pass; creation/write capacity,

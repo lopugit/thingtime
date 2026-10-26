@@ -167,7 +167,7 @@ export function parsePublishedVersionPreview(input: unknown, eventId: string, th
 	if (protectedContent && value.current === null && !request.componentMode) throw new Error('Protected recovery requires a complete dedicated design preview.');
 	for (const side of ['current', 'incoming', 'result']) {
 		if (side === 'current' && value.current === null) continue;
-		if (!keys(value[side], ['adapter', 'version', 'value']) || value[side].adapter !== contentAdapter || value[side].version !== 1)
+		if (!keys(value[side], ['adapter', 'version', 'value']) || value[side].adapter !== contentAdapter)
 			throw new Error('Invalid version content.');
 		if (contentAdapter === THEME_CONTENT_ADAPTER) themeContentValue(value[side]);
 		else if (contentAdapter === ALGORITHM_CONTENT_ADAPTER) algorithmContentValue(value[side]);

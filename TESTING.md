@@ -15623,3 +15623,13 @@ Local results do not establish current-head CI or deployed acceptance.
   cancellation behavior beyond deterministic coverage.
 - [ ] Exercise the complete native theme/algorithm UI with a large remote
   catalogue, offline cold reload, conflict review and independent write queues.
+
+
+### Owned profile count capacity and live pagination (PR #1000)
+
+- [ ] In an isolated disposable account, create more than 100 themes and 50 algorithms through canonical writes; branch an algorithm and retry an identical sync save. Verify exact counts and private ownership.
+- [ ] Drain `?page=1` through null cursors at the owner and gateway; check all exact IDs, same timestamps, modern/legacy twins, empty advancing pages, malformed/cross-owner cursors, cancellation and no partial success after a failed tail.
+- [ ] Confirm ordinary list consumers retain active selection; changing account/database mid-read rejects the old completion. Retained/offline catalogue paths must remain independent.
+- [ ] Inject genuine byte-quota refusal/transaction failure; verify no partial content, History, receipt or ledger update. These limits remain enforced after count ceilings are removed.
+- [ ] Round-trip focus token history v2, old partial v1 history, preview/restore and canonical transfer without silently adding fields to old payloads.
+- [ ] Run `npm --prefix remix run test:owned-profiles`, theme-sync, local-workspace and capability suites; the opt-in quota/browser fixture is not a pass when skipped. Use the built gateway acceptance for actual isolated API evidence. Deployed support requires the gateway to advertise the versions too.

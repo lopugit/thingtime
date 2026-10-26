@@ -60,7 +60,7 @@ test('algorithm transport requires current authority and compatible origin, boun
 		const command = parseAlgorithmWrite({
 			id: '123e4567-e89b-42d3-a456-426614174000',
 			action: 'save',
-			expectedVersion: null,
+			expectedVersion: 'algorithm-state-v1:' + 'a'.repeat(64),
 			writeId: 'profile-write',
 			content: { name: 'Reading', emoji: '🧠', weights: { types: {}, tags: {}, authors: {} }, eventCount: 0, lastTrainedAt: null },
 			description: ''
@@ -69,9 +69,22 @@ test('algorithm transport requires current authority and compatible origin, boun
 			id: command.id,
 			writeId: command.writeId,
 			action: 'save',
-			expectedVersion: null,
+			expectedVersion: command.expectedVersion,
 			resultVersion: 'algorithm-state-v1:' + 'b'.repeat(64)
 		};
+		const creation = { ...command, expectedVersion: null };
+		const creationAck = { ...ack, expectedVersion: null };
+		const beforeCreation = calls.length;
+		await assert.rejects(bind().write(creation, signal()), /incompatible/);
+		assert.equal(calls.length, beforeCreation, 'older contracts reject new profile admission before sending');
+		capability = '1.5.0';
+		await assert.rejects(bind().write(creation, signal()), /incompatible/);
+		assert.equal(calls.length, beforeCreation, 'streaming catalogues alone do not authorize unlimited creation');
+		capability = '1.6.0';
+		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: plane, storagePlane: 'home', acknowledgment: creationAck });
+		assert.deepEqual(await bind().write(creation, signal()), creationAck);
+		await assert.rejects(requireThingtimeCapability('test-refresh', '1.0.0'));
+		capability = '1.3.0';
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: plane, storagePlane: 'home', acknowledgment: ack });
 		assert.deepEqual(await bind().write(command, signal()), ack);
 		assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)), { operation: 'write', expectedOwnerId: 'owner', command });

@@ -13,8 +13,8 @@ import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContrac
 test('Timeline synchronization is registered and versioned on both capability manifests', () => {
 	assert.equal(createApiCapabilitiesManifest().features['api.mongodb-endpoint'], '1.1.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.mongodb-endpoint'].version, '1.1.0');
-	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.22.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.22.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.23.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.23.0');
 	assert.equal(typeof routeModules['v1/timeline'], 'function');
 	assert.equal(capabilitySatisfies('1.18.0','1.19.0'),false);
 	assert.equal(capabilitySatisfies(createApiCapabilitiesManifest().features['api.timeline'],'1.19.0'),true);
@@ -24,9 +24,9 @@ test('Timeline synchronization is registered and versioned on both capability ma
 test('dedicated theme writers advertise durable history on both capability manifests', () => {
 	const route = createApiCapabilitiesManifest().features;
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
-	for (const feature of ['api.themes', 'api.themes-delete']) {
-		assert.equal(route[feature], '1.1.1');
-		assert.equal(wellKnown[feature].version, '1.1.1');
+	for (const [feature, version] of [['api.themes', '1.3.0'], ['api.themes-delete', '1.1.1']]) {
+			assert.equal(route[feature], version);
+			assert.equal(wellKnown[feature].version, version);
 		assert.equal(capabilitySatisfies(route[feature], '1.1.0'), true);
 		for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
 	}
@@ -35,9 +35,9 @@ test('dedicated theme writers advertise durable history on both capability manif
 
 test('conditional theme synchronization is registered on both manifests', () => {
  const feature = 'api.themes-sync';
- assert.equal(createApiCapabilitiesManifest().features[feature], '1.7.0');
+ assert.equal(createApiCapabilitiesManifest().features[feature], '1.8.0');
  const manifest = thingtimeCapabilityManifest('https://thingtime.test');
- assert.equal(manifest.features[feature].version, '1.7.0');
+ assert.equal(manifest.features[feature].version, '1.8.0');
  assert.ok(manifest.operations.some(operation => operation.feature === feature && operation.path === '/api/v1/themes/sync' && operation.methods.includes('POST')));
  assert.equal(typeof routeModules['v1/themes/sync'], 'function');
 });
@@ -65,7 +65,7 @@ test('external avatar export requires the bounded-download contract on both mani
 
 test('emoji transfer, library and move capabilities reject pre-support origins', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, version] of [['api.things-export', '1.17.0'], ['api.things-import', '1.13.0'], ['api.things', '1.38.0'], ['api.things-bulk', '1.6.0']]) {
+  for (const [feature, version] of [['api.things-export', '1.17.0'], ['api.things-import', '1.14.0'], ['api.things', '1.38.0'], ['api.things-bulk', '1.6.0']]) {
     assert.equal(manifest.features[feature].version, feature === 'api.things' ? '1.42.0' : version);
     assert.equal(capabilitySatisfies(version, version), true);
     assert.equal(capabilitySatisfies('1.0.0', version), false);
@@ -766,7 +766,7 @@ test('draft naming requires the explicit Timeline 1.20 contract', () => {
 
 
 test('theme title metadata requires compatible synchronization and transfer contracts',()=>{
- for(const [feature,minimum,old] of [['api.themes-sync','1.4.0','1.3.0'],['api.things-import','1.13.0','1.11.0'],['api.things-export','1.17.0','1.15.0']]){
+ for(const [feature,minimum,old] of [['api.themes-sync','1.4.0','1.3.0'],['api.things-import','1.14.0','1.11.0'],['api.things-export','1.17.0','1.15.0']]){
   assert.equal(capabilitySatisfies(createApiCapabilitiesManifest().features[feature],minimum),true);assert.equal(capabilitySatisfies(thingtimeCapabilityManifest('https://titles.test').features[feature].version,minimum),true);
   assert.equal(capabilitySatisfies(old,minimum),false);assert.equal(capabilitySatisfies('2.0.0',minimum),false);
  }
@@ -775,8 +775,8 @@ test('theme title metadata requires compatible synchronization and transfer cont
 
 test('home theme receipt context requires its additive sync contract on both manifests',()=>{
  const feature='api.themes-sync';
- assert.equal(createApiCapabilitiesManifest().features[feature],'1.7.0');
- assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features[feature].version,'1.7.0');
+ assert.equal(createApiCapabilitiesManifest().features[feature],'1.8.0');
+ assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features[feature].version,'1.8.0');
  assert.equal(capabilitySatisfies('1.4.0','1.5.0'),false);
  assert.equal(capabilitySatisfies('1.5.1','1.5.0'),true);
  assert.equal(capabilitySatisfies('2.0.0','1.5.0'),false);
@@ -786,7 +786,7 @@ test('home theme receipt context requires its additive sync contract on both man
 test('conditional algorithm synchronization and atomic deletion are advertised by both manifests', () => {
   const route = createApiCapabilitiesManifest().features;
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, version] of [['api.algorithms-sync', '1.5.0'], ['api.algorithms-delete', '1.0.1']]) {
+  for (const [feature, version] of [['api.algorithms-sync', '1.6.0'], ['api.algorithms-delete', '1.0.1']]) {
     assert.equal(route[feature], version);
     assert.equal(manifest.features[feature].version, version);
     assert.equal(capabilitySatisfies(version, version), true);
@@ -800,7 +800,7 @@ test('conditional algorithm synchronization and atomic deletion are advertised b
 test('algorithm display titles require lossless normal transfer capabilities', () => {
   const route = createApiCapabilitiesManifest().features;
   const manifest = thingtimeCapabilityManifest('https://titles.test').features;
-  for (const [feature, minimum, prior] of [['api.things-export', '1.17.0', '1.16.0'], ['api.things-import', '1.13.0', '1.12.0']]) {
+  for (const [feature, minimum, prior] of [['api.things-export', '1.17.0', '1.16.0'], ['api.things-import', '1.14.0', '1.12.0']]) {
     assert.equal(route[feature], minimum);
     assert.equal(manifest[feature].version, minimum);
     assert.equal(capabilitySatisfies(prior, minimum), false);
@@ -906,10 +906,28 @@ test('theme and algorithm catalogue streams have additive negotiated contracts i
  const origin='https://catalogue.example';
  const browser=createApiCapabilitiesManifest();
  const runtime=thingtimeCapabilityManifest(origin);
- for(const [feature,version,previous] of [['api.themes-sync','1.7.0','1.6.0'],['api.algorithms-sync','1.5.0','1.4.0']]) {
+ for(const [feature,version,previous] of [['api.themes-sync','1.8.0','1.6.0'],['api.algorithms-sync','1.6.0','1.4.0']]) {
   assert.equal(browser.features[feature],version);
   assert.equal(runtime.features[feature].version,version);
   assert.equal(capabilitySatisfies(previous,version),false);
   assert.equal(capabilitySatisfies(version,version),true);
  }
+});
+
+
+test('owned pagination and count-free profile creation negotiate distinct additive capabilities', () => {
+ const route = createApiCapabilitiesManifest().features;
+ const origin = thingtimeCapabilityManifest('https://capacity.example').features;
+ for (const [feature, version, previous] of [
+  ['api.themes', '1.3.0', '1.2.0'], ['api.algorithms', '1.2.0', '1.1.0'],
+  ['api.themes-sync', '1.8.0', '1.7.0'], ['api.algorithms-sync', '1.6.0', '1.5.0'],
+  ['api.things-import', '1.14.0', '1.13.0']
+ ]) {
+  assert.equal(route[feature], version); assert.equal(origin[feature].version, version);
+  assert.equal(capabilitySatisfies(previous, version), false);
+  assert.equal(capabilitySatisfies(undefined, version), false);
+  assert.equal(capabilitySatisfies('2.0.0', version), false);
+  assert.equal(capabilitySatisfies(version, version), true);
+ }
+ assert.equal(capabilitySatisfies(route['api.themes'], '1.2.0'), true, 'Previously shipped focus-token contract remains supported.');
 });

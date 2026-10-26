@@ -67,21 +67,55 @@ test('theme transport rejects missing capability, offline authority, partial cat
 			action: 'save',
 			id: '123e4567-e89b-42d3-a456-426614174000',
 			writeId: 'fixture-write',
-			expectedVersion: null,
+			expectedVersion: 'theme-state-v1:' + 'b'.repeat(64),
 			name: 'Peach',
 			theme: {},
 			visibility: 'private'
 		});
+		if (command.action !== 'save') throw new Error('Expected a save fixture');
+		// Model a historical stored payload: normalization now supplies focus defaults,
+		// while these compatibility checks intentionally exercise older field sets.
+		for (const key of ['focusBorder', 'focusGlowStart', 'focusGlowEnd']) Reflect.deleteProperty(command.theme.colors, key);
+		for (const key of ['focusGlowBlur', 'focusGlowOpacity']) Reflect.deleteProperty(command.theme.general, key);
 		const acknowledgment = {
 			id: command.id,
 			writeId: command.writeId,
 			action: 'save',
-			expectedVersion: null,
+			expectedVersion: command.expectedVersion,
 			resultVersion: 'theme-state-v1:' + 'a'.repeat(64)
 		};
+		const creation = { ...command, expectedVersion: null };
+		const creationAck = { ...acknowledgment, expectedVersion: null };
+		const beforeCreation = calls.length;
+		await assert.rejects(bind().write(creation, signal()), /incompatible/);
+		assert.equal(calls.length, beforeCreation, 'older contracts reject new theme admission before sending');
+		capability = '1.7.0';
+		await assert.rejects(bind().write(creation, signal()), /incompatible/);
+		assert.equal(calls.length, beforeCreation, 'streaming catalogues alone do not authorize unlimited creation');
+		capability = '1.8.0';
+		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: 'home', storagePlane: 'home', acknowledgment: creationAck });
+		assert.deepEqual(await bind().write(creation, signal()), creationAck);
+		await assert.rejects(requireThingtimeCapability('test-refresh', '1.0.0'));
+		capability = '1.4.0';
 		response = Response.json({ ok: true, ownerId: 'owner', dataPlane: 'home', storagePlane: 'home', acknowledgment });
 		assert.deepEqual(await bind().write(command, signal()), acknowledgment);
-		assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)), { operation: 'write', expectedOwnerId: 'owner', command });
+		assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)), { operation: 'write', expectedOwnerId: 'owner', command: parseThemeWrite(command) });
+		assert.deepEqual(JSON.parse(String(calls.at(-1)!.init.body)).command, command, 'Transport must preserve an already frozen legacy command without adding focus defaults');
+		for (const [section, key, value] of [
+			['colors', 'focusBorder', '#123456'], ['colors', 'focusGlowStart', '#234567'], ['colors', 'focusGlowEnd', '#345678'],
+			['general', 'focusGlowBlur', 0], ['general', 'focusGlowOpacity', 0]
+		] as const) {
+			await assert.rejects(requireThingtimeCapability('test-refresh', '1.0.0'));
+			capability = '1.7.0';
+			const focused = { ...command, theme: { ...command.theme, [section]: { ...command.theme[section], [key]: value } } };
+			const beforeFocus = calls.length;
+			await assert.rejects(bind().write(focused, signal()), /incompatible/);
+			assert.equal(calls.length, beforeFocus, `${key} cannot be silently lost on an older host`);
+			capability = '1.8.0';
+			response = Response.json({ ok: true, ownerId: 'owner', dataPlane: 'home', storagePlane: 'home', acknowledgment });
+			assert.deepEqual(await bind().write(focused, signal()), acknowledgment);
+			assert.equal(JSON.parse(String(calls.at(-1)!.init.body)).command.theme[section][key], value);
+		}
 		const beforePlacement = calls.length;
 		await assert.rejects(requireThingtimeCapability('api.themes-sync','2.0.0'));
 		capability = '1.2.0';
@@ -141,8 +175,11 @@ test('home receipts negotiate their contract while requests retain the current s
  const previous={window:globalThis.window,fetch:globalThis.fetch};
  const calls:RequestInit[]=[];
  let capability='1.4.0';
- const command=parseThemeWrite({action:'save',id:'123e4567-e89b-42d3-a456-426614174000',writeId:'receipt-context',expectedVersion:null,name:'Peach',theme:{},visibility:'private'});
- const acknowledgment={id:command.id,writeId:command.writeId,action:'save',expectedVersion:null,resultVersion:'theme-state-v1:'+'a'.repeat(64)};
+ const command=parseThemeWrite({action:'save',id:'123e4567-e89b-42d3-a456-426614174000',writeId:'receipt-context',expectedVersion:'theme-state-v1:'+'b'.repeat(64),name:'Peach',theme:{},visibility:'private'});
+ if(command.action!=='save') throw new Error('Expected save fixture');
+ for(const key of ['focusBorder','focusGlowStart','focusGlowEnd']) Reflect.deleteProperty(command.theme.colors,key);
+ for(const key of ['focusGlowBlur','focusGlowOpacity']) Reflect.deleteProperty(command.theme.general,key);
+ const acknowledgment={id:command.id,writeId:command.writeId,action:'save',expectedVersion:command.expectedVersion,resultVersion:'theme-state-v1:'+'a'.repeat(64)};
  Object.assign(globalThis,{window:{location:{origin},dispatchEvent:()=>true},fetch:async(url:string,init:RequestInit)=>{
   if(url.includes('capabilities')) return Response.json({schemaVersion:1,origin,features:{'api.themes-sync':{version:capability},'api.mongodb-endpoint':{version:'1.1.0'}}});
   calls.push(init);return Response.json({ok:true,ownerId:'owner',dataPlane:selected,storagePlane:'home',acknowledgment});
@@ -159,7 +196,7 @@ test('home receipts negotiate their contract while requests retain the current s
    const sent=calls.at(-1)!;
    assert.equal((sent.headers as any)['X-Thingtime-Expected-Data-Plane'],selected);
    assert.equal((sent.headers as any)['X-Thingtime-Expected-Actor'],'owner');
-   assert.deepEqual(JSON.parse(String(sent.body)),{operation:'write',expectedOwnerId:'owner',command,context:{storagePlane:'home',receiptPlane}});
+   assert.deepEqual(JSON.parse(String(sent.body)),{operation:'write',expectedOwnerId:'owner',command:parseThemeWrite(command),context:{storagePlane:'home',receiptPlane}});
   }
   const count=calls.length;
   await assert.rejects(bind().write(command,signal(),'https://elsewhere.example'),/Invalid home theme context/);

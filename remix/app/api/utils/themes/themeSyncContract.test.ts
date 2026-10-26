@@ -16,7 +16,10 @@ test('theme synchronization shares canonical token normalization and stable requ
 	const parsed = parseThemeWrite(save),
 		normalized = normalizeSavedTheme(save);
 	assert.ok(normalized.ok);
-	assert.deepEqual(parsed, { ...save, name: normalized.name, theme: normalized.theme });
+	const expected = structuredClone(normalized.theme);
+	for (const key of ['focusBorder', 'focusGlowStart', 'focusGlowEnd']) Reflect.deleteProperty(expected.colors, key);
+	for (const key of ['focusGlowBlur', 'focusGlowOpacity']) Reflect.deleteProperty(expected.general, key);
+	assert.deepEqual(parsed, { ...save, name: normalized.name, theme: expected });
 	assert.deepEqual(parseThemeWrite(parsed), parsed);
 	for (const title of [null,'Library label']) assert.equal((parseThemeWrite({...save,title}) as any).title,title);
 	assert.equal('title' in parsed,false);
@@ -65,4 +68,15 @@ test('theme acknowledgments distinguish create/update from deletion and reject e
 		{ ...deleted, resultVersion: version }
 	])
 		assert.throws(() => parseThemeWriteAcknowledgment(bad));
+});
+
+test('theme sync retains explicit focus tokens through canonical normalization and replay parsing', () => {
+	const colors = { focusBorder: '#334455', focusGlowStart: '#556677', focusGlowEnd: '#778899' };
+	const general = { focusGlowBlur: 0, focusGlowOpacity: 0.375 };
+	const parsed = parseThemeWrite({ ...save, theme: { colors, general } });
+	assert.equal(parsed.action, 'save');
+	if (parsed.action !== 'save') throw Error('Expected saved theme');
+	for (const [key, value] of Object.entries(colors)) assert.equal((parsed.theme.colors as any)[key], value);
+	for (const [key, value] of Object.entries(general)) assert.equal((parsed.theme.general as any)[key], value);
+	assert.deepEqual(parseThemeWrite(parsed), parsed);
 });

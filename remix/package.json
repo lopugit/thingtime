@@ -175,6 +175,7 @@
     "test:mail:connector": "node --import tsx scripts/mail-connector.integration.mts",
     "test:mail:relay": "node --import tsx scripts/mail-relay.integration.mts",
     "test:mail:storage": "node --env-file=.env.local --import tsx scripts/mail-storage.integration.mts",
+    "test:owned-profiles": "node --import tsx --experimental-test-module-mocks --test app/api/utils/ownedListPage.test.ts app/api/utils/themes/ownedCapacity.test.mts app/api/utils/themes/ownedListRoutes.test.mts app/hooks/ownedListClient.test.ts app/theme/tokens.test.ts",
     "test:theme-sync": "node --import tsx --test app/api/utils/themes/*.test.ts app/api/utils/things/storedSnapshot.test.ts app/api/utils/lopu/userVaultVersion.test.ts app/api/utils/things/themeTransfer.test.ts app/timeline/themeContent.test.ts app/routes/api/v1/themes/sync/sync.test.ts",
     "test:activity": "node --import tsx --test app/activity/*.test.ts",
     "test:activity-ui": "node scripts/test-activity-manager-ui.mjs",

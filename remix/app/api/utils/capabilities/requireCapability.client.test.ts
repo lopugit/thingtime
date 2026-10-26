@@ -105,7 +105,7 @@ test('archive clients reject missing, older and breaking contracts but accept co
  }
 });
 
-test('algorithm export refuses pre-support origins while ordinary and theme exports retain their minima', async (t) => {
+test('profile exports negotiate their exact history decoders while ordinary exports retain their minimum', async (t) => {
   for (const version of [undefined, '1.21.0', '2.0.0', '1.22.0', '1.23.1']) {
     const response = t.mock.method(globalThis, 'fetch', async () => Response.json({ schemaVersion: 1, origin: 'https://thingtime.test', features: version ? { 'api.timeline': { version } } : {} }));
     const check = createThingtimeCapabilityChecker();
@@ -113,9 +113,10 @@ test('algorithm export refuses pre-support origins while ordinary and theme expo
     if (version === '1.22.0' || version === '1.23.1') await request;
     else await assert.rejects(request, /incompatible/);
     if (version === '1.21.0') {
-      await check('api.timeline', timelineVersionExportRequirement('theme-content'));
+      await assert.rejects(check('api.timeline', timelineVersionExportRequirement('theme-content')), /incompatible/);
       await check('api.timeline', timelineVersionExportRequirement('thing-content'));
     }
+    if (version === '1.23.1') await check('api.timeline', timelineVersionExportRequirement('theme-content'));
     response.mock.restore();
   }
 });

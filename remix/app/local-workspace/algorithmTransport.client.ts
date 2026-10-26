@@ -38,7 +38,7 @@ export function accountAlgorithmTransport(
 			if (scope.delegatedBy !== undefined) await requireThingtimeCapability('api.auth-characters', '1.0.0');
 			await requireThingtimeCapability(
 				'api.algorithms-sync',
-				scope.delegatedBy !== undefined ? '1.4.0' : operation === 'snapshot' || (operation === 'write' && command && 'content' in command && Object.prototype.hasOwnProperty.call(command.content, 'title')) ? '1.3.0' : operation === 'write' && command && 'folderId' in command ? '1.2.0' : ['selection', 'select'].includes(operation) ? '1.1.0' : '1.0.0'
+				operation === 'write' && command && 'action' in command && command.action === 'save' && command.expectedVersion === null ? '1.6.0' : scope.delegatedBy !== undefined ? '1.4.0' : operation === 'snapshot' || (operation === 'write' && command && 'content' in command && Object.prototype.hasOwnProperty.call(command.content, 'title')) ? '1.3.0' : operation === 'write' && command && 'folderId' in command ? '1.2.0' : ['selection', 'select'].includes(operation) ? '1.1.0' : '1.0.0'
 			);
 			await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
 			lease.assertCurrent();

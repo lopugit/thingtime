@@ -112,7 +112,7 @@ async function catalogueCapabilities(key) {
   assert.equal(routeResponse.response.url, origin(key) + '/api/v1/capabilities');
   assert.equal(routeManifest.ok, true); assert.equal(routeManifest.schemaVersion, 1);
   assert.deepEqual(routeManifest.dataEnvironment, getDeploymentDataEnvironment({ THINGTIME_DATA_ENV: 'development' }));
-  for (const [feature, required] of [['api.themes-sync', '1.7.0'], ['api.algorithms-sync', '1.5.0']]) {
+  for (const [feature, required] of [['api.themes-sync', '1.8.0'], ['api.algorithms-sync', '1.6.0'], ['api.themes', '1.3.0'], ['api.algorithms', '1.2.0'], ['api.things-import', '1.14.0']]) {
     assert.ok(capabilitySatisfies(publicManifest.features[feature]?.version, required), `${key} public ${feature} ${required}`);
     assert.ok(capabilitySatisfies(routeManifest.features[feature], required), `${key} routes ${feature} ${required}`);
   }
@@ -210,19 +210,21 @@ try {
     assert.ok(result.data.acknowledgment.resultVersion);
     return result.data.acknowledgment;
   };
-  // 65 rows cross the producer's 64-row page boundary while respecting the
-  // current canonical 100-theme create limit. No direct product DB insertion.
-  for (let index = 0; index < 65; index++) {
+  // Both catalogues exceed the former creation ceilings and cross a 64-row
+  // processing page. All product writes use canonical authenticated APIs.
+  for (let index = 0; index < 105; index++) {
     const command = { action: 'save', id: randomUUID(), writeId: randomUUID(), expectedVersion: null,
-      name: `Gateway catalogue theme ${String(index).padStart(3, '0')}`, theme: { colors: { accent: '#123456' } }, visibility: 'private' };
+      name: `Gateway catalogue theme ${String(index).padStart(3, '0')}`, theme: { colors: { accent: '#123456', focusBorder: '#26724d' }, general: { focusGlowBlur: 20, focusGlowOpacity: 0.4 } }, visibility: 'private' };
     const acknowledgment = await syncWrite('themes', command);
+    if (index === 104) assert.deepEqual(await syncWrite('themes', command), acknowledgment, 'Exact theme retry above old count ceiling replays its receipt.');
     expectedCatalogues.themes.set(command.id, { name: command.name, version: acknowledgment.resultVersion });
   }
-  for (let index = 0; index < 2; index++) {
+  for (let index = 0; index < 65; index++) {
     const command = { action: 'save', id: randomUUID(), writeId: randomUUID(), expectedVersion: null,
       description: 'Disposable gateway catalogue fixture', content: { name: `Gateway algorithm ${index}`, emoji: '🧠',
         weights: { types: { text: 0.5 }, tags: { gateway: 2 }, authors: {} }, eventCount: index, lastTrainedAt: null } };
     const acknowledgment = await syncWrite('algorithms', command);
+    if (index === 64) assert.deepEqual(await syncWrite('algorithms', command), acknowledgment, 'Exact algorithm retry above old count ceiling replays its receipt.');
     expectedCatalogues.algorithms.set(command.id, { content: command.content, version: acknowledgment.resultVersion });
   }
   const catalogueEvidence = { themes: {}, algorithms: {}, realReplica: true, canonicalReaderIntegrity: true,
@@ -241,6 +243,7 @@ try {
       if (domain === 'themes') {
         assert.equal(value.name, expected.get(id).name); assert.equal(value.visibility, 'private');
         assert.equal(value.theme.colors.accent, '#123456');
+        assert.equal(value.theme.colors.focusBorder, '#26724d'); assert.equal(value.theme.general.focusGlowBlur, 20); assert.equal(value.theme.general.focusGlowOpacity, 0.4);
       } else {
         assert.deepEqual(value.content, expected.get(id).content); assert.equal(value.shared, false); assert.equal(value.listed, false);
       }
@@ -248,6 +251,34 @@ try {
     catalogueEvidence[domain][key] = { entries: observed.receipt.entries, authenticated: true, anonymousRefused: true,
       crossSiteRefused: true, wrongOwnerRefused: true, sortedExactIds: true, exactPersistedVersion: true };
   }
+  // Normal creates/branches must use the same uncapped-count writers too.
+  const normalTheme = await api('follower', '/api/v1/themes', { cookie: account.cookie,
+    body: { name: 'Beyond old theme ceiling', theme: {}, visibility: 'private' } });
+  const normalAlgorithm = await api('follower', '/api/v1/algorithms', { cookie: account.cookie,
+    body: { name: 'Beyond old algorithm ceiling', branchFrom: [...expectedCatalogues.algorithms.keys()][0] } });
+  assert.ok(normalTheme.data.theme.id); assert.ok(normalAlgorithm.data.algorithm.id);
+  const pagedEvidence = {};
+  for (const key of ['owner', 'follower']) for (const domain of ['themes', 'algorithms']) {
+    const expectedIds = new Set([...expectedCatalogues[domain].keys(), domain === 'themes' ? normalTheme.data.theme.id : normalAlgorithm.data.algorithm.id]);
+    const rows = [], cursors = new Set(); let cursor = null, pages = 0;
+    do {
+      const query = '?page=1' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
+      const result = await api(key, `/api/v1/${domain}${query}`, { cookie: account.cookie });
+      assert.ok(result.data[domain].length <= 64); rows.push(...result.data[domain]); pages++;
+      cursor = result.data.nextCursor;
+      assert.ok(cursor === null || typeof cursor === 'string');
+      if (cursor) { assert.ok(!cursors.has(cursor)); cursors.add(cursor); }
+    } while (cursor);
+    assert.equal(rows.length, expectedIds.size); assert.deepEqual(new Set(rows.map(row => row.id)), expectedIds);
+    assert.ok(pages > 1); await api(key, `/api/v1/${domain}?page=1`, { status: 401 });
+    await api(key, `/api/v1/${domain}?page=1&cursor=invalid`, { cookie: account.cookie, status: 400 });
+    const legacy = await api(key, `/api/v1/${domain}`, { cookie: account.cookie });
+    assert.equal(legacy.data[domain].length, domain === 'themes' ? 100 : 50);
+    pagedEvidence[domain + ':' + key] = { entries: rows.length, pages, exactIds: true, legacyBoundRetained: true, malformedCursorRefused: true, anonymousRefused: true };
+  }
+  catalogueEvidence.ownedPagination = pagedEvidence;
+  catalogueEvidence.canonicalCreatesBeyondOldCeilings = true;
+  catalogueEvidence.exactSyncRetriesBeyondOldCeilings = true;
   await api('follower', '/api/v1/things', { cookie: account.cookie, body: { thingtime: ['post'], crystal: { type: 'text', text: 'Gateway acceptance' }, acl: ['tt:all'] },
     headers: { Origin: 'https://cross-site.invalid', 'Sec-Fetch-Site': 'cross-site' }, status: 403 });
   const saved = await api('follower', '/api/v1/things', { cookie: account.cookie, body: { thingtime: ['post'], crystal: { type: 'text', text: 'Gateway acceptance' }, acl: ['tt:all'] } });

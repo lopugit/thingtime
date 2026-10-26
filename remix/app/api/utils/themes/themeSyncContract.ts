@@ -11,8 +11,18 @@ const fail = (): never => {
 	throw new Error('Invalid theme synchronization command.');
 };
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+const focusColors = ['focusBorder', 'focusGlowStart', 'focusGlowEnd'] as const;
+const focusGeneral = ['focusGlowBlur', 'focusGlowOpacity'] as const;
+type FocusColor = typeof focusColors[number];
+type FocusGeneral = typeof focusGeneral[number];
+/** Frozen commands can predate focus tokens. Missing fields remain absent;
+ * ordinary saved-theme writers may apply current defaults after admission. */
+export type ThemeWriteTheme = Omit<TtTheme, 'colors' | 'general'> & {
+	colors: Omit<TtTheme['colors'], FocusColor> & Partial<Pick<TtTheme['colors'], FocusColor>>;
+	general: Omit<TtTheme['general'], FocusGeneral> & Partial<Pick<TtTheme['general'], FocusGeneral>>;
+};
 export type ThemeWrite = { id: string; writeId: string; expectedVersion: string | null } & (
-	| { action: 'save'; name: string; theme: TtTheme; visibility: 'private' | 'public'; folderId?: string | null; title?: string | null }
+	| { action: 'save'; name: string; theme: ThemeWriteTheme; visibility: 'private' | 'public'; folderId?: string | null; title?: string | null }
 	| { action: 'delete'; expectedVersion: string }
 );
 export type ThemeWriteAcknowledgment = {
@@ -56,11 +66,22 @@ export function parseThemeWrite(input: unknown): ThemeWrite {
 		return fail();
 	const normalized = normalizeSavedTheme({ name: value.name, theme: value.theme });
 	if (!normalized.ok) return fail();
+	// Receipts hash this canonical command with the existing v1 algorithm.
+	// Do not grow a frozen pre-upgrade request by injecting newly added defaults,
+	// including when transport/server validation reparses an already queued command.
+	// Explicit fields are retained, even when equal to a current default: their
+	// presence is different request content and cannot replay an older receipt.
+	const source = object(value.theme) ? value.theme : {};
+	const colors = object(source.colors) ? source.colors : {};
+	const general = object(source.general) ? source.general : {};
+	const theme: ThemeWriteTheme = { ...normalized.theme, colors: { ...normalized.theme.colors }, general: { ...normalized.theme.general } };
+	for (const key of focusColors) if (!Object.prototype.hasOwnProperty.call(colors, key)) delete theme.colors[key];
+	for (const key of focusGeneral) if (!Object.prototype.hasOwnProperty.call(general, key)) delete theme.general[key];
 	return {
 		...base,
 		action: 'save',
 		name: normalized.name,
-		theme: normalized.theme,
+		theme,
 		visibility: value.visibility as 'private' | 'public',
 		...('title' in value ? { title: value.title as string | null } : {}),
 		...('folderId' in value ? { folderId: value.folderId as string | null } : {})

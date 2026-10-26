@@ -5338,3 +5338,46 @@ fixture now passes multipart storage plus authenticated-browser 413 refusal
 and empty anonymous responses (1/1), with production cookie flags unchanged.
 The full browser test uses that authenticated path; its overall acceptance
 still requires a passing large-paste run. Scoped lint passes.
+
+
+## Owned profile creation and paged lists — 26 October 2026
+
+`api.themes` 1.3.0 and `api.algorithms` 1.2.0 add `GET ?page=1` with
+an optional opaque `cursor`. Responses keep their existing arrays and add
+`nextCursor`, null only at live exhaustion. Algorithms retain `activeAlgorithmId`.
+Each request inspects bounded windows of 64 records with cancellation and
+five-second database query deadlines. Modern records supersede legacy twins.
+A page can be empty while its cursor advances; continue until null. Theme order
+is `updatedAt` descending then ID ascending; algorithm order is `createdAt`
+ascending then ID ascending. These are live observations, not a complete
+snapshot for deletion reconciliation. The existing catalogue stream remains
+that complete-copy path. Unpaged GET retains its legacy 100/50 response window.
+
+Canonical creation, including branching, imports and conditional sync, no
+longer rejects an account because it has 100 themes or 50 algorithms. Real byte
+quota admission, transaction rollback, permissions, canonical validation and
+exact retry receipts remain intact. New saves negotiate themes-sync 1.8.0 or
+algorithms-sync 1.6.0; protected profile imports negotiate things-import 1.14.0.
+Ordinary clients drain pages and reject partial tails, repeated cursors, changed
+active selection or account/database changes. Account and anonymous retained
+catalogue adapters keep their existing paths.
+
+Theme pagination deliberately uses 1.3.0 because `main` already shipped focus
+tokens in 1.2.0. This branch carries that canonical token codec and introduces
+`theme-content` v2 only when those fields are present; historical v1 payloads
+keep their exact projection. Timeline 1.23.0 negotiates the new history format.
+
+See [capacity evidence](../artifacts/anonymous-local-first-2026-10-26-capacity/README.md).
+Larger individual write/transfer envelopes, live concurrent snapshot/legacy
+acceptance, full native product journeys and deployed gateway support remain
+separate work. Existing security and transport limits are not removed.
+
+Final local verification: 38 profile tests, 36 theme-sync tests and 860 workspace/
+offline checks pass;4+98 opt-in tests remain skipped. Both capability manifests
+pass 135 checks. The rebuilt disposable API passes 105 theme / 65 algorithm sync
+creation, exact retries and complete catalogue comparison, followed by normal
+creation/branching and complete 106/66 pagination through owner and gateway.
+TypeScript retains 91 diagnostics with none in changed files; this is not a clean
+check. Independent review caught and verified the fix for pre-upgrade receipt
+digests; original frozen payloads remain exact and explicit focus changes do
+not replay. See the linked capacity evidence for exact scope and limitations.

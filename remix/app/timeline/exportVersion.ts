@@ -116,7 +116,7 @@ export { isClientDraftVersion } from './contract.ts';
 
 /** These minima apply only to remote export; local retained content needs no server. */
 export const timelineVersionExportRequirement = (adapter?: string) =>
-	adapter === ALGORITHM_CONTENT_ADAPTER ? '1.22.0' : adapter === THEME_CONTENT_ADAPTER ? '1.21.0' : '1.18.0';
+	adapter === ALGORITHM_CONTENT_ADAPTER ? '1.22.0' : adapter === THEME_CONTENT_ADAPTER ? '1.23.0' : '1.18.0';
 
 /** Archive validation is shared by network reads, local exports and downloads.
  * Network responses still require a real receipt; a device archive can explicitly

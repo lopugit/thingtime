@@ -8,7 +8,7 @@ import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from 
 test('Character profile synchronization publishes matching actor-aware route contracts', () => {
   const origin = thingtimeCapabilityManifest('https://characters.example');
   const routes = createApiCapabilitiesManifest();
-  for (const [kind, version, previous] of [['themes', '1.7.0', '1.6.0'], ['algorithms', '1.5.0', '1.4.0']]) {
+  for (const [kind, version, previous] of [['themes', '1.8.0', '1.6.0'], ['algorithms', '1.6.0', '1.4.0']]) {
     const feature = `api.${kind}-sync`;
     assert.equal(origin.features[feature].version, version);
     assert.equal(routes.features[feature], version);
@@ -30,8 +30,8 @@ test('owner-scoped search advertises and negotiates the same additive contract o
 test('archive import clients reject missing, pre-archive and breaking contracts on both manifests', () => {
   for (const version of ['1.9.1', '1.9.2', '1.10.0']) assert.equal(capabilitySatisfies(version, '1.9.1'), true);
   for (const version of ['', '1.8.0', '1.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.9.1'), false);
-  assert.equal(createApiCapabilitiesManifest().features['api.things-import'], '1.13.0');
-  assert.equal(thingtimeCapabilityManifest('https://preview.example.test').features['api.things-import'].version, '1.13.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things-import'], '1.14.0');
+  assert.equal(thingtimeCapabilityManifest('https://preview.example.test').features['api.things-import'].version, '1.14.0');
 });
 
 test('owner archive deletion requires the additive Things capability at the chosen origin', () => {
@@ -104,7 +104,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.8.0');
 	assert.equal(manifest.features['api.actions-run']?.version, '1.38.0');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.7.0');
-	assert.equal(manifest.features['api.things-import']?.version, '1.13.0');
+	assert.equal(manifest.features['api.things-import']?.version, '1.14.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.17.0');
 	assert.equal(manifest.features['api.devices-node-state']?.version, '1.13.0');
 	assert.equal(capabilitySatisfies('1.9.0', '1.10.0'), false);
@@ -266,7 +266,7 @@ test('capability negotiation accepts compatible updates and rejects missing or b
 test('AI archive clients require the presentation contract before import, export and history reads', () => {
   const manifest = thingtimeCapabilityManifest('https://archive.test');
   for (const [feature, required, previous] of [['api.things-export', '1.17.0', '1.12.0'],
-    ['api.things-import', '1.13.0', '1.9.1'], ['api.things', '1.42.0', '1.16.1']]) {
+    ['api.things-import', '1.14.0', '1.9.1'], ['api.things', '1.42.0', '1.16.1']]) {
     assert.equal(manifest.features[feature].version, required);
     assert.equal(capabilitySatisfies(required, required), true);
     for (const unsupported of ['', previous, '2.0.0']) assert.equal(capabilitySatisfies(unsupported, required), false);
@@ -470,7 +470,7 @@ test('native traversal requires bounded synchronous callback support on both man
 test('server Action outcomes are discoverable in both capability manifests', () => {
   for (const features of [createApiCapabilitiesManifest().features, Object.fromEntries(Object.entries(thingtimeCapabilityManifest('https://outcomes.test').features).map(([id, feature]) => [id, feature.version]))]) {
     assert.equal(features['api.actions-run'], '1.38.0');
-    assert.equal(features['api.timeline'], '1.22.0');
+    assert.equal(features['api.timeline'], '1.23.0');
     assert.equal(capabilitySatisfies('1.36.0', '1.38.0'), false);
     assert.equal(capabilitySatisfies('1.15.0', '1.16.0'), false);
     assert.equal(capabilitySatisfies('1.16.0', '1.17.0'), false);

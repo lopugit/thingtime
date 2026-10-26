@@ -1,6 +1,7 @@
+import { ownedListPage, OWNED_LIST_QUERY_TIMEOUT_MS } from '../ownedListPage';
 import { lockFolderDestination } from '../things/folderPlacement';
 import { prepareManagedPlacement } from '../things/managedPlacementCore';
-import { MAX_SAVED_ALGORITHMS, normalizeAlgorithmName, sanitizeAlgorithmEmoji as sanitizeEmoji, sanitizeAlgorithmEvents as sanitizeEvents } from './algorithmContent';
+import { normalizeAlgorithmName, sanitizeAlgorithmEmoji as sanitizeEmoji, sanitizeAlgorithmEvents as sanitizeEvents } from './algorithmContent';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { randomUUID } from 'node:crypto';
 import { ObjectId, type ClientSession } from 'mongodb';
@@ -83,7 +84,8 @@ export type SharedAlgorithmPreview = {
   ownerUsername: string | null;
 };
 
-const MAX_ALGORITHMS_PER_USER = MAX_SAVED_ALGORITHMS;
+// Explicit compatibility window for clients that do not request pagination.
+const LEGACY_OWNED_LIST_LIMIT = 50;
 const DEFAULT_EMOJI = '🧠';
 
 type Fail = { ok: false; status: number; error: string };
@@ -142,16 +144,20 @@ const algorithmThingToDoc = (thing: any): FeedAlgorithmDoc => ({
 // number of algorithms) so the UI can show "@rick" instead of a Mongo id.
 // Dual-era like resolveProfiles in things/things.ts: user things first
 // (shareId = the id weight keys carry), legacy users collection for the rest.
-const resolveAuthorUsernames = async (ids: string[]): Promise<Map<string, string>> => {
+const resolveAuthorUsernames = async (ids: string[], signal?: AbortSignal, maxTimeMS?: number): Promise<Map<string, string>> => {
+  signal?.throwIfAborted();
+  const queryOptions = { ...(maxTimeMS === undefined ? {} : { maxTimeMS }), ...(signal ? { signal } : {}) };
   const wanted = [...new Set(ids)].filter((id) => typeof id === 'string' && id.trim());
   if (!wanted.length) return new Map();
   const usernames = new Map<string, string>();
 
   const things = await getThingsCollection();
+  signal?.throwIfAborted();
   const userThings = await things
-    .find({ thingtime: 'user', shareId: { $in: wanted } } as any)
+    .find({ thingtime: 'user', shareId: { $in: wanted } } as any, queryOptions)
     .project({ shareId: 1, 'crystal.username': 1 })
     .toArray();
+  signal?.throwIfAborted();
   for (const doc of userThings as any[]) {
     if (doc.crystal?.username) usernames.set(String(doc.shareId), doc.crystal.username);
   }
@@ -159,10 +165,12 @@ const resolveAuthorUsernames = async (ids: string[]): Promise<Map<string, string
   const remaining = wanted.filter((id) => !usernames.has(id) && ObjectId.isValid(id));
   if (remaining.length) {
     const users = await getUsersCollection();
+    signal?.throwIfAborted();
     const docs = await users
-      .find({ _id: { $in: remaining.map((id) => new ObjectId(id)) } })
+      .find({ _id: { $in: remaining.map((id) => new ObjectId(id)) } }, queryOptions)
       .project({ username: 1 })
       .toArray();
+    signal?.throwIfAborted();
     for (const doc of docs as any[]) usernames.set(String(doc._id), doc.username);
   }
   return usernames;
@@ -248,7 +256,7 @@ export const listAlgorithmsForUser = async (ownerId: string): Promise<PublicAlgo
     await things
       .find({ thingtime: 'feed-algorithm', ownerId } as any)
       .sort({ createdAt: 1 })
-      .limit(MAX_ALGORITHMS_PER_USER)
+      .limit(LEGACY_OWNED_LIST_LIMIT)
       .toArray()
   ).map(algorithmThingToDoc);
 
@@ -256,7 +264,7 @@ export const listAlgorithmsForUser = async (ownerId: string): Promise<PublicAlgo
   const legacyDocs = (await algorithms
     .find({ ownerId })
     .sort({ createdAt: 1 })
-    .limit(MAX_ALGORITHMS_PER_USER)
+    .limit(LEGACY_OWNED_LIST_LIMIT)
     .toArray()) as any as FeedAlgorithmDoc[];
 
   const seen = new Set<string>();
@@ -267,7 +275,7 @@ export const listAlgorithmsForUser = async (ownerId: string): Promise<PublicAlgo
     docs.push(doc);
   }
   docs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  const page = docs.slice(0, MAX_ALGORITHMS_PER_USER);
+  const page = docs.slice(0, LEGACY_OWNED_LIST_LIMIT);
 
   const interestsByDoc = page.map((doc) => topInterests(doc.weights || emptyWeights()));
   const usernames = await resolveAuthorUsernames(
@@ -277,6 +285,17 @@ export const listAlgorithmsForUser = async (ownerId: string): Promise<PublicAlgo
 			.map((entry) => entry.key)
   );
   return page.map((doc) => projectAlgorithm(doc, usernames));
+};
+
+export const listAlgorithmsPageForUser = async (ownerId: string, cursor?: string | null, signal?: AbortSignal): Promise<{ algorithms: PublicAlgorithm[]; nextCursor: string | null }> => {
+  signal?.throwIfAborted();
+  const page = await ownedListPage<FeedAlgorithmDoc>({ ownerId, purpose: 'algorithms', things: await getThingsCollection(), legacy: await getFeedAlgorithmsCollection(),
+    kind: 'feed-algorithm', field: 'createdAt', direction: 1, cursor, signal, fromThing: algorithmThingToDoc });
+  const usernames = await resolveAuthorUsernames(page.items.flatMap(doc => topInterests(doc.weights || emptyWeights()))
+    .filter(entry => entry.kind === 'author').map(entry => entry.key), signal, OWNED_LIST_QUERY_TIMEOUT_MS);
+  const algorithms = page.items.map(doc => projectAlgorithm(doc, usernames));
+  signal?.throwIfAborted();
+  return { algorithms, nextCursor: page.nextCursor };
 };
 
 export const getOwnedAlgorithmWeights = async (ownerId: string, shareId: string): Promise<AlgorithmWeights | null> => {
@@ -293,7 +312,7 @@ export const getOwnedAlgorithmTransfer = async (ownerId: string, shareId: string
 };
 
 /** Server-only entry point. Normal algorithm HTTP input cannot supply a seed.
- * The canonical writer still owns caps, storage admission, private ACL and IDs. */
+ * The canonical writer still owns storage admission, private ACL and IDs. */
 export const importAlgorithmTransfer = async (ownerId: string, content: unknown) => {
   const parsed = parseAlgorithmTransfer(content);
   return createAlgorithm(ownerId, { name: parsed.name, emoji: parsed.emoji }, parsed);
@@ -329,16 +348,6 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
   if (!name) return fail(400, 'Algorithm name is required');
 
   const things = await getThingsCollection();
-  const algorithms = await getFeedAlgorithmsCollection();
-  // the per-user cap spans both eras, or it would silently double mid-migration
-  const [thingCount, legacyCount] = await Promise.all([
-    things.countDocuments({ thingtime: 'feed-algorithm', ownerId } as any),
-    algorithms.countDocuments({ ownerId })
-  ]);
-  if (thingCount + legacyCount >= MAX_ALGORITHMS_PER_USER) {
-    return fail(400, `Algorithm limit reached (${MAX_ALGORITHMS_PER_USER})`);
-  }
-
   let weights = imported?.weights || emptyWeights();
   let parentId: string | null = null;
   if (input.branchFrom !== undefined && input.branchFrom !== null) {
@@ -431,9 +440,6 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
 		await withHomeMongoTransaction(async (session) => {
       await boundary.beforeWrite?.(null, null, session);
       if (boundary.folderId !== undefined) Object.assign(thing, prepareManagedPlacement(thing, ownerId, await lockFolderDestination(things, ownerId, boundary.folderId, session), now));
-      const count = await things.countDocuments({ thingtime: 'feed-algorithm', ownerId } as any, { session }) +
-        await algorithms.countDocuments({ ownerId }, { session });
-      if (count >= MAX_ALGORITHMS_PER_USER) throw new StorageMutationError(409, 'storage_conflict', 'Algorithm limit reached');
 			await applyUserStorageDelta(ownerId, sizeBytes, session);
 			await things.insertOne(thing as any, { session });
       await boundary.afterWrite?.(thing, session);
