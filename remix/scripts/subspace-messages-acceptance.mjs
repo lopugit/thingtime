@@ -255,6 +255,27 @@ try {
     assert.deepEqual(projected.thing.crystal.richText, richText);
     if (process.env.SUBSPACE_EVIDENCE_DIR) await writeFile(join(process.env.SUBSPACE_EVIDENCE_DIR, `${region}-rich-post-projection.json`), JSON.stringify(projected, null, 2));
   }
+  const renderTemplate = { tag: 'p', props: { style: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } }, children: ['{text}'] };
+  const savedRenderer = (await api('/api/v1/things', { cookie: owner.cookie, body: {
+    thingtime: ['component'], acl: ['tt:all'], crystal: { name: 'Acceptance text render Component', componentKey: 'render-acceptance-' + randomUUID(), version: 1, args: [], render: renderTemplate }
+  } })).data.thing;
+  assert(savedRenderer?.id, 'Saved render Component must exist through the real API');
+  const textFixtures = [
+    { key: 'saved-component', crystal: { renderComponent: { id: savedRenderer.id }, text: 'Saved Component renders safely <strong>as text</strong>\nSecond persisted line' } },
+    { key: 'embedded-component', crystal: { type: 'text', renderComponent: { render: renderTemplate }, text: 'Screenshot payload renders through an explicit embedded Component' } }
+  ];
+  for (const fixture of textFixtures) {
+    const created = (await api('/api/v1/things', { cookie: owner.cookie, body: { thingtime: ['data'], crystal: fixture.crystal, acl: ['tt:all'] } })).data.thing;
+    assert(created?.id, 'Explicit Component fixture must be created through the real API');
+    fixture.id = created.id;
+    fixture.embeds = {};
+    for (const region of ['feed', 'sidebar']) {
+      fixture.embeds[region] = (await addEmbed(created.id, region)).embed.id;
+      const projected = (await readEmbeds(owner, region)).embeds.find(row => row.id === fixture.embeds[region]);
+      assert.deepEqual(projected?.thing?.crystal, fixture.crystal, `${fixture.key}/${region}: persisted renderer payload must survive projection`);
+      if (process.env.SUBSPACE_EVIDENCE_DIR) await writeFile(join(process.env.SUBSPACE_EVIDENCE_DIR, `${fixture.key}-${region}-projection.json`), JSON.stringify(projected, null, 2));
+    }
+  }
   // More than one page proves batching is not a product count cap.
   for (let n = 0; n < 21; n++) await addEmbed(embedded.id);
   const firstPage = await readEmbeds(member);
@@ -273,7 +294,7 @@ try {
     const webOrigin = `http://127.0.0.1:${ports.web}`;
     await ready(vite, webOrigin);
     const fixture = join(dir, 'browser-fixture.json');
-    await writeFile(fixture, JSON.stringify({ origin: webOrigin, cookie: owner.cookie, outsiderCookie: outsider.cookie, space, second, memberCookie: member.cookie, memberId: member.data.user.id, embeddedThingId: embedded.id, feedEmbedId: feedEmbed.embed.id, richPostEmbeds, postId: post.id, messageId: sent.id, redirect: `http://127.0.0.1:${trap.address().port}/redirect` }), { mode: 0o600 });
+    await writeFile(fixture, JSON.stringify({ origin: webOrigin, cookie: owner.cookie, outsiderCookie: outsider.cookie, space, second, memberCookie: member.cookie, memberId: member.data.user.id, embeddedThingId: embedded.id, feedEmbedId: feedEmbed.embed.id, richPostEmbeds, textFixtures, savedRendererCrystal: savedRenderer.crystal, postId: post.id, messageId: sent.id, redirect: `http://127.0.0.1:${trap.address().port}/redirect` }), { mode: 0o600 });
     const ui = start(process.execPath, ['scripts/subspace-messages-acceptance.mjs', '--browser-worker', fixture], {
       PLAYWRIGHT_MODULE: process.env.PLAYWRIGHT_MODULE,
       SUBSPACE_BROWSER_EXECUTABLE: process.env.SUBSPACE_BROWSER_EXECUTABLE,
@@ -355,7 +376,27 @@ async function browserAcceptance() {
     });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${label}: horizontal overflow`);
     const bounds = await viewGroup().boundingBox();
-    assert(bounds && bounds.x >= -1 && bounds.x + bounds.width <= await page.evaluate(() => innerWidth) + 1, `${label}: controls escape viewport`);
+    const viewportWidth = await page.evaluate(() => innerWidth);
+    const geometry = await page.evaluate(() => {
+      const target = document.querySelector('[role="group"][aria-label="Subspace view"]');
+      const ancestors = [];
+      let node = target;
+      for (let depth = 0; node && depth < 12; depth++, node = node.parentElement) {
+        const style = getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        ancestors.push({ tag: node.tagName, id: node.id, className: typeof node.className === 'string' ? node.className : '',
+          x: rect.x, y: rect.y, width: rect.width, height: rect.height, scrollLeft: node.scrollLeft,
+          scrollWidth: node.scrollWidth, clientWidth: node.clientWidth, overflowX: style.overflowX, transform: style.transform });
+      }
+      const active = document.activeElement?.getBoundingClientRect();
+      return { scrollX, scrollY, viewportLeft: visualViewport?.offsetLeft, activeElement: { tag: document.activeElement?.tagName,
+        label: document.activeElement?.getAttribute('aria-label'), x: active?.x, y: active?.y, width: active?.width }, ancestors };
+    });
+    if (bounds && (bounds.x < -1 || bounds.x + bounds.width > viewportWidth + 1)) {
+      await writeFile(join(out, `${label}-geometry.json`), JSON.stringify(geometry, null, 2));
+    }
+    assert(bounds && bounds.x >= -1 && bounds.x + bounds.width <= viewportWidth + 1,
+      `${label}: controls escape viewport (${JSON.stringify(bounds)}, viewport ${viewportWidth}, ${JSON.stringify(geometry)})`);
     await page.screenshot({ path: join(out, label + '.png'), fullPage: true });
     await page.evaluate(() => window.scrollTo(0, 0));
   };
@@ -393,6 +434,71 @@ async function browserAcceptance() {
     await page.getByTestId('subspace-feed-embeds').getByText('Ordinary rich-text embedded post body', { exact: true }).waitFor({ timeout: 30000 });
     await page.screenshot({ path: join(out, 'rich-post-embedded-feed-sidebar.png'), fullPage: true });
     await note('Ordinary Editor.js post rendered in feed and sidebar with independent API evidence');
+    const assertTextEmbeds = async () => {
+      for (const region of ['feed', 'sidebar']) {
+        const host = page.getByTestId(`subspace-${region}-embeds`);
+        for (const textFixture of fixture.textFixtures) {
+          const rendered = host.locator('article').locator('p, blockquote').filter({ hasText: textFixture.crystal.text });
+          await rendered.waitFor({ timeout: 30000 });
+          assert.equal(await rendered.count(), 1, `${region}: Component content must render in one paragraph`);
+          assert.equal(await rendered.locator('strong').count(), 0, 'Plain text must never execute markup');
+          const cardIndex = await host.locator('article').evaluateAll((cards, text) => cards.findIndex(card => card.textContent.includes(text)), textFixture.crystal.text);
+          assert(cardIndex >= 0, 'Rendered Component must have an inspectable Thing card');
+          const card = host.locator('article').nth(cardIndex);
+          await card.getByRole('button', { name: 'Show the Thingtime view 🌀', exact: true }).click();
+          await card.getByRole('button', { name: 'Show as Component ✨', exact: true }).waitFor();
+          await card.getByText('renderComponent', { exact: true }).first().waitFor();
+          await card.getByRole('button', { name: 'Show as Component ✨', exact: true }).click();
+          await rendered.waitFor();
+        }
+      }
+    };
+    for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      await assertTextEmbeds();
+      await measure(`plain-text-embeds-${viewport.width}`);
+    }
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await viewGroup().waitFor({ timeout: 30000 });
+    await assertTextEmbeds();
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await note('Saved and embedded render Components persisted, rendered in both regions at desktop/mobile widths, toggled to data and survived reload');
+    const savedRendererId = fixture.textFixtures.find(row => row.key === 'saved-component').crystal.renderComponent.id;
+    const changedTemplate = { ...fixture.savedRendererCrystal, render: { ...fixture.savedRendererCrystal.render, tag: 'blockquote' } };
+    const changedRenderer = await page.request.post(fixture.origin + '/api/v1/things/update', {
+      headers: { Origin: fixture.origin }, data: { id: savedRendererId, crystal: changedTemplate }
+    });
+    assert.equal(changedRenderer.status(), 200, 'Render Component template edits must use the real API');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await assertTextEmbeds();
+    for (const region of ['feed', 'sidebar']) {
+      await page.getByTestId(`subspace-${region}-embeds`).locator('blockquote').filter({ hasText: fixture.textFixtures[0].crystal.text }).waitFor();
+    }
+    await note('Saved Component source template edited independently through API; both existing embeds reload the changed block with unchanged data');
+    await setSession(fixture.memberCookie);
+    await openSpace(fixture.space);
+    await assertTextEmbeds();
+    const rendererId = fixture.textFixtures.find(row => row.key === 'saved-component').crystal.renderComponent.id;
+    const setRendererAccess = async acl => {
+      const response = await page.request.post(fixture.origin + '/api/v1/things/update', {
+        headers: { Cookie: fixture.cookie, Origin: fixture.origin }, data: { id: rendererId, acl }
+      });
+      assert.equal(response.status(), 200, 'Owner must change the render Component ACL through the real API');
+    };
+    await setRendererAccess(['tt:user']);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    for (const region of ['feed', 'sidebar']) {
+      const host = page.getByTestId(`subspace-${region}-embeds`);
+      await host.getByText('This render Component is unavailable or invalid. Open the data view to inspect this Thing.', { exact: true }).waitFor({ timeout: 30000 });
+      assert.equal(await host.getByText(fixture.textFixtures[0].crystal.text, { exact: true }).count(), 0, 'Revoked renderer must not retain cached rendered output');
+      await host.getByText(fixture.textFixtures[1].crystal.text, { exact: true }).waitFor();
+    }
+    await page.screenshot({ path: join(out, 'render-component-source-acl-revoked.png'), fullPage: true });
+    await setRendererAccess(['tt:all']);
+    await setSession(fixture.cookie);
+    await openSpace(fixture.space);
+    await assertTextEmbeds();
+    await note('Saved Component independent ACL revocation hides cached rendering from a member; embedded Component and data source remain accessible');
     await commentsToggle().check();
     await page.getByText('First saved subspace comment', { exact: true }).waitFor({ timeout: 30000 });
     const editor = page.locator('[contenteditable="true"]').first();
@@ -511,7 +617,7 @@ async function browserAcceptance() {
     assert.equal(await commentsToggle().isChecked(), true, 'Nested Builder label edit must preserve its independent checkbox action');
     await note('Nested view control edited, saved and reloaded');
     assert.deepEqual(errors, [], 'Browser runtime errors');
-    await writeFile(join(out, 'browser-result.json'), JSON.stringify({ ok: true, desktopAndMobile: true, persistedViews: true, scopedComments: true, draftSwitching: true, realMessageSendRead: true, realEmbedAddRemove: true, browserNetworkDenied: true, errors }, null, 2));
+    await writeFile(join(out, 'browser-result.json'), JSON.stringify({ ok: true, desktopAndMobile: true, persistedViews: true, scopedComments: true, draftSwitching: true, realMessageSendRead: true, realEmbedAddRemove: true, explicitComponentEmbedRendering: true, explicitComponentDataToggle: true, browserNetworkDenied: true, errors }, null, 2));
     console.log(JSON.stringify({ ok: true, browser: true, evidenceDir: out, errors }));
   } catch (error) {
     await page.screenshot({ path: join(out, 'failure.png'), fullPage: true }).catch(() => {});

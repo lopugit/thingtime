@@ -3384,6 +3384,24 @@ email whose link points at the attacker.
 
 ## Feed thing rendering (`remix/app/components/Thingtime/ThingView.tsx`)
 
+- [ ] Human-facing data Things carry `renderComponent: { id: <saved Component Thing ID> }`
+      or an embedded Component definition, for example
+      `renderComponent: { render: { tag: "p", children: ["{text}"] } }`.
+      Exact-ID readback preserves the declaration and content; the Component
+      binds the Thing's data and renders by default. An explicit declaration
+      overrides every legacy kind/type renderer. Null, malformed, inaccessible,
+      deleted, or non-Component references show an unavailable state without
+      silently selecting a renderer from `type` or `kind`.
+- [ ] Switch rendered/data views and reload; inspect the original fields only
+      on explicit request. Change account, Character or data plane while a
+      Component fetch is pending; no previous viewer's renderer appears. Revoke
+      Component access and refocus/reload; the renderer becomes unavailable.
+      Component sources, Actions and native controls never execute through this
+      read-only display path; text bindings remain escaped.
+- [ ] Inside editable subspace layouts, click and keyboard-activate the
+      rendered/data toggle and ordinary nested controls. The surrounding
+      transient Action host handles only its own controls; it must not swallow
+      native button events or intercept a nested host's Action.
 - [ ] A thingtime post renders its thing as the NATIVE Thingtime tree in view
       mode — right-click opens the thing context menu, Toggle Edit Mode makes
       values editable (numbers get steppers, booleans a switch, Editor.js
@@ -3508,6 +3526,12 @@ email whose link points at the attacker.
 - [ ] Expand all comments shows loaded post comments and replies; turn it off, reload, navigate to another subspace and switch accounts to verify saved preference isolation without unbounded auto-pagination.
 - [ ] Pending, banned, removed and former members cannot read/send linked messages, see previews, or download message media; private changes and subspace deletion revoke every entry point.
 - [ ] Moderators add, move and remove accessible Things in the sidebar and above-feed regions; non-moderators are refused. Reload and verify order, pagination and placement between composer and first post. Revoke a referenced Thing and confirm it is unavailable without exposing hidden-link keys or granting access.
+- [ ] Embed data Things with both saved and embedded render Components above the
+      feed and in the sidebar. At desktop and 390px mobile widths, verify exact
+      text, whitespace, long words/URLs, escaped markup, full-page scrolling,
+      data/render toggles and reload without raw `type`/`text` fields in the
+      default presentation or horizontal overflow. Edit the Component's nested
+      text block in Builder independently, save/reload and verify both placements.
 - [ ] Select nested view/embed control labels independently in Builder, edit/save/reload, and confirm the real controls still act on the correct subspace.
 
 
