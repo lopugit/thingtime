@@ -813,7 +813,7 @@ test('resource limits and CPU downloads negotiate only their semantic dependenci
 test('environment gateway registers both manifests without changing branch password requirements', () => {
   const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
   const discovery = thingtimeCapabilityManifest('https://gateway-contract.test');
-  for (const [feature, version] of [['api.environment-gateway', '1.0.1'], ['api.social-card', '1.0.1'], ['api.passwords', '1.2.1']]) {
+  for (const [feature, version] of [['api.environment-gateway', '1.1.0'], ['api.social-card', '1.0.1'], ['api.passwords', '1.2.1']]) {
     assert.equal(legacy.features[feature], version);
     assert.equal(discovery.features[feature].version, version);
   }

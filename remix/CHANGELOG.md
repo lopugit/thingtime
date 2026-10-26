@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Reconcile PR996 with develop `cd6f8b8abc94270980bac216da2412ffef8578b1`: preserve gateway 1.1.0 fail-closed deployment policy, password 1.2.1 compatibility, deterministic lease renewal and isolated proxy/dedicated acceptance. [PR996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md). **Codex (AI)**
+
 - 2026-10-26: Integrate the canonical environment gateway into PR996: signed per-operation forwarding, fail-closed Mongo admission, promotion/rollback draining, guarded warmup and durable index readiness/recovery. Preserve password contract 1.2.1 and reject incompatible gateway operations. [Runbook](../docs/environment-api-gateway.md). Deployed/native acceptance remains separate. — Codex (AI)
 
 - 2026-10-26: Add independently editable nested properties for imported
@@ -153,6 +155,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-10-18: Restore installed desktop password/mail requests by preserving Nitro request interfaces during the selected-origin handoff; add Passwords to sidebar and Commander navigation. See [PR #996 notes](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
 
 - **2026-10-18 · Native password provider:** repair Developer ID archive/export, verify the exact signer and bundle-specific AutoFill profiles, and wrap the setup instructions. Signed macOS installation now succeeds; the provider is enabled and connected; OS credential ceremonies require user verification. [PR #996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md). — **Codex (AI)**
+- 2026-10-26: Integrate the reviewed environment gateway and dedicated connection policy into develop while preserving newer develop changes. Built sandboxed API acceptance and contract tests pass; canonical-owner activation remains pending. [PR #1224 details](../PRs/1224-codex-gateway-develop-integration-environment-gateways-and-dedicated-policy.md). **Codex (AI)**
+
+- 2026-10-26: Add the server-only `THINGTIME_MONGODB_CONNECTION_MODE` override for `proxy` or opt-in `dedicated` MongoDB connections, with a branch-bundled default. Document the audited preview/develop database relationship, proposed gateway mapping and gradual pool draining; gateway activation remains pending. **Codex (AI)**
+
+- 2026-10-26: Forward public social cards and generated docs through the local Vite proxy; verify root docs GET/POST through the actual Vite server as well as built Nitro. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
+
+- 2026-10-26: Add explicit per-environment API gateway ownership, signed origin-preserving forwarding, safe pool draining and bounded shared index-plan readiness. Branch frontends use the selected environment backend; live alias acceptance remains pending, and older preview deployments may age out naturally. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
+
 - 2026-10-23: Limit PR 1164 to reusable local-media and editable Builder primitives. Author compressor Pages/Components directly as saved Things; retain the legacy suite and fix capability-compatible file-sync assertions.
 
 ### 2026-10-22 — General local compressor

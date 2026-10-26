@@ -5279,23 +5279,41 @@ halves.
 - [ ] Root metadata/image routes expose their registered `-docs` twin for both
   GET and POST without database admission, through both Nitro and the real Vite
   dev proxy; check JSON endpoint/method fields and reject SPA HTML responses.
-- [ ] Confirm followers make zero MongoDB connections, preserve cookie/Bearer,
-  Character, expected actor and custom data-plane selection, refuse forged hops
-  and cross-site writes, and preserve OAuth redirect/cookie/stream cancellation.
+- [ ] In proxy mode, confirm followers make zero MongoDB connections, preserve
+      cookie/Bearer, Character, expected actor and custom data-plane selection,
+      refuse forged hops and cross-site writes, and preserve OAuth redirects,
+      cookies and stream cancellation.
+- [ ] When running built acceptance beside other tasks, choose an unused ten-port
+      loopback range with `THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE`. Invalid,
+      privileged or overflowing ranges must fail before the runner starts any
+      process. Keep the OS-denied external-network boundary in place.
+- [ ] In dedicated mode, confirm the deployment executes its own backend,
+      advertises `gateway: null`, owns its pools, and refuses relayed traffic.
+      Point a proxy worker at that dedicated alias and verify it fails closed.
+- [ ] In `test:environment-gateway`, verify the bundled connection policy and
+      an explicitly selected proxy policy independently; alias-ownership fixtures
+      must set their intended policy so machine/build defaults cannot change them.
+- [ ] Verify unknown connection-mode values and incomplete gateway settings fail
+      closed; Vercel defaults to proxy while a local/self-hosted server without
+      gateway settings retains direct-connection behavior.
 - [ ] Switch the alias and roll back with an admitted stream and detached
-  notification/Lopu save outstanding. Confirm pools close after work drains,
-  the old worker cannot create a new pool, and re-promotion opens a usable pool.
+      notification/Lopu save outstanding. Confirm existing work can finish and
+      pools drain after it ends; verify new ownership and a usable pool after
+      re-promotion. Do not infer fleet-wide fencing from this bounded check.
 - [ ] Verify missing/different-environment/incompatible manifests fail closed;
-  unchanged index plans skip DDL across instances, changed plans coordinate,
-  failed unique builds block constrained writes, and authenticated repair stays
-  reachable. Exercise lease expiry, failed-plan retry and manual invalidation.
-- [ ] Retire/restrict legacy immutable deployments before claiming fleet-wide
-  enforcement. Record real alias/API and Atlas connection evidence separately
-  from isolated tests; leave the Atlas tier unchanged.
+      unchanged index plans skip DDL across instances, changed plans coordinate,
+      failed unique builds block constrained writes, and authenticated repair stays
+      reachable. Exercise lease expiry, failed-plan retry and manual invalidation.
+- [ ] Record observed alias-to-environment/database mapping separately from
+      proposed gateway activation and isolated tests. Confirm previews and custom
+      develop use the development cluster, separate from production; verify
+      `master.previews.thingtime.com` before treating it as operational. Treat
+      old-preview credential retirement as optional; leave the Atlas tier unchanged.
 
 - [ ] For PR996 password requests, refuse absent/1.2.0/breaking-major contracts,
   missing paths and unsupported methods before forwarding; accept 1.2.1 and
-  compatible 1.3.0 without downgrading the branch requirement.
+  compatible 1.3.0 without downgrading the branch requirement. Exercise proxy
+  admission separately from deployment-only dedicated behavior.
 
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 

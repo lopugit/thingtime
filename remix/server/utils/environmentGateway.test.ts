@@ -9,12 +9,13 @@ import { GATEWAY_RELAY_HEADER, environmentGatewayIngress, proxyEnvironmentReques
 
 const origin = 'https://gateway.test';
 const follower = 'https://follower.test';
-const keys = ['THINGTIME_GATEWAY_ENVIRONMENT', 'THINGTIME_GATEWAY_ORIGIN', 'THINGTIME_GATEWAY_SECRET', 'THINGTIME_GATEWAY_DEPLOYMENT_ID', 'THINGTIME_GATEWAY_SOURCE_ORIGINS'] as const;
+const keys = ['THINGTIME_GATEWAY_ENVIRONMENT', 'THINGTIME_GATEWAY_ORIGIN', 'THINGTIME_GATEWAY_SECRET', 'THINGTIME_GATEWAY_DEPLOYMENT_ID', 'THINGTIME_GATEWAY_SOURCE_ORIGINS', 'THINGTIME_MONGODB_CONNECTION_MODE'] as const;
 const fixture = async (run: () => Promise<void>) => {
   const before = keys.map(key => process.env[key]);
   process.env.THINGTIME_GATEWAY_ENVIRONMENT = 'preview'; process.env.THINGTIME_GATEWAY_ORIGIN = origin;
   process.env.THINGTIME_GATEWAY_SECRET = 'synthetic'.repeat(8); process.env.THINGTIME_GATEWAY_DEPLOYMENT_ID = 'follower';
   process.env.THINGTIME_GATEWAY_SOURCE_ORIGINS = follower;
+  process.env.THINGTIME_MONGODB_CONNECTION_MODE = 'proxy';
   try { await run(); } finally { keys.forEach((key, i) => { if (before[i] === undefined) delete process.env[key]; else process.env[key] = before[i]; }); }
 };
 const aliasManifest = () => { const manifest = thingtimeCapabilityManifest(origin); manifest.gateway!.deploymentId = 'owner'; return manifest; };
@@ -186,3 +187,28 @@ test('unconfigured local runtime retains direct admission but refuses forged rel
     assert.ok(response instanceof Response); assert.equal(response.status, 403);
   } finally { keys.forEach((key, i) => { if (before[i] === undefined) delete process.env[key]; else process.env[key] = before[i]; }); }
 });
+test('explicit dedicated build executes its own handler, allows its Mongo client, and refuses relays', async t => fixture(async () => {
+  const manifest = aliasManifest();
+  process.env.THINGTIME_MONGODB_CONNECTION_MODE = 'dedicated';
+  const mock = t.mock.method(globalThis, 'fetch', async url => {
+    assert.match(String(url), /well-known/); return Response.json(manifest);
+  });
+  assert.equal(thingtimeCapabilityManifest(follower).gateway, null);
+  assert.equal(await environmentGatewayIngress(new Request(follower + '/api/v1/things')), null);
+  await requireGatewayDatabaseAccess();
+  const app = new H3().use(middleware).all('/api/**', () => Response.json({ handler: 'dedicated-branch' }));
+  const response = await app.fetch(new Request(follower + '/api/v1/things'));
+  assert.deepEqual(await response.json(), { handler: 'dedicated-branch' });
+  const forged = await environmentGatewayIngress(new Request(follower + '/api/v1/things', { headers: { [GATEWAY_RELAY_HEADER]: 'forged' } }));
+  assert.equal((forged as Response).status, 403);
+  assert.ok(mock.mock.callCount() > 0);
+}));
+
+test('a request cannot opt a proxy deployment into dedicated connections', async t => fixture(async () => {
+  t.mock.method(globalThis, 'fetch', async url => String(url).includes('.well-known') ? Response.json(aliasManifest()) : Response.json({ handler: 'gateway' }));
+  const response = await environmentGatewayIngress(new Request(follower + '/api/v1/things', {
+    headers: { 'x-thingtime-mongodb-connection-mode': 'dedicated' }
+  }));
+  assert.ok(response instanceof Response); assert.deepEqual(await response.json(), { handler: 'gateway' });
+  await assert.rejects(requireGatewayDatabaseAccess());
+}));

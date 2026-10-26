@@ -3,6 +3,45 @@
 PR: https://github.com/lopugit/thingtime/pull/996
 Branch: `codex/password-manager` (base `develop`)
 
+## Develop reconciliation — 26 October 2026
+
+A local merge of freshly fetched develop
+`cd6f8b8abc94270980bac216da2412ffef8578b1` into
+`codex/oauth-native-acceptance` preserves the existing PR996 password/mail,
+structured-field, private-binding and native work. Gateway capability 1.1.0 and
+the bundled proxy default remain intact. Vercel missing/partial settings fail
+closed; explicit deployment-only dedicated mode retains its independent backend
+and relay refusal. Dedicated mode is not enabled to bypass callback, capability
+or authority failures. Password operations still require 1.2.1 and accept
+compatible 1.3.0.
+
+Conflict resolution preserves the deterministic lease-renewal regression and
+both existing password forwarding tests and newer connection-policy tests.
+The standalone acceptance runner accepts a bounded ten-port loopback range via
+`THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE`; the dedicated-mode fixture uses its
+own disposable replica. The merged source passed 399 focused Node regressions with zero skips:
+gateway 25, capabilities 114, Mongo 86, workflow/migration 56, password/native
+94, and desktop private-service transport 24. The native Swift/WebAuthn
+interoperability gate also passed. The mode resolver uses explicit literal
+returns to retain runtime validation and satisfy its TypeScript union; its
+focused TypeScript check and the final gateway suite pass. All eight merged
+TS/TSX lint targets passed. Invalid, privileged and overflowing acceptance-port
+ranges were refused before startup.
+
+The final source passed a sanitized no-dotenv node-server build using the
+existing verified client shell, then real built proxy/dedicated acceptance on
+loopback ports 19981–19990 under the OS external-network boundary. Registration,
+cookie writes, cross-site refusal, Vite root docs, dedicated own handlers and
+shell metadata, independent dedicated data, alias promotion and rollback all
+passed. The follower made zero MongoDB dials. Each fresh home database recorded
+138 index creates, 51 drops and peak concurrency two; an unchanged cold owner
+recorded zero creates/drops. The runner removed its own processes and disposable
+data. No password/frontend/native source changed from the original tested head;
+the earlier 19 browser groups were not rerun for this runtime merge. No remote
+branch, alias, account, credentials or production data are changed by this local
+merge. The shared preview publisher's exact-source-origin fix and
+real-account/native/provider acceptance remain separate gates.
+
 ## Environment gateway and index lifecycle — 26 October 2026
 
 This branch now integrates the environment-scoped API gateway and coordinated
