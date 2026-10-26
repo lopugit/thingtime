@@ -35,7 +35,7 @@ export function ThingRenderComponent({ thing }: { thing: unknown }) {
       controller = new AbortController();
       try {
         const result = await apiRef.current.v1.things.get({ id: reference }, renderComponentReadOptions({ actor: actor?.id, character: character?.id, plane, origin }, controller.signal));
-        if (!disposed && request === generation) setLoaded({ identity, component: referencedRenderComponent(result?.thing) });
+        if (!disposed && request === generation) setLoaded({ identity, component: referencedRenderComponent(result?.thing, reference) });
       } catch {
         // A refused or failed refresh must not retain an old private renderer.
         if (!disposed && request === generation) setLoaded({ identity, component: null });
