@@ -4,6 +4,22 @@ Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/
 
 ## Current checkpoint — 2026-10-26
 
+Integrated develop `cd6f8b8a` into the existing feature branch, preserving both
+gateway/index lifecycle changes and anonymous/offline behavior. Conflicts were
+limited to additive changelog/test scripts and notification imports. The built
+gateway acceptance now checks branch-local draft-preview assets and restrictive
+CSP, plus actual public-card GET/HEAD; its disposable account/database,
+forwarding, cross-site rejection and promotion/rollback checks pass. The full
+client and Node-server builds pass. Focused checks pass 1,562 with 107 skips
+after a schema rerun; the initial 27 ms split-refusal failure against the
+unchanged 25 ms gate is retained. Exact-head CI and deployed verification remain
+separate. [Integration evidence](../artifacts/anonymous-local-first-2026-10-26-develop-integration/README.md).
+The incoming gateway mode type error is repaired without broadening accepted
+configuration; the warning-only ratchet returns to 91 diagnostics against an 89
+baseline. Notification re-exports now follow imports, preserving the API while
+satisfying import-order lint. The updated plan passes full-scroll and control
+checks at 1440, 390 and 320 pixels.
+
 The normal `thingtime` MCP is loaded in this Codex desktop chat. An actual
 `mcp__thingtime__thingtime_render_and_export` call rendered the canonical
 editable affirmation fixture at 1440×1000, 390×844, 320×844 and 400×560 card
@@ -24,7 +40,7 @@ host. It does not prove installed macOS-app acceptance, newer exact-head CI or
 deployed behavior. Remaining work includes the native paste/undo 5,000 ms gate
 (the 2,633 ms paste passed before a separate legacy-read assertion failed; the 8,182 ms repeat exceeded the unchanged gate), broader
 catalogue/transfer coverage, and the provider/device matrix. No login, Action,
-real account data, merge or manual deployment was involved.
+real account data, PR merge or manual deployment was involved.
 
 ## Earlier checkpoint — 2026-10-23
 
