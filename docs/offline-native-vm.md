@@ -1,18 +1,18 @@
-# Offline native VM harness (initial preparation milestone)
+# Offline native VM harness (preparation and installer milestones)
 
 `apple/OfflineNativeVM` is a dependency-free SwiftPM host CLI for a task-owned
 Apple Silicon macOS VM. Its machine-readable contract is `offline-native-vm
 manifest`, feature `native.offline-vm` version `1.0.0`. This is testing tooling,
 not a Thingtime app update, installer, release workflow or network API.
 
-This initial milestone compiles the host harness and tests private file handling,
-fresh preparation and bounded worker lifecycle with mocks. **Guest installation,
-Setup Assistant, toolchain verification and run admission remain unimplemented.**
-`run` and the internal worker fail with `guestReadinessUnavailable`; no manifest
-assertion, imported VM or caller option can authorize a start. The compiled VZ
-start/stop adapter is dormant pending those gates and independent review. Do not
-claim a working native build, traffic isolation acceptance or VM disposal from
-these tests.
+The host harness compiles and tests private file handling, fresh preparation,
+read-only restore inspection and a distinct bounded installer lifecycle with
+mocks. **Real preparation/installation/teardown acceptance is still pending.**
+Setup Assistant, guest toolchain verification and candidate run admission remain
+unimplemented. `run` and its internal runtime worker fail with
+`guestReadinessUnavailable`; no imported VM or caller readiness assertion can
+admit candidate execution. Do not claim a native build or VM disposal from the
+mock tests or successful read-only Apple restore metadata inspection.
 
 ## Threat model and fixed boundary
 
@@ -137,6 +137,50 @@ mtime/ctime and named-path identity before/after. Authorized host mutation is
 out of scope. No arbitrary library, command, network or existing-VM path can be
 selected through the manifest.
 
+## Separate installation phase
+
+`install TASK RUN_UUID` accepts only the harness's own `prepared-empty` receipt,
+matching task/source/manifest, original hardware and machine-ID hashes, and
+recorded private boot/output/auxiliary file identities. It acquires the exclusive
+task lease and creates `install-attempt.json` with exclusive creation **before**
+starting a worker. The immutable attempt starts in `pending-quarantined` state;
+if its parent dies or never writes finalization, the artifacts remain quarantined
+and a second installation attempt is refused even after the lease releases.
+No existing VM is imported and no new identity replaces the prepared pair.
+
+The installer is a separate VM-queue state machine. It starts only from stopped,
+retains `VZMacOSInstaller`, and never calls pause/stop during active installation.
+On deadline/cancellation/parent loss it calls `installer.progress.cancel()` only
+after `install` has begun, then allows at most 60 seconds for the installer
+completion callback. No callback means unknown teardown and quarantine; a
+stopped-looking VM alone cannot stand in for the installer callback. After that
+callback it separately allows 15 seconds for supported VM stop/observation.
+Failed stop, cancellation or failed installation never establishes success.
+
+The independent parent uses `deadlineSeconds`, requests termination (handled as
+installer cancellation), then allows 90 seconds for cancellation/stop/final
+receipt exit, followed by exact-worker SIGKILL and five seconds for reap if
+necessary. This is intentionally separate from the runtime stop grace. A hard
+kill, missing callback, missing stopped observation, unreadable receipt or failed
+reap cannot be successful disposal. The one-shot attempt persists; no automatic
+retry or reuse occurs. Parent/worker crash cannot be presented as proof of
+platform resource destruction. Unknown artifacts must stay quarantined pending
+supported recovery; never broad-kill host users/services to manufacture proof.
+
+Only a successful installer callback, observed stopped VM, exact worker reap,
+no cancellation/hard kill/failure and final private file identities can yield
+`installation.json` with `installed: true`, `quarantined: false`, state
+`installed-not-ready`. That host finalization supersedes the attempt's initial
+pending state. Setup/toolchain/readiness remain false, and candidate execution
+stays closed. No guest filesystem is mounted or output executed on the host.
+
+The local IPSW API does not promise that installation needs no Apple-service
+personalization. Keep the guest without a NIC and let an explicitly authorized
+bounded real installer result establish feasibility; metadata support and third
+party image labels do not establish installation success. Actual installation
+also does not complete Setup Assistant, establish a guest account or accept any
+license on the user's behalf.
+
 ## Lifecycle scaffold and remaining admission
 
 The dormant execution scaffold separates the parent deadline from the VZ
@@ -150,11 +194,11 @@ loss and an independent worker deadline also request VZ stop. No broad UID kill,
 launchd domain operation, host firewall change or external broker is involved.
 These timings are code/mocked evidence, not a measured real VM stop guarantee.
 
-Before enabling a real run, implement and independently review installation and
-readiness transitions accepting only this harness's own fresh preparation under
+Before enabling a candidate run, complete real installer acceptance and implement
+and independently review readiness transitions accepting only this harness's own fresh preparation under
 its lease, preserving original boot/auxiliary/model/identifier pairing. Hold
 that lease through confirmed VZ stop and worker reap; never reuse a consumed
-identity concurrently. Add finite installer and guest setup/toolchain gates,
+identity concurrently. Exercise the installer cancellation gates and add guest setup/toolchain gates,
 retain actual stop/cancellation receipts, and verify the no-NIC configuration
 on a real task-owned guest before native candidate execution. Guest output is
 still untrusted, even when a build reports success.
@@ -169,6 +213,7 @@ implied by this document.
 - [Apple: disk-image attachment](https://developer.apple.com/documentation/virtualization/vzdiskimagestoragedeviceattachment): RAW local block images and read-only attachment.
 - [Apple: Mac platform configuration](https://developer.apple.com/documentation/virtualization/vzmacplatformconfiguration): preserve original saved-VM model, auxiliary storage and machine identifier; independent concurrent VMs require distinct identities/storage.
 - [Apple: local restore metadata](https://developer.apple.com/documentation/virtualization/vzmacosrestoreimage): local image support and hardware requirements; the harness never calls the network fetch method.
+- [Apple: installing macOS](https://developer.apple.com/documentation/virtualization/installing-macos-on-a-virtual-machine): stopped initial VM, no stop/pause during installation, and installer progress cancellation.
 - [Apple: virtual machine stop](https://developer.apple.com/documentation/virtualization/vzvirtualmachine/stop(completionhandler:)): destructive forced stop and completion result.
 - [Apple: network devices](https://developer.apple.com/documentation/virtualization/vzvirtualmachineconfiguration/networkdevices): an empty device array exposes no virtual network device.
 

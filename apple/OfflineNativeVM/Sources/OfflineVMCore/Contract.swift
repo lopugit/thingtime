@@ -6,7 +6,7 @@ public enum VMFailure: String, Error { case guestReadinessUnavailable, arguments
 public enum Contract {
     public static let version = "1.0.0"
     public static let feature = "native.offline-vm"
-    public static let manifest: [String: Any] = ["feature": feature, "version": version, "guest": "macos-arm64", "commands": ["manifest", "init", "validate", "plan", "inspect-restore", "prepare", "run"], "networkDevices": 0, "directoryShares": 0, "socketDevices": 0, "guestOutputTrusted": false, "runConsumesTask": true, "runAvailable": false, "prepareStartsGuest": false]
+    public static let manifest: [String: Any] = ["feature": feature, "version": version, "guest": "macos-arm64", "commands": ["manifest", "init", "validate", "plan", "inspect-restore", "prepare", "install", "run"], "networkDevices": 0, "directoryShares": 0, "socketDevices": 0, "guestOutputTrusted": false, "runConsumesTask": true, "runAvailable": false, "prepareStartsGuest": false]
 }
 public struct Disk: Codable, Equatable { public let file: String; public let sha256: String; public let format: String }
 public struct Toolchain: Codable, Equatable {

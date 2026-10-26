@@ -64,6 +64,19 @@ func main() throws -> Int32 {
         let root = try Workspace.initialize(parent: URL(fileURLWithPath: args[1]), taskID: args[2])
         try emit(["contractVersion": Contract.version, "taskID": args[2], "root": root.path, "guestStarted": false]); return 0
     }
+    if command == "install", args.count == 3 {
+        let workspace = try Workspace(root: URL(fileURLWithPath: args[1]))
+        return try superviseInstallation(workspace, runID: args[2])
+    }
+    if command == "__install-worker", args.count == 4 {
+        guard let parent = Int32(args[3]), parent == getppid() else { throw VMFailure.arguments }
+        let workspace = try Workspace(root: URL(fileURLWithPath: args[1]))
+        let run = try workspace.installationWorkerRun(args[2], parentPID: parent)
+        let config = try configuration(workspace, run: run)
+        let worker = try InstallerWorker(config: config, restore: workspace.input(workspace.manifest.restoreImage),
+            report: run.appendingPathComponent("install-worker.json"), parent: parent, seconds: workspace.manifest.deadlineSeconds)
+        worker.begin(); RunLoop.main.run(); return 1
+    }
     if command == "__worker", args.count == 4 {
         let workspace = try Workspace(root: URL(fileURLWithPath: args[1])); try workspace.requireAdmission()
         guard UUID(uuidString: args[2]) != nil, let parent = Int32(args[3]), parent == getppid() else { throw VMFailure.arguments }

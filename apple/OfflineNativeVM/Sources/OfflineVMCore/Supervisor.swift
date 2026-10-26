@@ -16,16 +16,17 @@ public struct Supervision {
 public enum Supervisor {
     public static func run(_ worker: WorkerProcess, deadlineSeconds: Int,
                            now: () -> TimeInterval, pump: () -> Void,
-                           cancelled: () -> Bool) throws -> Supervision {
+                           cancelled: () -> Bool, terminationGraceSeconds: TimeInterval = 15) throws -> Supervision {
         let deadline = now() + Double(deadlineSeconds)
+        guard !cancelled() else { throw VMFailure.cancelled }
         try worker.start()
         while worker.running, !cancelled(), now() < deadline { pump() }
-        var interruption: String? = nil
+        var interruption: String? = cancelled() ? VMFailure.cancelled.rawValue : nil
         var hardKill = false
         if worker.running {
             interruption = cancelled() ? VMFailure.cancelled.rawValue : VMFailure.deadline.rawValue
             worker.terminate()
-            let grace = now() + 15
+            let grace = now() + terminationGraceSeconds
             while worker.running, now() < grace { pump() }
             if worker.running { hardKill = true; worker.kill() }
             let reap = now() + 5

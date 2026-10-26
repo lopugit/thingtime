@@ -138,13 +138,17 @@ public final class Workspace {
         // No imported declarations or prepared-empty receipt establish installation/readiness.
         throw VMFailure.guestReadinessUnavailable
     }
-    public func beginPreparation() throws -> (URL, Prepared) {
-        guard lease < 0 else { throw VMFailure.consumed }
+    public func acquireLease() throws {
+        guard lease < 0 else { throw VMFailure.ownership }
         let lockURL = root.appendingPathComponent("lease")
         lease = open(lockURL.path, O_WRONLY | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0o600)
         var s = stat()
         guard lease >= 0, fstat(lease, &s) == 0, s.st_uid == geteuid(), s.st_nlink == 1,
               s.st_mode & S_IFMT == S_IFREG, s.st_mode & 0o077 == 0, flock(lease, LOCK_EX | LOCK_NB) == 0 else { throw VMFailure.ownership }
+    }
+    public func beginPreparation() throws -> (URL, Prepared) {
+        guard lease < 0 else { throw VMFailure.consumed }
+        try acquireLease()
         let consumed = open(root.appendingPathComponent("consumed").path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
         guard consumed >= 0 else { throw VMFailure.consumed }; close(consumed)
         let runs = root.appendingPathComponent("runs"); try Self.privateDirectory(runs)
@@ -153,6 +157,39 @@ public final class Workspace {
         guard mkdir(run.path, 0o700) == 0 else { throw VMFailure.path }
         try writeJSON(prepared, to: run.appendingPathComponent("prepared.json"))
         return (run, prepared)
+    }
+    public func preparedRun(_ runID: String) throws -> URL {
+        guard UUID(uuidString: runID) != nil else { throw VMFailure.arguments }
+        _ = try SecureFile(root.appendingPathComponent("consumed"))
+        let run = root.appendingPathComponent("runs").appendingPathComponent(runID)
+        try Self.privateDirectory(root.appendingPathComponent("runs")); try Self.privateDirectory(run)
+        let receipt = try JSONDecoder().decode(PreparationReceipt.self, from: SecureFile(run.appendingPathComponent("preparation.json")).data())
+        guard receipt.taskID == owner.taskID, receipt.runID == runID, receipt.sourceSHA == manifest.sourceSHA,
+              receipt.manifestSHA256 == manifestHash, receipt.state == "prepared-empty", receipt.freshIdentity,
+              !receipt.installed, !receipt.guestStarted, !receipt.setupComplete, !receipt.toolchainVerified,
+              Set(receipt.files.keys) == ["boot.img", "output.img", "auxiliary.bin", "hardware.bin", "machine-id.bin"] else { throw VMFailure.ownership }
+        for (name, identity) in receipt.files {
+            guard try FileIdentity(run.appendingPathComponent(name)) == identity else { throw VMFailure.integrity }
+        }
+        guard try SecureFile(run.appendingPathComponent("hardware.bin")).hash() == receipt.hardwareSHA256,
+              try SecureFile(run.appendingPathComponent("machine-id.bin")).hash() == receipt.machineIdentifierSHA256 else { throw VMFailure.integrity }
+        return run
+    }
+    public func beginInstallation(_ runID: String, parentPID: Int32) throws -> URL {
+        try acquireLease()
+        let run = try preparedRun(runID)
+        let attempt = InstallAttempt(taskID: owner.taskID, runID: runID, sourceSHA: manifest.sourceSHA, parentPID: parentPID)
+        let data = try JSONEncoder().encode(attempt)
+        // This permanent one-shot quarantine exists BEFORE any worker/installer starts.
+        try Preparation.writeExclusive(data, to: run.appendingPathComponent("install-attempt.json"))
+        return run
+    }
+    public func installationWorkerRun(_ runID: String, parentPID: Int32) throws -> URL {
+        let run = try preparedRun(runID)
+        let attempt = try JSONDecoder().decode(InstallAttempt.self, from: SecureFile(run.appendingPathComponent("install-attempt.json")).data())
+        guard attempt.taskID == owner.taskID, attempt.runID == runID, attempt.sourceSHA == manifest.sourceSHA,
+              attempt.parentPID == parentPID, attempt.state == "pending-quarantined" else { throw VMFailure.ownership }
+        return run
     }
     public func input(_ disk: Disk) throws -> URL { guard let file = files[disk.file] else { throw VMFailure.path }; try file.unchanged(); return file.url }
     public func data(_ disk: Disk) throws -> Data { guard let file = files[disk.file] else { throw VMFailure.path }; return try file.data() }
