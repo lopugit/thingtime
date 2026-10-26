@@ -1,5 +1,13 @@
 # TESTING.md — per-area manual test checklists
 
+## Hosted native compilation boundary
+
+- [ ] Validate the native listener with `actionlint`; keep its owner/main/repository admission, read-only permissions, and immutable protected-controller pin. Do not inherit secrets or check out candidate code in the listener.
+- [ ] Dispatch the default `preflight` mode against an exact open same-repository PR and SHA. Require hosted runner-UID admission, post-policy transport probes, candidate/root/broker network-denial probes, watchdog cleanup, and retained sanitized evidence. This mode must never download, extract, or run candidate bytes.
+- [ ] Verify the supervisor receives watchdog readiness before identity or PF changes, records each bounded denial probe separately, and retains readable sanitized diagnostics when cleanup fails. A cancelled job or an unreadable/missing cleanup artifact does not prove restoration or process absence.
+- [ ] On Darwin, verify the cleared kernel group list contains exactly the intended primary GID and real/effective IDs match before executing a probe. Directory membership is not the process credential list. Retain only fixed-label/errno/exit-code failure diagnostics; reject extra groups and ignore malformed diagnostic records without leaking child output.
+- [ ] Only after that preflight passes, explicitly select `native` for the same reviewed source. Missing preflight/build/cleanup evidence or a runner-communication failure is incomplete acceptance; do not relax isolation or silently retry a full build.
+
 ## Static analysis gates and legacy smarts
 
 See [the audit and coverage limits](docs/static-analysis-baselines.md). These
