@@ -13,8 +13,8 @@ import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContrac
 test('Timeline synchronization is registered and versioned on both capability manifests', () => {
 	assert.equal(createApiCapabilitiesManifest().features['api.mongodb-endpoint'], '1.1.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.mongodb-endpoint'].version, '1.1.0');
-	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.18.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.18.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.timeline'], '1.19.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.timeline'].version, '1.19.0');
 	assert.equal(typeof routeModules['v1/timeline'], 'function');
 	for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
 });
@@ -23,8 +23,8 @@ test('dedicated theme writers advertise durable history on both capability manif
 	const route = createApiCapabilitiesManifest().features;
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
 	for (const feature of ['api.themes', 'api.themes-delete']) {
-		assert.equal(route[feature], '1.1.0');
-		assert.equal(wellKnown[feature].version, '1.1.0');
+		assert.equal(route[feature], feature === 'api.themes' ? '1.2.0' : '1.1.0');
+		assert.equal(wellKnown[feature].version, feature === 'api.themes' ? '1.2.0' : '1.1.0');
 		assert.equal(capabilitySatisfies(route[feature], '1.1.0'), true);
 		for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
 	}
