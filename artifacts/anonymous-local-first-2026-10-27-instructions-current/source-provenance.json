@@ -1,0 +1,15 @@
+{
+  "sourceHead": "84058ca5e097efc4150fdc3ebba773488d6aedeb",
+  "sourceTestSha256": "288243209560726e6270c6461a75c07a4d9cf755a87762b5e62fec0dfa569e67",
+  "applicationSource": "current remix/.output; sanitized package regenerated with prepare-native.cjs",
+  "test": "complete existing accountLopuInstructions.browser.test.ts",
+  "strictPasteGateMs": 5000,
+  "diagnosticOnly": false,
+  "applicationPackage": {
+    "applicationTarSha256": "9a5619443544a01446e9add380217453b735cfa676a597782040a3c9e1ea6628",
+    "session": "b6415db7-c342-49a9-a39e-818e134f1a28",
+    "origin": "http://127.0.0.1:18724",
+    "source": "current sanitized package in task tmpfs"
+  },
+  "result": "2 tests passed; complete existing acceptance; paste2459ms"
+}

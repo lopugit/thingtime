@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Account pages wait for newly created saved Components, while lost-response retries use their frozen dependencies and preserve newer edits. Native instruction and vault mechanism evidence now separates passing runs from intermittent paste and large-editor OOM failures; signed-in offline suite reconciliation remains open. [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
 - **Codex (AI), 2026-10-27:** Add known-length ZIP64 Blob export and refuse the
   observed Node Blob 4 GiB crash boundary before reads or inflation. Preserve
   canonical validation, checksums, cancellation and consumer limits. Record

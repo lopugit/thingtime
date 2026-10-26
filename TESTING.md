@@ -15679,3 +15679,8 @@ Local results do not establish current-head CI or deployed acceptance.
 - Exercise the normal shared-copy/export/import controls in an isolated browser;
   retain desktop/mobile screenshots, exact source package identity and network
   boundary evidence. Skipped browser tests do not satisfy this check.
+
+- Account queue dependencies: create a page containing a saved Component nested in stored children. Refuse the new Component upload; unrelated writes must continue while the page remains local. Retry the Component and verify acknowledgment precedes page upload. Also lose a page response, add a newer local Component dependency, and verify the original immutable operation can recover before that newer edit waits; preserve local blocks and use the recovered remote revision. Focused coverage: `accountSync.test.ts`. Native queue replay acceptance remains separately required.
+- Native vault capacity: opt into `passwordCapacity.browser.test.ts` only in the isolated synthetic environment. Distinguish the passing native IndexedDB/synthetic-transport mechanisms from large-note/66 MiB UI OOM failures and injected quota rollback; a CDP override that does not reject a write is not quota-enforcement proof. Retain cleanup and exact package/source receipts.
+
+- Progress tracker filters: Remaining includes partial and todo rows; Completed includes only done rows. The static current-verification summary stays visible when filtering or searching, and empty search hides checklist sections without hiding that overview. Verify counts, keyboard/search controls and full-page scrolling at 1440/390/320 px.

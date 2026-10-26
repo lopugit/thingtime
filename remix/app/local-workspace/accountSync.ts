@@ -5,6 +5,7 @@ import type { AccountThemeSync } from './accountThemes';
 import { isTransferTheme } from '../utils/thingTransfer/theme';
 import { isLocalMediaAttachment, type LocalMediaAttachment } from './attachments';
 import { normalizePublicAttachment } from '../components/Attachments/attachmentUiCore';
+import { compositionReferences } from '../api/utils/actions/sharedCompositionCore';
 import { postThingReferences } from '../components/Feed/postThingReferences';
 import { accountReadRefusals, ACCOUNT_READ_COLLECTIONS, forgetAccountConversation } from './accountReadRevocation';
 import { LocalThings, type LocalThing, type ThingWrite, type LocalFileMutation } from './things';
@@ -382,7 +383,11 @@ export class AccountThingSync {
 					}
 					if (deleting && rows.some(other => other.id !== candidate.id && other.state !== 'synced' &&
 						[other.base?.folderId, other.base?.targetId, other.pending?.body.folderId, other.pending?.body.targetId].includes(candidate.id))) continue;
-					if (!deleting && [content.folderId, content.targetId, content.thingtime.includes('data') ? content.crystal.schemaId : null, ...((content.thingtime.includes('post') || content.thingtime.includes('comment')) ? postThingReferences(content.crystal.thing).map(ref => ref.id) : [])].some(id => id && rows.some(other => other.id === id && (!other.base || other.pending?.method === 'delete')))) continue;
+					// Resolve a lost-response retry's frozen dependencies before a newer
+					// edit can gate the next write. All forward dependencies use the same
+					// request snapshot, including placement, schema and linked Things.
+					const dependencyContent = candidate.pending ? candidate.pending.body as unknown as Pick<LocalThing, 'folderId' | 'targetId' | 'thingtime' | 'crystal'> : content;
+					if (!deleting && [dependencyContent.folderId, dependencyContent.targetId, dependencyContent.thingtime.includes('data') ? dependencyContent.crystal.schemaId : null, ...(dependencyContent.thingtime.includes('webpage') ? compositionReferences(dependencyContent.thingtime, dependencyContent.crystal).filter(ref => ref.kind === 'component').map(ref => ref.ref) : []), ...((dependencyContent.thingtime.includes('post') || dependencyContent.thingtime.includes('comment')) ? postThingReferences(dependencyContent.crystal.thing).map(ref => ref.id) : [])].some(id => id && rows.some(other => other.id === id && (!other.base || other.pending?.method === 'delete')))) continue;
 					if (candidate.deleted && !candidate.pending && content.thingtime.includes('folder') && (this.themes || this.algorithms)) {
 						try {
 							let destination=content.folderId || null; const seen=new Set<string>();

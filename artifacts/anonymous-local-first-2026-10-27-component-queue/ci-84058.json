@@ -1,0 +1,21 @@
+{
+  "observedAt": "2026-10-26T15:16:00.480580+00:00",
+  "results": [
+    {
+      "run": 40344284219,
+      "exitCode": 0,
+      "conclusion": "success",
+      "headSha": "84058ca5e097efc4150fdc3ebba773488d6aedeb",
+      "status": "completed",
+      "url": "https://github.com/lopugit/thingtime/actions/runs/40344284219"
+    },
+    {
+      "run": 40344284197,
+      "exitCode": 0,
+      "conclusion": "success",
+      "headSha": "84058ca5e097efc4150fdc3ebba773488d6aedeb",
+      "status": "completed",
+      "url": "https://github.com/lopugit/thingtime/actions/runs/40344284197"
+    }
+  ]
+}

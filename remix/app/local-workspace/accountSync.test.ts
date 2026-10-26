@@ -334,3 +334,80 @@ test('a post waits for linked device Things before attempting its account create
  assert.deepEqual(f.calls.map(call=>call.id),[data.id,post.id]);
  await f.db.close();
 });
+
+
+test('saved pages wait for acknowledged nested Components while unrelated account writes drain', async () => {
+ const f = setup();
+ let sequence = 0;
+ // The Component sorts LAST in IndexedDB, guaranteeing the page is considered
+ // before its dependency even though the Component was authored first.
+ const sync = new AccountThingSync(f.db, f.scope, f.lease, () => Date.now(), () => ++sequence === 1
+  ? 'ffffffff-ffff-4fff-8fff-ffffffffffff'
+  : `00000000-0000-4000-8000-${sequence.toString().padStart(12, '0')}`);
+ try {
+  const component = await sync.things.create({ thingtime: ['component'], crystal: { name: 'Offline control', componentKey: 'offline-control', version: 1, render: { tag: 'button', children: 'Local control' } } });
+  const page = await sync.things.create({ thingtime: ['webpage'], crystal: { name: 'Offline page', blocks: [
+   { id: 'outer', type: 'container', children: [{ id: 'inner', type: 'container', children: [{ id: 'control', type: 'component', component: component.id }] }] },
+   // Ordinary text containing an id is not a stored composition dependency.
+   { id: 'description', type: 'text', text: 'unrelated-id' }
+  ] } });
+  const unrelated = await sync.things.create({ thingtime: ['data'], crystal: { name: 'Independent edit' } });
+  const attempted: string[] = [];
+  await sync.sync({ ...f.transport, write: async op => {
+   attempted.push(op.id);
+   if (op.id === component.id) throw { status: 422 };
+   return f.transport.write(op, new AbortController().signal);
+  } });
+  assert.ok(attempted.includes(unrelated.id), 'An unavailable Component must not block independent content');
+  assert.ok(attempted.includes(component.id));
+  assert.ok(!attempted.includes(page.id), 'Never publish a page whose saved Component is still absent');
+  assert.equal((await sync.status()).find(row => row.id === page.id)?.state, 'pending');
+  assert.deepEqual((await sync.things.get(page.id)).crystal.blocks, page.crystal.blocks);
+  await sync.retry(component.id);
+  await sync.sync({ ...f.transport, write: async op => {
+   if (op.id === page.id) assert.ok(f.remote.has(component.id), 'Component acknowledgment precedes page publication');
+   return f.transport.write(op, new AbortController().signal);
+  } });
+  assert.ok(f.remote.has(page.id));
+  assert.ok((await sync.status()).every(row => row.state === 'synced'));
+ } finally { await f.db.close(); }
+});
+
+
+test('a frozen page retry recovers before a newer edit waits for its unavailable Component', async () => {
+ const f = setup();
+ let sequence = 0;
+ const sync = new AccountThingSync(f.db, f.scope, f.lease, () => Date.now(), () => ++sequence === 1
+  ? '00000000-0000-4000-8000-000000000001'
+  : `ffffffff-ffff-4fff-8fff-${sequence.toString().padStart(12, '0')}`);
+ try {
+  const page = await sync.things.create({ thingtime: ['webpage'], crystal: { name: 'Original page', blocks: [{ id: 'text', type: 'text', text: 'Original frozen content' }] } });
+  await sync.sync({ get: async () => { throw new Error('Readback unavailable'); }, write: async operation => {
+   await f.transport.write(operation, new AbortController().signal);
+   throw new Error('Write response lost');
+  } }, undefined, 1);
+  const frozen = structuredClone(f.calls[0]);
+  const acknowledgedVersion = f.remote.get(page.id)!.updatedAt;
+  const component = await sync.things.create({ thingtime: ['component'], crystal: { name: 'New offline control', componentKey: 'new-offline-control', version: 1, render: { tag: 'button', children: 'New control' } } });
+  const newerBlocks = [{ id: 'control', type: 'component', component: component.id }];
+  await sync.things.update({ id: page.id, crystal: { name: 'Newer local page', blocks: newerBlocks } });
+  await sync.retry(page.id);
+  const recovered = await sync.sync({ ...f.transport, write: async operation => {
+   if (operation.id === component.id) throw { status: 422 };
+   return f.transport.write(operation, new AbortController().signal);
+  } });
+  assert.equal(recovered.completed, 1, 'Recover the original request despite the newer unavailable dependency');
+  assert.deepEqual(f.calls[1], frozen, 'Replay exactly the immutable original payload and operation identity');
+  assert.equal(f.remote.get(page.id)?.crystal.name, 'Original page');
+  assert.equal((await sync.things.get(page.id)).crystal.name, 'Newer local page');
+  assert.deepEqual((await sync.things.get(page.id)).crystal.blocks, newerBlocks);
+  assert.equal((await sync.status()).find(row => row.id === page.id)?.state, 'pending');
+  assert.equal((await sync.status()).find(row => row.id === component.id)?.state, 'error');
+  await sync.retry(component.id);
+  await sync.sync(f.transport);
+  const finalPageWrite = f.calls.find(call => call.id === page.id && call.method === 'update');
+  assert.equal(finalPageWrite.body.expectedUpdatedAt, acknowledgedVersion);
+  assert.equal(f.remote.get(page.id)?.crystal.name, 'Newer local page');
+  assert.ok((await sync.status()).every(row => row.state === 'synced'));
+ } finally { await f.db.close(); }
+});

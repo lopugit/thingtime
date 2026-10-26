@@ -5449,3 +5449,40 @@ immutable frontend advertise export 1.18/import 1.15/content 1.18; the shared
 gateway still advertises export 1.15/import 1.11/content 1.17 and lacks the
 profile sync features. No shared LLM proxy change, manual deployment, merge or
 existing-account mutation is part of this checkpoint.
+
+## Component dependencies and bounded native follow-up — 27 October 2026
+
+Account pages now wait for newly created saved Components. Canonical traversal
+finds nested stored references while unrelated writes continue. Recovery of a
+lost response uses the frozen operation's dependencies; later local edits cannot
+block acknowledgment of that original operation. The focused 40-test run,
+independent review, sanitized client/server build and lint pass. TypeScript
+retains the same 91 normalized baseline diagnostics. Native queue acceptance for
+this increment remains separate. See the [queue checkpoint](../artifacts/anonymous-local-first-2026-10-27-component-queue/README.md).
+
+The complete instruction acceptance on `84058ca5` passed 2/2 tests, including a
+2,459 ms actual paste under the unchanged five-second gate, exact undo/redo,
+local save, offline reload and independent resumable readback. Earlier slow runs
+remain unexplained; neither this passing run nor the inconclusive defaultValue
+diagnostic establishes a performance fix. [Current native evidence](../artifacts/anonymous-local-first-2026-10-27-instructions-current/README.md).
+
+Native vault mechanisms now pass 205-page refresh/reopen, 257-partition discovery,
+cancellation, stale-pull fencing and injected-quota atomic rollback/retry. Large
+note and 66 MiB UI runs produced OOM events within the unchanged fixture limit;
+their cause and complete UI capacity remain unresolved. A CDP quota override did
+not prove enforcement. [Vault passes and failures](../artifacts/anonymous-local-first-2026-10-27-vault/README.md).
+
+Source audit confirmed anonymous suites and Component/Collection sources already
+use local execution. Signed-in offline bundled-suite installation is still a
+real gap: ordinary queued creates would duplicate uncached account definitions.
+The candidate was rejected; durable identity reconciliation and canonical
+server concurrency protection remain necessary. [Audit](../artifacts/anonymous-local-first-2026-10-27-account-suite-candidate/README.md).
+
+Source `84058ca5` passed Web CI and CodeQL and has a reachable exact-source
+frontend preview. Its shared gateway still lacks the newer transfer/profile
+contracts. Later branch checks, deployed functional and installed-device
+acceptance remain separate. The shared LLM proxy service is unchanged.
+
+The progress tracker now shows all 25 unfinished rows under Remaining and keeps
+the current-verification overview visible while filtering or searching. Native
+static-page checks cover counts, controls and full scrolling at 1440/390/320 px.

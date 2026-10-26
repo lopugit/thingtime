@@ -892,8 +892,13 @@ The native Actions list, inspector, full program composer and shared definition
 editor accept local content ownership. Views and caches are keyed by the full
 workspace partition. Definition drafts use the existing local draft adapter;
 anonymous edits do not require an account Timeline. Delegated clicks can run
-locally owned Actions, but cannot reach cloud install fallbacks. Automatic
-component/collection source gates and local suite installation still need work.
+locally owned Actions. Component and Collection sources use the same
+workspace-bound Action runner and become inert when that workspace retires;
+`sourceWorkspace.browser.test.ts` covers refresh and zero-request execution.
+Anonymous bundled-suite installation uses `installLocalSuite` and the shared
+materialization plan in one local transaction. Its source definitions remain
+editable. Signed-in suite installation is tracked separately because its
+existing server-install path still depends on network completion.
 
 Execution details are protected relational `action-run` children, capped at 50
 per Action and omitted from ordinary reads/lists, imports and portable exports.
