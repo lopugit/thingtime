@@ -36,6 +36,7 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Trusted Action/AI attribution and relational operation grouping | `app/api/utils/timeline/mutationContext.ts`, established by `actions/execute.ts`, `actions/firstPartyActionHost.ts` and `lopu/chatTools.ts`; not request-controlled |
 | Shared History modal and managed Timeline folder | `app/components/Timeline/TimelineHost.tsx` |
 | Account/database-qualified History links and Thing caches | `app/utils/dataPlane.ts`, `app/hooks/useDataPlane.ts`, `app/routes/thing.tsx`; root identity invalidation also handles database selection across tabs |
+| Explicit data-Thing presentation | `app/components/Thingtime/ThingView.tsx`, `ThingRenderComponent.tsx`; `renderComponent` points to an independently readable saved Component or embeds its canonical render definition. See [the authoring and access contract](posts-comments-and-feed.md#subspace-messages-and-embedded-things). |
 | Approved saved-theme content history, home transaction and retained deletion accounting | `app/timeline/themeContent.ts`, `app/api/utils/timeline/themeContent.ts`, dedicated `app/api/utils/themes/themes.ts` writer |
 
 ## Authorization helper
