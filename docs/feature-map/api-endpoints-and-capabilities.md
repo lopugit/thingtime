@@ -451,3 +451,28 @@ with separately editable children. `api.webpages-suites-install` 1.7.0 installs
 the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
+
+## Environment gateway and index readiness
+
+Environment API gateway ingress is negotiated through `api.environment-gateway`
+1.1.0 and `/.well-known/thingtime-capabilities.json`. Server deployments use
+the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by
+opt-in) with the `THINGTIME_MONGODB_CONNECTION_MODE` runtime override. Dedicated
+mode executes its own backend, advertises `gateway: null`, and refuses relay
+traffic; it does not imply an isolated database. See [the gateway runbook](../environment-api-gateway.md)
+for the audited environment mapping and pending activation evidence.
+
+`app/api/utils/deployment/environmentGateway.ts` owns bounded discovery,
+admission and pool draining; `server/utils/environmentGateway.ts` validates
+origin-preserving signed relays before the normal route authorization path.
+`server/middleware/environment-gateway.ts`, the SPA fallback and capability
+handler retain local discovery/static serving while routing data operations.
+`mongodb/indexLifecycle.ts` and `indexMaintenance.mts` coordinate durable index
+readiness without blocking read-only authentication. Existing admin migration
+status/run contracts and Lopu background-task contracts carry their deliberate
+compatible patch versions in both generated manifests.
+
+Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
+the built `test:environment-gateway:acceptance` runner. See
+[the gateway runbook](../environment-api-gateway.md) for server settings,
+environment partitioning and outstanding live rollout acceptance.
