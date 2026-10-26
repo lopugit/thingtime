@@ -1,5 +1,13 @@
 # TESTING.md — per-area manual test checklists
 
+## Offline native VM harness
+
+- [ ] Run the isolated SwiftPM host tests in `apple/OfflineNativeVM`; verify symlink/hardlink/shared ownership rejection, source mutation detection, exact manifest keys, raw block alignment, one-shot fresh preparation and bounded mock cancellation/kill/reap. No VM boots in this suite.
+- [ ] Follow [offline-native-vm.md](docs/offline-native-vm.md): independently review local restore metadata, fresh task identity/auxiliary/disk provenance and actual no-NIC configuration readback before any installation preflight. Imported VMs and caller readiness assertions never admit a start.
+- [ ] Mock `inspect-restore`: refuse aliases, detect mutation, create no files/VM, and retain only bounded fixed-domain/numeric Apple error chains. Exercise actual entitled read-only metadata separately; cached-image ZIP metadata or an older support receipt is not current VZ acceptance.
+- [ ] Keep installation, Setup Assistant, guest toolchain and run admission explicitly unavailable until implemented/reviewed. A `prepared-empty` receipt is not an installed or usable guest. Preserve consumed markers/artifacts on failure.
+- [ ] Before native acceptance, prove real cancellation/deadline VZ stop plus exact worker reap. Missing stop evidence/hardkill means teardown unknown; never mount/execute guest output or invent a disposal receipt.
+
 ## Hosted native compilation boundary
 
 - [ ] Validate the native listener with `actionlint`; keep its owner/main/repository admission, read-only permissions, and immutable protected-controller pin. Do not inherit secrets or check out candidate code in the listener.

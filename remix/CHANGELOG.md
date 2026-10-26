@@ -102,6 +102,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Add the offline native VM host harness preparation milestone: private task manifests, fresh Apple VM identity/disks, fixed no-NIC configuration, read-only restore diagnostics and mocked deadline/cleanup tests. Guest installation, toolchain readiness, VM launch and native acceptance remain gated. [Runbook](../docs/offline-native-vm.md). **Codex (AI)**
+
 - 2026-10-27: Admit the reviewed Darwin kernel-group verification fix and bounded trusted failure diagnostics for the native compile runner. Preserve default inert preflight, immutable pinning, network denial, and separate hosted/native acceptance gates. **Codex (AI)**
 
 - 2026-10-27: Pin the native compile listener to the independently reviewed process-lifecycle repair: verified numeric identity drops, bounded watchdog readiness, separate denial-probe deadlines, and readable failure evidence. Hosted preflight and full native acceptance remain open. **Codex (AI)**
