@@ -54,14 +54,14 @@ jobs:
         (github.ref == 'refs/heads/main' &&
          github.workflow_ref == 'lopugit/thingtime/.github/workflows/native-compile-listener.yml@refs/heads/main'))
     runs-on: macos-15
-    timeout-minutes: 65
+    timeout-minutes: ${{ inputs.mode == 'native' && 65 || 10 }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
     steps:
       - name: Check out admitted immutable controller source only
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: 4dddacc04ceb1c50762e42654f49ecc9585ec915 # H1: independently reviewed helper source
+          ref: 982ea2707ca82a26eb35e87fd237eb17208695e0 # H1: independently reviewed helper source
           path: trusted-controller
           persist-credentials: false
           sparse-checkout: |
@@ -99,7 +99,7 @@ jobs:
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
           MODE: ${{ inputs.mode }}
-          CONTROL_SHA: 4dddacc04ceb1c50762e42654f49ecc9585ec915 # H1, independent of caller/candidate
+          CONTROL_SHA: 982ea2707ca82a26eb35e87fd237eb17208695e0 # H1, independent of caller/candidate
         run: |
           set -euo pipefail
           test "$(git -C trusted-controller rev-parse HEAD)" = "$CONTROL_SHA"

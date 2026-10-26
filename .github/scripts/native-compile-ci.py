@@ -7,6 +7,7 @@ import os
 from pathlib import Path, PurePosixPath
 import platform
 import re
+import select
 import shutil
 import signal
 import subprocess
@@ -16,7 +17,7 @@ import tempfile
 import time
 
 DEADLINE_SECONDS = 45 * 60
-BOOTSTRAP_SECONDS = 120
+BOOTSTRAP_SECONDS = 180
 COMMAND_SECONDS = 15
 CLEANUP_SECONDS = 60
 LOCK_SECONDS = 10
@@ -114,6 +115,14 @@ def start_owned_command(args,kwargs):
     with (work/'cleanup.lock').open('r+') as lock:
         acquire_cleanup_lock(lock,time.monotonic()+LOCK_SECONDS)
         state=json.loads((work/'state.json').read_text())
+        watcher=state.get('watchdog_pid')
+        if watcher:
+            try:exited=os.waitpid(watcher,os.WNOHANG)[0] != 0
+            except ChildProcessError:exited=True
+            if exited:
+                (work/'watchdog-reaped').touch()
+                (work/'cleanup-started').touch()
+                raise RuntimeError('Watchdog exited; owned command admission closed')
         if ((work/'cleanup-started').exists() or (work/'cleaned').exists() or
                 state.get('watchdog_requested') or time.monotonic() >= state['watchdog_deadline']):
             raise RuntimeError('Owned command admission closed for cleanup/expired bootstrap')
@@ -157,6 +166,9 @@ def run(args,check=True,timeout=COMMAND_SECONDS,**kwargs):
         except subprocess.TimeoutExpired:
             for pipe in [process.stdout,process.stderr]:
                 if pipe:pipe.close()
+            # Pipe EOF is independent of direct-child exit: an escaped child
+            # can retain a writer. Still reap our own child under a bound.
+            process.wait(timeout=5)
         raise
     finally:
         if GROUP_REGISTRAR:
@@ -240,6 +252,54 @@ def acquire_cleanup_lock(lock, deadline):
             time.sleep(.1)
 
 
+def process_inventory(text):
+    """Allowlisted process metadata only; zombies never count as absence."""
+    rows=[]
+    for line in text.splitlines():
+        fields=line.strip().split(None,5)
+        if len(fields)!=6 or not all(v.isdecimal() for v in fields[:4]):
+            raise RuntimeError('Invalid process inventory; absence unproven')
+        pid,ppid,uid,pgid,status,executable=fields
+        rows.append({'pid':int(pid),'parentPid':int(ppid),'uid':int(uid),
+                     'groupId':int(pgid),'state':status,'executable':Path(executable).name})
+    return rows
+
+
+def record_remaining(work,state,command):
+    rows=process_inventory(command(['/bin/ps','-axo','pid=,ppid=,uid=,pgid=,stat=,comm=']).stdout)
+    selected=[row for row in rows if row['uid']==state['uid'] or row['groupId'] in state.get('owned_groups',[])]
+    (Path(state['report'])/'remaining-processes.json').write_text(json.dumps(selected)+'\n')
+    return selected
+
+
+def detach_watchdog_io(report,preserve=()):
+    # Fork/setsid alone leaves the runner job's pipe writers inherited.
+    # This trusted root log remains bounded to phase/error labels, no args.
+    descriptor=os.open(str(Path(report)/'watchdog.log'),os.O_WRONLY|os.O_CREAT|os.O_APPEND,0o600)
+    null=os.open('/dev/null',os.O_RDONLY)
+    os.dup2(null,0)
+    os.dup2(descriptor,1)
+    os.dup2(descriptor,2)
+    os.close(null)
+    os.close(descriptor)
+    lower=3
+    for keep in sorted(fd for fd in preserve if fd>=3):
+        os.closerange(lower,keep)
+        lower=keep+1
+    os.closerange(lower,max(65536,os.sysconf('SC_OPEN_MAX')))
+
+
+def drop_identity(uid,gid,args):
+    if os.geteuid()!=0 or uid<=0 or gid<=0 or not args:
+        raise RuntimeError('Trusted identity drop requires root and nonroot numeric identity')
+    os.setgroups([])
+    os.setgid(gid)
+    os.setuid(uid)
+    if os.getuid()!=uid or os.geteuid()!=uid or os.getgid()!=gid or os.getegid()!=gid or os.getgroups():
+        raise RuntimeError('Identity drop verification failed')
+    os.execv(args[0],args)
+
+
 def cleanup(work,watchdog_parent=None):
     """Bounded cleanup; never restore networking with isolated descendants alive."""
     deadline = time.monotonic()+CLEANUP_SECONDS
@@ -272,7 +332,8 @@ def cleanup(work,watchdog_parent=None):
                     os.killpg(group,0)
                 except ProcessLookupError:
                     break
-                if time.monotonic() >= deadline:
+                if deadline-time.monotonic() < 3:
+                    record_remaining(work,state,command)
                     raise RuntimeError('Owned probe group remains; network stays denied')
                 time.sleep(.1)
         phase(report,'owned-probe-groups-gone')
@@ -284,7 +345,8 @@ def cleanup(work,watchdog_parent=None):
                     break
                 if status != 0:
                     raise RuntimeError('Cannot verify isolated descendant absence; network stays denied')
-                if deadline-time.monotonic() < 1:
+                if deadline-time.monotonic() < 3:
+                    record_remaining(work,state,command)
                     raise RuntimeError('Build descendants remain; network stays denied')
                 time.sleep(.1)
         phase(report,'isolated-descendants-gone')
@@ -325,16 +387,47 @@ def arm_native(work,save_state,gates_passed):
         save_state(watchdog_deadline=native_deadline('native',gates_passed,now))
 
 
+def publish_watchdog_evidence(work):
+    """Readable sanitized snapshot; active root-owned log stays protected."""
+    state=json.loads((work/'state.json').read_text())
+    report=Path(state['report'])
+    labels=[]
+    log=work/'watchdog.log'
+    if log.exists():
+        with log.open() as source:
+            for line in source:
+                match=re.fullmatch(r'native-compile phase=([a-z0-9-]+)\n?',line)
+                if match:labels.append(match.group(1))
+    evidence={'watchdogPhases':labels,'cleanupComplete':(work/'cleaned').exists(),
+              'policyRestored':True if (work/'cleaned').exists() else None,
+              'startupFailed':(work/'watchdog-startup-failed').exists()}
+    target=report/'watchdog-evidence.json'
+    temporary=report/f'.watchdog-evidence-{os.getpid()}.new'
+    temporary.write_text(json.dumps(evidence)+'\n')
+    temporary.chmod(0o444)
+    temporary.replace(target)  # Root remains owner; runner can read, never modify.
+
+
 def start_watchdog(work):
     global GROUP_REGISTRAR,COMMAND_CONTEXT
     parent=os.getpid()
-    child=os.fork()
+    ready_read,ready_write=os.pipe()
+    try:child=os.fork()
+    except BaseException:
+        os.close(ready_read);os.close(ready_write)
+        raise
     if child == 0:
         GROUP_REGISTRAR=None
         COMMAND_CONTEXT=None
-        os.setsid()
-        while True:
-            try:
+        ready=False
+        try:
+            os.close(ready_read)
+            os.setsid()
+            detach_watchdog_io(work,preserve=(ready_write,))
+            os.write(ready_write,b'1')
+            os.close(ready_write)
+            ready=True
+            while True:
                 state=json.loads((work/'state.json').read_text())
                 try:
                     os.kill(parent,0)
@@ -346,11 +439,43 @@ def start_watchdog(work):
                     phase(Path(state['report']),'watchdog-cleanup-triggered')
                     if cleanup(work,watchdog_parent=parent):os._exit(0)
                 time.sleep(1)
-            except BaseException:
-                # A broken watchdog cannot leave future native launches open.
+        except BaseException:
+            # Startup failures cannot silently leave command admission open.
+            try:
                 (work/'cleanup-started').touch()
+                if not ready:(work/'watchdog-startup-failed').touch()
+                publish_watchdog_evidence(work)
+            finally:
+                try:os.close(ready_write)
+                except OSError:pass
                 os._exit(1)
-    return child
+    os.close(ready_write)
+    reaped=False
+    try:
+        available=select.select([ready_read],[],[],5)[0]
+        if not available or os.read(ready_read,1)!=b'1':
+            raise RuntimeError('Watchdog failed bounded readiness gate before policy mutation')
+        if os.waitpid(child,os.WNOHANG)[0]!=0:
+            reaped=True
+            raise RuntimeError('Watchdog exited before readiness admission')
+        return child
+    except BaseException:
+        (work/'cleanup-started').touch()
+        (work/'watchdog-startup-failed').touch()
+        if not reaped:
+            try:os.kill(child,signal.SIGKILL)
+            except ProcessLookupError:pass
+        until=time.monotonic()+5
+        while not reaped:
+            try:
+                if os.waitpid(child,os.WNOHANG)[0]:break
+            except ChildProcessError:break
+            if time.monotonic()>=until:raise TimeoutError('Watchdog startup reap deadline exhausted')
+            time.sleep(.05)
+        publish_watchdog_evidence(work)
+        raise
+    finally:
+        os.close(ready_read)
 BASELINE = r'''
 import json, socket
 results=[]
@@ -371,30 +496,27 @@ print(json.dumps({'runnerPositiveControls':results,'positiveUdpDns':True}))
 
 PROBE = r'''
 import json, os, socket, subprocess, sys
-expected_uid = int(sys.argv[1])
+expected_uid = int(sys.argv[1]); part=sys.argv[2]
 assert os.geteuid() == expected_uid
-assert subprocess.check_output(['/usr/bin/id','-u'],text=True,timeout=5).strip() == str(expected_uid)
-# The identity has no administrative group or passwordless sudo authority.
-if expected_uid != 0:
+if part == 'authority':
+    assert expected_uid != 0 and not os.getgroups()
     assert subprocess.run(['/usr/bin/sudo','-n','/usr/bin/true'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,timeout=5).returncode != 0
-results = []
-for family, host in [(socket.AF_INET, '1.1.1.1'), (socket.AF_INET6, '2606:4700:4700::1111')]:
-    s=socket.socket(family, socket.SOCK_STREAM); s.settimeout(3)
-    try:
-        s.connect((host,443)); raise AssertionError('Outbound TCP escaped PF')
-    except OSError as e: results.append({'family':family,'tcpDenied':True,'errno':e.errno})
-    finally: s.close()
-# A complete DNS question for example.com; bypasses resolver/proxy configuration.
-q=bytes.fromhex('123401000001000000000000076578616d706c6503636f6d0000010001')
-s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.settimeout(3)
-try:
-    s.sendto(q,('1.1.1.1',53)); s.recvfrom(4096); raise AssertionError('Outbound UDP/DNS escaped PF')
-except OSError as e: results.append({'udpDnsDenied':True,'errno':e.errno})
-finally: s.close()
-# Child sandbox creation must work, with the same denied network policy.
-if len(sys.argv) < 3:
+elif part == 'sandbox':
     subprocess.run(['/usr/bin/sandbox-exec','-p','(version 1)(allow default)', '/usr/bin/true'],check=True,timeout=5)
-print(json.dumps({'uid':os.geteuid(),'probes':results,'childSandbox':'passed'}))
+elif part in ('tcp4','tcp6','udp'):
+    family=socket.AF_INET6 if part == 'tcp6' else socket.AF_INET
+    host='2606:4700:4700::1111' if part == 'tcp6' else '1.1.1.1'
+    s=socket.socket(family,socket.SOCK_DGRAM if part=='udp' else socket.SOCK_STREAM);s.settimeout(3)
+    try:
+        if part == 'udp':
+            q=bytes.fromhex('123401000001000000000000076578616d706c6503636f6d0000010001')
+            s.sendto(q,(host,53));s.recvfrom(4096)
+        else:s.connect((host,443))
+        raise AssertionError('Outbound subprobe escaped PF')
+    except OSError:pass
+    finally:s.close()
+else:raise ValueError('Unknown trusted subprobe')
+print(json.dumps({'uid':os.geteuid(),'subprobe':part,'passed':True}),flush=True)
 '''
 
 CONTROL_PROBE = r'''
@@ -449,6 +571,7 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
     # Before any mutation, verify the actual transport daemons, not just shell UID.
     report.mkdir(mode=0o755)
     daemons=admit_runner(runner_uid,report,expected_sha,control_sha,mode)
+    runner_gid=int(run(['/usr/bin/id','-g',runner_user],capture_output=True).stdout.strip())
     work=Path(tempfile.mkdtemp(prefix='thingtime-native-control-',dir='/private/tmp'))
     work.chmod(0o755)
     user=f'_ttnative{os.getpid()}'
@@ -490,6 +613,7 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
         temporary.replace(work/'state.json')
     save_state()
     watchdog=start_watchdog(work)
+    save_state(watchdog_pid=watchdog)
     def register_group(operation,pid):
         groups=list(state['owned_groups'])
         if operation == 'add':groups.append(pid)
@@ -501,10 +625,13 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
         raise RuntimeError(f'Native compile interrupted by signal {signum}')
     signal.signal(signal.SIGTERM,terminated)
     signal.signal(signal.SIGINT,terminated)
+    def as_uid(target_uid,target_gid,command,environment,**kwargs):
+        return run([PYTHON,'-I','-S',str(trusted_helper),'drop',str(target_uid),str(target_gid),
+                    *environment,*command],**kwargs)
     def as_runner(command,**kwargs):
-        return run(['/usr/bin/sudo','-n','-u',runner_user,'/usr/bin/env','-i',f'PATH={PATH}',*command],**kwargs)
+        return as_uid(runner_uid,runner_gid,command,['/usr/bin/env','-i',f'PATH={PATH}'],**kwargs)
     def as_build(command,**kwargs):
-        return run(['/usr/bin/sudo','-n','-u',user,*build_environment(home,user,developer),*command],**kwargs)
+        return as_uid(uid,uid,command,build_environment(home,user,developer),**kwargs)
     provenance={'sourceSha':expected_sha,'controllerSha':control_sha,'mode':mode,'archiveSha256':digest,
                 'signedDeviceAcceptance':False,'result':'incomplete','candidateExtracted':False,'candidateExecuted':False,'cleanupComplete':None,'policyRestored':None}
     try:
@@ -523,6 +650,9 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
         runner_home.chmod(0o700)
         baseline=as_runner([PYTHON,'-I','-S',str(work/'baseline.py')],capture_output=True,timeout=25)
         (report/'positive-controls.json').write_text(baseline.stdout)
+        phase(report,'authority-probe-started-before-policy')
+        as_build([PYTHON,'-I','-S',str(work/'probe.py'),str(uid),'authority'],capture_output=True,timeout=12)
+        phase(report,'authority-probe-passed-before-policy')
         phase(report,'before-policy')
         run(['/sbin/pfctl','-n','-f',str(work/'pf.conf')],capture_output=True)
         enabled=run(['/sbin/pfctl','-E'],capture_output=True)
@@ -547,18 +677,22 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
                 # Ordinary process timing, not another model/observer. Policy
                 # stays loaded during this short bounded continuity interval.
                 time.sleep(5)
-        denied=as_build([PYTHON,'-I','-S',str(work/'probe.py'),str(uid)],capture_output=True,timeout=25)
-        (report/'isolation.json').write_text(denied.stdout)
-        child=as_build(['/usr/bin/sandbox-exec','-p','(version 1)(allow default)',PYTHON,'-I','-S',
-                        str(work/'probe.py'),str(uid),'child'],capture_output=True,timeout=25)
-        (report/'child-isolation.json').write_text(child.stdout)
-        root_denied=run([PYTHON,'-I','-S',str(work/'probe.py'),'0','child'],capture_output=True,timeout=20)
-        (report/'root-isolation.json').write_text(root_denied.stdout)
+        def subprobes(label,target_uid,invoke,child=False):
+            results=[]
+            for part in (['tcp4','tcp6','udp'] if label in ('root','broker') else ['tcp4','tcp6','udp','sandbox']):
+                phase(report,f'{label}-{part}-started')
+                command=[PYTHON,'-I','-S',str(work/'probe.py'),str(target_uid),part]
+                if child:command=['/usr/bin/sandbox-exec','-p','(version 1)(allow default)',*command]
+                result=invoke(command,capture_output=True,timeout=12)
+                results.append(json.loads(result.stdout))
+                phase(report,f'{label}-{part}-passed')
+            (report/f'{label}-isolation.json').write_text(json.dumps(results)+'\n')
+        subprobes('isolated',uid,as_build)
+        subprobes('child',uid,as_build,child=True)
+        subprobes('root',0,run)
         for broker_uid in sorted({row['uid'] for row in daemons if row['executable']=='mDNSResponder'}-{0}):
-            broker=run(['/usr/bin/sudo','-n','-u',f'#{broker_uid}','/usr/bin/env','-i',f'PATH={PATH}',
-                        PYTHON,'-I','-S',str(work/'probe.py'),str(broker_uid),'child'],
-                       capture_output=True,timeout=20)
-            (report/f'dns-broker-{broker_uid}-isolation.json').write_text(broker.stdout)
+            subprobes('broker',broker_uid,lambda command,**kwargs:as_uid(broker_uid,broker_uid,command,
+                       ['/usr/bin/env','-i',f'PATH={PATH}'],**kwargs))
         phase(report,'all-control-and-isolation-gates-passed')
         if mode == 'preflight':
             phase(report,'inert-watchdog-cleanup-requested')
@@ -592,22 +726,31 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
         try:
             (report/'result.json').write_text(json.dumps(provenance,indent=2)+'\n')
         finally:
-            cleanup(work)
+            try:
+                cleanup(work)
+            finally:
+                publish_watchdog_evidence(work)
         provenance.update(cleanupComplete=True,policyRestored=True)
         (report/'result.json').write_text(json.dumps(provenance,indent=2)+'\n')
-        try:os.kill(watchdog,signal.SIGKILL)
-        except ProcessLookupError:pass
-        reap_until=time.monotonic()+5
-        while os.waitpid(watchdog,os.WNOHANG)[0] == 0:
-            if time.monotonic() >= reap_until:
-                raise TimeoutError('Watchdog reap deadline exhausted')
-            time.sleep(.1)
+        if not (work/'watchdog-reaped').exists():
+            try:already_reaped=os.waitpid(watchdog,os.WNOHANG)[0] != 0
+            except ChildProcessError:already_reaped=True
+            if not already_reaped:
+                try:os.kill(watchdog,signal.SIGKILL)
+                except ProcessLookupError:pass
+                reap_until=time.monotonic()+5
+                while os.waitpid(watchdog,os.WNOHANG)[0] == 0:
+                    if time.monotonic() >= reap_until:
+                        raise TimeoutError('Watchdog reap deadline exhausted')
+                    time.sleep(.1)
         run(['/usr/sbin/chown','-R',f'{runner_uid}:20',str(report)])
         run(['/bin/rm','-rf','--',str(work)])
 
 
 def main():
-    if len(sys.argv) >= 4 and sys.argv[1] == 'spawn':
+    if len(sys.argv) >= 6 and sys.argv[1] == 'drop':
+        drop_identity(int(sys.argv[2]),int(sys.argv[3]),sys.argv[4:])
+    elif len(sys.argv) >= 4 and sys.argv[1] == 'spawn':
         if os.geteuid() != 0:raise RuntimeError('Trusted command gate requires root supervisor')
         gate=int(sys.argv[2])
         allowed=os.read(gate,1) == b'1'

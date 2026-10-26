@@ -326,3 +326,20 @@ pre-queued with no jobs, logs, or cancellable run graph.
   for a broker exemption or native retry. Preflight success does not establish
   authenticated long-poll, DNS expiry, parent-loss/cancellation, or compilation.
   Native mode requires its separate explicit selection and later acceptance.
+
+- Native probe lifecycle regression: verify numeric credential drop clears
+  supplementary groups and verifies real/effective UID/GID before exec, each
+  network/sandbox subprobe has its own marker and deadline, and only the
+  pre-policy authority check invokes sudo. Capture stuck process state metadata
+  without treating zombies as absence. Use owned fixture PIDs only locally.
+- Verify a forked watchdog fixture closes inherited capture pipes while alive;
+  command timeouts must reap their direct child even when another writer holds
+  a pipe. Hosted preflight must finish or fail within the 10-minute job cap,
+  upload its sanitized evidence after verified restoration, and never download
+  candidate source. No native retry before successful hosted preflight.
+
+- Watchdog setup must fail closed on setsid/descriptor failure, no ready signal
+  or child death before admission; exercise a real nonprivileged fixture
+  readiness pipe, and kill/reap only its exact child. Each command admission
+  rejects a dead watcher. On cleanup failure, sanitized watchdog evidence stays
+  readable while the protected active log is outside all uploaded artifacts.
