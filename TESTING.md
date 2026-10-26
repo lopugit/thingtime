@@ -3384,13 +3384,35 @@ email whose link points at the attacker.
 
 ## Feed thing rendering (`remix/app/components/Thingtime/ThingView.tsx`)
 
+- [ ] Human-facing data Things carry `renderComponent: { id: <saved Component Thing ID> }`
+      or an embedded Component definition, for example
+      `renderComponent: { render: { tag: "p", children: ["{text}"] } }`.
+      Exact-ID readback preserves the declaration and content; the Component
+      binds the Thing's data and renders by default. An explicit declaration
+      overrides every legacy kind/type renderer. Null, malformed, inaccessible,
+      deleted, or non-Component references show an unavailable state without
+      silently selecting a renderer from `type` or `kind`.
+- [ ] Switch rendered/data views and reload; inspect the original fields only
+      on explicit request. Change account, Character or data plane while a
+      Component fetch is pending; no previous viewer's renderer appears. Revoke
+      Component access and refocus/reload; the renderer becomes unavailable.
+      Component sources, Actions and native controls never execute through this
+      read-only display path; text bindings remain escaped.
+- [ ] Inside editable subspace layouts, click and keyboard-activate the
+      rendered/data toggle and ordinary nested controls. The surrounding
+      transient Action host handles only its own controls; it must not swallow
+      native button events or intercept a nested host's Action.
+- [ ] Toggle the data inspector, switch Posts/Messages and resize desktop →
+      mobile → desktop → mobile. Hidden content containers must not retain
+      horizontal scroll offsets that shift controls outside the viewport;
+      check element bounds as well as document overflow, then scroll to bottom.
 - [ ] A thingtime post renders its thing as the NATIVE Thingtime tree in view
       mode — right-click opens the thing context menu, Toggle Edit Mode makes
       values editable (numbers get steppers, booleans a switch, Editor.js
       docs the block editor), and edits stay LOCAL: reloading the feed
       restores the server value, and neither the viewer's persisted
       thingtime blob nor the composer's tmp draft branch is touched.
-- [ ] A thing that resolves a kind renderer (a `render:` prop naming a kind,
+- [ ] A legacy Thing without `renderComponent` that resolves a kind renderer (a `render:` prop naming a kind,
       an explicit kind, or a structural match — in that priority order)
       shows the RENDERED form by default, with a small corner 🌀 icon back
       to the Thingtime view and ✨ back again; things resolving no renderer
@@ -3508,7 +3530,12 @@ email whose link points at the attacker.
 - [ ] Expand all comments shows loaded post comments and replies; turn it off, reload, navigate to another subspace and switch accounts to verify saved preference isolation without unbounded auto-pagination.
 - [ ] Pending, banned, removed and former members cannot read/send linked messages, see previews, or download message media; private changes and subspace deletion revoke every entry point.
 - [ ] Moderators add, move and remove accessible Things in the sidebar and above-feed regions; non-moderators are refused. Reload and verify order, pagination and placement between composer and first post. Revoke a referenced Thing and confirm it is unavailable without exposing hidden-link keys or granting access.
-- [ ] In both sidebar and above-feed placements, verify a generic Thing renders an explicit accessible saved Component pointer and an embedded Component definition against its live editable content on desktop and mobile after reload. Missing, inaccessible, invalid and wrong-kind renderers show an accurate unavailable state with data hidden until **Inspect data** is selected; Component/Webpage Things keep their canonical renderers, and shared/foreign render components cannot gain owner Action authority.
+- [ ] Embed data Things with both saved and embedded render Components above the
+      feed and in the sidebar. At desktop and 390px mobile widths, verify exact
+      text, whitespace, long words/URLs, escaped markup, full-page scrolling,
+      data/render toggles and reload without raw `type`/`text` fields in the
+      default presentation or horizontal overflow. Edit the Component's nested
+      text block in Builder independently, save/reload and verify both placements.
 - [ ] Select nested view/embed control labels independently in Builder, edit/save/reload, and confirm the real controls still act on the correct subspace.
 
 
@@ -10231,6 +10258,31 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 
 ## Password manager and native AutoFill
+
+- [ ] When adding optional password fields, run `pnpm --dir remix run test:schemas`
+  as well as the password tests. Keep the builtin schema projection pin current;
+  verify icon source choices and optional fields survive the schema write gate.
+
+- [ ] Generator: select each preset, adjust length/classes/symbols/exclusions,
+  and target a second password field. Invalid settings must explain the issue;
+  Generate fills only the selected masked draft. Save/readback/reload retains it.
+  Repeated draft edits must leave exactly one generator and attachment section;
+  sibling component keys cannot collide and retain stale controls.
+  Cancel/close or change owner/target during generation; no late result crosses
+  into another entry. Layout edits save/reload without storing generated values.
+- [ ] Icons: add an anonymous CORS-enabled HTTPS URL, blocked redirect and broken
+  URL; verify success/fallback without credential/referrer leakage. Upload an
+  encrypted icon, save/reopen/list, remove its reference, export/restore, and retry
+  after a lost response. Restored IDs must bind to the new entry's owned file.
+  A revoked session must not receive list icons or decrypted values.
+- [ ] Passkeys: expand/collapse the guide with an unfinished entry; it preserves
+  the draft. Web-only and native connection states are accurate. On a signed
+  installed device, register from a real site's security settings, verify the
+  vault record and sign in using that passkey. Private keys never enter the web
+  guide or diagnostic output; packaging checks alone do not satisfy this step.
+- [ ] At desktop and 390px, scroll top to bottom, open generator/preset controls
+  and passkey guide, inspect error/loading states, and edit nested text/control/
+  icon blocks separately in Builder. Save/reload preserves both layout and behavior.
 
 - [ ] Search regression: create a title match older than 50 nonmatching entries.
   Search must find it without Load more; case and literal regex punctuation work.

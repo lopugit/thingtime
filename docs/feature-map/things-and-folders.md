@@ -36,6 +36,7 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Trusted Action/AI attribution and relational operation grouping | `app/api/utils/timeline/mutationContext.ts`, established by `actions/execute.ts`, `actions/firstPartyActionHost.ts` and `lopu/chatTools.ts`; not request-controlled |
 | Shared History modal and managed Timeline folder | `app/components/Timeline/TimelineHost.tsx` |
 | Account/database-qualified History links and Thing caches | `app/utils/dataPlane.ts`, `app/hooks/useDataPlane.ts`, `app/routes/thing.tsx`; root identity invalidation also handles database selection across tabs |
+| Explicit data-Thing presentation | `app/components/Thingtime/ThingView.tsx`, `ThingRenderComponent.tsx`; `renderComponent` points to an independently readable saved Component or embeds its canonical render definition. See [the authoring and access contract](posts-comments-and-feed.md#subspace-messages-and-embedded-things). |
 | Approved saved-theme content history, home transaction and retained deletion accounting | `app/timeline/themeContent.ts`, `app/api/utils/timeline/themeContent.ts`, dedicated `app/api/utils/themes/themes.ts` writer |
 
 ## Authorization helper
@@ -317,7 +318,15 @@ cover this boundary; existing account drafts and import permissions are unchange
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
+`PasswordGenerator.tsx`, `PasswordIcon.tsx` and `PasswordPasskeySetup.tsx` compose
+editable settings blocks; secret output stays in the controlled entry draft.
+`passwords/generator.ts` owns WebCrypto/preset validation. `passwords/icons.ts`,
+`icons.client.ts` and `api/utils/passwords/icons.ts` own descriptors, anonymous
+image loading and the separately sealed list projection. `test:passwords` covers
+these boundaries; `scripts/password-tools.browser.html` is an isolated synthetic
+UI fixture, not native-provider acceptance.
+
+See [password-manager.md](../password-manager.md). `api.passwords` 1.3.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and

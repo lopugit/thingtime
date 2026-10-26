@@ -9,7 +9,7 @@ through global Thing state, local caches, editor history or request diagnostics.
 
 ## Storage and access
 
-`api.passwords` 1.2.0 uses the home data plane. GET returns 50 metadata records
+`api.passwords` 1.3.0 uses the home data plane. GET returns 50 metadata records
 at a time. Optional `q` searches all owned title metadata before pagination using
 a case-insensitive literal substring (outer whitespace is ignored). Keep the same
 query on subsequent pages; restart without a cursor when it changes. Field values
@@ -59,8 +59,8 @@ without screen capture, upload a screenshot instead.
 
 A `FIDO:` passkey QR is a live cross-device ceremony, not a transferable signing
 key. Importing its image does not register a passkey. Native passkey creation
-is a separate signed-provider release. A passkey reference can record the
-location of a key held elsewhere.
+is implemented by the signed Apple credential provider described below. A passkey
+reference can record the location of a key held elsewhere.
 
 Import/export supports 1Password 1PUX v3 and CSV, Chrome CSV and Apple Passwords
 CSV. Imports preview every entry using ranged ZIP reads and a streaming JSON/CSV
@@ -104,13 +104,57 @@ its mobile Credential Exchange flow. Thingtime's native passkey fields survive
 its own backups, but other managers may treat them as ordinary custom data.
 All export files contain unencrypted secrets; the UI requires acknowledgement.
 
+## Password generator and entry icons
+
+The entry editor offers an editable password generator for each password field.
+Length, uppercase, lowercase, digits, allowed symbols, ambiguous characters and
+explicit exclusions are configurable. WebCrypto supplies randomness with unbiased
+index selection; required classes are shuffled. The default is 20 characters.
+Generated values go directly to the selected masked draft field and are persisted
+only by Save entry. They do not enter Builder scope, layout data, editor history,
+local storage or request diagnostics. Non-secret generator preferences are scoped
+to the account and origin. Closing the entry or changing its owner/target cancels
+pending generation.
+
+Apple Account, GitHub and Google presets show source-linked guidance. Strong and
+Microsoft (recommended) are recommendations, not assertions of platform policy.
+Presets remain editable and cannot guarantee acceptance by a service's breached-
+password, account-specific or future policy checks. The generator, icon controls
+and passkey guide are composed from individually editable settings blocks.
+
+An entry can use an uploaded image or an explicit HTTPS image URL. Website favicon
+loading is opt-in. Remote images are fetched anonymously in the browser with no
+referrer and no redirects; the image host must permit anonymous CORS. A failed or
+unsupported image shows a generic icon and the upload alternative. There is no
+server proxy or third-party favicon lookup. Uploads use the existing encrypted
+password attachment lifecycle and require a saved entry and private-upload access.
+Icons appear in the list and editor. Removing an icon clears its presentation
+reference without deleting the underlying attachment.
+
+The full icon descriptor remains in the encrypted entry. A separate authenticated
+`password-icon` envelope supplies presentation metadata to a bounded, owner-scoped
+list query without decrypting or projecting credential values. Missing or corrupt
+legacy icon envelopes fall back safely. Account/session fences apply before the
+list is returned. Backup restoration maps an icon's original attachment ID to its
+new owner-local file ID and preserves retry-safe write identities.
+
 ## Native Password AutoFill
 
-Native iOS/macOS password, passkey and OTP providers are prepared separately in
-[PR #996](https://github.com/lopugit/thingtime/pull/996). Their release requires
-Apple provisioning and signed-device validation. This web release includes the
-private catalog API and optional bridge negotiation, but does not change native
-packaging or make Thingtime selectable in OS AutoFill settings by itself.
+Native provider code is present in `apple/Passwords` and
+`apple/PasswordProvider`; desktop/iOS bridges negotiate the installed provider.
+The provider handles a website-initiated WebAuthn registration, checks the relying
+party and supported algorithm, creates an ES256 key, saves it through the encrypted
+vault, verifies readback and completes the operating-system request. The web
+password editor cannot manufacture a passkey for an arbitrary website: open that
+site's security settings and choose Thingtime in the operating-system passkey flow.
+Required device authentication and user presence remain part of that flow.
+
+The inline Passkeys guide explains setup, preserves an unfinished entry, and offers
+the existing native connection action only when that bridge is available. It does
+not alter native signing, provisioning or OS AutoFill settings. A signed provider,
+OS enablement and a real registration followed by sign-in are separate acceptance
+requirements; build or package verification alone does not prove them. Thingtime's
+own account-login passkeys are a separate feature from this credential provider.
 
 ## Validation and setup
 
@@ -130,3 +174,11 @@ in an isolated localhost deployment, then configure the first username in
 It uses real session/admin/password/upload endpoints and creates a synthetic
 `/tmp/thingtime-password-import-qa/all-data.1pux` for browser round-trip checks.
 Never point this test at production or supply personal credentials.
+
+The synthetic UI fixture at `scripts/password-tools.browser.html` mounts the real
+password components with a fail-closed synthetic transport. Its Run regression
+control exercises generator presets, target selection, masked values, save/reload,
+icons and draft preservation. Use a task-owned browser and enforced network
+isolation, inspect desktop and 390px layouts, and edit/save representative nested
+Builder blocks. This fixture is UI regression evidence, not live vault or native
+passkey acceptance. Run the real HTTP verifier separately.

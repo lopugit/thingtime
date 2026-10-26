@@ -19,7 +19,7 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // a new registry field should appear (except a reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   file: ['name', 'trashed', 'content'],
-  'password-manager-entry': ['title', 'passwordType', 'fields'],
+  'password-manager-entry': ['title', 'passwordType', 'icon', 'fields'],
   draft: [], // Private snapshots never enter the public schema projection.
   "timeline-snapshot-part": [],
   "timeline-branch": ["name"],
@@ -344,4 +344,23 @@ test('zero-field marker schemas are valid at the top level, but childless object
     fields: [{ name: 'shape', type: 'object', children: [] }]
   });
   assert.equal(childless.ok, false);
+});
+
+
+test('password icon projection remains optional and retains its typed source choices', () => {
+  const projected = projectBuiltinSchemaCrystal(crystalSchemas.find(schema => schema.id === 'password-manager-entry')!);
+  const validated = validateThingtimeCrystal(['schema'], projected);
+  assert.equal(validated.ok, true);
+  if (!validated.ok) return;
+  const icon = (validated.crystal.fields as Array<Record<string, any>>).find(field => field.name === 'icon')!;
+  assert.equal(icon.type, 'object');
+  assert.notEqual(icon.required, true, 'existing entries do not need an icon');
+  assert.deepEqual(icon.children.map((field: { name: string }) => field.name), ['kind', 'url', 'fileId']);
+  const fields = Object.fromEntries(icon.children.map((field: { name: string }) => [field.name, field]));
+  assert.equal(fields.kind.required, true);
+  assert.deepEqual(fields.kind.values, ['url', 'attachment']);
+  for (const name of ['url', 'fileId']) {
+    assert.equal(fields[name].type, 'string');
+    assert.notEqual(fields[name].required, true, 'each source keeps its alternative field optional');
+  }
 });

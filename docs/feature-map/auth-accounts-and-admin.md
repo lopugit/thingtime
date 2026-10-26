@@ -76,7 +76,15 @@ private draft API, editor recovery, account isolation and independent media copi
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
+`PasswordGenerator.tsx`, `PasswordIcon.tsx` and `PasswordPasskeySetup.tsx` compose
+editable settings blocks; secret output stays in the controlled entry draft.
+`passwords/generator.ts` owns WebCrypto/preset validation. `passwords/icons.ts`,
+`icons.client.ts` and `api/utils/passwords/icons.ts` own descriptors, anonymous
+image loading and the separately sealed list projection. `test:passwords` covers
+these boundaries; `scripts/password-tools.browser.html` is an isolated synthetic
+UI fixture, not native-provider acceptance.
+
+See [password-manager.md](../password-manager.md). `api.passwords` 1.3.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -84,9 +92,9 @@ fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
 intentionally bypasses general request diagnostics and automatic origin fallback
 so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
-Native provider implementation and signed release are tracked separately in
-[PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
-private catalog and negotiates an optional supported native bridge.
+Native provider implementation lives in `apple/Passwords` and
+`apple/PasswordProvider`. Signed packaging and real device registration/sign-in
+remain separate acceptance checks; the web guide uses the existing native bridge.
 
 ## Account content snapshots
 

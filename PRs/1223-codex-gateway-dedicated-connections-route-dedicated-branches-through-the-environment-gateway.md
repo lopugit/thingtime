@@ -57,8 +57,9 @@ corpus as changed (4,122 code files, 641 docs, 384 images) and was stopped befor
 dispatch; this update retained the documented structural-only limitation.
 
 The branch now includes freshly fetched `origin/main` at
-`78f5c843828a284b9efe25e8d561ef06ef729c9c`, preserving the drawer/shared-select
-changes and the Things/files/devices single-click browsing update. The post-integration gateway suite passed 14/14 and API capability
+`789980d2e98ffa6bd63a84b6bf2a6da58e238b79`, preserving the drawer/shared-select,
+Things/files/devices single-click browsing, canonical Component rendering and
+password updates. The preceding integration's gateway suite passed 14/14 and API capability
 suite passed 115/115. Gateway test fixtures explicitly choose the mode under
 test, so both the normal proxy policy and a dedicated branch policy exercise
 the same assertions. The develop counterpart was merged as PR #1224 at
@@ -68,8 +69,15 @@ integration.
 
 The intended canonical origins are `thingtime.com` (production),
 `dev.thingtime.com` (custom develop), and `master.previews.thingtime.com`
-(standard preview). Publisher implementation, gateway activation and live
-acceptance remain pending. Do not merge the default-proxy runtime before the
+(standard preview). The preview master is now deployed from main `789980d2e`
+as `dpl_3JG3NdFSVUYcaCsZgZCiXfm95ywg`. Its standard Preview secret, origin and
+environment records were configured and read back in memory; no key values
+were recorded. Its capability manifest identifies the exact preview owner and
+`/api/root-data` returns HTTP 200. Nine protected production/develop/wildcard
+aliases were independently confirmed unchanged. Production and develop
+activation and live branch acceptance remain pending. A normal preview retry
+also exposed a separate protected-workflow expression error, being corrected
+on the controller branch. Do not merge the default-proxy runtime before the
 required canonical owners and publisher configuration are ready.
 
 ## Embed acceptance follow-up — 2026-10-26
@@ -78,22 +86,18 @@ Fresh authenticated production readback reported zero pending
 `subspace-messaging-spaces` migrations. Posts/Messages switched successfully,
 the selected Messages view survived reload, and its channel/composer remained
 usable at a 390px mobile width. The existing private coordination embed still
-displayed raw Thing fields, revealing a missing explicit-renderer adapter.
+displayed raw Thing fields, requiring explicit Component rendering.
 
-Ordinary Thing embeds now use `crystal.renderComponent`, either an accessible
-saved Component reference or an embedded definition. The reusable adapter binds
-the source Thing's editable content into the canonical Component renderer,
-retains Component/Webpage rendering, validates definitions with the same bounded
-validator as saved Components, and makes raw-data inspection an explicit choice.
-Referenced Components are fetched and revalidated with actor/data-plane fences;
-an embed grants no access or Action authority. An independent review checked
-the normal Things ACL, stale-identity fence, ownership and Action confirmation
-paths. Malformed/ambiguous definitions have regression coverage.
+PR #1227 now supplies the shared `ThingView` / `ThingRenderComponent` path on
+main. This branch adopts that canonical contract: a displayed data object has
+`renderComponent: { id: "<Component ID>" }` or an embedded Component crystal.
+Fields bind directly and through `thing`; saved references keep their own ACL
+and identity fences. Sources and Actions are inert in this display context.
+The earlier parallel adapter and its alternate authoring shape are removed.
 
-Focused renderer tests passed 9/9, the full feed suite passed 81/81, the schema
-sanitizer suite passed 275/275, and gateway tests passed 14/14. The final local
-typecheck ratchet exits successfully but reports 92 errors versus its baseline
-of 89; no errors are in the owned renderer, schema validator or gateway files.
-Targeted lint has no errors and retains one existing registry warning. Actual
+The earlier adapter's unit results do not establish acceptance of this
+integrated path. Its isolated API acceptance passed, but the browser manager
+correctly refused an image containing a mismatched static shell; no browser
+acceptance is claimed from that attempt. Actual
 deployed Builder selection/edit/save/reload, both embed placements, and remaining
 message/comment controls still require acceptance after gateway activation.

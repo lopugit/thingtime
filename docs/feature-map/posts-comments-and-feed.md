@@ -99,25 +99,30 @@ protected relational `subspace-embed` Thing. Readers must pass the subspace gate
 and the referenced Thing's independent ACL on every load. Embedding never
 changes an audience or shares a hidden link secret.
 
-`PostInteractiveThing` also renders ordinary Thing data through the shared
-`ExplicitThingRender` adapter. Set `crystal.renderComponent` to exactly one of
-`{ thingId: "<component-id>" }` or `{ definition: { render: <render-tree> } }`.
-Definitions use the canonical Component `tag`, `props`, and `children` syntax;
-`args` and `savedArgs` are optional. Bind display fields through `content`, which
-is the source Thing's editable `crystal.thing` object or its `crystal` object.
-The adapter never infers presentation from a data `type` or `kind`, and does not
-run a Component's saved source Action on mount.
+`PostInteractiveThing` delegates ordinary data Things to the shared `ThingView`.
+Human-facing data declares `renderComponent: { id: "<saved Component Thing ID>" }`
+or embeds the canonical Component crystal directly, for example
+`renderComponent: { render: { tag: "p", children: ["{text}"] } }`.
+`ThingRenderComponent` reads a referenced Component through the normal Things
+API and its independent ACL, then uses the existing Component argument/template
+resolver and inert HTML/Chakra renderers. Bindings receive the displayed data
+(also available as `thing`), defaults and saved arguments. Sources and Actions
+do not execute in this display context. Saved Component/Webpage Things retain
+their existing editable definitions and rendering paths.
 
-Saved references are fetched with the current actor and data plane, checked
-for exact identity and Component kind, and revalidated on focus, visibility,
-and a 60-second interval while visible. Missing, invalid, private, or wrong-kind
-references explain their state; data stays hidden until **Inspect data** is
-selected. An embedded definition can use its source owner's Action authority;
-a saved reference additionally requires that the viewer owns that Component.
-The canonical Action confirmation and server permissions still apply. Component
-and Webpage Things retain their existing renderer and editable definitions.
+An explicit declaration takes priority over legacy kind rendering, including
+when invalid or inaccessible; it never falls back to a type alias. The data
+inspector is a deliberate toggle. Identity changes fence pending reads, and
+focus/visibility refreshes recheck referenced Component access. The containing
+Thing does not grant access to its renderer or dependencies. Preserve data,
+ownership and audiences when assigning renderers to older Things.
+`TransientBlockHost` captures only its own transient Action controls, allowing
+the embedded Thing's native view toggle and nested controls to receive events.
 
 Run `test:subspaces`, `test:messenger`, `test:feed`, `test:api-capabilities`, then
 `test:subspace-messages-acceptance` against the built server. The latter creates
 its own OS-fenced disposable replica and real API fixtures; `--ui` additionally
 checks desktop/mobile rendering and saved controls.
+The feed suite includes `thingRenderComponent.test.ts`; the acceptance harness
+covers saved/embedded render declarations, exact saved content and both embed
+placements with rendered/data views and reload.

@@ -102,7 +102,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-26: Render ordinary Things in post and subspace embeds through explicit saved or embedded Component definitions, keeping content editable and data inspection opt-in. Fence references by actor/data plane, revalidate access, and preserve owner Action checks. Deployed Builder acceptance remains pending. [PR 1223 details](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
+- 2026-10-26: Configure and verify the shared preview gateway and its project
+  credentials while preserving production/develop aliases. Integrate the
+  canonical Thing renderer from main for subspace embeds; production/develop
+  gateway activation and final browser acceptance remain pending.
+  [Rollout and verification](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
+
+- 2026-10-26: Render data Things through an explicit saved Component pointer or
+  embedded Component definition, with an opt-in data inspector and independent
+  Component access checks. Keep type aliases out of explicit renderer selection
+  and document the authoring contract in global and repository AI guidance.
+  Preserve native child controls inside transient Action layouts and prevent
+  hidden content containers retaining horizontal scroll after data inspection.
+  [Verification and limits](../PRs/1227-thing-render-components.md). **Codex (AI)**
+- 2026-10-26 — **Codex (AI)**: Add editable password generation with configurable
+  rules and source-linked presets, encrypted entry-icon metadata with upload/URL
+  controls, and a native passkey setup guide. Password capability is 1.3.0;
+  isolated generator, icon and HTTP checks cover the new boundaries.
+  [PR #1231 details](../PRs/1231-codex-password-generator-passkeys-add-editable-password-generation-entry-icons-and-passkey-setup.md).
+
 
 - 2026-10-26: Match custom drawer links and the final inline **➕ Add +** row to Thingtime navigation. Move menu layout editing into Settings and save the editable menu template as a private webpage Thing while retaining legacy device layouts. [Details](../PRs/1226-codex-drawer-renderable-row-match-the-final-add-drawer-row.md). **Codex (AI)**
 - 2026-10-26: Align shared native selects with Thingtime surfaces and radii; replace the black focus outline with a contrasting pink border and soft pink-to-violet glow. Theme Studio can customize both glow colours, softness and strength, including no glow. Add isolated desktop/mobile, light/dark and theme-editor save/reload coverage. **Codex (AI)**

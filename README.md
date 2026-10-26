@@ -27,13 +27,13 @@ Subspace membership remains authoritative for message access. Moderators can
 place accessible Things above posts or in the sidebar; each visitor still needs
 the referenced Thing's own permission.
 
-Display content in an ordinary Thing uses an explicit `crystal.renderComponent`:
-either `{ "thingId": "<accessible-component-id>" }` or
-`{ "definition": { "render": { "tag": "p", "children": ["{content.text}"] } } }`.
-The Component receives the editable `crystal.thing` object (or `crystal` when
-there is no nested object) as `content`. Missing or inaccessible renderers show
-an explanation and an opt-in data inspector. Saved Component and Webpage Things
-keep their existing canonical render definitions. See the
+Human-facing Thing data declares `renderComponent` at its displayed data level:
+either `{ "id": "<accessible-component-id>" }` or a Component definition such as
+`{ "render": { "tag": "p", "children": ["{text}"] } }`.
+The shared `ThingView` binds editable fields directly and through the `thing`
+alias. References retain their own access checks, and display does not execute
+Component sources or Actions. Data inspection is an explicit choice. Saved
+Component and Webpage Things keep their canonical definitions. See the
 [embed rendering contract](docs/feature-map/posts-comments-and-feed.md#subspace-messages-and-embedded-things).
 
 Run `npm --prefix remix run test:subspace-messages-acceptance` for the disposable
@@ -65,12 +65,20 @@ and `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://localhost:<web port>`.
 This local adapter refuses deployed/Vercel environments. No new provider secrets
 are needed beyond the existing vault and private object storage configuration.
 
-Native system AutoFill and passkey creation are being delivered separately in
-[PR #996](https://github.com/lopugit/thingtime/pull/996). They require signed Apple
-credential-provider bundles, provisioning and device verification. This web
-release does not change the existing desktop/iOS packaging or claim OS AutoFill
-availability. TOTP QR imports, generated codes and password transfers work here
-without native installation.
+Password generation needs browser WebCrypto and no external provider account.
+Generator settings are account/origin scoped; generated values remain in the
+masked draft until saved. URL icons require anonymous HTTPS CORS from the image
+host; uploads use the existing encrypted attachment configuration above. No icon
+proxy credentials or third-party favicon service are required.
+
+Native system AutoFill and passkey registration are implemented in the Apple
+credential provider. Install a properly signed/provisioned provider and enable
+Thingtime in the operating system's Password AutoFill settings. Registration
+starts from the destination website and may require device authentication. The
+web Passkeys guide connects through the existing native bridge when available;
+this change does not modify native packaging. Verify an actual registration and
+sign-in on the installed device before claiming provider availability. See the
+[password manager contract](docs/password-manager.md#native-password-autofill).
 
 ### Unified Timeline (implementation in progress)
 

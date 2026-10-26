@@ -16,13 +16,6 @@ import { parseActionRequestPagination } from './actionRequestPagination';
 import { BROWSER_ACTION_OPS, actionHttpEndpoint, isActionHttpEndpoint } from './browserActions';
 import { MAX_POST_THINGS, postThingReferences } from '../components/Feed/postThingReferences.ts';
 import { isActionLookupProvider } from './actionLookups';
-import {
-	checkSchemaRenderTree as checkSharedSchemaRenderTree,
-	MAX_SCHEMA_RENDER_BYTES,
-	MAX_SCHEMA_RENDER_DEPTH,
-	MAX_SCHEMA_RENDER_NODES,
-	validateSchemaRender
-} from './schemaRenderValidation';
 // Thingtime Schemas — the single source of truth for the shapes Thingtime data
 // can take. Everything in the `things` collection is a thing: one root Thing
 // schema (schemaVersion per doc), sub-schemas applied via the root `thingtime`
@@ -54,8 +47,6 @@ import {
 	MAX_ATTACHMENT_NAME_CHARS,
 	sanitizeAttachmentPublicMetadata
 } from '../api/utils/attachments/attachmentCore.ts';
-
-export { MAX_SCHEMA_RENDER_BYTES, MAX_SCHEMA_RENDER_DEPTH, MAX_SCHEMA_RENDER_NODES } from './schemaRenderValidation';
 
 export type ThingtimeFieldType = 'array' | 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'string[]' | 'object' | 'record' | 'id';
 
@@ -1319,9 +1310,12 @@ export const MAX_SCHEMA_FIELD_DEPTH = 6;
 // and repeats resolve to one path at draw time). 2000 / 48KB is the stored
 // bound; the resolver's MAX_RESOLVED_VALUES and the renderers' MAX_NODES
 // stay the draw-time bounds.
+export const MAX_SCHEMA_RENDER_BYTES = 48 * 1024;
 // stored depth counts wrapper objects (a ttIf → then → ttEach → node chain is
 // four levels for one drawn element), so it sits well above the renderers'
 // 24-level DOM cap, which the RESOLVED tree still has to clear
+export const MAX_SCHEMA_RENDER_DEPTH = 48;
+export const MAX_SCHEMA_RENDER_NODES = 2000;
 export const SCHEMA_FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'enum', 'string[]', 'object', 'array', 'json'] as const;
 export type SchemaFieldType = (typeof SCHEMA_FIELD_TYPES)[number];
 
@@ -4481,6 +4475,11 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
     createdVia: '/api/v1/passwords', fields: [
       { name: 'title', type: 'string', required: true, description: 'Entry title.' },
       { name: 'passwordType', type: 'enum', required: true, values: [...PASSWORD_TYPES], description: 'Credential category. Native passkeys hold encrypted signing material.' },
+      { name: 'icon', type: 'object', required: false, description: 'Explicit uploaded password file or HTTPS URL choice. Sealed separately for private list presentation; never inferred from secret fields.', children: [
+        { name: 'kind', type: 'enum', required: true, values: ['url', 'attachment'], description: 'Selected image source.' },
+        { name: 'url', type: 'string', required: false, description: 'HTTPS image URL without credentials; loaded anonymously only after explicit selection.' },
+        { name: 'fileId', type: 'string', required: false, description: 'Owned ready password attachment bound to this entry.' }
+      ] },
       { name: 'fields', type: 'array', required: true, children: [
         { name: 'id', type: 'string', required: true, description: 'Stable field id.' },
         { name: 'label', type: 'string', required: true, description: 'Field label.' },
@@ -5409,15 +5408,65 @@ const sanitizeSchemaFieldList = (
 // keys only — SAFETY lives client-side, where render trees are only ever
 // drawn through the sanitising allowlist gates (ChakraThingRenderer /
 // HtmlThingRenderer), never the legacy unsanitised chakra path.
+const SCHEMA_RENDER_BLOCKED_KEYS = PROTOTYPE_POLLUTION_KEYS;
+
 const checkSchemaRenderTree = (value: unknown, depth: number, counter: { nodes: number }): true | Fail => {
-	const checked = checkSharedSchemaRenderTree(value, depth, counter);
-	return checked === true ? true : fail(400, checked.error);
+  counter.nodes++;
+  if (counter.nodes > MAX_SCHEMA_RENDER_NODES) {
+    return fail(400, `render can hold at most ${MAX_SCHEMA_RENDER_NODES} nodes`);
+  }
+  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return true;
+  if (depth >= MAX_SCHEMA_RENDER_DEPTH) return fail(400, `render nests at most ${MAX_SCHEMA_RENDER_DEPTH} levels`);
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const checked = checkSchemaRenderTree(entry, depth + 1, counter);
+      if (checked !== true) return checked;
+    }
+    return true;
+  }
+  if (typeof value === 'object') {
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (key.includes('\u0000') || key.includes('.') || key.startsWith('$') || SCHEMA_RENDER_BLOCKED_KEYS.has(key)) {
+        return fail(400, `render keys can’t contain dots or null bytes, start with $, or shadow object internals (${key.slice(0, 40)})`);
+      }
+      const checked = checkSchemaRenderTree(entry, depth + 1, counter);
+      if (checked !== true) return checked;
+    }
+    return true;
+  }
+  return fail(400, 'render must be JSON-serializable (objects, arrays, strings, numbers, booleans)');
 };
 
 const sanitizeSchemaRender = (input: unknown): { ok: true; render: Record<string, unknown> } | Fail => {
-	const checked = validateSchemaRender(input);
-	if (checked.ok === false) return fail(400, checked.error);
-	return checked;
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return fail(400, 'render must be a serialised component object');
+  }
+  const root = input as Record<string, unknown>;
+  const chakraShaped = typeof root.chakra === 'string' || root.type === 'chakra';
+  const elementShaped = typeof root.tag === 'string';
+  if (!chakraShaped && !elementShaped) {
+    return fail(400, 'render must be chakra shaped ({ chakra: "Box", … }) or element shaped ({ tag: "div", … })');
+  }
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(input);
+  } catch {
+    return fail(400, 'render must be JSON-serializable');
+  }
+  if (typeof serialized !== 'string') return fail(400, 'render must be JSON-serializable');
+  // same UTF-16 code-unit byte-cap shortcut sanitizeExtended uses
+  if (serialized.length > MAX_SCHEMA_RENDER_BYTES) {
+    return fail(400, `render exceeds the ${MAX_SCHEMA_RENDER_BYTES} byte limit`);
+  }
+  if (serialized.length * 3 > MAX_SCHEMA_RENDER_BYTES) {
+    const bytes = new TextEncoder().encode(serialized).byteLength;
+    if (bytes > MAX_SCHEMA_RENDER_BYTES) {
+      return fail(400, `render exceeds the ${MAX_SCHEMA_RENDER_BYTES} byte limit`);
+    }
+  }
+  const checked = checkSchemaRenderTree(input, 0, { nodes: 0 });
+  if (checked !== true) return checked;
+  return { ok: true, render: root };
 };
 
 const sanitizeSchemaCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
