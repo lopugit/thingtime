@@ -1,3 +1,4 @@
+import { openPasswordIcon, sealPasswordIcon } from './icons';
 import { deletePasswordFiles } from './files';
 import { BSON } from 'mongodb';
 import { createHmac } from 'node:crypto';
@@ -35,8 +36,13 @@ export async function listPasswords(ownerId: string, cursor?: string | null, que
   // Reuse the existing schema/owner/createdAt/shareId index: things_v2 is
   // already at Mongo's index budget. Immutable creation time keeps page order.
   const docs = await (await getHomeThingsCollection()).find({ ...match(ownerId), passwordDeleted: { $ne: true }, ...pageMatch(cursor), ...titleMatch },
-    { projection: { shareId: 1, 'crystal.title': 1, 'crystal.passwordType': 1, passwordRevision: 1, updatedAt: 1, createdAt: 1 } }).sort({ createdAt: -1, shareId: 1 }).limit(51).toArray();
-  return { entries: docs.slice(0, 50).map(project), nextCursor: docs.length > 50 ? pageCursor(docs[49]) : null };
+    { projection: { shareId: 1, 'crystal.title': 1, 'crystal.passwordType': 1, 'crystal.encryptedIcon': 1, passwordRevision: 1, updatedAt: 1, createdAt: 1 } }).sort({ createdAt: -1, shareId: 1 }).limit(51).toArray();
+  const page = docs.slice(0, 50);
+  const entries = page.some(doc => doc.crystal.encryptedIcon) ? await withUserVaultKey(ownerId, key => page.map(doc => {
+    const icon = openPasswordIcon(ownerId, key, doc.shareId, doc.crystal.encryptedIcon, PASSWORD_STORAGE_DOCUMENT_BYTES);
+    return { ...project(doc), ...(icon ? { icon } : {}) };
+  })) : page.map(project);
+  return { entries, nextCursor: docs.length > 50 ? pageCursor(docs[49]) : null };
 }
 export async function readPassword(ownerId: string, id: unknown) {
   if (!validPasswordId(id)) throw new PasswordManagerError(400, 'Invalid password entry.');
@@ -75,7 +81,10 @@ export async function savePassword(ownerId: string, input: any) {
   if (Buffer.byteLength(plain) >= PASSWORD_STORAGE_DOCUMENT_BYTES) throw storageSizeError();
   // Keyed digest gives stable retry identity without publishing password hashes.
   const digest = await withUserVaultKey(ownerId, key => createHmac('sha256', key.bytes).update(input.id).update(plain).digest('base64url'));
-  const encryptedValue = await withUserVaultKey(ownerId, key => sealVaultValue(ownerId, key, input.id, 'secret', plain, PASSWORD_STORAGE_DOCUMENT_BYTES));
+  const { encryptedValue, encryptedIcon } = await withUserVaultKey(ownerId, key => ({
+    encryptedValue: sealVaultValue(ownerId, key, input.id, 'secret', plain, PASSWORD_STORAGE_DOCUMENT_BYTES),
+    encryptedIcon: entry.icon ? sealPasswordIcon(ownerId, key, input.id, entry.icon, PASSWORD_STORAGE_DOCUMENT_BYTES) : undefined
+  }));
   await ensureIndexes();
   const things = await getHomeThingsCollection();
   return withHomeMongoTransaction(async session => {
@@ -84,19 +93,20 @@ export async function savePassword(ownerId: string, input: any) {
     if (previous?.passwordDeleted) throw new PasswordManagerError(410, 'This entry was deleted. Save a new entry instead.');
     if (previous?.passwordWriteId === input.writeId) {
       if (previous.passwordWriteDigest !== digest) throw new PasswordManagerError(409, 'This save id was already used for different content.');
-      return project(previous);
+      return { ...project(previous), ...(entry.icon ? { icon: entry.icon } : {}) };
     }
     if ((previous?.passwordRevision ?? 0) !== input.revision) throw new PasswordManagerError(409, 'This entry changed elsewhere. Reopen it before saving.');
+    if (entry.icon?.kind === 'attachment' && !await things.findOne({ ownerId, shareId: entry.icon.fileId, thingtime: 'attachment', attachmentPurpose: 'password', targetId: input.id, passwordFileParent: input.id, attachmentState: 'ready' }, { session, projection: { _id: 1 } })) throw new PasswordManagerError(400, 'Choose an uploaded icon belonging to this entry.');
     const now = new Date();
     const doc = { shareId: input.id, ownerId, thingtime: [PASSWORD_ENTRY_KIND], schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
-      acl: [ACL_OWNER], crystal: { title: entry.title, passwordType: entry.passwordType, encryptedValue }, extended: null, tags: [], targetId: null,
+      acl: [ACL_OWNER], crystal: { title: entry.title, passwordType: entry.passwordType, encryptedValue, ...(encryptedIcon ? { encryptedIcon } : {}) }, extended: null, tags: [], targetId: null,
       passwordRevision: input.revision + 1, passwordWriteId: input.writeId, passwordWriteDigest: digest, createdAt: previous?.createdAt ?? now, updatedAt: now };
     if (BSON.calculateObjectSize({ ...previous, ...doc }) >= PASSWORD_STORAGE_DOCUMENT_BYTES) throw storageSizeError();
     if (previous) {
       const updated = await updateAccountedThing(things, { ...match(ownerId, input.id), passwordRevision: previous.passwordRevision }, { $set: { crystal: doc.crystal, passwordRevision: doc.passwordRevision, passwordWriteId: input.writeId, passwordWriteDigest: digest, updatedAt: now } }, { session, ...HOME_ACCOUNTED_STORAGE_OPTIONS });
       if (updated.matchedCount !== 1) throw new PasswordManagerError(409, 'This entry changed while saving.');
     } else await insertAccountedThing(things, doc, { session, ...HOME_ACCOUNTED_STORAGE_OPTIONS });
-    return project(doc);
+    return { ...project(doc), ...(entry.icon ? { icon: entry.icon } : {}) };
   });
 }
 export async function deletePassword(ownerId: string, input: any) {
