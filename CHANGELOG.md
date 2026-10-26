@@ -15,6 +15,15 @@ verbatim, and CI changes are recorded here from now on.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 every entry is attributed the same way the app changelog attributes them.
 
+## 2026-10-26 — Initialize preview upload receipts on the runner
+
+- Move the protected receipt path out of job-level expressions into a runner
+  initialization step. This repairs workflow validation before jobs start,
+  retaining receipt artifacts, secretless builds and exact-source publication.
+- Add a regression for context placement and shell execution with spaced paths.
+  Protected rollout and subsequent live preview acceptance remain separate.
+  **Codex (AI)**
+
 ## 2026-10-26 — Route ordinary PR previews through the controlled preview gateway
 
 - Keep future ordinary PR builds and deployments in the custom `develop`

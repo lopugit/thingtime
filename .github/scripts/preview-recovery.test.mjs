@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { recoveryAttempt, recoverySourceIssue, previewWorkActive, reconcilePreviewInventory } from './preview-recovery.mjs';
 import { publishPreviewNotifications } from './preview-comments.mjs';
 
@@ -70,4 +73,25 @@ test('workflow keeps secretless builds while allowing protected comments and rec
   assert.match(build, /VERCEL_GIT_COMMIT_REF: \$\{\{ needs.prepare.outputs.head_ref \}\}/);
   assert.match(admin, /commentWrite\.catch\(\(\) => undefined\)\.then/);
   assert.match(admin, /lane: row.environment === 'develop' \? 'admin-develop' : 'production'/);
+});
+
+test('protected receipt path initializes on the runner before publisher steps without job-context expressions', () => {
+  const workflow = readFileSync(new URL('../workflows/develop-pr-preview.yml', import.meta.url), 'utf8');
+  const controller = workflow.split('\n  controller:\n')[1].split('\n  admin_prepare:\n')[0];
+  const [job, steps] = controller.split('\n    steps:\n');
+  assert.doesNotMatch(job, /\$\{\{\s*runner\./, 'runner context is unavailable in job-level env');
+  const initializer = /- name: Initialize protected Preview upload receipt path\n        run: (.+)/.exec(steps)?.[1];
+  assert.ok(initializer, 'the receipt path must be initialized by a runner step');
+  assert.ok(steps.indexOf(initializer) < steps.indexOf('- name: Upload and publish GitHub-built preview'));
+  const directory = mkdtempSync(join(tmpdir(), 'preview receipt '));
+  try {
+    const environmentFile = join(directory, 'github env');
+    const result = spawnSync('/bin/bash', ['-eu', '-c', initializer], {
+      env: { RUNNER_TEMP: directory, GITHUB_ENV: environmentFile }, encoding: 'utf8'
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, '', 'the initialization must not log environment values');
+    assert.equal(readFileSync(environmentFile, 'utf8'), `VERCEL_PREVIEW_RECEIPT_PATH=${directory}/pr-preview-upload-receipt.json\n`);
+    assert.match(steps, /path: \$\{\{ runner\.temp \}\}\/pr-preview-upload-receipt\.json/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });

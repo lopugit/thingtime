@@ -215,9 +215,11 @@ jobs:
       PREVIEW_EXPECTED_BUILD_MINUTES: ${{ vars.PREVIEW_EXPECTED_BUILD_MINUTES }}
       PREVIEW_EXPECTED_READY_AT: ${{ needs.prepare.outputs.expected_ready_at }}
       PREVIEW_MISSING_BUILD_PAGE: ${{ vars.PREVIEW_MISSING_BUILD_PAGE }}
-      VERCEL_PREVIEW_RECEIPT_PATH: ${{ runner.temp }}/pr-preview-upload-receipt.json
       STABLE_DEVELOP_DOMAIN: ${{ vars.STABLE_DEVELOP_DOMAIN }}
     steps:
+      - name: Initialize protected Preview upload receipt path
+        run: printf '%s\n' "VERCEL_PREVIEW_RECEIPT_PATH=$RUNNER_TEMP/pr-preview-upload-receipt.json" >> "$GITHUB_ENV"
+
       - name: Check out protected deployment controller
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:

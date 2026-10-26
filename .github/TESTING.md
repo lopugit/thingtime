@@ -266,3 +266,16 @@ pre-queued with no jobs, logs, or cancellable run graph.
 - OpenAI preflight failures report the HTTP status and an allowlisted error code. Unknown codes and response messages must never enter logs; verify both quota classification and redaction before a bounded live vault probe.
 
 - Verify reusable workflows parse on GitHub before running a credential probe. Job-level environment expressions must not reference step outputs or runtime environment values; those belong in step inputs or step environments.
+
+## Preview receipt runner context (2026-10-26)
+
+- Run `node --test .github/scripts/preview-recovery.test.mjs`. The receipt path
+  must be initialized by a runner step through `GITHUB_ENV` before publication;
+  `runner` expressions cannot appear in the controller's job-level environment.
+- Verify the initializer handles a temporary directory containing spaces, writes
+  exactly the receipt variable, and does not log environment values. Retain the
+  protected receipt artifact path and existing source/permission boundaries.
+- After authorized rollout, inspect a naturally arriving exact-head preview run:
+  workflow compilation and receipt collection must execute. Local contract and
+  lint checks do not establish a live publication. Do not replay shared jobs
+  merely to satisfy this checklist without task authorization.
