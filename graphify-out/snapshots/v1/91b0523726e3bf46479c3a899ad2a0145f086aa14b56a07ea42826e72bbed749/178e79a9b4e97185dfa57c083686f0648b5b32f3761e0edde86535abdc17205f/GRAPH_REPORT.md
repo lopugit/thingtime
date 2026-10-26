@@ -1,121 +1,132 @@
-# Graph Report - thingtime  (2026-10-18)
+# Graph Report - thingtime  (2026-10-26)
 
 ## Corpus Check
-- cluster-only mode — file stats not available
+- 92 files · ~245,799 words
+- Verdict: corpus is large enough that graph structure adds value.
+- Unclassified: 5 file(s) not represented in the graph (top: (none) 4, .jq 1)
 
 ## Summary
-- 1271 nodes · 2916 edges · 91 communities (57 shown, 34 thin omitted)
+- 1320 nodes · 3072 edges · 100 communities (64 shown, 36 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 25 edges (avg confidence: 0.84)
-- Token cost: 3,541 input · 696 output
+- Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3bc0f69d`
+- Built from commit: `ef078923`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- Promotion Workflow Tests
-- Develop Preview Deployment
-- Admin Preview Deployment
-- Graphify Snapshot Management
-- Control Plane Changelog
-- Credential Vault Models
-- Feature Stack Progress
-- Promotion PR Changelog
-- All Branch Builder
-- Cooperative Review Handover
-- Conflict Resolution Routing
-- PR Status Reporting
-- Control Plane Contracts
-- Preview Fallback Pages
-- Promotion Graph Refresh
-- CodeQL PR Backfill
-- Secure Vercel Extraction
-- Feature Stack Chat
-- Main Develop Sync Merge
-- Preview Race Tests
-- Promotion Worker Contract
-- Feature Stack Planning
-- Admin Preview Publisher
-- Rebase Edit Verification
-- Rebase Round Preparation
-- Promotion Worker Script
-- Preview Label Management
-- Promotion Worker Routing
-- Control Plane Testing
-- Repository Automation Architecture
-- Control Plane Documentation
-- Agent Instructions
-- Claude Compatibility Instructions
-- Graphify Snapshot Staging
-- Control Plane Events
-- Saved Model Waterfall
-- Preview Manager Reliability
-- Rebase Conflict Startup
-- Electron Release Workflow
-- PR Resolution Components
-- Promotion Source Verification
-- Stack Progress Heartbeat
-- Graphify Control Plane
-- Electron Release Gates
-- Main Develop Sync Automation
-- Stack Status Responder
-- Vercel Configuration
-- Web CI Workflow
-- Electron PR Release Contract
-- Conflict Resolution Jobs
-- Credential Vault Controller
-- Rebase Ownership Routing
-- Instruction Conflict Resolution
-- PR Rebase Management
-- Stacked PR Cascading
-- AI Instruction Files
-- Preview Recovery UX
-- Exact Head Preview
-- CodeQL Analysis Jobs
-- Lopu Promotion Workflows
-- Residual Conflict Collection
-- Review Handoff Jobs
-- GitHub Auto Merge
+- promote-features-to-main.mjs
+- deploy-develop-pr-preview.mjs
+- deploy-admin-pr-previews.mjs
+- graphify-cas.mjs
+- PR #643 — Missing-build page for unassigned PR preview URLs
+- lopu-model-waterfall.mjs
+- lopu-pr-lifecycle.mjs
+- promotion-pr-changelog.mjs
+- build-all-branch.mjs
+- lopu-cooperative-review.mjs
+- resolve-pr-conflicts-routing-contract.mjs
+- lopu-pr-status.mjs
+- workflow-control-plane-contract.mjs
+- preview-fallback.mjs
+- refresh-promotion-graphify.sh
+- codeql-open-pr-backfill.mjs
+- extract-vercel-prebuilt.py
+- ref_node_fs
+- merge-main-develop-sync-pr.mjs
+- electron-release-gates.test.mjs
+- promotion-worker-contract.sh
+- ref_node_path
+- PR #603 — Admin preview publisher controller
+- rebase-related-edits.test.mjs
+- prepare-round.sh
+- promotion-worker.sh
+- preview-labels.mjs
+- promotion-worker-routing-contract.mjs
+- Control-plane regression checklist
+- sync/main-into-develop PR
+- `github-actions` — the CI control plane
+- Thingtime AI instructions
+- Thingtime AI instructions
+- stage-graphify-snapshots.mjs
+- control-plane-events.test.mjs
+- Lopu Agent Action
+- PR #609 — Restore Lopu and preview admission
+- start.sh
+- Select Release Distribution
+- Resolve Promotion
+- verify-promotion-source-authority.sh
+- PR #534 — Feature Stack progress heartbeat controller
+- Lopu Protected Repository Manager
+- deploy-vercel-prebuilt.mjs
+- PR #506 — Auto-merge resolved main to develop sync PR
+- Feature Stack Status Responder
+- vercel.json
+- Classify Web CI Scope Job
+- ref_node_os
+- Conflict Detector Job
+- PR #492 — Load Lopu credentials from the Thingtime vault
+- rebase-ownership-routing-contract.sh
+- resolve-canonical-instruction-type-conflicts.sh
+- Lopu PR Manager Workflow
+- Guarded Push
+- Thingtime Agent Instructions
+- Control-plane changelog
+- Exact Head Preview Publication
+- CodeQL Analyze Job
+- Lopu internal develop promotion
+- Collect Residual Conflicts
+- Review Detector Job
+- GitHub Native Auto-Merge
 - Cooperative Handover Protocol
 - CodeQL Analysis Workflow
-- CodeQL PR Handoff
+- CodeQL PR handoff workflow
 - Commander Release Job
-- Control Plane CI
+- Workflow Control-Plane CI
 - Contract Advisories Job
-- Lopu PR Lifecycle
-- Stack Rebase Detection
-- Stack Rebase Handoff
+- Lopu PR Lifecycle Workflow
+- Stack Rebase Detection Job
+- Stack Rebase Handoff Job
 - Conversation Gate Job
-- Stack Merge Gate
-- Stack Plan Job
-- Stack Progress Job
-- Conflict Batch Finalization
+- Feature Stack Merge Gate Job
+- Feature Stack Plan Job
+- Feature Stack Progress Job
+- Finalize Conflict Batch Maintenance
 - PR Lifecycle Job
 - CodeQL Backfill Job
-- Develop Promotion Maintenance
-- Feature Promotion Maintenance
-- Main Develop Sync
-- Verified Sync Merge
-- Publication Target Recheck
+- Develop Promotion Maintenance Job
+- Feature Promotions Maintenance Job
+- Main to Develop Sync Job
+- Merge Verified Main to Develop Sync PR
+- Recheck Target After Publication
 - Promotion Validation Job
-- Workflow Routing Job
-- Lopu Label Synchronization
-- Credential Vault Verification
-- Preview Recovery
+- Route Job
+- Synchronize Lopu Label Subset
+- Verify Credential Vault Job
+- PR #611 Preview Recovery
 - Workflow Verification Checklist
+- ref_node_child_process
+- CHANGELOG.md
+- PR #634: Lopu comment admission and idempotent preview writes
+- ref_node_crypto
+- PR #661: conflict scans and visible previews
+- PR #637: Safe cooperative handover for Lopu reviews
+- [Unreleased]
+- TESTING.md
+- PR 1017: GitHub Lopu admin model waterfall
 
 ## God Nodes (most connected - your core abstractions)
 1. `runPromotion()` - 64 edges
 2. `selfTest()` - 53 edges
-3. `reconcile()` - 34 edges
-4. `runSelfTest()` - 34 edges
+3. `runSelfTest()` - 36 edges
+4. `reconcile()` - 34 edges
 5. `failureDetail()` - 28 edges
 6. `deploy()` - 27 edges
 7. `main()` - 22 edges
 8. `orphanedMergeHydrationIntegrationTest()` - 21 edges
-9. `githubRequest()` - 18 edges
-10. `main()` - 17 edges
+9. `publish()` - 20 edges
+10. `githubRequest()` - 18 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Thingtime Agent Instructions` --references--> `Control-plane regression checklist`  [EXTRACTED]
@@ -162,235 +173,263 @@
 - **Serialized PR Review Flow** — github_workflows_resolve_pr_conflicts_review_detect, github_workflows_resolve_pr_conflicts_review_handoff, github_workflows_resolve_pr_conflicts_model_config, github_workflows_resolve_pr_conflicts_review [EXTRACTED 0.96]
 - **Canonical Instruction Alias Layout** — agents_instructions, ai_all_instructions, claude_instructions [EXTRACTED 1.00]
 
-## Communities (91 total, 34 thin omitted)
+## Communities (100 total, 36 thin omitted)
 
-### Community 0 - "Promotion Workflow Tests"
+### Community 0 - "promote-features-to-main.mjs"
 Cohesion: 0.05
 Nodes (133): applyPicks(), attestationMatches(), botCommentsByLatestEvent(), buildPromotionDispatchRequest(), buildPromotionPlanContext(), cancelPromotionRetirement(), CFG, checkoutRemoteBranch() (+125 more)
 
-### Community 1 - "Develop Preview Deployment"
+### Community 1 - "deploy-develop-pr-preview.mjs"
 Cohesion: 0.05
 Nodes (119): ACTIVE_STATES, assertCurrentPullRequest(), assertPrebuiltOutput(), assertPreviewBundle(), assertRepositoryDispatchSource(), assertTrustedPrincipal(), assertTrustedPullRequest(), assertTrustedPullRequestStack() (+111 more)
 
-### Community 2 - "Admin Preview Deployment"
+### Community 2 - "deploy-admin-pr-previews.mjs"
 Cohesion: 0.08
 Nodes (65): ACTIVE_STATES, assertCurrentPullRequest(), assertPrebuiltOutput(), assignAlias(), boundedInteger(), cleanupDeploymentIssue(), cleanupEnvironment(), commentBody() (+57 more)
 
-### Community 3 - "Graphify Snapshot Management"
+### Community 3 - "graphify-cas.mjs"
 Cohesion: 0.09
 Nodes (60): activateSnapshot(), artifactHash(), baselineNodeCount(), compareSnapshotQuality(), computeSourceFingerprint(), copyPortableFiles(), DEFAULT_SNAPSHOT_RETENTION, dropNestedRepositories() (+52 more)
 
-### Community 4 - "Control Plane Changelog"
-Cohesion: 0.04
-Nodes (43): 2026-09-05 — Cooperative review handover and preview recovery, 2026-09-05 — Desktop and Recovery cloud release repair, 2026-09-05 — Signed Commander releases and Recovery pairing, 2026-09-05 — Visible previews and conflict detector recovery, 2026-10-18 — Execute the saved admin AI waterfall, Added, Changed, Control-plane changelog (+35 more)
+### Community 4 - "PR #643 — Missing-build page for unassigned PR preview URLs"
+Cohesion: 0.22
+Nodes (8): Cause and scope, Fixed HTML Fallback, PR #643 Missing-build Page, PR #643 — Missing-build page for unassigned PR preview URLs, Preview Wildcard Domains, Protected Rollout, Root response decision, Verification before merge
 
-### Community 5 - "Credential Vault Models"
-Cohesion: 0.12
-Nodes (37): models, CAPACITY_PATTERNS, classifyClaudeCredentialFailure(), collectStrings(), CREDENTIAL_PATTERNS, main(), selfTest(), exportBundle() (+29 more)
+### Community 5 - "lopu-model-waterfall.mjs"
+Cohesion: 0.15
+Nodes (31): models, exportBundle(), fetchBundle(), legacyCredentials(), main(), required(), safeCache(), validate() (+23 more)
 
-### Community 6 - "Feature Stack Progress"
-Cohesion: 0.09
-Nodes (34): githubJobs(), githubStackPullRequests(), postProgress(), progressSnapshot(), reconcile(), recoveryPayload(), run(), selfTest() (+26 more)
+### Community 6 - "lopu-pr-lifecycle.mjs"
+Cohesion: 0.16
+Nodes (17): checkDisposition(), approved(), eligible(), identity(), managed(), pauses, redundant(), selectPulls() (+9 more)
 
-### Community 7 - "Promotion PR Changelog"
+### Community 7 - "promotion-pr-changelog.mjs"
 Cohesion: 0.12
 Nodes (41): associatedPr(), bodyFile(), buildComment(), buildSection(), CFG, computeDelta(), computeMissingLabels(), contentIndex (+33 more)
 
-### Community 8 - "All Branch Builder"
+### Community 8 - "build-all-branch.mjs"
 Cohesion: 0.16
 Nodes (36): assertAllBranchWorkflowContract(), BASE_BRANCHES, buildMode(), checkMode(), completeRefspecs, countLeadingFailureMarkers(), doctorCommitMode(), doctorRecordMode() (+28 more)
 
-### Community 9 - "Cooperative Review Handover"
+### Community 9 - "lopu-cooperative-review.mjs"
 Cohesion: 0.11
 Nodes (28): checkpoint(), completedReport(), continuationNumbers(), finalize(), git(), HANDOVER_INSTRUCTIONS, initialize(), numbers() (+20 more)
 
-### Community 10 - "Conflict Resolution Routing"
+### Community 10 - "resolve-pr-conflicts-routing-contract.mjs"
 Cohesion: 0.12
 Nodes (26): aiRuntimeSourceFiles(), assertAdminLoader(), assertAdminModelRouting(), assertCapturedStdoutStaysClean(), assertRoute(), assertWorkflowSource(), CALLS_HELPER(), decodeBatch() (+18 more)
 
-### Community 11 - "PR Status Reporting"
+### Community 11 - "lopu-pr-status.mjs"
 Cohesion: 0.17
 Nodes (25): argument(), branchCode(), classifyInventory(), count(), dateParts(), desiredFactLabels(), escapeHtml(), FACT_LABEL_ORDER (+17 more)
 
-### Community 12 - "Control Plane Contracts"
+### Community 12 - "workflow-control-plane-contract.mjs"
 Cohesion: 0.13
 Nodes (26): acceptsBotRoutingProof(), actions, AI_RUNTIME_YAML, appReentryDisposition(), assertAdminLoader(), assertAdminModelRouting(), assertAdminWaterfallGrammar(), assertBareControlPlaneTree() (+18 more)
 
-### Community 13 - "Preview Fallback Pages"
+### Community 13 - "preview-fallback.mjs"
 Cohesion: 0.14
 Nodes (18): FALLBACK_BRANCH, FALLBACK_HEADER, FALLBACK_MARKER, fallbackDeploymentIssue(), fallbackDomainIssue(), fallbackPage(), installFallbackAliases(), publishedPreviewResponseIssue() (+10 more)
 
-### Community 14 - "Promotion Graph Refresh"
+### Community 14 - "refresh-promotion-graphify.sh"
 Cohesion: 0.14
 Nodes (24): assert_control_metadata_unchanged(), assert_tool_boundary(), current_grafts_state(), current_refs_hash(), emit(), fail(), GIT_ATTR_NOSYSTEM, GIT_CONFIG_COUNT (+16 more)
 
-### Community 15 - "CodeQL PR Backfill"
+### Community 15 - "codeql-open-pr-backfill.mjs"
 Cohesion: 0.21
 Nodes (23): ACTIVE_RUN_STATUSES, activePrHeadKeys(), analysisKey(), analysisSnapshotForPullRequest(), commandFailureText(), completeAnalysisKeys(), dispatchAnalysisWithInput(), flattenSlurp() (+15 more)
 
-### Community 16 - "Secure Vercel Extraction"
+### Community 16 - "extract-vercel-prebuilt.py"
 Cohesion: 0.15
 Nodes (9): extract_archive(), main(), _member_path(), self_test(), _validate_link(), Build Job, Controller Job, Dispatch Job (+1 more)
 
-### Community 17 - "Feature Stack Chat"
-Cohesion: 0.14
-Nodes (9): allowed, workflow, answerCommand(), answerQuestion(), CHAT_SYSTEM_PROMPT, safeRunContext(), serveRunChat(), script (+1 more)
+### Community 17 - "ref_node_fs"
+Cohesion: 0.10
+Nodes (16): CAPACITY_PATTERNS, classifyClaudeCredentialFailure(), collectStrings(), CREDENTIAL_PATTERNS, main(), selfTest(), allowed, workflow (+8 more)
 
-### Community 18 - "Main Develop Sync Merge"
+### Community 18 - "merge-main-develop-sync-pr.mjs"
 Cohesion: 0.17
 Nodes (18): assertHeadContainsMain(), assertSyncPullRequestShape(), exactSha(), EXPECTED_MERGE_REJECTIONS, githubRequest(), GitHubRequestError, headContainsMain(), mergeStandingSyncPullRequest() (+10 more)
 
-### Community 19 - "Preview Race Tests"
-Cohesion: 0.19
-Nodes (8): postPublishRefRace(), snapshot, previewSummaryBody(), publishPreviewSummary(), rawIndexHash(), runGit(), semanticIndexHash(), sha256()
+### Community 19 - "electron-release-gates.test.mjs"
+Cohesion: 0.18
+Nodes (10): allowed(), evaluate, expression, main, workflow, answerCommand(), answerQuestion(), CHAT_SYSTEM_PROMPT (+2 more)
 
-### Community 20 - "Promotion Worker Contract"
+### Community 20 - "promotion-worker-contract.sh"
 Cohesion: 0.14
 Nodes (17): BASE_REF, BASE_SHA, compute_plan_hash(), GITHUB_OUTPUT, PLAN_HASH, PROMOTION_BRANCH, reject_lineage_mismatch(), require_lineage_replay() (+9 more)
 
-### Community 21 - "Feature Stack Planning"
-Cohesion: 0.32
+### Community 21 - "ref_node_path"
+Cohesion: 0.30
 Nodes (14): canonicalFeatureStackPlan(), decodeFeatureStackPlan(), exactKeys(), featureStackId(), git(), selfTest(), validateWaterfall(), verifyFeatureStackHistory() (+6 more)
 
-### Community 22 - "Admin Preview Publisher"
+### Community 22 - "PR #603 — Admin preview publisher controller"
 Cohesion: 0.13
 Nodes (15): Admin Preview Publisher, Compatibility fix, Develop Preview Controller, Protected github-actions Branch, Thingtime GitHub App Bot, Outcome, PR #595, PR #603 — Admin preview publisher controller (+7 more)
 
-### Community 23 - "Rebase Edit Verification"
+### Community 23 - "rebase-related-edits.test.mjs"
 Cohesion: 0.28
 Nodes (14): actionPath, copyTrustedTree(), extractVerifierScript(), filesUnder(), hashNamedFiles(), hashRebaseState(), hashTrustedTree(), makeStoppedRebase() (+6 more)
 
-### Community 24 - "Rebase Round Preparation"
+### Community 24 - "prepare-round.sh"
 Cohesion: 0.28
 Nodes (14): assert_safe_regular_text_conflict(), clear_scratch(), emit(), emit_paths(), has_coherent_zdiff3_markers(), hash_index_entries(), hash_rebase_state(), rebase_in_progress() (+6 more)
 
-### Community 25 - "Promotion Worker Script"
+### Community 25 - "promotion-worker.sh"
 Cohesion: 0.37
 Nodes (13): classify_source_lineage(), emit(), emit_paths(), fail(), prepare(), require_environment(), require_reservation(), secure_git_environment() (+5 more)
 
-### Community 26 - "Preview Label Management"
+### Community 26 - "preview-labels.mjs"
 Cohesion: 0.24
 Nodes (11): colors, ensureLabel(), hasPreviewLabels(), lanes, prefix(), previewBuildTime(), previewBuiltLabel(), syncOnce() (+3 more)
 
-### Community 27 - "Promotion Worker Routing"
+### Community 27 - "promotion-worker-routing-contract.mjs"
 Cohesion: 0.14
 Nodes (13): action, allBranchWorkflow, developPromotionWorkflow, featurePromotionWorkflow, featureStackMergeIf, featureStackMergeJob, graphify, lopuAgent (+5 more)
 
-### Community 28 - "Control Plane Testing"
-Cohesion: 0.14
+### Community 28 - "Control-plane regression checklist"
+Cohesion: 0.17
 Nodes (12): Configured cross-provider waterfall, Control-plane regression checklist, Cooperative review handover, Event feedback and CI cancellation, Exact configured workflow model orders, Explicit stack model and endpoint waterfall, Feature Stack run status conversations, Feature Stack snapshot publication and merge gates (+4 more)
 
-### Community 29 - "Repository Automation Architecture"
+### Community 29 - "sync/main-into-develop PR"
 Cohesion: 0.15
 Nodes (14): Clean Synchronization Lane, develop Branch, GitHub Exact-Head REST Merge, Semantic Graphify Extraction, Local Codex Proxy, Lopu Conflict Resolver, main Branch, PR #475 (+6 more)
 
-### Community 30 - "Control Plane Documentation"
-Cohesion: 0.15
-Nodes (13): Commander signed releases, Desktop and Recovery release pipeline, Fork setup: Vercel develop previews, `github-actions` — the CI control plane, Known trade-off, Lopu principal repository manager, macOS signing and build identity, PR delivery regression checks (+5 more)
+### Community 30 - "`github-actions` — the CI control plane"
+Cohesion: 0.12
+Nodes (16): Commander signed releases, Desktop and Recovery release pipeline, Discoverable preview status and recovery, Fork setup: Vercel develop previews, `github-actions` — the CI control plane, Known trade-off, Lopu principal repository manager, macOS signing and build identity (+8 more)
 
-### Community 31 - "Agent Instructions"
+### Community 31 - "Thingtime AI instructions"
 Cohesion: 0.17
 Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
 
-### Community 32 - "Claude Compatibility Instructions"
+### Community 32 - "Thingtime AI instructions"
 Cohesion: 0.17
 Nodes (11): Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing, graphify, iOS development and releases (+3 more)
 
-### Community 33 - "Graphify Snapshot Staging"
+### Community 33 - "stage-graphify-snapshots.mjs"
 Cohesion: 0.36
 Nodes (11): addExisting(), filesUnder(), git(), LEGACY_ROOT, missingFromWorktree(), PORTABLE, removeFromIndex(), restoreTrackedFromHead() (+3 more)
 
-### Community 34 - "Control Plane Events"
-Cohesion: 0.31
-Nodes (5): ci, workflow, classifyConversation(), classifyQueuedConversation(), hasAutomationMarker()
+### Community 34 - "control-plane-events.test.mjs"
+Cohesion: 0.21
+Nodes (7): ci, workflow, classifyConversation(), classifyQueuedConversation(), hasAutomationMarker(), previewSummaryBody(), publishPreviewSummary()
 
-### Community 35 - "Saved Model Waterfall"
+### Community 35 - "Lopu Agent Action"
 Cohesion: 0.31
 Nodes (9): Saved Admin Model Waterfall, Isolated Rebase Scratch Verification, Lopu Agent Action, Rebase Conflict Round Action, Rebuild All Branch Job, Stack Rebase Worker Job, Feature Stack Merge Job, Model Configuration Job (+1 more)
 
-### Community 36 - "Preview Manager Reliability"
+### Community 36 - "PR #609 — Restore Lopu and preview admission"
 Cohesion: 0.22
 Nodes (8): Follow-up acceptance repair, Live diagnosis, Outcome, PR #609 — Restore Lopu and preview admission, Security boundary, Validation, Thingtime Credential Vault Router, Lopu Admission Contract
 
-### Community 37 - "Rebase Conflict Startup"
+### Community 37 - "start.sh"
 Cohesion: 0.46
 Nodes (7): emit(), emit_paths(), rebase_in_progress(), secure_git_environment(), start.sh script, usage(), write_conflicts()
 
-### Community 38 - "Electron Release Workflow"
+### Community 38 - "Select Release Distribution"
 Cohesion: 0.25
 Nodes (8): Build Signed and Notarized Electron Release, Build Unsigned Electron Release, Derive SemVer PR Release Identity, Import Developer ID and Notarization Credentials, Resolve and Validate PR Source, Select Release Distribution, Thingtime Electron PR Release Workflow, Electron App Release
 
-### Community 39 - "PR Resolution Components"
+### Community 39 - "Resolve Promotion"
 Cohesion: 0.25
 Nodes (8): Graphify Refresh, Lopu Agent Composite Action, PR Progress Monitor, Promotion Worker Script, Rebase Conflict Round Action, Promotion Graphify Refresh Script, Resolve PR, Resolve Promotion
 
-### Community 40 - "Promotion Source Verification"
+### Community 40 - "verify-promotion-source-authority.sh"
 Cohesion: 0.33
 Nodes (6): fail(), GIT_ATTR_NOSYSTEM, GIT_CONFIG_GLOBAL, GIT_CONFIG_NOSYSTEM, GIT_CONFIG_SYSTEM, verify-promotion-source-authority.sh script
 
-### Community 41 - "Stack Progress Heartbeat"
+### Community 41 - "PR #534 — Feature Stack progress heartbeat controller"
 Cohesion: 0.29
 Nodes (7): Feature Stack Progress Heartbeat Controller, Outcome, PR #534 — Feature Stack progress heartbeat controller, Feature Stack Progress Reporter, Safety and cost, Feature Stack Target Workers, Validation
 
-### Community 42 - "Graphify Control Plane"
+### Community 42 - "Lopu Protected Repository Manager"
 Cohesion: 0.33
 Nodes (6): Graphify Content-addressed Snapshots, Lopu Protected Repository Manager, All Branch Workflow, All Branch Event Handoff Job, Maintain All Branch Job, GitHub Actions Control Plane Documentation
 
-### Community 43 - "Electron Release Gates"
-Cohesion: 0.40
-Nodes (5): allowed(), evaluate, expression, main, workflow
+### Community 43 - "deploy-vercel-prebuilt.mjs"
+Cohesion: 0.15
+Nodes (36): applyOutputPolicy(), visit(), compatibilityAliasCandidates(), context(), deploymentArgs(), deploymentIssue(), exec, existing() (+28 more)
 
-### Community 44 - "Main Develop Sync Automation"
+### Community 44 - "PR #506 — Auto-merge resolved main to develop sync PR"
 Cohesion: 0.33
 Nodes (5): Operational proof gate, PR #506 — Auto-merge resolved main to develop sync PR, Problem, Resolution, Validation
 
-### Community 45 - "Stack Status Responder"
+### Community 45 - "Feature Stack Status Responder"
 Cohesion: 0.40
 Nodes (5): Merge Workers, PR #781 — Feature Stack action status responder, Paired Product/API PR #782, Product Chat Capability, Feature Stack Status Responder
 
-### Community 46 - "Vercel Configuration"
+### Community 46 - "vercel.json"
 Cohesion: 0.33
 Nodes (5): framework, git, deploymentEnabled, ignoreCommand, $schema
 
-### Community 47 - "Web CI Workflow"
+### Community 47 - "Classify Web CI Scope Job"
 Cohesion: 0.40
 Nodes (5): API Suite Job, Build Typecheck Ratchet Unit Tests Job, Product Contract Advisories, Classify Web CI Scope Job, Web CI Workflow
 
-### Community 48 - "Electron PR Release Contract"
-Cohesion: 0.50
-Nodes (4): assertPrReleaseContract(), count(), here, workflow
+### Community 48 - "ref_node_os"
+Cohesion: 0.17
+Nodes (17): githubJobs(), githubStackPullRequests(), postProgress(), progressSnapshot(), reconcile(), recoveryPayload(), run(), selfTest() (+9 more)
 
-### Community 49 - "Conflict Resolution Jobs"
+### Community 49 - "Conflict Detector Job"
 Cohesion: 0.40
 Nodes (5): Conflict Detector Job, Ensure Lopu Label Definitions, Ensure Progress Comment, GitHub Read Retry Helper, Resolver Handoff Job
 
-### Community 50 - "Credential Vault Controller"
+### Community 50 - "PR #492 — Load Lopu credentials from the Thingtime vault"
 Cohesion: 0.40
 Nodes (4): PR #492 — Load Lopu credentials from the Thingtime vault, Safety and regression focus, Scope, Validation log
 
-### Community 51 - "Rebase Ownership Routing"
+### Community 51 - "rebase-ownership-routing-contract.sh"
 Cohesion: 0.83
 Nodes (3): assert_owner(), assert_stack(), rebase-ownership-routing-contract.sh script
 
-### Community 52 - "Instruction Conflict Resolution"
+### Community 52 - "resolve-canonical-instruction-type-conflicts.sh"
 Cohesion: 0.83
 Nodes (3): resolve-canonical-instruction-type-conflicts.sh script, stage_record(), tree_record()
 
-### Community 53 - "PR Rebase Management"
+### Community 53 - "Lopu PR Manager Workflow"
 Cohesion: 0.50
 Nodes (4): Rebase PR Stacks Workflow, Lopu PR Manager Workflow, Apply Lopu CodeQL Dispositions, Manage Rebases Job
 
-### Community 54 - "Stacked PR Cascading"
+### Community 54 - "Guarded Push"
 Cohesion: 0.50
 Nodes (4): Cascade to Stacked PRs, Comment on Resolved PR, Guarded Push, Requeue After Moving Ref Race
 
-### Community 55 - "AI Instruction Files"
+### Community 55 - "Thingtime Agent Instructions"
 Cohesion: 0.67
 Nodes (3): Thingtime Agent Instructions, Canonical AI Instructions, Claude Compatibility Instructions
 
-### Community 56 - "Preview Recovery UX"
+### Community 56 - "Control-plane changelog"
+Cohesion: 0.20
+Nodes (10): 2026-09-05 — Cooperative review handover and preview recovery, 2026-09-05 — Desktop and Recovery cloud release repair, 2026-09-05 — Signed Commander releases and Recovery pairing, 2026-09-05 — Visible previews and conflict detector recovery, 2026-10-18 — Correct reusable workflow context, 2026-10-18 — Diagnose OpenAI preflight failures safely, 2026-10-18 — Execute the saved admin AI waterfall, 2026-10-23 — Build every Vercel deployment on GitHub Actions (+2 more)
+
+### Community 92 - "CHANGELOG.md"
+Cohesion: 0.25
+Nodes (4): Changes, Evidence and cause, PR #642: Discoverable preview status and missed-build repair, Validation and rollout
+
+### Community 93 - "PR #634: Lopu comment admission and idempotent preview writes"
+Cohesion: 0.29
+Nodes (7): Control-Plane Verification Job, PR 634 Comment Admission Hardening, Behavior, Evidence and scope, PR #634: Lopu comment admission and idempotent preview writes, Rollout, Validation
+
+### Community 94 - "ref_node_crypto"
+Cohesion: 0.80
+Nodes (4): rawIndexHash(), runGit(), semanticIndexHash(), sha256()
+
+### Community 95 - "PR #661: conflict scans and visible previews"
+Cohesion: 0.33
+Nodes (6): Bounded PR Inventory, Routing Dependency Graph Regression, PR #592, PR #661: conflict scans and visible previews, Preview Description Helper, Target Ref Race Retry
+
+### Community 97 - "PR #637: Safe cooperative handover for Lopu reviews"
+Cohesion: 0.40
+Nodes (5): PR #611 recovery, PR #637: Safe cooperative handover for Lopu reviews, Protocol, Scope and evidence, Validation
+
+### Community 98 - "[Unreleased]"
+Cohesion: 0.50
+Nodes (4): Added, Changed, Fixed, [Unreleased]
+
+### Community 100 - "PR 1017: GitHub Lopu admin model waterfall"
 Cohesion: 0.67
-Nodes (3): Discoverable preview status and recovery, Missing-build wildcard page, Working on it
+Nodes (3): Post Agent Semantic Graphify Refresh, OpenAI Vault Credentials, PR 1017: GitHub Lopu admin model waterfall
 
 ## Ambiguous Edges - Review These
 - `deploy-admin-pr-previews.mjs` → `Admin Controller Job`  [AMBIGUOUS]
@@ -399,23 +438,23 @@ Nodes (3): Discoverable preview status and recovery, Missing-build wildcard page
   .github/workflows/all-branch.yml · relation: references
 
 ## Knowledge Gaps
-- **122 isolated node(s):** `GIT_ATTR_NOSYSTEM`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_KEY_0`, `GIT_CONFIG_KEY_1` (+117 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 380 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **34 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **122 isolated node(s):** `RUNNER_TEMP`, `GITHUB_OUTPUT`, `SOURCE_PR`, `BASE_REF`, `BASE_SHA` (+117 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 390 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **36 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `selfTest()` connect `Promotion Workflow Tests` to `Preview Race Tests`?**
-  _High betweenness centrality (0.016) - this node is a cross-community bridge._
-- **What connects `GIT_ATTR_NOSYSTEM`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_GLOBAL` to the rest of the system?**
+- **Why does `Controller Job` connect `extract-vercel-prebuilt.py` to `deploy-develop-pr-preview.mjs`?**
+  _High betweenness centrality (0.014) - this node is a cross-community bridge._
+- **What connects `RUNNER_TEMP`, `GITHUB_OUTPUT`, `SOURCE_PR` to the rest of the system?**
   _122 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Promotion Workflow Tests` be split into smaller, more focused modules?**
-  _Cohesion score 0.05063571033720288 - nodes in this community are weakly interconnected._
-- **Why does `Controller Job` connect `Secure Vercel Extraction` to `Develop Preview Deployment`?**
-  _High betweenness centrality (0.011) - this node is a cross-community bridge._
-- **Should `Develop Preview Deployment` be split into smaller, more focused modules?**
-  _Cohesion score 0.05496774193548387 - nodes in this community are weakly interconnected._
+- **Should `promote-features-to-main.mjs` be split into smaller, more focused modules?**
+  _Cohesion score 0.05 - nodes in this community are weakly interconnected._
+- **Why does `selfTest()` connect `promote-features-to-main.mjs` to `ref_node_fs`?**
+  _High betweenness centrality (0.013) - this node is a cross-community bridge._
+- **Should `deploy-develop-pr-preview.mjs` be split into smaller, more focused modules?**
+  _Cohesion score 0.05470967741935484 - nodes in this community are weakly interconnected._
 
 ### Low-confidence Hints
 _AMBIGUOUS edges — the extractor was unsure. Verify before acting on these._
