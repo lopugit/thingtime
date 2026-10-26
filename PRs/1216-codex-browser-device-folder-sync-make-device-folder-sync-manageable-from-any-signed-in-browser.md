@@ -268,3 +268,10 @@ separately from the historical browser/compiled-server harness results above.
   settings were edited. A final follow-up preserves unsaved speed/recovery
   fields and corrects compact pause summaries; its seven focused tests and
   desktop/390px browser regressions passed before the final signed build.
+
+### Isolated upload fixture bootstrap — 2026-10-26
+
+- The opt-in acceptance relay can approve one named non-admin test account for private uploads through the canonical admin API. It creates a namespace-only administrator, restarts only the API with retained database/signing material, and never exports bootstrap credentials. Ordinary launches are unchanged; the fixture requires enforced isolated networking.
+- All used endpoint capabilities are negotiated. User discovery has a bounded deadline and 15–60 second backoff. Unexpected child exits still terminate the fixture. Focused regression coverage includes child lifecycle, identity/approval checks and refusal outside the isolated fixture.
+- The installed generic-folder build already confirmed real DJ DODA payloads and matching absolute cloud ancestry, with Home paused. These results do not replace the remaining isolated browser start/pause, hash, recovery and active-window-close acceptance. Final current evidence remains in the PR description and HTML tracker.
+- Corrected local folder-access copy to acknowledge the optional absolute paths retained in private synced Things.

@@ -33,8 +33,8 @@ function createRelay({ engine, task, port, active = () => !task.closed }) {
 }
 
 async function main() {
-  const [stateRoot, imageId, rawPort] = process.argv.slice(2), port = Number(rawPort);
-  if (process.argv.length !== 5 || !stateRoot || !path.isAbsolute(stateRoot) || !/^sha256:[a-f0-9]{64}$/.test(imageId || '')) throw new Error('Supply a fresh absolute private state directory, immutable full-app image ID and unused loopback port.');
+  const [stateRoot, imageId, rawPort, fixtureUsername] = process.argv.slice(2), port = Number(rawPort);
+  if (![5, 6].includes(process.argv.length) || (fixtureUsername !== undefined && !/^[a-z0-9][a-z0-9._-]{2,31}$/.test(fixtureUsername)) || !stateRoot || !path.isAbsolute(stateRoot) || !/^sha256:[a-f0-9]{64}$/.test(imageId || '')) throw new Error('Supply a fresh absolute private state directory, immutable full-app image ID and unused loopback port.');
   const origin = `http://127.0.0.1:${port}`;
   applicationOptions(randomUUID(), origin);
   await fs.mkdir(stateRoot, { recursive: true, mode: 0o700 });
@@ -47,7 +47,7 @@ async function main() {
     task = new BrowserContainer(engine, options);
     const call = task.call.bind(task);
     task.call = async (method, params, options) => {
-      try { return await call(method, method === 'launch' ? { ...params, applicationOrigin: origin } : params, options); }
+      try { return await call(method, method === 'launch' ? { ...params, applicationOrigin: origin, ...(fixtureUsername ? { fixtureUsername } : {}) } : params, options); }
       catch (error) {
         if (method === 'launch' && task.containerId) {
           // Capture only public readiness fields before the manager tears down

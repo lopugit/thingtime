@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Add an explicit isolated installed-sync fixture bootstrap: canonical admin registration, one supervised API restart preserving its private database/session, and private-only upload approval for an exact UI-registered non-admin account. Ordinary launches retain existing behavior; real installed transfer acceptance remains separate. **Codex (AI)**
+
 - 2026-10-26: Replace expanded folder-sync panels and Home presets with generic,
   individually editable folder cards. Preserve drafts across disclosure changes
   while stopping hidden progress work. New Mac connections can retain their

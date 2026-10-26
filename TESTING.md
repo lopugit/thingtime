@@ -12948,6 +12948,16 @@ separate from deterministic discovery/lease tests.
   and passed manifest checks on the shared private loopback origin. Browser and
   backend preflight confirmed no external routes and refused IPv4/IPv6 egress.
   Every local Docker COPY input is staged and allowlisted; 13 focused tests pass.
+- [ ] Opt-in isolated upload fixture: rebuild the immutable image, launch the
+  relay with the exact disposable username as fourth argument and register that
+  user in the bound browser. Verify canonical admin bootstrap registration
+  precedes its supervised API-only restart, ordinary launches remain unchanged,
+  and network preflight rejects the option outside isolation. Check the actual
+  test user's `/api/v1/auth/me`: full user, non-admin, private uploads enabled,
+  public uploads withheld. Wrong targets, API errors and timeout must fail closed;
+  no bootstrap credentials/session/signing material may appear in output. Run
+  `node --test electron/test/agent-browser-application.test.cjs`. This prerequisite
+  does not prove native pairing, transferred bytes or active window continuity.
 - [ ] Run the same-browser/backend installed acceptance in
   `docs/installed-sync-acceptance.md`. Verify the enforced network boundary,
   disposable full-account registration, genuine installed Node pairing, actual

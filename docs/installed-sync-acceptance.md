@@ -135,12 +135,36 @@ Provision private-upload approval through the documented local admin flow
 an authorized isolated administrator. Verify the test user is non-admin before
 acceptance. Do not directly modify encrypted account data or relax upload gates.
 
-The current acceptance runtime has no supported app-only restart: stopping its
-API child terminates the enclosing runtime and disposable database. A fixture
-that needs bootstrap-admin lifecycle support must have that support prepared
-before launch. Do not kill the API to change its environment, extract its signing
-secret, or claim readiness when upload approval is unavailable. Record this as a
-fixture prerequisite and preserve the separate negative-refusal evidence.
+For this eligibility prerequisite, the relay accepts an optional fourth argument:
+
+```sh
+node electron/scripts/test-agent-desktop-relay.cjs \
+  /private/tmp/ACCEPTANCE_STATE sha256:REPLACE_WITH_IMAGE_ID 28671 pr1216-test-user
+```
+
+The username is non-secret and must exactly match the account subsequently
+registered through the isolated browser UI using its approved on-device password
+manager entry. Rebuild the immutable image first; an older runtime cannot acquire
+this support. The option is refused unless the runtime's actual network preflight
+proves isolation and an explicit loopback application authority is selected.
+
+The opt-in runtime registers a separate generated bootstrap administrator through
+the canonical registration API, then performs one supervised API-only restart,
+retaining the namespace database and signing material. Only this intentional exit
+is exempt from the normal child-failure teardown. It verifies the retained admin
+session and negotiated capabilities before looking for the exact named test user.
+It waits with fifteen-second to sixty-second backoff for up to thirty minutes; after registration it
+refuses an admin target and approves **private uploads only** through the ordinary
+admin API. It verifies the approval response leaves public uploads withheld, then
+drops its bootstrap session handle. Passwords and sessions never leave the
+namespace or appear in CLI arguments, descriptors or output. Readiness alone does
+not establish that the later UI-registered user has been approved: independently
+check that user's authenticated `/api/v1/auth/me` before pairing or transfer.
+
+Any bootstrap/API/identity failure or registration timeout terminates the fixture.
+Ordinary launches without the username retain their existing behavior and upload
+refusal coverage. There is no general restart, admin or password-export interface.
+Do not kill the API manually, extract signing secrets or relax upload gates.
 
 Provision/access the disposable credentials through approved test-fixture
 handling or the executing device's supported Thingtime password-manager
