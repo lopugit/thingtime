@@ -75,7 +75,7 @@ stays separate, and gateway settings are rejected in the desktop shell. HTTPS is
 mandatory; HTTP loopback is permitted only in the explicit Node test fixture.
 
 `/.well-known/thingtime-capabilities.json` publishes `api.environment-gateway`
-1.1.0 and an optional `gateway` descriptor containing only environment, stable
+1.2.0 and an optional `gateway` descriptor containing only environment, stable
 origin and deployment identity. This metadata is private/no-store to prevent a
 CDN pinning the previous alias owner. Discovery itself neither authenticates an
 agent nor grants access to private Things.
@@ -91,6 +91,28 @@ specific semantic feature version and advertised path/method before forwarding.
 A branch with a newer or incompatible API must wait for its environment gateway
 to support that API; a preview therefore runs its own frontend against the
 canonical environment backend, not its branch-specific backend implementation.
+
+Follower discovery now resolves the same bounded gateway authority as request
+admission. It advertises a semantic feature only when every forwarded path and
+method in that local feature can execute at the owner's compatible version.
+Missing/incompatible features or operations remove the whole feature and its
+operations; discovery never substitutes an older owner version that the local
+request gate would reject. Remaining versions are local guarantees, not a copy
+of a newer owner's extra features. The frontend origin and public gateway
+identity remain unchanged; no relay secret or runtime configuration is copied.
+
+The configured canonical alias bootstraps its local registry without fetching
+itself. Standalone, dedicated, and verified immutable-owner origins retain their
+local registry. Other proxy origins return fixed, no-store503 on unavailable or
+invalid ownership, including wrong-origin discovery; no stale-on-error manifest
+is served. Ownership still uses the existing at-most-five-second cache. The
+handler resolves this contract for HEAD as well as GET. Browser clients keep
+same-origin manifest negotiation and receive no new authority to use another
+origin. Public `/api/v1/capabilities` continues to describe the executing API
+runtime; the frontend's well-known discovery must never promise more executable
+forwarded contracts than that runtime. A public docs409 is not successful feature
+acceptance, even if a local registry lists the newer feature.
+
 
 Relays preserve method, query, body stream, authentication/cookie, Character,
 selected-data-plane and expected-actor headers. A short-lived, environment-bound

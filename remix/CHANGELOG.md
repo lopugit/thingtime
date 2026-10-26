@@ -102,6 +102,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Correct proxy-preview capability discovery to advertise only whole contracts executable through the current gateway; unavailable ownership fails closed, while local/owner discovery remains intact. Share the feature/path/method gate with request admission and advertise `api.environment-gateway`1.2. Connections2 backend rollout and live feature acceptance remain separate. [PR1240](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**
+
 - 2026-10-27: Distinguish native Password AutoFill account linkage from OS suggestion-index synchronization, retain disabled-provider links with explicit retry feedback, and fence stale account/index completion. Installed-device acceptance remains pending. [Contract](../docs/password-manager.md#connection-and-suggestion-index-status). **Codex (AI)**
 
 - 2026-10-27: Integrate Connections2 service accounts and editable password-manager

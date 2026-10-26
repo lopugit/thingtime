@@ -14,7 +14,13 @@ Run `test:schemas`, `test:feed`, `test:api-capabilities` and the isolated
 `subspace-messages-acceptance.mjs` typed-post/comment persistence checks.
 
 Environment API gateway ingress is negotiated through `api.environment-gateway`
-1.1.0 and `/.well-known/thingtime-capabilities.json`. Server deployments use
+1.2.0 and `/.well-known/thingtime-capabilities.json`. Proxy follower discovery
+filters whole features/operations against the existing gateway authority through
+`gatewayOperations.ts`, shared with request admission; no downgrade to an owner
+version that the local runtime refuses. Missing or incompatible ownership fails
+closed. The canonical alias bootstraps local discovery; standalone/dedicated and
+verified immutable owners retain their registry. Run `test:environment-gateway`
+for the actual Nitro handler, ownership and public operation contract checks. Server deployments use
 the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by
 opt-in) with the `THINGTIME_MONGODB_CONNECTION_MODE` runtime override. Dedicated
 mode executes its own backend, advertises `gateway: null`, and refuses relay

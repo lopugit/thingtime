@@ -101,3 +101,33 @@ that failure. Full native compilation and signed installed-device acceptance
 remain open. The installed provider is enabled in macOS settings, but a usable
 Thingtime choice in Chrome's passkey prompt has not been demonstrated. No Google
 client secret or live Google/GitHub passkey was created by these checks.
+
+
+## Effective preview capability discovery —2026-10-27
+
+Read-only release checks linked the exactfb712 frontend artifact to both preview
+URLs through the GitHub artifact digest, static index,119 direct assets and the
+passwords lazy bundle. This did not prove backend rollout: the shared preview
+master executes main0658 and publicly advertises Connections1.0, while the
+frontend-local discovery claimed2.0/request2.0/filters1.1. Public Connections docs
+returned409 from the follower's existing semantic gate. Passwords1.3 agreed.
+
+This correction projects follower discovery through that same bounded authority
+and shared feature/path/method gate. A whole semantic feature and its operations
+are omitted if any forwarded operation is missing/incompatible; it never
+advertises an older contract the local runtime refuses. Canonical alias bootstrap
+avoids self-fetch recursion; standalone/dedicated/verified owner behavior remains
+local. Fixed503/no-store failures expose no raw error or deployment configuration.
+The gateway feature deliberately advances to1.2; backend routing, minimum owner
+protocol and operation refusal remain unchanged. This source correction has not
+been deployed or accepted against a real account. Connections2 gateway rollout,
+native builds/provider/credential behavior and overall feature acceptance remain
+open; the capability repair cannot implement a missing backend.
+
+Focused source verification:64 environment-gateway/handler checks (including
+nine new effective-discovery cases) and122 API registry/client capability checks
+passed with no skipped cases. Targeted lint passed with two pre-existing
+`apiDocs.ts` literal-concatenation warnings; no new lint errors. Tests use in-process
+public Nitro requests and synthetic authority responses, without authentication,
+production requests or a database. No graph refresh, staging or publication is
+part of this review freeze.

@@ -178,7 +178,7 @@
     "test:mail:storage": "node --env-file=.env.local --import tsx scripts/mail-storage.integration.mts",
     "test:activity": "node --import tsx --test app/activity/*.test.ts",
     "test:activity-ui": "node scripts/test-activity-manager-ui.mjs",
-    "test:environment-gateway": "node --import tsx --test app/api/utils/deployment/environmentGateway.test.ts server/utils/environmentGateway.test.ts",
+    "test:environment-gateway": "node --import tsx --test app/api/utils/deployment/environmentGateway.test.ts server/utils/environmentGateway.test.ts server/handlers/thingtime-capabilities.test.ts",
     "test:environment-gateway:acceptance": "node scripts/environment-gateway-acceptance.mjs",
     "test:environment-gateway:connections": "THINGTIME_GATEWAY_ACCEPTANCE_CONNECTIONS=1 node scripts/environment-gateway-acceptance.mjs",
     "test:connections-browser": "TT_QA_SUITE=service-catalog node scripts/run-private-tools-browser.mjs"

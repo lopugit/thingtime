@@ -1,3 +1,6 @@
+<!-- Effective proxy capability discovery regression added2026-10-27. -->
+- [ ] Pair a newer proxy frontend registry with an older gateway: its well-known manifest must omit whole incompatible/missing features and all their operations, never downgrade to a version refused by local admission. For each remaining forwarded operation require matching feature/path/method in the owner; test missing path/method/feature, malformed/breaking version, wrong origin/environment, unavailable owner, selection/owner changes and no stale-on-error. Actual handler GET/HEAD failures must be fixed no-store503 without config/secrets. Canonical alias discovery must not recurse; standalone/dedicated/verified immutable-owner registries remain unchanged. Public runtime capabilities/docs must agree; backend rollout and authenticated acceptance remain separate.
+
 # TESTING.md — per-area manual test checklists
 
 ## Hosted native compilation boundary

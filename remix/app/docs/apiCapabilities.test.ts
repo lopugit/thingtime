@@ -838,7 +838,7 @@ test('gateway discovery and every Connections major2 operation retain their exac
   const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
   const discovery = thingtimeCapabilityManifest('https://gateway-contract.test');
   for (const [feature, version] of [
-    ['api.environment-gateway', '1.1.0'], ['api.social-card', '1.0.1'],
+    ['api.environment-gateway', '1.2.0'], ['api.social-card', '1.0.1'],
     ...['connections', 'connections-providers', 'connections-feed', 'connections-oauth-begin', 'connections-oauth-callback', 'connections-request'].map(id => [`api.${id}`, '2.0.0'])
   ]) {
     assert.equal(legacy.features[feature], version);
