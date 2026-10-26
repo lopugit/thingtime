@@ -104,6 +104,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Add negotiated theme/algorithm catalogue streams with one home
+  snapshot, validated completion and atomic scoped device admission. Isolated
+  Chromium and built owner/gateway HTTP checks pass; creation/write capacity,
+  live snapshot races and full native UI remain open.
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
+
 - 2026-10-26: Reconcile PR 1000 with develop's environment gateway while retaining
   offline test coverage and safe notification links. Built acceptance verifies
   branch-local draft-preview bytes/CSP, social-card GET/HEAD, authenticated

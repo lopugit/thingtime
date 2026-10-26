@@ -23,7 +23,7 @@ const conflict = (): never => {
 	throw new ThemeSyncError(409, 'The account theme changed. Your device changes have been kept.');
 };
 const themeVersion = (doc: any) => storedSnapshotVersion(doc, THEME_VERSION_PREFIX);
-const project = (doc: any, legacy = false) => ({
+export const projectThemeSyncDocument = (doc: any, legacy = false) => ({
 	...toPublicTheme(
 		legacy ? doc : { ...doc, name: doc.crystal?.name, theme: doc.crystal?.theme, visibility: doc.acl?.includes('tt:all') ? 'public' : 'private' }
 	),
@@ -48,9 +48,9 @@ export async function themeSyncSnapshot(ownerId: string) {
 			.toArray();
 		if (current.length > MAX_SAVED_THEMES || earlier.length > MAX_SAVED_THEMES)
 			throw new ThemeSyncError(413, 'The theme catalogue exceeds the synchronization limit.');
-		const all = new Map<string, ReturnType<typeof project>>();
-		for (const doc of earlier) all.set(doc.shareId, project(doc, true));
-		for (const doc of current) all.set(doc.shareId, project(doc));
+		const all = new Map<string, ReturnType<typeof projectThemeSyncDocument>>();
+		for (const doc of earlier) all.set(doc.shareId, projectThemeSyncDocument(doc, true));
+		for (const doc of current) all.set(doc.shareId, projectThemeSyncDocument(doc));
 		if (all.size > MAX_SAVED_THEMES) throw new ThemeSyncError(413, 'The theme catalogue exceeds the synchronization limit.');
 		const sorted = [...all.values()].sort((a, b) => a.id.localeCompare(b.id));
 		copyBoundedJson(sorted, { maxBytes: 8 * 1024 * 1024, maxDepth: 12, maxNodes: 250_000 });

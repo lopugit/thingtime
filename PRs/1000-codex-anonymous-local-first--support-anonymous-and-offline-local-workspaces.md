@@ -4,6 +4,21 @@ Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/
 
 ## Current checkpoint — 2026-10-26
 
+The next capacity slice adds authenticated NDJSON catalogue reads, bounded
+home-snapshot paging and atomic scoped IndexedDB admission. It has codec,
+authorization, manifest, storage and real isolated Chromium adapter coverage;
+[the catalogue checkpoint](../artifacts/anonymous-local-first-2026-10-26-catalogue/README.md)
+records failures, corrections and evidence boundaries. Built HTTP streams pass
+through owner and gateway follower with 65 themes and two algorithms on isolated
+replica sets, including exact content, versions, manifests and refusal checks.
+Live concurrent mutation/legacy precedence, full native UI, remote creation
+counts and larger individual transfers remain open.
+
+Web CI and both CodeQL language analyses passed for integration commit
+`2ced7219977adcfa42608f571ad44414305eb357`. Its preview workflow failed with no
+exposed jobs/check-run diagnostics; the reachable preview still served older
+`7f4803f9` when read. This is separate from the later catalogue source.
+
 Integrated develop `cd6f8b8a` into the existing feature branch, preserving both
 gateway/index lifecycle changes and anonymous/offline behavior. Conflicts were
 limited to additive changelog/test scripts and notification imports. The built

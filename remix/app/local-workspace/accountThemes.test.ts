@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { createQuotaFactory } from './storageTestFixture';
 import assert from 'node:assert/strict';
 import test from 'node:test';

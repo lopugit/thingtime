@@ -15603,3 +15603,23 @@ Local results do not establish current-head CI or deployed acceptance.
   `USE_INSTRUCTION_TRANSFER`; separately assert anonymous responses contain no
   instructions. Keep this protocol regression independently runnable without
   replacing the full native clipboard, undo/redo and cold-reload test.
+
+
+### Streamed theme and algorithm catalogues (PR #1000)
+
+- [x] Validate ordered chunks, exact identity, transcript digest/counts and clean
+  EOF before local admission; reject truncation, malformed frames, revoked
+  identity and stalled writes. `test:catalogue` and `accountCatalogueTransport.test.ts`.
+- [x] Keep previous content after interrupted reads, quota failure or cancellation
+  inside admission. Cover superseding reads, edits during reception, dependent
+  Things, retired-lease staging cleanup and catalogues beyond old count/8 MiB
+  response limits without `getAll`. `catalogueStaging.test.ts`.
+- [x] Exercise built authenticated HTTP streams through the owner and gateway
+  follower against disposable replica sets. Validate 65 themes across the page
+  boundary, two algorithms, exact versions/content, both capability manifests,
+  clean EOF and anonymous/cross-site/wrong-owner refusal.
+- [ ] Mutate source data between live snapshot pages and verify consistent
+  observations, legacy precedence, expiry, revocation, selected-database and
+  cancellation behavior beyond deterministic coverage.
+- [ ] Exercise the complete native theme/algorithm UI with a large remote
+  catalogue, offline cold reload, conflict review and independent write queues.

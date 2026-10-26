@@ -1,3 +1,5 @@
+import type { CatalogueCompletion, CatalogueSink } from '../catalogue/catalogueStream';
+import { stageCatalogue, scanWorkspace, findCatalogueEntry, type StagedCatalogue } from './catalogueStaging';
 import type { LocalMutationCapture } from './timeline';
 import { validOptionalLibraryTitle } from '../utils/libraryTitle';
 import { recordAccountThemeChange } from './accountTimeline';
@@ -31,6 +33,7 @@ export type AccountThemeSnapshot = {
 	updatedAt: string;
 };
 export type AccountThemeTransport = {
+	catalogue?(sink: CatalogueSink, signal: AbortSignal): Promise<CatalogueCompletion>;
 	snapshot(signal: AbortSignal): Promise<AccountThemeSnapshot[]>;
 	write(command: ThemeWrite, signal: AbortSignal, receiptPlane?: string): Promise<ThemeWriteAcknowledgment>;
 };
@@ -414,63 +417,82 @@ export class AccountThemeSync {
 			attempts: 0
 		} satisfies State);
 	}
+	private async admitCatalogue(tx: WorkspaceTransaction, remote: StagedCatalogue<AccountThemeSnapshot>) {
+		const catalog = (await tx.get<Catalog>('settings', catalogKey)) ?? blankCatalog();
+		for await (const { value: row } of remote.rows()) {
+			const old = await tx.get<State>(collection, row.id);
+			if (old?.deleted) continue;
+			if (!old || old.state === 'synced') {
+				if (!old || old.baseVersion !== row.version || !old.placementKnown || (!old.titleKnown && row.title !== undefined))
+					await this.install(tx, row, old);
+			} else if (old.baseVersion === row.version && (!old.placementKnown || (!old.titleKnown && row.title !== undefined))) {
+				// Upgrade retained metadata without replacing a pending device edit.
+				const local = await tx.get<LocalThing>('things', row.id);
+				if (local && isTransferTheme(local)) {
+					await tx.put('things', row.id, {
+						...local,
+						...(!old.placementKnown && !old.placementIntent ? { folderId: row.folderId } : {}),
+						crystal: { ...local.crystal, ...(!old.titleKnown && !old.titleIntent && row.title !== undefined ? { title: row.title } : {}) },
+						revision: local.revision + 1
+					});
+					await tx.put(collection, row.id, { ...old, base: row, placementKnown: true, titleKnown: old.titleKnown || row.title !== undefined });
+				}
+			}
+		}
+		for await (const { id, value: state } of scanWorkspace<State>(tx, collection))
+			if (!(await remote.has(id)) && state.state === 'synced' && !state.deleted) {
+				if ((await remote.hasDependent(id))) {
+					await tx.put(collection, id, {
+						...state,
+						state: 'conflict',
+						revision: state.revision + 1,
+						error: 'The account theme was removed. Review its related device Things before discarding the retained copy.'
+					});
+					continue;
+				}
+				await tx.delete('things', id);
+				await tx.delete(collection, id);
+				if ((await tx.get('settings', 'active-theme')) === id) await tx.delete('settings', 'active-theme');
+			}
+		await tx.put('settings', catalogKey, { ...catalog, complete: true, epoch: catalog.epoch + 1 });
+		return true;
+	}
 	async remember(input: unknown, ticket: { read: number; epoch: number }, signal?: AbortSignal) {
 		const remote = parseAccountThemeSnapshot(input);
-		return this.tx(
-			'readwrite',
-			async (tx) => {
-				const catalog = (await tx.get<Catalog>('settings', catalogKey)) ?? blankCatalog();
-				if (catalog.read !== ticket.read || catalog.epoch !== ticket.epoch) return false;
-				const states = new Map((await tx.list<State>(collection)).map(({ id, value }) => [id, value]));
-				const present = new Set(remote.map((row) => row.id));
-				const dependents = new Set((await tx.list<LocalThing>('things')).flatMap(({ value }) => [value.folderId, value.targetId].filter(Boolean)));
-				for (const row of remote) {
-					const old = states.get(row.id);
-					if (old?.deleted) continue;
-					if (!old || old.state === 'synced') {
-						if (!old || old.baseVersion !== row.version || !old.placementKnown || (!old.titleKnown && row.title !== undefined))
-							await this.install(tx, row, old);
-					} else if (old.baseVersion === row.version && (!old.placementKnown || (!old.titleKnown && row.title !== undefined))) {
-						// Upgrade retained metadata without replacing a pending device edit.
-						const local = await tx.get<LocalThing>('things', row.id);
-						if (local && isTransferTheme(local)) {
-							await tx.put('things', row.id, {
-								...local,
-								...(!old.placementKnown && !old.placementIntent ? { folderId: row.folderId } : {}),
-								crystal: { ...local.crystal, ...(!old.titleKnown && !old.titleIntent && row.title !== undefined ? { title: row.title } : {}) },
-								revision: local.revision + 1
-							});
-							await tx.put(collection, row.id, { ...old, base: row, placementKnown: true, titleKnown: old.titleKnown || row.title !== undefined });
-						}
-					}
-				}
-				for (const [id, state] of states)
-					if (!present.has(id) && state.state === 'synced' && !state.deleted) {
-						if (dependents.has(id)) {
-							await tx.put(collection, id, {
-								...state,
-								state: 'conflict',
-								revision: state.revision + 1,
-								error: 'The account theme was removed. Review its related device Things before discarding the retained copy.'
-							});
-							continue;
-						}
-						await tx.delete('things', id);
-						await tx.delete(collection, id);
-						if ((await tx.get('settings', 'active-theme')) === id) await tx.delete('settings', 'active-theme');
-					}
-				await tx.put('settings', catalogKey, { ...catalog, complete: true, epoch: catalog.epoch + 1 });
-				return true;
-			},
-			signal
-		);
+		return this.tx('readwrite', async tx => {
+			const catalog = (await tx.get<Catalog>('settings', catalogKey)) ?? blankCatalog();
+			if (catalog.read !== ticket.read || catalog.epoch !== ticket.epoch) return false;
+			const present = new Set(remote.map(row => row.id));
+			const dependents = new Set<string>();
+			for await (const { value } of scanWorkspace<LocalThing>(tx, 'things'))
+				for (const reference of [value.folderId, value.targetId]) if (reference) dependents.add(reference);
+			return this.admitCatalogue(tx, {
+				async *rows() { for (const value of remote) yield { id: value.id, value }; },
+				has: async id => present.has(id), hasDependent: async id => dependents.has(id)
+			});
+		}, signal);
 	}
 	async refresh(transport: AccountThemeTransport, signal = new AbortController().signal) {
 		const ticket = await this.beginRead();
-		const remote = await accountSyncDeadline((s) => transport.snapshot(s), signal);
-		this.lease.assertCurrent();
-		signal.throwIfAborted();
-		return this.remember(remote, ticket, signal);
+		if (!transport.catalogue) return this.remember(await accountSyncDeadline(s => transport.snapshot(s), signal), ticket, signal);
+		return stageCatalogue<AccountThemeSnapshot>({
+			run: this.tx.bind(this), domain: 'themes', catalogKey, ticket, id: this.uuid(), signal, now: this.now,
+			parse: (id, value) => {
+				const row = parseAccountThemeSnapshot([value])[0];
+				if (row.id !== id || row.title === undefined) return fail('Invalid streamed themes entry.', 'INVALID_THEME_SNAPSHOT', 502);
+				return row;
+			},
+			load: (sink, requestSignal) => transport.catalogue!(sink, requestSignal),
+			admit: (tx, rows) => this.admitCatalogue(tx, rows)
+		});
+	}
+	private async readRemote(id: string, transport: AccountThemeTransport, signal: AbortSignal) {
+		if (!transport.catalogue) return parseAccountThemeSnapshot(await accountSyncDeadline(s => transport.snapshot(s), signal)).find(row => row.id === id) ?? null;
+		return findCatalogueEntry((sink, requestSignal) => transport.catalogue!(sink, requestSignal), id, value => {
+			const row = parseAccountThemeSnapshot([value])[0];
+			if (row.id !== id) return fail('Invalid streamed themes identity.');
+			return row;
+		}, signal);
 	}
 	async sync(transport: AccountThemeTransport, signal = new AbortController().signal, maxWrites = 25) {
 		let completed = 0;
@@ -615,7 +637,7 @@ export class AccountThemeSync {
 		});
 	}
 	async inspect(id: string, transport: AccountThemeTransport, signal = new AbortController().signal) {
-		const remote = parseAccountThemeSnapshot(await accountSyncDeadline((s) => transport.snapshot(s), signal)).find((row) => row.id === id) ?? null;
+		const remote = await this.readRemote(id, transport, signal);
 		return this.tx(
 			'readonly',
 			async (tx) => {
@@ -634,7 +656,7 @@ export class AccountThemeSync {
 	) {
 		if (!['local', 'remote', 'copy'].includes(keep)) return fail('Choose the device theme, account theme or independent copy.');
 		const remote =
-			parseAccountThemeSnapshot(await accountSyncDeadline((s) => transport.snapshot(s), signal)).find((row) => row.id === review.id) ?? null;
+			await this.readRemote(review.id, transport, signal);
 		if (stable(remote) !== stable(review.remote)) return fail('Account theme changed again. Review it again.');
 		return this.tx(
 			'readwrite',

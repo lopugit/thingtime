@@ -1,0 +1,9 @@
+{
+  "result": "failed",
+  "error": "The container operation timed out.",
+  "cleanup": {
+    "session": "694172d1-3018-43ab-93dc-5cf301b1b84f",
+    "remaining": ""
+  },
+  "scope": "Updated plan validation; no page acceptance claimed"
+}

@@ -188,3 +188,44 @@ test('Character sync reauthorizes the selected actor before writes and disclosur
   assert.equal(f.reads() + f.writes(), 0, 'refused delegation cannot fall back to the principal');
  }
 });
+
+
+test('catalogue preserves account admission, rate limits and stream revalidation', async () => {
+ const payload = { operation: 'catalogue', expectedOwnerId: 'owner' };
+ let producers = 0, admissions = 0;
+ const producer = (options: any) => {
+  producers++;
+  assert.deepEqual(options.identity, {domain: 'algorithms', origin, ownerId:'owner', dataPlane:'home', storagePlane:'home'});
+  assert.ok(options.signal instanceof AbortSignal);
+  return new ReadableStream<Uint8Array>({ async start(controller) {
+   try { await options.admit(); admissions++; controller.enqueue(new TextEncoder().encode('fixture\n')); await options.admit(); admissions++; controller.close(); }
+   catch (error) { controller.error(error); }
+  }});
+ };
+ for (const [overrides, headers, status] of [
+  [{getAuthToken:async()=>null},{},401],
+  [{resolveTokenUser:async()=>({...account,user:{...account.user,temporary:true}})},{},401],
+  [{resolveTokenUser:async()=>({...account,user:{...account.user,accountKind:'service'}})},{},401],
+  [{resolveTokenUser:async()=>({...account,user:{...account.user,id:'other'}})},{},409],
+  [{mongoDataPlane:()=> 'custom-'+ 'b'.repeat(64)},{},409],
+  [{},{Origin:'https://foreign.example'},403],
+  [{enforceRateLimit:async()=>({allowed:false,limit:60,remaining:0,resetAt:new Date(Date.now()+60000).toISOString()})},{},429],
+  [{enforceRateLimit:async()=>{throw Error('private failure')}},{},503]
+ ] as any[]) {
+  const f=fixture({catalogueSnapshotBody:producer,...overrides});
+  assert.equal((await f.run({request:request(payload,headers)})).status,status);
+  assert.equal(producers,0);
+ }
+ const req=request(payload), internal=fixture({catalogueSnapshotBody:producer});
+ assert.equal((await withInternalRequestActor(req,async()=>account.user as any,()=>internal.run({request:req}))).status,403);
+ assert.equal(producers,0);
+ const response=await fixture({catalogueSnapshotBody:producer}).run({request:request(payload)});
+ assert.equal(response.status,200); assert.match(response.headers.get('Content-Type')!,/application\/x-ndjson/);
+ assert.equal(response.headers.get('Cache-Control'),'private, no-store');
+ assert.equal(await response.text(),'fixture\n'); assert.equal(admissions,2);
+ let current:any=account;
+ const revoked=await fixture({catalogueSnapshotBody:(options:any)=>new ReadableStream({async pull(controller){
+  current=null; try {await options.admit();controller.close();}catch(error){controller.error(error);}
+ }}),resolveTokenUser:async()=>current}).run({request:request(payload)});
+ await assert.rejects(revoked.text());
+});

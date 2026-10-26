@@ -8,11 +8,18 @@ import { createServer as createTcpServer } from 'node:net';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { MongoClient } from 'mongodb';
 import { draftPreviewCsp } from './csp.mjs';
+import { tsImport } from 'tsx/esm/api';
+
+// Validate actual HTTP bytes with the shipping protocol reader, not a second
+// acceptance-only interpretation of its digest/framing/clean-EOF contract.
+const { readCatalogueStream } = await tsImport('../app/catalogue/catalogueStream.ts', import.meta.url);
+const { capabilitySatisfies } = await tsImport('../app/api/utils/capabilities/capabilityContract.ts', import.meta.url);
+const { getDeploymentDataEnvironment } = await tsImport('../app/api/utils/deployment/dataEnvironment.ts', import.meta.url);
 
 assert.equal(process.platform, 'darwin', 'Requires sandbox-exec; never run an unrestricted fallback.');
 const cwd = fileURLToPath(new URL('..', import.meta.url));
@@ -80,13 +87,56 @@ async function ready(server, key) {
   }
   throw new Error('Built gateway readiness timed out.');
 }
-async function api(key, path, { body, cookie, status = 200, headers = {} } = {}) {
+async function api(key, path, { body, cookie, status = 200, headers = {}, retryRateLimit = false } = {}) {
   console.log(`${key} ${body ? 'POST' : 'GET'} ${path.split('?')[0]}`);
-  const response = await fetch(origin(key) + path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', Origin: origin(key),
+  const send = () => fetch(origin(key) + path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', Origin: origin(key),
     ...(cookie ? { Cookie: cookie } : {}), ...headers }, ...(body ? { body: JSON.stringify(body) } : {}), redirect: 'manual', signal: AbortSignal.timeout(60_000) });
+  let response = await send();
+  if (retryRateLimit && status === 200 && response.status === 429) {
+    const seconds = Number(response.headers.get('retry-after'));
+    assert.ok(Number.isFinite(seconds) && seconds > 0 && seconds <= 60, 'Honor the bounded fixture rate-limit response.');
+    await response.body?.cancel(); await delay(seconds * 1000 + 100);
+    response = await send(); // Same immutable command and operation identity.
+  }
   assert.equal(response.status, status, `${key} ${path}: HTTP ${response.status}`);
   const data = await response.json();
   return { response, data, cookie: response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ') };
+}
+async function catalogueCapabilities(key) {
+  const publicManifest = (await api(key, '/.well-known/thingtime-capabilities.json')).data;
+  const routeResponse = await api(key, '/api/v1/capabilities'), routeManifest = routeResponse.data;
+  // The public discovery envelope carries origin. The canonical route
+  // manifest instead carries ok/schemaVersion/dataEnvironment; bind that
+  // response to the selected URL and verify its own contract independently.
+  assert.equal(publicManifest.origin, origin(key));
+  assert.equal(routeResponse.response.url, origin(key) + '/api/v1/capabilities');
+  assert.equal(routeManifest.ok, true); assert.equal(routeManifest.schemaVersion, 1);
+  assert.deepEqual(routeManifest.dataEnvironment, getDeploymentDataEnvironment({ THINGTIME_DATA_ENV: 'development' }));
+  for (const [feature, required] of [['api.themes-sync', '1.7.0'], ['api.algorithms-sync', '1.5.0']]) {
+    assert.ok(capabilitySatisfies(publicManifest.features[feature]?.version, required), `${key} public ${feature} ${required}`);
+    assert.ok(capabilitySatisfies(routeManifest.features[feature], required), `${key} routes ${feature} ${required}`);
+  }
+}
+async function catalogue(key, domain, account) {
+  const response = await fetch(origin(key) + `/api/v1/${domain}/sync`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin(key), Cookie: account.cookie,
+      'X-Thingtime-Expected-Data-Plane': 'home' },
+    body: JSON.stringify({ operation: 'catalogue', expectedOwnerId: account.data.user.id }),
+    redirect: 'manual', signal: AbortSignal.timeout(60_000)
+  });
+  assert.equal(response.status, 200); assert.match(response.headers.get('content-type'), /^application\/x-ndjson/);
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  const entries = []; let completion;
+  const receipt = await readCatalogueStream(response.body, { domain, origin: origin(key), ownerId: account.data.user.id,
+    dataPlane: 'home', storagePlane: 'home' }, {
+    entry: async (id, value) => { entries.push({ id, value }); },
+    complete: async value => { completion = value; }
+  });
+  assert.deepEqual(completion, receipt, 'Only canonical integrity validation plus clean EOF admits a catalogue.');
+  assert.equal(receipt.entries, entries.length);
+  assert.deepEqual(entries.map(entry => entry.id), [...new Set(entries.map(entry => entry.id))].sort());
+  return { receipt, entries };
 }
 const trap = createTcpServer(socket => { followerDials++; socket.destroy(); });
 const alias = createServer((request, response) => {
@@ -114,6 +164,8 @@ try {
     MONGODB_CONNECTION_STRING: `mongodb://127.0.0.1:${ports.trap}/thingtime`, JWT_SECRET: randomBytes(48).toString('hex') }); await ready(follower, 'follower');
   const manifest = (await api('alias', '/.well-known/thingtime-capabilities.json')).data;
   assert.equal(manifest.gateway.deploymentId, 'owner'); assert.equal(manifest.features['api.environment-gateway'].version, '1.1.0');
+  // Negotiate the selected origins before any catalogue-dependent work.
+  await catalogueCapabilities('owner'); await catalogueCapabilities('follower');
   // A branch's anonymous renderer must keep its own exact assets and restrictive
   // headers even when account API traffic is forwarded to an environment owner.
   for (const file of ['index.html', 'runner.js']) {
@@ -150,6 +202,52 @@ try {
   const account = await api('follower', '/api/v1/auth/register', { body: { username: 'gateway-acceptance', email: 'gateway@example.invalid', password: randomBytes(24).toString('hex') } });
   assert.ok(account.data.user.id); assert.ok(account.cookie);
   const root = await api('follower', '/api/root-data', { cookie: account.cookie }); assert.equal(root.data.user.id, account.data.user.id);
+  const syncHeaders = { 'X-Thingtime-Expected-Data-Plane': 'home' }, expectedCatalogues = { themes: new Map(), algorithms: new Map() };
+  const syncWrite = async (domain, command) => {
+    const result = await api('follower', `/api/v1/${domain}/sync`, { cookie: account.cookie, headers: syncHeaders, retryRateLimit: true,
+      body: { operation: 'write', expectedOwnerId: account.data.user.id, command } });
+    assert.equal(result.data.acknowledgment.id, command.id); assert.equal(result.data.acknowledgment.writeId, command.writeId);
+    assert.ok(result.data.acknowledgment.resultVersion);
+    return result.data.acknowledgment;
+  };
+  // 65 rows cross the producer's 64-row page boundary while respecting the
+  // current canonical 100-theme create limit. No direct product DB insertion.
+  for (let index = 0; index < 65; index++) {
+    const command = { action: 'save', id: randomUUID(), writeId: randomUUID(), expectedVersion: null,
+      name: `Gateway catalogue theme ${String(index).padStart(3, '0')}`, theme: { colors: { accent: '#123456' } }, visibility: 'private' };
+    const acknowledgment = await syncWrite('themes', command);
+    expectedCatalogues.themes.set(command.id, { name: command.name, version: acknowledgment.resultVersion });
+  }
+  for (let index = 0; index < 2; index++) {
+    const command = { action: 'save', id: randomUUID(), writeId: randomUUID(), expectedVersion: null,
+      description: 'Disposable gateway catalogue fixture', content: { name: `Gateway algorithm ${index}`, emoji: '🧠',
+        weights: { types: { text: 0.5 }, tags: { gateway: 2 }, authors: {} }, eventCount: index, lastTrainedAt: null } };
+    const acknowledgment = await syncWrite('algorithms', command);
+    expectedCatalogues.algorithms.set(command.id, { content: command.content, version: acknowledgment.resultVersion });
+  }
+  const catalogueEvidence = { themes: {}, algorithms: {}, realReplica: true, canonicalReaderIntegrity: true,
+    themeRowsCrossPageBoundary: true, legacyPrecedenceLive: false, concurrentMutationPinningLive: false };
+  for (const key of ['owner', 'follower']) for (const domain of ['themes', 'algorithms']) {
+    const body = { operation: 'catalogue', expectedOwnerId: account.data.user.id };
+    await api(key, `/api/v1/${domain}/sync`, { headers: syncHeaders, body, status: 401 });
+    await api(key, `/api/v1/${domain}/sync`, { cookie: account.cookie, headers: {
+      ...syncHeaders, Origin: 'https://cross-site.invalid', 'Sec-Fetch-Site': 'cross-site' }, body, status: 403 });
+    await api(key, `/api/v1/${domain}/sync`, { cookie: account.cookie, headers: syncHeaders,
+      body: { ...body, expectedOwnerId: 'different-disposable-owner' }, status: 409 });
+    const observed = await catalogue(key, domain, account), expected = expectedCatalogues[domain];
+    assert.deepEqual(observed.entries.map(entry => entry.id), [...expected.keys()].sort());
+    for (const { id, value } of observed.entries) {
+      assert.equal(value.id, id); assert.equal(value.version, expected.get(id).version);
+      if (domain === 'themes') {
+        assert.equal(value.name, expected.get(id).name); assert.equal(value.visibility, 'private');
+        assert.equal(value.theme.colors.accent, '#123456');
+      } else {
+        assert.deepEqual(value.content, expected.get(id).content); assert.equal(value.shared, false); assert.equal(value.listed, false);
+      }
+    }
+    catalogueEvidence[domain][key] = { entries: observed.receipt.entries, authenticated: true, anonymousRefused: true,
+      crossSiteRefused: true, wrongOwnerRefused: true, sortedExactIds: true, exactPersistedVersion: true };
+  }
   await api('follower', '/api/v1/things', { cookie: account.cookie, body: { thingtime: ['post'], crystal: { type: 'text', text: 'Gateway acceptance' }, acl: ['tt:all'] },
     headers: { Origin: 'https://cross-site.invalid', 'Sec-Fetch-Site': 'cross-site' }, status: 403 });
   const saved = await api('follower', '/api/v1/things', { cookie: account.cookie, body: { thingtime: ['post'], crystal: { type: 'text', text: 'Gateway acceptance' }, acl: ['tt:all'] } });
@@ -190,7 +288,7 @@ try {
   assert.equal((await api('successor', '/api/root-data', { cookie: account.cookie })).data.user.id, account.data.user.id);
   assert.equal(followerDials, 0, 'Follower must never open its configured MongoDB socket.');
   console.log(JSON.stringify({ ok: true, transport: 'built-nitro', draftPreviewExactAssets: true, draftPreviewCsp: true, socialCardPngAndHead: true, viteRootDocs: true, registration: true, authCookies: true, crossSiteRefused: true, writes: true, dedicatedOwnHandler: true, dedicatedShellMetadata: true, independentDedicatedDatabase: true, dedicatedIndexCommands: dedicatedIndex, promotion: true, rollback: true, followerMongoDials: followerDials,
-    initializedIndexCommands: initialized, unchangedColdIndexCommands: unchanged }));
+    initializedIndexCommands: initialized, unchangedColdIndexCommands: unchanged, catalogue: catalogueEvidence }));
 } finally {
   for (const child of children.reverse()) {
     if (child.exitCode === null && child.signalCode === null) { try { process.kill(-child.pid, 'SIGTERM'); } catch {} }

@@ -47,6 +47,8 @@ export type WorkspaceTransaction = {
 	deleteBytes(id: string): Promise<void>;
 	get<T>(collection: string, id: string): Promise<T | undefined>;
 	list<T>(collection: string): Promise<{ id: string; value: T }[]>;
+	/** ID-ordered processing page; continue with the last returned ID. */
+	scan<T>(collection: string, options?: { after?: string; limit?: number }): Promise<{ id: string; value: T }[]>;
 	put(collection: string, id: string, value: unknown): Promise<void>;
 	delete(collection: string, id: string): Promise<void>;
 };
@@ -359,6 +361,35 @@ export class WorkspaceDatabase {
 					const found = (await request(records.index('collection').getAll([scopeKey, collection]))) as WorkspaceRecord<V>[];
 					lease.assertCurrent();
 					return found.map(({ id, value }) => ({ id, value }));
+				},
+				scan: async <V>(collection: string, options: { after?: string; limit?: number } = {}) => {
+					check(collection, options.after);
+					const requested = options.limit ?? 64;
+					if (!Number.isSafeInteger(requested) || requested < 1)
+						throw new WorkspaceError('INVALID_SCAN_LIMIT', 'Local scan page size must be a positive safe integer');
+					// This bounds one processing page, never the retained library size.
+					const limit = Math.min(requested, 1024);
+					const range = this.keyRanges.bound(
+						options.after === undefined ? [scopeKey, collection] : [scopeKey, collection, options.after],
+						[scopeKey, collection, []],
+						options.after !== undefined
+					);
+					return new Promise<{ id: string; value: V }[]>((resolve, reject) => {
+						const page: { id: string; value: V }[] = [];
+						const cursor = records.openCursor(range);
+						cursor.onerror = () => reject(cursor.error);
+						cursor.onsuccess = () => {
+							try {
+								lease.assertCurrent();
+								const row = cursor.result;
+								if (!row) return resolve(page);
+								const { id, value } = row.value as WorkspaceRecord<V>;
+								page.push({ id, value });
+								if (page.length === limit) return resolve(page);
+								row.continue();
+							} catch (error) { reject(error); }
+						};
+					});
 				},
 				put: async (collection, id, value) => {
 					check(collection, id);

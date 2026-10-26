@@ -1,3 +1,4 @@
+import { accountCatalogueTransport } from './accountCatalogueTransport.client';
 import {
 	parseAlgorithmSelection,
 	parseAlgorithmSelectionWrite,
@@ -85,6 +86,7 @@ export function accountAlgorithmTransport(
 		}
 	};
 	return {
+		catalogue: accountCatalogueTransport('algorithms', scope, lease),
 		selection: async (signal) => parseAlgorithmSelection((await request('selection', undefined, signal)).selection),
 		select: async (raw, signal) => {
 			const command = parseAlgorithmSelectionWrite(raw);

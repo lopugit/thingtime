@@ -23,7 +23,7 @@ const conflict = (): never => {
 };
 const version = (doc: any) => storedSnapshotVersion(doc, ALGORITHM_VERSION_PREFIX);
 const iso = (value: unknown) => new Date(value as string).toISOString();
-const project = (doc: any, legacy = false) => {
+export const projectAlgorithmSyncDocument = (doc: any, legacy = false) => {
 	const content = legacy ? doc : doc.crystal;
 	return {
 		id: doc.shareId,
@@ -62,10 +62,10 @@ export async function algorithmSyncSnapshot(ownerId: string) {
 			.toArray();
 		if (current.length > MAX_SAVED_ALGORITHMS || earlier.length > MAX_SAVED_ALGORITHMS)
 			throw new AlgorithmSyncError(413, 'Algorithm catalogue exceeds the synchronization limit.');
-		const rows = new Map<string, ReturnType<typeof project>>();
+		const rows = new Map<string, ReturnType<typeof projectAlgorithmSyncDocument>>();
 		try {
-			for (const doc of earlier) rows.set(doc.shareId, project(doc, true));
-			for (const doc of current) rows.set(doc.shareId, project(doc));
+			for (const doc of earlier) rows.set(doc.shareId, projectAlgorithmSyncDocument(doc, true));
+			for (const doc of current) rows.set(doc.shareId, projectAlgorithmSyncDocument(doc));
 		} catch {
 			throw new AlgorithmSyncError(409, 'A saved algorithm needs repair before its complete profile can synchronize.');
 		}

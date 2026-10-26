@@ -1,3 +1,4 @@
+import { accountCatalogueTransport } from './accountCatalogueTransport.client';
 import { parseThemeHomeContext } from '../api/utils/themes/themeHomeContext';
 import {
 	parseThemeSelection,
@@ -95,6 +96,7 @@ export function accountThemeTransport(
 		}
 	};
 	return {
+		catalogue: accountCatalogueTransport('themes', scope, lease),
 		selection: async (signal) => parseThemeSelection((await request('selection', undefined, signal)).selection),
 		select: async (command, signal, receiptPlane) => parseThemeSelectionAcknowledgment((await request('select', command, signal, receiptPlane)).acknowledgment),
 		snapshot: async (signal) => {

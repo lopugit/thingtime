@@ -1,3 +1,4 @@
+import { catalogueSnapshotBody } from '~/api/utils/catalogue/catalogueSnapshot';
 import { readUserAlgorithmSelection, synchronizeAlgorithmSelection } from '~/api/utils/algorithms/algorithmSelection';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getAuthToken } from '~/api/utils/auth/authCookie';
@@ -20,6 +21,7 @@ const privateResponse = (response: Response) => {
 	return response;
 };
 const defaults = {
+	catalogueSnapshotBody,
 	getAuthToken,
 	resolveTokenUser,
 	mongoDataPlane,
@@ -53,7 +55,7 @@ export function createAlgorithmSyncResponse(overrides: Partial<typeof defaults> 
 				!body ||
 				typeof body !== 'object' ||
 				Array.isArray(body) ||
-				!['snapshot', 'write', 'selection', 'select'].includes(body.operation) ||
+				!['catalogue', 'snapshot', 'write', 'selection', 'select'].includes(body.operation) ||
 				typeof body.expectedOwnerId !== 'string' ||
 				!body.expectedOwnerId ||
 				Object.keys(body).some(
@@ -77,6 +79,12 @@ export function createAlgorithmSyncResponse(overrides: Partial<typeof defaults> 
 			if (!limit.allowed) {
 				const init = rateLimitedResponseInit(limit);
 				return json({ ok: false, error: 'Algorithm synchronization is rate limited.' }, { ...init, headers: { ...init.headers, ...headers } });
+			}
+			if (body.operation === 'catalogue') {
+				return new Response(deps.catalogueSnapshotBody({
+					identity: { domain: 'algorithms', origin: resolvePublicOrigin(request).origin, ownerId, dataPlane: expectedPlane, storagePlane: 'home' },
+					admit, signal: request.signal
+				}), { headers: { ...headers, 'Content-Type': 'application/x-ndjson; charset=utf-8', 'X-Content-Type-Options': 'nosniff' } });
 			}
 			const result =
 				body.operation === 'snapshot'

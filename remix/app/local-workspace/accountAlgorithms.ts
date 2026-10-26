@@ -1,3 +1,5 @@
+import type { CatalogueCompletion, CatalogueSink } from '../catalogue/catalogueStream';
+import { stageCatalogue, scanWorkspace, findCatalogueEntry, type StagedCatalogue } from './catalogueStaging';
 import { AccountAlgorithmSelection, ACCOUNT_ALGORITHM_SELECTION, type AccountAlgorithmSelectionState } from './algorithmSelection';
 import { LocalAlgorithms } from './algorithms';
 import { recordAccountAlgorithmChange } from './accountTimeline';
@@ -32,6 +34,7 @@ export type AccountAlgorithmSnapshot = {
 	updatedAt: string;
 };
 export type AccountAlgorithmTransport = {
+	catalogue?(sink: CatalogueSink, signal: AbortSignal): Promise<CatalogueCompletion>;
 	snapshot(signal: AbortSignal): Promise<AccountAlgorithmSnapshot[]>;
 	write(command: AlgorithmWrite, signal: AbortSignal): Promise<AlgorithmWriteAcknowledgment>;
 };
@@ -342,48 +345,70 @@ export class AccountAlgorithmSync {
 			attempts: 0
 		} satisfies State);
 	}
+	private async admitCatalogue(tx: WorkspaceTransaction, remote: StagedCatalogue<AccountAlgorithmSnapshot>) {
+		const catalog = (await tx.get<Catalog>('settings', catalogKey)) ?? blankCatalog();
+		for await (const { value: row } of remote.rows()) {
+			const old = await tx.get<State>(collection, row.id);
+			if (old?.deleted) continue;
+			if (!old || old.state === 'synced') {
+				if (!old || old.baseVersion !== row.version || old.base?.version !== row.version) await this.install(tx, row, old);
+			}
+		}
+		const choice = await tx.get<AccountAlgorithmSelectionState>('settings', ACCOUNT_ALGORITHM_SELECTION);
+		for await (const { id, value: state } of scanWorkspace<State>(tx, collection))
+			if (!(await remote.has(id)) && state.state === 'synced' && !state.deleted) {
+				if ((await remote.hasDependent(id)) || (choice?.state !== 'synced' && choice?.desired === id) || choice?.pending?.command.algorithmId === id) {
+					await tx.put(collection, id, {
+						...state,
+						state: 'conflict',
+						revision: state.revision + 1,
+						error: 'Account algorithm was removed. Review the device choice or related Things before discarding it.'
+					});
+					continue;
+				}
+				await tx.delete('things', id);
+				await tx.delete(collection, id);
+				// Reconcile the account pointer through the independent selection reader.
+			}
+		await tx.put('settings', catalogKey, { ...catalog, complete: true, epoch: catalog.epoch + 1 });
+		return true;
+	}
 	async remember(input: unknown, ticket: { read: number; epoch: number }, signal?: AbortSignal) {
 		const remote = parseAccountAlgorithmSnapshot(input);
-		return this.tx(
-			'readwrite',
-			async (tx) => {
-				const catalog = (await tx.get<Catalog>('settings', catalogKey)) ?? blankCatalog();
-				if (catalog.read !== ticket.read || catalog.epoch !== ticket.epoch) return false;
-				const states = new Map((await tx.list<State>(collection)).map((row) => [row.id, row.value])),
-					present = new Set(remote.map((row) => row.id));
-				const dependents = new Set((await tx.list<LocalThing>('things')).flatMap(({ value }) => [value.folderId, value.targetId].filter(Boolean)));
-				for (const row of remote) {
-					const old = states.get(row.id);
-					if (old?.deleted) continue;
-					if (!old || old.state === 'synced') {
-						if (!old || old.baseVersion !== row.version || old.base?.version !== row.version) await this.install(tx, row, old);
-					}
-				}
-				const choice = await tx.get<AccountAlgorithmSelectionState>('settings', ACCOUNT_ALGORITHM_SELECTION);
-				for (const [id, state] of states)
-					if (!present.has(id) && state.state === 'synced' && !state.deleted) {
-						if (dependents.has(id) || (choice?.state !== 'synced' && choice?.desired === id) || choice?.pending?.command.algorithmId === id) {
-							await tx.put(collection, id, {
-								...state,
-								state: 'conflict',
-								revision: state.revision + 1,
-								error: 'Account algorithm was removed. Review the device choice or related Things before discarding it.'
-							});
-							continue;
-						}
-						await tx.delete('things', id);
-						await tx.delete(collection, id);
-						// Reconcile the account pointer through the independent selection reader.
-					}
-				await tx.put('settings', catalogKey, { ...catalog, complete: true, epoch: catalog.epoch + 1 });
-				return true;
-			},
-			signal
-		);
+		return this.tx('readwrite', async tx => {
+			const catalog = (await tx.get<Catalog>('settings', catalogKey)) ?? blankCatalog();
+			if (catalog.read !== ticket.read || catalog.epoch !== ticket.epoch) return false;
+			const present = new Set(remote.map(row => row.id));
+			const dependents = new Set<string>();
+			for await (const { value } of scanWorkspace<LocalThing>(tx, 'things'))
+				for (const reference of [value.folderId, value.targetId]) if (reference) dependents.add(reference);
+			return this.admitCatalogue(tx, {
+				async *rows() { for (const value of remote) yield { id: value.id, value }; },
+				has: async id => present.has(id), hasDependent: async id => dependents.has(id)
+			});
+		}, signal);
 	}
 	async refresh(transport: AccountAlgorithmTransport, signal = new AbortController().signal) {
 		const ticket = await this.beginRead();
-		return this.remember(await accountSyncDeadline((s) => transport.snapshot(s), signal), ticket, signal);
+		if (!transport.catalogue) return this.remember(await accountSyncDeadline(s => transport.snapshot(s), signal), ticket, signal);
+		return stageCatalogue<AccountAlgorithmSnapshot>({
+			run: this.tx.bind(this), domain: 'algorithms', catalogKey, ticket, id: this.uuid(), signal, now: this.now,
+			parse: (id, value) => {
+				const row = parseAccountAlgorithmSnapshot([value])[0];
+				if (row.id !== id) return fail('Invalid streamed algorithms entry.', 'INVALID_ALGORITHM_SNAPSHOT', 502);
+				return row;
+			},
+			load: (sink, requestSignal) => transport.catalogue!(sink, requestSignal),
+			admit: (tx, rows) => this.admitCatalogue(tx, rows)
+		});
+	}
+	private async readRemote(id: string, transport: AccountAlgorithmTransport, signal: AbortSignal) {
+		if (!transport.catalogue) return parseAccountAlgorithmSnapshot(await accountSyncDeadline(s => transport.snapshot(s), signal)).find(row => row.id === id) ?? null;
+		return findCatalogueEntry((sink, requestSignal) => transport.catalogue!(sink, requestSignal), id, value => {
+			const row = parseAccountAlgorithmSnapshot([value])[0];
+			if (row.id !== id) return fail('Invalid streamed algorithms identity.');
+			return row;
+		}, signal);
 	}
 	async sync(transport: AccountAlgorithmTransport, signal = new AbortController().signal, maxWrites = 25) {
 		let completed = 0;
@@ -554,7 +579,7 @@ export class AccountAlgorithmSync {
 
 	async inspect(id: string, transport: AccountAlgorithmTransport, signal = new AbortController().signal) {
 		const remote =
-			parseAccountAlgorithmSnapshot(await accountSyncDeadline((s) => transport.snapshot(s), signal)).find((row) => row.id === id) ?? null;
+			await this.readRemote(id, transport, signal);
 		return this.tx(
 			'readonly',
 			async (tx) => {
@@ -575,7 +600,7 @@ export class AccountAlgorithmSync {
 		const stable = (value: unknown) =>
 			JSON.stringify(copyBoundedJson(value, { maxBytes: 8 * 1024 * 1024, maxDepth: 12, maxNodes: 250000, sortKeys: true }));
 		const remote =
-			parseAccountAlgorithmSnapshot(await accountSyncDeadline((s) => transport.snapshot(s), signal)).find((row) => row.id === review.id) ?? null;
+			await this.readRemote(review.id, transport, signal);
 		if (stable(remote) !== stable(review.remote)) return fail('Account algorithm changed again. Review it again.');
 		return this.tx(
 			'readwrite',

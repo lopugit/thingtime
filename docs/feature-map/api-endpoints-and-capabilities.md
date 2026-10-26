@@ -567,11 +567,16 @@ Nitro/Vite failure checks are recorded in the PR #1000 integration note.
 
 ### Character profile sync
 
-`themes/sync/_sync.tsx` (1.6.0) and `algorithms/sync/_sync.tsx` (1.4.0)
+`themes/sync/_sync.tsx` (1.7.0) and `algorithms/sync/_sync.tsx` (1.5.0)
 resolve the requested/session-selected actor through `resolveTokenUser` on every
 admission. Delegated `themeTransport.client.ts` and `algorithmTransport.client.ts`
 negotiate those contracts and `api.auth-characters` 1.0.0. Both manifests derive
-versions from `apiEndpointDocs`. Run the route `sync.test.ts` suites,
+versions from `apiEndpointDocs`. The additive `catalogue` operation returns a
+backpressured NDJSON stream from one home Mongo snapshot. The shared
+`catalogue/catalogueStream.ts` reader validates identity, ordered chunks, digest,
+counts and clean EOF. Scoped IndexedDB staging and one atomic admission in
+`local-workspace/catalogueStaging.ts` preserve device edits on any incomplete read.
+Legacy JSON snapshots and per-profile write contracts remain supported. Run the route `sync.test.ts` suites,
 `characterProfileSync.test.ts`, capability coverage, and the opt-in native
 `characterProfileSync.browser.test.ts`; see [Characters](../characters.md).
 

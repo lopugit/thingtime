@@ -56,7 +56,7 @@ test(
 			assert.equal(health.replicaSet, 'draftPreview');
 			assert.equal(health.custom, false);
 			const capabilities = await read(await owner.get('/api/v1/capabilities'), 'placement contract active');
-			assert.equal(capabilities.features['api.themes-sync'], '1.6.0');
+			assert.equal(capabilities.features['api.themes-sync'], '1.7.0');
 			for (const context of [owner, other]) {
 				const username = 'themeimport-' + randomUUID().slice(0, 8);
 				const result = await read(

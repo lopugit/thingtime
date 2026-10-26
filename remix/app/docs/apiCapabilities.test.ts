@@ -35,9 +35,9 @@ test('dedicated theme writers advertise durable history on both capability manif
 
 test('conditional theme synchronization is registered on both manifests', () => {
  const feature = 'api.themes-sync';
- assert.equal(createApiCapabilitiesManifest().features[feature], '1.6.0');
+ assert.equal(createApiCapabilitiesManifest().features[feature], '1.7.0');
  const manifest = thingtimeCapabilityManifest('https://thingtime.test');
- assert.equal(manifest.features[feature].version, '1.6.0');
+ assert.equal(manifest.features[feature].version, '1.7.0');
  assert.ok(manifest.operations.some(operation => operation.feature === feature && operation.path === '/api/v1/themes/sync' && operation.methods.includes('POST')));
  assert.equal(typeof routeModules['v1/themes/sync'], 'function');
 });
@@ -775,8 +775,8 @@ test('theme title metadata requires compatible synchronization and transfer cont
 
 test('home theme receipt context requires its additive sync contract on both manifests',()=>{
  const feature='api.themes-sync';
- assert.equal(createApiCapabilitiesManifest().features[feature],'1.6.0');
- assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features[feature].version,'1.6.0');
+ assert.equal(createApiCapabilitiesManifest().features[feature],'1.7.0');
+ assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features[feature].version,'1.7.0');
  assert.equal(capabilitySatisfies('1.4.0','1.5.0'),false);
  assert.equal(capabilitySatisfies('1.5.1','1.5.0'),true);
  assert.equal(capabilitySatisfies('2.0.0','1.5.0'),false);
@@ -786,7 +786,7 @@ test('home theme receipt context requires its additive sync contract on both man
 test('conditional algorithm synchronization and atomic deletion are advertised by both manifests', () => {
   const route = createApiCapabilitiesManifest().features;
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, version] of [['api.algorithms-sync', '1.4.0'], ['api.algorithms-delete', '1.0.1']]) {
+  for (const [feature, version] of [['api.algorithms-sync', '1.5.0'], ['api.algorithms-delete', '1.0.1']]) {
     assert.equal(route[feature], version);
     assert.equal(manifest.features[feature].version, version);
     assert.equal(capabilitySatisfies(version, version), true);
@@ -899,4 +899,17 @@ test('resource limits and CPU downloads negotiate only their semantic dependenci
  assert.equal(capabilitySatisfies('1.1.0', FILE_SYNC_RESOURCE_REQUIREMENTS['api.file-sync-batches']), false);
  assert.equal(capabilitySatisfies('1.16.0', requirements['api.attachment-content']), false);
  assert.equal(capabilitySatisfies('1.18.0', requirements['api.attachment-content']), true);
+});
+
+
+test('theme and algorithm catalogue streams have additive negotiated contracts in both manifests', () => {
+ const origin='https://catalogue.example';
+ const browser=createApiCapabilitiesManifest();
+ const runtime=thingtimeCapabilityManifest(origin);
+ for(const [feature,version,previous] of [['api.themes-sync','1.7.0','1.6.0'],['api.algorithms-sync','1.5.0','1.4.0']]) {
+  assert.equal(browser.features[feature],version);
+  assert.equal(runtime.features[feature].version,version);
+  assert.equal(capabilitySatisfies(previous,version),false);
+  assert.equal(capabilitySatisfies(version,version),true);
+ }
 });

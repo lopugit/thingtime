@@ -5747,3 +5747,44 @@ Network isolation, no-OOM checks and owned-runtime cleanup passed.
 The prior paragraph's older-build limitation is superseded by this fresh build;
 the performance failure, larger enabled inference and installed-app acceptance
 remain open. Added event/frame diagnostics are awaiting native execution.
+
+
+## Streamed account catalogues — 26 October 2026
+
+The normal theme and algorithm transports now negotiate `api.themes-sync`
+1.7.0 and `api.algorithms-sync` 1.5.0 before requesting `operation: catalogue`
+on their existing same-origin authenticated POST routes. Anonymous workspaces
+never call them. Character and selected-database checks, rate limits and private
+response headers remain in place. Home storage is explicit even when themes
+are observed from a selected custom database.
+
+The response uses version-1 NDJSON start/entry/end frames. Each entry is split
+into 24 KiB chunks; the frame ceiling is 40 KiB. These are processing bounds,
+not total catalogue limits. The producer merges modern and legacy rows in
+ID order with modern precedence, using 64-entry pages from one pinned Mongo
+snapshot. Identity, count, byte total, SHA-256 transcript and clean EOF must all
+validate. Snapshot expiry, revocation, stalled consumption or any malformed
+frame fails the observation; no newer snapshot is spliced into it.
+
+The client stages one validated entry at a time in the exact account/origin/
+selected-database/delegated-actor workspace. Cursor pages avoid full-library
+`getAll` reads during streamed admission. The last complete catalogue stays
+visible until one native IndexedDB transaction checks the read ticket, local
+mutation epoch, current identity lease and cancellation signal, then admits
+the new catalogue. Pending changes and dependent Things retain their existing
+conflict rules. Conflict review retains only its requested entry from the
+complete stream.
+
+Staging is provisional and never joins an upload queue. Successful admission
+clears it atomically; failures clean their own rows while the original identity
+lease remains valid. A retired lease leaves cleanup to the next authorized
+read. Metadata expires after 24 hours of inactivity; expired or superseded
+staging is reclaimed on that read. There is no background cleanup service or
+public artifact store. A platform quota failure rolls back admission and keeps
+the previous catalogue.
+
+Verification is recorded in the [catalogue checkpoint](../artifacts/anonymous-local-first-2026-10-26-catalogue/README.md).
+This checkpoint removes the total-count/8 MiB restriction from the new read
+path. Remote creation limits, larger individual write/transfer contracts,
+live concurrent snapshot/legacy checks and the full native product journey
+remain separate work; this is not a claim that all capacity limits are removed.

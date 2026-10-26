@@ -4,6 +4,7 @@ import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { accountWorkspaceWorker } from './accountApi.client';
 import { bindLocalWorkspace, workspaceDatabase } from './runtime.client';
 import { rootIdentity } from '../utils/rootIdentity';
+import { readCatalogueStream, writeCatalogueStream, type CatalogueSink } from '../catalogue/catalogueStream';
 
 test('reconnect retries failed theme reads inside the refresh throttle without granting home content authority', async () => {
  const original = { window: globalThis.window, indexedDB: globalThis.indexedDB, IDBKeyRange: globalThis.IDBKeyRange, fetch: globalThis.fetch };
@@ -18,10 +19,16 @@ test('reconnect retries failed theme reads inside the refresh throttle without g
  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: nav });
  rootIdentity.changed(); bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
  const worker = accountWorkspaceWorker(scope, { localPlane: 'home' });
+ const emptyCatalogue = async (domain: 'themes' | 'algorithms', sink: CatalogueSink, signal: AbortSignal) => {
+  const identity = { domain, origin: scope.origin, ownerId: scope.ownerId, dataPlane: scope.dataPlane, storagePlane: 'home' } as const;
+  const chunks: Uint8Array[] = [];
+  await writeCatalogueStream({ ...identity, version: 1, generation: 'reconnect-fixture' }, (async function* () {})(), async bytes => { chunks.push(bytes); }, { signal });
+  return readCatalogueStream(new ReadableStream({ start(controller) { chunks.forEach(chunk => controller.enqueue(chunk)); controller.close(); } }), identity, sink, { signal });
+ };
  try {
-  worker.themeTransport.snapshot = async () => { snapshots++; if (snapshots === 1) throw Error('Temporary catalogue failure'); return []; };
+  worker.themeTransport.catalogue = async (sink, signal) => { snapshots++; if (snapshots === 1) throw Error('Temporary catalogue failure'); return emptyCatalogue('themes', sink, signal); };
   worker.themeTransport.selection = async () => { selections++; if (selections === 1) throw Error('Temporary selection failure'); return { themeId: null, version: 'theme-selection-v1:' + 'a'.repeat(64) }; };
-  worker.algorithmWorker!.transport.snapshot = async () => [];
+  worker.algorithmWorker!.transport.catalogue = (sink, signal) => emptyCatalogue('algorithms', sink, signal);
   worker.algorithmWorker!.transport.selection = async () => ({ algorithmId: null, version: 'algorithm-selection-v1:' + 'a'.repeat(64) });
   worker.sync.sync = async () => { genericPasses++; throw Error('The selected custom plane does not authorize generic home sync'); };
   await Promise.all([worker.refreshThemes(true), worker.refreshThemeSelection(true)]);

@@ -8,7 +8,7 @@ import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from 
 test('Character profile synchronization publishes matching actor-aware route contracts', () => {
   const origin = thingtimeCapabilityManifest('https://characters.example');
   const routes = createApiCapabilitiesManifest();
-  for (const [kind, version, previous] of [['themes', '1.6.0', '1.5.0'], ['algorithms', '1.4.0', '1.3.0']]) {
+  for (const [kind, version, previous] of [['themes', '1.7.0', '1.6.0'], ['algorithms', '1.5.0', '1.4.0']]) {
     const feature = `api.${kind}-sync`;
     assert.equal(origin.features[feature].version, version);
     assert.equal(routes.features[feature], version);
