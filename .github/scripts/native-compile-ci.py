@@ -7,6 +7,7 @@ import os
 from pathlib import Path, PurePosixPath
 import platform
 import re
+import select
 import shutil
 import signal
 import subprocess
@@ -114,6 +115,14 @@ def start_owned_command(args,kwargs):
     with (work/'cleanup.lock').open('r+') as lock:
         acquire_cleanup_lock(lock,time.monotonic()+LOCK_SECONDS)
         state=json.loads((work/'state.json').read_text())
+        watcher=state.get('watchdog_pid')
+        if watcher:
+            try:exited=os.waitpid(watcher,os.WNOHANG)[0] != 0
+            except ChildProcessError:exited=True
+            if exited:
+                (work/'watchdog-reaped').touch()
+                (work/'cleanup-started').touch()
+                raise RuntimeError('Watchdog exited; owned command admission closed')
         if ((work/'cleanup-started').exists() or (work/'cleaned').exists() or
                 state.get('watchdog_requested') or time.monotonic() >= state['watchdog_deadline']):
             raise RuntimeError('Owned command admission closed for cleanup/expired bootstrap')
@@ -263,7 +272,7 @@ def record_remaining(work,state,command):
     return selected
 
 
-def detach_watchdog_io(report):
+def detach_watchdog_io(report,preserve=()):
     # Fork/setsid alone leaves the runner job's pipe writers inherited.
     # This trusted root log remains bounded to phase/error labels, no args.
     descriptor=os.open(str(Path(report)/'watchdog.log'),os.O_WRONLY|os.O_CREAT|os.O_APPEND,0o600)
@@ -273,7 +282,11 @@ def detach_watchdog_io(report):
     os.dup2(descriptor,2)
     os.close(null)
     os.close(descriptor)
-    os.closerange(3,max(65536,os.sysconf('SC_OPEN_MAX')))
+    lower=3
+    for keep in sorted(fd for fd in preserve if fd>=3):
+        os.closerange(lower,keep)
+        lower=keep+1
+    os.closerange(lower,max(65536,os.sysconf('SC_OPEN_MAX')))
 
 
 def drop_identity(uid,gid,args):
@@ -374,17 +387,47 @@ def arm_native(work,save_state,gates_passed):
         save_state(watchdog_deadline=native_deadline('native',gates_passed,now))
 
 
+def publish_watchdog_evidence(work):
+    """Readable sanitized snapshot; active root-owned log stays protected."""
+    state=json.loads((work/'state.json').read_text())
+    report=Path(state['report'])
+    labels=[]
+    log=work/'watchdog.log'
+    if log.exists():
+        with log.open() as source:
+            for line in source:
+                match=re.fullmatch(r'native-compile phase=([a-z0-9-]+)\n?',line)
+                if match:labels.append(match.group(1))
+    evidence={'watchdogPhases':labels,'cleanupComplete':(work/'cleaned').exists(),
+              'policyRestored':True if (work/'cleaned').exists() else None,
+              'startupFailed':(work/'watchdog-startup-failed').exists()}
+    target=report/'watchdog-evidence.json'
+    temporary=report/f'.watchdog-evidence-{os.getpid()}.new'
+    temporary.write_text(json.dumps(evidence)+'\n')
+    temporary.chmod(0o444)
+    temporary.replace(target)  # Root remains owner; runner can read, never modify.
+
+
 def start_watchdog(work):
     global GROUP_REGISTRAR,COMMAND_CONTEXT
     parent=os.getpid()
-    child=os.fork()
+    ready_read,ready_write=os.pipe()
+    try:child=os.fork()
+    except BaseException:
+        os.close(ready_read);os.close(ready_write)
+        raise
     if child == 0:
         GROUP_REGISTRAR=None
         COMMAND_CONTEXT=None
-        os.setsid()
-        detach_watchdog_io(json.loads((work/'state.json').read_text())['report'])
-        while True:
-            try:
+        ready=False
+        try:
+            os.close(ready_read)
+            os.setsid()
+            detach_watchdog_io(work,preserve=(ready_write,))
+            os.write(ready_write,b'1')
+            os.close(ready_write)
+            ready=True
+            while True:
                 state=json.loads((work/'state.json').read_text())
                 try:
                     os.kill(parent,0)
@@ -396,11 +439,43 @@ def start_watchdog(work):
                     phase(Path(state['report']),'watchdog-cleanup-triggered')
                     if cleanup(work,watchdog_parent=parent):os._exit(0)
                 time.sleep(1)
-            except BaseException:
-                # A broken watchdog cannot leave future native launches open.
+        except BaseException:
+            # Startup failures cannot silently leave command admission open.
+            try:
                 (work/'cleanup-started').touch()
+                if not ready:(work/'watchdog-startup-failed').touch()
+                publish_watchdog_evidence(work)
+            finally:
+                try:os.close(ready_write)
+                except OSError:pass
                 os._exit(1)
-    return child
+    os.close(ready_write)
+    reaped=False
+    try:
+        available=select.select([ready_read],[],[],5)[0]
+        if not available or os.read(ready_read,1)!=b'1':
+            raise RuntimeError('Watchdog failed bounded readiness gate before policy mutation')
+        if os.waitpid(child,os.WNOHANG)[0]!=0:
+            reaped=True
+            raise RuntimeError('Watchdog exited before readiness admission')
+        return child
+    except BaseException:
+        (work/'cleanup-started').touch()
+        (work/'watchdog-startup-failed').touch()
+        if not reaped:
+            try:os.kill(child,signal.SIGKILL)
+            except ProcessLookupError:pass
+        until=time.monotonic()+5
+        while not reaped:
+            try:
+                if os.waitpid(child,os.WNOHANG)[0]:break
+            except ChildProcessError:break
+            if time.monotonic()>=until:raise TimeoutError('Watchdog startup reap deadline exhausted')
+            time.sleep(.05)
+        publish_watchdog_evidence(work)
+        raise
+    finally:
+        os.close(ready_read)
 BASELINE = r'''
 import json, socket
 results=[]
@@ -538,6 +613,7 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
         temporary.replace(work/'state.json')
     save_state()
     watchdog=start_watchdog(work)
+    save_state(watchdog_pid=watchdog)
     def register_group(operation,pid):
         groups=list(state['owned_groups'])
         if operation == 'add':groups.append(pid)
@@ -650,16 +726,23 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
         try:
             (report/'result.json').write_text(json.dumps(provenance,indent=2)+'\n')
         finally:
-            cleanup(work)
+            try:
+                cleanup(work)
+            finally:
+                publish_watchdog_evidence(work)
         provenance.update(cleanupComplete=True,policyRestored=True)
         (report/'result.json').write_text(json.dumps(provenance,indent=2)+'\n')
-        try:os.kill(watchdog,signal.SIGKILL)
-        except ProcessLookupError:pass
-        reap_until=time.monotonic()+5
-        while os.waitpid(watchdog,os.WNOHANG)[0] == 0:
-            if time.monotonic() >= reap_until:
-                raise TimeoutError('Watchdog reap deadline exhausted')
-            time.sleep(.1)
+        if not (work/'watchdog-reaped').exists():
+            try:already_reaped=os.waitpid(watchdog,os.WNOHANG)[0] != 0
+            except ChildProcessError:already_reaped=True
+            if not already_reaped:
+                try:os.kill(watchdog,signal.SIGKILL)
+                except ProcessLookupError:pass
+                reap_until=time.monotonic()+5
+                while os.waitpid(watchdog,os.WNOHANG)[0] == 0:
+                    if time.monotonic() >= reap_until:
+                        raise TimeoutError('Watchdog reap deadline exhausted')
+                    time.sleep(.1)
         run(['/usr/sbin/chown','-R',f'{runner_uid}:20',str(report)])
         run(['/bin/rm','-rf','--',str(work)])
 

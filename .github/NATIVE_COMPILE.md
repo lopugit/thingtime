@@ -173,7 +173,7 @@ After policy activation, identity transitions use a trusted numeric
 path, preserving the registered process group without sudo/PAM monitor
 processes. The negative sudo-authority check runs before PF activation.
 The detached watchdog redirects stdin to null and stdout/stderr to its
-root-owned report log, closing other descriptors so it cannot retain the
+root-owned private work log outside the artifact directory, closing other descriptors so it cannot retain the
 runner job capture pipes. Captured-command timeouts still reap the direct child
 when an inherited writer prevents pipe EOF. Failed reap diagnostics contain
 only PID/PPID/UID/PGID/state/executable metadata; zombies and escaped groups
@@ -182,6 +182,16 @@ isolated UID process remains.
 
 Safe phase labels are flushed to stdout
 and a durable report. Lost stdout/report storage cannot prevent cleanup.
+Watchdog session/descriptor setup is inside an exception fence. A private
+5-second readiness pipe and immediate child-exit check must pass before
+identity/PF mutations. Each subsequent owned-command admission also detects
+watchdog exit and closes further execution. Startup EOF, timeout or death
+fails closed, records failure and reaps only that child.
+Even when cleanup fails, independent finalization writes an atomic, readable,
+root-owned sanitized `watchdog-evidence.json` snapshot. The protected active
+log stays outside uploaded artifacts; snapshot failure never claims policy
+restoration.
+
 No deadline or static test proves that a watchdog survived an actual VM loss.
 The GitHub job VM is disposable. Never run privileged helper operations on a
 developer Mac or a self-hosted runner.

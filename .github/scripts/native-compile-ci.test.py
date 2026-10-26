@@ -276,6 +276,79 @@ class NativeCompileBoundaryTests(unittest.TestCase):
         workflow=(HELPER.parent.parent/'workflows/native-compile.yml').read_text()
         self.assertIn("inputs.mode == 'native' && 65 || 10",workflow)
 
+    def test_watchdog_setup_failure_is_fenced_and_never_admitted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);self.cleanup_state(root)
+            with patch.object(native.os,'fork',return_value=0),patch.object(native.os,'setsid',side_effect=OSError),patch.object(native.os,'_exit',side_effect=SystemExit),self.assertRaises(SystemExit):
+                native.start_watchdog(root)
+            self.assertTrue((root/'cleanup-started').exists())
+            evidence=json.loads((root/'watchdog-evidence.json').read_text())
+            self.assertTrue(evidence['startupFailed'])
+            self.assertIsNone(evidence['policyRestored'])
+
+    def test_watchdog_ready_timeout_aborts_and_reaps_only_spawned_child(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);self.cleanup_state(root)
+            with patch.object(native.os,'fork',return_value=999001),patch.object(native.select,'select',return_value=([],[],[])),patch.object(native.os,'kill') as kill,patch.object(native.os,'waitpid',return_value=(999001,0)),self.assertRaises(RuntimeError):
+                native.start_watchdog(root)
+            kill.assert_called_once_with(999001,native.signal.SIGKILL)
+            self.assertTrue((root/'cleanup-started').exists())
+
+    def test_dead_after_ready_is_not_admitted_or_killed_after_reap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);self.cleanup_state(root)
+            with patch.object(native.os,'fork',return_value=999001),patch.object(native.select,'select',return_value=([123],[],[])),patch.object(native.os,'read',return_value=b'1'),patch.object(native.os,'waitpid',return_value=(999001,0)),patch.object(native.os,'kill') as kill,self.assertRaises(RuntimeError):
+                native.start_watchdog(root)
+            kill.assert_not_called()
+
+    def test_ready_live_watchdog_is_admitted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);self.cleanup_state(root)
+            with patch.object(native.os,'fork',return_value=999001),patch.object(native.select,'select',return_value=([123],[],[])),patch.object(native.os,'read',return_value=b'1'),patch.object(native.os,'waitpid',return_value=(0,0)):
+                self.assertEqual(native.start_watchdog(root),999001)
+            self.assertFalse((root/'cleanup-started').exists())
+
+    def test_watchdog_death_closes_command_admission_before_spawn(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);context=self.command_fixture(root)
+            state=json.loads((root/'state.json').read_text());state['watchdog_pid']=999001
+            (root/'state.json').write_text(json.dumps(state))
+            with patch.object(native,'COMMAND_CONTEXT',context),patch.object(native.os,'waitpid',return_value=(999001,0)),patch.object(native.subprocess,'Popen') as launch,self.assertRaises(RuntimeError):
+                native.start_owned_command(['/bin/true'],{})
+            launch.assert_not_called()
+            self.assertTrue((root/'watchdog-reaped').exists())
+
+    def test_failed_cleanup_watchdog_evidence_is_readable_and_never_claims_restore(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);self.cleanup_state(root)
+            report=root/'export';report.mkdir()
+            state=json.loads((root/'state.json').read_text());state['report']=str(report)
+            (root/'state.json').write_text(json.dumps(state))
+            log=root/'watchdog.log';log.write_text('native-compile phase=cleanup-started\nraw fixture must not be exposed\n')
+            log.chmod(0o600)
+            native.publish_watchdog_evidence(root)
+            target=report/'watchdog-evidence.json';evidence=json.loads(target.read_text())
+            self.assertEqual(evidence['watchdogPhases'],['cleanup-started'])
+            self.assertFalse(evidence['cleanupComplete']);self.assertIsNone(evidence['policyRestored'])
+            self.assertEqual(target.stat().st_mode & 0o777,0o444)
+            self.assertEqual(log.stat().st_mode & 0o777,0o600)
+            self.assertFalse((report/'watchdog.log').exists())
+            self.assertTrue(all(p.stat().st_mode & 0o004 for p in report.iterdir()))
+
+    def test_real_watchdog_ready_handshake_preserves_pipe_and_detached_io(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);self.cleanup_state(root)
+            state=json.loads((root/'state.json').read_text());state.update(watchdog_deadline=10**20,watchdog_requested=False)
+            (root/'state.json').write_text(json.dumps(state))
+            child=native.start_watchdog(root)
+            try:
+                self.assertTrue((root/'watchdog.log').exists())
+                self.assertEqual(os.waitpid(child,os.WNOHANG),(0,0))
+                self.assertFalse((root/'cleanup-started').exists())
+            finally:
+                os.kill(child,native.signal.SIGKILL)
+                os.waitpid(child,0)
+
     def command_fixture(self,root):
         (root/'cleanup.lock').touch()
         (root/'state.json').write_text(json.dumps({'watchdog_deadline':10**20,'watchdog_requested':False}))

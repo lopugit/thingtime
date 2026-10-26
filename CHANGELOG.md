@@ -5,6 +5,8 @@
 - Replace post-policy sudo transitions with verified numeric identity drop,
   split denial subprobes, detach watchdog capture pipes, and retain sanitized
   process-state diagnostics without weakening absence or network denial.
+- Require bounded watchdog readiness before mutation and expose sanitized
+  failure evidence independently of successful cleanup; keep raw logs private.
 - Cap inert preflight jobs at 10 minutes. The observed inert timeout/remaining
   UID failure is recorded separately from unproven runtime cause; hosted
   preflight and native acceptance remain required.

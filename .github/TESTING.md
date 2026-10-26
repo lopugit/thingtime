@@ -337,3 +337,9 @@ pre-queued with no jobs, logs, or cancellable run graph.
   a pipe. Hosted preflight must finish or fail within the 10-minute job cap,
   upload its sanitized evidence after verified restoration, and never download
   candidate source. No native retry before successful hosted preflight.
+
+- Watchdog setup must fail closed on setsid/descriptor failure, no ready signal
+  or child death before admission; exercise a real nonprivileged fixture
+  readiness pipe, and kill/reap only its exact child. Each command admission
+  rejects a dead watcher. On cleanup failure, sanitized watchdog evidence stays
+  readable while the protected active log is outside all uploaded artifacts.
