@@ -4475,6 +4475,11 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
     createdVia: '/api/v1/passwords', fields: [
       { name: 'title', type: 'string', required: true, description: 'Entry title.' },
       { name: 'passwordType', type: 'enum', required: true, values: [...PASSWORD_TYPES], description: 'Credential category. Native passkeys hold encrypted signing material.' },
+      { name: 'icon', type: 'object', required: false, description: 'Explicit uploaded password file or HTTPS URL choice. Sealed separately for private list presentation; never inferred from secret fields.', children: [
+        { name: 'kind', type: 'enum', required: true, values: ['url', 'attachment'], description: 'Selected image source.' },
+        { name: 'url', type: 'string', required: false, description: 'HTTPS image URL without credentials; loaded anonymously only after explicit selection.' },
+        { name: 'fileId', type: 'string', required: false, description: 'Owned ready password attachment bound to this entry.' }
+      ] },
       { name: 'fields', type: 'array', required: true, children: [
         { name: 'id', type: 'string', required: true, description: 'Stable field id.' },
         { name: 'label', type: 'string', required: true, description: 'Field label.' },

@@ -60,3 +60,13 @@ test('title search and cursor reach the owner-scoped list without revealing valu
   assert.equal(response.headers.get('cache-control'), 'private, no-store');
   assert.deepEqual((await response.json()).entries, []);
 });
+
+
+test('revocation during icon metadata load withholds the entire private list', async () => {
+  let checks = 0;
+  const handler = createPasswordHandler({ ...defaults, getCurrentUser: async () => ++checks === 1 ? owner : null,
+    listPasswords: async () => ({ entries: [{ id: 'fixture', title: 'Private', icon: { kind: 'url', url: 'https://private.example.test/icon' } }], nextCursor: null }) as any });
+  const response = await handler({ request: new Request('https://thingtime.example/api/v1/passwords') });
+  assert.equal(response.status, 401);
+  assert.equal((await response.text()).includes('private.example'), false);
+});

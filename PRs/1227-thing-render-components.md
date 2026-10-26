@@ -10,7 +10,9 @@ unrelated develop work is outside this PR. Main's newer native-link handling
 and Things capability gate are preserved, as is the subsequently merged
 single-click interaction. All affected tests, client/server builds and full
 isolated browser acceptance passed on the main integration. Final-head CI
-checks and evidence are recorded on the PR.
+checks and evidence are recorded on the PR. A later main update through
+`5d4e2db579` was merged into this branch, preserving the newly landed password
+tools; only documentation/ignore comments and generated maps conflicted.
 
 ## Contract
 
