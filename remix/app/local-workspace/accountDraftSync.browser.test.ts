@@ -24,6 +24,7 @@ test('native account drafts survive offline reload and post and draft sync failu
  const errors: string[] = [], offlineWrites: string[] = [], routeErrors: string[] = [];
  const responses: { path: string; status: number }[] = [];
  const heldResponses: Promise<unknown>[] = [];
+ const composerPostRequests: any[] = [];
  const postRequests: any[] = [], postFailures: string[] = [], postStatuses: number[] = [];
  const blockedPostText = 'Pending private post ' + randomUUID();
  const independentDraftText = 'Draft survives a pending post ' + randomUUID();
@@ -50,6 +51,7 @@ test('native account drafts survive offline reload and post and draft sync failu
  });
  page.on('request', (request: any) => {
   if (offline && !['GET', 'HEAD', 'OPTIONS'].includes(request.method())) offlineWrites.push(new URL(request.url()).pathname);
+  if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/things') composerPostRequests.push(request.postDataJSON());
   if (isBlockedPost(request)) postRequests.push(request.postDataJSON());
  });
  page.on('requestfailed', (request: any) => { if (isBlockedPost(request)) postFailures.push(request.failure()?.errorText || 'Request failed'); });
@@ -136,13 +138,23 @@ test('native account drafts survive offline reload and post and draft sync failu
   await page.locator('.ce-paragraph[contenteditable="true"]').first().pressSequentially(text + suffix);
   await page.getByText('Draft saved on this device ✓', { exact: true }).first().waitFor();
   await poll(async () => failedDraftWrites, value => value > 0);
+  // This final edit intentionally races the autosave debounce. The native
+  // composer must publish its live Editor.js snapshot, independently of the held save.
+  const immediate = ' Final immediate edit.';
+  await page.locator('.ce-paragraph[contenteditable="true"]').first().press('End');
+  await page.locator('.ce-paragraph[contenteditable="true"]').first().pressSequentially(immediate);
   await page.getByRole('button', { name: 'Post ✨', exact: true }).click();
-  const card = page.locator('[data-thing-id]').filter({ hasText: text + suffix }).first();
+  const card = page.locator('[data-thing-id]').filter({ hasText: text + suffix + immediate }).first();
   await card.waitFor(); postId = await card.getAttribute('data-thing-id'); assert.ok(postId);
   const published = await poll(async () => (await api('GET', '/api/v1/things?id=' + postId)).json(), value => value.thing?.id === postId, 20);
-  assert.equal(published.thing.crystal.text, text + suffix); assert.deepEqual(published.thing.acl, ['tt:user']);
+  assert.equal(published.thing.crystal.text, text + suffix + immediate);
+  const firstWrites = composerPostRequests.filter(row => row.shareId === postId);
+  assert.equal(firstWrites.length, 1);
+  assert.deepEqual(published.thing.crystal.richText, firstWrites[0].crystal.richText, 'exact remote readback preserves the live editor document'); assert.deepEqual(published.thing.acl, ['tt:user']);
   assert.equal((await guest.request.get(url('/api/v1/things?id=' + postId))).status(), 404);
-  releaseDraft(); await Promise.all(heldResponses); await page.unroute('**/api/v1/drafts'); await page.reload();
+  releaseDraft(); await Promise.all(heldResponses);
+  await poll(async () => responses, rows => rows.some((row: any) => row.path === '/api/v1/drafts' && row.status === 503));
+  await page.unroute('**/api/v1/drafts'); await page.reload();
   // Reload can retire a worker with its durable 60-second claim still live.
   // Wait through that existing lease before expecting remote draft retirement.
   await poll(async () => (await api('GET', '/api/v1/drafts?id=' + draftId)).status(), value => value === 404, 225);
@@ -195,6 +207,8 @@ test('native account drafts survive offline reload and post and draft sync failu
   for (const request of postRequests) assert.deepEqual(request, postRequests[0]);
   const remotePosts = await (await api('GET', '/api/v1/things?thingtime=post&limit=200')).json();
   assert.equal(remotePosts.nextCursor, null);
+  assert.equal(composerPostRequests.filter(row => row.shareId === postId).length, 1, 'late draft failure and reload cannot duplicate the first post');
+  assert.deepEqual(remotePosts.things.filter((row: any) => row.crystal.text === text + suffix + immediate).map((row: any) => row.id), [postId]);
   assert.deepEqual(remotePosts.things.filter((row: any) => row.crystal.text === blockedPostText).map((row: any) => row.id), [reversePostId]);
   assert.equal((await guest.request.get(url('/api/v1/things?id=' + reversePostId))).status(), 404);
   await poll(() => editor.innerText(), value => value === independentDraftText);
@@ -205,7 +219,7 @@ test('native account drafts survive offline reload and post and draft sync failu
   await poll(() => editor.innerText(), value => value === independentDraftText);
   if (artifacts) await page.screenshot({ path: resolve(artifacts, 'post-retried-draft-preserved.png'), animations: 'disabled' });
   assert.deepEqual(errors, []); assert.deepEqual(routeErrors, []); assert.deepEqual(offlineWrites, []);
-  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ offlineReload: true, privateDraftSync: true, immutableTemplateRetry: true, failedDraftWrites, independentPrivatePost: postId, postSyncedBeforeDraftReleased: true, retirementConverged: true, templatePreserved: true, failedPostWrites, reversePostId, independentDraftId, draftSyncedBeforePostReleased: true, postRetrySameIdentity: true, postAttempts: postRequests.length, exactlyOneRetriedPost: true, workingDraftPreservedAfterPostRetryAndReload: true, postStatuses, postFailures, viewports: [1440, 390, 320], errors, offlineWrites }, null, 2));
+  if (artifacts) await writeFile(resolve(artifacts, 'verification.json'), JSON.stringify({ offlineReload: true, privateDraftSync: true, immutableTemplateRetry: true, failedDraftWrites, independentPrivatePost: postId, postSyncedBeforeDraftReleased: true, latestImmediateEditorSnapshot: true, exactRichTextReadback: true, exactlyOneFirstPost: true, retirementConverged: true, templatePreserved: true, failedPostWrites, reversePostId, independentDraftId, draftSyncedBeforePostReleased: true, postRetrySameIdentity: true, postAttempts: postRequests.length, exactlyOneRetriedPost: true, workingDraftPreservedAfterPostRetryAndReload: true, postStatuses, postFailures, viewports: [1440, 390, 320], errors, offlineWrites }, null, 2));
  } catch (error) {
   if (artifacts) {
    await page.screenshot({ path: resolve(artifacts, 'failure.png') }).catch(() => {});

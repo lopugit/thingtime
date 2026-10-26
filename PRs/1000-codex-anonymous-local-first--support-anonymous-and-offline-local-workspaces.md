@@ -5558,3 +5558,29 @@ exact-commit frontend shell/manifest responded successfully. This subsequent
 test/evidence increment requires its own pushed-head checks. TypeScript retains
 exactly the same 91 baseline diagnostics; no product code changed. The shared
 LLM proxy/key and VM configuration remain unchanged.
+
+## 27 October — fresh posting/draft independence acceptance
+
+The retained normal-composer browser suite now additionally checks an edit made
+immediately before Post, exact remote rich-text readback, and no duplicate after
+the held draft returns 503 and the page reloads. Existing coverage already tests
+both directions: posts complete while draft saving is held/fails, and a separate
+draft saves while a post upload is held/fails. The post retries its immutable
+body/identity into one record; the working draft survives reload. The fresh
+isolated run passes 1/1 with no skips or product changes. Earlier fixture
+precondition failure and recovered historical evidence retain their narrower
+scope. [Current evidence](../artifacts/anonymous-post-draft-independence-2026-10-27/README.md).
+
+Pushed `ae245f48` passes Web CI and CodeQL. Its GitHub-associated immutable
+preview serves the shell, script assets and origin-scoped capability manifest;
+no literal commit marker was found in the inspected assets, and no deployed
+account actions were performed. This test/evidence increment has separate
+pushed-head checks. [CI/preview record](../artifacts/anonymous-post-draft-independence-2026-10-27/ci-preview.json).
+
+A bounded installed-app audit verified the existing signed Thingtime app is
+from another feature branch (`48925abc31f481b4a2010986ff06e5779c32e2b7`). It exposes
+the documented Electron import/Codex-session connectors, with no observed MCP
+host controls. The requested MCP host proof is already supplied by actual
+Codex desktop/CLI tool calls; adding a new MCP client to Thingtime.app is not
+required for that proof. Wider installed-app acceptance remains separate. The
+installed app, shared LLM proxy/key and VM configuration were left unchanged.
