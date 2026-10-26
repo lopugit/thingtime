@@ -102,11 +102,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-26: Configure and verify the shared preview gateway and its project
-  credentials while preserving production/develop aliases. Integrate the
-  canonical Thing renderer from main for subspace embeds; production/develop
-  gateway activation and final browser acceptance remain pending.
-  [Rollout and verification](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
+- 2026-10-26: Let initial and foreground resource refreshes reach a local API
+  even when the browser reports offline. Subspace embeds now get their first
+  request without weakening network isolation; offline background polling stays
+  paused. Regression and related suites pass 779 tests. [Verification](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
+- 2026-10-26: Configure production, develop and shared preview gateway targets;
+  verify their origin-scoped manifests and root-data routes while preserving
+  existing aliases and credentials. Integrate the canonical Thing renderer
+  from main for subspace embeds. Verify dedicated branch reads and rejection of
+  incoming gateway relays; identify the exact-origin allowlist correction needed
+  for ordinary PR aliases. [Rollout and verification](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
 
 - 2026-10-26: Replace the legacy UUID hook's insecure random source with Web Crypto while preserving its mount-time lifecycle. The main delivery includes only the owned zero-baseline changes from PR 1228. **Codex (AI)**
 - 2026-10-26: Render data Things through an explicit saved Component pointer or

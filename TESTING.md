@@ -9144,6 +9144,7 @@ storage only; do not describe it as a production upload or provider acceptance.
 
 ## Background refresh and returning tabs
 
+- [ ] With `navigator.onLine === false` but the isolated same-origin API reachable, open and reload a subspace: both embed regions load without synthetic refresh events. Foreground return revalidates once; offline background polls remain paused, and reconnect resumes ordinary polling. Keep the enforced browser/backend network boundary unchanged.
 - [ ] Open an existing Lopu conversation in two clients. Create another conversation and append a message in the other client: the first client's list and selected timeline update without reload or changing the selected conversation. Repeat in the floating Lopu window and Messenger.
 - [ ] Leave the tab hidden, update from the other client, then return. Verify an immediate refresh on visibility/focus, reconnect and browser history restoration; hidden tabs poll at most once per minute per resource. Cached content remains during failures.
 - [ ] Keep a draft, scroll into history, open conversation/chat settings drawers, and let several polls run at desktop and phone widths. No draft loss, loading flash, pagination rewind, overlap or clipping. Rename/delete while an earlier read is delayed; an old result cannot undo the edit. Switch accounts away and back during a delayed read; old private data cannot reappear.

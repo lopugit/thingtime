@@ -46,51 +46,90 @@ focused lint, a Nitro server build, and built transport acceptance under an
 OS-enforced local network boundary. Two independent MongoDB replicas proved the
 dedicated branch executed its own backend and used independent test data; the
 ordinary follower made zero MongoDB dials. Authentication, writes, promotion,
-rollback, and the dedicated root-shell metadata path passed final acceptance.
-The build log is `/tmp/thingtime-gateway-dedicated-build.log`; the acceptance
-log is `/tmp/thingtime-gateway-dedicated-acceptance.log`. The portable Graphify snapshot was refreshed through the repository wrapper
-with AST extraction and HTML export (65,227 nodes, 188,279 edges). Its AST cache
-miss scanned 3,659 code files; five files had syntax warnings and 380 yielded
-no symbols. Semantic extraction was not run, so the changed Markdown/docs are
-not represented in this refresh. The earlier semantic path classified the full
+rollback, and the dedicated root-shell metadata path passed that transport
+acceptance. This does not replace the outstanding deployed runtime or Builder
+acceptance. The build log is `/tmp/thingtime-gateway-dedicated-build.log`; the
+acceptance log is `/tmp/thingtime-gateway-dedicated-acceptance.log`.
+
+The final portable Graphify snapshot was refreshed through the repository
+wrapper with AST extraction and HTML export (65,339 nodes, 188,624 edges).
+Semantic extraction was not run, so changed Markdown/docs are not
+represented in this refresh. The earlier semantic path classified the full
 corpus as changed (4,122 code files, 641 docs, 384 images) and was stopped before
-dispatch; this update retained the documented structural-only limitation.
+dispatch; the code-only limitation remains.
 
 The branch now includes freshly fetched `origin/main` at
 `3a5b10d538ba0ef9996f004492fe2dd1d8c1454c`, preserving the zero-TypeScript-diagnostic update, drawer/shared-select,
 Things/files/devices single-click browsing, canonical Component rendering and
-password updates. The preceding integration's gateway suite passed 14/14 and API capability
-suite passed 115/115. Gateway test fixtures explicitly choose the mode under
-test, so both the normal proxy policy and a dedicated branch policy exercise
-the same assertions. The develop counterpart was merged as PR #1224 at
+password updates. The integration baseline is `b63b591aa414ab662e86fd3bd9cd0a8ba89888a8`.
+At that head the typecheck ratchet reported zero errors, gateway tests passed
+14/14, capability and MongoDB health coverage passed 116/116, and the smarts
+regression suite passed 7/7. Earlier focused integration checks passed for the
+canonical renderer (11/11), schemas (276/276), Feed (89/89), and final delegated
+assertions (2/2). Gateway test fixtures explicitly choose the mode under test,
+so both the normal proxy policy and a dedicated branch policy exercise the same
+assertions. The develop counterpart was merged as PR #1224 at
 `cd6f8b8abc94270980bac216da2412ffef8578b1` after its build, API and both CodeQL
-checks passed on the exact head. No live gateway activation is implied by that
-integration.
+checks passed on the exact head. PR #1223's four required CI checks passed on
+`b63b591`; the complete source review found no issues. These results establish
+source and build readiness, not deployed feature acceptance.
 
-The intended canonical origins are `thingtime.com` (production),
-`dev.thingtime.com` (custom develop), and `master.previews.thingtime.com`
-(standard preview). The preview master is now deployed from main `789980d2e`
-as `dpl_3JG3NdFSVUYcaCsZgZCiXfm95ywg`. Its standard Preview secret, origin and
-environment records were configured and read back in memory; no key values
-were recorded. Its capability manifest identifies the exact preview owner and
-`/api/root-data` returns HTTP 200. Nine protected production/develop/wildcard
-aliases were independently confirmed unchanged. Production and develop
-activation and live branch acceptance remain pending. A normal preview retry
-also exposed a separate protected-workflow expression error, being corrected
-on the controller branch. Do not merge the default-proxy runtime before the
-required canonical owners and publisher configuration are ready.
+### Current deployment state
 
-The initial production/develop activation preserves legacy continuations. A
-focused source review verified production deployment `dpl_EsserNdfyVGY1GaHNQfZC1m29ZGs`
-at `70c0df25d33c225c6a6339b3717fc55c69ad2003` and development deployment
-`dpl_5t3m8HfMaSbscDaRubJ5eQ57CWBy` at `f41cf65629fe98423405de4bea4e5894f59ccb46`.
+The selected origins are `thingtime.com` (production), `dev.thingtime.com`
+(custom develop), and `master.previews.thingtime.com` (standard preview).
+Production is configured on deployment `dpl_48sQnkSRs5BFuKhsUxncyGwFyxXS`,
+source `main` `3a5b10d`; its receipt is
+`/tmp/thingtime-bootstrap-artifact-QPhoHI/receipt.json` for attempt
+`dd774aba-727f-45e3-af4b-906fd38c94a6`. Develop is configured on deployment
+`dpl_5qkujMBNFHMaDBbaD8KEHnQRRD7i`, source `cd6f8b8`; its receipt is
+`/tmp/thingtime-bootstrap-artifact-kif5p6/receipt.json`. Develop adopted the
+existing scoped secret unchanged.
+
+The first preview owner, `3JG`, on main `789980d2e` was normally promoted by
+canonical workflow run `40307943198` (publisher
+`1b2496105f61d004c5b2d2c3543704cb51cf73dd`) to `master` deployment
+`dpl_5AXh1dSsDDiRy1FLqLV9Dxm34my3`, source main `3a5b10d`. The PR #1223 branch
+preview for head `b63b591` is successful at
+https://thingtime-73mdoazx5-lopugits-projects.vercel.app.
+
+Production, develop and preview manifests were independently read from their
+exact origins and deployments and returned HTTP 200. The negotiated gateway
+features are production/preview `1.0.1` and develop `1.1.0`; `/api/root-data`
+returned HTTP 200 on all three origins. Configuration readback confirmed the
+singleton scope, type and value in memory; credential values were not recorded.
+Existing deployments, the Atlas tier and MongoDB credentials were preserved.
+The `.com.au` alias remains with its previous owner, and `devcompat9BAF` and
+wildcard aliases remain unchanged.
+
+The protected controller fix was merged in PR #1235 at `1b249610`; redundant
+PR #1234 was closed. Dedicated canary PR #1229 then published exact head
+`d36956c9` at `https://pr-1229.previews.dev.thingtime.com`: the manifest correctly
+advertised no shared gateway ownership, root-data returned 200, and a forged
+incoming relay was rejected with 403. Its custom develop credential target was
+preserved. The ordinary PR #1223 deployment's direct URL returned 200, but its
+friendly PR alias returned 421 because that origin was absent from the
+deployment's allowlist. Controller PR #1236 adds only the exact assigned alias
+to the deployment's source-origin setting, with a new upload policy to prevent
+reuse of older builds. Historical deployments remain untouched.
+
+The PR conversation records subsequent exact-head rollout and browser results.
+Do not treat HTTP readbacks or passing CI as Builder acceptance: release checks
+also cover Thing editing, save/reload, both embed placements and message/comment
+controls. Earlier attempts with stale assets or mismatched static shells do not
+establish acceptance of this branch.
+
+The initial production/develop configuration preserved legacy continuations.
 Their unconfigured gateway paths leave database access intact, and continuation
 steps invoke local handlers without fetching through the moved public alias.
-Keeping the database/origin/task scope and old deployments intact preserves
-worker acknowledgments and shared locks. Production's authenticated Tasks UI
-showed no running root workflows but one running-status row; the API omits
-reservation fields, so no zero-reservation or fleet-drain claim is made. This
+Keeping database/origin/task scope and old deployments intact preserves worker
+acknowledgments and shared locks. Production's authenticated Tasks UI showed no
+running root workflows but one running-status row; the API omits reservation
+fields, so no zero-reservation or fleet-drain claim is made. This
 first-activation allowance does not apply to later configured-owner promotions.
+The user subsequently reported a successful live production Tasks check with
+no running server tasks or reservations. This is user-reported evidence, not an
+independent inspection of reservation fields omitted from public projections.
 
 ## Embed acceptance follow-up — 2026-10-26
 
@@ -107,9 +146,18 @@ Fields bind directly and through `thing`; saved references keep their own ACL
 and identity fences. Sources and Actions are inert in this display context.
 The earlier parallel adapter and its alternate authoring shape are removed.
 
-The earlier adapter's unit results do not establish acceptance of this
-integrated path. Its isolated API acceptance passed, but the browser manager
-correctly refused an image containing a mismatched static shell; no browser
-acceptance is claimed from that attempt. Actual
-deployed Builder selection/edit/save/reload, both embed placements, and remaining
-message/comment controls still require acceptance after gateway activation.
+Fresh isolated browser testing found another first-load failure: the browser
+reported `navigator.onLine === false` while its same-origin API remained
+reachable. The shared refresh scheduler skipped the initial embed request.
+Initial subscriptions and foreground returns now probe the API despite that
+connectivity hint; offline background polling remains paused, and existing
+throttling, request coalescing and failure backoff remain intact. Both regions
+rendered after a diagnostic refresh, which identified the cause but is not a
+substitute for natural first-load/reload acceptance of the fix.
+
+The refresh scheduler's seven tests pass, including offline initial-load,
+foreground revalidation and deferred-subscription regressions. The complete
+hooks, Lopu UI/store, Messenger and root-data suites passed 779 tests; targeted
+lint and `git diff --check` passed. Final browser receipts must use a newly built
+client, synchronized Nitro shell and matching node-server image, and cover
+natural loading plus actual Builder selection/edit/save/reload.
