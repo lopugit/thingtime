@@ -125,6 +125,15 @@ System-kind rules (never bypass):
   Blocks never carry raw markup: component blocks reference `component` things
   and draw client-side through the sanitising allowlist renderers with one
   render budget per block.
+- `lopu-instruction-transfer` and `lopu-instruction-part` are protected,
+  owner-private home records. Instruction text lives only in validated secure
+  BinData, with its exact UTF-8 bytes charged to the canonical storage ledger.
+  Reserved identifiers and root unique keys protect immutable attempts and row
+  identities; generic search, copies and writes cannot access these kinds.
+  Each part is bounded, while the live account holds a compact revision/ref.
+  Pointer and committed generation change in one home transaction. Committed
+  history is retained; abandoned staging is tombstoned and reclaimed in bounded,
+  accounted batches. No physical collection or extra authentication is added.
 - `lopu-background-task` is protected owner-private home control state, minted
   only around canonical AI handlers. Owner, origin/data-source scope and request
   ID derive the reserved `lopu-background-` shareId; an immutable body digest

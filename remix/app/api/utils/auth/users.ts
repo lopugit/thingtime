@@ -3,6 +3,7 @@ import type { UserVaultKeyRegistry } from './vaultKeys';
 import { randomUUID as lopuSettingsRevision } from 'node:crypto';
 import { LopuPromptConflictError, validateLopuInstructions, type LopuInstructionSettings } from '../lopu/promptSettingsCore';
 import { createHash } from 'node:crypto';
+import { parseInstructionRecord, type InstructionRecord } from '../../../lopu/instructionTransfer';
 import { Binary, ObjectId, BSON, type ClientSession } from 'mongodb';
 import type { AlgorithmSelection } from '../algorithms/algorithmSelectionContract';
 import type { ThemeSelection } from '../themes/themeSelectionContract';
@@ -2208,28 +2209,42 @@ export const updateUserProfile = createUpdateUserProfile();
 
 // Personal instructions are private secure metadata: never part of a profile,
 // Thing crystal, search index, admin roster, or another viewer's prompt.
-export const getUserLopuInstructions = async (userId: string): Promise<LopuInstructionSettings> => {
-  const thing = await (await getThingsCollection()).findOne({ shareId: String(userId), thingtime: 'user' } as any, { projection: { secure: 1 } });
+export const getUserLopuInstructionRecord = async (userId: string, session?: ClientSession): Promise<InstructionRecord> => {
+  const options = { projection: { secure: 1 }, ...(session ? { session } : {}) };
+  const thing = await (await getThingsCollection()).findOne({ shareId: String(userId), thingtime: 'user' } as any, options);
   const legacy = !thing && ObjectId.isValid(userId)
-    ? await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.lopuInstructions': 1 } }) : null;
+    ? await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { 'meta.lopuInstructions': 1 }, ...(session ? { session } : {}) }) : null;
   const stored = (thing ? unpackSecure((thing as any).secure).meta : legacy?.meta)?.lopuInstructions;
-  if (!stored) return { revision: null, instructions: [] };
-  return { revision: stored.revision, instructions: validateLopuInstructions(stored.instructions) };
+  return stored ? parseInstructionRecord(stored) : { revision: null, instructions: [] };
 };
-export const setUserLopuInstructions = async (userId: string, instructions: unknown, expectedRevision: string | null): Promise<LopuInstructionSettings> => {
-  const settings = { revision: lopuSettingsRevision(), instructions: validateLopuInstructions(instructions) };
+export const getUserLopuInstructions = async (userId: string): Promise<LopuInstructionSettings> => {
+  const stored = await getUserLopuInstructionRecord(userId);
+  if (!('reference' in stored)) return stored;
+  const { materializeInstructions } = await import('../settings/lopuInstructionStore');
+  return { revision: stored.revision, instructions: await materializeInstructions(userId, stored.reference) };
+};
+/** The immutable parts and live pointer commit in one home transaction. Ordinary
+ * atomic settings writes share this revision fence, including after migration. */
+export const setUserLopuInstructionRecord = async (userId: string, raw: InstructionRecord, expectedRevision: string | null, session?: ClientSession): Promise<InstructionRecord> => {
+  const settings = parseInstructionRecord(raw);
   const result = await mutateUserThingSecure(userId, secure => {
     if ((secure.meta!.lopuInstructions?.revision ?? null) !== expectedRevision) throw new LopuPromptConflictError();
     secure.meta!.lopuInstructions = settings;
-  });
+  }, false, session);
   if (result === 'mutated') return settings;
   if (result === 'contended') throw new SecureWriteContendedError(userId);
   if (!ObjectId.isValid(userId)) throw new Error('Account not found.');
   const legacy = await (await getUsersCollection()).updateOne(
     { _id: new ObjectId(userId), 'meta.lopuInstructions.revision': expectedRevision } as any,
-    { $set: { 'meta.lopuInstructions': settings, updatedAt: new Date() } }
+    { $set: { 'meta.lopuInstructions': settings, updatedAt: new Date() } },
+    { ...(session ? { session } : {}) }
   );
   if (!legacy.matchedCount) throw new LopuPromptConflictError();
+  return settings;
+};
+export const setUserLopuInstructions = async (userId: string, instructions: unknown, expectedRevision: string | null): Promise<LopuInstructionSettings> => {
+  const settings = { revision: lopuSettingsRevision(), instructions: validateLopuInstructions(instructions) };
+  await setUserLopuInstructionRecord(userId, settings, expectedRevision);
   return settings;
 };
 

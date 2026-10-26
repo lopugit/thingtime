@@ -50,3 +50,22 @@ test('personal lists exceed the old count/text caps while authentication and tra
   assert.deepEqual(f.writes[0].instructions, instructions);
   await assert.rejects(f.call({ scope: 'personal', revision: 'personal-1', instructions: [{ id: 'large', text: 'x'.repeat(100000), enabled: true }] }), (error: unknown) => error instanceof Response && error.status === 413);
 });
+
+
+test('base-only reads remain public and do not touch retained personal instructions', async () => {
+  for (const user of [null, { id: 'admin', accountKind: 'user', isAdmin: true }]) {
+    const f = fixture(user);
+    f.deps.getUserLopuInstructions = async () => { throw new Error('Personal read must not occur'); };
+    const response = await createLopuPromptHandlers(f.deps).loader({ request: new Request('http://localhost/api/v1/settings/lopu-prompt?scope=base') });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true, base: { basePrompt: 'Public base', revision: 'base-1' } });
+  }
+});
+test('malformed JSON is a field-validation refusal and transport overflow remains a thrown HTTP 413 response', async () => {
+  const f = fixture({ id: 'alice', accountKind: 'user' });
+  const response = await createLopuPromptHandlers(f.deps).action({ request: new Request('http://localhost/api/v1/settings/lopu-prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{' }) });
+  assert.equal(response.status, 400);
+  // The canonical Nitro catch-all recognizes a thrown Response before its
+  // generic error logger; this preserves that executable dispatch boundary.
+  await assert.rejects(createLopuPromptHandlers(f.deps).action({ request: new Request('http://localhost/api/v1/settings/lopu-prompt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'x'.repeat(96*1024+1) }) }), (error: unknown) => error instanceof Response && error.status === 413);
+});

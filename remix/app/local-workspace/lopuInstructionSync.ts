@@ -14,5 +14,8 @@ export async function syncLopuInstructionPass(
  await service.sync(transport, signal);
  const after = await service.read();
  if (JSON.stringify(before) !== JSON.stringify(after)) changed();
- return !after.conflict && !instructionSyncBlocked(after) && (after.pending || after.error || after.claim) ? 60_000 : null;
+ // An acknowledged earlier save may leave a newer edit ready. It resumes
+ // at the normal transfer cadence instead of inheriting the failure retry.
+ const cadence = after.pending && !after.attempt && !after.error ? 15_000 : 60_000;
+ return !after.conflict && !instructionSyncBlocked(after) && (after.pending || after.error || after.claim) ? Math.max(1_000, (after.retryAt ?? (Date.now() + cadence)) - Date.now()) : null;
 }

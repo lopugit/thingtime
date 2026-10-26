@@ -1,3 +1,5 @@
+import type { LopuInstruction, LopuInstructionSettings } from '../lopu/promptSettingsCore';
+import { openBackupInstructionRecord, verifyInstructionBackupReference } from './instructionRecords';
 import { createHash } from 'node:crypto';
 import { binaryBytes } from '../auth/binary';
 import { accountContentSnapshot, accountContentValue, ACCOUNT_CONTENT_BYTES } from '../../../timeline/accountContent';
@@ -175,6 +177,14 @@ export async function openBackupAccountSnapshot(
 	thingId: string,
 	access: BackupAccess
 ): Promise<TimelineSnapshot> {
+	const scopeKey = timelineScopeKey(access.scope);
+	const guard = async () => {
+		access.signal?.throwIfAborted();
+		if (timelineScopeKey(access.scope) !== scopeKey) throw Error('Retained account scope changed');
+		await access.authorize();
+		access.signal?.throwIfAborted();
+		if (timelineScopeKey(access.scope) !== scopeKey) throw Error('Retained account scope changed');
+	};
 	const { item, ranges } = await openBackupItem(store, snapshotId, thingId, access),
 		descriptor = item.snapshot.value as any;
 	if (
@@ -201,5 +211,39 @@ export async function openBackupAccountSnapshot(
 		value = accountContentValue(snapshot);
 	if (json(accountContentSnapshot(value)) !== text || value.ownerId !== thingId || thingId !== access.scope.ownerId)
 		throw Error('Retained account identity changed');
+	const personal = value.preferences.lopuInstructions as any;
+	if (personal?.reference) await verifyInstructionBackupReference(value.ownerId, personal.reference,
+		ids => Promise.all(ids.map(id => openBackupInstructionRecord(store, snapshotId, id, access))), guard, personal.revision);
+	await guard();
 	return snapshot;
+}
+
+/** Recover the complete editable checklist from a sealed private backup. This
+ * is explicit offline content recovery, not live account mutation or inference.
+ * Validation of the entire immutable generation finishes before any settings
+ * are returned. No live source or existing account session content is needed. */
+export async function recoverBackupInstructionSettings(
+  store: BackupObjectStore,
+  snapshotId: string,
+  access: BackupAccess
+): Promise<LopuInstructionSettings> {
+  const scopeKey = timelineScopeKey(access.scope), ownerId = access.scope.ownerId;
+  const snapshot = await openBackupAccountSnapshot(store, snapshotId, ownerId, access);
+  const personal = accountContentValue(snapshot).preferences.lopuInstructions as any;
+  if (!personal) return { revision: null, instructions: [] };
+  if (!personal.reference) return personal;
+  const { instructionPartThingId } = await import('../settings/lopuInstructionStore');
+  const instructions: LopuInstruction[] = [];
+  let pieces: string[] = [];
+  for (let ordinal = 0; ordinal < personal.reference.partCount; ordinal++) {
+    const record = await openBackupInstructionRecord(store, snapshotId, instructionPartThingId(ownerId, personal.reference.attemptId, ordinal), access);
+    const part = record.payload.part;
+    if (part.start) { instructions.push({ id: part.id, enabled: part.enabled, text: '' }); pieces = []; }
+    pieces.push(part.text);
+    if (part.end) instructions[instructions.length - 1].text = pieces.join('');
+  }
+  await access.authorize();
+  access.signal?.throwIfAborted();
+  if (timelineScopeKey(access.scope) !== scopeKey) throw Error('Instruction recovery account changed');
+  return { revision: personal.revision, instructions };
 }

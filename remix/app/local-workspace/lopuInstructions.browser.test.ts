@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
@@ -14,7 +15,7 @@ test('isolated native instructions: anonymous edit, offline reload, cross-tab co
   const health = await (await fetch(origin + '/api/v1/health/nitro')).json();
   assert.equal(health.testEnvironment.mode, 'isolated-agent-test'); assert.equal(health.testEnvironment.sessionId, session);
   const manifest = await (await fetch(origin + '/.well-known/thingtime-capabilities.json')).json();
-  assert.equal(manifest.origin, origin); assert.equal(manifest.features['api.settings-lopu-prompt'].version, '1.1.0');
+  assert.equal(manifest.origin, origin); assert.ok(capabilitySatisfies(manifest.features['api.settings-lopu-prompt'].version, '2.0.0'));
   const { default: puppeteer } = await import(puppeteerPath!);
   const browser = await puppeteer.launch({ executablePath, headless: true, pipe: true, protocolTimeout: 30_000, args: ['--no-proxy-server', '--disable-background-networking'] });
   contextTest.signal.addEventListener('abort', () => { void browser.close(); }, { once: true });

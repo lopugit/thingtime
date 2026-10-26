@@ -73,3 +73,34 @@ test('instruction writes measure the exact serialized UTF-8 body and never POST 
   if (navigator) Object.defineProperty(globalThis, 'navigator', navigator); else delete (globalThis as any).navigator;
  }
 });
+
+test('resumable transport negotiates v2, enforces receipt identity, and propagates rate-limit backoff', async () => {
+ const previous = { window: globalThis.window, fetch: globalThis.fetch }, navigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+ let version = '1.1.0', wrongOwner = false, throttle = false, terminalId: string | undefined;
+ const commands: any[] = [];
+ Object.assign(globalThis, { window: { location: { origin: scope.origin }, dispatchEvent: () => true }, fetch: async (url: string, init: RequestInit) => {
+  if (url.includes('capabilities')) return Response.json({ schemaVersion: 1, origin: scope.origin, features: { 'api.settings-lopu-prompt': { version } } });
+  const command = JSON.parse(String(init.body)).command; commands.push(command);
+  if (terminalId) return Response.json({ ok: false, code: 'INSTRUCTION_TRANSFER_ABORTED', attemptId: terminalId }, { status: 409 });
+  if (throttle) return Response.json({ ok: false }, { status: 429, headers: { 'Retry-After': '120' } });
+  return Response.json({ ok: true, ownerId: wrongOwner ? 'bob' : scope.ownerId, dataPlane: scope.dataPlane, storagePlane: 'home', base: { revision: null, basePrompt: 'Public base' }, personal: { revision: 'remote', instructions: [] } });
+ } });
+ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } });
+ try {
+  rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(false, rootIdentity.read().generation, scope, true);
+  const transport = instructionTransport(scope), signal = new AbortController().signal;
+  await assert.rejects(transport.writeResumable!({ revision: null, instructions: [{ id: 'large', text: 'x'.repeat(100_000), enabled: true }] }, { id: 'stable', nextPart: 0 }, signal, async () => {}), { code: 'INSTRUCTIONS_RESUMABLE_UNAVAILABLE' });
+  assert.equal(commands.length, 0);
+  version = '2.0.0'; await transport.read(signal); assert.equal(commands.at(-1).action, 'snapshot');
+  wrongOwner = true; await assert.rejects(transport.read(signal), { code: 'INVALID_SETTINGS_RECEIPT' });
+  wrongOwner = false; throttle = true; await assert.rejects(transport.read(signal), { status: 429, retryAfterMs: 120_000 });
+  throttle = false; terminalId = 'frozen-transfer';
+  const value = { revision: null, instructions: [{ id: 'one', text: 'Pending', enabled: true }] };
+  await assert.rejects(transport.writeResumable!(value, { id: 'frozen-transfer', nextPart: 0 }, signal, async () => {}), { code: 'INSTRUCTION_TRANSFER_ABORTED', attemptId: 'frozen-transfer' });
+  terminalId = 'another-transfer';
+  await assert.rejects(transport.writeResumable!(value, { id: 'frozen-transfer', nextPart: 0 }, signal, async () => {}), { code: 'INSTRUCTIONS_SYNC_REFUSED' });
+ } finally {
+  bindLocalWorkspace(true, rootIdentity.read().generation); Object.assign(globalThis, previous);
+  if (navigator) Object.defineProperty(globalThis, 'navigator', navigator); else delete (globalThis as any).navigator;
+ }
+});

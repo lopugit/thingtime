@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Add resumable owner-fenced account instruction storage and versioned sealed backup recovery with bounded immutable transfers, transactional revision commit, retention cleanup and 96 KiB ordinary-inference working set. Inference metering boundary checks pass 9/9; isolated packaged-app instruction acceptance failed at 12,000-line paste/undo, with installed macOS acceptance still open. See [PR 1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#resumable-account-instruction-transfer--26-october-2026). — Codex (AI)
+
 - 2026-10-26: Make disabled MCP card crops extractable with explicit result metadata, reject duplicate viewport dimensions before launch, and withhold artifacts after truncated worker output. Artifact extractor regressions now run in the default MCP suite. [PR 1000 evidence](../artifacts/anonymous-local-first-2026-10-26-mcp-options/README.md). **Codex (AI)**
 
 - 2026-10-26: Prevent repeated instruction saves from stacking the same editor’s success notifications. Native clipboard/undo/save/reload now covers 12,002 hard lines; saved profile Actions pass through the normal offline Run button with retained history and responsive checks. [PR 1000 follow-up evidence](../artifacts/anonymous-local-first-2026-10-26-followup-final/README.md). **Codex (AI)**

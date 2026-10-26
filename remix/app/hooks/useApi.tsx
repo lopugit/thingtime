@@ -443,9 +443,15 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       }
     },
     settings: {
-      lopuPrompt: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/settings/lopu-prompt', options), [getJson]),
+      lopuPrompt: useCallback(async (options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.settings-lopu-prompt', '2.0.0');
+        const result = await getJson('/api/v1/settings/lopu-prompt?scope=base', options);
+        // This caller edits only the public base. Preserve the editor snapshot
+        // shape without reading or materializing private account instructions.
+        return { ...result, personal: { revision: null, instructions: [] } };
+      }, [getJson]),
       setLopuPrompt: useCallback(async (args: Record<string, unknown>) => {
-        await requireThingtimeCapability('api.settings-lopu-prompt', '1.0.0');
+        await requireThingtimeCapability('api.settings-lopu-prompt', '2.0.0');
         return asyncFetcher.submit(args, { action: '/api/v1/settings/lopu-prompt', errorContext: 'save Lopu instructions' });
       }, [asyncFetcher]),
       // Public so the GitHub conflict resolver can read the same ordered model

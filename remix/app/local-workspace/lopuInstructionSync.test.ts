@@ -84,3 +84,22 @@ test('oversized revisions survive reopen without timer retries and an edited rev
   assert.equal(writes, 1); assert.equal((await reopened.read()).pending, false); assert.equal((await reopened.read()).error, undefined);
  } finally { pump.stop(); t.mock.timers.reset(); await db.close(); }
 });
+
+test('acknowledging a lost reply resumes a newer device edit at normal transfer cadence', async () => {
+ const db = new WorkspaceDatabase(new IDBFactory()), service = new LocalLopuInstructions(db, scope, lease), signal = new AbortController().signal;
+ let personal = { revision: 'initial', instructions: [] as { id: string; text: string; enabled: boolean }[] }, writes = 0, entered!: () => void, release!: () => void;
+ const started = new Promise<void>(resolve => { entered = resolve; }), held = new Promise<void>(resolve => { release = resolve; });
+ const transport: InstructionTransport = { read: async () => ({ ...snapshot, personal: structuredClone(personal) }), write: async value => { writes++; personal = { revision: 'receipt-' + writes, instructions: value.instructions }; return structuredClone(personal); } };
+ try {
+  await service.sync(transport, signal);
+  const first = await service.save({ revision: (await service.read()).personal.revision, instructions: [{ id: 'one', text: 'First edit', enabled: true }] });
+  const uncertain: InstructionTransport = { ...transport, write: async (value, signal) => { await transport.write(value, signal); entered(); await held; throw Error('Lost committed reply'); } };
+  const running = syncLopuInstructionPass(service, uncertain, signal, () => {}); await started;
+  const newer = await service.save({ revision: first.personal.revision, instructions: [{ id: 'one', text: 'Newer edit', enabled: true }] });
+  release(); assert.equal(await running, 60_000);
+  const delay = await syncLopuInstructionPass(service, transport, signal, () => {});
+  assert.ok(delay !== null && delay >= 14_990 && delay <= 15_000);
+  const ready = await service.read(); assert.equal(ready.attempt, undefined); assert.equal(ready.error, undefined); assert.equal(ready.pending, true); assert.deepEqual(ready.personal, newer.personal); assert.equal(writes, 1);
+  assert.equal(await syncLopuInstructionPass(service, transport, signal, () => {}), null); assert.equal(writes, 2); assert.equal(personal.instructions[0].text, 'Newer edit');
+ } finally { release?.(); await db.close(); }
+});

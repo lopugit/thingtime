@@ -836,15 +836,15 @@ test('Gmail OAuth and its one-use callback are advertised on both manifests and 
   for (const version of [undefined, '1.1.0', '1.1.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
  });
 
-test('device instruction sync negotiates uncapped personal lists on both origin manifests', () => {
+test('device instruction sync negotiates resumable private instructions on both origin manifests', () => {
  const feature = 'api.settings-lopu-prompt';
- assert.equal(createApiCapabilitiesManifest().features[feature], '1.1.0');
+ assert.equal(createApiCapabilitiesManifest().features[feature], '2.0.0');
  const manifest = thingtimeCapabilityManifest('https://instructions.test');
- assert.equal(manifest.features[feature].version, '1.1.0');
+ assert.equal(manifest.features[feature].version, '2.0.0');
  assert.ok(manifest.operations.some(operation => operation.feature === feature && operation.path === '/api/v1/settings/lopu-prompt' && operation.methods.includes('POST')));
  assert.equal(typeof routeModules['v1/settings/lopu-prompt'], 'function');
- for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
- for (const version of ['1.1.0', '1.1.1', '1.2.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), true);
+ for (const version of [undefined, '1.0.0', '1.1.0', '1.9.0', '3.0.0']) assert.equal(capabilitySatisfies(version, '2.0.0'), false);
+ for (const version of ['2.0.0', '2.0.1', '2.1.0']) assert.equal(capabilitySatisfies(version, '2.0.0'), true);
 });
 
 

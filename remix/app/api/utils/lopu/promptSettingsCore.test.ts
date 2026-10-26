@@ -32,3 +32,22 @@ test('every protocol receives the current base and only this viewer’s enabled 
   assert.match(surface, /Alice private preference/);
   assert.doesNotMatch(surface, /Disabled secret preference/);
 });
+
+
+test('large personal checklists reach every prompt protocol and surface without clipping or changing order', () => {
+  const instructions = Array.from({ length: 12002 }, (_, i) => ({ id: `row_${i}`, text: `Preference ${i}: ${'界🙂'.repeat(16)}`, enabled: i % 7 !== 0 }));
+  assert.ok(Buffer.byteLength(JSON.stringify(instructions)) > 1024 * 1024);
+  const settings = { basePrompt: 'Current admin prompt', instructions: validateLopuInstructions(instructions) };
+  const expected = JSON.stringify(instructions.filter(row => row.enabled).map(row => row.text));
+  for (const toolProtocol of ['native', 'text', 'none'] as const) {
+    const prompt = buildLopuSystemPrompt({ viewer: { username: 'alice' }, context: {}, activePage: null, toolProtocol, promptSettings: settings });
+    assert.ok(prompt.volatile.includes(expected));
+    assert.ok(prompt.text.includes(expected));
+    assert.ok(!prompt.stable.includes(instructions[1].text), 'private preferences never enter shared stable grammar');
+  }
+  for (const surface of ['Spoken reply', 'Musing', 'Recording insights']) {
+    const prompt = composeLopuSurfacePrompt(settings, surface);
+    assert.ok(prompt.includes(expected));
+    assert.ok(prompt.endsWith(expected));
+  }
+});

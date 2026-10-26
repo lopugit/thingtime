@@ -1,0 +1,316 @@
+{
+  "error": "AssertionError [ERR_ASSERTION]: Native multiline paste took 9114 ms",
+  "phase": "12000-hard-line native paste and undo",
+  "phaseMarks": [
+    {
+      "phase": "oversized Settings input readiness",
+      "elapsedMs": 335286
+    },
+    {
+      "phase": "oversized paragraph Settings save",
+      "elapsedMs": 336107
+    },
+    {
+      "phase": "12000-hard-line native paste and undo",
+      "elapsedMs": 337510
+    }
+  ],
+  "elapsedMs": 347376,
+  "browserProcesses": {
+    "processInfo": [
+      {
+        "type": "browser",
+        "id": 553,
+        "cpuTime": 13.64
+      },
+      {
+        "type": "renderer",
+        "id": 645,
+        "cpuTime": 0.04
+      },
+      {
+        "type": "renderer",
+        "id": 646,
+        "cpuTime": 73.42
+      },
+      {
+        "type": "renderer",
+        "id": 634,
+        "cpuTime": 1.56
+      },
+      {
+        "type": "GPU",
+        "id": 585,
+        "cpuTime": 15.82
+      },
+      {
+        "type": "network.mojom.NetworkService",
+        "id": 587,
+        "cpuTime": 3.68
+      },
+      {
+        "type": "storage.mojom.StorageService",
+        "id": 600,
+        "cpuTime": 0.09
+      }
+    ]
+  },
+  "rendererMetrics": {
+    "metrics": [
+      {
+        "name": "Timestamp",
+        "value": 71009.913109
+      },
+      {
+        "name": "AudioHandlers",
+        "value": 0
+      },
+      {
+        "name": "AudioWorkletProcessors",
+        "value": 0
+      },
+      {
+        "name": "Documents",
+        "value": 1
+      },
+      {
+        "name": "Frames",
+        "value": 1
+      },
+      {
+        "name": "JSEventListeners",
+        "value": 568
+      },
+      {
+        "name": "LayoutObjects",
+        "value": 36729
+      },
+      {
+        "name": "MediaKeySessions",
+        "value": 0
+      },
+      {
+        "name": "MediaKeys",
+        "value": 0
+      },
+      {
+        "name": "Nodes",
+        "value": 25145
+      },
+      {
+        "name": "Resources",
+        "value": 4
+      },
+      {
+        "name": "ContextLifecycleStateObservers",
+        "value": 23
+      },
+      {
+        "name": "V8PerContextDatas",
+        "value": 2
+      },
+      {
+        "name": "WorkerGlobalScopes",
+        "value": 2
+      },
+      {
+        "name": "UACSSResources",
+        "value": 0
+      },
+      {
+        "name": "RTCPeerConnections",
+        "value": 0
+      },
+      {
+        "name": "ResourceFetchers",
+        "value": 3
+      },
+      {
+        "name": "AdSubframes",
+        "value": 0
+      },
+      {
+        "name": "DetachedScriptStates",
+        "value": 0
+      },
+      {
+        "name": "ArrayBufferContents",
+        "value": 10
+      },
+      {
+        "name": "LayoutCount",
+        "value": 5
+      },
+      {
+        "name": "RecalcStyleCount",
+        "value": 15
+      },
+      {
+        "name": "LayoutDuration",
+        "value": 1.314284
+      },
+      {
+        "name": "RecalcStyleDuration",
+        "value": 0.034605
+      },
+      {
+        "name": "DevToolsCommandDuration",
+        "value": 0.076297
+      },
+      {
+        "name": "ScriptDuration",
+        "value": 0.061927
+      },
+      {
+        "name": "V8CompileDuration",
+        "value": 0
+      },
+      {
+        "name": "TaskDuration",
+        "value": 9.145528
+      },
+      {
+        "name": "TaskOtherDuration",
+        "value": 7.658415
+      },
+      {
+        "name": "ThreadTime",
+        "value": 7.052805
+      },
+      {
+        "name": "ProcessTime",
+        "value": 0
+      },
+      {
+        "name": "JSHeapUsedSize",
+        "value": 48128112
+      },
+      {
+        "name": "JSHeapTotalSize",
+        "value": 55037952
+      },
+      {
+        "name": "FirstMeaningfulPaint",
+        "value": 70687.751105
+      },
+      {
+        "name": "DomContentLoaded",
+        "value": 70686.383132
+      },
+      {
+        "name": "NavigationStart",
+        "value": 70684.498886
+      }
+    ]
+  },
+  "checks": [
+    "offline normal settings save and cold reload retain exact Unicode and disabled rows",
+    "server commits before a lost reply; newer local save completes while reply is held; read acknowledgement avoids duplicate replay",
+    "explicit device conflict choice preserves the reviewed revision and exact content",
+    "explicit account conflict choice preserves the reviewed revision and exact content"
+  ],
+  "errors": [],
+  "offlineWrites": [],
+  "instructionRequests": [
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 276
+    },
+    {
+      "method": "POST",
+      "bytes": 48966
+    },
+    {
+      "method": "POST",
+      "bytes": 48958
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 276
+    },
+    {
+      "method": "POST",
+      "bytes": 13879
+    },
+    {
+      "method": "POST",
+      "bytes": 162
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 310
+    },
+    {
+      "method": "POST",
+      "bytes": 48966
+    },
+    {
+      "method": "POST",
+      "bytes": 48958
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 310
+    },
+    {
+      "method": "POST",
+      "bytes": 13925
+    },
+    {
+      "method": "POST",
+      "bytes": 162
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 300
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    },
+    {
+      "method": "POST",
+      "bytes": 113
+    }
+  ],
+  "writes": 13,
+  "screenshotCaptured": true,
+  "bodyReadable": true,
+  "body": "🦄\ninstructions-cfbb8505\n🌈\n🦄\nSettings\nAccount\nCharacters\nEmail\nProfile\nThings\nAppearance\nNotifications\nSecurity\nConnections\nLopu\nAI waterfalls\nLopu 🦄\nYour Thingtime assistant: the floating bubble, how its chat window sits, whether its builder edits paint live, its voice, and the model it thinks with.\nLopu prompt\nShared guidance and your personal instructions.\n\nLopu · Instructions\n\nSave custom instructions in this workspace. Signed-in accounts sync independently; account replies use them after sync completes. Task-specific guidance and tool permissions also apply. Canned messages do not use an AI prompt.\n\nView base prompt\n\nYour custom instructions\n\nTick the instructions you want Lopu to use, then save. Unticked instructions stay in your list.\n\nRemove\nRemove\nAdd instruction\n\nSaved on this device. Waiting for account sync.\n\nSave instructions\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nINSTRUCTIONS-CFBB8505\n\nProfile\n\nLog out\n\n✉️ email unverified\n\n🦄"
+}

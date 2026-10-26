@@ -349,6 +349,17 @@ custom instructions with individual enable switches. **Settings → Admin → Lo
 base prompt** edits the shared public guidance. Set the normal server
 `ADMIN_USERNAMES=<your-admin-username>` on your fork, and use its normal MongoDB
 configuration. The base prompt is public: keep credentials in Secure Vault.
+Personal account synchronization negotiates `api.settings-lopu-prompt` 2.0.0
+and uploads immutable parts with resumable checkpoints. Device saves still
+complete independently. Each request retains the 96 KiB boundary and normal
+rate limit; account storage uses the existing home MongoDB transaction and
+quota machinery. No additional secret or environment setting is required.
+`GET ?scope=base` avoids reading private instructions for the base editor.
+Large instruction storage and model context capacity are separate: ordinary
+saved preferences work, while larger enabled content currently reports an
+explicit inference-capacity error until a verified provider checker exists.
+Nothing is silently truncated. See [the transfer contract and remaining
+acceptance](docs/local-workspaces.md#resumable-account-instructions--26-october-2026).
 Changes apply to the next AI reply and newly started direct voice sessions.
 Chat, voice, musings and recording analysis share this guidance; surface rules
 and server-enforced permissions remain in effect. Simultaneous edits report a

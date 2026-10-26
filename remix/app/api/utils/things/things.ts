@@ -1223,6 +1223,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
   if (
     trimmed.startsWith('mail_') ||
     trimmed.startsWith('timeline-') ||
+    trimmed.startsWith('instruction-transfer-') || trimmed.startsWith('instruction-part-') ||
     trimmed.startsWith('subspace-space-') ||
     trimmed.startsWith('subspace-general-') ||
     trimmed.startsWith(FOUND_POST_PREFIX) ||
@@ -2993,7 +2994,7 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   // Every `timeline-` kind (events, links, snapshot parts, branches, heads, notes, version names)
   // is protected History metadata reachable only through the Timeline API, never a generic read.
   if (thingtimeOf(doc).some(kind => typeof kind === 'string' && kind.startsWith('timeline-'))) return false;
-  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
+  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['lopu-instruction-transfer', 'lopu-instruction-part', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
 	if ((thingtimeOf(doc).includes(FOUND_POST_KIND) || thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME))) return false;
@@ -3092,7 +3093,7 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
-  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
+  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['lopu-instruction-transfer', 'lopu-instruction-part', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
 	// terminal — a blocked or born-private comment under a clean post must
 	// vanish for non-owners too
@@ -3746,7 +3747,7 @@ export async function getThing(
   if (options.commentProjection && (app || isCustomMongoEndpointActive())) return fail(400, 'Discussion projection requires first-party home storage');
   let viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
-  if (!doc || isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['draft', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return fail(404, 'Thing not found');
+  if (!doc || isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['draft', 'lopu-instruction-transfer', 'lopu-instruction-part', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return fail(404, 'Thing not found');
   if (options.commentProjection && doc.appId) return fail(404, 'Thing not found');
   if (!app) {
     const terminal = await resolveInheritChain(doc, d => aclOf(d).includes(ACL_INHERIT), findThing);

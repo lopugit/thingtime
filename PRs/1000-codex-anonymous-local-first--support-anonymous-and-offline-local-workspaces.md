@@ -5196,3 +5196,29 @@ account snapshot and accounting boundaries. A request-cap-only patch would not
 meet the requirement. The [recorded implementation gates](../docs/local-workspaces.md#account-instruction-transport-audit--26-october-2026)
 retain the complete storage/backup/inference work; no new capability was
 advertised. Unified desktop namespace loading and the wider matrix remain open.
+
+
+## Resumable account instruction transfer — 26 October 2026
+
+The account instruction transport audit is now implemented as a resumable,
+owner-fenced store under `api.settings-lopu-prompt` 2.0.0. Frozen attempts and
+content hashes resume immutable 48 KiB parts in batches of at most 64 under the
+96 KiB request bound. Exact private BinData accounting, compact user revision/ref,
+transactional compare-and-swap, seven-day inactive staging expiry, bounded cleanup,
+retained committed generations, renewed cross-tab claims, origin/owner/Character/
+data-plane rechecks and lost-ack reconciliation preserve isolation and recovery.
+Terminal abort only retires its matching attempt and protects newer edits for
+conflict review. Version-2 backup preserves sealed refs/parts and editable
+recovery content, including source removal beyond the prior 1 MiB snapshot
+boundary; version-1 reads continue to work. Offline selected-record recovery
+works but rescans the manifest per part. No aggregate product cap or live-account
+restore API was added. Ordinary-reference inference has a bounded 96 KiB working
+set; larger enabled inference remains unsupported pending verified provider
+capacity/tokenizer integration.
+
+Focused tests, build and network isolation metadata are indexed in the
+[instruction-transfer evidence](../artifacts/anonymous-local-first-2026-10-26-instruction-transfer/README.md). Inference metering now counts canonical row metadata once across fragments and handles escaped UTF-8 text and split surrogate pairs; 9/9 boundary tests and the final server rebuild pass. Raw typecheck has 91 diagnostics against an 89-diagnostic ratchet baseline and is not clean. The isolated packaged-app attempt passed offline save/cold reload, multipart lost-ack reconciliation, and both explicit conflict choices, then failed on the 12,000-line paste/undo step with a five-second locator timeout. It is not installed macOS acceptance. The retained [failure record](../artifacts/anonymous-local-first-2026-10-26-instruction-transfer/instructions/failure.json) notes no browser errors or offline writes, but no screenshot/body capture. A separate same-page diagnostic run remains in progress; keep the native gate unchecked. This checkpoint does not claim production, new-head CI or desktop namespace acceptance. The durable task checkpoint is
+[resumable account instructions](../docs/local-workspaces.md#resumable-account-instructions--26-october-2026).
+
+
+The final matched-control diagnostic produced no timing result; terminal cleanup was verified. Its severe host-contention snapshot does not identify an editor root cause. The 14-pass scheduling regression is a local source test only; the final built package predates that change and full acceptance remains open.

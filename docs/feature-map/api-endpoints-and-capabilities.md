@@ -400,7 +400,7 @@ Native traversal and editable synchronous callback objects/functions require `ap
 
 ## Lopu schemas, files and prompt settings
 
-`api.lopu-chats-reply` 1.17.0 combines all earlier page-context and Ask/Full contracts with current base/personal prompt composition, visible-schema inspection and extension, and independent private attachment saving. The new `api.settings-lopu-prompt` 1.0.0 route supports authenticated personal checklists and admin base edits with revision conflicts. `api.lopu-voice-session` 1.2.0 returns composed session instructions consumed by both web and iOS direct voice clients. Endpoint docs remain the executable registration source; tests cover both manifests and the route import map.
+`api.lopu-chats-reply` 1.17.0 combines all earlier page-context and Ask/Full contracts with current base/personal prompt composition, visible-schema inspection and extension, and independent private attachment saving. `api.settings-lopu-prompt` 2.0.0 supports resumable private instruction transfer, immutable references and admin base edits with revision conflicts. Public `GET ?scope=base` reads no personal data; legacy full reads of referenced content return explicit 413. Multipart operations preserve same-origin, current account/data-plane fences, the 96 KiB body boundary, normal request limits and quota accounting. `api.lopu-voice-session` 1.2.0 returns composed session instructions consumed by both web and iOS direct voice clients. Endpoint docs remain the executable registration source; tests cover both manifests and the route import map.
 
 
 Named-branch comparison uses `preview-branch-merge` on that same endpoint;

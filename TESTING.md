@@ -14602,6 +14602,31 @@ Local results do not establish current-head CI or deployed acceptance.
 
 ## Device Lopu instruction settings
 
+- [x] A lost committed reply followed by a newer local edit resumes the ready edit
+  at the normal 15-second transfer cadence; explicit retry timestamps retain
+  precedence and failures retain the 60-second cadence. This is local source
+  regression coverage only; rebuild and native acceptance of this correction
+  remain open.
+
+- [x] Resumable protocol unit coverage: immutable begin/part replay, lost commit
+  acknowledgment, revision conflicts, expiry/abort retirement with newer edits,
+  private kind exclusion, exact secure-byte accounting and quota rollback.
+- [x] Both manifests require `api.settings-lopu-prompt` 2.0.0; compatible updates
+  pass and absent/older/breaking versions refuse. Base-only reads skip personal
+  data. Malformed JSON and the existing 96 KiB transport ceiling remain explicit.
+- [x] Reference-backed ordinary inference preserves complete enabled text.
+  Count canonical logical row bytes once, independent of fragment metadata;
+  near-limit many-row, exact-boundary, one-byte overflow and split Unicode
+  regression cases must preserve compatibility.
+  Larger unverified content fails before provider contact, without truncation;
+  large enabled inference remains incomplete until provider capacity is verified.
+- [x] Sealed account-content v2 backups retain reference dependencies and recover
+  exact editable text/flags after live-source deletion; legacy inline v1 still
+  opens. Missing, corrupted and uncommitted references refuse recovery.
+- [ ] Run the updated multipart browser fixture against the built application
+  and real isolated MongoDB: lost commit reply, local newer edit, reviewed CAS
+  conflict, exact large readback, public base, guest refusal and cleanup.
+
 - [x] In a fresh isolated browser, open Settings → Lopu without a session. Add
   multiline instructions, disable one, save, go fully offline and cold-reload.
   Text and enabled state persist, with zero `/api/v1/settings/lopu-prompt`

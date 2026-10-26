@@ -5683,3 +5683,51 @@ Next implementation gates (not delivered by this audit):
 
 No transport/storage/API change was made during this audit. No capability is
 advertised early, and the existing safe local retention behavior remains intact.
+
+## Resumable account instructions — 26 October 2026
+
+The implementation now replaces the transport-only audit gates above with a
+versioned, owner-fenced account instruction store. The selected origin negotiates
+`api.settings-lopu-prompt` 2.0.0 before synchronization. A frozen attempt and
+content hash resume immutable 48 KiB parts through bounded batches of at most 64;
+the request remains capped at 96 KiB. The server keeps only a compact account
+revision/reference in the user record, stores private content as accounted exact
+BinData, and commits through transactional compare-and-swap. Staging expires
+after seven inactive days and cleanup processes at most 64 parts per pass;
+committed generations remain available for recovery. Each pass rechecks origin,
+owner, Character and data-plane identity. Retries are immutable, cross-tab claims
+renew, and a lost commit acknowledgement reconciles against the committed hash.
+Terminal abort retires only its matching attempt, preserving newer edits and
+requiring snapshot conflict review.
+
+Canonical account-content backup now emits sealed, version-2 instruction refs
+and exact parts alongside editable recovery content, including source removal
+when the input exceeds the prior 1 MiB snapshot boundary; version 1 remains
+readable. No aggregate product-size cap was added. Existing ordinary-reference
+inference uses a bounded 96 KiB compatibility working set. Larger enabled
+inference is explicitly unsupported until actual provider capacity and tokenizer
+limits are verified. Offline selected-record recovery still rescans the manifest
+per part; throughput optimization remains open. This does not add a live-account
+restore API: restore remains offline-only.
+
+Focused core, manifest, inference-surface, retention/inference, canonical-storage,
+and sanitized client/Nitro checks are recorded in the [instruction-transfer
+artifact](../artifacts/anonymous-local-first-2026-10-26-instruction-transfer/README.md).
+The inference metering correction counts canonical row metadata once across
+fragments and handles escaped UTF-8 text and split surrogate pairs; its boundary
+suite passes 9/9 and the final server rebuild passes. Raw typecheck reports 91
+diagnostics against an 89-diagnostic ratchet baseline and is not clean.
+
+The isolated packaged-app acceptance attempt is a failure, not installed macOS
+acceptance: normal Settings offline save/cold reload, real multipart lost-ack
+reconciliation, and both explicit device/account conflict choices passed, then
+the 12,000-line paste/undo step timed out after five seconds waiting for the
+`Instruction 1` textarea during `Control+V`. The attempt recorded no browser
+errors or offline writes, but captured no screenshot and could not read the page
+body. See the retained [failure record](../artifacts/anonymous-local-first-2026-10-26-instruction-transfer/instructions/failure.json).
+The same-page diagnostic recheck completed the exact 12,002-line paste in 9,114 ms, exceeding the strict under-five-second requirement. The renderer responded afterward, with no OOM, JavaScript errors or offline writes; cleanup was verified. High host contention was observed during subsequent diagnosis, so the performance cause remains unresolved. The final packaged app predates the separately tested 15-second newer-edit scheduling correction. No installed macOS acceptance is established. Keep the native gate
+unchecked; this failure does not establish installed macOS acceptance. No
+production, new-head CI, or desktop namespace acceptance is claimed here.
+
+
+The final matched-control diagnostic produced no timing result; terminal cleanup was verified. Its severe host-contention snapshot does not identify an editor root cause. The 14-pass scheduling regression is a local source test only; the final built package predates that change and full acceptance remains open.
