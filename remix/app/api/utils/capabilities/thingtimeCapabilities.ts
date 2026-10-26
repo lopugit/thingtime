@@ -1,5 +1,6 @@
 import { apiEndpointDocs } from '../../../docs/apiDocs';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from './capabilityContract';
+import { gatewayDescriptor } from '../deployment/environmentGateway';
 
 export { THINGTIME_CAPABILITY_MANIFEST_PATH } from './capabilityContract';
 
@@ -34,6 +35,7 @@ export const thingtimeCapabilityManifest = (origin: string) => {
   return {
     schemaVersion: 1,
     origin: normalizedOrigin,
+    gateway: gatewayDescriptor(),
     features,
     operations
   };
