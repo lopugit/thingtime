@@ -15,6 +15,8 @@ import { SETTINGS_BLOCK_TYPES, localSettingsDocumentAdapter, parseSettingsDocume
 export type SettingsDocumentHostProps = {
   documentKey: string;
   defaultDocument: WebpageBlock[];
+  /** Additive authored-template migrations; never receives live form values. */
+  upgradeDocument?: (blocks: WebpageBlock[]) => WebpageBlock[];
   scopeKey: string;
   title?: string;
   persistence?: 'account' | 'device';
@@ -61,14 +63,15 @@ function ScopedSettingsDocument(props: SettingsDocumentHostProps) {
     writable={props.persistence === 'device' || (!!user?.id && !!dataPlane && !user.temporary)} />;
 }
 
-function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', persistence = 'account', accountTransport, children, documentScope, writable }: SettingsDocumentHostProps & {
+function SettingsDocumentSession({ defaultDocument, upgradeDocument, title = 'Settings layout', persistence = 'account', accountTransport, children, documentScope, writable }: SettingsDocumentHostProps & {
   documentScope: Parameters<typeof settingsDocumentKey>[0]; writable: boolean;
 }) {
   const key = settingsDocumentKey(documentScope);
   const [defaults] = React.useState(() => settingsDocumentBlocks(defaultDocument));
+  const upgrade = React.useCallback((value: SettingsDocument): SettingsDocument => upgradeDocument ? { ...value, blocks: settingsDocumentBlocks(upgradeDocument(value.blocks)) } : value, [upgradeDocument]);
   const cacheKey = `tt-settings-preview:${key}`;
   const initial = (): SettingsDocument => {
-    try { const cached = readLocalCache<unknown>(persistence === 'device' ? key : cacheKey); if (cached) return parseSettingsDocument(cached); } catch { /* load reports invalid durable data */ }
+    try { const cached = readLocalCache<unknown>(persistence === 'device' ? key : cacheKey); if (cached) return upgrade(parseSettingsDocument(cached)); } catch { /* load reports invalid durable data */ }
     return { blocks: defaults, name: title, revision: null };
   };
   const [document, setDocument] = React.useState<SettingsDocument>(initial);
@@ -100,12 +103,12 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
       if (!active || signal.aborted || load !== loadingRevision.current) return;
       setReady(true); setError('');
       if (revision.current !== edit || dirtyRef.current) return;
-      const next = value || { blocks: defaults, name: title, revision: null };
+      const next = upgrade(value || { blocks: defaults, name: title, revision: null });
       setDocument(next); setSaved(next);
       if (persistence === 'account' && value) writeLocalCache(cacheKey, value);
     }).catch(() => { if (active && !signal.aborted && load === loadingRevision.current) { setReady(false); setError('Could not load your layout. The current view is preserved; retry before saving.'); } });
     return () => { active = false; };
-  }, [adapter, reload, writable, cacheKey, defaults, persistence, title]);
+  }, [adapter, reload, writable, cacheKey, defaults, persistence, title, upgrade]);
   const update = (blocks: WebpageBlock[]) => {
     if (saving.current) return;
     try { const safe = settingsDocumentBlocks(blocks); revision.current++; setDocument(previous => ({ ...previous, blocks: safe })); }

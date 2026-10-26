@@ -186,6 +186,8 @@ export const ALLOWED_PROPS = new Set([
 	'data-tt-submit',
 	'data-tt-credential-form',
 	'data-tt-private-control',
+	// Inert private-label address; trusted transient hosts hydrate textContent.
+	'data-tt-private-text',
 	// Inert editor address, validated against the authored template before editing.
 	'data-tt-label-key'
 ]);

@@ -8,19 +8,27 @@ import { ThingtimeContext } from '../app/Providers/ThingtimeProvider';
 import { PasswordManager } from '../app/components/Passwords/PasswordManager';
 import { newPasswordFile } from '../app/passwords/fileCrypto';
 import type { PasswordEntry } from '../app/passwords/model';
+import { importOnePasswordItem } from '../app/passwords/onePassword';
 Object.defineProperty(window, 'SharedWorker', { value: undefined });
 Object.defineProperty(navigator, 'onLine', { get: () => true });
 const fixtureQuery = new URL(location.href).searchParams;
 history.replaceState(null, '', '/passwords' + location.search);
 let signedIn = true, vaultConfigured = fixtureQuery.get('vaultConfigured') !== '0';
 const owner = 'synthetic-password-owner', entryId = '11111111-1111-4111-8111-111111111111', archiveId = '22222222-2222-4222-8222-222222222222';
+const structuredSource = { uuid: 'fixture-file', categoryUuid: '001', overview: { title: 'Synthetic login' }, details: {
+  passwordHistory: [{ value: 'fixture-old-password', time: 1700000000 }], notesPlain: 'fixture-source-secret',
+  sections: [{ title: 'Synthetic properties', fields: [
+    { title: 'Address', value: { address: { city: 'fixture-city-private', unknown: { 'fixture-private-property-name': ['fixture-nested-value', true, 7, null], empty: {}, sameType: ['fixture-array-first', 'fixture-array-second'] } } } },
+    { title: 'SSH key', value: { sshKey: { privateKey: 'fixture-ssh-private-key', metadata: { publicKey: 'fixture-ssh-public-key' } } } }
+  ] }]
+} };
 const initial: PasswordEntry = {
   title: 'Synthetic login', passwordType: 'login', tags: ['fixture-private-tag'], importArchiveId: archiveId,
   fields: [{ id: 'username', label: 'Username', type: 'text', value: 'fixture-user@example.test' },
     { id: 'password', label: 'Password', type: 'password', value: 'fixture-password-value' },
     { id: 'totp', label: 'Verification code', type: 'totp', value: 'JBSWY3DPEHPK3PXP' },
-    { id: 'notes', label: 'Notes', type: 'notes', value: 'fixture-private-note' }],
-  onePassword: JSON.stringify({ uuid: 'fixture-file', details: { passwordHistory: [{ value: 'fixture-old-password', time: 1700000000 }], notesPlain: 'fixture-source-secret' } }),
+    { id: 'notes', label: 'Notes', type: 'notes', value: 'fixture-private-note' }, ...importOnePasswordItem(structuredSource).fields.filter(field => field.structured)],
+  onePassword: JSON.stringify(structuredSource),
   onePasswordContext: JSON.stringify({ account: { accountName: 'fixture-account-private' }, vault: { name: 'fixture-vault-secret' } })
 };
 const entries = new Map([[entryId, { entry: initial, revision: 1 }]]);
@@ -128,6 +136,7 @@ Object.assign(window, { passwordFixture: {
   hasPrivateLayoutValues: () => {
     const stored = JSON.stringify(JSON.parse(localStorage.getItem(layoutKey) || '{}'));
     const privateValues = ['A'.repeat(32), 'fixture-user@example.test', 'fixture-password-value', 'fixture-old-password', 'fixture-private-note', 'fixture-source-secret', 'fixture-vault-secret', 'fixture-account-private', 'fixture-private-tag', 'JBSWY3DPEHPK3PXP', ...Array.from(files.values()).flat().flatMap(file => [file.metadata.key, file.metadata.nonce])];
+    privateValues.push('fixture-city-private', 'fixture-private-property-name', 'fixture-nested-value', 'fixture-ssh-private-key', 'fixture-ssh-public-key', 'fixture-array-first', 'fixture-array-second');
     return privateValues.some(value => stored.includes(value));
   }
 } });

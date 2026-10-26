@@ -10153,6 +10153,15 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Edit imported structured address, SSH and nested array properties separately.
+  Save/reopen and export/reimport must preserve unknown siblings and original
+  scalar types. Unknown property names and values must stay out of saved layouts
+  and display scope, clear on blur/account changes, and respect masking. Reject
+  stale property bindings after JSON keys reorder; unsafe trees retain their raw
+  JSON without changing large/overflowing numeric literals. In Builder, edit a
+  nested caption and input independently, save/reload, then confirm edits still
+  reach the intended property. Check desktop/mobile scrolling and opened states.
+
 - [ ] In the normal Builder inspector/context menu, style and reorder a repeated
   field caption, duplicate it, then delete only the duplicate. Save/reload and
   confirm the original field's input, Copy and Save still target that field;

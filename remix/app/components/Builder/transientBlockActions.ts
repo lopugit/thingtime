@@ -14,6 +14,8 @@ export type TransientBlockInvocation = {
 	value: string | boolean | undefined;
 	readField: (name: string) => string | boolean | undefined;
 	readFile: (name: string) => File | undefined;
+	/** Trusted static validation for this exact control, never authored regex. */
+	setValidity?: (message: string) => void;
 	signal: AbortSignal;
 };
 export type TransientBlockActions = Record<string, (invocation: TransientBlockInvocation) => void | Promise<void>>;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { passwordAuthenticatorSetupBlocks, passwordManagerBlocks, passwordSignInBlocks } from './passwordManagerBlocks';
+import { passwordAuthenticatorSetupBlocks, passwordManagerBlocks, passwordSignInBlocks, upgradePasswordManagerBlocks } from './passwordManagerBlocks';
 import { passwordEntryDisplay } from './passwordEntryDisplay';
 import { settingsDocumentBlocks } from '../Settings/settingsDocument';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
@@ -73,4 +73,39 @@ test('incoming native setup controls are individually editable and bind no secre
     assert.ok(button.children?.some(child => child.tag === 'span'));
   }
   assert.ok(!JSON.stringify(saved).includes('otpauth://'));
+});
+
+test('structured fields expose separate editable templates with private labels and typed values', () => {
+  const nodes = walk(settingsDocumentBlocks(passwordManagerBlocks));
+  for (const id of ['password-property-caption', 'password-property-label', 'password-property-input', 'password-property-textarea', 'password-property-checkbox', 'password-property-type', 'password-field-mode']) assert.ok(nodes.some(node => node.id === id));
+  const input = nodes.find(node => node.id === 'password-property-input')!;
+  assert.deepEqual(input.props?.['data-tt-action-inputs'], { operation: 'field.property', id: '{item.id}', path: '{item.path}', epoch: '{item.epoch}' });
+  assert.equal(input.props?.['data-tt-private-control'], '');
+  assert.equal(nodes.find(node => node.id === 'password-property-label')?.props?.['data-tt-private-text'], '{item.labelName}');
+  const entry = { title: 'Synthetic', passwordType: 'identity' as const, fields: [{ id: 'address', label: 'Address', type: 'address' as const, structured: true, value: JSON.stringify({ city: 'PRIVATE_CITY', PRIVATE_KEY: ['PRIVATE_VALUE', false, 12, null] }) }] };
+  const hidden = passwordEntryDisplay(entry), shown = passwordEntryDisplay(entry, { address: true });
+  assert.ok(!JSON.stringify([hidden, shown]).includes('PRIVATE_'));
+  assert.equal(hidden.fields[0].structured, true);
+  assert.equal(hidden.fields[0].properties[0].inputType, 'text');
+  assert.equal(hidden.fields[0].properties[1].inputType, 'password');
+  assert.equal(shown.fields[0].properties[1].inputType, 'text');
+  assert.equal(hidden.fields[0].properties[3].required, true);
+  assert.equal(hidden.fields[0].properties[4].readOnly, true);
+  const raw = passwordEntryDisplay(entry, {}, {}, { address: true });
+  assert.equal(raw.fields[0].structured, false);
+  assert.equal(raw.fields[0].inputType, 'password');
+});
+test('private text slots cannot persist hydrated contents, markup or child blocks', () => {
+  const slot = { id: 'label', type: 'element', tag: 'span', props: { 'data-tt-private-text': 'property-label' } };
+  assert.doesNotThrow(() => settingsDocumentBlocks([slot]));
+  for (const patch of [{ text: 'secret' }, { html: '<b>secret</b>' }, { children: [{ id: 'child', type: 'element', tag: 'span', text: 'secret' }] }, { tag: 'div' }]) assert.throws(() => settingsDocumentBlocks([{ ...slot, ...patch }]), /Private text/);
+});
+test('older customised password layouts gain property controls once without overwriting authored blocks', () => {
+  const original = [{ id: 'password-field', type: 'element' as const, tag: 'div', children: [{ id: 'custom-label', type: 'element' as const, tag: 'p', text: 'My layout' }] }];
+  const upgraded = upgradePasswordManagerBlocks(original);
+  assert.deepEqual(upgradePasswordManagerBlocks(upgraded), upgraded);
+  assert.deepEqual(upgraded[0].children![0], original[0].children[0]);
+  assert.equal(upgraded[0].children!.filter(block => block.id === 'password-field-structured').length, 1);
+  assert.equal(original[0].children.length, 1);
+  assert.doesNotThrow(() => settingsDocumentBlocks(upgraded));
 });

@@ -11,7 +11,8 @@ import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { TransientBlockHost, type TransientBlockActions } from '../Builder/TransientBlockHost';
 import { TransientPrivateControls } from '../Builder/TransientPrivateControls';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
-import { passwordAuthenticatorSetupBlocks, passwordManagerBlocks, passwordSignInBlocks } from './passwordManagerBlocks';
+import { passwordAuthenticatorSetupBlocks, passwordManagerBlocks, passwordSignInBlocks, upgradePasswordManagerBlocks } from './passwordManagerBlocks';
+import { passwordPropertyShape, passwordPropertyValues, patchPasswordProperty } from '~/passwords/structuredFields';
 import { passwordEntryDisplay } from './passwordEntryDisplay';
 import { totpCode } from '~/passwords/totp';
 import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
@@ -45,6 +46,11 @@ function PasswordManagerScope({ ownerId, scopeKey, dataPlane, accountLabel }: { 
   const importRead = React.useRef<AbortController | null>(null);
   const [deleteConfirm, setDeleteConfirm] = React.useState(false);
   const [revealed, setRevealed] = React.useState<Record<string, boolean>>({});
+  const [rawFields, setRawFields] = React.useState<Record<string, boolean>>({});
+  const propertyIdentities = React.useRef(new Map<string, { shape: string; epoch: number }>());
+  const propertyEpoch = React.useRef(0);
+  const propertyDraft = React.useRef<string | undefined>(undefined);
+  React.useEffect(() => setRawFields({}), [draft?.id]);
   const [copyFeedback, setCopyFeedback] = React.useState<Record<string, string>>({});
   const copyEpoch = React.useRef(0), copyCleanup = React.useRef<(() => void) | null>(null);
   const currentDraft = React.useRef(draft); currentDraft.current = draft;
@@ -227,7 +233,23 @@ function PasswordManagerScope({ ownerId, scopeKey, dataPlane, accountLabel }: { 
     setTransfer(null); setAcknowledged(false); setProgress('');
   });
   const visible = records.filter(record => record.title.toLowerCase().includes(search.trim().toLowerCase())).sort((a, b) => sort === 'updated' ? b.updatedAt.localeCompare(a.updatedAt) : a.title.localeCompare(b.title));
-  const entryDisplay = passwordEntryDisplay(draft?.entry, revealed, copyFeedback);
+  if (propertyDraft.current !== draft?.id) { propertyIdentities.current.clear(); propertyDraft.current = draft?.id; }
+  for (const id of propertyIdentities.current.keys()) if (!draft?.entry.fields.some(field => field.id === id)) propertyIdentities.current.delete(id);
+  for (const field of draft?.entry.fields || []) {
+    const shape = passwordPropertyShape(field), previous = propertyIdentities.current.get(field.id);
+    if (!previous || previous.shape !== shape) propertyIdentities.current.set(field.id, { shape, epoch: ++propertyEpoch.current });
+  }
+  const entryDisplay = passwordEntryDisplay(draft?.entry, revealed, copyFeedback, rawFields);
+  const privateProperties = new Map<string, string | boolean>();
+  for (const field of entryDisplay.fields) for (const property of field.properties) Object.assign(property, { epoch: propertyIdentities.current.get(field.id)?.epoch });
+  for (const field of entryDisplay.fields) if (field.structured) {
+    const values = passwordPropertyValues(draft!.entry.fields.find(source => source.id === field.id)!);
+    for (const property of field.properties) {
+      const source = values.get(property.path)!;
+      privateProperties.set(property.name, typeof source.value === 'boolean' && !property.boolean ? String(source.value) : source.value);
+      privateProperties.set(property.labelName, source.label);
+    }
+  }
   const scope = { passwords: {
     ...entryDisplay, busy, cannotAdd: busy || configured === false, unconfigured: configured === false,
     nativeAvailable, nativeMessage, error, search, sort, listLoading,
@@ -296,7 +318,18 @@ function PasswordManagerScope({ ownerId, scopeKey, dataPlane, accountLabel }: { 
     'entry.delete': () => { if (draft?.revision) setDeleteConfirm(true); },
     'entry.keep': () => setDeleteConfirm(false),
     'entry.confirm-delete': () => run(async () => { if (!draft || !deleteConfirm) return; await request({ operation: 'delete', id: draft.id, revision: draft.revision }); setRecords(prev => prev.filter(record => record.id !== draft.id)); changed(); clearAndRefresh(); }),
-    'field.change': ({ inputs, value }) => { const id = fieldId(inputs.id); if (id) edit(entry => ({ ...entry, fields: entry.fields.map(field => field.id === id ? { ...field, value: String(value || '') } : field) })); },
+    'field.change': ({ inputs, value }) => { const id = fieldId(inputs.id); if (id) { propertyIdentities.current.delete(id); edit(entry => ({ ...entry, fields: entry.fields.map(field => field.id === id ? { ...field, value: String(value || '') } : field) })); } },
+    'field.property': ({ inputs, value, setValidity }) => {
+      const id = fieldId(inputs.id), identity = id && propertyIdentities.current.get(id);
+      if (!id || !identity || String(identity.epoch) !== String(inputs.epoch) || rawFields[id]) return;
+      const source = draft!.entry.fields.find(field => field.id === id)!;
+      let patched;
+      try { patched = patchPasswordProperty(source, inputs.path, value); }
+      catch { setValidity?.('Enter a value with the original property type.'); return; }
+      setValidity?.('');
+      edit(entry => ({ ...entry, fields: entry.fields.map(field => field.id === id ? patched : field) }));
+    },
+    'field.mode': ({ inputs }) => { const id = fieldId(inputs.id); if (id && !busy) { propertyIdentities.current.delete(id); setRawFields(previous => ({ ...previous, [id]: !previous[id] })); } },
     'field.copy': async ({ inputs, signal }) => {
       const id = fieldId(inputs.id), source = draft;
       // Resolve values only inside this transient adapter. Passkey fields are
@@ -346,6 +379,7 @@ function PasswordManagerScope({ ownerId, scopeKey, dataPlane, accountLabel }: { 
     if (!draft) return undefined;
     if (name === 'entry-title') return draft.entry.title;
     if (name === 'entry-tags') return (draft.entry.tags || []).join('\n');
+    if (privateProperties.has(name)) return privateProperties.get(name);
     if (name.startsWith('field-')) return draft.entry.fields.find(field => `field-${field.id}` === name)?.value;
     if (name.startsWith('totp-')) { const field = draft.entry.fields.find(field => field.type === 'totp' && `totp-${field.id}` === name); return field ? codes[field.id] || '—' : undefined; }
     return undefined;
@@ -357,7 +391,7 @@ function PasswordManagerScope({ ownerId, scopeKey, dataPlane, accountLabel }: { 
         <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
       </TransientBlockHost>}
     </SettingsDocumentHost>}
-    <SettingsDocumentHost documentKey="password-manager" defaultDocument={passwordManagerBlocks} scopeKey={scopeKey} title="Password manager layout">
+    <SettingsDocumentHost documentKey="password-manager" defaultDocument={passwordManagerBlocks} upgradeDocument={upgradePasswordManagerBlocks} scopeKey={scopeKey} title="Password manager layout">
       {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={privateScope} scope={scope} actions={scopedActions} enabled={!editing} onError={() => setError('Please try again.')}>
         <TransientPrivateControls scopeKey={privateScope} readValue={readPrivateValue} enabled={!editing}>
           <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />

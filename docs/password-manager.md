@@ -151,7 +151,15 @@ The coverage target is every datum in a 1PUX v3 file: all known and unknown item
 categories, structured field values, sections and field attributes, tags,
 favourites, archived state, IDs, timestamps, URLs, linked-item references, account
 and vault attributes, password history, documents, attachments, icons, and unknown
-properties. Standard fields are editable through the password field templates. The original item
+properties. Standard fields are editable through the password field templates.
+Structured addresses, SSH keys and other recognised structured fields expose
+separate string, number and boolean property controls, including nested arrays
+and unknown members. Those controls preserve sibling data and original scalar
+types. Null values and empty containers are labelled explicitly; use the JSON
+editor to change their type or add properties. Unsupported or unsafe structures
+retain the masked JSON editor. Imported property names and values are hydrated
+only into the private live editor, never saved in a Builder layout or display
+scope. The original item
 and its account/vault attributes remain encrypted for inspection. A separate
 archive entry owns every original ZIP member, including exact export.data and
 export.attributes bytes, so unknown structures and original numeric literals

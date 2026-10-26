@@ -79,6 +79,7 @@ function TransientBlockSession({ scope, actions, enabled = true, onError, childr
 			// Invoke synchronously so explicit browser-open/download gestures retain
 			// user activation. Do not retain or publish the operation's return value.
 			const result = action({ inputs: binding.inputs, value, signal: lifetime.signal,
+				setValidity: message => { lifetime.assertActive(); if (field && root.contains(control)) (control as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).setCustomValidity(message); },
 				readField: name => transientFieldValue(read(name)),
 				readFile: name => {
 					const input = read(name) as HTMLInputElement | null;

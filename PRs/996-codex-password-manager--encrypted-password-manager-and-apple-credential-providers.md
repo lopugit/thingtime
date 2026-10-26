@@ -3,6 +3,44 @@
 PR: https://github.com/lopugit/thingtime/pull/996
 Branch: `codex/password-manager` (base `develop`)
 
+## Structured imported-field editing — 26 October 2026
+
+Imported addresses, SSH keys and other supported structured fields previously
+required editing a whole JSON string. Reusable field templates now expose
+individual string, number and boolean leaves, including nested arrays and unknown
+members. Nulls and empty containers retain explicit type labels and a JSON mode
+for structural changes. Unsupported or unsafe data stays in the masked JSON
+editor. Existing customized layouts receive the additional editable templates
+without replacing their original controls or restoring deliberately deleted ones.
+
+Private property labels and values remain in the transient editor adapter and
+live DOM. Saved Builder documents and display scope carry only opaque field/path
+identifiers and control metadata. Focus loss, account changes and unmount clear
+the private presentation. Property generation checks reject old position bindings
+after the JSON shape changes, and patching cannot traverse prototype properties.
+Numeric preservation checks protect untouched JSON siblings from rounding or
+overflow during a leaf edit. Duplicate keys, including escaped equivalent names,
+also retain their raw representation rather than collapsing during editing.
+
+The isolated browser test caught a renderer allowlist omission that stripped
+private labels. An independent review also caught potential numeric sibling
+corruption. Both fixes passed focused regressions and a second independent review.
+The final run passed all 19 browser groups with zero page errors, covering the
+real editor and Builder at 1440px and 390px with synthetic vault/clipboard/native
+adapters. It verifies separate property editing, invalid numeric input blocking
+Save, same-type array and object-key stale-binding rejection, masking and label
+clearing, save/reopen, and correct targets after nested Builder edits and reload.
+Screenshots were visually reviewed. Browser and backend shared a network-none
+container with no mounts or exposed ports, a read-only root, dropped capabilities
+and the Chromium sandbox enabled. Direct-IP and redirect probes were refused.
+
+All 94 JavaScript password-suite tests passed under network denial. The separate
+43-test focused renderer/settings/structured-field suite passed too (these suites
+overlap). Targeted lint and syntax checks passed; two pre-existing `resetCopy`
+dependency warnings remain. The unchanged native gate was not rerun for these web
+editor changes. Installed/deployed private-data acceptance, live OAuth and OS
+passkey ceremonies remain open.
+
 ## Develop preview publication recovery — 26 October 2026
 
 The trusted preview publisher refused publication because its required scoped

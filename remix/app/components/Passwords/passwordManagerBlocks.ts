@@ -15,6 +15,29 @@ const privateInput = (id: string, name: string, operation: string, props = {}, t
 const label = (id: string, caption: string, child: WebpageBlock) => el(id, 'label', '', {}, [text(`${id}-caption`, caption, 'span'), child], stack);
 const options = (prefix: string, values: readonly string[]) => values.map(value => el(`${prefix}-${value}`, 'option', value.replace(/-/g, ' '), { value }));
 const select = (id: string, name: string, operation: string, value: string, children: WebpageBlock[], props = {}) => el(id, 'select', '', { name, value, ...action(operation), ...props }, children, control);
+const propertyInput = (id: string, props = {}, tag = 'input') => privateInput(id, '{item.name}', 'field.property', { id: 'private-{item.name}', 'data-tt-action-inputs': { operation: 'field.property', id: '{item.id}', path: '{item.path}', epoch: '{item.epoch}' }, 'aria-labelledby': 'label-{item.name}', ...props }, tag);
+const propertyBlocks: WebpageBlock[] = [when('password-field-structured', 'item.structured', [repeat('password-field-properties', 'item.properties', [
+  el('password-property', 'div', '', {}, [
+    el('password-property-caption', 'label', '', { htmlFor: 'private-{item.name}', id: 'label-{item.name}' }, [text('password-property-prefix', 'Property: ', 'span'), el('password-property-label', 'span', '', { 'data-tt-private-text': '{item.labelName}' })], { 'overflow-wrap': 'anywhere' }),
+    when('password-property-single', 'item.single', [propertyInput('password-property-input', { type: '{item.inputType}', inputMode: '{item.inputMode}', readOnly: '{item.readOnly}', required: '{item.required}' })]),
+    when('password-property-multiline', 'item.multiline', [propertyInput('password-property-textarea', { rows: 4 }, 'textarea')]),
+    when('password-property-boolean', 'item.boolean', [propertyInput('password-property-checkbox', { type: 'checkbox' })]),
+    text('password-property-type', '{item.typeLabel}', 'small')
+  ], stack)
+])])];
+const propertyModeBlock = when('password-field-mode-visible', 'item.canStructure', [button('password-field-mode', '{item.modeLabel}', 'field.mode')]);
+
+/** Add the new editable templates to older customised layouts without
+ * replacing their existing controls, styling, order or labels. */
+export function upgradePasswordManagerBlocks(blocks: WebpageBlock[]): WebpageBlock[] {
+  const visit = (nodes: WebpageBlock[]): WebpageBlock[] => nodes.map(block => {
+    let children = block.children ? visit(block.children) : undefined;
+    const upgrade = block.id === 'password-field' && children && !block.props?.['data-tt-password-properties-version'] && !children.some(child => ['password-field-structured', 'password-field-mode-visible'].includes(child.id));
+    if (upgrade) children = [...children!, ...structuredClone(propertyBlocks), structuredClone(propertyModeBlock)];
+    return { ...block, ...(upgrade ? { props: { ...block.props, 'data-tt-password-properties-version': 1 } } : {}), ...(children ? { children } : {}), ...(block.else ? { else: visit(block.else) } : {}), ...(block.empty ? { empty: visit(block.empty) } : {}) };
+  });
+  return visit(blocks);
+}
 
 /** Live field values are hydrated into transient DOM controls only. This
  * document contains editable ordinary templates and display bindings. */
@@ -53,10 +76,11 @@ export const passwordManagerBlocks: WebpageBlock[] = [el('password-manager', 'se
       when('password-reference-visible', 'passwords.passkeyReference', [text('password-reference-help', 'Record the site and where an existing passkey is stored. This reference does not contain a passkey. New passkeys use the native credential provider.')]),
       el('password-entry-flags', 'div', '', {}, [label('password-favorite-label', 'Favourite', input('password-favorite', 'favorite', 'entry.favorite', { type: 'checkbox', checked: '{passwords.favorite}' })), label('password-archived-label', 'Archived', input('password-archived', 'archived', 'entry.archived', { type: 'checkbox', checked: '{passwords.archived}' }))], row),
       label('password-tags-label', 'Tags (one per line)', privateInput('password-tags', 'entry-tags', 'entry.tags', { rows: 2 }, 'textarea')),
-      repeat('password-fields', 'passwords.fields', [el('password-field', 'div', '', {}, [
+      repeat('password-fields', 'passwords.fields', [el('password-field', 'div', '', { 'data-tt-password-properties-version': 1 }, [
         when('password-field-section-visible', 'item.section', [text('password-field-section', '{item.section}', 'h3')]),
         el('password-field-heading', 'div', '', {}, [text('password-field-caption', '{item.label}', 'label', { htmlFor: 'private-{item.id}' }), el('password-field-actions', 'div', '', {}, [button('password-field-up', '↑', 'field.up', '{item.first}', { 'aria-label': 'Move {item.label} up' }), button('password-field-down', '↓', 'field.down', '{item.last}', { 'aria-label': 'Move {item.label} down' }), button('password-field-remove', '×', 'field.remove', '{passwords.busy}', { 'aria-label': 'Remove {item.label}' })], row)], { ...row, 'justify-content': 'space-between' }),
         el('password-field-control-row', 'div', '', {}, [when('password-field-single', 'item.single', [privateInput('password-field-input', 'field-{item.id}', 'field.change', { id: 'private-{item.id}', type: '{item.inputType}', 'aria-label': '{item.label}', inputMode: '{item.inputMode}' })]), when('password-field-multiline', 'item.multiline', [privateInput('password-field-textarea', 'field-{item.id}', 'field.change', { id: 'private-{item.id}', rows: 3, 'aria-label': '{item.label}' }, 'textarea')]), when('password-field-copy-visible', 'item.copyable', [button('password-field-copy', '{item.copyLabel}', 'field.copy', '{passwords.busy}', { 'aria-label': '{item.copyAccessibleLabel}' })]), when('password-field-secret', 'item.secret', [button('password-field-reveal', '{item.revealLabel}', 'field.reveal', false, { 'aria-label': '{item.revealLabel} {item.label}' })])], stack),
+        ...propertyBlocks, propertyModeBlock,
         when('password-field-copy-feedback-visible', 'item.copyFeedback', [text('password-field-copy-feedback', '{item.copyFeedback}', 'p', { role: 'status', 'aria-live': 'polite', 'aria-atomic': true })]),
         when('password-field-totp', 'item.totp', [privateInput('password-totp-code', 'totp-{item.id}', 'field.noop', { readOnly: true, 'aria-label': 'Current verification code', 'aria-live': 'off' })])
       ], stack)]),
