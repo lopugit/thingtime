@@ -189,29 +189,61 @@ async function prepare() {
   console.log(`Deployment plan: ${plan.branch} @ ${plan.sha} -> ${plan.target.slug}${deployed ? ' (already deployed)' : ''}`);
 }
 
-export async function verifyAlias(check, wait = (ms) => new Promise((done) => setTimeout(done, ms))) {
-  const delays = [2000, 5000];
-  for (let attempt = 0; ; attempt++) {
-    try { return await check(); }
-    catch (error) {
-      if (attempt === delays.length) throw error;
-      await wait(delays[attempt]);
-    }
+export async function verifyAlias(check, wait = (ms) => new Promise((done) => setTimeout(done, ms)), { timeoutMs = 90_000, now = Date.now, onFailure = (observation) => console.log(JSON.stringify(observation)) } = {}) {
+  const started = now();
+  const delays = [2000, 5000, 10_000, 15_000];
+  let waited = 0;
+  let attempt = 0;
+  let lastError;
+  while (true) {
+    const remaining = timeoutMs - Math.max(now() - started, waited);
+    if (remaining <= 0) throw lastError || new Error('Alias acceptance deadline expired');
+    const controller = new AbortController();
+    let timer;
+    try {
+      return await Promise.race([
+        check({ signal: controller.signal }),
+        new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('Alias acceptance deadline expired')); }, remaining); })
+      ]);
+    } catch (error) {
+      lastError = error;
+      onFailure({ event: 'alias-acceptance-pending', attempt: ++attempt, elapsedMs: Math.max(now() - started, waited), ...(error.observation ? { observation: error.observation } : {}) });
+    } finally { clearTimeout(timer); }
+    const delay = Math.min(delays[Math.min(attempt - 1, delays.length - 1)], timeoutMs - Math.max(now() - started, waited));
+    if (delay <= 0) throw lastError;
+    await wait(delay);
+    waited += delay;
   }
 }
 
-async function smoke(url, { api = true } = {}) {
-  const home = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+const safeOrigin = (value) => {
+  try { const url = new URL(value); return !url.username && !url.password && ['https:', 'http:'].includes(url.protocol) && url.origin === value ? url.origin : 'invalid'; }
+  catch { return 'invalid'; }
+};
+export async function verifyCanonicalGateway(name, gateway, deploymentId, signal) {
+  const response = await fetch(`https://${name}/.well-known/thingtime-capabilities.json`, { signal, cache: 'no-store' });
+  let manifest;
+  try { manifest = await response.json(); } catch { manifest = null; }
+  if (response.ok && manifest?.origin === `https://${name}` && manifest.gateway?.environment === gateway.environment && manifest.gateway?.origin === gateway.origin && manifest.gateway?.deploymentId === deploymentId) return;
+  const error = new Error('Canonical gateway ownership failed verification');
+  const cache = response.headers.get('x-vercel-cache');
+  const age = response.headers.get('age');
+  error.observation = { host: name, status: response.status, origin: safeOrigin(manifest?.origin), gateway: { environment: ['production', 'develop', 'preview'].includes(manifest?.gateway?.environment) ? manifest.gateway.environment : 'invalid', origin: safeOrigin(manifest?.gateway?.origin), deploymentId: /^dpl_[a-zA-Z0-9]+$/.test(manifest?.gateway?.deploymentId || '') ? manifest.gateway.deploymentId : 'invalid' }, cache: ['HIT', 'MISS', 'STALE', 'BYPASS'].includes(cache) ? cache : 'unknown', age: /^\d+$/.test(age || '') ? age : null };
+  throw error;
+}
+
+async function smoke(url, { api = true, signal } = {}) {
+  const home = await fetch(url, { signal: signal || AbortSignal.timeout(30_000) });
   const html = await home.text();
   if (!home.ok || !html.includes('<div id="root"></div>')) throw new Error(`Deployed Vite shell failed verification at ${url}`);
-  const index = await fetch(`${url}/index.html`, { signal: AbortSignal.timeout(30_000) });
+  const index = await fetch(`${url}/index.html`, { signal: signal || AbortSignal.timeout(30_000) });
   if (!index.ok || !(await index.text()).includes('<div id="root"></div>')) throw new Error('Deployed index.html failed verification');
   const asset = html.match(/(?:src|href)="(\/assets\/[^"?]+\.js)[^"]*"/);
   if (!asset) throw new Error('No deployed JavaScript asset');
-  const response = await fetch(new URL(asset[1], url), { signal: AbortSignal.timeout(30_000) });
+  const response = await fetch(new URL(asset[1], url), { signal: signal || AbortSignal.timeout(30_000) });
   if (!response.ok || !(response.headers.get('content-type') || '').includes('javascript')) throw new Error(`Deployed asset failed verification at ${url}`);
   if (!api) return;
-  const apiResponse = await fetch(`${url}/api/root-data`, { signal: AbortSignal.timeout(30_000) });
+  const apiResponse = await fetch(`${url}/api/root-data`, { signal: signal || AbortSignal.timeout(30_000) });
   if (!apiResponse.ok || !(apiResponse.headers.get('content-type') || '').includes('json')) throw new Error('Deployed API failed verification');
   await apiResponse.json();
 }
@@ -301,13 +333,9 @@ export async function publish() {
     if ((await context(branch, plan.target.slug)).sha !== plan.sha) throw new Error('Branch advanced before alias publication');
     await reconcileGatewayAliases({
       names: [...aliases], before: aliasBefore, deploymentId: deployment.id, read: readAlias, assign: assignAlias, remove: removeAlias,
-      verify: (name) => verifyAlias(async () => {
-        if (name === new URL(plan.gateway.origin).hostname && plan.gateway.owner) {
-          const response = await fetch(`https://${name}/.well-known/thingtime-capabilities.json`, { signal: AbortSignal.timeout(30_000), cache: 'no-store' });
-          const manifest = await response.json();
-          if (!response.ok || manifest.origin !== `https://${name}` || manifest.gateway?.environment !== plan.gateway.environment || manifest.gateway?.origin !== plan.gateway.origin || manifest.gateway?.deploymentId !== deployment.id) throw new Error('Canonical gateway ownership failed verification');
-        }
-        await smoke(`https://${name}`);
+      verify: (name) => verifyAlias(async ({ signal }) => {
+        if (name === new URL(plan.gateway.origin).hostname && plan.gateway.owner) await verifyCanonicalGateway(name, plan.gateway, deployment.id, signal);
+        await smoke(`https://${name}`, { signal });
       })
     });
   } catch (error) {

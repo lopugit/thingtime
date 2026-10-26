@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { publish, needsReleaseBuild, verifyAlias, compatibilityAliasCandidates, applyOutputPolicy, policyVersion, runtimePolicyIssue, deploymentArgs, deploymentIssue, marker, planOutputs, publisherEnvironment, selectTarget, sourceFromEvent } from './deploy-vercel-prebuilt.mjs';
+import { publish, needsReleaseBuild, verifyAlias, verifyCanonicalGateway, compatibilityAliasCandidates, applyOutputPolicy, policyVersion, runtimePolicyIssue, deploymentArgs, deploymentIssue, marker, planOutputs, publisherEnvironment, selectTarget, sourceFromEvent } from './deploy-vercel-prebuilt.mjs';
 
 import { gatewayMetadata, gatewayPolicy } from './environment-gateway-policy.mjs';
 
@@ -137,8 +137,10 @@ test('alias propagation retries only reads and stops on persistent failure', asy
   assert.equal(reads, 3);
   assert.deepEqual(delays, [2000, 5000]);
   let failures = 0;
-  await assert.rejects(verifyAlias(async () => { failures++; throw new Error('persistent'); }, async () => {}), /persistent/);
-  assert.equal(failures, 3);
+  const observations = [];
+  await assert.rejects(verifyAlias(async () => { failures++; throw new Error('persistent'); }, async () => {}, { now: () => 0, onFailure: value => observations.push(value) }), /persistent/);
+  assert.equal(failures, 8);
+  assert.equal(observations.at(-1).elapsedMs, 77000);
 });
 
 
@@ -262,4 +264,38 @@ test('READY reuse publishes alias, status and summary, then retries without anot
     }
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('alias acceptance waits beyond seven seconds and bounds persistent propagation', async () => {
+  let elapsed = 0; let reads = 0; const observations = [];
+  const ready = await verifyAlias(async () => { reads++; if (elapsed < 32000) throw Error('old edge'); return 'ready'; }, async ms => { elapsed += ms; }, { now: () => elapsed, onFailure: value => observations.push(value) });
+  assert.equal(ready, 'ready'); assert.equal(reads, 5); assert.equal(elapsed, 32000); assert.equal(observations.length, 4);
+  elapsed = 0; reads = 0;
+  await assert.rejects(verifyAlias(async () => { reads++; throw Error('stale'); }, async ms => { elapsed += ms; }, { now: () => elapsed, onFailure: () => {} }), /stale/);
+  assert.equal(elapsed, 90000); assert.equal(reads, 8);
+});
+
+test('canonical verifier requires every exact identity and records only safe mismatch fields', async () => {
+  const original = globalThis.fetch;
+  const gateway = { environment: 'production', origin: 'https://thingtime.com' };
+  const correct = { origin: gateway.origin, gateway: { ...gateway, deploymentId: 'dpl_new' } };
+  try {
+    for (const field of ['status', 'origin', 'environment', 'gateway-origin', 'deploymentId', 'invalid-json']) {
+      const manifest = structuredClone(correct);
+      if (field === 'origin') manifest.origin = 'https://old.example';
+      if (field === 'environment') manifest.gateway.environment = 'preview';
+      if (field === 'gateway-origin') manifest.gateway.origin = 'https://old.example';
+      if (field === 'deploymentId') manifest.gateway.deploymentId = 'dpl_old';
+      globalThis.fetch = async () => new Response(field === 'invalid-json' ? 'not JSON secret-value' : JSON.stringify(manifest), { status: field === 'status' ? 503 : 200, headers: { 'x-vercel-cache': 'HIT', age: '18', 'set-cookie': 'secret-value' } });
+      await assert.rejects(verifyCanonicalGateway('thingtime.com', gateway, 'dpl_new'), error => { assert.equal(error.observation.status, field === 'status' ? 503 : 200); assert.equal(error.observation.cache, 'HIT'); assert.equal(error.observation.age, '18'); assert.ok(!JSON.stringify(error.observation).includes('secret-value')); return true; });
+    }
+    globalThis.fetch = async () => new Response(JSON.stringify(correct), { status: 200 });
+    await verifyCanonicalGateway('thingtime.com', gateway, 'dpl_new');
+  } finally { globalThis.fetch = original; }
+});
+
+test('alias acceptance aborts an in-flight read at its deadline', async () => {
+  let signal;
+  await assert.rejects(verifyAlias(({ signal: value }) => { signal = value; return new Promise(() => {}); }, async () => {}, { timeoutMs: 15, onFailure: () => {} }), /deadline expired/);
+  assert.equal(signal.aborted, true);
 });
