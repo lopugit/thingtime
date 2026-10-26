@@ -15720,3 +15720,34 @@ Local results do not establish current-head CI or deployed acceptance.
   button stack on narrow screens; every visible version pane reaches its scroll
   endpoints without launcher overlap. Retry7 retains the captures and geometry.
   Retry9 subsequently passes the full preserved-version recovery and cold reload.
+
+### Offline mail reader account retirement — PR 1000
+
+- [x] In the opt-in `accountScope.browser.test.mjs` isolated fixture, open an
+  encrypted saved message offline, then trigger the production cross-tab root
+  identity change while its root response is held. The old subject/body must
+  disappear before the new identity resolves; no stale mail request is allowed.
+- [x] Seed the same message ID under two disposable accounts with distinct
+  content. The new account must open only its own reader; exact independent
+  readback must retain the old partition unchanged. Scroll each real scroll root
+  at 1440/390/320px and verify reader bounds/occlusion with normal fixed controls.
+  [Retained evidence and fixture corrections](artifacts/anonymous-mail-account-scope-2026-10-27/README.md).
+- [ ] Separately exercise Electron endpoint selection, native-work retirement,
+  restart and endpoint-derived BrowserWindow partitions. Two web navigations
+  or a same-origin account transition do not establish this behavior.
+
+
+### Account Home deleted theme/algorithm recovery — PR 1000
+
+- [x] In a disposable network-none account fixture, acknowledge normal dedicated
+  creates and deletes, recover each through History while offline, and preserve
+  exact stable ID, canonical design, title, folder and private intent. Cold reload
+  and 1440/390/320px scrolling and visible confirmation checks pass.
+- [x] Reconnect through the normal workers: one dedicated save per recovered item,
+  exact remote snapshot, guest 404 and post-sync reload. Twelve focused recovery
+  regressions cover occupied IDs, schema/scope refusal and rollback.
+- [ ] Complete wider native Character/custom-plane and cross-tab/identity lifecycle
+  checks; the supported recovery scope remains account Home only.
+
+Evidence: `artifacts/anonymous-protected-account-recovery-2026-10-27/README.md`.
+The account-only run intentionally skips the previously verified anonymous case.

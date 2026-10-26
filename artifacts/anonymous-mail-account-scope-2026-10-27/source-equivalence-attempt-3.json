@@ -1,0 +1,16 @@
+{
+  "testSource": "remix/app/mail/accountScope.browser.test.mjs",
+  "fixtureSource": "remix/app/mail/accountScope.browser.fixture.ts",
+  "testSourceExactEqualityToAttempt3Executed": true,
+  "testSha256": "443e1265944a17e28ddeedaa80dd35cc589f4943a4fef1497667e3836423415d",
+  "latestRun": "attempt-3-reader",
+  "assertionsAddedSinceAttempt2": [
+    "scroll actual roots top-to-bottom at 1440/390/320px",
+    "no horizontal overflow throughout scrolling",
+    "subject and body fully inside viewport",
+    "nine point elementFromPoint checks per target prove no fixed-control obstruction",
+    "reader screenshots with existing toast/controls retained"
+  ],
+  "fixtureExecutableEquality": "unchanged; source-equivalence-attempt-2.json records relocation normalization",
+  "sourceEditedAfterLatestExecution": false
+}

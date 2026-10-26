@@ -5584,3 +5584,50 @@ host controls. The requested MCP host proof is already supplied by actual
 Codex desktop/CLI tool calls; adding a new MCP client to Thingtime.app is not
 required for that proof. Wider installed-app acceptance remains separate. The
 installed app, shared LLM proxy/key and VM configuration were left unchanged.
+
+## 27 October — offline mail reader account privacy
+
+The normal encrypted mail reader now has retained native account-transition
+acceptance. Real cross-tab identity invalidation hides the previous subject and
+body while the new root HTTP response is held. A second disposable account opens
+its own content despite identical message IDs; exact readback leaves the first
+partition unchanged. The latest isolated run passes 1/1 without skips, mail API
+requests, page errors or OOM. All scroll roots and actual reader visibility pass
+at 1440/390/320px, with normal toast and controls retained. Earlier assertion and
+screenshot-coverage limitations are preserved alongside the passing run.
+[Sources, evidence and cleanup](../artifacts/anonymous-mail-account-scope-2026-10-27/README.md).
+
+No product code change was needed. Eight source-map modules match their current
+sources; the tested archive hash is recorded separately and is not a claim of
+whole-package source equivalence. Electron selected-origin switching restarts
+the app and changes BrowserWindow partition; this Chromium/Nitro fixture does
+not exercise that path. Installed-app, popup/provider and origin acceptance
+remain open. Pushed `66f456800` passes Web CI and CodeQL, with reachable public
+preview shell/scripts/manifest; this later increment requires its own checks.
+
+
+### 27 October — account Home protected recovery acceptance
+
+The normal History UI now has retained isolated-account acceptance for deleted
+Themes and Algorithms. Normal dedicated creates/deletes converge first; recovery
+then completes offline, preserves exact IDs/design/title/folder/private intent,
+keeps selection unchanged, and survives cold reload. Reconnect sends one dedicated
+save per item, restores its canonical remote snapshot, refuses guest reads (404),
+and survives another reload. Full scrolling and visible confirmation checks pass
+at 1440/390/320px. One native account case passed; the anonymous case was explicitly
+skipped in this account-only run. Twelve focused refusal/rollback cases passed.
+
+No product changes were needed. Retained harness failures identified the Chromium
+network-none online signal, responsive-dialog selector/settling and snapshot field
+expectation; they are not classified as application defects. Seven production
+modules match sourcesContent in the actual sanitized archive; its separate package
+hash does not prove whole-package equivalence. Runtime cleanup left zero owned
+resources. Character/custom-plane recovery remains refused; installed-device,
+provider and wider identity/plane acceptance remain separate.
+
+Evidence: [account recovery](../artifacts/anonymous-protected-account-recovery-2026-10-27/README.md).
+The combined mail/recovery TypeScript check has the same 91 normalized baseline
+diagnostics, with no additions or removals; it is not a clean typecheck. Mail's
+post-acceptance destination guard separately passes deterministic rejection tests;
+its native flow evidence predates only that guard addition. Private Agent Overview
+reporting is unavailable; these are local parent-reported results.

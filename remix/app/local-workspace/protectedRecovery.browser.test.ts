@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import net from 'node:net';
@@ -10,8 +11,8 @@ const origin = process.env.TT_PROTECTED_RECOVERY_ORIGIN, session = process.env.T
 const artifacts = process.env.TT_PROTECTED_RECOVERY_ARTIFACTS, fixture = process.env.TT_PROTECTED_RECOVERY_FIXTURE;
 const puppeteerPath = process.env.TT_PROTECTED_RECOVERY_PUPPETEER, executablePath = process.env.TT_PROTECTED_RECOVERY_CHROME;
 
-test('native anonymous History recovers deleted themes and algorithms privately with cold offline persistence', {
- skip: !origin || !session || !artifacts || !fixture || !puppeteerPath || !executablePath, timeout: 240_000
+for (const signedIn of [false, true]) test(`native ${signedIn ? 'account Home' : 'anonymous'} History recovers deleted themes and algorithms privately with cold offline persistence`, {
+ skip: (!signedIn && process.env.TT_PROTECTED_RECOVERY_ACCOUNT_ONLY === '1') || !origin || !session || !artifacts || !fixture || !puppeteerPath || !executablePath, timeout: 240_000
 }, async t => {
  assert.equal(new URL(origin!).hostname, '127.0.0.1');
  assert.equal(new URL(origin!).origin, origin);
@@ -26,12 +27,16 @@ test('native anonymous History recovers deleted themes and algorithms privately 
   });
   assert.ok(['EPERM', 'ENETUNREACH', 'EHOSTUNREACH'].includes(String(code)), `Direct egress must fail closed: ${code}`);
  }
- await mkdir(artifacts!, { recursive: true });
+ const output = resolve(artifacts!, signedIn ? 'account' : 'anonymous');
+ await mkdir(output, { recursive: true });
  const { default: puppeteer } = await import(puppeteerPath!);
  const browser = await puppeteer.launch({ executablePath, headless: true, pipe: true, protocolTimeout: 30_000,
   args: ['--no-proxy-server', '--disable-background-networking'] });
  t.signal.addEventListener('abort', () => { void browser.close(); }, { once: true });
  const context = await browser.createBrowserContext(), page = await context.newPage(); page.setDefaultTimeout(25_000);
+ const network = await page.createCDPSession();
+ await network.send('Network.enable');
+ const connectivity = async (value: boolean) => { offline = value; await page.setOfflineMode(value); await network.send('Network.overrideNetworkState', { offline: value, latency: 1, downloadThroughput: 100_000_000, uploadThroughput: 100_000_000, connectionType: 'ethernet' }); };
  const errors: string[] = [], accountRequests: string[] = [], bounds: unknown[] = [], checks: string[] = [];
  page.on('pageerror', (error: Error) => errors.push(error.message));
  page.on('request', (request: any) => {
@@ -44,7 +49,16 @@ test('native anonymous History recovers deleted themes and algorithms privately 
   await handle.asElement().evaluate((button: HTMLElement) => button.scrollIntoView({ block: 'center' }));
   await handle.asElement().click(); await handle.dispose();
  };
- const inject = async () => { await page.addScriptTag({ path: fixture }); };
+ let ownerId = '', offline = false;
+ const offlineWrites: string[] = [], contentWrites: any[] = [];
+ page.on('request', (request: any) => { if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method())) { const path = new URL(request.url()).pathname; if (offline) offlineWrites.push(path); if (/^\/api\/v1\/(themes|algorithms)\/sync$/.test(path)) { const body = JSON.parse(request.postData() || '{}'); if (body.operation !== 'snapshot') contentWrites.push({ path, body }); } } });
+ const inject = async () => { await page.addScriptTag({ path: fixture }); if (ownerId) await page.evaluate(id => (window as any).protectedRecoveryFixture.configure(id), ownerId); };
+ const converge = async (ids: string[], deleted: boolean) => {
+  await page.goto(origin + '/things', { waitUntil: 'domcontentloaded' });
+  for (let n = 0; n < 120; n++) { const value = await proof(ids); if (value.rows.every((row: any) => { const state = row.themeState || row.algorithmState; return state?.state === 'synced' && state.deleted === deleted && !state.pending && !state.claim; })) return value; await new Promise(resolve => setTimeout(resolve, 500)); }
+  throw Error('Dedicated account profile queue failed to converge');
+ };
+ const remote = async () => page.evaluate(async ownerId => { const result: any = {}; for (const kind of ['themes', 'algorithms']) { const response = await fetch('/api/v1/' + kind + '/sync', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Thingtime-Expected-Data-Plane': 'home', 'X-Thingtime-Expected-Actor': ownerId }, body: JSON.stringify({ operation: 'snapshot', expectedOwnerId: ownerId }) }); if (!response.ok) throw Error('Snapshot HTTP ' + response.status); result[kind] = await response.json(); } return result; }, ownerId);
  const proof = async (ids: string[]) => { await inject(); return page.evaluate(ids => (window as any).protectedRecoveryFixture.proof(ids), ids); };
  const capture = async (label: string, review: boolean) => {
   for (const width of [1440, 390, 320]) {
@@ -66,8 +80,13 @@ test('native anonymous History recovers deleted themes and algorithms privately 
     if (canReview) await click('Recover this Thing…');
     await page.waitForFunction((selector: string) => document.querySelector(selector)?.textContent?.includes('Recover deleted Thing'), {}, details);
    }
+   // Check the affected History overlay. Other root-shell dialogs may remain
+   // mounted offscreen and are not the recovery surface under review.
+   // Chakra's responsive dialog animates after its content mounts. Inspect
+   // the settled overlay rather than a departing frame during resize.
+   await page.waitForFunction(() => [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-label="Version details"]')].filter(el => el.getBoundingClientRect().width).every(el => { const box = el.getBoundingClientRect(); return box.x >= -1 && box.right <= innerWidth + 1 && !el.getAnimations().some(animation => animation.playState === 'running'); }));
    const geometry = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth,
-    dialogs: [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].filter(el => el.getBoundingClientRect().width).map(el => {
+    dialogs: [...document.querySelectorAll<HTMLElement>('[role="dialog"][aria-label="Version details"]')].filter(el => el.getBoundingClientRect().width).map(el => {
      const box = el.getBoundingClientRect(); return { x: box.x, width: box.width, right: box.right };
     }) }));
    assert.equal(geometry.scrollWidth, width, label);
@@ -95,30 +114,61 @@ test('native anonymous History recovers deleted themes and algorithms privately 
      }), true, `${label}: recovery confirmation is visible and unobstructed`);
      await control.dispose();
     }
-    await page.screenshot({ path: resolve(artifacts!, `${label}-${width}${bottom ? '-bottom' : ''}.png`) });
+    await page.screenshot({ path: resolve(output, `${label}-${width}${bottom ? '-bottom' : ''}.png`) });
    }
   }
  };
  let seeded: any;
  try {
   await page.setViewport({ width: 1440, height: 1000 });
+  await connectivity(false);
+  if (signedIn) {
+   const { request } = await import(process.env.TT_SHARED_PLAYWRIGHT_PATH!);
+   const api = await request.newContext({ baseURL: origin });
+   try {
+    const username = 'protected-' + randomUUID();
+    const response = await api.post('/api/v1/auth/register', { headers: { Origin: origin! }, data: { username, email: username + '@example.test', password: randomUUID() + randomUUID() } });
+    assert.equal(response.status(), 200); ownerId = (await response.json()).user.id;
+    // Only this disposable test identity's cookie jar enters its own isolated browser.
+    // Secret values remain in memory and are never recorded in acceptance artifacts.
+    const state = await api.storageState();
+    await context.setCookie(...state.cookies.map(({ sameSite, ...cookie }: any) => ({ ...cookie, sameSite: sameSite === 'None' ? 'None' : sameSite })));
+   } finally { await api.dispose(); }
+  }
   await page.goto(origin + '/themes', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Save theme 💾'));
-  assert.equal(await page.evaluate(async () => (await (await fetch('/api/root-data')).json()).user), null);
+  if (signedIn) {
+   await page.waitForFunction(async id => (await (await fetch('/api/root-data')).json()).user?.id === id, {}, ownerId);
+   const rootIdentity = await page.evaluate(async () => { const root = await (await fetch('/api/root-data')).json(); return { ownerId: root.user?.id, temporary: root.user?.temporary, accountKind: root.user?.accountKind, dataPlane: root.dataPlane }; });
+   assert.equal(await page.evaluate(() => navigator.onLine), true, 'Synthetic loopback browser begins online');
+   assert.equal(rootIdentity.ownerId, ownerId); assert.notEqual(rootIdentity.temporary, true); assert.equal(rootIdentity.dataPlane, 'home');
+   await writeFile(resolve(output, 'authenticated-baseline.json'), JSON.stringify(rootIdentity, null, 2));
+  }
+  else assert.equal(await page.evaluate(async () => (await (await fetch('/api/root-data')).json()).user), null);
   await page.waitForFunction(async () => {
    await navigator.serviceWorker.ready; if (!navigator.serviceWorker.controller) return false;
    for (const key of await caches.keys()) if (key.startsWith('thingtime:offline-shell:') && await (await caches.open(key)).match('/__thingtime_offline_shell_complete__')) return true;
    return false;
   }, { timeout: 90_000 });
-  await inject(); seeded = await page.evaluate(() => (window as any).protectedRecoveryFixture.seed());
+  await inject(); seeded = await page.evaluate(signedIn => (window as any).protectedRecoveryFixture.seed(signedIn), signedIn);
   const ids = seeded.profiles.map((profile: any) => profile.id);
+  if (signedIn) {
+   console.log('Protected recovery: converging initial account profiles');
+   await converge(ids, false);
+   await writeFile(resolve(output, 'created-remote.json'), JSON.stringify(await remote(), null, 2));
+   await inject(); seeded = await page.evaluate(value => (window as any).protectedRecoveryFixture.remove(value), seeded);
+   await converge(ids, true);
+   const removed = await remote();
+   for (const kind of ['themes', 'algorithms']) assert.ok(!removed[kind][kind].some((row: any) => ids.includes(row.id)));
+   await writeFile(resolve(output, 'deleted-remote.json'), JSON.stringify(removed, null, 2));
+  }
   const deleted = await proof(ids); assert.ok(deleted.rows.every((row: any) => row.row === null));
   assert.equal(deleted.themes.activeThemeId, null); assert.equal(deleted.algorithms.activeAlgorithmId, null);
   for (const profile of seeded.profiles) {
    await page.setViewport({ width: 1440, height: 1000 });
    await page.goto(origin + '/history?thing=' + encodeURIComponent(profile.id), { waitUntil: 'domcontentloaded' });
    await click('Deleted Thing', true);
-   await page.setOfflineMode(true);
+   await connectivity(true);
    await click('Recover this Thing…'); await capture(profile.kind + '-recovery', true);
    await click('Recover Thing privately');
    await page.waitForFunction(() => document.body.innerText.includes('Version saved.'));
@@ -144,13 +194,37 @@ test('native anonymous History recovers deleted themes and algorithms privately 
    await page.waitForFunction((title: string) => document.body.innerText.includes(title), {}, profile.title);
    checks.push(`${profile.kind}: actual History recovery, canonical ID/design/privacy/selection proof and cold offline list reload`);
   }
-  assert.deepEqual(errors, []); assert.deepEqual(accountRequests, []);
-  await writeFile(resolve(artifacts!, 'verification.json'), JSON.stringify({ checks, bounds, errors, accountRequests, seeded,
-   proof: await proof(seeded.profiles.map((profile: any) => profile.id)), scope: 'anonymous-device-only; no account acceptance claimed' }, null, 2));
+  assert.deepEqual(errors, []); assert.deepEqual(offlineWrites, []);
+  let remoteProof: any;
+  if (signedIn) {
+   const start = contentWrites.length;
+   await connectivity(false);
+   await converge(ids, false); remoteProof = await remote();
+   const recoveryWrites = contentWrites.slice(start);
+   await writeFile(resolve(output, 'recovered-remote.json'), JSON.stringify(remoteProof, null, 2));
+   for (const profile of seeded.profiles) {
+    const kind = profile.kind === 'theme' ? 'themes' : 'algorithms';
+    const row = remoteProof[kind][kind].find((row: any) => row.id === profile.id);
+    assert.ok(row, 'Same profile ID is recreated through dedicated sync');
+    assert.equal(row.folderId, seeded.folderId);
+    assert.equal(row.title ?? row.content?.title, profile.title);
+    assert.equal(row.name ?? row.content?.name, profile.name);
+    if (kind === 'themes') { assert.equal(row.visibility, 'private'); assert.equal(row.theme.colors.accent, '#553377'); }
+    else { assert.equal(row.description, 'Disposable local profile'); assert.ok(!row.shared && !row.listed && !row.parentId); }
+    assert.equal(recoveryWrites.filter((write: any) => write.path === '/api/v1/' + kind + '/sync' && write.body.operation === 'write' && write.body.command.id === profile.id).length, 1);
+   }
+   const guest = await browser.createBrowserContext(), guestPage = await guest.newPage();
+   try { for (const profile of seeded.profiles) assert.equal((await guestPage.goto(origin + '/api/v1/things?id=' + encodeURIComponent(profile.id)))?.status(), 404, 'Recovered profile remains private to its account'); }
+   finally { await guest.close(); }
+   await page.reload({ waitUntil: 'domcontentloaded' });
+   for (const profile of seeded.profiles) assert.ok((await proof(ids)).rows.find((row: any) => row.id === profile.id).row);
+  } else assert.deepEqual(accountRequests, []);
+  await writeFile(resolve(output, 'verification.json'), JSON.stringify({ checks, bounds, errors, accountRequests, seeded,
+   proof: await proof(seeded.profiles.map((profile: any) => profile.id)), offlineWrites, contentWrites, remoteProof, scope: signedIn ? 'synthetic account Home; real isolated API; no Character/custom-plane recovery claimed' : 'anonymous-device-only; no account acceptance claimed' }, null, 2));
  } catch (error) {
-  await page.screenshot({ path: resolve(artifacts!, 'failure.png') }).catch(() => {});
-  await writeFile(resolve(artifacts!, 'failure.json'), JSON.stringify({ error: String(error), stack: (error as Error).stack,
-   body: await page.$eval('body', (element: HTMLElement) => element.innerText).catch(() => ''), errors, accountRequests, seeded,
+  await page.screenshot({ path: resolve(output, 'failure.png') }).catch(() => {});
+  await writeFile(resolve(output, 'failure.json'), JSON.stringify({ error: String(error), stack: (error as Error).stack,
+   bounds, offlineWrites, contentWrites, body: await page.$eval('body', (element: HTMLElement) => element.innerText).catch(() => ''), errors, accountRequests, seeded,
    proof: seeded ? await proof(seeded.profiles.map((profile: any) => profile.id)).catch(() => null) : null }, null, 2));
   throw error;
  } finally { await context.close(); await browser.close(); }

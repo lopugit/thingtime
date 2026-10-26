@@ -1,0 +1,6 @@
+{
+  "error": "locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n  - waiting for getByText('Mail is unavailable while the workspace is changing.') to be visible\n",
+  "text": "Thingtime\n\nRefreshing your session\n\nYour previous view is hidden while we check your current session.",
+  "mail": [],
+  "errors": []
+}

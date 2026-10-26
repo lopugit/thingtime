@@ -116,7 +116,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   lost-response retries and revision-checked updates through the normal worker.
   [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
 
-- 2026-10-27: Offline account suites reconcile canonical identities; saved Component dependencies and lost-response recovery pass native queue acceptance. Normal-composer posting/draft independence now also verifies the immediate editor snapshot, exact rich text and duplicate prevention. Instruction/vault evidence distinguishes passing checks from unresolved performance and wider device/provider acceptance. [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+- 2026-10-27: Offline account suites reconcile canonical identities; saved Component dependencies and lost-response recovery pass native queue acceptance. Normal-composer posting/draft independence now also verifies the immediate editor snapshot, exact rich text and duplicate prevention. Isolated native checks additionally verify mail account-retirement privacy and offline account Home theme/algorithm recovery with private reconnect. Instruction/vault evidence distinguishes passing checks from unresolved performance and wider device/provider acceptance. [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
 
 - **Codex (AI), 2026-10-27:** Add known-length ZIP64 Blob export and refuse the
   observed Node Blob 4 GiB crash boundary before reads or inflation. Preserve
