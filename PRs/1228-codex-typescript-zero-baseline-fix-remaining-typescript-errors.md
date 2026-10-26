@@ -1,5 +1,8 @@
 # Enforce zero TypeScript errors and repair static analysis failures
 
+PR: https://github.com/lopugit/thingtime/pull/1228
+Owned implementation commit: `7905d5259`.
+
 Source branch: `codex/typescript-zero-baseline`.
 Starting commit: `ad0868db5698b5cbe3803a8595879f784ad1a0c2` (`origin/main` at task creation).
 PR target: `develop`, as required by the product contribution lane.
@@ -59,3 +62,12 @@ configurations conflict; the protected `github-actions` controller still has a
 stale warning-only label and no ESLint/Prettier CI step. This PR changes the
 product listener comment, not that protected implementation. No native source
 or installed app was changed. No primary-branch merge is authorized.
+
+## Documentation indexing
+
+The semantic pass did not finalize cleanly: four of 126 dispatched documents
+were omitted and source attribution warnings were reported. A bounded structural
+fallback completed successfully, with a verified source fingerprint, manifest,
+report and portable HTML. The new audit and this note are inventoried in the
+manifest; complete semantic coverage is not claimed. No `cost.json` was emitted
+by the structural update.

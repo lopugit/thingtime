@@ -58,7 +58,7 @@ The final Nitro/Vercel server rebuild, canonical Claude-runtime packaging,
 output patching, output verification and OS-denied compiled manifest/health
 smoke passed. Client build, MCP typecheck, Commander's five package typechecks
 and the focused regression suites also passed. See
-[the validation note](../PRs/codex-typescript-zero-baseline.md) for scope and
+[the validation note](../PRs/1228-codex-typescript-zero-baseline-fix-remaining-typescript-errors.md) for scope and
 review boundaries. Existing compiler settings and warning allowances remain.
 
 ## Workspace coverage
