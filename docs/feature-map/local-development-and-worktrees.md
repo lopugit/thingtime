@@ -141,3 +141,5 @@ return `503 LOCAL_API_NOT_CONFIGURED`; neither server selects production implici
 a macOS OS network sandbox, including direct-IP and redirect denial. Fixture
 requests accept only a literal loopback HTTP origin and same-origin uploads.
 Keep backend/browser network isolation and dedicated test credentials in place.
+
+- Offline native VM first boot: `apple/OfflineNativeVM` `view` admits only the own installed final identity pair, with bounded AppKit framebuffer/input and stopped/reaped host checkpoints. Candidate run remains closed. See [runbook](../offline-native-vm.md) and `ViewerTests.swift`; real viewer acceptance requires separate authorization.

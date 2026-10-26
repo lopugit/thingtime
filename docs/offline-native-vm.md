@@ -1,4 +1,4 @@
-# Offline native VM harness (preparation and installer milestones)
+# Offline native VM harness (preparation, installation and viewer milestones)
 
 `apple/OfflineNativeVM` is a dependency-free SwiftPM host CLI for a task-owned
 Apple Silicon macOS VM. Its machine-readable contract is `offline-native-vm
@@ -7,9 +7,16 @@ not a Thingtime app update, installer, release workflow or network API.
 
 The host harness compiles and tests private file handling, fresh preparation,
 read-only restore inspection and a distinct bounded installer lifecycle with
-mocks. **Real preparation/installation/teardown acceptance is still pending.**
-Setup Assistant, guest toolchain verification and candidate run admission remain
-unimplemented. `run` and its internal runtime worker fail with
+mocks. Root-observed signed checks passed local restore inspection, fresh
+preparation, bounded installation and a VM boot followed by normal cancellation
+with stopped/reaped evidence. A separately signed task bundle is reachable by
+exact-bundle CUA binding and displays the host controls plus Apple startup
+framebuffer. Root exercised ordinary input through offline Setup Assistant to
+Create a Mac Account, then stopped with a normal stopped/reaped checkpoint;
+modifier/case input was not fully reliable. No password/account/terms were
+submitted. Credential provisioning, Setup Assistant completion, toolchain
+verification and candidate run admission remain unimplemented/unverified. See the bounded
+[evidence and remaining gates](../PRs/1249-codex-oauth-offline-native-vm-add-offline-native-vm-harness.md). `run` and its internal runtime worker fail with
 `guestReadinessUnavailable`; no imported VM or caller readiness assertion can
 admit candidate execution. Do not claim a native build or VM disposal from the
 mock tests or successful read-only Apple restore metadata inspection.
@@ -22,10 +29,13 @@ this boundary. The harness never imports an existing VM or adopts a user's
 machine identity, disks, accounts or auxiliary storage.
 
 Construction always sets `networkDevices`, `directorySharingDevices`,
-`socketDevices`, serial ports, audio, consoles, keyboards and pointing devices
-to empty arrays. There is no NIC enable flag, NAT, bridging, socket proxy,
+`socketDevices`, serial ports, audio and consoles
+to empty arrays. Headless preparation/installation also has no input devices;
+the explicit `view` phase admits exactly one USB keyboard and one USB absolute
+coordinate pointer, inspected before VM construction. There is no NIC enable flag, NAT, bridging, socket proxy,
 clipboard integration, shared directory or guest-to-host execution path. The
-headless virtual display does not expose a host window or clipboard. Only three
+headless virtual display does not expose a host window; the viewer uses the
+supported `VZVirtualMachineView` framebuffer/input without clipboard integration. Only three
 block devices are configured: fresh writable boot/output files and a task input
 attachment with `readOnly: true`. Configuration is read back and `validate()`
 is required before constructing a VM. Readback is configuration evidence;
@@ -221,3 +231,107 @@ SDK header evidence was checked against installed stable Xcode 26.6, macOS SDK
 26.5, on 2026-10-27. Real guest provisioning and platform behavior remain to be
 verified separately. This CLI exposes no web surface; no preview/server is
 created.
+
+## Bounded first-boot viewer (source/mocks only)
+
+`view /absolute/private/task/root RUN-UUID` is a separate, explicitly authorized
+first-boot operation. It does not install, adopt another VM, assert readiness or
+execute candidate commands. Do not invoke it until the exact signed executable
+and real launch are separately reviewed/authorized. It reuses the original
+installed boot/hardware/machine-ID/auxiliary/output pair under the parent lease.
+Admission requires a successful host installation receipt, normal zero exit,
+stop/reap and no quarantine. It validates **final installed** sizes/identities;
+Apple can grow auxiliary storage during installation. The original preparation
+and installation inode chain plus hardware/ID hashes must still match.
+
+Before worker creation, a host-only UUID attempt is recorded. A missing,
+failed, hard-killed or unreaped checkpoint blocks further viewer starts even
+when the lease is released. After a normal stopped/reaped viewer, the next
+attempt validates the last checkpoint's final identities and the original
+installed inodes. Receipts never claim Setup Assistant, toolchain or candidate
+acceptance, and artifacts are retained rather than reported disposed.
+
+The task-labelled AppKit window uses a native USB keyboard/absolute pointer via
+`VZVirtualMachineView`, a visible host **Stop and checkpoint** button, window-close
+and Quit stop requests. System hotkeys stay with the host (`capturesSystemKeys`
+false). Focus and mouse events reach only the focused guest view through Apple's
+API. No pasteboard, secret entry helper, guest AX bridge, serial/vsock channel,
+network device or shared folder is implemented. This device surface is necessary
+host tooling; guest content is not a Thingtime product UI or trusted host data.
+
+The session has an independent monotonic parent and worker deadline of at most
+30 minutes (or the smaller manifest deadline). Close, Quit, deadline, parent
+loss or SIGINT/SIGTERM requests runtime VZ stop. Starting/stopping states are
+rechecked for at most 15 seconds. The parent allows **25 seconds** shutdown
+margin before exact-worker hard kill, then at most **5 seconds** reap. Hard kill,
+missing callback, failed stop or missing/abnormal exit means quarantine, never a
+reusable checkpoint. There is no active installer in this phase.
+
+Safe tests use mock lifecycle events and private fixture files only. Root's
+separate signed real check observed a running guest and normal parent-cancellation
+stop/reap, and the task bundle displayed an Apple startup framebuffer through
+CUA. Basic click/text input reached Create a Mac Account and the host Stop control
+produced another normal stopped/reaped checkpoint. Modifier/case input was not
+fully reliable. Focus/resize/system hotkeys, Quit, deadline and parent-loss
+acceptance remain open; source tests alone do not verify those paths. Signing and VM launch
+are separate authorized acceptance operations, not part of the safe test suite. Synthetic credentials,
+legal assent/user presence, guest tools and output transport are later gates;
+no private Setup Assistant sentinels or imported host preferences are permitted.
+
+## Task-owned app packaging (no launch)
+
+A bare CLI may run a VM without a registered/discoverable AppKit identity.
+`apple/OfflineNativeVM/scripts/package_viewer.py` stages the **existing reviewed
+binary** as an `APPL` bundle with a fixed executable and task-specific stable
+`com.thingtime.offline-native-vm.task.<UUID-without-hyphens>` identity. Each build
+uses an exclusive new staging directory under the OS account's nonsynced
+`~/Library/Caches/com.thingtime.offline-native-vm/app-staging/<task>/<build>/`.
+It never copies preferences, environment, accounts, `.env`, disk images or
+credentials and never replaces `~/Applications/Thingtime.app`. It neither
+executes, signs, registers nor launches the binary. Validation rejects extra
+bundle files/plist keys, aliases, foreign ownership, shared/writable parents,
+wrong binary digests and alternate launchers. Receipts say signature verification
+has **not** been performed; only separate `codesign` verification proves that.
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
+  -s apple/OfflineNativeVM/scripts -p 'test_package_viewer.py'
+python3 apple/OfflineNativeVM/scripts/package_viewer.py stage \
+  --task-id "$TASK_ID" --binary "$REVIEWED_EXECUTABLE" \
+  --binary-sha256 "$REVIEWED_EXECUTABLE_SHA256"
+```
+
+The caller must use the returned unique bundle path, verify staged bytes against
+the review receipt, then separately authorize signing with the explicit installed
+Developer ID identity, hardened runtime, secure timestamp and the existing
+`Virtualization.entitlements`. No signing key is exported or stored in the
+bundle. For the single executable bundle, sign the bundle itself (do not use
+`--deep` for signing); verify it with `codesign --verify --deep --strict`, inspect
+the virtualization entitlement and stable task bundle identifier/designated
+requirement, and record the post-sign executable SHA256 separately. Signing can
+change Mach-O bytes; never substitute the post-sign digest for the reviewed
+pre-sign source digest. Validate the signed layout with:
+
+```sh
+python3 apple/OfflineNativeVM/scripts/package_viewer.py validate \
+  --task-id "$TASK_ID" --bundle "$TASK_BUNDLE" \
+  --binary-sha256 "$POST_SIGN_EXECUTABLE_SHA256"
+```
+
+This task-cache harness is explicitly separate from installed product apps.
+After a separately authorized launch, invoke the exact bundled executable with
+its existing arguments:
+`"$TASK_BUNDLE/Contents/MacOS/offline-native-vm" view "$TASK_ROOT" "$RUN_ID"`.
+The same bundled executable supervises/starts its worker. Bind CUA to the exact
+**already-running** task bundle/registered worker and freshly verify its task
+window before any input. Do not invoke `open` to repair discovery or start a
+second VM. No command/VM arguments or autostart setting are embedded in the
+plist; ordinary app launch without explicit CLI arguments fails validation and
+never starts a VM. Packaging/validation or binding an existing application is
+not authorization to execute `view`. Root's signed real check reached the exact task bundle through CUA and observed
+the task-labelled window, host Stop control and Apple startup framebuffer, even
+though generic app inventory omitted it. Basic guest click/text input and host
+Stop/checkpoint worked; modifier/case combinations were not fully reliable.
+This does not prove completed guest setup, credential delivery, toolchain
+readiness or a native build. Packaging mocks alone
+do not prove app registration/window/CUA discovery.

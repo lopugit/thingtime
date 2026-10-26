@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import OfflineVMCore
 import Darwin
 
@@ -63,6 +64,19 @@ func main() throws -> Int32 {
     if command == "init", args.count == 3 {
         let root = try Workspace.initialize(parent: URL(fileURLWithPath: args[1]), taskID: args[2])
         try emit(["contractVersion": Contract.version, "taskID": args[2], "root": root.path, "guestStarted": false]); return 0
+    }
+    if command == "view", args.count == 3 {
+        return try superviseViewer(Workspace(root: URL(fileURLWithPath: args[1])), runID: args[2])
+    }
+    if command == "__viewer-worker", args.count == 5 {
+        guard let parent = Int32(args[4]), parent == getppid() else { throw VMFailure.arguments }
+        let workspace = try Workspace(root: URL(fileURLWithPath: args[1]))
+        let run = try workspace.viewerWorkerRun(args[2], attemptID: args[3], parentPID: parent)
+        let config = try configuration(workspace, run: run, interactive: true)
+        let worker = try ViewerWorker(config: config, report: run.appendingPathComponent("viewer-" + args[3]).appendingPathComponent("worker.json"),
+            taskID: workspace.owner.taskID, parent: parent, seconds: min(1800, workspace.manifest.deadlineSeconds))
+        let app = NSApplication.shared; app.setActivationPolicy(.regular); app.delegate = worker
+        withExtendedLifetime(worker) { app.run() }; return 1
     }
     if command == "install", args.count == 3 {
         let workspace = try Workspace(root: URL(fileURLWithPath: args[1]))

@@ -2,6 +2,11 @@
 
 ## Offline native VM harness
 
+- [ ] Run safe `test_package_viewer.py` fixtures: fixed APPL/plist/task identity, source digest/layout/alias/FIFO rejection, private cache stages, no environment/autostart and no execution. Separately verify signed existing bundle/CUA discovery without a duplicate VM start; packaging success alone is not a visible viewer.
+
+- [ ] Mock viewer installed-final identity admission (including auxiliary growth), original inode/hash pairing, lease exclusion, pending/mismatched checkpoint refusal and resumable stopped/reaped checkpoints. Stale stopped receipts plus hardkill/nonzero/missing exit never permit reuse.
+- [ ] After separate authorization, verify signed task-labelled viewer focus/resize/input, system hotkeys remaining on host, visible host Stop, window close/Quit and bounded deadline/parent-loss stop. Worker stop budget15s, parent grace25s plus exact reap5s; no NIC/share/socket/clipboard, no candidate readiness or secret transport claim.
+
 - [ ] Run the isolated SwiftPM host tests in `apple/OfflineNativeVM`; verify symlink/hardlink/shared ownership rejection, source mutation detection, exact manifest keys, raw block alignment, one-shot fresh preparation and bounded mock cancellation/kill/reap. No VM boots in this suite.
 - [ ] Follow [offline-native-vm.md](docs/offline-native-vm.md): independently review local restore metadata, fresh task identity/auxiliary/disk provenance and actual no-NIC configuration readback before any installation preflight. Imported VMs and caller readiness assertions never admit a start.
 - [ ] Mock `inspect-restore`: refuse aliases, detect mutation, create no files/VM, and retain only bounded fixed-domain/numeric Apple error chains. Exercise actual entitled read-only metadata separately; cached-image ZIP metadata or an older support receipt is not current VZ acceptance.

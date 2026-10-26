@@ -27,7 +27,7 @@ struct ApplePreparationBackend: FreshPreparationBackend {
     }
 }
 // No network attachment, share, socket, clipboard, or serial implementation exists here.
-func configuration(_ workspace: Workspace, run: URL) throws -> VZVirtualMachineConfiguration {
+func configuration(_ workspace: Workspace, run: URL, interactive: Bool = false) throws -> VZVirtualMachineConfiguration {
     let manifest = workspace.manifest
     guard VZVirtualMachine.isSupported,
           let hardware = VZMacHardwareModel(dataRepresentation: try SecureFile(run.appendingPathComponent("hardware.bin")).data()), hardware.isSupported,
@@ -40,7 +40,8 @@ func configuration(_ workspace: Workspace, run: URL) throws -> VZVirtualMachineC
     config.cpuCount = manifest.cpuCount; config.memorySize = manifest.memoryGiB * 1024*1024*1024
     config.networkDevices = []; config.directorySharingDevices = []; config.socketDevices = []
     config.serialPorts = []; config.audioDevices = []; config.consoleDevices = []
-    config.keyboards = []; config.pointingDevices = []
+    config.keyboards = interactive ? [VZUSBKeyboardConfiguration()] : []
+    config.pointingDevices = interactive ? [VZUSBScreenCoordinatePointingDeviceConfiguration()] : []
     let boot = try VZDiskImageStorageDeviceAttachment(url: run.appendingPathComponent("boot.img"), readOnly: false)
     let input = try VZDiskImageStorageDeviceAttachment(url: workspace.input(manifest.input), readOnly: true)
     let output = try VZDiskImageStorageDeviceAttachment(url: run.appendingPathComponent("output.img"), readOnly: false)
@@ -49,12 +50,13 @@ func configuration(_ workspace: Workspace, run: URL) throws -> VZVirtualMachineC
     graphics.displays = [VZMacGraphicsDisplayConfiguration(widthInPixels: 1280, heightInPixels: 800, pixelsPerInch: 80)]
     config.graphicsDevices = [graphics]
     // Configuration is inspected again immediately before VZVirtualMachine construction.
-    try verifyConfiguration(config)
+    try verifyConfiguration(config, interactive: interactive)
     try config.validate()
     return config
 }
-func verifyConfiguration(_ config: VZVirtualMachineConfiguration) throws {
-    guard config.networkDevices.isEmpty, config.directorySharingDevices.isEmpty, config.socketDevices.isEmpty,
+func verifyConfiguration(_ config: VZVirtualMachineConfiguration, interactive: Bool = false) throws {
+    guard (interactive ? config.keyboards.count == 1 && config.keyboards[0] is VZUSBKeyboardConfiguration && config.pointingDevices.count == 1 && config.pointingDevices[0] is VZUSBScreenCoordinatePointingDeviceConfiguration : config.keyboards.isEmpty && config.pointingDevices.isEmpty),
+          config.networkDevices.isEmpty, config.directorySharingDevices.isEmpty, config.socketDevices.isEmpty,
           config.serialPorts.isEmpty, config.audioDevices.isEmpty, config.consoleDevices.isEmpty,
           config.storageDevices.count == 3,
           let boot = config.storageDevices[0].attachment as? VZDiskImageStorageDeviceAttachment, !boot.isReadOnly,

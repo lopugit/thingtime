@@ -191,6 +191,82 @@ public final class Workspace {
               attempt.parentPID == parentPID, attempt.state == "pending-quarantined" else { throw VMFailure.ownership }
         return run
     }
+    public static let pairedFiles: Set<String> = ["boot.img", "output.img", "auxiliary.bin", "hardware.bin", "machine-id.bin"]
+    // Unlike preparedRun(), mutable disk sizes come from the final installed/checkpoint receipt.
+    public func installedRun(_ runID: String, validateCurrentFiles: Bool = true) throws -> URL {
+        guard UUID(uuidString: runID) != nil else { throw VMFailure.arguments }
+        _ = try SecureFile(root.appendingPathComponent("consumed"))
+        let run = root.appendingPathComponent("runs").appendingPathComponent(runID)
+        try Self.privateDirectory(root.appendingPathComponent("runs")); try Self.privateDirectory(run)
+        let prepared = try JSONDecoder().decode(PreparationReceipt.self, from: SecureFile(run.appendingPathComponent("preparation.json")).data())
+        let installed = try JSONDecoder().decode(InstallReceipt.self, from: SecureFile(run.appendingPathComponent("installation.json")).data())
+        guard prepared.contractVersion == Contract.version, prepared.taskID == owner.taskID, prepared.runID == runID,
+              prepared.sourceSHA == manifest.sourceSHA, prepared.manifestSHA256 == manifestHash, prepared.freshIdentity,
+              prepared.state == "prepared-empty", Set(prepared.files.keys) == Self.pairedFiles,
+              installed.taskID == owner.taskID, installed.runID == runID, installed.sourceSHA == manifest.sourceSHA,
+              installed.manifestSHA256 == manifestHash, installed.installed, !installed.quarantined,
+              installed.outcome == "installed-not-ready", !installed.readiness,
+              InstallReceipt.eligible(worker: installed.worker, supervision: Supervision(reaped: installed.workerReaped, interruption: nil, hardKillRequested: installed.hardKillRequested), workerExitedNormally: installed.workerExitedNormally, workerExitCode: installed.workerExitCode),
+              Set(installed.files.keys) == Self.pairedFiles else { throw VMFailure.ownership }
+        for name in Self.pairedFiles {
+            guard prepared.files[name]?.device == installed.files[name]?.device,
+                  prepared.files[name]?.inode == installed.files[name]?.inode else { throw VMFailure.integrity }
+        }
+        guard try SecureFile(run.appendingPathComponent("hardware.bin")).hash() == prepared.hardwareSHA256,
+              try SecureFile(run.appendingPathComponent("machine-id.bin")).hash() == prepared.machineIdentifierSHA256 else { throw VMFailure.integrity }
+        if validateCurrentFiles { try verifyPair(run: run, expected: installed.files) }
+        return run
+    }
+    public func verifyPair(run: URL, expected: [String: FileIdentity]) throws {
+        guard Set(expected.keys) == Self.pairedFiles else { throw VMFailure.integrity }
+        for (name, identity) in expected {
+            guard try FileIdentity(run.appendingPathComponent(name)) == identity else { throw VMFailure.integrity }
+        }
+    }
+    public func viewerAttempt(_ run: URL) throws -> ViewerAttempt {
+        let attempt = try JSONDecoder().decode(ViewerAttempt.self, from: SecureFile(run.appendingPathComponent("viewer-attempt.json")).data())
+        guard UUID(uuidString: attempt.id) != nil, attempt.taskID == owner.taskID,
+              attempt.runID == run.lastPathComponent, attempt.sourceSHA == manifest.sourceSHA,
+              attempt.manifestSHA256 == manifestHash else { throw VMFailure.ownership }
+        return attempt
+    }
+    public func beginViewer(_ runID: String, parentPID: Int32) throws -> (URL, ViewerAttempt) {
+        try acquireLease()
+        let run = try installedRun(runID, validateCurrentFiles: false)
+        let current = run.appendingPathComponent("viewer-attempt.json")
+        var value = stat()
+        if lstat(current.path, &value) == 0 {
+            let previous = try viewerAttempt(run)
+            let checkpoint = try JSONDecoder().decode(ViewerCheckpoint.self, from: SecureFile(run.appendingPathComponent("viewer-" + previous.id).appendingPathComponent("checkpoint.json")).data())
+            guard checkpoint.attempt == previous, checkpoint.teardownProven, !checkpoint.quarantined,
+                  ViewerCheckpoint.eligible(worker: checkpoint.worker, supervision: Supervision(reaped: checkpoint.workerReaped, interruption: checkpoint.interruption, hardKillRequested: checkpoint.hardKillRequested), normal: checkpoint.workerExitedNormally, exitCode: checkpoint.workerExitCode) else { throw VMFailure.teardownUnknown }
+            // Each checkpoint must still name the original five installed inodes.
+            let installed = try JSONDecoder().decode(InstallReceipt.self, from: SecureFile(run.appendingPathComponent("installation.json")).data())
+            for name in Self.pairedFiles {
+                guard checkpoint.files[name]?.device == installed.files[name]?.device,
+                      checkpoint.files[name]?.inode == installed.files[name]?.inode else { throw VMFailure.integrity }
+            }
+            try verifyPair(run: run, expected: checkpoint.files)
+        } else {
+            guard errno == ENOENT else { throw VMFailure.path }
+            _ = try installedRun(runID)
+        }
+        var expected: [String: FileIdentity] = [:]
+        for name in Self.pairedFiles { expected[name] = try FileIdentity(run.appendingPathComponent(name)) }
+        let attempt = ViewerAttempt(taskID: owner.taskID, runID: runID, sourceSHA: manifest.sourceSHA, manifestSHA256: manifestHash, expectedFiles: expected, parentPID: parentPID)
+        guard mkdir(run.appendingPathComponent("viewer-" + attempt.id).path, 0o700) == 0 else { throw VMFailure.path }
+        // Permanent pending marker before worker creation. Missing checkpoint blocks future starts.
+        try writeJSON(attempt, to: current)
+        return (run, attempt)
+    }
+    public func viewerWorkerRun(_ runID: String, attemptID: String, parentPID: Int32) throws -> URL {
+        let run = try installedRun(runID, validateCurrentFiles: false)
+        let attempt = try viewerAttempt(run)
+        guard attempt.id == attemptID, attempt.parentPID == parentPID else { throw VMFailure.ownership }
+        try Self.privateDirectory(run.appendingPathComponent("viewer-" + attempt.id))
+        try verifyPair(run: run, expected: attempt.expectedFiles)
+        return run
+    }
     public func input(_ disk: Disk) throws -> URL { guard let file = files[disk.file] else { throw VMFailure.path }; try file.unchanged(); return file.url }
     public func data(_ disk: Disk) throws -> Data { guard let file = files[disk.file] else { throw VMFailure.path }; return try file.data() }
 }
