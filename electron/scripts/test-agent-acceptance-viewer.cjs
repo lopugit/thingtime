@@ -61,5 +61,10 @@ async function main() {
   // No automatic lease release: the installed app may still need this backend.
   await new Promise(resolve => app.once('will-quit', resolve));
 }
-if (require.main === module) main().catch(() => { process.stderr.write(FAILURE + '\n'); process.exitCode = 1; try { require('electron').app.quit(); } catch {} });
-module.exports = { main };
+// Electron's CommonJS launcher owns require.main; identify its explicit script
+// argument as well, while keeping ordinary imports side-effect free.
+function isEntrypoint(entry = process.argv[1]) {
+  return typeof entry === 'string' && path.resolve(entry) === __filename;
+}
+if (require.main === module || isEntrypoint()) main().catch(() => { process.stderr.write(FAILURE + '\n'); process.exitCode = 1; try { require('electron').app.quit(); } catch {} });
+module.exports = { main, isEntrypoint };

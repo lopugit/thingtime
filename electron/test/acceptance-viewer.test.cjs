@@ -7,6 +7,15 @@ const path = require('node:path');
 const net = require('node:net');
 const { ORIGIN, FAILURE, allowedURL, assertSender, loadBinding, createBridge } = require('../scripts/acceptance-viewer-boundary.cjs');
 const binding = { leaseId: 'lease', token: 'PRIVATE_HANDLE', taskId: 'task', sessionId: 'session', pageId: '1' };
+test('Electron-owned require.main still recognizes the explicit viewer entry script', () => {
+  const { isEntrypoint } = require('../scripts/test-agent-acceptance-viewer.cjs');
+  const entry = path.resolve(__dirname, '../scripts/test-agent-acceptance-viewer.cjs');
+  assert.equal(isEntrypoint(entry), true);
+  assert.equal(isEntrypoint(path.relative(process.cwd(), entry)), true);
+  assert.equal(isEntrypoint(__filename), false);
+  assert.equal(isEntrypoint('electron'), false);
+  assert.equal(isEntrypoint(null), false);
+});
 function fixture({ url = ORIGIN + '/register', mutate = () => {} } = {}) {
   const commands = [];
   const status = { leases: [{ id: 'lease', taskId: 'task', expired: false }], sessions: [{ id: 'session', leaseId: 'lease', state: 'ready', proof: { isolated: true }, policy: { mode: 'isolated' }, application: { origin: ORIGIN } }] };

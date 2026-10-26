@@ -107,7 +107,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-10-26: Add an opt-in native test viewer for the existing private sync
   acceptance browser, with masked transient credential entry and fixed
   origin/task/session/tab controls. [Acceptance runbook](../docs/installed-sync-acceptance.md).
-  GUI sign-in and installed transfers remain separate acceptance checks. **Codex (AI)**
+  Correct Electron 43 entry detection so the viewer opens; its 11 focused tests
+  and real disposable browser sign-in pass. Installed transfers remain a
+  separate acceptance check. **Codex (AI)**
 
 - 2026-10-25: Add a private browser/backend relay for signed-Mac sync acceptance,
   with exact loopback authority, lease fencing and bounded private diagnostics.

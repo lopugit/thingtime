@@ -144,7 +144,7 @@ separately from the historical browser/compiled-server harness results above.
   acceptance browser. It is fenced to the task/session/lease and loopback
   acceptance origin; it adds no new listener and does not launch or modify the
   production app.
-- The focused viewer boundary suite passed 12/12, including the real browser
+- The focused viewer boundary suite now passes 11/11, including the real browser
   manager/lease/dispatch/driver contracts with native I/O stubbed. Syntax and
   diff checks passed. These checks verify the helper boundary, not its rendered
   GUI, password-manager flow, account sign-in or installed sync behavior.
@@ -156,3 +156,22 @@ separately from the historical browser/compiled-server harness results above.
   paused with its source grant absent; no settings were changed during cleanup.
 - Actual GUI inspection/sign-in, installed start/pause/resume, transferred
   bytes, recovery and window-close behavior remain incomplete and unverified.
+
+### Installed acceptance continuation — 2026-10-26
+
+- Fixed the test viewer's Electron entry point: Electron 43 owns `require.main`,
+  so the Node-only entry check never opened the GUI. The explicit script check
+  now launches the actual viewer while ordinary imports remain inert. All 11
+  focused tests pass, including the new entry-point regression.
+- The actual viewer rendered its bound isolated tab and completed full-account
+  registration for the disposable identity through masked credential entry.
+  The credential came from the saved on-device password-manager entry; no
+  credential was placed in command arguments, logs or task records.
+- Raising the exact installed window restored responsive native controls. The
+  Production Home view was directly confirmed paused with its source grant
+  missing before switching to the isolated acceptance endpoint. Native pairing,
+  transfer hashes, recovery and window-close behavior still require evidence.
+- Published head `6b0ce35a9344b050ef40853b1ac5da42d1453e90` passed build,
+  typecheck, unit/API, CodeQL, GitGuardian and Vercel checks. Its separate
+  merge-conflict sweep failed with a GitHub installation API rate-limit 403;
+  that is an automation access failure, not a failing feature assertion.

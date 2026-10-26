@@ -12946,6 +12946,11 @@ separate from deterministic discovery/lease tests.
   quitting removes only its private viewer profile while retaining the relay.
   Keep other controllers idle during credential entry. Unit boundaries alone
   do not prove sign-in or installed-device sync.
+- [x] Electron viewer startup regression: recognize the explicit script when
+  Electron owns `require.main`, keep imports side-effect free, and launch the
+  actual installed Electron binary to verify that the GUI appears. The focused
+  suite passes 11 tests; actual disposable full-account registration through
+  the viewer also passed. This does not prove installed native file transfer.
 - [ ] On the signed Mac, negotiate the selected origin through the actual
   desktop folder host. Confirm `api.devices-sync-control` survives its
   allowlisted projection so the remote worker can start. Missing/malformed

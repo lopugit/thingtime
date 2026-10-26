@@ -86,6 +86,10 @@ electron/node_modules/.bin/electron electron/scripts/test-agent-acceptance-viewe
 ```
 
 The viewer binds the private descriptor's task, session and first existing tab.
+Its entry check supports Electron's CommonJS launcher, which owns `require.main`;
+an explicit script argument starts the GUI while importing the helper stays
+side-effect free. Run the actual viewer once as well as its Node tests: a passing
+import-based test does not establish that Electron executed the entry point.
 It negotiates browser/network-policy major 1 and checks lease ownership, active
 session, isolated policy and exact application origin before every operation.
 Only `http://127.0.0.1:28671` pages accept input; an initial `about:blank` may
