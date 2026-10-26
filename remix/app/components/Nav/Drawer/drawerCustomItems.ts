@@ -1,4 +1,6 @@
-export type CustomDrawerItem = { id: string; emoji: string; title: string; tooltip: string; url: string; thingId?: string; thingTitle?: string };
+import { drawerMenuItems, drawerBuiltinNodes, type DrawerTopItem, filterDrawerTopItems, filterDrawerItemsByAuth } from './drawerMenu';
+
+export type CustomDrawerItem = { parentId?: string; id: string; emoji: string; title: string; tooltip: string; url: string; thingId?: string; thingTitle?: string };
 
 /** Validate again at the navigation boundary, including persisted/imported preferences. */
 export function customDrawerUrl(value: unknown): string | null {
@@ -17,13 +19,69 @@ export function customDrawerUrl(value: unknown): string | null {
 export function normalizeCustomDrawerItems(value: unknown): CustomDrawerItem[] {
  if (!Array.isArray(value)) return [];
  const ids = new Set<string>();
- return value.flatMap(item => {
+ const normalized: CustomDrawerItem[] = value.flatMap(item => {
   if (!item || typeof item !== 'object' || typeof item.id !== 'string' || !/^custom-[a-zA-Z0-9-]+$/.test(item.id) || ids.has(item.id) || typeof item.title !== 'string' || !item.title.trim()) return [];
   const url = customDrawerUrl(item.url);
   if (!url) return [];
   ids.add(item.id);
-  return [{ id: item.id, title: item.title.trim(), emoji: typeof item.emoji === 'string' ? item.emoji : '🔗', tooltip: typeof item.tooltip === 'string' ? item.tooltip : '', url, ...(typeof item.thingId === 'string' && item.thingId ? { thingId: item.thingId, ...(typeof item.thingTitle === 'string' && item.thingTitle ? { thingTitle: item.thingTitle } : {}) } : {}) }];
+  return [{ ...(typeof item.parentId === 'string' && item.parentId ? { parentId: item.parentId } : {}), id: item.id, title: item.title.trim(), emoji: typeof item.emoji === 'string' ? item.emoji : '🔗', tooltip: typeof item.tooltip === 'string' ? item.tooltip : '', url, ...(typeof item.thingId === 'string' && item.thingId ? { thingId: item.thingId, ...(typeof item.thingTitle === 'string' && item.thingTitle ? { thingTitle: item.thingTitle } : {}) } : {}) }];
  });
+ // Imported preferences fail closed: neither orphans nor cyclic branches are promoted to roots.
+ const builtin = new Set(drawerBuiltinNodes().map(({ item }) => item.id));
+ const byId = new Map(normalized.map(item => [item.id, item]));
+ return normalized.filter(item => {
+  const seen = new Set([item.id]); let parent = item.parentId;
+  while (parent) {
+   if (seen.has(parent)) return false;
+   if (builtin.has(parent)) return true;
+   seen.add(parent); const node = byId.get(parent); if (!node) return false;
+   parent = node.parentId;
+  }
+  return true;
+ });
+}
+
+export type DrawerParentOption = { id: string; title: string; parentId?: string };
+/** Parent availability inherits the exact built-in ancestor visibility policy. */
+export function drawerParentOptions(items: CustomDrawerItem[], loggedIn: boolean, isAdmin: boolean, isPublished: (key: string) => boolean, menu: DrawerTopItem[] = drawerMenuItems): DrawerParentOption[] {
+ const builtins: DrawerParentOption[] = [];
+ const pendingBuiltins = filterDrawerTopItems(menu, loggedIn, isAdmin, isPublished).map(item => ({ item, parentId: undefined as string | undefined }));
+ const visited = new Set<string>();
+ while (pendingBuiltins.length) {
+  const { item, parentId } = pendingBuiltins.shift()!; if (visited.has(item.id)) continue;
+  visited.add(item.id); builtins.push({ id: item.id, title: item.label, ...(parentId ? { parentId } : {}) });
+  pendingBuiltins.unshift(...filterDrawerItemsByAuth(item.children || [], loggedIn, isAdmin, isPublished).map(child => ({ item: { ...child, icon: child.icon || '', children: child.children || [] }, parentId: item.id })));
+ }
+ const custom = normalizeCustomDrawerItems(items);
+ const available = new Set(builtins.map(item => item.id));
+ const pending = [...custom]; const result: DrawerParentOption[] = [...builtins];
+ while (pending.length) {
+  const index = pending.findIndex(item => !item.parentId || available.has(item.parentId));
+  if (index < 0) break;
+  const [item] = pending.splice(index, 1); available.add(item.id);
+  result.push({ id: item.id, title: item.title, ...(item.parentId ? { parentId: item.parentId } : {}) });
+ }
+ return result;
+}
+export function drawerAncestorPath(id: string | undefined, parents: DrawerParentOption[]): DrawerParentOption[] {
+ const byId = new Map(parents.map(item => [item.id, item])); const path: DrawerParentOption[] = []; const seen = new Set<string>();
+ while (id && !seen.has(id)) { seen.add(id); const item = byId.get(id); if (!item) return []; path.unshift(item); id = item.parentId; }
+ return path;
+}
+/** Removing a container keeps its links and descendants by moving direct children up one level. */
+export function removeCustomDrawerItem(items: CustomDrawerItem[], id: string): CustomDrawerItem[] {
+ const removed = items.find(item => item.id === id);
+ return items.filter(item => item.id !== id).map(item => {
+  if (item.parentId !== id) return item;
+  const next = { ...item }; delete next.parentId;
+  return removed?.parentId ? { ...next, parentId: removed.parentId } : next;
+ });
+}
+export function moveCustomDrawerSibling(items: CustomDrawerItem[], id: string, delta: number): CustomDrawerItem[] {
+ const index = items.findIndex(item => item.id === id); if (index < 0) return items;
+ const siblingIndexes = items.flatMap((item, i) => item.parentId === items[index].parentId ? [i] : []);
+ const target = siblingIndexes[siblingIndexes.indexOf(index) + delta]; if (target === undefined) return items;
+ const next = [...items]; [next[index], next[target]] = [next[target], next[index]]; return next;
 }
 
 /** A Thing attachment describes its selected destination, not just a label.

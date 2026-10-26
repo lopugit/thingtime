@@ -12,4 +12,8 @@ export const drawerRowStyles = `
 .tt-drawer-row:focus-visible { outline: 2px solid var(--tt-ink, #222); outline-offset: -2px; }
 .tt-drawer-row-icon { flex-shrink: 0; font-size: 13px; line-height: 1; display: flex; align-items: center; justify-content: center; width: 13px; }
 .tt-drawer-row-label { min-width: 0; max-width: 100%; overflow-wrap: anywhere; word-break: break-word; }
+.tt-drawer-sublevel .tt-drawer-row { padding-top: 6px; padding-bottom: 6px; font-size: var(--chakra-fontSizes-xs, 12px); }
+.tt-drawer-sublevel .tt-drawer-row-icon { font-size: 11px; width: 11px; }
+.tt-drawer-children { width: auto; flex-shrink: 0; font-size: 11px; margin-left: auto; }
+[data-block-id="custom-drawer-row"] > .tt-drawer-row:first-child { flex: 1; width: auto; }
 `;

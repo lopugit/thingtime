@@ -24,6 +24,8 @@ export type SettingsDocumentHostProps = {
   /** Optional scoped legacy document, consulted only when no durable document exists. */
   loadFallbackDocument?: () => SettingsDocument | null;
   persistence?: 'account' | 'device';
+  /** Upgrade loaded authored blocks before both rendering and Builder selection; never transforms live edits. */
+  migrateBlocks?: (blocks: WebpageBlock[]) => WebpageBlock[];
   /** Native hosts provide their selected authenticated API transport. */
   accountTransport?: { origin: string; fetch: typeof fetch; currentOrigin: () => string };
   children: (render: SettingsDocumentControls) => React.ReactNode;
@@ -67,7 +69,7 @@ function ScopedSettingsDocument(props: SettingsDocumentHostProps) {
     writable={props.persistence === 'device' || (!!user?.id && !!dataPlane && !user.temporary)} />;
 }
 
-function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', persistence = 'account', accountTransport, children, documentScope, writable, layoutEditingDisabled = false, showLayoutControls = true, loadFallbackDocument }: SettingsDocumentHostProps & {
+function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', persistence = 'account', accountTransport, children, documentScope, writable, layoutEditingDisabled = false, showLayoutControls = true, loadFallbackDocument, migrateBlocks }: SettingsDocumentHostProps & {
   documentScope: Parameters<typeof settingsDocumentKey>[0]; writable: boolean;
 }) {
   const key = settingsDocumentKey(documentScope);
@@ -75,7 +77,7 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
   const cacheKey = `tt-settings-preview:${key}`;
   const initial = (): SettingsDocument => settingsDocumentSeed(defaults, title,
     readLocalCache<unknown>(persistence === 'device' ? key : cacheKey), loadFallbackDocument);
-  const [document, setDocument] = React.useState<SettingsDocument>(initial);
+  const [document, setDocument] = React.useState<SettingsDocument>(() => { const seed = initial(); return migrateBlocks ? { ...seed, blocks: settingsDocumentBlocks(migrateBlocks(seed.blocks)) } : seed; });
   const [saved, setSaved] = React.useState(document);
   const [editing, setEditing] = React.useState(false);
   const [ready, setReady] = React.useState(!writable);
@@ -106,11 +108,11 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
       if (revision.current !== edit || dirtyRef.current) return;
       const fallback = !value ? loadFallbackDocument?.() : null;
       const next = value || (fallback ? { blocks: settingsDocumentBlocks(fallback.blocks), name: fallback.name, revision: null } : { blocks: defaults, name: title, revision: null });
-      setDocument(next); setSaved(next);
+      setDocument(migrateBlocks ? { ...next, blocks: settingsDocumentBlocks(migrateBlocks(next.blocks)) } : next); setSaved(next);
       if (persistence === 'account' && value) writeLocalCache(cacheKey, value);
     }).catch(() => { if (active && !signal.aborted && load === loadingRevision.current) { setReady(false); setError('Could not load your layout. The current view is preserved; retry before saving.'); } });
     return () => { active = false; };
-  }, [adapter, reload, writable, cacheKey, defaults, persistence, title, loadFallbackDocument]);
+  }, [adapter, reload, writable, cacheKey, defaults, persistence, title, loadFallbackDocument, migrateBlocks]);
   React.useEffect(() => {
     const reconcile = (event: Event) => {
       const changedKey = event instanceof CustomEvent ? event.detail?.key : (event as StorageEvent).key;

@@ -102,6 +102,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Add a contextual **➕ Add +** row to both drawer lists and support arbitrary-depth nested menus in the existing lower section. Preserve ancestor navigation, editable saved templates and existing links; expose parent selection and sibling ordering in drawer settings. **Codex (AI)**
 - 2026-10-26: Let initial and foreground resource refreshes reach a local API
   even when the browser reports offline. Subspace embeds now get their first
   request without weakening network isolation; offline background polling stays

@@ -97,7 +97,7 @@ try {
   const vite=start(process.execPath,['--input-type=module','-e',`import {createServer} from 'vite';const server=await createServer({envFile:false,server:{host:'127.0.0.1',port:${ports.web},strictPort:true}});await server.listen();`],{NODE_ENV:'development'});
   const webOrigin=`http://127.0.0.1:${ports.web}`;await ready(vite,webOrigin);
   const fixture=join(dir,'browser-fixture.json');
-  await writeFile(fixture,JSON.stringify({origin:webOrigin,cookie:account.cookie,alternateCookie:alternate.cookie,alternateId:alternate.data.user.id,thingId,redirect:`http://127.0.0.1:${trap.address().port}/redirect`,evidence}),{mode:0o600});
+  await writeFile(fixture,JSON.stringify({origin:webOrigin,cookie:account.cookie,alternateCookie:alternate.cookie,alternateId:alternate.data.user.id,ownerId:account.data.user.id,thingId,redirect:`http://127.0.0.1:${trap.address().port}/redirect`,scope:process.env.CUSTOM_DRAWER_ACCEPTANCE_SCOPE,evidence}),{mode:0o600});
   const ui=start(process.execPath,['scripts/custom-drawer-acceptance.mjs','--browser',fixture],{PLAYWRIGHT_MODULE:process.env.PLAYWRIGHT_MODULE,CHROMIUM_EXECUTABLE:browserBinary});
   const timeout=setTimeout(()=>{try{process.kill(-ui.child.pid,'SIGTERM')}catch{}},600_000);
   const uiExit=await once(ui.child,'exit');clearTimeout(timeout);
@@ -168,6 +168,7 @@ async function browserAcceptance(fixturePath) {
     await context.addCookies(fixture.cookie.split('; ').map(pair=>{const split=pair.indexOf('=');return{name:pair.slice(0,split),value:pair.slice(split+1),url:fixture.origin,httpOnly:true,sameSite:'Lax'}}));
     page.on('pageerror',e=>errors.push(e.message));page.on('request',request=>{const plane=request.headers()['x-thingtime-expected-data-plane'];if(plane)observedDataPlane=plane;});
     await page.goto(fixture.origin+'/feed',{waitUntil:'domcontentloaded'});
+    if(fixture.scope === 'nested') { await nestedAcceptance({page,context,fixture,note,capture,openDrawer,errors,out,dataPlane:()=>observedDataPlane}); return; }
     for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){await page.setViewportSize(viewport);await capture('baseline-feed-'+viewport.width)}await page.setViewportSize({width:1440,height:1000});
     await page.getByRole('button',{name:/Open menu|Close menu/}).waitFor({timeout:60000});
     for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){await page.setViewportSize(viewport);await assertFinalRow('empty-inline-row-'+viewport.width)}
@@ -309,6 +310,125 @@ async function browserAcceptance(fixturePath) {
     assert.equal(errors.length,0,'Unhandled browser errors: '+errors.join('; '));
     await writeFile(join(out,'browser-result.json'),JSON.stringify({ok:true,steps,errors,desktopAndMobile:true,realApiThing:fixture.thingId,browserNetworkDenied:true,rowComparisons:rowMeasurements.length},null,2));
     console.log(JSON.stringify({ok:true,steps,errors}));
-  } catch(error) {await page.screenshot({path:join(out,'failure.png'),fullPage:true}).catch(()=>{});await writeFile(join(out,'browser-result.json'),JSON.stringify({ok:false,error:error.message,steps,errors},null,2));throw error;}
+  } catch(error) {await writeFile(join(out,'failure-controls.json'),JSON.stringify(await page.locator('button,a[href],select').evaluateAll(nodes=>nodes.filter(e=>e.getBoundingClientRect().height>0).map(e=>({tag:e.tagName,text:e.textContent.trim(),label:e.getAttribute('aria-label'),block:e.getAttribute('data-block-id'),href:e.getAttribute('href')}))).catch(()=>[]),null,2));await page.screenshot({path:join(out,'failure.png'),fullPage:true}).catch(()=>{});await writeFile(join(out,'browser-result.json'),JSON.stringify({ok:false,error:error.message,steps,errors},null,2));throw error;}
   finally {await browser.close();}
+}
+
+// Focused continuation: real disposable account/API plus enforced browser/backend fencing.
+async function nestedAcceptance({page,context,fixture,note,capture,openDrawer,errors,out,dataPlane}) {
+ const dialog=page.getByRole('dialog',{name:'Custom drawer item',exact:true});
+ const root=()=>page.locator('.drawerMenuScroll:visible [data-drawer-custom-level="toplevel"]');
+ const submenu=()=>page.locator('.drawerMenuScroll:visible [data-drawer-custom-level]:not([data-drawer-custom-level="toplevel"])');
+ const add=host=>host.locator('[data-block-id="custom-drawer-add"]');
+ const parents={};
+ const expectParent=async parent=>assert.equal(await dialog.getByLabel('Parent menu',{exact:true}).inputValue(),parent || '','Add uses the clicked list parent');
+ const save=async(title,{parent,emoji='🧭',tooltip=title+' tooltip',url='/feed?nested='+encodeURIComponent(title),attach=false}={})=>{
+  await dialog.waitFor();if(parent!==undefined)await expectParent(parent);
+  await dialog.getByLabel('Emoji',{exact:true}).fill(emoji);await dialog.getByLabel('Title',{exact:true}).fill(title);await dialog.getByLabel('Hover tooltip',{exact:true}).fill(tooltip);
+  if(attach){await dialog.getByLabel('Commander: search Things',{exact:true}).fill('Drawer acceptance attached page');await dialog.getByRole('button',{name:/Drawer acceptance attached page/}).click();await dialog.getByText('Attached Thing: Drawer acceptance attached page',{exact:true}).waitFor();}
+  else await dialog.getByLabel('URL (relative or https://)',{exact:true}).fill(url);
+  await dialog.getByRole('button',{name:'Save item',exact:true}).click();await dialog.waitFor({state:'hidden'});
+ };
+ const enter=async title=>{
+  const button=page.locator('.drawerMenuScroll:visible').getByRole('button',{name:'Open submenu for '+title,exact:true});await button.click();await submenu().waitFor();
+  const id=await submenu().getAttribute('data-drawer-custom-level');parents[title]=id;return id;
+ };
+ const back=async()=>{await page.locator('.drawerMenuScroll:visible').getByRole('button',{name:'Back to parent menu',exact:true}).click();};
+ const assertPlacement=async name=>{
+  await openDrawer();await add(root()).waitFor();await add(submenu()).waitFor();
+  assert.equal(await root().count(),1,name+' exactly one root list');assert.equal(await submenu().count(),1,name+' exactly one active submenu');
+  for(const host of [root(),submenu()]){
+   assert(await host.evaluate(e=>{const controls=[...e.querySelectorAll('button,a[href]')].filter(x=>x.getBoundingClientRect().height>0&&!x.closest('dialog'));return controls.at(-1)?.getAttribute('data-block-id')==='custom-drawer-add'}),name+' Add is final in its own list');
+  }
+  const bounds=await page.evaluate(()=>{const a=document.querySelector('.drawerMenuScroll [data-drawer-custom-level="toplevel"]')?.getBoundingClientRect();const b=document.querySelector('.drawerMenuScroll [data-drawer-custom-level]:not([data-drawer-custom-level="toplevel"])')?.getBoundingClientRect();return{root:a?{top:a.top,bottom:a.bottom}:null,sub:b?{top:b.top,bottom:b.bottom}:null}});
+  assert(bounds.sub.top>=bounds.root.bottom-1,name+' submenu stays below root list');await capture(name);
+ };
+ const settings=page.locator('[data-settings-document="custom-drawer-settings"]');
+ const openSettings=async()=>{
+  await page.goto(fixture.origin+'/settings/appearance',{waitUntil:'domcontentloaded'});await page.getByRole('button',{name:/^(Open|Close) menu$/}).waitFor({timeout:60000});await page.waitForTimeout(800);await page.mouse.move(1000,700);
+  const close=page.getByRole('button',{name:'Close menu',exact:true});if(await close.isVisible())await close.click();await page.waitForTimeout(350);
+  const summary=page.locator('summary').filter({hasText:'Custom drawer items'});if(await summary.locator('..').getAttribute('open')===null)await summary.click();await settings.waitFor();
+ };
+ const settingsRow=title=>settings.getByRole('link',{name:title,exact:true}).locator('..');
+ const edit=async title=>{await settingsRow(title).getByRole('button',{name:'Edit',exact:true}).click();await dialog.waitFor();};
+ const setSession=async cookie=>{await context.clearCookies();await context.addCookies(cookie.split('; ').map(pair=>{const at=pair.indexOf('=');return{name:pair.slice(0,at),value:pair.slice(at+1),url:fixture.origin,httpOnly:true,sameSite:'Lax'}}));await page.reload({waitUntil:'domcontentloaded'});};
+ await openDrawer();
+ assert(dataPlane(),'Observed isolated data plane for legacy menu scope');
+ const legacy=await page.evaluate(async ({owner,plane})=>{
+  const {customDrawerBlocks}=await import('/app/components/Nav/Drawer/customDrawerBlocks.ts');
+  const removed=new Set(['custom-drawer-browse-visible','custom-drawer-children','custom-drawer-location','custom-drawer-up','custom-drawer-down','drawer-parent-field']);
+  const clean=nodes=>nodes.filter(b=>!removed.has(b.id)).map(b=>({...b,...(b.children?{children:clean(b.children)}:{})}));const blocks=clean(customDrawerBlocks(false));
+  const visit=nodes=>{for(const b of nodes){if(b.id==='custom-drawer-add-label')b.text='Legacy nested Add +';if(b.props)delete b.props['data-tt-drawer-template-version'];if(b.children)visit(b.children)}};visit(blocks);
+  const scope=`${location.origin}:${owner}:${plane}`;const key='tt-settings-document:'+JSON.stringify([location.origin,'device',scope,'custom-drawer-menu']);const raw=JSON.stringify({name:'Authored legacy nested menu',revision:'legacy-nested-fixture',blocks});localStorage.setItem(key,raw);return{key,raw};
+ },{owner:fixture.ownerId,plane:dataPlane()});
+ await page.reload({waitUntil:'domcontentloaded'});await openDrawer();await root().getByRole('button',{name:'Legacy nested Add +',exact:true}).waitFor();assert.equal(await page.evaluate(key=>localStorage.getItem(key),legacy.key),legacy.raw,'Original legacy authored layout preserved');
+ await note('Legacy authored menu imports without overwriting its source; hierarchy controls are added to that editable template');
+ await add(root()).click();await expectParent('');
+ await dialog.getByLabel('Title',{exact:true}).fill('Discarded nested draft');await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});assert(await add(root()).evaluate(e=>document.activeElement===e),'Escape restores clicked root Add focus');
+ await add(root()).focus();await page.keyboard.press('Enter');await save('Nested root A',{parent:''});await root().getByRole('link',{name:'Nested root A',exact:true}).waitFor();
+ await add(root()).click();await save('Nested root B',{parent:'',emoji:'🌿'});
+ await enter('Nested root A');const rootA=parents['Nested root A'];
+ await assertPlacement('nested-empty-root-A');
+ await add(submenu()).click();await save('Nested level 2',{parent:rootA});
+ assert.equal(await root().getByRole('link',{name:'Nested level 2',exact:true}).count(),0,'Nested item is never promoted to root');
+ await add(submenu()).click();await save('Nested sibling A',{parent:rootA,emoji:'⭐'});
+ await enter('Nested level 2');const level2=parents['Nested level 2'];await add(submenu()).click();await save('Nested level 3',{parent:level2});
+ await enter('Nested level 3');const level3=parents['Nested level 3'];await add(submenu()).click();await save('Nested level 4',{parent:level3});
+ await enter('Nested level 4');const level4=parents['Nested level 4'];await add(submenu()).click();await save('Nested level 5',{parent:level4,emoji:'🪐'});
+ await enter('Nested level 5');const level5=parents['Nested level 5'];await add(submenu()).click();await save('Nested attached leaf',{parent:level5,attach:true});
+ await note('Root plus five nested levels and Commander-attached leaf created through the real editor with exact parent context');
+ await assertPlacement('nested-level-5-desktop');
+ // The top Add must still create a root while a deep branch remains selected.
+ await add(root()).click();await expectParent('');await save('Nested root C',{parent:''});await root().getByRole('link',{name:'Nested root C',exact:true}).waitFor();
+ assert.equal(await submenu().getAttribute('data-drawer-custom-level'),level5,'Root Add preserves active nested branch');
+ const leaf=submenu().getByRole('link',{name:'Nested attached leaf',exact:true});assert((await leaf.getAttribute('href')).includes(fixture.thingId));assert.equal(await leaf.getAttribute('title'),'Nested attached leaf tooltip');
+ await leaf.click();await page.getByText('Attached drawer page',{exact:true}).waitFor();await openDrawer();assert.equal(await submenu().getAttribute('data-drawer-custom-level'),level5,'URL navigation retains selected parent');
+ await page.reload({waitUntil:'domcontentloaded'});await openDrawer();assert.equal(await submenu().getAttribute('data-drawer-custom-level'),level5,'Nested parent survives reload');
+ await submenu().getByRole('link',{name:'Nested attached leaf',exact:true}).waitFor();
+ await back();assert.equal(await submenu().getAttribute('data-drawer-custom-level'),level4,'Back selects immediate parent');
+ await page.locator('.drawerMenuScroll:visible').getByRole('button',{name:'Nested root A',exact:true}).click();assert.equal(await submenu().getAttribute('data-drawer-custom-level'),rootA,'Breadcrumb returns directly to chosen ancestor');
+ await submenu().getByRole('link',{name:'Nested sibling A',exact:true}).waitFor();
+ await enter('Nested root B');await add(submenu()).click();await save('Nested sibling B',{parent:parents['Nested root B']});assert.equal(await submenu().getByRole('link',{name:'Nested sibling A',exact:true}).count(),0,'Sibling branches isolate their lists');
+ await note('Top Add creates a root while deep selection remains; navigation, reload, immediate Back, breadcrumbs and sibling switching preserve context');
+ // Built-in children can also own arbitrary deeper custom branches.
+ await page.locator('.drawerMenuScroll:visible .tt-drawer-row[href="/feed"]').first().click();await openDrawer();
+ await add(submenu()).click();await expectParent('feed');await save('Nested built-in child',{parent:'feed'});await enter('Nested built-in child');await add(submenu()).click();await save('Nested built-in grandchild',{parent:parents['Nested built-in child']});
+ await note('Built-in Feed accepts custom children and further custom descendants');
+ await openSettings();await edit('Nested level 3');await expectParent(level2);
+ const options=await dialog.getByLabel('Parent menu',{exact:true}).locator('option').evaluateAll(nodes=>nodes.map(n=>n.value));assert(!options.includes(level3)&&!options.includes(level4)&&!options.includes(level5),'Parent selector excludes self and descendants');
+ await dialog.getByLabel('Title',{exact:true}).fill('Nested level 3 renamed');await dialog.getByRole('button',{name:'Save item',exact:true}).click();await dialog.waitFor({state:'hidden'});
+ await edit('Nested sibling A');await dialog.getByLabel('Parent menu',{exact:true}).selectOption(parents['Nested root B']);await dialog.getByRole('button',{name:'Save item',exact:true}).click();await dialog.waitFor({state:'hidden'});
+ await settingsRow('Nested sibling A').getByRole('button',{name:'Move down',exact:true}).click();
+ let order=await settings.locator('[data-block-id="custom-drawer-title"]').allTextContents();assert(order.indexOf('Nested sibling A')>order.indexOf('Nested sibling B'),'Move down changes sibling order');
+ await settingsRow('Nested sibling A').getByRole('button',{name:'Move up',exact:true}).click();order=await settings.locator('[data-block-id="custom-drawer-title"]').allTextContents();assert(order.indexOf('Nested sibling A')<order.indexOf('Nested sibling B'),'Move up changes sibling order');
+ await settingsRow('Nested level 3 renamed').getByRole('button',{name:'Remove',exact:true}).click();await settings.getByRole('link',{name:'Nested level 3 renamed',exact:true}).waitFor({state:'hidden'});await edit('Nested level 4');await expectParent(level2);await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+ await page.reload({waitUntil:'domcontentloaded'});await openSettings();await edit('Nested level 4');await expectParent(level2);await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+ await note('Settings rename, legal parent move, sibling reorder and removal preserve descendants by reparenting; exact parent survives reload');
+ await page.goto(fixture.origin+'/feed',{waitUntil:'domcontentloaded'});await openDrawer();await enter('Nested root A');await enter('Nested level 2');await submenu().getByRole('link',{name:'Nested level 4',exact:true}).waitFor();assert.equal(await submenu().getByRole('link',{name:'Nested sibling A',exact:true}).count(),0,'Moved sibling absent from old parent');
+ for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){await page.setViewportSize(viewport);await assertPlacement('nested-light-'+viewport.width);await add(submenu()).click();await expectParent(level2);await capture('nested-dialog-light-'+viewport.width);await dialog.getByRole('button',{name:'Cancel',exact:true}).click();assert(await add(submenu()).evaluate(e=>document.activeElement===e),'Cancel restores clicked submenu Add focus');}
+ await page.setViewportSize({width:1440,height:1000});await openSettings();
+ const appearance=page.locator('details').filter({has:page.locator('summary').filter({hasText:'Appearance'})}).first();if(await appearance.getAttribute('open')===null)await appearance.locator('summary').first().click();await page.getByRole('button',{name:'Midnight',exact:true}).click();
+ await page.waitForFunction(()=>getComputedStyle(document.documentElement).getPropertyValue('--tt-page-bg').trim()==='#0b0b0f',undefined,{timeout:15000});await page.waitForTimeout(2400);
+ await page.goto(fixture.origin+'/feed',{waitUntil:'domcontentloaded'});await page.waitForFunction(()=>getComputedStyle(document.documentElement).getPropertyValue('--tt-page-bg').trim()==='#0b0b0f',undefined,{timeout:15000});await openDrawer();await enter('Nested root A');await enter('Nested level 2');
+ for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){await page.setViewportSize(viewport);await assertPlacement('nested-dark-'+viewport.width);await add(submenu()).click();await expectParent(level2);await capture('nested-dialog-dark-'+viewport.width);await dialog.getByRole('button',{name:'Cancel',exact:true}).click();}
+ await note('Light and observed Midnight token states pass desktop/mobile top-to-bottom scroll, both Add placements and opened nested dialogs without overflow');
+ await page.setViewportSize({width:1440,height:1000});await setSession(fixture.alternateCookie);await openDrawer();assert.equal(await root().getByRole('link',{name:/Nested root/}).count(),0,'Alternate account cannot see root items');assert.equal(await submenu().getByRole('link',{name:/Nested/}).count(),0,'Alternate account cannot see nested items');
+ await setSession(fixture.cookie);await openDrawer();await root().getByRole('link',{name:'Nested root A',exact:true}).waitFor();await enter('Nested root B');await submenu().getByRole('link',{name:'Nested sibling A',exact:true}).waitFor();await submenu().getByRole('link',{name:'Nested sibling B',exact:true}).waitFor();
+ await note('Account isolation clears nested selection/data and original account restores its old root entries and moved branch');
+ // Save constituent blocks with the actual Builder, then independently read its private Thing.
+ await openSettings();await page.locator('summary').filter({hasText:'Drawer menu template'}).click();
+ const template=page.locator('[data-settings-document="custom-drawer-menu"]');await template.getByRole('button',{name:'Edit layout',exact:true}).click();await template.getByRole('button',{name:'Open Builder inspector',exact:true}).click();
+ const blockSelect=page.getByRole('combobox',{name:'Select block',exact:true});await blockSelect.waitFor();
+ await blockSelect.selectOption('custom-drawer-children');await blockSelect.selectOption('drawer-parent');
+ const edits=[['custom-drawer-add-icon','✨'],['custom-drawer-add-label','New nested item +'],['custom-drawer-icon','{item.emoji} ✨'],['custom-drawer-title','{item.title} ✓']];
+ for(const [id,text] of edits){await blockSelect.selectOption(id);await page.getByLabel('Block text',{exact:true}).fill(text);assert.equal(await page.getByLabel('Block text',{exact:true}).inputValue(),text);}
+ await page.getByTestId('builder-save').click();await template.getByText('Unsaved layout',{exact:true}).waitFor({state:'hidden'});await page.getByRole('button',{name:'Close builder',exact:true}).click();await template.getByRole('button',{name:'Done editing layout',exact:true}).click();
+ const resolved=await page.request.get(fixture.origin+'/api/v1/webpages/resolve?id=settings-custom-drawer-menu');assert.equal(resolved.status(),200);const saved=await resolved.json();assert.equal(saved.source,'user');assert.deepEqual(saved.page.acl,['tt:user']);
+ const blocks=[];const visit=nodes=>{for(const b of nodes||[]){blocks.push(b);visit(b.children)}};visit(saved.page.crystal.blocks);for(const [id,text] of edits)assert.equal(blocks.find(b=>b.id===id)?.text,text,'Independent saved block '+id);assert(blocks.find(b=>b.id==='custom-drawer-children'),'Saved menu retains editable submenu button');assert(blocks.find(b=>b.id==='drawer-parent'),'Saved menu retains editable Parent selector');assert.equal(String(blocks.find(b=>b.id==='custom-drawer-root')?.props?.['data-tt-drawer-template-version']),'2','Saved legacy template records completed additive migration');
+ await writeFile(join(out,'saved-nested-menu-thing.json'),JSON.stringify({id:saved.page.id,acl:saved.page.acl,blocks:saved.page.crystal.blocks},null,2));
+ await page.goto(fixture.origin+'/feed',{waitUntil:'domcontentloaded'});await openDrawer();await enter('Nested root B');await root().getByRole('link',{name:'Nested root A ✓',exact:true}).waitFor();await submenu().getByRole('link',{name:'Nested sibling A ✓',exact:true}).waitFor();
+ for(const host of [root(),submenu()]){await host.getByRole('button',{name:'New nested item +',exact:true}).waitFor();assert.equal(await host.locator('[data-block-id="custom-drawer-add-icon"]').textContent(),'✨');}
+ await note('Actual Builder separately edits repeated icon/title and Add icon/label; private saved Thing readback and rendered root/sublist survive reload');
+ assert.equal(errors.length,0,'Unhandled browser errors: '+errors.join('; '));
+ await writeFile(join(out,'browser-result.json'),JSON.stringify({ok:true,scope:'nested',steps:JSON.parse(await readFile(join(out,'progress.json'),'utf8')),errors,desktopAndMobile:true,browserNetworkDenied:true,realApiThing:fixture.thingId,parentIds:parents},null,2));
 }

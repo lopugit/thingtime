@@ -4156,15 +4156,26 @@ email whose link points at the attacker.
 
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
-- [ ] The inline **➕ Add +** row is the final navigation item after contextual,
-      editor and custom items, with More expanded or collapsed and zero or many
-      custom links. Compare its computed height, font, emoji size, padding and
-      hover/focus treatment with an ordinary top-level row on desktop and 390px.
+- [ ] The inline **➕ Add +** row appears at the end of both the top-level list
+      and the active submenu, with More expanded or collapsed and zero or many
+      custom links. Each Add saves into its own parent. Compare its computed
+      height, font, emoji size, padding and hover/focus treatment with an
+      ordinary row at that level on desktop and 390px.
       Normal navigation must not show a layout-editing toolbar. In Settings →
       Appearance, expand **Drawer menu template** and edit the actual menu's
       separate icon, label and repeated-link fields; save, reload and compare
       the private webpage Thing with the rendered drawer. An existing device
       layout must survive migration; another account must not inherit it.
+- [ ] Create at least five nested custom levels, including a branch below a
+      built-in submenu item. Every level renders in the same section below the
+      top-level list. Check Back, ancestor breadcrumbs, sibling branches, route
+      navigation outside the built-in parent and immediate reload. Add at the
+      top still creates a root while a deep submenu is selected. Move an item
+      through Parent menu, reorder siblings and remove a parent; descendants
+      must remain reachable, and self/descendant parents must be unavailable.
+      Unauthorized built-in ancestors hide their custom descendants. Legacy
+      templates gain selectable, editable hierarchy controls; after an explicit
+      save, intentionally deleted template controls must not reappear.
 - [ ] Custom drawer items: use **Add +** to save an emoji, title, hover tooltip
       and relative or absolute HTTP(S) link. Check URL validation, cancel,
       keyboard focus/Escape, navigation, edit/remove from Settings → Appearance →
