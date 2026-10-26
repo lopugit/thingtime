@@ -19,7 +19,7 @@ test('interactive webpage attachments cannot become or replace an editable build
       if (argument && ts.isObjectLiteralExpression(argument)) options = argument;
     }
     if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(source) === 'WebpageBlocksRenderer') {
-      interactive = node.attributes.properties.some(prop => ts.isJsxAttribute(prop) && prop.name.getText(source) === 'interactive' && (!prop.initializer || ts.isJsxExpression(prop.initializer) && prop.initializer.expression?.kind === ts.SyntaxKind.TrueKeyword));
+      interactive = node.attributes.properties.some(prop => ts.isJsxAttribute(prop) && prop.name.getText(source) === 'interactive' && (!prop.initializer || (ts.isJsxExpression(prop.initializer) && prop.initializer.expression?.kind === ts.SyntaxKind.TrueKeyword)));
     }
     ts.forEachChild(node, visit);
   };
@@ -49,4 +49,11 @@ test('interactive webpage attachments cannot become or replace an editable build
   } finally {
     resetLopuBuildBridge();
   }
+});
+
+test('generic Things delegate to ThingView while Component and Webpage Things keep their canonical renderers', () => {
+  const source = readFileSync(new URL('./PostInteractiveThing.tsx', import.meta.url), 'utf8');
+  assert.match(source, /if \(!component && !webpage\) return <ThingView thing=\{thing\.crystal\.thing \|\| thing\.crystal\}/);
+  assert.match(source, /component \? <LinkedComponent thing=\{thing\} \/> : <LinkedPage thing=\{thing\} \/>/);
+  assert.doesNotMatch(source, /ExplicitThingRender/);
 });

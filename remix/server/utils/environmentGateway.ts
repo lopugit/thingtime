@@ -2,7 +2,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 import { apiEndpointDocs } from '../../app/docs/apiDocs';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
-import { gatewayAuthority, gatewayOrigin, getGatewaySettings, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
+import { gatewayAuthority, gatewayOrigin, getGatewaySettings, getMongoConnectionMode, type GatewaySettings } from '../../app/api/utils/deployment/environmentGateway';
 
 export const GATEWAY_RELAY_HEADER = 'x-thingtime-gateway-relay';
 const SIGNATURE_HEADER = 'x-thingtime-gateway-signature';
@@ -134,12 +134,13 @@ export const environmentGatewayIngress = async (request: Request): Promise<Respo
     const authority = await gatewayAuthority.current();
     if (!authority) return gatewayFailure();
     if (relayed) {
+      if (getMongoConnectionMode() === 'dedicated') return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_RELAY');
       if (!authority.owner) return gatewayFailure(508, 'ENVIRONMENT_GATEWAY_LOOP');
       const restored = restoreGatewayRequest(request, settings);
       if (restored && crossSiteMutation(restored)) return gatewayFailure(403, 'ENVIRONMENT_GATEWAY_CROSS_SITE');
       return restored || gatewayFailure(403, 'ENVIRONMENT_GATEWAY_RELAY');
     }
-    if (authority.owner) return null;
+    if (authority.owner || getMongoConnectionMode() === 'dedicated') return null;
     return proxyEnvironmentRequest(request, authority);
   } catch { return gatewayFailure(); }
 };

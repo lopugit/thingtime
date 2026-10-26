@@ -22,7 +22,7 @@ test('rendering requires the explicit Component pointer or embedded definition, 
 });
 
 test('malformed explicit Components remain authoritative instead of silently falling through', () => {
-  for (const renderComponent of [null, 'text', 'plain-text', [], {}, { id: '' }, { render: [] }, { id: 'component', render: {} }]) {
+  for (const renderComponent of [null, 'text', 'plain-text', [], {}, { id: '' }, { render: [] }, { render: {} }, { render: { foo: 'bar' } }, { id: 'component', render: {} }]) {
     const data = { renderComponent, type: 'text', kind: 'rich-text', text: 'Keep raw data available' };
     assert.equal(hasRenderComponent(data), true);
     assert.deepEqual(renderComponentDeclaration(data), { kind: 'invalid' });
@@ -31,9 +31,9 @@ test('malformed explicit Components remain authoritative instead of silently fal
 
 test('saved renderer reads only accept an actual Component Thing with a render definition', () => {
   const valid = { id: 'component', thingtime: ['component'], crystal: template };
-  assert.deepEqual(referencedRenderComponent(valid), template);
-  for (const invalid of [null, { ...valid, thingtime: ['data'] }, { ...valid, crystal: { render: [] } }, { crystal: template }]) {
-    assert.equal(referencedRenderComponent(invalid), null);
+  assert.deepEqual(referencedRenderComponent(valid, 'component'), template);
+  for (const invalid of [null, { ...valid, id: 'different-component' }, { ...valid, thingtime: ['data'] }, { ...valid, crystal: { render: [] } }, { ...valid, crystal: { render: {} } }, { ...valid, crystal: { render: { foo: 'bar' } } }, { crystal: template }]) {
+    assert.equal(referencedRenderComponent(invalid, 'component'), null);
   }
 });
 

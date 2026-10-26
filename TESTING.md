@@ -5375,19 +5375,32 @@ halves.
 - [ ] Root metadata/image routes expose their registered `-docs` twin for both
   GET and POST without database admission, through both Nitro and the real Vite
   dev proxy; check JSON endpoint/method fields and reject SPA HTML responses.
-- [ ] Confirm followers make zero MongoDB connections, preserve cookie/Bearer,
-  Character, expected actor and custom data-plane selection, refuse forged hops
-  and cross-site writes, and preserve OAuth redirect/cookie/stream cancellation.
+- [ ] In proxy mode, confirm followers make zero MongoDB connections, preserve
+      cookie/Bearer, Character, expected actor and custom data-plane selection,
+      refuse forged hops and cross-site writes, and preserve OAuth redirects,
+      cookies and stream cancellation.
+- [ ] In dedicated mode, confirm the deployment executes its own backend,
+      advertises `gateway: null`, owns its pools, and refuses relayed traffic.
+      Point a proxy worker at that dedicated alias and verify it fails closed.
+- [ ] Run the gateway suite with each bundled connection policy. Mode-specific
+      fixtures must select their mode explicitly, and runtime overrides must win
+      over either bundled default, so an opt-in branch can pass the same checks.
+- [ ] Verify unknown connection-mode values and incomplete gateway settings fail
+      closed; Vercel defaults to proxy while a local/self-hosted server without
+      gateway settings retains direct-connection behavior.
 - [ ] Switch the alias and roll back with an admitted stream and detached
-  notification/Lopu save outstanding. Confirm pools close after work drains,
-  the old worker cannot create a new pool, and re-promotion opens a usable pool.
+      notification/Lopu save outstanding. Confirm existing work can finish and
+      pools drain after it ends; verify new ownership and a usable pool after
+      re-promotion. Do not infer fleet-wide fencing from this bounded check.
 - [ ] Verify missing/different-environment/incompatible manifests fail closed;
-  unchanged index plans skip DDL across instances, changed plans coordinate,
-  failed unique builds block constrained writes, and authenticated repair stays
-  reachable. Exercise lease expiry, failed-plan retry and manual invalidation.
-- [ ] Retire/restrict legacy immutable deployments before claiming fleet-wide
-  enforcement. Record real alias/API and Atlas connection evidence separately
-  from isolated tests; leave the Atlas tier unchanged.
+      unchanged index plans skip DDL across instances, changed plans coordinate,
+      failed unique builds block constrained writes, and authenticated repair stays
+      reachable. Exercise lease expiry, failed-plan retry and manual invalidation.
+- [ ] Record observed alias-to-environment/database mapping separately from
+      proposed gateway activation and isolated tests. Confirm previews and custom
+      develop use the development cluster, separate from production; verify
+      `master.previews.thingtime.com` before treating it as operational. Treat
+      old-preview credential retirement as optional; leave the Atlas tier unchanged.
 
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
@@ -9142,6 +9155,7 @@ storage only; do not describe it as a production upload or provider acceptance.
 
 ## Background refresh and returning tabs
 
+- [ ] With `navigator.onLine === false` but the isolated same-origin API reachable, open and reload a subspace: both embed regions load without synthetic refresh events. Foreground return revalidates once; offline background polls remain paused, and reconnect resumes ordinary polling. Keep the enforced browser/backend network boundary unchanged.
 - [ ] Open an existing Lopu conversation in two clients. Create another conversation and append a message in the other client: the first client's list and selected timeline update without reload or changing the selected conversation. Repeat in the floating Lopu window and Messenger.
 - [ ] Leave the tab hidden, update from the other client, then return. Verify an immediate refresh on visibility/focus, reconnect and browser history restoration; hidden tabs poll at most once per minute per resource. Cached content remains during failures.
 - [ ] Keep a draft, scroll into history, open conversation/chat settings drawers, and let several polls run at desktop and phone widths. No draft loss, loading flash, pagination rewind, overlap or clipping. Rename/delete while an earlier read is delayed; an old result cannot undo the edit. Switch accounts away and back during a delayed read; old private data cannot reappear.
