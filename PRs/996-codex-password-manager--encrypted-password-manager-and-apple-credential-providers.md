@@ -3,6 +3,28 @@
 PR: https://github.com/lopugit/thingtime/pull/996
 Branch: `codex/password-manager` (base `develop`)
 
+## Develop preview publication recovery — 26 October 2026
+
+The trusted preview publisher refused publication because its required scoped
+bootstrap was absent. An authorized Vercel API update created one encrypted
+`THINGTIME_GATEWAY_SECRET` scoped only to custom develop. Metadata for all 74
+existing environment-variable records remained unchanged. Production settings
+and aliases were unchanged; no shared develop gateway rollout was performed.
+No secret values were retained in this report, and no Google secret or passkey
+was created.
+
+The failed protected publishers were retried after that scoped repair. Exact-head
+[PR #996 preview](https://pr-996.previews.dev.thingtime.com) and
+[PR #992 preview](https://pr-992.previews.dev.thingtime.com) then published
+successfully at PR #996 source `00b073515ac906fc97a819bd259c293a4c15cbff`
+and PR #992 source `21a2f8c2803c316e1e87383a4c1c7dc8a124fb9f`.
+Live page, root-data and capability-manifest requests returned HTTP 200,
+root-data identified those source SHAs, and manifest origins matched their
+preview URLs. This later documentation revision was not part of those builds. The previews advertised `api.passwords` 1.2.1 and
+`api.connections` 2.0.0 respectively. This verifies preview publication and public
+compatibility discovery; it does not establish real-account OAuth, installed
+native fill/passkey acceptance or gateway isolation for pre-gateway source.
+
 ## Structural Builder acceptance — 26 October 2026
 
 The isolated password browser harness now uses the actual Builder inspector and

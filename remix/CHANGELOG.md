@@ -104,6 +104,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Recover exact-head PR #996 and #992 develop previews by adding an
+  encrypted bootstrap scoped only to custom develop; preserve all 74 existing
+  environment-variable metadata records and production settings. Verify live
+  page/root-data/manifests without a shared gateway rollout or real-account
+  credential creation. [Audit](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md#develop-preview-publication-recovery--26-october-2026).
+  **Codex (AI)**
+
 - 2026-10-26: Make native passkey interoperability a network-denied macOS gate
   for password tests and provider builds, with private temporary cleanup and real
   verifier tamper regressions. OS/provider ceremonies remain separate.
