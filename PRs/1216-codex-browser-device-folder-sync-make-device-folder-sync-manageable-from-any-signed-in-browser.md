@@ -137,3 +137,22 @@ to production.
 
 Graphify refresh and the remaining installed acceptance evidence are tracked
 separately from the historical browser/compiled-server harness results above.
+
+### Acceptance viewer helper — 2026-10-26
+
+- Added an opt-in, test-only Electron viewer for the already-running isolated
+  acceptance browser. It is fenced to the task/session/lease and loopback
+  acceptance origin; it adds no new listener and does not launch or modify the
+  production app.
+- The focused viewer boundary suite passed 12/12, including the real browser
+  manager/lease/dispatch/driver contracts with native I/O stubbed. Syntax and
+  diff checks passed. These checks verify the helper boundary, not its rendered
+  GUI, password-manager flow, account sign-in or installed sync behavior.
+- The isolated Docker relay had already passed network-none readiness. It was
+  stopped and its descriptor and lease removed. No new pairing or transfer was
+  performed. Existing user approval for native pairing remains in force.
+- Native controls recovered to Production settings after the restart, but the
+  final Home pause view was not re-read. The last verified Home state remains
+  paused with its source grant absent; no settings were changed during cleanup.
+- Actual GUI inspection/sign-in, installed start/pause/resume, transferred
+  bytes, recovery and window-close behavior remain incomplete and unverified.

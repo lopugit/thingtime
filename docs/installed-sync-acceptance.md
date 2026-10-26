@@ -70,6 +70,48 @@ namespace and makes the relay refuse requests. Never claim a second browser to
 reach this backend, broaden network policy, publish the relay, or reuse a
 personal Chrome profile.
 
+### Task-owned native viewer for approved test credential entry
+
+The opt-in local Electron GUI controls the same already-running isolated
+Chromium through its existing private socket. It introduces no HTTP listener,
+password-export interface or second browser. Start with the official Electron
+dependency from this checkout, after the relay reports ready on port **28671**:
+Use a canonical physical state path for both commands; on macOS use
+`/private/tmp/...` rather than its `/tmp/...` symlink. Symlinked state paths are
+rejected, including otherwise-private aliases.
+
+```sh
+electron/node_modules/.bin/electron electron/scripts/test-agent-acceptance-viewer.cjs \
+  /absolute/private/acceptance-state
+```
+
+The viewer binds the private descriptor's task, session and first existing tab.
+It negotiates browser/network-policy major 1 and checks lease ownership, active
+session, isolated policy and exact application origin before every operation.
+Only `http://127.0.0.1:28671` pages accept input; an initial `about:blank` may
+only be viewed or navigated to that origin. It cannot create or switch tabs.
+Keep all other controllers idle during this viewer's credential phase: the
+existing browser protocol performs a current-tab origin check before typing,
+and does not provide an atomic origin-and-type transaction against concurrent
+navigation by another controller.
+
+Use supported on-device password-manager retrieval/autofill and native Computer
+Use keyboard entry into the GUI's masked field. Select the actual destination
+password field in the live frame first. The GUI clears its entry immediately
+on submission or focus loss; errors are fixed messages, and responses omit
+credentials, control handles and raw server errors. Do not capture a secret
+reveal, type credentials through CLI arguments, or send a password to a text
+field that displays it visibly. The renderer has only fixed tabs/frame/click/
+type/key/scroll/viewport/navigate controls, no evaluate or generic IPC API.
+
+The local renderer uses sandbox/context isolation/web security, denies external
+requests, navigation, popups, downloads and permissions, and uses a private
+temporary profile/session. Quitting removes that profile and leaves the
+existing relay/lease running for installed-app acceptance. It never modifies
+or launches the production app. Frames refresh on explicit actions only; this
+is a test operator GUI, not a shipped Builder page. Visual and real sign-in
+acceptance still require exercising this actual GUI and installed app.
+
 ## Synthetic identity and real native acceptance
 
 Use canonical full-account registration (`/register`, backed by
@@ -114,7 +156,8 @@ permissions, copy credentials or widen the namespace's network.
 
 ```sh
 node --test electron/test/agent-browser-application.test.cjs \
-  electron/test/agent-desktop-relay.test.cjs electron/test/agent-browser-manager.test.cjs
+  electron/test/agent-desktop-relay.test.cjs electron/test/agent-browser-manager.test.cjs \
+  electron/test/acceptance-viewer.test.cjs
 ```
 
 These checks cover origin validation, manifest configuration inputs, actual HTTP

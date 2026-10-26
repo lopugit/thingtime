@@ -12939,6 +12939,13 @@ separate from deterministic discovery/lease tests.
   `docs/installed-sync-acceptance.md`. Verify the enforced network boundary,
   disposable full-account registration, genuine installed Node pairing, actual
   byte hashes and restoration of the original endpoint/session before cleanup.
+- [ ] Acceptance viewer: run `node --test electron/test/acceptance-viewer.test.cjs`;
+  exercise the actual local GUI against its bound isolated tab at port 28671.
+  Verify masked credential entry clears on submission/focus loss, off-origin
+  input is refused, frames/clicks/keyboard/scroll/mobile viewport work, and
+  quitting removes only its private viewer profile while retaining the relay.
+  Keep other controllers idle during credential entry. Unit boundaries alone
+  do not prove sign-in or installed-device sync.
 - [ ] On the signed Mac, negotiate the selected origin through the actual
   desktop folder host. Confirm `api.devices-sync-control` survives its
   allowlisted projection so the remote worker can start. Missing/malformed
