@@ -2,7 +2,8 @@
 
 `apple/OfflineNativeVM` is a dependency-free SwiftPM host CLI for a task-owned
 Apple Silicon macOS VM. Its machine-readable contract is `offline-native-vm
-manifest`, feature `native.offline-vm` version `1.0.0`. This is testing tooling,
+manifest`, feature `native.offline-vm` version `1.1.0`. The persistent guest/receipt
+format stays `1.0.0`, preserving existing installed task identities and manifests. This is testing tooling,
 not a Thingtime app update, installer, release workflow or network API.
 
 The host harness compiles and tests private file handling, fresh preparation,
@@ -35,9 +36,11 @@ the explicit `view` phase admits exactly one USB keyboard and one USB absolute
 coordinate pointer, inspected before VM construction. There is no NIC enable flag, NAT, bridging, socket proxy,
 clipboard integration, shared directory or guest-to-host execution path. The
 headless virtual display does not expose a host window; the viewer uses the
-supported `VZVirtualMachineView` framebuffer/input without clipboard integration. Only three
-block devices are configured: fresh writable boot/output files and a task input
-attachment with `readOnly: true`. Configuration is read back and `validate()`
+supported `VZVirtualMachineView` framebuffer/input without clipboard integration. Headless phases and the viewer without a registered supplement configure three
+block devices: fresh writable boot/output files and a task input
+attachment with `readOnly: true`. An explicitly registered viewer supplement adds
+exactly one fourth USB block device, also read-only; it never replaces those three.
+Configuration is read back and `validate()`
 is required before constructing a VM. Readback is configuration evidence;
 actual launch/network/teardown evidence remains a separate acceptance gate.
 
@@ -399,8 +402,8 @@ The result is beneath `PARENT/TASK_UUID/BUILD_UUID/`: `payload/`,
 not installation proof. Review the source/archive manifests and image SHA before
 use. A later separately reviewed stopped/leased VM transition must bind the new
 read-only image without replacing the original installed model, machine ID,
-auxiliary or boot pairing. The current three-device viewer configuration does
-**not** silently attach this supplement, rewrite its original manifest or admit
+auxiliary or boot pairing. The viewer requires explicit stopped/leased `attach-media` registration below;
+it does not silently attach an image, rewrite the original manifest or admit
 `run`. No actual media copy or guest use is implied by the fixture suite.
 
 The included fixed `guest-build.sh` is for explicit invocation **inside** the
@@ -431,3 +434,67 @@ stop/reap boundary throughout. The recipe writes untrusted guest-local logs and
 `output/guest-result.txt`; no result is mounted, executed or accepted by the
 host. Credential/setup, media-attachment admission, output transport/readback,
 full build execution and native feature acceptance remain separate open gates.
+
+
+## Explicit read-only supplement registration (feature 1.1)
+
+Negotiate `offline-native-vm manifest` before using this additive operation:
+require feature `native.offline-vm` version at least `1.1.0` with matching major
+and `readOnlySupplement: true`. The manifest separately reports persistent
+`contractVersion: 1.0.0`; do not rewrite `guest.json`, installed receipts or the
+original source SHA to the new feature version. No HTTP/API endpoint is added.
+
+The builder's final image must be private under this existing task's inputs:
+`inputs/build-media/TASK_UUID/BUILD_UUID/build-input.iso`. Generate it using the
+media builder with `TASK/inputs/build-media` as its private parent. Both UUIDs,
+owner/modes, no symlink/hardlink aliases, positive sector-aligned size, SHA256,
+file identity and the private builder `media.json` task/build/source/hash/size
+are checked. Media staging remains a separate operation; registration does not
+copy large images, mount data or construct/start a VM.
+
+```sh
+# Inspect feature 1.1/readOnlySupplement first, using the reviewed executable.
+offline-native-vm manifest
+offline-native-vm attach-media "$TASK_ROOT" "$RUN_ID" \
+  "build-media/$TASK_ID/$BUILD_ID/build-input.iso" "$IMAGE_SHA256" "$CANDIDATE_COMMIT"
+# A later, separately authorized viewer launch attaches the fourth read-only disk.
+offline-native-vm view "$TASK_ROOT" "$RUN_ID"
+```
+
+`attach-media` acquires the same nonblocking exclusive task lease as installation
+and viewing. It requires the harness's successful installation plus, when a
+viewer attempt exists, its **latest** normal stopped/reaped nonquarantined
+checkpoint and current final identities. A live lease, pending/missing/failed
+checkpoint, hard kill or changed original boot/auxiliary/model/machine-ID/output
+pair refuses registration. The receipt is exclusive/one-shot for this installed
+run, so another candidate binding cannot silently overwrite it. A future binding
+replacement requires a separately reviewed lifecycle transition.
+
+The new host-only `viewer-supplement.json` records the original installed source
+and manifest independently from the new exact candidate commit and image/header
+hashes. Those are input provenance, never an attestation that guest tools or a
+build ran. Existing mutable disks, old read-only input, `guest.json`, installation
+and viewer checkpoints remain untouched by registration. The CLI reports
+`attachmentConfigured: false`, `guestStarted: false` and `readiness: false`.
+
+Each subsequent viewer attempt freezes this binding. The independent worker
+reopens and rehashes it before configuration; construction inspects the fourth
+USB attachment's exact URL and `isReadOnly` flag immediately before VM creation.
+The original three storage devices retain their roles and no NIC/share/socket/
+clipboard/serial devices are introduced. Parent and worker retain read-only file
+descriptors and recheck immutable media through normal stop/reap. Checkpoint
+acceptance requires matching four-device/read-only/hash evidence and revalidated
+media, in addition to the existing stopped/reaped/no-hardkill rules. A missing or
+changed registered image/header, replaced inode or conflicting attempt cannot
+silently fall back to three devices. Old three-device checkpoints without new
+optional fields remain valid when no supplement has been registered.
+
+Safe fixture tests exercise registration, lease exclusion, latest-checkpoint
+refusal, unchanged installed pairing, containment/aliases/alignment, metadata and
+hash/inode mutation, resume binding, old receipt decoding and strict worker
+read-only evidence. They compile the fixed VZ configuration code but do not
+construct/start a VM or establish real attachment/guest mount acceptance. Root
+must independently verify the new signed executable/configuration and real
+stopped/leased attachment before guest use. `run` and its internal candidate
+worker remain `guestReadinessUnavailable`; this operation grants no candidate
+execution, credential delivery, Setup Assistant completion or legal assent.

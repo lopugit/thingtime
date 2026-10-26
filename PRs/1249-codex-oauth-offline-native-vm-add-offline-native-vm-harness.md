@@ -87,3 +87,34 @@ copied, media has not been attached and no guest operation occurred. Original
 installed identities, source manifest and viewer remain unchanged; `run` stays
 closed. Credential/setup, stopped/leased supplement attachment, guest execution
 and untrusted-output transport/acceptance are still open.
+
+
+## Read-only supplement registration continuation
+
+Feature `native.offline-vm`1.1 registers one task-owned builder image under the
+exclusive task lease and latest eligible stopped/reaped viewer checkpoint.
+Persistent format1.0, original installed source/manifest and boot/auxiliary/
+model/machine-ID/output identities remain unchanged. The new candidate commit
+is separately bound to the read-only image's hash/inode and host builder header.
+Viewer attempts and the independent worker freeze/revalidate that binding,
+inspect the fourth USB device's exact URL/read-only flag, and require matching
+post-stop worker/checkpoint evidence. No hotplug, mount, NIC/share/socket/
+clipboard, candidate run admission, guest readiness, credential delivery or
+legal acceptance is introduced. Existing three-device receipts remain readable.
+
+Verification: focused supplement/viewer tests passed21/21 and the full core
+suite passed68/68, with no failures or warnings. The frozen compiled CLI then
+registered the actual3,630,559,232-byte builder image once under the existing
+stopped task lease. The separate candidate is
+`fb712dd48192bdde744e1dc94eeedfa39247ffb9`; imageSHA256 is
+`f743924c53f418ed78f5b0bfb26b16fb72a1e2bba4d81f26adfc48783f2cb43f`.
+Registration exited normally and was reaped. Exact before/after manifest and
+receipt hashes plus original five-file identities were unchanged; binding
+readback preserved installed source`dbc6170` separately from the new candidate.
+The host receipt reports attachmentConfigured/guestStarted/readiness=false.
+
+This is actual host registration evidence only: no VM construction/start,
+signing/install, mount, legal acceptance or credential access occurred. Actual
+fourth-device configuration, guest-visible media, setup/toolchain execution and
+native feature acceptance remain open. The earlier build-media paragraph's
+source-only observations describe that earlier milestone, not this registration.

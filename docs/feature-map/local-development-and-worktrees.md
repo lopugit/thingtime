@@ -10,7 +10,11 @@ and hash-bound credential-free toolchain bytes into fresh RAW UDF media without
 mounting or starting a guest. Its fixed guest recipe checks vendor/toolchain and
 license prerequisites before unsigned Mac/iOS test-target compilation. Run
 `test_build_media.py` inert fixtures; actual attachment/setup/build/output
-acceptance remains separate. Its SwiftPM tests do not boot a guest. Real installer acceptance and guest setup/toolchain admission are
+acceptance remains separate. Feature `native.offline-vm` 1.1 adds explicit `attach-media` registration under
+the latest stopped checkpoint and exclusive lease, binding a fourth read-only
+USB image without changing the installed five-file pair or persistent format1.0.
+Viewer attempts/worker readback/checkpoints freeze and verify that binding;
+candidate admission remains closed. Its SwiftPM tests do not boot a guest. Real installer acceptance and guest setup/toolchain admission are
 an explicit remaining gate; there is no network/shared-directory enable option.
 
 ## Agent browser runtime

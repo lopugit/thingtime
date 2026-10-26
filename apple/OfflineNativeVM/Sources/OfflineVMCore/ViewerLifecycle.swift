@@ -8,9 +8,10 @@ public struct ViewerAttempt: Codable, Equatable {
     public let manifestSHA256: String
     public let expectedFiles: [String: FileIdentity]
     public let parentPID: Int32
-    public init(taskID: String, runID: String, sourceSHA: String, manifestSHA256: String, expectedFiles: [String: FileIdentity], parentPID: Int32) {
+    public let supplement: ReadOnlySupplement?
+    public init(taskID: String, runID: String, sourceSHA: String, manifestSHA256: String, expectedFiles: [String: FileIdentity], parentPID: Int32, supplement: ReadOnlySupplement? = nil) {
         id = UUID().uuidString; self.taskID = taskID; self.runID = runID; self.sourceSHA = sourceSHA
-        self.manifestSHA256 = manifestSHA256; self.expectedFiles = expectedFiles; self.parentPID = parentPID
+        self.manifestSHA256 = manifestSHA256; self.expectedFiles = expectedFiles; self.parentPID = parentPID; self.supplement = supplement
     }
 }
 public struct ViewerWorkerReceipt: Codable {
@@ -30,6 +31,9 @@ public struct ViewerWorkerReceipt: Codable {
     public var socketDevices = 0
     public var clipboardIntegration = false
     public var readiness = false
+    public var storageDevices: Int? = nil
+    public var supplementSHA256: String? = nil
+    public var supplementReadOnly: Bool? = nil
     public init() {}
 }
 public struct ViewerCheckpoint: Codable {
@@ -44,7 +48,10 @@ public struct ViewerCheckpoint: Codable {
     public let quarantined: Bool
     public var readiness = false
     public let files: [String: FileIdentity]
-    public static func eligible(worker: ViewerWorkerReceipt?, supervision: Supervision, normal: Bool, exitCode: Int32?) -> Bool {
+    public static func eligible(worker: ViewerWorkerReceipt?, supervision: Supervision, normal: Bool, exitCode: Int32?, supplement: ReadOnlySupplement? = nil) -> Bool {
+        let mediaMatches = supplement.map { worker?.storageDevices == 4 && worker?.supplementSHA256 == $0.imageSHA256 && worker?.supplementReadOnly == true }
+            ?? ((worker?.storageDevices == nil || worker?.storageDevices == 3) && worker?.supplementSHA256 == nil && worker?.supplementReadOnly == nil)
+        return mediaMatches &&
         normal && exitCode == 0 && supervision.reaped && !supervision.hardKillRequested &&
         worker?.contractVersion == Contract.version && worker?.startRequested == true && worker?.runningObserved == true &&
         worker?.startCallbackObserved == true && worker?.stoppedObserved == true && worker?.failure == nil && worker?.readiness == false &&
@@ -55,7 +62,7 @@ public struct ViewerCheckpoint: Codable {
         self.attempt = attempt; self.worker = worker; workerReaped = supervision.reaped
         workerExitedNormally = normal; workerExitCode = exitCode; hardKillRequested = supervision.hardKillRequested
         interruption = supervision.interruption; self.files = files
-        teardownProven = Self.eligible(worker: worker, supervision: supervision, normal: normal, exitCode: exitCode) && Set(files.keys) == Workspace.pairedFiles
+        teardownProven = Self.eligible(worker: worker, supervision: supervision, normal: normal, exitCode: exitCode, supplement: attempt.supplement) && Set(files.keys) == Workspace.pairedFiles
         quarantined = !teardownProven
     }
 }
@@ -67,7 +74,11 @@ public final class ViewerLifecycle {
     private var finished = false
     private var stopIssued = false
     private var stopDeadline: TimeInterval?
-    public init() {}
+    public init(supplement: ReadOnlySupplement? = nil) {
+        receipt.storageDevices = supplement == nil ? 3 : 4
+        receipt.supplementSHA256 = supplement?.imageSHA256
+        receipt.supplementReadOnly = supplement == nil ? nil : true
+    }
     public func begin() -> [ViewerAction] {
         guard !begun, !finished, stopDeadline == nil else { return [] }
         begun = true; receipt.startRequested = true; return [.start]

@@ -79,6 +79,7 @@ public final class Workspace {
     public let manifestHash: String
     private var files: [String: SecureFile] = [:]
     private var lease: Int32 = -1
+    var retainedSupplementFiles: [String: SecureFile] = [:]
     public static func privateDirectory(_ url: URL) throws {
         guard url.path.hasPrefix("/"), !url.pathComponents.contains(".."), !url.pathComponents.contains(".") else { throw VMFailure.path }
         var current = URL(fileURLWithPath: "/")
@@ -230,8 +231,8 @@ public final class Workspace {
               attempt.manifestSHA256 == manifestHash else { throw VMFailure.ownership }
         return attempt
     }
-    public func beginViewer(_ runID: String, parentPID: Int32) throws -> (URL, ViewerAttempt) {
-        try acquireLease()
+    func stoppedViewerRun(_ runID: String) throws -> URL {
+        guard lease >= 0 else { throw VMFailure.ownership }
         let run = try installedRun(runID, validateCurrentFiles: false)
         let current = run.appendingPathComponent("viewer-attempt.json")
         var value = stat()
@@ -239,7 +240,7 @@ public final class Workspace {
             let previous = try viewerAttempt(run)
             let checkpoint = try JSONDecoder().decode(ViewerCheckpoint.self, from: SecureFile(run.appendingPathComponent("viewer-" + previous.id).appendingPathComponent("checkpoint.json")).data())
             guard checkpoint.attempt == previous, checkpoint.teardownProven, !checkpoint.quarantined,
-                  ViewerCheckpoint.eligible(worker: checkpoint.worker, supervision: Supervision(reaped: checkpoint.workerReaped, interruption: checkpoint.interruption, hardKillRequested: checkpoint.hardKillRequested), normal: checkpoint.workerExitedNormally, exitCode: checkpoint.workerExitCode) else { throw VMFailure.teardownUnknown }
+                  ViewerCheckpoint.eligible(worker: checkpoint.worker, supervision: Supervision(reaped: checkpoint.workerReaped, interruption: checkpoint.interruption, hardKillRequested: checkpoint.hardKillRequested), normal: checkpoint.workerExitedNormally, exitCode: checkpoint.workerExitCode, supplement: previous.supplement) else { throw VMFailure.teardownUnknown }
             // Each checkpoint must still name the original five installed inodes.
             let installed = try JSONDecoder().decode(InstallReceipt.self, from: SecureFile(run.appendingPathComponent("installation.json")).data())
             for name in Self.pairedFiles {
@@ -247,16 +248,25 @@ public final class Workspace {
                       checkpoint.files[name]?.inode == installed.files[name]?.inode else { throw VMFailure.integrity }
             }
             try verifyPair(run: run, expected: checkpoint.files)
+            if let expected = previous.supplement {
+                guard try viewerSupplement(run) == expected else { throw VMFailure.integrity }
+            }
         } else {
             guard errno == ENOENT else { throw VMFailure.path }
             _ = try installedRun(runID)
         }
+        return run
+    }
+    public func beginViewer(_ runID: String, parentPID: Int32) throws -> (URL, ViewerAttempt) {
+        try acquireLease()
+        let run = try stoppedViewerRun(runID)
+        let supplement = try viewerSupplement(run)
         var expected: [String: FileIdentity] = [:]
         for name in Self.pairedFiles { expected[name] = try FileIdentity(run.appendingPathComponent(name)) }
-        let attempt = ViewerAttempt(taskID: owner.taskID, runID: runID, sourceSHA: manifest.sourceSHA, manifestSHA256: manifestHash, expectedFiles: expected, parentPID: parentPID)
+        let attempt = ViewerAttempt(taskID: owner.taskID, runID: runID, sourceSHA: manifest.sourceSHA, manifestSHA256: manifestHash, expectedFiles: expected, parentPID: parentPID, supplement: supplement)
         guard mkdir(run.appendingPathComponent("viewer-" + attempt.id).path, 0o700) == 0 else { throw VMFailure.path }
         // Permanent pending marker before worker creation. Missing checkpoint blocks future starts.
-        try writeJSON(attempt, to: current)
+        try writeJSON(attempt, to: run.appendingPathComponent("viewer-attempt.json"))
         return (run, attempt)
     }
     public func viewerWorkerRun(_ runID: String, attemptID: String, parentPID: Int32) throws -> URL {
@@ -265,6 +275,7 @@ public final class Workspace {
         guard attempt.id == attemptID, attempt.parentPID == parentPID else { throw VMFailure.ownership }
         try Self.privateDirectory(run.appendingPathComponent("viewer-" + attempt.id))
         try verifyPair(run: run, expected: attempt.expectedFiles)
+        guard try viewerSupplement(run) == attempt.supplement else { throw VMFailure.integrity }
         return run
     }
     public func input(_ disk: Disk) throws -> URL { guard let file = files[disk.file] else { throw VMFailure.path }; try file.unchanged(); return file.url }

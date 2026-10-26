@@ -8,7 +8,7 @@ import Darwin
 // serial console, shared folders, socket, networking or guest result reader.
 final class ViewerWorker: NSObject, NSApplicationDelegate, NSWindowDelegate, VZVirtualMachineDelegate {
     let vm: VZVirtualMachine
-    let lifecycle = ViewerLifecycle()
+    let lifecycle: ViewerLifecycle
     let report: URL
     let parent: pid_t
     let deadline: TimeInterval
@@ -16,8 +16,10 @@ final class ViewerWorker: NSObject, NSApplicationDelegate, NSWindowDelegate, VZV
     var window: NSWindow?
     var signals: [DispatchSourceSignal] = []
     var timer: DispatchSourceTimer?
-    init(config: VZVirtualMachineConfiguration, report: URL, taskID: String, parent: pid_t, seconds: Int) throws {
-        try verifyConfiguration(config, interactive: true)
+    init(config: VZVirtualMachineConfiguration, report: URL, taskID: String, parent: pid_t, seconds: Int, supplement: ReadOnlySupplement? = nil, supplementURL: URL? = nil) throws {
+        guard (supplement == nil) == (supplementURL == nil) else { throw VMFailure.configuration }
+        try verifyConfiguration(config, interactive: true, supplementURL: supplementURL)
+        lifecycle = ViewerLifecycle(supplement: supplement)
         vm = VZVirtualMachine(configuration: config, queue: .main)
         self.report = report; self.taskID = taskID; self.parent = parent
         deadline = ProcessInfo.processInfo.systemUptime + Double(seconds)
@@ -133,16 +135,17 @@ func superviseViewer(_ workspace: Workspace, runID: String) throws -> Int32 {
     let normal = result.reaped && process.terminationReason == .exit
     let code: Int32? = result.reaped ? process.terminationStatus : nil
     var files: [String: FileIdentity] = [:]
-    if ViewerCheckpoint.eligible(worker: worker, supervision: result, normal: normal, exitCode: code) {
+    if ViewerCheckpoint.eligible(worker: worker, supervision: result, normal: normal, exitCode: code, supplement: attempt.supplement) {
         for name in Workspace.pairedFiles {
             let identity = try FileIdentity(run.appendingPathComponent(name))
             guard identity.device == attempt.expectedFiles[name]?.device, identity.inode == attempt.expectedFiles[name]?.inode else { throw VMFailure.integrity }
             files[name] = identity
         }
     }
+    if let supplement = attempt.supplement { _ = try workspace.verifiedSupplementURL(supplement, run: run) }
     let checkpoint = ViewerCheckpoint(attempt: attempt, worker: worker, supervision: result, normal: normal, exitCode: code, files: files)
     try writeJSON(checkpoint, to: phase.appendingPathComponent("checkpoint.json"))
     try emit(["contractVersion": Contract.version, "runID": runID, "attemptID": attempt.id,
-        "teardownProven": checkpoint.teardownProven, "quarantined": checkpoint.quarantined, "readiness": false, "candidateExecuted": false])
+        "teardownProven": checkpoint.teardownProven, "quarantined": checkpoint.quarantined, "readiness": false, "candidateExecuted": false, "supplementReadOnly": attempt.supplement != nil])
     return checkpoint.teardownProven ? 0 : 1
 }

@@ -27,7 +27,8 @@ struct ApplePreparationBackend: FreshPreparationBackend {
     }
 }
 // No network attachment, share, socket, clipboard, or serial implementation exists here.
-func configuration(_ workspace: Workspace, run: URL, interactive: Bool = false) throws -> VZVirtualMachineConfiguration {
+func configuration(_ workspace: Workspace, run: URL, interactive: Bool = false, supplementURL: URL? = nil) throws -> VZVirtualMachineConfiguration {
+    guard interactive || supplementURL == nil else { throw VMFailure.configuration }
     let manifest = workspace.manifest
     guard VZVirtualMachine.isSupported,
           let hardware = VZMacHardwareModel(dataRepresentation: try SecureFile(run.appendingPathComponent("hardware.bin")).data()), hardware.isSupported,
@@ -46,22 +47,34 @@ func configuration(_ workspace: Workspace, run: URL, interactive: Bool = false) 
     let input = try VZDiskImageStorageDeviceAttachment(url: workspace.input(manifest.input), readOnly: true)
     let output = try VZDiskImageStorageDeviceAttachment(url: run.appendingPathComponent("output.img"), readOnly: false)
     config.storageDevices = [VZVirtioBlockDeviceConfiguration(attachment: boot), VZUSBMassStorageDeviceConfiguration(attachment: input), VZUSBMassStorageDeviceConfiguration(attachment: output)]
+    if let supplementURL {
+        let attachment = try VZDiskImageStorageDeviceAttachment(url: supplementURL, readOnly: true)
+        config.storageDevices.append(VZUSBMassStorageDeviceConfiguration(attachment: attachment))
+    }
     let graphics = VZMacGraphicsDeviceConfiguration()
     graphics.displays = [VZMacGraphicsDisplayConfiguration(widthInPixels: 1280, heightInPixels: 800, pixelsPerInch: 80)]
     config.graphicsDevices = [graphics]
     // Configuration is inspected again immediately before VZVirtualMachine construction.
-    try verifyConfiguration(config, interactive: interactive)
+    try verifyConfiguration(config, interactive: interactive, supplementURL: supplementURL)
     try config.validate()
     return config
 }
-func verifyConfiguration(_ config: VZVirtualMachineConfiguration, interactive: Bool = false) throws {
+func verifyConfiguration(_ config: VZVirtualMachineConfiguration, interactive: Bool = false, supplementURL: URL? = nil) throws {
     guard (interactive ? config.keyboards.count == 1 && config.keyboards[0] is VZUSBKeyboardConfiguration && config.pointingDevices.count == 1 && config.pointingDevices[0] is VZUSBScreenCoordinatePointingDeviceConfiguration : config.keyboards.isEmpty && config.pointingDevices.isEmpty),
           config.networkDevices.isEmpty, config.directorySharingDevices.isEmpty, config.socketDevices.isEmpty,
           config.serialPorts.isEmpty, config.audioDevices.isEmpty, config.consoleDevices.isEmpty,
-          config.storageDevices.count == 3,
+          config.storageDevices.count == (supplementURL == nil ? 3 : 4),
+          config.storageDevices[0] is VZVirtioBlockDeviceConfiguration,
+          config.storageDevices[1] is VZUSBMassStorageDeviceConfiguration,
+          config.storageDevices[2] is VZUSBMassStorageDeviceConfiguration,
           let boot = config.storageDevices[0].attachment as? VZDiskImageStorageDeviceAttachment, !boot.isReadOnly,
           let input = config.storageDevices[1].attachment as? VZDiskImageStorageDeviceAttachment, input.isReadOnly,
           let output = config.storageDevices[2].attachment as? VZDiskImageStorageDeviceAttachment, !output.isReadOnly else { throw VMFailure.configuration }
+    if let supplementURL {
+        guard interactive, config.storageDevices[3] is VZUSBMassStorageDeviceConfiguration,
+              let attachment = config.storageDevices[3].attachment as? VZDiskImageStorageDeviceAttachment,
+              attachment.isReadOnly, attachment.url == supplementURL else { throw VMFailure.configuration }
+    }
 }
 final class VMWorker: NSObject, VZVirtualMachineDelegate {
     let vm: VZVirtualMachine

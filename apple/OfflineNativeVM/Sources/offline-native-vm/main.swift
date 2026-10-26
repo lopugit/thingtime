@@ -65,6 +65,14 @@ func main() throws -> Int32 {
         let root = try Workspace.initialize(parent: URL(fileURLWithPath: args[1]), taskID: args[2])
         try emit(["contractVersion": Contract.version, "taskID": args[2], "root": root.path, "guestStarted": false]); return 0
     }
+    if command == "attach-media", args.count == 6 {
+        let workspace = try Workspace(root: URL(fileURLWithPath: args[1]))
+        let binding = try workspace.registerSupplement(args[2], relativePath: args[3], expectedSHA256: args[4], candidateCommit: args[5])
+        try emit(["contractVersion": Contract.version, "featureVersion": Contract.featureVersion,
+            "runID": binding.runID, "supplementID": binding.id, "candidateCommit": binding.candidateCommit,
+            "inputReadOnly": true, "attachmentConfigured": false, "guestStarted": false, "readiness": false])
+        return 0
+    }
     if command == "view", args.count == 3 {
         return try superviseViewer(Workspace(root: URL(fileURLWithPath: args[1])), runID: args[2])
     }
@@ -72,9 +80,11 @@ func main() throws -> Int32 {
         guard let parent = Int32(args[4]), parent == getppid() else { throw VMFailure.arguments }
         let workspace = try Workspace(root: URL(fileURLWithPath: args[1]))
         let run = try workspace.viewerWorkerRun(args[2], attemptID: args[3], parentPID: parent)
-        let config = try configuration(workspace, run: run, interactive: true)
+        let supplement = try workspace.viewerAttempt(run).supplement
+        let supplementURL = try supplement.map { try workspace.verifiedSupplementURL($0, run: run) }
+        let config = try configuration(workspace, run: run, interactive: true, supplementURL: supplementURL)
         let worker = try ViewerWorker(config: config, report: run.appendingPathComponent("viewer-" + args[3]).appendingPathComponent("worker.json"),
-            taskID: workspace.owner.taskID, parent: parent, seconds: min(1800, workspace.manifest.deadlineSeconds))
+            taskID: workspace.owner.taskID, parent: parent, seconds: min(1800, workspace.manifest.deadlineSeconds), supplement: supplement, supplementURL: supplementURL)
         let app = NSApplication.shared; app.setActivationPolicy(.regular); app.delegate = worker
         withExtendedLifetime(worker) { app.run() }; return 1
     }

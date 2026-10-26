@@ -5,8 +5,9 @@ import Darwin
 public enum VMFailure: String, Error { case guestReadinessUnavailable, arguments, manifest, path, ownership, integrity, consumed, configuration, worker, deadline, cancelled, teardownUnknown }
 public enum Contract {
     public static let version = "1.0.0"
+    public static let featureVersion = "1.1.0"
     public static let feature = "native.offline-vm"
-    public static let manifest: [String: Any] = ["feature": feature, "version": version, "guest": "macos-arm64", "commands": ["manifest", "init", "validate", "plan", "inspect-restore", "prepare", "install", "view", "run"], "networkDevices": 0, "directoryShares": 0, "socketDevices": 0, "guestOutputTrusted": false, "runConsumesTask": true, "runAvailable": false, "prepareStartsGuest": false]
+    public static let manifest: [String: Any] = ["feature": feature, "version": featureVersion, "contractVersion": version, "readOnlySupplement": true, "guest": "macos-arm64", "commands": ["manifest", "init", "validate", "plan", "inspect-restore", "prepare", "install", "attach-media", "view", "run"], "networkDevices": 0, "directoryShares": 0, "socketDevices": 0, "guestOutputTrusted": false, "runConsumesTask": true, "runAvailable": false, "prepareStartsGuest": false]
 }
 public struct Disk: Codable, Equatable { public let file: String; public let sha256: String; public let format: String }
 public struct Toolchain: Codable, Equatable {
