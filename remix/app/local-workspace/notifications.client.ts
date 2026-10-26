@@ -8,9 +8,38 @@ import { WorkspaceError, workspaceScopeKey, type WorkspaceScope } from './storag
 export function deviceNotificationHistory(scope: WorkspaceScope) {
  return new LocalNotificationHistory(workspaceDatabase(), scope, scope.kind === 'account' ? accountWorkspaceLease(scope) : anonymousWorkspaceLease());
 }
-export const notifyHistoryChanged = (scope: WorkspaceScope) => window.dispatchEvent(new CustomEvent('thingtime:notification-recorded', {
- detail: { userId: scope.kind === 'account' ? scope.ownerId : 'local-workspace', scope: workspaceScopeKey(scope) }
-}));
+const HISTORY_CHANNEL = 'thingtime:notification-history';
+const dispatchHistoryChanged = (detail: { userId: string; scope: string }) => window.dispatchEvent(new CustomEvent('thingtime:notification-recorded', { detail }));
+let historyChannel: BroadcastChannel | undefined;
+function channel() {
+ if (!historyChannel && typeof window.BroadcastChannel === 'function') {
+  try { historyChannel = new window.BroadcastChannel(HISTORY_CHANNEL); } catch { return undefined; }
+  historyChannel.onmessage = event => {
+   const detail = event.data;
+   // Only an invalidation hint crosses tabs, never message content or credentials.
+   if (detail && typeof detail.userId === 'string' && typeof detail.scope === 'string') dispatchHistoryChanged(detail);
+  };
+ }
+ return historyChannel;
+}
+export function subscribeNotificationHistory(scope: WorkspaceScope, listener: () => void) {
+ channel();
+ const expected = workspaceScopeKey(scope);
+ const changed = (event: Event) => { if ((event as CustomEvent).detail?.scope === expected) listener(); };
+ window.addEventListener('thingtime:notification-recorded', changed);
+ return () => window.removeEventListener('thingtime:notification-recorded', changed);
+}
+export function notifyHistoryChanged(scope: WorkspaceScope) {
+ const detail = { userId: scope.kind === 'account' ? scope.ownerId : 'local-workspace', scope: workspaceScopeKey(scope) };
+ dispatchHistoryChanged(detail);
+ try { channel()?.postMessage(detail); } catch { /* Cross-tab hints are optional; local persistence and invalidation succeeded. */ }
+}
+export async function retryNotificationHistory(scope: WorkspaceScope) {
+ if (scope.kind !== 'account') return;
+ await deviceNotificationHistory(scope).retry();
+ notifyHistoryChanged(scope);
+ startNotificationHistorySync(scope);
+}
 
 type AccountScope = Extract<WorkspaceScope, { kind: 'account' }>;
 export const notificationMessageTransport = (scope: AccountScope): MessageTransport => async (body, signal) => {
@@ -57,7 +86,10 @@ export function startNotificationHistorySync(scope: AccountScope) {
    const result = await history.sync(transport, controller.signal);
    notifyHistoryChanged(scope);
    if (result.pending && !stopped) timer = setTimeout(wake, 30_000);
-  } catch { /* The committed local message survives retirement and offline transport. */ }
+  } catch {
+   // A transient failure must keep a retry scheduled; identity retirement still stops it.
+   if (!stopped && canSyncAccountWorkspace(scope)) timer = setTimeout(wake, 30_000);
+  }
   finally { running = false; if (again && !stopped) wake(); }
  };
  const stop = () => { stopped = true; clearTimeout(timer); controller.abort(); unbind(); unsubscribe(); window.removeEventListener('online', wake); window.removeEventListener('focus', wake); workers.delete(key); };

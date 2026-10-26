@@ -7,19 +7,20 @@ import { bindLocalWorkspace, workspaceDatabase } from '../../local-workspace/run
 import { deviceNotificationHistory, notificationMessageTransport } from '../../local-workspace/notifications.client';
 const account = { kind: 'account', origin: 'https://notifications.example.test', ownerId: 'alice', dataPlane: 'home' } as const;
 
-test('Lopu saves anonymous/offline messages without network, bounds UTF8, and rejects stale callers', async () => {
+test('Lopu saves anonymous/offline messages despite blocked cross-tab hints, bounds UTF8, and rejects stale callers', async () => {
  const keys = ['window','indexedDB','IDBKeyRange','navigator'] as const;
  const descriptors = keys.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
  const previousFetch = globalThis.fetch; const events: string[] = [];
  const bind = (anonymous: boolean) => { rootIdentity.changed(); rootIdentity.confirm(rootIdentity.read().generation); bindLocalWorkspace(anonymous, rootIdentity.read().generation, anonymous ? undefined : account, false); };
  try {
-  const window = Object.assign(new EventTarget(), { location: { origin: account.origin } });
+  const window = Object.assign(new EventTarget(), { location: { origin: account.origin }, BroadcastChannel: class { constructor() { throw new Error('Blocked cross-tab storage'); } } });
   window.addEventListener('thingtime:notification-recorded', () => events.push('saved'));
   window.addEventListener('thingtime:notification-save-failed', () => events.push('failed'));
   for (const [key,value] of Object.entries({ window, indexedDB: new IDBFactory(), IDBKeyRange, navigator: { onLine: false } })) Object.defineProperty(globalThis, key, { configurable: true, value });
   globalThis.fetch = async () => { assert.fail('Local saving must not fetch'); };
   bind(true); await saveLopuHistory(undefined, { title: 'Anonymous message' });
   assert.equal((await deviceNotificationHistory({ kind: 'anonymous' }).list({ history: true })).total, 1);
+  Object.assign(window, { BroadcastChannel: class { onmessage = null; postMessage() { throw new Error('Cross-tab channel closed'); } } });
   bind(false); await saveLopuHistory('alice', { title: 'Offline message' });
   for (const description of ['🥰'.repeat(24000), '\u0001'.repeat(48000)]) await saveLopuHistory('alice', { title: 'Long message', description });
   await saveLopuHistory('bob', { title: 'Stale caller' });

@@ -7,6 +7,8 @@ import { Icon } from '../Icon/Icon';
 import { useLopu, useLopuStream } from '../Lopu/useLopu';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useApi } from '~/hooks/useApi';
+import { useLopuLauncherClearance } from '../Lopu/useLopuLauncherClearance';
+import { useIsMobileViewport } from '../Nav/Drawer/useDrawer';
 import {
   buildCurlForEntry,
   describeApiStatus,
@@ -169,6 +171,8 @@ export const DevKit = (_props) => {
   );
   const [mounted, setMounted] = React.useState(false);
   const [open, setOpen] = React.useState(false);
+  const isMobile = useIsMobileViewport();
+  const [triggerDragging, setTriggerDragging] = React.useState(false);
   const [pos, setPos] = React.useState<{ left: number; top: number } | null>(null);
   const [triggerPos, setTriggerPos] = React.useState<FixedPosition | null>(null);
 
@@ -243,10 +247,15 @@ export const DevKit = (_props) => {
     moved: boolean;
   } | null>(null);
   const suppressTriggerClickRef = React.useRef(false);
+  const triggerCovered = useLopuLauncherClearance(
+    triggerRef, mounted && devKit && isMobile && !open && !triggerDragging,
+    `${location.pathname}:${triggerPos?.left}:${triggerPos?.top}`
+  );
 
   const startTriggerDrag = React.useCallback((clientX: number, clientY: number) => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    setTriggerDragging(true);
 
     triggerDragRef.current = {
       startX: clientX,
@@ -272,6 +281,7 @@ export const DevKit = (_props) => {
   const endTriggerDrag = React.useCallback(() => {
     const moved = !!triggerDragRef.current?.moved;
     triggerDragRef.current = null;
+    setTriggerDragging(false);
 
     if (moved) {
       suppressTriggerClickRef.current = true;
@@ -616,6 +626,11 @@ export const DevKit = (_props) => {
 
       <Box
         className="tt.devKit"
+        // Keep the measured box and saved position so scrolling clear restores it.
+        visibility={triggerCovered ? 'hidden' : 'visible'}
+        opacity={triggerCovered ? 0 : 1}
+        pointerEvents={triggerCovered ? 'none' : undefined}
+        aria-hidden={triggerCovered || undefined}
         position="fixed"
         zIndex={99999}
         // the mobile Lopu sheet spans the viewport (LopuHost flags it on <html>);

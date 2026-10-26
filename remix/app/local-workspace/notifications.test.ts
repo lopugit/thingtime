@@ -140,3 +140,29 @@ test('redaction expansion remains inside canonical server field and byte limits'
   assert.equal(sent, true); assert.equal((await history.list({ history: true })).pendingCount, 0);
  } finally { await db.close(); }
 });
+
+test('explicit retry survives cold reload and preserves event identity after failed reconnect without stealing a live tab claim', async () => {
+ const { factory, db } = fixture(); let now = Date.now(); const input = body();
+ const first = new LocalNotificationHistory(db, account, lease, () => now);
+ await first.save(input);
+ for (let i = 0; i < 5; i++) { await first.sync(async () => { throw new Error('Failed reconnect'); }); now += 61_000; }
+ assert.equal((await first.list({ history: true })).failedCount, 1);
+ await db.close();
+ const reopened = new WorkspaceDatabase(factory, 'notifications-test', 10000, IDBKeyRange);
+ try {
+  const second = new LocalNotificationHistory(reopened, account, lease, () => now);
+  assert.equal(await second.retry(), 1);
+  let release!: () => void, entered!: () => void;
+  const ready = new Promise<void>(resolve => { entered = resolve; });
+  const wait = new Promise<void>(resolve => { release = resolve; });
+  const sync = second.sync(async message => { assert.equal(message.eventId, input.eventId); entered(); await wait; return idOf(message); });
+  await ready;
+  const otherTab = new LocalNotificationHistory(reopened, account, lease, () => now);
+  assert.equal(await otherTab.retry(), 0, 'live claims remain with the sending tab');
+  await otherTab.sync(async () => { assert.fail('Duplicate send'); });
+  release(); assert.equal((await sync).completed, 1);
+  const result = await second.list({ history: true });
+  assert.equal(result.notifications[0].id, idOf(input)); assert.equal(result.failedCount, 0); assert.equal(result.pendingCount, 0);
+  assert.equal(await new LocalNotificationHistory(reopened, anonymous, lease).retry(), 0);
+ } finally { await reopened.close(); }
+});

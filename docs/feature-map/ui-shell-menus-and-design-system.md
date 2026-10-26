@@ -16,6 +16,7 @@ components; reuse them instead of adding parallel versions.
 | Icons: emoji ↔ lucide registry (`LUCIDE_ICONS`, `LUCIDE_FOR_EMOJI`) | `app/theme/icons.tsx`; renderer `app/components/Icon/Icon.tsx` |
 | Toasts / notifications | `app/components/Lopu/useLopu.tsx` (`useLopu()`, `useLopuStream()`) — never raw Chakra `useToast` or `alert()` |
 | Device notification history | `app/local-workspace/notifications.ts`, `notifications.client.ts`; `NotificationsPage.tsx` reuses the normal rows/filters. Anonymous messages never sync; account messages use the existing home-pinned recorder after verified login. |
+| Retained account history | `app/local-workspace/notificationPages.ts`, `notificationHistoryAccess.ts`; exact query/cursor snapshots and scoped refusal guards. `app/hooks/useDebouncedSearchDraft.ts` preserves newer typing across delayed URL updates. Native tests cover offline/retry, pagination invalidation and refused cached projections. History filters use the existing launcher-clearance marker, shared by the mobile Lopu and DevKit shortcuts. |
 | Layering (z-index) | `app/components/Things/transferLayers.ts` and the shared layer constants; never ad-hoc z-index escalation |
 | Page shell, nav clearance, drawers | `app/components/Layout/Main.tsx`, `app/components/Nav/*` (`--tt-nav-clearance`, safe-area vars) |
 | Device menu and full page | `app/components/Things/ThingsPage.tsx`, `ThingsViews.tsx`, `app/components/Devices/deviceNavigation.ts`, `DeviceDetailsDrawer.tsx` (one shared details tree for drawer and page) |

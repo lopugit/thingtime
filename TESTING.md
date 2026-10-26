@@ -6892,6 +6892,41 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Notification history (`/notifications`, `remix/app/components/Notifications/`, `api/utils/notifications/listQuery.ts`)
 
+- [ ] Keep two normal History tabs open. Save a Lopu message offline in one;
+      the other refreshes only its matching workspace without transmitting
+      message bodies across tabs. Cold reload keeps the message. A blocked
+      BroadcastChannel must not turn a successful local save into a failure.
+- [ ] Download more than one account-history page and a filtered page, then
+      reload offline. Keep the Account history tab and selected account view available
+      without treating the offline identity as a remote grant. Show cached/partial
+      provenance and read only saved pages
+      for the exact query/cursor. An unseen filter must not reuse other results
+      as a match. Keep previous-query rows visibly labelled during refresh;
+      releasing an older delayed response cannot overwrite the active query.
+- [ ] Immediately after a search request starts, type a newer query. Its request
+      must start before the older response returns, and a delayed URL update
+      must not replace the newer input. Back/forward and explicit reset still
+      update the search field; concurrent non-search filters remain intact.
+- [ ] At 390px and 320px, scroll the complete history and hit-test visible
+      filters and row controls. Optional floating Lopu/DevKit shortcuts must
+      yield to marked filter controls, then reappear when scrolled clear.
+      DevKit still opens, closes and drags normally.
+- [ ] Refuse an account page or pagination read with 401/403/409. Immediately
+      retire its visible and first-paint cached projection, including when
+      IndexedDB cleanup fails. Cold reload must not bypass the scoped refusal
+      guard; independent pending device messages survive. Reconfirm through a
+      successful authorized remote read before showing cached account rows.
+- [ ] Hold an older-page response, then invalidate the same History scope from
+      another tab or the normal notification event. The fresh first-page read
+      releases the obsolete pagination's busy state; loading the current cursor
+      works, and releasing the stale response adds no duplicates. A delayed
+      refusal for a previous query must retire the currently displayed query
+      in the same tab, even when the stale promise result is ignored.
+- [ ] Force a local account message's reconnect to fail, then use **Retry
+      account sync** by keyboard. Preserve its original event ID through the
+      retry and show exactly one canonical event. Another tab's live claim is
+      never stolen; anonymous messages never acquire an account retry path.
+
 - [ ] `/notifications` keeps authenticated account history as its default;
       "On this device" (`?source=device`) lists locally saved Lopu messages.
       Anonymous/offline workspaces default to device history and the nav bell

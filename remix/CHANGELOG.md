@@ -104,6 +104,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Retain exact offline notification queries/pages, add explicit event-preserving retries and scoped cross-tab refresh, and fence cached projections after access refusal or failed cache cleanup. Fix superseded pagination remaining busy, delayed URL updates replacing newer search input, and cold offline account history selecting the wrong source. Mobile floating shortcuts yield to filter controls. Native synthetic-account acceptance, full scrolling and control hit tests pass at 1440/390/320px; hosted head checks remain separate. [PR 1000 detail](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
+
 - 2026-10-27: Password queue status now distinguishes unread/failed queues from empty queues, preserves known rows through refresh errors, and retires prior account presentation. Fresh isolated API/native and actual-component fault checks pass; [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
 - 2026-10-27: Record instrumented native instruction paste, undo/redo and

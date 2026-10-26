@@ -72,6 +72,21 @@ export class LocalNotificationHistory {
     nextCursor: last && eligible.length > page.length ? `device-notifications:${JSON.stringify({ key, at: last.createdAt, id: last.id })}` : null };
   });
  }
+ /** Explicit user retry resets failed deliveries without changing their immutable
+  * event IDs. Live claims are left alone so another tab cannot duplicate a send. */
+ async retry() {
+  if (this.scope.kind !== 'account') return 0;
+  return this.db.transaction(this.scope, 'readwrite', this.lease, async tx => {
+   let retried = 0;
+   for (const { value: row } of await tx.list<Message>(COLLECTION)) {
+    if (row.state !== 'error' && row.state !== 'pending' && !(row.state === 'syncing' && row.retryAt <= this.now())) continue;
+    const { claim: _claim, ...record } = row;
+    await tx.put(COLLECTION, row.id, { ...record, state: 'pending', attempts: 0, retryAt: 0 } satisfies Message);
+    retried++;
+   }
+   return retried;
+  });
+ }
  /** Claims serialize across tabs. A lost response reuses the same event UUID;
   * neither retries nor account switches can duplicate or retarget an event. */
  async sync(transport: MessageTransport, signal?: AbortSignal) {

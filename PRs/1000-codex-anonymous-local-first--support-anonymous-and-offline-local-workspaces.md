@@ -5744,3 +5744,40 @@ serve matching shell/assets and an origin-scoped manifest. These public HTTP
 checks are separate from functional deployed acceptance and from the new source's
 head checks. No merge, manual deployment, existing-account mutation, shared
 proxy/key/service or VM change was made.
+
+
+### 27 October — durable notification history and independent retry
+
+Account History retains exact query/cursor snapshots in its existing scoped
+workspace database. Offline identity selects only those saved projections; it
+grants no remote reads. Device messages survive disconnect/reload, explicit
+keyboard retries preserve their original event IDs, and scoped invalidations
+refresh another tab without transmitting message content. Known refusals retire
+visible/first-paint projections before best-effort deletion; a separate
+non-content guard fails closed when marker storage or cache cleanup fails.
+
+Native testing found and fixed superseded pagination staying busy, delayed URL
+acknowledgements replacing newer search input, and cold offline reload selecting
+device history despite an available account workspace. The search-draft helper
+also preserves current nonquery filters and normal back/forward/reset behavior.
+Visual review found floating controls covering phone filters. The existing
+launcher-clearance contract now protects those controls for Lopu and DevKit,
+while retaining normal DevKit open/close/drag behavior.
+
+[History evidence](../artifacts/anonymous-notification-history-2026-10-27/README.md)
+records each failed attempt, its cause and the final accepted run. Focused tests
+pass 27/27; notification suites pass 52/52 and 12/12 (overlapping checks are not a
+unique-test sum). Changed-source lint passes; the last full typecheck retains
+exactly the same 91 normalized baseline diagnostics. Sanitized client/server
+builds restore local configuration and verify reviewed source-map contents.
+Native tests use synthetic accounts, normal browser sign-in, a real built app
+and MongoDB, sandboxed Chromium and enforced network-none isolation; all owned
+runtimes are released. Desktop/390/320px full traversal, visible control hit
+targets and normal floating-tool interactions are checked.
+
+This closes the scoped history checkpoint, not real social-trigger or wider
+automation/local-definition acceptance. The original unified desktop/CLI MCP
+render/export evidence remains separate. Prior pushed cdd7198ff passed Web CI
+and CodeQL with public preview shell/assets/manifest verified; this follow-up
+requires its own hosted head checks. No merge, manual deployment, existing-account
+write, shared proxy/key/service change or VM change was made.
