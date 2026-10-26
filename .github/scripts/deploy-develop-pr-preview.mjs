@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { deploymentIssue as stablePublisherDeploymentIssue } from './deploy-vercel-prebuilt.mjs';
+import { gatewayPolicy, gatewayMetadata, gatewayDeploymentIssue, gatewayRuntimeArgs, gatewayPublisherEnvironment, gatewaySecretConfigured } from './environment-gateway-policy.mjs';
 import { isManagedPreviewComment as isManagedComment, upsertPreviewComment, publishPreviewNotifications } from './preview-comments.mjs';
 import { syncPreviewLabels, deploymentBuiltAt, previewBuildTime } from './preview-labels.mjs';
 import { recoverySourceIssue, previewWorkActive, recoveryAttempt, reconcilePreviewInventory } from './preview-recovery.mjs';
@@ -364,9 +366,11 @@ const dispatchPullRequestIssue = (pullRequest, dispatch) => {
 const workflowDeploymentCommitSha = (deployment) => deployment?.meta?.githubCommitSha ?? deployment?.gitSource?.sha ?? null;
 const workflowDeploymentCommitRef = (deployment) => deployment?.meta?.githubCommitRef ?? deployment?.gitSource?.ref ?? null;
 
+const prGatewayPolicy = (branch) => gatewayPolicy({ branch, target: { slug: 'develop' }, follower: true });
 const deploymentMetadata = ({ pullRequest, config }) => {
 	const [githubCommitOrg, githubCommitRepo] = config.repository.split('/');
 	return {
+		...gatewayMetadata(prGatewayPolicy(pullRequest.head.ref)),
 		githubCommitOrg,
 		githubCommitRepo,
 		githubCommitRef: pullRequest.head.ref,
@@ -426,6 +430,7 @@ const choosePreferredDeployment = (deployments, expectedSha) =>
 		.filter(
 			(deployment) =>
 				workflowDeploymentCommitSha(deployment) === expectedSha &&
+				!gatewayDeploymentIssue(deployment, prGatewayPolicy(workflowDeploymentCommitRef(deployment))) &&
 				(deployment.readyState === 'READY' || ACTIVE_STATES.has(deployment.readyState))
 		)
 		.sort((left, right) => {
@@ -587,7 +592,7 @@ const runSelfTest = async () => {
 	equal(metadata.githubDeployment, undefined);
 	equal(metadata[WORKFLOW_DEPLOYMENT_MARKER], '1');
 	equal(metadata[PREBUILT_DEPLOYMENT_MARKER], '1');
-	equal(Object.keys(metadata).length, 9);
+	equal(Object.keys(metadata).length, 13);
 	const runtimeEnvironment = {
 		THINGTIME_BRANCH_NAME: base.head.ref,
 		THINGTIME_GIT_COMMIT_SHA: base.head.sha
@@ -697,7 +702,7 @@ const runSelfTest = async () => {
 	);
 	const prebuiltDeployment = {
 		...deployment,
-		meta: { ...deployment.meta, [PREBUILT_DEPLOYMENT_MARKER]: '1' },
+		meta: { ...deployment.meta, ...gatewayMetadata(prGatewayPolicy(base.head.ref)), [PREBUILT_DEPLOYMENT_MARKER]: '1' },
 		gitSource: null
 	};
 	equal(
@@ -723,7 +728,8 @@ const runSelfTest = async () => {
 		deploymentIdentityIssue({ ...deployment, meta: { ...deployment.meta, githubRepositoryId: '99' } }, config, { prNumber: 201 }),
 		'metadata-github-repository-mismatch'
 	);
-	equal(choosePreferredDeployment([deployment], base.head.sha)?.id, deployment.id);
+	equal(choosePreferredDeployment([deployment], base.head.sha), null);
+	equal(choosePreferredDeployment([prebuiltDeployment], base.head.sha)?.id, prebuiltDeployment.id);
 	equal(choosePreferredDeployment([{ ...deployment, readyState: 'ERROR' }], base.head.sha), null);
 	const developSha = 'd'.repeat(40);
 	const stableDeployment = {
@@ -1628,75 +1634,23 @@ const assignAliasVerified = async (config, deployment, prNumber) => {
 	return { alias, oldDeploymentId: assignment.oldDeploymentId ?? null };
 };
 
-const assignStableDevelopAliasVerified = async (config, deployment, expectedSha) => {
-	const issue = stableDevelopDeploymentIssue(deployment, config, expectedSha);
-	if (issue || deployment.readyState !== 'READY') {
-		throw new Error(`Refusing to publish an unverified stable develop deployment (${issue ?? deployment.readyState})`);
-	}
-	if ((await getDevelopHeadSha(config)) !== expectedSha) return { headChanged: true, oldDeploymentId: null };
-
-	const existing = await getStableDevelopAliasBinding(config);
-	if (existing?.deployment.id === deployment.id) {
-		return { headChanged: false, oldDeploymentId: null };
-	}
-
-	let assignment = null;
-	try {
-		assignment = await vercelRequest(`/v2/deployments/${encodeURIComponent(deployment.id)}/aliases`, {
-			method: 'POST',
-			accept: [200],
-			retries: 0,
-			body: { alias: config.stableDevelopDomain }
-		});
-	} catch (error) {
-		const reconciled = await getStableDevelopAliasBinding(config);
-		if (reconciled?.deployment.id !== deployment.id) throw error;
-		assignment = reconciled.record;
-	}
-	if (assignment?.alias !== config.stableDevelopDomain) {
-		throw new Error('Vercel assigned an unexpected stable develop alias');
-	}
-	const verified = await getStableDevelopAliasBinding(config);
-	if (verified?.deployment.id !== deployment.id) {
-		throw new Error('Stable develop alias did not resolve to the expected deployment');
-	}
-	await assertVercelConfiguration(config);
-	await verifyPublishedAlias(`https://${config.stableDevelopDomain}`);
-	return {
-		headChanged: (await getDevelopHeadSha(config)) !== expectedSha,
-		oldDeploymentId: assignment.oldDeploymentId ?? null
-	};
-};
-
 const reconcileStableDevelopAlias = async (config, { waitForReady = false } = {}) => {
 	await assertVercelConfiguration(config);
 	const timeoutAt = Date.now() + STABLE_DEVELOP_TIMEOUT_MS;
 	for (;;) {
 		const expectedSha = await getDevelopHeadSha(config);
 		const binding = await getStableDevelopAliasBinding(config);
-		const bindingIssue = binding ? stableDevelopDeploymentIssue(binding.deployment, config, expectedSha) : 'missing-alias';
+		const bindingIssue = binding ? stablePublisherDeploymentIssue(binding.deployment, { sha: expectedSha, branch: 'develop', target: { slug: 'develop', kind: 'preview', id: config.customEnvironmentId }, projectId: config.projectId }) : 'missing-alias';
 		if (binding && bindingIssue === null && binding.deployment.readyState === 'READY') {
 			console.log(`Stable develop alias already current: ${config.stableDevelopDomain} -> ${expectedSha}`);
 			return { changed: false, deploymentId: binding.deployment.id, sha: expectedSha };
 		}
 
-		const deployments = await listStableDevelopDeployments(config, expectedSha);
-		const preferred = chooseStableDevelopDeployment(deployments, config, expectedSha);
-		if (preferred?.readyState === 'READY') {
-			const assigned = await assignStableDevelopAliasVerified(config, preferred, expectedSha);
-			if (assigned.headChanged) {
-				if (!waitForReady && Date.now() >= timeoutAt) {
-					console.log('Stable develop alias promotion deferred because develop advanced during assignment');
-					return { changed: true, deferred: true, deploymentId: preferred.id, sha: expectedSha };
-				}
-				continue;
-			}
-			console.log(`Stable develop alias promoted: ${config.stableDevelopDomain} -> ${preferred.id} (${expectedSha})`);
-			return { changed: true, deploymentId: preferred.id, sha: expectedSha };
-		}
+		// The protected prebuilt publisher exclusively owns stable gateway aliases.
+		// This PR controller waits for that owner; it never promotes a legacy build.
 
 		if (!waitForReady) {
-			console.log(`Stable develop alias promotion deferred: current=${expectedSha}; binding=${bindingIssue}; deployment=${preferred?.readyState ?? 'missing'}`);
+			console.log(`Stable develop alias promotion deferred: current=${expectedSha}; binding=${bindingIssue}; stable publisher owns promotion`);
 			return { changed: false, deferred: true, deploymentId: binding?.deployment.id ?? null, sha: expectedSha };
 		}
 		if (Date.now() >= timeoutAt) {
@@ -1745,6 +1699,7 @@ const prebuiltDeploymentArgs = ({ config, prebuiltDirectory, metadata, runtimeEn
 		'--cwd',
 		prebuiltDirectory
 	];
+	args.push(...gatewayRuntimeArgs(prGatewayPolicy(metadata.githubCommitRef)));
 	for (const [key, value] of Object.entries(runtimeEnvironment).sort(([left], [right]) => left.localeCompare(right))) {
 		args.push('--env', `${key}=${value}`);
 	}
@@ -1764,6 +1719,8 @@ const deployPrebuiltOutput = async (config, pullRequest) => {
 		{ mode: 0o600 }
 	);
 
+	const variables = await vercelRequest(`/v9/projects/${config.projectId}/env`);
+	if (!gatewaySecretConfigured(variables.envs || [], { slug: 'develop', id: config.customEnvironmentId })) throw new Error('Scoped encrypted gateway bootstrap secret missing');
 	const metadata = deploymentMetadata({ pullRequest, config });
 	const runtimeEnvironment = {
 		THINGTIME_BRANCH_NAME: pullRequest.head.ref,
@@ -1772,12 +1729,12 @@ const deployPrebuiltOutput = async (config, pullRequest) => {
 	const args = prebuiltDeploymentArgs({ config, prebuiltDirectory, metadata, runtimeEnvironment });
 
 	const { stdout } = await execFileAsync(resolve(requiredEnv('VERCEL_CLI_PATH')), args, {
-		env: {
+		env: gatewayPublisherEnvironment(prGatewayPolicy(pullRequest.head.ref), {
 			...process.env,
 			VERCEL_ORG_ID: config.teamId,
 			VERCEL_PROJECT_ID: config.projectId,
 			VERCEL_TOKEN: requiredEnv('VERCEL_API_TOKEN')
-		},
+		}),
 		maxBuffer: 4 * 1024 * 1024,
 		timeout: 10 * 60 * 1000
 	});
@@ -1826,7 +1783,7 @@ const createVercelDeployment = async (config, pullRequest, reusable = null) => {
 		expectedSha: pullRequest.head.sha,
 		expectedRef: pullRequest.head.ref
 	});
-	if (issue) throw new Error(`Created Vercel deployment failed identity validation (${issue})`);
+	if (issue || gatewayDeploymentIssue(created, prGatewayPolicy(pullRequest.head.ref))) throw new Error(`Created Vercel deployment failed identity validation (${issue || 'gateway-policy'})`);
 	return created;
 };
 

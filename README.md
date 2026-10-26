@@ -50,6 +50,53 @@ every branch inheriting this thin tree and keeps `ignoreCommand: "exit 0"` as a
 second fail-safe. It has no install, build, or output command because there is
 no product here to deploy.
 
+## Environment gateways for future product builds
+
+The protected publishers select the backend bootstrap; product builds contain no
+Vercel token, Mongo credential or gateway signing secret. `environment-gateway-policy.mjs`
+maps production to `https://thingtime.com`, custom develop to
+`https://dev.thingtime.com`, and standard preview to
+`https://master.previews.thingtime.com`. The preview master is a separate
+preview-target build of the trusted current `main` source, never whichever PR
+published last. Its Vercel preview scope uses the existing development Mongo and
+auth/signing configuration; production retains production scope. Develop keeps
+its existing custom environment and source branch.
+
+Bootstrap setup requires one encrypted `THINGTIME_GATEWAY_SECRET` (at least 32
+characters) in each selected Vercel scope: production, preview, and custom develop.
+Keep it in the authorized Vercel secret store or the canonical server vault;
+never put values in workflow inputs, GitHub artifacts, command arguments or docs.
+The secret is irreducible bootstrap authority for authenticating the relay before
+Mongo/vault access. Environment and canonical origin are protected publisher
+constants, passed by environment-variable key name through the child environment.
+Missing encrypted secret metadata refuses publication before upload. The protected
+workflow accepts `build_only: true` to create exact-source artifacts without
+uploading or changing aliases; production builds also emit the separate preview
+master artifact. This supports deployment-scoped owner bootstrap before scoped
+project settings are activated. The project
+remains Git-disconnected and prebuilt-only; no native branch-variable feature is
+assumed.
+
+New product bundles default to proxy mode and can explicitly opt into their own
+backend through their documented bundled policy or
+`THINGTIME_MONGODB_CONNECTION_MODE=dedicated`. Ordinary branch publications do
+not override that choice. The three canonical gateway owners are explicitly
+forced to proxy mode, preventing an inherited dedicated override from converting
+a shared gateway into a branch backend. An unknown environment mapping fails
+closed. Existing immutable deployments are allowed to age out naturally; this
+policy does not revoke their credentials or claim their background pools stopped.
+
+The stable publisher records gateway provenance and rejects old READY deployment
+reuse. Production uses `--skip-domain`; the pinned CLI does not support that flag
+for custom targets. All applicable alias bindings are therefore snapshotted
+before every upload, then verified after publication. Failure restores bindings
+still owned by that attempt, without overwriting a concurrent operator. The PR
+preview controller never promotes `dev.thingtime.com`; only the stable publisher
+owns that canonical alias. Source must support the gateway capability before an
+owner can pass the exact manifest and API checks. Keep the old production/develop
+bindings until bootstrap has passed review and each environment can be activated
+and verified independently.
+
 ## Why it is bare
 
 `main` and `develop` carry only **thin listeners** — one `uses:` of a workflow

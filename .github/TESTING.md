@@ -229,3 +229,26 @@ pre-queued with no jobs, logs, or cancellable run graph.
 - After disconnecting native Git, verify existing provider branch aliases for main/develop/staging and the project production alias follow the verified prebuilt deployment. Only existing aliases owned by the selected project may be reconciled; skip unsupported/long branch slugs and absent aliases.
 
 - A newly reassigned alias can briefly return a stale shell referencing an unavailable asset. Retry only the read verification with bounded backoff; never repeat the alias mutation blindly, and fail after persistent errors.
+
+## Environment gateway publication
+
+- Run `node --test .github/scripts/environment-gateway-policy.test.mjs .github/scripts/deploy-vercel-prebuilt.test.mjs`
+  and `node .github/scripts/deploy-develop-pr-preview.mjs --self-test`.
+- Verify production and preview master are separately built with their own target
+  metadata and no provider/gateway secrets in either build or artifact.
+- Missing encrypted scope bootstrap, unknown target, arbitrary PR master selection,
+  stale deployment policy and inherited owner dedicated mode must fail closed.
+- Simulate automatic alias assignment before CLI completion and failed API smoke:
+  rollback must restore the pre-upload owner, remove only a newly created alias,
+  and preserve a concurrent operator. Production passes `--skip-domain`; custom
+  targets use pre-upload snapshots because CLI59.10.0 rejects that option there.
+- A scheduled PR-preview reconciliation must never move the stable develop alias
+  to a native or PR deployment. Verify canonical source and exact manifest owner,
+  then ordinary API reads after the stable publisher's explicit alias assignment.
+- Activate each environment only after source support and independent review;
+  preserve known production/develop bindings for rollback. Do not retire old
+  immutable deployments or change Atlas tier/credentials for this rollout.
+- Exercise the full READY-reuse publisher with mocked GitHub/Vercel/runtime HTTP,
+  no CLI or real network. Confirm canonical manifest/API acceptance reaches the
+  success status and step-summary receipt, then repeat without another alias or
+  status mutation. This guards receipt variables escaping their acceptance scope.

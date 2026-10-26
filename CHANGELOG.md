@@ -15,6 +15,16 @@ verbatim, and CI changes are recorded here from now on.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 every entry is attributed the same way the app changelog attributes them.
 
+## 2026-10-26 — Publish environment gateway owners and explicit branch backends
+
+- Map production, custom develop and standard preview to controlled gateway
+  origins, retaining the existing Mongo/auth credential scopes. Build a separate
+  preview-target master from trusted main source; arbitrary PRs cannot own it.
+- Keep dedicated backend opt-in on ordinary branches, force canonical owners to
+  proxy, and refuse missing bootstrap secrets or stale deployment provenance.
+- Snapshot aliases before uploads, restore them on failed acceptance, and retire
+  the PR controller's competing stable-develop promotion path.
+
 ## 2026-10-23 — Build every Vercel deployment on GitHub Actions
 
 - Reconcile already-READY output after an interrupted publisher without another

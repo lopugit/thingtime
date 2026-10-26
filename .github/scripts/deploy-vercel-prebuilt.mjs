@@ -3,10 +3,11 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { gatewayPolicy, gatewayMetadata, gatewayDeploymentIssue, gatewayRuntimeArgs, gatewayPublisherEnvironment, gatewaySecretConfigured, reconcileGatewayAliases, restoreGatewayAliases } from './environment-gateway-policy.mjs';
 
 const exec = promisify(execFile);
 export const marker = 'thingtimeGithubActionsBuild';
-export const policyVersion = '2';
+export const policyVersion = '3';
 const required = (name) => {
   const value = process.env[name];
   if (!value) throw new Error(`Missing ${name}`);
@@ -47,6 +48,8 @@ export function selectTarget(branch, productionBranch, environments, requested =
 }
 
 export function deploymentIssue(deployment, { sha, branch, target, projectId }) {
+  const gateway = gatewayPolicy({ branch, target, owner: branch === 'main' && target.slug === 'preview' });
+  if (gatewayDeploymentIssue(deployment, gateway)) return 'gateway-policy';
   if (deployment.projectId !== projectId) return 'project';
   if (deployment.meta?.[marker] !== '1') return 'build-marker';
   if (deployment.meta?.thingtimePrebuiltPolicy !== policyVersion) return 'output-policy';
@@ -61,8 +64,11 @@ export function deploymentArgs({ directory, target, branch, sha, teamSlug, runId
   const args = ['deploy', '--prebuilt', '--archive=tgz', '--yes', '--scope', teamSlug, '--cwd', directory];
   if (regions.length) args.push('--regions', regions.join(','));
   args.push(target.kind === 'production' ? '--prod' : `--target=${target.slug}`);
+  if (target.kind === 'production') args.push('--skip-domain');
+  const gateway = gatewayPolicy({ branch, target, owner: branch === 'main' && target.slug === 'preview' });
+  args.push(...gatewayRuntimeArgs(gateway));
   const [owner, repo] = repository.split('/');
-  for (const [key, value] of Object.entries({ [marker]: '1', thingtimePrebuiltPolicy: policyVersion, thingtimeBuildTarget: target.slug, githubCommitSha: sha, githubCommitRef: branch, githubCommitOrg: owner, githubCommitRepo: repo, githubDeployment: '1', githubWorkflowRunId: runId })) args.push('--meta', `${key}=${value}`);
+  for (const [key, value] of Object.entries({ ...gatewayMetadata(gateway), [marker]: '1', thingtimePrebuiltPolicy: policyVersion, thingtimeBuildTarget: target.slug, githubCommitSha: sha, githubCommitRef: branch, githubCommitOrg: owner, githubCommitRepo: repo, githubDeployment: '1', githubWorkflowRunId: runId })) args.push('--meta', `${key}=${value}`);
   for (const [key, value] of Object.entries({ THINGTIME_BRANCH_NAME: branch, THINGTIME_GIT_COMMIT_SHA: sha })) args.push('--env', `${key}=${value}`);
   return args;
 }
@@ -124,7 +130,8 @@ async function context(branch, requested) {
   const target = selectTarget(branch, repository.default_branch, environments.environments, requested);
   const sha = ref.object?.sha;
   if (!/^[a-f0-9]{40}$/.test(sha || '')) throw new Error('Invalid source SHA');
-  return { sha, branch, target, projectId: project.id };
+  const gateway = gatewayPolicy({ branch, target, owner: branch === 'main' && target.slug === 'preview' });
+  return { sha, branch, target, gateway, projectId: project.id };
 }
 
 async function existing(plan) {
@@ -155,6 +162,10 @@ async function output(values) {
   }
 }
 
+export function needsReleaseBuild(plan, deployed, previewMaster) {
+  return !deployed || (plan.target.kind === 'production' && !previewMaster);
+}
+
 export function planOutputs(plan, deployed) {
   // READY output may still need aliases/status recovery after an interrupted
   // publisher. Reconcile it without compiling or uploading it again.
@@ -167,8 +178,14 @@ async function prepare() {
   if (source.skip || source.branch === 'github-actions') return output({ should_build: 'false' });
   const plan = await context(source.branch, process.env.TARGET_ENVIRONMENT || 'auto');
   if (source.sha && plan.sha !== source.sha) return output({ should_build: 'false' });
+  if (process.env.BUILD_ONLY === 'true') {
+    await output({ ...planOutputs(plan, null), should_publish: 'false' });
+    console.log(`Build-only plan: ${plan.branch} @ ${plan.sha} -> ${plan.target.slug}; publication disabled`);
+    return;
+  }
   const deployed = await existing(plan);
-  await output(planOutputs(plan, deployed));
+  const master = plan.target.kind === 'production' ? await existing(await context(plan.branch, 'preview')) : null;
+  await output(planOutputs(plan, needsReleaseBuild(plan, deployed, master) ? null : deployed));
   console.log(`Deployment plan: ${plan.branch} @ ${plan.sha} -> ${plan.target.slug}${deployed ? ' (already deployed)' : ''}`);
 }
 
@@ -183,7 +200,7 @@ export async function verifyAlias(check, wait = (ms) => new Promise((done) => se
   }
 }
 
-async function smoke(url) {
+async function smoke(url, { api = true } = {}) {
   const home = await fetch(url, { signal: AbortSignal.timeout(30_000) });
   const html = await home.text();
   if (!home.ok || !html.includes('<div id="root"></div>')) throw new Error(`Deployed Vite shell failed verification at ${url}`);
@@ -193,54 +210,26 @@ async function smoke(url) {
   if (!asset) throw new Error('No deployed JavaScript asset');
   const response = await fetch(new URL(asset[1], url), { signal: AbortSignal.timeout(30_000) });
   if (!response.ok || !(response.headers.get('content-type') || '').includes('javascript')) throw new Error(`Deployed asset failed verification at ${url}`);
-  const api = await fetch(`${url}/api/root-data`, { signal: AbortSignal.timeout(30_000) });
-  if (!api.ok || !(api.headers.get('content-type') || '').includes('json')) throw new Error('Deployed API failed verification');
-  await api.json();
+  if (!api) return;
+  const apiResponse = await fetch(`${url}/api/root-data`, { signal: AbortSignal.timeout(30_000) });
+  if (!apiResponse.ok || !(apiResponse.headers.get('content-type') || '').includes('json')) throw new Error('Deployed API failed verification');
+  await apiResponse.json();
 }
 
-async function publish() {
+export async function publish() {
   const branch = required('SOURCE_REF');
   const plan = await context(branch, required('TARGET_ENVIRONMENT'));
   if (plan.sha !== required('SOURCE_SHA') || plan.target.id !== (process.env.TARGET_ID || '')) {
     console.log('Source or environment advanced; a newer run owns deployment'); return;
   }
+  const variables = await vercel(`/v9/projects/${plan.projectId}/env`);
+  if (!gatewaySecretConfigured(variables.envs || [], plan.target)) throw new Error('Scoped encrypted gateway bootstrap secret missing');
   const source = await github(`/contents/vercel.json?ref=${plan.sha}`);
   const productConfig = JSON.parse(Buffer.from(source.content, 'base64').toString('utf8'));
-  let deployment = await existing(plan);
-  if (!deployment) {
-    const directory = resolve(required('VERCEL_PREBUILT_DIR'));
-    // Only the validated output is read from the untrusted build. Source config
-    // comes independently from the authorized immutable GitHub commit.
-    const config = { framework: null, git: { deploymentEnabled: false } };
-    for (const key of ['regions', 'fluid']) if (productConfig[key] !== undefined) config[key] = productConfig[key];
-    if (plan.target.kind === 'production' && productConfig.crons) config.crons = productConfig.crons;
-    await mkdir(resolve(directory, '.vercel'), { recursive: true });
-    await writeFile(resolve(directory, '.vercel/project.json'), JSON.stringify({ orgId: required('VERCEL_TEAM_ID'), projectId: plan.projectId }), { mode: 0o600 });
-    await writeFile(resolve(directory, 'vercel.json'), JSON.stringify(config));
-    await applyOutputPolicy(directory, productConfig, plan.target);
-    const args = deploymentArgs({ ...plan, regions: productConfig.regions, directory, teamSlug: required('VERCEL_TEAM_SLUG'), runId: required('GITHUB_RUN_ID'), repository: required('GITHUB_REPOSITORY') });
-    let stdout;
-    try {
-      ({ stdout } = await exec(required('VERCEL_CLI_PATH'), args, { env: publisherEnvironment({ teamId: required('VERCEL_TEAM_ID'), projectId: plan.projectId, token: required('VERCEL_API_TOKEN') }), timeout: 15 * 60_000, maxBuffer: 4 * 1024 * 1024 }));
-    } catch {
-      // Reconcile an uncertain upload once; never silently retry a deployment.
-      deployment = await existing(plan);
-      if (!deployment) throw new Error('Prebuilt upload failed; inspect Vercel and the workflow before retrying');
-    }
-    if (!deployment) {
-      const urls = stdout.match(/https:\/\/[a-z0-9.-]+\.vercel\.app\/?/gi) || [];
-      if (!urls.length) throw new Error('Publisher returned no deployment URL');
-      deployment = await vercel(`/v13/deployments/${new URL(urls.at(-1)).hostname}`);
-    }
-  }
-  const issue = deploymentIssue(deployment, plan) || runtimePolicyIssue(deployment, productConfig, plan.target);
-  if (issue || deployment.readyState !== 'READY') throw new Error(`Deployment verification failed (${issue || deployment.readyState})`);
-  const url = `https://${deployment.url}`;
-  await smoke(url);
-  if ((await context(branch, plan.target.slug)).sha !== plan.sha) throw new Error('Branch advanced before alias publication');
   const domains = await vercel(`/v9/projects/${plan.projectId}/domains?limit=100`);
-  const aliases = new Set();
-  for (const domain of domains.domains || []) {
+  const previewMaster = plan.gateway.owner && plan.target.slug === 'preview';
+  const aliases = new Set(previewMaster ? [new URL(plan.gateway.origin).hostname] : []);
+  for (const domain of previewMaster ? [] : domains.domains || []) {
     if (domain.redirect || domain.name.startsWith('*.')) continue;
     const productionDomain = plan.target.kind === 'production' && !domain.gitBranch && !domain.customEnvironmentId;
     if (!productionDomain && domain.gitBranch !== branch && !(plan.target.id && domain.customEnvironmentId === plan.target.id)) continue;
@@ -249,7 +238,7 @@ async function publish() {
   // Native Git used to maintain these provider-owned compatibility URLs.
   // Reconcile only existing aliases belonging to this exact project; do not
   // invent long-branch slugs or create additional public hostnames.
-  for (const name of compatibilityAliasCandidates({ branch, projectName: required('VERCEL_PROJECT_NAME'), teamSlug: required('VERCEL_TEAM_SLUG'), target: plan.target })) {
+  for (const name of previewMaster ? [] : compatibilityAliasCandidates({ branch, projectName: required('VERCEL_PROJECT_NAME'), teamSlug: required('VERCEL_TEAM_SLUG'), target: plan.target })) {
     let alias;
     try { alias = await vercel(`/v4/aliases/${name}`); }
     catch (error) { if (error.status === 404) continue; throw error; }
@@ -257,16 +246,83 @@ async function publish() {
     if (owner !== plan.projectId) throw new Error('Compatibility alias project mismatch');
     aliases.add(name);
   }
-  for (const name of aliases) {
-    let currentAlias = null;
-    try { currentAlias = await vercel(`/v4/aliases/${name}`); }
-    catch (error) { if (error.status !== 404) throw error; }
-    if (currentAlias?.deploymentId !== deployment.id) {
-      await vercel(`/v2/deployments/${deployment.id}/aliases`, { method: 'POST', body: JSON.stringify({ alias: name }) });
+  const readAlias = async (name) => {
+    try {
+      const alias = await vercel(`/v4/aliases/${name}`);
+      const owner = alias.projectId || (alias.deploymentId && (await vercel(`/v13/deployments/${alias.deploymentId}`)).projectId);
+      if (owner !== plan.projectId) throw new Error('Alias project mismatch');
+      return alias;
     }
-    const alias = await vercel(`/v4/aliases/${name}`);
-    if (alias.deploymentId !== deployment.id) throw new Error('Alias did not publish the verified deployment');
-    await verifyAlias(() => smoke(`https://${name}`));
+    catch (error) { if (error.status === 404) return null; throw error; }
+  };
+  const assignAlias = (name, id) => vercel(`/v2/deployments/${id}/aliases`, { method: 'POST', body: JSON.stringify({ alias: name }) });
+  const removeAlias = async (name) => {
+    const alias = await readAlias(name);
+    if (alias) await vercel(`/v2/aliases/${alias.uid || alias.id || name}`, { method: 'DELETE' });
+  };
+  const canonicalHost = new URL(plan.gateway.origin).hostname;
+  if (plan.gateway.owner && !aliases.has(canonicalHost)) throw new Error('Canonical gateway domain missing from project mapping');
+  if (previewMaster && !(domains.domains || []).some((domain) => domain.name === '*.previews.thingtime.com' && domain.verified && !domain.redirect)) throw new Error('Preview master wildcard ownership unavailable');
+  const aliasBefore = new Map(await Promise.all([...aliases].map(async (name) => [name, await readAlias(name)])));
+  let deployment;
+  let url;
+  try {
+    deployment = await existing(plan);
+    if (!deployment) {
+      const directory = resolve(required('VERCEL_PREBUILT_DIR'));
+      // Only the validated output is read from the untrusted build. Source config
+      // comes independently from the authorized immutable GitHub commit.
+      const config = { framework: null, git: { deploymentEnabled: false } };
+      for (const key of ['regions', 'fluid']) if (productConfig[key] !== undefined) config[key] = productConfig[key];
+      if (plan.target.kind === 'production' && productConfig.crons) config.crons = productConfig.crons;
+      await mkdir(resolve(directory, '.vercel'), { recursive: true });
+      await writeFile(resolve(directory, '.vercel/project.json'), JSON.stringify({ orgId: required('VERCEL_TEAM_ID'), projectId: plan.projectId }), { mode: 0o600 });
+      await writeFile(resolve(directory, 'vercel.json'), JSON.stringify(config));
+      await applyOutputPolicy(directory, productConfig, plan.target);
+      const args = deploymentArgs({ ...plan, regions: productConfig.regions, directory, teamSlug: required('VERCEL_TEAM_SLUG'), runId: required('GITHUB_RUN_ID'), repository: required('GITHUB_REPOSITORY') });
+      let stdout;
+      try {
+        ({ stdout } = await exec(required('VERCEL_CLI_PATH'), args, { env: gatewayPublisherEnvironment(plan.gateway, publisherEnvironment({ teamId: required('VERCEL_TEAM_ID'), projectId: plan.projectId, token: required('VERCEL_API_TOKEN') })), timeout: 15 * 60_000, maxBuffer: 4 * 1024 * 1024 }));
+      } catch {
+        // Reconcile an uncertain upload once; never silently retry a deployment.
+        deployment = await existing(plan);
+        if (!deployment) throw new Error('Prebuilt upload failed; inspect Vercel and the workflow before retrying');
+      }
+      if (!deployment) {
+        const urls = stdout.match(/https:\/\/[a-z0-9.-]+\.vercel\.app\/?/gi) || [];
+        if (!urls.length) throw new Error('Publisher returned no deployment URL');
+        deployment = await vercel(`/v13/deployments/${new URL(urls.at(-1)).hostname}`);
+      }
+    }
+    const issue = deploymentIssue(deployment, plan) || runtimePolicyIssue(deployment, productConfig, plan.target);
+    if (issue || deployment.readyState !== 'READY') throw new Error(`Deployment verification failed (${issue || deployment.readyState})`);
+    url = `https://${deployment.url}`;
+    await smoke(url, { api: !plan.gateway.owner });
+    if ((await context(branch, plan.target.slug)).sha !== plan.sha) throw new Error('Branch advanced before alias publication');
+    await reconcileGatewayAliases({
+      names: [...aliases], before: aliasBefore, deploymentId: deployment.id, read: readAlias, assign: assignAlias, remove: removeAlias,
+      verify: (name) => verifyAlias(async () => {
+        if (name === new URL(plan.gateway.origin).hostname && plan.gateway.owner) {
+          const response = await fetch(`https://${name}/.well-known/thingtime-capabilities.json`, { signal: AbortSignal.timeout(30_000), cache: 'no-store' });
+          const manifest = await response.json();
+          if (!response.ok || manifest.origin !== `https://${name}` || manifest.gateway?.environment !== plan.gateway.environment || manifest.gateway?.origin !== plan.gateway.origin || manifest.gateway?.deploymentId !== deployment.id) throw new Error('Canonical gateway ownership failed verification');
+        }
+        await smoke(`https://${name}`);
+      })
+    });
+  } catch (error) {
+    if (deployment) await restoreGatewayAliases({ before: aliasBefore, deploymentId: deployment.id, read: readAlias, assign: assignAlias, remove: removeAlias });
+    else {
+      // An interrupted CLI may have autoassigned a custom environment before
+      // returning its URL. Reconcile only this run's independently verified upload.
+      for (const name of aliases) {
+        const current = await readAlias(name);
+        if (!current || current.deploymentId === aliasBefore.get(name)?.deploymentId) continue;
+        const candidate = await vercel(`/v13/deployments/${current.deploymentId}`);
+        if (!deploymentIssue(candidate, plan) && candidate.meta?.githubWorkflowRunId === required('GITHUB_RUN_ID')) await restoreGatewayAliases({ before: aliasBefore, deploymentId: candidate.id, read: readAlias, assign: assignAlias, remove: removeAlias });
+      }
+    }
+    throw error;
   }
   const statusContext = `Vercel prebuilt (${plan.target.slug})`;
   const statuses = await github(`/commits/${plan.sha}/status`);
