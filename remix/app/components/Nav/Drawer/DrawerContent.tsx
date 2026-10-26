@@ -7,6 +7,7 @@ import { ChevronDown, Search } from 'lucide-react';
 import { Icon } from '../../Icon/Icon';
 import { RAINBOW } from '~/theme/rainbow';
 import { ROOT_THING_PATH, buildThingModeUrl, parseThingMode, parseThingPath } from '../../Thingtime/thingRoute';
+import { CustomDrawerItems } from './CustomDrawerItems';
 import { EditorDrawerSection } from './EditorDrawerSection';
 import { ReorderableList } from './ReorderableList';
 import { useMarketingPublications } from '~/components/Marketing/marketingPublicationsStore';
@@ -485,6 +486,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 
 			{/* scrollable menus */}
 			<Box className="drawerMenuScroll" flex={1} minHeight={0} overflowY="auto" overscrollBehaviorY="contain" paddingBottom={2}>
+				<CustomDrawerItems preview={variant === 'popup'} onNavigate={onNavigate} />
 				{/* top-level items (limited, with faint More) */}
 				<Flex flexDirection="column" rowGap="1px" paddingTop={1}>
 					<ReorderableList

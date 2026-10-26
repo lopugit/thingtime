@@ -4100,6 +4100,21 @@ email whose link points at the attacker.
 
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
+- [ ] Custom drawer items: use **Add +** to save an emoji, title, hover tooltip
+      and relative or absolute HTTP(S) link. Check URL validation, cancel,
+      keyboard focus/Escape, navigation, edit/remove from Settings → Appearance →
+      Custom drawer items, immediate reload once Save closes, and account
+      separation. Editing must prefill every field. Locally bound rows must render
+      their template without database Collection controls. Failed writes must
+      retain the draft or restore the removed item; changing accounts or editing
+      layouts during a save must not leave stuck controls or write another
+      account’s preferences. Attach a real Thing through Commander search
+      without navigating away from the popup;
+      open the saved item and compare its destination with that Thing's ID.
+      Inspect the drawer, popup, search results and settings from top to bottom
+      at desktop and 390px, including long labels and empty/no-result states.
+      In Builder, separately edit nested text, inputs, buttons, icons and a
+      repeated item field; save/reload and verify the working interface.
 - [ ] With the desktop drawer collapsed, hover the trigger and move into the preview: it starts below the top bar, stays open, and scrolls from the first to last menu item while its brand and account footer stay visible. Recheck at a short desktop viewport and with a safe-area/titlebar inset; no clipping or page scroll chaining. Click to pin/unpin, then at 390px verify tap-to-open, menu scrolling, navigation dismissal, and no hover popup.
 - [ ] Hold a linked top-level row or submenu row for 280ms, then drag over
       another row and release. The row moves without a native URL/image ghost,
