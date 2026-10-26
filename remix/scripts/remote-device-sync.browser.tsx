@@ -2,6 +2,7 @@ import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { Box, ChakraProvider } from '@chakra-ui/react';
+import { SyncFolderCard } from '../app/components/Devices/SyncFolderCard';
 import { DeviceSyncPanel } from '../app/components/Devices/DeviceSyncBrowser';
 import { thingtimeCapabilityManifest } from '../app/api/utils/capabilities/thingtimeCapabilities';
 import type { RemoteSyncStatus } from '../app/fileSync/remoteSyncProtocol';
@@ -14,11 +15,12 @@ const configuration = { configurationVersion: 1, name: 'Documents backup', devic
 let rows: any[] = JSON.parse(localStorage.getItem('remote-sync-fixture-rows') || 'null') ?? [
  { id: 'cloud-documents', thingtime: ['folder'], author: { id: ownerId }, acl: ['tt:user'], crystal: { name: 'Cloud documents' } },
  { id: 'documents-sync', thingtime: ['file-sync'], author: { id: ownerId }, acl: ['tt:user'], updatedAt: '2026-10-23T00:00:00.000Z', crystal: configuration },
+ { id: 'archive-sync', thingtime: ['file-sync'], author: { id: ownerId }, acl: ['tt:user'], updatedAt: '2026-10-23T00:00:00.000Z', crystal: { ...configuration, name: 'Archive backup' } },
  { id: 'other-device-sync', thingtime: ['file-sync'], author: { id: ownerId }, acl: ['tt:user'], updatedAt: '2026-10-23T00:00:00.000Z', crystal: { ...configuration, name: 'Other device private sync', deviceId: 'another-device' } },
  { id: 'other-owner-sync', thingtime: ['file-sync'], author: { id: 'another-owner' }, acl: ['tt:user'], updatedAt: '2026-10-23T00:00:00.000Z', crystal: { ...configuration, name: 'Other owner private sync' } }
 ];
 const initialStatus = (): RemoteSyncStatus => ({ version: 1, deviceId, observedAt: new Date().toISOString(),
- roots: [{ id: 'local-documents', name: 'Documents on Mac' }], rootsReady: true, capabilities: { platform: 'macos', fileAccessVersion: '1.14.0' }, jobs: [], task: null });
+ roots: [{ id: 'local-documents', name: 'Documents on Mac', sourcePath: '/Users/example/Documents on Mac' }], rootsReady: true, capabilities: { platform: 'macos', fileAccessVersion: '1.15.0' }, jobs: [], task: null });
 let status = initialStatus(), offline = true, failure: string | null = null, writes = 0, holdNextStart = false;
 let priorities = { revision: 0, paths: [] as string[] };
 const commands: any[] = [], replies = new Map<string, any>();
@@ -89,11 +91,11 @@ window.fetch = async (input, init) => {
   if (!row || row.updatedAt !== body.expectedUpdatedAt) return json({ ok: false, error: 'Stale revision' }, 409);
   row.crystal = body.crystal; row.updatedAt = new Date().toISOString(); writes++;
  } else if (method === 'POST') {
-  rows.push({ id: body.shareId, thingtime: body.thingtime, crystal: body.crystal, author: { id: ownerId }, acl: body.acl, updatedAt: new Date().toISOString() }); writes++;
+  rows.push({ id: body.shareId, thingtime: body.thingtime, crystal: body.crystal, ...(body.folderId !== undefined ? { folderId: body.folderId } : {}), author: { id: ownerId }, acl: body.acl, updatedAt: new Date().toISOString() }); writes++;
  } else throw Error('Unexpected fixture write');
  localStorage.setItem('remote-sync-fixture-rows', JSON.stringify(rows));
  return json({ ok: true, thing: rows.find(row => row.id === (body.id || body.shareId)) });
 };
 const router = createMemoryRouter([{ id: 'root', path: '/', loader: () => ({ user: { id: ownerId, accountKind: 'user' }, dataPlane: 'home' }),
- element: <ChakraProvider><Box maxW="1000px" mx="auto" p={4}><DeviceSyncPanel ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={[]} ownedDeviceIds={[deviceId]} /></Box></ChakraProvider> }]);
+ element: <ChakraProvider><Box maxW="1000px" mx="auto" p={4}><DeviceSyncPanel ownerId={ownerId} deviceId={deviceId} pairedDeviceIds={[]} ownedDeviceIds={[deviceId]} /><SyncFolderCard title="Editable folder preview" path="/Sample/Folder" description="Synthetic shared card" stats="No transfer started" scopeKey="fixture-shared-card"><p>Folder details preview</p></SyncFolderCard></Box></ChakraProvider> }]);
 createRoot(document.getElementById('root')!).render(<StrictMode><RouterProvider router={router} /></StrictMode>);

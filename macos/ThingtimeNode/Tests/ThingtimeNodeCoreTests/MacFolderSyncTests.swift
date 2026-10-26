@@ -188,7 +188,11 @@ final class MacFolderSyncTests: XCTestCase {
         let data = try JSONEncoder().encode(result)
         let body = try JSONSerialization.jsonObject(with: data) as! [String: Any]
         let rows = try XCTUnwrap(body["roots"] as? [[String: Any]])
-        XCTAssertEqual(Set(rows[0].keys), ["id", "name", "publicationVersion"])
+        XCTAssertEqual(Set(rows[0].keys), ["id", "name", "publicationVersion", "sourcePath"])
+        let sourcePath = try XCTUnwrap(rows[0]["sourcePath"] as? String)
+        XCTAssertTrue(sourcePath.hasSuffix("/" + folder.lastPathComponent + "/selected"))
+        XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: sourcePath)[.systemFileNumber] as? NSNumber,
+                       try FileManager.default.attributesOfItem(atPath: folder.appendingPathComponent("selected").path)[.systemFileNumber] as? NSNumber)
         return try XCTUnwrap(rows.first?["id"] as? String)
     }
     private func rejects(_ work: () async throws -> JSONValue) async {
@@ -716,7 +720,7 @@ final class MacFolderSyncTests: XCTestCase {
         let capabilities = try XCTUnwrap(context["capabilities"]).decode([String: String].self)
         XCTAssertNotNil(context["conditions"])
         XCTAssertNotNil(context["roots"])
-        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.14.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0", "fileUploadBatchVersion": "1.0.0", "fileFolderBatchVersion": "1.0.0"])
+        XCTAssertEqual(capabilities, ["fileAccessVersion": "1.15.0", "fileStagingVersion": "1.1.0", "filePublicationVersion": "1.2.0", "fileUploadBatchVersion": "1.0.0", "fileFolderBatchVersion": "1.0.0"])
         let result = try await service.handle(request("conditions")).decode([String: JSONValue].self)
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }

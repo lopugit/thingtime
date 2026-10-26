@@ -12,7 +12,7 @@ Adding or changing a device folder requires a current response from that device;
 account metadata alone never grants filesystem access.
 
 The browser sends high-level management requests through
-`/api/v1/devices/sync-control` (`api.devices-sync-control` 1.0.0). The installed
+`/api/v1/devices/sync-control` (`api.devices-sync-control` 1.1.0). The installed
 app claims requests for its verified local pairing and runs the existing native
 sync runtime. Transfers, grants, automatic jobs, inventories, priorities and
 conflict journals remain on the device. File contents do not pass through this
@@ -84,3 +84,18 @@ child processes, uses a temporary home directory and synthetic signing secret,
 and sends fixture email through the console provider. It terminates both child
 processes and removes their database files on completion. These controls isolate
 fixture credentials and storage; they do not install an OS network sandbox.
+
+
+### Private source-location metadata
+
+Ordinary control continues to require 1.0.0. Clients separately negotiate the
+optional 1.1.0 source-location contract; older origins keep ordinary controls and
+explicit destination selection. Contract 1.1.0 preserves optional `roots[].sourcePath` through status pages and
+folder-management results. An updated Mac native adapter (fileAccessVersion
+1.15.0) supplies the absolute POSIX location of its exact current owner-scoped
+bookmark; it omits stale/unavailable grants and Photos. The existing encrypted
+control payload and owner/device/current-pairing/lease fences protect this
+metadata. It does not enter public manifests or grant parent-directory access.
+Clients must keep it separate from executable root-relative file paths. Missing
+metadata leaves an explicit cloud destination choice available; existing saved
+connection destinations are never automatically moved or retargeted.

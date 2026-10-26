@@ -53,8 +53,8 @@ async function pair(viewer) {
 try {
   const endpoint = '/api/v1/devices/sync-control';
   const publicManifest = await request('/.well-known/thingtime-capabilities.json');
-  assert.equal(publicManifest.value.features['api.devices-sync-control'].version, '1.0.0');
-  assert.equal((await request('/api/v1/capabilities')).value.features['api.devices-sync-control'], '1.0.0');
+  assert.equal(publicManifest.value.features['api.devices-sync-control'].version, '1.1.0');
+  assert.equal((await request('/api/v1/capabilities')).value.features['api.devices-sync-control'], '1.1.0');
   assert.equal((await request(endpoint + '-docs')).value.docs.id, 'devices-sync-control');
   assert.equal((await request(endpoint, { action: 'poll', deviceId: 'device' })).response.status, 401);
   const owner = await register(), foreign = await register(), deviceId = await pair(owner);

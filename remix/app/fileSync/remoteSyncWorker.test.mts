@@ -92,3 +92,31 @@ test('remote Pause acknowledges through an independent transport after aborting 
 		assert.equal(completed[0]?.leaseId, 'lease');
 	} finally { abort.abort(); stop(); if (original) Object.defineProperty(globalThis, 'window', original); else delete (globalThis as any).window; nativeAbort = undefined; }
 });
+
+
+test('remote status preserves exact optional native source locations and legacy absence', async () => {
+ snapshot = null;
+ const roots = [{ id: 'selected', name: 'Music library', sourcePath: '/Volumes/Drive/Music library' }, { id: 'legacy', name: 'Legacy folder' }];
+ const page: any = await executeRemoteSyncCommand({ action: 'status' }, context, { ...session, roots });
+ assert.deepEqual(page.roots.find((root: any) => root.id === 'selected'), roots[0]);
+ assert.equal(Object.hasOwn(page.roots.find((root: any) => root.id === 'legacy'), 'sourcePath'), false);
+});
+
+
+test('older server or native versions strip optional paths while status and folder controls continue', async () => {
+ snapshot = null;
+ const roots = [{ id: 'selected', name: 'Music library', sourcePath: '/Volumes/Drive/Music library' }];
+ for (const nativeVersion of ['1.14.0', '1.15.0']) {
+  let negotiations = 0;
+  const older = { ...host, capabilities: { platform: 'macos', fileAccessVersion: nativeVersion },
+   requireCapability: async (_feature: string, minimum: string) => { negotiations++; assert.equal(minimum, '1.1.0'); throw Error('old server'); },
+   request: async () => ({ roots }) };
+  const contextOld = { ...context, host: older }, sessionOld = { ...session, host: older, roots };
+  const page: any = await executeRemoteSyncCommand({ action: 'status' }, contextOld, sessionOld);
+  assert.deepEqual(page.roots, [{ id: 'selected', name: 'Music library' }]);
+  const folders: any = await executeRemoteSyncCommand({ action: 'folders', request: { action: 'list' } }, contextOld, sessionOld);
+  assert.deepEqual(folders.roots, page.roots);
+  assert.equal(negotiations, nativeVersion === '1.14.0' ? 0 : 1);
+  assert.equal(sessionOld.roots[0].sourcePath, roots[0].sourcePath);
+ }
+});

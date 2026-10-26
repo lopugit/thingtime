@@ -229,3 +229,33 @@ separately from the historical browser/compiled-server harness results above.
   paused journal is retained. Local evidence:
   `/tmp/pr1216-installed-final-evidence.json` and
   `/tmp/pr1216-upload-eligibility.json`.
+
+### Generic folder cards and absolute source paths — 2026-10-26
+
+- Removed the Home preset from ordinary sync editors. Existing Home settings
+  are preserved as an ordinary connection; this change does not resume it.
+  Granted folders and saved connections use shared, individually editable
+  cards with title, path, description, quick statistics and disclosure controls.
+  Only the selected folder exposes its editor. Optional viewers start closed.
+- Drafts survive switching folders, collapsing cards and closing the parent
+  section, including temporarily invalid inputs, automatic intervals and
+  unsaved upload priorities. Read-heavy progress viewers unmount while hidden.
+- Mac file-access 1.15.0 reports the current absolute location of the exact
+  owner-authorized bookmark. It grants no parent-directory access. Remote
+  projection additionally requires sync-control 1.1.0; ordinary controls retain
+  their 1.0.0 minimum. Stale/denied bookmarks and Photos expose no path.
+- Explicitly saving a new connection without a destination creates private
+  ordinary Folder Things for the verified absolute hierarchy. Deterministic
+  identities bind origin, owner, data plane, device, parent and name. Exact
+  ownership/name/parent readback makes retries safe. Existing destinations are
+  never retargeted; missing path support requires choosing a destination.
+  No user-specific folder name or filesystem location is hardcoded.
+- Validation: 665 file-sync tests, 349 Electron tests, and 239 Mac tests
+  passed (two Mac tests skipped). Focused source-path, capability and canonical
+  Things-validator checks passed. Desktop/phone browser checks cover drafts,
+  nested Builder editing, new-folder Save, unchanged existing destinations and
+  no unsolicited Start. Browser fixtures are not real transferred-byte proof.
+- Final signed-install observations and the exact installed source commit are
+  recorded in the PR description and the existing HTML tracker after the build.
+  Earlier installed transfer/hash and active window-close acceptance remains
+  incomplete unless separately supported by new evidence there.

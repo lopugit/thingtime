@@ -14,12 +14,14 @@ export function DesktopFolderAccess({
 	ownerId,
 	pairedDeviceIds,
 	ownedDeviceIds,
-	deviceId: selectedDeviceId
+	deviceId: selectedDeviceId,
+	active = true
 }: {
 	ownerId: string;
 	pairedDeviceIds: readonly string[];
 	ownedDeviceIds: readonly string[];
 	deviceId?: string;
+	active?: boolean;
 }) {
 	const user = useCurrentUser(),
 		dataPlane = useDataPlane();
@@ -39,6 +41,7 @@ export function DesktopFolderAccess({
 	if (!candidates.length) return null;
 	return (
 		<DeviceFolders
+			active={active}
 			key={JSON.stringify([ownerId, candidates, identity.generation])}
 			ownerId={ownerId}
 			candidates={candidates}
@@ -46,7 +49,7 @@ export function DesktopFolderAccess({
 		/>
 	);
 }
-function DeviceFolders({ ownerId, candidates, generation }: { ownerId: string; candidates: string[]; generation: number }) {
+function DeviceFolders({ ownerId, candidates, generation, active }: { ownerId: string; candidates: string[]; generation: number; active: boolean }) {
 	const [choice, setChoice] = useState('');
 	const deviceId = candidates.length === 1 ? candidates[0] : candidates.includes(choice) ? choice : '';
 	return (
@@ -66,11 +69,11 @@ function DeviceFolders({ ownerId, candidates, generation }: { ownerId: string; c
 					</Select>
 				</FormControl>
 			) : null}
-			{deviceId ? <VerifiedFolders key={deviceId} ownerId={ownerId} deviceId={deviceId} generation={generation} /> : null}
+			{deviceId ? <VerifiedFolders active={active} key={deviceId} ownerId={ownerId} deviceId={deviceId} generation={generation} /> : null}
 		</Box>
 	);
 }
-function VerifiedFolders({ ownerId, deviceId, generation }: { ownerId: string; deviceId: string; generation: number }) {
+function VerifiedFolders({ ownerId, deviceId, generation, active }: { ownerId: string; deviceId: string; generation: number; active: boolean }) {
 	const task = useSyncExternalStore(nativeSyncTasks.subscribe, nativeSyncTasks.read, nativeSyncTasks.read);
 	let taskHost: FolderHost | undefined;
 	if (task?.scope.ownerId === ownerId && task.scope.deviceId === deviceId && task.scope.dataPlane === 'home') {
@@ -105,7 +108,7 @@ function VerifiedFolders({ ownerId, deviceId, generation }: { ownerId: string; d
 			});
 		return () => controller.abort();
 	}, [ownerId, deviceId, generation, attempt, taskHost]);
-	if (taskHost || host) return <MobileFolderAccess ownerId={ownerId} deviceId={deviceId} host={taskHost ?? host} />;
+	if (taskHost || host) return <MobileFolderAccess active={active} ownerId={ownerId} deviceId={deviceId} host={taskHost ?? host} />;
 	return (
 		<Box marginTop={2}>
 			<Text fontSize="12px" role={error ? 'alert' : undefined}>

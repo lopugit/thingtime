@@ -29,6 +29,8 @@ export type RemoteSyncStatus = {
 		review?: { id: string; view: ConflictReviewView } };
 };
 
+export const REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS = { 'api.devices-sync-control': '1.1.0' } as const;
+
 export const REMOTE_SYNC_COMMAND_BYTES = 64 * 1024;
 // Native metadata pages already permit 1 MiB; preserve those pages plus their
 // control envelope instead of imposing a smaller browser-only data limit.

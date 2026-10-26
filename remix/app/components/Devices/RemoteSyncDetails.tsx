@@ -9,7 +9,7 @@ import { sameSyncScope, syncScopeKey } from '~/fileSync/reconcile';
 import { rootIdentity } from '~/utils/rootIdentity';
 import { SyncProgressViewer, type SyncProgressViewerProps } from './SyncProgressViewer';
 import { BackupCoverageViewer } from './BackupCoverageViewer';
-import type { UploadPriorityOptions } from './SyncUploadPriorities';
+import type { UploadPriorityOptions, UploadPriorityDraftState } from './SyncUploadPriorities';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
@@ -23,14 +23,14 @@ const metadataBlocks: WebpageBlock[] = [{ id: 'remote-details-metadata', type: '
 ] }];
 
 /** Shared viewers, with their journal operations executed by the paired app. */
-export function RemoteSyncDetails({ saved, scope, generation, status, command }: {
-	saved: SavedFileSyncConfiguration; scope: SyncScope; generation: number; status: RemoteSyncStatus | null; command: RemoteSyncClient['send'];
+export function RemoteSyncDetails({ saved, scope, generation, status, command, draftState }: {
+	saved: SavedFileSyncConfiguration; scope: SyncScope; generation: number; status: RemoteSyncStatus | null; command: RemoteSyncClient['send']; draftState?: UploadPriorityDraftState;
 }) {
 	const scopeKey = `${syncScopeKey(scope)}:${generation}`;
-	return <RemoteDetailsSession key={scopeKey} saved={saved} scope={scope} generation={generation} status={status} command={command} scopeKey={scopeKey} />;
+	return <RemoteDetailsSession draftState={draftState} key={scopeKey} saved={saved} scope={scope} generation={generation} status={status} command={command} scopeKey={scopeKey} />;
 }
-function RemoteDetailsSession({ saved, scope, generation, status, command, scopeKey }: {
-	saved: SavedFileSyncConfiguration; scope: SyncScope; generation: number; status: RemoteSyncStatus | null; command: RemoteSyncClient['send']; scopeKey: string;
+function RemoteDetailsSession({ saved, scope, generation, status, command, scopeKey, draftState }: {
+	saved: SavedFileSyncConfiguration; scope: SyncScope; generation: number; status: RemoteSyncStatus | null; command: RemoteSyncClient['send']; draftState?: UploadPriorityDraftState; scopeKey: string;
 }) {
 	const [metadata, setMetadata] = React.useState<Details>({}), [error, setError] = React.useState(''), [busy, setBusy] = React.useState(false);
 	const [refresh, setRefresh] = React.useState(0);
@@ -87,7 +87,7 @@ function RemoteDetailsSession({ saved, scope, generation, status, command, scope
 		</SettingsDocumentHost>
 		<SyncProgressViewer scopeKey={scopeKey} descriptor={progressDescriptor} progress={task?.progress} currentScope={currentScope}
 			status={task?.status ?? 'paused'} message={task?.progress.message} readPage={readPage}
-			uploadPriorities={saved.configuration.mode === 'download' ? undefined : { scope: binding, excludedPaths: saved.configuration.excludedPaths, ignoreRules: saved.configuration.ignoreRules, transport: priorityTransport }} />
+			uploadPriorities={saved.configuration.mode === 'download' ? undefined : { draftState, scope: binding, excludedPaths: saved.configuration.excludedPaths, ignoreRules: saved.configuration.ignoreRules, transport: priorityTransport }} />
 		{inventoryDescriptor ? <BackupCoverageViewer scopeKey={scopeKey} descriptor={inventoryDescriptor} currentScope={currentScope} read={coverageRead} /> : null}
 	</>;
 }

@@ -22,26 +22,31 @@ export const remoteSyncBlocks: WebpageBlock[] = [{ id: 'remote-sync', type: 'ele
 			button('remote-sync-add', 'Add connection', 'add', '{remote.addDisabled}'),
 			button('remote-sync-choose', 'Choose device folder', 'choose', '{remote.deviceDisabled}')]),
 		{ id: 'remote-sync-roots', type: 'collection', props: { itemsPath: 'remote.roots', label: 'Device folders', hideSearch: true, hideSize: true, hideCount: true, size: 'all', empty: '{remote.rootsEmpty}' }, children: [
-			row('remote-sync-root', [element('remote-sync-root-name', 'p', '{item.name}'), button('remote-sync-root-remove', 'Remove folder access', 'remove', '{remote.deviceDisabled}', { rootId: '{item.id}' })])
+			{ id: 'remote-sync-root', type: 'element', tag: 'details', css: { padding: '12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '12px' }, children: [element('remote-sync-root-name', 'summary', '{item.name}'), element('remote-sync-root-path', 'p', '{item.path}'), element('remote-sync-root-description', 'p', '{item.accessDescription}'), button('remote-sync-root-remove', 'Remove folder access', 'remove', '{remote.deviceDisabled}', { rootId: '{item.id}' })] }
 		] },
 		{ id: 'remote-sync-connections', type: 'collection', props: { itemsPath: 'remote.connections', label: 'Saved sync connections', hideSearch: true, hideSize: true, hideCount: true, size: 'all', empty: '{remote.empty}' }, children: [
-			{ id: 'remote-sync-connection', type: 'element', tag: 'article', css: { display: 'grid', gap: '8px', padding: '16px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '12px', 'min-width': '0' }, children: [
-				element('remote-sync-connection-name', 'h4', '{item.name}'),
-				element('remote-sync-connection-mode', 'p', '{item.mode}'),
-				element('remote-sync-connection-status', 'p', '{item.status}', { role: 'status' }),
-				element('remote-sync-connection-progress', 'p', '{item.progress}'),
-				element('remote-sync-connection-speed', 'p', '{item.speed}'),
+			{ id: 'remote-sync-connection', type: 'element', tag: 'article', css: { display: 'grid', gap: '4px', padding: '12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '12px', 'min-width': '0' }, children: [
+				row('remote-sync-card-header', [
+                    { ...element('remote-sync-connection-name', 'h4', '{item.name}'), css: { flex: '1', 'min-width': '0', 'font-weight': '600' } },
+                    { ...button('remote-sync-expand', '{item.toggleGlyph}', 'expand', '{remote.editDisabled}', { id: '{item.id}' }), props: { type: 'button', 'aria-label': '{item.expandLabel}', 'aria-expanded': '{item.expanded}', disabled: '{remote.editDisabled}', ...action('expand', { id: '{item.id}' }) }, css: { ...control, 'min-width': '44px', 'min-height': '44px', 'font-size': '20px', padding: '4px 8px' } }
+                ]),
+				{ ...element('remote-sync-connection-path', 'p', '{item.path}'), css: { 'font-size': '12px', color: 'var(--tt-muted, #71717a)' } },
+                { ...row('remote-sync-card-stats', [element('remote-sync-connection-mode', 'span', '{item.mode}'), element('remote-sync-connection-summary', 'span', '{item.summaryStatus}', { role: 'status' }), element('remote-sync-connection-progress', 'span', '{item.quickStats}')]), css: { display: 'flex', 'flex-wrap': 'wrap', gap: '4px 10px', 'font-size': '12px', color: 'var(--tt-muted, #71717a)' } },
+				when('remote-sync-selected-controls', 'item.expanded', [element('remote-sync-connection-status', 'p', '{item.status}', { role: 'status' }), element('remote-sync-connection-speed', 'p', '{item.speed}'),
 				row('remote-sync-connection-actions', [button('remote-sync-edit', 'Edit', 'edit', '{remote.editDisabled}', { id: '{item.id}' }),
 					button('remote-sync-start', 'Sync now', 'start', '{item.startDisabled}', { id: '{item.id}' }),
 					button('remote-sync-pause', 'Pause sync', 'pause', '{item.pauseDisabled}', { id: '{item.id}' }),
 					button('remote-sync-details', 'Progress, coverage & priorities', 'details', '{remote.deviceDisabled}', { id: '{item.id}' }),
 					{ ...element('remote-sync-files', 'a', 'Browse synced files', { href: '{item.href}' }), css: control }]),
 				element('remote-sync-automatic-status', 'p', '{item.automatic}'),
+				{ id: 'remote-sync-automatic-options', type: 'element', tag: 'details', children: [element('remote-sync-automatic-summary', 'summary', 'Automatic sync'),
 				row('remote-sync-automation', [
 					{ id: 'remote-sync-interval', type: 'element', tag: 'select', props: { 'aria-label': 'Automatic sync interval for {item.name}', value: '{item.interval}', disabled: '{item.startDisabled}', ...action('interval', { id: '{item.id}' }) }, css: control,
 						children: [['60000', 'Every minute'], ['300000', 'Every 5 minutes'], ['900000', 'Every 15 minutes'], ['3600000', 'Every hour']].map(([value, label]) => element('remote-sync-interval-' + value, 'option', label, { value })) },
 					button('remote-sync-automatic-start', 'Start automatic sync', 'automatic', '{item.startDisabled}', { id: '{item.id}' })
-				])
+				])] }
+				]),
+                { id: 'remote-sync-editor-slot', type: 'element', tag: 'div', props: { id: '{item.editorSlotId}', hidden: '{item.editorHidden}' } }
 			] }
 		] },
 		when('remote-sync-more-state', 'remote.hasMore', [button('remote-sync-more', 'More connections', 'more', '{remote.busy}')])
@@ -55,3 +60,23 @@ export const remoteSyncEditorBlocks: WebpageBlock[] = [{ id: 'remote-editor-acti
 		when('remote-editor-conflict-state', 'editor.hasConflict', [button('remote-editor-reload', 'Replace draft with saved version', 'reload', '{editor.busy}')]),
 		when('remote-editor-folders-state', 'editor.hasMoreFolders', [button('remote-editor-folders', 'More cloud folders', 'moreFolders', '{editor.busy}')])])
 ] }];
+
+/** Existing personal layouts keep their authored fields. Add the missing core
+ * disclosure when upgrading an older saved layout; guard operational blocks
+ * at render time as well as in the command adapter. */
+export function remoteSyncDisclosureBlocks(blocks: WebpageBlock[]): WebpageBlock[] {
+ const operations = new Set(['edit', 'start', 'pause', 'details', 'interval', 'automatic']);
+ const visit = (block: WebpageBlock, inConnection = false): WebpageBlock => {
+  const connection = inConnection || block.id === 'remote-sync-connection';
+  const next = { ...block, ...(block.children ? { children: block.children.map(child => visit(child, connection)) } : {}) };
+  if (block.id === 'remote-sync-connection' && !JSON.stringify(block).includes('"operation":"expand"')) {
+   next.children = [...(next.children ?? []), button('remote-sync-expand', '{item.expandLabel}', 'expand', '{remote.editDisabled}', { id: '{item.id}' })];
+  }
+  if (block.id === 'remote-sync-connection' && !JSON.stringify(block).includes('remote-sync-editor-slot')) next.children = [...(next.children ?? []), { id: 'remote-sync-editor-slot', type: 'element', tag: 'div', props: { id: '{item.editorSlotId}', hidden: '{item.editorHidden}' } }];
+  const inputs = block.props?.['data-tt-action-inputs'];
+  if (connection && inputs && typeof inputs === 'object' && operations.has(String((inputs as { operation?: unknown }).operation)))
+   return when(`${block.id}-selection`, 'item.expanded', [next]);
+  return next;
+ };
+ return blocks.map(block => visit(block));
+}

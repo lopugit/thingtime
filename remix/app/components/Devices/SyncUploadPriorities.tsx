@@ -8,7 +8,8 @@ import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { SettingsDocumentHost, type SettingsDocumentHostProps } from '../Settings/SettingsDocumentHost';
 
 type Preferences = { revision: number; paths: string[] };
-export type UploadPriorityOptions = { scope: SyncScope; excludedPaths: string[]; ignoreRules?: string;
+export type UploadPriorityDraftState = { saved?: Preferences; draft?: string };
+export type UploadPriorityOptions = { scope: SyncScope; excludedPaths: string[]; ignoreRules?: string; draftState?: UploadPriorityDraftState;
  transport?: { read(signal: AbortSignal): Promise<Preferences>; save(paths: string[], expectedRevision: number, signal: AbortSignal): Promise<Preferences> } };
 const action = (operation: string, inputs: Record<string, unknown> = {}) => ({ 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation, ...inputs } });
 const control = { 'min-height': '40px', padding: '8px 12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', 'max-width': '100%', 'box-sizing': 'border-box' };
@@ -41,7 +42,7 @@ export const syncUploadPriorityBlocks: WebpageBlock[] = [{ id: 'sync-priorities'
 export function useUploadPriorities(options: UploadPriorityOptions | undefined, currentScope: () => SyncScope) {
  const latest = React.useRef({ options, currentScope }); latest.current = { options, currentScope };
  const savedScope = React.useMemo(() => options && structuredClone(options.scope), [options && JSON.stringify(options.scope)]);
- const [saved, setSaved] = React.useState<Preferences | null>(null), [draft, setDraft] = React.useState('');
+ const [saved, setSaved] = React.useState<Preferences | null>(options?.draftState?.saved ?? null), [draft, setDraft] = React.useState(options?.draftState?.draft ?? '');
  const [busy, setBusy] = React.useState(false), [error, setError] = React.useState(''), [message, setMessage] = React.useState('Reading saved priorities…');
  const savedRef = React.useRef(saved); savedRef.current = saved;
  const draftRef = React.useRef(draft); draftRef.current = draft;
@@ -61,6 +62,7 @@ export function useUploadPriorities(options: UploadPriorityOptions | undefined, 
     const result = transport ? paths === undefined ? await transport.read(signal) : await transport.save(paths, savedRef.current!.revision, signal)
      : paths === undefined ? await priorities!.read() : await priorities!.save(paths, savedRef.current!.revision);
     check(signal); savedRef.current = result; setSaved(result); setDraft(result.paths.join('\n'));
+    if (latest.current.options?.draftState) Object.assign(latest.current.options.draftState, { saved: result, draft: result.paths.join('\n') });
     setMessage(paths === undefined ? 'Saved priorities loaded.' : 'Upload priorities saved. They apply after the current operation finishes.');
    } finally { journal?.close(); }
   } catch (cause) {
@@ -69,7 +71,11 @@ export function useUploadPriorities(options: UploadPriorityOptions | undefined, 
  };
  React.useEffect(() => {
   const controller = new AbortController(); lifetime.current = controller;
-  if (savedScope) void work();
+  if (savedScope) {
+   const retained = latest.current.options?.draftState;
+   if (retained?.saved && retained.draft !== undefined && retained.draft !== retained.saved.paths.join('\n')) setMessage('Unsaved priority draft restored. Save it or reload the saved priorities.');
+   else void work();
+  }
   return () => controller.abort();
  }, [savedScope]);
  const save = async (paths: string[]) => {
@@ -94,7 +100,7 @@ export function useUploadPriorities(options: UploadPriorityOptions | undefined, 
  return { enabled: !!options, disabled: busy || !saved, moveFirst,
   scope: { priorities: { inputId, draft, disabled: busy || !saved, reloadDisabled: busy, error, message,
    rows: (saved?.paths ?? []).map((path, index, paths) => ({ id: path, path, position: index + 1, upDisabled: busy || index === 0, downDisabled: busy || index === paths.length - 1 })) } },
-  actions: { edit: ({ value }: { value: unknown }) => { if (!busy) { setDraft(String(value ?? '')); setError(''); } },
+  actions: { edit: ({ value }: { value: unknown }) => { if (!busy) { const next = String(value ?? ''); setDraft(next); if (latest.current.options?.draftState) Object.assign(latest.current.options.draftState, { saved: savedRef.current ?? undefined, draft: next }); setError(''); } },
    save: () => save(draftRef.current.split(/\r?\n/).filter(Boolean)), reload: () => work(),
    up: ({ inputs }: { inputs: Readonly<Record<string, unknown>> }) => editOrder('up', inputs.path),
    down: ({ inputs }: { inputs: Readonly<Record<string, unknown>> }) => editOrder('down', inputs.path),

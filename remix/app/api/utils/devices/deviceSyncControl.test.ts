@@ -98,3 +98,18 @@ test('backpressure and closed request vocabulary reject overflow and file transp
   assert.equal((await f.enqueue('bytes', { action: 'folders', request: { action: 'read', rootId: 'root', path: 'secret' } }) as any).status, 400);
   assert.equal((await f.call({ action: 'complete', requestId: 'pending-0', leaseId: 'lease', result: 'x'.repeat(REMOTE_SYNC_RESULT_BYTES) }) as any).status, 413);
 });
+
+
+test('source locations roundtrip only in encrypted owner/device/pairing-bound status results', async () => {
+ const f = fixture(); await f.enqueue();
+ const claim = (await f.call({ action: 'poll' }) as any).command;
+ const result = { version: 1, deviceId: 'device', roots: [{ id: 'root', name: 'Music library', sourcePath: '/Volumes/Drive/Music library' }] };
+ assert.equal((await f.call({ action: 'complete', requestId: 'request', leaseId: claim.leaseId, result }) as any).status, 'complete');
+ assert.deepEqual((await f.call({ action: 'read', requestId: 'request' }) as any).result, result);
+ assert.equal(JSON.stringify(f.records[1].crystal).includes('/Volumes/Drive'), false);
+ assert.ok(f.records[1].secure instanceof Binary);
+ for (const [input, owner] of [[{}, 'foreign'], [{ deviceId: 'other' }, 'owner']] as const)
+  assert.equal((await f.call({ action: 'read', requestId: 'request', ...input }, owner)).ok, false);
+ f.credentials[0].jti = 'new-pairing';
+ assert.equal((await f.call({ action: 'read', requestId: 'request' })).ok, false);
+});

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRemoteSyncClient } from './remoteSyncClient.client';
+import { createRemoteSyncClient, negotiateRemoteSourcePaths } from './remoteSyncClient.client';
 
 const storage = () => {
 	const data = new Map<string, string>();
@@ -84,4 +84,20 @@ test('incompatible server and identity changes stop dispatch or stale replies', 
 	let current = true;
 	const client = createRemoteSyncClient({ ...base(), assertCurrent() { if (!current) throw Error('Account changed'); }, fetch: async () => { current = false; return reply({ ok: true, status: 'complete', result: { roots: [] } }); } });
 	await assert.rejects(client.send({ action: 'status' }), /Account changed/);
+});
+
+
+test('optional source locations negotiate separately while older origins retain ordinary control', async () => {
+ let dispatched = false;
+ const minimums: string[] = [];
+ const oldOrigin = async (_feature: string, version: string) => { minimums.push(version); if (version !== '1.0.0') throw Error('unsupported'); };
+ assert.equal(await negotiateRemoteSourcePaths(oldOrigin), false);
+ const client = createRemoteSyncClient({ ...base(), requireCapability: oldOrigin,
+  fetch: async () => { dispatched = true; return reply({ ok: true, status: 'complete', result: { roots: [] } }); } });
+ assert.deepEqual(await client.send({ action: 'status' }), { roots: [] });
+ assert.equal(dispatched, true);
+ assert.deepEqual(minimums, ['1.1.0', '1.0.0']);
+ assert.equal(await negotiateRemoteSourcePaths(async (feature, version) => {
+  assert.equal(feature, 'api.devices-sync-control'); assert.equal(version, '1.1.0');
+ }), true);
 });

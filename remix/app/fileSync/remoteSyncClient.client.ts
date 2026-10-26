@@ -1,6 +1,15 @@
 import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
 import { requireThingtimeCapability } from '../api/utils/capabilities/requireCapability.client';
-import { validateRemoteSyncCommand, type RemoteSyncCommand } from './remoteSyncProtocol';
+import { REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, validateRemoteSyncCommand, type RemoteSyncCommand } from './remoteSyncProtocol';
+
+/** Optional display contract: older origins keep ordinary controls and explicit
+ * destination selection. Callers recheck their identity after awaiting this. */
+export async function negotiateRemoteSourcePaths(requireCapability = requireThingtimeCapability): Promise<boolean> {
+ try {
+  await requireCapability('api.devices-sync-control', REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS['api.devices-sync-control']);
+  return true;
+ } catch { return false; }
+}
 
 type Reply = { ok: boolean; status: 'pending' | 'processing' | 'complete' | 'error' | 'expired'; result?: unknown; error?: string };
 export type RemoteSyncClient = ReturnType<typeof createRemoteSyncClient>;

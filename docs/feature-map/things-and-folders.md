@@ -623,3 +623,15 @@ private managed content excluded by the ordinary library API are not covered.
 Incomplete scan/traversal status remains explicit. No new API contract or
 background indexing service is introduced. Unfiled files independently loads
 one page at a time and requires Load more for each subsequent page.
+
+
+Mac folder-grant location metadata uses `MacFolderSync` `fileAccessVersion`
+1.15.0 and `MobileFolderStore.sourcePath`. The owner-verified native response
+adds optional `roots[].sourcePath`, preserving the exact selected absolute POSIX
+location without granting ancestor access. `mobileFolders.client` validates it
+separately from root-relative file paths and exposes `supportsNativeSourcePaths`.
+Stale/unavailable bookmarks and Photos omit it. `MobileFolderTests` and
+`MacFolderSyncTests` cover owner isolation and continued rejection of absolute
+paths by file operations; `mobileFolders.client.test.ts` covers negotiation,
+correlation and malformed location metadata. This field does not change signed
+sync policy, existing cloud destination identities, or public manifests.

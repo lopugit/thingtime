@@ -1,7 +1,7 @@
 import { rootIdentity } from '../utils/rootIdentity';
 import { createNativeSyncHost, getNativeSyncAdapter, isNativeSyncAdapterCurrent } from './nativeSyncHost.client';
 import type { FolderHost } from './desktopFolders.client';
-import type { MobileFolder } from './mobileFolders.client';
+import { supportsNativeSourcePaths, type MobileFolder } from './mobileFolders.client';
 import { nativeSyncTasks, pauseNativeSyncJob, startNativeSyncTask } from './nativeSyncTasks.client';
 import { readOwnedFileSyncConfiguration } from './configuredPlan';
 import { openSyncJournal } from './journal.client';
@@ -9,9 +9,31 @@ import { holdDesktopSyncWindow } from './desktopSyncWindow.client';
 import { createFolderHostFetch } from './folderHostFetch.client';
 import { executeRemoteSyncDetails } from './remoteSyncDetails.client';
 import type { SyncScope } from './reconcile';
-import { REMOTE_SYNC_RESULT_BYTES, validateRemoteSyncCommand, type RemoteSyncCommand, type RemoteSyncStatus } from './remoteSyncProtocol';
+import { REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS, REMOTE_SYNC_RESULT_BYTES, validateRemoteSyncCommand, type RemoteSyncCommand, type RemoteSyncStatus } from './remoteSyncProtocol';
 
 export const REMOTE_SYNC_REQUIREMENTS = { 'api.devices-sync-control': '1.0.0' } as const;
+// One bounded, host/owner/device/origin-scoped optional negotiation. A short
+// expiry lets older deployments gain support without restarting ordinary jobs.
+const sourcePathNegotiations = new WeakMap<FolderHost, { key: string; expiresAt: number; result: Promise<boolean> }>();
+async function projectRemoteRoots(context: RemoteSyncWorkerContext, roots: MobileFolder[]): Promise<MobileFolder[]> {
+ const { host } = context;
+ let available = false;
+ if (supportsNativeSourcePaths(host.capabilities)) {
+  const key = JSON.stringify([host.origin(), context.ownerId, context.deviceId]);
+  let entry = sourcePathNegotiations.get(host);
+  if (!entry || entry.key !== key || entry.expiresAt <= Date.now()) {
+   const result = Promise.resolve().then(() => host.requireCapability('api.devices-sync-control', REMOTE_SYNC_SOURCE_PATH_REQUIREMENTS['api.devices-sync-control'])).then(() => true, () => false);
+   entry = { key, expiresAt: Date.now() + 30_000, result }; sourcePathNegotiations.set(host, entry);
+  }
+  available = await entry.result;
+ }
+ context.check();
+ return roots.map(root => {
+  if (available) return root;
+  const { sourcePath: _sourcePath, ...withoutLocation } = root;
+  return withoutLocation;
+ });
+}
 const reviews = new WeakMap<object, string>();
 const reviewId = (controller: object) => {
 	let id = reviews.get(controller);
@@ -70,7 +92,7 @@ export async function executeRemoteSyncCommand(command: RemoteSyncCommand, conte
 			const snapshot: RemoteSyncStatus = {
 				version: 1, deviceId, observedAt: new Date().toISOString(), capabilities: { ...host.capabilities! }, rootsReady: session.rootsReady,
 				...(session.rootsObservedAt ? { rootsObservedAt: session.rootsObservedAt } : {}),
-				roots: roots.slice(offset, offset + pageSize), jobs: jobs.slice(offset, offset + pageSize),
+				roots: await projectRemoteRoots(context, roots.slice(offset, offset + pageSize)), jobs: jobs.slice(offset, offset + pageSize),
 				...(offset + pageSize < Math.max(roots.length, jobs.length) ? { nextCursor: String(offset + pageSize) } : {}),
 				task: task ? { connectionId: task.scope.rootId, active: task.active, stopping: task.stopping, status: task.status,
 					waiting: task.waiting, progress: structuredClone(task.progress),
@@ -86,7 +108,7 @@ export async function executeRemoteSyncCommand(command: RemoteSyncCommand, conte
 		case 'folders': {
 			const request = command.request;
 			if (ownTask(context)?.active) {
-				if (request.action === 'list' && session.rootsReady) return { roots: structuredClone(session.roots) };
+				if (request.action === 'list' && session.rootsReady) return { roots: await projectRemoteRoots(context, structuredClone(session.roots)) };
 				throw Error('Pause the current transfer before changing folder access or recovering device files.');
 			}
 			if ('trash' in request) {
@@ -97,7 +119,7 @@ export async function executeRemoteSyncCommand(command: RemoteSyncCommand, conte
 			await host.authorizeDevice(ownerId, deviceId, signal); context.check();
 			const result = await host.request(ownerId, request, signal); context.check();
 			session.roots = result.roots; session.rootsReady = true; session.rootsObservedAt = new Date().toISOString();
-			return result;
+			return { ...result, roots: await projectRemoteRoots(context, result.roots) };
 		}
 		case 'start': {
 			if (nativeSyncTasks.read()?.active) throw Error('A transfer is already running. Pause it before starting another connection.');

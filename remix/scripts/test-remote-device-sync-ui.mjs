@@ -32,6 +32,7 @@ try {
   const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: 'block' });
   await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   const page = await context.newPage();
+  page.setDefaultTimeout(12_000);
   page.on('pageerror', error => errors.push(error.message));
   try {
    await page.goto(origin);
@@ -40,12 +41,43 @@ try {
    const manage = page.locator('summary').filter({ hasText: 'Manage sync connections' });
    await manage.click();
    await page.getByText('Sync connections', { exact: true }).waitFor();
-   await page.getByRole('button', { name: 'Edit', exact: true }).waitFor();
+   await page.getByRole('button', { name: 'Expand folder', exact: true }).first().waitFor();
+   assert.equal(await page.getByRole('button', { name: 'Edit', exact: true }).count(), 0, 'saved cards start collapsed');
+   assert.equal(await page.getByRole('button', { name: 'Sync now', exact: true }).count(), 0);
+   const documents = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Documents backup', exact: true }) });
+   const archive = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Archive backup', exact: true }) });
+   await page.screenshot({ path: join(evidence, `${label}-collapsed-folders.png`), fullPage: true });
+   await documents.getByRole('button', { name: 'Expand folder', exact: true }).click();
    assert.equal(await page.getByText('Other device private sync', { exact: true }).count(), 0);
    assert.equal(await page.getByText('Other owner private sync', { exact: true }).count(), 0);
    assert.equal(await page.evaluate(() => window.remoteSyncFixture.state().commands.filter(c => c.action !== 'status').length), 0, 'opening settings cannot start device work');
    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+   assert.equal(await documents.getByRole('textbox', { name: 'Connection name', exact: true }).count(), 1, 'selected editor is inside its folder card');
    await page.getByRole('textbox', { name: 'Connection name', exact: true }).fill(`${label} browser backup`);
+   const resources = page.locator('summary').filter({ hasText: /^Resource limits$/ });
+   await resources.click();
+   const upload = page.getByRole('textbox', { name: 'Upload speed', exact: true });
+   await upload.fill('-');
+   assert.equal(await page.getByRole('button', { name: 'Save connection', exact: true }).isDisabled(), true);
+   await resources.click(); await resources.click();
+   assert.equal(await upload.inputValue(), '-', 'incomplete numeric input survives optional section collapse');
+   await manage.click(); await manage.click();
+   assert.equal(await upload.inputValue(), '-', 'incomplete numeric input survives management collapse');
+   await documents.getByRole('button', { name: 'Collapse folder', exact: true }).click();
+   await archive.getByRole('button', { name: 'Expand folder', exact: true }).click();
+   await page.getByRole('button', { name: 'Edit', exact: true }).click();
+   await page.getByRole('textbox', { name: 'Connection name', exact: true }).fill('Archive draft retained');
+   await documents.getByRole('button', { name: 'Expand folder', exact: true }).click();
+   assert.equal(await page.getByRole('textbox', { name: 'Connection name', exact: true }).inputValue(), `${label} browser backup`);
+   assert.equal(await upload.inputValue(), '-', 'incomplete resource input survives sibling selection');
+   assert.equal(await page.getByRole('button', { name: 'Save connection', exact: true }).isDisabled(), true);
+   await archive.getByRole('button', { name: 'Expand folder', exact: true }).click();
+   assert.equal(await page.getByRole('textbox', { name: 'Connection name', exact: true }).inputValue(), 'Archive draft retained');
+   await page.getByRole('button', { name: 'Discard draft', exact: true }).click();
+   await documents.getByRole('button', { name: 'Expand folder', exact: true }).click();
+   await upload.fill('');
+   await page.screenshot({ path: join(evidence, `${label}-retained-folder-draft.png`), fullPage: true });
+
    await page.getByRole('button', { name: 'Save connection', exact: true }).click();
    await page.getByRole('button', { name: 'Save connection', exact: true }).waitFor({ state: 'hidden' });
    let state = await page.evaluate(() => window.remoteSyncFixture.state());
@@ -55,6 +87,7 @@ try {
    await page.screenshot({ path: join(evidence, `${label}-offline-settings.png`), fullPage: true });
    await page.reload(); await manage.click();
    await page.getByText(`${label} browser backup`, { exact: true }).last().waitFor();
+   await page.locator('article').filter({ has: page.getByRole('heading', { name: `${label} browser backup`, exact: true }) }).getByRole('button', { name: 'Expand folder', exact: true }).click();
    await page.evaluate(() => window.remoteSyncFixture.setOnline(true));
    await page.getByRole('button', { name: 'Refresh device', exact: true }).click();
    const start = page.getByRole('button', { name: 'Sync now', exact: true });
@@ -89,6 +122,7 @@ try {
    await page.evaluate(() => window.remoteSyncFixture.releaseStartAcknowledgements());
    await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'Edit' && !button.disabled));
    assert.equal((await page.evaluate(() => window.remoteSyncFixture.state())).status.task.active, false, 'a late Start acknowledgement must not restart the paused task');
+   await page.locator('summary').filter({ hasText: /^Automatic sync$/ }).click();
    await page.getByRole('combobox', { name: `Automatic sync interval for ${label} browser backup`, exact: true }).selectOption('900000');
    await page.getByRole('button', { name: 'Start automatic sync', exact: true }).click();
    await page.waitForFunction(() => window.remoteSyncFixture.state().status.task?.active === true);
@@ -99,6 +133,10 @@ try {
    await page.getByRole('button', { name: 'Progress, coverage & priorities', exact: true }).click();
    const priorityPaths = page.getByRole('textbox', { name: 'Priority paths', exact: true });
    await priorityPaths.fill('Important\nPhotos/Family');
+   await page.locator('summary').filter({ hasText: '· Progress, coverage & priorities' }).click();
+   assert.equal(await priorityPaths.count(), 0, 'read-heavy detail session unmounts when collapsed');
+   await page.getByRole('button', { name: 'Progress, coverage & priorities', exact: true }).click();
+   assert.equal(await priorityPaths.inputValue(), 'Important\nPhotos/Family', 'unsaved priorities survive lazy detail remount');
    await page.getByRole('button', { name: 'Save upload priorities', exact: true }).click();
    await page.getByText('Upload priorities saved. They apply after the current operation finishes.', { exact: true }).waitFor();
    state = await page.evaluate(() => window.remoteSyncFixture.state());
@@ -128,10 +166,44 @@ try {
    assert.ok(state.commands.some(command => command.action === 'folders' && command.request.action === 'list'), 'a new binding verifies current device roots');
    assert.equal(state.commands.filter(command => command.action === 'start').length, startsBeforeCreation, 'creating a connection does not start transfers');
    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'phone and desktop layouts fit the viewport');
+   const folderWritesBefore = state.rows.filter(row => row.thingtime.includes('folder')).length;
+   await page.getByRole('button', { name: 'Add connection', exact: true }).click();
+   await page.getByRole('textbox', { name: 'Connection name', exact: true }).fill('Path-mapped backup');
+   assert.equal(await page.getByRole('combobox', { name: 'Private cloud folder', exact: true }).inputValue(), '');
+   assert.equal((await page.evaluate(() => window.remoteSyncFixture.state())).rows.filter(row => row.thingtime.includes('folder')).length, folderWritesBefore, 'opening a new draft cannot create folders');
+   await page.getByRole('button', { name: 'Save connection', exact: true }).click();
+   await page.getByRole('button', { name: 'Save connection', exact: true }).waitFor({ state: 'hidden' });
+   await page.waitForFunction(() => window.remoteSyncFixture.state().rows.some(row => row.crystal.name === 'Path-mapped backup'));
+   state = await page.evaluate(() => window.remoteSyncFixture.state());
+   const pathMapped = state.rows.find(row => row.crystal.name === 'Path-mapped backup');
+   assert.ok(pathMapped, 'explicit new connection Save creates the path-mapped configuration');
+   const leaf = state.rows.find(row => row.id === pathMapped.crystal.remoteFolderId);
+   const accountFolder = state.rows.find(row => row.id === leaf.folderId);
+   const usersFolder = state.rows.find(row => row.id === accountFolder.folderId);
+   assert.equal(leaf.crystal.name, 'Documents on Mac');
+   assert.equal(accountFolder.crystal.name, 'example');
+   assert.equal(usersFolder.crystal.name, 'Users');
+   assert.equal(usersFolder.folderId, null);
+   assert.equal(state.commands.filter(command => command.action === 'start').length, startsBeforeCreation, 'folder preparation cannot start transfers');
+   assert.equal(state.rows.find(row => row.id === 'documents-sync').crystal.remoteFolderId, 'cloud-documents', 'existing destinations remain unchanged');
+   const sharedCard = page.locator('article').filter({ has: page.getByRole('heading', { name: 'Editable folder preview', exact: true }) });
+   const sharedLayout = sharedCard.locator('[data-settings-document="device-sync-folder-card"]');
+   await sharedLayout.getByRole('button', { name: 'Edit layout', exact: true }).click();
+   await sharedLayout.locator('[data-block-id="folder-card-title"]').click();
+   const selectedBlock = page.getByRole('combobox', { name: 'Select block', exact: true });
+   await selectedBlock.waitFor();
+   assert.equal(await selectedBlock.inputValue(), 'folder-card-title', 'nested title is selected through normal Builder controls');
+   await selectedBlock.selectOption('folder-card-expand');
+   assert.equal(await selectedBlock.inputValue(), 'folder-card-expand', 'expand control is an independently editable block');
+   await page.screenshot({ path: join(evidence, `${label}-folder-builder.png`), fullPage: true });
+   await page.getByRole('button', { name: 'Close builder', exact: true }).click();
+   await sharedLayout.getByRole('button', { name: 'Done editing layout', exact: true }).click();
+   await page.evaluate(async () => { for (let y = 0; y < document.documentElement.scrollHeight; y += innerHeight) { scrollTo(0, y); await new Promise(requestAnimationFrame); } scrollTo(0, 0); });
+   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
    results.push({ viewport: label, browserWithoutNativeBridge: true, offlineSettingsSave: true, savedSettingsReload: true,
-    privateDeviceScope: true, noTransferOnOpen: true, rejectedCommandVisible: true, remoteStart: true, remotePause: true, pauseBeforeStartAcknowledgement: true,
-    remoteAutomaticInterval: true, remotePriorities: true, noBrowserSyncJournal: true, conflictPreservesDraft: true,
-    remoteFolderSelection: true, newConnectionVerifiesRoots: true, noOverflow: true });
+    collapsedGenericCards: true, independentEditableCardFields: true, invalidResourceDraftRetained: true, siblingDraftRetained: true, privateDeviceScope: true, noTransferOnOpen: true, rejectedCommandVisible: true, remoteStart: true, remotePause: true, pauseBeforeStartAcknowledgement: true,
+    remoteAutomaticInterval: true, remotePriorities: true, unsavedPriorityDraftRetained: true, noBrowserSyncJournal: true, conflictPreservesDraft: true,
+    newConnectionCreatesRealThingHierarchy: true, existingDestinationPreserved: true, remoteFolderSelection: true, newConnectionVerifiesRoots: true, noOverflow: true });
   } catch (error) {
    await page.screenshot({ path: join(evidence, `${label}-failure.png`), fullPage: true }).catch(() => {});
    console.error(await page.locator('body').innerText().catch(() => ''));
