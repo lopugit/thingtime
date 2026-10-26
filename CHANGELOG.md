@@ -1,5 +1,15 @@
 # Control-plane changelog
 
+## 2026-10-27 — Prepare protected unsigned native compilation
+
+- Separate admitted controller code from immutable candidate native source;
+  extract and execute candidate files only as a fresh unprivileged identity
+  after PF outbound denial, with root watchdog cleanup and provenance artifacts.
+- Add adversarial archive/import and cleanup regressions. Document separate
+  controller/main-listener admission and hosted verification; no signing,
+  release, installation, or full-build acceptance is claimed from local tests.
+
+
 Everything in this repository's **executable CI** lives on the `github-actions`
 branch: the workflows, the automation scripts, and the actions they call. The
 product branches carry only thin listeners that invoke this branch by ref, so a
