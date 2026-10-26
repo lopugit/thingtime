@@ -10,6 +10,36 @@ Signed state and encrypted grants bind public client, origin, environment, callb
 
 The API payload shape is unchanged, but removing env-only setup and rejecting unbound legacy states/grants changes behavior: catalog/begin/callback/feed/Connections and saved-account request deliberately move to major 2.0.0. Browser capability minimums require these corrected contracts. No real secrets, provider accounts or provider-network calls are used by the regression suite. Validation: 177 Connections, 118 capability, 25 admin integration and 34 mail tests pass. The canonical Vercel client/server build and output verifier pass. The compiled Vercel handler serves both major-2 manifests under an OS sandbox denying every network destination, with synthetic bootstrap only. Typecheck reports 92 diagnostics against the count-only 89 baseline. The ratchet retains only its first 40 diagnostics; those printed diagnostics also occur in the retained pre-worker 92-diagnostic log, and none names an owned file. The count-only baseline cannot identify three newly added diagnostics or prove complete before/after equality; lint has no errors in owned sources (existing useApi hook/documentation warnings remain), and MTS tests pass lint with the TypeScript parser and ES2021 globals. Latest structural graph output is refreshed; current documentation semantics are unverified after the established local semantic-backend failure. Real multi-account Google/Facebook acceptance and environment rollout remain pending.
 
+## 26 October 2026: structural Builder acceptance
+
+The service-card and Lopu credential browser harnesses now use the normal Builder
+inspector/context menu to style/reorder a nested label, duplicate it and delete
+only the duplicate. Save/reload preserves authored style/order while excluding
+live account identities and secrets. Post-edit service add/reconnect/remove
+preserves the other account and its Check action; the original Lopu selector
+still changes credentials. Callback assertions compare only events emitted by
+the current action, after confirming reload clears the fixture event list.
+The Lopu check reads its persisted second-account baseline, selects credits,
+reads back the local preference, reloads and verifies credits remains selected
+while the saved chat's separate API choice remains unchanged.
+Desktop/mobile saved layouts, full-page scrolling,
+dynamic panels and open inspectors were checked; screenshots were reviewed.
+
+The service suite passed all nine groups and the Lopu suite passed all five,
+both with zero page errors. The first Lopu run correctly refused layout saving:
+its stale synthetic manifest advertised `api.things` 1.35.0 while the existing
+settings-document client requires 1.36.0. Updating only that fixture to the
+required minimum restored the real save path; no product guard was weakened.
+
+Each suite used a separate task-owned Chromium container, immutable runtime image
+`sha256:51f594d897c72bdb47d90e2da9141dee5b1ccc5bc32b0b1439852d3d2a0dac4b`
+and the installed seccomp profile. Inspection verified network none, no host
+mounts/ports, read-only root, all capabilities dropped and no-new-privileges.
+Chromium sandboxing and blocked backend direct-IP/browser redirects were checked.
+All exact containers, including the failed first run, were removed. These are
+real components and Builder controls with synthetic account/provider boundaries;
+they do not establish real OAuth, production or installed-device acceptance.
+
 ## 23 October 2026: cloud reconciliation and current deployment evidence
 
 The source branch was `0c6bcc0b6cac5960e3472eb9a5ac3002d3ebc6b6`. It still contains substantive service-account code absent from current `main`; it is not a duplicate promotion. Current `develop` at `f41cf65629fe98423405de4bea4e5894f59ccb46` was integrated without dropping the merged Lopu selector or media/sync contracts. The three product conflicts were capability declarations/tests; generated graph snapshots are refreshed separately. There were no PR review submissions or inline review threads at reconciliation.

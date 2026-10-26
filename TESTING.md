@@ -7872,6 +7872,17 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Third-party connections (`/connections`, `/connections/feed`, `/api/v1/connections/*`)
 
+- [ ] Through normal Builder inspector/context controls, style/reorder a
+  repeated account label and the Lopu credential label, duplicate each, then
+  delete only the duplicate. Save/reload; confirm service add/reconnect/remove
+  still preserve the other account and its Check action, and the original
+  credential selector still works. Compare each service callback's new event
+  slice, not previously recorded events. Read back the stored Lopu preference
+  before/after selecting credits, reload to confirm credits persists, and verify
+  the saved chat's independent API choice is unchanged. Saved layouts must contain no live account
+  identities or secrets. Both credential browser harnesses cover this path with
+  synthetic boundaries; inspect desktop/mobile scrolling and the open inspector.
+
 - [ ] After merging independently advanced capability branches, verify uncapped data writes require `api.things` 1.42.0, `api.things-update` 1.13.0 and `api.actions-run` 1.39.0; earlier versions used for unrelated features must not authorize these writes. Both manifests must retain the current media/sync contracts. Exercise a long-data write against the immediately preceding origin and verify refusal before transmission.
 - [ ] Follow a saved-service continuation token through the browser API helper, not only the HTTP route, and verify `pageToken` reaches the next request unchanged. The hostile-feed parser timing test must stub DNS and prove the response reached the parser, so network delay/refusal cannot change its result.
 - [ ] Edit a service icon, repeated account label and credential field independently in Builder, save and reload. Live account names and synthetic credential values must not enter the saved document or Action history; attempts to save a private field's value/default must fail before persistence even when its type is dynamic or changed to text. Verify empty required fields block both click and Enter, valid mobile Enter submits once, and switching accounts or entering edit mode cancels pending transient work.
