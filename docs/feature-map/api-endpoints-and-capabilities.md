@@ -497,3 +497,23 @@ with separately editable children. `api.webpages-suites-install` 1.7.0 installs
 the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
+
+Connections gateway clients retain all six major2 requirements. The synthetic
+`connections/gatewayOAuthFlow.test.mts` uses the signed H3 relay and actual
+OAuth/request handlers to check frontend callback, actual data-environment vault
+selection, live-session/one-use state and refresh ownership. A Connections1
+canonical backend is intentionally refused; upgrade/promote the backend before
+dependent follower actions. See the gateway runbook's Connections rollout.
+
+`test:environment-gateway:connections` additionally verifies the compiled Nitro
+OAuth/request path with a synthetic generated adapter preload and real temporary
+replica API data. It preserves the OS network boundary and normal authentication.
+Use `THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE` for a free separate test port range.
+
+
+The combined OAuth/password production integration adds uncapped data strings at
+`api.things` 1.43.0 and `api.things-update` 1.14.0, preserving main's independently
+shipped explicit renderer contracts at 1.42.0/1.13.0. Writers negotiate only the
+capability they use. Bundled desktop fallback validates the actual selected
+origin before forwarding every password operation (1.3.0) and all six
+Connections operations (2.0.0), in both ordinary and forwarded-origin paths.

@@ -90,6 +90,14 @@ def lopu_widget_profile_name
   ENV.fetch("LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER", "Thingtime Lopu Widget App Store #{lopu_widget_bundle_identifier}#{distribution_profile_suffix}")
 end
 
+def password_provider_bundle_identifier
+  "#{ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER')}.password-provider"
+end
+
+def password_provider_profile_name
+  ENV.fetch("PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER", "Thingtime Password Provider App Store #{password_provider_bundle_identifier}#{distribution_profile_suffix}")
+end
+
 def xcodebuild_xcargs
   args = []
   if manual_profile_signing?
@@ -97,6 +105,7 @@ def xcodebuild_xcargs
     args << "CODE_SIGN_IDENTITY=#{Shellwords.escape('Apple Distribution')}"
     args << "THINGTIME_IOS_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(ios_provisioning_profile_name)}"
     args << "THINGTIME_WATCH_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(watch_provisioning_profile_name)}"
+    args << "THINGTIME_PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(password_provider_profile_name)}"
     args << "THINGTIME_LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(lopu_widget_profile_name)}"
   else
     args << api_key_xcargs
@@ -126,7 +135,8 @@ def export_options(destination: "export")
     provisioningProfiles: {
       ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER") => ios_provisioning_profile_name,
       ENV.fetch("WATCH_BUNDLE_IDENTIFIER") => watch_provisioning_profile_name,
-      lopu_widget_bundle_identifier => lopu_widget_profile_name
+      lopu_widget_bundle_identifier => lopu_widget_profile_name,
+      password_provider_bundle_identifier => password_provider_profile_name
     }
   )
 end
@@ -250,6 +260,16 @@ platform :ios do
         output_path: OUTPUT_DIRECTORY
       )
       ENV["LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
+      get_provisioning_profile(
+        api_key: app_store_api_key,
+        team_id: ENV.fetch("DEVELOPMENT_TEAM"),
+        app_identifier: password_provider_bundle_identifier,
+        provisioning_name: password_provider_profile_name,
+        cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
+        force: false,
+        output_path: OUTPUT_DIRECTORY
+      )
+      ENV["PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
     end
 
     archive_path = File.expand_path(File.join(OUTPUT_DIRECTORY, "Thingtime.xcarchive"))

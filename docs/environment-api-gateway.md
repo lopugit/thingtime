@@ -119,6 +119,29 @@ before reopening a pool if a rollback promotes it again. Multiple warm gateway
 instances still have separate pools and monitoring sockets. This selects one
 deployment, **not one process or socket**, and does not change the Atlas tier.
 
+## Connections major2 rollout
+
+PR992 deliberately requires major version 2 for `api.connections`,
+`api.connections-providers`, `api.connections-feed`, `api.connections-oauth-begin`,
+`api.connections-oauth-callback` and `api.connections-request`. Missing or major1
+backend contracts fail closed before forwarding credentials or consuming the
+request body; matching major2 still requires the advertised path and method.
+Never downgrade these requirements or select dedicated mode merely to make a
+preview appear accepted; this branch retains its intended proxy policy. The current preview master advertises Connections 1.0.0; that
+refusal is an expected compatibility gate and is not end-to-end completion.
+
+Deploy and verify a canonical environment backend implementing Connections 2
+before promoting it to the stable environment gateway and enabling dependent
+follower actions. Preserve the previous immutable gateway for assessed rollback.
+The frontend callback remains the exact frontend origin, never the gateway
+origin. Each gateway-owned `connections-*-oauth` vault bundle must contain that
+exact frontend origin under `environments[getDeploymentDataEnvironment().id]`.
+The gateway environment label (for example `preview`) is not a substitute for
+the actual data-environment ID (which may be `development` or a custom ID).
+Register each exact callback with the provider. Old env-only clients and
+unbound saved grants must reconnect through the major2 flow; never copy secrets
+between origins/environments or widen a network boundary as recovery.
+
 ## Rollout and environment mapping
 
 The intended mapping separates the logical gateway environment from Vercel's
@@ -145,6 +168,10 @@ the same development cluster, separate from production. The
 `master.previews.thingtime.com` alias has not yet been created or verified, and
 gateway activation across these origins is pending. Do not treat the intended
 mapping as proof of live gateway operation.
+
+Connections clients require all six major-2 contracts. Public discovery alone
+does not prove authenticated provider, vault, origin-allowlist or installed-client
+acceptance; verify the selected backend after deployment.
 Preserve existing data/authentication assignments unless an explicit data
 migration is authorized.
 
@@ -187,19 +214,30 @@ npm --prefix remix run test:collections
 npm --prefix remix run test:api-capabilities
 NITRO_PRESET=node-server npm --prefix remix run build:server
 node remix/scripts/environment-gateway-acceptance.mjs
+# Optional synthetic Connections2 provider with real API sessions and storage:
+THINGTIME_GATEWAY_ACCEPTANCE_CONNECTIONS=1 node remix/scripts/environment-gateway-acceptance.mjs
 ```
 
 The built transport runner requires macOS sandbox-exec and local mongod. It
-creates disposable API identities and a temporary replica set on 19771–19776,
+creates disposable API identities and two temporary replica sets on 19771–19780,
 proves direct-IP outbound denial, uses separate synthetic signing credentials
 on the follower, verifies cookie-authenticated writes and promotion/rollback,
 and counts any forbidden follower MongoDB dial. It fails on occupied ports and
 removes its own processes and temporary data. It does not use production data
 or credentials and does not expose a public dev server.
 
+The runner accepts `THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE` for an independent
+ten-port range. It validates all ten ports before creating temporary state and
+never takes over listeners. The first eight serve the proxy/gateway fixture;
+the last two serve an explicitly dedicated worker and its independent test
+replica set. `THINGTIME_GATEWAY_ACCEPTANCE_CONNECTIONS=1` retains the generated
+synthetic provider/vault adapters while exercising real HTTP sessions, one-use
+state, encrypted storage and refresh leases. Product routes and authentication
+are unchanged.
+
 ## Promotion procedure
 
-Use the intended mapping and pending-activation status above. Do not select an
+Verify the selected origin and required contracts against the mapping above. Do not select an
 arbitrary PR deployment as the shared preview backend or treat staging/wildcard
 aliases as acceptance evidence. Build the gateway from the intended integration
 branch, run contract and real API acceptance, then promote that immutable
@@ -270,3 +308,49 @@ proof that an already submitted server operation stopped instantaneously.
 Fencing and bounded commands reduce overlap risk but are not an absolute
 distributed cancellation guarantee. Preserve failed/unknown readiness and
 reconcile server state before retrying.
+
+## PR992 integration verification — 26 October 2026
+
+Network-denied gateway/capability/Mongo/admin-integration checks passed 272/272.
+The Connections/workflow/migration/readiness batch passed 238 pre-existing checks;
+all four new signed-relay OAuth cases passed after completing their synthetic
+live-session fixture. The fixed cases verify exact frontend callback and actual
+data-environment selection, one-use state, wrong/revoked sessions and concurrent
+refresh/account independence. Targeted lint passed 26 `.ts`/`.tsx` files with two
+pre-existing `apiDocs.ts` warnings. Existing ESLint does not parse `.mts`; those
+checks ran through Node. Raw TypeScript reported 92 diagnostics, none on added
+or modified lines; this is not a clean repository typecheck.
+
+A sanitized `node-server` build and both generic and synthetic Connections2
+built transport acceptance passed. The latter used the free range 19971–19978,
+a temporary replica set and real synthetic registration/cookies. It verified
+frontend callback preservation, callback replay refusal, exactly one provider
+exchange and one rotating refresh across two concurrent requests (200/401),
+credential-free responses, Vite root docs and promotion/rollback. Followers made
+zero MongoDB dials; initial DDL recorded 138 creates/51 drops with peak2, while
+an unchanged cold owner issued zero commands. Processes and disposable state
+were cleaned up. These local tests do not establish actual provider consent,
+current preview Connections2 support or installed native acceptance.
+
+
+## PR992 develop integration verification — 26 October 2026
+
+Fresh develop `cd6f8b8abc94270980bac216da2412ffef8578b1` was merged locally into
+PR992's existing branch. All 15 conflicts were resolved without changing its
+proxy default, Connections2 contracts or frontend/session/data-environment fences.
+Incoming gateway1.1 policy and explicit dedicated mode remain intact; the mode
+helper uses explicit validated return branches to avoid an incoming TS2322.
+The final 54 gateway/OAuth checks passed after that correction, alongside 517
+focused checks across gateway, capability, index, admin, Connections and workflow
+paths. Lint passed eight changed TS/TSX files with two existing docs warnings;
+raw TypeScript has 92 diagnostics and none on merge-added/modified lines.
+
+Final sanitized Nitro build and ten-port compiled acceptance passed on
+19971–19980. The runner verified an explicitly dedicated worker's independent
+replica and public shell metadata, proxy and signed Connections2 synthetic OAuth,
+callback replay refusal, concurrent rotating refresh, promotion/rollback and zero
+follower Mongo dials. Both initial index plans peaked at two commands; unchanged
+cold owner DDL remained zero. Processes and temporary data were cleaned up.
+This is local test evidence, not live canonical gateway1.1 / Connections2 or real
+provider/native acceptance. Graph refresh, merge completion and publication are
+handled separately by the coordinating task.
