@@ -28,6 +28,8 @@ export default defineNitroConfig({
   routes: {
     ...Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
     [THINGTIME_CAPABILITY_MANIFEST_PATH]: thingtimeCapabilitiesHandler,
+    [`${THINGTIME_CAPABILITY_MANIFEST_PATH}-docs`]: apiHandler,
+    '/social-card-docs': apiHandler,
     [APPLE_APP_ASSOCIATION_PATH]: './server/handlers/apple-app-association.ts',
     [`${APPLE_APP_ASSOCIATION_PATH}-docs`]: './server/routes/api/[...].ts',
     // Crawler discovery lives at the well-known root paths; their -docs twins
