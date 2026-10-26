@@ -475,3 +475,24 @@ test('personal-plan background admission never invokes Vercel Workflow for expli
     assert.equal(rows[index].workflowInput, undefined);
   }
 });
+
+for (const claimed of [false, true]) test(`gateway promotion reconciles expired ${claimed ? 'claimed' : 'unclaimed'} workflow without replay`, async t => {
+  const { row } = await pendingServerRoot();
+  row.workflowGatewayDeploymentId = 'previous-owner'; row.deadlineAt = new Date(0);
+  if (claimed) { row.workerStarted = true; row.activeWorkerRequestId = row.crystal.requestId; }
+  const gateway = await import('../deployment/environmentGateway');
+  const keys = ['THINGTIME_GATEWAY_ENVIRONMENT', 'THINGTIME_GATEWAY_ORIGIN', 'THINGTIME_GATEWAY_SECRET', 'THINGTIME_GATEWAY_DEPLOYMENT_ID'] as const;
+  const before = keys.map(key => process.env[key]);
+  process.env.THINGTIME_GATEWAY_ENVIRONMENT = 'preview'; process.env.THINGTIME_GATEWAY_ORIGIN = 'https://gateway.test';
+  process.env.THINGTIME_GATEWAY_SECRET = 'synthetic'.repeat(8); process.env.THINGTIME_GATEWAY_DEPLOYMENT_ID = 'current-owner';
+  t.mock.method(gateway.gatewayAuthority, 'current', async () => ({ owner: true, settings: gateway.getGatewaySettings()!, manifest: {} }) as any);
+  try {
+    assert.equal((await read(row.shareId)).status, 200);
+    assert.equal(row.cancelRequested, true);
+    assert.match(row.crystal.error, /gateway changed/i);
+    assert.equal(row.workflowFinalStatus, 'needs-attention');
+    assert.equal(row.workflowInput, undefined);
+    if (claimed) { assert.ok(row.uniqueKeys); assert.equal(row.workflowFinalizedAt, undefined); }
+    else { assert.equal(row.crystal.workflowStatus, 'needs-attention'); assert.equal(row.uniqueKeys, undefined); }
+  } finally { keys.forEach((key, i) => { if (before[i] === undefined) delete process.env[key]; else process.env[key] = before[i]; }); }
+});

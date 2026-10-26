@@ -451,3 +451,26 @@ with separately editable children. `api.webpages-suites-install` 1.7.0 installs
 the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
+
+## Environment gateway
+
+`api.environment-gateway` 1.0.1 registers origin-scoped gateway metadata in both
+manifest generators. `deployment/environmentGateway.ts` resolves alias ownership;
+`server/utils/environmentGateway.ts` checks every semantic version, path and method
+before signing a one-hop relay. Nitro middleware restores the original URL before
+authentication and keeps streaming work admitted until completion. Discovery is
+private/no-store. Root social-card and manifest docs twins are explicitly routed.
+Run `test:environment-gateway`, `test:api-capabilities` and `test:collections`; see
+[environment gateway](../environment-api-gateway.md) for rollout boundaries.
+
+Connections gateway clients retain all six major2 requirements. The synthetic
+`connections/gatewayOAuthFlow.test.mts` uses the signed H3 relay and actual
+OAuth/request handlers to check frontend callback, actual data-environment vault
+selection, live-session/one-use state and refresh ownership. A Connections1
+canonical backend is intentionally refused; upgrade/promote the backend before
+dependent follower actions. See the gateway runbook's Connections rollout.
+
+`test:environment-gateway:connections` additionally verifies the compiled Nitro
+OAuth/request path with a synthetic generated adapter preload and real temporary
+replica API data. It preserves the OS network boundary and normal authentication.
+Use `THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE` for a free separate test port range.

@@ -586,7 +586,7 @@ test('subspace rename requires the post-media additive contract', () => {
 test('background AI requires compatible operation and task contracts on both manifests', () => {
  const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
  const discovery = thingtimeCapabilityManifest('https://background.test');
- for (const [feature, required] of Object.entries({ 'api.lopu-background-tasks': '1.3.1', 'api.lopu-chats-reply': '1.21.1', 'api.lopu-voice-reply': '1.5.0', 'api.lopu-musing': '1.1.0', 'api.ai-complete': '1.2.0' })) {
+ for (const [feature, required] of Object.entries({ 'api.lopu-background-tasks': '1.3.2', 'api.lopu-chats-reply': '1.21.1', 'api.lopu-voice-reply': '1.5.0', 'api.lopu-musing': '1.1.0', 'api.ai-complete': '1.2.0' })) {
   assert.equal(legacy.features[feature], required);
   assert.equal(discovery.features[feature].version, required);
   assert.equal(capabilitySatisfies(required, required), true);
@@ -823,4 +823,25 @@ test('resource limits and CPU downloads negotiate only their semantic dependenci
  assert.equal(capabilitySatisfies('1.1.0', FILE_SYNC_RESOURCE_REQUIREMENTS['api.file-sync-batches']), false);
  assert.equal(capabilitySatisfies('1.16.0', requirements['api.attachment-content']), false);
  assert.equal(capabilitySatisfies('1.18.0', requirements['api.attachment-content']), true);
+});
+
+
+test('gateway discovery and every Connections major2 operation retain their exact requirements', () => {
+  const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
+  const discovery = thingtimeCapabilityManifest('https://gateway-contract.test');
+  for (const [feature, version] of [
+    ['api.environment-gateway', '1.0.1'], ['api.social-card', '1.0.1'],
+    ...['connections', 'connections-providers', 'connections-feed', 'connections-oauth-begin', 'connections-oauth-callback', 'connections-request'].map(id => [`api.${id}`, '2.0.0'])
+  ]) {
+    assert.equal(legacy.features[feature], version);
+    assert.equal(discovery.features[feature].version, version);
+    if (version === '2.0.0') for (const old of [undefined, '1.0.0', '3.0.0']) assert.equal(capabilitySatisfies(old, version), false);
+  }
+  assert.equal(discovery.gateway, null);
+  for (const [feature, path, methods] of [
+    ['api.environment-gateway', '/.well-known/thingtime-capabilities.json', ['GET']],
+    ['api.environment-gateway', '/.well-known/thingtime-capabilities.json-docs', ['GET', 'POST']],
+    ['api.social-card', '/social-card', ['GET']],
+    ['api.social-card', '/social-card-docs', ['GET', 'POST']]
+  ] as const) assert.deepEqual(discovery.operations.find(operation => operation.feature === feature && operation.path === path)?.methods, methods);
 });

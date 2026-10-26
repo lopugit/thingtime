@@ -397,3 +397,46 @@ These bullets record the 18 October environment and implementation only. Current
 - Finish two-distinct-Google-account and Facebook positive authorization testing. Mocked OAuth tests alone do not establish these.
 - The OpenAI partner inquiry page confirms receipt. Hosted ChatGPT still requires an approved partner client. Local subscription-token enrollment is not implemented. Direct browser Claude enrollment is unavailable; the current adapter accepts a Claude Code setup token.
 - Review preview behavior and required CI. Production promotion requires separate approval for the exact PR.
+
+
+## Environment gateway integration — 26 October 2026
+
+Imported the reviewed canonical environment-gateway runtime as a bounded source
+integration, preserving PR992's six Connections 2.0.0 operations. The relay
+negotiates each semantic version, path and method before consuming a body or
+forwarding credentials. Mongo admission, lazy gateway warmup, pool draining,
+durable index readiness, scoped administrative recovery and detached-work
+lifetimes use the same canonical implementation.
+
+The current preview master advertises Connections 1.0.0. Its refusal is the
+expected compatibility gate, not completed end-to-end acceptance. A canonical
+backend implementing Connections2 must be verified and promoted before dependent
+follower actions. Keep exact frontend callback URLs in the gateway-owned vault
+under the actual `getDeploymentDataEnvironment().id`; do not replace callback
+origins with the gateway or use its environment label as the data-environment ID.
+See [the gateway rollout contract](../docs/environment-api-gateway.md#connections-major2-rollout).
+
+A synthetic network-denied regression runs signed relays through the real H3
+middleware, OAuth begin/callback and saved-request handlers. It covers exact
+frontend/data-environment selection, session and one-use state, revoked sessions,
+concurrent rotating refresh and account independence. Storage and provider
+responses are synthetic; separate real-provider/native acceptance remains open.
+
+Verification: gateway/capability/Mongo/admin suite 272/272; 238 existing
+Connections/workflow/migration/readiness checks and four new relay cases passed.
+Targeted lint: 26 source files, zero errors, two existing docs warnings. Raw
+TypeScript: 92 diagnostics, none on added/modified lines. Sanitized `node-server`
+build passed. Generic and synthetic Connections2 compiled transport acceptance
+both passed under the local-only OS network boundary on ports 19971–19978;
+real sessions/encrypted storage were exercised with generated provider/vault
+adapters, not real provider credentials. Concurrent requests produced 200/401
+with exactly one exchange and refresh; replay was refused. Follower Mongo dials
+remained zero; index peak2 and unchanged-cold DDL0. The runner cleaned its own
+processes and data. Existing preflight ports were preserved when initially busy.
+
+Commands: `test:environment-gateway`, `test:collections`, `test:api-capabilities`,
+`test:admin-integrations`, `test:connections` and the affected Lopu/migration tests
+were run through clean-environment `sandbox-exec` with networking denied.
+`NITRO_PRESET=node-server ... build:server` used the same restriction.
+`THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE=19971 THINGTIME_GATEWAY_ACCEPTANCE_CONNECTIONS=1 node remix/scripts/environment-gateway-acceptance.mjs`
+ran the compiled acceptance with its own verified OS network policy.

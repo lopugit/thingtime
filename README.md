@@ -1492,15 +1492,24 @@ on the same document. Docs: `/docs/api` → things.
 
 ## MongoDB
 
-MongoDB powers the app status checks and database-backed API routes. Local
-development does not require MongoDB env by default: when
-`MONGODB_CONNECTION_STRING` is missing, Vite and Nitro forward same-origin API
-requests to `https://thingtime.com` with the same method, path, query, headers,
-cookies, and payload. Upstream auth cookies are rewritten for local HTTP so
-zero-env localhost login can persist through the proxy.
+Connections 2 followers require a canonical gateway already implementing the
+same major2 operation contracts. The gateway vault must select every exact
+frontend callback origin under the actual deployment data-environment ID;
+see [the rollout contract](docs/environment-api-gateway.md#connections-major2-rollout).
+A major1 preview backend is deliberately refused and does not establish live
+OAuth acceptance.
 
-Set these variables only when you want this checkout or deployment to serve API
-requests from its own MongoDB instead of falling back to Thingtime production:
+Configured branch deployments use the canonical environment API gateway for
+database-backed operations. See [gateway setup and rollout](docs/environment-api-gateway.md)
+for the server-only environment/origin/deployment settings, separate relay secret,
+exact source origins, per-operation capability negotiation, pool draining and
+index-readiness recovery. A gateway that lacks a branch operation fails closed;
+no production fallback or dedicated-backend opt-out is used.
+
+MongoDB powers database-backed API routes. Incomplete local or deployed APIs
+return a configuration error rather than implicitly forwarding to production.
+The installed desktop shell retains its explicit selected-API bridge. Configure
+the canonical environment owner or a deliberate self-hosted API with:
 
 ```sh
 MONGODB_CONNECTION_STRING="mongodb+srv://<user>:<db_password>@<cluster>/<database>?retryWrites=true&w=majority"

@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Integrate canonical gateway ownership, signed origin-preserving relays, Mongo admission/draining and durable index readiness into PR992. Keep all six Connections contracts at major2; test restored frontend callbacks, exact data-environment vault selection and rotating refresh isolation. Roll out a compatible canonical backend before follower-dependent actions; current major1 refusal is expected. [Details](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md#environment-gateway-integration--26-october-2026). — Codex (AI)
+
 - 2026-10-26: Resolve Connections OAuth clients and callbacks from the encrypted server vault by exact origin and explicit data environment, bind pending/saved grants, and reject ambiguous configuration and refresh races. Old unbound grants require reconnect; real provider acceptance remains pending. [PR 992 details](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). **Codex (AI)**
 
 - 2026-10-23: Make service/account cards, credential forms and Connections tools individually editable in Builder; keep secrets in transient form state and out of request logs. Reconcile current develop, assign distinct capability versions for uncapped writes, and preserve saved-service pagination. Current provider configuration and validation evidence are recorded in [PR 992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md); real-account acceptance remains open. **Codex (AI)**

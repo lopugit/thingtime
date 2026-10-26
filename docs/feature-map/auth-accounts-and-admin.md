@@ -252,3 +252,13 @@ admin lookup, session selection, agent coordination and acceptance runbook.
 `resolveSessionUser` defaults to the authenticated principal for roster and
 credential callers; request authentication passes an explicit selection (or null
 for the session default). Never re-mint a principal session with an acting user ID.
+
+## Connections through an environment gateway
+
+OAuth client selection remains exact to the restored frontend origin and
+`getDeploymentDataEnvironment().id`. Gateway relay metadata does not grant a
+session, change a callback or substitute its environment label. State is one-use
+and session-bound; refresh retains the saved origin/environment/client binding
+and independent account lease. Run `test:connections`, `test:environment-gateway`,
+`test:admin-integrations` and `test:api-capabilities`. Connections major2 rollout
+is backend-first; see [the runbook](../environment-api-gateway.md#connections-major2-rollout).
