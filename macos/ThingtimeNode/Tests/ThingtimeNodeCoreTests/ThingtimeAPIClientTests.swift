@@ -594,7 +594,7 @@ final class ThingtimeAPIClientTests: XCTestCase {
             XCTAssertNotNil(body["revision"])
             XCTAssertEqual(Set(body.keys), Set(["revision", "state", "connectors", "capabilities"]))
             let capabilities = try XCTUnwrap(body["capabilities"] as? [String])
-            XCTAssertLessThanOrEqual(capabilities.count, 64)
+            XCTAssertLessThanOrEqual(capabilities.count, PairingManager.maximumCapabilityCount)
             XCTAssertEqual(Set(capabilities).count, capabilities.count)
             XCTAssertTrue(capabilities.contains("filesystem.v1"))
             XCTAssertTrue(capabilities.contains("system.brightness.write"))

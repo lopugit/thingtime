@@ -12913,6 +12913,12 @@ separate from deterministic discovery/lease tests.
 
 ### Browser management and remote execution — 2026-10-23
 
+- [x] Native pairing capability bound regression (2026-10-26): bind and verify
+  the signature of a 65-capability claim, reject 129 capabilities and malformed
+  identifiers. Native normalization must match the backend's 128-entry limit.
+  The signed installed helper must also complete pairing on a fully equipped
+  Mac; a successful server prepare or native approval alone is insufficient.
+
 - Installed checkpoint, 2026-10-25: 331 Electron tests passed; canonical
   Developer ID build/install and installed signature passed with an unchanged
   designated requirement. Existing account and paused Home state survived.

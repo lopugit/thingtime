@@ -27,6 +27,21 @@ an independent receipt and remains available during an unacknowledged Start.
 
 ## Verification
 
+### Installed pairing correction — 2026-10-26
+
+The installed test reproduced `The pairing capabilities are invalid` after
+native approval. A read-only projection of the disposable backend confirmed
+server preparation without a consumed claim. The native helper's normalization
+still allowed only 64 entries, while the Mac can advertise 65 and the server
+already permits 128. Native normalization now uses the same 128-entry bound.
+Focused Swift validation passed 34 tests, including signature verification for
+65 capabilities and rejection of 129 entries and malformed identifiers.
+
+Production was restored and the existing Home job was directly verified paused
+with its missing folder grant, draft and priorities preserved. Rebuilt installed
+pairing, real transfer hashes, pause/recovery and window-close acceptance remain
+pending; no transferred-byte result is claimed by these regression tests.
+
 - Device, file-sync and capability suites pass. Added checks cover the command
   allowlist, owner/device boundaries, stale settings/reviews, request replay,
   revocation, pagination, remote journal selectors and priority revision checks.
