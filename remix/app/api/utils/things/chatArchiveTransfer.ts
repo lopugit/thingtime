@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { validateChatArchives } from '../../../utils/thingTransfer/chatArchive';
-import { orderedTransferAttachments, serializeTransfer, validateTransfer, type ThingTransfer } from '../../../utils/thingTransfer/format';
+import { orderedTransferAttachments, serializeTransfer, TRANSFER_LIMITS, validateTransfer, type ThingTransfer } from '../../../utils/thingTransfer/format';
 import { customReactionEmojiId } from '../../../utils/reactionTokens';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
@@ -37,7 +37,8 @@ export const createTransferChatArchive = async (
   if (!validId(ownerId) || !validId(rootId)) reject('A signed-in archive owner is required');
   if (deps.custom()) reject('Chat archives must be imported into the home Thingtime library');
   // Own a validated snapshot across awaits and transaction retries.
-  const manifest = validateTransfer(JSON.parse(serializeTransfer(validateTransfer(input))));
+  const manifest = validateTransfer(JSON.parse(serializeTransfer(validateTransfer(input,
+    { maxFileBytes: TRANSFER_LIMITS.fileBytes }))));
   const group = validateChatArchives(manifest).find(item => item.root.id === rootId);
   if (!group) return reject('Chat archive not found in this transfer');
   const folderId = resources.folderId ?? null;

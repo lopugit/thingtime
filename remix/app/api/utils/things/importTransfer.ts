@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { moveManagedContent } from './managedPlacement';
 import { isProtectedThingtime } from '../../../schemas/registry';
-import { orderedTransferAttachments, serializeTransfer, transferAnnotations, validateTransfer, type ThingTransfer, type TransferThing } from '../../../utils/thingTransfer/format';
+import { orderedTransferAttachments, serializeTransfer, transferAnnotations, TRANSFER_LIMITS, validateTransfer, type ThingTransfer, type TransferThing } from '../../../utils/thingTransfer/format';
 import { importedThingCrystal, orderTransferImports } from '../../../utils/thingTransfer/importContent';
 import { rewriteTransferMedia } from './transferMediaCore';
 import { annotateAttachment, linkAttachment, deleteAttachment, createReadyAttachmentPostInsertHook, inspectReadyAttachmentsForPost, prepareAttachmentCascadeForThing } from '../attachments/attachments';
@@ -54,7 +54,9 @@ export const importTransfer = async (
   let ordered: TransferThing[];
   let archives: ChatArchiveGroup[];
   try {
-    manifest = validateTransfer(input.manifest);
+    // Keep the negotiated account import envelope independent of the local
+    // Blob archive codec. Larger remote imports need their own contract.
+    manifest = validateTransfer(input.manifest, { maxFileBytes: TRANSFER_LIMITS.fileBytes });
     serializeTransfer(manifest);
     ordered = orderTransferImports(manifest);
     archives = validateChatArchives(manifest);

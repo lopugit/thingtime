@@ -15633,3 +15633,20 @@ Local results do not establish current-head CI or deployed acceptance.
 - [ ] Inject genuine byte-quota refusal/transaction failure; verify no partial content, History, receipt or ledger update. These limits remain enforced after count ceilings are removed.
 - [ ] Round-trip focus token history v2, old partial v1 history, preview/restore and canonical transfer without silently adding fields to old payloads.
 - [ ] Run `npm --prefix remix run test:owned-profiles`, theme-sync, local-workspace and capability suites; the opt-in quota/browser fixture is not a pass when skipped. Use the built gateway acceptance for actual isolated API evidence. Deployed support requires the gateway to advertise the versions too.
+
+
+### Local portable archive capacity (PR #1000)
+
+- Collect/export/read more than 512 MiB of real Blob files; compare canonical
+  metadata, exact sizes and independently streamed hashes. Run the opt-in
+  `TT_TRANSFER_LARGE_BLOB_TEST=1 node --import tsx --test app/utils/thingTransfer/capacity.test.ts`
+  from `remix/`; do not treat its default skip as acceptance.
+- Verify ZIP manifest discovery consumes skipped entries without retaining their
+  payloads or inflating them; test both stored and compressed entries, manifest
+  ordering, cancellation, unsafe names, undeclared entries and truncated input.
+- Refuse unsafe integer aggregates and unrepresentable ZIP32 size/offset fields
+  before file reads. Consumer budget failures must happen before import writes.
+- Preserve the account import/export and buffered/clipboard limits, canonical
+  storage/quota rollback, and anonymous renderer file/Action/input restrictions.
+- After changing progress-plan task states, verify displayed summary totals and
+  each status filter against the actual task rows at desktop and mobile widths.

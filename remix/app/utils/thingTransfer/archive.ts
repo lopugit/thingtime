@@ -1,8 +1,9 @@
-import { Unzip, UnzipInflate, Zip, ZipPassThrough } from 'fflate';
-import { parseTransfer, serializeTransfer, TRANSFER_LIMITS, TransferFormatError, type ThingTransfer } from './format';
+import { Unzip, UnzipInflate, UnzipPassThrough, Zip, ZipPassThrough, type UnzipDecoder, type UnzipDecoderConstructor } from 'fflate';
+import { parseTransfer, serializeTransfer, TRANSFER_LIMITS, TransferFormatError, type ThingTransfer, type TransferValidationOptions } from './format';
 import { binaryBlob, binarySize, blobChecksum, type TransferBinary } from './binary';
 
 export const TRANSFER_MANIFEST_PATH = 'thingtime.json';
+/** Buffered compatibility budget. Blob paths use explicit consumer budgets. */
 export const MAX_ARCHIVE_BYTES = TRANSFER_LIMITS.manifestBytes + TRANSFER_LIMITS.fileBytes + 1024 * 1024;
 export type TransferBundle<T extends TransferBinary = Uint8Array> = { manifest: ThingTransfer; files: Map<string, T>;
   /** Optional in-process availability fence, excluded from every serialized format. */
@@ -17,6 +18,34 @@ export const transferChecksum = async (bytes: TransferBinary, signal?: AbortSign
 };
 const fail = (message: string): never => { throw new TransferFormatError(message); };
 const abort = (signal?: AbortSignal) => { signal?.throwIfAborted(); };
+export type TransferArchiveOptions = TransferValidationOptions & { maxArchiveBytes?: number };
+const archiveByteLimit = (options: TransferArchiveOptions): number => {
+  const limit = options.maxArchiveBytes === undefined ? Number.MAX_SAFE_INTEGER : options.maxArchiveBytes;
+  if (!Number.isSafeInteger(limit) || limit < 0) fail('Invalid transfer archive byte budget');
+  return limit;
+};
+const checkArchiveSize = (size: number, options: TransferArchiveOptions) => {
+  if (!Number.isSafeInteger(size) || size <= 0) fail('Invalid archive size');
+  if (size > archiveByteLimit(options)) fail('Transfer archive exceeds the consumer byte budget');
+};
+// fflate's encoder writes 32-bit sizes and offsets, not ZIP64 records. Account
+// for every local header, data descriptor, central record and the ZIP footer
+// before reading files, so a large Blob cannot produce a wrapped/corrupt ZIP.
+const zip32Size = (manifest: ThingTransfer, manifestBytes: number): number => {
+  const entries = [{ path: TRANSFER_MANIFEST_PATH, bytes: manifestBytes }, ...manifest.files];
+  let localBytes = 0, directoryBytes = 0;
+  const requireZip64 = () => fail('This archive requires ZIP64; the current ZIP encoder supports only ZIP32 sizes and offsets');
+  if (entries.length >= 0xffff) requireZip64();
+  for (const entry of entries) {
+    const nameBytes = new TextEncoder().encode(entry.path).byteLength;
+    if (entry.bytes >= 0xffffffff || localBytes >= 0xffffffff) requireZip64();
+    localBytes += 30 + nameBytes + entry.bytes + 16;
+    directoryBytes += 46 + nameBytes;
+  }
+  // The footer stores directory start and length independently as uint32.
+  if (localBytes >= 0xffffffff || directoryBytes >= 0xffffffff) requireZip64();
+  return localBytes + directoryBytes + 22;
+};
 
 /** Validate actual bytes, not the ZIP headers' untrusted size claims. */
 export const verifyTransferFiles = async (bundle: TransferBundle<TransferBinary>, signal?: AbortSignal): Promise<void> => {
@@ -34,7 +63,7 @@ export const verifyTransferFiles = async (bundle: TransferBundle<TransferBinary>
  * downloads call encodeTransferArchiveBlob directly. */
 export const encodeTransferArchive = async (bundle: TransferBundle<TransferBinary>, signal?: AbortSignal): Promise<Uint8Array> => {
   const assertCurrent = bundle.assertCurrent;
-  const blob = await encodeTransferArchiveBlob(bundle, signal);
+  const blob = await encodeTransferArchiveBlob(bundle, signal, { maxFileBytes: TRANSFER_LIMITS.fileBytes, maxArchiveBytes: MAX_ARCHIVE_BYTES });
   const bytes = new Uint8Array(await blob.arrayBuffer());
   abort(signal);
   await assertCurrent?.(signal);
@@ -42,9 +71,12 @@ export const encodeTransferArchive = async (bundle: TransferBundle<TransferBinar
 };
 
 /** Downloadable archive without joining files or the ZIP into one JS buffer. */
-export const encodeTransferArchiveBlob = async (bundle: TransferBundle<TransferBinary>, signal?: AbortSignal): Promise<Blob> => {
-  const manifest = new TextEncoder().encode(serializeTransfer(bundle.manifest));
-  const metadata = parseTransfer(new TextDecoder().decode(manifest));
+export const encodeTransferArchiveBlob = async (bundle: TransferBundle<TransferBinary>, signal?: AbortSignal, options: TransferArchiveOptions = {}): Promise<Blob> => {
+  abort(signal);
+  const manifest = new TextEncoder().encode(serializeTransfer(bundle.manifest, options));
+  const metadata = parseTransfer(new TextDecoder().decode(manifest), options);
+  const expectedSize = zip32Size(metadata, manifest.byteLength);
+  checkArchiveSize(expectedSize, options);
   if (bundle.files.size !== metadata.files.length) fail('The transfer has missing or unexpected files');
   // Freeze caller-owned arrays and map membership before the first async read.
   const files = new Map([...bundle.files].map(([id, data]) => [id, binaryBlob(data)]));
@@ -58,7 +90,7 @@ export const encodeTransferArchiveBlob = async (bundle: TransferBundle<TransferB
     if (failure) return;
     if (error) { failure = error; return; }
     size += data.byteLength;
-    if (size > MAX_ARCHIVE_BYTES) { failure = new TransferFormatError('Transfer archive is too large'); return; }
+    if (size > expectedSize) { failure = new TransferFormatError('Transfer archive exceeds its expected size'); return; }
     parts.push(new Blob([Uint8Array.from(data)]));
     complete = final;
   });
@@ -83,11 +115,32 @@ export const encodeTransferArchiveBlob = async (bundle: TransferBundle<TransferB
     }
     abort(signal); zip.end();
     if (failure) throw failure;
-    if (!complete) fail('The archive is incomplete');
+    if (!complete || size !== expectedSize) fail('The archive is incomplete');
     await assertCurrent?.(signal);
     abort(signal);
     return new Blob(parts, { type: 'application/zip' });
   } finally { zip.terminate(); }
+};
+
+/** Starting every entry is essential: fflate buffers all compressed input for
+ * entries that have not started. A filename-aware sink consumes skipped input
+ * without retaining or inflating it while the manifest is being located. */
+const selectiveDecoder = (Decoder: UnzipDecoderConstructor, required: ReadonlyMap<string, number>): UnzipDecoderConstructor => class implements UnzipDecoder {
+  static compression = Decoder.compression;
+  ondata!: UnzipDecoder['ondata'];
+  private decoder?: UnzipDecoder;
+  private stopped = false;
+  constructor(filename: string, size?: number, originalSize?: number) {
+    if (required.has(filename)) this.decoder = new Decoder(filename, size, originalSize);
+  }
+  push(data: Uint8Array, final: boolean) {
+    if (this.stopped) return;
+    if (this.decoder) {
+      this.decoder.ondata = this.ondata;
+      this.decoder.push(data, final);
+    } else if (final) this.ondata(null, new Uint8Array(), true);
+  }
+  terminate() { this.stopped = true; this.decoder?.terminate?.(); }
 };
 
 /** Two passes allow a re-zipped archive to put its manifest anywhere.
@@ -109,9 +162,20 @@ const readEntries = async <T extends TransferBinary>(
       failure = new TransferFormatError('Duplicate, unsafe, or excessive archive entries'); return;
     }
     seen.add(file.name);
+    if (file.compression !== 0 && file.compression !== 8) {
+      failure = new TransferFormatError('Unsupported archive compression'); return;
+    }
     const cap = limits.get(file.name);
-    if (cap === undefined) return;
-    if (file.originalSize !== undefined && file.originalSize > cap) {
+    if (cap === undefined) {
+      active.add(file);
+      file.ondata = (error, _data, final) => {
+        if (error) failure = error;
+        if (final) active.delete(file);
+      };
+      file.start();
+      return;
+    }
+    if (file.originalSize !== undefined && (!Number.isSafeInteger(file.originalSize) || file.originalSize < 0 || file.originalSize > cap)) {
       failure = new TransferFormatError('An archive entry exceeds its declared size'); return;
     }
     let size = 0;
@@ -121,8 +185,8 @@ const readEntries = async <T extends TransferBinary>(
     file.ondata = (error, data, final) => {
       if (failure) return;
       if (error) { failure = error; return; }
+      if (data.byteLength > cap - size) { failure = new TransferFormatError('An archive entry expands beyond its limit'); file.terminate(); return; }
       size += data.byteLength;
-      if (size > cap) { failure = new TransferFormatError('An archive entry expands beyond its limit'); file.terminate(); return; }
       if (collect.chunkBytes) {
         // Keep the inflater's small input budget without creating a browser
         // Blob handle for every 4 KiB callback. One bounded buffer per entry
@@ -145,7 +209,8 @@ const readEntries = async <T extends TransferBinary>(
     };
     file.start();
   });
-  unzip.register(UnzipInflate);
+  unzip.register(selectiveDecoder(UnzipPassThrough, limits));
+  unzip.register(selectiveDecoder(UnzipInflate, limits));
   try {
     // Small compressed chunks bound each inflater output allocation, including
     // malicious files whose local/central-directory size fields are false.
@@ -185,9 +250,10 @@ const blobCollector = {
 
 export const decodeTransferArchive = async (archive: Uint8Array, signal?: AbortSignal): Promise<TransferBundle> => {
   abort(signal);
-  if (!archive.byteLength || archive.byteLength > MAX_ARCHIVE_BYTES) fail('Invalid archive size');
+  const options = { maxFileBytes: TRANSFER_LIMITS.fileBytes, maxArchiveBytes: MAX_ARCHIVE_BYTES };
+  checkArchiveSize(archive.byteLength, options);
   const first = await readEntries(archive, new Map([[TRANSFER_MANIFEST_PATH, TRANSFER_LIMITS.manifestBytes]]), byteCollector, signal);
-  const manifest = parseTransfer(new TextDecoder('utf-8', { fatal: true }).decode(first.get(TRANSFER_MANIFEST_PATH)));
+  const manifest = parseTransfer(new TextDecoder('utf-8', { fatal: true }).decode(first.get(TRANSFER_MANIFEST_PATH)), options);
   const limits = new Map([[TRANSFER_MANIFEST_PATH, TRANSFER_LIMITS.manifestBytes as number], ...manifest.files.map((file): [string, number] => [file.path, file.bytes])]);
   const entries = await readEntries(archive, limits, byteCollector, signal, true);
   const bundle = { manifest, files: new Map(manifest.files.map((file) => [file.id, entries.get(file.path)!])) };
@@ -197,11 +263,11 @@ export const decodeTransferArchive = async (archive: Uint8Array, signal?: AbortS
 
 /** Native file selection keeps the archive and decoded files as immutable
  * Blobs. Only the bounded manifest and processing chunks enter JS buffers. */
-export const decodeTransferArchiveBlob = async (archive: Blob, signal?: AbortSignal): Promise<TransferBundle<Blob>> => {
+export const decodeTransferArchiveBlob = async (archive: Blob, signal?: AbortSignal, options: TransferArchiveOptions = {}): Promise<TransferBundle<Blob>> => {
   abort(signal);
-  if (!archive.size || archive.size > MAX_ARCHIVE_BYTES) fail('Invalid archive size');
+  checkArchiveSize(archive.size, options);
   const first = await readEntries(archive, new Map([[TRANSFER_MANIFEST_PATH, TRANSFER_LIMITS.manifestBytes]]), byteCollector, signal);
-  const manifest = parseTransfer(new TextDecoder('utf-8', { fatal: true }).decode(first.get(TRANSFER_MANIFEST_PATH)));
+  const manifest = parseTransfer(new TextDecoder('utf-8', { fatal: true }).decode(first.get(TRANSFER_MANIFEST_PATH)), options);
   const limits = new Map([[TRANSFER_MANIFEST_PATH, TRANSFER_LIMITS.manifestBytes as number], ...manifest.files.map((file): [string, number] => [file.path, file.bytes])]);
   const entries = await readEntries(archive, limits, blobCollector, signal, true);
   const bundle = { manifest, files: new Map(manifest.files.map(file => [file.id, entries.get(file.path)!])) };

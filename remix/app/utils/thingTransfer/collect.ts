@@ -1,6 +1,6 @@
 import { binarySize, type TransferBinary } from './binary';
 import { transferChecksum, type TransferBundle } from './archive';
-import { TRANSFER_FORMAT, TRANSFER_LIMITS, TransferFormatError, serializeTransfer, transferAnnotations, type TransferAnnotations, type TransferFile, type TransferThing } from './format';
+import { TRANSFER_FORMAT, TRANSFER_LIMITS, TransferFormatError, serializeTransfer, transferFileByteLimit, transferAnnotations, type TransferAnnotations, type TransferFile, type TransferThing } from './format';
 
 export type TransferSourceFile<T extends TransferBinary = Uint8Array> = TransferAnnotations & { id: string; name: string; mime: string; data: T };
 /** Adapters MUST authorize each read using the current viewer and return a
@@ -19,6 +19,8 @@ export type CollectTransferOptions = {
   includeFiles?: boolean;
   includeLinks?: boolean;
   signal?: AbortSignal;
+  /** Optional budget for buffered or otherwise constrained consumers. */
+  maxFileBytes?: number;
   progress?: (state: { things: number; files: number; bytes: number }) => void;
 };
 const fail = (message: string): never => { throw new TransferFormatError(message); };
@@ -32,7 +34,8 @@ export const collectTransfer = async <T extends TransferBinary = Uint8Array>(roo
   const docs = new Map<string, TransferThing>();
   const files = new Map<string, T>();
   const metadata: TransferFile[] = [];
-  let bytes = 0;
+  let bytes = 0, bufferedBytes = 0;
+  const byteLimit = transferFileByteLimit(options);
   const check = () => options.signal?.throwIfAborted();
   const enqueue = (ids: string[]) => {
     for (const id of ids) {
@@ -75,7 +78,14 @@ export const collectTransfer = async <T extends TransferBinary = Uint8Array>(roo
         if (existing.bytes !== binarySize(file.data) || existing.sha256 !== await transferChecksum(file.data, options.signal)) fail('A file changed during export');
         continue;
       }
-      if (files.size >= TRANSFER_LIMITS.files || bytes + binarySize(file.data) > TRANSFER_LIMITS.fileBytes) fail('This export exceeds the file limit');
+      const length = binarySize(file.data);
+      if (!Number.isSafeInteger(length) || length < 0 || length > Number.MAX_SAFE_INTEGER - bytes) fail('Invalid export file size');
+      if (files.size >= TRANSFER_LIMITS.files) fail('This export exceeds the file limit');
+      if (length > byteLimit - bytes) fail('This export exceeds the consumer byte budget');
+      if (!(file.data instanceof Blob)) {
+        if (length > TRANSFER_LIMITS.fileBytes - bufferedBytes) fail('This export exceeds the buffered byte budget');
+        bufferedBytes += length;
+      }
       const data = (file.data instanceof Blob ? file.data : Uint8Array.from(file.data)) as T;
       const entry = { id: file.id, name: file.name, mime: file.mime, targetId: copy.id, ...transferAnnotations(file),
         path: `files/${files.size.toString().padStart(6, '0')}`, bytes: binarySize(data), sha256: '' };
@@ -90,6 +100,6 @@ export const collectTransfer = async <T extends TransferBinary = Uint8Array>(roo
   // part of the portable content and the import destination supplies it.
   for (const doc of docs.values()) if (doc.folderId && !docs.has(doc.folderId)) delete doc.folderId;
   const manifest = { format: TRANSFER_FORMAT, version: 1 as const, roots: selected, things: [...docs.values()], files: metadata };
-  serializeTransfer(manifest);
+  serializeTransfer(manifest, options);
   return { manifest, files };
 };

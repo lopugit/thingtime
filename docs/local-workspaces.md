@@ -5827,3 +5827,25 @@ retains absence of the five new focus fields, so an unchanged pre-upgrade
 command keeps its exact receipt digest through client and server. Explicit
 focus additions still change the digest. No receipt is rewritten and no
 alternate-digest fallback is accepted.
+
+
+### Local Blob archive capacity — 27 October 2026
+
+Portable transfer metadata now validates safe integer file sizes and aggregate
+arithmetic separately from a consumer's byte budget. Normal local Blob collection,
+export plans and selected-file ZIP decoding no longer reject a valid transfer
+solely for exceeding 512 MiB. Processing buffers and manifest, entry-count, path,
+exact-size and checksum validation remain bounded. The encoder checks each real
+ZIP32 size and offset before reading files; exports requiring ZIP64 are refused
+explicitly until an encoder supporting that format is available.
+
+Buffered byte/clipboard paths and existing account import/export contracts retain
+their explicit budgets. Account storage admission, atomic import, permissions and
+upload verification are unchanged. The anonymous native renderer retains its
+separate 256 KiB / 32-Thing limits and refuses files, external assets and Actions.
+This is a local archive codec improvement, not a larger remote import contract.
+
+See [transfer capacity evidence](../artifacts/anonymous-local-first-2026-10-27-transfer-capacity/README.md)
+for real-byte, memory-retention, negative-path and current verification results.
+Normal Builder/device/account acceptance and other traversal/transport envelopes
+remain separate checklist items.

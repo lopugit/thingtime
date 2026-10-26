@@ -1,0 +1,32 @@
+✔ bytes: ZIP round trip preserves actual bytes, Unicode filenames and manifest (33.225125ms)
+✔ bytes: imports deflated files when a ZIP tool reordered the manifest last (6.278542ms)
+✔ bytes: refuses missing and tampered bytes before creating an archive (3.90175ms)
+✔ bytes: refuses undeclared paths, missing files and zip-slip entries (9.842416ms)
+✔ bytes: checks actual inflated size and digest, not just a valid manifest (14.668291ms)
+✔ bytes: cancellation stops processing without returning a partial bundle (7.7265ms)
+✔ bytes: zero-file manifests do not hide undeclared archive entries (5.340541ms)
+✔ bytes: forged ZIP size headers cannot bypass the streaming output limit (5.130625ms)
+✔ blob: ZIP round trip preserves actual bytes, Unicode filenames and manifest (7.076166ms)
+✔ blob: imports deflated files when a ZIP tool reordered the manifest last (5.401708ms)
+✔ blob: refuses missing and tampered bytes before creating an archive (2.917041ms)
+✔ blob: refuses undeclared paths, missing files and zip-slip entries (11.146167ms)
+✔ blob: checks actual inflated size and digest, not just a valid manifest (9.128333ms)
+✔ blob: cancellation stops processing without returning a partial bundle (3.8535ms)
+✔ blob: zero-file manifests do not hide undeclared archive entries (3.699208ms)
+✔ blob: forged ZIP size headers cannot bypass the streaming output limit (5.383708ms)
+✔ large Blob manifests pass the former aggregate ceiling and still require exact actual bytes (8.149042ms)
+✔ ZIP32 output rejects unrepresentable offsets including overhead before reading Blob bytes (2.373958ms)
+✔ consumer archive budgets reject before reading and Blob processing remains cancellable beyond the old cap (5.29625ms)
+✔ truncated large-file payloads cannot publish a partial Blob bundle (1.646125ms)
+✔ manifest discovery discards skipped stored bytes with manifest first (273.851167ms)
+✔ manifest discovery discards skipped stored bytes with manifest last (247.051958ms)
+✔ manifest discovery discards skipped deflated bytes with manifest first (629.876083ms)
+✔ manifest discovery discards skipped deflated bytes with manifest last (518.979167ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2522.37475

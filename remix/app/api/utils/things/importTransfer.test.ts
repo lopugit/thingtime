@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { importTransfer, orderTransferImports } from './importTransfer';
-import { TRANSFER_FORMAT, type ThingTransfer } from '../../../utils/thingTransfer/format';
+import { TRANSFER_FORMAT, TRANSFER_LIMITS, type ThingTransfer } from '../../../utils/thingTransfer/format';
 import { rewriteTransferMedia } from './transferMediaCore';
 import { resolveTemplate } from '../../../components/ComponentsLibrary/componentTemplate';
 import { compositionAttachmentIds } from '../actions/compositionMediaCore';
@@ -24,6 +24,19 @@ const harness = () => {
     remove: async (_viewer: any, id: any) => { removed.push(id); return { ok: true } as any; }
   } };
 };
+
+test('account imports preserve their negotiated byte budget before inspecting or writing files', async () => {
+  const manifest = fixture();
+  manifest.files.push({ id: 'large-file', targetId: 'data', path: 'files/000000', name: 'large.bin',
+    mime: 'application/octet-stream', bytes: TRANSFER_LIMITS.fileBytes + 1, sha256: 'a'.repeat(64) });
+  const { deps, writes, removed } = harness();
+  const result = await importTransfer({ id: 'recipient' }, { manifest, files: { 'large-file': 'upload' } }, undefined, {
+    ...deps, inspectFiles: async () => { assert.fail('Over-budget metadata must be refused before file inspection'); }
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) { assert.equal(result.status, 400); assert.match(result.error, /too large/); }
+  assert.deepEqual(writes, []); assert.deepEqual(removed, []);
+});
 
 const archiveFixture = (id = 'archive'): ThingTransfer['things'] => {
   const at = '2026-09-01T00:00:00.000Z';

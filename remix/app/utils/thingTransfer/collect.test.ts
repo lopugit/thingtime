@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { collectTransfer, type TransferSource } from './collect';
-import type { TransferThing } from './format';
+import { TRANSFER_LIMITS, type TransferThing } from './format';
 
 const make = (id: string, kind = 'data', folderId?: string): TransferThing => ({ id, thingtime: [kind], crystal: { name: id }, ...(folderId ? { folderId } : {}) });
 const provider = (docs: TransferThing[]): TransferSource => ({
@@ -77,4 +77,22 @@ test('Blob collection preserves file identity and metadata across asynchronous h
   assert.equal(bundle.manifest.things[0].crystal.name, 'note');
   assert.deepEqual([...bundle.files.keys()], ['original']);
   assert.deepEqual(new Uint8Array(await bundle.files.get('original')!.arrayBuffer()), new Uint8Array([1, 2, 3]));
+});
+
+
+test('Blob collection crosses the former cap with bounded hashing and retains explicit budget refusal', async () => {
+  const controller = new AbortController();
+  const data = new Blob();
+  let reads = 0;
+  Object.defineProperty(data, 'size', { value: TRANSFER_LIMITS.fileBytes + 1 });
+  Object.defineProperty(data, 'slice', { value: (start: number, end: number) => {
+    assert.equal(start, 0); assert.ok(end <= 1024 * 1024); reads++;
+    controller.abort(new Error('cancelled bounded hash'));
+    return new Blob([new Uint8Array([1])]);
+  } });
+  const source: TransferSource<Blob> = { ...provider([make('root')]), files: async function* () { yield { id: 'file', name: 'large.bin', mime: 'application/octet-stream', data }; } };
+  await assert.rejects(collectTransfer(['root'], source, { signal: controller.signal }), /cancelled bounded hash/);
+  assert.equal(reads, 1);
+  await assert.rejects(collectTransfer(['root'], source, { maxFileBytes: TRANSFER_LIMITS.fileBytes }), /consumer byte budget/);
+  assert.equal(reads, 1);
 });

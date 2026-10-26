@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readTransferFile, readTransferFiles } from './readFile';
 import { encodeTransferArchive, transferChecksum } from './archive';
-import { serializeTransfer, type ThingTransfer } from './format';
+import { serializeTransfer, TRANSFER_LIMITS, type ThingTransfer } from './format';
 
 const manifest = (): ThingTransfer => ({ format: 'thingtime.transfer', version: 1, roots: ['post'], things: [{ id: 'post', thingtime: ['post'], crystal: { content: 'Portable content' } }], files: [] });
 
@@ -88,4 +88,28 @@ test('an oversized individual transfer is still refused inside a batch', async (
   oversized.things = Array.from({ length: 1001 }, (_, index) => ({ id: `post-${index}`, thingtime: ['post'], crystal: { content: 'Invalid single transfer' } }));
   oversized.roots = ['post-0'];
   await assert.rejects(readTransferFiles([valid, new File([JSON.stringify(oversized)], 'oversized.json')]), /Invalid number of Things/);
+});
+
+
+test('large selected ZIPs reach bounded reads and cancellation instead of the former aggregate cap', async () => {
+  const controller = new AbortController();
+  const file = new Blob();
+  const ranges: [number, number][] = [];
+  Object.defineProperty(file, 'size', { value: TRANSFER_LIMITS.fileBytes + 32 * 1024 * 1024 });
+  Object.defineProperty(file, 'slice', { value: (start: number, end: number) => {
+    ranges.push([start, end]);
+    if (end > 4) controller.abort(new Error('cancelled selected archive'));
+    return new Blob([new Uint8Array([0x50, 0x4b, 3, 4])]);
+  } });
+  await assert.rejects(readTransferFile(file, controller.signal), /cancelled selected archive/);
+  assert.deepEqual(ranges, [[0, 4], [0, 256 * 1024]]);
+  await assert.rejects(readTransferFile(file, undefined, { maxArchiveBytes: TRANSFER_LIMITS.fileBytes }), /consumer byte budget/);
+});
+
+test('batch selection forwards explicit per-transfer consumer budgets', async () => {
+  const file = new File([serializeTransfer(manifest())], 'bounded.json');
+  await assert.rejects(readTransferFiles([file], undefined, { maxArchiveBytes: 1 }), /consumer byte budget/);
+  for (const maxArchiveBytes of [-1, 0.5, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    await assert.rejects(readTransferFile(file, undefined, { maxArchiveBytes }), /consumer byte budget/);
+  }
 });

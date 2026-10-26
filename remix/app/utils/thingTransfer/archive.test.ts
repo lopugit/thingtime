@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { zipSync } from 'fflate';
-import { decodeTransferArchive as decodeBytes, decodeTransferArchiveBlob, encodeTransferArchive, transferChecksum, type TransferBundle } from './archive';
-import { TRANSFER_FORMAT, serializeTransfer } from './format';
+import { Unzip, UnzipInflate, UnzipPassThrough, zipSync } from 'fflate';
+import { decodeTransferArchive as decodeBytes, decodeTransferArchiveBlob, encodeTransferArchiveBlob, encodeTransferArchive, transferChecksum, type TransferBundle } from './archive';
+import { TRANSFER_FORMAT, TRANSFER_LIMITS, serializeTransfer } from './format';
 
 const fixture = async (): Promise<TransferBundle> => {
   const bytes = new TextEncoder().encode('An actual file 🥰\n');
@@ -85,4 +85,105 @@ testCase('forged ZIP size headers cannot bypass the streaming output limit', asy
   await assert.rejects(decodeTransferArchive(archive), /expands beyond/);
 });
 
+}
+
+
+test('large Blob manifests pass the former aggregate ceiling and still require exact actual bytes', async () => {
+  const bundle = await fixture();
+  bundle.manifest.files[0].bytes = TRANSFER_LIMITS.fileBytes + 1;
+  const archive = zipSync({ 'thingtime.json': new TextEncoder().encode(serializeTransfer(bundle.manifest)), 'files/000000': new Uint8Array() });
+  await assert.rejects(decodeTransferArchiveBlob(new Blob([Uint8Array.from(archive)])), /wrong size/);
+  await assert.rejects(decodeTransferArchiveBlob(new Blob([Uint8Array.from(archive)]), undefined, { maxFileBytes: TRANSFER_LIMITS.fileBytes }), /too large/);
+  await assert.rejects(decodeBytes(archive), /too large/);
+  await assert.rejects(encodeTransferArchive(bundle), /too large/);
+});
+
+test('ZIP32 output rejects unrepresentable offsets including overhead before reading Blob bytes', async () => {
+  const bundle = await fixture();
+  bundle.manifest.files[0].bytes = 0xffffffff - 100;
+  const data = new Blob();
+  Object.defineProperty(data, 'size', { value: bundle.manifest.files[0].bytes });
+  Object.defineProperty(data, 'slice', { value: () => { throw new Error('must not read huge file'); } });
+  const large = { manifest: bundle.manifest, files: new Map([['photo', data]]) };
+  await assert.rejects(encodeTransferArchiveBlob(large), /requires ZIP64/);
+});
+
+test('consumer archive budgets reject before reading and Blob processing remains cancellable beyond the old cap', async () => {
+  const bundle = await fixture();
+  const archive = await encodeTransferArchive(bundle);
+  await assert.rejects(decodeTransferArchiveBlob(new Blob([Uint8Array.from(archive)]), undefined, { maxArchiveBytes: archive.byteLength - 1 }), /consumer byte budget/);
+  await assert.rejects(encodeTransferArchiveBlob(bundle, undefined, { maxArchiveBytes: 1 }), /consumer byte budget/);
+  const controller = new AbortController();
+  const large = new Blob();
+  Object.defineProperty(large, 'size', { value: TRANSFER_LIMITS.fileBytes + 32 * 1024 * 1024 });
+  Object.defineProperty(large, 'slice', { value: (start: number, end: number) => {
+    assert.equal(start, 0); assert.ok(end <= 256 * 1024);
+    controller.abort(new Error('cancelled bounded slice'));
+    return new Blob([Uint8Array.from(archive)]);
+  } });
+  await assert.rejects(decodeTransferArchiveBlob(large, controller.signal), /cancelled bounded slice/);
+  for (const size of [-1, 0.5, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    const malformed = new Blob(); Object.defineProperty(malformed, 'size', { value: size });
+    await assert.rejects(decodeTransferArchiveBlob(malformed), /Invalid archive size/);
+  }
+});
+
+test('truncated large-file payloads cannot publish a partial Blob bundle', async () => {
+  const bundle = await fixture();
+  bundle.manifest.files[0].bytes = TRANSFER_LIMITS.fileBytes + 1;
+  const archive = zipSync({ 'thingtime.json': new TextEncoder().encode(serializeTransfer(bundle.manifest)), 'files/000000': new Uint8Array([1, 2, 3]) }, { level: 0 });
+  const path = new TextEncoder().encode('files/000000');
+  let offset = 0;
+  for (let index = 0; index < archive.length - path.length; index++) {
+    if (path.every((byte, part) => archive[index + part] === byte)) { offset = index + path.length + 1; break; }
+  }
+  assert.ok(offset > 0);
+  await assert.rejects(decodeTransferArchiveBlob(new Blob([Uint8Array.from(archive.subarray(0, offset))])), /incomplete|unexpected EOF|invalid zip data/i);
+});
+
+
+for (const level of [0, 6] as const) for (const manifestFirst of [true, false]) {
+  test(`manifest discovery discards skipped ${level ? 'deflated' : 'stored'} bytes with manifest ${manifestFirst ? 'first' : 'last'}`, async context => {
+    const bundle = await fixture();
+    // Large enough for many input pushes. A deterministic varying pattern
+    // exercises stored and deflated entry framing without huge allocations.
+    const bytes = new Uint8Array(8 * 1024 * 1024);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 31 + (i >>> 8)) & 255;
+    bundle.files.set('photo', bytes);
+    bundle.manifest.files[0].bytes = bytes.byteLength;
+    bundle.manifest.files[0].sha256 = await transferChecksum(bytes);
+    const manifest = new TextEncoder().encode(serializeTransfer(bundle.manifest));
+    const entries = manifestFirst ? { 'thingtime.json': manifest, 'files/000000': bytes } : { 'files/000000': bytes, 'thingtime.json': manifest };
+    const archive = zipSync(entries, { level });
+    const original = Unzip.prototype.push;
+    let maxRetained = 0, parserCount = 0;
+    const state: { firstParser?: Unzip; activeParser?: Unzip; firstPassDecoderBytes: number } = { firstPassDecoderBytes: 0 };
+    const parsers = new Set<Unzip>();
+    context.mock.method(Unzip.prototype, 'push', function(this: Unzip, chunk: Uint8Array, final?: boolean) {
+      state.firstParser ||= this;
+      parsers.add(this); parserCount = parsers.size;
+      const previous = state.activeParser;
+      state.activeParser = this;
+      try { original.call(this, chunk, final); } finally { state.activeParser = previous; }
+      // Dependency-boundary regression: fflate's private pending-entry arrays
+      // must never retain an unstarted entry's compressed input between pushes.
+      const retained = (this as unknown as { k: Uint8Array[][] }).k.reduce((sum, chunks) => sum + chunks.reduce((total, data) => total + data.byteLength, 0), 0);
+      maxRetained = Math.max(maxRetained, retained);
+    });
+    for (const Decoder of [UnzipPassThrough, UnzipInflate]) {
+      const push = Decoder.prototype.push;
+      context.mock.method(Decoder.prototype, 'push', function(this: UnzipPassThrough | UnzipInflate, chunk: Uint8Array, final: boolean) {
+        if (state.activeParser === state.firstParser) state.firstPassDecoderBytes += chunk.byteLength;
+        push.call(this, chunk, final);
+      });
+    }
+    try {
+      const decoded = await decodeTransferArchiveBlob(new Blob([Uint8Array.from(archive)]));
+      assert.deepEqual(decoded.manifest, bundle.manifest);
+      assert.equal(decoded.files.get('photo')!.size, bytes.byteLength);
+      assert.equal(parserCount, 2);
+      assert.equal(maxRetained, 0, 'manifest discovery must start a sink instead of buffering skipped input');
+      assert.ok(state.firstPassDecoderBytes > 0 && state.firstPassDecoderBytes <= manifest.byteLength, 'only manifest input may reach a real decoder during discovery');
+    } finally { context.mock.restoreAll(); }
+  });
 }

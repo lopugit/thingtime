@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { bundleFromPlan, downloadTransfer, readTransferClipboard, transferClipboardText, writeTransferClipboard } from './browser';
+import { TRANSFER_LIMITS } from './format';
 import type { TransferPlan } from './plan';
 import { encodeTransferArchive, decodeTransferArchive } from './archive';
 
@@ -229,4 +230,21 @@ test('plan metadata and reader identity are frozen before asynchronous availabil
   assert.equal(bundle.manifest.things[0].crystal.name, 'A note');
   assert.equal(bundle.manifest.files[0].name, 'original.bin');
   assert.deepEqual(new Uint8Array(await bundle.files.get('file')!.arrayBuffer()), new Uint8Array([1, 2, 3]));
+});
+
+
+test('large local Blob plans reach bounded hashing while remote plans keep their existing budget', async () => {
+  const value = plan();
+  value.files = [{ id: 'file', targetId: 'note', name: 'large.bin', mime: 'application/octet-stream', bytes: TRANSFER_LIMITS.fileBytes + 1 }];
+  await assert.rejects(bundleFromPlan(value, { fetch: async () => { throw new Error('must not fetch'); } }), /too large/);
+  const controller = new AbortController();
+  const data = new Blob();
+  Object.defineProperty(data, 'size', { value: value.files[0].bytes });
+  Object.defineProperty(data, 'slice', { value: (start: number, end: number) => {
+    assert.equal(start, 0); assert.ok(end <= 1024 * 1024);
+    controller.abort(new Error('cancelled local hash'));
+    return new Blob([new Uint8Array([1])]);
+  } });
+  value.readLocalFile = async () => data;
+  await assert.rejects(bundleFromPlan(value, { signal: controller.signal }), /cancelled local hash/);
 });

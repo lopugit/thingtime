@@ -1216,3 +1216,11 @@ rows never allocate fake bytes or fetch their content. `linkedDrafts.test.ts` co
 mixed media across reopen, remapped layouts, account queue rollback and partition
 separation, plus metadata changes before commit. Account registration and later
 post/draft binding use the dedicated `AccountFileSync` journal.
+
+
+Local portable ZIP capacity uses `utils/thingTransfer/format.ts` consumer budgets,
+`collect.ts` Blob collection, `archive.ts` bounded entry processing and ZIP32 field
+checks, and `readFile.ts` selected-file decoding. Buffered/clipboard and account
+import/export budgets are explicit at their consumers; this does not change the
+remote API contract. Run the transfer unit tests and opt-in `capacity.test.ts`;
+see [the local archive checkpoint](../local-workspaces.md#local-blob-archive-capacity--27-october-2026).

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createTransferChatArchive, type ChatArchiveImportResources } from './chatArchiveTransfer';
-import type { ThingTransfer } from '../../../utils/thingTransfer/format';
+import { TRANSFER_LIMITS, type ThingTransfer } from '../../../utils/thingTransfer/format';
 import { customEmojiIdForAttachment } from '../messenger/messengerMediaCore';
 
 const at = '2026-09-01T00:00:00.000Z';
@@ -61,6 +61,14 @@ const harness = () => {
   return { state, deps };
 };
 const empty = (): ChatArchiveImportResources => ({ files: new Map() });
+
+test('direct account archive imports retain their byte budget before starting a transaction', async () => {
+  const { state, deps } = harness(); const input = fixture();
+  input.files.push({ id: 'large-file', targetId: 'first', path: 'files/000000', name: 'large.bin',
+    mime: 'application/octet-stream', bytes: TRANSFER_LIMITS.fileBytes + 1, sha256: 'a'.repeat(64) });
+  await assert.rejects(createTransferChatArchive('importer', input, 'chat', empty(), deps), /too large/);
+  assert.equal(state.attempts, 0); assert.equal(state.inserts, 0); assert.deepEqual(state.bindings, []);
+});
 
 test('archive writer retains inert assistant presentation on fresh private rows', async () => {
   const { state, deps } = harness(); const input = fixture();

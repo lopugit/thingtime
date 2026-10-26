@@ -5381,3 +5381,21 @@ TypeScript retains 91 diagnostics with none in changed files; this is not a clea
 check. Independent review caught and verified the fix for pre-upgrade receipt
 digests; original frozen payloads remain exact and explicit focus changes do
 not replay. See the linked capacity evidence for exact scope and limitations.
+
+
+## Local Blob archive capacity — 27 October 2026
+
+The normal local portable archive path now separates safe-integer metadata from
+consumer byte budgets, allowing aggregate Blob files beyond the former 512 MiB
+ceiling. The ZIP encoder checks representable size/offset fields before reading
+content. Buffered and account import/export budgets remain explicit; remote API
+contracts and anonymous renderer isolation are unchanged. Validation retains
+canonical paths, declared sizes, checksums, bounded processing and cancellation.
+
+Review found that fflate retained skipped file bytes during manifest discovery.
+The corrected first pass starts discard decoders; four deterministic regressions
+verify zero retained skipped input for stored/deflated entries with the manifest
+first or last. See the
+[transfer checkpoint](../artifacts/anonymous-local-first-2026-10-27-transfer-capacity/README.md)
+for the final tests and evidence limits. This checkpoint does not close broader
+native/device acceptance, larger remote transfers or the paste performance gate.

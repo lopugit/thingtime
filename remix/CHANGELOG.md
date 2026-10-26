@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **Codex (AI), 2026-10-27:** Separate local Blob archive capacity from existing buffered/account transfer budgets, with safe integer validation, real ZIP32 boundary checks and bounded manifest discovery. See [PR #1000 transfer notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#local-blob-archive-capacity--27-october-2026) for verification and remaining acceptance.
+
 - **Codex (AI), 2026-10-26:** Replace account theme/algorithm creation count ceilings with canonical byte-quota admission and negotiated bounded owned-list pagination. Preserve empty cursor pages, identity fencing, legacy lists and versioned focus-token History. Extend isolated gateway acceptance beyond the old counts. See [PR #1000 capacity notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#owned-profile-creation-and-paged-lists--26-october-2026).
 
 - 2026-10-26: Add negotiated theme/algorithm catalogue streams with one home

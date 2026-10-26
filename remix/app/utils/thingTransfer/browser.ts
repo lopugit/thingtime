@@ -14,10 +14,11 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
   const assertCurrent = typeof plan.assertCurrent === 'function' ? plan.assertCurrent : undefined;
   const readLocalFile = typeof plan.readLocalFile === 'function' ? plan.readLocalFile : undefined;
   const sources = structuredClone(plan.files);
+  const budget = readLocalFile ? {} : { maxFileBytes: TRANSFER_LIMITS.fileBytes };
   const manifest = parseTransfer(serializeTransfer(validateTransfer({ format: TRANSFER_FORMAT, version: 1, roots: plan.roots, things: plan.things,
     ...(plan.links ? { links: plan.links } : {}), ...(plan.attachmentOrder ? { attachmentOrder: plan.attachmentOrder } : {}),
     files: plan.files.map((file, index) => ({ id: file.id, targetId: file.targetId, name: file.name, mime: file.mime, bytes: file.bytes, ...transferAnnotations(file),
-      path: `files/${index.toString().padStart(6, '0')}`, sha256: '0'.repeat(64) })) })));
+      path: `files/${index.toString().padStart(6, '0')}`, sha256: '0'.repeat(64) })) }), budget), budget);
   await assertCurrent?.(options.signal);
   const files = new Map<string, Blob>();
   const originalChecks: ((signal?: AbortSignal) => Promise<void>)[] = [];
@@ -26,7 +27,7 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
     if (readLocalFile) {
       const bytes = binaryBlob(await readLocalFile(entry.id, options.signal));
       options.signal?.throwIfAborted();
-      if (bytes.size !== entry.bytes || bytes.size > TRANSFER_LIMITS.fileBytes) invalid('A local file changed size during export');
+      if (bytes.size !== entry.bytes) invalid('A local file changed size during export');
       manifest.files[index].sha256 = await transferChecksum(bytes, options.signal);
       files.set(entry.id, bytes);
       continue;
@@ -91,7 +92,7 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
         streamSignal?.throwIfAborted();
         if (part.done) break;
         size += part.value.byteLength;
-        if (size > entry.bytes || size > TRANSFER_LIMITS.fileBytes) invalid('A file grew beyond its export limit');
+        if (size > entry.bytes) invalid('A file grew beyond its export limit');
         chunks.push(new Blob([Uint8Array.from(part.value)]));
       }
       if (size !== entry.bytes) invalid('A file changed size during export');
@@ -148,7 +149,7 @@ export const readTransferClipboard = async (text: string, signal?: AbortSignal):
   }
   let binary: string;
   try { binary = atob(text.slice(ZIP_TEXT_PREFIX.length)); } catch { return invalid('Invalid clipboard ZIP encoding'); }
-  return decodeTransferArchiveBlob(new Blob([Uint8Array.from(binary, (character) => character.charCodeAt(0))]), signal);
+  return decodeTransferArchiveBlob(new Blob([Uint8Array.from(binary, (character) => character.charCodeAt(0))]), signal, { maxFileBytes: TRANSFER_LIMITS.fileBytes, maxArchiveBytes: MAX_CLIPBOARD_BYTES });
 };
 
 /** Call directly in the user's click/key handler. ClipboardItem receives a
