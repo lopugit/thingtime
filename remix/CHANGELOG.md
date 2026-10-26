@@ -104,6 +104,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Scope explicit offline audio originals to the workspace identity,
+  validate canonical bytes and fence playback/downloads across track and account
+  transitions. Native correct-package playback, cold reload and removal pass;
+  preserve exact archive/source evidence and prior failed fixture attempts.
+  See the [PR 1000 checkpoint note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-27: Label retained account Search results as partial snapshots and keep
+  previous-query provenance after failed refresh. Native People/Subspace/Thing
+  offline, logout and desktop/mobile status checks pass. Separate normal post
+  privacy/body editing passes completed-save reload and private reconnect without
+  a product change. [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
 - 2026-10-27: Add durable account suite receipts and canonical identity adoption,
   with atomic server installation, frozen retries and explicit conflict recovery.
   Real isolated API and normal offline/reconnect/recovery UI acceptance pass,

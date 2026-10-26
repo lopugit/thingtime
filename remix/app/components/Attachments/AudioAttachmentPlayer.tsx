@@ -4,10 +4,12 @@ import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Download, ListMusic } from 'lucide-react';
 
 import { attachmentContentUrl, attachmentDisplayName, attachmentMediaSrc, attachmentPlaybackContentType, attachmentTypeLabel, formatAttachmentBytes } from './attachmentUiCore';
-import { readOfflineAudio, removeOfflineAudio, saveOfflineAudio } from './audioPlaybackCache';
+import { audioAttachmentIdentity, captureOfflineAudioContext, readOfflineAudio, removeOfflineAudio, saveOfflineAudio, type OfflineAudioContext } from './audioPlaybackCache';
 import { nextQueuedAudioIndex } from './audioPlaybackCore';
 import type { PublicAttachment } from './attachmentTypes';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { subscribeWorkspaceIdentity, workspaceIdentityKey } from '~/local-workspace/runtime.client';
 import { localMediaId } from '~/local-workspace/media';
 import { RecordingTranscript } from './RecordingTranscript';
 
@@ -25,81 +27,114 @@ const releaseAudio = (audio: HTMLAudioElement) => {
 	if (claimedAudio === audio) claimedAudio = null;
 };
 
-export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attachments: PublicAttachment[]; compact?: boolean }) => {
-	const mediaUrl = useSharedMediaUrl();
-	const shared = useSharedAccess();
-	const user = useCurrentUser();
+export const AudioAttachmentPlayer = (props: { attachments: PublicAttachment[]; compact?: boolean }) => {
+ const user = useCurrentUser(), dataPlane = useDataPlane(), shared = useSharedAccess();
+ const identity = React.useSyncExternalStore(subscribeWorkspaceIdentity, workspaceIdentityKey, () => '');
+ const actorId = user?.temporary ? null : user?.id;
+ const context = React.useMemo(() => identity ? captureOfflineAudioContext(actorId, dataPlane) : null, [identity, actorId, dataPlane]);
+ // Replace the complete playback lifetime at an identity/context boundary.
+ // Old native audio elements must not retain a source until a passive effect.
+ const key = JSON.stringify([identity, actorId, dataPlane, shared.key || '', shared.sharedRoot || '']);
+ return <AudioAttachmentPlayerSession key={key} {...props} context={context} />;
+};
+
+const AudioAttachmentPlayerSession = ({ attachments, compact = false, context }: { attachments: PublicAttachment[]; compact?: boolean; context: OfflineAudioContext | null }) => {
+ const mediaUrl = useSharedMediaUrl();
+ const shared = useSharedAccess();
 	const audioRef = React.useRef<HTMLAudioElement | null>(null);
 	const [activeIndex, setActiveIndex] = React.useState(0);
 	const [playAfterChange, setPlayAfterChange] = React.useState(false);
-	const [offlineCopy, setOfflineCopy] = React.useState<Blob | null>(null);
-	const [offlineUrl, setOfflineUrl] = React.useState<string | null>(null);
+	const [offlineCopy, setOfflineCopy] = React.useState<{ key: string; bytes: Blob } | null>(null);
+	const [offlineUrl, setOfflineUrl] = React.useState<{ key: string; url: string } | null>(null);
 	const [offlineAvailable, setOfflineAvailable] = React.useState(false);
 	const [usingOffline, setUsingOffline] = React.useState(false);
 	const [savingOffline, setSavingOffline] = React.useState(false);
 	const [playbackError, setPlaybackError] = React.useState<string | null>(null);
 
-	const active = attachments[Math.min(Math.max(activeIndex, 0), Math.max(attachments.length - 1, 0))];
-	const activeId = active?.id || '';
-	const activeLinkedUrl = active?.url || '';
-	const viewerId = user?.id || null;
+ const active = attachments[Math.min(Math.max(activeIndex, 0), Math.max(attachments.length - 1, 0))];
+ const descriptorKey = active ? audioAttachmentIdentity(active) : '';
+ const descriptor = React.useRef({ key: descriptorKey, attachment: active });
+ if (descriptor.current.key !== descriptorKey) descriptor.current = { key: descriptorKey, attachment: active };
+ const cacheAttachment = descriptor.current.attachment;
 	const deviceAudio = !!active && !!localMediaId(attachmentMediaSrc(active));
-	const cacheAllowed = !deviceAudio && !shared.key && !shared.sharedRoot;
+	const cacheAllowed = !!context && !deviceAudio && !shared.key && !shared.sharedRoot;
+ const selectionKey = JSON.stringify([context?.key, descriptorKey, cacheAllowed]);
+ const selection = React.useMemo(() => ({ key: selectionKey, controller: new AbortController() }), [selectionKey]);
+ const currentSelection = React.useRef(selection); currentSelection.current = selection;
+ const selectionCurrent = React.useCallback((signal = selection.controller.signal) => currentSelection.current === selection && signal === selection.controller.signal && !signal.aborted, [selection]);
+ const copyAvailable = offlineAvailable && offlineCopy?.key === selectionKey;
+ const savedUrl = offlineUrl?.key === selectionKey && copyAvailable && usingOffline ? offlineUrl.url : null;
+
+ React.useLayoutEffect(() => {
+  if (selection.controller.signal.aborted) selection.controller = new AbortController();
+  const controller = selection.controller;
+  setSavingOffline(false);
+  return () => controller.abort();
+ }, [selection]);
+
 
 	React.useEffect(() => {
-		const audio = audioRef.current;
-		return () => {
-			if (audio) releaseAudio(audio);
-		};
-	}, []);
-
-	React.useEffect(() => {
-		if (!activeId || activeLinkedUrl || !cacheAllowed) {
+		if (!cacheAttachment?.id || cacheAttachment.url || !cacheAllowed) {
 			setOfflineCopy(null);
 			setOfflineAvailable(false);
 			setUsingOffline(false);
 			return;
 		}
 		let cancelled = false;
+  const signal = selection.controller.signal;
 		setOfflineCopy(null);
 		setOfflineAvailable(false);
 		setUsingOffline(false);
-		void readOfflineAudio(activeId, viewerId).then((copy) => {
-			if (cancelled || !copy) return;
-			setOfflineCopy(copy);
-			setOfflineAvailable(true);
-		});
+		void readOfflineAudio(cacheAttachment, context!).then((copy) => {
+   if (cancelled || !selectionCurrent(signal) || !copy) return;
+   setOfflineCopy({ key: selectionKey, bytes: copy });
+   setOfflineAvailable(true);
+  }).catch(() => { /* An unavailable cache must not replace the streaming path. */ });
 		return () => {
 			cancelled = true;
 		};
-	}, [activeId, activeLinkedUrl, viewerId, cacheAllowed]);
+	}, [cacheAttachment, cacheAllowed, context, selection, selectionCurrent, selectionKey]);
 
-	React.useEffect(() => {
-		if (!usingOffline || !offlineCopy) {
+	React.useLayoutEffect(() => {
+		if (!usingOffline || !offlineCopy || offlineCopy.key !== selectionKey) {
 			setOfflineUrl(null);
 			return;
 		}
-		const url = URL.createObjectURL(offlineCopy);
-		setOfflineUrl(url);
+		const url = URL.createObjectURL(offlineCopy.bytes);
+		setOfflineUrl({ key: selectionKey, url });
 		return () => URL.revokeObjectURL(url);
-	}, [offlineCopy, usingOffline]);
+	}, [offlineCopy, usingOffline, selectionKey]);
 
-	const source = active ? (cacheAllowed ? offlineUrl : null) || mediaUrl(attachmentMediaSrc(active)) : '';
+	// A pending root/plane has no native playback source. The stale metadata
+ // may remain rendered while revalidation runs, but cannot reopen remote or
+ // device bytes under an unresolved identity. Shared/public playback still
+ // goes through its ordinary resolver once the workspace is bound.
+ const source = active && context ? (cacheAllowed ? savedUrl : null) || mediaUrl(attachmentMediaSrc(active)) : '';
+ React.useLayoutEffect(() => {
+  const audio = audioRef.current;
+  return () => {
+   if (audio) { audio.pause(); audio.removeAttribute('src'); audio.querySelectorAll('source').forEach(source => source.removeAttribute('src')); audio.load(); releaseAudio(audio); }
+  };
+ }, [source]);
+
 	React.useEffect(() => { setPlaybackError(null); }, [source]);
 	const sourceType = active ? attachmentPlaybackContentType(active) : '';
 
 	React.useEffect(() => {
-		if (!playAfterChange || !source) return;
+		if (!playAfterChange || !source || !selectionCurrent()) return;
+		const signal = selection.controller.signal;
 		const frame = window.requestAnimationFrame(() => {
 			const audio = audioRef.current;
-			if (!audio) return;
-			void audio.play().catch(() => setPlaybackError('Playback needs a tap or click to start.'));
+			if (!audio || !selectionCurrent(signal)) return;
+			void audio.play().catch(() => { if (selectionCurrent(signal)) setPlaybackError('Playback needs a tap or click to start.'); });
+			setPlayAfterChange(false);
 		});
-		setPlayAfterChange(false);
 		return () => window.cancelAnimationFrame(frame);
-	}, [playAfterChange, source]);
+	}, [playAfterChange, source, selection, selectionCurrent]);
 
 	const selectTrack = React.useCallback((index: number, play = false) => {
+		if (index === activeIndex) { setPlayAfterChange(play); return; }
+		selection.controller.abort();
 		setPlaybackError(null);
 		// Do not briefly point the next queued track at the prior track’s object
 		// URL while IndexedDB availability is being checked.
@@ -108,36 +143,40 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 		setOfflineUrl(null);
 		setActiveIndex(index);
 		setPlayAfterChange(play);
-	}, []);
+	}, [selection, activeIndex]);
 
 	const saveActiveOffline = React.useCallback(async () => {
-		if (!active || active.url || savingOffline || !cacheAllowed) return;
+		if (!active || active.url || savingOffline || !cacheAllowed || !context || !selectionCurrent()) return;
+		const signal = selection.controller.signal;
 		setSavingOffline(true);
 		setPlaybackError(null);
 		try {
-			const copy = await saveOfflineAudio(active, viewerId, mediaUrl);
-			setOfflineCopy(copy);
+			const copy = await saveOfflineAudio(active, context, mediaUrl, { signal });
+			if (!selectionCurrent(signal)) return;
+			setOfflineCopy({ key: selectionKey, bytes: copy });
 			setOfflineAvailable(true);
 			setUsingOffline(true);
 			setPlayAfterChange(true);
 		} catch (error) {
-			setPlaybackError(error instanceof Error ? error.message : 'Thingtime could not save this audio for offline playback.');
+			if (selectionCurrent(signal)) setPlaybackError(error instanceof Error ? error.message : 'Thingtime could not save this audio for offline playback.');
 		} finally {
-			setSavingOffline(false);
+			if (selectionCurrent(signal)) setSavingOffline(false);
 		}
-	}, [active, savingOffline, viewerId, mediaUrl, cacheAllowed]);
+	}, [active, savingOffline, context, mediaUrl, cacheAllowed, selection, selectionKey, selectionCurrent]);
 
 	const clearActiveOffline = React.useCallback(async () => {
-		if (!active || active.url || !cacheAllowed) return;
+		if (!active || active.url || !cacheAllowed || !context || !selectionCurrent()) return;
+		const signal = selection.controller.signal;
 		try {
-			await removeOfflineAudio(active.id, viewerId);
+			await removeOfflineAudio(active, context);
+			if (!selectionCurrent(signal)) return;
 			setUsingOffline(false);
 			setOfflineCopy(null);
 			setOfflineAvailable(false);
 		} catch {
-			setPlaybackError('Thingtime could not remove the saved offline copy.');
+			if (selectionCurrent(signal)) setPlaybackError('Thingtime could not remove the saved offline copy.');
 		}
-	}, [active, viewerId, cacheAllowed]);
+	}, [active, context, cacheAllowed, selection, selectionCurrent]);
 
 	if (!active) return null;
 
@@ -172,7 +211,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 					}}
 					onError={() => {
 						if (!source) return;
-						if (cacheAllowed && offlineUrl) {
+						if (cacheAllowed && savedUrl) {
 							setUsingOffline(false);
 							setPlaybackError('The saved copy could not be decoded. Streaming will be used instead.');
 							return;
@@ -187,10 +226,10 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 			{deviceAudio && !shared.key && !shared.sharedRoot ? <Text mt={2} fontSize="10px" color={MUTED}>Saved on this device</Text> : null}
 			{!active.url && cacheAllowed ? (
 				<Flex mt={2} columnGap={2} rowGap={1} flexWrap="wrap" alignItems="center">
-					{offlineAvailable ? (
+					{copyAvailable ? (
 						<>
 							<Button size="xs" variant="outline" onClick={() => setUsingOffline((current) => !current)}>
-								{usingOffline ? 'Use streaming' : 'Use offline copy'}
+								{usingOffline && copyAvailable ? 'Use streaming' : 'Use offline copy'}
 							</Button>
 							<Button size="xs" variant="ghost" onClick={() => void clearActiveOffline()}>
 								Remove offline copy
@@ -202,7 +241,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 						</Button>
 					)}
 					<Text fontSize="10px" color={MUTED}>
-						{usingOffline ? 'Playing your saved local copy' : 'Streaming from Thingtime'}
+						{usingOffline && copyAvailable ? 'Playing your saved local copy' : 'Streaming from Thingtime'}
 					</Text>
 				</Flex>
 			) : null}

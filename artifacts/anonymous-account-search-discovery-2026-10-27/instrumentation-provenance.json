@@ -1,0 +1,9 @@
+{
+  "status": "instrumented candidate compiled and linted, awaiting coordinated exclusive runtime GO; not yet executed",
+  "files": {
+    "remix/app/local-workspace/accountSearchDiscovery.browser.test.ts": "2b023b09a6d3d6fd3bbf271fbca7ddd7e7770fc3962ea83fd5355fcacc3cd9b1",
+    "remix/app/local-workspace/accountSearchDiscovery.browser.fixture.ts": "bb4a62f79ba63e652eb83f029934768cbaf06da7f33bbbefc58f84088b59eba0",
+    "tmp/continuation/account-search.test.mjs": "a12a31e1076cc6845367374b8eb9c1df1d8ec920ad97dea30b3ce2685013a865",
+    "tmp/continuation/post-draft-app.tar.gz": "0a847337609cd760c3188d784375f57a2d1eadb495ccad86b1c2799429d3a0d5"
+  }
+}

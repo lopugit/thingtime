@@ -1,0 +1,71 @@
+{
+  "result": "PASS",
+  "acceptedAttempt": 11,
+  "archive": {
+    "path": "tmp/continuation/audio-search-app.tar.gz",
+    "sha256": "aea7f888d84c7976add09f1d1c5dff646677f086ff2d499ac39e3b466f7a4217"
+  },
+  "files": {
+    "remix/app/components/Attachments/AudioAttachmentPlayer.tsx": "9a8f50ad91efe8c594f97c4d55ac1847e8a754d81b0807520eaf837d5c57b1cf",
+    "remix/app/components/Attachments/audioPlaybackCache.ts": "b19b7f41f537839987d48d8d8b3a3e8f321197c409c8b0e972affc96cb866f8f",
+    "remix/app/components/Attachments/audioPlaybackCache.test.ts": "381fad2dfdc2be615c99038219f4577a448327ce095bbe02fbf6b99bf77e0da8",
+    "remix/app/components/Attachments/AudioAttachmentPlayer.browser.test.ts": "6084335a3447203a4ca4ca826d697ffd8b7a32a939ae0f66937e99b5388542d1"
+  },
+  "executedFixture": {
+    "source": "attempt-11.browser.test.ts",
+    "sourceSha256": "b9461505f4e66de55ad65751499a377deda64e35da8a31b53b89c90b20870c58",
+    "bundle": "attempt-11.test.mjs",
+    "bundleSha256": "474bdd4ca617e7d3415728b133d953955ff8d35c091eaa3a1bad6b4fde127662"
+  },
+  "currentFixtureNote": "Only changed three promise-outcome assertions after execution to reject successful playback without requiring a particular pending/rejection class. Native resource/event invariants are unchanged. Current fixture not claimed executed; exact executed fixture and diff retained. Parent instructed no rerun solely for promise wording.",
+  "sourceMapParity": {
+    "archiveSha256": "aea7f888d84c7976add09f1d1c5dff646677f086ff2d499ac39e3b466f7a4217",
+    "modulePath": "/assets/ThingTransferControls-DT4WMVmm.js",
+    "sourcemapSha256": "aefbf58e5e860f182d514e5cc852a910ae6ccc0ef63bef5c0112aef6630772a5",
+    "checks": [
+      {
+        "source": "../../app/components/Attachments/AudioAttachmentPlayer.tsx",
+        "sha256": "9a8f50ad91efe8c594f97c4d55ac1847e8a754d81b0807520eaf837d5c57b1cf",
+        "exactSourceContent": true
+      },
+      {
+        "source": "../../app/components/Attachments/audioPlaybackCache.ts",
+        "sha256": "b19b7f41f537839987d48d8d8b3a3e8f321197c409c8b0e972affc96cb866f8f",
+        "exactSourceContent": true
+      }
+    ]
+  },
+  "proofs": {
+    "native": "audio/verification.json",
+    "pendingRoot": "audio/pending-root.json",
+    "retiredNativeAudio": "audio/retired-playback.json",
+    "nativeMechanismOnly": "audio/native-media-api.json",
+    "sourceModules": "audio/served-modules.json",
+    "preflight": "audio/preflight-parity.json",
+    "isolation": "audio/network-proof.json",
+    "cleanup": "audio/cleanup.json",
+    "tests": "final-unit.log",
+    "lint": "final-lint.log"
+  },
+  "attempts": {
+    "1": "wrong archive; nonacceptance",
+    "2": "wrong archive; nonacceptance",
+    "3": "wrong archive; nonacceptance",
+    "4": "wrong archive; nonacceptance",
+    "5": "correct archive; fixture logout full-bleed route omission",
+    "6": "correct archive; fixture secondary-page navigator state omission",
+    "7": "correct archive; fixture incorrectly required player mounted",
+    "8": "correct archive; fixture incorrectly required historical currentSrc empty",
+    "9": "correct archive; precise native no-resource diagnostic proved currentSrc historical",
+    "10": "separate native mechanism: empty-source play stayed pending, chosen rejection assertion invalid",
+    "11": "complete real API/UI acceptance PASS"
+  },
+  "limitations": [
+    "Isolated synthetic-account Chromium/runtime acceptance, not production/installed app UI acceptance. Installed browser allocator used; no native app source changed.",
+    "Loaded JS/CSS module byte parity and exact two audio sourcemap sources established; no whole-package source equivalence claim.",
+    "Font CSS declares Hanken Grotesk/system stack; document.fonts faces empty in network-none runtime, so system fallback appearance only; no custom font binary loading proof.",
+    "V1 bytes remain locally ignored, not deleted and not treated as authorized; fresh ordinary authorized save required.",
+    "No revalidation on every cache hit: unobserved offline revocation/version changes cannot be inferred. Known structured save refusal retires exact selected copy; streaming remains normal authorization path.",
+    "Device-specific byte resolver/shared-key exclusion preserved by source/unit checks; this native fixture covers ordinary account/anonymous public remote audio, not device file or delegated Character UI."
+  ]
+}

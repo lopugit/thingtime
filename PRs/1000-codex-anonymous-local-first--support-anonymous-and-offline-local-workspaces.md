@@ -5658,3 +5658,69 @@ The preceding pushed `2366c088` preview and alias serve the app shell, boot/main
 assets and origin-scoped manifest, with source association supplied by GitHub
 preview metadata. A source audit confirms there is no public in-page Git SHA
 marker; HTTP availability is not deployed functional acceptance. That checkpoint passed [Web CI](https://github.com/lopugit/thingtime/actions/runs/40390728996) and [CodeQL](https://github.com/lopugit/thingtime/actions/runs/40391484620); its [immutable preview](https://thingtime-8ry23fcvp-lopugits-projects.vercel.app) and CI observation are retained separately from this new source.
+
+
+### 27 October — cached discovery and normal offline privacy
+
+Search preserves cached People, Subspaces and Things with explicit partial-result
+status, including accurate provenance after a different query fails. Two focused
+regressions and native cold offline/logout/layout checks pass; status contrast is
+6.517:1 across 1440/390/320px. The fresh `bd61db37` package has exact parity for five
+relevant client modules, and predates separate audio review repairs.
+
+The normal existing-post privacy/body-edit case also passes offline save completion,
+cold reload, canonical reconnect and separate-reader/guest refusal. No product
+repair was needed there; six earlier fixture/resource/selector attempts are retained.
+Final privacy acceptance uses `0a847337`, with eleven exact client-module matches
+and no server/whole-package parity claim. Both final runs retain network-none
+browser/backend isolation, sandbox, zero OOM and empty cleanup results.
+
+- [Search evidence](../artifacts/anonymous-account-search-discovery-2026-10-27/README.md)
+- [Privacy evidence](../artifacts/anonymous-account-post-privacy-2026-10-27/README.md)
+
+These are local scoped results. Commit `50cb1f957` separately passed Web CI and
+CodeQL and has a reachable metadata-associated preview; these later source changes
+require their own CI and preview. The broader coverage matrix remains open.
+
+### 27 October — scoped audio cache and final discovery integration
+
+The ordinary player now caches authorized original bytes through V2 scoped
+WorkspaceDatabase leases/accounting, fenced by origin, selected plane, account
+and delegating Character. Canonical identity/ETag/length validation brackets a
+bounded original-byte download. Track/context retirement aborts pending work;
+unresolved identity cannot retain a native source. Equivalent refreshes preserve
+playback. Legacy V1 data is ignored without mutation; stale descriptors cannot
+delete another valid copy. Shared/keyed and device playback keep their existing
+resolvers. Explicit offline copies cannot infer unseen server ACL/content changes.
+
+[Native audio evidence](../artifacts/anonymous-audio-cache-2026-10-27/README.md)
+records the passing correct-package run: held track and logout races, retired
+native resource state, exact WAV bytes/decode/play, anonymous public save, cold
+offline reload, return to account cache, removal and 1440/390/320px full scrolling.
+All 401 served JS/CSS responses match packaged bytes; sandbox, network denial and
+cleanup pass. Source-map contents match both reviewed audio modules exactly.
+The first four attempts incorrectly selected an older archive and are excluded
+from acceptance; the runner now validates archive SHA and source/module parity
+before claiming a runtime. Later failed fixture assumptions are preserved.
+Chromium retains historical `currentSrc` after resource retirement; actual
+paused/no-source/no-data state and playing events determine the native fence.
+
+Sixteen focused audio tests pass. The attachment suite reports 12 plus 369
+passing checks; overlapping runs are not a unique-test total. Search/privacy
+lint passes; the product typecheck retains exactly 91 baseline diagnostics, with
+none added or removed. The final native fixture has its own execution/lint
+provenance. The client/template/server build passes.
+
+[Integration evidence](../artifacts/anonymous-search-audio-integration-2026-10-27/README.md)
+links the separate package boundaries for Search, post privacy and audio. The
+updated plan has 65 completed checkpoints, 20 partial rows and four planned
+items. The local app/tool inventory now identifies browser storage, unified MCP,
+agent browser manager, notification history and mobile bridge; installed device,
+OS permission, pairing and provider checks remain explicit. The original actual
+desktop MCP render/export proof is unchanged and was not rerun for these edits.
+
+Prior pushed `50cb1f957` passed Web CI and CodeQL; its immutable and alias previews
+serve matching shell/assets and an origin-scoped manifest. These public HTTP
+checks are separate from functional deployed acceptance and from the new source's
+head checks. No merge, manual deployment, existing-account mutation, shared
+proxy/key/service or VM change was made.

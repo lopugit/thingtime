@@ -1,0 +1,28 @@
+{
+  "id": "514fe4fd-c2a3-4af7-9ade-62a093993580",
+  "offlinePrivacyMenu": true,
+  "offlineBodyEdit": true,
+  "coldReload": true,
+  "canonicalText": "Private body edited offline and retained after a cold reload.",
+  "canonicalAcl": [
+    "tt:user"
+  ],
+  "readerDenied": 404,
+  "guestDenied": 404,
+  "offlineWrites": [],
+  "bounds": [
+    {
+      "width": 1440,
+      "scrollWidth": 1440
+    },
+    {
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "width": 320,
+      "scrollWidth": 320
+    }
+  ],
+  "errors": []
+}

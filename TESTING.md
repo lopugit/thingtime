@@ -15766,3 +15766,36 @@ The account-only run intentionally skips the previously verified anonymous case.
 
 Evidence: `artifacts/anonymous-account-feed-membership-2026-10-27/README.md`.
 The real packaged API is used; exact source parity covers six client modules only.
+
+
+### Cached Search provenance and offline post privacy — PR 1000
+
+- [x] Through normal Search, load People, Subspaces and a private Thing from the
+  real isolated API; cold-reload offline and keep all three result sections with
+  an explicit cached/partial notice. Fail a different query and retain accurate
+  previous-search provenance; logout then cold-reload without protected results.
+- [x] Check full scrolling and notice wrapping at 1440/390/320px; measure normal
+  status contrast (6.517:1). Final run: no offline writes, page errors or OOM.
+- [x] Use normal post menus and composer to make an existing public post Private
+  and edit its body offline. Wait for normal composer closure before cold reload;
+  preserve body/privacy and verify canonical reconnect plus reader/guest refusal.
+  A visible edited paragraph alone does not prove Save has completed.
+- [ ] Broaden ranking/shortcuts, unvisited discovery, deletion and cross-device
+  acceptance; the scoped checks do not establish these wider flows.
+
+Evidence: `artifacts/anonymous-account-search-discovery-2026-10-27/README.md` and
+`artifacts/anonymous-account-post-privacy-2026-10-27/README.md`. Keep their distinct
+archive/client parity limits and failed attempts.
+
+### Scoped audio cache and playback lifetime — 27 October 2026
+
+- [x] Use isolated synthetic author/viewer accounts and real uploaded WAV bytes; keep the normal service worker and full application renderer. Verify served JS/CSS against the tested package.
+- [x] Hold the actual selected track's authorized original-byte response, change tracks, then release it; the retired save must not select or commit into the new track.
+- [x] Save an authorized original through the normal control, compare its Blob bytes with the upload and preserve playback across an equivalent root refresh.
+- [x] Log out in another tab while this page's root response remains pending; the old native element must pause and clear its source, and late bytes must not reopen playback.
+- [x] Verify anonymous public playback cannot borrow account cache, then save a separate authorized anonymous copy and check cold offline reload, account re-entry and removal.
+- [x] Check 1440/390/320px layout with full scrolling, actual audio controls, fonts and no horizontal overflow. Keep runtime network denial, sandbox and cleanup evidence.
+- [x] Regression checks cover stale size/MIME/context cache misses without deleting valid newer bytes, exact-key corrupt record cleanup, quota/accounting rollback and retirement cancellation.
+
+The native checklist is linked to its execution record rather than inferred from
+unit tests. Offline copies cannot discover an unobserved server ACL/content change.

@@ -1,0 +1,62 @@
+{
+  "message": "TimeoutError: locator.click: Timeout 25000ms exceeded.\nCall log:\n  - waiting for getByRole('menuitem', { name: /^Edit/ })\n",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\n\nOffline account workspace. Local edits are available; account sync is paused until your session is verified.\n\nReconnect\n\n1 change saved on this device. Offline — sync will resume when connected.\n\nReview sync\nTHINGTIME · POST 📌\nPost 📌\nP\nprivacy-270cb95b-3da5-4d21-8dee-cb256161ad89\n@privacy-270cb95b-3da5-4d21-8dee-cb256161ad89 · \njust now\n🔒\nonly the author can see this post\n\nSynthetic public privacy transition fixture.\n\n0\nPost as\nOffline account workspace\nRecover earlier comment draft\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄\n\nthingtime\n\n📌\n❌\n🔎\n\nOpen Thing\n\n💎\n\nView Thing data\n\n🕰️\n\nHistory\n\n🔗\n\nCopy link\n\n📥\n\nDownload…\n\n✏️\n\nRename\n\n✏️\n\nEdit\n\n🌐\n\nShare / permissions\n\n▸\n📋\n\nSave as template\n\n🗑️\n\nDelete",
+  "id": "58ca6c49-3ec1-4dd2-b2a2-a22bfa7fc150",
+  "errors": [],
+  "writes": [],
+  "network": [
+    {
+      "path": "/api/root-data",
+      "status": 200
+    },
+    {
+      "path": "/api/root-data",
+      "status": 200
+    },
+    {
+      "path": "/api/root-data",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/root-data",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things/reactions-recent",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/things",
+      "status": 200
+    }
+  ],
+  "online": false
+}

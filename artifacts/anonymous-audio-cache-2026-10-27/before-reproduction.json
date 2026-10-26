@@ -1,0 +1,8 @@
+{
+  "source": "HEAD audioPlaybackCache.ts",
+  "sourceSha256": "cdfc49022cb0f28646e4c3067633a1c655e1db06bab5ea8ccaeb32a8b671148b",
+  "oldKeysHaveNoOriginPlaneDelegation": true,
+  "oldValidatorAcceptsMismatchedRequestedIdentity": true,
+  "oldKey": "thingtime:audio:v1:same-viewer:same-track",
+  "boundary": "Reproduces metadata/context validation gap; does not claim remote authorization bypass."
+}

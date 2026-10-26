@@ -54,6 +54,8 @@ import type {
   SearchThing
 } from './searchTypes';
 import { thingDetailPath } from './commanderSearch';
+import { retainSearchResults, searchResultQuery, searchResultSnapshotNotice } from './searchResultSnapshot';
+import type { SearchResultSnapshot } from './searchResultSnapshot';
 
 // The /search page — the Commander search bar, grown up. A ranked text search
 // (Google-style) over every visible thing, plus a minimalist query builder
@@ -467,6 +469,7 @@ const SearchWorkspace = ({ device }: { device: boolean }) => {
   const [nextCursor, setNextCursor] = React.useState<string | null>(cached?.nextCursor ?? null);
   const [loading, setLoading] = React.useState(false);
   const [searchError, setSearchError] = React.useState('');
+  const [resultSnapshot, setResultSnapshot] = React.useState<SearchResultSnapshot | null>(() => cached ? { query: searchResultQuery({ q: cached.q || '', mode: cached.mode || 'all', kind: cached.kind || '', sort: cached.sort || 'auto', conditions: compileRows(cached.rows || []) }), retained: true } : null);
 
   const [schemasOpen, setSchemasOpen] = React.useState(false);
   const [communitySchemas, setCommunitySchemas] = React.useState<SchemaSource[]>([]);
@@ -599,7 +602,10 @@ const SearchWorkspace = ({ device }: { device: boolean }) => {
         // only a RESOLVED first page owns load-more continuation — committing
         // submittedRef at submit time would let a failed search's params be
         // mixed with the painted result set's cursor by a later Load more
-        if (!cursor) submittedRef.current = current;
+        if (!cursor) {
+          submittedRef.current = current;
+          setResultSnapshot({ query: searchResultQuery({ ...current, conditions }), retained: false });
+        }
 
         if (!cursor) setPeople(wantPeople ? peopleResp?.users || [] : []);
         if (!cursor) setSubspaces(wantPeople ? subspacesResp?.subspaces || [] : []);
@@ -678,6 +684,7 @@ const SearchWorkspace = ({ device }: { device: boolean }) => {
         }
         const message = err?.error || err?.message || 'Search hit a snag. Try again.';
         setSearchError(message);
+        setResultSnapshot(retainSearchResults);
         lopuRef.current({ title: message, status: 'error' });
       } finally {
         if (seq === requestSeqRef.current) setLoading(false);
@@ -964,6 +971,8 @@ const SearchWorkspace = ({ device }: { device: boolean }) => {
     });
   }, []);
 
+  const snapshotNotice = !device ? searchResultSnapshotNotice(resultSnapshot, searchResultQuery({ q, mode, kind, sort, conditions: compileRows(rows) }), !!(things.length || people.length || subspaces.length)) : null;
+
   // the count is a visibility-superset approximation (private-to-others docs
   // can be counted but never shown), so present it as such
   const totalLabel =
@@ -1226,6 +1235,8 @@ const SearchWorkspace = ({ device }: { device: boolean }) => {
             );
           }}
         />
+
+        {snapshotNotice && <Text role="status" aria-atomic="true" data-testid="search-snapshot-coverage" fontSize="sm" color="var(--tt-text, #33333c)">{snapshotNotice}</Text>}
 
         {/* results */}
         <Flex
