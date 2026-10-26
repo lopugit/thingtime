@@ -9,6 +9,9 @@ import { WebpageBlocksRenderer } from '~/components/Builder/WebpageBlocksRendere
 import { commanderSearchResults, type CommanderSearchResult } from '~/components/Search/commanderSearch';
 import type { SearchResponse } from '~/components/Search/searchTypes';
 import { useDrawer } from './useDrawer';
+import { legacyDeviceSettingsDocument } from '~/components/Settings/settingsDocument';
+import { Global } from '@emotion/react';
+import { drawerRowStyles } from './drawerRow';
 import { customDrawerBlocks } from './customDrawerBlocks';
 import { customDrawerUrl, updateCustomDrawerDraft, type CustomDrawerItem } from './drawerCustomItems';
 const ADD_FROM_PREVIEW = 'thingtime:custom-drawer-add';
@@ -17,11 +20,20 @@ export function CustomDrawerItems({ settings = false, preview = false, onNavigat
  const user = useCurrentUser();
  const dataPlane = useDataPlane();
  const scope = `${typeof window === 'undefined' ? '' : window.location.origin}:${user?.id || 'anonymous'}:${dataPlane || 'unavailable'}`;
- return <CustomDrawerScope key={scope} scopeKey={scope} settings={settings} preview={preview} onNavigate={onNavigate} />;
+ return <>
+  <Global styles={drawerRowStyles} />
+  <CustomDrawerScope key={scope} scopeKey={scope} settings={settings} preview={preview} onNavigate={onNavigate} />
+  {settings && <details><summary>Drawer menu template</summary><p>Edit the actual menu rows, icon and label blocks used in your drawer.</p><CustomDrawerScope key={`${scope}:template`} scopeKey={scope} settings={false} templateEditor preview={false} /></details>}
+ </>;
 }
-function CustomDrawerScope({ scopeKey, settings, preview, onNavigate }: { scopeKey: string; settings: boolean; preview: boolean; onNavigate?: () => void }) {
+function CustomDrawerScope({ scopeKey, settings, preview, onNavigate, templateEditor = false }: { scopeKey: string; settings: boolean; preview: boolean; onNavigate?: () => void; templateEditor?: boolean }) {
  const { customItems, setCustomItems, closesOnClick, setCloseOnClickFor, setOpen: setDrawerOpen } = useDrawer();
  const api = useApi(); const navigate = useNavigate(); const user = useCurrentUser();
+ const dataPlane = useDataPlane();
+ const accountMenu = !settings && !!user?.id && !user.temporary && !!dataPlane;
+ const legacyDocument = React.useCallback(() => {
+  try { return legacyDeviceSettingsDocument({ origin: window.location.origin, ownerId: user?.id || 'anonymous', dataPlane: dataPlane || 'unavailable', documentKey: 'custom-drawer-menu' }, window.localStorage); } catch { return null; }
+ }, [user?.id, dataPlane]);
  const [open, setOpen] = React.useState(false); const [draft, setDraft] = React.useState(emptyDraft);
  const [editorGeneration, setEditorGeneration] = React.useState(0);
  const [nextCursor, setNextCursor] = React.useState<string | null>(null);
@@ -50,11 +62,11 @@ function CustomDrawerScope({ scopeKey, settings, preview, onNavigate }: { scopeK
   return () => { window.clearTimeout(timer); seq.current++; };
  }, [open, query, user?.id]);
  React.useEffect(() => {
-  if (settings || preview) return;
+  if (settings || preview || templateEditor) return;
   const add = () => { setDraft(emptyDraft()); setEditorGeneration(value => value + 1); setError(''); setOpen(true); };
   window.addEventListener(ADD_FROM_PREVIEW, add);
   return () => window.removeEventListener(ADD_FROM_PREVIEW, add);
- }, [settings, preview]);
+ }, [settings, preview, templateEditor]);
  const close = () => { if (busy.current) return; seq.current++; setOpen(false); setResults([]); setQuery(''); setError(''); setDraft(emptyDraft()); window.requestAnimationFrame(() => host.current?.querySelector<HTMLButtonElement>('[data-block-id="custom-drawer-add"]')?.focus()); };
  const readDraft = (invocation: TransientBlockInvocation) => updateCustomDrawerDraft(draft, {
   emoji: String(invocation.readField('drawer-emoji') ?? draft.emoji), title: String(invocation.readField('drawer-title') ?? draft.title),
@@ -110,7 +122,7 @@ function CustomDrawerScope({ scopeKey, settings, preview, onNavigate }: { scopeK
    if (closesOnClick(item.id)) { setDrawerOpen(false); onNavigate?.(); }
   }
  };
- return <div ref={host}><SettingsDocumentHost documentKey={settings ? 'custom-drawer-settings' : 'custom-drawer-menu'} title="Custom drawer layout" layoutEditingDisabled={saving} defaultDocument={blocks} scopeKey={scopeKey} persistence="device">
+ return <div ref={host}><SettingsDocumentHost documentKey={settings ? 'custom-drawer-settings' : 'custom-drawer-menu'} title={settings ? "Custom drawer management" : "Drawer menu template"} showLayoutControls={settings || templateEditor} loadFallbackDocument={accountMenu ? legacyDocument : undefined} layoutEditingDisabled={saving} defaultDocument={blocks} scopeKey={scopeKey} persistence={accountMenu ? "account" : "device"}>
   {({ blocks, chrome, editing }) => <TransientBlockHost key={editorGeneration} scopeKey={scopeKey} enabled={!editing} scope={{ drawer: {
    items: customItems.map(item => ({ ...item, closes: closesOnClick(item.id) })), open, draft, heading: draft.id ? 'Edit drawer item' : 'Add drawer item',
    attached: draft.thingId ? (draft.thingTitle ? `Attached Thing: ${draft.thingTitle}` : 'Thing attached') : '', query, results, error, searchMessage, saving, managementError, hasMore: !!nextCursor

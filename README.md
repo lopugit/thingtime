@@ -1477,8 +1477,11 @@ servers without gateway settings retain direct connections. Dedicated mode
 owns its MongoDB pools but uses the configured environment database, so it does
 not imply database isolation or an Atlas tier change. The intended mapping is
 `thingtime.com`/production to production data, `dev.thingtime.com`/develop to
-development data, and standard previews to `master.previews.thingtime.com` /
-preview on development data. A recent configuration audit found previews and
+development data, and ordinary PR previews to `master.previews.thingtime.com` /
+preview on development data. PR builds keep their existing custom develop
+credential scope; the publisher explicitly selects the logical preview gateway
+without exposing unrelated standard-preview settings to branch code. A recent
+configuration audit found previews and
 custom develop already share the development cluster, separate from production;
 the master preview alias and gateway activation are still pending.
 

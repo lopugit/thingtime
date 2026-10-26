@@ -100,6 +100,12 @@ Saved theme history uses `api.themes` / `api.themes-delete` 1.1.0 and
 and retained deletion in its content transaction; no new endpoint or collection
 is introduced. See [the Timeline contract](../unified-timeline.md).
 
+`api.themes` 1.2.0 and `api.themes-shared` 1.1.0 add optional focus border,
+two glow colours, blur and strength tokens. Theme saves negotiate 1.2.0 through
+`theme/capabilities.ts`; older theme documents receive defaults without losing
+other settings. `test:theme` covers normalization and the authenticated route,
+while `test:api-capabilities` covers both manifests and client compatibility.
+
 All data access goes through `/api/v1/...` (`FUNDAMENTALS.md` §1). Nitro
 routes every documented endpoint to one catch-all handler; the docs registry is
 the source of truth for the route table and both capability manifests.

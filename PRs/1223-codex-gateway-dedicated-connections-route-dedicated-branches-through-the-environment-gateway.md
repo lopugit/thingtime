@@ -28,10 +28,15 @@ unmerged paths. Existing generated, untracked Graphify snapshots were preserved.
 The dirty primary checkout is not used for edits.
 
 The protected deployment publisher requires a separate change on its canonical
-controller branch. Future standard previews must use a controlled master
+controller branch. Future ordinary PR previews must use a controlled master
 preview build, never whichever arbitrary PR deployed most recently. A preview
 master must be compiled with preview target settings; production-built client
-output must not be relabelled as a preview build.
+output must not be relabelled as a preview build. Ordinary PR deployments retain
+their existing custom develop credential target with explicit logical preview
+gateway overrides. An in-memory configuration audit found different sensitive
+settings in standard preview, so changing the whole runtime target would expand
+branch authority unnecessarily. The preview master itself uses the standard
+preview target. Historical PR alias names remain compatible.
 
 ## Verification and rollout
 
@@ -48,6 +53,16 @@ Markdown was not refreshed: the incremental semantic path classified the whole
 corpus as changed (4,122 code files, 641 docs, and 384 images, with zero
 unchanged), so it was stopped before semantic dispatch to avoid an unnecessary
 full-corpus run.
+
+The branch now includes `main` at
+`21ac2cba8739a5ed578b46dee4bb8e4109113cff`, preserving the drawer and shared-select
+changes. The post-integration gateway suite passed 14/14 and API capability
+suite passed 115/115. Gateway test fixtures explicitly choose the mode under
+test, so both the normal proxy policy and a dedicated branch policy exercise
+the same assertions. The develop counterpart was merged as PR #1224 at
+`cd6f8b8abc94270980bac216da2412ffef8578b1` after its build, API and both CodeQL
+checks passed on the exact head. No live gateway activation is implied by that
+integration.
 
 The intended canonical origins are `thingtime.com` (production),
 `dev.thingtime.com` (custom develop), and `master.previews.thingtime.com`

@@ -17,10 +17,11 @@ components; reuse them instead of adding parallel versions.
 | Toasts / notifications | `app/components/Lopu/useLopu.tsx` (`useLopu()`, `useLopuStream()`) — never raw Chakra `useToast` or `alert()` |
 | Layering (z-index) | `app/components/Things/transferLayers.ts` and the shared layer constants; never ad-hoc z-index escalation |
 | Page shell, nav clearance, drawers | `app/components/Layout/Main.tsx`, `app/components/Nav/*` (`--tt-nav-clearance`, safe-area vars) |
-| Custom drawer links and Thing attachments | `app/components/Nav/Drawer/drawerCustomItems.ts`, `customDrawerBlocks.ts`, `CustomDrawerItems.tsx`, and `useDrawer.tsx`; account-scoped device preferences, shared Commander search, individually editable Builder blocks; `scripts/custom-drawer-acceptance.mjs` exercises real API/browser persistence and Builder edits |
+| Custom drawer links and Thing attachments | `app/components/Nav/Drawer/drawerCustomItems.ts`, `customDrawerBlocks.ts`, `CustomDrawerItems.tsx`, and `useDrawer.tsx`; account-scoped device entries, shared Commander search, individually editable Builder blocks. Add is the final menu row. Settings exposes the actual menu template, saved as a private webpage Thing through `SettingsDocumentHost`, with scoped legacy device-layout recovery. `scripts/custom-drawer-acceptance.mjs` checks matched row styling, real API/browser persistence and nested Builder edits |
 | Device menu and full page | `app/components/Things/ThingsPage.tsx`, `ThingsViews.tsx`, `app/components/Devices/deviceNavigation.ts`, `DeviceDetailsDrawer.tsx` (one shared details tree for drawer and page) |
 | Desktop footer build identity | `app/components/Nav/Footer.tsx` reads `thingtimeDesktop.getInfo().buildIdentity` from the packaged `electron/dist/web/metadata.json`; remote-origin status remains separate |
 | Design tokens / CSS vars | `var(--tt-*)` tokens (surface, border, muted, ink, accent, radius); rainbow text in `app/theme/rainbow.ts` |
+| Shared native selects | `app/Providers/Chakra/Components/Select.tsx`, registered in `theme.tsx`; Chakra `Select` consumers (including Character posting and CI providers) inherit runtime colors, borders, radii and keyboard focus; Theme Studio controls the focus border and two-color glow through `theme/tokens.ts` and `theme/customise.ts` |
 | Design system docs page | `/docs/design-system` (`app/routes/docs/*`) |
 | Local cache tiers (first-paint) | `app/hooks/localCache.ts` (`tt-<domain>` keys) |
 
@@ -90,6 +91,14 @@ browser acceptance also checks reload and repeated search through the renderer.
 - Lopu has no gender; use **it**.
 
 ## Tests
+
+- `node remix/scripts/run-select-theme-browser.mjs` builds the real shared theme
+  and Character selector in a network-isolated browser fixture. Set
+  `TT_QA_IMAGE` to an installed isolated runtime and `TT_QA_SECCOMP` to its
+  Chromium sandbox profile, as required by the runner. It checks desktop/mobile,
+  light/dark themes, native options, keyboard focus and selection, overflow,
+  and real Theme Studio editing/save/reload against synthetic HTTP;
+  it does not perform live-account or CI-provider mutations.
 
 - `scripts/lopu-popovers.browser.html` mounts the real floating host, full page,
   or embedded chat with synthetic HTTP/preferences. It checks popup hit testing,

@@ -119,3 +119,14 @@ test('owned-plan clients negotiate each new operation and reject pre-admission o
     }
   }
 });
+
+
+test('theme saves refuse stale manifests then retry compatible focus-setting support', async (t) => {
+  const { THEME_CAPABILITY_REQUIREMENTS } = await import('../../../theme/capabilities');
+  let version = '1.1.0';
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ schemaVersion: 1, origin: 'https://thingtime.test', features: { 'api.themes': { version } } }));
+  const check = createThingtimeCapabilityChecker();
+  await assert.rejects(check('api.themes', THEME_CAPABILITY_REQUIREMENTS['api.themes']), /incompatible/);
+  version = '1.2.1';
+  await check('api.themes', THEME_CAPABILITY_REQUIREMENTS['api.themes']);
+});
