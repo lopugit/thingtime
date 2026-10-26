@@ -1,5 +1,8 @@
 # Password generator, entry icons and passkey setup
 
+[PR #1231](https://github.com/lopugit/thingtime/pull/1231) targets `main` under the
+user's explicit repository-specific authorization. It remains open for review.
+
 ## Scope
 
 Branch `codex/password-generator-passkeys` starts at `origin/main`
@@ -35,7 +38,7 @@ The unrelated primary checkout was not modified.
 ## Evidence
 
 - Password suite: 68/68 passing; targeted rendered-control regression also passes.
-- Capability suite: 113/113 passing; stale exact version expectations updated.
+- Capability suite after main integration: 115/115 passing; stale exact version expectations updated.
 - Isolated real source-handler HTTP verifier: 44/44 passing, including ownership,
   revisions, recovery, encryption and logout. This is separate from built routing.
 - Canonical Nitro node-server build passes with scrubbed environment. Built HTTP
