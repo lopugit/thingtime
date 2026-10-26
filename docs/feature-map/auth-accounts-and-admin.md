@@ -93,6 +93,14 @@ stale work/feedback. See the Copy regression in `TESTING.md` and the synthetic
 browser harness in `scripts/check-password-manager-browser.cjs`.
 Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
 `iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
+`npm --prefix remix run test:passwords` and the native `build:passwords`
+preflight run `remix/scripts/verify-native-password-passkey.mjs` on macOS. It
+exports one public Swift ceremony fixture and runs the independent WebAuthn
+verifier under a network-denying sandbox, with private temporary cleanup.
+Unsupported platforms explicitly skip; macOS failures fail the gate. Run
+`node --test remix/scripts/native-password-passkey.test.mjs` for entrypoint,
+failure/cleanup and real challenge/origin/signature/UV tampering regressions.
+Protocol interoperability does not establish signed OS or real-account acceptance.
 Native provider implementation and signed release are tracked separately in
 [PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
 private catalog and negotiates an optional supported native bridge.

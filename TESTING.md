@@ -10153,6 +10153,18 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- `npm --prefix remix run test:passwords` and the native `build:passwords`
+  preflight automatically verify native ES256 registration/assertion against the
+  independent WebAuthn server on macOS. The gate selects only the public fixture
+  test, requires UV and backed-up multi-device credentials, rejects a wrong RP,
+  and removes its private temporary fixture/build directory. Both subprocesses
+  run under a network-denying sandbox; SwiftPM's nested sandbox alone is disabled.
+  Missing Xcode, failed/skipped fixture output or verifier failure must fail the
+  macOS gate. Other operating systems report an explicit unsupported-platform
+  skip. Run `node --test remix/scripts/native-password-passkey.test.mjs` for
+  failure/cleanup and real verifier tampering regressions. This does not verify
+  AuthenticationServices, user presence, Keychain, live persistence or service login.
+
 - [ ] In both signed native hosts, confirm Thingtime is selectable under **Set Up
   Codes In**, then open a disposable TOTP QR/link cold and warm. Normal sign-in
   returns to Passwords, create/attach requires a choice, and only Save persists.

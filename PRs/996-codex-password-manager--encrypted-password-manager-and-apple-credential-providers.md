@@ -3,6 +3,30 @@
 PR: https://github.com/lopugit/thingtime/pull/996
 Branch: `codex/password-manager` (base `develop`)
 
+## Automatic native interoperability gate — 26 October 2026
+
+The public Swift WebAuthn fixture previously required a manually supplied output
+path and was skipped by ordinary package tests. `test:passwords` and the native
+provider build now run a macOS gate before signing: one selected Swift test
+exports only public ceremony bytes, then the existing independent WebAuthn server
+verifies registration, assertion, UV, synchronized backup flags and wrong-RP
+rejection. No session, Keychain, device-presence prompt or live endpoint is used.
+The gate denies network access to both processes and removes its private fixture
+and build scratch on success or failure. SwiftPM's nested sandbox is disabled
+inside that outer sandbox because macOS rejects nested `sandbox_apply`.
+Unsupported operating systems explicitly skip; supported macOS failures do not.
+
+Regression coverage exercises cleanup and failure propagation, missing fixture
+output, and real-verifier rejection of altered challenge, origin, signature and
+UV flags. This protocol check does not replace signed OS, vault persistence or
+Google/GitHub acceptance. The JavaScript workflow remains portable to Linux;
+the automatic native step runs only on macOS with Xcode.
+
+Validation: all eight focused runner/verifier regressions passed, the new real
+macOS gate passed from fresh scratch, targeted ESLint and JavaScript syntax
+checks passed, and `git diff --check` was clean. The broader password suite and
+app packaging were not rerun for this gate-only change.
+
 ## Release split
 
 The web vault was merged into main at `998bdb83c` by [PR #997](https://github.com/lopugit/thingtime/pull/997). This branch incorporates that web base and retains the Apple providers, native packaging and signing setup. It is open for review. The 26 October local continuation ran Xcode checks and updated the signed macOS companion; the earlier cloud-only checkpoints remain historical evidence. Actual OS fill/passkey ceremonies remain acceptance gates. The evidence below includes the shared web prerequisite.

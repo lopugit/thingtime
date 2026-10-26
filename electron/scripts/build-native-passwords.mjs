@@ -1,3 +1,4 @@
+import { verifyNativePasswordPasskey } from '../../remix/scripts/verify-native-password-passkey.mjs';
 import { verifyPasswordProvider } from './verify-password-provider.mjs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -13,6 +14,7 @@ function run(command, args, capture = false) {
   return result.stdout || '';
 }
 if (process.platform !== 'darwin') throw new Error('Apple credential providers require macOS and Xcode.');
+await verifyNativePasswordPasskey();
 let identity = process.env.THINGTIME_PASSWORD_SIGNING_IDENTITY || process.env.THINGTIME_NODE_SIGNING_IDENTITY || '';
 let team = process.env.APPLE_TEAM_ID || process.env.DEVELOPMENT_TEAM || '';
 if (!unsigned) {

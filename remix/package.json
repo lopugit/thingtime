@@ -166,7 +166,7 @@
     "build:draft": "vite build --config vite.draft.config.ts",
     "test:draft": "node --import tsx --test app/draftPreview/*.test.ts",
     "test:passwords-browser": "TT_QA_SUITE=password-manager node scripts/run-lopu-credentials-browser.mjs",
-    "test:passwords": "node --experimental-test-module-mocks --import tsx --test app/passwords/*.test.ts app/components/Passwords/*.test.ts app/routes/api/v1/passwords/*.test.ts app/api/utils/connections/vaultEnvelope.test.ts app/api/utils/connections/vaultKeys.test.mts scripts/worktree-ports.test.cjs",
+    "test:passwords": "node --experimental-test-module-mocks --import tsx --test app/passwords/*.test.ts app/components/Passwords/*.test.ts app/routes/api/v1/passwords/*.test.ts app/api/utils/connections/vaultEnvelope.test.ts app/api/utils/connections/vaultKeys.test.mts scripts/worktree-ports.test.cjs scripts/native-password-passkey.test.mjs && node scripts/verify-native-password-passkey.mjs",
     "test:mail": "node --import tsx --test app/mail/*.test.ts app/api/utils/mail/*.test.ts app/routes/api/v1/mail/*.test.ts",
     "mail:connector": "node --import tsx scripts/mail-connector.mts",
     "test:mail:transport": "node --import tsx app/api/utils/mail/transport.integration.mts",

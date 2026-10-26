@@ -104,6 +104,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Make native passkey interoperability a network-denied macOS gate
+  for password tests and provider builds, with private temporary cleanup and real
+  verifier tamper regressions. OS/provider ceremonies remain separate.
+  [PR #996 details](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+  **Codex (AI)**
+
 - 2026-10-26: Remove QR upload byte/pixel rejection caps; scan large images in
   cancellable overlapping sections and stop screen sharing before decoding.
   See [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
