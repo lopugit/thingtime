@@ -1,5 +1,5 @@
 import React from 'react';
-import { ComponentLocalControl, NativeControlsEnabled } from './NativeComponentControls';
+import { ComponentLocalControl, NativeControlsEnabled, ComponentDisplayOnly } from './NativeComponentControls';
 import { componentChangeInputs } from './componentChangeInputs';
 
 /** Convert a field change to the same delegated Action path as a button. */
@@ -12,7 +12,8 @@ export function ComponentChange({
 	children,
 	...props
 }: Record<string, unknown> & { children: React.ReactNode }) {
-	const enabled = React.useContext(NativeControlsEnabled);
+	const displayOnly = React.useContext(ComponentDisplayOnly);
+	const enabled = React.useContext(NativeControlsEnabled) && !displayOnly;
 	const local = React.useContext(ComponentLocalControl);
 	const button = React.useRef<HTMLButtonElement>(null);
 	const timer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -58,7 +59,7 @@ export function ComponentChange({
 				hidden
 				aria-hidden="true"
 				tabIndex={-1}
-				data-tt-action={typeof props['data-tt-action'] === 'string' ? props['data-tt-action'] : undefined}
+				data-tt-action={!displayOnly && typeof props['data-tt-action'] === 'string' ? props['data-tt-action'] : undefined}
 			/>
 		</span>
 	);

@@ -1151,7 +1151,7 @@ export function useApi() {
           await requireThingtimeCapability('api.attachment-content', '1.9.0');
           return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
         },
-				[]
+				[getJson]
 			),
       list: useCallback(
         async (args, options?: ThingRequestOptions) => {
