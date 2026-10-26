@@ -11,6 +11,12 @@ on:
         description: Exact immutable pull request head SHA
         required: true
         type: string
+      mode:
+        description: Run inert isolation preflight before explicitly selecting native compilation
+        required: false
+        default: preflight
+        type: choice
+        options: [preflight, native]
 
 permissions:
   contents: read
@@ -23,7 +29,8 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main' &&
       github.actor == github.repository_owner
-    uses: lopugit/thingtime/.github/workflows/native-compile.yml@109f82a0e51e6dc66da017445bff8d85e1e63527
+    uses: lopugit/thingtime/.github/workflows/native-compile.yml@c874f8fa775eefdd3f0a4fae167bf841b90d620c
     with:
       source_pr: ${{ inputs.source_pr }}
       source_sha: ${{ inputs.source_sha }}
+      mode: ${{ inputs.mode }}
