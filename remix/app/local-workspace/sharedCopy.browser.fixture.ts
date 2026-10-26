@@ -1,6 +1,6 @@
 // Opt-in isolated acceptance only. The application's normal UI performs the
-// shared copy; this separately bundled fixture reads its resulting device data
-// and invokes the actual saved Action interpreter with synthetic local data.
+// shared copy and saved Action run; this separately bundled fixture only seeds
+// synthetic local state and reads resulting device data. It never runs an Action.
 import { LocalThings } from './things';
 import { WorkspaceDatabase } from './storage';
 import { LocalActions } from './actions';
@@ -25,7 +25,7 @@ export async function proof(id: string) {
 	return { page, roots: bundle.manifest.roots, things: bundle.manifest.things, files: bundle.manifest.files, media, json: serializeTransfer(bundle.manifest) };
 }
 
-export async function runProfileAction() {
+export async function seedProfileAction() {
 	const endpoint = (route: string, minimumVersion: string, body: unknown) => ({ op: 'http.request', path: `/api/v1/${route}`, method: 'POST', feature: `api.${route.replace('/', '-')}`, minimumVersion, body });
 	const steps = [
 		endpoint('themes', '1.1.1', { name: 'Browser Action theme', theme: {} }),
@@ -38,9 +38,7 @@ export async function runProfileAction() {
 	];
 	const action = await things.create({ thingtime: ['action'], crystal: { name: 'Saved profile browser acceptance', runtime: 'browser', version: 1,
 		capabilities: [{ capability: 'http.request', endpoints: [...new Set(steps.filter(step => 'path' in step).map(step => `POST ${step.path}`))] }], steps } });
-	const actions = new LocalActions(db, scope, lease), supported = await actions.canRunLocally(action.id), outcome = await actions.run({ action: action.id });
-	const profiles = await profileProof(action.id);
-	return { actionId: action.id, supported, outcome, ...profiles };
+	return { actionId: action.id };
 }
 
 export async function profileProof(actionId: string) {

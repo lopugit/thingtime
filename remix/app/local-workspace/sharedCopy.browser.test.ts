@@ -12,7 +12,7 @@ const largeFile = process.env.TT_SHARED_COPY_LARGE_FILE === '1';
 const adminFile = process.env.TT_SHARED_COPY_ADMIN_FIXTURE;
 const safeCode = (body: any) => typeof body?.code === 'string' && /^[A-Z][A-Z0-9_]{0,79}$/.test(body.code) ? body.code : 'NO_SAFE_ERROR_CODE';
 
-test('native anonymous shared-copy button retains editable closure offline; injected saved profile Action uses device adapters', {
+test('native anonymous shared-copy button retains editable closure offline; normal saved profile Action Run button uses device adapters', {
 	skip: !origin || !session || !artifacts || !fixture || !puppeteerPath || !executablePath, timeout: 240_000
 }, async testContext => {
 	assert.equal(new URL(origin!).hostname, '127.0.0.1');
@@ -28,6 +28,8 @@ test('native anonymous shared-copy button retains editable closure offline; inje
 	const ownerContext = await browser.createBrowserContext(), guestContext = await browser.createBrowserContext();
 	const ownerPage = await ownerContext.newPage(), page = await guestContext.newPage(); page.setDefaultTimeout(20_000);
 	const setupSteps: { method: string; path: string; status: number; code: string; phase?: string; validationError?: string }[] = [];
+	const actionBounds: unknown[] = [];
+	let phase = 'shared-copy-setup';
 	const errors: string[] = [], requests: { method: string; path: string; mode?: string }[] = [], bounds: unknown[] = [];
 	page.on('pageerror', (error: Error) => errors.push(error.message));
 	page.on('request', (request: any) => { const url = new URL(request.url()); if (url.pathname.startsWith('/api/')) requests.push({ method: request.method(), path: url.pathname, ...(url.searchParams.has('cache') ? {mode: url.searchParams.get('cache')!} : {}) }); });
@@ -196,19 +198,82 @@ test('native anonymous shared-copy button retains editable closure offline; inje
 			assert.equal(copied.media.length, 1); assert.notEqual(copied.media[0].id, source.file.id);
 			assert.equal(copied.media[0].bytes, source.file.size); assert.equal(copied.media[0].sha256, source.file.sha256);
 		}
+		phase = 'saved-action-seed';
+		const builderUrl = page.url();
+		const { actionId } = await page.evaluate(() => (window as any).sharedCopyFixture.seedProfileAction());
+		// Load the normal route and its code before taking the browser offline.
+		// The fixture only seeds synthetic state; the real UI owns execution.
+		phase = 'saved-action-route';
+		await page.goto(origin + '/actions/' + encodeURIComponent(actionId), { waitUntil: 'domcontentloaded' });
+		await page.waitForFunction(() => document.querySelector('h1')?.textContent?.includes('Saved profile browser acceptance') &&
+			[...document.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Run action' && !button.disabled));
+		await shellReady(); await page.addScriptTag({ path: fixture });
+		const beforeRun = await page.evaluate(id => (window as any).sharedCopyFixture.profileProof(id), actionId);
+		assert.equal(beforeRun.runs.length, 0, 'Seeding must not execute the Action');
 		const beforeOffline = requests.length; await page.setOfflineMode(true);
-		const profiles = await page.evaluate(() => (window as any).sharedCopyFixture.runProfileAction());
-		assert.equal(profiles.supported, true); assert.equal(profiles.outcome.status, 'ok', profiles.outcome.error);
-		assert.equal(profiles.outcome.historyError, undefined); assert.equal(profiles.runs.length, 1);
-		assert.ok(profiles.historyCounts.every((count: number) => count >= 2));
-		assert.equal(requests.length, beforeOffline, 'injected saved Action executes actual device adapters without HTTP');
+		phase = 'saved-action-offline-run';
+		await click('Run action');
+		await page.waitForFunction(() => [...document.querySelectorAll('pre')].some(element => {
+			try { const result = JSON.parse(element.textContent || ''); return typeof result.themeId === 'string' && typeof result.algorithmId === 'string'; }
+			catch { return false; }
+		}));
+		const renderedResult = await page.evaluate(() => [...document.querySelectorAll('pre')].map(element => {
+			try { return JSON.parse(element.textContent || ''); } catch { return null; }
+		}).find(result => typeof result?.themeId === 'string' && typeof result?.algorithmId === 'string'));
+		await page.waitForFunction(() => /recent execution details/i.test(document.body.textContent || '') && document.body.innerText.includes('This device'));
+		const profiles = await page.evaluate(id => (window as any).sharedCopyFixture.profileProof(id), actionId);
+		assert.equal(profiles.runs.length, 1); assert.equal(profiles.runs[0].status, 'ok', profiles.runs[0].error);
+		assert.equal(profiles.runs[0].localOnly, true); assert.deepEqual(profiles.runs[0].result, renderedResult);
+		assert.equal(profiles.themes.activeThemeId, renderedResult.themeId);
+		assert.equal(profiles.algorithms.activeAlgorithmId, renderedResult.algorithmId);
+		assert.equal(profiles.historyCounts.length, 2); assert.ok(profiles.historyCounts.every((count: number) => count >= 2));
+		const offlineRunApiRequests = requests.length - beforeOffline;
+		assert.equal(offlineRunApiRequests, 0, 'Normal Run action button executes device adapters without API requests');
+		await page.screenshot({ path: resolve(artifacts!, 'profile-action-offline-run.png') });
+		phase = 'saved-action-responsive-layout';
+		for (const width of [1440, 390, 320]) {
+			await page.setViewport({ width, height: width === 1440 ? 1000 : 844 });
+			await page.evaluate(() => { for (const root of [document.scrollingElement!, ...document.querySelectorAll('#lopuPageScroll')]) root.scrollTop = 0; });
+			for (const position of ['top', 'bottom']) {
+				if (position === 'bottom') await page.evaluate(async () => {
+					for (const root of [document.scrollingElement!, ...document.querySelectorAll('#lopuPageScroll')]) {
+						const height = root.scrollHeight, step = Math.max(1, root.clientHeight / 2);
+						for (let top = 0; top <= height; top += step) { root.scrollTop = top; await new Promise(requestAnimationFrame); }
+						root.scrollTop = height;
+					}
+				});
+				const measured = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+					overflow: document.documentElement.scrollWidth > innerWidth, overflowing: [...document.querySelectorAll('main *, h1, pre, button')].flatMap(element => {
+						const rect = element.getBoundingClientRect();
+						return rect.width && (rect.left < -1 || rect.right > innerWidth + 1) ? [{ tag: element.tagName, left: rect.left, right: rect.right, width: rect.width }] : [];
+					}) }));
+				actionBounds.push({ ...measured, position });
+				await writeFile(resolve(artifacts!, 'profile-action-bounds.json'), JSON.stringify(actionBounds, null, 2));
+				await page.screenshot({ path: resolve(artifacts!, `profile-action-${width}-${position}.png`) });
+				assert.equal(measured.overflow, false, `Action ${width}px ${position}: ${JSON.stringify(measured)}`);
+			}
+		}
+		await page.setViewport({ width: 1440, height: 1000 });
+		phase = 'saved-action-offline-reload';
 		await page.reload({ waitUntil: 'domcontentloaded' });
+		await page.waitForFunction(() => document.querySelector('h1')?.textContent?.includes('Saved profile browser acceptance') &&
+			/recent execution details/i.test(document.body.textContent || '') && document.body.innerText.includes('This device'));
+		await page.screenshot({ path: resolve(artifacts!, 'profile-action-offline-reloaded.png') });
+		phase = 'shared-copy-offline-reload';
+		await page.goto(builderUrl, { waitUntil: 'domcontentloaded' });
 		await page.waitForFunction(() => document.body.innerText.includes('Shared copy edited locally'));
 		await click('View'); await page.waitForFunction(() => document.body.innerText.includes('Shared component survives offline'));
 		await page.addScriptTag({ path: fixture });
-		const reloaded = await page.evaluate(({ copyId, actionId }) => Promise.all([(window as any).sharedCopyFixture.proof(copyId), (window as any).sharedCopyFixture.profileProof(actionId)]), { copyId, actionId: profiles.actionId });
+		const reloaded = await page.evaluate(({ copyId, actionId }) => Promise.all([(window as any).sharedCopyFixture.proof(copyId), (window as any).sharedCopyFixture.profileProof(actionId)]), { copyId, actionId });
 		assert.equal(reloaded[0].json, copied.json); assert.equal(reloaded[1].runs.length, 1);
 		assert.deepEqual(reloaded[0].media, copied.media);
+		assert.deepEqual(reloaded[1].runs, profiles.runs);
+		assert.deepEqual(reloaded[1].historyCounts, profiles.historyCounts);
+		// Cold shell boots emit read-only root/health/account-hint requests even
+		// offline; request events do not prove a backend request succeeded. Keep
+		// the Action's zero-request proof separate and forbid offline mutations.
+		const offlineReloadRequests = requests.slice(beforeOffline);
+		assert.ok(offlineReloadRequests.every(request => request.method === 'GET'), 'Offline reload must not enqueue or send mutations');
 		assert.equal(reloaded[1].themes.themes.find((theme: any) => theme.id === reloaded[1].themes.activeThemeId)?.name, 'Browser Action theme edited');
 		assert.equal(reloaded[1].algorithms.algorithms.find((algorithm: any) => algorithm.id === reloaded[1].algorithms.activeAlgorithmId)?.name, 'Browser Action algorithm edited');
 		await page.screenshot({ path: resolve(artifacts!, 'shared-copy-offline-reloaded.png') });
@@ -220,15 +285,15 @@ test('native anonymous shared-copy button retains editable closure offline; inje
 		await writeFile(resolve(artifacts!, 'shared-copy-offline.json'), copied.json);
 		await writeFile(resolve(artifacts!, 'profile-action-offline.json'), profiles.json);
 		await writeFile(resolve(artifacts!, 'verification.json'), JSON.stringify({ normalSharedCopyButton: true, individuallyEditableCopiedHeading: true,
-			coldOfflineDependencyReload: true, sourceUnchanged: true, savedProfileAction: 'actual LocalActions.run invoked through isolated test fixture, not the normal run button',
+			coldOfflineDependencyReload: true, sourceUnchanged: true, savedProfileAction: { setup: 'isolated synthetic seed only', route: '/actions/:key', button: 'Run action', normalUiRun: true, offlineRunApiRequests, offlineReloadRequestEvents: offlineReloadRequests, offlineMutationRequests: 0, coldOfflineExecutionDetailsReload: true },
 			profileHistoryRetained: true, media: source.file ? {largeSharedOriginal: true, bytes: source.file.size, sha256: source.file.sha256, independentOfflineBytes: true}
-				: 'Large shared-original acceptance not enabled; set TT_SHARED_COPY_LARGE_FILE=1', bounds, writes, errors, setupSteps, sourceOwner: { isAdmin: false, publicUploadApproval: largeFile ? 'canonical admin API for this disposable owner only' : 'not needed' } }, null, 2));
+				: 'Large shared-original acceptance not enabled; set TT_SHARED_COPY_LARGE_FILE=1', bounds, actionBounds, writes, errors, setupSteps, sourceOwner: { isAdmin: false, publicUploadApproval: largeFile ? 'canonical admin API for this disposable owner only' : 'not needed' } }, null, 2));
 	} catch (error) {
 		const sourceSteps = await ownerPage.evaluate(() => (window as any).__sharedCopySourceSetupSteps ?? []).catch(() => []);
 		if (sourceSteps.length && !setupSteps.some(step => step.phase)) setupSteps.push(...sourceSteps);
 		await page.screenshot({ path: resolve(artifacts!, 'failure.png') }).catch(() => {});
 		await writeFile(resolve(artifacts!, 'failure.txt'), await page.$eval('body', (element: HTMLElement) => element.innerText).catch(() => 'Unavailable'));
-		await writeFile(resolve(artifacts!, 'failure.json'), JSON.stringify({ error: String(error), stack: (error as Error).stack, setupSteps, errors, requests }, null, 2));
+		await writeFile(resolve(artifacts!, 'failure.json'), JSON.stringify({ error: String(error), stack: (error as Error).stack, phase, bounds, actionBounds, setupSteps, errors, requests }, null, 2));
 		throw error;
 	} finally { await guestContext.close(); await ownerContext.close(); await browser.close(); }
 });

@@ -15484,4 +15484,6 @@ Local results do not establish current-head CI or deployed acceptance.
   and save to resume account sync. Reconcile an earlier lost reply before refusing
   newer oversized content; retain uncertain legacy attempts without replay loops.
 
+- Repeat instruction saves quickly at 1440/390/320px: one editor replaces its own active success notification, unrelated notifications remain separate, and all account-size guidance lines remain unobscured without dismissing feedback. Paste 12,000 hard lines through the actual clipboard, verify native undo/redo and subsequent typing, then save and cold-reload exact content. CDP `fill` alone is not evidence of native paste performance.
+
 - Unified MCP discovery must advertise the read-only capabilities and rendering tools accurately; verify them from a read-only host without changing its approval policy. Import/delete tools retain their consent requirements.

@@ -24,6 +24,13 @@ components; reuse them instead of adding parallel versions.
 | Design system docs page | `/docs/design-system` (`app/routes/docs/*`) |
 | Local cache tiers (first-paint) | `app/hooks/localCache.ts` (`tt-<domain>` keys) |
 
+
+Repeated feedback from one editor can pass a stable `id` to `useLopu`;
+`lopuToastDelivery.ts` replaces only an active notification with the same account
+and caller key. Unkeyed notifications and every-event history stay separate.
+`lopuToastDelivery.test.ts` runs in `test:client-errors`; the native instruction
+Settings test checks repeated saves and unobscured 1440/390/320px guidance.
+
 ## Adding a menu action (any Thing surface)
 
 1. Model: add a `ThingContextAction` (`id`, `command`, `label`, `icon`

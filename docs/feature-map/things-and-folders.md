@@ -7,7 +7,7 @@ budgets, cancellation and per-item results. `actions.ts` binds account moves and
 deletes to `AccountThingSync` so content and queue intent commit together. Copies
 use canonical export/import, require a complete device closure for account
 Actions, and refuse protected child content before writes.
-Regression: `actionRequests.test.ts` and `accountActions.test.ts`. Normal transfer
+Regression: `actionRequests.test.ts` and `accountActions.test.ts`. `sharedCopy.browser.test.ts` seeds a synthetic saved browser Action, runs it with the normal Action page button offline, and reads theme/algorithm changes and history after cold reload; its fixture never invokes the interpreter. Normal transfer
 selection uses `thingTransfer/readFile.ts` without a separate selected-file cap;
 `transferBatch.browser.test.ts` exercises 20 JSON files through the offline native
 dialog and cold reload (`TT_DRAFT_WEB_BASE`, `TT_DRAFT_ARTIFACT_DIR`, shared browser

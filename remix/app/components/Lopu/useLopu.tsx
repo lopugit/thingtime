@@ -9,6 +9,7 @@ import { normalizeLopuMessage } from './lopuMessage';
 import { lopuToastPlacement } from './lopuPosition';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { saveLopuHistory } from './notificationHistory.client';
+import { deliverLopuToast } from './lopuToastDelivery';
 
 // 🦄 Lopu — the Thingtime AI. A minimal, modern toast: a rainbow gradient
 // "unicorn vomit" border around a clean white card, shown as a little message
@@ -75,6 +76,7 @@ const LOPU_LINK_STYLE = {
 const isInternalLopuHref = (href: string) => href.startsWith('/') && !href.startsWith('//');
 
 type LopuArgs = {
+  id?: string;
   title?: string;
   description?: string;
   status?: LopuStatus;
@@ -208,10 +210,10 @@ export const useLopu = () => {
   const user = useWorkspaceUser();
 
   return useCallback(
-		({ title, description, status, duration = 13000, link, announceDescription, descriptionLabel }: LopuArgs) => {
+		({ id, title, description, status, duration = 13000, link, announceDescription, descriptionLabel }: LopuArgs) => {
       const message = normalizeLopuMessage({ title, description, status });
       void saveLopuHistory(user?.id, { ...message, status, link });
-      return toast({
+      return deliverLopuToast(toast, {
         duration,
         ...lopuToastPlacement(),
         render: ({ onClose }) => (
@@ -226,7 +228,7 @@ export const useLopu = () => {
             onClose={onClose}
           />
         )
-      });
+      }, id, user?.id);
     },
     [toast, user?.id]
   );

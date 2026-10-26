@@ -20,6 +20,7 @@ const PromptEditor = ({ admin, identity }: { admin: boolean; identity: string })
   const service = React.useMemo(() => !admin && identity ? lopuInstructionWorkspace() : null, [admin, identity]);
   const api = useApi();
   const lopu = useLopu();
+  const saveNotificationId = React.useId();
   const loadSettings = api.v1.settings.lopuPrompt;
   const [snapshot, setSnapshot] = React.useState<Snapshot>(() => ({ base: readLocalCache<LopuBasePromptSettings>(baseCacheKey) ?? fallback.base, personal: fallback.personal }));
   const [basePrompt, setBasePrompt] = React.useState(snapshot.base.basePrompt);
@@ -73,7 +74,7 @@ const PromptEditor = ({ admin, identity }: { admin: boolean; identity: string })
       }
       dirty.current = false;
       if (service) announceLopuInstructions(service.scope, true);
-      lopu({ title: admin ? 'Lopu base prompt saved' : 'Lopu instructions saved on this device', description: admin ? 'Applies to new AI replies and newly started direct voice sessions.' : service?.scope.kind === 'account' ? 'Account sync runs separately. Account replies use these instructions after sync completes.' : 'Kept in this local workspace. Nothing was sent to an account.', status: 'success' });
+      lopu({ id: saveNotificationId, title: admin ? 'Lopu base prompt saved' : 'Lopu instructions saved on this device', description: admin ? 'Applies to new AI replies and newly started direct voice sessions.' : service?.scope.kind === 'account' ? 'Account sync runs separately. Account replies use these instructions after sync completes.' : 'Kept in this local workspace. Nothing was sent to an account.', status: 'success' });
     } catch (cause: any) {
       if (generation === request.current) setError(cause?.error || cause?.message || 'Could not save Lopu instructions.');
     } finally { if (generation === request.current) setSaving(false); }

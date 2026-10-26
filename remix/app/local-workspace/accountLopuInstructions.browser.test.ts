@@ -24,7 +24,10 @@ test('native account instructions save offline and reconcile lost replies and re
  const { chromium } = await import(playwrightPath!);
  const browser = await chromium.launch({ executablePath: process.env.TT_SHARED_CHROME_PATH, headless: true, chromiumSandbox: true });
  t.after(() => browser.close());
- const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+ // This disposable context uses only synthetic clipboard text. The native
+ // paste path retains browser undo; CDP insertText (locator.fill) has a
+ // separate Chromium many-hard-line insertion bottleneck even on a blank page.
+ const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, permissions: ['clipboard-read', 'clipboard-write'] });
  const guest = await browser.newContext(), page = await context.newPage();
  const network = await context.newCDPSession(page);
  const errors: string[] = [], offlineWrites: string[] = [], checks: string[] = [], writes: any[] = [], viewports: unknown[] = [];
@@ -66,7 +69,12 @@ test('native account instructions save offline and reconcile lost replies and re
  const editor = page.locator('#lopu-instructions');
  const save = async () => {
   await editor.getByRole('button', { name: 'Save instructions', exact: true }).click();
-  await poll(() => editor.getByRole('button', { name: 'Save instructions', exact: true }).isDisabled(), value => value === true);
+  // The Saving… state is also disabled. Wait for the completed local receipt,
+  // rather than treating the start of an asynchronous save as completion.
+  await poll(async () => {
+   const button = editor.getByRole('button', { name: 'Save instructions', exact: true });
+   return await button.isVisible() && await button.isDisabled();
+  }, value => value === true);
  };
  const inSync = () => editor.getByRole('status').filter({ hasText: 'Device and account instructions are in sync.' }).waitFor({ timeout: 90_000 });
  try {
@@ -170,15 +178,16 @@ test('native account instructions save offline and reconcile lost replies and re
   // its prior value while the device retains this larger, unsynchronized edit.
   const beforeCapacity = (await api('GET')).body.personal;
   phase = 'oversized Settings input readiness';
-  // Exercise the byte boundary with ordinary paragraph text. The earlier
-  // 12,000-line shaping/unresponsive-renderer case is retained separately as
-  // an unverified performance limit, not acceptance of large multiline input.
-  const oversized = 'Native capacity fixture — 日本語 🌟 "quoted" \\ exact wording.\n' +
+  const paragraph = 'Native capacity fixture — 日本語 🌟 "quoted" \\ exact wording.\n' +
    'Keep this saved instruction editable, private, and available offline. '.repeat(1700) + 'End of the exact device preference.';
+  const hardLinePayload = ['Native capacity fixture', ...Array(12_000).fill('🌟漢"' + String.fromCharCode(92)), 'End of exact preference.'].join('\n');
+  const suffix = ' Edited after paste.';
+  const oversized = hardLinePayload + suffix;
   const oversizedUtf8Bytes = Buffer.byteLength(oversized, 'utf8');
-  assert.ok(oversizedUtf8Bytes > 96 * 1024); assert.ok(oversized.split('\n').length <= 4);
+  assert.ok(oversizedUtf8Bytes > 96 * 1024); assert.equal(oversized.split('\n').length, 12_002);
   await page.setViewportSize({ width: 1440, height: 1000 });
   const capacityInput = editor.getByLabel('Instruction 1', { exact: true });
+  const capacityEquals = (text: string) => capacityInput.evaluate((element: HTMLTextAreaElement, expected: string) => element.value === expected, text);
   await capacityInput.waitFor({ state: 'visible', timeout: 30_000 });
   await poll(() => capacityInput.isEditable(), value => value === true);
   await capacityInput.scrollIntoViewIfNeeded(); await capacityInput.click();
@@ -190,15 +199,35 @@ test('native account instructions save offline and reconcile lost replies and re
   assert.equal(inputReadiness.disabled, false); assert.equal(inputReadiness.readOnly, false); assert.equal(inputReadiness.focused, true);
   await writeFile(resolve(artifacts!, 'capacity-input-readiness.json'), JSON.stringify({ ...inputReadiness, oversizedUtf8Bytes, hardLines: oversized.split('\n').length }, null, 2));
   await page.screenshot({ path: resolve(artifacts!, 'instructions-capacity-before-input.png'), animations: 'disabled' });
-  phase = 'oversized Settings save';
-  try { await capacityInput.fill(oversized, { timeout: 30_000 }); }
+  phase = 'oversized paragraph Settings save';
+  const guidance = editor.getByRole('status').filter({ hasText: 'Account sync supports requests up to 96 KiB.' });
+  try { await capacityInput.fill(paragraph, { timeout: 30_000 }); }
   catch (error) {
    // Playwright otherwise repeats the complete synthetic payload in its call
    // log. Keep the action failure and readiness evidence bounded and useful.
    throw new Error('Oversized Settings input failed after enabled/editable/focus checks: ' + String(error).split('\n')[0].slice(0, 300));
   }
   await save();
-  const guidance = editor.getByRole('status').filter({ hasText: 'Account sync supports requests up to 96 KiB.' });
+  await guidance.waitFor();
+  assert.equal(await capacityEquals(paragraph), true, 'the long paragraph is saved exactly');
+
+  phase = '12000-hard-line native paste and undo';
+  await page.evaluate(text => navigator.clipboard.writeText(text), hardLinePayload);
+  await capacityInput.click(); await capacityInput.press('Control+A');
+  const pasteStarted = Date.now();
+  await capacityInput.press('Control+V', { timeout: 5000 });
+  assert.equal(await capacityEquals(hardLinePayload), true, 'native paste preserves every hard line');
+  const pasteMs = Date.now() - pasteStarted;
+  assert.ok(pasteMs < 5000, `Native multiline paste took ${pasteMs} ms`);
+  await capacityInput.press('Control+Z'); assert.equal(await capacityEquals(paragraph), true, 'native undo restores the preceding complete instruction');
+  await capacityInput.press('Control+Shift+Z'); assert.equal(await capacityEquals(hardLinePayload), true, 'native redo restores every hard line');
+  await capacityInput.press('Control+End'); await page.keyboard.type(suffix);
+  assert.equal(await capacityEquals(oversized), true, 'normal typing remains editable after the bulk paste');
+  phase = '12000-hard-line local Settings save';
+  const saveStarted = Date.now(); await save(); const localSaveMs = Date.now() - saveStarted;
+  assert.ok(localSaveMs < 5000, `Local multiline save took ${localSaveMs} ms`);
+  assert.equal(await page.locator('.lopuToast').filter({ hasText: 'Lopu instructions saved on this device' }).count(), 1,
+   'consecutive paragraph and multiline saves must update one visible success notification');
   await guidance.waitFor();
   assert.match(await guidance.innerText(), /saved on this device.*Shorten the instructions/);
   assert.equal(await editor.getByLabel('Instruction 1', { exact: true }).evaluate((element: HTMLTextAreaElement, expected: string) => element.value === expected, oversized), true);
@@ -251,6 +280,9 @@ test('native account instructions save offline and reconcile lost replies and re
      headerBottom, hitPoints, unobscured: hitPoints.every(point => point.unobscured),
      viewportHeight: innerHeight, contentWidth: element.scrollWidth, clientWidth: element.clientWidth, height: box.height, lineHeight };
    });
+   // Preserve the observed hit-test geometry even when an overlay regression
+   // fails below; a failure screenshot alone cannot show every sampled point.
+   await writeFile(resolve(artifacts!, `instructions-capacity-guidance-${width}-bounds.json`), JSON.stringify(bounds, null, 2));
    assert.ok(bounds.left >= 0 && bounds.right <= width && bounds.top >= 0 && bounds.bottom <= bounds.viewportHeight);
    assert.ok(bounds.top > bounds.headerBottom, 'the first line must start below the fixed header');
    assert.equal(bounds.unobscured, true, 'first, middle and last guidance lines must not be covered by another panel');
@@ -283,7 +315,7 @@ test('native account instructions save offline and reconcile lost replies and re
   const afterCapacity = (await api('GET')).body.personal;
   assert.equal(afterCapacity.instructions[0].text, shortened); assert.equal(afterCapacity.instructions[1].enabled, false);
   assert.ok(instructionRequests.every(request => request.method !== 'POST' || request.bytes <= 96 * 1024));
-  capacityProof = { oversizedUtf8Bytes, accountUnchangedWhileBlocked: true, offlineReloadRetained: true,
+  capacityProof = { oversizedUtf8Bytes, hardLines: oversized.split('\n').length, pasteMs, localSaveMs, nativeUndoRedoExact: true, postPasteTypingExact: true, paragraphSavedExactly: true, accountUnchangedWhileBlocked: true, offlineReloadRetained: true,
    observedRetryWindowMs, repeatInstructionRequests,
    shortenedAccountReadback: true, postByteLengths: instructionRequests.filter(request => request.method === 'POST').map(request => request.bytes) };
   checks.push('blocked revision sends no oversized POST or repeated request across a real 60-second retry window; shortening through Settings resumes normal account sync');
