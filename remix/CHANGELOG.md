@@ -107,7 +107,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   tools, explicit render components, drawer customization and the zero-error
   TypeScript gate. Preserve private transient controls, exact-origin vault binding
   and all six Connections2 gateway requirements. Provider, scanner and installed
-  device acceptance remain separate release gates. **Codex (AI)**
+  device acceptance remain separate release gates. [Integration and verification](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**
 - 2026-10-26: Preserve explicit saved or embedded render Components when typed Posts and comments are created or edited. Honor the outer declaration in nested Post embeds, negotiate the additive write contracts, and cover real typed-Post repair/readback in feed and sidebar acceptance. Existing saved content still needs an explicit renderer assigned. **Codex (AI)**
 
 - 2026-10-26: Add a contextual **➕ Add +** row to both drawer lists and support arbitrary-depth nested menus in the existing lower section. Preserve ancestor navigation, editable saved templates and existing links; expose parent selection and sibling ordering in drawer settings. **Codex (AI)**
