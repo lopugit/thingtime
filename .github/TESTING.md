@@ -349,4 +349,5 @@ pre-queued with no jobs, logs, or cancellable run graph.
   missing accessor/system limits, syscall/count failures and ID mismatches.
   A read-only current-process accessor test is allowed; never perform a local
   privileged identity drop. Verify failure diagnostics reject arbitrary output,
-  command arguments/messages, environment values and unregistered labels.
+  command arguments/messages, environment values and unregistered labels;
+  malformed prefixed JSON and non-string stage/error-type fields are ignored.

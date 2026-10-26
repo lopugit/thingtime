@@ -342,6 +342,7 @@ def preflight_failure(error,label='runner-baseline'):
             try:record=json.loads(line[len(prefix):])
             except (ValueError,TypeError):continue
             if (isinstance(record,dict) and set(record)<={'stage','errorType','errno','exitCode'} and
+                isinstance(record.get('stage'),str) and isinstance(record.get('errorType'),str) and
                 record.get('stage') in stages and record.get('errorType') in
                 {'OSError','PermissionError','RuntimeError','CalledProcessError','TimeoutExpired','AssertionError','OtherError'} and
                 all(type(record[k]) is int for k in set(record)&{'errno','exitCode'})):

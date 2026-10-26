@@ -393,6 +393,15 @@ class NativeCompileBoundaryTests(unittest.TestCase):
         timeout=subprocess.TimeoutExpired(['private command'],25,stderr=b'private bytes')
         self.assertEqual(native.preflight_failure(timeout),{'stage':'runner-baseline','errorType':'TimeoutExpired'})
 
+    def test_malformed_trusted_diagnostic_field_types_are_ignored(self):
+        for stage,error_type in [([], 'RuntimeError'),({}, 'RuntimeError'),('credential-verify',[]),('credential-verify',{}),(None,None),(42,True)]:
+            with self.subTest(stage=stage,error_type=error_type):
+                error=subprocess.CalledProcessError(1,['private'],stderr='native-identity '+json.dumps({'stage':stage,'errorType':error_type}))
+                self.assertEqual(native.preflight_failure(error),{'stage':'runner-baseline','errorType':'CalledProcessError','exitCode':1})
+        for value in [[],None,42,'string']:
+            error=subprocess.CalledProcessError(1,['private'],stderr='native-identity '+json.dumps(value))
+            self.assertNotIn('identity',native.preflight_failure(error))
+
     def command_fixture(self,root):
         (root/'cleanup.lock').touch()
         (root/'state.json').write_text(json.dumps({'watchdog_deadline':10**20,'watchdog_requested':False}))

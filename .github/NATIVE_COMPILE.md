@@ -254,13 +254,13 @@ pre-policy authority probe; canonical numeric-drop verification runs before exec
 
 Primary source revisions reviewed:
 
-- [CPython 3.9.6 getgroups implementation](https://github.com/python/cpython/blob/db3ff76da19004f266b62e98a81bdfd322861436/Modules/posixmodule.c#L6993-L7026)
+- [CPython 3.9.6 getgroups implementation](https://github.com/python/cpython/blob/db3ff76da19004f266b62e98a81bdfd322861436/Modules/posixmodule.c#L7508-L7549)
   and [Python's macOS contract](https://docs.python.org/3.9/library/os.html#os.getgroups).
-- [Apple Libc alias header](https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/unistd.h#L449-L453)
+- [Apple Libc alias header](https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/include/unistd.h#L477-L481)
   and [directory-backed extension](https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/sys/getgroups.c#L22-L54).
-- [XNU kernel credential groups](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_prot.c#L369-L427),
-  [zero-list normalization](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_prot.c#L1284-L1320)
-  and [memberd opt-out](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_prot.c#L1358-L1387).
+- [XNU kernel credential groups](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_prot.c#L388-L446),
+  [zero-list normalization](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_prot.c#L1354-L1390)
+  and [memberd opt-out](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_prot.c#L1434-L1461).
 
 Inert run 40370525585 exited before authority/PF, with restored-state cleanup
 and no candidate extraction/execution. Its baseline child stderr was not retained,
@@ -268,4 +268,5 @@ so this known source defect is not an observed diagnosis of that hosted exit.
 Trusted pre-policy failure evidence now accepts fixed stage/error enums, errno
 and exit codes only. It excludes arbitrary stderr/stdout, messages, arguments
 and environment values; candidate output is never parsed as trusted diagnostics.
+[XNU preserves memberd opt-out across setuid](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_prot.c#L741-L752).
 Hosted baseline, isolation and full native acceptance still require actual runs.
