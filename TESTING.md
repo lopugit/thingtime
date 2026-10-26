@@ -2,6 +2,8 @@
 
 ## Offline native VM harness
 
+- [ ] Run `test_build_media.py` fixtures: exact-commit source export, no mutable checkout/credentials, vendor tar aliases/traversal/hardlinks/special files/private metadata refused, system-only xcodegen loads (including weak/re-export/upward), dormant runpaths preserved, bounded own-tool timeout/reap and hash-bound RAW staging without mount/start. Shell syntax alone is not guest execution. In the separately authorized guest verify signatures, exact toolchain/SDK and license/first-launch prerequisites; missing iOS test artifacts are an unavailable failing gate, not success. No guest credentials, ready receipt or host output acceptance is supplied by staging.
+
 - [ ] Run safe `test_package_viewer.py` fixtures: fixed APPL/plist/task identity, source digest/layout/alias/FIFO rejection, private cache stages, no environment/autostart and no execution. Separately verify signed existing bundle/CUA discovery without a duplicate VM start; packaging success alone is not a visible viewer.
 
 - [ ] Mock viewer installed-final identity admission (including auxiliary growth), original inode/hash pairing, lease exclusion, pending/mismatched checkpoint refusal and resumable stopped/reaped checkpoints. Stale stopped receipts plus hardkill/nonzero/missing exit never permit reuse.

@@ -69,3 +69,21 @@ prove a build. Later admission must bind a verified source-closure comparison.
 There is no release, signing-key export, provider-secret use, production rollout
 or feature merge in this PR. Preview is N/A for host testing tooling. PR remains
 open; native compilation and the OAuth/password feature acceptance remain open.
+
+## Build-media continuation (source/fixtures only)
+
+The host media builder now exports exact committed native source plus caller-hash-bound
+credential-free vendor/toolchain inputs into a new private RAW UDF image without
+mounting or starting it. Archive traversal/aliases/private metadata and real
+non-system xcodegen loads fail; unused vendor runpaths are retained without
+rewriting the executable. The guest-only recipe checks hashes, strict vendor
+signature, exact tools/SDKs and license/first-launch prerequisites before local
+package tests, unsigned Mac compilation and iOS Simulator build-for-testing.
+Missing iOS test artifacts fails rather than becoming a passing skip.
+
+Only inert fixture/syntax checks and read-only local xcodegen metadata inspection
+are authorized in this continuation. The real toolchain archive has not been
+copied, media has not been attached and no guest operation occurred. Original
+installed identities, source manifest and viewer remain unchanged; `run` stays
+closed. Credential/setup, stopped/leased supplement attachment, guest execution
+and untrusted-output transport/acceptance are still open.

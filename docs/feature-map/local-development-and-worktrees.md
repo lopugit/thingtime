@@ -5,7 +5,12 @@
 `apple/OfflineNativeVM` owns the host CLI, exact local manifest, fresh task-owned
 RAW disk/auxiliary/identity preparation, separate progress-cancel installer and bounded lifecycle scaffold. See
 [offline-native-vm.md](../offline-native-vm.md) and the root `TESTING.md` checklist.
-Its SwiftPM tests do not boot a guest. Real installer acceptance and guest setup/toolchain admission are
+`apple/OfflineNativeVM/scripts/build_media.py` exports exact committed native source
+and hash-bound credential-free toolchain bytes into fresh RAW UDF media without
+mounting or starting a guest. Its fixed guest recipe checks vendor/toolchain and
+license prerequisites before unsigned Mac/iOS test-target compilation. Run
+`test_build_media.py` inert fixtures; actual attachment/setup/build/output
+acceptance remains separate. Its SwiftPM tests do not boot a guest. Real installer acceptance and guest setup/toolchain admission are
 an explicit remaining gate; there is no network/shared-directory enable option.
 
 ## Agent browser runtime

@@ -335,3 +335,99 @@ Stop/checkpoint worked; modifier/case combinations were not fully reliable.
 This does not prove completed guest setup, credential delivery, toolchain
 readiness or a native build. Packaging mocks alone
 do not prove app registration/window/CUA discovery.
+
+## Immutable build media (host-only staging)
+
+`apple/OfflineNativeVM/scripts/build_media.py` creates a new private media stage
+for a task; it never changes the installed VM, old `guest.json`, disk pairing or
+checkpoint. It exports only tracked native members from an exact **commit**,
+not a mutable checkout or caller shell. Fixed prefixes are `apple`, `macos/ThingtimePasswords` and `iOS`; shared bridge,
+widget and resource dependencies remain included.
+Symlinks, submodules, credentials/profiles and paths outside that closure fail.
+Only the tracked `iOS/.env.example` placeholder template is permitted; actual `.env`
+and other `.env.*` files are refused and no environment file is loaded.
+The archive records original Git object IDs, SHA256, modes and the source tree.
+
+Supply a separately reviewed, current-user-owned Xcode archive and a resolved
+regular xcodegen executable with independently retained SHA256 values. Do not
+pass the Homebrew symlink. The archive must contain only `Xcode.app`, preserving
+vendor file bytes and relative symlinks within that root. The builder reads
+headers without extraction, resolves the complete symlink graph (including
+forward references), rejects chained escapes/cycles or entries under a link,
+and rejects absolute links, hardlinks, devices,
+FIFOs, privileged modes, receipt/private metadata and xattr/sparse records. It
+never reads a Mac App Store receipt or copies Accounts, Keychains, profiles,
+`.env`, signing assets, developer caches or host license preferences. If an
+archive fails these checks, recreate it from the reviewed public application
+bundle with the exclusions in the toolchain prerequisites; do not weaken the
+checks or copy personal developer state.
+
+The xcodegen Mach-O audit requires arm64 and checks normal, weak, re-export,
+lazy/upward library loads plus the dynamic loader. Every actual dependency must
+be an absolute OS-vendor path under `/usr/lib` or `/System/Library`; Homebrew,
+`@rpath`, `@loader_path` and executable-relative dependencies fail. Unused
+`LC_RPATH` entries alone do not make those paths dependencies when all loads are
+absolute system paths. The original binary remains unchanged. The guest recipe
+starts with an empty environment, so host `DYLD_*`, tokens and account settings
+are not inherited. These static checks are not guest execution acceptance.
+
+The builder streams private hash-bound copies, creates a fresh RAW UDF image
+using `hdiutil makehybrid -udf` (no host mount), checks block alignment and
+rechecks payload hashes after image creation. UDF avoids ISO9660's per-file size
+constraint for large vendor archives. It uses no `attach`, overwrite option,
+network fetch, signing, VM creation/start, credentials or license acceptance.
+Trusted host tool children have a deny-network sandbox, finite deadlines and
+exact process-group cleanup. An interrupted stage is retained for inspection;
+only a complete `media.json` is a successful stage. Host receipts contain
+relative artifact names/digests and fixed observations, never host input paths
+or a guest readiness assertion. Image creation is not guest filesystem readback.
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
+  -s apple/OfflineNativeVM/scripts -p 'test_build_media.py'
+python3 apple/OfflineNativeVM/scripts/build_media.py \
+  --parent "$PRIVATE_MEDIA_PARENT" --task-id "$TASK_ID" \
+  --repository "$REVIEWED_CHECKOUT" --source-commit "$EXACT_CANDIDATE_COMMIT" \
+  --xcode-archive "$REVIEWED_XCODE_ARCHIVE" --xcode-sha256 "$XCODE_ARCHIVE_SHA256" \
+  --xcodegen "$RESOLVED_XCODEGEN_FILE" --xcodegen-sha256 "$XCODEGEN_SHA256" \
+  --xcode-version 26.6 --xcode-build 17F113 --macos-sdk 26.5 \
+  --simulator-sdk 26.5 --xcodegen-version 2.45.4
+```
+
+The result is beneath `PARENT/TASK_UUID/BUILD_UUID/`: `payload/`,
+`build-input.iso` and host-only `media.json`. Toolchain labels are expectations,
+not installation proof. Review the source/archive manifests and image SHA before
+use. A later separately reviewed stopped/leased VM transition must bind the new
+read-only image without replacing the original installed model, machine ID,
+auxiliary or boot pairing. The current three-device viewer configuration does
+**not** silently attach this supplement, rewrite its original manifest or admit
+`run`. No actual media copy or guest use is implied by the fixture suite.
+
+The included fixed `guest-build.sh` is for explicit invocation **inside** the
+authorized networkless guest after its account/setup gate is met and media is
+attached read-only. It is never executed by staging or host tests. It verifies
+all payload hashes, extracts into a new private guest work directory, verifies
+Xcode's strict vendor signature, exact Xcode/build/SDK/xcodegen labels and
+read-only license/first-launch status. It never accepts terms, invokes `sudo`,
+loads credentials, imports host settings, signs, provisions, installs or launches
+product apps. A missing license or first-launch prerequisite stops that phase.
+Do not copy host preference sentinels or bypass a vendor/account refusal.
+
+After those checks it generates the actual Mac/iOS projects, rejects custom
+shell phases/build rules or remote package references, runs the local Passwords
+and FileSync Swift packages, builds the unsigned Mac companion/provider, and
+uses iOS generic Simulator `build-for-testing` to compile app/test targets. All
+resources, Watch/widget dependencies and test sources remain included. Private
+guest outputs, caches, logs and result bundles stay in the new work directory.
+Missing `.xctestrun` or `ThingtimeTests.xctest` artifacts records an unavailable
+platform/test target and fails overall; it cannot be a passing skip. This does
+not run the iOS XCTest bundle or a simulator/device, and default-skipped Swift
+integration tests must still be reported as skips.
+
+Later invocation takes two absolute **guest** paths:
+`/bin/bash /Volumes/TTNativeBuild/guest-build.sh /Volumes/TTNativeBuild /Users/TEST_ACCOUNT/native-build-UNIQUE`.
+The independently supervised guest VM must retain its external deadline/normal
+stop/reap boundary throughout. The recipe writes untrusted guest-local logs and
+`output/guest-result.txt`; no result is mounted, executed or accepted by the
+host. Credential/setup, media-attachment admission, output transport/readback,
+full build execution and native feature acceptance remain separate open gates.

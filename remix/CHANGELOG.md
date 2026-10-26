@@ -102,6 +102,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Add exact-commit native build-media staging with hash-bound vendor/toolchain inputs, archive and relocatability audits, and a fixed guest-only unsigned Mac/iOS compile recipe. No guest setup, license acceptance, VM launch, readiness or output acceptance is implied. [Runbook](../docs/offline-native-vm.md). **Codex (AI)**
+
 - 2026-10-27: Add exclusive task-cache `.app` packaging and inert validation for the reviewed offline VM viewer, with distinct stable task identity and no autostart or host environment/preferences copying. Signed CUA discovery remains a separate check. [Runbook](../docs/offline-native-vm.md); [bounded evidence](../PRs/1249-codex-oauth-offline-native-vm-add-offline-native-vm-harness.md). **Codex (AI)**
 
 - 2026-10-27: Add the source-tested offline VM first-boot viewer: final installed-pair admission, bounded native framebuffer/input and stopped/reaped checkpoint fencing. Real viewer/Setup Assistant and candidate readiness remain gated. [Runbook](../docs/offline-native-vm.md); [bounded evidence](../PRs/1249-codex-oauth-offline-native-vm-add-offline-native-vm-harness.md). **Codex (AI)**
