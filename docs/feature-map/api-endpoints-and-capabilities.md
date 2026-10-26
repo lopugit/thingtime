@@ -1,5 +1,18 @@
 # API endpoints and capabilities
 
+Explicit Thing presentation is shared crystal metadata: `registry.ts`
+`validateThingtimeCrystal` retains `renderComponent` after each typed content
+allowlist and validates embedded definitions through the canonical Component
+sanitizer. `api.things` 1.42.0 and `api.things-update` 1.13.0 advertise it through
+both generated manifests. The first-party create/PATCH/PUT client negotiates
+1.42.0 when it sends a declaration. Omitted PATCH metadata survives content
+edits; `null` remains an explicit unavailable renderer; replacement omission
+removes the declaration. Malformed declarations fail validation. Saved pointers
+never grant Component/dependency access. `renderComponentDeclaration.ts` shares
+the declaration grammar and root-over-nested post precedence with rendering.
+Run `test:schemas`, `test:feed`, `test:api-capabilities` and the isolated
+`subspace-messages-acceptance.mjs` typed-post/comment persistence checks.
+
 Environment API gateway ingress is negotiated through `api.environment-gateway`
 1.1.0 and `/.well-known/thingtime-capabilities.json`. Server deployments use
 the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by

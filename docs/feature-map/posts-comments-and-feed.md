@@ -1,5 +1,11 @@
 # Posts, comments and feed
 
+Typed Posts and comments retain explicit `crystal.renderComponent` metadata.
+The root declaration takes precedence over legacy nested `crystal.thing` in
+`PostInteractiveThing`; the linked embed still reads its Component through its
+own ACL. See [the presentation contract](api-endpoints-and-capabilities.md)
+for validation, versions and regression checks.
+
 Posts are `post` Things; comments share the post schema
 (`thingtime: ['post', 'comment']`, `targetId` = parent) so every comment is
 reactable and has a `/post/:id` permalink. Reactions, saves, votes and views are

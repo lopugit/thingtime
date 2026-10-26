@@ -53,7 +53,7 @@ test('interactive webpage attachments cannot become or replace an editable build
 
 test('generic Things delegate to ThingView while Component and Webpage Things keep their canonical renderers', () => {
   const source = readFileSync(new URL('./PostInteractiveThing.tsx', import.meta.url), 'utf8');
-  assert.match(source, /if \(!component && !webpage\) return <ThingView thing=\{thing\.crystal\.thing \|\| thing\.crystal\}/);
+  assert.match(source, /if \(!component && !webpage\) return <ThingView thing=\{thingPresentationData\(thing\.crystal\)\}/);
   assert.match(source, /component \? <LinkedComponent thing=\{thing\} \/> : <LinkedPage thing=\{thing\} \/>/);
   assert.doesNotMatch(source, /ExplicitThingRender/);
 });

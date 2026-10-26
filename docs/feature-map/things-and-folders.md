@@ -1,5 +1,9 @@
 # Things and folders
 
+`validateThingtimeCrystal` preserves explicit `renderComponent` metadata across
+typed and data Thing writes. See [the presentation contract](api-endpoints-and-capabilities.md)
+for saved/embedded definitions, PATCH/replacement semantics and tests.
+
 Server Action admission/outcomes use `api/utils/timeline/actionOutcome.ts` and
 shared `timeline/actionOutcome.ts`, called from the canonical server executor.
 They retain safe effect receipts in the existing Timeline, never a new history

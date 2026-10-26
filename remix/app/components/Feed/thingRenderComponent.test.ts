@@ -1,3 +1,4 @@
+import { thingPresentationData } from '../Thingtime/renderComponentDeclaration';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import React from 'react';
@@ -133,4 +134,13 @@ test('explicit display resets inherited upload authority and supplies its own co
     assert.doesNotMatch(markup, /Unrelated parent private data|Choose files|Upload files/);
     assert.match(markup, /Own displayed record/);
   } finally { router.dispose(); }
+});
+
+test('root post declarations take precedence over nested legacy Thing payloads', () => {
+  for (const renderComponent of [{ id: 'saved-component' }, template, null, {}]) {
+    const crystal = { text: 'root data', renderComponent, thing: { type: 'text', text: 'nested data' } };
+    assert.equal(thingPresentationData(crystal), crystal);
+  }
+  const thing = { type: 'text', text: 'legacy data' };
+  assert.equal(thingPresentationData({ thing }), thing);
 });

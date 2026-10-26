@@ -95,7 +95,8 @@ try {
   const manifest = (await api('/.well-known/thingtime-capabilities.json')).data;
   assert.equal(manifest.origin, origin, 'Manifest must describe this isolated origin');
   const requirements = { 'api.subspaces': '1.5.1', 'api.chats': '1.1.0', 'api.chats-messages': '1.2.1', 'api.subspaces-embeds': '1.0.0',
-    'api.health-mongodb': '1.0.1', 'api.mongodb-status': '1.0.1', 'api.mongodb-status-data': '1.0.1' };
+    'api.health-mongodb': '1.0.1', 'api.mongodb-status': '1.0.1', 'api.mongodb-status-data': '1.0.1',
+    'api.things': '1.42.0', 'api.things-update': '1.13.0' };
   for (const [feature, minimum] of Object.entries(requirements)) {
     const actual = manifest.features[feature]?.version?.split('.').map(Number);
     const required = minimum.split('.').map(Number);
@@ -262,12 +263,23 @@ try {
   assert(savedRenderer?.id, 'Saved render Component must exist through the real API');
   const textFixtures = [
     { key: 'saved-component', crystal: { renderComponent: { id: savedRenderer.id }, text: 'Saved Component renders safely <strong>as text</strong>\nSecond persisted line' } },
-    { key: 'embedded-component', crystal: { type: 'text', renderComponent: { render: renderTemplate }, text: 'Screenshot payload renders through an explicit embedded Component' } }
+    { key: 'embedded-component', crystal: { type: 'text', renderComponent: { render: renderTemplate }, text: 'Screenshot payload renders through an explicit embedded Component' } },
+    { key: 'typed-post-component', thingtime: ['post'], crystal: { type: 'text', renderComponent: { id: savedRenderer.id }, text: 'A real typed Post retains its saved Component' } },
+    { key: 'typed-comment-component', thingtime: ['post', 'comment'], targetId: post.id, crystal: { type: 'text', renderComponent: { render: renderTemplate }, text: 'A rich Comment retains its embedded Component' } },
+    { key: 'nested-post-component', thingtime: ['post'], crystal: { type: 'thingtime', renderComponent: { id: savedRenderer.id }, text: 'The explicit outer Component wins over nested post data', thing: { note: 'Nested data must not select this presentation' } } }
   ];
   for (const fixture of textFixtures) {
-    const created = (await api('/api/v1/things', { cookie: owner.cookie, body: { thingtime: ['data'], crystal: fixture.crystal, acl: ['tt:all'] } })).data.thing;
+    const result = (await api('/api/v1/things', { cookie: owner.cookie, body: {
+      thingtime: fixture.thingtime || ['data'], crystal: fixture.crystal, acl: ['tt:all'], ...(fixture.targetId ? { targetId: fixture.targetId } : {})
+    } })).data;
+    const created = result.thing || result.post;
     assert(created?.id, 'Explicit Component fixture must be created through the real API');
     fixture.id = created.id;
+    const readback = (await api(`/api/v1/things?id=${created.id}`, { cookie: owner.cookie })).data.thing;
+    assert.equal(readback.crystal.text, fixture.crystal.text, `${fixture.key}: typed content must survive creation`);
+    if (fixture.crystal.renderComponent.id) assert.deepEqual(readback.crystal.renderComponent, fixture.crystal.renderComponent, `${fixture.key}: saved pointer must survive creation`);
+    else assert.deepEqual(readback.crystal.renderComponent?.render, renderTemplate, `${fixture.key}: embedded render tree must survive creation`);
+    fixture.crystal = readback.crystal;
     fixture.embeds = {};
     for (const region of ['feed', 'sidebar']) {
       fixture.embeds[region] = (await addEmbed(created.id, region)).embed.id;
@@ -276,6 +288,26 @@ try {
       if (process.env.SUBSPACE_EVIDENCE_DIR) await writeFile(join(process.env.SUBSPACE_EVIDENCE_DIR, `${fixture.key}-${region}-projection.json`), JSON.stringify(projected, null, 2));
     }
   }
+  // Reproduce the screenshot with an already-saved typed Post, not an object
+  // carrying a coincidentally similar `type` field in the free-form data schema.
+  const beforeRepair = (await api(`/api/v1/things?id=${post.id}`, { cookie: owner.cookie })).data.thing;
+  await api('/api/v1/things', { method: 'PATCH', cookie: owner.cookie, body: {
+    id: post.id, expectedUpdatedAt: beforeRepair.updatedAt, crystal: { renderComponent: { id: savedRenderer.id } }
+  } });
+  const repaired = (await api(`/api/v1/things?id=${post.id}`, { cookie: owner.cookie })).data.thing;
+  assert.deepEqual(repaired.crystal, { ...beforeRepair.crystal, renderComponent: { id: savedRenderer.id } }, 'Repair must retain the complete original Post content');
+  for (const field of ['author', 'acl', 'visibility', 'thingtime', 'targetId', 'folderId']) assert.deepEqual(repaired[field], beforeRepair[field], `Repair must preserve ${field}`);
+  await api('/api/v1/things/update', { cookie: owner.cookie, body: { id: post.id, crystal: { title: 'Post title edited after renderer repair' } } });
+  const edited = (await api(`/api/v1/things?id=${post.id}`, { cookie: owner.cookie })).data.thing;
+  assert.equal(edited.crystal.title, 'Post title edited after renderer repair', 'Ordinary Post edit must actually be saved');
+  assert.deepEqual(edited.crystal.renderComponent, { id: savedRenderer.id }, 'Ordinary Post edits must not strip the saved renderer');
+  assert.deepEqual(edited.crystal.richText, richText, 'Ordinary Post edits must preserve the original rich text');
+  for (const region of ['feed', 'sidebar']) {
+    const projection = (await readEmbeds(owner, region)).embeds.find(row => row.id === richPostEmbeds[region]);
+    assert.deepEqual(projection.thing.crystal, edited.crystal, `${region}: repaired Post projection must retain its renderer and content`);
+    if (process.env.SUBSPACE_EVIDENCE_DIR) await writeFile(join(process.env.SUBSPACE_EVIDENCE_DIR, `repaired-existing-post-${region}-projection.json`), JSON.stringify(projection, null, 2));
+  }
+  textFixtures.push({ key: 'repaired-existing-post', id: post.id, crystal: edited.crystal, embeds: richPostEmbeds });
   // More than one page proves batching is not a product count cap.
   for (let n = 0; n < 21; n++) await addEmbed(embedded.id);
   const firstPage = await readEmbeds(member);
@@ -441,10 +473,6 @@ async function browserAcceptance() {
     const sidebarRead = await page.evaluate(async id => (await fetch('/api/v1/subspaces/embeds?id=' + id + '&region=sidebar')).json(), fixture.space.id);
     assert(sidebarRead.embeds.some(row => row.thing?.id === fixture.embeddedThingId), 'Sidebar source must match the real API projection');
     assert(await sidebar.locator('article').count() > 0, 'Sidebar must render actual repeated Thing cards');
-    await sidebar.getByText('Ordinary rich-text embedded post body', { exact: true }).waitFor({ timeout: 30000 });
-    await page.getByTestId('subspace-feed-embeds').getByText('Ordinary rich-text embedded post body', { exact: true }).waitFor({ timeout: 30000 });
-    await page.screenshot({ path: join(out, 'rich-post-embedded-feed-sidebar.png'), fullPage: true });
-    await note('Ordinary Editor.js post rendered in feed and sidebar with independent API evidence');
     const assertTextEmbeds = async () => {
       for (const region of ['feed', 'sidebar']) {
         const host = page.getByTestId(`subspace-${region}-embeds`);
@@ -458,6 +486,12 @@ async function browserAcceptance() {
           const card = host.locator('article').nth(cardIndex);
           await card.getByRole('button', { name: 'Show the Thingtime view 🌀', exact: true }).click();
           await card.getByRole('button', { name: 'Show as Component ✨', exact: true }).waitFor();
+          // Typed Posts have more fields than the inspector's first page.
+          // Expand the ordinary data view before inspecting its metadata.
+          if (!await card.getByText('renderComponent', { exact: true }).count()) {
+            const more = card.getByRole('button', { name: 'Load more', exact: true }).first();
+            if (await more.count()) await more.click();
+          }
           await card.getByText('renderComponent', { exact: true }).first().waitFor();
           await card.getByRole('button', { name: 'Show as Component ✨', exact: true }).click();
           await rendered.waitFor();
@@ -473,7 +507,7 @@ async function browserAcceptance() {
     await viewGroup().waitFor({ timeout: 30000 });
     await assertTextEmbeds();
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await note('Saved and embedded render Components persisted, rendered in both regions at desktop/mobile widths, toggled to data and survived reload');
+    await note('Data, typed Posts, rich Comments and repaired existing Posts retain explicit saved/embedded Components; both regions render, toggle and reload at desktop/mobile widths');
     const savedRendererId = fixture.textFixtures.find(row => row.key === 'saved-component').crystal.renderComponent.id;
     const changedTemplate = { ...fixture.savedRendererCrystal, render: { ...fixture.savedRendererCrystal.render, tag: 'blockquote' } };
     const changedRenderer = await page.request.post(fixture.origin + '/api/v1/things/update', {
@@ -500,10 +534,12 @@ async function browserAcceptance() {
     await page.reload({ waitUntil: 'domcontentloaded' });
     for (const region of ['feed', 'sidebar']) {
       const host = page.getByTestId(`subspace-${region}-embeds`);
-      await host.getByText('This render Component is unavailable or invalid. Open the data view to inspect this Thing.', { exact: true }).waitFor({ timeout: 30000 });
+      await host.getByText('This render Component is unavailable or invalid. Open the data view to inspect this Thing.', { exact: true }).first().waitFor({ timeout: 30000 });
       const rendered = host.locator('article').locator('p, blockquote');
-      assert.equal(await rendered.filter({ hasText: fixture.textFixtures[0].crystal.text }).count(), 0, 'Revoked renderer must not retain cached rendered output');
-      await rendered.filter({ hasText: fixture.textFixtures[1].crystal.text }).waitFor();
+      for (const textFixture of fixture.textFixtures) {
+        if (textFixture.crystal.renderComponent.id === rendererId) assert.equal(await rendered.filter({ hasText: textFixture.crystal.text }).count(), 0, `${textFixture.key}: revoked renderer must not retain cached output`);
+        else await rendered.filter({ hasText: textFixture.crystal.text }).waitFor();
+      }
     }
     await page.screenshot({ path: join(out, 'render-component-source-acl-revoked.png'), fullPage: true });
     await setRendererAccess(['tt:all']);

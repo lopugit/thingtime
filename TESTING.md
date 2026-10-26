@@ -3412,6 +3412,16 @@ email whose link points at the attacker.
 
 ## Feed thing rendering (`remix/app/components/Thingtime/ThingView.tsx`)
 
+- [ ] Create a typed text Post, rich post/comment, plain comment and data Thing
+      through the real API with an explicit saved/embedded `crystal.renderComponent`.
+      Exact-ID readback retains it. PATCH only text/richText, then read/reload:
+      declaration, audience and author remain intact. Unknown typed content keys
+      are still dropped. Malformed declarations fail; null displays unavailable;
+      replaceCrystal omission removes it. Both manifests publish `api.things`
+      1.42.0 and `api.things-update` 1.13.0. A post's root declaration wins over
+      nested legacy `crystal.thing`; revoked/private renderer dependencies stay
+      unavailable without widening access. Run `schemas/renderComponent.test.ts`
+      and the isolated typed-post/comment acceptance harness.
 - [ ] Human-facing data Things carry `renderComponent: { id: <saved Component Thing ID> }`
       or an embedded Component definition, for example
       `renderComponent: { render: { tag: "p", children: ["{text}"] } }`.

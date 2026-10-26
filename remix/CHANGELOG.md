@@ -102,6 +102,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Preserve explicit saved or embedded render Components when typed Posts and comments are created or edited. Honor the outer declaration in nested Post embeds, negotiate the additive write contracts, and cover real typed-Post repair/readback in feed and sidebar acceptance. Existing saved content still needs an explicit renderer assigned. **Codex (AI)**
+
 - 2026-10-26: Add a contextual **➕ Add +** row to both drawer lists and support arbitrary-depth nested menus in the existing lower section. Preserve ancestor navigation, editable saved templates and existing links; expose parent selection and sibling ordering in drawer settings. **Codex (AI)**
 - 2026-10-26: Let initial and foreground resource refreshes reach a local API
   even when the browser reports offline. Subspace embeds now get their first
@@ -113,7 +115,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   from main for subspace embeds. Verify dedicated branch reads and rejection of
   incoming gateway relays; identify the exact-origin allowlist correction needed
   for ordinary PR aliases. [Rollout and verification](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
-
 - 2026-10-26: Replace the legacy UUID hook's insecure random source with Web Crypto while preserving its mount-time lifecycle. The main delivery includes only the owned zero-baseline changes from PR 1228. **Codex (AI)**
 - 2026-10-26: Render data Things through an explicit saved Component pointer or
   embedded Component definition, with an opt-in data inspector and independent
