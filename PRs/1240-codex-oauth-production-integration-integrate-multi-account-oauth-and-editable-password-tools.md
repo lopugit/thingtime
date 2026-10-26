@@ -70,3 +70,34 @@ aggregated HTML view. Changed documentation was not semantically reindexed: the
 supported wrapper update is code-only, and the earlier non-code attempt stopped
 before semantic dispatch. All existing snapshot directories remain preserved;
 the wrapper's tracked-path retention behavior is recorded as a tooling limitation.
+
+## AutoFill connection status correction — 27 October 2026
+
+Linking a Thingtime session no longer implies that the operating system accepted
+its password suggestions. The native bridge now distinguishes a synchronized
+index, a linked account awaiting synchronization, and an unverifiable legacy
+result. A failed index replacement preserves the account link, clears stale
+suggestions when possible, and offers a retry. Both native platforms serialize
+index work and reject results after the account, origin or session changes.
+The passkey guide only reports readiness after synchronization succeeds.
+
+The additive bridge fields retain the deployed `passwordsVersion: 1.0.0`
+contract. Detailed macOS helper exit codes require an explicit new-caller flag;
+older callers keep their legacy exit behavior, and newer callers treat an old
+helper's generic success as unverified.
+
+Validation for this correction: 14 Electron tests, eight web projection tests,
+eight Swift state-transition tests, focused lint, independent source review,
+and 29 network-isolated browser milestones passed. The browser run includes
+390px and 1440px screenshots for all three connection states, real editable
+password components, and synthetic native/vault responses with zero page errors.
+Its container was removed after the evidence was retained.
+
+Unsigned native project generation passed from a frozen 195-file source
+snapshot. The macOS Xcode build stopped before compilation when local package
+resolution attempted a nested sandbox inside the enforced network-denial
+sandbox. No network policy was relaxed; iOS compilation was not started after
+that failure. Full native compilation and signed installed-device acceptance
+remain open. The installed provider is enabled in macOS settings, but a usable
+Thingtime choice in Chrome's passkey prompt has not been demonstrated. No Google
+client secret or live Google/GitHub passkey was created by these checks.

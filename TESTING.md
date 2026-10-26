@@ -10487,6 +10487,11 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Browser fixture `password-manager.browser.tsx` / `check-password-manager-browser.cjs`: exercise linked-pending, unknown legacy and synchronized replies through manager + passkey-guide notices. Pending/unknown must not display generic Connected or append the create-passkey next step; existing editable role=status feedback/retry remains intact. Real signed OS acceptance is separate.
+- [ ] Native index status: disabled/failing OS index retains the linked account but reports `linked-index-pending`, offers Connect retry, and never reports synchronized. Verify both macOS/iOS, then enable indexing and require an actual successful replacement before `index-synchronized`. Legacy/missing helper states stay unknown. No secret/identity/error payload appears in status.
+- [ ] Change account/origin or disconnect during a delayed index replacement. Reject the old result, finish stale-index cleanup before a new queued replacement, and verify current-account suggestions/fill only. Failed best-effort clearing must not claim synchronization; provider read authorization remains owner-bound.
+
+
 - [ ] When adding optional password fields, run `pnpm --dir remix run test:schemas`
   as well as the password tests. Keep the builtin schema projection pin current;
   verify icon source choices and optional fields survive the schema write gate.

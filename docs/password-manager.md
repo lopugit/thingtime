@@ -239,6 +239,35 @@ OS enablement and a real registration followed by sign-in are separate acceptanc
 requirements; build or package verification alone does not prove them. Thingtime's
 own account-login passkeys are a separate feature from this credential provider.
 
+### Connection and suggestion-index status
+
+The native connection result distinguishes `index-synchronized`,
+`linked-index-pending`, `disconnected` and unknown legacy status. A linked account
+remains linked when OS indexing is unavailable (including disabled AutoFill),
+but the UI says suggestions are not synchronized and offers the existing Connect
+retry. It never substitutes generic “Connected” for an unverified index result.
+The existing `passwordsVersion` 1.0.0 remains unchanged because deployed legacy
+web clients require that exact value. New clients accept major-1 bridges but
+require coherent explicit status fields before reporting synchronized; missing
+fields remain unknown. No HTTP API operation or capability version changes.
+
+New Electron opts into `--connection-status-v1`; the macOS helper then uses
+fixed exit codes 20/21/22 for the three explicit states. Without that flag the
+new helper preserves legacy exit 0 for older consumers. An older helper ignores
+the flag; its exit 0 on connect/sync is unknown to new Electron, not synchronized. No usernames, catalog
+entries, raw system errors or session values are returned. Both native platforms
+serialize replacement and stale-index cleanup, rechecking current session (and
+iOS document/generation) before and after the OS callback. Failed/stale replace
+attempts clear suggestions best-effort before a newer queued replacement; a
+failed clear never becomes a successful synchronization claim. The provider
+still reauthorizes the selected record against the current owner before fill.
+The Electron bridge rejects a changed account session after helper completion
+and clears old native authority before a later queued connection.
+
+Actual disabled/enabled OS indexing and account switching still require signed
+installed acceptance; source/mocked statuses are not proof that Chrome requests
+or fills a matching Google credential.
+
 ## Validation and setup
 
 See the [README setup](../README.md#password-manager-setup) and

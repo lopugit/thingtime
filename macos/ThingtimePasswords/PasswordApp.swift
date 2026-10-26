@@ -6,8 +6,10 @@ import ThingtimePasswordCore
     @MainActor static func main() {
         if CommandLine.arguments.contains("--connect") || CommandLine.arguments.contains("--disconnect") || CommandLine.arguments.contains("--sync") {
             let disconnect = CommandLine.arguments.contains("--disconnect")
+            let detailedStatus = CommandLine.arguments.contains("--connection-status-v1")
             Task { @MainActor in
                 do {
+                    var status = PasswordConnectionStatus.disconnected
                     if disconnect { try PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait() }
                     else {
                         // The Electron parent writes only its current first-party
@@ -16,21 +18,22 @@ import ThingtimePasswordCore
                         let decoded = try JSONDecoder().decode(ProviderSession.self, from: data)
                         let session = try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie)
                         if CommandLine.arguments.contains("--sync") {
-                            guard let prior = try? PasswordSessionStore.load() else { exit(0) }
+                            guard let prior = try? PasswordSessionStore.load() else { exit(PasswordConnectionStatus.disconnected.exitCode(detailed: detailedStatus)) }
                             guard prior.origin == session.origin, prior.ownerId == session.ownerId else {
                                 try PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait()
                                 DistributedNotificationCenter.default().postNotificationName(.init("com.thingtime.passwords.destination-changed"), object: nil, userInfo: nil, deliverImmediately: true)
-                                exit(0)
+                                exit(PasswordConnectionStatus.disconnected.exitCode(detailed: detailedStatus))
                             }
                         }
                         let catalog = try await PasswordClient(account: session).catalog()
                         try PasswordSessionStore.save(session)
                         LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
-                        // Disabled AutoFill must not prevent linking the account.
-                        try? await PasswordIdentityIndex.synchronize(catalog)
+                        status = try await PasswordIdentityIndex.synchronizeConnection(catalog) {
+                            guard try PasswordSessionStore.load() == session else { throw PasswordProviderError.invalidSession }
+                        }
                     }
                     DistributedNotificationCenter.default().postNotificationName(.init("com.thingtime.passwords.destination-changed"), object: nil, userInfo: nil, deliverImmediately: true)
-                    exit(0)
+                    exit(status.exitCode(detailed: detailedStatus))
                 } catch { exit(1) }
             }
             RunLoop.main.run()

@@ -102,6 +102,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Distinguish native Password AutoFill account linkage from OS suggestion-index synchronization, retain disabled-provider links with explicit retry feedback, and fence stale account/index completion. Installed-device acceptance remains pending. [Contract](../docs/password-manager.md#connection-and-suggestion-index-status). **Codex (AI)**
+
 - 2026-10-27: Integrate Connections2 service accounts and editable password-manager
   fields onto current main while retaining password 1.3 icons/generation/passkey
   tools, explicit render components, drawer customization and the zero-error

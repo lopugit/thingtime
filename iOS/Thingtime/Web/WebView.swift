@@ -243,8 +243,14 @@ struct WebView: UIViewRepresentable {
                       let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
                       let frameURL = message.frameInfo.request.url, LopuVoiceContract.sameOrigin(frameURL, root),
                       let payload = body["payload"] as? [String: Any], let action = payload["action"] as? String else { return }
-                passwordBridge.handle(action: action, ownerId: payload["ownerId"] as? String, webView: webView, root: root) { [weak self] ok, message in
-                    self?.sendToWeb(type: "password-provider-result", payload: ["ok": ok, "message": message, "requestId": payload["requestId"] as? String ?? ""])
+                passwordBridge.handle(action: action, ownerId: payload["ownerId"] as? String, webView: webView, root: root) { [weak self] ok, message, status in
+                    var response: [String: Any] = ["ok": ok, "message": message, "requestId": payload["requestId"] as? String ?? ""]
+                    if let status {
+                        response["state"] = status.rawValue
+                        response["linked"] = status != .disconnected
+                        response["indexSynchronized"] = status == .synchronized
+                    }
+                    self?.sendToWeb(type: "password-provider-result", payload: response)
                 }
                 return
             }

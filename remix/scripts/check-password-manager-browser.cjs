@@ -235,12 +235,37 @@ let browser, server;
       await record(`${width}px: real private inputs type/save once for rapid click/Enter, focused blur/focus restores masked value, synthetic TOTP updates; layout fits`);
       await record(`${width}px: independently editable address/array/SSH properties save and reopen with types/unknown siblings intact; labels and values clear on blur; whole-field Copy retains JSON`);
     }
-    await page.setViewport({ width: 1440, height: 1000 });
-    await page.click(block('password-native-connect'));
-    await page.waitForFunction(() => window.passwordFixture.nativeOperations().includes('connect'));
-    await page.waitForFunction(() => document.querySelector('[data-block-id="password-native-message"]')?.textContent.includes('Synthetic AutoFill connect completed'));
+    const guideOpen = '[data-settings-document="password-passkey-setup"] [data-block-id="password-passkey-open"]';
+    for (const width of [390, 1440]) {
+      await page.setViewport({ width, height: 1000 });
+      for (const [state, expected] of [['linked-index-pending', 'not synchronized'], ['unknown', 'could not be verified'], ['index-synchronized', 'suggestions synchronized']]) {
+        await page.evaluate(value => window.passwordFixture.setNativeConnectionState(value), state);
+        await page.$eval(block('password-native-connect'), node => node.scrollIntoView({ block: 'center' }));
+        await page.click(block('password-native-connect'));
+        await page.waitForFunction(text => document.querySelector('[data-block-id="password-native-message"]')?.textContent.includes(text), {}, expected);
+        const nativeNotice = await page.$eval(block('password-native-message'), node => node.textContent);
+        assert.ok(!nativeNotice.includes('private diagnostic'));
+        await page.$eval(guideOpen, node => node.scrollIntoView({ block: 'center' }));
+        await physicalClick(guideOpen);
+        await page.waitForSelector('[data-block-id="password-passkey-instructions"]');
+        await physicalClick('[data-settings-document="password-passkey-setup"] [data-block-id="password-passkey-connect"]');
+        await page.waitForFunction(text => document.querySelector('[data-block-id="password-passkey-notice-message"]')?.textContent.includes(text), {}, expected);
+        const guideNotice = await page.$eval('[data-block-id="password-passkey-notice-message"]', node => node.textContent);
+        if (state !== 'index-synchronized') {
+          assert.ok(!guideNotice.includes('Password AutoFill connected'));
+          assert.ok(!guideNotice.includes('Create the passkey on the website or app'));
+        } else assert.ok(guideNotice.includes('Create the passkey on the website or app'));
+        assert.ok(!guideNotice.includes('private diagnostic'));
+        await assertWidth();
+        await page.screenshot({ path: `${results}/${width}-native-${state}.png`, fullPage: true });
+        await physicalClick('[data-settings-document="password-passkey-setup"] [data-block-id="password-passkey-close"]');
+        await page.waitForSelector('[data-block-id="password-passkey-instructions"]', { hidden: true });
+      }
+    }
+    await page.$eval(block('password-native-disconnect'), node => node.scrollIntoView({ block: 'center' }));
     await page.click(block('password-native-disconnect'));
-    await page.waitForFunction(() => window.passwordFixture.nativeOperations().includes('disconnect'));
+    await page.waitForFunction(() => document.querySelector('[data-block-id="password-native-message"]')?.textContent.includes('disconnected'));
+    await record('Native connection notices distinguish linked-pending, legacy-unknown and synchronized in manager/passkey guide; pending/unknown never claim connected or tell the user to create a passkey');
     await page.click(block('password-qr-screen'));
     await page.waitForFunction(() => document.querySelector('[data-block-id="password-error"]')?.textContent.length > 0);
     assert.equal(await page.$eval('input[name="field-password"]', input => input.type), 'password');

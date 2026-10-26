@@ -35,6 +35,7 @@ const entries = new Map([[entryId, { entry: initial, revision: 1 }]]);
 const files = new Map([[entryId, [{ id: '33333333-3333-4333-8333-333333333333', metadata: newPasswordFile('Synthetic attachment.txt', 17) }]], [archiveId, [{ id: '44444444-4444-4444-8444-444444444444', metadata: { ...newPasswordFile('Synthetic source.txt', 9), archivePath: 'files/fixture-file___source.txt' } }]]]);
 const pendingUploads = new Map<string, { entryId: string; metadata: ReturnType<typeof newPasswordFile> }>();
 const operations: string[] = [], nativeOperations: string[] = [];
+let nativeConnectionState: 'index-synchronized' | 'linked-index-pending' | 'unknown' = 'index-synchronized';
 const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical((value as Record<string, unknown>)[key])])) : value;
 const structuredSnapshot = (entry?: PasswordEntry) => (entry?.fields || []).filter(field => field.structured).map(field => ({ label: field.label, type: field.type, value: JSON.parse(field.value) }));
 let roundTripBaseline: string | null = null, omitBackupFiles = false, captureBackup = false, downloadedBackup: Blob | null = null;
@@ -115,7 +116,10 @@ window.fetch = async (input, init) => {
   return originalFetch(input, init);
 };
 Object.assign(window, { thingtimeDesktop: { passwordsVersion: '1.0.0', passwordProvider: async ({ action, ownerId }: { action: string; ownerId: string }) => {
-  if (ownerId !== owner) throw Error('Synthetic native owner mismatch'); nativeOperations.push(action); return { ok: true, message: `Synthetic AutoFill ${action} completed.` };
+  if (ownerId !== owner) throw Error('Synthetic native owner mismatch'); nativeOperations.push(action);
+  if (action === 'disconnect') return { ok: true, state: 'disconnected', linked: false, indexSynchronized: false };
+  if (nativeConnectionState === 'unknown') return { ok: true, message: 'Connected with synthetic private diagnostic that must not render.' };
+  return { ok: true, state: nativeConnectionState, linked: true, indexSynchronized: nativeConnectionState === 'index-synchronized' };
 } } });
 // Native transport simulation only. Real owner/URL/nonce verification is
 // separately tested in the native adapter and the actual injected JS model.
@@ -142,6 +146,7 @@ const router = createMemoryRouter([{ id: 'root', path: '*', loader: () => ({ use
 createRoot(document.getElementById('root')!).render(<ChakraProvider><RouterProvider router={router} /></ChakraProvider>);
 Object.assign(window, { passwordFixture: {
   qrFixtureUrl,
+  setNativeConnectionState: (state: typeof nativeConnectionState) => { nativeConnectionState = state; },
   offerSetup: () => { if (setupPending) return false; setupPending = { id: crypto.randomUUID(), value: `otpauth://totp/Synthetic:setup?secret=${'A'.repeat(32)}` }; if (setupScope) announceSetup(); else window.dispatchEvent(new Event('thingtime:authenticator-setup-ready')); return true; },
   setupPending: () => Boolean(setupPending),
   expireSetup: () => { const id = setupPending?.id; setupPending = null; if (id) setupMessage({ kind: 'expired', requestId: id }); return id; },
