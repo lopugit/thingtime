@@ -4400,13 +4400,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-mongodb',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
+    contractVersion: '1.0.2',
+    featureVersion: '1.0.2',
     group: 'health',
     title: 'MongoDB health',
     endpoint: '/api/v1/health/mongodb',
     summary: 'Returns MongoDB connectivity for the current or target environment.',
-    detail: 'This route wraps the MongoDB status helper and can proxy remote health checks through the environment status resolver. Version 1.0.1 reuses the application connection pool without collection adoption or index writes, coalesces simultaneous checks only for the exact selected connection/database, and bounds diagnostics to two seconds. It never closes the shared application client. The response shape and endpoint selection are unchanged.',
+    detail: 'This route wraps the MongoDB status helper and can proxy remote health checks through the environment status resolver. Version 1.0.1 reuses the application connection pool without collection adoption or index writes, coalesces simultaneous checks only for the exact selected connection/database, and bounds diagnostics to two seconds. Version 1.0.2 returns the complete MongoConnectionStatus shape when remote health is unavailable; custom is false because the public proxy has no viewer-specific connection selection, and replicaSet is null because no successful hello response identified the remote set. It never closes the shared application client.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint. Secrets are sanitized from responses.'
@@ -4415,7 +4415,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'Call without query parameters for current runtime MongoDB health.',
       'Pass target or origin query parameters to compare another deployment when supported.',
-      'Read connected, host, dbName, pingMs, checkedAt, and error.',
+      'Read connected, host, dbName, custom, pingMs, collections, replicaSet, checkedAt, and error.',
       'Do not expect raw credentials in host; connection strings are sanitized.'
     ],
     requestExamples: [
@@ -4430,6 +4430,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'MongoDB health shape.',
         body: { connected: true, host: 'mongodb://localhost:27017/thingtime', dbName: 'thingtime', pingMs: 4 }
+      },
+      {
+        status: 200,
+        description: 'Unavailable remote MongoDB health still returns every status field.',
+        body: { connected: false, host: null, dbName: null, custom: false, pingMs: null, collections: null, replicaSet: null, checkedAt: '2026-10-26T00:00:00.000Z', error: 'Remote status unavailable' }
       }
     ]
   }),

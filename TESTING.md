@@ -1,5 +1,33 @@
 # TESTING.md — per-area manual test checklists
 
+## Static analysis gates and legacy smarts
+
+See [the audit and coverage limits](docs/static-analysis-baselines.md). These
+checks apply to the current head; dated passing counts below are history.
+
+- [ ] Run raw Remix `typecheck`, `typecheck:ratchet` and full `lint`. Require
+      zero TypeScript diagnostics and zero ESLint errors. Keep the committed
+      TypeScript baseline at zero; report warnings separately without inventing
+      a warning budget or calling the formatter a check gate.
+- [ ] Run `npm --prefix remix run test:typecheck-ratchet`. An increased count,
+      duplicate property/identifier, invalid or unreadable baseline, missing
+      compiler, synchronous launch failure, output-buffer failure, signal,
+      unexpected exit or nonzero exit without diagnostics must fail. A failed
+      run must never rewrite the baseline; `--update-baseline` refuses increases.
+- [ ] Keep `useUuid` on Web Crypto UUID generation with no insecure fallback.
+      CodeQL must not report insecure randomness in this helper; preserve its
+      undefined initial value and one mount-time effect assignment.
+- [ ] Run `npm --prefix remix run test:smarts`.
+      Verify escaped path aliases, primitive/object list lookup and defaults,
+      omitted optional index flags, ordinary nested writes/merge and explicit
+      standalone replacer state. Bound parent lookup and reactive setters,
+      deletion and mapped-list helpers must honor their supplied context.
+- [ ] Run the adjacent `health/mongodb/_mongodb.test.ts` and
+      `test:api-capabilities` from `remix/`. Failed remote probes return a
+      complete disconnected status with `custom: false`, `replicaSet: null`,
+      null connection metrics and a sanitized error. Verify HTTP 200 is not
+      interpreted as connected, and local cookies are never forwarded.
+
 ## Characters
 
 - [x] Isolated real API + desktop/390px browser acceptance (2026-10-18): create a separate-login Character, select/restore the session, post, comment, reply and post in a private subspace; compare persisted author IDs. API checks cover all login modes, membership denial, owner privacy, tier changes and revocation.
@@ -6015,8 +6043,8 @@ which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
       opt-out labels must stop the batch.
 - [ ] After a large Feature Stack publishes its target PR, run the required
       Web CI aggregate against the combined head. Cross-branch additions must
-      retain every shared runtime import and keep the typecheck ratchet at or
-      below its baseline; repairing the published head must rerun required
+      retain every shared runtime import and keep the typecheck ratchet at
+      the zero-error baseline; repairing the published head must rerun required
       checks without replacing the immutable stack history or disabling
       auto-merge.
 - [ ] While a Feature Stack is active, confirm Lopu posts a signed progress
