@@ -104,6 +104,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Make sealed instruction recovery linear in inventory and selected
+  content instead of rescanning for every part; preserve exact-byte, owner and
+  generation validation and refuse inflated counts before large allocations.
+  Update the recording model-routing contract and verify instruction validation
+  uses the provider's selected model. [PR 1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
 - 2026-10-26: Add resumable owner-fenced account instruction storage and versioned sealed backup recovery with bounded immutable transfers, transactional revision commit, retention cleanup and 96 KiB ordinary-inference working set. Inference metering boundary checks pass 9/9; isolated packaged-app instruction acceptance failed at 12,000-line paste/undo, with installed macOS acceptance still open. See [PR 1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#resumable-account-instruction-transfer--26-october-2026). — Codex (AI)
 
 - 2026-10-26: Make disabled MCP card crops extractable with explicit result metadata, reject duplicate viewport dimensions before launch, and withhold artifacts after truncated worker output. Artifact extractor regressions now run in the default MCP suite. [PR 1000 evidence](../artifacts/anonymous-local-first-2026-10-26-mcp-options/README.md). **Codex (AI)**

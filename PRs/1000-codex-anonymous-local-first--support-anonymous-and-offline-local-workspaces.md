@@ -5211,14 +5211,48 @@ Terminal abort only retires its matching attempt and protects newer edits for
 conflict review. Version-2 backup preserves sealed refs/parts and editable
 recovery content, including source removal beyond the prior 1 MiB snapshot
 boundary; version-1 reads continue to work. Offline selected-record recovery
-works but rescans the manifest per part. No aggregate product cap or live-account
+now indexes actual instruction inventory once and reads each selected payload
+once, retaining complete validation before returning content. No aggregate product cap or live-account
 restore API was added. Ordinary-reference inference has a bounded 96 KiB working
 set; larger enabled inference remains unsupported pending verified provider
 capacity/tokenizer integration.
 
 Focused tests, build and network isolation metadata are indexed in the
-[instruction-transfer evidence](../artifacts/anonymous-local-first-2026-10-26-instruction-transfer/README.md). Inference metering now counts canonical row metadata once across fragments and handles escaped UTF-8 text and split surrogate pairs; 9/9 boundary tests and the final server rebuild pass. Raw typecheck has 91 diagnostics against an 89-diagnostic ratchet baseline and is not clean. The isolated packaged-app attempt passed offline save/cold reload, multipart lost-ack reconciliation, and both explicit conflict choices, then failed on the 12,000-line paste/undo step with a five-second locator timeout. It is not installed macOS acceptance. The retained [failure record](../artifacts/anonymous-local-first-2026-10-26-instruction-transfer/instructions/failure.json) notes no browser errors or offline writes, but no screenshot/body capture. A separate same-page diagnostic run remains in progress; keep the native gate unchecked. This checkpoint does not claim production, new-head CI or desktop namespace acceptance. The durable task checkpoint is
+[instruction-transfer evidence](../artifacts/anonymous-local-first-2026-10-26-instruction-transfer/README.md). Inference metering now counts canonical row metadata once across fragments and handles escaped UTF-8 text and split surrogate pairs; 9/9 boundary tests and the final server rebuild pass. Raw typecheck has 91 diagnostics against an 89-diagnostic ratchet baseline and is not clean. The isolated packaged-app attempt passed offline save/cold reload, multipart lost-ack reconciliation, and both explicit conflict choices, then failed on the 12,000-line paste/undo step with a five-second locator timeout. It is not installed macOS acceptance. The retained [failure record](../artifacts/anonymous-local-first-2026-10-26-instruction-transfer/instructions/failure.json) notes no browser errors or offline writes, but no screenshot/body capture. A later same-page diagnostic preserved the exact text but took 9,114 ms; keep the native gate unchecked. This checkpoint does not claim production, new-head CI or desktop namespace acceptance. The durable task checkpoint is
 [resumable account instructions](../docs/local-workspaces.md#resumable-account-instructions--26-october-2026).
 
 
 The final matched-control diagnostic produced no timing result; terminal cleanup was verified. Its severe host-contention snapshot does not identify an editor root cause. The 14-pass scheduling regression is a local source test only; the final built package predates that change and full acceptance remains open.
+
+## Instruction recovery and CI contract follow-up — 26 October 2026
+
+Checkpoint `7f4803f9a` was pushed to `codex/anonymous-local-first`. Its Web CI
+run [40283025198](https://github.com/lopugit/thingtime/actions/runs/40283025198)
+passed the API suite but failed a source assertion expecting recording model
+selection inline. The model is now resolved once for both instruction validation
+and the provider request; the updated contract passes, and a mocked real-SDK
+regression verifies that agreement. Recording checks pass 9/9 and scoped lint
+passes. The lost-reply/newer-edit sync and transfer suites pass 14/14.
+
+Sealed instruction recovery now uses one shared inventory scan for the selected
+generation. Descriptor memory scales with actual instruction inventory; decoded
+records scale with selected content and are released as the final editable
+checklist is assembled. Missing parts, inflated counts, foreign owners,
+out-of-order hashed IDs and changed chunk bytes still refuse. No temporary
+persistence or product-size cap was introduced. The focused inventory suite
+passes 58/58, including object-read counts and exact fragmented-row recovery.
+
+The fresh sanitized client/Nitro rebuild passes and includes the scheduling
+correction. The isolated native rerun preserves all 12,002 pasted lines but
+fails the unchanged five-second gate at 6,665 ms. Offline/cold-reload, lost-reply
+and conflict paths reached their assertions before that failure. No OOM or
+outbound access occurred; owned-runtime cleanup passed. Event/frame diagnostics
+were added for the next native run, without claiming a performance fix.
+[Follow-up evidence](../artifacts/anonymous-local-first-2026-10-26-instruction-followup/README.md). Desktop MCP namespace acceptance and larger enabled inference
+remain open. GitGuardian's two historical findings point to synthetic test
+fixtures; the external failure was not dismissed or treated as a passing check.
+
+The progress plan's remaining 33 local links now resolve to tracked/staged
+artifacts. Current canonical JSON and native PNG downloads retain the expected
+hash and dimensions; missing historical temporary targets are explicitly labeled
+unavailable. The repair inventory preserves those original evidence gaps.

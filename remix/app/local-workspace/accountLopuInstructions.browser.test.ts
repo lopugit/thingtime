@@ -262,11 +262,43 @@ test('native account instructions save offline and reconcile lost replies and re
   const prePaste = { phaseMarks, browserProcesses: await browserControl.send('SystemInfo.getProcessInfo'), rendererMetrics: await network.send('Performance.getMetrics'),
    document: await capacityInput.evaluate((element: HTMLTextAreaElement) => ({ characters: element.value.length, hardLines: element.value.split('\n').length, elements: document.getElementsByTagName('*').length, focused: document.activeElement === element, disabled: element.disabled, readOnly: element.readOnly })) };
   await writeFile(resolve(artifacts!, 'capacity-paste-preflight.json'), JSON.stringify(prePaste, null, 2));
+  // Keep host/automation elapsed time separate from native editing and the
+  // first rendered frame. Capture metadata only, never the instruction text.
+  const pasteProbe = await capacityInput.evaluateHandle((element: HTMLTextAreaElement) => {
+   const started = performance.now();
+   const events: { type: string; elapsedMs: number; inputType?: string }[] = [];
+   const longTasks: { elapsedMs: number; durationMs: number }[] = [];
+   const recordTasks = (entries: PerformanceEntry[]) => {
+    for (const entry of entries) if (entry.startTime >= started)
+     longTasks.push({ elapsedMs: entry.startTime - started, durationMs: entry.duration });
+   };
+   const observer = PerformanceObserver.supportedEntryTypes.includes('longtask')
+    ? new PerformanceObserver(list => recordTasks(list.getEntries())) : null;
+   observer?.observe({ type: 'longtask' });
+   const record = (event: Event) => {
+    events.push({ type: event.type, elapsedMs: performance.now() - started,
+     ...('inputType' in event ? { inputType: (event as InputEvent).inputType } : {}) });
+    if (event.type === 'input') requestAnimationFrame(() => {
+     events.push({ type: 'first-frame-after-input', elapsedMs: performance.now() - started });
+    });
+   };
+   for (const type of ['paste', 'beforeinput', 'input']) element.addEventListener(type, record, true);
+   return { finish: async () => {
+    // This observation is outside pasteMs; it must not weaken or add to the
+    // unchanged end-to-end acceptance threshold below.
+    await new Promise<void>(resolveFrame => requestAnimationFrame(() => resolveFrame()));
+    if (observer) { recordTasks(observer.takeRecords()); observer.disconnect(); }
+    for (const type of ['paste', 'beforeinput', 'input']) element.removeEventListener(type, record, true);
+    return { events, longTasks, observedMs: performance.now() - started };
+   } };
+  });
   const pasteStarted = Date.now();
   await capacityInput.press('Control+V', { timeout: 20_000 });
   assert.equal(await capacityEquals(hardLinePayload), true, 'native paste preserves every hard line');
   const pasteMs = Date.now() - pasteStarted;
-  await writeFile(resolve(artifacts!, 'capacity-paste-result.json'), JSON.stringify({ pasteMs, exact: true, hardLines: hardLinePayload.split('\n').length, rendererMetrics: await network.send('Performance.getMetrics'), browserProcesses: await browserControl.send('SystemInfo.getProcessInfo') }, null, 2));
+  const nativeTimings = await pasteProbe.evaluate((probe: { finish: () => Promise<unknown> }) => probe.finish());
+  await pasteProbe.dispose();
+  await writeFile(resolve(artifacts!, 'capacity-paste-result.json'), JSON.stringify({ pasteMs, nativeTimings, exact: true, hardLines: hardLinePayload.split('\n').length, rendererMetrics: await network.send('Performance.getMetrics'), browserProcesses: await browserControl.send('SystemInfo.getProcessInfo') }, null, 2));
   assert.ok(pasteMs < 5000, `Native multiline paste took ${pasteMs} ms`);
   await capacityInput.press('Control+Z'); assert.equal(await capacityEquals(paragraph), true, 'native undo restores the preceding complete instruction');
   await capacityInput.press('Control+Shift+Z'); assert.equal(await capacityEquals(hardLinePayload), true, 'native redo restores every hard line');

@@ -5706,9 +5706,12 @@ when the input exceeds the prior 1 MiB snapshot boundary; version 1 remains
 readable. No aggregate product-size cap was added. Existing ordinary-reference
 inference uses a bounded 96 KiB compatibility working set. Larger enabled
 inference is explicitly unsupported until actual provider capacity and tokenizer
-limits are verified. Offline selected-record recovery still rescans the manifest
-per part; throughput optimization remains open. This does not add a live-account
-restore API: restore remains offline-only.
+limits are verified. Offline recovery now shares one sealed inventory traversal
+and reads each selected instruction payload once. Metadata scales with actual
+instruction inventory and decoded content with the selected generation, rather
+than an untrusted declared part count. Object integrity, owner checks and complete
+chain validation remain mandatory. This does not add a live-account restore API:
+restore remains offline-only.
 
 Focused core, manifest, inference-surface, retention/inference, canonical-storage,
 and sanitized client/Nitro checks are recorded in the [instruction-transfer
@@ -5731,3 +5734,16 @@ production, new-head CI, or desktop namespace acceptance is claimed here.
 
 
 The final matched-control diagnostic produced no timing result; terminal cleanup was verified. Its severe host-contention snapshot does not identify an editor root cause. The 14-pass scheduling regression is a local source test only; the final built package predates that change and full acceptance remains open.
+
+### Native instruction follow-up — 26 October 2026
+
+A fresh sanitized client/Nitro rebuild includes the newer-edit scheduling fix.
+The isolated packaged-app run again passed offline save/cold reload, multipart
+lost-reply reconciliation and both reviewed conflict choices. Exact native paste
+preserved 12,002 lines but took 6,665 ms, failing the unchanged five-second gate.
+Renderer task time was 6.687 s, with 0.625 s layout and 0.0425 s JavaScript.
+Network isolation, no-OOM checks and owned-runtime cleanup passed.
+[Evidence](../artifacts/anonymous-local-first-2026-10-26-instruction-followup/README.md).
+The prior paragraph's older-build limitation is superseded by this fresh build;
+the performance failure, larger enabled inference and installed-app acceptance
+remain open. Added event/frame diagnostics are awaiting native execution.

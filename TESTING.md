@@ -14602,6 +14602,14 @@ Local results do not establish current-head CI or deployed acceptance.
 
 ## Device Lopu instruction settings
 
+- [x] Sealed instruction recovery shares a verified inventory traversal across the
+  selected generation, reuses records, and reads each selected payload once.
+  Cover multiple pages, hashed-ID order, fragmented rows, post-manifest chunk
+  corruption, oversized declared counts and a foreign owner before any I/O.
+- [x] Recording analysis passes the same selected model to instruction validation
+  and the provider request. Run `test:ai-model-routing` plus the mocked real-SDK
+  `recordingsProvider.test.mts` regression after refactoring model selection.
+
 - [x] A lost committed reply followed by a newer local edit resumes the ready edit
   at the normal 15-second transfer cadence; explicit retry timestamps retain
   precedence and failures retain the 60-second cadence. This is local source
@@ -15521,3 +15529,10 @@ Local results do not establish current-head CI or deployed acceptance.
 - Repeat instruction saves quickly at 1440/390/320px: one editor replaces its own active success notification, unrelated notifications remain separate, and all account-size guidance lines remain unobscured without dismissing feedback. Paste 12,000 hard lines through the actual clipboard, verify native undo/redo and subsequent typing, then save and cold-reload exact content. CDP `fill` alone is not evidence of native paste performance.
 
 - Unified MCP discovery must advertise the read-only capabilities and rendering tools accurately; verify them from a read-only host without changing its approval policy. Import/delete tools retain their consent requirements.
+
+## Progress plan artifact links — 26 October 2026
+
+- [x] Verify every remaining local link resolves to a tracked or staged artifact.
+  Current render JSON/PNG links retain their content hash and viewport dimensions.
+  Missing historical temporary evidence must be labeled unavailable, never
+  presented as a working download or silently promoted to a newer verification.

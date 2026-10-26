@@ -1,5 +1,5 @@
 import type { LopuInstruction, LopuInstructionSettings } from '../lopu/promptSettingsCore';
-import { openBackupInstructionRecord, verifyInstructionBackupReference } from './instructionRecords';
+import { openBackupInstructionGeneration, verifyInstructionBackupReference } from './instructionRecords';
 import { createHash } from 'node:crypto';
 import { binaryBytes } from '../auth/binary';
 import { accountContentSnapshot, accountContentValue, ACCOUNT_CONTENT_BYTES } from '../../../timeline/accountContent';
@@ -171,12 +171,12 @@ export async function retainBackupAccountContent(
 /** Read-only offline recovery. Identity, active selections and preferences are
  * historical content, never authority to sign in, grant access or overwrite a
  * live account. A live restore must use the currently authorized writers. */
-export async function openBackupAccountSnapshot(
+async function readBackupAccountSnapshot(
 	store: BackupObjectStore,
 	snapshotId: string,
 	thingId: string,
 	access: BackupAccess
-): Promise<TimelineSnapshot> {
+): Promise<{ snapshot: TimelineSnapshot; instructionRecords?: Map<string, any> }> {
 	const scopeKey = timelineScopeKey(access.scope);
 	const guard = async () => {
 		access.signal?.throwIfAborted();
@@ -212,10 +212,18 @@ export async function openBackupAccountSnapshot(
 	if (json(accountContentSnapshot(value)) !== text || value.ownerId !== thingId || thingId !== access.scope.ownerId)
 		throw Error('Retained account identity changed');
 	const personal = value.preferences.lopuInstructions as any;
-	if (personal?.reference) await verifyInstructionBackupReference(value.ownerId, personal.reference,
-		ids => Promise.all(ids.map(id => openBackupInstructionRecord(store, snapshotId, id, access))), guard, personal.revision);
+	let instructionRecords: Map<string, any> | undefined;
+	if (personal?.reference) {
+		instructionRecords = await openBackupInstructionGeneration(store, snapshotId, value.ownerId, personal.reference, access);
+		await verifyInstructionBackupReference(value.ownerId, personal.reference,
+			ids => Promise.resolve(ids.map(id => instructionRecords!.get(id)).filter(Boolean)), guard, personal.revision);
+	}
 	await guard();
-	return snapshot;
+	return { snapshot, instructionRecords };
+}
+
+export async function openBackupAccountSnapshot(store: BackupObjectStore, snapshotId: string, thingId: string, access: BackupAccess): Promise<TimelineSnapshot> {
+	return (await readBackupAccountSnapshot(store, snapshotId, thingId, access)).snapshot;
 }
 
 /** Recover the complete editable checklist from a sealed private backup. This
@@ -228,7 +236,7 @@ export async function recoverBackupInstructionSettings(
   access: BackupAccess
 ): Promise<LopuInstructionSettings> {
   const scopeKey = timelineScopeKey(access.scope), ownerId = access.scope.ownerId;
-  const snapshot = await openBackupAccountSnapshot(store, snapshotId, ownerId, access);
+  const { snapshot, instructionRecords } = await readBackupAccountSnapshot(store, snapshotId, ownerId, access);
   const personal = accountContentValue(snapshot).preferences.lopuInstructions as any;
   if (!personal) return { revision: null, instructions: [] };
   if (!personal.reference) return personal;
@@ -236,7 +244,9 @@ export async function recoverBackupInstructionSettings(
   const instructions: LopuInstruction[] = [];
   let pieces: string[] = [];
   for (let ordinal = 0; ordinal < personal.reference.partCount; ordinal++) {
-    const record = await openBackupInstructionRecord(store, snapshotId, instructionPartThingId(ownerId, personal.reference.attemptId, ordinal), access);
+    const id = instructionPartThingId(ownerId, personal.reference.attemptId, ordinal), record = instructionRecords?.get(id);
+    if (!record) throw Error('Instruction generation is incomplete');
+    instructionRecords?.delete(id);
     const part = record.payload.part;
     if (part.start) { instructions.push({ id: part.id, enabled: part.enabled, text: '' }); pieces = []; }
     pieces.push(part.text);
