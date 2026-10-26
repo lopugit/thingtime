@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-26: Integrate isolated native rendering into the existing Thingtime MCP, verify real agent artifacts and owned cleanup, correct read-only discovery metadata and the stale Nav acceptance assertion. Native instruction guidance passes all three widths; unified desktop reload and broader acceptance remain separate. [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
 - **2026-10-25 — Comment acceptance CI:** repair the harness to use selected-Character clients and cover independent draft/content failures. No production handler changed. Feed checks pass 96 with one existing skip; exact-head CI is separate. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
 
 - Shared Copy negotiates original-byte streaming for larger files, with exact receipts, final access checks, bounded progress/cancellation and atomic local import.

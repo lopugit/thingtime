@@ -2,24 +2,34 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 const enabled = process.env.TT_DRAFT_BROWSER_TEST === '1';
-test('stdio agent: no-login native PNGs, canonical dependencies and failures', { skip: !enabled, timeout: 120000 }, async () => {
+test('unified stdio agent: isolated native PNGs, canonical dependencies and failures', { skip: !enabled, timeout: 1800000 }, async () => {
+  assert.ok(process.env.THINGTIME_MCP_RENDER_IMAGE, 'Configure the unified MCP pinned image explicitly.');
+  assert.ok(process.env.THINGTIME_MCP_RENDER_SOCKET, 'Configure the unified MCP Docker Unix socket explicitly.');
+  const rendererEnv = Object.fromEntries(['THINGTIME_MCP_RENDER_IMAGE', 'THINGTIME_MCP_RENDER_SOCKET',
+    'THINGTIME_MCP_RENDER_DOCKER', 'THINGTIME_MCP_RENDER_ASSETS'].flatMap(key => process.env[key] ? [[key, process.env[key]!]] : []));
   const transport = new StdioClientTransport({
     command: process.execPath, args: ['dist/index.js'], stderr: 'pipe',
-    env: process.env.PLAYWRIGHT_BROWSERS_PATH ? { PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH } : undefined
+    env: { ...rendererEnv, THINGTIME_MCP_STATE_DIR: join(tmpdir(), `thingtime-render-acceptance-${process.pid}`) }
   });
+  transport.stderr?.resume();
   const client = new Client({ name: 'thingtime-draft-acceptance', version: '1.0.0' });
+  const callTool = (request: Parameters<Client['callTool']>[0]) => client.callTool(request, undefined, { timeout: 240000 });
   await client.connect(transport);
   try {
     assert.ok((await client.listTools()).tools.some(tool => tool.name === 'thingtime_render_and_export'));
-    const capabilities = await client.callTool({ name: 'thingtime_capabilities', arguments: {} });
+    const capabilities = await callTool({ name: 'thingtime_capabilities', arguments: {} });
     assert.equal(capabilities.isError, undefined);
     assert.match(String(capabilities.structuredContent?.renderExport), /thingtime_render_and_export/);
+    assert.equal((capabilities.structuredContent?.renderIsolation as any).mode, 'isolated-per-render');
+    assert.equal((capabilities.structuredContent?.renderIsolation as any).configured, true);
     const fixture = JSON.parse(await readFile(new URL('./fixtures/affirmation.transfer.json', import.meta.url), 'utf8'));
-    const result: any = await client.callTool({ name: 'thingtime_render_and_export', arguments: { content: fixture, crop: { enabled: true, blockId: 'card' } } });
+    const result: any = await callTool({ name: 'thingtime_render_and_export', arguments: { content: fixture, crop: { enabled: true, blockId: 'card' } } });
     assert.equal(result.isError, undefined, JSON.stringify(result));
     const metadata = result.structuredContent;
     assert.match(metadata.hash, /^[a-f0-9]{64}$/);
@@ -54,35 +64,35 @@ test('stdio agent: no-login native PNGs, canonical dependencies and failures', {
       for (const resource of resources) await writeFile(`${process.env.TT_DRAFT_ARTIFACT_DIR}/${new URL(resource.uri).pathname.split('/').pop()}`, resource.text || Buffer.from(resource.blob, 'base64'));
       await writeFile(`${process.env.TT_DRAFT_ARTIFACT_DIR}/verification.json`, JSON.stringify(metadata, null, 2));
     }
-    const repeat: any = await client.callTool({ name: 'thingtime_render_and_export', arguments: { content: exported } });
+    const repeat: any = await callTool({ name: 'thingtime_render_and_export', arguments: { content: exported } });
     assert.equal(repeat.isError, undefined, JSON.stringify(repeat));
     assert.equal(repeat.structuredContent.hash, metadata.hash);
-    const concurrent: any[] = await Promise.all([0, 1].map(() => client.callTool({ name: 'thingtime_render_and_export', arguments: { content: exported } })));
+    const concurrent: any[] = await Promise.all([0, 1].map(() => callTool({ name: 'thingtime_render_and_export', arguments: { content: exported } })));
     assert.equal(concurrent.filter(result => result.isError).length, 1,
       JSON.stringify(concurrent.map(result => result.isError ? result.content : { ok: true })));
     assert.match(concurrent.find(result => result.isError).content[0].text, /busy/);
     for (const args of [{ content: exported, viewports: [{ width: 319, height: 844 }] }, { content: exported, crop: { enabled: true, blockId: 'missing' } }]) {
-      const rejected: any = await client.callTool({ name: 'thingtime_render_and_export', arguments: args });
+      const rejected: any = await callTool({ name: 'thingtime_render_and_export', arguments: args });
       assert.equal(rejected.isError, true);
       assert.ok(rejected.content.every((item: any) => item.type === 'text'));
     }
     const badInputs = ['{invalid', { ...fixture, things: [fixture.things[0]] },
       { ...fixture, things: [{ ...fixture.things[1], crystal: { ...fixture.things[1].crystal, render: { tag: 'img', props: { src: 'https://example.com/private' } } } }] }];
     for (const content of badInputs) {
-      const rejected: any = await client.callTool({ name: 'thingtime_render_and_export', arguments: { content } });
+      const rejected: any = await callTool({ name: 'thingtime_render_and_export', arguments: { content } });
       assert.equal(rejected.isError, true);
       assert.ok(rejected.content.every((item: any) => item.type === 'text'));
     }
     for (const invisibleStyle of [{ color: 'rgba(10, 20, 30, 0)' }, { color: 'color(display-p3 1 0 0 / 0)' }, { fontSize: '0px' }]) {
       const hidden = structuredClone(fixture); Object.assign(hidden.things[1].crystal.render.props.style, invisibleStyle);
-      const blank: any = await client.callTool({ name: 'thingtime_render_and_export', arguments: { content: hidden } });
+      const blank: any = await callTool({ name: 'thingtime_render_and_export', arguments: { content: hidden } });
       assert.equal(blank.isError, true);
       assert.match(blank.content[0].text, /Invisible/);
       assert.ok(blank.content.every((item: any) => item.type === 'text'));
     }
     const overflow = structuredClone(fixture);
     overflow.things[1].crystal.render.props.style.width = '3000px';
-    const failed: any = await client.callTool({ name: 'thingtime_render_and_export', arguments: { content: overflow } });
+    const failed: any = await callTool({ name: 'thingtime_render_and_export', arguments: { content: overflow } });
     assert.equal(failed.isError, true);
     assert.match(failed.content[0].text, /overflow/);
   } finally { await client.close(); }

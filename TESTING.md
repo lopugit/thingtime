@@ -15444,6 +15444,35 @@ Local results do not establish current-head CI or deployed acceptance.
   bytes after a cold offline reload; revoked/replaced/truncated sources and
   caller cancellation must leave no partial import.
 
+### Unified local MCP draft rendering — 26 October 2026
+
+- Register the regular `thingtime` MCP host against `MCP/dist/index.js` with
+  its existing tools intact. Verify `thingtime_capabilities` reports the
+  render configuration and tool discovery includes the prior import tools plus
+  `thingtime_render_and_export`. Treat the legacy `thingtime-drafts` worker's
+  previous native success as separate evidence; the unified host call and its
+  downloadable artifacts still require acceptance.
+- With absent, malformed or non-absolute renderer settings, confirm rendering
+  is disabled with no host fallback and all existing import tools remain
+  available. Before a valid render, verify the exact cached sha256 image ID,
+  absolute Docker socket and renderer asset paths. Set host tool timeout to at
+  least 240 seconds.
+- Make an actual unified host render call with supplied UTF-8 JSON at or below
+  256 KiB. Verify canonical JSON and PNG outputs are embedded MCP resources or
+  `image` blocks, and check artifact extraction with the optional `thingtime`
+  server-name argument. HTTP reachability alone does not establish
+  a successful MCP tool call or artifact delivery.
+- Confirm no credentials, import roots, state directory or other host env
+  reaches the renderer child. Exercise invalid input, network isolation,
+  EOF, error, signal and runtime timeout; each failure returns no artifacts,
+  and cleanup removes only the request's verified owned container/volume
+  before success is returned.
+- Retain the `remix/app/components/Nav/lopuDrawerEntry.test.ts` regression for
+  an older source predicate resolving after a newer navigation: the stale
+  completion must not select or overwrite the newer source. Keep test/CLI
+  evidence, the legacy worker, unified-host acceptance, and installed desktop
+  acceptance as distinct states.
+
 - Local attachment Actions: annotate a standalone anonymous and account file,
   verify the canonical `updatedAt`, and remove it while remote sync is unavailable.
   Confirm child cleanup, independent account metadata/deletion queues, no anonymous
@@ -15454,3 +15483,5 @@ Local results do not establish current-head CI or deployed acceptance.
   reload, show the account-size explanation and make no repeated requests. Shorten
   and save to resume account sync. Reconcile an earlier lost reply before refusing
   newer oversized content; retain uncertain legacy attempts without replay loops.
+
+- Unified MCP discovery must advertise the read-only capabilities and rendering tools accurately; verify them from a read-only host without changing its approval policy. Import/delete tools retain their consent requirements.

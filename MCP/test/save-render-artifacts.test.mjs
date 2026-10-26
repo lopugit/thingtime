@@ -5,7 +5,7 @@ import { deflateSync } from 'node:zlib';
 import { mkdtemp, readFile, writeFile, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { crc32, decodeRenderEvents, saveRenderArtifacts, MAX_INPUT_BYTES } from '../scripts/save-render-artifacts.mjs';
+import { crc32, decodeRenderEvents, decodeRenderResult, saveRenderArtifacts, saveRenderResult, MAX_INPUT_BYTES } from '../scripts/save-render-artifacts.mjs';
 
 function chunk(type, data) {
   const bytes = Buffer.alloc(data.length + 12);
@@ -23,6 +23,33 @@ function fixture() {
   return [{ type: 'item.completed', item: { id: 'render', type: 'mcp_tool_call', server: 'thingtime-drafts', tool: 'thingtime_render_and_export', status: 'completed', error: null, result } }, { type: 'turn.completed', usage: {} }];
 }
 const encode = events => events.map(e => JSON.stringify(e)).join('\n') + '\n';
+
+test('saves native host resources with actual provenance and validates before writing', async () => {
+  const source = fixture()[0].item.result;
+  const result = { content: source.content, structuredContent: source.structured_content };
+  const provenance = { host: 'Current desktop chat', server: 'thingtime' };
+  const root = await mkdtemp(join(tmpdir(), 'tt-native-extract-'));
+  try {
+    const output = join(root, 'out');
+    const report = await saveRenderResult(result, output, provenance);
+    assert.equal(report.host, provenance.host);
+    assert.equal(report.server, 'thingtime');
+    assert.equal(report.itemId, undefined);
+    assert.equal(report.artifacts.length, 2);
+    await assert.rejects(saveRenderResult(result, output, provenance), { code: 'EEXIST' });
+    await assert.rejects(saveRenderResult({ ...result, isError: true }, join(root, 'bad'), provenance), /Failed/);
+    assert.ok(!(await readdir(root)).includes('bad'));
+    assert.throws(() => decodeRenderResult({ ...result, structured_content: source.structured_content }, provenance), /Ambiguous/);
+    const changed = structuredClone(result); changed.content[0].resource.text += ' ';
+    assert.throws(() => decodeRenderResult(changed, provenance), /hash mismatch/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('CLI extraction selects the configured unified server explicitly', () => {
+  const events = fixture(); events[0].item.server = 'thingtime';
+  assert.equal(decodeRenderEvents(encode(events), 'thingtime').verification.server, 'thingtime');
+  assert.throws(() => decodeRenderEvents(encode(events)), /exactly one/);
+});
 
 test('extracts actual CLI event shape and accepts clean expected invalid-call result', () => {
   const events = fixture();

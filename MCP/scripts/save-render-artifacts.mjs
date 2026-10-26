@@ -63,7 +63,17 @@ export function decodeRenderEvents(input, server = 'thingtime-drafts') {
   }
   const successes = renders.filter(i => i.status === 'completed' && !i.error);
   requireThat(successes.length === 1, 'Expected exactly one successful render call');
-  const item = successes[0], result = item.result, metadata = result?.structured_content;
+  const item = successes[0];
+  return decodeRenderResult(item.result, { host: 'Codex CLI agent (not current desktop chat)', server, itemId: item.id });
+}
+
+// Native MCP hosts can save their actual tool result without inventing CLI events.
+export function decodeRenderResult(result, provenance) {
+  requireThat(result && result.isError !== true && Array.isArray(result.content), 'Failed or invalid render result');
+  requireThat(!(result.structuredContent && result.structured_content), 'Ambiguous render metadata');
+  requireThat(Buffer.byteLength(JSON.stringify(result)) <= MAX_INPUT_BYTES, 'Input limit exceeded');
+  requireThat(typeof provenance?.host === 'string' && typeof provenance?.server === 'string', 'Host provenance required');
+  const metadata = result.structuredContent ?? result.structured_content;
   requireThat(metadata?.ok === true && /^[a-f0-9]{64}$/.test(metadata.hash) && Array.isArray(metadata.viewports) && metadata.viewports.length >= 1 && metadata.viewports.length <= 4, 'Invalid render metadata');
   requireThat(metadata.viewports.every(v => Number.isInteger(v.width) && v.width >= 320 && v.width <= 1920 && Number.isInteger(v.height) && v.height >= 320 && v.height <= 1440 && v.deviceScaleFactor === 1), 'Invalid viewport metadata');
   requireThat(Array.isArray(metadata.artifacts) && metadata.artifacts.length >= 2 && metadata.artifacts.length <= 6 && new Set(metadata.artifacts).size === metadata.artifacts.length, 'Invalid artifact manifest');
@@ -100,10 +110,10 @@ export function decodeRenderEvents(input, server = 'thingtime-drafts') {
     checks.push({ name, bytes: bytes.length, sha256: hash(bytes), ...dimensions });
   }
   requireThat(files.has('thingtime-draft.json') && metadata.artifacts.every(name => files.has(name)), 'Incomplete artifact set');
-  return { files, verification: { host: 'Codex CLI agent (not current desktop chat)', server, tool: item.tool, itemId: item.id, metadata, artifacts: checks } };
+  return { files, verification: { ...provenance, tool: 'thingtime_render_and_export', metadata, artifacts: checks } };
 }
 
-export async function saveRenderArtifacts(inputPath, outputPath) {
+export async function saveRenderArtifacts(inputPath, outputPath, server = 'thingtime-drafts') {
   const handle = await open(inputPath, 'r');
   let input;
   try {
@@ -115,7 +125,14 @@ export async function saveRenderArtifacts(inputPath, outputPath) {
     requireThat(used <= MAX_INPUT_BYTES, 'Input limit exceeded');
     input = buffer.subarray(0, used).toString('utf8');
   } finally { await handle.close(); }
-  const decoded = decodeRenderEvents(input);
+  return saveDecodedArtifacts(decodeRenderEvents(input, server), outputPath);
+}
+
+export async function saveRenderResult(result, outputPath, provenance) {
+  return saveDecodedArtifacts(decodeRenderResult(result, provenance), outputPath);
+}
+
+async function saveDecodedArtifacts(decoded, outputPath) {
   const output = resolve(outputPath);
   // Exclusive mkdir refuses pre-existing directories (including symlinks). Nothing
   // is written until the entire event stream and artifact set have validated.
@@ -129,8 +146,8 @@ export async function saveRenderArtifacts(inputPath, outputPath) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
-    requireThat(process.argv.length === 4, 'Usage: node MCP/scripts/save-render-artifacts.mjs PRIVATE_EVENTS.jsonl NEW_OUTPUT_DIRECTORY');
-    const result = await saveRenderArtifacts(process.argv[2], process.argv[3]);
+    requireThat([4, 5].includes(process.argv.length), 'Usage: node MCP/scripts/save-render-artifacts.mjs PRIVATE_EVENTS.jsonl NEW_OUTPUT_DIRECTORY [SERVER_NAME]');
+    const result = await saveRenderArtifacts(process.argv[2], process.argv[3], process.argv[4]);
     console.log(`Verified and saved ${result.artifacts.length} artifacts in ${resolve(process.argv[3])}`);
   } catch (error) { console.error(`Artifact extraction failed: ${error.message}`); process.exitCode = 1; }
 }

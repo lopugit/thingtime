@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
+import { runInNewContext } from 'node:vm';
+import ts from 'typescript';
 
 import { DRAWER_KEEP_OPEN_DEFAULT_IDS, drawerMenuItems, filterDrawerItemsByAuth } from './Drawer/drawerMenu';
 import { resolveSettingsTab } from '~/components/Settings/settingsTabs';
@@ -129,7 +131,7 @@ test('the floating host is non-modal chrome that hides on /lopu and honours the 
 	// `open`, so the navbar 🦄 can open it with the bubble turned off
 	assert.match(source, /const showLauncher = !hiddenOnPath && \(settings\.launcher \|\| minimised\);/);
 	assert.match(source, /const showWindow = !hiddenOnPath && open && !minimised;/);
-	assert.match(source, /\{showLauncher && !showSheet && !\(showFrame && docked\) && \(/);
+	assert.match(source, /\{launcherVisible && \(/);
 	assert.doesNotMatch(source, /role="dialog"/, 'the window must not claim to be a dialog while non-modal');
 	assert.match(source, /role="complementary"/);
 	assert.match(source, /zIndex=\{LOPU_WINDOW_Z\}/);
@@ -147,6 +149,31 @@ test('the floating host is non-modal chrome that hides on /lopu and honours the 
 	assert.match(source, /88dvh/);
 	// the shared chat view, compact, without the conversation column
 	assert.match(source, /<LopuChatView compact showConversations=\{false\} onOpenFull=\{openFull\} \/>/);
+});
+
+test('floating launcher visibility preserves settings, minimisation, mobile sheets and docked frames', () => {
+	const source = ts.createSourceFile('LopuHost.tsx', read('components/Lopu/LopuHost.tsx'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+	const names = ['showLauncher', 'showWindow', 'showSheet', 'showFrame', 'docked', 'launcherVisible'];
+	const initializers = new Map<string, string>();
+	const visit = (node: ts.Node) => {
+		if (ts.isVariableDeclaration(node) && names.includes(node.name.getText(source)) && node.initializer) {
+			initializers.set(node.name.getText(source), node.initializer.getText(source));
+		}
+		ts.forEachChild(node, visit);
+	};
+	visit(source);
+	for (const name of names) assert.ok(initializers.has(name), `Missing ${name} visibility binding`);
+	const code = names.map(name => `const ${name} = ${initializers.get(name)};`).join('\n') + '\n({ showWindow, launcherVisible });';
+	for (const hiddenOnPath of [false, true]) for (const launcher of [false, true]) for (const minimised of [false, true]) {
+		for (const open of [false, true]) for (const isMobile of [false, true]) for (const dock of ['free', 'top', 'right', 'bottom', 'left']) {
+			const context = { hiddenOnPath, settings: { launcher, dock }, minimised, open, isMobile };
+			const actual = runInNewContext(code, context);
+			const windowOpen = !hiddenOnPath && open && !minimised;
+			const expectedLauncher = !hiddenOnPath && (launcher || minimised) && !(windowOpen && (isMobile || dock !== 'free'));
+			assert.equal(actual.showWindow, windowOpen, JSON.stringify(context));
+			assert.equal(actual.launcherVisible, expectedLauncher, JSON.stringify(context));
+		}
+	}
 });
 
 test('logging out sweeps every tt-lopu-* cache line', () => {

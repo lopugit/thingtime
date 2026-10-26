@@ -655,13 +655,20 @@ Claude, and other compatible tools read the same instructions. Update
 ## Thingtime MCP
 
 The [`MCP/`](MCP/) package contains Thingtime's consent-first AI conversation
-normalizers. As a standalone MCP server it supports explicit current-chat
-handoff, private local staging, ChatGPT/Claude exports, and a portable connector
-manifest. The Electron app also bundles its read-only desktop connector: it can
-discover local ChatGPT Work/Codex history plus Claude sessions from the main and
-Thingtime desktop profiles, then import projects, chats, and visible messages
-through the authenticated Messenger API. See [`MCP/README.md`](MCP/README.md)
-for both workflows and their privacy boundaries.
+normalizers. Its regular local stdio entry supports explicit current-chat
+handoff and private local staging for ChatGPT/Claude exports and portable
+connector manifests. With an exact cached Docker image and Unix socket
+configured, the same `thingtime` server adds isolated no-login native draft
+rendering; missing renderer settings disable only that tool. Rendering runs in
+a network-none container and returns canonical JSON and embedded PNG artifacts
+only after owned-resource cleanup is verified. The MCP still has its local
+import `SnapshotStore`; it does not scan host application data automatically or
+upload staged records to ThingtimeDB. The Electron app's read-only desktop
+connector remains a separate authenticated workflow. See [`MCP/README.md`](MCP/README.md),
+[no-login draft preview and export](docs/no-login-draft-preview.md) and the
+[MCP design](docs/ai-chat-import-mcp.md). Desktop acceptance of the unified
+render tool is pending; earlier success through `thingtime-drafts` does not
+establish it.
 
 ## Lopu voice + personal Secure Vault
 

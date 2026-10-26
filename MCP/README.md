@@ -1,134 +1,120 @@
 # Thingtime MCP
 
-A consent-first local MCP bridge for bringing conversations from AI desktop
-apps into a normalized Thingtime staging format.
+Thingtime MCP is a consent-first local stdio server for explicitly supplied AI
+conversation exports, host conversations and portable Thingtime drafts. The
+normal entry point is `MCP/dist/index.js`; it retains the existing import and
+staging tools and adds `thingtime_render_and_export` when its isolated renderer
+is configured. The server does not discover host chat history, cookies,
+credentials or private application storage by itself.
 
-## What works
+The standalone tools accept an explicitly supplied current chat or
+user-approved ChatGPT/Claude export, normalize it into private local staging,
+and preview relational `ai-chat` / `ai-chat-message` records without uploading
+them. Other apps can use the portable
+[`thingtime.ai-desktop-export` manifest](examples/ai-desktop-export.example.json).
+Remote attachment URLs are retained but never fetched implicitly. The
+separately bundled Electron connector performs a user-triggered read of its
+allowlisted local conversation stores and can sync selected projects, chats
+and visible messages through the authenticated Messenger API; it filters hidden
+reasoning and internal tool traffic. It is not the standalone server's
+automatic discovery path.
 
-- Any MCP-capable host can explicitly hand its current conversation to
-  `thingtime_ingest_current_chat`.
-- ChatGPT and Claude JSON exports can be normalized from a user-approved path.
-- Any other app can emit the portable `thingtime.ai-desktop-export` manifest;
-  see [`examples/ai-desktop-export.example.json`](examples/ai-desktop-export.example.json).
-- Chats, messages, settings, attachment metadata, source provenance, and
-  allowlisted local attachment files are staged privately outside the
-  repository. Remote attachment URLs are retained but never downloaded
-  implicitly.
-- Relational `ai-chat` + `ai-chat-message` Thingtime ingestion records can be
-  previewed without writing to ThingtimeDB.
-- The Electron build bundles a separate desktop connector from this package.
-  With an authenticated Thingtime window it discovers local ChatGPT Work/Codex
-  history, the main Claude desktop profile, and the Claude Thingtime profile;
-  official ChatGPT/Claude JSON or ZIP exports can be selected for cloud history.
-- The bundled connector sends bounded batches through
-  `/api/v1/ai/connections`. Projects become Messenger Spaces, conversations
-  become chats/channels, and messages become relational read-only Messenger
-  rows. Stable owner-scoped source keys make retries and full resyncs
-  idempotent.
+## Build
 
-MCP does **not** give a server universal access to every connected app's chat
-history, private application storage, cookies, or settings. Apps must hand the
-data to the standalone server or provide an export/connector. The standalone
-MCP server never scans application data directories automatically. The bundled
-Electron connector performs only an explicit, user-triggered read of its
-allowlisted local conversation stores; it filters hidden reasoning, tool
-traffic, and internal context, and never sends raw local paths or credentials.
+From the repository root:
 
-## Install and build
-
-```bash
-cd MCP
-npm install
-npm test
-npm run build
+```sh
+npm run worktree-setup
+npm --prefix remix run build:draft
+npm --prefix MCP ci
+npm --prefix MCP run build
 ```
 
-Configure absolute import roots and a private state directory:
+The no-login renderer uses the existing `remix/dist/draft-preview` assets and
+an exact, already-cached Docker image. Install/configure Docker and prepare the
+compatible image through the documented isolated-render workflow; the MCP
+process never pulls or builds an image. No credentials or provider keys are
+needed for rendering.
 
-```bash
-export THINGTIME_MCP_ALLOWED_ROOTS="$HOME/Downloads/ai-exports"
-export THINGTIME_MCP_STATE_DIR="$HOME/.thingtime/mcp"
-```
+## Configure a desktop host
 
-The state directory is created with private directory/file modes. Keep it out
-of synced or shared folders if the chat data is sensitive.
-
-## Desktop app configuration
-
-Build first, then add this stdio server to the desktop app's MCP configuration:
+Use the regular `thingtime` server name and the normal MCP entry point. Replace
+the example paths and image digest with local absolute paths and the exact
+verified image ID. `THINGTIME_MCP_RENDER_DOCKER` defaults to
+`/opt/homebrew/bin/docker`; `THINGTIME_MCP_RENDER_ASSETS` is optional and, when
+set, must be an absolute path to the built renderer assets.
 
 ```json
 {
   "mcpServers": {
     "thingtime": {
-      "command": "node",
+      "command": "/absolute/path/to/node",
       "args": ["/absolute/path/to/thingtime/MCP/dist/index.js"],
       "env": {
         "THINGTIME_MCP_ALLOWED_ROOTS": "/Users/you/Downloads/ai-exports",
-        "THINGTIME_MCP_STATE_DIR": "/Users/you/.thingtime/mcp"
+        "THINGTIME_MCP_STATE_DIR": "/Users/you/.thingtime/mcp",
+        "THINGTIME_MCP_RENDER_IMAGE": "sha256:<64-lowercase-hex-image-id>",
+        "THINGTIME_MCP_RENDER_SOCKET": "/absolute/path/to/docker.sock",
+        "THINGTIME_MCP_RENDER_DOCKER": "/absolute/path/to/docker",
+        "THINGTIME_MCP_RENDER_ASSETS": "/absolute/path/to/thingtime/remix/dist/draft-preview"
       }
     }
   }
 }
 ```
 
-Config file locations differ by host and can change; use the host's current MCP
-documentation. The server uses stdio, so the host launches one private local
-process and communicates over JSON-RPC.
+The host's tool-call timeout must be at least 240 seconds. The renderer has a
+30-second inner deadline; the per-render container lifetime is 120 seconds;
+the adapter allows 150 seconds for work plus up to 76 seconds for verified
+cleanup (226 seconds total). A host timeout below that can interrupt cleanup.
 
-This configuration is for the standalone MCP workflow. Thingtime's own
-Electron app needs no MCP config: build/package the desktop app, sign in, open
-Messenger, select **✦ AI**, and choose **Sync local chats** or **Import full
-export…** for each source. The web browser deliberately cannot inspect desktop
-application storage.
+`THINGTIME_MCP_RENDER_IMAGE` must be an exact `sha256:` image ID with 64
+lowercase hexadecimal digits, and `THINGTIME_MCP_RENDER_SOCKET` must be an
+absolute Unix socket path. Docker and optional asset paths must also be
+absolute. Missing or invalid render settings disable only rendering; the other
+MCP tools remain available. Run `thingtime_capabilities` to see whether
+rendering is configured. That is configuration status: Docker, the image and
+assets are checked lazily when rendering runs.
 
-## Safe workflow
+The renderer receives only a sanitized `PATH`, temporary `HOME` and `TMPDIR`.
+It does not receive the import roots, state directory or host credentials.
+Rendering runs in a network-none, per-request container, returns artifacts
+only after cleanup, and removes only resources it can verify as its own. The
+normal MCP still has its existing local import `SnapshotStore`; it is not a
+stateless or render-only server. For the renderer threat model and lifecycle,
+see [no-login draft preview and export](../docs/no-login-draft-preview.md).
 
-1. Call `thingtime_capabilities` to review boundaries and configured roots.
-2. Ask the user to approve one export file or the current host chat.
+## Safe import workflow
+
+1. Call `thingtime_capabilities` to review available tools and boundaries.
+2. Obtain the user's explicit approval for an export file or current host chat.
 3. Import with `thingtime_import_archive` or `thingtime_ingest_current_chat`.
-4. Call `thingtime_list_imports`; it returns counts, not message bodies.
-5. Read one conversation only when needed.
-6. Preview future ThingtimeDB records with `thingtime_prepare_ingestion`.
-7. Delete local staging with `thingtime_delete_import` when the user asks.
+4. Call `thingtime_list_imports`; it returns summaries without message bodies.
+5. Read a conversation only when needed, then preview records with
+   `thingtime_prepare_ingestion`.
+6. Delete local staging with `thingtime_delete_import` when requested.
 
-## Connector contract
+The state directory is private local staging, not a ThingtimeDB upload path.
+The authenticated Electron-to-Messenger bridge is a separate workflow. See
+the [full MCP and desktop connector documentation](../README.md#thingtime-mcp).
+Configure `THINGTIME_MCP_ALLOWED_ROOTS` and `THINGTIME_MCP_STATE_DIR` as
+absolute paths when archive imports are needed. Keep the private state directory
+outside synced/shared folders when it contains sensitive chat data. Staged
+records are only a preview: the standalone MCP does not upload them to
+ThingtimeDB. The authenticated Electron connector sends bounded batches through
+`/api/v1/ai/connections` under the current Thingtime session.
 
-Connectors normalize source data into schema version 1 in `src/model.ts`.
-Adapters should preserve stable source IDs, timestamps, ordered messages,
-attachment references, settings, participants, and provenance. Unknown raw
-metadata is opt-in and recursively redacted for credential-shaped keys.
+## Render response and acceptance
 
-The portable manifest is the interoperability path for apps without a built-in
-adapter. An app-side exporter should obtain the user's consent, serialize only
-the selected scope, and write the manifest into an allowed root.
+`thingtime_render_and_export` returns canonical JSON as an embedded
+`application/json` MCP resource and PNGs as MCP `image` blocks and embedded
+blob resources. Artifacts are inline; `thingtime-draft://` resource URIs are
+not public URLs. A host or local artifact extractor must consume the MCP tool
+result, including both the canonical JSON and embedded PNG content. When using
+the supplied extractor with this shared server, select it with
+`thingtime` as the extractor’s final positional argument. HTTP reachability or the old
+`thingtime-drafts` worker's native success does not prove this normal server's
+tool call or host artifact delivery. See the unified-host checklist in
+[`TESTING.md`](../TESTING.md#unified-local-mcp-draft-rendering--26-october-2026).
 
-## ThingtimeDB boundary
-
-The standalone MCP staging tools still do not upload directly to ThingtimeDB.
-The enabled persistence path is the authenticated Electron-to-Messenger bridge:
-the renderer receives only normalized batches over a narrow preload API and
-posts them to `/api/v1/ai/connections` using the current Thingtime session.
-Local sync sessions are in-memory, expiring, cancellation-aware, and expose no
-raw chosen path to the page.
-
-The server registers `ai-connection` alongside native Messenger schemas and
-stores every imported message as its own bounded `chat-message` Thing. Source
-ids are hashed with the owner before becoming unique keys. The server enforces
-batch limits, owner ACLs, membership-only reads, read-only provider rows, and
-the same exact transactional account-storage ledger used by posts and native
-Messenger content. Attachment object bytes, when present through Thingtime's
-upload system, are separately charged on protected attachment Things. Replaying
-an identical batch changes neither row count nor storage usage.
-
-## No-login native draft rendering
-
-`thingtime_render_and_export` renders supplied editable Thing/transfer JSON with
-Thingtime's real HTML/component/page renderers in a fresh offline Chromium
-context. It returns canonical JSON, PNG images and embedded downloadable
-resources, viewport metadata, a content hash and diagnostics. No login,
-account persistence or publication occurs. Text/CSS only; Actions and network
-assets fail closed. Build the sibling draft bundle and install Chromium first.
-See [setup, host connection, examples and limits](../docs/no-login-draft-preview.md).
-Web-only hosts need a separately configured bridge; the existing hosted OAuth
-endpoint does not gain this tool automatically.
+26 October verification: the normal `thingtime` connection passed actual CLI-agent capabilities, native rendering and malformed-input refusal. [Artifacts and boundaries](../artifacts/anonymous-local-first-2026-10-26/README.md). Desktop discovery of the unified namespace remains a separate host check.
