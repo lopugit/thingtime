@@ -27,6 +27,11 @@ require anonymous CORS; encrypted uploads remain available when a site blocks it
 `api.passwords` advances to 1.3.0 for optional icon metadata. Existing vault keys,
 account/session boundaries, encryption purposes and retry identities are retained.
 
+Integrated freshly fetched `origin/main` at
+`79b46b081aaefa3dcb82c9f85a2926b9f0720436` inside the task worktree. Shared
+Theme Studio/select contracts from main are retained alongside passwords 1.3.0.
+The unrelated primary checkout was not modified.
+
 ## Evidence
 
 - Password suite: 68/68 passing; targeted rendered-control regression also passes.

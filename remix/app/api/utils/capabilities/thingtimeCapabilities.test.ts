@@ -451,7 +451,7 @@ test('native traversal requires bounded synchronous callback support on both man
 test('server Action outcomes are discoverable in both capability manifests', () => {
   for (const features of [createApiCapabilitiesManifest().features, Object.fromEntries(Object.entries(thingtimeCapabilityManifest('https://outcomes.test').features).map(([id, feature]) => [id, feature.version]))]) {
     assert.equal(features['api.actions-run'], '1.38.0');
-    assert.equal(features['api.timeline'], '1.18.0');
+    assert.equal(features['api.timeline'], '1.19.0');
     assert.equal(capabilitySatisfies('1.36.0', '1.38.0'), false);
     assert.equal(capabilitySatisfies('1.15.0', '1.16.0'), false);
     assert.equal(capabilitySatisfies('1.16.0', '1.17.0'), false);
@@ -528,4 +528,21 @@ test('editable media containers require compatible element storage contracts on 
  }
  assert.equal(capabilitySatisfies('1.6.0','1.7.0'),false);
  assert.equal(capabilitySatisfies('1.7.1','1.7.0'),true);
+});
+
+
+test('theme focus settings are additive and consistent across both manifests', async () => {
+  const { THEME_CAPABILITY_REQUIREMENTS } = await import('../../../theme/capabilities');
+  const requirements = { ...THEME_CAPABILITY_REQUIREMENTS, 'api.themes-shared': '1.1.0', 'api.timeline': '1.19.0' };
+  const docs = createApiCapabilitiesManifest().features;
+  const discovery = thingtimeCapabilityManifest('https://themes.test');
+  assert.equal(discovery.origin, 'https://themes.test');
+  for (const [feature, minimum] of Object.entries(requirements)) {
+    assert.equal(docs[feature], minimum);
+    assert.equal(discovery.features[feature].version, minimum);
+    assert.equal(capabilitySatisfies(minimum, minimum), true);
+    assert.equal(capabilitySatisfies('1.20.0', minimum), true);
+    for (const incompatible of ['', '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(incompatible, minimum), false);
+  }
+  assert.equal(capabilitySatisfies('1.1.9', THEME_CAPABILITY_REQUIREMENTS['api.themes']), false);
 });

@@ -107,6 +107,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   controls, and a native passkey setup guide. Password capability is 1.3.0;
   isolated generator, icon and HTTP checks cover the new boundaries.
 
+- 2026-10-26: Align shared native selects with Thingtime surfaces and radii; replace the black focus outline with a contrasting pink border and soft pink-to-violet glow. Theme Studio can customize both glow colours, softness and strength, including no glow. Add isolated desktop/mobile, light/dark and theme-editor save/reload coverage. **Codex (AI)**
+
 - 2026-10-26: Forward public social cards and generated docs through the local Vite proxy; verify root docs GET/POST through the actual Vite server as well as built Nitro. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
 
 - 2026-10-26: Add explicit per-environment API gateway ownership, signed origin-preserving forwarding, safe pool draining and bounded shared index-plan readiness. Branch frontends use the selected environment backend; legacy deployment retirement and live alias acceptance remain separate rollout requirements. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**

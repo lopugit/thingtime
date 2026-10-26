@@ -4146,6 +4146,11 @@ email whose link points at the attacker.
       WITHOUT navigating. Logged out, the row reads "Log in" and opens the
       settings modal (account switcher hosts log-in) instead of navigating.
 
+## Shared select controls
+
+- [ ] Run the isolated computed-style and interaction regression: `TT_QA_IMAGE=<immutable image ID> TT_QA_SECCOMP=<installed runtime seccomp profile> node remix/scripts/run-select-theme-browser.mjs`. It uses the existing credential-browser runner isolation contract and synthetic roster data.
+- [ ] On feed/profile composers, quick comments and nested replies, and Admin → CI Lopu Feature Stack execution providers, check the shared Chakra Select at desktop and 390px. It uses the active Thingtime card, ink, border and radius tokens with readable inset text and space for the chevron; light/dark and changed radius themes update together. Open the native options, select with mouse/keyboard, and confirm the selected identity/provider is retained. Tab and pointer focus use the theme focus-border color and soft two-color glow without an extra outline; disabled and invalid controls remain distinguishable. In Theme Studio, change Focus border, Focus glow start/end, softness and strength, then save and reload the theme. Confirm selected controls use the saved values in light/dark themes and strength 0% leaves the border without a visible glow. Scroll each affected page to the bottom and check long labels, wrapping and horizontal overflow.
+
 ## Shared page shell & footer (`remix/app/components/Layout/Main.tsx`, `remix/app/components/Nav/Footer.tsx`)
 
 - [ ] On the landing page and a short authenticated route, scroll from top to
