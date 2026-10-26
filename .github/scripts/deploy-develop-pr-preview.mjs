@@ -1057,7 +1057,13 @@ const runSelfTest = async () => {
 		meta: { ...gatewayMetadata(gatewayPolicy({ branch: 'main', target: PR_PREVIEW_TARGET, owner: true })), [stablePublisherMarker]: '1', thingtimePrebuiltPolicy: stablePublisherPolicyVersion, thingtimeBuildTarget: 'preview', githubCommitRef: 'main', githubCommitSha: base.head.sha } };
 	const masterDependencies = (candidate = master) => ({
 		readGithub: async (path) => { equal(path, `/repos/${config.repository}/git/ref/heads/main`); return { ref: 'refs/heads/main', object: { type: 'commit', sha: base.head.sha } }; },
-		readVercel: async (path) => { truthy(!path.includes('custom-environments') && !path.includes('dev.thingtime.com')); return path.startsWith('/v4/aliases/') ? { alias: 'master.previews.thingtime.com', projectId: config.projectId, deploymentId: 'dpl_master' } : candidate; },
+		readVercel: async (path) => {
+			if (path === `/v4/aliases/master.previews.thingtime.com?projectId=${encodeURIComponent(config.projectId)}`) {
+				return { alias: 'master.previews.thingtime.com', projectId: config.projectId, deploymentId: 'dpl_master' };
+			}
+			equal(path, '/v13/deployments/dpl_master?withGitRepoInfo=true');
+			return candidate;
+		},
 		verify: async (name, policy, id) => { equal(name, 'master.previews.thingtime.com'); equal(policy.environment, 'preview'); equal(id, 'dpl_master'); }
 	});
 	await assertPreviewMaster(config, masterDependencies());
