@@ -3,7 +3,11 @@ import React, { useState } from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
-import { ThingsThing, isFolder, thingDisplayName, thingIcon } from './thingsCore';
+import type { ThingsThing } from './thingsCore';
+import { isFolder, thingDisplayName, thingIcon } from './thingsCore';
+import type { ThingsItemHandlers } from './ThingsViews';
+import { ItemMenu, ItemSelection } from './ThingsViews';
+import { browseClickIntent, BROWSE_CONTROLS_SX } from './browseInteraction';
 
 // Collapsible folder tree — the desktop sidebar AND the Move dialog's picker
 // (pick mode). Data comes from the page's folderPages map (one listing per
@@ -32,6 +36,8 @@ export type FolderTreeProps = {
   rootLabel?: string;
   dnd?: FolderTreeDnd;
   onNewFolder?: (parentId: string | null) => void;
+  // Browse-only controls; Move dialog pickers keep their existing selection.
+  handlers?: ThingsItemHandlers;
 };
 
 const dndProps = (folderId: string | null, dnd?: FolderTreeDnd) =>
@@ -79,14 +85,10 @@ const TreeNode = ({
         borderRadius="8px"
         cursor={disabled ? 'not-allowed' : 'pointer'}
         gap={1}
-        onClick={() => {
-          if (disabled) return;
-          props.onPick(folder.id);
-          if (!open) {
-            setOpen(true);
-            props.ensureLoaded(folder.id);
-          }
-        }}
+        data-tree-thing-id={folder.id}
+        role="group"
+        sx={props.handlers ? BROWSE_CONTROLS_SX : undefined}
+        onContextMenu={props.handlers ? event => props.handlers!.onItemContextMenu(folder, event) : undefined}
         opacity={disabled ? 0.4 : 1}
         paddingLeft={`${8 + depth * 14}px`}
         paddingRight={2}
@@ -100,10 +102,22 @@ const TreeNode = ({
             <ChevronRight color="var(--tt-faint, #b6b6c0)" size={13} />
           )}
         </Box>
-        <Text fontSize="13px">{thingIcon(folder)}</Text>
-        <Text flex="1" fontSize="13px" fontWeight={active ? 600 : 400} noOfLines={1} wordBreak="break-all">
-          {thingDisplayName(folder)}
-        </Text>
+        {props.handlers && <ItemSelection thing={folder} handlers={props.handlers} />}
+        <Flex as="button" type="button" alignItems="center" gap={1} flex="1" minWidth={0} textAlign="left"
+          aria-expanded={open} aria-disabled={disabled} onClick={event => {
+            if (disabled) return;
+            const intent = props.handlers ? browseClickIntent(event) : 'open';
+            if (intent === 'select') { props.handlers!.onItemClick(folder, event); return; }
+            if (intent !== 'open') return;
+            props.onPick(folder.id);
+            if (!open) { setOpen(true); props.ensureLoaded(folder.id); }
+          }}>
+          <Text fontSize="13px">{thingIcon(folder)}</Text>
+          <Text flex="1" fontSize="13px" fontWeight={active ? 600 : 400} noOfLines={1} wordBreak="break-all">
+            {thingDisplayName(folder)}
+          </Text>
+        </Flex>
+        {props.handlers && <ItemMenu thing={folder} handlers={props.handlers} />}
       </Flex>
       {open && (
         <Box>
