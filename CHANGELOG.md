@@ -15,6 +15,16 @@ verbatim, and CI changes are recorded here from now on.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 every entry is attributed the same way the app changelog attributes them.
 
+## 2026-10-26 — Verify the API before reporting a PR preview ready
+
+- Probe the public root-data API through the stable PR alias after assignment.
+  Reject gateway-origin failures, redirects and HTML/error fallbacks even when
+  the page shell succeeds; retain bounded propagation retries and source fences.
+- Cover healthy-shell/API-421 refusal and inherited source-origin stripping.
+  The exact-origin runtime configuration and policy bump from PR #1236 remain
+  the source of alias admission. Live rollout remains a separate check.
+  **Codex (AI)**
+
 ## 2026-10-26 — Admit the exact ordinary PR alias at the Preview gateway
 
 - Add each PR's verified public alias as its sole explicit relay source origin.

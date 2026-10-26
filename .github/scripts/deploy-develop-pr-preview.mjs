@@ -664,11 +664,13 @@ const runSelfTest = async () => {
 		['THINGTIME_GATEWAY_SOURCE_ORIGINS=https://pr-201.previews.dev.thingtime.com']);
 	const uploadEnvironment = prebuiltUploadEnvironment(config, base.head.ref, 's'.repeat(32), 'synthetic-token', {
 		THINGTIME_GATEWAY_SECRET: 'wrong-custom-develop-secret',
+		THINGTIME_GATEWAY_SOURCE_ORIGINS: 'https://*.example.test,https://unrelated.example.test',
 		THINGTIME_GATEWAY_ENVIRONMENT: 'develop',
 		THINGTIME_GATEWAY_ORIGIN: 'https://dev.thingtime.com',
 		THINGTIME_MONGODB_CONNECTION_MODE: 'proxy'
 	});
 	equal(uploadEnvironment.THINGTIME_GATEWAY_SECRET, 's'.repeat(32));
+	equal(uploadEnvironment.THINGTIME_GATEWAY_SOURCE_ORIGINS, undefined);
 	equal(uploadEnvironment.THINGTIME_GATEWAY_ENVIRONMENT, 'preview');
 	equal(uploadEnvironment.THINGTIME_GATEWAY_ORIGIN, 'https://master.previews.thingtime.com');
 	equal(uploadEnvironment.THINGTIME_MONGODB_CONNECTION_MODE, undefined);
@@ -1789,7 +1791,7 @@ const assertWildcardFallbackRuntimes = async (config) => {
 	await verifyWildcardFallbackRuntime({ suffix: config.productionPreviewAliasSuffix, expectedBranch: 'main', missingBuildPage: config.missingBuildPage });
 };
 
-const verifyPublishedAlias = (aliasUrl) => verifyPublishedPreview(aliasUrl);
+const verifyPublishedAlias = (aliasUrl) => verifyPublishedPreview(aliasUrl, { verifyApi: true });
 
 const deploymentDetail = async (deploymentId) => vercelRequest(`/v13/deployments/${encodeURIComponent(deploymentId)}?withGitRepoInfo=true`);
 

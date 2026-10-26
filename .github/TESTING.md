@@ -285,3 +285,14 @@ pre-queued with no jobs, logs, or cancellable run graph.
   workflow compilation and receipt collection must execute. Local contract and
   lint checks do not establish a live publication. Do not replay shared jobs
   merely to satisfy this checklist without task authorization.
+
+## Published PR gateway API acceptance (2026-10-26)
+
+- Run both preview publisher self-tests and `node --test .github/scripts/preview-*.test.mjs .github/scripts/environment-gateway-policy.test.mjs`.
+- Generated PR arguments must admit exactly their validated HTTPS PR alias;
+  inherited source-origin lists and wildcards must never enter upload arguments.
+- Ordinary PR publication must GET `/api/root-data` after alias assignment,
+  with a bounded timeout and no redirects. A shell 200 with API 421, an HTML
+  fallback, missing-build marker, invalid JSON or redirected API must fail.
+- After authorized rollout, verify the exact head and API through the stable
+  alias; local fixtures alone do not establish live alias acceptance.
