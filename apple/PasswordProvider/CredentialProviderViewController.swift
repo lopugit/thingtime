@@ -95,7 +95,13 @@ private struct ProviderView: View {
                     // underlying errors, server responses or credential values.
                     self.logger.error("Request failed: phase=\(self.phase.rawValue, privacy: .public) code=\(String(describing: failure), privacy: .public)")
                     self.model.message = self.phase.failure(failure)
-                    self.model.retry = { [weak self] in self?.perform(work) }
+                    if failure.allowsRetryInCurrentRequest {
+                        self.model.retry = { [weak self] in self?.perform(work) }
+                    } else {
+                        // Keep pending material fenced to its original session
+                        // until cancellation; a new ceremony must start afresh.
+                        self.model.retry = nil; self.model.choices = []
+                    }
                     self.model.status = "Step: " + self.phase.message.replacingOccurrences(of: "…", with: "")
                 }
             }
@@ -108,7 +114,8 @@ private struct ProviderView: View {
     }
     private func verify(_ current: UUID, session: ProviderSession) throws {
         try Task.checkCancellation()
-        guard requests.isCurrent(current), try PasswordSessionStore.load() == session else { throw PasswordProviderError.invalidSession }
+        guard requests.isCurrent(current) else { throw CancellationError() }
+        try PasswordSessionStore.load().requireUnchanged(from: session)
     }
     private func authenticate(_ current: UUID, session: ProviderSession) async throws {
         show(.verification)
@@ -216,7 +223,7 @@ private struct ProviderView: View {
             guard request.clientDataHash.count == 32, request.supportedAlgorithms.contains(.ES256) else { throw PasswordProviderError.unsupportedAlgorithm }
             let session = try PasswordSessionStore.load(), client = PasswordClient(account: session)
             if let priorSession = self.registrationSession {
-                guard priorSession == session else { throw PasswordProviderError.invalidSession }
+                try session.requireUnchanged(from: priorSession)
             }
             try await self.authenticate(current, session: session)
             self.show(.vault)

@@ -221,7 +221,9 @@ Thingtime; a protected-store access failure calls for unlocking the device.
 
 Retry within the same registration request retains the original key, credential,
 record and write identity, including uncertain save/readback outcomes. Cancellation,
-a replacement OS request, or account/session changes fence late work. Saved-entry
+a replacement OS request, or account/session changes fence late work. A changed
+session after registration begins requires Cancel and a new request from the
+website; the old ceremony cannot retry against a different connection. Saved-entry
 pagination follows cursors without an arbitrary entry cap and rejects a repeated
 cursor rather than looping forever. These guards do not establish that the active
 installed provider completed a relying-party registration: verify a signed build,

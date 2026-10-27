@@ -18,6 +18,8 @@ public enum PasswordProviderPhase: String, CaseIterable, Sendable {
 
     public func failure(_ error: PasswordProviderError) -> String {
         switch error {
+        case .sessionChanged:
+            return "Your Thingtime connection changed during this request. Cancel this request, then start again from the website."
         case .invalidSession:
             return "Your Password AutoFill connection is missing, changed, or expired. Open Thingtime → Passwords → Connect Password AutoFill, then try again."
         case .sessionUnavailable:

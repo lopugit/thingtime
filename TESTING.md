@@ -10329,7 +10329,9 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   verification, expire/reconnect the session and interrupt a save/readback; retry
   inside the same request must retain one key/credential/record/write identity.
   Cancel or replace the request while work is held; no late result or queued click
-  may change a newer request. Diagnostics contain only closed phase/error codes.
+  may change a newer request. Change the connected session after a registration
+  begins: show Cancel/start again from the website and do not offer same-ceremony
+  retry. Diagnostics contain only closed phase/error codes.
 - [ ] Native catalog: retrieve multiple cursor pages beyond 10,000 entries;
   preserve all results and reject repeated cursors without an infinite loop.
   Run `swift test --package-path apple/Passwords` for injected transport/session

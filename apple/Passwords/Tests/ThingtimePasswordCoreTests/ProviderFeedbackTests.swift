@@ -15,6 +15,21 @@ final class ProviderFeedbackTests: XCTestCase {
         XCTAssertNotNil(requests.start(), "The current request can be retried after it finishes")
     }
 
+    func testReconnectedSessionRequiresNewCeremonyWithoutRetryingOldKey() throws {
+        let initial = try ProviderSession(origin: URL(string: "https://example.com")!, ownerId: "synthetic", cookie: "tt_auth=first-session")
+        let reconnected = try ProviderSession(origin: initial.origin, ownerId: initial.ownerId, cookie: "tt_auth=rotated-session")
+        XCTAssertNoThrow(try initial.requireUnchanged(from: initial))
+        XCTAssertThrowsError(try reconnected.requireUnchanged(from: initial)) { error in
+            XCTAssertEqual(error as? PasswordProviderError, .sessionChanged)
+        }
+        XCTAssertFalse(PasswordProviderError.sessionChanged.allowsRetryInCurrentRequest)
+        XCTAssertTrue(PasswordProviderError.invalidSession.allowsRetryInCurrentRequest)
+        let message = PasswordProviderPhase.confirming.failure(.sessionChanged)
+        XCTAssertTrue(message.contains("Cancel this request"))
+        XCTAssertTrue(message.contains("start again from the website"))
+        XCTAssertFalse(message.contains("try again"))
+    }
+
     func testCancellationAndNetworkRecoveryDoNotAskForReconnect() {
         for phase in PasswordProviderPhase.allCases {
             XCTAssertFalse(phase.failure(.cancelled).contains("expired"))
