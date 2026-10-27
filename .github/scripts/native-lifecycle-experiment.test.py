@@ -5,6 +5,8 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
+import stat
 from pathlib import Path
 import re
 import subprocess
@@ -92,6 +94,75 @@ class CleanupReview(unittest.TestCase):
                  patch.object(module.time, 'sleep'):
                 module.cleanup(work)
             return json.loads((report / 'result.json').read_text()), calls
+
+    def test_report_is_runner_readable_under_private_supervisor_umask(self):
+        with tempfile.TemporaryDirectory(prefix='inert-report-mode-review-') as temporary:
+            report = Path(temporary) / 'report'
+            previous = os.umask(0o077)
+            try:
+                control = Path(temporary) / 'mkdir-control'
+                control.mkdir(mode=0o755)
+                self.assertEqual(stat.S_IMODE(control.stat().st_mode), 0o700)
+                module.prepare_report_directory(report)
+                module.write_json(report / 'provenance.json', {'fixed': 'safe'}, 0o644)
+            finally:
+                os.umask(previous)
+            directory_mode = stat.S_IMODE(report.stat().st_mode)
+            self.assertEqual(directory_mode, 0o755)
+            self.assertEqual(directory_mode & (stat.S_IROTH | stat.S_IXOTH), stat.S_IROTH | stat.S_IXOTH)
+            self.assertEqual(stat.S_IMODE((report / 'provenance.json').stat().st_mode), 0o644)
+            self.assertEqual(json.loads((report / 'provenance.json').read_text()), {'fixed': 'safe'})
+
+    def test_existing_report_is_not_repermissioned(self):
+        with tempfile.TemporaryDirectory(prefix='inert-existing-report-review-') as temporary:
+            report = Path(temporary) / 'report'
+            report.mkdir(mode=0o700)
+            with self.assertRaises(FileExistsError):
+                module.prepare_report_directory(report)
+            self.assertEqual(stat.S_IMODE(report.stat().st_mode), 0o700)
+
+    def test_allocator_reports_numeric_search_skips_without_raw_records(self):
+        diagnostics = {}
+        def fake_command(label, args, allowed=(0,)):
+            return types.SimpleNamespace(stdout=b'private-record-name' if args[3] == '/Users' else b'', returncode=0)
+        with tempfile.TemporaryDirectory(prefix='inert-allocation-review-') as temporary, \
+             patch.object(module, 'command', side_effect=fake_command), \
+             patch.object(module, 'pids', side_effect=AssertionError('must short-circuit')), \
+             patch.object(module, 'domain_status', side_effect=AssertionError('must short-circuit')):
+            with self.assertRaisesRegex(RuntimeError, 'bounded-fresh-identity-range-exhausted'):
+                module.allocate(Path(temporary), set(), diagnostics)
+        self.assertEqual(diagnostics['scanned'], 200)
+        self.assertEqual(diagnostics['userNumericSearchMatch'], 200)
+        self.assertEqual(diagnostics['groupNumericSearchMatch'], 0)
+        self.assertEqual(diagnostics['existingPid'], 0)
+        self.assertEqual(diagnostics['existingDomain'], 0)
+        self.assertEqual(diagnostics['outcome'], 'range-exhausted')
+        self.assertNotIn('private-record-name', json.dumps(diagnostics))
+
+    def test_allocator_distinguishes_group_process_and_domain_skips(self):
+        diagnostics = {}
+        def fake_command(label, args, allowed=(0,)):
+            matched = label == 'fresh-numeric-identity' and args[3] == '/Groups' and args[-1] == '5501'
+            return types.SimpleNamespace(stdout=b'private-group-name' if matched else b'', returncode=0)
+        with tempfile.TemporaryDirectory(prefix='inert-allocation-review-') as temporary, \
+             patch.object(module, 'command', side_effect=fake_command), \
+             patch.object(module, 'pids', side_effect=lambda uid: [123] if uid == 5502 else []), \
+             patch.object(module, 'domain_status', side_effect=lambda uid: 0 if uid == 5503 else 113):
+            result = module.allocate(Path(temporary), {5500}, diagnostics)
+        self.assertEqual(result['uid'], 5504)
+        self.assertEqual(diagnostics['scanned'], 5)
+        self.assertEqual(diagnostics['excludedUsed'], 1)
+        self.assertEqual(diagnostics['groupNumericSearchMatch'], 1)
+        self.assertEqual(diagnostics['existingPid'], 1)
+        self.assertEqual(diagnostics['existingDomain'], 1)
+        self.assertEqual(diagnostics['available'], 1)
+        self.assertEqual(diagnostics['outcome'], 'identity-allocated')
+        self.assertNotIn('private-group-name', json.dumps(diagnostics))
+
+    def test_unknown_domain_status_still_fails_instead_of_becoming_absence(self):
+        with patch.object(module.subprocess, 'run', return_value=types.SimpleNamespace(returncode=1, stdout=b'', stderr=b'')):
+            with self.assertRaisesRegex(RuntimeError, 'domain-observation-unexpected-status-1'):
+                module.domain_status(5500)
 
     def test_full_head_label_fits_github_name_limit_without_truncation(self):
         head = '0123456789abcdef' * 2 + '01234567'

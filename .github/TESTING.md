@@ -313,7 +313,7 @@ pre-queued with no jobs, logs, or cancellable run graph.
 ## Inert native lifecycle platform experiment
 
 - Run `python3 .github/scripts/native-lifecycle-experiment.test.py` for syntax,
-  pinned-workflow checks and nine deterministic label/cleanup/timeout regressions. Before the
+  pinned-workflow checks and fourteen deterministic label/report/allocation/cleanup regressions. Before the
   separate workflow commit exists, use `--helper-only`. These checks execute no
   system commands, real signals, UID mutations or hosted work.
 - Run `actionlint .github/workflows/native-lifecycle-experiment.yml` after the
@@ -323,6 +323,14 @@ pre-queued with no jobs, logs, or cancellable run graph.
   and simulated parent-loss observations, exact task-only teardown, quarantine
   boundaries and platform return-code hypotheses. Neither safe tests nor the
   inert experiment establish network isolation or unsigned native compilation.
+- Under a restored local `umask 077`, reproduce plain `mkdir(0755)` as `0700`,
+  then verify only the new allowlisted report is explicitly `0755` and JSON is
+  `0644`. Existing directories must not be repermissioned. This does not prove
+  hosted artifact upload; verify the next authorized run's actual artifacts.
+- Mock numeric-field search, PID and domain predicates independently. Confirm
+  bounded allocation skip counts contain no raw records and unknown domain
+  errors remain rejected. Do not widen the UID range to hide unexplained
+  hosted exhaustion. Preserve the original failed run and its actual E1/E2/W.
 
 ## Native task lifecycle admission
 

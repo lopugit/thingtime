@@ -1,5 +1,15 @@
 # Control-plane changelog
 
+## 2026-10-27 — Preserve inert initialization failure evidence
+
+- Repair allowlisted report-directory access under the private supervisor
+  umask, with a local control/mode regression that preserves existing folders.
+- Add bounded allocator predicate counts and fixed stage/outcome diagnostics
+  without widening UID bounds, accepting unknown domain statuses or publishing
+  raw private state. The first hosted run failed before lifecycle fixtures;
+  cleanup and native acceptance remain unverified. See
+  [the run evidence and plan](.github/NATIVE_LIFECYCLE_EXPERIMENT.md#hosted-run-40438204623-initialization-evidence-and-proposed-repair).
+
 ## 2026-10-27 — Fit exact-head experiment labels within GitHub
 
 - Use `tt-life-` plus the full forty-character SHA for a 48-character label.

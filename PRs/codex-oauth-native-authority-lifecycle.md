@@ -87,8 +87,25 @@ candidate checkout, PF operation, secret context or native build. Helper and
 workflow commits are reviewed separately; the owner label/run remain withheld
 until final exact-source review. Existing native H1/H2 pins are unchanged.
 
-The safe local checker covers workflow/Python syntax and nine deterministic label, cleanup
+The safe local checker covers workflow/Python syntax and fourteen deterministic label, report, allocation, cleanup
 and timeout cases. It executes no host command, real signal, account operation
 or hosted job. See [the full experiment spec](../.github/NATIVE_LIFECYCLE_EXPERIMENT.md).
 Actual hosted observations, candidate network denial, unsigned compilation and
 signed provider/device acceptance remain separate unfinished gates.
+
+## Hosted initialization and report-access failure — 2026-10-27
+
+Run [40438204623](https://github.com/lopugit/thingtime/actions/runs/40438204623)
+validated reviewed E1/E2 and actual workflow W, then both cases failed during
+identity allocation with `bounded-fresh-identity-range-exhausted`. Lifecycle
+fixtures and simulated parent loss were not reached. Both uploads failed
+with `EACCES` on the allowlisted provenance file; no artifact or cleanup
+acceptance survived. See the preserved E1/E2/W and bounded next evidence plan
+in [the experiment spec](../.github/NATIVE_LIFECYCLE_EXPERIMENT.md#hosted-run-40438204623-initialization-evidence-and-proposed-repair).
+
+The narrow proposed repair applies explicit permissions only to the new
+allowlisted report directory and records aggregate allocator rejection
+counters/stages inside existing provenance JSON. Local mode/control and
+mocked allocation regressions preserve existing-directory modes, unknown-status
+refusal, UID bounds and private output boundaries. No trigger or acceptance is
+implied; original native pins/admission/PF remain unchanged.

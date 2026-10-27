@@ -37,6 +37,13 @@ def write_json(path, value, mode=0o600):
     temporary.replace(path)
 
 
+def prepare_report_directory(report):
+    # mkdir's requested mode is filtered by the supervisor's private umask.
+    # Only this new allowlisted report directory must be traversable by runner.
+    report.mkdir(mode=0o755)
+    report.chmod(0o755)
+
+
 def command(label, args, allowed=(0,)):
     result = subprocess.run(args, env=ENV, cwd='/', stdin=subprocess.DEVNULL,
                             capture_output=True, timeout=10, close_fds=True)
@@ -193,24 +200,45 @@ def watchdog(work, parent):
         time.sleep(.2)
 
 
-def allocate(work, used):
+def allocate(work, used, diagnostics=None):
+    diagnostics = diagnostics if diagnostics is not None else {}
+    diagnostics.update(outcome='incomplete', stage='start', scanned=0, excludedUsed=0,
+                       userNumericSearchMatch=0, groupNumericSearchMatch=0,
+                       existingPid=0, existingDomain=0, available=0)
     for uid in range(5500, 5700):
+        diagnostics['scanned'] += 1
         if uid in used:
+            diagnostics['excludedUsed'] += 1
             continue
         found = False
-        for table, field in [('/Users', 'UniqueID'), ('/Groups', 'PrimaryGroupID')]:
+        for table, field, counter in [('/Users', 'UniqueID', 'userNumericSearchMatch'),
+                                      ('/Groups', 'PrimaryGroupID', 'groupNumericSearchMatch')]:
+            diagnostics['stage'] = counter
             if command('fresh-numeric-identity', ['/usr/bin/dscl', '.', '-search', table, field,
                                                 str(uid)]).stdout.strip():
+                diagnostics[counter] += 1
                 found = True
-        if not found and not pids(uid) and domain_status(uid) == ABSENT:
-            name = '_ttlife' + uuid.uuid4().hex[:14]
-            for table in ('Users', 'Groups'):
-                names = command('fresh-record-name', ['/usr/bin/dscl', '.', '-list', '/' + table]).stdout.decode().splitlines()
-                if name in names:
-                    raise RuntimeError('generated-account-name-already-exists')
-            home = work / name
-            home.mkdir(mode=0o700)
-            return {'uid': uid, 'user': name, 'home': str(home), 'domainAttempted': False}
+        if found:
+            continue
+        diagnostics['stage'] = 'pid-inventory'
+        if pids(uid):
+            diagnostics['existingPid'] += 1
+            continue
+        diagnostics['stage'] = 'domain-observation'
+        if domain_status(uid) != ABSENT:
+            diagnostics['existingDomain'] += 1
+            continue
+        diagnostics['stage'] = 'record-name-check'
+        name = '_ttlife' + uuid.uuid4().hex[:14]
+        for table in ('Users', 'Groups'):
+            names = command('fresh-record-name', ['/usr/bin/dscl', '.', '-list', '/' + table]).stdout.decode().splitlines()
+            if name in names:
+                raise RuntimeError('generated-account-name-already-exists')
+        home = work / name
+        home.mkdir(mode=0o700)
+        diagnostics.update(stage='complete', outcome='identity-allocated', available=1)
+        return {'uid': uid, 'user': name, 'home': str(home), 'domainAttempted': False}
+    diagnostics.update(stage='complete', outcome='range-exhausted')
     raise RuntimeError('bounded-fresh-identity-range-exhausted')
 
 
@@ -235,7 +263,7 @@ def supervise(case, report, admission):
     report = Path(report).resolve()
     if not report.is_relative_to(Path(os.environ['RUNNER_TEMP']).resolve()) or report.exists():
         raise RuntimeError('new-task-report-required')
-    report.mkdir(mode=0o755)
+    prepare_report_directory(report)
     command('launchctl-positive-control', ['/bin/launchctl', 'print', 'system'])
     work = Path(tempfile.mkdtemp(prefix='tt-inert-lifecycle-', dir='/private/tmp'))
     work.chmod(0o755)
@@ -257,7 +285,14 @@ def supervise(case, report, admission):
     signal.alarm(120)
     try:
         for _ in range(2):
-            resource = allocate(work, {runner_uid, *(item['uid'] for item in state['resources'])})
+            allocation = {'attempt': len(state['resources']) + 1,
+                          'recordedResourcesBefore': len(state['resources'])}
+            try:
+                resource = allocate(work, {runner_uid, *(item['uid'] for item in state['resources'])}, allocation)
+            finally:
+                # Fixed labels/counts only; never directory records, names or domain dumps.
+                provenance.setdefault('identityAllocation', []).append(allocation)
+                write_json(report / 'provenance.json', provenance, 0o644)
             # Persist ownership intent before creation; teardown still requires exact readback.
             state['resources'].append(resource)
             write_json(work / 'state.json', state)

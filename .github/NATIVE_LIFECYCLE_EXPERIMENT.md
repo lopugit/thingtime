@@ -18,7 +18,7 @@ Official GitHub docs say hosted macOS jobs use fresh VMs, while nested virtualiz
 python3 .github/scripts/native-lifecycle-experiment.test.py
 ```
 
-This parses helper and embedded workflow Python, verifies pinned official action refs and token scope, and runs nine deterministic label/cleanup/timeout tests. It executes no subprocess, privilege change, UID inventory, signal, network request, account operation or launchctl command. Temporary filesystem fixtures are new directories under `/tmp`; no repository file changes occur.
+This parses helper and embedded workflow Python, verifies pinned official action refs and token scope, and runs fourteen deterministic label, report-mode, allocation and cleanup/timeout tests. It executes no subprocess, privilege change, UID inventory, signal, network request, account operation or launchctl command. Temporary filesystem fixtures are new directories under `/tmp`; no repository file changes occur.
 
 Durable source locations:
 
@@ -124,3 +124,54 @@ longer prefix was rejected with HTTP 422 before a label could be created or
 applied; it did not trigger an experiment. Keep the complete SHA and the same
 owner/current-head/workflow-byte guards; never shorten or truncate the SHA.
 The safe checker verifies the generated label's exact contents and length.
+
+## Hosted run 40438204623: initialization evidence and proposed repair
+
+The single owner-authorized run [40438204623](https://github.com/lopugit/thingtime/actions/runs/40438204623)
+(attempt 1) failed during identity allocation in both cases, with fixed error
+`bounded-fresh-identity-range-exhausted`. Neither KeepAlive/escaped-child
+assertions nor the deliberate parent-loss checkpoint ran. This is no conclusion
+about whether the intended lifecycle can pass. The source did not record which
+allocation predicate rejected each ID or whether allocation one or two failed.
+
+Both cases passed exact-source validation with helper E1
+`5e8da0ea14707276769fc420f2a522b8715fc0a8`, reviewed head E2
+`547cf540129b9bbfbd38cc2ecff86341bfff6e32`, and actual workflow source W
+`8242b2b08fd56746169e4ad6eaf3f93cd896a031`. The workflow bytes at W independently
+match reviewed E2. Both artifact uploads reported `EACCES` while examining the
+allowlisted `provenance.json`; the artifact inventory is empty. Cleanup status
+and created identity/domain counts are unverified. The original terminal
+receipt remains preserved; no relabel or workflow retry followed this result.
+
+Source analysis identifies the report-access defect: `umask 077` filters
+`mkdir(mode=0755)` to `0700`. The proposed repair explicitly applies `0755`
+only to the new task report directory, preserving `0644` for its allowlisted
+JSON and private modes elsewhere. A local temporary-directory regression first
+reproduces the `0700` control and verifies the repaired directory/file access
+modes; it also refuses to change an existing directory's permissions. This is
+local mode evidence, not a successful hosted upload.
+
+The allocator retains UID range 5500–5699, numeric search semantics, PID
+inventory and accepted domain statuses. It publishes only bounded counters
+inside the existing allowlisted `provenance.json`: attempt and pre-allocation
+resource-entry counts, IDs scanned/excluded, user/group numeric-field search
+matches, PID/domain presence and available candidates, plus fixed stage/outcome
+labels. Search matches mean nonempty output from the existing numeric-field
+pattern search; they do not newly claim exact numeric identity matches. User
+and group counters can overlap. No directory record, account name, process
+argument, environment, raw command output or domain dump is published.
+
+A separate authorized nonprivileged read-only check on this personal host
+found one unused numeric UID with empty user/group searches and no processes;
+`launchctl print user/<uid>` returned status 1. This is not the hosted result
+and does not explain hosted exhaustion. Status 1 remains rejected; neither
+the UID range nor accepted domain statuses are broadened.
+
+Next evidence plan: review the narrow source diff and safe checks; commit the
+new helper as a new E1 and separately pin/review workflow E2 and its digest.
+Only after separate exact-head authorization, trigger one bounded inert run
+with the same two sequential cases. Inspect the allowlisted readable
+provenance/result/fixture JSON, allocation skip counters and observed E1/E2/W.
+If allocation still fails, classify its actual predicate before proposing any
+behavioral change. No candidate compile, native H1/H2 admission, PF change,
+existing-domain takeover or accepted-status expansion is authorized by this plan.
