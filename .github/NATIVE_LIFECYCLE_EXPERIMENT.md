@@ -27,8 +27,8 @@ Durable source locations:
 
 The workflow pins the separately reviewed helper commit in both its checkout and declared provenance. The safe checker also supports `--helper-only` to validate the first helper commit before the workflow exists, or `--workflow <path>` when reviewing a prepared workflow outside its final location.
 
-The published helper commit E1 is `5e8da0ea14707276769fc420f2a522b8715fc0a8`, with source SHA-256
-`d7c074d4ac55ab3c20d1b80bd9be6b163f5153651d3434b131e4d65850a5fd98`.
+The published helper commit E1 is `de7bab6700b01a73bf94df7114c551052d9468cc`, with source SHA-256
+`467904bc6543efd4c9bed5fb1207676625b5d06271de09a281867071b7775c56`.
 
 ## Helper SHA, reviewed head and actual workflow SHA
 

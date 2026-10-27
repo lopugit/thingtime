@@ -29,12 +29,12 @@ jobs:
       matrix:
         case: [normal, parent-loss]
     env:
-      EXPERIMENT_HELPER_SHA: 5e8da0ea14707276769fc420f2a522b8715fc0a8
+      EXPERIMENT_HELPER_SHA: de7bab6700b01a73bf94df7114c551052d9468cc
     steps:
       - name: Acquire only independently reviewed inert helper
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 5e8da0ea14707276769fc420f2a522b8715fc0a8
+          ref: de7bab6700b01a73bf94df7114c551052d9468cc
           persist-credentials: false
           path: inert-helper
           sparse-checkout-cone-mode: false
@@ -72,7 +72,7 @@ jobs:
           actual = subprocess.run(['git', '-C', 'inert-helper', 'rev-parse', 'HEAD'], check=True, capture_output=True).stdout.decode().strip()
           assert actual == helper
           script = pathlib.Path('inert-helper/.github/scripts/native-lifecycle-experiment.py')
-          assert hashlib.sha256(script.read_bytes()).hexdigest() == 'd7c074d4ac55ab3c20d1b80bd9be6b163f5153651d3434b131e4d65850a5fd98'
+          assert hashlib.sha256(script.read_bytes()).hexdigest() == '467904bc6543efd4c9bed5fb1207676625b5d06271de09a281867071b7775c56'
           provenance = {'helperSha': helper, 'reviewedHeadSha': head, 'workflowSha': workflow,
                         'actor': os.environ['REVIEW_ACTOR'], 'label': os.environ['REVIEW_LABEL'],
                         'workflowBytesEqual': True, 'candidateCheckout': False}
