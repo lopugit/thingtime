@@ -26,5 +26,5 @@ fixture and policy traversal/counter proof. Do not remove those gates, broadly
 kill user services, relax network denial or dispatch this feature branch. A
 separate reviewed H1/H2 admission must follow any complete future repair.
 
-See [the regression checklist](../TESTING.md) and
+See [the regression checklist](../.github/TESTING.md) and
 [the native control-plane contract](../.github/NATIVE_COMPILE.md).

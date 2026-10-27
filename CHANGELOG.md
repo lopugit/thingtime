@@ -202,6 +202,8 @@ Details: [PR #637](PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-rev
 
 ## [Unreleased]
 
+- 2026-10-27: Keep the native authority regression checklist in `.github/TESTING.md` and correct its links, preserving the bare control-plane root contract. Helper logic, workflows and admission pins are unchanged. **Codex (AI)**
+
 - 2026-09-05: Publish Graphify writer ownership atomically, preserve replacement
   locks during delayed cleanup, and retain query snapshot locks through child
   completion. Add deterministic stale-reaper, six-process contention, writer

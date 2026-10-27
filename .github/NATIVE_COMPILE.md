@@ -18,7 +18,7 @@ The observed authority timeout/remaining-UID cleanup failure still requires
 supported launchd service ownership/teardown and usable IPv6 policy proof
 before any newly authorized hosted preflight or native execution. See
 [the repair note](../PRs/codex-oauth-native-authority-lifecycle.md) and
-[the regression checklist](../TESTING.md).
+[the regression checklist](TESTING.md).
 
 ## Admission and entry point
 
