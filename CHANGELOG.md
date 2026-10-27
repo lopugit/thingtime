@@ -1,5 +1,14 @@
 # Control-plane changelog
 
+## 2026-10-27 — Identify the inert authority failure operation
+
+- Preserve the hosted authority EINVAL result and add allowlisted numeric-drop,
+  sudo, transport-setuid and synthetic-canary operation labels to sanitized
+  child/root diagnostics. Keep every enforcement check and group readback.
+- Document the primary-source group-read hypothesis without claiming the actual
+  hosted syscall is known or authorizing another run. Original native admission
+  is unchanged; see [the experiment evidence](.github/NATIVE_PERSISTENT_DENIAL_EXPERIMENT.md#hosted-run-40444943200-and-diagnostic-only-follow-up--2026-10-27).
+
 ## 2026-10-27 — Prepare inert denial through provider disposal
 
 - Prepare a separate reviewed-source experiment with no candidate/native

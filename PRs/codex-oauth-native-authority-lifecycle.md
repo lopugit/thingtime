@@ -125,3 +125,22 @@ requires a separate exact-head approval. No new run has been triggered.
 See [the contract and evidence procedure](../.github/NATIVE_PERSISTENT_DENIAL_EXPERIMENT.md).
 The previous runs 40438204623 and 40440369530 and their terminal receipts remain
 unchanged; their fixtures never reached lifecycle acceptance.
+
+## Authority EINVAL diagnostic follow-up — 2026-10-27
+
+Persistent-denial run [40444943200](https://github.com/lopugit/thingtime/actions/runs/40444943200)
+passed exact-source validation and saved readable, digest-verified result evidence,
+then failed at the authority phase with `fixed-probe-os-error-22` before any PF
+attempt. Positive controls, policy attribution and parent-loss fixtures did not
+run. Artifact continuity was proved only before PF. Its E1/E2/W and terminal
+receipt remain preserved; no retry is implied.
+
+The follow-up adds fixed sanitized operation labels around the unchanged numeric
+credential drop and authority calls. It does not relax enforcement or remove
+`os.getgroups()`. [Python documents extended macOS group-read behavior](https://docs.python.org/3/library/os.html#os.getgroups),
+and [Apple libc returns EINVAL when the UID has no account](https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/sys/getgroups.c#L34-L52).
+[Published XNU accepts an empty setgroups input](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_prot.c#L1266-L1299).
+This makes group readback a strong hypothesis for the deliberately accountless
+fixture, not an identified hosted syscall or matching-binary proof. The next
+reviewed evidence must name the operation before any supported group-observation
+or setup contract is changed. Candidate admission remains false even on success.

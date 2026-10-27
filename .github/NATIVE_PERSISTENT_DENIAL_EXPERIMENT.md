@@ -99,3 +99,46 @@ real transport credentials and arbitrary privileged services. Synthetic canary
 and peer-UID tests deliberately do not close it. Candidate source, compile,
 signing/publication and any change to original admission require their own
 reviewed contracts and authorization.
+
+## Hosted run 40444943200 and diagnostic-only follow-up — 2026-10-27
+
+[The single approved run](https://github.com/lopugit/thingtime/actions/runs/40444943200)
+completed with failure. E1 `5c5a0e936810e0bf06b7db90717c0827fa531350`, E2
+`b82a61899be67ae495d0d932fa47610e9e4a2fcf` and actual W
+`641becbf7792992bce84005c878b79048c97461c` passed byte binding. Artifact
+`12707851644` contained only `result.json`; upload/readback and archive digest
+matched. The result failed in `authority` with `fixed-probe-os-error-22`, before
+positive controls or PF mutation. Escape, parent-loss and policy attribution
+were not reached. Upload success before PF does not establish continuity under
+retained denial. No provenance file was expected at this early checkpoint.
+
+The existing broad authority phase covers several operations. A diagnostic-only
+follow-up preserves every call, argument, order and acceptance condition, while
+adding allowlisted operation labels around group clearing, gid/uid changes,
+each numeric ID read, ID/group verification, group readback, sudo launch and
+normal-refusal check, transport-setuid attempt and each synthetic canary open.
+The root result retains its broad `failureStage` and adds `failureOperation`
+with the specific fixed label, plus the sanitized failure code. Child envelopes
+reject unknown operation labels/extra fields; exceptions never contribute
+identity names, paths, stderr, command output or secret material. Local
+`--helper-only` tests support this pre-pin stage; final immutable publication
+still requires `--final E1` with two exact E1 pins and the helper digest.
+
+A likely cause is the current `os.getgroups()` readback for an accountless UID.
+[Python's documented macOS behavior](https://docs.python.org/3/library/os.html#os.getgroups)
+distinguishes the extended group-access list from the effective group list and
+says modern deployment-target results are not changed by `setgroups()`.
+[Apple's published libc implementation](https://github.com/apple-oss-distributions/Libc/blob/71bbe350ab79eef58113991d817ccc6165061a64/sys/getgroups.c#L34-L52)
+returns EINVAL if lookup of the current numeric UID finds no account; other
+group-resolution failures can also return it. The [published XNU implementation](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_prot.c#L1266-L1299)
+accepts a zero-length `setgroups` input rather than establishing that empty
+input itself is invalid. Installed `setuid(2)`, `setgid(2)` and `getgroups(2)`
+also document EINVAL cases, so the numeric errno alone is ambiguous.
+
+These primary sources identify a plausible operation; they are not proof of the
+hosted Python/libc build or the actual failing syscall. The follow-up neither
+removes group verification nor interprets errors as empty groups, creates an
+account, changes group expectations, or substitutes a private syscall. A future
+separately reviewed hosted observation must identify the operation first. No
+new execution is authorized here; original native pins/admission and all prior
+terminal evidence remain unchanged.

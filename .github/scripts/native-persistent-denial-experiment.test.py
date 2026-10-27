@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Safe local regression tests: no privileged operations, networking or jobs."""
 import argparse
+from contextlib import ExitStack
+import errno
 import ast
 import hashlib
 import importlib.util
@@ -224,8 +226,95 @@ class SafeTests(unittest.TestCase):
             opened.assert_not_called()
         with patch.object(m.os, 'geteuid', return_value=5500), \
              patch.object(m.subprocess, 'run', side_effect=subprocess.TimeoutExpired([], 3)):
-            with self.assertRaises(subprocess.TimeoutExpired):
+            with self.assertRaises(m.OperationFailure) as raised:
                 m.authority_probe(Path('/synthetic'), Path('/synthetic'), 501, 5500)
+            self.assertEqual(raised.exception.operation, 'authority-sudo-launch')
+            self.assertEqual(raised.exception.code, 'command-timeout')
+
+    def test_einval_identifies_every_numeric_drop_operation(self):
+        operations = {'setgroups': 'drop-clear-groups', 'setgid': 'drop-set-gid', 'setuid': 'drop-set-uid',
+                      'getuid': 'drop-read-real-uid', 'geteuid': 'drop-read-effective-uid',
+                      'getgid': 'drop-read-real-gid', 'getegid': 'drop-read-effective-gid',
+                      'getgroups': 'drop-read-groups'}
+        for failing, operation in operations.items():
+            with self.subTest(operation=operation), ExitStack() as stack:
+                mocks = {}
+                for name in operations:
+                    value = [] if name == 'getgroups' else (5500 if name.startswith('get') else None)
+                    mocks[name] = stack.enter_context(patch.object(m.os, name, return_value=value))
+                mocks[failing].side_effect = OSError(errno.EINVAL, 'never-publish-this-path-or-identity')
+                with self.assertRaises(m.OperationFailure) as raised:
+                    m.drop(5500, 5500)
+                detail = m.diagnostic(raised.exception)
+                self.assertEqual(detail, {'failureOperation': operation, 'failureCode': 'os-error-22'})
+                self.assertNotIn('never-publish', json.dumps(detail))
+                if failing != 'getgroups': mocks['getgroups'].assert_not_called()
+
+    def test_group_readback_is_retained_and_never_treats_error_as_empty(self):
+        with ExitStack() as stack:
+            for name in ('setgroups', 'setgid', 'setuid'):
+                stack.enter_context(patch.object(m.os, name))
+            for name in ('getuid', 'geteuid', 'getgid', 'getegid'):
+                stack.enter_context(patch.object(m.os, name, return_value=5500))
+            groups = stack.enter_context(patch.object(m.os, 'getgroups', return_value=[0]))
+            with self.assertRaises(m.OperationFailure) as raised:
+                m.drop(5500, 5500)
+            self.assertEqual(raised.exception.operation, 'drop-verify-groups')
+            self.assertEqual(raised.exception.code, 'unexpected-supplementary-groups')
+            groups.assert_called_once_with()
+
+    def test_einval_identifies_authority_uid_read_and_sudo_launch(self):
+        with patch.object(m.os, 'geteuid', side_effect=OSError(errno.EINVAL, 'private')), \
+             patch.object(m.subprocess, 'run') as sudo:
+            with self.assertRaises(m.OperationFailure) as raised:
+                m.authority_probe(Path('/synthetic'), Path('/synthetic'), 501, 5500)
+            self.assertEqual(m.diagnostic(raised.exception), {'failureOperation': 'authority-read-effective-uid', 'failureCode': 'os-error-22'})
+            sudo.assert_not_called()
+        with patch.object(m.os, 'geteuid', return_value=5500), \
+             patch.object(m.subprocess, 'run', side_effect=OSError(errno.EINVAL, 'private')):
+            with self.assertRaises(m.OperationFailure) as raised:
+                m.authority_probe(Path('/synthetic'), Path('/synthetic'), 501, 5500)
+            self.assertEqual(m.diagnostic(raised.exception), {'failureOperation': 'authority-sudo-launch', 'failureCode': 'os-error-22'})
+
+    def test_refusal_and_transport_setuid_failures_remain_distinct(self):
+        with patch.object(m.os, 'geteuid', return_value=5500), \
+             patch.object(m.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)):
+            with self.assertRaises(m.OperationFailure) as raised:
+                m.authority_probe(Path('/synthetic'), Path('/synthetic'), 501, 5500)
+            self.assertEqual(raised.exception.operation, 'authority-sudo-refusal')
+        with patch.object(m.os, 'geteuid', return_value=5500), \
+             patch.object(m.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1)), \
+             patch.object(m.os, 'setuid', side_effect=OSError(errno.EINVAL, 'private')):
+            with self.assertRaises(m.OperationFailure) as raised:
+                m.authority_probe(Path('/synthetic'), Path('/synthetic'), 501, 5500)
+            self.assertEqual(m.diagnostic(raised.exception), {'failureOperation': 'authority-transport-setuid', 'failureCode': 'os-error-22'})
+
+    def test_einval_identifies_each_synthetic_canary_without_acceptance(self):
+        operations = ['canary-synthetic-credential-read', 'canary-policy-write', 'canary-receipt-write', 'canary-helper-write']
+        for index, operation in enumerate(operations):
+            with self.subTest(operation=operation), patch.object(m.os, 'geteuid', return_value=5500), \
+                 patch.object(m.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1)), \
+                 patch.object(m.os, 'setuid', side_effect=PermissionError(errno.EPERM, 'private')), \
+                 patch.object(m.os, 'open', side_effect=[PermissionError(errno.EACCES, 'private')] * index + [OSError(errno.EINVAL, 'private')]):
+                with self.assertRaises(m.OperationFailure) as raised:
+                    m.authority_probe(Path('/synthetic'), Path('/synthetic'), 501, 5500)
+                self.assertEqual(m.diagnostic(raised.exception), {'failureOperation': operation, 'failureCode': 'os-error-22'})
+
+    def test_operation_survives_child_receipt_and_root_projection(self):
+        from unittest.mock import Mock
+        value = {'failureCode': 'os-error-22', 'failureOperation': 'drop-read-groups'}
+        child = Mock(returncode=1)
+        child.communicate.return_value = (json.dumps(value).encode(), None)
+        with self.assertRaises(m.OperationFailure) as raised: m.receive(child)
+        result = m.terminal_result({'admission': {}}, 'authority', m.failure_code(raised.exception), raised.exception.operation)
+        self.assertEqual(result['failureStage'], 'authority')
+        self.assertEqual(result['failureOperation'], 'drop-read-groups')
+        self.assertEqual(result['failureCode'], 'fixed-probe-os-error-22')
+        self.assertFalse(result['candidateAdmission'])
+        for bad in ('private-path', [], {'private': 'identity'}):
+            child.communicate.return_value = (json.dumps({**value, 'failureOperation': bad}).encode(), None)
+            with self.assertRaisesRegex(RuntimeError, 'failed-without-diagnostic'): m.receive(child)
+        with self.assertRaises(ValueError): m.OperationFailure('drop-read-groups', 'private value /path')
 
     def test_workflow_exact_head_and_allowlisted_publication_contract(self):
         text = WORKFLOW.read_text()
@@ -267,7 +356,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     choice = parser.add_mutually_exclusive_group(required=True)
     choice.add_argument('--draft', action='store_true')
+    choice.add_argument('--helper-only', action='store_true')
     choice.add_argument('--final', metavar='E1')
     args = parser.parse_args()
-    print(json.dumps(verify_pins(args.final, args.draft)))
+    print(json.dumps({'helperOnly': True} if args.helper_only else verify_pins(args.final, args.draft)))
     unittest.main(argv=[sys.argv[0]])

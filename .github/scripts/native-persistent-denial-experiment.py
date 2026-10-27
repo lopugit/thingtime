@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fixed inert hosted observations; never admits candidate execution."""
 import ctypes
+from contextlib import contextmanager
 import errno
 import hashlib
 import ipaddress
@@ -149,14 +150,56 @@ def label_packets(output, expected):
     return result
 
 
+DIAGNOSTIC_OPERATIONS = frozenset({
+    'drop-clear-groups', 'drop-set-gid', 'drop-set-uid',
+    'drop-read-real-uid', 'drop-read-effective-uid', 'drop-read-real-gid', 'drop-read-effective-gid',
+    'drop-verify-ids', 'drop-read-groups', 'drop-verify-groups',
+    'authority-read-effective-uid', 'authority-verify-uid', 'authority-sudo-launch', 'authority-sudo-refusal',
+    'authority-transport-setuid', 'canary-synthetic-credential-read', 'canary-policy-write',
+    'canary-receipt-write', 'canary-helper-write'})
+
+
+class OperationFailure(RuntimeError):
+    def __init__(self, operation, code):
+        if operation not in DIAGNOSTIC_OPERATIONS:
+            raise ValueError('unknown-diagnostic-operation')
+        if not isinstance(code, str) or not re.fullmatch('[a-z][a-z0-9-]{0,159}', code):
+            raise ValueError('invalid-diagnostic-code')
+        self.operation, self.code = operation, code
+        super().__init__(code)
+
+
+@contextmanager
+def boundary(operation):
+    if operation not in DIAGNOSTIC_OPERATIONS:
+        raise ValueError('unknown-diagnostic-operation')
+    try:
+        yield
+    except OperationFailure:
+        raise
+    except BaseException as error:
+        raise OperationFailure(operation, failure_code(error)) from None
+
+
+def operation_call(operation, function, *args):
+    with boundary(operation):
+        return function(*args)
+
+
 def drop(uid, gid):
-    os.setgroups([])
-    os.setgid(gid)
-    os.setuid(uid)
-    if (os.getuid(), os.geteuid(), os.getgid(), os.getegid()) != (uid, uid, gid, gid):
-        raise RuntimeError('numeric-drop-mismatch')
-    if os.getgroups() not in ([], [gid]):
-        raise RuntimeError('unexpected-supplementary-groups')
+    operation_call('drop-clear-groups', os.setgroups, [])
+    operation_call('drop-set-gid', os.setgid, gid)
+    operation_call('drop-set-uid', os.setuid, uid)
+    actual = tuple(operation_call(operation, function) for operation, function in (
+        ('drop-read-real-uid', os.getuid), ('drop-read-effective-uid', os.geteuid),
+        ('drop-read-real-gid', os.getgid), ('drop-read-effective-gid', os.getegid)))
+    with boundary('drop-verify-ids'):
+        if actual != (uid, uid, gid, gid):
+            raise RuntimeError('numeric-drop-mismatch')
+    groups = operation_call('drop-read-groups', os.getgroups)
+    with boundary('drop-verify-groups'):
+        if groups not in ([], [gid]):
+            raise RuntimeError('unexpected-supplementary-groups')
 
 
 def launch(work, uid, gid, mode, *arguments):
@@ -179,8 +222,12 @@ def receive(process, timeout=10):
         raise RuntimeError('fixed-probe-result-invalid')
     if process.returncode != 0:
         code = value.get('failureCode')
-        if set(value) != {'failureCode'} or not isinstance(code, str) or not re.fullmatch('[a-z][a-z0-9-]{0,119}', code):
+        if (set(value) not in ({'failureCode'}, {'failureCode', 'failureOperation'}) or
+            not isinstance(code, str) or not re.fullmatch('[a-z][a-z0-9-]{0,119}', code) or
+            ('failureOperation' in value and (not isinstance(value['failureOperation'], str) or value['failureOperation'] not in DIAGNOSTIC_OPERATIONS))):
             raise RuntimeError('fixed-probe-failed-without-diagnostic')
+        if 'failureOperation' in value:
+            raise OperationFailure(value['failureOperation'], 'fixed-probe-' + code)
         raise RuntimeError('fixed-probe-' + code)
     return value
 
@@ -238,6 +285,8 @@ def https_control(addresses):
 
 
 def failure_code(error):
+    if isinstance(error, OperationFailure):
+        return error.code
     if isinstance(error, subprocess.TimeoutExpired):
         return 'command-timeout'
     if isinstance(error, OSError):
@@ -247,32 +296,48 @@ def failure_code(error):
     return 'unexpected-' + type(error).__name__.lower()
 
 
+def diagnostic(error):
+    value = {'failureCode': failure_code(error)}
+    if isinstance(error, OperationFailure):
+        value['failureOperation'] = error.operation
+    return value
+
+
 def authority_probe(control, report, runner_uid, expected_uid):
-    if os.geteuid() != expected_uid or expected_uid in (0, runner_uid):
-        raise RuntimeError('fixture-identity-mismatch')
-    status = subprocess.run(['/usr/bin/sudo', '-n', '/usr/bin/true'], env=ENV, cwd='/',
-                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL, close_fds=True, timeout=3).returncode
-    if status != 1:
-        raise RuntimeError('normal-sudo-refusal-not-observed')
-    try:
-        os.setuid(runner_uid)
-    except OSError as error:
-        if error.errno != errno.EPERM:
-            raise
-    else:
-        raise RuntimeError('fixture-obtained-transport-identity')
-    # Synthetic canaries only: never open real runner credentials or profiles.
-    for path, flags in [(control / 'synthetic-credential', os.O_RDONLY), (control / 'policy.conf', os.O_WRONLY),
-                        (report / 'receipt-canary.json', os.O_WRONLY), (control.parent / 'helper.py', os.O_WRONLY)]:
+    actual_uid = operation_call('authority-read-effective-uid', os.geteuid)
+    with boundary('authority-verify-uid'):
+        if actual_uid != expected_uid or expected_uid in (0, runner_uid):
+            raise RuntimeError('fixture-identity-mismatch')
+    with boundary('authority-sudo-launch'):
+        status = subprocess.run(['/usr/bin/sudo', '-n', '/usr/bin/true'], env=ENV, cwd='/',
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, close_fds=True, timeout=3).returncode
+    with boundary('authority-sudo-refusal'):
+        if status != 1:
+            raise RuntimeError('normal-sudo-refusal-not-observed')
+    with boundary('authority-transport-setuid'):
         try:
-            descriptor = os.open(path, flags | os.O_NOFOLLOW)
+            os.setuid(runner_uid)
         except OSError as error:
-            if error.errno != errno.EACCES:
-                raise RuntimeError('canary-refusal-not-permission-denial') from None
+            if error.errno != errno.EPERM:
+                raise
         else:
-            os.close(descriptor)  # No read/write even if the premise failed.
-            raise RuntimeError('protected-canary-accessible')
+            raise RuntimeError('fixture-obtained-transport-identity')
+    # Synthetic canaries only: never open real runner credentials or profiles.
+    for operation, path, flags in [
+        ('canary-synthetic-credential-read', control / 'synthetic-credential', os.O_RDONLY),
+        ('canary-policy-write', control / 'policy.conf', os.O_WRONLY),
+        ('canary-receipt-write', report / 'receipt-canary.json', os.O_WRONLY),
+        ('canary-helper-write', control.parent / 'helper.py', os.O_WRONLY)]:
+        with boundary(operation):
+            try:
+                descriptor = os.open(path, flags | os.O_NOFOLLOW)
+            except OSError as error:
+                if error.errno != errno.EACCES:
+                    raise
+            else:
+                os.close(descriptor)  # No read/write even if the premise failed.
+                raise RuntimeError('protected-canary-accessible')
     return {'fixtureUidVerified': True, 'normalSudoRefusal': True,
             'transportSetuidDenied': True, 'syntheticCanaryAccessDenied': True}
 
@@ -341,7 +406,7 @@ def attributed_denials(work, state, role, uid):
     return results
 
 
-def terminal_result(state, failure=None, code=None):
+def terminal_result(state, failure=None, code=None, operation=None):
     return {'experiment': 'inert-persistent-denial-v1', 'source': state['admission'],
             'candidateExecuted': False, 'nativeCompileAdmitted': False, 'platformAcceptance': False,
             'policyChanged': True if state.get('policyActivated') else (None if state.get('policyActivationAttempted') else False),
@@ -350,7 +415,7 @@ def terminal_result(state, failure=None, code=None):
             'pfEnableReferenceReleased': False, 'providerDisposalRequired': True,
             'providerDestructionObserved': False, 'rootAuthored': True, 'candidateAdmission': False,
             'result': 'inert-observations-complete' if failure is None else 'inert-observation-failed',
-            'failureStage': failure, 'failureCode': code, 'observations': state.get('observations', {}),
+            'failureStage': failure, 'failureCode': code, 'failureOperation': operation, 'observations': state.get('observations', {}),
             'unproven': ['stock-service-delegation-enforcement', 'real-transport-credential-inaccessibility',
                          'future-candidate-namespace-authority', 'live-dns-broker-and-cache-expiry-continuity',
                          'artifact-readback-after-job', 'provider-destruction-receipt']}
@@ -401,7 +466,7 @@ def watchdog(work, ready):
         snapshot(control, state)
         write_json(Path(state['report']) / 'result.json', terminal_result(state))
     except BaseException as error:
-        write_json(Path(state['report']) / 'result.json', terminal_result(state, 'parent-loss', failure_code(error)))
+        write_json(Path(state['report']) / 'result.json', terminal_result(state, 'parent-loss', failure_code(error), error.operation if isinstance(error, OperationFailure) else None))
 
 
 def start_watchdog(work):
@@ -504,7 +569,7 @@ def supervise(report, admission_path):
         # Simulated supervisor death is real process exit. Watchdog owns readback.
         os._exit(75)
     except BaseException as error:
-        write_json(report / 'result.json', terminal_result(state, state.get('phase', 'supervisor-initialization'), failure_code(error)))
+        write_json(report / 'result.json', terminal_result(state, state.get('phase', 'supervisor-initialization'), failure_code(error), error.operation if isinstance(error, OperationFailure) else None))
         (control / 'supervisor-finished').touch()
         raise RuntimeError('inert-observation-failed-see-root-receipt') from None
 
@@ -551,5 +616,5 @@ if __name__ == '__main__':
     try:
         main(sys.argv[1:])
     except BaseException as error:
-        print(json.dumps({'failureCode': failure_code(error)}), flush=True)
+        print(json.dumps(diagnostic(error)), flush=True)
         raise SystemExit(1) from None

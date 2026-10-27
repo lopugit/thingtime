@@ -436,3 +436,18 @@ PYTHONDONTWRITEBYTECODE=1 python3 -I -S .github/scripts/native-compile-ci.test.p
 - After an authorized hosted run, verify the actual upload artifact ID/digest
   and exact E1/E2/W bytes; preserve denial through provider disposal and never
   claim PF restoration or an observed destruction receipt.
+
+### Fixed authority-operation diagnostics — 2026-10-27
+
+- During helper-only preparation, run `PYTHONDONTWRITEBYTECODE=1 python3
+  .github/scripts/native-persistent-denial-experiment.test.py --helper-only`;
+  this does not verify publication pins. Use `--final E1` for the final pair.
+- Inject EINVAL separately at every numeric setter/getter, sudo launch,
+  transport-setuid attempt and synthetic canary open; require its exact
+  allowlisted operation label and numeric error code to survive child and
+  root receipt projection. Do not expose exception strings/paths/identities.
+- Keep group readback and mismatch rejection. EINVAL, launcher failure,
+  timeout and unexpected return codes must never count as normal denial.
+  Transport setuid still accepts only EPERM, canary access only EACCES.
+- Preserve prior hosted terminal receipts byte-for-byte. Do not label or retry
+  while preparing the diagnostic source/pins for exact parent review.
