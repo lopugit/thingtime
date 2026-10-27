@@ -102,6 +102,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Add Password manager navigation/settings and an opt-in Chromium
+  passkey extension with editable website approval, fresh password verification,
+  origin/RP fences and durable vault readback. Document fork-safe ZIP setup and
+  real-data regression checks; Firefox, Safari, mobile and native-provider
+  acceptance remain separate. **Codex (AI)**
+
 - 2026-10-27: Add native desktop View menu zoom and focused-window Command/Control `+`/`=`/`-`/`0` shortcuts, sharing one zoom path while preserving text editing and preventing duplicate menu/renderer handling. Add focused and real Electron host regressions. [Validation and delivery](../PRs/1253-mac-dev-production-policy.md). **Codex (AI)**
 
 - 2026-10-27: Update Mac development delivery guidance to retain a separate development app for testing and usage, and gate stable Thingtime installation on a newer version containing a Mac feature merged into `main`. **Codex (AI)**

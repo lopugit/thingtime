@@ -84,7 +84,7 @@ image loading and the separately sealed list projection. `test:passwords` covers
 these boundaries; `scripts/password-tools.browser.html` is an isolated synthetic
 UI fixture, not native-provider acceptance.
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.3.0 is a
+See [password-manager.md](../password-manager.md). `api.passwords` 1.4.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -92,6 +92,16 @@ fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
 intentionally bypasses general request diagnostics and automatic origin fallback
 so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
+`passwords/browserPasskey.ts` validates RP/origin/options and implements ES256;
+`browserProviderCeremony.ts` owns fresh `verify-passkey`, catalog selection,
+retry identity and durable readback. `BrowserPasswordProvider.tsx` serves
+`/passwords/provider` with editable `browserProviderBlocks.ts`. Chromium transport
+and trusted tab/document checks live in `browser-extension/`; package with
+`build:password-extension`, test with `test:password-extension` and
+`test:passwords`. Browser acceptance must use the real local API/vault and an
+independent relying party; unit signatures and synthetic UI alone are insufficient.
+`Settings/passwordManagerSettingsBlocks.ts` and `PasswordManagerSettings.tsx`
+share `/settings/passwords`; Thingtime login passkeys remain in Security.
 Native provider implementation lives in `apple/Passwords` and
 `apple/PasswordProvider`. Signed packaging and real device registration/sign-in
 remain separate acceptance checks; the web guide uses the existing native bridge.
