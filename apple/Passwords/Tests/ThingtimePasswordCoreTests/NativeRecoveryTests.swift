@@ -124,6 +124,14 @@ final class NativeRecoveryTests: XCTestCase {
             (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, request.url!.path.hasPrefix("/.well-known") ? try self.manifest() : body)
         }
         let restored = try await client.read("fixture-id"); XCTAssertEqual(restored, entry)
+        // A real entry stays well inside the ceiling, but an unbounded reply must
+        // still fail the request rather than evict the provider extension.
+        let oversized = Data(repeating: UInt8(ascii: "x"), count: PasswordClient.responseLimit + 1)
+        RecoveryURLProtocol.reply = { request in
+            (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, request.url!.path.hasPrefix("/.well-known") ? try self.manifest() : oversized)
+        }
+        do { _ = try await client.read("fixture-id"); XCTFail("Must bound an unlimited reply") }
+        catch { XCTAssertEqual(error as? PasswordProviderError, .invalidResponse) }
         RecoveryURLProtocol.reply = { _ in (HTTPURLResponse(url: URL(string: "https://attacker.test/api/v1/passwords")!, statusCode: 200, httpVersion: nil, headerFields: nil)!, body) }
         do { _ = try await client.read("fixture-id"); XCTFail("Must reject redirected response") }
         catch { XCTAssertEqual(error as? PasswordProviderError, .invalidResponse) }
