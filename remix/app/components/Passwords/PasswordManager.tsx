@@ -17,7 +17,7 @@ import { emptyPasswordEntry, FIELD_TYPES, PASSWORD_TYPES, type PasswordEntry, ty
 import { passwordRequest } from '~/passwords/client';
 import { previewPasswordFile, visitPasswordFile, passwordImportErrorMessage, exportPasswordBackup, type PasswordFormat, type PasswordImportPreview } from '~/passwords/transfer';
 import { scanQrFile, scanQrScreen } from '~/passwords/qr.client';
-import { hasNativePasswordProvider, nativePasswordProvider } from '~/passwords/native.client';
+import { hasNativePasswordProvider } from '~/passwords/native.client';
 
 type Draft = { id: string; revision: number; entry: PasswordEntry };
 const changed = () => window.dispatchEvent(new Event('thingtime:passwords-changed'));
@@ -40,7 +40,7 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   const [readingImport, setReadingImport] = React.useState(false);
   const importRead = React.useRef<AbortController | null>(null);
   const [deleteConfirm, setDeleteConfirm] = React.useState(false);
-  const [nativeAvailable, setNativeAvailable] = React.useState(false), [nativeMessage, setNativeMessage] = React.useState('');
+  const [nativeAvailable, setNativeAvailable] = React.useState(false);
   React.useEffect(() => { const check = () => setNativeAvailable(hasNativePasswordProvider()); check(); window.addEventListener('thingtime:native-bridge-ready', check); return () => window.removeEventListener('thingtime:native-bridge-ready', check); }, []);
   const generation = React.useRef(0), active = React.useRef(true), controllers = React.useRef(new Set<AbortController>());
   const retry = React.useRef<{ payload: string; writeId: string } | null>(null), importSource = React.useRef<{ file: File; count: number; saved: number; archive?: { id: string; writeId: string; saved: boolean }; filesSaved?: number; entryIds?: Map<number, string>; restoredIds?: Map<string, string>; iconFiles?: Map<number, string>; pendingIcon?: { id: string; revision: number; writeId: string; entry: PasswordEntry }; pendingFile?: PasswordFile; pending?: { id: string; writeId: string; entry: PasswordEntry } } | null>(null);
@@ -181,7 +181,6 @@ function PasswordManagerScope({ ownerId }: { ownerId: string }) {
   return <Box width="100%" maxWidth="1100px" mx="auto" px={{ base: 3, md: 6 }} py={6}>
     <Flex gap={3} alignItems="center" justifyContent="space-between" flexWrap="wrap"><Box><Heading size="lg">Password manager</Heading><Text mt={1} color="var(--tt-muted)">Unlocked with your Thingtime session</Text></Box><Flex gap={2} flexWrap="wrap"><Button onClick={() => { clearAndRefresh(); setDraft({ id: crypto.randomUUID(), revision: 0, entry: emptyPasswordEntry() }); }} isDisabled={busy || configured === false}>Add password</Button><Button variant="outline" onClick={() => { clearAndRefresh(); setTransfer('import'); }}>Import</Button><Button variant="outline" onClick={() => { clearAndRefresh(); setTransfer('export'); }}>Export</Button><Button variant="ghost" onClick={clearAndRefresh}>Hide values</Button></Flex></Flex>
     {configured === false && <Text mt={4}>Password encryption needs deployment configuration before you can save entries.</Text>}
-    {nativeAvailable && <Box mt={4}><Text fontSize="sm">Use the native Thingtime app to fill passwords, verification codes, and create or use passkeys in other apps and websites.</Text><Flex gap={2} mt={2} flexWrap="wrap"><Button size="sm" onClick={() => run(async () => { const result = await nativePasswordProvider('connect', ownerId); setNativeMessage(result.message); })}>Connect Password AutoFill</Button><Button size="sm" variant="ghost" onClick={() => run(async () => { const result = await nativePasswordProvider('disconnect', ownerId); setNativeMessage(result.message); })}>Disconnect AutoFill</Button></Flex>{nativeMessage && <Text role="status" mt={2} fontSize="sm">{nativeMessage}</Text>}</Box>}
     <PasswordPasskeySetup ownerId={ownerId} nativeAvailable={nativeAvailable} />
     {error && <Text role="alert" color="red.600" mt={4}>{error}</Text>}
     <Flex gap={5} mt={6} alignItems="start" direction={{ base: 'column', md: 'row' }}>

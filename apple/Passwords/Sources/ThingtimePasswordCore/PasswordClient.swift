@@ -16,14 +16,35 @@ public struct PasswordCatalogItem: Codable, Identifiable, Sendable {
 public final class PasswordClient: @unchecked Sendable {
     public let account: ProviderSession
     private let transport: URLSession
-    public init(account: ProviderSession) {
+    public convenience init(account: ProviderSession) {
+        self.init(account: account, configuration: .ephemeral)
+    }
+    init(account: ProviderSession, configuration: URLSessionConfiguration) {
         self.account = account
-        let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil; configuration.urlCache = nil; configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest = 25; configuration.timeoutIntervalForResource = 40
         transport = URLSession(configuration: configuration, delegate: NoRedirect(), delegateQueue: nil)
     }
     deinit { transport.invalidateAndCancel() }
+    private func receive(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let data: Data, response: URLResponse
+        do { (data, response) = try await transport.data(for: request) }
+        catch {
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled { throw CancellationError() }
+            throw PasswordProviderError.networkUnavailable
+        }
+        guard let http = response as? HTTPURLResponse, http.url == request.url else { throw PasswordProviderError.invalidResponse }
+        switch http.statusCode {
+        case 200: return (data, http)
+        case 401: throw PasswordProviderError.invalidSession
+        case 403: throw PasswordProviderError.permissionDenied
+        case 404, 405: throw PasswordProviderError.incompatibleService
+        case 409: throw PasswordProviderError.conflict
+        case 429: throw PasswordProviderError.rateLimited
+        case 500...599: throw PasswordProviderError.serviceUnavailable
+        default: throw PasswordProviderError.invalidResponse
+        }
+    }
     private struct Reply: Decodable {
         let ok: Bool
         let ownerId: String?
@@ -42,9 +63,8 @@ public final class PasswordClient: @unchecked Sendable {
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         var content = body; content["expectedOwnerId"] = account.ownerId
         request.httpBody = try JSONSerialization.data(withJSONObject: content)
-        let (data, response) = try await transport.data(for: request)
-        guard let response = response as? HTTPURLResponse, response.statusCode == 200, response.url == request.url, data.count <= 2 * 1024 * 1024 else { throw PasswordProviderError.unavailable }
-        let reply = try JSONDecoder().decode(Reply.self, from: data)
+        let (data, _) = try await receive(request)
+        guard data.count <= 2 * 1024 * 1024, let reply = try? JSONDecoder().decode(Reply.self, from: data) else { throw PasswordProviderError.invalidResponse }
         guard reply.ok, reply.ownerId == account.ownerId else { throw PasswordProviderError.invalidSession }
         return reply
     }
@@ -69,18 +89,21 @@ public final class PasswordClient: @unchecked Sendable {
     public func requireCapability() async throws {
         var request = URLRequest(url: account.origin.appendingPathComponent(".well-known/thingtime-capabilities.json"))
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        let (data, response) = try await transport.data(for: request)
-        guard let response = response as? HTTPURLResponse, response.statusCode == 200,
-              response.url == request.url, Self.compatibleCapabilities(data, origin: account.origin) else { throw PasswordProviderError.unavailable }
+        let (data, _) = try await receive(request)
+        guard Self.compatibleCapabilities(data, origin: account.origin) else { throw PasswordProviderError.incompatibleService }
     }
     public func catalog() async throws -> [PasswordCatalogItem] {
         try await requireCapability()
         var result: [PasswordCatalogItem] = [], cursor: String?
+        var visitedCursors = Set<String>()
         repeat {
             var body: [String: Any] = ["operation": "catalog"]
             if let cursor { body["cursor"] = cursor }
             let reply = try await call(body)
-            guard let entries = reply.catalog, result.count + entries.count <= 10_000, reply.nextCursor != cursor || cursor == nil else { throw PasswordProviderError.unavailable }
+            guard let entries = reply.catalog else { throw PasswordProviderError.invalidResponse }
+            // Pagination is a processing boundary, never a vault item limit.
+            // Refuse repeated cursors, including cycles spanning multiple pages.
+            if let next = reply.nextCursor, !visitedCursors.insert(next).inserted { throw PasswordProviderError.invalidResponse }
             result.append(contentsOf: entries); cursor = reply.nextCursor
         } while cursor != nil
         return result

@@ -30,6 +30,9 @@ public struct ProviderSession: Codable, Equatable, Sendable {
     public var origin: URL
     public var ownerId: String
     public var cookie: String
+    public func requireUnchanged(from expected: ProviderSession) throws {
+        guard self == expected else { throw PasswordProviderError.sessionChanged }
+    }
     public init(origin: URL, ownerId: String, cookie: String) throws {
         guard origin.scheme == "https", origin.host != nil, origin.user == nil, origin.password == nil,
               origin.query == nil, origin.fragment == nil, origin.path.isEmpty || origin.path == "/",
@@ -38,7 +41,13 @@ public struct ProviderSession: Codable, Equatable, Sendable {
         self.origin = origin; self.ownerId = ownerId; self.cookie = cookie
     }
 }
-public enum PasswordProviderError: Error { case invalidSession, unavailable, invalidCredential, unsupportedAlgorithm, cancelled }
+// Closed categories are safe to present in the extension. Never display a raw
+// server response, URLSession error, Keychain value or credential in diagnostics.
+public enum PasswordProviderError: Error, Equatable {
+    case invalidSession, sessionChanged, sessionUnavailable, unavailable, invalidCredential, unsupportedAlgorithm, cancelled
+    case permissionDenied, conflict, rateLimited, serviceUnavailable, incompatibleService, networkUnavailable, invalidResponse
+    public var allowsRetryInCurrentRequest: Bool { self != .sessionChanged }
+}
 extension Data {
     public var base64URL: String { base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "") }
     public init?(base64URL: String) {
