@@ -71,6 +71,7 @@
     "test:characters-preflight": "node --import tsx --test scripts/character-coordination-preflight.test.ts",
     "test:characters": "node --experimental-test-module-mocks --import tsx --test app/api/utils/auth/characters.test.mts app/api/utils/auth/characterLogin.test.mts",
     "test:auth-introspection": "node --experimental-test-module-mocks --import tsx --test app/api/utils/auth/getCurrentUser.introspection.test.mts",
+    "smoke:built-connections": "node scripts/smoke-built-connections.mjs",
     "verify:connections": "node scripts/verify-connections.mjs",
     "test:autosave": "node --import tsx --test app/Providers/*.test.ts",
     "test:branding": "node --import tsx --test app/components/Branding/*.test.ts",
@@ -166,7 +167,8 @@
     "test:timeline:related": "node --import tsx scripts/timeline-related.integration.mts",
     "build:draft": "vite build --config vite.draft.config.ts",
     "test:draft": "node --import tsx --test app/draftPreview/*.test.ts",
-    "test:passwords": "node --experimental-test-module-mocks --import tsx --test app/passwords/*.test.ts app/routes/api/v1/passwords/*.test.ts app/api/utils/connections/vaultEnvelope.test.ts app/api/utils/connections/vaultKeys.test.mts scripts/worktree-ports.test.cjs",
+    "test:passwords-browser": "TT_QA_SUITE=password-manager node scripts/run-private-tools-browser.mjs",
+    "test:passwords": "node --experimental-test-module-mocks --import tsx --test app/passwords/*.test.ts app/components/Passwords/*.test.ts app/routes/api/v1/passwords/*.test.ts app/api/utils/connections/vaultEnvelope.test.ts app/api/utils/connections/vaultKeys.test.mts scripts/worktree-ports.test.cjs scripts/native-password-passkey.test.mjs && node scripts/verify-native-password-passkey.mjs",
     "test:mail": "node --import tsx --test app/mail/*.test.ts app/api/utils/mail/*.test.ts app/routes/api/v1/mail/*.test.ts",
     "mail:connector": "node --import tsx scripts/mail-connector.mts",
     "test:mail:transport": "node --import tsx app/api/utils/mail/transport.integration.mts",
@@ -176,8 +178,10 @@
     "test:mail:storage": "node --env-file=.env.local --import tsx scripts/mail-storage.integration.mts",
     "test:activity": "node --import tsx --test app/activity/*.test.ts",
     "test:activity-ui": "node scripts/test-activity-manager-ui.mjs",
-    "test:environment-gateway": "node --import tsx --test app/api/utils/deployment/environmentGateway.test.ts server/utils/environmentGateway.test.ts",
-    "test:environment-gateway:acceptance": "node scripts/environment-gateway-acceptance.mjs"
+    "test:environment-gateway": "node --import tsx --test app/api/utils/deployment/environmentGateway.test.ts server/utils/environmentGateway.test.ts server/handlers/thingtime-capabilities.test.ts",
+    "test:environment-gateway:acceptance": "node scripts/environment-gateway-acceptance.mjs",
+    "test:environment-gateway:connections": "THINGTIME_GATEWAY_ACCEPTANCE_CONNECTIONS=1 node scripts/environment-gateway-acceptance.mjs",
+    "test:connections-browser": "TT_QA_SUITE=service-catalog node scripts/run-private-tools-browser.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "2.1.272",

@@ -98,7 +98,7 @@ export const PlatformCredentials = ({
 		setBusy(key);
 		setError(null);
 		try {
-			await requireThingtimeCapability('api.admin-ci-credentials', action.action === 'import-configured-openai' ? '3.1.0' : '3.0.0');
+			await requireThingtimeCapability('api.admin-ci-credentials', action.action === 'import-configured-openai' ? '3.1.1' : '3.0.0');
 			const result = await fetch('/api/v1/admin/ci/credentials', {
 				method: 'POST',
 				credentials: 'same-origin',

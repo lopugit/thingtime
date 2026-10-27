@@ -70,3 +70,10 @@ test('revocation during icon metadata load withholds the entire private list', a
   assert.equal(response.status, 401);
   assert.equal((await response.text()).includes('private.example'), false);
 });
+
+test('native setup owner verification uses the existing authenticated metadata GET contract', async () => {
+  const response = await createPasswordHandler(defaults)({ request: new Request('https://thingtime.example/api/v1/passwords') });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, ownerId: 'owner', configured: true, entries: [], nextCursor: null });
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+});

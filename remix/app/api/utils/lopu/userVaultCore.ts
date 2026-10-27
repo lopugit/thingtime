@@ -155,9 +155,11 @@ export const LOPU_PROVIDER_TEMPLATES: readonly LopuProviderTemplate[] = [
 
 const SAFE_ID = /^[A-Za-z0-9_-]{8,120}$/;
 
+export const vaultText = (value: unknown): string | null =>
+	typeof value === 'string' && value.trim() ? value.trim() : null;
+
 export const boundedVaultText = (value: unknown, max: number): string | null => {
-	if (typeof value !== 'string') return null;
-	const text = value.trim();
+	const text = vaultText(value);
 	return text && text.length <= max ? text : null;
 };
 
@@ -218,7 +220,7 @@ export const isBlockedLopuProviderHostname = (hostname: string): boolean => {
 };
 
 export const normalizeLopuProviderEndpoint = (value: unknown): string | null => {
-	if (typeof value !== 'string' || value.length > 2048) return null;
+	if (typeof value !== 'string') return null;
 	try {
 		const url = new URL(value.trim());
 		if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || isBlockedLopuProviderHostname(url.hostname))
@@ -253,11 +255,11 @@ export const providerModelFor = (provider: LopuProviderKind, modelId: unknown): 
 };
 
 // A provider-native model id as the vault or a voice request may carry it
-// (`gpt-5.4`, `openai/gpt-oss-120b`, `grok-voice-latest`): bounded, no
+// (`gpt-5.4`, `openai/gpt-oss-120b`, `grok-voice-latest`): no
 // whitespace or shell-ish characters, else null.
-const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,199}$/;
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@-]*$/;
 export const safeVaultModelId = (value: unknown): string | null => {
-	const text = boundedVaultText(value, 200);
+	const text = vaultText(value);
 	return text && MODEL_ID.test(text) ? text : null;
 };
 
