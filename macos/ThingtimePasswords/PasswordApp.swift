@@ -40,7 +40,7 @@ import ThingtimePasswordCore
     private var window: NSWindow?
     func applicationDidFinishLaunching(_ notification: Notification) {
         let content = VStack(alignment: .leading, spacing: 16) {
-            Text("Thingtime Passwords").font(.title).bold()
+            Text("Thingtime").font(.title).bold()
             Text("Open Passwords in the Thingtime desktop app and select Connect Password AutoFill. Then enable Thingtime in System Settings → General → AutoFill & Passwords.")
                 .fixedSize(horizontal: false, vertical: true)
             Button("Open Thingtime") {
@@ -48,7 +48,7 @@ import ThingtimePasswordCore
             }
             Button("Open Password AutoFill settings") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Passwords-Settings.extension")!) }
         }.padding(24).frame(width: 420)
-        let window = NSWindow(contentViewController: NSHostingController(rootView: content)); window.title = "Thingtime Passwords"; window.center(); window.makeKeyAndOrderFront(nil); self.window = window
+        let window = NSWindow(contentViewController: NSHostingController(rootView: content)); window.title = "Thingtime"; window.center(); window.makeKeyAndOrderFront(nil); self.window = window
         NSApp.activate(ignoringOtherApps: true)
     }
 }

@@ -38,7 +38,12 @@ public struct ProviderSession: Codable, Equatable, Sendable {
         self.origin = origin; self.ownerId = ownerId; self.cookie = cookie
     }
 }
-public enum PasswordProviderError: Error { case invalidSession, unavailable, invalidCredential, unsupportedAlgorithm, cancelled }
+// Closed categories are safe to present in the extension. Never display a raw
+// server response, URLSession error, Keychain value or credential in diagnostics.
+public enum PasswordProviderError: Error, Equatable {
+    case invalidSession, sessionUnavailable, unavailable, invalidCredential, unsupportedAlgorithm, cancelled
+    case permissionDenied, conflict, rateLimited, serviceUnavailable, incompatibleService, networkUnavailable, invalidResponse
+}
 extension Data {
     public var base64URL: String { base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "") }
     public init?(base64URL: String) {

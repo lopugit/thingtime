@@ -6326,6 +6326,19 @@ and provisioning contracts. `CODE_SIGNING_ALLOWED=NO` is for isolated compilatio
 only and does not establish installed AutoFill or Keychain acceptance. Never
 install an unsigned helper over a working signed app.
 
+For an isolated native helper compilation, set all five overrides together:
+`THINGTIME_PASSWORD_HOST_BUNDLE_ID`, `THINGTIME_PASSWORD_PROVIDER_BUNDLE_ID`,
+`THINGTIME_PASSWORD_KEYCHAIN_GROUP`, `THINGTIME_PASSWORD_STAGING_APP` and
+`THINGTIME_PASSWORD_BUILD_DIR`. Use a distinct host ID such as
+`com.example.thingtime.passwords.dev`, provider ID `<host-id>.provider`, and a
+private Keychain group ending in `.<host-id>`. Staging/build paths must be absolute,
+distinct from the canonical outputs, and outside every `Applications` directory.
+For unsigned compilation set `THINGTIME_NODE_SIGNING_MODE=unsigned`; a signed
+development run still needs its own provisioned identity and independent test
+session. Do not install or register an unsigned fixture as the user's provider.
+The visible host/provider name is Thingtime; existing production bundle IDs,
+Keychain group and `Thingtime Passwords.app` packaging path remain unchanged.
+
 ### Commander-backed Mac backup indexing
 
 The signed macOS node bundles the repository's `commander-indexer` Rust binary.

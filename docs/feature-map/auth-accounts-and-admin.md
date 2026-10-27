@@ -103,7 +103,13 @@ independent relying party; unit signatures and synthetic UI alone are insufficie
 `Settings/passwordManagerSettingsBlocks.ts` and `PasswordManagerSettings.tsx`
 share `/settings/passwords`; Thingtime login passkeys remain in Security.
 Native provider implementation lives in `apple/Passwords` and
-`apple/PasswordProvider`. Signed packaging and real device registration/sign-in
+`apple/PasswordProvider`. `ProviderFeedback.swift` owns closed progress/error text,
+request fencing and immutable registration retry identity; `PasswordClient.swift`
+classifies HTTP failures and walks complete cursor-based catalogs. The macOS host
+and provider display Thingtime while retaining installed bundle/Keychain identities.
+Run `swift test --package-path apple/Passwords` and
+`bash apple/PasswordProvider/tests/render-preview.sh`; the latter renders the
+actual SwiftUI view with synthetic status only. Signed packaging and real device registration/sign-in
 remain separate acceptance checks; the web guide uses the existing native bridge.
 
 ## Account content snapshots

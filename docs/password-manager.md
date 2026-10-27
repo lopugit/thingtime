@@ -205,6 +205,28 @@ OS enablement and a real registration followed by sign-in are separate acceptanc
 requirements; build or package verification alone does not prove them. Thingtime's
 own account-login passkeys are a separate feature from this credential provider.
 
+### Native progress, recovery and naming
+
+The macOS provider and host display **Thingtime** in the operating-system flow.
+The existing bundle identifiers, shared Keychain group and packaged
+`Thingtime Passwords.app` path remain stable so this label change does not create
+a new credential store or require migration.
+
+The provider shows the current connection, device verification, vault, save,
+readback, AutoFill indexing or browser-return step. Failures use closed error
+categories with actionable recovery text; diagnostics contain only the phase and
+category, never server bodies, underlying error descriptions, account identifiers
+or credential material. A missing/expired connection calls for reconnecting from
+Thingtime; a protected-store access failure calls for unlocking the device.
+
+Retry within the same registration request retains the original key, credential,
+record and write identity, including uncertain save/readback outcomes. Cancellation,
+a replacement OS request, or account/session changes fence late work. Saved-entry
+pagination follows cursors without an arbitrary entry cap and rejects a repeated
+cursor rather than looping forever. These guards do not establish that the active
+installed provider completed a relying-party registration: verify a signed build,
+the active extension and a real create-and-sign-in flow independently.
+
 ## Validation and setup
 
 See the [README setup](../README.md#password-manager-setup) and

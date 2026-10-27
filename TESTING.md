@@ -10324,6 +10324,24 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Native recovery: exercise each closed HTTP/session failure and verify the
+  provider shows its current step with safe recovery text. Cancel device
+  verification, expire/reconnect the session and interrupt a save/readback; retry
+  inside the same request must retain one key/credential/record/write identity.
+  Cancel or replace the request while work is held; no late result or queued click
+  may change a newer request. Diagnostics contain only closed phase/error codes.
+- [ ] Native catalog: retrieve multiple cursor pages beyond 10,000 entries;
+  preserve all results and reject repeated cursors without an infinite loop.
+  Run `swift test --package-path apple/Passwords` for injected transport/session
+  failures, readback and retry/request fencing without accessing user credentials.
+- [ ] Native provider presentation: run
+  `bash apple/PasswordProvider/tests/render-preview.sh` and inspect compact/wide
+  busy, long error and retry states. This fixture cannot prove device authentication or extension IPC.
+  On the final signed installed host/provider, confirm the OS picker and host say
+  **Thingtime**, existing Keychain access persists, and an independent relying
+  party creates then authenticates the saved passkey. Confirm the active extension
+  build rather than treating a newer nested helper or Connected label as proof.
+
 - [ ] Passkey readback normalization: reorder object properties in canonical
   saved field projections without changing values; registration and assertion
   readback must still accept the entry. Change a secret field value, credential
