@@ -87,7 +87,7 @@ candidate checkout, PF operation, secret context or native build. Helper and
 workflow commits are reviewed separately; the owner label/run remain withheld
 until final exact-source review. Existing native H1/H2 pins are unchanged.
 
-The safe local checker covers workflow/Python syntax and eight mocked cleanup
+The safe local checker covers workflow/Python syntax and nine deterministic label, cleanup
 and timeout cases. It executes no host command, real signal, account operation
 or hosted job. See [the full experiment spec](../.github/NATIVE_LIFECYCLE_EXPERIMENT.md).
 Actual hosted observations, candidate network denial, unsigned compilation and

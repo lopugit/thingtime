@@ -1,5 +1,14 @@
 # Control-plane changelog
 
+## 2026-10-27 — Fit exact-head experiment labels within GitHub
+
+- Use `tt-life-` plus the full forty-character SHA for a 48-character label.
+  Preserve exact-head owner binding and add a name-length/no-truncation
+  regression after GitHub rejected the previous prefix before label creation.
+- Keep hosted triggering withheld until the updated helper/workflow pins are
+  independently reviewed. No label or experiment run was created by the failed
+  request.
+
 ## 2026-10-27 — Prepare an inert hosted lifecycle experiment
 
 - Add a fixed helper and safe mocked checks for fresh task user-domain

@@ -20,6 +20,15 @@ ENV = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'LC_ALL': 'C'}
 ABSENT = 113  # Observational platform hypothesis, NOT a production absence API.
 
 
+def review_label(head_sha):
+    if not re.fullmatch('[0-9a-f]{40}', head_sha):
+        raise ValueError('review-label-requires-full-immutable-sha')
+    label = 'tt-life-' + head_sha
+    if len(label) > 50:
+        raise ValueError('review-label-exceeds-github-name-limit')
+    return label
+
+
 def write_json(path, value, mode=0o600):
     temporary = path.with_suffix('.new')
     with temporary.open('w') as stream:
@@ -221,7 +230,7 @@ def supervise(case, report, admission):
     if not all(re.fullmatch('[0-9a-f]{40}', provenance.get(key, ''))
                for key in ('helperSha', 'reviewedHeadSha', 'workflowSha')):
         raise RuntimeError('invalid-reviewed-provenance')
-    if provenance.get('actor') != 'lopugit' or provenance.get('label') != 'native-lifecycle-' + provenance['reviewedHeadSha']:
+    if provenance.get('actor') != 'lopugit' or provenance.get('label') != review_label(provenance['reviewedHeadSha']):
         raise RuntimeError('exact-owner-review-label-required')
     report = Path(report).resolve()
     if not report.is_relative_to(Path(os.environ['RUNNER_TEMP']).resolve()) or report.exists():

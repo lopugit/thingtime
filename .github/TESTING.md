@@ -313,7 +313,7 @@ pre-queued with no jobs, logs, or cancellable run graph.
 ## Inert native lifecycle platform experiment
 
 - Run `python3 .github/scripts/native-lifecycle-experiment.test.py` for syntax,
-  pinned-workflow checks and eight mocked cleanup/timeout regressions. Before the
+  pinned-workflow checks and nine deterministic label/cleanup/timeout regressions. Before the
   separate workflow commit exists, use `--helper-only`. These checks execute no
   system commands, real signals, UID mutations or hosted work.
 - Run `actionlint .github/workflows/native-lifecycle-experiment.yml` after the

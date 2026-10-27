@@ -34,7 +34,7 @@ if not options.helper_only:
     assert 'timeout-minutes: 8' in workflow and 'max-parallel: 1' in workflow
     assert 'reviewed_bytes == executed_bytes' in workflow
     assert 'current[\'head\'][\'sha\'] == head' in workflow
-    assert 'native-lifecycle-{0}' in workflow
+    assert 'tt-life-{0}' in workflow
     for expression in ('pull_request_target:', 'workflow_dispatch:', 'secrets:', 'secrets.', 'secrets: inherit',
                        'actions/cache@', 'contents: write', 'pull-requests: write'):
         assert expression not in workflow, expression
@@ -92,6 +92,16 @@ class CleanupReview(unittest.TestCase):
                  patch.object(module.time, 'sleep'):
                 module.cleanup(work)
             return json.loads((report / 'result.json').read_text()), calls
+
+    def test_full_head_label_fits_github_name_limit_without_truncation(self):
+        head = '0123456789abcdef' * 2 + '01234567'
+        label = module.review_label(head)
+        self.assertEqual(label, 'tt-life-' + head)
+        self.assertEqual(len(label), 48)
+        self.assertLessEqual(len(label), 50)
+        self.assertNotEqual(label, module.review_label(head[:-1] + '8'))
+        with self.assertRaises(ValueError):
+            module.review_label(head + '0')
 
     def test_success_tears_down_only_exact_owned_user_domain_and_uid(self):
         result, calls = self.scenario()

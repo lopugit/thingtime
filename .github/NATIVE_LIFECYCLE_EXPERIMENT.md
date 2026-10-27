@@ -18,7 +18,7 @@ Official GitHub docs say hosted macOS jobs use fresh VMs, while nested virtualiz
 python3 .github/scripts/native-lifecycle-experiment.test.py
 ```
 
-This parses helper and embedded workflow Python, verifies pinned official action refs and token scope, and runs eight mocked cleanup/timeout tests. It executes no subprocess, privilege change, UID inventory, signal, network request, account operation or launchctl command. Temporary filesystem fixtures are new directories under `/tmp`; no repository file changes occur.
+This parses helper and embedded workflow Python, verifies pinned official action refs and token scope, and runs nine deterministic label/cleanup/timeout tests. It executes no subprocess, privilege change, UID inventory, signal, network request, account operation or launchctl command. Temporary filesystem fixtures are new directories under `/tmp`; no repository file changes occur.
 
 Durable source locations:
 
@@ -35,7 +35,7 @@ The published helper commit E1 is `84a6338f87082b61ef665ccea6748fa9fc29697a`, wi
 There are three different immutable references:
 
 1. E1 is the commit containing the independently reviewed inert helper. The workflow checks out E1 explicitly with credentials disabled and sparse checkout restricted to that helper. Its bytes must match the literal SHA-256 in the workflow. Candidate source and candidate scripts are never acquired.
-2. E2 is the final PR head containing the reviewed workflow that pins E1. After reviewing E2, the authorized owner applies `native-lifecycle-<E2>` to PR1251. The event must be `pull_request:labeled`, sender `lopugit`, same repository, expected branch, open state and base `github-actions`. Pushes and ordinary PR updates never trigger this experiment.
+2. E2 is the final PR head containing the reviewed workflow that pins E1. After reviewing E2, the authorized owner applies `tt-life-<E2>` to PR1251. The event must be `pull_request:labeled`, sender `lopugit`, same repository, expected branch, open state and base `github-actions`. Pushes and ordinary PR updates never trigger this experiment.
 3. W is `github.workflow_sha`, the actual source commit GitHub selected for workflow execution. PR workflows use a merge ref, so W must not silently be called E2. Before root execution, the validation step uses the built-in read-only token to compare exact workflow bytes at E2 and W. It also rereads the current PR head and rejects a stale label if HEAD moved. Provenance records E1, E2 and W separately.
 
 Permissions are only `contents: read` (immutable helper and workflow contents) and `pull-requests: read` (fresh head/state check). There is no `secrets` context, `secrets: inherit`, custom credential, cache or environment. `GH_TOKEN` exists only in the runner validation step. The root helper receives `env -i` with explicit non-secret hosted markers and the runner UID, and all fixture commands receive a fixed empty-derived environment. Artifact upload uses the existing pinned official action; its runtime authorization is not passed to fixtures.
@@ -53,8 +53,8 @@ The checker expects the workflow in `.github/workflows/` to contain that exact S
 ```sh
 experiment_reviewed_head=$(gh pr view 1251 --repo lopugit/thingtime --json headRefOid --jq .headRefOid)
 test "$experiment_reviewed_head" = "$experiment_expected_reviewed_head"
-gh label create "native-lifecycle-$experiment_reviewed_head" --repo lopugit/thingtime --color 6b7280 --description 'Exact-head owner approval for one inert hosted lifecycle experiment'
-gh pr edit 1251 --repo lopugit/thingtime --add-label "native-lifecycle-$experiment_reviewed_head"
+gh label create "tt-life-$experiment_reviewed_head" --repo lopugit/thingtime --color 6b7280 --description 'Exact-head owner approval for one inert hosted lifecycle experiment'
+gh pr edit 1251 --repo lopugit/thingtime --add-label "tt-life-$experiment_reviewed_head"
 ```
 
 `experiment_expected_reviewed_head` must be the E2 just reviewed. These commands are a proposed trigger, not instructions already executed by this child. If the label already exists, inspect why; do not blindly remove/re-add or repeatedly dispatch. Preserve the single run handle. This adds no approval to the existing native workflow and changes none of its pins.
@@ -115,3 +115,12 @@ Read locally on 2026-10-27: `man launchctl` (user domains, bootstrap/bootout, as
 - GitHub minimal token permissions and script-injection guidance: https://docs.github.com/en/actions/reference/security/secure-use
 
 The new root experiment itself needs independent exact-source review and explicit parent authorization. A label is an exact-head trigger within the reviewed design; it is not a way to bypass the existing native controller's admission policy or promote unreviewed feature-branch code into privilege.
+
+## GitHub label compatibility
+
+The exact-head trigger is `tt-life-<full forty-character SHA>`, which is 48
+characters and fits GitHub's 50-character label-name maximum. The original
+longer prefix was rejected with HTTP 422 before a label could be created or
+applied; it did not trigger an experiment. Keep the complete SHA and the same
+owner/current-head/workflow-byte guards; never shorten or truncate the SHA.
+The safe checker verifies the generated label's exact contents and length.
