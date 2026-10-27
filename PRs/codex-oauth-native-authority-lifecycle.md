@@ -69,3 +69,26 @@ The runbook records the exact next namespace/lifecycle implementation and
 KeepAlive/escaped-child/parent-loss/cancellation/teardown/no-respawn acceptance
 gate. This is an inactive source safety stop, not a delivered launchd backend;
 existing admission and helper/workflow pins remain unchanged.
+
+## Bounded inert hosted platform experiment
+
+A separate helper and PR-only experiment workflow test the actual hosted
+`user/<fresh UID>` bootstrap lifecycle with fixed inert fixtures. Normal and
+simulated parent-loss cases check task credentials/bootstrap placement,
+cross-UID admission refusal, KeepAlive respawn, escaped descendants and exact
+owned cleanup with sixty seconds of no-respawn observation. Unknown platform
+statuses or ownership/cleanup failures quarantine the disposable guest. The
+runner, system, GUI and login domains are never teardown targets.
+
+The workflow uses only read-only contents/PR permissions, pins an independently
+reviewed helper commit and digest, binds the owner-applied label to the current
+PR head, and compares reviewed/actually-executed workflow bytes. There is no
+candidate checkout, PF operation, secret context or native build. Helper and
+workflow commits are reviewed separately; the owner label/run remain withheld
+until final exact-source review. Existing native H1/H2 pins are unchanged.
+
+The safe local checker covers workflow/Python syntax and eight mocked cleanup
+and timeout cases. It executes no host command, real signal, account operation
+or hosted job. See [the full experiment spec](../.github/NATIVE_LIFECYCLE_EXPERIMENT.md).
+Actual hosted observations, candidate network denial, unsigned compilation and
+signed provider/device acceptance remain separate unfinished gates.

@@ -1,5 +1,15 @@
 # Control-plane changelog
 
+## 2026-10-27 — Prepare an inert hosted lifecycle experiment
+
+- Add a fixed helper and safe mocked checks for fresh task user-domain
+  ownership, KeepAlive/escaped-child observations and exact owned cleanup on
+  disposable hosted macOS guests. Preserve quarantine on uncertain authority.
+- Keep the experiment separate from native helper/workflow admission. The
+  owner label/run require final exact-source review; publishing is not hosted
+  or unsigned native compile acceptance. See
+  [the experiment spec](.github/NATIVE_LIFECYCLE_EXPERIMENT.md).
+
 ## 2026-10-27 — Stop before unsupported task lifecycle mutation
 
 - Refuse both native-helper modes after read-only runner admission and before

@@ -310,6 +310,20 @@ pre-queued with no jobs, logs, or cancellable run graph.
   hosted direct IPv4/IPv6, UDP/DNS and child-sandbox checks, cancellation/watchdog
   cleanup, and full unsigned Xcode acceptance. Static tests do not prove these.
 
+## Inert native lifecycle platform experiment
+
+- Run `python3 .github/scripts/native-lifecycle-experiment.test.py` for syntax,
+  pinned-workflow checks and eight mocked cleanup/timeout regressions. Before the
+  separate workflow commit exists, use `--helper-only`. These checks execute no
+  system commands, real signals, UID mutations or hosted work.
+- Run `actionlint .github/workflows/native-lifecycle-experiment.yml` after the
+  workflow is added. Preserve the exact helper SHA/digest and owner label bound
+  to the final reviewed PR head. Publishing never authorizes the label or run.
+- Follow [the experiment spec](NATIVE_LIFECYCLE_EXPERIMENT.md) for hosted normal
+  and simulated parent-loss observations, exact task-only teardown, quarantine
+  boundaries and platform return-code hypotheses. Neither safe tests nor the
+  inert experiment establish network isolation or unsigned native compilation.
+
 ## Native task lifecycle admission
 
 - Safe deterministic tests must prove both modes refuse after runner admission

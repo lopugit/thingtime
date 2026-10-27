@@ -20,6 +20,11 @@ before any newly authorized hosted preflight or native execution. See
 [the repair note](../PRs/codex-oauth-native-authority-lifecycle.md) and
 [the regression checklist](TESTING.md).
 
+A separate [inert lifecycle experiment](NATIVE_LIFECYCLE_EXPERIMENT.md) provides
+a bounded way to collect actual hosted platform observations. Its reviewed
+helper and exact-head PR label are independent of native H1/H2; publication
+does not authorize a run or activate candidate compilation.
+
 ## Admission and entry point
 
 Review the controller workflow, Python supervisor, archive extractor, probes,
