@@ -29316,9 +29316,9 @@
     "semantic_hash": ""
   },
   "PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md": {
-    "mtime": 1793063997.238312,
-    "seen": 1793064183.272193,
-    "ast_hash": "c310713740c3694ea877861908ece1ae",
+    "mtime": 1793066126.1855052,
+    "seen": 1793066419.2723079,
+    "ast_hash": "4a602d9d4a297bdaf93164004db0e08a",
     "semantic_hash": ""
   },
   "PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md": {
@@ -31224,9 +31224,9 @@
     "semantic_hash": ""
   },
   "TESTING.md": {
-    "mtime": 1793063997.2345212,
-    "seen": 1793064183.27875,
-    "ast_hash": "f13c4faf0399ece3f8710bc8ff946d24",
+    "mtime": 1793066055.5048337,
+    "seen": 1793066419.2834299,
+    "ast_hash": "70d0a751e5e5f6cd7742e114818f7e2a",
     "semantic_hash": ""
   },
   "TODO/TODO.md": {
@@ -32196,9 +32196,9 @@
     "semantic_hash": ""
   },
   "docs/local-workspaces.md": {
-    "mtime": 1793063997.2365415,
-    "seen": 1793064183.285957,
-    "ast_hash": "c9ecc4609bd88919caffe8e25be7dfc7",
+    "mtime": 1793066126.184238,
+    "seen": 1793066419.296531,
+    "ast_hash": "852b05b2e53d6400796a77a9cb288b47",
     "semantic_hash": ""
   },
   "docs/lopu-action-access.md": {
@@ -32238,9 +32238,9 @@
     "semantic_hash": ""
   },
   "docs/progress/anonymous-local-first.html": {
-    "mtime": 1793063997.2419689,
-    "seen": 1793064183.286081,
-    "ast_hash": "c0dbda694a97538e9f5d3b261697f864",
+    "mtime": 1793066126.1890068,
+    "seen": 1793066419.296688,
+    "ast_hash": "253e3840f90d343f1058318f29b87762",
     "semantic_hash": ""
   },
   "docs/remote-files.md": {
@@ -32364,9 +32364,9 @@
     "semantic_hash": ""
   },
   "remix/CHANGELOG.md": {
-    "mtime": 1793063997.241016,
-    "seen": 1793064183.286535,
-    "ast_hash": "998b10fb6e4b5143d1989dc3abf708a7",
+    "mtime": 1793066126.1882198,
+    "seen": 1793066419.29793,
+    "ast_hash": "a6b14058abf8527ef12bc3d1ae10ddff",
     "semantic_hash": ""
   },
   "remix/README.md": {
@@ -54801,6 +54801,48 @@
     "mtime": 1793064011.5289207,
     "seen": 1793064183.324286,
     "ast_hash": "b215757c242ae86c2f8dc9f40846181f",
+    "semantic_hash": ""
+  },
+  "artifacts/anonymous-site-editable-2026-10-27/artifact-manifest.json": {
+    "mtime": 1793066245.4880464,
+    "seen": 1793066419.122466,
+    "ast_hash": "c058b8ae4b5cf3a5b6c9ea5c1056c489",
+    "semantic_hash": ""
+  },
+  "artifacts/anonymous-site-editable-2026-10-27/capacity-result.json": {
+    "mtime": 1793066126.1828256,
+    "seen": 1793066419.1224692,
+    "ast_hash": "f3570fa51c6196cc36df5b9942854b34",
+    "semantic_hash": ""
+  },
+  "artifacts/anonymous-site-editable-2026-10-27/plan-source-check.json": {
+    "mtime": 1793066192.5447154,
+    "seen": 1793066419.12247,
+    "ast_hash": "e04f20195cdb0598650fbc3ac9270f23",
+    "semantic_hash": ""
+  },
+  "artifacts/anonymous-site-editable-2026-10-27/prepared-fixture.mjs": {
+    "mtime": 1793066191.2635055,
+    "seen": 1793066419.122472,
+    "ast_hash": "9753b2e7f9b95573735cc6b0e15b2a9f",
+    "semantic_hash": ""
+  },
+  "artifacts/anonymous-site-editable-2026-10-27/source-proof.json": {
+    "mtime": 1793066191.2644022,
+    "seen": 1793066419.122473,
+    "ast_hash": "04f1f8f94981d724124b268661677640",
+    "semantic_hash": ""
+  },
+  "remix/app/local-workspace/siteEditableBlocks.browser.test.ts": {
+    "mtime": 1793066055.5019536,
+    "seen": 1793066419.2265081,
+    "ast_hash": "3863d7dddfe7c9d6f976b582ffc30bf2",
+    "semantic_hash": ""
+  },
+  "artifacts/anonymous-site-editable-2026-10-27/README.md": {
+    "mtime": 1793066245.4861093,
+    "seen": 1793066419.293449,
+    "ast_hash": "056319f7e938c29193ffe7db165536aa",
     "semantic_hash": ""
   }
 }

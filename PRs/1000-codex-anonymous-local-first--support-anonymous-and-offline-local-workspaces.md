@@ -4,6 +4,23 @@ Branch: `codex/anonymous-local-first`. PR: https://github.com/lopugit/thingtime/
 
 ## Current checkpoint — 2026-10-27
 
+The post-delete/quote checkpoint `c8105d7cd9ee7cffd1caea865bf1182a60e5f9a5`
+passed [Web CI](https://github.com/lopugit/thingtime/actions/runs/40432792534) and
+[CodeQL](https://github.com/lopugit/thingtime/actions/runs/40433269034). Its
+[immutable preview](https://thingtime-otyk7n82p-lopugits-projects.vercel.app) and
+[PR alias](https://pr-1000.previews.dev.thingtime.com) passed public HTTP shell,
+assets and origin-scoped manifest checks. Deployment `7347973206` identifies the
+source; these checks do not prove deployed functional acceptance.
+
+The next global/site nested-block fixture is prepared and reviewed. Lint and
+opt-in skipped discovery pass, but its preflight and one ten-minute capacity wait
+started zero browsers because another task's runtime remained active. Native
+acceptance stays open. [Prepared fixture, run instructions and observed blocker](../artifacts/anonymous-site-editable-2026-10-27/README.md).
+No production code, shared service, VM setting or account data changed in this
+fixture-readiness follow-up. Later commits need their own hosted checks.
+
+### Retained earlier checkpoint
+
 The existing Thingtime MCP has actual desktop-host and CLI-agent render/export
 proof. The broader anonymous/offline suite remains in progress. Product checkpoint
 `99448760f5b49638a9979a81eda55805e994b709` passes Web CI and CodeQL; its immutable
