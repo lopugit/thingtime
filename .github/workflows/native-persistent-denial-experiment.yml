@@ -1,0 +1,128 @@
+# Reviewed inert experiment: execution requires separate exact-head owner approval.
+name: Inert persistent denial until hosted VM disposal
+on:
+  pull_request:
+    types: [labeled]
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: inert-persistent-denial-${{ github.event.number }}
+  cancel-in-progress: false
+jobs:
+  observe:
+    if: >-
+      github.repository == 'lopugit/thingtime' &&
+      github.event_name == 'pull_request' &&
+      github.event.action == 'labeled' &&
+      github.event.sender.login == 'lopugit' &&
+      github.event.pull_request.state == 'open' &&
+      github.event.pull_request.base.ref == 'github-actions' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/oauth-native-authority-lifecycle' &&
+      github.event.label.name == format('tt-pd-{0}', github.event.pull_request.head.sha)
+    runs-on: macos-15
+    timeout-minutes: 8
+    env:
+      # Independently reviewed E1; never selected by candidate or caller input.
+      EXPERIMENT_HELPER_SHA: '5c5a0e936810e0bf06b7db90717c0827fa531350'
+    steps:
+      - name: Acquire only independently reviewed fixed inert helper
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: '5c5a0e936810e0bf06b7db90717c0827fa531350'
+          path: inert-helper
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/scripts/native-persistent-denial-experiment.py
+      - name: Bind current owner-reviewed head, actual workflow bytes and helper
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEWED_HEAD: ${{ github.event.pull_request.head.sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          REVIEW_ACTOR: ${{ github.event.sender.login }}
+          REVIEW_LABEL: ${{ github.event.label.name }}
+          SOURCE_PR: ${{ github.event.number }}
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 -I -S - <<'PY'
+          import base64, hashlib, json, os, pathlib, re, subprocess
+          def api(path):
+              return json.loads(subprocess.run(['gh', 'api', path], check=True, capture_output=True).stdout)
+          helper, head, workflow = (os.environ[key] for key in ('EXPERIMENT_HELPER_SHA', 'REVIEWED_HEAD', 'WORKFLOW_SHA'))
+          assert all(re.fullmatch('[0-9a-f]{40}', value) and value != '0' * 40 for value in (helper, head, workflow))
+          assert os.environ['REVIEW_ACTOR'] == 'lopugit'
+          assert len(os.environ['REVIEW_LABEL']) <= 50
+          assert os.environ['REVIEW_LABEL'] == 'tt-pd-' + head
+          pr = os.environ['SOURCE_PR']
+          assert re.fullmatch('[1-9][0-9]*', pr)
+          current = api('repos/lopugit/thingtime/pulls/' + pr)
+          assert current['state'] == 'open' and current['head']['sha'] == head
+          assert current['head']['repo']['full_name'] == 'lopugit/thingtime'
+          assert current['head']['ref'] == 'codex/oauth-native-authority-lifecycle'
+          assert current['base']['repo']['full_name'] == 'lopugit/thingtime'
+          assert current['base']['ref'] == 'github-actions'
+          assert current['user']['login'] == 'lopugit'
+          path = 'repos/lopugit/thingtime/contents/.github/workflows/native-persistent-denial-experiment.yml?ref='
+          reviewed_bytes = base64.b64decode(api(path + head)['content'])
+          executed_bytes = base64.b64decode(api(path + workflow)['content'])
+          assert reviewed_bytes == executed_bytes
+          actual = subprocess.run(['git', '-C', 'inert-helper', 'rev-parse', 'HEAD'], check=True, capture_output=True).stdout.decode().strip()
+          assert actual == helper
+          script = pathlib.Path('inert-helper/.github/scripts/native-persistent-denial-experiment.py')
+          digest = hashlib.sha256(script.read_bytes()).hexdigest()
+          assert digest == '52db4cbbe0ace3d2c8693039e6b913b4529e640ab7cd6e53a298216e13e0d4ff'
+          provenance = {'helperSha': helper, 'helperSha256': digest, 'reviewedHeadSha': head,
+                        'workflowSha': workflow, 'workflowSha256': hashlib.sha256(executed_bytes).hexdigest(),
+                        'actor': os.environ['REVIEW_ACTOR'], 'label': os.environ['REVIEW_LABEL'],
+                        'workflowBytesEqual': True, 'candidateCheckout': False}
+          pathlib.Path(os.environ['RUNNER_TEMP'], 'inert-pd-admission.json').write_text(json.dumps(provenance))
+          PY
+      - name: Observe fixed inert policy and supervisor loss; never restore networking
+        env:
+          REVIEW_ACTOR: ${{ github.event.sender.login }}
+        run: |
+          set -euo pipefail
+          status=0
+          sudo -n /usr/bin/env -i \
+            GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+            RUNNER_OS="$RUNNER_OS" GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
+            GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" REVIEW_ACTOR="$REVIEW_ACTOR" \
+            RUNNER_TEMP="$RUNNER_TEMP" SUDO_UID="$(id -u)" \
+            /usr/bin/python3 -I -S \
+            "$GITHUB_WORKSPACE/inert-helper/.github/scripts/native-persistent-denial-experiment.py" \
+            supervise "$RUNNER_TEMP/inert-pd-report" "$RUNNER_TEMP/inert-pd-admission.json" || status=$?
+          for ((attempt=0; attempt<215; attempt++)); do
+            test ! -f "$RUNNER_TEMP/inert-pd-report/result.json" || break
+            sleep 1
+          done
+          test "$status" = 75
+          /usr/bin/python3 -I -S - "$RUNNER_TEMP/inert-pd-report/result.json" <<'PY'
+          import json, pathlib, sys
+          result = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert result['result'] == 'inert-observations-complete', result['failureStage']
+          assert result['denyRulesLoaded'] is True and result['policyRestored'] is False
+          assert result['pfEnableReferenceReleased'] is False
+          assert result['candidateExecuted'] is False and result['nativeCompileAdmitted'] is False
+          assert result['providerDisposalRequired'] is True and result['providerDestructionObserved'] is False
+          PY
+      - name: Genuine runner artifact continuity while PF denial remains active
+        id: evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: inert-persistent-denial
+          path: |
+            ${{ runner.temp }}/inert-pd-report/provenance.json
+            ${{ runner.temp }}/inert-pd-report/result.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Record provider-side artifact handle
+        if: ${{ always() && steps.evidence.outcome == 'success' }}
+        env:
+          ARTIFACT_ID: ${{ steps.evidence.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.evidence.outputs.artifact-digest }}
+        run: |
+          test -n "$ARTIFACT_ID" && test -n "$ARTIFACT_DIGEST"
+          printf 'Allowlisted artifact ID: %s; digest: %s\n' "$ARTIFACT_ID" "$ARTIFACT_DIGEST"
