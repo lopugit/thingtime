@@ -34,9 +34,8 @@ export type MongoConnectionMode = 'proxy' | 'dedicated';
 /** Deployment configuration only; request headers cannot select database access. */
 export const getMongoConnectionMode = (env: Record<string, string | undefined> = process.env): MongoConnectionMode => {
   const mode = env.THINGTIME_MONGODB_CONNECTION_MODE;
-  if (mode === undefined) return mongoConnectionPolicy;
-  if (mode === 'proxy' || mode === 'dedicated') return mode;
-  throw new GatewayUnavailable();
+  if (mode !== undefined && mode !== 'proxy' && mode !== 'dedicated') throw new GatewayUnavailable();
+  return mode || mongoConnectionPolicy;
 };
 
 /** Vercel builds default to the gateway. Local/desktop standalone runtimes retain
