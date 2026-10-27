@@ -109,3 +109,19 @@ counters/stages inside existing provenance JSON. Local mode/control and
 mocked allocation regressions preserve existing-directory modes, unknown-status
 refusal, UID bounds and private output boundaries. No trigger or acceptance is
 implied; original native pins/admission/PF remain unchanged.
+
+## Reviewed persistent-denial experiment — 2026-10-27
+
+The reviewed provider-disposal lifetime contract now has a separate reviewed inert
+experiment. It retains PF denial until the one hosted macOS job VM is
+destroyed, tests labeled packet counters and an escaped fixture after actual
+supervisor exit, and requires real runner artifact continuity. Controlled root
+file canaries and a synthetic peer-credential IPC service are narrow observations;
+stock-service delegation and real transport-credential isolation remain unproven.
+No candidate is admitted. Original native H1/H2/PF admission is unchanged.
+The new workflow follows independent E1/digest and E2 pins. Parent readback of
+the immutable local commits precedes runnable publication; hosted execution
+requires a separate exact-head approval. No new run has been triggered.
+See [the contract and evidence procedure](../.github/NATIVE_PERSISTENT_DENIAL_EXPERIMENT.md).
+The previous runs 40438204623 and 40440369530 and their terminal receipts remain
+unchanged; their fixtures never reached lifecycle acceptance.

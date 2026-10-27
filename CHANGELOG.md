@@ -1,5 +1,14 @@
 # Control-plane changelog
 
+## 2026-10-27 — Prepare inert denial through provider disposal
+
+- Prepare a separate reviewed-source experiment with no candidate/native
+  admission: retain PF denial through hosted VM disposal, attribute fixed probe
+  packets, observe escaped work after supervisor loss, and verify real artifact
+  transport separately. Synthetic canary/IPC observations do not establish broad
+  credential or service isolation. Original native pins remain unchanged; hosted execution requires separate approval.
+- See [the reviewed experiment](.github/NATIVE_PERSISTENT_DENIAL_EXPERIMENT.md).
+
 ## 2026-10-27 — Preserve inert initialization failure evidence
 
 - Repair allowlisted report-directory access under the private supervisor

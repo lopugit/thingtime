@@ -421,3 +421,18 @@ PYTHONDONTWRITEBYTECODE=1 python3 -I -S .github/scripts/native-compile-ci.test.p
 - [ ] Keep this control-plane checklist under `.github/`; stage owned changes and run
   `node .github/scripts/workflow-control-plane-contract.mjs --self-test` so the
   tracked root remains within `CONTROL_PLANE_ROOTS` without widening its allowlist.
+
+## Inert persistent denial experiment — 2026-10-27
+
+- Run `python3 .github/scripts/native-persistent-denial-experiment.test.py --draft`
+  locally for mocked failure, counter attribution, source-binding and receipt
+  checks; use `--final E1` only after approved immutable pin publication.
+- Run `actionlint .github/workflows/native-persistent-denial-experiment.yml`.
+- Follow [the reviewed specification](NATIVE_PERSISTENT_DENIAL_EXPERIMENT.md). Do
+  not trigger before exact parent review. An unusable positive IPv6 control must
+  stop before PF, and timeout without a labeled rule-counter delta must fail.
+- Keep synthetic credential/IPC observations distinct from broad live runner
+  authority and real credential isolation; candidate admission remains false.
+- After an authorized hosted run, verify the actual upload artifact ID/digest
+  and exact E1/E2/W bytes; preserve denial through provider disposal and never
+  claim PF restoration or an observed destruction receipt.
