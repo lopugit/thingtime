@@ -3,16 +3,22 @@ import test from 'node:test';
 import { PASSWORD_PASSKEY_BLOCKS, migratePasswordPasskeyBlocks } from '../components/Passwords/passwordPasskeyBlocks';
 import { settingsDocumentBlocks } from '../components/Settings/settingsDocument';
 import { parseTransientBinding } from '../components/Builder/transientBlockActions';
+import { NATIVE_PASSWORD_CONNECTION_BLOCKS } from '../components/Passwords/nativePasswordConnectionBlocks';
 
 test('passkey setup survives normal saved-layout validation with scoped transient operations', () => {
   const blocks = settingsDocumentBlocks(JSON.parse(JSON.stringify(PASSWORD_PASSKEY_BLOCKS)));
   const nodes: any[] = [];
   const visit = (items: any[]) => { for (const item of items) { nodes.push(item); if (item.children) visit(item.children); } };
   visit(blocks);
-  const connect = nodes.find(item => item.id === 'password-passkey-connect');
+  assert.equal(nodes.find(item => item.id === 'password-passkey-connect'), undefined);
+  const connection = settingsDocumentBlocks(JSON.parse(JSON.stringify(NATIVE_PASSWORD_CONNECTION_BLOCKS)));
+  const connectionNodes: any[] = []; const collect = (items: any[]) => { for (const item of items) { connectionNodes.push(item); if (item.children) collect(item.children); } }; collect(connection);
+  const connect = connectionNodes.find(item => item.id === 'password-native-action');
   assert.equal(connect.props['data-tt-action'], '$transient');
-  assert.equal(parseTransientBinding(JSON.stringify(connect.props['data-tt-action-inputs']))?.operation, 'passkey.connect');
-  assert.equal(connect.props.disabled, '{result.busy}');
+  assert.equal(parseTransientBinding(JSON.stringify(connect.props['data-tt-action-inputs']))?.operation, 'autofill.activate');
+  assert.equal(connect.props.disabled, '{result.disabled}');
+  assert.equal(connect.text, '{result.label}');
+  assert.equal(connectionNodes.filter(item => item.tag === 'button').length, 1);
   assert.equal(nodes.find(item => item.id === 'password-passkey-native').condition.arg, 'result.nativeAvailable');
   assert.equal(nodes.find(item => item.id === 'password-passkey-web').condition.arg, 'result.webOnly');
   assert.equal(nodes.find(item => item.id === 'password-passkey-open').props['aria-controls'], 'password-passkey-instructions');
@@ -22,7 +28,18 @@ test('passkey setup survives normal saved-layout validation with scoped transien
   // Action, vault entry payload, remote source, or credential input.
   assert.ok(nodes.every(item => !item.source && item.type !== 'component' && item.tag !== 'input'));
   assert.ok(nodes.filter(item => item.props?.['data-tt-action-inputs']).every(item =>
-    ['passkey.open', 'passkey.close', 'passkey.connect', 'passkey.extension'].includes(item.props['data-tt-action-inputs'].operation)));
+    ['passkey.open', 'passkey.close', 'passkey.extension'].includes(item.props['data-tt-action-inputs'].operation)));
+});
+
+test('saved guide retires the old connection action without removing authored siblings', () => {
+  const blocks = structuredClone(PASSWORD_PASSKEY_BLOCKS);
+  const native = flatten(blocks).find(item => item.id === 'password-passkey-native');
+  native.children.push({ id: 'relocated-old-action', type: 'element', tag: 'button', text: 'My connection', props: { 'data-tt-action-inputs': { operation: 'passkey.connect' } } });
+  native.children.push({ id: 'authored-message', type: 'element', tag: 'p', text: 'Keep this guidance' });
+  const migrated = migratePasswordPasskeyBlocks(blocks);
+  assert.equal(flatten(migrated).some(item => item.id === 'relocated-old-action'), false);
+  assert.equal(flatten(migrated).find(item => item.id === 'authored-message').text, 'Keep this guidance');
+  assert.equal(flatten(blocks).some(item => item.id === 'relocated-old-action'), true);
 });
 
 

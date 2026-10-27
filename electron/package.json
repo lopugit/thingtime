@@ -1,6 +1,6 @@
 {
 	"name": "thingtime-electron",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"private": true,
 	"description": "Thingtime desktop app shell for the Remix/Nitro web app.",
 	"main": "main.cjs",

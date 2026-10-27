@@ -102,10 +102,20 @@ and trusted tab/document checks live in `browser-extension/`; package with
 independent relying party; unit signatures and synthetic UI alone are insufficient.
 `Settings/passwordManagerSettingsBlocks.ts` and `PasswordManagerSettings.tsx`
 share `/settings/passwords`; Thingtime login passkeys remain in Security.
+`NativePasswordConnection.tsx` and `nativePasswordConnectionBlocks.ts` supply the
+single editable device connection control shared by Password manager and Passwords
+settings. `nativeConnection.ts` owns ephemeral status, refresh and identity fences;
+`native.client.ts` requires desktop `passwordsVersion` 1.1.0. Electron's
+`password-provider.cjs` calls the read-only host `--status` path, backed by
+`PasswordConnectionStatus.swift` owner/origin linkage. Status does not probe the
+network or assert OS AutoFill enablement. Older bridges require an app update;
+this checkout's iOS web-only path has no native-password bridge.
 Native provider implementation lives in `apple/Passwords` and
 `apple/PasswordProvider`. `ProviderFeedback.swift` owns closed progress/error text,
 request fencing and immutable registration retry identity; `PasswordClient.swift`
-classifies HTTP failures and walks complete cursor-based catalogs. The macOS host
+classifies HTTP failures and walks complete cursor-based catalogs. The provider
+controller starts registration once after OS selection when its view is visible,
+preserving device authentication, cancellation, retry and session fences. The macOS host
 and provider display Thingtime while retaining installed bundle/Keychain identities.
 Run `swift test --package-path apple/Passwords` and
 `bash apple/PasswordProvider/tests/render-preview.sh`; the latter renders the

@@ -94,3 +94,20 @@ public struct PasswordProviderRequests: Sendable {
         return true
     }
 }
+
+/// A registration selected in the OS picker starts once, after presentation.
+/// Consuming the pending start is independent of operation completion: a failed
+/// attempt or a reappearing view must wait for the person's explicit retry.
+public struct PasswordProviderRegistrationStart: Sendable {
+    private var pending = false
+    private var visible = false
+    public init() {}
+    public mutating func prepare() { pending = true }
+    public mutating func setVisible(_ value: Bool) { visible = value }
+    public mutating func reset() { pending = false }
+    public mutating func takeStart() -> Bool {
+        guard pending && visible else { return false }
+        pending = false
+        return true
+    }
+}

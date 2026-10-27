@@ -53,6 +53,8 @@ private struct ProviderView: View {
     private var registrationAttempt: PasskeyRegistrationAttempt?
     private var registrationSession: ProviderSession?
     private var registrationAcknowledged = false
+    private var registrationStart = PasswordProviderRegistrationStart()
+    private var registrationRequest: ASPasskeyCredentialRequest?
 
     private func show(_ phase: PasswordProviderPhase) {
         self.phase = phase; model.status = phase.message
@@ -68,7 +70,29 @@ private struct ProviderView: View {
         addChild(host); view = host.view
         model.cancel = { [weak self] in self?.cancel() }
     }
+#if os(macOS)
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        registrationStart.setVisible(true)
+        startRegistrationIfReady()
+    }
+    override func viewDidDisappear() {
+        super.viewDidDisappear()
+        registrationStart.setVisible(false)
+    }
+#else
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        registrationStart.setVisible(true)
+        startRegistrationIfReady()
+    }
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        registrationStart.setVisible(false)
+    }
+#endif
     private func beginRequest() {
+        registrationStart.reset(); registrationRequest = nil
         requests.reset(); task?.cancel(); task = nil
         authentication?.invalidate(); authentication = nil
         registrationAttempt = nil; registrationSession = nil; registrationAcknowledged = false
@@ -102,7 +126,7 @@ private struct ProviderView: View {
                         // until cancellation; a new ceremony must start afresh.
                         self.model.retry = nil; self.model.choices = []
                     }
-                    self.model.status = "Step: " + self.phase.message.replacingOccurrences(of: "…", with: "")
+                    self.model.status = ""
                 }
             }
             if self.requests.finish(current) {
@@ -211,11 +235,23 @@ private struct ProviderView: View {
         model.choices = [.init(id: "done", title: "Done", detail: "", select: { [weak self] in self?.extensionContext.completeExtensionConfigurationRequest() })]
     }
     override func prepareInterface(forPasskeyRegistration registrationRequest: any ASCredentialRequest) {
-        _ = view; beginRequest()
         guard let request = registrationRequest as? ASPasskeyCredentialRequest, let identity = request.credentialIdentity as? ASPasskeyCredentialIdentity else { cancel(.failed); return }
+        // The system can deliver preparation/presentation in either order.
+        // Repeated preparation of the same request must not cancel active work
+        // or re-arm device verification after a failure.
+        if self.registrationRequest === request { startRegistrationIfReady(); return }
+        _ = view; beginRequest()
+        self.registrationRequest = request
         model.title = "Save a passkey in Thingtime"
         model.message = "\(identity.userName) · \(identity.relyingPartyIdentifier)"
-        model.choices = [.init(id: "register", title: "Create and save passkey", detail: "Verify with your device", select: { [weak self] in self?.register(request, identity: identity) })]
+        registrationStart.prepare()
+        startRegistrationIfReady()
+    }
+    private func startRegistrationIfReady() {
+        guard let request = registrationRequest,
+              let identity = request.credentialIdentity as? ASPasskeyCredentialIdentity,
+              registrationStart.takeStart() else { return }
+        register(request, identity: identity)
     }
     private func register(_ request: ASPasskeyCredentialRequest, identity: ASPasskeyCredentialIdentity) {
         perform { [weak self] current in

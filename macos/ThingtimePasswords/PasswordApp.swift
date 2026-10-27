@@ -4,7 +4,7 @@ import SwiftUI
 import ThingtimePasswordCore
 @main enum PasswordApp {
     @MainActor static func main() {
-        if CommandLine.arguments.contains("--connect") || CommandLine.arguments.contains("--disconnect") || CommandLine.arguments.contains("--sync") {
+        if CommandLine.arguments.contains("--connect") || CommandLine.arguments.contains("--disconnect") || CommandLine.arguments.contains("--sync") || CommandLine.arguments.contains("--status") {
             let disconnect = CommandLine.arguments.contains("--disconnect")
             Task { @MainActor in
                 do {
@@ -15,6 +15,11 @@ import ThingtimePasswordCore
                         guard let data = try FileHandle.standardInput.read(upToCount: 65537), data.count <= 65536 else { throw PasswordProviderError.invalidSession }
                         let decoded = try JSONDecoder().decode(ProviderSession.self, from: data)
                         let session = try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie)
+                        if CommandLine.arguments.contains("--status") {
+                            let status = PasswordConnectionStatus.current(for: session)
+                            FileHandle.standardOutput.write(try JSONEncoder().encode(status))
+                            exit(0)
+                        }
                         if CommandLine.arguments.contains("--sync") {
                             guard let prior = try? PasswordSessionStore.load() else { exit(0) }
                             guard prior.origin == session.origin, prior.ownerId == session.ownerId else { try PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait(); exit(0) }

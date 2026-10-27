@@ -190,13 +190,19 @@ for testing; never import personal browser sessions or production credentials.
 ## Native Password AutoFill
 
 Native provider code is present in `apple/Passwords` and
-`apple/PasswordProvider`; desktop/iOS bridges negotiate the installed provider.
+`apple/PasswordProvider`; the desktop bridge negotiates the installed provider.
+This checkout does not expose an iOS native-password bridge; web-only behavior
+remains available there.
 The provider handles a website-initiated WebAuthn registration, checks the relying
 party and supported algorithm, creates an ES256 key, saves it through the encrypted
 vault, verifies readback and completes the operating-system request. Registration starts at the destination website rather than in a standalone
 password-entry editor. With this native provider, choose Thingtime in the
 operating-system passkey flow.
-Required device authentication and user presence remain part of that flow.
+After Thingtime is selected in the operating-system picker, registration begins
+once the provider view is visible and starts device verification automatically;
+there is no second Create button. Repeated view presentation cannot start a
+second registration. Required device authentication and user presence remain
+part of that flow; cancellation and explicit recovery retry remain available.
 
 The inline Passkeys guide explains setup, preserves an unfinished entry, and offers
 the existing native connection action only when that bridge is available. It does
@@ -204,6 +210,25 @@ not alter native signing, provisioning or OS AutoFill settings. A signed provide
 OS enablement and a real registration followed by sign-in are separate acceptance
 requirements; build or package verification alone does not prove them. Thingtime's
 own account-login passkeys are a separate feature from this credential provider.
+
+### Device connection control
+
+Password manager and Passwords settings share one editable native AutoFill control.
+The desktop bridge's `passwordsVersion` 1.1.0 adds a read-only `--status` helper:
+`connected` means the saved device connection matches the selected owner and
+origin; `disconnected` means no saved connection; `differentSession` means another
+owner or origin is linked; `unavailable` means that protected status could not be
+read. Cookie rotation alone does not change this linkage.
+
+Only a matching connection shows Disconnect; disconnected or different-session
+states show Connect. Unavailable status shows Retry, and older app bridges show
+an update instruction. Refresh after actions, focus and native bridge changes;
+fence late results when account or origin changes. Do not persist connection
+status or credentials in editable layouts. This check neither probes the remote
+service nor proves the operating system has enabled the provider: OS AutoFill
+settings, vault access and an actual relying-party ceremony remain separate checks.
+The updated Electron bridge/helper must be installed before claiming this control
+works on the user's device; upgrading only the provider extension is insufficient.
 
 ### Native progress, recovery and naming
 

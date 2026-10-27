@@ -2,6 +2,52 @@ import XCTest
 @testable import ThingtimePasswordCore
 
 final class ProviderFeedbackTests: XCTestCase {
+    func testRegistrationStartsOnceForEitherPresentationOrder() {
+        for appearsFirst in [false, true] {
+            var start = PasswordProviderRegistrationStart()
+            if appearsFirst { start.setVisible(true) }
+            start.prepare()
+            if !appearsFirst {
+                XCTAssertFalse(start.takeStart(), "Preparation must not prompt before the provider appears")
+                start.setVisible(true)
+            }
+            XCTAssertTrue(start.takeStart())
+            XCTAssertFalse(start.takeStart(), "Repeated readiness callbacks must not duplicate registration")
+            start.setVisible(false)
+            start.setVisible(true)
+            XCTAssertFalse(start.takeStart(), "Reappearance must not repeat device verification")
+        }
+    }
+
+    func testCancelledPendingRegistrationCannotStartWhenViewAppears() {
+        var start = PasswordProviderRegistrationStart()
+        start.prepare()
+        start.reset()
+        start.setVisible(true)
+        XCTAssertFalse(start.takeStart())
+        start.prepare()
+        XCTAssertTrue(start.takeStart(), "A replacement OS request may start in an already-visible provider")
+    }
+
+    func testFailedAutomaticRegistrationRequiresExplicitRetryAndKeepsRequestFence() throws {
+        var start = PasswordProviderRegistrationStart()
+        var requests = PasswordProviderRequests()
+        start.prepare()
+        start.setVisible(true)
+        XCTAssertTrue(start.takeStart())
+        let automatic = try XCTUnwrap(requests.start())
+        XCTAssertNil(requests.start())
+        XCTAssertTrue(requests.finish(automatic))
+        start.setVisible(false)
+        start.setVisible(true)
+        XCTAssertFalse(start.takeStart(), "A failed attempt must not enter an automatic retry loop")
+        let retry = try XCTUnwrap(requests.start(), "The explicit Retry action can start another attempt")
+        requests.reset()
+        start.reset()
+        XCTAssertFalse(requests.finish(retry), "Cancellation fences a late retry completion")
+        XCTAssertFalse(start.takeStart())
+    }
+
     func testReplacingRequestRejectsOldCompletionAndDoubleSubmission() throws {
         var requests = PasswordProviderRequests()
         let old = try XCTUnwrap(requests.start())

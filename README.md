@@ -6339,6 +6339,14 @@ session. Do not install or register an unsigned fixture as the user's provider.
 The visible host/provider name is Thingtime; existing production bundle IDs,
 Keychain group and `Thingtime Passwords.app` packaging path remain unchanged.
 
+The desktop bridge reports `passwordsVersion` 1.1.0 when the bundled host supports
+read-only connection status. Password manager and Passwords settings then show one
+Connect/Disconnect control based on saved owner/origin linkage. Older installed
+bridges show an update instruction. An extension-only upgrade does not provide
+this host/Electron capability. Status reads do not contact the server or establish
+that macOS AutoFill is enabled; verify those requirements separately. Keep an
+existing custom host's OAuth/login behavior when updating native components.
+
 ### Commander-backed Mac backup indexing
 
 The signed macOS node bundles the repository's `commander-indexer` Rust binary.

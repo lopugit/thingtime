@@ -31,7 +31,6 @@ export const PASSWORD_PASSKEY_BLOCKS: WebpageBlock[] = [
         ]),
         when('native', 'result.nativeAvailable', [
           paragraph('native-instructions', 'Connect your Thingtime account to Password AutoFill, then enable Thingtime in your device’s AutoFill & Passwords settings.'),
-          button('connect', 'Connect Password AutoFill', 'passkey.connect', { disabled: '{result.busy}' }),
         ]),
         when('web', 'result.webOnly', [
           paragraph('web-instructions', 'Browser passkeys do not need the Mac app. The extension opens Thingtime for approval and then returns the result to the requesting tab. Without an extension or system provider, a web page cannot create passkeys for another website.'),
@@ -66,6 +65,17 @@ const passkeyNodes = (blocks: WebpageBlock[]): WebpageBlock[] => blocks.flatMap(
  * Legacy text is also the one-time marker, so deleting new setup blocks after an
  * upgrade remains an intentional author edit rather than triggering reinsertion. */
 export function migratePasswordPasskeyBlocks(blocks: WebpageBlock[]): WebpageBlock[] {
+  // The connection control now lives in its own editable shared document. Retire
+  // its legacy action wherever moved, while preserving every other authored node.
+  const retireConnection = (items: WebpageBlock[]): WebpageBlock[] => items.flatMap(block => {
+    const inputs = block.props?.['data-tt-action-inputs'];
+    if (inputs && typeof inputs === 'object' && 'operation' in inputs && inputs.operation === 'passkey.connect') return [];
+    if (!block.children) return [block];
+    const children = retireConnection(block.children);
+    return [children.every((child, index) => child === block.children![index]) && children.length === block.children.length ? block : { ...block, children }];
+  });
+  const cleaned = retireConnection(blocks);
+  if (cleaned.some((block, index) => block !== blocks[index]) || cleaned.length !== blocks.length) blocks = cleaned;
   const nodes = passkeyNodes(blocks);
   const matchesLegacy = (block: WebpageBlock) => {
     const legacy = LEGACY_PASSKEY_TEXT[block.id];

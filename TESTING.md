@@ -10324,6 +10324,20 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Native connection control: on Password manager and Passwords settings,
+  compare the single editable control with the helper's read-only saved owner/origin
+  linkage. Matching connection shows Disconnect; absent/different linkage shows
+  Connect. Locked/unreadable storage shows Retry, never disconnected. An older
+  bridge shows Update Thingtime. Confirm `passwordsVersion` 1.1.0 negotiation,
+  cookie rotation, native failure, account/origin changes, out-of-order responses,
+  focus refresh and refresh after connect/disconnect. Never interpret this status
+  as remote-service health or OS-provider enablement. Save/reload nested label,
+  button and status blocks independently; test desktop and narrow full-scroll.
+- [ ] Native registration entry: after selecting Thingtime in the OS picker,
+  begin device verification automatically once the provider view is ready; no
+  second Create button is required. Cancel, repeated presentation and a replacement
+  request must not start duplicate authentication/save work. Verify on the signed
+  installed active extension; synthetic view/crypto fixtures are separate evidence.
 - [ ] Native recovery: exercise each closed HTTP/session failure and verify the
   provider shows its current step with safe recovery text. Cancel device
   verification, expire/reconnect the session and interrupt a save/readback; retry
