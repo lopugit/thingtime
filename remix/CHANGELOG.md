@@ -102,6 +102,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Add negotiated owner/origin/data-bound read-only task diagnostics
+  and the existing Thingtime fields inspector for release preflight evidence.
+  Missing worker/finalizer receipts remain unknown; no recovery or unlock behavior
+  changes. Compatible rollout and live scope correlation remain pending.
+  [PR1252 details](../PRs/1252-codex-oauth-web-release-release-connections-and-password-web-tools-independently-of-native-changes.md).
+  **Codex (AI)**
+
+
 - 2026-10-27: Split Connections 2, owner-bound encrypted OAuth/vault credentials,
   editable service/password tools, origin-scoped manifests and fail-closed
   gateway admission into an independent web/backend release. Retain older

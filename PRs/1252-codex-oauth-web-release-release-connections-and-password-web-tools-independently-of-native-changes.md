@@ -46,3 +46,49 @@ configuration/callback checks, Google-secret save and real Google/GitHub provide
 ceremonies are pending. All native signing/install/OS indexing/physical-device
 requirements remain open in PR #1240. This web slice does not complete the overall
 goal. No workflow dispatch, CI admission change, deploy or merge performed here.
+
+
+## Read-only task preflight diagnostics — 2026-10-27
+
+The existing Tasks GET adds negotiated 1.4.0 `id` + `diagnostics=1`, returning
+allowlisted existing root/run/admission-deployment identifiers, recorded claim/
+reservation, root/reserved/first unacknowledged worker start/final-save evidence,
+and requested finalizer outcome/application finalized timestamp. It bypasses
+stale reconciliation and expired-output cleanup, reads no grants/prompts/output,
+and repeats account/origin/data scope, chain membership and conversation access.
+The opt-in Tasks Diagnostics uses the shared read-only Thingtime fields inspector;
+client generation/source fences discard stale responses, including JSON races.
+Missing evidence remains unknown; sequential reads are explicitly non-atomic.
+
+This adds visibility only. It does not stop, replay, reconcile, unlock or fabricate
+receipts. A completed provider finalizer step can have returned false. Production
+Oct6/7 exact row correlation remains unproven until a compatible authorized
+rollout and owned-scope readback. No deployment/settings change or primary-branch
+action is included.
+
+The promotion preflight must distinguish live work that changing the current
+owner could newly strand from historical canceled/uncertain locks. A terminal
+provider workflow may have returned `finalize=false`: retain its lock and saved
+output, but do not require that historical lock to become acknowledged merely
+to ship observational diagnostics. This does not permit release of any claim.
+
+A bounded sequence avoids making diagnostics a prerequisite for its own rollout:
+verify each current production/preview owner deployment ID and activation time;
+inspect provider pending/active continuation inventory covering each owner's full
+tenure, alongside a fresh authenticated owned-scope task read. Drain actual
+current-owner scheduled/running continuations through normal controls and await
+their receipts. If that inventory establishes no callbacks remain to be newly
+fenced, carry historical needs-attention/uncertain records unchanged through
+promotion, then use diagnostics to correlate exact roots/runs and separately
+assess any recovery. Provider terminal status proves neither final-save receipt
+nor application finalization. The observed 30-day 0-active/0-pending aggregate is
+bounded evidence only: confirm its environment coverage and that the period spans
+both current owners' tenures. Missing preview-owner evidence remains a concrete
+preflight item, not a demand to unlock all old rows.
+
+Diagnostic checks: 32 task/client tests and 113 capability tests pass with OS
+network denial; actual inspector/client synthetic browser fixture passes at
+1440px/390px with complete scrolling, long-ID growth, read-only controls,
+refresh/hide/keyboard, and same-task-ID owner/source replacement. Full lint has
+0 errors/388 warnings; raw TypeScript and ratchet pass at 0 errors. These are
+local synthetic/static checks, not production acceptance.

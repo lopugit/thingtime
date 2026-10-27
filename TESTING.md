@@ -1243,6 +1243,18 @@ persisted; every check is client-side.
 
 ## Background AI execution and recovery
 
+- [ ] Expand Diagnostics on an expired and an active task at desktop and 390px;
+  compare exact root/run/deployment IDs and recorded worker/finalizer timestamps
+  with the owned task source. Missing receipts remain unknown. Refresh/close,
+  keyboard activation, long IDs, and full-page scrolling must work. Switch
+  account/data scope during fetch and JSON parsing: old evidence must disappear.
+  `?id=...&diagnostics=1` must perform no writes or output fetch; reject foreign
+  owner/origin/data scope, missing conversations and foreign root/child links.
+  This non-atomic view cannot itself certify scope drain or worker termination.
+  Synthetic regression: backgroundTasks/aiTasks.client tests and
+  `scripts/check-lopu-task-diagnostics-browser.mjs` (OS deny-network, only
+  127.0.0.1:13964 allowed); deployed/source comparison remains separate.
+
 - [ ] With disposable data and `LOPU_CHAT_PROVIDER=test`, send a reply, navigate
   away, close its tab with another origin tab open, then repeat with all origin
   tabs closed. Reopen task overview/chat: one user turn, assistant turn and set
