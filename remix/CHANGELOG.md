@@ -102,6 +102,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Add native desktop View menu zoom and focused-window Command/Control `+`/`=`/`-`/`0` shortcuts, sharing one zoom path while preserving text editing and preventing duplicate menu/renderer handling. Add focused and real Electron host regressions. [Validation and delivery](../PRs/1253-mac-dev-production-policy.md). **Codex (AI)**
+
 - 2026-10-27: Update Mac development delivery guidance to retain a separate development app for testing and usage, and gate stable Thingtime installation on a newer version containing a Mac feature merged into `main`. **Codex (AI)**
 
 - 2026-10-27: Admit the reviewed Darwin kernel-group verification fix and bounded trusted failure diagnostics for the native compile runner. Preserve default inert preflight, immutable pinning, network denial, and separate hosted/native acceptance gates. **Codex (AI)**

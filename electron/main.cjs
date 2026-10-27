@@ -23,6 +23,7 @@ const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
 const { LocalRuntime, attachQuitSignals } = require('./lib/local-runtime.cjs');
 const { SessionAuthority, remoteOrigin, contentOrigin } = require('./lib/session-authority.cjs');
 const { ensureWindowVisible, loadWindow } = require('./lib/window-visibility.cjs');
+const { attachWindowZoom, windowZoomMenu } = require('./lib/window-zoom.cjs');
 const { AuthorityTransition } = require('./lib/authority-transition.cjs');
 const authorityTransition = new AuthorityTransition();
 const {
@@ -1774,6 +1775,7 @@ function createApplicationMenu() {
       ]
     },
     { role: 'editMenu' },
+    windowZoomMenu(() => mainWindow),
     { role: 'windowMenu' }
   ];
 
@@ -1818,6 +1820,7 @@ function createWindow() {
     }
   });
 
+  attachWindowZoom(mainWindow);
   mainWindow.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
     if (isMainFrame && !isInPlace) { syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); }
   });

@@ -1,5 +1,12 @@
 # TESTING.md — per-area manual test checklists
 
+## Native desktop UI zoom — 2026-10-27
+
+- [ ] Run `node --test electron/test/window-zoom.test.cjs` and `corepack pnpm@10.12.1 --dir electron verify:window-zoom`. The latter requires a graphical macOS desktop and uses a separate task process, disposable local document/profile, real `sendInputEvent` and native menu dispatch. Normal networking and Chromium's standard sandbox remain enabled; the runner bounds execution and cleans its process group/profile. No sign-in or account writes occur.
+- [ ] In the separate Thingtime development app built from final source, test Command and Control `=` / shifted `+`, `-`, keypad plus/minus, and `0`. Each press applies once; Actual Size restores 100% from fractional zoom. Repeat with a focused text field and held keys; typing, copy/paste and undo remain functional. View menu commands match keyboard behavior; changing another app's focus does not zoom Thingtime.
+- [ ] At increased and decreased zoom, inspect top-to-bottom content, drawer, Settings and nested menus at the desktop and narrowest supported window sizes. Check content reflow, visible focused controls, traffic lights, alignment, clipping and overflow. Reload to check native origin zoom behavior; no cross-origin/app preference persistence is promised.
+- [ ] Stable installed acceptance is separate: after the authorized merge to `main` and eligible signed update, verify the installed copy's revision/signature/path and repeat the zoom smoke. Never overwrite the stable app with an unmerged branch build.
+
 ## Hosted native compilation boundary
 
 - [ ] Validate the native listener with `actionlint`; keep its owner/main/repository admission, read-only permissions, and immutable protected-controller pin. Do not inherit secrets or check out candidate code in the listener.
