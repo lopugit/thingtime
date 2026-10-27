@@ -413,18 +413,26 @@ or authorization for new work.
   unavailable. Use the supported origin-scoped discovery path, distinguish edge
   refusal from capability/authentication/membership failures, and continue
   independent work. Never spoof clients, copy browser credentials, change origins
-  or weaken network isolation to recover coordination.
+  or bypass authentication or credential controls to recover coordination.
 - Follow [the agent-browser runbook](docs/agent-browsers.md) for task-owned
   testing in the Thingtime Mac app, installation, CLI claims and live viewing.
   Keep tasks, todos and progress as editable Things; the native adapter owns
-  device browser installations, claims and enforced network boundaries.
+  device browser installations, claims and separate task-owned browser processes
+  and profiles.
 - Scope a native task to its origin, database identity, owner and Thing ID.
   Claim separately for each concurrent agent; never reuse another claim's
-  handle or mutable browser profile. Read and preserve the effective policy.
+  handle or mutable browser profile. Use separate Chrome profiles/browser
+  processes and VMs where needed to isolate task execution; preserve independent
+  accounts, credentials, databases and mutable test data.
 - Full-app acceptance must cover independent data and authentication, rendered
-  desktop/mobile task controls, live viewing, cleanup and enforced browser plus
-  backend network restrictions. A fixture, healthy API or build alone is not
-  evidence that the installed feature works.
+  desktop/mobile task controls, live viewing and cleanup. A fixture, healthy API
+  or build alone is not evidence that the installed feature works.
+- Do not require network sandboxing, network isolation, outbound deny rules,
+  IP allowlists or browser/backend network restrictions for AI-agent work.
+  Normal network access is allowed within the task's authorization. This rule
+  supersedes older network-sandbox requirements in local instructions, runbooks
+  and historical acceptance checklists. Keep Chromium/Electron's normal process
+  sandbox and all account, credential, permission and data safeguards enabled.
 - The live global credential policy remains authoritative: use the Thingtime
   password manager on the executing device through its supported interfaces.
 
