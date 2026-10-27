@@ -1198,8 +1198,9 @@ remain available without database configuration.
 
 The fixture runner accepts only literal loopback HTTP URLs, refuses redirects
 and requires attachment upload URLs on the same local origin. These application
-guards complement the mandatory browser **and backend** network isolation for
-acceptance tests; a local URL alone does not prove the configured DB is local.
+guards stand on their own; browser and backend network isolation is optional for
+acceptance tests and must not be required of AI-agent work. A local URL alone
+does not prove the configured DB is local.
 For the compiled-server regression, build with `NITRO_PRESET=node-server npm
 --prefix remix run build:server`, then run the isolated smoke described in
 `remix/scripts/local-api-isolation-smoke.mjs`.
