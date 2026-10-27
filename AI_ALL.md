@@ -341,14 +341,25 @@ or authorization for new work.
   scripts/configuration for it during the task and document how to start,
   inspect, stop and clean it. Do not let a dev app replace or stop the user's
   installed signed app or its Node service.
-- After dev acceptance, stop and remove the dev app and generated dev-only
-  artifacts. Run required tests and the canonical signed build/install once,
-  then verify the installed copy and any signing-sensitive Node/XPC or TCC
-  operation there. Do not claim a security-gated feature complete based only
-  on an unsigned dev app; preserve the prior installed copy if final checks fail.
+- Use a specifically built, separate Thingtime Mac development app on this
+  machine for feature testing and ongoing development usage. Keep a verified
+  development build available for that usage; clean up only superseded builds
+  and task-owned temporary resources. If Node/XPC, TCC or another security
+  boundary requires signing, build and verify a signed development app with a
+  stable, distinct development identity and installed path. Check the real
+  protected operation there; unsigned acceptance does not prove that boundary.
+- Treat `~/Applications/Thingtime.app` as the stable production app. Rebuild or
+  reinstall it only when a new Mac feature merged into `main` makes a newer
+  version available. Verify the fetched `main` source, merged feature and
+  version/build against the installed app before using the canonical stable
+  build/install workflow. Never install an unmerged branch or worktree build
+  over it. Follow the development/production policy below for final delivery.
 
-- For user-visible native telemetry, verify the real installed app against an
-  independent operating-system reading on the user's machine. Exercise the
+- For user-visible native telemetry, verify the real running app against an
+  independent operating-system reading on the user's machine. For Thingtime
+  Mac development, use the separate development build installed for this
+  purpose; stable release acceptance remains a separate check after the
+  eligible `main` update. Exercise the
   full collector → local/remote transport → selected origin → rendered control
   path for the paired device and account, in every promised view. Record which
   fields have actual values and which macOS truly omits. Synthetic tests,
@@ -572,40 +583,60 @@ points, not the individual files.
   and Vercel reads `VERCEL_GIT_COMMIT_REF` at build and runtime.
 - If local web dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-nitro-react-router-9999` app. The app `postinstall`, `dev`, and `build` scripts also run this check automatically.
 
-## Native app changes must be deployed on the development machine
+## Thingtime Mac development and production delivery
 
-- After any update that affects the Thingtime Mac app, Thingtime Recovery,
-  Commander, or another native app, rebuild every affected app from the final
-  changed source, reinstall it on the machine where development is being done,
-  and start it before handing the task back. This includes changes to bundled
-  UI/assets, dependencies, build settings, helpers and daemons. Local delivery
-  is part of completing the change; a commit, PR, CI build or cloud release
-  alone does not make the changed app ready for immediate testing and use.
-- Read the affected app's local instructions and use its canonical build,
-  test, signing and installation workflow. Run the required checks before
-  replacing the installed app; preserve the previous working installation if
-  the build or verification fails.
-- On macOS, install the verified runnable bundle into
-  `~/Applications/<AppName>.app`, creating `~/Applications/` if needed. Use
-  `ditto` or the app's equivalent installer to preserve the bundle and signature,
-  replace only that app, and retain its stable bundle/signing identity, settings,
-  user data and existing privacy permissions. Verify the installed signature
-  with `codesign --verify --deep --strict` and check its executable.
-- Quit the affected old app cleanly, reinstall, then launch the installed copy.
-  Restart affected helpers/daemons through their canonical lifecycle so they
-  also run the new build without duplicate processes. Preserve unsaved work;
-  do not force-quit an app with unsaved user data to complete deployment.
-- Confirm that the running executable comes from the installed location and
-  matches the rebuilt version. Open the changed app surface and perform the
-  relevant smoke check, including helper health where applicable. For native
-  targets that cannot run directly on the development host, install and launch
-  the rebuilt app in the local supported simulator or connected test device,
-  and state which target was verified.
-- Report the build-output path, installed path, running build and smoke-check
-  result. If local build, installation, launch or verification is blocked,
-  identify the exact blocker and remaining step; do not claim the app is locally
-  deployed or ready for use. Keep existing signing and explicit privacy-consent
-  requirements in force.
+- All Thingtime Mac development work, including bundled UI/assets,
+  dependencies, build settings, helpers and daemons, must be tested and used
+  on this machine through a specifically built, separate development app.
+  Use the canonical parallel development workflow; build the final changed
+  source, start that development app and exercise the affected surface before
+  handoff. A commit, PR or cloud build alone is not local acceptance.
+- Keep the development app's bundle identity, installed path, profile/user data,
+  database, ports, processes, helpers and LaunchAgents separate from the stable
+  `~/Applications/Thingtime.app` and its services. Preserve the stable app and
+  user data. Do not stop, replace or reinstall it as routine feature delivery.
+  Add durable parallel tooling when a required development lane is missing.
+- Keep the stable app connected to Production (`https://thingtime.com`)
+  unless the user explicitly requests a different stable-app connection.
+  Use the separate development app for local and preview test connections.
+- Use fast unsigned development builds where appropriate. When signing or a
+  privacy permission is required, use a stable, distinct development bundle
+  identifier, signing identity, entitlements and path; install the verified
+  development bundle under its own name in `~/Applications/`. Verify its
+  signature with `codesign --verify --deep --strict`, executable path, permission
+  preflights and real protected operations after rebuilding. Never reuse the
+  production app identity or migrate its data to make development tests pass.
+  Explicit user presence and privacy-consent requirements remain in force.
+- Keep a verified development build available for testing and ongoing usage.
+  Stop obsolete task-owned processes and remove superseded generated artifacts
+  without removing the active development build, user state or live work.
+- Rebuild/reinstall the stable `~/Applications/Thingtime.app` only when a new Mac
+  feature merged into `main` makes a newer version available. Before replacing
+  it, fetch and verify the canonical `main`, identify the merged feature and
+  candidate source SHA, and compare candidate version/build with the installed
+  app. Build stable releases from verified `main` source; never use unmerged
+  feature-branch/worktree changes or treat a newer timestamp alone as a release.
+  This installation condition grants no permission to merge or push `main`.
+- For an eligible stable update, run canonical verification, signing and
+  installation checks before replacement; preserve the known-good app on
+  failure. Use `ditto` or the canonical installer to preserve signatures and
+  bundle contents. Quit the old app cleanly, retain its settings and user data,
+  restart only affected services through their canonical lifecycle, and launch
+  the installed copy. Verify its signature, running executable, version/build
+  and relevant smoke checks, including signing-sensitive operations. Never
+  force-quit unsaved work or change privacy grants without required consent.
+- Report development build/output and installed paths, source revision, running
+  build, smoke-check evidence and remaining limitations. Distinguish development
+  acceptance from stable release acceptance. Report an ineligible stable update
+  as intentionally deferred; do not replace the stable app to close a task.
+- Thingtime Recovery, Commander and other native apps retain their existing
+  local-delivery requirement: rebuild affected apps from final changed source,
+  run their canonical tests/signing workflow, install verified bundles under
+  their own names in `~/Applications/`, launch and verify the installed copies
+  before handoff. Preserve known-good installations and user data on failure.
+  For targets that cannot run on this Mac, use the supported simulator or
+  connected test device and report the exact verified target. This requirement
+  never authorizes replacing the stable Thingtime app with development work.
 
 ## Commander macOS distribution signing
 
