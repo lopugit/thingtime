@@ -38,9 +38,10 @@ provider acceptance. Browser timeouts and nonterminal reports fail verification.
 No personal browser profile or production credential is copied.
 
 Swift core passes 17 tests with two opt-in skips, Electron bridge passes nine,
-and navigation fencing passes four. Native bridge typechecks pass. Full Xcode
-builds remain unverified because the local environment refuses the compiler's
-nested sandbox; compile-only hosted recovery is being prepared separately.
+and navigation fencing passes four. Native bridge typechecks pass. Initial full Xcode
+attempts stopped at the compiler's nested sandbox. Later canonical Mac/iOS
+package-integration and staged-signing results are recorded below; installed
+provider acceptance remains separate.
 
 At revision `6b672f9e24f1971913aa3163957eb2157cc49066`, hosted Web CI
 (build/typecheck and API suite), both CodeQL analyses, and GitGuardian pass.
@@ -97,8 +98,8 @@ Unsigned native project generation passed from a frozen 195-file source
 snapshot. The macOS Xcode build stopped before compilation when local package
 resolution attempted a nested sandbox inside the enforced network-denial
 sandbox. No network policy was relaxed; iOS compilation was not started after
-that failure. Full native compilation and signed installed-device acceptance
-remain open. The installed provider is enabled in macOS settings, but a usable
+that failure. At that initial checkpoint, full native compilation and signed installed-device
+acceptance remained open; later canonical/staged results are recorded below. The installed provider is enabled in macOS settings, but a usable
 Thingtime choice in Chrome's passkey prompt has not been demonstrated. No Google
 client secret or live Google/GitHub passkey was created by these checks.
 
@@ -185,8 +186,9 @@ and listener cleanup passed. The same private environment, outer network denial,
 reviewed standard-macro setting and signing-disabled flags were retained.
 No Mac build/test rerun, test/simulator/app launch, signing or installation took
 place. Receipt: `/tmp/oauth-native-ios-link-validation.json`; log and xcresult
-remain in its separate private task root. Canonical Xcode package integration,
-OS/provider behavior and signed installed-device acceptance remain unverified.
+remain in its separate private task root. At that adapter checkpoint canonical Xcode package integration remained
+unverified; the later canonical results below supersede that compilation gap.
+OS/provider behavior and signed installed-device acceptance remain separate.
 
 Current Passwords SwiftPM closure was independently checked against `fd43daf`:
 nine selected connection-status/logout tests passed, with zero skips or
@@ -195,3 +197,116 @@ checkout and immutable snapshot before and after; IPv4/IPv6 controls and owned
 cleanup passed. This verifies selected synthetic package behavior, without OS
 identity-store, live session, signing or installed-provider acceptance. The
 parent-reviewed receipt is `/tmp/oauth-native-passwords-nine-current.json`.
+
+## Canonical native integration and split release preparation — 27 October 2026
+
+The parent independently reviewed canonical Mac and iOS local-package builds at
+`00383d797eac1ff2f5346ad0f1a9485403697bf8`. Mac XcodeGen and the actual Xcode
+host/provider build passed in 39.673 seconds using the invocation-local shipped
+manifest-sandbox override under unchanged outer network denial; its source
+closure (25 files), 19 structural graph entries, direct IPv4/IPv6 controls and
+owned cleanup passed. The earlier missing-username XcodeGen failure remains
+retained separately; supplying explicit nonsecret USER/LOGNAME fixed that
+harness prerequisite. Canonical iOS integration was parent-verified separately:
+196 files, 12 artifacts and 78.733 seconds. Neither result proves signing,
+installation, Keychain/OS-provider behavior or real-account ceremonies.
+
+The opt-in release split preserves the legacy build path. Preparation uses a
+fresh private environment and canonical production team/group settings with
+signing disabled, retaining real local-package edges. It materializes canonical
+entitlements and embeds matching public manual profiles without changing
+compiled Info.plists. The reviewed manifest digest binds fixed artifacts,
+profile/entitlement/source/tool bytes. A separate signer performs no package or
+candidate execution: it revalidates inputs and valid identity metadata, signs
+and verifies the extension before the enclosing host, requires secure timestamps
+and hardened runtime, and reuses final canonical verification. Verifier options
+now accept an explicit sanitized environment and fixed bundle IDs; default
+callers keep existing behavior. No key is exported and actual Keychain prompts
+remain intact. At that review freeze the main app and standalone installed companion were
+unchanged; the later parent-performed standalone installation is recorded below.
+
+Focused safe verification passed 34/34 tests with zero skips/failures, all four
+changed/new JavaScript entrypoint syntax checks and `git diff --check`. Regressions
+cover profile/certificate/team/expiry/group refusal,
+compiled identity/substitution checks, artifact/profile/entitlement mutation,
+symlink/hardlink/traversal/new-file refusal, trusted-tool and reviewed-digest
+binding, explicit private build settings, extension-first failure handling and
+post-sign payload checks. These are synthetic filesystem/mocked-command tests;
+at the first review freeze this tooling revision had not yet run preparation or
+actual signing. The later parent-reported staged result is recorded below. Exact
+commands and fork-safe placeholders are in README. Signed bundle preparation,
+backup/designated-requirement comparison, installed verification and real OS
+provider acceptance remain distinct next steps. PR1216's occupied main session
+must not be replaced or restarted by this companion work.
+
+Independent release review reproduced an unchecked inter-sign window with a
+synthetic writer: host bytes changed during extension signing could reach the
+host signer. The release now rechecks each expected executable digest immediately
+before its system codesign call and includes that exact regression. Claims are
+limited to this pre-sign binding plus trusted system codesign; only non-executable
+payload is compared byte-for-byte afterward. Normalized post-sign Mach-O payload
+equality and isolation from arbitrary same-account concurrent writers are not
+provided. Fresh private staging limits access by other accounts, not by the same
+UID. No actual preparation or signing was needed for this review/regression.
+
+A second independent review found that normal parent SIGINT/SIGTERM could bypass
+cleanup of detached build groups. Preparation now installs scoped cancellation
+handlers, forwards TERM to the owned active group, escalates to KILL after five
+seconds and reaps before closing listeners/logs and recording failure. Handlers
+are removed on every normal/error exit and no signing manifest survives observed
+cancellation. Two harmless synthetic supervisor/child tests exercise actual
+SIGINT/SIGTERM and an owned child that ignores TERM; no Xcode/signing runs in
+these tests. SIGKILL/host loss cannot run JavaScript cleanup and is not claimed.
+
+## Verified signed installed companion — 27 October 2026
+
+The parent executed and independently verified preparation of the exact
+`00383d797eac1ff2f5346ad0f1a9485403697bf8` native source with the reviewed split:
+23 source hashes, nine prepared artifact hashes, four trusted-tool hashes,
+compiled production team/shared-group settings, all six direct IPv4/IPv6
+positive/denial controls, actual canonical `BUILD SUCCEEDED`, owned group reap
+and listener cleanup passed. Preparation manifest SHA256:
+`49aa807d3887dac10857bf6c0a8bfbe35c45f14c8106e73e7ea5b48559ead891`.
+Receipt: `/tmp/oauth-password-provider-prepared-verification.json`.
+
+Two full canonical preparations and trusted Developer ID signing runs then
+passed with secure timestamps and strict host/provider verification. Their
+new designated requirements are identical across the two rebuilds. The new
+Developer-ID-only text differs from the previously installed companion's
+App-Store-or-Developer-ID disjunction; both new bundles satisfy the corresponding
+old requirements through `codesign -R`. This proves checked compatibility and
+rebuild stability, not identical old/new text or a protected provider ceremony.
+Receipts: `/tmp/oauth-password-provider-signed-verification.json` and
+`/tmp/oauth-password-provider-rebuild-stability.json`.
+
+The parent installed the verified v2 bundle from
+`/private/tmp/thingtime-passwords-00383-release-signed-v2/stage/Thingtime Passwords.app`
+into `/Users/lopu/Applications/Thingtime Passwords.app` using a fresh verified
+stage and `ditto`, retaining a verified rollback bundle. Host/provider strict
+signatures and the installed executable passed. The exact running installed
+executable was confirmed, and the new companion opened its Passwords screen
+with “Sign in to unlock your password manager.” This proves installed launch,
+not an authenticated account connection. The idle previous installed process
+was stopped normally with targeted TERM after Quit had no effect; the Debug
+companion and occupied main app/session were preserved. Installation and rollback
+paths are recorded in `/tmp/oauth-password-provider-installation.json`.
+
+The installed companion's Open Password AutoFill settings action opened the
+correct macOS panel. Thingtime Passwords was listed and already enabled for
+passkeys/passwords/codes; no permission toggle changed. A read-only
+`pluginkit -m -v -i com.thingtime.passwords.provider` check returned exactly one
+selected (`+`) extension at the newly installed companion's
+`Contents/PlugIns/ThingtimePasswordProvider.appex` path, rather than the Debug
+copy. Settings screenshot: `/tmp/oauth-autofill-enabled-20261027.png`.
+These are observed settings/registration and installed-host-launch results.
+No real credential retrieval, authenticated provider fill, passkey ceremony or
+account connection was demonstrated. The packaged Electron bridge still uses
+its separately installed nested helper; replacing the standalone companion did
+not replace or establish acceptance of the occupied main app's bridge.
+
+The temporary preparation, signing, and rebuild-stability receipts have expired
+and are unavailable for a fresh audit. The durable current-install receipt at
+`/Users/lopu/.codex-2/visualizations/2026/10/13/01a1349c-0b75-7d83-87f6-14b3d130a53c/evidence/native-installed-current.json`
+confirms current installed signatures, executable hashes, install path, and
+selected plugin only; it does not re-establish the earlier build history or a
+real provider/passkey ceremony.

@@ -14,6 +14,14 @@ function run(command, args, capture = false) {
   return result.stdout || '';
 }
 if (process.platform !== 'darwin') throw new Error('Apple credential providers require macOS and Xcode.');
+if (process.argv[2] === '--prepare-signing') {
+  const { parseOptions, prepareRelease } = await import('./password-provider-release.mjs');
+  const options = parseOptions(process.argv.slice(3), ['--source', '--team', '--certificate-sha1', '--identity-name', '--host-profile', '--provider-profile', '--output']);
+  const result = await prepareRelease({ sourceSHA: options['--source'], team: options['--team'], certificateSHA1: options['--certificate-sha1'], identityName: options['--identity-name'], hostProfile: options['--host-profile'], providerProfile: options['--provider-profile'], output: options['--output'] });
+  console.log(JSON.stringify(result));
+  process.exit(0);
+}
+
 await verifyNativePasswordPasskey();
 let identity = process.env.THINGTIME_PASSWORD_SIGNING_IDENTITY || process.env.THINGTIME_NODE_SIGNING_IDENTITY || '';
 let team = process.env.APPLE_TEAM_ID || process.env.DEVELOPMENT_TEAM || '';

@@ -10498,6 +10498,46 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+### Split companion preparation/signing (2026-10-27)
+
+Parent-verified source `00383d7` passed two canonical preparations and secure-
+timestamped signing runs with stable new requirements. Both new bundles satisfy
+the respective old requirements through `codesign -R`, despite different old/new
+text. The verified v2 standalone companion was backed up, installed and launched
+from `~/Applications/Thingtime Passwords.app`; strict host/provider checks pass.
+Its settings action opens the correct AutoFill panel, already enabled, and
+`pluginkit` selects the updated installed extension. This does not prove real
+credential fill, authenticated connection, passkey ceremony or the untouched
+main app's nested bridge.
+
+- [ ] Run `node --test electron/scripts/password-provider-release.test.mjs`:
+  reject changed binaries/profiles/entitlements, foreign bundle/team/certificate,
+  expired/debug profiles, unresolved substitutions, symlinks/hardlinks/traversal,
+  extra authority/files and changed trusted tools. A wrong reviewed manifest
+  digest or unavailable valid identity must stop before any signing output.
+- [ ] In a fresh preparation directory, export the exact reviewed native Git
+  closure; retain canonical local-package references, production team/group
+  build settings, private sanitized environment and unchanged outer network
+  denial. Verify pre/post IPv4/IPv6 controls, source hashes, successful package
+  build, bounded owned-process cleanup and no compiled Info.plist rewrites.
+  Send SIGINT and SIGTERM to a harmless synthetic supervisor whose owned child
+  ignores TERM: require bounded TERM/KILL/reap, closed listeners/logs, a failure
+  result, and no leaked signal handlers; never use Xcode or signing in this test.
+- [ ] Review the manifest bytes/digest independently. Only the release signer may
+  timestamp-sign the fixed staged artifacts: extension signing/verification must
+  finish before host signing. Inject either extension failure and ensure no host
+  signing, success receipt, fallback identity, app launch or install occurs. Also
+  mutate the host during extension signing: its fresh pre-sign digest must refuse
+  before host codesign. Non-executable payload remains checked afterward; do not
+  claim normalized Mach-O equality or arbitrary same-account writer isolation.
+- [ ] Verify the final signed host/provider with the canonical verifier, including
+  secure timestamps, expected authority/team/group/profiles. Preserve any real
+  Keychain prompt; metadata discovery is not signing authorization evidence.
+  Record the old standalone bundle backup and designated requirement before a
+  separately authorized install. Leave an occupied main app/session untouched.
+
+
+
 - [ ] Browser fixture `password-manager.browser.tsx` / `check-password-manager-browser.cjs`: exercise linked-pending, unknown legacy and synchronized replies through manager + passkey-guide notices. Pending/unknown must not display generic Connected or append the create-passkey next step; existing editable role=status feedback/retry remains intact. Real signed OS acceptance is separate.
 - [ ] Native index status: disabled/failing OS index retains the linked account but reports `linked-index-pending`, offers Connect retry, and never reports synchronized. Verify both macOS/iOS, then enable indexing and require an actual successful replacement before `index-synchronized`. Legacy/missing helper states stay unknown. No secret/identity/error payload appears in status.
 - [ ] Change account/origin or disconnect during a delayed index replacement. Reject the old result, finish stale-index cleanup before a new queued replacement, and verify current-account suggestions/fill only. Failed best-effort clearing must not claim synchronization; provider read authorization remains owner-bound.

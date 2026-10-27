@@ -6479,6 +6479,95 @@ and provisioning contracts. `CODE_SIGNING_ALLOWED=NO` is for isolated compilatio
 only and does not establish installed AutoFill or Keychain acceptance. Never
 install an unsigned helper over a working signed app.
 
+### Prepare and sign the standalone Password AutoFill companion
+
+The default `build:passwords` workflow above remains unchanged. An opt-in split
+keeps canonical Xcode package evaluation and compilation inside the enforced
+`(version 1) (allow default) (deny network*)` sandbox, then signs only the
+hash-bound fixed host/extension in a separate release operation. This is a
+trusted, reviewed source build, not an arbitrary-code isolation boundary:
+network denial does not restrict filesystem, Mach or Keychain access.
+
+Use a full reviewed Git commit, stable `/Applications/Xcode.app`, XcodeGen at
+`/opt/homebrew/bin/xcodegen`, and two existing manual Developer ID profiles in
+Xcode's supported store. For a fork, replace every placeholder below with your
+own team's public metadata and provision both fixed bundle identifiers and the
+shared `<TEAM_ID>.com.thingtime.passwords` group. Keep private keys in Keychain;
+no profile/certificate/key contents belong in shell arguments or source. A
+valid identity listing does not establish unattended signing permission.
+
+```sh
+node electron/scripts/build-native-passwords.mjs --prepare-signing \
+  --source <FULL_REVIEWED_GIT_SHA> --team <TEAM_ID> \
+  --certificate-sha1 <40_HEX_PUBLIC_CERTIFICATE_FINGERPRINT> \
+  --identity-name 'Developer ID Application: <NAME> (<TEAM_ID>)' \
+  --host-profile "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/<HOST_UUID>.provisionprofile" \
+  --provider-profile "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/<PROVIDER_UUID>.provisionprofile" \
+  --output /private/tmp/thingtime-passwords-prepare-review1
+```
+
+Output must be a new absolute directory through canonical, nonsymlink paths.
+Preparation exports only the native Git closure, preserves canonical local
+Swift-package references, compiles the production team/group into Info.plists,
+and never rewrites those compiled Info.plists. It uses a fresh private HOME,
+TMP/cache/config state, explicit nonsecret USER/LOGNAME, no inherited account,
+service, provisioning or session environment, and no automatic provisioning.
+The invocation-local `-IDEPackageSupportDisableManifestSandbox=YES` omits only
+Xcode's nested manifest sandbox; the outer network denial is unchanged. This
+shipped Xcode override is absent from public help and must be reverified after
+a toolchain change. Direct IPv4/IPv6 positive/denial controls run before and
+after; each owned process group is reaped under a shared 600-second build
+budget. SIGINT/SIGTERM cancellation terminates the active owned group, escalates
+to KILL after five seconds, reaps it and closes listeners/logs before writing a
+failure receipt; signal handlers are removed afterward. Cancellation emits no
+signing manifest. Abrupt SIGKILL/host loss cannot execute JavaScript cleanup.
+Failure retains logs and partial outputs without a signing manifest.
+
+Review `preparation-receipt.json`, `build.log`, source hashes, generated project
+hash and `manifest.json`. The manifest binds artifact, embedded profile,
+materialized entitlement and trusted-tool bytes. Preparation does not repeat
+the independent interoperability/unit checks or establish device acceptance.
+Then pass the independently reviewed manifest SHA256 explicitly:
+
+```sh
+node electron/scripts/sign-native-passwords.mjs \
+  --manifest /private/tmp/thingtime-passwords-prepare-review1/manifest.json \
+  --sha256 <REVIEWED_MANIFEST_SHA256> \
+  --output /private/tmp/thingtime-passwords-signed-review1
+```
+
+The signer rechecks profile expiry/team/app/AutoFill/certificate, compiled
+identities, artifact hashes, canonical paths and valid local identity metadata.
+It copies into fresh private staging and invokes trusted system `codesign`
+extension first, verifying that result before signing the host. Hardened runtime
+and a secure timestamp are mandatory. It rechecks each executable digest immediately before its system signing call,
+catching changes made while the other bundle was signed. After signing,
+non-executable payload/profile/entitlement bytes must remain identical. Signing
+necessarily changes Mach-O bytes; normalized post-sign executable equality is
+not checked. This contract assumes trusted system codesign is the only writer
+inside fresh private staging and does not isolate arbitrary concurrent writers
+using the same macOS account. It never executes the prepared app,
+package manifests, plugins or build hooks. Timestamping is a separate release
+operation that may contact Apple's timestamp service; no build-network policy
+is changed. Any real Keychain/user-presence prompt remains required. A failed
+signature, timestamp or final canonical verification leaves a failed receipt;
+it never falls back to ad-hoc/development signing or installs anything.
+
+The successful result is `<SIGNED_OUTPUT>/stage/Thingtime Passwords.app` plus
+`signing-receipt.json`. Before a separately reviewed standalone installation,
+record a backup and signatures/designated requirements of the existing copy;
+verify the staged and installed copies and the real provider operation. Automatic
+`codesign` requirement text can differ from Xcode's requirement even with the
+same identity and bundle IDs. Compare the actual requirements and their
+compatibility/rebuild stability; never assume unchanged permissions from a
+matching certificate name or silently call differing requirements identical. The
+packaged Electron bridge uses its nested helper, so a standalone installation
+cannot prove or update the main app's bridge. Do not replace/restart an occupied
+`Thingtime.app`. Notarization and OS/provider acceptance remain separate.
+
+Safe regression command (no Xcode, signing or credentials):
+`node --test electron/scripts/password-provider-release.test.mjs`.
+
 ### Commander-backed Mac backup indexing
 
 The signed macOS node bundles the repository's `commander-indexer` Rust binary.
