@@ -30,7 +30,7 @@ export function PasswordPasskeySetup({ ownerId, nativeAvailable }: PasswordPassk
       try {
         const result = await nativePasswordProvider('connect', selectedOwner);
         if (active()) setNotice(result.ok
-          ? 'Password AutoFill connected. Enable Thingtime in your device’s AutoFill & Passwords settings, then create the passkey on the website or app.'
+          ? result.message + (result.state === 'index-synchronized' ? ' Create the passkey on the website or app.' : '')
           : 'Password AutoFill could not connect. Check your Thingtime sign-in and native provider installation, then try again.');
       } catch {
         if (active()) setNotice('Password AutoFill could not connect. Check your Thingtime sign-in and native provider installation, then try again.');

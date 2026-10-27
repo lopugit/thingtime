@@ -1,0 +1,106 @@
+import type { WebpageBlock } from '../Builder/webpageBlocks';
+import { FIELD_TYPES } from '~/passwords/model';
+const stack = { display: 'grid', gap: '12px', 'min-width': '0' };
+const row = { display: 'flex', 'flex-wrap': 'wrap', 'align-items': 'center', gap: '8px', 'min-width': '0' };
+const card = { ...stack, padding: '16px', border: '1px solid var(--tt-border, #e6e6eb)', 'border-radius': '12px', background: 'var(--tt-card, white)' };
+const control = { padding: '8px 10px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', 'min-width': '0', 'box-sizing': 'border-box', background: 'var(--tt-surface, white)', color: 'inherit', font: 'inherit', 'min-height': '44px' };
+const el = (id: string, tag: string, text = '', props: Record<string, unknown> = {}, children?: WebpageBlock[], css?: Record<string, string>): WebpageBlock => ({ id, type: 'element', tag, text, props, ...(children ? { children } : {}), ...(css ? { css } : {}) });
+const text = (id: string, value: string, tag = 'p', props = {}) => el(id, tag, value, props, undefined, { margin: '0', 'overflow-wrap': 'anywhere', ...(['h1', 'h2', 'h3'].includes(tag) ? { 'font-size': tag === 'h1' ? '30px' : tag === 'h2' ? '22px' : '17px', 'font-weight': '650', 'line-height': '1.25' } : {}) });
+const when = (id: string, arg: string, children: WebpageBlock[]): WebpageBlock => ({ id, type: 'condition', condition: { arg }, children });
+const repeat = (id: string, itemsPath: string, children: WebpageBlock[]): WebpageBlock => ({ id, type: 'collection', props: { itemsPath, size: 'all', transparent: true }, children });
+const action = (operation: string, id = '{item.id}') => ({ 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation, id } });
+const button = (id: string, label: string, operation: string, disabled: string | boolean = '{passwords.busy}', props = {}) => el(id, 'button', '', { type: 'button', disabled, ...action(operation), ...props }, [text(`${id}-label`, label, 'span')], { ...control, cursor: 'pointer' });
+const input = (id: string, name: string, operation: string, props = {}, tag = 'input') => el(id, tag, '', { name, autoComplete: 'off', spellCheck: false, disabled: '{passwords.busy}', ...action(operation), ...props }, undefined, { ...control, width: '100%' });
+const privateInput = (id: string, name: string, operation: string, props = {}, tag = 'input') => input(id, name, operation, { 'data-tt-private-control': '', ...props }, tag);
+const label = (id: string, caption: string, child: WebpageBlock) => el(id, 'label', '', {}, [text(`${id}-caption`, caption, 'span'), child], stack);
+const options = (prefix: string, values: readonly string[]) => values.map(value => el(`${prefix}-${value}`, 'option', value.replace(/-/g, ' '), { value }));
+const select = (id: string, name: string, operation: string, value: string, children: WebpageBlock[], props = {}) => el(id, 'select', '', { name, value, ...action(operation), ...props }, children, control);
+const propertyInput = (id: string, props = {}, tag = 'input') => privateInput(id, '{item.name}', 'field.property', { id: 'private-{item.name}', 'data-tt-action-inputs': { operation: 'field.property', id: '{item.id}', path: '{item.path}', epoch: '{item.epoch}' }, 'aria-labelledby': 'label-{item.name}', ...props }, tag);
+const propertyBlocks: WebpageBlock[] = [when('password-field-structured', 'item.structured', [repeat('password-field-properties', 'item.properties', [
+  el('password-property', 'div', '', {}, [
+    el('password-property-caption', 'label', '', { htmlFor: 'private-{item.name}', id: 'label-{item.name}' }, [text('password-property-prefix', 'Property: ', 'span'), el('password-property-label', 'span', '', { 'data-tt-private-text': '{item.labelName}' })], { 'overflow-wrap': 'anywhere' }),
+    when('password-property-single', 'item.single', [propertyInput('password-property-input', { type: '{item.inputType}', inputMode: '{item.inputMode}', readOnly: '{item.readOnly}', required: '{item.required}' })]),
+    when('password-property-multiline', 'item.multiline', [propertyInput('password-property-textarea', { rows: 4 }, 'textarea')]),
+    when('password-property-boolean', 'item.boolean', [propertyInput('password-property-checkbox', { type: 'checkbox' })]),
+    text('password-property-type', '{item.typeLabel}', 'small')
+  ], stack)
+])])];
+const propertyModeBlock = when('password-field-mode-visible', 'item.canStructure', [button('password-field-mode', '{item.modeLabel}', 'field.mode')]);
+
+const recordIconBlock = el('password-record-icon-frame', 'span', '', { 'aria-hidden': true }, [when('password-record-icon-visible', 'item.hasIcon', [el('password-record-icon', 'img', '', { 'data-tt-private-image': 'entry-icon-{item.id}', alt: '', referrerPolicy: 'no-referrer', width: 32, height: 32 }, undefined, { 'object-fit': 'contain', 'border-radius': '6px' })]), when('password-record-icon-fallback-visible', 'item.iconMissing', [text('password-record-icon-fallback', '🔐', 'span')])], { width: '32px', height: '32px', display: 'grid', 'place-items': 'center', 'flex-shrink': '0' });
+
+/** Add the new editable templates to older customised layouts without
+ * replacing their existing controls, styling, order or labels. */
+export function upgradePasswordManagerBlocks(blocks: WebpageBlock[]): WebpageBlock[] {
+  const visit = (nodes: WebpageBlock[]): WebpageBlock[] => nodes.map(block => {
+    let children = block.children ? visit(block.children) : undefined;
+    if (block.id === 'password-record' && children && !children.some(child => child.id === 'password-record-icon-frame')) children = [structuredClone(recordIconBlock), ...children];
+    const upgrade = block.id === 'password-field' && children && !block.props?.['data-tt-password-properties-version'] && !children.some(child => ['password-field-structured', 'password-field-mode-visible'].includes(child.id));
+    if (upgrade) children = [...children!, ...structuredClone(propertyBlocks), structuredClone(propertyModeBlock)];
+    return { ...block, ...(upgrade ? { props: { ...block.props, 'data-tt-password-properties-version': 1 } } : {}), ...(children ? { children } : {}) };
+  });
+  return visit(blocks);
+}
+
+/** Live field values are hydrated into transient DOM controls only. This
+ * document contains editable ordinary templates and display bindings. */
+export const passwordAuthenticatorSetupBlocks: WebpageBlock[] = [el('password-authenticator-setup', 'section', '', { 'aria-label': 'Authenticator setup' }, [
+    when('password-setup-pending', 'passwords.setupPending', [el('password-setup-notice', 'section', '', { role: 'region', 'aria-label': 'Incoming authenticator setup' }, [
+      text('password-setup-heading', 'Authenticator setup received', 'h2'),
+      text('password-setup-help', 'Choose an entry below or create a new one. Your existing draft stays unchanged until you choose Add to current draft. Review the account before saving.'),
+      text('password-setup-account', '{passwords.setupAccount}'),
+      el('password-setup-actions', 'div', '', {}, [button('password-setup-create', 'Create new entry', 'setup.create', '{passwords.setupCannotCreate}'), button('password-setup-attach', 'Add to current draft', 'setup.attach', '{passwords.setupCannotAttach}'), button('password-setup-cancel', 'Cancel setup', 'setup.cancel', false)], row)
+    ], card)]),
+    when('password-setup-message-visible', 'passwords.setupMessage', [text('password-setup-message', '{passwords.setupMessage}', 'p', { role: 'status' }), button('password-setup-retry', 'Retry setup', 'setup.retry')]),
+], { ...stack, 'max-width': '1100px', margin: '0 auto', padding: '24px 16px 0', 'box-sizing': 'border-box', width: '100%' })];
+
+export const passwordManagerBlocks: WebpageBlock[] = [el('password-manager', 'section', '', { 'aria-label': 'Password manager' }, [
+  el('password-heading-row', 'div', '', {}, [
+    el('password-heading-copy', 'div', '', {}, [text('password-heading', 'Passwords', 'h1'), text('password-session-caption', 'Unlocked with your Thingtime session')], stack),
+    el('password-toolbar', 'div', '', {}, [button('password-add', 'Add password', 'password.add', '{passwords.cannotAdd}'), button('password-import', 'Import', 'password.import'), button('password-export', 'Export', 'password.export'), button('password-hide', 'Hide values', 'password.close', false)], row)
+  ], { ...row, 'justify-content': 'space-between' }),
+  when('password-configuration-visible', 'passwords.unconfigured', [text('password-configuration', 'Password encryption needs deployment configuration before you can save entries.')]),
+  when('password-native-visible', 'passwords.nativeAvailable', [el('password-native', 'section', '', {}, [text('password-native-description', 'Use the native Thingtime app to fill passwords, verification codes, and create or use passkeys in other apps and websites.'), el('password-native-actions', 'div', '', {}, [button('password-native-connect', 'Connect Password AutoFill', 'native.connect'), button('password-native-disconnect', 'Disconnect AutoFill', 'native.disconnect')], row), when('password-native-message-visible', 'passwords.nativeMessage', [text('password-native-message', '{passwords.nativeMessage}', 'p', { role: 'status' })])], stack)]),
+  when('password-error-visible', 'passwords.error', [text('password-error', '{passwords.error}', 'p', { role: 'alert' })]),
+  el('password-workspace', 'div', '', {}, [
+    el('password-list', 'section', '', { 'aria-label': 'Saved passwords' }, [
+      el('password-filter-row', 'div', '', {}, [input('password-search', 'search', 'password.search', { value: '{passwords.search}', 'aria-label': 'Search passwords', placeholder: 'Search all password titles', disabled: false }), select('password-sort', 'sort', 'password.sort', '{passwords.sort}', [el('password-sort-title', 'option', 'Title', { value: 'title' }), el('password-sort-updated', 'option', 'Recently edited', { value: 'updated' })], { 'aria-label': 'Sort passwords' })], row),
+      repeat('password-records', 'passwords.records', [el('password-record', 'button', '', { type: 'button', disabled: '{passwords.busy}', ...action('password.read') }, [structuredClone(recordIconBlock), text('password-record-title', '{item.title}', 'strong'), text('password-record-type', '{item.type}')], { ...card, 'text-align': 'left', width: '100%', cursor: 'pointer' })]),
+      when('password-list-loading', 'passwords.listLoading', [text('password-list-loading-message', '{passwords.loadingMessage}', 'p', { role: 'status' })]),
+      when('password-list-empty', 'passwords.empty', [text('password-list-empty-message', '{passwords.emptyMessage}')]),
+      when('password-list-more', 'passwords.hasMore', [button('password-load-more', 'Load more', 'password.more', '{passwords.cannotLoadMore}')]),
+      when('password-list-retry', 'passwords.canRetry', [button('password-retry', 'Retry search', 'password.retry', false)])
+    ], stack),
+    when('password-editor-visible', 'passwords.editingEntry', [el('password-editor', 'fieldset', '', { 'aria-label': 'Password entry' }, [
+      el('password-editor-heading-row', 'div', '', {}, [text('password-editor-heading', '{passwords.editorTitle}', 'h2'), button('password-editor-close', 'Close', 'password.close', false)], { ...row, 'justify-content': 'space-between' }),
+      label('password-title-label', 'Title', privateInput('password-title', 'entry-title', 'entry.title', { required: true })),
+      label('password-type-label', 'Password type', select('password-type', 'entry-type', 'entry.type', '{passwords.type}', [repeat('password-types', 'passwords.types', [el('password-type-option', 'option', '{item.label}', { value: '{item.value}' })])], { disabled: '{passwords.passkey}' })),
+      when('password-passkey-visible', 'passwords.passkey', [text('password-passkey-help', 'This passkey was created by the native Thingtime provider. Keep its signing fields intact to continue signing in.')]),
+      when('password-reference-visible', 'passwords.passkeyReference', [text('password-reference-help', 'Record the site and where an existing passkey is stored. This reference does not contain a passkey. New passkeys use the native credential provider.')]),
+      el('password-entry-flags', 'div', '', {}, [label('password-favorite-label', 'Favourite', input('password-favorite', 'favorite', 'entry.favorite', { type: 'checkbox', checked: '{passwords.favorite}' })), label('password-archived-label', 'Archived', input('password-archived', 'archived', 'entry.archived', { type: 'checkbox', checked: '{passwords.archived}' }))], row),
+      label('password-tags-label', 'Tags (one per line)', privateInput('password-tags', 'entry-tags', 'entry.tags', { rows: 2 }, 'textarea')),
+      repeat('password-fields', 'passwords.fields', [el('password-field', 'div', '', { 'data-tt-password-properties-version': 1 }, [
+        when('password-field-section-visible', 'item.section', [text('password-field-section', '{item.section}', 'h3')]),
+        el('password-field-heading', 'div', '', {}, [text('password-field-caption', '{item.label}', 'label', { htmlFor: 'private-{item.id}' }), el('password-field-actions', 'div', '', {}, [button('password-field-up', '↑', 'field.up', '{item.first}', { 'aria-label': 'Move {item.label} up' }), button('password-field-down', '↓', 'field.down', '{item.last}', { 'aria-label': 'Move {item.label} down' }), button('password-field-remove', '×', 'field.remove', '{passwords.busy}', { 'aria-label': 'Remove {item.label}' })], row)], { ...row, 'justify-content': 'space-between' }),
+        el('password-field-control-row', 'div', '', {}, [when('password-field-single', 'item.single', [privateInput('password-field-input', 'field-{item.id}', 'field.change', { id: 'private-{item.id}', type: '{item.inputType}', 'aria-label': '{item.label}', inputMode: '{item.inputMode}' })]), when('password-field-multiline', 'item.multiline', [privateInput('password-field-textarea', 'field-{item.id}', 'field.change', { id: 'private-{item.id}', rows: 3, 'aria-label': '{item.label}' }, 'textarea')]), when('password-field-copy-visible', 'item.copyable', [button('password-field-copy', '{item.copyLabel}', 'field.copy', '{passwords.busy}', { 'aria-label': '{item.copyAccessibleLabel}' })]), when('password-field-secret', 'item.secret', [button('password-field-reveal', '{item.revealLabel}', 'field.reveal', false, { 'aria-label': '{item.revealLabel} {item.label}' })])], stack),
+        ...propertyBlocks, propertyModeBlock,
+        when('password-field-copy-feedback-visible', 'item.copyFeedback', [text('password-field-copy-feedback', '{item.copyFeedback}', 'p', { role: 'status', 'aria-live': 'polite', 'aria-atomic': true })]),
+        when('password-field-totp', 'item.totp', [privateInput('password-totp-code', 'totp-{item.id}', 'field.noop', { readOnly: true, 'aria-label': 'Current verification code', 'aria-live': 'off' })])
+      ], stack)]),
+      el('password-custom-field', 'div', '', {}, [label('password-custom-label', 'Custom field label', input('password-custom-name', 'custom-label', 'field.label', { value: '{passwords.customLabel}' })), label('password-custom-type-label', 'Custom field type', select('password-custom-type', 'custom-type', 'field.type', '{passwords.customType}', options('password-field-type', FIELD_TYPES))), button('password-custom-add', 'Add custom field', 'field.add', '{passwords.cannotAddField}')], row),
+      when('password-save-attachment-help-visible', 'passwords.newEntry', [text('password-save-attachment-help', 'Save this entry to add attachments.')]),
+      el('password-authenticator', 'section', '', {}, [text('password-authenticator-heading', 'Authenticator setup', 'h3'), text('password-authenticator-help', 'Import a TOTP setup QR code. Screen scanning asks you to choose the screen or tab to capture; images are processed on this device.'), button('password-qr-screen', 'Scan QR code on screen', 'qr.screen'), label('password-qr-upload-label', 'Upload QR code', input('password-qr-upload', 'qr-file', 'qr.file', { type: 'file', accept: 'image/png,image/jpeg,image/webp', 'aria-label': 'Upload QR code' }))], stack),
+      el('password-editor-actions', 'div', '', {}, [button('password-save', 'Save entry', 'entry.save', '{passwords.busy}', { 'data-tt-submit': 'true' }), when('password-delete-visible', 'passwords.savedEntry', [button('password-delete', 'Delete entry', 'entry.delete')])], { ...row, 'justify-content': 'space-between' }),
+      when('password-delete-confirmation-visible', 'passwords.deleteConfirm', [el('password-delete-confirmation', 'div', '', {}, [text('password-delete-question', 'Delete this entry and its saved secrets?'), el('password-delete-confirmation-actions', 'div', '', {}, [button('password-delete-confirm', 'Confirm delete', 'entry.confirm-delete'), button('password-delete-cancel', 'Keep entry', 'entry.keep')], row)], stack)])
+    ], { ...card, margin: '0' })])
+  ], { ...stack, 'grid-template-columns': 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', 'align-items': 'start' }),
+  when('password-transfer-visible', 'passwords.transferOpen', [el('password-transfer', 'dialog', '', { 'aria-labelledby': 'password-transfer-heading', 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation: 'password.close', open: '{passwords.transferOpen}' } }, [el('password-transfer-form', 'fieldset', '', {}, [
+    text('password-transfer-heading', '{passwords.transferTitle}', 'h2', { id: 'password-transfer-heading' }),
+    when('password-import-visible', 'passwords.importing', [el('password-import-panel', 'div', '', {}, [text('password-import-help', 'Choose a 1Password .1pux or CSV export, Chrome CSV, or Apple Passwords CSV. Preview before saving. Imported entries remain private.'), label('password-import-file-label', 'Import password file', input('password-import-file', 'import-file', 'transfer.file', { type: 'file', accept: '.csv,.1pux', 'aria-label': 'Import password file' })), when('password-import-preview-visible', 'passwords.importReady', [text('password-import-count', '{passwords.importSummary}', 'strong'), el('password-import-preview-list', 'div', '', {}, [repeat('password-import-entries', 'passwords.importEntries', [text('password-import-entry', '{item.title} · {item.type}')]), when('password-import-more-visible', 'passwords.importMore', [text('password-import-more', '{passwords.importMore}')])], { 'max-height': '180px', 'overflow-y': 'auto' }), repeat('password-import-warnings', 'passwords.importWarnings', [text('password-import-warning', '{item.message}')]), text('password-import-keep-source', 'Keep your source vault until you have checked the imported entries.')])], stack)]),
+    when('password-export-visible', 'passwords.exporting', [el('password-export-panel', 'div', '', {}, [label('password-export-format-label', 'Export format', select('password-export-format', 'format', 'transfer.format', '{passwords.format}', [el('password-format-1pux', 'option', '1Password 1PUX (all data and attachments)', { value: '1pux' }), el('password-format-1password', 'option', '1Password CSV', { value: '1password' }), el('password-format-chrome', 'option', 'Chrome CSV', { value: 'chrome' }), el('password-format-apple', 'option', 'Apple Passwords CSV', { value: 'apple' })])), text('password-export-warning', '1PUX includes custom fields, attachments, and preserved original archive data. Large CSV exports download as numbered files in a ZIP. Exports contain unencrypted passwords. CSV omits custom fields; Chrome CSV also omits authenticator secrets. CSV does not transfer passkeys. Thingtime 1PUX backups preserve passkey fields for restoring to Thingtime; other password managers may import them only as custom data. Use 1PUX to keep custom fields, and delete the export after transferring it.'), label('password-export-ack-label', 'I understand the downloaded file contains unencrypted secrets.', input('password-export-acknowledgement', 'acknowledged', 'transfer.acknowledge', { type: 'checkbox', checked: '{passwords.acknowledged}' }))], stack)]),
+    when('password-transfer-progress-visible', 'passwords.progress', [text('password-transfer-progress', '{passwords.progress}', 'p', { role: 'status' })]), when('password-transfer-error-visible', 'passwords.error', [text('password-transfer-error', '{passwords.error}', 'p', { role: 'alert' })]),
+    el('password-transfer-actions', 'div', '', {}, [button('password-transfer-cancel', 'Cancel', 'password.close', false), button('password-transfer-confirm', '{passwords.transferAction}', 'transfer.confirm', '{passwords.cannotTransfer}')], row)
+  ], { ...stack, border: '0', margin: '0', padding: '0' })], { ...card, width: 'min(600px, calc(100vw - 32px))', 'max-height': '85vh', overflow: 'auto', color: 'inherit' })])
+], { ...stack, 'max-width': '1100px', margin: '0 auto', padding: '24px 16px', 'box-sizing': 'border-box' })];
+
+export const passwordSignInBlocks: WebpageBlock[] = [el('password-sign-in', 'section', '', {}, [text('password-sign-in-heading', 'Passwords', 'h1'), text('password-sign-in-help', 'Sign in to unlock your password manager.'), el('password-sign-in-link', 'a', 'Sign in', { href: '/login' })], { ...stack, padding: '24px' })];

@@ -3,6 +3,33 @@ import { agentTestEnvironment } from '../../app/api/utils/agentTesting';
 
 const MONGO_PASSWORD_PLACEHOLDER = '<db_password>';
 
+// Read at most `max` bytes, cancelling the transfer rather than just refusing
+// to parse what already arrived. Throws past the cap: every caller treats a
+// failed manifest read as "incompatible".
+const readBoundedManifest = async (response: Response, max: number): Promise<string> => {
+  const declared = Number(response.headers.get('content-length'));
+  const body = response.body;
+  if (!body || (Number.isFinite(declared) && declared > max)) {
+    await body?.cancel().catch(() => {});
+    throw new Error('Manifest too large');
+  }
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > max) {
+      await reader.cancel().catch(() => {});
+      throw new Error('Manifest too large');
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+};
+
 const normaliseOrigin = (value?: string | null) => {
   const trimmed = value?.trim();
   if (!trimmed) return null;
@@ -168,6 +195,44 @@ export const proxyApiRequestToFallback = async (request: Request, options: { str
   // Direct callers cannot bypass the dispatcher's policy.
   if (!shouldProxyApiToFallback(request)) return unavailableLocalApiResponse();
   const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, expectedOrigin!);
+  {
+    // A bundled client and its selected server can be released independently.
+    // Negotiate the actual authority before forwarding credentials or bodies.
+    const requirements: Record<string, [string, string]> = {
+      '/api/v1/passwords': ['api.passwords', '1.3.0'],
+      '/api/v1/connections': ['api.connections', '2.0.0'],
+      '/api/v1/connections/providers': ['api.connections-providers', '2.0.0'],
+      '/api/v1/connections/feed': ['api.connections-feed', '2.0.0'],
+      '/api/v1/connections/oauth/begin': ['api.connections-oauth-begin', '2.0.0'],
+      '/api/v1/connections/oauth/callback': ['api.connections-oauth-callback', '2.0.0'],
+      '/api/v1/connections/request': ['api.connections-request', '2.0.0'],
+      '/api/v1/mail': ['api.mail', '1.2.0'],
+      '/api/v1/mail/sync': ['api.mail-sync', '1.0.0']
+    };
+    const required = requirements[requestUrl.pathname];
+    if (required) {
+      try {
+        const response = await fetch(new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, fallbackUrl.origin), {
+          headers: { Accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(10_000)
+        });
+        if (!response.ok) {
+          await response.body?.cancel().catch(() => {});
+          throw new Error('Manifest unavailable');
+        }
+        // Enforce the cap WHILE reading. `response.text()` buffers the whole
+        // body first, so checking its length afterwards bounds only the parse:
+        // this negotiation exists precisely because the selected server is not
+        // yet trusted, and it must not be able to stream us out of memory.
+        const manifest = JSON.parse(await readBoundedManifest(response, 512 * 1024));
+        if (manifest.schemaVersion !== 1 || manifest.origin !== fallbackUrl.origin ||
+            !capabilitySatisfies(manifest.features?.[required[0]]?.version, required[1])) throw new Error('Incompatible manifest');
+      } catch {
+        return Response.json({ ok: false, code: 'API_CAPABILITY_INCOMPATIBLE', error: `The selected desktop server must provide ${required[0]} ${required[1]} or a compatible version. Update or reconnect that server.` }, {
+          status: 503, headers: { 'Cache-Control': 'private, no-store' }
+        });
+      }
+    }
+  }
   const headers = cloneProxyRequestHeaders(request, fallbackUrl);
   if (options.stripForwardedOrigin) {
     headers.delete('x-forwarded-host');

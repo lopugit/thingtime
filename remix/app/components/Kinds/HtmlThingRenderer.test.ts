@@ -9,6 +9,14 @@ import { WebpageRuntimeProvider, useWebpageRuntime } from '../Builder/webpageRun
 import { ALLOWED_PROPS, HtmlThingRenderer, InteractiveWorkspace } from './HtmlThingRenderer.tsx';
 import { ChakraThingRenderer } from './ChakraThingRenderer';
 
+test('transient submit markers survive rendering without admitting native form destinations', () => {
+  assert.ok(ALLOWED_PROPS.has('data-tt-submit'));
+  assert.ok(ALLOWED_PROPS.has('data-tt-credential-form'));
+  assert.ok(ALLOWED_PROPS.has('data-tt-private-control'));
+  assert.ok(ALLOWED_PROPS.has('referrerPolicy'), 'authored account avatars retain their no-referrer policy');
+  for (const prop of ['action', 'formAction', 'formaction', 'method']) assert.equal(ALLOWED_PROPS.has(prop), false);
+});
+
 // The prop allowlist IS the trust boundary for component things: a component
 // crystal is untrusted data, and every name in this set is something its
 // author gets to hand the browser. These tests pin the decisions that are
@@ -37,6 +45,14 @@ test('event handlers and script sinks stay out of the allowlist', () => {
 	for (const prop of ['onClick', 'onclick', 'onError', 'dangerouslySetInnerHTML', 'srcDoc', 'srcdoc', 'formAction', 'xlinkHref']) {
 		assert.equal(ALLOWED_PROPS.has(prop), false, `${prop} must never render from untrusted markup`);
 	}
+});
+
+test('private text addresses reach the rendered DOM without widening data attribute or script permissions', () => {
+  const markup = renderToStaticMarkup(React.createElement(HtmlThingRenderer, { node: { tag: 'span', props: { 'data-tt-private-text': 'property-label-field-0', 'data-secret': 'must-be-stripped', onClick: 'unsafe()' } } }));
+  assert.match(markup, /data-tt-private-text="property-label-field-0"/);
+  assert.doesNotMatch(markup, /must-be-stripped|onclick|unsafe/);
+  assert.equal(ALLOWED_PROPS.has('data-tt-private-text'), true);
+  assert.equal(ALLOWED_PROPS.has('pattern'), false);
 });
 
 test('authored menu triggers stay inert in previews and sanitize custom content', () => {

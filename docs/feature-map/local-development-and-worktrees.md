@@ -133,3 +133,30 @@ return `503 LOCAL_API_NOT_CONFIGURED`; neither server selects production implici
 a macOS OS network sandbox, including direct-IP and redirect denial. Fixture
 requests accept only a literal loopback HTTP origin and same-origin uploads.
 Keep backend/browser network isolation and dedicated test credentials in place.
+
+## Gateway runtime and Mongo admission
+
+`app/api/utils/deployment/environmentGateway.ts` guards driver and cached-collection
+access; configured followers skip `server/plugins/mongo-warmup.ts`. Owner streams
+and detached work retain their admission during promotion, then drain pools and
+readiness caches. `mongodb/indexLifecycle.ts` coordinates the canonical index plan
+with a durable fingerprint and renewable lease; normal writes require readiness,
+while authenticated admin migrations use the scoped recovery path.
+`test:collections` covers lifecycle/admission/recovery; `test:environment-gateway`
+covers forwarding and ownership. The built acceptance runner creates isolated
+synthetic API identities under a verified OS network boundary. See
+[the gateway runbook](../environment-api-gateway.md).
+
+## Password AutoFill release tooling
+
+`electron/scripts/build-native-passwords.mjs --prepare-signing` exports a reviewed
+native Git closure and builds the canonical Xcode/local-package graph under
+network denial. `password-provider-release.mjs` owns private state, artifact and
+manual-profile/entitlement binding, bounded cleanup and the release contract;
+`sign-native-passwords.mjs` consumes an independently reviewed manifest digest
+and stages timestamped Developer ID signatures without installation or candidate
+execution. It reuses `verify-password-provider.mjs` with a sanitized command
+environment and explicit fixed bundle IDs; legacy callers retain their defaults.
+See README "Prepare and sign the standalone Password AutoFill companion" and
+TESTING.md's split companion checklist. Safe checks:
+`node --test electron/scripts/password-provider-release.test.mjs`.
