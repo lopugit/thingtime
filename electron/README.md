@@ -225,6 +225,23 @@ the renderer applies `html.thingtime-electron-desktop` and reserves the traffic
 light area before placing the drawer trigger and top nav content. The top nav is
 marked draggable, with inputs, links, and buttons marked non-draggable.
 
+The native **View** menu offers **Zoom In**, **Zoom Out** and **Actual Size**.
+With the desktop window focused, either Command or Control plus `=` / `+`,
+`-`, or `0` changes the whole interface or resets it to 100%, including while
+editing text. Plus/minus keypad keys work through their ordinary key values.
+Each step changes Chromium's zoom level by 0.5; its native range and
+origin-scoped zoom behavior apply, without a separate Thingtime preference.
+Alt/Option chords, composition, typing and unrelated editing shortcuts pass
+through. `electron/lib/window-zoom.cjs` consumes zoom input before renderer and
+menu dispatch so each press applies once. Run `pnpm --dir electron
+verify:window-zoom` for the real Electron keyboard/menu fixture; it opens a
+temporary local document with a disposable profile and uses no Thingtime API.
+The canonical runner uses a separate task process and fresh profile with
+normal networking and Chromium's standard sandbox enabled. It clears inherited
+Electron/Node switches, enforces a 30-second deadline and removes its profile
+and process group. The fixture uses synthetic local data and performs no
+sign-in or account writes. No network restrictions or exception flags apply.
+
 The drawer settings modal shows a **Thingtime desktop** section inside the
 desktop app. Endpoint profiles are stored locally in a versioned, atomic `0600`
 `desktop-settings.json` under Electron's app-data directory. Production,
