@@ -146,9 +146,15 @@ There is no DNS broker exemption, arbitrary forwarding, endpoint/IP allowlist,
 or resolver change. These fixed documented GitHub control-host probes establish
 only immediate public control HTTPS. They do not authenticate the runner's
 long-poll protocol or establish DNS-cache-expiry continuity. Trusted runner positive controls must reach
-the same IPv4 TCP/UDP addresses first. IPv6 positive-control availability is
-reported separately; absence of an IPv6 route is not transport-level proof of
-IPv6 enforcement. The explicit loaded IPv6 deny rule remains mandatory.
+the same TCP/UDP addresses first. Both IPv4 and IPv6 TCP positive controls and
+the UDP/DNS positive control are required before PF activation and revalidated
+from the saved evidence before the isolation gates can pass. An unavailable
+IPv6 route aborts rather than becoming denial evidence. Direct denial probes
+accept timeout-class socket failures only; route, refusal, permission and other
+socket errors fail closed. A timeout observation is not PF counter attribution:
+usable task-owned IPv6 fixtures, policy traversal and exact denial counters
+remain outstanding acceptance requirements. The explicit loaded IPv6 deny rule
+remains mandatory.
 Redirects and alternate DNS names do not grant an exception. A refused PF
 operation, failed required control, or child-sandbox failure stops compilation;
 there is no permissive fallback.

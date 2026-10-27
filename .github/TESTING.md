@@ -367,6 +367,13 @@ PYTHONDONTWRITEBYTECODE=1 python3 -I -S .github/scripts/native-compile-ci.test.p
 - [x] No probe capture pipes or nested unprivileged timeout are involved.
 - [x] Timeout regression signals only its own spawned fixture process group;
   tests do not invoke sudo, change identities or enumerate/kill a host UID.
+- [x] IPv4/IPv6 TCP and UDP/DNS baseline positives are required before policy
+  activation and revalidated before the gate can pass. Missing, malformed,
+  duplicate-family or false control evidence refuses admission.
+- [x] Synthetic unrouted IPv6 fails with the fixed `baseline-tcp6` diagnostic;
+  route/refusal/permission errors cannot become successful denial probes.
+  Only timeout-class failures pass the direct socket denial check; connected
+  transport fails. These observations do not prove PF counter attribution.
 - [ ] Establish supported exclusive task-UID/domain/service ownership and
   teardown/no-respawn proof before PF restoration; keep absence failures closed.
 - [ ] Establish usable task-owned IPv6 positive controls, actual policy traversal

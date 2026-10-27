@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Non-privileged trusted-controller admission tests; never load candidate code."""
 import importlib.util
+import errno
 import io
 import json
 import os
+import socket
 from pathlib import Path
 import subprocess
 import sys
@@ -73,6 +75,55 @@ class NativeCompileBoundaryTests(unittest.TestCase):
         self.assertTrue(all('user' not in r and 'proto' not in r for r in rules[4:]))
         for uid in [0,-1,'501\npass out all']:
             with self.assertRaises(ValueError):native.firewall_rules(uid)
+
+    def test_positive_controls_require_both_usable_families_and_udp(self):
+        valid={'runnerPositiveControls':[{'family':int(family),'positiveTcp':True}
+                   for family in [socket.AF_INET,socket.AF_INET6]],'positiveUdpDns':True}
+        native.require_positive_controls(valid)
+        invalid=[None,{},dict(valid,positiveUdpDns=False),dict(valid,positiveUdpDns=1),
+                 dict(valid,runnerPositiveControls=[]),dict(valid,runnerPositiveControls={})]
+        for rows in [[valid['runnerPositiveControls'][0]]*2,
+                     [{'family':int(socket.AF_INET),'positiveTcp':True},
+                      {'family':int(socket.AF_INET6),'positiveTcp':False,'errno':errno.ENETUNREACH}],
+                     [{'family':int(socket.AF_INET),'positiveTcp':True},
+                      {'family':str(int(socket.AF_INET6)),'positiveTcp':True}],
+                     [{'family':int(socket.AF_INET),'positiveTcp':True},
+                      {'family':int(socket.AF_INET6),'positiveTcp':1}]]:
+            invalid.append(dict(valid,runnerPositiveControls=rows))
+        for evidence in invalid:
+            with self.subTest(evidence=evidence),self.assertRaises(RuntimeError):
+                native.require_positive_controls(evidence)
+
+    def test_unrouted_ipv6_baseline_fails_with_fixed_diagnostic(self):
+        client=Mock();client.connect.side_effect=[None,OSError(errno.ENETUNREACH,'fixture')]
+        output,error=io.StringIO(),io.StringIO()
+        with patch('socket.socket',return_value=client),patch('sys.stdout',output),patch('sys.stderr',error):
+            with self.assertRaises(OSError):exec(native.BASELINE,{})
+        self.assertEqual(output.getvalue(),'')
+        diagnostic=native.preflight_failure(subprocess.CalledProcessError(1,[],stderr=error.getvalue()))
+        self.assertEqual(diagnostic['baseline'],{'stage':'baseline-tcp6','errorType':'OSError','errno':errno.ENETUNREACH})
+
+    def test_direct_denial_requires_timeout_not_route_or_refusal_errors(self):
+        for part in ['tcp4','tcp6','udp']:
+            for code in [errno.ENETUNREACH,errno.EHOSTUNREACH,errno.ECONNREFUSED,errno.EACCES]:
+                client=Mock();client.connect.side_effect=OSError(code,'fixture')
+                client.recvfrom.side_effect=OSError(code,'fixture')
+                with self.subTest(part=part,code=code),patch('socket.socket',return_value=client),\
+                        patch.object(sys,'argv',['probe','5500',part]),patch.object(native.os,'geteuid',return_value=5500):
+                    with self.assertRaises(RuntimeError):exec(native.PROBE,{})
+
+    def test_direct_denial_records_timeout_and_rejects_connected_transport(self):
+        for part in ['tcp4','tcp6','udp']:
+            for error in [socket.timeout(),TimeoutError(),OSError(errno.ETIMEDOUT,'fixture')]:
+                client=Mock();client.connect.side_effect=error;client.recvfrom.side_effect=error
+                output=io.StringIO()
+                with self.subTest(part=part,error=type(error).__name__),patch('socket.socket',return_value=client),\
+                        patch.object(sys,'argv',['probe','5500',part]),patch.object(native.os,'geteuid',return_value=5500),\
+                        patch('sys.stdout',output):exec(native.PROBE,{})
+                self.assertEqual(json.loads(output.getvalue()),{'uid':5500,'subprobe':part,'passed':True})
+            with patch('socket.socket',return_value=Mock()),patch.object(sys,'argv',['probe','5500',part]),\
+                    patch.object(native.os,'geteuid',return_value=5500),self.assertRaises(AssertionError):
+                exec(native.PROBE,{})
 
     def make_archive(self,root,extras=()):
         archive=root/'candidate.tar.gz'
@@ -171,10 +222,13 @@ class NativeCompileBoundaryTests(unittest.TestCase):
     def test_failed_hostname_probe_fails_positive_gate_without_network_access(self):
         with patch('socket.create_connection',side_effect=OSError),patch.object(sys,'argv',['probe','allow']):
             with self.assertRaises(RuntimeError):exec(native.CONTROL_PROBE,{})
-        output=io.StringIO()
-        with patch('socket.create_connection',side_effect=OSError),patch.object(sys,'argv',['probe','deny']),patch('sys.stdout',output):
-            exec(native.CONTROL_PROBE,{})
-        self.assertTrue(json.loads(output.getvalue())['rootControlDenied'])
+        with patch('socket.create_connection',side_effect=OSError),patch.object(sys,'argv',['probe','deny']):
+            with self.assertRaises(RuntimeError):exec(native.CONTROL_PROBE,{})
+        for error in [socket.timeout(),TimeoutError()]:
+            output=io.StringIO()
+            with patch('socket.create_connection',side_effect=error),patch.object(sys,'argv',['probe','deny']),patch('sys.stdout',output):
+                exec(native.CONTROL_PROBE,{})
+            self.assertTrue(json.loads(output.getvalue())['rootControlDenied'])
 
     def test_owned_probe_group_must_be_gone_before_restore(self):
         calls=[]

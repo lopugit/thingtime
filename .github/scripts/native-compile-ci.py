@@ -11,6 +11,7 @@ import re
 import select
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tarfile
@@ -332,7 +333,7 @@ def trusted_failure(label,error,returncode=None):
 def preflight_failure(error,label='runner-baseline'):
     failure=trusted_failure(label,error)
     accepted={'native-identity ':('identity',{'identity-admission','groups-clear','gid-set','uid-set','credential-verify','identity-exec'}),
-              'native-baseline ':('baseline',{'baseline-tcp4','baseline-udp-dns'})}
+              'native-baseline ':('baseline',{'baseline-tcp4','baseline-tcp6','baseline-udp-dns'})}
     stderr=getattr(error,'stderr',None) or ''
     if isinstance(stderr,bytes):stderr=stderr.decode('utf-8',errors='replace')
     if not isinstance(stderr,str):stderr=''
@@ -348,6 +349,23 @@ def preflight_failure(error,label='runner-baseline'):
                 all(type(record[k]) is int for k in set(record)&{'errno','exitCode'})):
                 failure[field]=record
     return failure
+
+
+def require_positive_controls(evidence):
+    """No unavailable address family can become successful denial evidence."""
+    if not isinstance(evidence,dict) or evidence.get('positiveUdpDns') is not True:
+        raise RuntimeError('Trusted positive UDP/DNS control unavailable')
+    controls=evidence.get('runnerPositiveControls')
+    if not isinstance(controls,list) or len(controls)!=2:
+        raise RuntimeError('Trusted positive TCP controls incomplete')
+    families=[]
+    for control in controls:
+        if (not isinstance(control,dict) or type(control.get('family')) is not int or
+                control.get('positiveTcp') is not True):
+            raise RuntimeError('Trusted positive TCP control unavailable')
+        families.append(control['family'])
+    if set(families)!={int(socket.AF_INET),int(socket.AF_INET6)}:
+        raise RuntimeError('Trusted positive controls require both address families')
 
 
 def drop_identity(uid,gid,args):
@@ -578,9 +596,7 @@ for family,host in [(socket.AF_INET,'1.1.1.1'),(socket.AF_INET6,'2606:4700:4700:
     s=socket.socket(family,socket.SOCK_STREAM);s.settimeout(5)
     try: s.connect((host,443)); results.append({'family':family,'positiveTcp':True})
     except OSError as e:
-        if family == socket.AF_INET:
-            failure('baseline-tcp4',e);raise
-        results.append({'family':family,'positiveTcp':False,'errno':e.errno})
+        failure('baseline-tcp4' if family == socket.AF_INET else 'baseline-tcp6',e);raise
     finally: s.close()
 s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.settimeout(5)
 try:
@@ -609,7 +625,9 @@ elif part in ('tcp4','tcp6','udp'):
             s.sendto(q,(host,53));s.recvfrom(4096)
         else:s.connect((host,443))
         raise AssertionError('Outbound subprobe escaped PF')
-    except OSError:pass
+    except (socket.timeout,TimeoutError):pass
+    except OSError:
+        raise RuntimeError('Outbound denial probe failed without timeout evidence') from None
     finally:s.close()
 else:raise ValueError('Unknown trusted subprobe')
 print(json.dumps({'uid':os.geteuid(),'subprobe':part,'passed':True}),flush=True)
@@ -631,7 +649,7 @@ try:
         raise AssertionError('Root/broker UID escaped PF')
     print(json.dumps({'hostname':'api.github.com','tlsVerified':True,'https':200}))
 except (OSError,ssl.SSLError) as error:
-    if expected:
+    if expected or not isinstance(error,(socket.timeout,TimeoutError)):
         raise RuntimeError('Fixed control hostname/TLS preflight failed') from None
     print(json.dumps({'rootControlDenied':True}))
 '''
@@ -747,6 +765,7 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
         phase(report,'runner-baseline-started')
         try:
             baseline=as_runner([PYTHON,'-I','-S',str(work/'baseline.py')],capture_output=True,timeout=25)
+            require_positive_controls(json.loads(baseline.stdout))
         except BaseException as error:
             failure=preflight_failure(error)
             (report/'trusted-failure.json').write_text(json.dumps(failure)+'\n')
@@ -800,6 +819,7 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
         for broker_uid in sorted({row['uid'] for row in daemons if row['executable']=='mDNSResponder'}-{0}):
             subprobes('broker',broker_uid,lambda command,**kwargs:as_uid(broker_uid,broker_uid,command,
                        ['/usr/bin/env','-i',f'PATH={PATH}'],**kwargs))
+        require_positive_controls(json.loads((report/'positive-controls.json').read_text()))
         phase(report,'all-control-and-isolation-gates-passed')
         if mode == 'preflight':
             phase(report,'inert-watchdog-cleanup-requested')

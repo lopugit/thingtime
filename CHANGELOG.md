@@ -1,5 +1,16 @@
 # Control-plane changelog
 
+## 2026-10-27 — Refuse unavailable native network controls
+
+- Require usable IPv4/IPv6 TCP and UDP/DNS positive controls before policy
+  activation and gate completion. Reject no-route/refusal/permission failures
+  as denial evidence; retain only timeout-class denial observations.
+- 49 selected safe regressions pass with live signaling/forking guarded;
+  three existing live-process fixtures were excluded from this bounded audit.
+  Launchd ownership, task-owned IPv6 fixtures/counters, immutable admission,
+  hosted execution and native acceptance remain incomplete. See
+  [the repair note](PRs/codex-oauth-native-authority-lifecycle.md).
+
 ## 2026-10-27 — Bound the negative native authority command
 
 - Let the trusted root supervisor register, time out, kill and reap the fixed

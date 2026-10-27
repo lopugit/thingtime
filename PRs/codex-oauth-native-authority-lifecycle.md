@@ -26,5 +26,28 @@ fixture and policy traversal/counter proof. Do not remove those gates, broadly
 kill user services, relax network denial or dispatch this feature branch. A
 separate reviewed H1/H2 admission must follow any complete future repair.
 
+## Refuse false network-denial evidence
+
+A synthetic source audit reproduced an unavailable IPv6 baseline followed by
+a successful denial result for the same `ENETUNREACH` failure. The baseline
+now requires usable IPv4 and IPv6 TCP plus UDP/DNS controls before policy
+activation; the supervisor revalidates the saved evidence before declaring
+the isolation gates passed. Missing, malformed, false and duplicate-family
+records fail closed. IPv6 baseline failures retain only the fixed
+`baseline-tcp6` stage/error/errno diagnostic.
+
+Direct socket denial and negative hostname probes now accept timeout-class
+failures only. Route, refused connection, permission and other socket failures
+cannot become successful denial evidence. A timeout by itself does not prove
+PF traversal or counter attribution; those requirements remain open alongside
+exclusive launchd ownership and teardown/no-respawn proof.
+
+49 selected safe tests passed, including four new network-evidence regressions.
+The audit guarded live `kill`, `killpg` and `fork` operations and excluded the
+three existing live-process fixtures that need them. No real network, sudo,
+account mutation, PF, candidate, credential, hosted or native operation ran.
+Admission, pins and workflows are unchanged; this remains a partial inactive
+source correction, with no hosted or native acceptance claimed.
+
 See [the regression checklist](../.github/TESTING.md) and
 [the native control-plane contract](../.github/NATIVE_COMPILE.md).
