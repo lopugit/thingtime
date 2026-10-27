@@ -411,3 +411,41 @@ test('a frozen page retry recovers before a newer edit waits for its unavailable
   assert.ok((await sync.status()).every(row => row.state === 'synced'));
  } finally { await f.db.close(); }
 });
+
+test('comment target touches require a refreshed parent delete basis and never swallow concurrent edits', async () => {
+ for (const mode of ['stale-target-touch', 'refreshed-target-touch', 'concurrent-parent-edit']) {
+  const f = setup();
+  try {
+   const parent = await f.sync.things.savePost({ thingtime: ['post'], crystal: { type: 'text', text: 'Keep version checks' } });
+   await f.sync.sync(f.transport);
+   const beforeTouch = structuredClone(f.remote.get(parent.id)!);
+   // Canonical createThing serializes target-attached creates by touching
+   // parent.updatedAt, even though its content is unchanged. Comment DELETE
+   // does not undo that touch or return a replacement parent version receipt.
+   const touched = { ...beforeTouch, updatedAt: new Date(Date.parse(beforeTouch.updatedAt) + 1000).toISOString() };
+   f.remote.set(parent.id, touched);
+   const child: AccountThing = { ...touched, id: 'target-touch-child', thingtime: ['post', 'comment'], targetId: parent.id, crystal: { type: 'text', text: 'Child' }, acl: ['tt:inherit'] };
+   f.remote.set(child.id, child); await f.sync.remember(child);
+   if (mode !== 'stale-target-touch') await f.sync.remember(touched);
+   if (mode === 'concurrent-parent-edit') f.remote.set(parent.id, { ...touched, crystal: { ...touched.crystal, text: 'Real concurrent edit' }, updatedAt: new Date(Date.parse(touched.updatedAt) + 1000).toISOString() });
+   await f.sync.remove([parent.id]);
+   const deletes: any[] = [];
+   const transport: AccountSyncTransport = { ...f.transport, remove: async operation => {
+    deletes.push(structuredClone(operation)); const current = f.remote.get(operation.id);
+    if (!current) throw { status: 404 };
+    if (current.updatedAt !== operation.body.expectedUpdatedAt) throw { status: 409 };
+    f.remote.delete(operation.id);
+   } };
+   await f.sync.sync(transport);
+   assert.deepEqual(deletes.map(row => row.id), [child.id, parent.id], mode);
+   assert.equal(f.remote.has(child.id), false, mode);
+   const expected = mode === 'stale-target-touch' ? beforeTouch.updatedAt : touched.updatedAt;
+   assert.equal(deletes[1].body.expectedUpdatedAt, expected, 'parent request preserves the retained basis');
+   const state = (await f.sync.status()).find(row => row.id === parent.id)!;
+   assert.equal(state.state, mode === 'refreshed-target-touch' ? 'synced' : 'conflict', mode);
+   assert.equal(f.remote.has(parent.id), mode !== 'refreshed-target-touch', mode);
+   if (mode === 'concurrent-parent-edit') assert.equal(f.remote.get(parent.id)!.crystal.text, 'Real concurrent edit');
+   await f.sync.sync(transport); assert.equal(deletes.length, 2, 'a conflict cannot silently rebase or retry deletion');
+  } finally { await f.db.close(); }
+ }
+});

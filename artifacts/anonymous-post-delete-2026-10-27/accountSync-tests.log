@@ -1,0 +1,34 @@
+✔ deleting an owned root clears retained descendants and shared references in the same transaction (25.181959ms)
+✔ account creates and updates commit locally first and sync canonical content (12.816833ms)
+✔ lost responses replay one immutable identity after database reopen (5.453125ms)
+✔ typing during sync retains newer edits and advances from the acknowledged server version (7.242916ms)
+✔ two tabs claim a write once and an invalidated identity cannot acknowledge it (5.855708ms)
+✔ remote conflicts preserve edits and cannot retry as an overwrite (12.340791ms)
+✔ anonymous and foreign content cannot sync; parents sync before children (5.037958ms)
+✔ sync acknowledgements preserve the editor token and remote clocks do not hide new versions (11.529625ms)
+✔ local tag normalization matches canonical server writes, including lost-response readback (2.933375ms)
+✔ conflict review fences both versions and keep-local uses the reviewed server version (11.777292ms)
+✔ keep-remote is an explicit local replacement and invalidates old editor tokens (11.2645ms)
+✔ a definitive validation refusal can be corrected, while ambiguous outcomes retain their frozen request (6.505708ms)
+✔ an orphaned queue entry is quarantined instead of stalling every other pending write (4.739375ms)
+✔ account moves commit placement and sync intent atomically, survive reopen and wait for new destinations (25.07275ms)
+✔ account batch move rolls back content and queue together on cycles or missing sync bases (9.871709ms)
+✔ a move during an ambiguous write preserves the frozen retry and syncs the later placement afterward (12.878709ms)
+✔ a remote edit conflicts with an offline move and reviewed keep-local preserves both local content and destination (10.138542ms)
+✔ schema-based data waits for its copied definition after a failed schema sync (6.760708ms)
+✔ catalogue batches retain canonical owned content atomically without replacing pending edits or deletions (9.056291ms)
+✔ account post and reply submissions commit locally, preserve replay identity and sync parents first (14.182625ms)
+✔ retained foreign discussions allow local reply storage but never grant server write permission (3.649292ms)
+✔ read refusal retires synced owned projections and fences older reads without discarding pending authorship (3.95075ms)
+✔ a post waits for linked device Things before attempting its account create (6.011333ms)
+✔ saved pages wait for acknowledged nested Components while unrelated account writes drain (13.669291ms)
+✔ a frozen page retry recovers before a newer edit waits for its unavailable Component (11.639ms)
+✔ comment target touches require a refreshed parent delete basis and never swallow concurrent edits (26.17775ms)
+ℹ tests 26
+ℹ suites 0
+ℹ pass 26
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 882.622208

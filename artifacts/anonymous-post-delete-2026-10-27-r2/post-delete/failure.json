@@ -1,0 +1,9 @@
+{
+  "phase": "anonymous",
+  "error": "TimeoutError: locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n  - waiting for locator('[data-thing-id]').filter({ hasText: 'Anonymous post and media deleted on device.' }).first() to be visible\n",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\nTHINGTIME · POST 📌\nPost 📌\nL\nLocal workspace\n@local · \njust now\n🔒\nonly the author can see this post\n\nAnonymous post and media deleted on device.\n\n0\nPost as\nLocal workspace\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "checks": [],
+  "bounds": [],
+  "mutations": [],
+  "errors": []
+}

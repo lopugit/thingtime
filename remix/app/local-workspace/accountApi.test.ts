@@ -1,7 +1,7 @@
 import { WorkspaceError } from './storage';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { IDBFactory } from 'fake-indexeddb';
+import { IDBFactory, IDBKeyRange } from 'fake-indexeddb';
 import { accountApi, accountWorkspaceWorker, resolveAccountWebpage } from './accountApi.client';
 import { bindLocalWorkspace, workspaceDatabase } from './runtime.client';
 import { rootIdentity } from '../utils/rootIdentity';
@@ -9,10 +9,10 @@ import { AccountTimeline } from './accountTimeline';
 import type { AccountThing } from './accountSync';
 
 test('account local facade and native page resolution work offline without uploading anonymous content', async () => {
- const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB, oldFetch = globalThis.fetch;
+ const oldWindow = globalThis.window, oldFactory = globalThis.indexedDB, oldFetch = globalThis.fetch, oldKeyRange = globalThis.IDBKeyRange;
  const oldNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
  const target = new EventTarget(), scope = { kind: 'account', origin: 'https://thingtime.example', ownerId: 'owner', dataPlane: 'home' } as const;
- Object.assign(globalThis, { window: { location: { origin: scope.origin }, addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target), dispatchEvent: target.dispatchEvent.bind(target) }, indexedDB: new IDBFactory(), fetch: async () => { throw new Error('Unexpected network'); } });
+ Object.assign(globalThis, { window: { location: { origin: scope.origin }, addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target), dispatchEvent: target.dispatchEvent.bind(target) }, indexedDB: new IDBFactory(), IDBKeyRange, fetch: async () => { throw new Error('Unexpected network'); } });
  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false } });
  let remoteCalls = 0; const remote = async (..._args: any[]) => { remoteCalls++; return { ok: true }; };
  try {
@@ -177,7 +177,7 @@ test('account local facade and native page resolution work offline without uploa
   assert.equal(anonymous.length, 0);
  } finally {
   rootIdentity.changed(); await workspaceDatabase().close();
-  Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory, fetch: oldFetch });
+  Object.assign(globalThis, { window: oldWindow, indexedDB: oldFactory, IDBKeyRange: oldKeyRange, fetch: oldFetch });
   if (oldNavigator) Object.defineProperty(globalThis, 'navigator', oldNavigator); else Reflect.deleteProperty(globalThis, 'navigator');
  }
 });
@@ -504,6 +504,60 @@ test('component catalogue resolves retired suite IDs locally and remotely within
   }
  } finally {
   rootIdentity.changed(); await workspaceDatabase().close(); Object.assign(globalThis, { window: saved.window, indexedDB: saved.indexedDB });
+  if (saved.navigator) Object.defineProperty(globalThis, 'navigator', saved.navigator); else Reflect.deleteProperty(globalThis, 'navigator');
+ }
+});
+
+test('stale online projections hide deleted parents and comments and reject retired account replies', async () => {
+ const saved = { window: globalThis.window, indexedDB: globalThis.indexedDB, fetch: globalThis.fetch, keyRange: globalThis.IDBKeyRange, navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator') };
+ const target = new EventTarget(), scope = { kind: 'account', origin: 'https://thingtime.example', ownerId: 'deleted-projection-owner', dataPlane: 'home' } as const;
+ Object.assign(globalThis, { window: { location: { origin: scope.origin }, addEventListener: target.addEventListener.bind(target), removeEventListener: target.removeEventListener.bind(target), dispatchEvent: target.dispatchEvent.bind(target) }, indexedDB: new IDBFactory(), IDBKeyRange, fetch: async () => { throw Error('No HTTP expected'); } });
+ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: false } });
+ try {
+  bindLocalWorkspace(false, rootIdentity.read().generation, scope); rootIdentity.confirm(rootIdentity.read().generation);
+  const worker = accountWorkspaceWorker(scope), at = '2026-10-27T00:00:00.000Z';
+  const content = (id: string, targetId: string | null = null): any => ({ id, thingtime: [targetId ? 'comment' : 'post'], crystal: { type: 'text', text: id }, author: { id: scope.ownerId }, targetId, acl: ['tt:user'], visibility: 'private', createdAt: at, updatedAt: at });
+  const parent = content('deleted-parent'), child = content('deleted-child', parent.id);
+  await worker.sync.rememberMany([parent, child]);
+  const projection = (row: any): any => ({ ...row, type: 'text', text: row.id, attachments: [], comments: [], viewerReactions: [], reactionCounts: {} });
+  const staleParent = { ...projection(parent), comments: [projection(child)] }, unrelated = { ...projection(content('unrelated')), comments: [projection(child)], shareOf: staleParent };
+  const result = () => structuredClone({ ok: true, posts: [staleParent, projection(child), unrelated] });
+  await worker.posts.remember(result().posts); await worker.sync.remove([parent.id]);
+  const refused = Object.assign(Error('Transient delete failure'), { status: 503 });
+  await worker.sync.sync({ remove: async () => { throw refused; }, get: async () => { throw refused; }, write: async () => { throw Error('No write expected'); } });
+  assert.ok((await worker.sync.status()).some(row => row.deleted && row.state === 'pending'));
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { onLine: true } });
+  let release: ((value: any) => void) | undefined;
+  const remote: any = { things: { feed: async () => result(), trending: async () => result(), get: async () => ({ ...result(), post: staleParent, thing: parent }), list: async () => ({ ok: true, comments: [projection(child), projection(content('unrelated-child', 'other-parent'))], things: [parent, child, content('unrelated-thing')] }) } };
+  const api: any = accountApi(remote, { id: scope.ownerId }, 'home');
+  for (const read of [() => api.things.feed(), () => api.things.trending()]) {
+   const response = await read(); assert.deepEqual(response.posts.map((row: any) => row.id), ['unrelated']);
+   assert.deepEqual(response.posts[0].comments, []); assert.equal(response.posts[0].shareOf, null);
+  }
+  const detail = await api.things.get({ id: parent.id, key: 'test-link' }); assert.equal(detail.post, null); assert.equal(detail.thing, null);
+  await assert.rejects(api.things.list({ target: parent.id, thingtime: 'comment', commentProjection: true }), { code: 'NOT_FOUND' });
+  const comments = await api.things.list({ target: 'other-parent', thingtime: 'comment', commentProjection: true });
+  assert.deepEqual(comments.comments.map((row: any) => row.id), ['unrelated-child']);
+  const generic = await api.things.list({ target: 'other-parent', thingtime: 'post', key: 'test-link' });
+  assert.deepEqual(generic.things, [content('unrelated-thing')], 'generic list filters tombstones without changing ordinary Thing shapes');
+  const rawDuplicate = content('duplicate-parent');
+  const expandedDuplicate = { ...projection(rawDuplicate), comments: [projection(child)] };
+  remote.things.list = async () => ({ ok: true, posts: [expandedDuplicate], things: [rawDuplicate] });
+  const duplicateApi: any = accountApi(remote, { id: scope.ownerId }, 'home');
+  const duplicates = await duplicateApi.things.list({ target: 'other-parent', key: 'test-link' });
+  assert.deepEqual(duplicates.posts[0].comments, [], 'a shallow same-ID Thing must not hide descendants of its expanded projection from tombstone masking');
+  assert.deepEqual(duplicates.things, [rawDuplicate], 'duplicate traversal preserves the raw Thing shape');
+  remote.things.trending = () => new Promise(resolve => { release = resolve; });
+  const retiring: any = accountApi(remote, { id: scope.ownerId }, 'home');
+  const late = retiring.things.trending(); await Promise.resolve();
+  let releaseEmpty!: (value: any) => void;
+  remote.things.trending = () => new Promise(resolve => { releaseEmpty = resolve; });
+  const retiringEmpty: any = accountApi(remote, { id: scope.ownerId }, 'home');
+  const lateEmpty = retiringEmpty.things.trending(); await Promise.resolve();
+  rootIdentity.changed(); release!(result()); releaseEmpty({ ok: true, posts: [] });
+  await Promise.all([assert.rejects(late, { code: 'WORKSPACE_CHANGED' }), assert.rejects(lateEmpty, { code: 'WORKSPACE_CHANGED' })]);
+ } finally {
+  rootIdentity.changed(); await workspaceDatabase().close(); Object.assign(globalThis, { window: saved.window, indexedDB: saved.indexedDB, IDBKeyRange: saved.keyRange, fetch: saved.fetch });
   if (saved.navigator) Object.defineProperty(globalThis, 'navigator', saved.navigator); else Reflect.deleteProperty(globalThis, 'navigator');
  }
 });

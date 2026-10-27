@@ -1,3 +1,4 @@
+import { pruneAccountConversation } from './accountReadRevocation';
 import { themeVersionWriter } from './themeVersions';
 import { algorithmVersionWriter } from './algorithmVersions';
 import { createAccountAlgorithmWorker } from './accountAlgorithmWorker.client';
@@ -342,6 +343,28 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		const row = await service.sync.things.savePost(input, update); changed();
 		return { ok: true, id: row.id, thing: project(await service.sync.view(row.id)), post: await ownedPost(row.id, true), savedLocally: true };
 	};
+	// Remote projections can lag a locally committed deletion (including a lost
+	// DELETE reply). Recheck the scoped intent after every asynchronous read,
+	// rather than letting a fresh server response resurrect authored content.
+	const maskDeletedConversations = async (result: any) => {
+		facadeLease.assertCurrent();
+		const visited = new WeakSet<object>(), ids = new Set<string>(), pending = [result.thing, result.post, result.parent, result.root, result.discussion, ...(result.posts || []), ...(result.comments || []), ...(result.things || [])];
+		while (pending.length) {
+			const row = pending.pop(); if (!row || typeof row !== 'object' || typeof row.id !== 'string' || visited.has(row)) continue;
+			// Different projections of one Thing can carry different descendants.
+			visited.add(row); ids.add(row.id); pending.push(...(row.comments || []), row.shareOf, ...(row.linkedThings || []).map((link: any) => link.thing || link));
+		}
+		if (!ids.size) return result;
+		const { deleted } = await worker().sync.viewSnapshot([...ids]);
+		facadeLease.assertCurrent();
+		const hidden = (id: string) => deleted.has(id);
+		const project = (row: any) => !row || hidden(row.id) ? null : pruneAccountConversation(row, hidden);
+		for (const key of ['post', 'parent', 'root', 'discussion']) if (result[key]) result[key] = project(result[key]);
+		if (result.thing && hidden(result.thing.id)) result.thing = null;
+		if (Array.isArray(result.things)) result.things = result.things.filter((row: any) => !hidden(row.id));
+		for (const key of ['posts', 'comments']) if (Array.isArray(result[key])) result[key] = result[key].map(project).filter(Boolean);
+		return result;
+	};
 	const discussionOffline = () => navigator.onLine === false || !canSyncAccountWorkspace(scope);
 	const discussionRefusal = async (id: string, error: any) => {
 		if ([401,403,404,410].includes(Number(error?.status))) {
@@ -360,7 +383,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 					try { await service.discussions.remember({ ...post, targetId: result.thing?.targetId || post.targetId }, startedAt); }
 					catch { facadeLease.assertCurrent(); result.localCacheError = 'This discussion could not be retained. Retry online before going offline.'; }
 				}
-				await retainInteractionProjection(post, startedAt); return result;
+				await retainInteractionProjection(post, startedAt); return maskDeletedConversations(result);
 			} catch (error) { facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); await discussionRefusal(target, error); failure = error; }
 		}
 		const post = await ownedPost(target) || await service.discussions.get(target) || local?.post;
@@ -381,14 +404,15 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				if (!result?.ok) throw new WorkspaceError('DISCUSSION_READ_FAILED', result?.error || 'Could not read comments.', result?.status || 503);
 				try { await service.discussions.rememberPage(target, result.comments, startedAt); }
 				catch { facadeLease.assertCurrent(); result.localCacheError = 'These comments could not be retained. Retry online before going offline.'; }
-				if (authored.some(row => row!.syncState !== 'synced')) return service.discussions.comments(target, { limit: args.limit }, !!local, authored as any);
-				return result;
+				if (authored.some(row => row!.syncState !== 'synced')) return maskDeletedConversations(await service.discussions.comments(target, { limit: args.limit }, !!local, authored as any));
+				return maskDeletedConversations(result);
 			} catch (error) { facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); await discussionRefusal(target, error); if (args.cursor) throw error; }
 		}
 		const result = await service.discussions.comments(target, { cursor: args.cursor, limit: args.limit }, !!local, authored as any);
 		facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); return result;
 	};
 	const retainPosts = async (result: any, startedAt: number) => {
+		facadeLease.assertCurrent();
 		if (result.post && result.thing?.id === result.post.id && typeof result.thing.targetId === 'string') result.post = { ...result.post, targetId: result.thing.targetId };
 		const rows = [result.post, result.parent, result.root, ...(Array.isArray(result.posts) ? result.posts : [])].filter(Boolean);
 		if (!rows.length) return result;
@@ -409,7 +433,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		const states = new Map((await worker().interactions.states()).map(state => [state.id, state]));
 		for (const key of ['post', 'parent', 'root']) if (result[key]) result[key] = overlayAccountPost(result[key], states);
 		if (Array.isArray(result.posts)) result.posts = result.posts.map((post: any) => overlayAccountPost(post as any, states));
-		return result;
+		return maskDeletedConversations(result);
 	};
 	const refresh = async (args: Record<string, unknown>, signal?: AbortSignal, retainPage?: (page: { ids: string[]; nextCursor: string | null }) => Promise<void>) => {
 		const { sync, files, transport, lease } = worker();
@@ -801,7 +825,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
    const result = await retainPosts(response, startedAt);
    try { await service.algorithms.algorithms.observePosts(result.posts || []); }
    catch (error) { facadeLease.assertCurrent(); result.localTrainingError = error instanceof Error ? error.message : 'Device training storage is unavailable.'; }
-   return id ? { ...result, posts: await service.algorithms.algorithms.rankPage(id, result.posts || []), ranked: true, localRanking: true } : result;
+   return maskDeletedConversations(id ? { ...result, posts: await service.algorithms.algorithms.rankPage(id, result.posts || []), ranked: true, localRanking: true } : result);
   },
 		trending: async (...args: any[]) => { const startedAt = Date.now(); return retainPosts(await online.things.trending(...args), startedAt); },
 		saved: async (args: {cursor?:string;limit?:number} = {}) => {
@@ -825,7 +849,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 				const pending = new Set((await service.interactions.status()).filter(row=>row.state!=='synced').map(row=>row.id));
 				result.posts = [...local.posts.filter(post=>pending.has(post.id)&&!result.posts.some((row:any)=>row.id===post.id)),...result.posts];
 			}
-			return result;
+			return maskDeletedConversations(result);
 		},
 		fork: async (input: { id: string; key?: string }) => {
 			facadeLease.assertCurrent();
@@ -1042,7 +1066,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 			if (scope.dataPlane === 'home' && args?.commentProjection === true && !args.key && Object.entries(args).every(([key,value]) => value === undefined || ['id','key','commentProjection'].includes(key))) return readDiscussion(args, options);
 			if (Object.entries(args || {}).some(([key, value]) => value !== undefined && key !== 'id')) {
 				const startedAt = Date.now();
-				const result = await online.things.get(args, options); await retainInteractionProjection(result.discussion || result.post, startedAt); return result;
+				const result = await online.things.get(args, options); await retainInteractionProjection(result.discussion || result.post, startedAt); return maskDeletedConversations(result);
 			}
 			const service = worker(), { sync } = service;
 			const localFile = typeof args?.id === 'string' && args.id.startsWith('local-file-');
@@ -1086,7 +1110,7 @@ export function accountApi<T extends Record<string, any>>(remote: T, owner: Owne
 		list: async (args: any = {}, options?: { signal?: AbortSignal }) => {
 			facadeLease.assertCurrent();
 			if (scope.dataPlane === 'home' && args?.commentProjection === true && args.thingtime === 'comment' && !args.key && Object.entries(args).every(([key,value]) => value === undefined || ['target','thingtime','key','commentProjection','cursor','limit'].includes(key))) return readDiscussionComments(args, options);
-			if (Object.keys(args).some(key => !['thingtime', 'folder', 'cursor', 'limit', 'device'].includes(key))) return online.things.list(args, options);
+			if (Object.keys(args).some(key => !['thingtime', 'folder', 'cursor', 'limit', 'device'].includes(key))) return maskDeletedConversations(await online.things.list(args, options));
 			const { db, lease, sync } = worker();
 			// A cold offline route may never have fetched this exact server page.
 			// List the known local library with its own cursor and explicit partial

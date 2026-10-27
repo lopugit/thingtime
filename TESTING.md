@@ -15847,3 +15847,15 @@ unit tests. Offline copies cannot discover an unobserved server ACL/content chan
 - Change the vault or canonical owner/origin/data-plane/delegation: the first committed frame contains no old titles/messages; late successes and failures cannot repopulate it. Equivalent scope props preserve the edited child form.
 - Run `npm --prefix remix run test:passwords` for reader regressions. Build the opt-in actual-component browser fixture with `node remix/scripts/build-password-queue-status-fixture.cjs`; run in the task-owned sandbox with its documented environment.
 - [Current normal API + component fault acceptance](artifacts/anonymous-vault-status-2026-10-27/README.md): full 1440/390/320px scroll, retry, preserved values, zero component network requests, canonical account readback and released runtime. Broader provider/device boundaries remain separate.
+
+### Native post deletion and closed quote overflow — PR 1000
+
+- [x] Delete through the ordinary PostCard menu anonymously while offline; cold reload, verify exact post/comment/media-record/byte removal and no HTTP mutations.
+- [x] Delete a retained account post offline, reload, then hold DELETE before server execution. Require the actual Feed response to contain its ID while the rendered Feed hides it and shows an unrelated post. Lose the reply, resume normal synchronization and verify canonical parent/comment 404s and settled tombstones.
+- [x] Delete a never-sent account post with media; cancel local create/file work without issuing a server create.
+- [x] Complete the final-package quote open/focus/Escape/reopen/outside-close checks at 1440/390/320px for saved and pending-media posts. Measure inner action/card/hidden-ancestor clientWidth, scrollWidth and scrollLeft as well as page width; focus/scrollIntoView must not shift hidden containers. Wait for settled opacity/geometry, check visible control hit targets and confirm no quote submission or extra mutation.
+- [x] Regress duplicate shallow/rich conversation projections, preserve raw Thing shapes, and reject held empty/nonempty replies across account retirement. Current built sources match; final native account/anonymous runs pass on the same package.
+- [x] Preserve conditional parent deletion after child creation changes its canonical version: a stale basis conflicts, explicit refresh permits the cascade, and a later genuine parent edit still conflicts. Native setup must await the child receipt and compare retained parent basis with exact canonical parent readback before going offline.
+- [ ] Broaden linked-Thing, bound-file, origin/plane/Character and cross-device deletion acceptance.
+
+Evidence: `artifacts/anonymous-post-delete-2026-10-27/README.md`. Preserve failed fixture attempts and runtime OOM records; neither a page-width check nor an interrupted browser run proves layout acceptance.

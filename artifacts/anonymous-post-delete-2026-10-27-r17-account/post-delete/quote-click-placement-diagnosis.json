@@ -1,0 +1,639 @@
+{
+  "finding": "132px placement jump persists with both Portal wrappers",
+  "menuTopAtPointerDown": 577,
+  "menuTopAtPointerUp": 445,
+  "movementPixels": 132,
+  "events": [
+    {
+      "type": "mousedown",
+      "capture": true,
+      "coordinates": {
+        "x": 532,
+        "y": 635
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 0
+      },
+      "ancestors": [],
+      "defaultPrevented": false,
+      "trusted": true,
+      "path": [
+        {
+          "tag": "BUTTON",
+          "role": "menuitem",
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": "menu",
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "BODY",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "HTML",
+          "role": null,
+          "label": null
+        }
+      ],
+      "active": {
+        "tag": "DIV",
+        "label": null,
+        "placeholder": null
+      },
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": 1,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447,
+            "top": 577,
+            "width": 170,
+            "height": 84
+          }
+        }
+      ],
+      "at": 3042.7000000178814,
+      "target": {
+        "tag": "BUTTON",
+        "role": "menuitem",
+        "label": null,
+        "placeholder": null,
+        "menuText": "Quote post \u270f\ufe0f",
+        "text": "Quote post \u270f\ufe0f",
+        "rect": {
+          "left": 448,
+          "top": 619,
+          "width": 168,
+          "height": 33
+        }
+      },
+      "actualTarget": {
+        "tag": "BUTTON",
+        "role": "menuitem"
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "quoteVisible": false
+    },
+    {
+      "type": "focusin",
+      "capture": true,
+      "coordinates": null,
+      "documentScroll": {
+        "x": 0,
+        "y": 0
+      },
+      "ancestors": [],
+      "defaultPrevented": false,
+      "trusted": true,
+      "path": [
+        {
+          "tag": "BUTTON",
+          "role": "menuitem",
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": "menu",
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "BODY",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "HTML",
+          "role": null,
+          "label": null
+        }
+      ],
+      "active": {
+        "tag": "BUTTON",
+        "label": null,
+        "placeholder": null
+      },
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": 1,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447,
+            "top": 577,
+            "width": 170,
+            "height": 84
+          }
+        }
+      ],
+      "at": 3043.100000023842,
+      "target": {
+        "tag": "BUTTON",
+        "role": "menuitem",
+        "label": null,
+        "placeholder": null,
+        "menuText": "Quote post \u270f\ufe0f",
+        "text": "Quote post \u270f\ufe0f",
+        "rect": {
+          "left": 448,
+          "top": 619,
+          "width": 168,
+          "height": 33
+        }
+      },
+      "actualTarget": {
+        "tag": "BUTTON",
+        "role": "menuitem"
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "quoteVisible": false
+    },
+    {
+      "type": "pointerup",
+      "capture": true,
+      "coordinates": {
+        "x": 532,
+        "y": 635.5
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 0
+      },
+      "ancestors": [
+        {
+          "tag": "DIV",
+          "className": "mainFlexChildrenContainer cha-5gv3tp",
+          "scrollLeft": 0,
+          "scrollTop": 0,
+          "rect": {
+            "left": 0,
+            "top": 0,
+            "width": 1440,
+            "height": 1274
+          }
+        },
+        {
+          "tag": "DIV",
+          "className": "mainFlexRoot cha-64rata",
+          "scrollLeft": 0,
+          "scrollTop": 0,
+          "rect": {
+            "left": 0,
+            "top": 0,
+            "width": 1440,
+            "height": 1669
+          }
+        }
+      ],
+      "defaultPrevented": false,
+      "trusted": true,
+      "path": [
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        }
+      ],
+      "active": {
+        "tag": "BUTTON",
+        "label": null,
+        "placeholder": null
+      },
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": 1,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447,
+            "top": 445,
+            "width": 170,
+            "height": 84
+          }
+        }
+      ],
+      "at": 3045.300000011921,
+      "target": {
+        "tag": "DIV",
+        "role": null,
+        "label": null,
+        "placeholder": null,
+        "menuText": null,
+        "text": "delete-82f44633just nowAccount child removed with parent.",
+        "rect": {
+          "left": 453,
+          "top": 581,
+          "width": 570,
+          "height": 61
+        }
+      },
+      "actualTarget": {
+        "tag": "DIV",
+        "role": null
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "quoteVisible": false
+    },
+    {
+      "type": "mouseup",
+      "capture": true,
+      "coordinates": {
+        "x": 532,
+        "y": 635
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 0
+      },
+      "ancestors": [
+        {
+          "tag": "DIV",
+          "className": "mainFlexChildrenContainer cha-5gv3tp",
+          "scrollLeft": 0,
+          "scrollTop": 0,
+          "rect": {
+            "left": 0,
+            "top": 0,
+            "width": 1440,
+            "height": 1274
+          }
+        },
+        {
+          "tag": "DIV",
+          "className": "mainFlexRoot cha-64rata",
+          "scrollLeft": 0,
+          "scrollTop": 0,
+          "rect": {
+            "left": 0,
+            "top": 0,
+            "width": 1440,
+            "height": 1669
+          }
+        }
+      ],
+      "defaultPrevented": false,
+      "trusted": true,
+      "path": [
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        }
+      ],
+      "active": {
+        "tag": "BUTTON",
+        "label": null,
+        "placeholder": null
+      },
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": 1,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447,
+            "top": 445,
+            "width": 170,
+            "height": 84
+          }
+        }
+      ],
+      "at": 3045.4000000059605,
+      "target": {
+        "tag": "DIV",
+        "role": null,
+        "label": null,
+        "placeholder": null,
+        "menuText": null,
+        "text": "delete-82f44633just nowAccount child removed with parent.",
+        "rect": {
+          "left": 453,
+          "top": 581,
+          "width": 570,
+          "height": 61
+        }
+      },
+      "actualTarget": {
+        "tag": "DIV",
+        "role": null
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "quoteVisible": false
+    },
+    {
+      "type": "click",
+      "capture": true,
+      "coordinates": {
+        "x": 532,
+        "y": 635
+      },
+      "documentScroll": {
+        "x": 0,
+        "y": 0
+      },
+      "ancestors": [],
+      "defaultPrevented": false,
+      "trusted": true,
+      "path": [
+        {
+          "tag": "BODY",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "HTML",
+          "role": null,
+          "label": null
+        }
+      ],
+      "active": {
+        "tag": "BUTTON",
+        "label": null,
+        "placeholder": null
+      },
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": 1,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447,
+            "top": 445,
+            "width": 170,
+            "height": 84
+          }
+        }
+      ],
+      "at": 3045.600000023842,
+      "target": {
+        "tag": "BODY",
+        "role": null,
+        "label": null,
+        "placeholder": null,
+        "menuText": null,
+        "text": "#lopuPageViewport { width: 100%; }\n        #lopuPageViewport",
+        "rect": {
+          "left": 0,
+          "top": 0,
+          "width": 1440,
+          "height": 1669
+        }
+      },
+      "actualTarget": {
+        "tag": "BODY",
+        "role": null
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "quoteVisible": false
+    },
+    {
+      "type": "focusin",
+      "capture": true,
+      "coordinates": null,
+      "documentScroll": {
+        "x": 0,
+        "y": 0
+      },
+      "ancestors": [],
+      "defaultPrevented": false,
+      "trusted": true,
+      "path": [
+        {
+          "tag": "DIV",
+          "role": "menu",
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "DIV",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "BODY",
+          "role": null,
+          "label": null
+        },
+        {
+          "tag": "HTML",
+          "role": null,
+          "label": null
+        }
+      ],
+      "active": {
+        "tag": "DIV",
+        "label": null,
+        "placeholder": null
+      },
+      "menus": [
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "hidden",
+          "display": "block",
+          "rect": {
+            "left": 16,
+            "top": 1,
+            "width": 128,
+            "height": 8
+          }
+        },
+        {
+          "expanded": null,
+          "hidden": null,
+          "dataState": null,
+          "visibility": "visible",
+          "display": "block",
+          "rect": {
+            "left": 447,
+            "top": 445,
+            "width": 170,
+            "height": 84
+          }
+        }
+      ],
+      "at": 3074.5,
+      "target": {
+        "tag": "DIV",
+        "role": "menu",
+        "label": null,
+        "placeholder": null,
+        "menuText": null,
+        "text": "Repost \ud83d\udd01Quote post \u270f\ufe0f",
+        "rect": {
+          "left": 447,
+          "top": 445,
+          "width": 170,
+          "height": 84
+        }
+      },
+      "actualTarget": {
+        "tag": "DIV",
+        "role": "menu"
+      },
+      "repostExpanded": "true",
+      "quotePresent": false,
+      "quoteVisible": false
+    }
+  ]
+}

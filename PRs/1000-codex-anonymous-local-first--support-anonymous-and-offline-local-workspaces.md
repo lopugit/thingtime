@@ -5781,3 +5781,13 @@ render/export evidence remains separate. Prior pushed cdd7198ff passed Web CI
 and CodeQL with public preview shell/assets/manifest verified; this follow-up
 requires its own hosted head checks. No merge, manual deployment, existing-account
 write, shared proxy/key/service change or VM change was made.
+
+### 27 October — pending deletion projections and quote overflow
+
+The normal PostCard deletion path was already implemented. Native acceptance added exact anonymous record/byte cleanup, offline account tombstones, lost DELETE replies and never-sent post/media cancellation. It exposed stale online feed projections showing locally deleted content before server acknowledgement. The adapter now masks the existing scoped tombstones, retains raw Thing shapes and checks retirement around asynchronous snapshots. Passing regressions cover duplicate shallow/rich projection traversal and empty/nonempty replies across retirement.
+
+The held-feed proof uses a real server response containing the deleted parent while DELETE is held before server execution; an unrelated post renders and the deleted parent does not. The released queue reaches canonical parent/comment 404s. Native visual review separately found closed quote content overflowing a hidden ancestor at 320px. Chakra Portal removes that inline box. The Repost menu also uses fixed positioning to avoid stale absolute placement after scrolling; the original open/reopen/focus/dismissal sequence now passes at 1440/390/320px, including settled screenshots and unobscured controls.
+
+[Evidence index](../artifacts/anonymous-post-delete-2026-10-27/README.md) preserves fixture corrections, accepted r8/r10 behavior, r11/r12 shared-VM OOM failures, r13 anonymous acceptance and r14 quote-reopen failure. The sanitized build passes; typecheck matches all 91 existing diagnostics. Prior pushed `5c6d6df8d` passed Web CI/CodeQL and public preview shell/assets/manifest checks. Final account and anonymous acceptance pass on the same `e5ca5891` package: one test each, zero skips/errors/OOM, all owned runtime resources released. Hosted head checks remain separate and are recorded in the PR. No merge, manual deployment, existing-account write, shared service/proxy/key or VM change was made.
+
+The post-deletion fixture correction preserves conditional-write safety: child creation updates the canonical parent version, so native setup now awaits the child receipt and exact refreshed parent basis before going offline. A 26-test synchronization suite includes stale-basis conflict, refreshed cascade success and a genuine later-edit conflict. No automatic rebasing or forced deletion was added.

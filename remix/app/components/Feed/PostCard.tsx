@@ -25,6 +25,7 @@ import {
   Popover,
   PopoverAnchor,
   PopoverContent,
+  Portal,
   Select,
   Skeleton,
   SkeletonCircle,
@@ -2582,16 +2583,18 @@ function PostCardImpl(props: PostCardProps) {
           {/* repost: instant repost OR quote (caption + circle) */}
 			{!mediaThing && !discussionOnly && !localOnly && (user ? (
             <Box position="relative" display="flex">
-              <Menu placement="top" autoSelect={false}>
+              <Menu placement="top" strategy="fixed" autoSelect={false}>
 									<MenuButton as={ActionIcon} icon={<Repeat2 size={18} strokeWidth={2.2} />} count={post.shareCount} label="Repost" />
-                <MenuList minWidth="170px" borderRadius={RADIUS_MD} zIndex={10}>
-                  <MenuItem fontSize="sm" onClick={handleRepost}>
-                    Repost 🔁
-                  </MenuItem>
-                  <MenuItem fontSize="sm" onClick={() => setQuoteOpen(true)}>
-                    Quote post ✏️
-                  </MenuItem>
-                </MenuList>
+                <Portal>
+                  <MenuList minWidth="170px" borderRadius={RADIUS_MD} zIndex={10}>
+                    <MenuItem fontSize="sm" onClick={handleRepost}>
+                      Repost 🔁
+                    </MenuItem>
+                    <MenuItem fontSize="sm" onClick={() => setQuoteOpen(true)}>
+                      Quote post ✏️
+                    </MenuItem>
+                  </MenuList>
+                </Portal>
               </Menu>
 
               {/* the quote composer, anchored above the repost button */}
@@ -2599,56 +2602,58 @@ function PostCardImpl(props: PostCardProps) {
                 <PopoverAnchor>
                   <Box position="absolute" left={0} bottom="100%" width="1px" height="1px" pointerEvents="none" />
                 </PopoverAnchor>
-                <PopoverContent
-                  ref={quoteContentRef as any}
-                  width="260px"
-                  border={BORDER}
-                  borderRadius={RADIUS_MD}
-                  boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
-                  zIndex={10}
-                >
-                  <Flex flexDirection="column" rowGap={2} padding={3}>
-											<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
-                      Quote this post ✏️
-                    </Text>
-                    <Textarea
-                      size="sm"
-                      rows={2}
-                      resize="none"
-                      borderRadius="var(--tt-radius-sm, 9px)"
-                      placeholder="Add your thoughts…"
-                      value={quoteText}
-                      onChange={(event) => setQuoteText(event.target.value)}
-                    />
-                    <Select
-                      size="sm"
-                      borderRadius="var(--tt-radius-sm, 9px)"
-                      value={quoteVisibility}
-                      onChange={(event) => setQuoteVisibility(event.target.value as PostVisibility)}
-                    >
-                      {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
-                        <option key={key} value={key}>
-                          {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
-                        </option>
-                      ))}
-                    </Select>
-                    <Button
-                      size="sm"
-                      color="white"
-                      fontFamily="heading"
-                      fontWeight={600}
-                      background={RAINBOW}
-                      backgroundSize="calc(100px + 200%)"
-                      sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}
-                      _hover={{ opacity: 0.9 }}
-                      borderRadius={RADIUS_MD}
-                      isLoading={sharing}
-                      onClick={handleQuote}
-                    >
-                      Quote ✨
-                    </Button>
-                  </Flex>
-                </PopoverContent>
+                <Portal>
+                  <PopoverContent
+                    ref={quoteContentRef as any}
+                    width="260px"
+                    border={BORDER}
+                    borderRadius={RADIUS_MD}
+                    boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
+                    zIndex={10}
+                  >
+                    <Flex flexDirection="column" rowGap={2} padding={3}>
+                      <Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
+                        Quote this post ✏️
+                      </Text>
+                      <Textarea
+                        size="sm"
+                        rows={2}
+                        resize="none"
+                        borderRadius="var(--tt-radius-sm, 9px)"
+                        placeholder="Add your thoughts…"
+                        value={quoteText}
+                        onChange={(event) => setQuoteText(event.target.value)}
+                      />
+                      <Select
+                        size="sm"
+                        borderRadius="var(--tt-radius-sm, 9px)"
+                        value={quoteVisibility}
+                        onChange={(event) => setQuoteVisibility(event.target.value as PostVisibility)}
+                      >
+                        {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
+                          <option key={key} value={key}>
+                            {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
+                          </option>
+                        ))}
+                      </Select>
+                      <Button
+                        size="sm"
+                        color="white"
+                        fontFamily="heading"
+                        fontWeight={600}
+                        background={RAINBOW}
+                        backgroundSize="calc(100px + 200%)"
+                        sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}
+                        _hover={{ opacity: 0.9 }}
+                        borderRadius={RADIUS_MD}
+                        isLoading={sharing}
+                        onClick={handleQuote}
+                      >
+                        Quote ✨
+                      </Button>
+                    </Flex>
+                  </PopoverContent>
+                </Portal>
               </Popover>
             </Box>
           ) : (

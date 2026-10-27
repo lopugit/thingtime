@@ -1,0 +1,25 @@
+✖ native PostCard deletion persists anonymously and across account offline reload, cancellation and lost replies (33098.891283ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 33358.991612
+
+✖ failing tests:
+
+test at ../post-delete.test.mjs:7:1
+✖ native PostCard deletion persists anonymously and across account offline reload, cancellation and lost replies (33098.891283ms)
+  locator.waitFor: Timeout 20000ms exceeded.
+  Call log:
+    - waiting for getByPlaceholder('Add your thoughts…', { exact: true }) to be visible
+  
+      at open (/tmp/check/post-delete.test.mjs:84:38)
+      at async reviewQuoteLayout (/tmp/check/post-delete.test.mjs:88:5)
+      at async menuDelete (/tmp/check/post-delete.test.mjs:97:19)
+      at async TestContext.<anonymous> (/tmp/check/post-delete.test.mjs:124:155) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByPlaceholder('Add your thoughts…', { exact: true }) to be visible" ]
+  }
