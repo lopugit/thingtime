@@ -18,6 +18,9 @@ test('whole-vault searches negotiate support, encode the query on every page, an
   await assert.rejects(passwordRequest('owner', undefined, undefined, undefined, 'facebook'), /incompatible/);
   assert.equal(requests.length, 0, 'old servers must not silently ignore search');
   version = '1.2.0';
+  await assert.rejects(passwordRequest('owner', undefined, undefined, undefined, 'facebook'), /incompatible/);
+  assert.equal(requests.length, 0, 'older branch contracts with receipts alone cannot imply search support');
+  version = '1.3.0';
   await passwordRequest('owner', undefined, undefined, undefined, 'facebook & [.*]');
   await passwordRequest('owner', undefined, undefined, 'opaque-cursor', 'facebook & [.*]');
   for (const url of requests) assert.equal(new URL(url, 'https://password-search.test').searchParams.get('q'), 'facebook & [.*]');

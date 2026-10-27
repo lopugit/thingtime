@@ -7,9 +7,15 @@ import { linkAttachment } from '~/api/utils/attachments/attachments';
 // sinks; the server never fetches the URL). No upload-approval gate: linked
 // media consumes no Thingtime object storage, matching the legacy image-URL
 // flow it replaces.
-export const action = createAttachmentMutationAction({
+export const createAttachmentLinkAction = (
+	overrides: Parameters<typeof createAttachmentMutationAction>[1] = {},
+	service: typeof linkAttachment = linkAttachment
+) => createAttachmentMutationAction({
 	rateKey: 'attachments.link',
-	service: linkAttachment
-});
+	requestIdRequiresFullUser: true,
+	service
+}, overrides);
+
+export const action = createAttachmentLinkAction();
 
 export const loader = attachmentPostOnlyLoader;

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { THINGTIME_THEME } from '../theme/tokens.ts';
@@ -34,7 +35,7 @@ test('protected theme history excludes non-approved fields and its decoder rejec
 	for (const secret of ['root-secret', 'extension-secret', 'crystal-secret', 'theme-secret', 'token-secret']) assert.equal(JSON.stringify(event).includes(secret), false);
 	const valid = event.after!;
 	for (const changed of [
-		{ ...valid, version: 2 }, { ...valid, value: { ...valid.value as any, secure: 'hidden' } },
+		{ ...valid, version: 3 }, { ...valid, value: { ...valid.value as any, secure: 'hidden' } },
 		{ ...valid, value: { ...valid.value as any, crystal: { ...(valid.value as any).crystal, password: 'hidden' } } },
 		{ ...valid, value: { ...valid.value as any, crystal: { name: 'Name', theme: { colors: { privateKey: 'hidden' } } } } },
 		{ ...valid, value: { ...valid.value as any, crystal: { name: 'Name', theme: { general: { motion: 'yes' } } } } },
@@ -73,4 +74,25 @@ test('theme retained-byte projection matches approved live payload and never exe
 	assert.equal(bytes(draft), Buffer.byteLength(JSON.stringify({ before: draft.before, after: draft.after })));
 	const poisoned = { ...deleted, before: { ...deleted.before!, value: { ...(deleted.before!.value as any), hidden: 'payload' } } };
 	assert.equal(bytes(poisoned), null);
+});
+
+test('theme focus tokens use v2 while historical v1 bytes and validation stay frozen', () => {
+	const oldTheme = { name: 'Historical', colors: { accent: 'saved-value' }, general: { motion: false, radiusScale: 0 } };
+	const oldValue = { crystal: { name: 'Old theme', theme: oldTheme }, tags: [], visibility: 'private', folderId: null };
+	const oldSnapshot = themeContentSnapshot(oldValue);
+	assert.equal(oldSnapshot.version, 1);
+	const encoded = JSON.stringify(oldSnapshot);
+	const digest = '1481ecb32bd4b3356e9e25be42a434396a28ed2081e29475dad97b3adccf74cc';
+	assert.equal(createHash('sha256').update(encoded).digest('hex'), digest, 'Frozen historical v1 projection digest');
+	assert.deepEqual(themeContentValue(JSON.parse(encoded)), oldValue);
+	assert.equal(JSON.stringify(themeContentSnapshot(themeContentValue(oldSnapshot))), encoded);
+	assert.equal(createHash('sha256').update(JSON.stringify(oldSnapshot)).digest('hex'), digest);
+	const theme = { colors: { focusBorder: '#334455', focusGlowStart: '#556677', focusGlowEnd: '#778899' }, general: { focusGlowBlur: 0, focusGlowOpacity: 0.375 } };
+	const current = themeContentSnapshot({ ...oldValue, crystal: { name: 'Focus', theme } });
+	assert.equal(current.version, 2);
+	assert.deepEqual(themeContentValue(current).crystal.theme, theme);
+	assert.throws(() => themeContentValue({ ...current, version: 1 }), /Invalid theme content history/);
+	for (const invalid of [{ ...theme, general: { focusGlowBlur: '3' } }, { ...theme, general: { focusGlowOpacity: Infinity } },
+		{ ...theme, colors: { focusBorder: false } }])
+		assert.throws(() => themeContentSnapshot({ ...oldValue, crystal: { name: 'Focus', theme: invalid } }));
 });

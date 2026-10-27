@@ -1,0 +1,75 @@
+Current package ready; running account-feed
+Egress check 203.0.113.1: ENETUNREACH
+Egress check ::ffff:203.0.113.1: ENETUNREACH
+Egress check 2001:db8::1: ENETUNREACH
+Egress check blocked.invalid: EAI_AGAIN
+Checking backend redirect
+Launching isolated browser
+Browser ready
+Browser egress denied http://203.0.113.1/
+Browser egress denied http://[::ffff:203.0.113.1]/
+Browser egress denied http://[2001:db8::1]/
+Browser egress denied http://blocked.invalid/
+Browser egress denied http://127.0.0.1:18725/
+Closing network-proof browser
+Closing network-proof server
+{"interfaces":["loopback"],"denied":[{"host":"203.0.113.1","code":"ENETUNREACH"},{"host":"::ffff:203.0.113.1","code":"ENETUNREACH"},{"host":"2001:db8::1","code":"ENETUNREACH"},{"host":"blocked.invalid","code":"EAI_AGAIN"}],"browserDenied":["http://203.0.113.1/","http://[::ffff:203.0.113.1]/","http://[2001:db8::1]/","http://blocked.invalid/","http://127.0.0.1:18725/"],"backendRedirectDenied":true,"chromiumSandbox":true}
+Server before test: 200
+
+✖ normal account feed retains only visited remote pages as an explicit partial offline view (21878.780725ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 21945.7669
+
+✖ failing tests:
+
+test at ../account-feed.test.mjs:10:1
+✖ normal account feed retains only visited remote pages as an explicit partial offline view (21878.780725ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + Set(25) {
+  - Set(20) {
+      '0ad08e84-b3e9-418f-a526-aa8095fec5a0',
+      '1a0f785b-6204-436b-8811-56459fb6ce1d',
+  +   '1dfaee8d-95f3-4f42-8a1c-c902ab0f780b',
+      '28c848fd-3c6a-42be-b406-adf1a257c2f1',
+      '29a3ed58-d12a-408f-b773-5ac7af5e7e33',
+      '3a344484-4c14-4b55-b9e9-bc6d61c259a9',
+      '531a668f-ba8a-4113-a3cc-bc4a4126a14b',
+  +   '568c96a0-d297-4b6f-bc27-02ef1b3cfd72',
+      '5fb712ff-9e6b-4f66-a15e-73db43ae3b8f',
+      '6c72c084-4bb1-47ea-b7f6-d9b18016b2ff',
+  +   '6e278ed1-91fe-40d7-88ec-dfed9d324273',
+      '74945904-a9ed-4d0f-ae32-f6fe3c0e6cbe',
+      '7bdabd40-7627-4dc8-85db-be0584ad14b6',
+      '83f06ffa-a4a6-404f-a58b-e451dadbaf92',
+      '8570349c-7fcd-46ef-9daa-f167cccbc447',
+  +   '88b388fd-929d-4ff7-a240-563f1f976f70',
+      'a0d8644b-be14-40ae-aa93-2b97eff31ebe',
+      'aae2bcfc-38fb-493e-9f55-a5f857347a2b',
+      'b7f3f369-b6d0-47c2-9fb0-047f6201ed45',
+      'bd6a4f6e-f6e8-4edc-826b-0eb6d0defc26',
+      'c1a62296-bed3-4fb4-9ad6-afc55ff3dd3c',
+      'd3b5a34d-e238-4114-b851-b4da8c825a6b',
+  +   'e6d2272e-aaa1-42ec-b2c7-a4adf1310339',
+      'f8caab2d-f99e-4554-8c43-49f3ec4dd9a5',
+      'fcea632e-c79e-4ebe-8de1-0c809c545c8e'
+    }
+
+      at TestContext.<anonymous> (file:///tmp/check/account-feed.test.mjs:115:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Set(25) { 'f8caab2d-f99e-4554-8c43-49f3ec4dd9a5', '5fb712ff-9e6b-4f66-a15e-73db43ae3b8f', '7bdabd40-7627-4dc8-85db-be0584ad14b6', 'b7f3f369-b6d0-47c2-9fb0-047f6201ed45', 'a0d8644b-be14-40ae-aa93-2b97eff31ebe', 'aae2bcfc-38fb-493e-9f55-a5f857347a2b', '531a668f-ba8a-4113-a3cc-bc4a4126a14b', 'bd6a4f6e-f6e8-4edc-826b-0eb6d0defc26', '74945904-a9ed-4d0f-ae32-f6fe3c0e6cbe', 'fcea632e-c79e-4ebe-8de1-0c809c545c8e', '83f06ffa-a4a6-404f-a58b-e451dadbaf92', '8570349c-7fcd-46ef-9daa-f167cccbc447', 'd3b5a34d-e238-4114-b851-b4da8c825a6b', '6c72c084-4bb1-47ea-b7f6-d9b18016b2ff', 'c1a62296-bed3-4fb4-9ad6-afc55ff3dd3c', '28c848fd-3c6a-42be-b406-adf1a257c2f1', '0ad08e84-b3e9-418f-a526-aa8095fec5a0', '3a344484-4c14-4b55-b9e9-bc6d61c259a9', '1a0f785b-6204-436b-8811-56459fb6ce1d', '29a3ed58-d12a-408f-b773-5ac7af5e7e33', '568c96a0-d297-4b6f-bc27-02ef1b3cfd72', 'e6d2272e-aaa1-42ec-b2c7-a4adf1310339', '1dfaee8d-95f3-4f42-8a1c-c902ab0f780b', '6e278ed1-91fe-40d7-88ec-dfed9d324273', '88b388fd-929d-4ff7-a240-563f1f976f70' },
+    expected: Set(20) { 'f8caab2d-f99e-4554-8c43-49f3ec4dd9a5', '5fb712ff-9e6b-4f66-a15e-73db43ae3b8f', '7bdabd40-7627-4dc8-85db-be0584ad14b6', 'b7f3f369-b6d0-47c2-9fb0-047f6201ed45', 'a0d8644b-be14-40ae-aa93-2b97eff31ebe', 'aae2bcfc-38fb-493e-9f55-a5f857347a2b', '531a668f-ba8a-4113-a3cc-bc4a4126a14b', 'bd6a4f6e-f6e8-4edc-826b-0eb6d0defc26', '74945904-a9ed-4d0f-ae32-f6fe3c0e6cbe', 'fcea632e-c79e-4ebe-8de1-0c809c545c8e', '83f06ffa-a4a6-404f-a58b-e451dadbaf92', '8570349c-7fcd-46ef-9daa-f167cccbc447', 'd3b5a34d-e238-4114-b851-b4da8c825a6b', '6c72c084-4bb1-47ea-b7f6-d9b18016b2ff', 'c1a62296-bed3-4fb4-9ad6-afc55ff3dd3c', '28c848fd-3c6a-42be-b406-adf1a257c2f1', '0ad08e84-b3e9-418f-a526-aa8095fec5a0', '3a344484-4c14-4b55-b9e9-bc6d61c259a9', '1a0f785b-6204-436b-8811-56459fb6ce1d', '29a3ed58-d12a-408f-b773-5ac7af5e7e33' },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+Container operation failed: 1

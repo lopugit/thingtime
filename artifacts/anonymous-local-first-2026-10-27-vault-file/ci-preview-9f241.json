@@ -1,0 +1,40 @@
+{
+  "at": "2026-10-26T16:16:22.144Z",
+  "head": "9f24113dd883b450e9d3086753b6cfd027d175a8",
+  "base": "develop",
+  "state": "OPEN",
+  "runs": [
+    {
+      "conclusion": "success",
+      "databaseId": 40353661294,
+      "headSha": "9f24113dd883b450e9d3086753b6cfd027d175a8",
+      "status": "completed",
+      "url": "https://github.com/lopugit/thingtime/actions/runs/40353661294"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 40353661659,
+      "headSha": "9f24113dd883b450e9d3086753b6cfd027d175a8",
+      "status": "completed",
+      "url": "https://github.com/lopugit/thingtime/actions/runs/40353661659"
+    }
+  ],
+  "previewMetadata": [
+    "- Commit: `9f24113d`",
+    "- Preview: [https://pr-1000.previews.dev.thingtime.com](https://pr-1000.previews.dev.thingtime.com)",
+    "- Immutable deployment: [https://thingtime-r9xti14w8-lopugits-projects.vercel.app](https://thingtime-r9xti14w8-lopugits-projects.vercel.app)"
+  ],
+  "responses": [
+    {
+      "url": "https://pr-1000.previews.dev.thingtime.com",
+      "status": 200,
+      "finalUrl": "https://pr-1000.previews.dev.thingtime.com/"
+    },
+    {
+      "url": "https://thingtime-r9xti14w8-lopugits-projects.vercel.app",
+      "status": 200,
+      "finalUrl": "https://thingtime-r9xti14w8-lopugits-projects.vercel.app/"
+    }
+  ],
+  "note": "CI and preview apply to pushed9f241 source; pending suite changes unbuilt. Reachability is not deployed gateway functionality."
+}

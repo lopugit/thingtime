@@ -1,6 +1,12 @@
 {
 	"root": true,
 	"extends": ["@remix-run/eslint-config", "@remix-run/eslint-config/node"],
+	"overrides": [
+		{
+			"files": ["**/*.mts", "**/*.cts"],
+			"parser": "@typescript-eslint/parser"
+		}
+	],
 	"rules": {
 		"@typescript-eslint/no-extra-semi": "off",
 		"@typescript-eslint/no-use-before-define": "off",

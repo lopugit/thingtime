@@ -1,0 +1,53 @@
+Preparing plan payload
+Checking enforced network boundary
+Running page validation
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Header counts match the current checklist
++ actual - expected
+
+  [
+    63,
++   13,
++   12
+-   14,
+-   11
+  ]
+
+    at file:///tmp/plan/acceptance.mjs:36:12 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: [ 63, 13, 12 ],
+  expected: [ 63, 14, 11 ],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.21.0
+Container operation failed: node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Header counts match the current checklist
++ actual - expected
+
+  [
+    63,
++   13,
++   12
+-   14,
+-   11
+  ]
+
+    at file:///tmp/plan/acceptance.mjs:36:12 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: [ 63, 13, 12 ],
+  expected: [ 63, 14, 11 ],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.21.0

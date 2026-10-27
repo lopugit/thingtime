@@ -1,0 +1,8 @@
+{
+  "command": "tsc --noEmit --pretty false",
+  "exitCode": 2,
+  "diagnostics": 91,
+  "baselineBeforeCatalogue": 91,
+  "ownedDiagnostics": [],
+  "note": "Raw typecheck, not a clean pass; durable browser fixture checked separately"
+}

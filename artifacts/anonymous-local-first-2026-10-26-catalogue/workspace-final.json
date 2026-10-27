@@ -1,0 +1,23 @@
+{
+  "startedAt": "2026-10-26T10:49:39.576Z",
+  "endedAt": "2026-10-26T10:53:05.321Z",
+  "scope": "Current merged source; sanitized test environment; outbound network restricted to loopback; synthetic unit fixtures only",
+  "results": [
+    {
+      "command": "test:local-workspace",
+      "code": 0,
+      "elapsedMs": 205741,
+      "summary": [
+        "ℹ tests 954",
+        "ℹ pass 856",
+        "ℹ fail 0",
+        "ℹ skipped 98",
+        "ℹ tests 4",
+        "ℹ pass 4",
+        "ℹ fail 0",
+        "ℹ skipped 0"
+      ],
+      "log": "/tmp/tt-anonymous-merge-repeat-test-local-workspace.log"
+    }
+  ]
+}

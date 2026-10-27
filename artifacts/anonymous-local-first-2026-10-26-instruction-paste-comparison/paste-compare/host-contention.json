@@ -1,0 +1,21 @@
+{
+  "source": "Read-only host uptime, vm_stat and ps snapshot, 17:17 local; no processes changed",
+  "loadAverages": [
+    852.53,
+    727.31,
+    552.2
+  ],
+  "pageSizeBytes": 16384,
+  "freePages": 5425,
+  "activePages": 1175148,
+  "inactivePages": 1164172,
+  "wiredPages": 744014,
+  "purgeablePages": 59,
+  "focusedTests": {
+    "passed": 14,
+    "failed": 0,
+    "skipped": 0,
+    "durationMs": 66341.448083
+  },
+  "note": "The same bounded tests completed in under four seconds earlier in this task. This host pressure is a performance measurement confound, not proof of the native paste cause."
+}

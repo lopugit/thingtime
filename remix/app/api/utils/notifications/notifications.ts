@@ -1,4 +1,5 @@
 import { withGatewayWork } from '../deployment/environmentGateway';
+import { safeInternalHref } from './safeInternalHref';
 import { waitUntil } from '@vercel/functions';
 import { randomUUID } from 'node:crypto';
 import type { NotificationDelivery } from '../lopu/remindersCore';
@@ -27,6 +28,8 @@ import {
 } from './listQuery';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 
+export { safeInternalHref } from './safeInternalHref';
+
 // Notifications are PROTECTED things minted only here (see registry.ts
 // PROTECTED_THINGTIME): ownerId = recipient, targetId = the subject thing
 // (post/comment/user), crystal carries the type + actor snapshot, root readAt
@@ -34,7 +37,6 @@ import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 // The bell still applies push preferences; history=1 explicitly reads all rows.
 
 const MAX_PREVIEW_CHARS = 140;
-const MAX_HREF_CHARS = 300;
 const MAX_CURSOR_CHARS = 512;
 // The page-size bounds live in listQuery.ts — normalizeNotificationListOptions
 // delegates the limit to resolveNotificationListQuery so both entry points
@@ -94,18 +96,6 @@ export const clampPreview = (value: unknown): string | null => {
   const text = value.replace(/\s+/g, ' ').trim();
   if (!text) return null;
   return text.length > MAX_PREVIEW_CHARS ? `${text.slice(0, MAX_PREVIEW_CHARS - 1)}…` : text;
-};
-
-// A click-through for a system note is always an in-app path: rooted, not
-// protocol-relative, no whitespace/control characters, bounded. Anything else
-// is dropped rather than rendered.
-export const safeInternalHref = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const href = value.trim();
-  if (!href.startsWith('/') || href.startsWith('//') || href.length > MAX_HREF_CHARS) return null;
-  // eslint-disable-next-line no-control-regex
-  if (/[\\\s\u0000-\u001f\u007f]/.test(href)) return null;
-  return href;
 };
 
 export const notificationDoc = (input: EmitNotificationInput, now: Date) => ({

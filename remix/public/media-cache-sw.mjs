@@ -1,3 +1,4 @@
+import { installOfflineShell, pruneOfflineShells, offlineShellRequest, handleOfflineShell } from './offline-shell.mjs';
 import { mediaStore, cacheEnabled, MAX_AGE, MAX_FILE_BYTES } from './media-cache-store.mjs';
 import { boundedBlob, compatibleManifest, managedUrl, publicAsset, publicLifetime, responseFromRecord } from './media-cache-core.mjs';
 
@@ -18,9 +19,10 @@ const preferencesReady = storageDeadline(cacheEnabled(), false).then((value) => 
 });
 let generation = 0;
 let capability;
-// A cache worker never intercepts HTML, JS bundles or general API responses.
-self.addEventListener('install', (event) => event.waitUntil(self.skipWaiting()));
-self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+// Media authorization stays unchanged. A separate verified static app shell
+// supports offline navigation; no account API response enters that cache.
+self.addEventListener('install', (event) => event.waitUntil(Promise.all([self.skipWaiting(), installOfflineShell().catch(() => {})])));
+self.addEventListener('activate', (event) => event.waitUntil(Promise.all([self.clients.claim(), pruneOfflineShells().catch(() => {})])));
 
 async function supportsCaching() {
 	if (!capability || capability.expires < Date.now()) {
@@ -108,6 +110,7 @@ async function handle(request, event) {
 }
 self.addEventListener('fetch', (event) => {
 	const request = event.request;
+	if (offlineShellRequest(request, origin)) { event.respondWith(handleOfflineShell(request)); return; }
 	if (managedUrl(request, origin) || publicAsset(request, origin)) {
 		event.respondWith(handle(request, event).catch(() => fetch(request)));
 	}

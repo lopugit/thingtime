@@ -1,0 +1,90 @@
+{
+  "format": "thingtime.transfer",
+  "version": 1,
+  "roots": [
+    "local-1f85aa06-840f-4674-ac32-e8be25ea5ee2"
+  ],
+  "things": [
+    {
+      "id": "local-1f85aa06-840f-4674-ac32-e8be25ea5ee2",
+      "thingtime": [
+        "webpage"
+      ],
+      "crystal": {
+        "name": "Shared offline page",
+        "version": 2,
+        "blocks": [
+          {
+            "id": "frame",
+            "type": "container",
+            "css": {
+              "padding": "24px",
+              "max-width": "600px",
+              "margin": "0 auto"
+            },
+            "direction": "column",
+            "gap": 4,
+            "children": [
+              {
+                "id": "title",
+                "type": "element",
+                "tag": "h1",
+                "text": "Shared copy edited locally"
+              },
+              {
+                "id": "card",
+                "type": "component",
+                "component": "local-3007b029-8320-4eaa-8dba-1a7878d2b496"
+              }
+            ]
+          }
+        ]
+      },
+      "extended": null,
+      "tags": []
+    },
+    {
+      "id": "local-3007b029-8320-4eaa-8dba-1a7878d2b496",
+      "thingtime": [
+        "component"
+      ],
+      "crystal": {
+        "name": "Shared offline component",
+        "library": "custom",
+        "category": "general",
+        "componentKey": "shared-offline-component",
+        "version": 1,
+        "render": {
+          "tag": "p",
+          "children": [
+            "Shared component survives offline",
+            {
+              "tag": "a",
+              "props": {
+                "href": "/api/v1/attachments/content?id=local-6e374c0e-31a4-474e-b0b4-8e3f94ea2433%3Abytes&download=1",
+                "style": {
+                  "display": "block",
+                  "marginTop": "8px"
+                }
+              },
+              "children": "Download shared original"
+            }
+          ]
+        }
+      },
+      "extended": null,
+      "tags": []
+    }
+  ],
+  "files": [
+    {
+      "id": "local-6e374c0e-31a4-474e-b0b4-8e3f94ea2433:bytes",
+      "name": "shared-original.bin",
+      "mime": "application/octet-stream",
+      "targetId": "local-1f85aa06-840f-4674-ac32-e8be25ea5ee2",
+      "path": "files/000000",
+      "bytes": 17825795,
+      "sha256": "565383931cc1fe1f0dad6000cb34780802899a570ff7ad35cea05f4615595f14"
+    }
+  ]
+}

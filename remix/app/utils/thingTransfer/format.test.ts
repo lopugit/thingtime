@@ -77,7 +77,8 @@ test('files use numbered paths and bounded checksummed manifests, never display 
     assert.throws(() => validateTransfer({ ...value, files: [{ ...value.files[0], path }] }), /archive file path/);
   }
   value.files[0].bytes = TRANSFER_LIMITS.fileBytes + 1;
-  assert.throws(() => validateTransfer(value), /too large/);
+  assert.deepEqual(parseTransfer(serializeTransfer(value)), value);
+  assert.throws(() => validateTransfer(value, { maxFileBytes: TRANSFER_LIMITS.fileBytes }), /too large/);
 });
 
 test('malformed JSON and excessive record counts fail without a partial result', () => {
@@ -85,4 +86,21 @@ test('malformed JSON and excessive record counts fail without a partial result',
   const value = fixture();
   value.things = Array(TRANSFER_LIMITS.things + 1).fill(value.things[0]);
   assert.throws(() => validateTransfer(value), /number of Things/);
+});
+
+
+test('file metadata preserves large exact sizes but rejects unsafe sizes and aggregate overflow', () => {
+  const value = fixture();
+  const file = { id: 'file', targetId: 'data', path: 'files/000000', name: 'large.bin', mime: 'application/octet-stream', bytes: Number.MAX_SAFE_INTEGER, sha256: 'a'.repeat(64) };
+  value.files = [file];
+  assert.deepEqual(parseTransfer(serializeTransfer(value)), value);
+  for (const bytes of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => validateTransfer({ ...value, files: [{ ...file, bytes }] }), /file size/);
+  }
+  assert.throws(() => validateTransfer({ ...value, files: [file, { ...file, id: 'other', path: 'files/000001', bytes: 1 }] }), /safe integer precision/);
+  for (const maxFileBytes of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => validateTransfer(fixture(), { maxFileBytes }), /byte budget/);
+  }
+  assert.throws(() => parseTransfer(serializeTransfer(value), { maxFileBytes: 12 }), /too large/);
+  assert.throws(() => serializeTransfer(value, { maxFileBytes: 12 }), /too large/);
 });

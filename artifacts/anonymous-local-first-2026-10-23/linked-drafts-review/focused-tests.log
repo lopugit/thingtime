@@ -1,0 +1,30 @@
+✔ account drafts complete locally with canonical retries, list/load and independent remote revisions (45.299988ms)
+✔ uncertain writes retain their exact identity across reconstruction and before newer edits (25.044534ms)
+✔ retirement is local and deletion follows an already-started uncertain save without resurrection (16.689904ms)
+✔ two workers claim once and a completion preserves a newer local edit (5.369681ms)
+✔ remote conflicts keep both versions and reviewed replacement checks both revisions (12.541932ms)
+✔ late remote reads never overwrite local edits or a discarded draft (8.296222ms)
+✔ account boundaries, failed queue admission and scope retirement cannot leak or partly save a draft (10.649469ms)
+✔ a malformed acknowledgement never advances the account revision or drops the frozen save (5.506636ms)
+✔ rate-limited uncertain saves respect the server delay and preserve their immutable body (15.928931ms)
+✔ invalid acknowledgement snapshots retain the uncertain save and report a bounded protocol error (6.591992ms)
+✔ conflict reads are cancelled and refused before transport after scope retirement (1.143308ms)
+✔ keeping the reviewed account version fences both revisions and creates a fresh local revision (12.351218ms)
+✔ local drafts preserve retry identity, conflict checks and discard tombstones (32.27003ms)
+✔ template copies and conflict recovery stay independent and are idempotent (13.353533ms)
+✔ draft attachments cannot borrow IDs from another workspace (3.300702ms)
+✔ draft media bind atomically; templates and recovery own independent bytes and remapped layouts (71.9496ms)
+✔ corrupt media and identity retirement cannot commit a draft or a partial template copy (6.758907ms)
+✔ draft expiry reaps only released selections and never bound working files (10.751237ms)
+✔ template selection copies into the destination context without replaying pending submissions (17.933218ms)
+✔ URL and byte draft media bind, copy, recover and expire independently without fetching linked content (76.988411ms)
+✔ account URL drafts get independent request identities and fail atomically on queue refusal (33.495923ms)
+✔ linked metadata changes between preparation and commit cannot partly copy a draft (4.168941ms)
+ℹ tests 22
+ℹ suites 0
+ℹ pass 22
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1450.523957

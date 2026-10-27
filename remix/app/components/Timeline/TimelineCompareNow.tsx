@@ -45,7 +45,7 @@ export function useTimelineCompareNow(event: TimelineEvent | null) {
 		pending.current = started;
 		setState({ key: started, preview: null, error: '', busy: true });
 		try {
-			await connection.sync.pushPending();
+			if (!api.v1.timeline.canChangeLocally?.(connection.scope)) await connection.sync.pushPending();
 			const query: VersionRequest = { command: 'preview-version', mode: 'restore', eventId: event.id, recover: true, choices: {}, componentMode: 'current', componentChoices: {} };
 			const result = await api.v1.timeline.version(connection.scope, query);
 			if (result?.ok === false || !result?.preview) throw new Error(result?.error || 'Could not compare this version with now.');

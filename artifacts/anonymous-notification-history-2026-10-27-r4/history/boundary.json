@@ -1,0 +1,10 @@
+{
+  "session": "64afec41-3af6-4570-a820-940e1e6e90a0",
+  "image": "sha256:5c17ff3d0158b726b014ea37d18286ed6bf9187db9f650ff51e17b35f4a315be",
+  "network": "none",
+  "mounts": [],
+  "ports": {},
+  "readOnly": true,
+  "memoryBytes": 4294967296,
+  "cpu": 1000000000
+}

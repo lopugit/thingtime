@@ -1,0 +1,10 @@
+{
+  "recordedAt": "2026-10-26T16:54:45.940Z",
+  "productBuildUnchanged": true,
+  "baseHead": "9f24113dd883b450e9d3086753b6cfd027d175a8",
+  "applicationTarSha256": "b33327824cec7bdb59f55067ea03709baa3283416bbbf6fa364005da15a3200d",
+  "testSourceSha256": "9365385ca8ed42bfaaf29c3e7619e9a96e2a237ba71e53e59cb007d73c6d20d9",
+  "testBundleSha256": "1920293d9c867d0c78a2e3ae585d3d8db60f6d256a8066a1206440d3a13a44dd",
+  "contractSourceSha256": "ef84d07657176d1ef7272cc50f58553ef576d8d0521a1225b4e9627adc59c0d3",
+  "reason": "Browser-native same-origin fixture authentication; canonical flat RootLoaderData and exact actor/data plane validation"
+}

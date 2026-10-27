@@ -20,10 +20,11 @@ const rejects = async (work: Promise<unknown>, status: number, pattern: RegExp) 
 
 function harness(options: { billable?: boolean } = {}) {
 	let rows: any[] = [{ _id: 'db-folder', shareId: timelineFolderId('user-1'), ownerId: 'user-1', thingtime: ['folder'], updatedAt: new Date(0) }]; let charge = 0; let clock = Date.parse('2026-10-13T09:00:00.000Z');
-	const touches: Date[] = [];
+	const touches: Date[] = []; let failDebit=false;
 	const session = { inTransaction: () => true }; const ai: string[] = []; let reply: string | null = 'The title changed from Hello to World through the editor.';
 	const match = (row: any, filter: any) => Object.entries(filter).every(([key, value]: any) => {
 		if (value?.$in) return value.$in.includes(row[key]);
+        if (value && Object.prototype.hasOwnProperty.call(value, '$ne')) return row[key] !== value.$ne;
 		return Array.isArray(row[key]) ? row[key].includes(value) : row[key] === value;
 	});
 	const things = {
@@ -37,18 +38,19 @@ function harness(options: { billable?: boolean } = {}) {
 		},
 		countDocuments: async (filter: any, options: any) => { if (options.session) assert.equal(options.session, session); assert.equal(options.limit, TIMELINE_NOTES_PER_EVENT); return Math.min(rows.filter(row => match(row, filter)).length, options.limit); },
 		insertOne: async (doc: any, options: any) => { assert.equal(options.session, session); assert.ok(!rows.some(row => row.shareId === doc.shareId)); rows.push({ _id: `db-${rows.length}`, ...doc }); },
+		replaceOne: async (filter: any, next: any, options: any) => { assert.equal(options.session, session); const index = rows.findIndex(row => match(row, filter)); assert.ok(index >= 0); rows[index] = {_id:rows[index]._id,...next}; return {matchedCount:1}; },
 		deleteOne: async (filter: any, options: any) => { assert.equal(options.session, session); const index = rows.findIndex(row => match(row, filter)); if (index === -1) return { deletedCount: 0 }; rows.splice(index, 1); return { deletedCount: 1 }; }
 	};
 	const events = new Map<string, TimelineEntry>([['saved', entryFixture(eventFixture('saved'))], ['other-thing', entryFixture(eventFixture('other-thing', { thingId: 'other-page' }))]]);
 	const service = createNoteService({
 		collection: async () => things as any,
 		transaction: async work => { const before = [...rows]; const oldCharge = charge; try { return await work(session); } catch (error) { rows = before; charge = oldCharge; throw error; } },
-		debit: async (owner, bytes, tx) => { assert.equal(owner, 'user-1'); assert.equal(tx, session); charge += bytes; },
+		debit: async (owner, bytes, tx) => { assert.ok(['user-1','other'].includes(owner)); assert.equal(tx, session); if(failDebit){failDebit=false;throw new Error('Quota transaction refused');} charge += bytes; },
 		billable: () => options.billable ?? true, now: () => new Date(clock += 1000),
 		entries: async (_things, ownerId, ids) => ids.flatMap(id => { const entry = events.get(id); return entry && entry.event.ownerId === ownerId ? [entry] : []; }),
 		explain: async entry => { ai.push(entry.event.id); if (reply === null) throw new StorageMutationError(503, 'storage_invariant', 'Lopu could not explain this change right now. Try again in a moment.'); return reply; }
 	});
-	return { things, service, ai, rows: () => rows.filter(row => row._id !== 'db-folder'), folder: () => rows.find(row => row._id === 'db-folder'), touches, charge: () => charge, reply: (value: string | null) => { reply = value; } };
+	return { things, service, ai, failNextDebit:()=>{failDebit=true;}, rows: () => rows.filter(row => row._id !== 'db-folder'), folder: () => rows.find(row => row._id === 'db-folder'), touches, charge: () => charge, reply: (value: string | null) => { reply = value; } };
 }
 
 test('an owner note is one protected relational Thing beside its event, metered once, and an exact retry returns it without a second write', async () => {
@@ -100,21 +102,23 @@ test('an event holds at most eight notes; retries of stored notes still replay o
 	assert.equal(h.rows().length, TIMELINE_NOTES_PER_EVENT + 1);
 });
 
-test('removing a note refunds exactly its metered bytes, works for either author, and acknowledges a missing note idempotently', async () => {
-	const h = harness();
-	const owner = await h.service('user-1', add(1)); const lopu = await h.service('user-1', explain(2));
-	assert.ok('note' in owner && 'note' in lopu); assert.equal(h.rows().length, 2);
-	const bytes = h.rows().map(row => row.sizeBytes); assert.equal(h.charge(), bytes[0] + bytes[1]);
-	assert.deepEqual(await h.service('user-1', remove(3, owner.note.id)), { ok: true, removed: true, noteId: owner.note.id });
-	assert.equal(h.rows().length, 1); assert.equal(h.charge(), bytes[1]);
-	assert.deepEqual(await h.service('user-1', remove(3, owner.note.id)), { ok: true, removed: true, noteId: owner.note.id });
-	assert.deepEqual(await h.service('user-1', remove(4, owner.note.id)), { ok: true, removed: true, noteId: owner.note.id });
-	assert.equal(h.charge(), bytes[1], 'a missing note refunds nothing');
-	assert.deepEqual(await h.service('other', remove(5, lopu.note.id)), { ok: true, removed: true, noteId: lopu.note.id });
-	assert.equal(h.rows().length, 1, 'another account cannot remove this owner’s note');
-	assert.deepEqual(await h.service('user-1', remove(6, lopu.note.id)), { ok: true, removed: true, noteId: lopu.note.id });
-	assert.equal(h.rows().length, 0); assert.equal(h.charge(), 0);
-	assert.equal((await h.service('user-1', add(1))).ok, true, 'the operation id of a removed note is free again only for an identical note');
+test('removing notes erases text, meters a minimal identity fence and refuses delayed add/explain retries', async () => {
+ const h = harness();
+ const owner = await h.service('user-1', add(1)), lopu = await h.service('user-1', explain(2));
+ assert.ok('note' in owner && 'note' in lopu);
+ const before=h.charge();
+ assert.deepEqual(await h.service('user-1',remove(3,owner.note.id)),{ok:true,removed:true,noteId:owner.note.id});
+ const fence=h.rows().find(row=>row.shareId===timelineNoteThingId('user-1',owner.note.id));
+ assert.equal(fence.timelineNoteRemoved,true);assert.ok(h.charge()<before);assert.equal(JSON.stringify(fence).includes('Note 1'),false);
+ assert.deepEqual(Object.keys(JSON.parse(fromBin(fence.secure))).sort(),['formatVersion','id','ownerId','removedAt']);
+ const charge=h.charge();await h.service('user-1',remove(3,owner.note.id));await h.service('user-1',remove(4,owner.note.id));assert.equal(h.charge(),charge);
+ await rejects(h.service('user-1',add(1)),409,/removed/);await rejects(h.service('user-1',explain(1)),409,/removed/);
+ assert.deepEqual(h.ai,['saved'],'Removed identities never run inference again');
+ await h.service('other',remove(5,lopu.note.id));assert.ok(await h.things.findOne({ownerId:'user-1',shareId:timelineNoteThingId('user-1',lopu.note.id),timelineNoteRemoved:{$ne:true}}));
+ await h.service('user-1',remove(6,lopu.note.id));assert.deepEqual(await readTimelineNotes(h.things,'user-1',['saved']),[]);
+ assert.equal(h.charge(),h.rows().reduce((sum,row)=>sum+row.sizeBytes,0));
+ const unknown=timelineNoteId(uuid(10));await h.service('user-1',remove(11,unknown));await rejects(h.service('user-1',add(10)),409,/removed/);
+ const fresh=await h.service('user-1',add(12));assert.ok('note' in fresh,'New identities can still be authored');
 });
 
 test('Lopu is asked once per request id, outside the transaction, and the stored explanation replays without a second model call', async () => {
@@ -148,7 +152,7 @@ test('a custom database stores notes without storage accounting, and removal ref
 	const result = await h.service('user-1', add(1)); assert.ok('note' in result);
 	assert.equal(h.rows()[0].storageClass, undefined); assert.equal(h.rows()[0].sizeBytes, undefined); assert.equal(h.charge(), 0);
 	assert.deepEqual(await h.service('user-1', remove(2, result.note.id)), { ok: true, removed: true, noteId: result.note.id });
-	assert.equal(h.rows().length, 0); assert.equal(h.charge(), 0);
+	assert.equal(h.rows().length, 1); assert.equal(h.rows()[0].timelineNoteRemoved,true); assert.equal(h.charge(), 0);
 });
 
 test('page note reads are one bounded owner-scoped batch in createdAt order and refuse envelopes that drifted from their record', async () => {
@@ -180,4 +184,13 @@ test('every note write touches the Timeline folder inside the transaction so con
 	h.folder().shareId = 'elsewhere';
 	await rejects(h.service('user-1', add(3)), 404, /not in your history/);
 	assert.equal(h.rows().length, 2);
+});
+
+
+test('failed removal accounting preserves the original note and quota atomically',async()=>{
+ const h=harness();const result=await h.service('user-1',add(1));assert.ok('note' in result);const charge=h.charge();
+ h.failNextDebit();await assert.rejects(h.service('user-1',remove(2,result.note.id)),/Quota transaction refused/);
+ assert.equal(h.charge(),charge);assert.deepEqual(noteFromDoc(h.rows()[0]),result.note);assert.equal(h.rows()[0].timelineNoteRemoved,undefined);
+ h.rows()[0].sizeBytes=0;await rejects(h.service('user-1',remove(3,result.note.id)),409,/reconciliation/);
+ assert.equal(h.rows()[0].timelineNoteRemoved,undefined);assert.deepEqual(noteFromDoc(h.rows()[0]),result.note);
 });

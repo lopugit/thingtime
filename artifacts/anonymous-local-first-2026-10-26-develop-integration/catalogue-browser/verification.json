@@ -1,0 +1,42 @@
+{
+  "scope": "Browser storage adapter acceptance with synthetic stream, no server/UI acceptance claim",
+  "result": [
+    {
+      "domain": "themes",
+      "count": 145,
+      "serializedBytes": 39296,
+      "pendingPreserved": true,
+      "cancelled": true,
+      "admissionCancelled": true,
+      "quotaStyleRollback": true,
+      "stagingRows": 0,
+      "nativeIndexedDB": true
+    },
+    {
+      "domain": "algorithms",
+      "count": 60,
+      "serializedBytes": 9486361,
+      "pendingPreserved": true,
+      "cancelled": true,
+      "admissionCancelled": true,
+      "quotaStyleRollback": true,
+      "stagingRows": 0,
+      "nativeIndexedDB": true
+    }
+  ],
+  "reload": [
+    {
+      "domain": "themes",
+      "count": 145,
+      "pendingName": "Pending device edit",
+      "stagingRows": 0
+    },
+    {
+      "domain": "algorithms",
+      "count": 60,
+      "pendingName": "Pending device edit",
+      "stagingRows": 0
+    }
+  ],
+  "errors": []
+}

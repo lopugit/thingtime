@@ -1,0 +1,775 @@
+{
+  "error": "AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:\n\n  assert.ok(box && box.x >= 0 && box.x + box.width <= width + 1 && box.y >= 0 && box.y + box.height <= (width === 1440 ? 1000 : 844))\n",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\n\nOffline account workspace. Local edits are available; account sync is paused until your session is verified.\n\nReconnect\nReview sync\nThemes 🎨\n\nMake Thingtime yours — tweak colours, fonts, and the general feel. Save your look as a theme and share it with a link — or browse public looks in the theme gallery ✨.\n\nPRESETS\n\nAa Thingtime\n\nButton\nCTA\n\nThingtime\n\nAa Thingtime\n\nButton\nCTA\n\nFable\n\nAa Thingtime\n\nButton\nCTA\n\nPrism\n\nAa Thingtime\n\nButton\nCTA\n\nMidnight\n\nCOLOURS\n\nAccent\n\nCTAs + highlights\n\nAccent tint\n\nInk\n\nheadings + borders\n\nBody text\n\nMuted text\n\nPage background\n\nCards\n\nSurface\n\nSurface alt\n\nBorders\n\nLinks\n\nRainbow\n\nthe five brand stops\n\nFONTS\n\nHeadings\n\nSpace Grotesk by default\n\nSystem\nSpace Grotesk\nHanken Grotesk\nJetBrains Mono\nInter\nSora\nFraunces\nInstrument Serif\nNunito\nAtkinson Hyperlegible\nIBM Plex Mono\nFira Code\n\nBody\n\nHanken Grotesk by default\n\nSystem\nSpace Grotesk\nHanken Grotesk\nJetBrains Mono\nInter\nSora\nFraunces\nInstrument Serif\nNunito\nAtkinson Hyperlegible\nIBM Plex Mono\nFira Code\n\nCode\n\nJetBrains Mono by default\n\nSystem\nSpace Grotesk\nHanken Grotesk\nJetBrains Mono\nInter\nSora\nFraunces\nInstrument Serif\nNunito\nAtkinson Hyperlegible\nIBM Plex Mono\nFira Code\n\nLanding display\n\nthe big landing headlines\n\nSystem\nSpace Grotesk\nHanken Grotesk\nJetBrains Mono\nInter\nSora\nFraunces\nInstrument Serif\nNunito\nAtkinson Hyperlegible\nIBM Plex Mono\nFira Code\n\nGENERAL\n\nCorner radius\n\n0 = sharp and brutal\n\n−\n\n1×\n\n＋\n\nBorder weight\n\n−\n\n1px\n\n＋\n\nShadows\n\nSoft\nHard 🧱\n\nIcons\n\nplayful emoji or coloured line icons\n\nEmoji 🥳\nLucide ✦\n\nThings badge padding\n\nView / Show / Arrange / Kind controls\n\nSmall\nMedium\nLarge\nCustom\n\nMotion\n\nrainbow animations\n\nAnimation speed\n\n−\n\n200ms\n\n＋\n\nReset\n\nback to the preset's defaults (clears custom CSS too)\n\nReset customisations\n\nWINDOW BUTTONS\n\nClose\n\nthe red light\n\n−\n\n3.5px\n\n＋\n\nMinimise\n\nthe amber light\n\n−\n\n3.5px\n\n＋\n\nExpand\n\nthe green light\n\n−\n\n3.5px\n\n＋\n\nSAVE A THEME ON THIS DEVICE\n\nShareable\n\nSave theme 💾\n\nThemes save on this device first. Account content and the selected theme synchronize separately.\n\nRefresh account themes\n\n495e3996-3481-434b-bb51-f426ef101a17: pending\n\nRetry theme sync\n\nTheme selection: pending\n\nRetry selection sync\n\nMY THEMES\n\nTransfer\n\nAa Thingtime\n\nButton\nCTA\n\nHistory design 36288a ⭐\n\nsaved on this device · pending\n\nApply\nHistory\nTransfer\nDelete\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄\nHistory\n\n4 changes waiting to sync\n\nRefresh\nOpen History browser\nTry a variation\nEverything\nThis Thing\nPage + related\nHistory design 36288a\n\nLook\n\nList\nCards\nLine\nFrames\nMessages\nKind\nAll\nPages\nComponents\nData\nPosts\nFiles\nFolders\nActions\nSchemas\nThemes\nAlgorithms\nSource\nAll\nEditor\nAPI\nLopu\nAction\nThingtime\nChange\nAll\nCreated\nEdited\nRestored\nCombined\nRemoved\nActivity\nSaved\nAll\nOn this device\nSynced to account\nLast 30 days · loaded changes\n\n4 of 4 matching changes · 4 loaded. Search and filters apply to this loaded window.\n\nOct 23, 2026\n7:28 AM · You · editor · Variation\nUndid change\n🎨\nHistory design 36288a\ntheme · as of this version\ntheme › colors › accent\n#bb7755\n→\n#885544\nTHINGTIME\nUndid just this change · later edits to other properties were kept\nSaved on this device\n7:28 AM · You · editor · Variation\nEdited Thing on this device\n🎨\nHistory design 36288a\ntheme · as of this version\ntheme › colors › accent\n#aa6644\n→\n#bb7755\nSaved on this device\n7:28 AM · You · editor · Variation\nEdited Thing on this device\n🎨\nHistory design 36288a\ntheme · as of this version\ntheme › colors › accent\n#885544\n→\n#aa6644\nSaved on this device\n7:28 AM · You · editor · Variation\nCreated Thing on this device\n🎨\nHistory design 36288a\ntheme · as of this version\nThing\nNot set\n→\nStructured content\nSaved on this device\nVersion details\nEdited Thing on this device\nClose preview\n\nPrivate variation · Oct 23, 2026, 7:28 AM · Editor\n\nContinues from device-event · Private draft\n\nChanges\nMessage\nVersions\nCompare from this version\n\ntheme › colors › accent\n\nBefore: #885544\n\nAfter: #aa6644\n\nView dataOpen Thing\nReview restore\n\nThis saves the earlier design as a new version. Current sharing, library title and folder stay unchanged.\n\ntheme › colors › accent\n\nCurrent: #885544\n\nResult: #aa6644\n\nRestore this version\nCancel",
+  "inputs": [
+    {
+      "type": "color",
+      "value": "#885544"
+    },
+    {
+      "type": "text",
+      "value": "#885544"
+    },
+    {
+      "type": "color",
+      "value": "#fff5fa"
+    },
+    {
+      "type": "text",
+      "value": "#fff5fa"
+    },
+    {
+      "type": "color",
+      "value": "#16161a"
+    },
+    {
+      "type": "text",
+      "value": "#16161a"
+    },
+    {
+      "type": "color",
+      "value": "#5a5a66"
+    },
+    {
+      "type": "text",
+      "value": "#5a5a66"
+    },
+    {
+      "type": "color",
+      "value": "#9a9aa6"
+    },
+    {
+      "type": "text",
+      "value": "#9a9aa6"
+    },
+    {
+      "type": "color",
+      "value": "#ffffff"
+    },
+    {
+      "type": "text",
+      "value": "#ffffff"
+    },
+    {
+      "type": "color",
+      "value": "#ffffff"
+    },
+    {
+      "type": "text",
+      "value": "#ffffff"
+    },
+    {
+      "type": "color",
+      "value": "#fafafb"
+    },
+    {
+      "type": "text",
+      "value": "#fafafb"
+    },
+    {
+      "type": "color",
+      "value": "#f5f5f7"
+    },
+    {
+      "type": "text",
+      "value": "#f5f5f7"
+    },
+    {
+      "type": "color",
+      "value": "#ececef"
+    },
+    {
+      "type": "text",
+      "value": "#ececef"
+    },
+    {
+      "type": "color",
+      "value": "#2f8fd6"
+    },
+    {
+      "type": "text",
+      "value": "#2f8fd6"
+    },
+    {
+      "type": "color",
+      "value": "#f34a4a"
+    },
+    {
+      "type": "color",
+      "value": "#ffbc48"
+    },
+    {
+      "type": "color",
+      "value": "#58ca70"
+    },
+    {
+      "type": "color",
+      "value": "#47b5e6"
+    },
+    {
+      "type": "color",
+      "value": "#a555e8"
+    },
+    {
+      "type": "checkbox",
+      "value": "on"
+    },
+    {
+      "type": "color",
+      "value": "#f34a4a"
+    },
+    {
+      "type": "text",
+      "value": "#f34a4a"
+    },
+    {
+      "type": "color",
+      "value": "#ffbc48"
+    },
+    {
+      "type": "text",
+      "value": "#ffbc48"
+    },
+    {
+      "type": "color",
+      "value": "#58ca70"
+    },
+    {
+      "type": "text",
+      "value": "#58ca70"
+    },
+    {
+      "type": "text",
+      "value": ""
+    },
+    {
+      "type": "checkbox",
+      "value": "on"
+    },
+    {
+      "type": "search",
+      "value": ""
+    }
+  ],
+  "records": [
+    {
+      "scope": "[\"http://127.0.0.1:18721\",\"home\",\"6adb0c828a47e9e112f4fbff\"]",
+      "event": {
+        "actorId": "6adb0c828a47e9e112f4fbff",
+        "after": {
+          "adapter": "theme-content",
+          "value": {
+            "crystal": {
+              "name": "History design 36288a",
+              "theme": {
+                "colors": {
+                  "accent": "#bb7755",
+                  "accentContrast": "#ffffff",
+                  "accentTint": "#fff5fa",
+                  "border": "#ececef",
+                  "borderLight": "#f0f0f2",
+                  "card": "#ffffff",
+                  "danger": "#d6455a",
+                  "darkAccent": "#59ff9c",
+                  "darkBg": "#131318",
+                  "darkBorder": "#2a2a33",
+                  "darkChrome": "#1c1c22",
+                  "darkMuted": "#8a8a95",
+                  "darkText": "#e6e6ee",
+                  "faint": "#b6b6c0",
+                  "ink": "#16161a",
+                  "link": "#2f8fd6",
+                  "muted": "#9a9aa6",
+                  "pageBg": "#ffffff",
+                  "positive": "#2f8f4f",
+                  "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                  "rainbow": [
+                    "#f34a4a",
+                    "#ffbc48",
+                    "#58ca70",
+                    "#47b5e6",
+                    "#a555e8"
+                  ],
+                  "surface": "#fafafb",
+                  "surfaceAlt": "#f5f5f7",
+                  "surfaceHover": "#ececee",
+                  "text": "#5a5a66",
+                  "warning": "#ffbc48"
+                },
+                "fonts": {
+                  "body": "Hanken Grotesk",
+                  "display": "",
+                  "heading": "Space Grotesk",
+                  "mono": "JetBrains Mono"
+                },
+                "general": {
+                  "animSpeed": 200,
+                  "borderWidth": 1,
+                  "iconStyle": "emoji",
+                  "motion": true,
+                  "radiusScale": 1,
+                  "shadow": "soft",
+                  "thingsBadgeCustomPadding": "3px 8px",
+                  "thingsBadgePadding": "small"
+                },
+                "name": "History design 36288a",
+                "windows": {
+                  "closeColor": "",
+                  "closeRadius": 3.5,
+                  "maximiseColor": "",
+                  "maximiseRadius": 3.5,
+                  "minimiseColor": "",
+                  "minimiseRadius": 3.5
+                }
+              }
+            },
+            "folderId": null,
+            "tags": [],
+            "visibility": "private"
+          },
+          "version": 1
+        },
+        "before": {
+          "adapter": "theme-content",
+          "value": {
+            "crystal": {
+              "name": "History design 36288a",
+              "theme": {
+                "colors": {
+                  "accent": "#aa6644",
+                  "accentContrast": "#ffffff",
+                  "accentTint": "#fff5fa",
+                  "border": "#ececef",
+                  "borderLight": "#f0f0f2",
+                  "card": "#ffffff",
+                  "danger": "#d6455a",
+                  "darkAccent": "#59ff9c",
+                  "darkBg": "#131318",
+                  "darkBorder": "#2a2a33",
+                  "darkChrome": "#1c1c22",
+                  "darkMuted": "#8a8a95",
+                  "darkText": "#e6e6ee",
+                  "faint": "#b6b6c0",
+                  "ink": "#16161a",
+                  "link": "#2f8fd6",
+                  "muted": "#9a9aa6",
+                  "pageBg": "#ffffff",
+                  "positive": "#2f8f4f",
+                  "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                  "rainbow": [
+                    "#f34a4a",
+                    "#ffbc48",
+                    "#58ca70",
+                    "#47b5e6",
+                    "#a555e8"
+                  ],
+                  "surface": "#fafafb",
+                  "surfaceAlt": "#f5f5f7",
+                  "surfaceHover": "#ececee",
+                  "text": "#5a5a66",
+                  "warning": "#ffbc48"
+                },
+                "fonts": {
+                  "body": "Hanken Grotesk",
+                  "display": "",
+                  "heading": "Space Grotesk",
+                  "mono": "JetBrains Mono"
+                },
+                "general": {
+                  "animSpeed": 200,
+                  "borderWidth": 1,
+                  "iconStyle": "emoji",
+                  "motion": true,
+                  "radiusScale": 1,
+                  "shadow": "soft",
+                  "thingsBadgeCustomPadding": "3px 8px",
+                  "thingsBadgePadding": "small"
+                },
+                "name": "History design 36288a",
+                "windows": {
+                  "closeColor": "",
+                  "closeRadius": 3.5,
+                  "maximiseColor": "",
+                  "maximiseRadius": 3.5,
+                  "minimiseColor": "",
+                  "minimiseRadius": 3.5
+                }
+              }
+            },
+            "folderId": null,
+            "tags": [],
+            "visibility": "private"
+          },
+          "version": 1
+        },
+        "branchId": "device-workspace-b8dc5338-8be9-4c28-a88a-3bd9918500ac",
+        "clientId": "workspace-b8dc5338-8be9-4c28-a88a-3bd9918500ac",
+        "dependencyCount": 0,
+        "formatVersion": 1,
+        "id": "device-event-266c943f-240b-4081-a485-33e89b83b10a",
+        "label": "Edited Thing on this device",
+        "mode": "draft",
+        "occurredAt": "2026-10-23T07:28:27.618Z",
+        "operation": "update",
+        "operationId": "711bb162-14c7-42bb-b866-0cb92070d509",
+        "ownerId": "6adb0c828a47e9e112f4fbff",
+        "parentCount": 1,
+        "source": "client",
+        "thingId": "495e3996-3481-434b-bb51-f426ef101a17"
+      },
+      "receipt": null,
+      "status": "pending",
+      "accessedAt": 1792740507618,
+      "bytes": 3017,
+      "reserve": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     "
+    },
+    {
+      "scope": "[\"http://127.0.0.1:18721\",\"home\",\"6adb0c828a47e9e112f4fbff\"]",
+      "event": {
+        "actorId": "6adb0c828a47e9e112f4fbff",
+        "after": {
+          "adapter": "theme-content",
+          "value": {
+            "crystal": {
+              "name": "History design 36288a",
+              "theme": {
+                "colors": {
+                  "accent": "#aa6644",
+                  "accentContrast": "#ffffff",
+                  "accentTint": "#fff5fa",
+                  "border": "#ececef",
+                  "borderLight": "#f0f0f2",
+                  "card": "#ffffff",
+                  "danger": "#d6455a",
+                  "darkAccent": "#59ff9c",
+                  "darkBg": "#131318",
+                  "darkBorder": "#2a2a33",
+                  "darkChrome": "#1c1c22",
+                  "darkMuted": "#8a8a95",
+                  "darkText": "#e6e6ee",
+                  "faint": "#b6b6c0",
+                  "ink": "#16161a",
+                  "link": "#2f8fd6",
+                  "muted": "#9a9aa6",
+                  "pageBg": "#ffffff",
+                  "positive": "#2f8f4f",
+                  "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                  "rainbow": [
+                    "#f34a4a",
+                    "#ffbc48",
+                    "#58ca70",
+                    "#47b5e6",
+                    "#a555e8"
+                  ],
+                  "surface": "#fafafb",
+                  "surfaceAlt": "#f5f5f7",
+                  "surfaceHover": "#ececee",
+                  "text": "#5a5a66",
+                  "warning": "#ffbc48"
+                },
+                "fonts": {
+                  "body": "Hanken Grotesk",
+                  "display": "",
+                  "heading": "Space Grotesk",
+                  "mono": "JetBrains Mono"
+                },
+                "general": {
+                  "animSpeed": 200,
+                  "borderWidth": 1,
+                  "iconStyle": "emoji",
+                  "motion": true,
+                  "radiusScale": 1,
+                  "shadow": "soft",
+                  "thingsBadgeCustomPadding": "3px 8px",
+                  "thingsBadgePadding": "small"
+                },
+                "name": "History design 36288a",
+                "windows": {
+                  "closeColor": "",
+                  "closeRadius": 3.5,
+                  "maximiseColor": "",
+                  "maximiseRadius": 3.5,
+                  "minimiseColor": "",
+                  "minimiseRadius": 3.5
+                }
+              }
+            },
+            "folderId": null,
+            "tags": [],
+            "visibility": "private"
+          },
+          "version": 1
+        },
+        "before": {
+          "adapter": "theme-content",
+          "value": {
+            "crystal": {
+              "name": "History design 36288a",
+              "theme": {
+                "colors": {
+                  "accent": "#885544",
+                  "accentContrast": "#ffffff",
+                  "accentTint": "#fff5fa",
+                  "border": "#ececef",
+                  "borderLight": "#f0f0f2",
+                  "card": "#ffffff",
+                  "danger": "#d6455a",
+                  "darkAccent": "#59ff9c",
+                  "darkBg": "#131318",
+                  "darkBorder": "#2a2a33",
+                  "darkChrome": "#1c1c22",
+                  "darkMuted": "#8a8a95",
+                  "darkText": "#e6e6ee",
+                  "faint": "#b6b6c0",
+                  "ink": "#16161a",
+                  "link": "#2f8fd6",
+                  "muted": "#9a9aa6",
+                  "pageBg": "#ffffff",
+                  "positive": "#2f8f4f",
+                  "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                  "rainbow": [
+                    "#f34a4a",
+                    "#ffbc48",
+                    "#58ca70",
+                    "#47b5e6",
+                    "#a555e8"
+                  ],
+                  "surface": "#fafafb",
+                  "surfaceAlt": "#f5f5f7",
+                  "surfaceHover": "#ececee",
+                  "text": "#5a5a66",
+                  "warning": "#ffbc48"
+                },
+                "fonts": {
+                  "body": "Hanken Grotesk",
+                  "display": "",
+                  "heading": "Space Grotesk",
+                  "mono": "JetBrains Mono"
+                },
+                "general": {
+                  "animSpeed": 200,
+                  "borderWidth": 1,
+                  "iconStyle": "emoji",
+                  "motion": true,
+                  "radiusScale": 1,
+                  "shadow": "soft",
+                  "thingsBadgeCustomPadding": "3px 8px",
+                  "thingsBadgePadding": "small"
+                },
+                "name": "History design 36288a",
+                "windows": {
+                  "closeColor": "",
+                  "closeRadius": 3.5,
+                  "maximiseColor": "",
+                  "maximiseRadius": 3.5,
+                  "minimiseColor": "",
+                  "minimiseRadius": 3.5
+                }
+              }
+            },
+            "folderId": null,
+            "tags": [],
+            "visibility": "private"
+          },
+          "version": 1
+        },
+        "branchId": "device-workspace-b8dc5338-8be9-4c28-a88a-3bd9918500ac",
+        "clientId": "workspace-b8dc5338-8be9-4c28-a88a-3bd9918500ac",
+        "dependencyCount": 0,
+        "formatVersion": 1,
+        "id": "device-event-5e64954c-4056-4265-80d7-04347e06a6cd",
+        "label": "Edited Thing on this device",
+        "mode": "draft",
+        "occurredAt": "2026-10-23T07:28:21.297Z",
+        "operation": "update",
+        "operationId": "db35da57-7881-4f54-b3a0-aef92fb1bc79",
+        "ownerId": "6adb0c828a47e9e112f4fbff",
+        "parentCount": 1,
+        "source": "client",
+        "thingId": "495e3996-3481-434b-bb51-f426ef101a17"
+      },
+      "receipt": null,
+      "status": "pending",
+      "accessedAt": 1792740501297,
+      "bytes": 3017,
+      "reserve": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     "
+    },
+    {
+      "scope": "[\"http://127.0.0.1:18721\",\"home\",\"6adb0c828a47e9e112f4fbff\"]",
+      "event": {
+        "actorId": "6adb0c828a47e9e112f4fbff",
+        "after": {
+          "adapter": "theme-content",
+          "value": {
+            "crystal": {
+              "name": "History design 36288a",
+              "theme": {
+                "colors": {
+                  "accent": "#885544",
+                  "accentContrast": "#ffffff",
+                  "accentTint": "#fff5fa",
+                  "border": "#ececef",
+                  "borderLight": "#f0f0f2",
+                  "card": "#ffffff",
+                  "danger": "#d6455a",
+                  "darkAccent": "#59ff9c",
+                  "darkBg": "#131318",
+                  "darkBorder": "#2a2a33",
+                  "darkChrome": "#1c1c22",
+                  "darkMuted": "#8a8a95",
+                  "darkText": "#e6e6ee",
+                  "faint": "#b6b6c0",
+                  "ink": "#16161a",
+                  "link": "#2f8fd6",
+                  "muted": "#9a9aa6",
+                  "pageBg": "#ffffff",
+                  "positive": "#2f8f4f",
+                  "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                  "rainbow": [
+                    "#f34a4a",
+                    "#ffbc48",
+                    "#58ca70",
+                    "#47b5e6",
+                    "#a555e8"
+                  ],
+                  "surface": "#fafafb",
+                  "surfaceAlt": "#f5f5f7",
+                  "surfaceHover": "#ececee",
+                  "text": "#5a5a66",
+                  "warning": "#ffbc48"
+                },
+                "fonts": {
+                  "body": "Hanken Grotesk",
+                  "display": "",
+                  "heading": "Space Grotesk",
+                  "mono": "JetBrains Mono"
+                },
+                "general": {
+                  "animSpeed": 200,
+                  "borderWidth": 1,
+                  "iconStyle": "emoji",
+                  "motion": true,
+                  "radiusScale": 1,
+                  "shadow": "soft",
+                  "thingsBadgeCustomPadding": "3px 8px",
+                  "thingsBadgePadding": "small"
+                },
+                "name": "History design 36288a",
+                "windows": {
+                  "closeColor": "",
+                  "closeRadius": 3.5,
+                  "maximiseColor": "",
+                  "maximiseRadius": 3.5,
+                  "minimiseColor": "",
+                  "minimiseRadius": 3.5
+                }
+              }
+            },
+            "folderId": null,
+            "tags": [],
+            "visibility": "private"
+          },
+          "version": 1
+        },
+        "before": null,
+        "branchId": "device-workspace-b8dc5338-8be9-4c28-a88a-3bd9918500ac",
+        "clientId": "workspace-b8dc5338-8be9-4c28-a88a-3bd9918500ac",
+        "dependencyCount": 0,
+        "formatVersion": 1,
+        "id": "device-event-637c3dba-9a50-45eb-a900-41ad07518382",
+        "label": "Created Thing on this device",
+        "mode": "draft",
+        "occurredAt": "2026-10-23T07:28:14.065Z",
+        "operation": "create",
+        "operationId": "63280979-ad6f-4a3b-a794-35bc3f6364bb",
+        "ownerId": "6adb0c828a47e9e112f4fbff",
+        "parentCount": 0,
+        "source": "client",
+        "thingId": "495e3996-3481-434b-bb51-f426ef101a17"
+      },
+      "receipt": null,
+      "status": "pending",
+      "accessedAt": 1792740494065,
+      "bytes": 1782,
+      "reserve": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     "
+    },
+    {
+      "scope": "[\"http://127.0.0.1:18721\",\"home\",\"6adb0c828a47e9e112f4fbff\"]",
+      "event": {
+        "actorId": "6adb0c828a47e9e112f4fbff",
+        "after": {
+          "adapter": "theme-content",
+          "value": {
+            "crystal": {
+              "name": "History design 36288a",
+              "theme": {
+                "colors": {
+                  "accent": "#885544",
+                  "accentContrast": "#ffffff",
+                  "accentTint": "#fff5fa",
+                  "border": "#ececef",
+                  "borderLight": "#f0f0f2",
+                  "card": "#ffffff",
+                  "danger": "#d6455a",
+                  "darkAccent": "#59ff9c",
+                  "darkBg": "#131318",
+                  "darkBorder": "#2a2a33",
+                  "darkChrome": "#1c1c22",
+                  "darkMuted": "#8a8a95",
+                  "darkText": "#e6e6ee",
+                  "faint": "#b6b6c0",
+                  "ink": "#16161a",
+                  "link": "#2f8fd6",
+                  "muted": "#9a9aa6",
+                  "pageBg": "#ffffff",
+                  "positive": "#2f8f4f",
+                  "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                  "rainbow": [
+                    "#f34a4a",
+                    "#ffbc48",
+                    "#58ca70",
+                    "#47b5e6",
+                    "#a555e8"
+                  ],
+                  "surface": "#fafafb",
+                  "surfaceAlt": "#f5f5f7",
+                  "surfaceHover": "#ececee",
+                  "text": "#5a5a66",
+                  "warning": "#ffbc48"
+                },
+                "fonts": {
+                  "body": "Hanken Grotesk",
+                  "display": "",
+                  "heading": "Space Grotesk",
+                  "mono": "JetBrains Mono"
+                },
+                "general": {
+                  "animSpeed": 200,
+                  "borderWidth": 1,
+                  "iconStyle": "emoji",
+                  "motion": true,
+                  "radiusScale": 1,
+                  "shadow": "soft",
+                  "thingsBadgeCustomPadding": "3px 8px",
+                  "thingsBadgePadding": "small"
+                },
+                "name": "History design 36288a",
+                "windows": {
+                  "closeColor": "",
+                  "closeRadius": 3.5,
+                  "maximiseColor": "",
+                  "maximiseRadius": 3.5,
+                  "minimiseColor": "",
+                  "minimiseRadius": 3.5
+                }
+              }
+            },
+            "folderId": null,
+            "tags": [],
+            "visibility": "private"
+          },
+          "version": 1
+        },
+        "before": {
+          "adapter": "theme-content",
+          "value": {
+            "crystal": {
+              "name": "History design 36288a",
+              "theme": {
+                "colors": {
+                  "accent": "#bb7755",
+                  "accentContrast": "#ffffff",
+                  "accentTint": "#fff5fa",
+                  "border": "#ececef",
+                  "borderLight": "#f0f0f2",
+                  "card": "#ffffff",
+                  "danger": "#d6455a",
+                  "darkAccent": "#59ff9c",
+                  "darkBg": "#131318",
+                  "darkBorder": "#2a2a33",
+                  "darkChrome": "#1c1c22",
+                  "darkMuted": "#8a8a95",
+                  "darkText": "#e6e6ee",
+                  "faint": "#b6b6c0",
+                  "ink": "#16161a",
+                  "link": "#2f8fd6",
+                  "muted": "#9a9aa6",
+                  "pageBg": "#ffffff",
+                  "positive": "#2f8f4f",
+                  "positiveSoft": "rgba(88, 202, 112, 0.14)",
+                  "rainbow": [
+                    "#f34a4a",
+                    "#ffbc48",
+                    "#58ca70",
+                    "#47b5e6",
+                    "#a555e8"
+                  ],
+                  "surface": "#fafafb",
+                  "surfaceAlt": "#f5f5f7",
+                  "surfaceHover": "#ececee",
+                  "text": "#5a5a66",
+                  "warning": "#ffbc48"
+                },
+                "fonts": {
+                  "body": "Hanken Grotesk",
+                  "display": "",
+                  "heading": "Space Grotesk",
+                  "mono": "JetBrains Mono"
+                },
+                "general": {
+                  "animSpeed": 200,
+                  "borderWidth": 1,
+                  "iconStyle": "emoji",
+                  "motion": true,
+                  "radiusScale": 1,
+                  "shadow": "soft",
+                  "thingsBadgeCustomPadding": "3px 8px",
+                  "thingsBadgePadding": "small"
+                },
+                "name": "History design 36288a",
+                "windows": {
+                  "closeColor": "",
+                  "closeRadius": 3.5,
+                  "maximiseColor": "",
+                  "maximiseRadius": 3.5,
+                  "minimiseColor": "",
+                  "minimiseRadius": 3.5
+                }
+              }
+            },
+            "folderId": null,
+            "tags": [],
+            "visibility": "private"
+          },
+          "version": 1
+        },
+        "branchId": "device-workspace-b8dc5338-8be9-4c28-a88a-3bd9918500ac",
+        "clientId": "workspace-b8dc5338-8be9-4c28-a88a-3bd9918500ac",
+        "dependencyCount": 0,
+        "formatVersion": 1,
+        "id": "version-d015a1a4-1bf3-4d72-afce-0ac8baf00a2f",
+        "label": "Undid change",
+        "mode": "draft",
+        "occurredAt": "2026-10-23T07:28:34.851Z",
+        "operation": "restore",
+        "operationId": "b14bad7de8af0867ecb045c5fc6c475bfaf4e26bab2f5269669ac9d45f2b75cc",
+        "ownerId": "6adb0c828a47e9e112f4fbff",
+        "parentCount": 2,
+        "source": "client",
+        "thingId": "495e3996-3481-434b-bb51-f426ef101a17"
+      },
+      "receipt": null,
+      "status": "pending",
+      "accessedAt": 1792740514851,
+      "bytes": 3078,
+      "reserve": "                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     "
+    }
+  ],
+  "errors": [],
+  "writes": [
+    "/api/v1/algorithms/sync",
+    "/api/v1/algorithms/sync",
+    "/api/v1/themes/sync",
+    "/api/v1/themes/sync"
+  ]
+}

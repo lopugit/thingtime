@@ -1,0 +1,35 @@
+{
+  "jobId": "pr1000-ci-50cb1f957dd9",
+  "sha": "50cb1f957dd907a14ad02346c06f3b004ffa4ccd",
+  "pid": 61211,
+  "required": [
+    "Web CI",
+    "Lopu CodeQL all branches"
+  ],
+  "startedAt": "2026-10-26T20:13:34.907196+00:00",
+  "deadlineSeconds": 1200,
+  "cancellation": "SIGTERM or SIGINT to this PID",
+  "status": "success",
+  "observedAt": "2026-10-26T20:22:54.164271+00:00",
+  "runs": {
+    "Web CI": {
+      "conclusion": "success",
+      "createdAt": "2026-10-26T20:13:06Z",
+      "databaseId": 40393670539,
+      "headSha": "50cb1f957dd907a14ad02346c06f3b004ffa4ccd",
+      "status": "completed",
+      "url": "https://github.com/lopugit/thingtime/actions/runs/40393670539",
+      "workflowName": "Web CI"
+    },
+    "Lopu CodeQL all branches": {
+      "conclusion": "success",
+      "createdAt": "2026-10-26T20:18:31Z",
+      "databaseId": 40394468447,
+      "headSha": "50cb1f957dd907a14ad02346c06f3b004ffa4ccd",
+      "status": "completed",
+      "url": "https://github.com/lopugit/thingtime/actions/runs/40394468447",
+      "workflowName": "Lopu CodeQL all branches"
+    }
+  },
+  "endedAt": "2026-10-26T20:22:54.165622+00:00"
+}

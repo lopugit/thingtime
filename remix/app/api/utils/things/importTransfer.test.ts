@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { importTransfer, orderTransferImports } from './importTransfer';
-import { TRANSFER_FORMAT, type ThingTransfer } from '../../../utils/thingTransfer/format';
+import { TRANSFER_FORMAT, TRANSFER_LIMITS, type ThingTransfer } from '../../../utils/thingTransfer/format';
 import { rewriteTransferMedia } from './transferMediaCore';
 import { resolveTemplate } from '../../../components/ComponentsLibrary/componentTemplate';
 import { compositionAttachmentIds } from '../actions/compositionMediaCore';
@@ -24,6 +24,58 @@ const harness = () => {
     remove: async (_viewer: any, id: any) => { removed.push(id); return { ok: true } as any; }
   } };
 };
+
+const largeFileFixture = () => {
+  const manifest = fixture();
+  manifest.files = ['first', 'second'].map((id, index) => ({ id, targetId: 'data', path: `files/${String(index).padStart(6, '0')}`,
+    name: `${id}.bin`, mime: 'application/octet-stream', bytes: 300 * 1024 * 1024, sha256: 'a'.repeat(64) }));
+  return manifest;
+};
+
+test('metadata-only account imports above 512 MiB preserve ownership, ready-upload inspection and binding', async () => {
+  const manifest = largeFileFixture(), { deps, writes } = harness(); let bound = false;
+  const result = await importTransfer({ id: 'recipient' }, { manifest, files: { first: 'upload-first', second: 'upload-second' } }, undefined, {
+    ...deps,
+    inspectFiles: async (owner, ids) => { assert.equal(owner, 'recipient'); assert.deepEqual(ids, ['upload-first', 'upload-second']); return { ok: true, hasAny: true, hasVisual: false }; },
+    getFile: async (owner, id) => { assert.equal(owner, 'recipient'); assert.match(id, /^upload-/); return { crystal: { size: manifest.files[0].bytes } } as any; },
+    bindFiles: ids => { assert.deepEqual(ids, ['upload-first', 'upload-second']); bound = true; return undefined as any; }
+  });
+  assert.equal(result.ok, true); assert.equal(bound, true);
+  assert.ok(writes.every(row => row.owner === 'recipient' && row.input.acl[0] === 'tt:user'));
+});
+
+test('large imports refuse malformed or unsafe aggregate sizes before inspecting or writing', async () => {
+  for (const sizes of [[-1, 1], [0.5, 1], [Number.MAX_SAFE_INTEGER + 1, 1], [Number.MAX_SAFE_INTEGER, 1]]) {
+    const manifest = largeFileFixture(); manifest.files.forEach((file, i) => { file.bytes = sizes[i]; });
+    const { deps, writes, removed } = harness();
+    const result = await importTransfer({ id: 'recipient' }, { manifest, files: { first: 'upload-first', second: 'upload-second' } }, undefined, {
+      ...deps, inspectFiles: async () => { assert.fail('Invalid sizes must fail before file inspection'); }
+    });
+    assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 400);
+    assert.deepEqual(writes, []); assert.deepEqual(removed, []);
+  }
+});
+
+test('large import access, quota and cancellation failures preserve rollback without retrying', async () => {
+  for (const failure of ['access', 'quota', 'cancel']) {
+    const manifest = largeFileFixture(), { deps, writes, removed } = harness(), controller = new AbortController();
+    const result = await importTransfer({ id: 'recipient' }, { manifest, files: { first: 'upload-first', second: 'upload-second' } }, controller.signal, {
+      ...deps,
+      inspectFiles: async () => failure === 'access' ? { ok: false, status: 403, error: 'Not an owned ready upload' } : { ok: true, hasAny: true, hasVisual: false },
+      getFile: async () => ({ crystal: { size: manifest.files[0].bytes } }) as any,
+      bindFiles: () => undefined as any,
+      create: async (...args: Parameters<typeof deps.create>) => {
+        if (failure === 'quota' && writes.length === 1) return { ok: false, status: 413, error: 'Storage quota exceeded' } as any;
+        const made = await deps.create(...args);
+        if (failure === 'cancel') controller.abort();
+        return made;
+      }
+    });
+    assert.equal(result.ok, false);
+    if (failure === 'access') assert.deepEqual(writes, []);
+    else { assert.equal(writes.length, 1); assert.deepEqual(removed, [writes[0].input.shareId]); }
+  }
+});
 
 const archiveFixture = (id = 'archive'): ThingTransfer['things'] => {
   const at = '2026-09-01T00:00:00.000Z';

@@ -1,0 +1,74 @@
+{
+  "error": "AssertionError [ERR_ASSERTION]: first, middle and last guidance lines must not be covered by another panel\n\nfalse !== true\n",
+  "phase": "oversized status responsive layout",
+  "checks": [
+    "offline normal settings save and cold reload retain exact Unicode and disabled rows",
+    "server commits before a lost reply; newer local save completes while reply is held; read acknowledgement avoids duplicate replay",
+    "explicit device conflict choice preserves the reviewed revision and exact content",
+    "explicit account conflict choice preserves the reviewed revision and exact content"
+  ],
+  "errors": [],
+  "offlineWrites": [],
+  "instructionRequests": [
+    {
+      "method": "GET",
+      "bytes": 0
+    },
+    {
+      "method": "GET",
+      "bytes": 0
+    },
+    {
+      "method": "GET",
+      "bytes": 0
+    },
+    {
+      "method": "POST",
+      "bytes": 298
+    },
+    {
+      "method": "GET",
+      "bytes": 0
+    },
+    {
+      "method": "GET",
+      "bytes": 0
+    },
+    {
+      "method": "POST",
+      "bytes": 378
+    },
+    {
+      "method": "GET",
+      "bytes": 0
+    },
+    {
+      "method": "GET",
+      "bytes": 0
+    },
+    {
+      "method": "POST",
+      "bytes": 300
+    },
+    {
+      "method": "GET",
+      "bytes": 0
+    },
+    {
+      "method": "GET",
+      "bytes": 0
+    },
+    {
+      "method": "GET",
+      "bytes": 0
+    },
+    {
+      "method": "GET",
+      "bytes": 0
+    }
+  ],
+  "writes": 3,
+  "screenshotCaptured": true,
+  "bodyReadable": true,
+  "body": "🦄\ninstructions-0f62fe1c\n🌈\n🦄\nSettings\nAccount\nCharacters\nEmail\nProfile\nThings\nAppearance\nNotifications\nSecurity\nConnections\nLopu\nAI waterfalls\nLopu 🦄\nYour Thingtime assistant: the floating bubble, how its chat window sits, whether its builder edits paint live, its voice, and the model it thinks with.\nLopu prompt\nShared guidance and your personal instructions.\n\nLopu · Instructions\n\nSave custom instructions in this workspace. Signed-in accounts sync independently; account replies use them after sync completes. Task-specific guidance and tool permissions also apply. Canned messages do not use an AI prompt.\n\nView base prompt\n\nYour custom instructions\n\nTick the instructions you want Lopu to use, then save. Unticked instructions stay in your list.\n\nRemove\nRemove\nAdd instruction\n\nInstructions are saved on this device. Account sync supports requests up to 96 KiB. Shorten the instructions to retry account sync.\n\nSave instructions\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nINSTRUCTIONS-0F62FE1C\n\nProfile\n\nLog out\n\n✉️ email unverified\n\n🦄\n\n🦄\n\nLopu\n\nTHINGTIME AI\n\n✕\n\n✨ Lopu instructions saved on this device\n\nAccount sync runs separately. Account replies use these instructions after sync completes.\n\n🦄\n\nLopu\n\nTHINGTIME AI\n\n✕\n\n✨ Lopu instructions saved on this device\n\nAccount sync runs separately. Account replies use these instructions after sync completes.\n\n🦄\n\nLopu\n\nTHINGTIME AI\n\n✕\n\n✨ Lopu instructions saved on this device\n\nAccount sync runs separately. Account replies use these instructions after sync completes."
+}

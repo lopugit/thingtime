@@ -1,0 +1,27 @@
+[
+  {
+    "at": 1792994777525,
+    "cpu": "usage_usec 152326659\nuser_usec 117444431\nsystem_usec 34882228\ncore_sched.force_idle_usec 0\nnr_periods 2548\nnr_throttled 815\nthrottled_usec 50811799\nnr_bursts 0\nburst_usec 0\n",
+    "memory": "1882361856"
+  },
+  {
+    "at": 1792994795620,
+    "cpu": "usage_usec 161419742\nuser_usec 124417625\nsystem_usec 37002117\ncore_sched.force_idle_usec 0\nnr_periods 2730\nnr_throttled 853\nthrottled_usec 52681538\nnr_bursts 0\nburst_usec 0\n",
+    "memory": "1883877376"
+  },
+  {
+    "at": 1792994827310,
+    "cpu": "usage_usec 176286227\nuser_usec 136102170\nsystem_usec 40184056\ncore_sched.force_idle_usec 0\nnr_periods 3047\nnr_throttled 913\nthrottled_usec 56955404\nnr_bursts 0\nburst_usec 0\n",
+    "memory": "1943527424"
+  },
+  {
+    "at": 1792994887557,
+    "cpu": "usage_usec 194125301\nuser_usec 150260718\nsystem_usec 43864582\ncore_sched.force_idle_usec 0\nnr_periods 3649\nnr_throttled 970\nthrottled_usec 60350627\nnr_bursts 0\nburst_usec 0\n",
+    "memory": "1904762880"
+  },
+  {
+    "at": 1792994948121,
+    "cpu": "usage_usec 220887919\nuser_usec 172219821\nsystem_usec 48668097\ncore_sched.force_idle_usec 0\nnr_periods 4256\nnr_throttled 1103\nthrottled_usec 69020432\nnr_bursts 0\nburst_usec 0\n",
+    "memory": "2005684224"
+  }
+]

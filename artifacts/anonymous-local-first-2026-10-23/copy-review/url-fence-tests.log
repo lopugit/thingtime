@@ -1,0 +1,45 @@
+✔ account native copy and fork preserve local files, remap content, and never require upload (16851.697255ms)
+✔ copy import rechecks deletion, refusal, missing bytes, retirement and quota inside its atomic commit (107.195257ms)
+✔ native account writers accept selections above the old 200-item operation cap (24033.957926ms)
+✔ prepared text-only bearer exports keep their observed access fence during local copy admission (10.595189ms)
+✔ prepared bearer URL copies refuse a known device link removed at import admission (27.448191ms)
+✔ new account content exports canonical offline dependencies without sync or account authority (204.357552ms)
+✔ partial folder caches require a complete server plan and preserve local changes on subsequent offline downloads (98.1532ms)
+✔ fresh server export content outranks unchanged stale cache and option scopes never widen (58.006872ms)
+✔ export refuses missing dependencies, invalid options, cancellation and identity changes without retaining partial snapshots (30.664773ms)
+✔ dedicated online exports remain available but cannot erase pending device edits (21.066893ms)
+✔ large exports retain successfully and remain available when actual browser capacity refuses retention (1667.112475ms)
+✔ export-only dependencies cannot capture an owner-local component alias (21.054039ms)
+✔ multi-root preparation refuses conflicting saved dependency contexts (5.3187ms)
+✔ known read refusals remove complete export snapshots and invalidate prepared JSON plans (10.654412ms)
+✔ refused export-only dependencies invalidate every affected closure but preserve pending authored work (33.552697ms)
+✔ a refusal during an authorized export read cannot resurrect the snapshot; fresh reauthorization can export again (9.063584ms)
+✔ legacy export snapshots cannot bypass a refusal retained before this client version (4.898572ms)
+✔ dedicated remote plans are fenced during and after their authorized read (11.498786ms)
+✔ keyed remote plans are fenced during and after their authorized read (9.304045ms)
+✔ account folder ZIP uses saved annotated files and round-trips exact bytes through the normal local importer (276.614359ms)
+✔ canonical retained file aliases export the current local metadata once without inventing upload identity (32.412599ms)
+✔ local page media references to retained account aliases become independent portable file references (143.007482ms)
+✔ cancelled and deleted account files cannot reappear from a retained export snapshot (42.7929ms)
+✔ file downloads reject damaged bytes and missing workspace data without returning a partial plan (40.576702ms)
+✔ export readers return immutable copies and fence cancellation and a retired account (13.760321ms)
+✔ excluding file bytes preserves original account media references (81.551233ms)
+✔ an online managed-content fallback cannot silently omit pending device file edits (41.759814ms)
+✔ prepared byte readers cannot outlive deletion or a canonical account-file refusal (141.33367ms)
+✔ a fresh export cannot reuse retained bytes after an already-known canonical refusal (37.212711ms)
+✔ canonical account refusal does not remove independent device-authored original ownership (60.782815ms)
+✔ mixed account gallery commits metadata, bytes and independent queues offline, exports fresh copies and synchronizes owner-bound annotations (489.182968ms)
+✔ lost link receipts survive reopen and reorder without duplicating identity or overwriting newer annotations (90.456106ms)
+✔ linked removal before registration is local; ambiguous registration and lost deletion replay retain one durable cancellation fence (57.507621ms)
+✔ bound annotation sync rejects changed owner, target and immutable URL or byte identity without writing or losing device edits (306.466406ms)
+✔ linked import quota failures leave no partial journal and a retired worker cannot commit its late link receipt (47.935983ms)
+✔ direct URL selection waits for a working draft or post; template copies and consumed drafts keep independent receipt identities (93.416762ms)
+✔ malformed URL receipts never bind and expired unsubmitted URL selections close locally without a request (55.671232ms)
+ℹ tests 37
+ℹ suites 0
+ℹ pass 37
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 44391.103335

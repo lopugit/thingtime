@@ -1,0 +1,45 @@
+✔ account Action effects commit with the existing queue and sync without executing the Action again (201.494373ms)
+✔ account browser and nested data Actions use the same queued adapter (36.603279ms)
+✔ account browser bulk operations retain per-item results and queue ordinary mutations without replay (60.695351ms)
+✔ remote-only dependencies are classified before effects; later local failures retain completed effects (44.893059ms)
+✔ account browser bulk copy uses complete device closures and queues independent effects once (165.051786ms)
+✔ account Action adapter preserves account, anonymous, cancellation and identity boundaries (10.508591ms)
+✔ account Action folder copy never silently omits dedicated theme or file children (82.669646ms)
+✔ new account content exports canonical offline dependencies without sync or account authority (162.783437ms)
+✔ partial folder caches require a complete server plan and preserve local changes on subsequent offline downloads (49.729758ms)
+✔ fresh server export content outranks unchanged stale cache and option scopes never widen (39.930837ms)
+✔ export refuses missing dependencies, invalid options, cancellation and identity changes without retaining partial snapshots (34.466322ms)
+✔ dedicated online exports remain available but cannot erase pending device edits (12.420426ms)
+✔ large exports retain successfully and remain available when actual browser capacity refuses retention (1553.678268ms)
+✔ export-only dependencies cannot capture an owner-local component alias (34.091516ms)
+✔ multi-root preparation refuses conflicting saved dependency contexts (5.721108ms)
+✔ known read refusals remove complete export snapshots and invalidate prepared JSON plans (9.047467ms)
+✔ refused export-only dependencies invalidate every affected closure but preserve pending authored work (17.458146ms)
+✔ a refusal during an authorized export read cannot resurrect the snapshot; fresh reauthorization can export again (9.359023ms)
+✔ legacy export snapshots cannot bypass a refusal retained before this client version (6.417702ms)
+✔ dedicated remote plans are fenced during and after their authorized read (17.548061ms)
+✔ keyed remote plans are fenced during and after their authorized read (24.164174ms)
+✔ account folder ZIP uses saved annotated files and round-trips exact bytes through the normal local importer (187.870781ms)
+✔ canonical retained file aliases export the current local metadata once without inventing upload identity (27.16593ms)
+✔ local page media references to retained account aliases become independent portable file references (100.42159ms)
+✔ cancelled and deleted account files cannot reappear from a retained export snapshot (71.496836ms)
+✔ file downloads reject damaged bytes and missing workspace data without returning a partial plan (64.285503ms)
+✔ export readers return immutable copies and fence cancellation and a retired account (13.50199ms)
+✔ excluding file bytes preserves original account media references (16.069962ms)
+✔ an online managed-content fallback cannot silently omit pending device file edits (19.80918ms)
+✔ prepared byte readers cannot outlive deletion or a canonical account-file refusal (63.40248ms)
+✔ a fresh export cannot reuse retained bytes after an already-known canonical refusal (12.864626ms)
+✔ canonical account refusal does not remove independent device-authored original ownership (35.773527ms)
+✔ account theme import atomically remaps folder/content/intent, stays private and exports before either sender runs (106.661016ms)
+✔ only background sync waits for the imported folder and lost creates replay immutable placement before a later edit (50.598285ms)
+✔ account imports retain more than 100 themes with only dedicated private sync intents (1437.798292ms)
+✔ invalid themes and home/custom placement conflicts roll back the whole import without generic protected queues (15.435325ms)
+✔ conflict copies preserve uncached existing folder placement without waiting for a nonexistent local create (74.355278ms)
+ℹ tests 37
+ℹ suites 0
+ℹ pass 37
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4772.533469

@@ -360,7 +360,7 @@ export const ThingsGridView = ({
             top={2}
             transition="opacity 120ms ease"
           >
-            <Checkbox colorScheme="pink" isChecked={selected} onChange={() => handlers.onItemToggle(thing)} size="sm" />
+            <Checkbox aria-label={`Select ${thingDisplayName(thing)}`} colorScheme="pink" isChecked={selected} onChange={() => handlers.onItemToggle(thing)} size="sm" />
           </Box>
           <Box position="absolute" right={1} top={1}>
             <ItemMenu handlers={handlers} thing={thing} />
@@ -444,6 +444,7 @@ export const ThingsListView = ({
       textTransform="uppercase"
     >
       <Checkbox
+        aria-label="Select all visible Things"
         colorScheme="pink"
         isChecked={allSelected && items.length > 0}
         isIndeterminate={!allSelected && handlers.selected.size > 0}
@@ -489,7 +490,7 @@ export const ThingsListView = ({
         >
         <Flex alignItems="center" gap={3}>
           <Box onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
-            <Checkbox colorScheme="pink" isChecked={selected} onChange={() => handlers.onItemToggle(thing)} size="sm" />
+            <Checkbox aria-label={`Select ${thingDisplayName(thing)}`} colorScheme="pink" isChecked={selected} onChange={() => handlers.onItemToggle(thing)} size="sm" />
           </Box>
           <Flex alignItems="center" flex="1" gap={2} minWidth={0}>
             <Text fontSize="16px">{thingIcon(thing)}</Text>

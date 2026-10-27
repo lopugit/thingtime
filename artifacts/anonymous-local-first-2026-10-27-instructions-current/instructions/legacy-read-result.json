@@ -1,0 +1,17 @@
+{
+  "request": {
+    "status": 200,
+    "ok": true,
+    "hasPersonal": true,
+    "hasReference": false,
+    "rowCount": 0,
+    "revisionMatches": false
+  },
+  "page": {
+    "status": 413,
+    "ok": false,
+    "code": "USE_INSTRUCTION_TRANSFER",
+    "hasPersonal": false,
+    "hasReference": false
+  }
+}

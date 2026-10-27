@@ -1,0 +1,5 @@
+{
+  "kind": "small-note-file",
+  "passed": false,
+  "message": "locator.click: Timeout 45000ms exceeded.\n"
+}

@@ -63,3 +63,83 @@ sync writes. `google-drafts` pages Google drafts without saving their bodies.
 `GmailWorkspace`, `GmailMessageActions` and `GmailComposer` share those APIs;
 compose drafts use separate encrypted rows in the existing mail IndexedDB store,
 with per-draft revisions and owner/origin isolation. No new collection is added.
+
+## Anonymous and offline workspaces
+
+`mail/useMailWorkspace.ts` keys both normal Mail surfaces by trusted root identity;
+`mail/workspace.client.ts` selects the anonymous or account partition and gates
+all cookie-bearing mail clients before capability negotiation. `mail/localStore.ts`
+keeps the existing encrypted rows and canonical records, scopes account mail to
+its API origin/owner (home plane), and uses workspace leases through crypto and
+transaction completion. No account API, new route or remote capability is added.
+
+`useMail` opens local state first; cloud refresh is independent and cannot replace
+newer device edits. Anonymous setup selects native sync or the existing fixed
+paired connector, never relay/cloud/Gmail. Existing device-only account settings
+remain locally editable while offline. Cloud-backed account and proxy settings now commit locally and queue independent
+account writes; see `mail/settingsSync.ts`. No automatic anonymous
+adoption is allowed. Same-origin old account keys remain readable; unproven
+legacy desktop-origin caches are not reassigned to a selected server.
+
+`mail/workspace.test.ts` exercises real IndexedDB/encryption with synthetic data:
+account/origin partitions, more than 2,000 retained messages, crypto/transaction
+retirement and rejection before any fetch. The store processes encryption in
+batches without a retention count ceiling. The native saved-reader and paused-settings checks below now pass locally;
+provider/native-transport and signed-in checks remain separate in TESTING.
+
+## Independent account-settings synchronization
+
+`mail/settingsSync.ts` retains a separate encrypted pending row and server revision
+for each account/proxy in the existing mail store. Device edits/removals complete
+before network work. Unsent intent may coalesce; a dispatched attempt keeps its
+original writeId/body until receipt, beside any newer edit. A durable claim fences
+competing workers, and canonical receipt validation advances only the server token.
+Refreshes cannot rewind acknowledged edits or restore pending removals. No mailbox
+operation or send enters this queue; Gmail actions obtain the current server token
+and refuse pending settings. Anonymous workspaces never acquire this queue.
+
+`MailSettingsStatus.tsx` exposes pending/refused state on both normal surfaces.
+Explicit adoption of account settings is bound to the reviewed local intent;
+uncertain attempts cannot be discarded. `settingsSync.test.ts` exercises encrypted
+reopen, lost receipts, concurrent edits/workers, monotonic versions, scoped retirement,
+conflict review and deletion sequencing. Native browser and real API queue acceptance
+remain separate checks in TESTING.md. No HTTP contract/version changes are introduced.
+
+Mail IndexedDB version 3 upgrades the existing encrypted rows in place and refuses
+version-2 writers, which cannot preserve the new queue metadata. The migration
+regression verifies retained ciphertext and the old-writer VersionError fence.
+
+
+## Native anonymous acceptance
+
+`anonymous.browser.test.ts` runs two fresh contexts against an explicitly isolated
+full-app fixture. `anonymous.browser.fixture.ts` seeds only canonical encrypted
+synthetic messages after account settings are created through the real UI; it is
+never imported by the app. Tests exercise offline settings edit/removal, exact
+reader text and inert markup, search/pagination, proxy editing and competing tabs,
+plus 1440/390/320px scroll/bounds checks. Account/cloud/connector/tracker requests
+fail the test. Provider delivery, popup settings and full-account synchronization
+remain separate. Current evidence and limitations: `docs/local-workspaces.md`.
+
+Bundle the fixture with esbuild (`--bundle --platform=browser --format=iife
+--global-name=MailFixture`) and the test with `--platform=node --format=esm`.
+Run the test inside the verified task namespace with `TT_MAIL_TEST_ORIGIN`,
+`TT_MAIL_TEST_SESSION`, `TT_MAIL_TEST_FIXTURE`, `TT_MAIL_TEST_ARTIFACTS`,
+`TT_MAIL_PUPPETEER` and `TT_MAIL_CHROME` pointing to its own app, files and binaries.
+The health response must match the isolated session. Use no personal profile or
+credentials. Close the allocator's initial app tab before starting the test
+browser, keep the resource limits, inspect cgroup memory events and reject any
+run with renderer/OOM failures. Each scenario closes its browser before the next.
+Missing opt-in variables skip these tests in `test:mail`; skips are not passes.
+
+## Native account-settings acceptance
+
+`accountSettings.browser.test.ts` uses normal signed-in Email settings against the
+isolated Linux browser/backend fixture with a freshly generated server vault key.
+It covers offline save and cold reload, a held successful response while newer
+device edits complete, exact durable retry identity, independent newer intent,
+real stale-revision refusal and both explicit conflict choices. Real API readback
+and guest read/write refusal complement 1440/390/320px screenshots and zero offline
+writes. Use `TT_LOCAL_MAIL_SETTINGS_URL` and `TT_LOCAL_MAIL_SETTINGS_ARTIFACTS` with
+the harness's generated session and shared browser paths. This tests encrypted
+settings synchronization; provider connections and mail delivery remain separate.

@@ -51,3 +51,11 @@ test('branch Builder links retain account, source and named branch identity inde
 	assert.throws(() => branchBuilderHref('main', 'page', 'owner', 'home'));
 	assert.throws(() => branchBuilderHref('branch-177abf25-b322-4ac0-9707-a59c36e7bcd5', 'page', 'owner', 'other'));
 });
+
+test('local branch routes keep an explicit isolated owner and never broaden account data-plane validation', () => {
+ const id = 'branch-177abf25-b322-4ac0-9707-a59c36e7bcd5';
+ const url = new URL(branchBuilderHref(id, 'local-page', 'local-workspace', 'local-workspace'), 'https://thingtime.test');
+ assert.equal(url.searchParams.get('historyOwner'), 'local-workspace');
+ assert.equal(url.searchParams.get('dataPlane'), 'local-workspace');
+ assert.throws(() => branchBuilderHref(id, 'local-page', 'account', 'local-workspace'));
+});

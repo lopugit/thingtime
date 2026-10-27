@@ -1,0 +1,7 @@
+{
+  "message": "TimeoutError: locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n  - waiting for getByText('Synthetic public privacy transition fixture.', { exact: true }) to be visible\n",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\n\nOffline account workspace. Local edits are available; account sync is paused until your session is verified.\n\nReconnect\nReview sync\nTHINGTIME · POST 📌\nPost 📌\n\nThis workspace is offline. Reconnect and confirm your account before syncing.\n\nBack to the feed 📰\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: ready\n\nFrontend: ready 6ms\n\nMongoDB: connected (4ms)\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "id": "a362617e-4e53-4c7f-9d16-1a56519227e5",
+  "errors": [],
+  "writes": []
+}

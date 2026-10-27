@@ -1,0 +1,5 @@
+
+> @1.0.0 lint:files /Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix
+> node scripts/ensure-dependencies.js --tool=eslint && eslint -- app/local-workspace/componentQueue.browser.fixture.ts app/local-workspace/componentQueue.browser.test.ts
+
+⚠️ REMIX FUTURE CHANGE: The `@remix-run/eslint-config` package is deprecated and will not be included in React Router v7.  We recommend moving towards a streamlined ESLint config such as the ones included in the Remix templates. See https://github.com/remix-run/remix/blob/v2/templates/remix/.eslintrc.cjs.

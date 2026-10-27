@@ -2,6 +2,7 @@ import { refreshUnavailableAiModel } from '../ai/modelSync';
 import { normalizeReadReferences, rememberReadReference, restoreReadContext, type LopuReadReference } from './readContext';
 import { looksLikeUnexecutedToolCall } from './toolTextParser';
 import { checkpointResultContext } from './checkpointResults';
+import { InstructionInferenceCapacityError } from './instructionInference';
 import type { LopuPromptSettings } from './promptSettingsCore';
 import { anthropicMediaContent, isLopuImage, openAiMediaContent, type LopuMedia } from './chatMedia';
 import { recordErrorLog } from '../errors/errorLogs';
@@ -144,7 +145,7 @@ export type LopuVaultTurnProvider = LopuVaultProviderRecord & {
 };
 
 export type LopuChatDependencies = {
-  getPromptSettings: (ownerId: string) => Promise<LopuPromptSettings>;
+  getPromptSettings: (ownerId: string, options?: { modelId?: string }) => Promise<LopuPromptSettings>;
   runTool: (call: LopuToolCall, ctx: LopuToolContext) => Promise<LopuToolResult>;
   getPreferredModelWaterfall: typeof getAiPreferredModelWaterfall;
   // options are passed only for a vault turn (the viewer's own key + base URL
@@ -190,7 +191,7 @@ export type LopuChatTurnInput = {
 };
 
 const defaultDependencies = (): LopuChatDependencies => ({
-  getPromptSettings: async ownerId => (await import('../settings/lopuPromptSettings')).getLopuPromptSettings(ownerId),
+  getPromptSettings: async (ownerId, options) => (await import('../settings/lopuPromptSettings')).getLopuPromptSettings(ownerId, options),
   runTool: runLopuTool,
   getPreferredModelWaterfall: getAiPreferredModelWaterfall,
   createAnthropic: (options) => createClaudeOAuthClient(typeof options?.apiKey === 'string' ? { token: options.apiKey } : {}),
@@ -1227,7 +1228,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
   const newState = () => ({ ...newTurnState(), readReferences: normalizeReadReferences(restored.references) });
 
   let promptSettings: LopuPromptSettings | undefined;
-  const readPromptSettings = async () => promptSettings ??= await deps.getPromptSettings(input.viewer.id);
+  const readPromptSettings = async (modelId?: string) => promptSettings ??= await deps.getPromptSettings(input.viewer.id, { modelId });
 
   // --- the viewer's own provider (Secure Vault, design note §1.3) --------
   // Takes precedence over every mode, LOPU_CHAT_PROVIDER=test included: the
@@ -1277,7 +1278,14 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
 
     const ctx = makeContext();
     const toolProtocol: LopuToolProtocol = config.transport === 'anthropic' ? 'native' : config.toolProtocol;
-    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved, accessMode: await ctx.readAccessMode(), promptSettings: await readPromptSettings() });
+    let settings: LopuPromptSettings;
+    try { settings = await readPromptSettings(config.model); } catch (error) {
+      if (!(error instanceof InstructionInferenceCapacityError)) throw error;
+      state.stopReason = 'error'; state.error = error.message;
+      yield { type: 'error', message: error.message, retryable: false };
+      return outcome('vault', choice, state, config.model, entry.name);
+    }
+    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved, accessMode: await ctx.readAccessMode(), promptSettings: settings });
     const options = vaultClientOptions(config);
     const provider =
       config.transport === 'anthropic'
@@ -1362,7 +1370,14 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     const state = newState();
     const toolMode = lopuOpenAiToolMode();
     const toolProtocol: LopuToolProtocol = attempt.provider === 'openai' && toolMode === 'text' ? 'text' : 'native';
-    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved, accessMode: await ctx.readAccessMode(), promptSettings: await readPromptSettings() });
+    let settings: LopuPromptSettings;
+    try { settings = await readPromptSettings(attempt.choice.model); } catch (error) {
+      if (!(error instanceof InstructionInferenceCapacityError)) throw error;
+      state.stopReason = 'error'; state.error = error.message;
+      yield { type: 'error', message: error.message, retryable: false };
+      return outcome(attempt.provider, attempt.choice, state);
+    }
+    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved, accessMode: await ctx.readAccessMode(), promptSettings: settings });
     const provider =
       attempt.provider === 'claude'
         ? anthropicProvider({ client: deps.createAnthropic(), choice: attempt.choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: providerText, media: input.media, signal: input.signal })

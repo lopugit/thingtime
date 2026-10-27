@@ -1,3 +1,5 @@
+import { thingHistoryHref } from '../../utils/dataPlane';
+import { characterContentPath } from '../Characters/characterContentPath';
 import { THINGS_KIND_FILTERS, THINGS_SORT_OPTIONS, THINGS_GROUP_OPTIONS, isFolder, thingOpenHref, type ThingsThing, type ThingsCache, type ThingsView, type ThingsDisplayMode, type ThingsSort, type ThingsGroupBy, type ThingsKindFilter } from './thingsCore';
 
 export type ThingsLocationState = { q: string; view: ThingsView; display: ThingsDisplayMode; sort: ThingsSort; group: ThingsGroupBy; kind: ThingsKindFilter };
@@ -25,9 +27,32 @@ export const writeThingsLocation = (params: URLSearchParams, state: ThingsLocati
 };
 
 export const thingBrowseHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>, search = '') => {
-  if (!isFolder(thing)) return thingOpenHref(thing, 'things');
+  if (!isFolder(thing)) {
+    const params = new URLSearchParams(search);
+    return characterContentPath(params.get('localPlane') === 'home' && params.get('workspaceOwner')
+      ? thingHistoryHref(thing.id, 'home', params.get('workspaceOwner')!)
+      : thingOpenHref(thing, 'things'), params.get('character'));
+  }
   const next = new URLSearchParams(search);
   next.set('folder', thing.id);
   for (const key of ['q', 'preview', 'device']) next.delete(key);
   return `/things?${next}`;
+};
+
+/** Home links bind an account, never whatever account happens to open the URL.
+ * Unknown/duplicate options fail closed instead of falling back to selected. */
+export function readLibraryDestination(params: URLSearchParams, owner?: { id: string; localOnly?: true } | null): 'selected' | 'home' | 'invalid' {
+  const plane = params.get('localPlane'), expectedOwner = params.get('workspaceOwner');
+  if (plane === null && expectedOwner === null) return 'selected';
+  if (params.getAll('localPlane').length !== 1 || params.getAll('workspaceOwner').length !== 1 ||
+    plane !== 'home' || !owner || owner.localOnly || expectedOwner !== owner.id) return 'invalid';
+  return 'home';
+}
+export const homeLibraryHref = (ownerId: string) => `/things?${new URLSearchParams({ localPlane: 'home', workspaceOwner: ownerId })}`;
+
+export const thingInspectHref = (thingId: string, search = '') => {
+  const params = new URLSearchParams(search);
+  return characterContentPath(params.get('localPlane') === 'home' && params.get('workspaceOwner')
+    ? thingHistoryHref(thingId, 'home', params.get('workspaceOwner')!)
+    : `/thing/${encodeURIComponent(thingId)}?from=things`, params.get('character'));
 };

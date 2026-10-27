@@ -1,0 +1,19 @@
+{
+  "before": {
+    "currentSrc": "blob:null/d451dd94-38c6-455c-9c53-ca38e6117adf",
+    "readyState": 4
+  },
+  "after": {
+    "currentSrc": "blob:null/d451dd94-38c6-455c-9c53-ca38e6117adf",
+    "paused": true,
+    "readyState": 0,
+    "networkState": 3,
+    "srcAttribute": null,
+    "sources": [
+      null
+    ]
+  },
+  "beforeCancellation": "pending without source",
+  "playResult": "AbortError",
+  "playingEvents": 0
+}

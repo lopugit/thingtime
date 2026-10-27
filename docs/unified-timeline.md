@@ -1091,3 +1091,64 @@ previews), so it stays available against a 1.17.0 server.
 Run `test:timeline`, `test:api-capabilities` and the opt-in
 `test:timeline:versions` (`scripts/timeline-versions.integration.mts`) on the
 guarded `timeline-rs` replica.
+
+
+### Durable note removal — api.timeline 1.19.0
+
+`TimelineNoteRemoval` is the shared local/account record for a removed note
+identity. The account retains a small metered private protected Thing while
+erasing note text and source references; ordinary note reads/counts exclude it
+through its empty target. Retrying an old add or explanation returns 409, and
+removing a not-yet-created identity also fences a delayed add. Fresh notes use
+fresh operation IDs. The browser queues dependent removals durably and keeps a
+single read revision per scope to reject stale cache replies. See
+[local coverage](local-workspaces.md#pending-history-note-removal--2026-10-17)
+and README's guarded `test:timeline:notes` setup. Existing auth, owner scope,
+quota, transaction and capability gates remain required.
+
+
+### Naming device versions — api.timeline 1.20.0
+
+Version names now admit retained owner-authored client drafts with after content,
+using the existing canonical name command, name record and effect receipt.
+The shared `canNameTimelineVersion` rule extends eligibility without changing
+any event provenance or the saved-revision authority rules for other operations.
+Account queues may accept a name offline before upload, but the remote writer
+must already hold the exact draft. Anonymous local authority accepts names and
+exports draft content without remote synchronization. See
+[coverage](local-workspaces.md#device-draft-names-and-anonymous-version-export--2026-10-17)
+for local-versus-account export metadata and unfinished acceptance boundaries.
+
+
+### Algorithm device versions — api.timeline 1.22.0
+
+`algorithmContent.ts` projects the approved saved profile design and library
+placement into the canonical `algorithm-content` version-1 snapshot. Local
+create, edit, training, import, organization and deletion use the existing
+Timeline transaction. Account hydration and content-sync acknowledgements do
+not invent edits. Training observations, sharing/listing authority, lineage and
+active selection are never restorable snapshot data.
+
+The shared version planner opts into `algorithmVersionWriter`, whose dedicated
+transaction restores, undoes or merges design fields while preserving the live
+library title/folder, authority and selection. The preview fingerprint rejects
+a changed live profile even before its next Timeline event is available. Local
+commit and its History event survive failed content upload; account History
+receipts acknowledge only the immutable device event. Generic protected-Thing
+mutation and deleted-profile recovery remain refused. Named-branch checkout and
+branch-merge composition are not supported for these protected profiles.
+
+Remote export now accepts canonical algorithm snapshots from revisions and
+admitted owner-authored client drafts, including deletion before-images. It
+retains the actual receipt and draft provenance, applies the existing private
+owner scope, metering and response-size limit, and writes nothing. The client
+requires `api.timeline` 1.22.0 only for remote algorithm export; ordinary and
+theme export keep their existing minima, and local operations need no server
+capability. Other client-draft adapters remain unsupported by remote export.
+
+Coverage: `local-workspace/algorithmHistory.test.ts`,
+`api/utils/timeline/exportVersion.test.ts`, `test:api-capabilities`, and the
+opt-in native `local-workspace/algorithmHistory.browser.test.ts`. The browser
+fixture requires a disposable isolated runtime and emits narrow/desktop restore
+screenshots plus actual API receipt/export checks; a skipped fixture is not
+acceptance evidence.

@@ -29,14 +29,19 @@ function harness(callback: () => void | Promise<unknown>) {
   const effects = { writes: 0, errors: 0, restored: 0, dropped: 0 };
   let post = { id: 'target', comments: [] as any[], commentCount: 0 };
   let replies: any[] = [];
+  const clearedDrafts: string[] = [];
+  const scopedApi = () => ({ v1: { things: { comment: (_input?: any) => { effects.writes++; return response; } } } });
   const fresh = { note() {}, swap() {}, drop() { effects.dropped++; } };
   const bindings = {
-    api: { v1: { things: { comment: (_input?: any) => { effects.writes++; return response; } } } },
+    // Posting must use the selected actor's client, independently of reads
+    // through the session principal's API.
+    api: { v1: { things: { comment: () => assert.fail('Submission used the session principal client') } } },
+    commentApi: scopedApi(), replyApi: scopedApi(),
     cursorReplies: false, post, comment: post, user: { id: 'viewer' }, commentActor: { id: 'character' }, replyActor: { id: 'character' }, commentText: 'New note', replyText: 'New note',
     buildPendingComment: () => ({ id: 'pending', pending: true }),
     beginComment: () => true, beginReply: () => true, endComment() {}, endReply() {},
     flushCommentDraft: async () => {}, flushReplyDraft: async () => {},
-    clearCommentDraft() {}, clearReplyDraft() {}, freshComments: fresh, freshReplies: fresh,
+    clearCommentDraft(text: string) { clearedDrafts.push(text); }, clearReplyDraft(text: string) { clearedDrafts.push(text); }, freshComments: fresh, freshReplies: fresh,
     onChanged: (_id: string, change: (current: typeof post) => typeof post) => { post = change(post); },
     setReplies: (change: (current: any[]) => any[]) => { replies = change(replies); },
     setCachedThread() {}, commentSort: null, isPendingComment: (entry: any) => !!entry.pending,
@@ -44,7 +49,7 @@ function harness(callback: () => void | Promise<unknown>) {
     setCommentText() { effects.restored++; }, setReplyText() { effects.restored++; },
     lopu() { effects.errors++; }, onCommentAdded: callback, notifyCommentAdded
   };
-  return { accept, reject, effects, bindings };
+  return { accept, reject, effects, bindings, clearedDrafts, current: () => ({ post, replies }) };
 }
 
 for (const name of ['submitComment', 'submitReply']) {
@@ -74,6 +79,55 @@ for (const name of ['submitComment', 'submitReply']) {
     await sending;
     await settle();
     assert.equal(refreshes, 0);
+    assert.deepEqual(h.effects, { writes: 1, errors: 1, restored: 0, dropped: 1 });
+  });
+  test(`${name} accepts content independently of a pending or rejected draft save`, async () => {
+    for (const outcome of ['pending', 'rejected']) {
+      let rejectDraft!: (error: Error) => void;
+      const draft = new Promise<void>((_resolve, reject) => { rejectDraft = reject; });
+      let refreshes = 0, completed = false;
+      const h = harness(() => { refreshes++; });
+      const flush = name === 'submitComment' ? 'flushCommentDraft' : 'flushReplyDraft';
+      h.bindings[flush] = () => draft;
+      if (outcome === 'rejected') rejectDraft(new Error('Draft save failed'));
+      const sending = closure(name, h.bindings)().then(() => { completed = true; });
+      await settle();
+      assert.equal(h.effects.writes, 1, 'draft persistence cannot prevent content submission');
+      h.accept({ comment: { id: 'accepted', text: 'New note' }, commentCount: 1 });
+      await settle();
+      try {
+        assert.equal(completed, true, 'content acceptance cannot wait for draft persistence');
+        assert.equal(refreshes, 1);
+        assert.deepEqual(h.clearedDrafts, ['New note']);
+        assert.deepEqual(h.effects, { writes: 1, errors: 0, restored: 0, dropped: 0 });
+      } finally {
+        rejectDraft(new Error('Draft save failed'));
+        await sending;
+        await settle();
+      }
+      assert.equal(refreshes, 1, 'a late draft failure cannot resubmit accepted content');
+      assert.deepEqual(h.effects, { writes: 1, errors: 0, restored: 0, dropped: 0 });
+      const accepted = name === 'submitComment' ? h.current().post.comments : h.current().replies;
+      assert.deepEqual(Array.from(accepted, comment => comment.id), ['accepted']);
+    }
+  });
+  test(`${name} preserves its draft when content fails after a successful draft save`, async () => {
+    let draftSaves = 0, refreshes = 0;
+    const h = harness(() => { refreshes++; });
+    const flush = name === 'submitComment' ? 'flushCommentDraft' : 'flushReplyDraft';
+    h.bindings[flush] = async () => { draftSaves++; };
+    const sending = closure(name, h.bindings)();
+    await settle();
+    assert.equal(draftSaves, 1);
+    assert.deepEqual(h.clearedDrafts, []);
+    h.reject(new Error('Write failed'));
+    await sending;
+    await settle();
+    assert.deepEqual(h.clearedDrafts, []);
+    assert.equal(refreshes, 0);
+    assert.equal(h.current().post.commentCount, 0);
+    assert.equal(h.current().post.comments.length, 0);
+    assert.equal(h.current().replies.length, 0);
     assert.deepEqual(h.effects, { writes: 1, errors: 1, restored: 0, dropped: 1 });
   });
 }
@@ -168,8 +222,13 @@ test('opening cursor replies reads one authorized page and rejects stale or revo
 for (const name of ['submitComment', 'submitReply']) {
   test(`${name} sends the selected Character rather than the session principal`, async () => {
     const h = harness(() => {});
+    const client = name === 'submitComment' ? 'commentApi' : 'replyApi';
+    const otherClient = name === 'submitComment' ? 'replyApi' : 'commentApi';
+    h.bindings[otherClient].v1.things.comment = () => assert.fail('Submission used the other composer client');
+    const selected = name === 'submitComment' ? h.bindings.commentActor : h.bindings.replyActor;
+    assert.equal(closure(client, { ...h.bindings, useApi: (_context: unknown, actor: unknown) => actor }), selected);
     let actor;
-    h.bindings.api.v1.things.comment = (input: any) => { actor = input.characterId; return Promise.resolve({ comment: {id:'accepted'}, commentCount:1 }); };
+    h.bindings[client].v1.things.comment = (input: any) => { actor = input.characterId; return Promise.resolve({ comment: {id:'accepted'}, commentCount:1 }); };
     await closure(name, h.bindings)();
     assert.equal(actor, 'character');
   });

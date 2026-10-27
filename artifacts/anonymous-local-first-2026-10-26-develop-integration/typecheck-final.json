@@ -1,0 +1,28 @@
+{
+  "startedAt": "2026-10-26T10:02:09.234Z",
+  "endedAt": "2026-10-26T10:03:20.585Z",
+  "scope": "Current merged source; sanitized test environment; outbound network restricted to loopback; synthetic unit fixtures only",
+  "results": [
+    {
+      "command": "test:environment-gateway",
+      "code": 0,
+      "elapsedMs": 1800,
+      "summary": [
+        "\u2139 tests 14",
+        "\u2139 pass 14",
+        "\u2139 fail 0",
+        "\u2139 skipped 0"
+      ]
+    },
+    {
+      "command": "typecheck:ratchet",
+      "code": 0,
+      "elapsedMs": 69547,
+      "summary": []
+    }
+  ],
+  "diagnostics": 91,
+  "baseline": 89,
+  "cleanTypecheck": false,
+  "fixedIncomingGatewayDiagnostic": true
+}

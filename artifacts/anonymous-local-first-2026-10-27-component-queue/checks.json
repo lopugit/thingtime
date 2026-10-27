@@ -1,0 +1,22 @@
+{
+  "baseHead": "84058ca5e097efc4150fdc3ebba773488d6aedeb",
+  "sourceSha256": {
+    "remix/app/local-workspace/accountSync.ts": "5966525eae60143caccfe5ce143f85d8cfd2d529e5fb065908856c7bd3ae5d6e",
+    "remix/app/local-workspace/accountSync.test.ts": "69a75d2e1226822bfdbcc82fa5c9fd7fa4ea3382b52499825f8e42027ea8db29"
+  },
+  "focusedTests": {
+    "passed": 40,
+    "failed": 0,
+    "source": "author agent execution, reviewed by parent",
+    "command": "cd remix && node --import tsx --test app/local-workspace/accountSync.test.ts app/api/utils/actions/sharedCompositionCore.test.ts app/api/utils/actions/forkCompositionCore.test.ts"
+  },
+  "review": "Independent review found frozen-dependency replay issue; fixed with regression and re-reviewed with no remaining actionable findings.",
+  "sanitizedClientAndServerBuild": "passed",
+  "scopedLint": "passed",
+  "typecheck": "91 unchanged normalized baseline diagnostics; no new or removed diagnostics",
+  "nativeQueueAcceptance": "not run for this increment",
+  "buildLog": {
+    "rawSha256": "4ce8c6c79217444be160362ee05299504abe8b2b1499a4cc3d8375d67c739561",
+    "publishedFormatting": "ANSI escapes and trailing whitespace removed; raw log retained in ignored tmp/continuation"
+  }
+}

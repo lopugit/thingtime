@@ -371,7 +371,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 
 	const props = fieldProps(tag, sanitizeProps(node.props, tag));
 	if (props.style) props.style = mapStyleMediaUrls(props.style, state.mediaUrl);
-	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
+	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]) || undefined;
 
 	if (tag === 'textarea') {
 		// React forbids textarea children whenever a value/defaultValue exists,

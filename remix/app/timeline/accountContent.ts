@@ -2,6 +2,7 @@ import { copyBoundedJson, type JsonValue } from '../utils/boundedJson';
 import { MAX_BIO_CHARS, MAX_DISPLAY_NAME_CHARS, MAX_PROFILE_URL_CHARS, NOTIFICATION_TYPES, EMAIL_NOTIFICATION_TYPES } from '../schemas/registry';
 import { validateLopuInstructions, validatePromptRevision } from '../api/utils/lopu/promptSettingsCore';
 import type { TimelineSnapshot } from './contract';
+import { parseInstructionRecord } from '../lopu/instructionTransfer';
 
 export const ACCOUNT_CONTENT_ADAPTER = 'account-content';
 export const ACCOUNT_CONTENT_BYTES = 1024 * 1024;
@@ -94,16 +95,22 @@ export function accountContentSnapshot(input: unknown): TimelineSnapshot {
 	if (own(source, 'lopuInstructions')) {
 		const stored = source.lopuInstructions;
 		if (!object(stored)) invalid();
-		const instructions = validateLopuInstructions(stored.instructions);
-		// Writers already trim text. Reject a malformed stored value, do not
-		// silently edit historical instruction text while taking a snapshot.
-		if (instructions.some((row, i) => row.text !== stored.instructions[i].text)) invalid();
-		preferences.lopuInstructions = { revision: validatePromptRevision(stored.revision), instructions };
+		if (own(stored, 'reference')) {
+			// The immutable generation lives in separate owner-scoped records.
+			// Never materialize it inside the bounded account snapshot.
+			if (Object.keys(stored).length !== 2 || own(stored, 'instructions')) invalid();
+			preferences.lopuInstructions = parseInstructionRecord(stored) as unknown as JsonValue;
+		} else {
+			const instructions = validateLopuInstructions(stored.instructions);
+			// Legacy inline history remains readable without editing retained text.
+			if (instructions.some((row, i) => row.text !== stored.instructions[i].text)) invalid();
+			preferences.lopuInstructions = { revision: validatePromptRevision(stored.revision), instructions };
+		}
 	}
 	if (!Array.isArray(input.recentReactions) || input.recentReactions.length > 500 || input.recentReactions.some((v) => !text(v, 4096))) invalid();
 	return {
 		adapter: ACCOUNT_CONTENT_ADAPTER,
-		version: 1,
+		version: object(preferences.lopuInstructions) && own(preferences.lopuInstructions, 'reference') ? 2 : 1,
 		value: copyBoundedJson({ ownerId: input.ownerId, profile, preferences, recentReactions: input.recentReactions }, budget, 'Account content')
 	};
 }
@@ -114,8 +121,9 @@ export function accountContentValue(snapshot: TimelineSnapshot): {
 	preferences: Record<string, JsonValue>;
 	recentReactions: string[];
 } {
-	if (snapshot.adapter !== ACCOUNT_CONTENT_ADAPTER || snapshot.version !== 1) invalid();
+	if (snapshot.adapter !== ACCOUNT_CONTENT_ADAPTER || ![1, 2].includes(snapshot.version)) invalid();
 	const value = copyBoundedJson(snapshot.value, budget, 'Account content');
-	if (JSON.stringify(accountContentSnapshot(value).value) !== JSON.stringify(value)) invalid();
+	const canonical = accountContentSnapshot(value);
+	if (canonical.version !== snapshot.version || JSON.stringify(canonical.value) !== JSON.stringify(value)) invalid();
 	return value as ReturnType<typeof accountContentValue>;
 }

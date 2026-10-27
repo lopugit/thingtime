@@ -92,7 +92,7 @@ test('attachment metadata is canonical, bounded, and derives a safe media kind',
 });
 
 test('every lifecycle state remains a valid billable attachment envelope', () => {
-	for (const attachmentState of ATTACHMENT_STATES) {
+	for (const attachmentState of ATTACHMENT_STATES.filter(state => state !== 'cancelled')) {
 		assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentState })), 42, attachmentState);
 	}
 	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ objectVersionId: 'opaque-version-id' })), 42);
@@ -543,4 +543,33 @@ test('the owner keeps seeing their own pending attachment (flagged); others neve
 	assert.equal(toAttachmentPublicMetadata('attachment-1', crystal, { status: 'blocked' }, { ownerView: true }), null);
 	// clear/nsfw are unaffected by ownerView
 	assert.equal(toAttachmentPublicMetadata('attachment-1', crystal, { status: 'nsfw' }, { ownerView: true })?.nsfw, true);
+});
+
+
+test('cancelled receipts are closed zero-object envelopes with durable intent', () => {
+	const receipt = attachment({ attachmentState: 'cancelled', attachmentCancellationRequested: true,
+		attachmentPurpose: undefined, objectSizeBytes: 0,
+		crystal: { name: 'Cancelled upload', size: 0, contentType: 'application/octet-stream', mediaKind: 'file' } });
+	assert.equal(attachmentObjectSizeBytesForAccounting(receipt), 0);
+	for (const patch of [
+		{ attachmentCancellationRequested: undefined }, { attachmentCancellationRequested: false },
+		{ objectSizeBytes: 1 }, { uploadId: 'mpu' }, { objectVersionId: 'version' },
+		{ attachmentExpiresAt: new Date() }, { attachmentPurpose: 'post' }, { targetId: 'post' },
+		{ attachmentRequestFingerprint: 'a'.repeat(64) }, { attachmentLinked: true },
+		{ attachmentPartsIssuedAt: new Date() }, { attachmentMpuEmptyVerifiedAt: new Date() },
+		{ attachmentObjectlessDelete: true }, { attachmentFinalizationLeaseId: 'lease' }
+	]) assert.equal(attachmentObjectSizeBytesForAccounting({ ...receipt, ...patch }), null, JSON.stringify(patch));
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentCancellationRequested: true })), null);
+	assert.equal(attachmentObjectSizeBytesForAccounting(attachment({ attachmentState: 'deleting', attachmentCancellationRequested: true })), 42);
+});
+
+test('password cancellation receipts retain only a validated parent relation and zero object authority', () => {
+	const receipt = attachment({ attachmentState: 'cancelled', attachmentCancellationRequested: true,
+		attachmentPurpose: 'password', passwordFileParent: '725d1312-9d6f-4460-8ae0-c1c5689861b1', objectSizeBytes: 0,
+		crystal: { name: 'Cancelled upload', size: 0, contentType: 'application/octet-stream', mediaKind: 'file' } });
+	assert.equal(attachmentObjectSizeBytesForAccounting(receipt), 0);
+	for (const patch of [{ passwordFileParent: undefined }, { passwordFileParent: 'invalid' }, { attachmentPurpose: 'post' },
+		{ attachmentPurpose: undefined }, { passwordFileEnvelope: {} }, { targetId: 'parent' }, { objectSizeBytes: 1 }, { uploadId: 'mpu' }, { objectVersionId: 'version' }]) {
+		assert.equal(attachmentObjectSizeBytesForAccounting({ ...receipt, ...patch }), null, JSON.stringify(patch));
+	}
 });

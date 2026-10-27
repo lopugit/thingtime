@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Button, Checkbox, Flex, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Progress, Select, Text } from '@chakra-ui/react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { useAttachmentUploads } from '../Attachments/useAttachmentUploads';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { useApi } from '~/hooks/useApi';
+import { LOCAL_WORKSPACE_CHANGED, workspaceIdentityKey, subscribeWorkspaceIdentity, currentAccountWorkspace, accountRemoteWorkspaceLease } from '~/local-workspace/runtime.client';
 import { formatAttachmentBytes } from '../Attachments/attachmentUiCore';
 import { FILESYSTEM_MAX_BYTES, filesystemPath } from '~/api/utils/devices/deviceFilesystemCore';
 import { ThingsGridView, ThingsListView, type ThingsItemAction, type ThingsItemHandlers } from './ThingsViews';
@@ -27,59 +28,60 @@ type Props = { deviceId?: string; initialPath?: string; initialFolderId?: string
 /** The same Things items, selection, grid/list and action menu in every host.
  * Remote inode metadata stays ephemeral and scoped to the signed-in owner. */
 export const FilesystemThingsBrowser = (props: Props) => {
-  const user = useCurrentUser();
-  return <FilesystemThingsContent key={user?.id || "anonymous"} {...props} />;
+  const identity = React.useSyncExternalStore(subscribeWorkspaceIdentity, workspaceIdentityKey, workspaceIdentityKey);
+  return identity ? <FilesystemThingsContent key={identity} identity={identity} {...props} /> : <Text padding={4}>Your workspace is not ready. Reload to try again.</Text>;
 };
 
-const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId = null, compact = false, onLocationChange }: Props) => {
-  const user = useCurrentUser();
+const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId = null, compact = false, onLocationChange, identity }: Props & { identity: string }) => {
+  const user = useWorkspaceUser();
   const ownerId = user?.id || '';
+  const localOnly = !!user?.localOnly;
+  const api = useApi(), apiRef = useRef(api); apiRef.current = api;
   const [location, setLocation] = useState<FileLocation>(() => deviceId ? { deviceId, path: initialPath } : { folderId: initialFolderId });
   useEffect(() => {
     setLocation(current => (current.deviceId === deviceId && (deviceId ? current.path === initialPath : current.folderId === initialFolderId)) ? current : (deviceId ? { deviceId, path: initialPath } : { folderId: initialFolderId }));
   }, [deviceId, initialPath, initialFolderId]);
+  const fileLimit = location.deviceId ? FILESYSTEM_MAX_BYTES : null;
   const [history, setHistory] = useState<FileLocation[]>([]);
-  const [items, setItems] = useState<ThingsThing[]>(() => listings.get(locationKey(ownerId, location)) || []);
+  const [items, setItems] = useState<ThingsThing[]>(() => listings.get(locationKey(identity, location)) || []);
   const [devices, setDevices] = useState<Array<{ id: string; name: string; capabilities: string[] }>>([]);
   const [view, setView] = useState<'grid' | 'list'>(compact ? 'list' : 'grid');
   const [query, setQuery] = useState(''), [kind, setKind] = useState('all'), [sort, setSort] = useState('name');
   const [hidden, setHidden] = useState(false), [selected, setSelected] = useState<Set<string>>(new Set());
-  const [clipboard, setClipboard] = useState(() => filesystemClipboard.get(ownerId));
+  const [clipboard, setClipboard] = useState(() => filesystemClipboard.get(identity));
   const [busy, setBusy] = useState(false), [loading, setLoading] = useState(false), [error, setError] = useState(''), [status, setStatus] = useState('');
   const [progress, setProgress] = useState<number | null>(null), [name, setName] = useState(''), [creating, setCreating] = useState(false);
   const [approval, setApproval] = useState<{ id: string; prompt: string; decide: (yes: boolean) => void } | null>(null);
   const [popup, setPopup] = useState(false);
   const contextMenu = useThingContextMenu();
   const [contextItem, setContextItem] = useState<ThingsThing | null>(null);
-  const active = useRef(false);
+  const active = useRef(false), refreshVersion = useRef(0);
   const operation = useRef<AbortController | null>(null), picker = useRef<HTMLInputElement>(null), mounted = useRef(true);
-  const uploadWaiter = useRef<{ file: File; resolve: (id: string) => void; reject: (e: Error) => void } | null>(null);
-  const uploadError = useCallback((message: string) => { uploadWaiter.current?.reject(new Error(message)); uploadWaiter.current = null; }, []);
-  const uploads = useAttachmentUploads(ownerId, uploadError, uploadError, true, undefined, {
-    purpose: 'file', selectionScope: 'transfer', maxFiles: 1, maxBytesPerFile: FILESYSTEM_MAX_BYTES,
-    remainingBytes: user?.storage?.remainingBytes, storageStatus: user?.storage?.status
-  });
-  useEffect(() => {
-    const pending = uploadWaiter.current;
-    if (!pending) return;
-    const upload = uploads.uploads.find(item => item.sourceFile === pending.file);
-    if (upload?.status === 'ready' && upload.attachment) {
-      uploads.markCommitted([upload.attachment.id]); uploadWaiter.current = null; pending.resolve(upload.attachment.id);
-    } else if (upload?.status === 'error') uploadError(upload.error || 'Upload failed.');
-    else if (upload) setProgress(upload.progress);
-  }, [uploads.uploads, uploads.markCommitted, uploadError]);
+  const withRemote = useCallback(async <T,>(signal: AbortSignal, work: (signal: AbortSignal) => Promise<T>, pairedDevice = true): Promise<T> => {
+    const scope = currentAccountWorkspace();
+    if (!scope || workspaceIdentityKey() !== identity) throw new Error('Reconnect and verify your account before using remote files.');
+    const lease = accountRemoteWorkspaceLease(scope), controller = new AbortController();
+    lease.assertCurrent(); signal.throwIfAborted();
+    const abort = () => controller.abort();
+    const unsubscribe = lease.onInvalidate(abort); signal.addEventListener('abort', abort, { once: true });
+    try {
+      if (pairedDevice) await requireFilesystemCapabilities();
+      lease.assertCurrent(); controller.signal.throwIfAborted();
+      const result = await work(controller.signal); lease.assertCurrent(); controller.signal.throwIfAborted(); return result;
+    } finally { unsubscribe(); signal.removeEventListener('abort', abort); }
+  }, [identity]);
   useEffect(() => {
     mounted.current = true;
-    const update = () => setClipboard(filesystemClipboard.get(ownerId));
+    const update = () => setClipboard(filesystemClipboard.get(identity));
     update(); window.addEventListener('thingtime-files-clipboard', update);
-    return () => { mounted.current = false; operation.current?.abort(); uploadError('Transfer cancelled; source files were kept.'); window.removeEventListener('thingtime-files-clipboard', update); };
-  }, [ownerId, uploadError]);
+    return () => { mounted.current = false; operation.current?.abort(); window.removeEventListener('thingtime-files-clipboard', update); };
+  }, [identity]);
   useEffect(() => {
-    if (!ownerId) return;
+    if (!ownerId || localOnly || user?.offline) return;
     const controller = new AbortController();
-    void requireFilesystemCapabilities().then(() => fileRequest('/api/v1/devices', undefined, controller.signal)).then(result => setDevices(result.devices || [])).catch(() => {});
+    void withRemote(controller.signal, signal => fileRequest('/api/v1/devices', undefined, signal)).then(result => setDevices(result.devices || [])).catch(() => {});
     return () => controller.abort();
-  }, [ownerId]);
+  }, [ownerId, localOnly, user?.offline, withRemote]);
   const approve: FileApproval = useCallback((request, signal) => new Promise<void>((resolve, reject) => {
     signal.throwIfAborted();
     const abort = () => { setApproval(null); reject(new DOMException('Cancelled', 'AbortError')); };
@@ -87,15 +89,17 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
     setApproval({ ...request, decide: async yes => {
       setApproval(null); signal.removeEventListener('abort', abort);
       try {
-        await fileRequest('/api/v1/devices/approvals', { approvalId: request.id, decision: yes ? 'approved' : 'denied' }, signal);
+        await withRemote(signal, remoteSignal => fileRequest('/api/v1/devices/approvals', { approvalId: request.id, decision: yes ? 'approved' : 'denied' }, remoteSignal));
         if (yes) resolve(); else reject(new Error('Device action declined.'));
       } catch (e) { reject(e); }
     } });
-  }), []);
-  const list = useCallback(async (target: FileLocation, signal: AbortSignal, includeHidden = hidden) => {
-    await requireFilesystemCapabilities(); signal.throwIfAborted();
+  }), [withRemote]);
+  const list = useCallback(async (target: FileLocation, signal: AbortSignal, includeHidden = hidden, includeAccount = true) => {
+    signal.throwIfAborted();
+    if (localOnly && target.deviceId) throw new Error('Paired devices require a signed-in account. Your local files stay on this device.');
     const result: ThingsThing[] = [];
     if (target.deviceId) {
+      await withRemote(signal, async signal => {
       let cursor: number | undefined;
       do {
         const page = await remoteFileCommand(target.deviceId, { op: 'list', path: target.path, hidden: includeHidden, ...(cursor === undefined ? {} : { cursor }) }, signal, approve);
@@ -103,31 +107,64 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
         cursor = page.nextCursor ?? undefined;
         if (result.length > 10_000) throw new Error('This directory is too large to browse.');
       } while (cursor !== undefined);
+      });
     } else {
-      let cursor: string | undefined;
-      do {
-        const page = await fileRequest(`/api/v1/things?folder=${encodeURIComponent(target.folderId || 'root')}&limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, undefined, signal);
-        result.push(...page.things); cursor = page.nextCursor || undefined;
-        if (result.length > 10_000) throw new Error('This folder is too large to browse.');
-      } while (cursor);
+      const readPages = async (device: boolean) => {
+        let cursor: string | undefined;
+        const seen = new Set<string>();
+        do {
+          signal.throwIfAborted();
+          const page = await apiRef.current.v1.things.list({ folder: target.folderId || 'root', limit: 100, cursor, ...(device ? { device: true } : {}) }, { signal });
+          result.push(...page.things); cursor = page.nextCursor || undefined;
+          if (result.length > 20_000 || (cursor && seen.has(cursor))) throw new Error('This folder is too large to browse.');
+          if (cursor) seen.add(cursor);
+        } while (cursor);
+      };
+      await readPages(!localOnly);
+      if (includeAccount && !localOnly && !user?.offline && navigator.onLine !== false) {
+        try { await readPages(false); }
+        catch (error) { signal.throwIfAborted(); setError(`Showing files saved on this device. Account refresh failed: ${failure(error)}`); }
+      }
     }
-    return result;
-  }, [approve, hidden]);
+    return [...new Map(result.map(row => [row.id, row])).values()];
+  }, [approve, hidden, localOnly, user?.offline, withRemote]);
   const refresh = useCallback(async (signal: AbortSignal) => {
-    const fresh = await list(location, signal);
-    signal.throwIfAborted();
-    const key = locationKey(ownerId, location);
-    listings.delete(key); listings.set(key, fresh);
-    while (listings.size > 12) listings.delete(listings.keys().next().value!);
-    setItems(fresh);
-  }, [list, location, ownerId]);
+    const version = ++refreshVersion.current;
+    const key = locationKey(identity, location);
+    const show = (fresh: ThingsThing[]) => {
+      signal.throwIfAborted();
+      if (version !== refreshVersion.current) return;
+      listings.delete(key); listings.set(key, fresh);
+      while (listings.size > 12) listings.delete(listings.keys().next().value!);
+      setItems(fresh);
+    };
+    const local = await list(location, signal, hidden, false);
+    // Existing online-only files remain visible while their authorized list
+    // refreshes. Device writes complete independently of that network read.
+    const retained = !location.deviceId ? (listings.get(key) || []).filter(row => row.thingtime.includes('attachment') && !row.id.startsWith('local-')) : [];
+    show([...retained, ...local]);
+    if (!location.deviceId && !localOnly && !user?.offline && navigator.onLine !== false)
+      void list(location, signal).then(show).catch(error => { if (!signal.aborted) setError(failure(error)); });
+  }, [list, location, identity, hidden, localOnly, user?.offline]);
+
   useEffect(() => {
     if (!ownerId) return;
     const controller = new AbortController();
-    operation.current = controller; setItems(listings.get(locationKey(ownerId, location)) || []); setSelected(new Set()); setLoading(true); setError('');
+    operation.current = controller; setItems(listings.get(locationKey(identity, location)) || []); setSelected(new Set()); setLoading(true); setError('');
     void refresh(controller.signal).catch(e => { if (!controller.signal.aborted) setError(failure(e)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [refresh, ownerId]);
+  }, [refresh, ownerId, identity, location]);
+  useEffect(() => {
+    let controller: AbortController | undefined;
+    const update = () => {
+      if (active.current || location.deviceId) return;
+      controller?.abort(); controller = new AbortController();
+      const signal = controller.signal;
+      void refresh(signal).catch(error => { if (!signal.aborted) setError(failure(error)); });
+    };
+    window.addEventListener(LOCAL_WORKSPACE_CHANGED, update);
+    return () => { controller?.abort(); window.removeEventListener(LOCAL_WORKSPACE_CHANGED, update); };
+  }, [refresh, location.deviceId]);
   const go = (next: FileLocation, back = false) => {
     if (busy) return;
     if (!back) setHistory(current => [...current, location]);
@@ -139,69 +176,86 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
     operation.current?.abort();
     const controller = new AbortController(); operation.current = controller;
     setBusy(true); setLoading(false); setError(''); setStatus(''); setProgress(null);
-    try { await requireFilesystemCapabilities(); await work(controller.signal); controller.signal.throwIfAborted(); await refresh(controller.signal); setStatus('Done'); return true; }
+    try { await work(controller.signal); controller.signal.throwIfAborted(); await refresh(controller.signal); setStatus('Done'); return true; }
     catch (e) { if (mounted.current) { setStatus(''); setError(controller.signal.aborted ? 'Stopped waiting. An accepted device action or upload may still finish. Refresh before retrying; source files were kept unless their completed move was already confirmed.' : failure(e)); } return false; }
     finally { active.current = false; if (mounted.current) { setBusy(false); setProgress(null); } }
   };
   const progressFor = (filename: string) => (done: number, total: number) => { setStatus(filename); setProgress(total ? done / total * 100 : 100); };
   const read = async (item: ThingsThing, signal: AbortSignal) => {
-    if (item.inode) return readRemoteFile(item.inode.deviceId, item.inode, signal, approve, progressFor(filesystemName(item)));
+    if (localOnly && item.inode) throw new Error('Paired devices require a signed-in account.');
+    if (item.inode) return withRemote(signal, remoteSignal => readRemoteFile(item.inode!.deviceId, item.inode!, remoteSignal, approve, progressFor(filesystemName(item))));
     if (!item.thingtime.includes('attachment')) throw new Error('Select a file.');
-    const size = Number(item.crystal.size);
-    if (!Number.isSafeInteger(size) || size < 0 || size > FILESYSTEM_MAX_BYTES) throw new Error('Choose a file up to 32 MiB.');
-    const bundle = await bundleFromPlan({ roots: [item.id], things: [{ id: item.id, thingtime: ['attachment'], crystal: { recordingFileId: 'bytes', filePurpose: 'file' } }], files: [{ id: 'bytes', sourceId: item.id, targetId: item.id, name: filesystemName(item), mime: String(item.crystal.contentType || 'application/octet-stream'), bytes: size }] }, { signal });
-    return new File([Uint8Array.from(bundle.files.get('bytes')!)], filesystemName(item), { type: String(item.crystal.contentType || 'application/octet-stream') });
+    if (localOnly || item.id.startsWith('local-file-')) {
+      const result = await apiRef.current.v1.attachments.readLocalFile({ id: item.id }, { signal, format: 'blob' });
+      signal.throwIfAborted();
+      return new File([result.blob], filesystemName(item), { type: String(result.attachment.contentType) });
+    }
+    // Account files use the canonical scoped export adapter. Device command
+    // buffers/capabilities do not govern an ordinary Thingtime file download.
+    return withRemote(signal, async remoteSignal => {
+      const result = await apiRef.current.v1.things.export({ ids: [item.id], includeChildren: false, includeDependencies: false, includeLinks: false }, { signal: remoteSignal });
+      if (!result?.ok) throw new Error(result?.error || 'The file could not be downloaded.');
+      const bundle = await bundleFromPlan(result.plan, { originalStream: true, signal: remoteSignal });
+      const file = bundle.manifest.files[0];
+      if (bundle.manifest.roots.length !== 1 || bundle.manifest.files.length !== 1 || file.targetId !== bundle.manifest.roots[0] || file.bytes !== Number(item.crystal.size))
+        throw new Error('The file changed while downloading. Refresh and try again.');
+      return new File([bundle.files.get(file.id)!], filesystemName(item), { type: file.mime });
+    }, false);
   };
   const bulk = async (op: string, chosen: ThingsThing[], target: FileLocation, signal: AbortSignal) => {
     if (target.deviceId) throw new Error('Choose a Thingtime folder.');
-    const result = await fileRequest('/api/v1/things/bulk', { op, ids: chosen.map(item => item.id), folderId: target.folderId }, signal);
+    signal.throwIfAborted();
+    const localFiles = !localOnly ? chosen.filter(item => item.id.startsWith('local-file-')) : [];
+    if (localFiles.length && op !== 'move') throw new Error('Copy files through the file browser.');
+    for (const item of localFiles) { signal.throwIfAborted(); await apiRef.current.v1.attachments.moveLocalFile({ id: item.id, folderId: target.folderId || null }); }
+    const rest = chosen.filter(item => !localFiles.includes(item));
+    if (!rest.length) return;
+    const result = await apiRef.current.v1.things.bulk({ op: op as 'move' | 'copy' | 'delete', ids: rest.map(item => item.id), folderId: target.folderId });
     if (result.failed || result.results?.some((entry: any) => !entry.ok)) throw new Error(result.results?.find((entry: any) => !entry.ok)?.error || 'Some items could not be moved. Refresh to inspect the completed items.');
   };
   const mkdir = async (target: FileLocation, folderName: string, signal: AbortSignal): Promise<FileLocation> => {
     if (!filesystemPath(folderName) || !folderName || folderName.includes('/')) throw new Error('Choose a folder name without slashes.');
+    if (localOnly && target.deviceId) throw new Error('Paired devices require a signed-in account.');
     if (target.deviceId) {
-      const path = join(target.path, folderName); await remoteFileCommand(target.deviceId, { op: 'mkdir', path }, signal, approve); return { deviceId: target.deviceId, path };
+      const path = join(target.path, folderName); await withRemote(signal, remoteSignal => remoteFileCommand(target.deviceId!, { op: 'mkdir', path }, remoteSignal, approve)); return { deviceId: target.deviceId, path };
     }
-    const result = await fileRequest('/api/v1/things', { thingtime: ['folder'], crystal: { name: folderName }, folderId: target.folderId, acl: ['tt:user'] }, signal);
+    signal.throwIfAborted();
+    const result = await apiRef.current.v1.things.create({ thingtime: ['folder'], crystal: { name: folderName }, folderId: target.folderId });
     return { folderId: result.thing?.id || result.id };
   };
   const write = async (target: FileLocation, file: File, signal: AbortSignal) => {
     setStatus(`Saving ${file.name}`);
-    if (target.deviceId) return writeRemoteFile(target.deviceId, join(target.path, file.name), file, signal, approve, progressFor(file.name));
-    if (!file.size) throw new Error('Thingtime uploads require a non-empty file. The source was kept.');
-    const id = await new Promise<string>((resolve, reject) => {
-      signal.throwIfAborted();
-      const abort = () => { uploadError('Transfer cancelled; the source was kept.'); };
-      signal.addEventListener('abort', abort, { once: true });
-      uploadWaiter.current = { file, resolve: value => { signal.removeEventListener('abort', abort); resolve(value); }, reject: e => { signal.removeEventListener('abort', abort); reject(e); } };
-      uploads.replaceFiles([file]);
-    });
-    signal.throwIfAborted();
-    if (target.folderId) {
-      try { await bulk('move', [{ id } as ThingsThing], target, signal); }
-      catch (e) { throw new Error(`Saved ${file.name} in Thingtime root, but could not place it in this folder: ${failure(e)}`); }
+    if (target.deviceId) {
+      if (localOnly) throw new Error('Paired devices require a signed-in account.');
+      return withRemote(signal, remoteSignal => writeRemoteFile(target.deviceId!, join(target.path!, file.name), file, remoteSignal, approve, progressFor(file.name)));
     }
+    signal.throwIfAborted();
+    await apiRef.current.v1.attachments.saveLocalFile({ requestId: crypto.randomUUID(), name: file.name, contentType: file.type || 'application/octet-stream', bytes: file, folderId: target.folderId }, { signal });
   };
+
   const copy = (mode: 'copy' | 'cut', chosen = items.filter(item => selected.has(item.id))) => {
     if (!chosen.length || busy) return;
-    filesystemClipboard.set({ ownerId, mode, location, items: chosen }); setStatus(`${chosen.length} selected for ${mode === 'copy' ? 'copy' : 'move'}. Choose a destination and paste.`);
+    filesystemClipboard.set({ ownerId: identity, mode, location, items: chosen }); setStatus(`${chosen.length} selected for ${mode === 'copy' ? 'copy' : 'move'}. Choose a destination and paste.`);
   };
   const paste = (target = location) => {
-    const source = filesystemClipboard.get(ownerId);
+    const source = filesystemClipboard.get(identity);
     if (!source) return;
     void run(async signal => {
       await transferFilesystem(source, target, {
         list: where => list(where, signal, true), check: () => signal.throwIfAborted(),
         mkdir: (where, title) => mkdir(where, title, signal), read: item => read(item, signal), write: (where, file) => write(where, file, signal),
         remove: async item => {
-          if (item.inode) await remoteFileCommand(item.inode.deviceId, { op: 'trash', path: item.inode.path, version: item.inode.version }, signal, approve);
-          else if (isFolder(item)) await fileRequest('/api/v1/things', { id: item.id }, signal, 'DELETE');
-          else await fileRequest('/api/v1/attachments/delete', { id: item.id }, signal);
+          signal.throwIfAborted();
+          if (localOnly) { await apiRef.current.v1.things.bulk({ op: 'delete', ids: [item.id] }); return; }
+          if (item.inode) await withRemote(signal, remoteSignal => remoteFileCommand(item.inode!.deviceId, { op: 'trash', path: item.inode!.path, version: item.inode!.version }, remoteSignal, approve));
+          else if (isFolder(item) || item.id.startsWith('local-file-')) await apiRef.current.v1.things.remove({ id: item.id });
+          else await withRemote(signal, remoteSignal => fileRequest('/api/v1/attachments/delete', { id: item.id }, remoteSignal));
         },
         nativeMove: async (chosen, where) => {
+          if (localOnly && where.deviceId) throw new Error('Paired devices require a signed-in account.');
           if (where.deviceId) for (const item of chosen) {
             if (!item.inode) throw new Error('Select files on the source device.');
-            await remoteFileCommand(where.deviceId, { op: 'move', path: item.inode.path, version: item.inode.version, destination: join(where.path, item.inode.name) }, signal, approve);
+            await withRemote(signal, remoteSignal => remoteFileCommand(where.deviceId!, { op: 'move', path: item.inode!.path, version: item.inode!.version, destination: join(where.path!, item.inode!.name) }, remoteSignal, approve));
           } else await bulk('move', chosen, where, signal);
         }
       });
@@ -237,7 +291,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
       ...(isFolder(item) ? [{ id: 'paste-into', command: 'paste-into', label: 'Paste into folder', icon: '📥', disabled: busy || !clipboard }] : [])
     ] }] })
   };
-  if (!ownerId) return <Text padding={4}>Sign in to browse your files and paired devices.</Text>;
+  if (!ownerId) return <Text padding={4}>Your workspace is not ready. Reload to try again.</Text>;
   return <Box data-testid="filesystem-browser" minWidth={0} width="100%" onKeyDown={event => {
     if (!(event.ctrlKey || event.metaKey) || (event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return;
     if (['c', 'x', 'v'].includes(event.key.toLowerCase())) { event.preventDefault(); event.key.toLowerCase() === 'v' ? paste() : copy(event.key.toLowerCase() === 'x' ? 'cut' : 'copy'); }
@@ -250,7 +304,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
     </Flex>
     <Flex gap={2} wrap="wrap" marginBottom={2}>
       <Select aria-label="File location" size="sm" minWidth={0} flex="1 1 160px" maxWidth="100%" value={location.deviceId || 'thingtime'} isDisabled={busy} onChange={e => { setHistory([]); go(e.target.value === 'thingtime' ? { folderId: null } : { deviceId: e.target.value, path: '' }); }}>
-        <option value="thingtime">Your Thingtime</option>
+        <option value="thingtime">{localOnly ? "Files on this device" : "Your Thingtime"}</option>
         {location.deviceId && !devices.some(d => d.id === location.deviceId) && <option value={location.deviceId}>Remote device</option>}
         {devices.map(device => <option key={device.id} value={device.id} disabled={!device.capabilities?.includes('filesystem.v1')}>{device.name || 'Device'}{device.capabilities?.includes('filesystem.v1') ? '' : ' · update node to browse'}</option>)}
       </Select>
@@ -269,12 +323,12 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
     </Flex>
     <Flex gap={2} wrap="wrap" marginBottom={3}>
       <Button size="xs" isDisabled={busy} onClick={() => { setCreating(!creating); setName(''); }}>New folder</Button>
-      <Button size="xs" isDisabled={busy} onClick={() => picker.current?.click()}>Upload</Button>
+      <Button size="xs" isDisabled={busy} onClick={() => picker.current?.click()}>Add files</Button>
       <Button size="xs" isDisabled={busy || !selected.size} onClick={() => copy('copy')}>Copy</Button>
       <Button size="xs" isDisabled={busy || !selected.size} onClick={() => copy('cut')}>Cut</Button>
       <Button size="xs" isDisabled={busy || !clipboard} onClick={() => paste()}>Paste{clipboard ? ` (${clipboard.items.length})` : ''}</Button>
       {location.deviceId && <Checkbox size="sm" isChecked={hidden} isDisabled={busy} onChange={e => setHidden(e.target.checked)}>Hidden</Checkbox>}
-      <input hidden type="file" multiple ref={picker} onChange={e => { const files = Array.from(e.target.files || []); e.target.value = ''; void run(async signal => { for (const file of files) { if ((await list(location, signal, true)).some(item => filesystemName(item).toLowerCase() === file.name.toLowerCase())) throw new Error(`${file.name} already exists.`); await write(location, file, signal); } }); }} />
+      <input hidden type="file" multiple ref={picker} onChange={e => { const files = Array.from(e.target.files || []); e.target.value = ''; void run(async signal => { for (const file of files) { if ((await list(location, signal, true, false)).some(item => filesystemName(item).toLowerCase() === file.name.toLowerCase())) throw new Error(`${file.name} already exists.`); await write(location, file, signal); } }); }} />
     </Flex>
     {creating && <Flex gap={2} marginBottom={3} as="form" onSubmit={e => { e.preventDefault(); void run(async signal => { await mkdir(location, name.trim(), signal); setCreating(false); }); }}><Input autoFocus size="sm" aria-label="New folder name" placeholder="Folder name" value={name} onChange={e => setName(e.target.value)} minWidth={0} /><Button type="submit" size="sm" isDisabled={busy || !name.trim()}>Create</Button></Flex>}
     {approval && <Box role="alert" border="1px solid var(--tt-border)" borderRadius="8px" padding={3} marginBottom={3}><Text fontSize="13px" overflowWrap="anywhere">{approval.prompt}</Text><Flex gap={2} marginTop={2}><Button size="sm" onClick={() => approval.decide(true)}>Approve once</Button><Button size="sm" onClick={() => approval.decide(false)}>Decline</Button></Flex></Box>}
@@ -284,7 +338,7 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
       {view === 'grid' ? <ThingsGridView items={visible} handlers={handlers} displayMode="name" /> : <ThingsListView items={visible} handlers={handlers} displayMode="name" onToggleAll={() => setSelected(selected.size === visible.length ? new Set() : new Set(visible.map(item => item.id)))} allSelected={visible.length > 0 && visible.every(item => selected.has(item.id))} />}
       {!visible.length && !loading && <Text fontSize="13px" textAlign="center" padding={6} color="var(--tt-muted)">{query || kind !== 'all' ? 'No matching files or folders.' : 'No files or folders here yet.'}</Text>}
     </Box>
-    <Text fontSize="11px" color="var(--tt-muted)" marginTop={3}>{visible.length} items{selected.size ? ` · ${selected.size} selected` : ''} · Files up to {formatAttachmentBytes(FILESYSTEM_MAX_BYTES)}</Text>
+    <Text fontSize="11px" color="var(--tt-muted)" marginTop={3}>{visible.length} items{selected.size ? ` · ${selected.size} selected` : ''}{fileLimit === null ? '' : ` · Files up to ${formatAttachmentBytes(fileLimit)}`}</Text>
     {contextItem && <ThingContextMenu {...contextMenu.menuProps} zIndex={TRANSFER_MENU_Z + 2} model={handlers.itemMenuFor!(contextItem)} onAction={({ action: chosen }) => action(contextItem, chosen.command as ThingsItemAction)} />}
     {compact && <Modal isOpen={popup} onClose={() => setPopup(false)} size="3xl" scrollBehavior="inside"><ModalOverlay zIndex={TRANSFER_DIALOG_Z} /><ModalContent marginX={3} maxWidth="min(900px, calc(100vw - 24px))" containerProps={{ zIndex: TRANSFER_DIALOG_Z + 1 }}><ModalHeader>Browse files</ModalHeader><ModalCloseButton /><ModalBody paddingBottom={5}>{popup && <FilesystemThingsBrowser deviceId={location.deviceId} initialPath={location.deviceId ? location.path : ''} initialFolderId={location.folderId} />}</ModalBody></ModalContent></Modal>}
   </Box>;

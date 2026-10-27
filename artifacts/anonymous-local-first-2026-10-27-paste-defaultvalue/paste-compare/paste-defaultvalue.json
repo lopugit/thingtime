@@ -1,0 +1,315 @@
+{
+  "diagnosticOnly": true,
+  "payloadUtf8Bytes": 120068,
+  "hardLines": 12002,
+  "results": [
+    {
+      "mode": "product-history",
+      "pasteMs": 2358,
+      "strictFiveSecondPass": true,
+      "exact": true,
+      "undoExact": true,
+      "redoExact": true,
+      "before": {
+        "value": 119094,
+        "defaultValue": 119094,
+        "textContent": 119094,
+        "selected": 119094,
+        "connected": true
+      },
+      "after": {
+        "value": 72068,
+        "defaultValue": 72068,
+        "textContent": 72068
+      },
+      "events": [
+        {
+          "type": "paste",
+          "at": 9.700000002980232,
+          "value": 119094,
+          "defaultValue": 119094,
+          "textContent": 119094
+        },
+        {
+          "type": "beforeinput",
+          "at": 11.299999997019768,
+          "inputType": "insertFromPaste",
+          "value": 119094,
+          "defaultValue": 119094,
+          "textContent": 119094
+        },
+        {
+          "type": "input",
+          "at": 2293.7000000029802,
+          "inputType": "insertFromPaste",
+          "value": 72068,
+          "defaultValue": 119094,
+          "textContent": 119094
+        },
+        {
+          "type": "beforeinput",
+          "at": 2372.7999999970198,
+          "inputType": "historyUndo",
+          "value": 72068,
+          "defaultValue": 72068,
+          "textContent": 72068
+        },
+        {
+          "type": "input",
+          "at": 2414.2000000029802,
+          "inputType": "historyUndo",
+          "value": 119094,
+          "defaultValue": 72068,
+          "textContent": 72068
+        },
+        {
+          "type": "beforeinput",
+          "at": 2453.5,
+          "inputType": "historyRedo",
+          "value": 119094,
+          "defaultValue": 119094,
+          "textContent": 119094
+        },
+        {
+          "type": "input",
+          "at": 2562.2000000029802,
+          "inputType": "historyRedo",
+          "value": 72068,
+          "defaultValue": 119094,
+          "textContent": 119094
+        }
+      ]
+    },
+    {
+      "mode": "clone-history",
+      "pasteMs": 2411,
+      "strictFiveSecondPass": true,
+      "exact": true,
+      "undoExact": true,
+      "redoExact": true,
+      "before": {
+        "value": 119094,
+        "defaultValue": 0,
+        "textContent": 0,
+        "selected": 119094,
+        "connected": true
+      },
+      "after": {
+        "value": 72068,
+        "defaultValue": 0,
+        "textContent": 0
+      },
+      "events": [
+        {
+          "type": "paste",
+          "at": 8.399999991059303,
+          "value": 119094,
+          "defaultValue": 0,
+          "textContent": 0
+        },
+        {
+          "type": "beforeinput",
+          "at": 10.5,
+          "inputType": "insertFromPaste",
+          "value": 119094,
+          "defaultValue": 0,
+          "textContent": 0
+        },
+        {
+          "type": "input",
+          "at": 2353.5,
+          "inputType": "insertFromPaste",
+          "value": 72068,
+          "defaultValue": 0,
+          "textContent": 0
+        },
+        {
+          "type": "beforeinput",
+          "at": 2423.8999999910593,
+          "inputType": "historyUndo",
+          "value": 72068,
+          "defaultValue": 0,
+          "textContent": 0
+        },
+        {
+          "type": "input",
+          "at": 2472.199999988079,
+          "inputType": "historyUndo",
+          "value": 119094,
+          "defaultValue": 0,
+          "textContent": 0
+        },
+        {
+          "type": "beforeinput",
+          "at": 2500.5999999940395,
+          "inputType": "historyRedo",
+          "value": 119094,
+          "defaultValue": 0,
+          "textContent": 0
+        },
+        {
+          "type": "input",
+          "at": 2627.0999999940395,
+          "inputType": "historyRedo",
+          "value": 72068,
+          "defaultValue": 0,
+          "textContent": 0
+        }
+      ]
+    },
+    {
+      "mode": "clone-default-sync-history",
+      "pasteMs": 2303,
+      "strictFiveSecondPass": true,
+      "exact": true,
+      "undoExact": true,
+      "redoExact": true,
+      "before": {
+        "value": 119094,
+        "defaultValue": 119094,
+        "textContent": 119094,
+        "selected": 119094,
+        "connected": true
+      },
+      "after": {
+        "value": 72068,
+        "defaultValue": 72068,
+        "textContent": 72068
+      },
+      "events": [
+        {
+          "type": "paste",
+          "at": 9,
+          "value": 119094,
+          "defaultValue": 119094,
+          "textContent": 119094
+        },
+        {
+          "type": "beforeinput",
+          "at": 10.400000005960464,
+          "inputType": "insertFromPaste",
+          "value": 119094,
+          "defaultValue": 119094,
+          "textContent": 119094
+        },
+        {
+          "type": "input",
+          "at": 2210.7000000029802,
+          "inputType": "insertFromPaste",
+          "value": 72068,
+          "defaultValue": 119094,
+          "textContent": 119094
+        },
+        {
+          "type": "beforeinput",
+          "at": 2324.4000000059605,
+          "inputType": "historyUndo",
+          "value": 72068,
+          "defaultValue": 72068,
+          "textContent": 72068
+        },
+        {
+          "type": "input",
+          "at": 2369.6000000089407,
+          "inputType": "historyUndo",
+          "value": 119094,
+          "defaultValue": 72068,
+          "textContent": 72068
+        },
+        {
+          "type": "beforeinput",
+          "at": 2409.9000000059605,
+          "inputType": "historyRedo",
+          "value": 119094,
+          "defaultValue": 119094,
+          "textContent": 119094
+        },
+        {
+          "type": "input",
+          "at": 2558.7000000029802,
+          "inputType": "historyRedo",
+          "value": 72068,
+          "defaultValue": 119094,
+          "textContent": 119094
+        }
+      ]
+    },
+    {
+      "mode": "product-clear-default-history",
+      "pasteMs": 2286,
+      "strictFiveSecondPass": true,
+      "exact": true,
+      "undoExact": true,
+      "redoExact": true,
+      "before": {
+        "value": 119094,
+        "defaultValue": 0,
+        "textContent": 0,
+        "selected": 119094,
+        "connected": true
+      },
+      "after": {
+        "value": 72068,
+        "defaultValue": 0,
+        "textContent": 0
+      },
+      "events": [
+        {
+          "type": "paste",
+          "at": 8,
+          "value": 119094,
+          "defaultValue": 0,
+          "textContent": 0
+        },
+        {
+          "type": "beforeinput",
+          "at": 9.300000011920929,
+          "inputType": "insertFromPaste",
+          "value": 119094,
+          "defaultValue": 0,
+          "textContent": 0
+        },
+        {
+          "type": "input",
+          "at": 2220.4000000059605,
+          "inputType": "insertFromPaste",
+          "value": 72068,
+          "defaultValue": 0,
+          "textContent": 0
+        },
+        {
+          "type": "beforeinput",
+          "at": 2296.800000011921,
+          "inputType": "historyUndo",
+          "value": 72068,
+          "defaultValue": 0,
+          "textContent": 0
+        },
+        {
+          "type": "input",
+          "at": 2342.800000011921,
+          "inputType": "historyUndo",
+          "value": 119094,
+          "defaultValue": 0,
+          "textContent": 0
+        },
+        {
+          "type": "beforeinput",
+          "at": 2371,
+          "inputType": "historyRedo",
+          "value": 119094,
+          "defaultValue": 0,
+          "textContent": 0
+        },
+        {
+          "type": "input",
+          "at": 2519.1000000089407,
+          "inputType": "historyRedo",
+          "value": 72068,
+          "defaultValue": 0,
+          "textContent": 0
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+✖ native account mail settings persist offline and reconcile real private API receipts independently (44613.676984ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45172.01067
+
+✖ failing tests:
+
+test at app/mail/accountSettings.browser.test.ts:2:1253
+✖ native account mail settings persist offline and reconcile real private API receipts independently (44613.676984ms)
+  locator.check: Timeout 30000ms exceeded.
+  Call log:
+    - waiting for getByRole('checkbox', { name: 'Through Thingtime’s cloud', exact: true })
+      - locator resolved to <input type="checkbox" aria-checked="false" aria-disabled="false" class="chakra-checkbox__input"/>
+    - attempting click action
+      - waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <span aria-hidden="true" class="chakra-checkbox__control cha-1rf8imo"></span> intercepts pointer events
+    - retrying click action
+      - waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - element is outside of the viewport
+    - retrying click action
+      - waiting 20ms
+      2 × waiting for element to be visible, enabled and stable
+        - element is visible, enabled and stable
+        - scrolling into view if needed
+        - done scrolling
+        - <span aria-hidden="true" class="chakra-checkbox__control cha-1rf8imo"></span> intercepts pointer events
+      - retrying click action
+        - waiting 100ms
+      13 × waiting for element to be visible, enabled and stable
+         - element is visible, enabled and stable
+         - scrolling into view if needed
+         - done scrolling
+         - <span aria-hidden="true" class="chakra-checkbox__control cha-1rf8imo"></span> intercepts pointer events
+       - retrying click action
+         - waiting 500ms
+         - waiting for element to be visible, enabled and stable
+         - element is visible, enabled and stable
+         - scrolling into view if needed
+         - done scrolling
+         - element is outside of the viewport
+       - retrying click action
+         - waiting 500ms
+         - waiting for element to be visible, enabled and stable
+         - element is visible, enabled and stable
+         - scrolling into view if needed
+         - done scrolling
+         - <span aria-hidden="true" class="chakra-checkbox__control cha-1rf8imo"></span> intercepts pointer events
+       - retrying click action
+         - waiting 500ms
+         - waiting for element to be visible, enabled and stable
+         - element is visible, enabled and stable
+         - scrolling into view if needed
+         - done scrolling
+         - <span aria-hidden="true" class="chakra-checkbox__control cha-1rf8imo"></span> intercepts pointer events
+       - retrying click action
+         - waiting 500ms
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/mail/accountSettings.browser.test.ts:113:89) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('checkbox', { name: 'Through Thingtime’s cloud', exact: true })", '    - locator resolved to <input type="checkbox" aria-checked="false" aria-disabled="false" class="chakra-checkbox__input"/>', '  - attempting click action', '    - waiting for element to be visible, enabled and stable', '    - element is visible, enabled and stable', '    - scrolling into view if needed', '    - done scrolling', '    - <span aria-hidden="true" class="chakra-checkbox__control cha-1rf8imo"></span> intercepts pointer events', '  - retrying click action', '    - waiting for element to be visible, enabled and stable', '    - element is visible, enabled and stable', '    - scrolling into view if needed', '    - done scrolling', '    - element is outside of the viewport', '  - retrying click action', '    - waiting 20ms', '    2 × waiting for element to be visible, enabled and stable', '      - element is visible, enabled and stable', '      - scrolling into view if needed', '      - done scrolling', '      - <span aria-hidden="true" class="chakra-checkbox__control cha-1rf8imo"></span> intercepts pointer events', '    - retrying click action', '      - waiting 100ms', '    13 × waiting for element to be visible, enabled and stable', '       - element is visible, enabled and stable', '       - scrolling into view if needed', '       - done scrolling', '       - <span aria-hidden="true" class="chakra-checkbox__control cha-1rf8imo"></span> intercepts pointer events', '     - retrying click action', '       - waiting 500ms', '       - waiting for element to be visible, enabled and stable', '       - element is visible, enabled and stable', '       - scrolling into view if needed', '       - done scrolling', '       - element is outside of the viewport', '     - retrying click action', '       - waiting 500ms', '       - waiting for element to be visible, enabled and stable', '       - element is visible, enabled and stable', '       - scrolling into view if needed', '       - done scrolling', '       - <span aria-hidden="true" class="chakra-checkbox__control cha-1rf8imo"></span> intercepts pointer events', '     - retrying click action', '       - waiting 500ms', '       - waiting for element to be visible, enabled and stable', '       - element is visible, enabled and stable', '       - scrolling into view if needed', '       - done scrolling', '       - <span aria-hidden="true" class="chakra-checkbox__control cha-1rf8imo"></span> intercepts pointer events', '     - retrying click action', '       - waiting 500ms' ]
+  }

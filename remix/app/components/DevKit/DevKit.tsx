@@ -7,6 +7,8 @@ import { Icon } from '../Icon/Icon';
 import { useLopu, useLopuStream } from '../Lopu/useLopu';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useApi } from '~/hooks/useApi';
+import { useLopuLauncherClearance } from '../Lopu/useLopuLauncherClearance';
+import { useIsMobileViewport } from '../Nav/Drawer/useDrawer';
 import {
   buildCurlForEntry,
   describeApiStatus,
@@ -169,6 +171,8 @@ export const DevKit = (_props) => {
   );
   const [mounted, setMounted] = React.useState(false);
   const [open, setOpen] = React.useState(false);
+  const isMobile = useIsMobileViewport();
+  const [triggerDragging, setTriggerDragging] = React.useState(false);
   const [pos, setPos] = React.useState<{ left: number; top: number } | null>(null);
   const [triggerPos, setTriggerPos] = React.useState<FixedPosition | null>(null);
 
@@ -243,10 +247,15 @@ export const DevKit = (_props) => {
     moved: boolean;
   } | null>(null);
   const suppressTriggerClickRef = React.useRef(false);
+  const triggerCovered = useLopuLauncherClearance(
+    triggerRef, mounted && devKit && isMobile && !open && !triggerDragging,
+    `${location.pathname}:${triggerPos?.left}:${triggerPos?.top}`
+  );
 
   const startTriggerDrag = React.useCallback((clientX: number, clientY: number) => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    setTriggerDragging(true);
 
     triggerDragRef.current = {
       startX: clientX,
@@ -272,6 +281,7 @@ export const DevKit = (_props) => {
   const endTriggerDrag = React.useCallback(() => {
     const moved = !!triggerDragRef.current?.moved;
     triggerDragRef.current = null;
+    setTriggerDragging(false);
 
     if (moved) {
       suppressTriggerClickRef.current = true;
@@ -419,8 +429,9 @@ export const DevKit = (_props) => {
 	// development-only helper off the route rather than obscuring product UI.
 	// The Lopu page is the same shape (a chat whose composer sits bottom-right).
 	const chatRoute = ['/messages', '/lopu'].some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
-	// Settings hosts the Secure Vault forms bottom-right, so the corner stays clear there too.
-	if (!mounted || !devKit || chatRoute || location.pathname === '/settings') return null;
+	// Settings and password-manager pages host sensitive forms; keep the floating trigger clear there.
+	const passwordRoute = location.pathname === '/passwords' || location.pathname.startsWith('/passwords/');
+	if (!mounted || !devKit || chatRoute || location.pathname === '/settings' || passwordRoute) return null;
 
   return (
     <>
@@ -615,6 +626,11 @@ export const DevKit = (_props) => {
 
       <Box
         className="tt.devKit"
+        // Keep the measured box and saved position so scrolling clear restores it.
+        visibility={triggerCovered ? 'hidden' : 'visible'}
+        opacity={triggerCovered ? 0 : 1}
+        pointerEvents={triggerCovered ? 'none' : undefined}
+        aria-hidden={triggerCovered || undefined}
         position="fixed"
         zIndex={99999}
         // the mobile Lopu sheet spans the viewport (LopuHost flags it on <html>);

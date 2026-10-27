@@ -1,0 +1,12 @@
+{
+  "scope": "Incremental semantic attempt through approved local proxy",
+  "startedAt": "2026-10-25T10:21:37.547Z",
+  "endedAt": "2026-10-25T10:23:09.230Z",
+  "code": null,
+  "signal": "SIGTERM",
+  "timedOut": false,
+  "log": "/tmp/thingtime-continuation-graph-semantic.log",
+  "reason": "The nominal incremental extract reported 4913 code files, 671 documents and 723 images changed with zero unchanged. It was stopped during AST work to avoid an unintended full-corpus semantic rebuild; no semantic freshness is claimed.",
+  "proxyHealth": "Approved local Codex proxy was healthy; unavailable credentials were not the cause.",
+  "fallback": "Final structural update, clustering/report and high-limit HTML export; document/image semantic indexing remains pending."
+}

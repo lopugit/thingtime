@@ -58,3 +58,10 @@ export const useCurrentUser = (): CurrentUser => {
   const data = useRouteLoaderData('root') as { user?: CurrentUser } | undefined;
   return character === undefined ? data?.user ?? null : character;
 };
+
+/** Read the confirmed root-loader identity without a composer override.
+ * It may itself be a Character; the workspace binding follows this identity. */
+export const useRootUser = (): CurrentUser => {
+  const data = useRouteLoaderData('root') as { user?: CurrentUser } | undefined;
+  return data?.user ?? null;
+};

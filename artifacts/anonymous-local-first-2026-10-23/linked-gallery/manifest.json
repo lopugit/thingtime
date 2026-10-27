@@ -1,0 +1,193 @@
+{
+  "recordedAt": "2026-10-23T09:18:58.440837+00:00",
+  "productPackageSha256": "2f0710ac20e67675e56271dd5607a7a32c2e038853e40ebd62dbf40c9e310e59",
+  "fixture": "remix/app/local-workspace/linkedGallery.browser.test.ts",
+  "cases": [
+    {
+      "name": "anonymous mixed transfer",
+      "result": "pass",
+      "proof": "retry1/anonymous/verification.json"
+    },
+    {
+      "name": "account mixed transfer and lost-link-response recovery",
+      "result": "pass",
+      "proof": "retry1/account/verification.json"
+    },
+    {
+      "name": "anonymous native URL composer draft/template",
+      "result": "pass",
+      "proof": "initial-run/anonymous-composer/verification.json"
+    },
+    {
+      "name": "account native URL composer draft/template",
+      "result": "pass",
+      "proof": "retry1/account-composer/verification.json"
+    }
+  ],
+  "coverage": [
+    "Native offline ZIP import, cold reload, canonical ZIP export/reimport with all new IDs and source unchanged",
+    "Interleaved URL/file/URL order; exact URL, mediaKind, title, multiline Unicode description, filenamePreview; exact stored file name, MIME, length, hash and bytes",
+    "Linked metadata has no byte record; no external gallery URL requests; no writes while offline",
+    "Account real server link commit with first response lost, held retries, cold reload, exact request tuple/ID replay, parent binding and six independent remote IDs",
+    "Private account parent/attachment/content refused to guest; owner reads exact stored bytes after sync",
+    "Native offline Attach-by-URL composer, draft cold reload, post Save as template, source deletion, fresh template draft links, post binding and surviving template",
+    "Anonymous composer performs no account draft requests or mutation HTTP; account private template and post sync to independent attachments",
+    "1440,390,320px document horizontal overflow assertions and screenshots"
+  ],
+  "limits": [
+    "Stored file annotation fields were not supplied by this fixture; native exact annotation proof applies to URL attachments. Stored-byte annotation semantics have separate focused regression coverage.",
+    "Viewport checks assert document width and preserve screenshots; this fixture does not assert every control hit target.",
+    "Initial-run anonymous composer passed before the fixture began awaiting native post-success UI; it completed the same full scenario. The remaining three cases passed after test-only synchronization/selectors were corrected."
+  ],
+  "initialFailures": [
+    {
+      "case": "anonymous/account mixed transfer",
+      "reason": "Fixture required a raw exact folder href while native scoped library URLs include scope parameters; changed selector to stable data-thing-id."
+    },
+    {
+      "case": "account composer",
+      "reason": "Fixture navigated immediately after local content insertion, ahead of native success/spent-draft processing; now waits native post card and spent-draft retirement before navigation."
+    }
+  ],
+  "fixtureCorrections": [
+    "Stable folder row selector",
+    "Synthetic admin grants public-purpose and private-purpose upload permission through normal API; final parent remains private",
+    "Wait native submission completion before changing route",
+    "Poll final ordered remote annotations, count gallery-bound byte rows only"
+  ],
+  "preservedInitialFailures": true,
+  "files": {
+    "build.json": {
+      "bytes": 166,
+      "sha256": "ee617c7bb02b81e4ddc3da7f4bb0e4cb3f727329da3232775f2fbb05e9db537c"
+    },
+    "initial-run/account/failure.json": {
+      "bytes": 6225,
+      "sha256": "4d7845e85c9cf377f127e98529b019b1c9042cebc772f9d4b87fd7411ebec930"
+    },
+    "initial-run/account/failure.png": {
+      "bytes": 96471,
+      "sha256": "9fb0a02b8a02d4222776c300dc25e78d0f98c66584d52a49934d263fba7e51ea"
+    },
+    "initial-run/account-composer/failure.json": {
+      "bytes": 507197,
+      "sha256": "292f3c55167aa5085af9f0218dc3964e3f8d8dbef89d2c4c61af855eddf0ca59"
+    },
+    "initial-run/account-composer/failure.png": {
+      "bytes": 101746,
+      "sha256": "772de60fc3ca6a565c2c324ed67b0ee212324b750860a40935834d4ac2aba6b2"
+    },
+    "initial-run/anonymous/failure.json": {
+      "bytes": 4687,
+      "sha256": "667b09c97a05290b21dc24ca91d42bac9186c4e2b245ab9805d79e5b18fcfb69"
+    },
+    "initial-run/anonymous/failure.png": {
+      "bytes": 73567,
+      "sha256": "9c7d28e3548322e7b51803d6ea1fb841a5b9e5d049f4d986081338fb1a3b26ff"
+    },
+    "initial-run/anonymous-composer/url-post-1440.png": {
+      "bytes": 52933,
+      "sha256": "379bccb08ae4ac29d3dfdd53a39f3adf54bade31a60150e3ea9a3c8a8382c7de"
+    },
+    "initial-run/anonymous-composer/url-post-320.png": {
+      "bytes": 44550,
+      "sha256": "d8b4939a1d12f8735c19caf12a227321201ea5fe63b5aecbfac0b42ea1376111"
+    },
+    "initial-run/anonymous-composer/url-post-390.png": {
+      "bytes": 45367,
+      "sha256": "91b1e7c625599cb508f853f36ac3538190d5cbfea1fcc51d2b1c547fd3afbdeb"
+    },
+    "initial-run/anonymous-composer/verification.json": {
+      "bytes": 768,
+      "sha256": "4cf3383e94d8bf46ad96270d04757b94fbac0a982be0d121ac4caa208de788cf"
+    },
+    "isolation-verification.json": {
+      "bytes": 909,
+      "sha256": "1cebec8637b1a82046560bd4e7dd4b1848c768b9bc567b9639ecf64b52d46f4a"
+    },
+    "isolation.json": {
+      "bytes": 419,
+      "sha256": "2e2034f1f27513df59febfeedbe1b3013a370fdc567ba1dfdd29875dd9ba3230"
+    },
+    "linked-gallery-native-retry1.log": {
+      "bytes": 456,
+      "sha256": "14a0157ccebc9997563977e861457de1c2fb9c2f49b3ebfd4f0354d8b25ef935"
+    },
+    "linked-gallery-native.log": {
+      "bytes": 3848,
+      "sha256": "0762949dc60a88f1ed8983337ae5468daca1b3921b74ce0fea5705ee3a7eb18e"
+    },
+    "retry1/account/gallery-1440.png": {
+      "bytes": 90652,
+      "sha256": "89a5563d94c0f8109d133becfa3e7dac4a6dda45bcf10cb811956e80c4bf4890"
+    },
+    "retry1/account/gallery-320.png": {
+      "bytes": 64329,
+      "sha256": "52df8d05180e08c7fb8b16718ac696b3bc32a6f85c5cb12a61fd71a5f525a52c"
+    },
+    "retry1/account/gallery-390.png": {
+      "bytes": 68156,
+      "sha256": "bdd6d5273e2837d9984452fa2da1bb310f9c34ee11c5f595b0b48c73eb5cf1e4"
+    },
+    "retry1/account/reimport-cold-offline.thingtime.zip": {
+      "bytes": 2291,
+      "sha256": "e7456cb19582c247450869cd71434102269f3c201b123d8188241a7b4a4c21bc"
+    },
+    "retry1/account/source-cold-offline.thingtime.zip": {
+      "bytes": 2291,
+      "sha256": "07e345fbd5005fb8fff70362dce225641a56f65ef9086904cb32abc6e23392fb"
+    },
+    "retry1/account/source-unchanged.thingtime.zip": {
+      "bytes": 2291,
+      "sha256": "a1ebbb42d62d6d71ff3ae762c50551763e3a1efea40609de6cd2ff1ad1bd7a31"
+    },
+    "retry1/account/verification.json": {
+      "bytes": 7609,
+      "sha256": "45c3c06f042532176e7124a3707aa1768610598d5aaf39b7c2ecb074f90e2484"
+    },
+    "retry1/account-composer/url-post-1440.png": {
+      "bytes": 91962,
+      "sha256": "358b4b01d1a93dee44c56e0d069379383006a00c6ca2251ab2389fda1889965d"
+    },
+    "retry1/account-composer/url-post-320.png": {
+      "bytes": 51436,
+      "sha256": "4d6df43ed64e7fa051b455d589d1ae4d364f1ec871ce028c190b8fb4b07d91be"
+    },
+    "retry1/account-composer/url-post-390.png": {
+      "bytes": 66256,
+      "sha256": "6ffbb42b0c661f1737d05df979b54b4337fa3ace5f8afc7954ec6b1eedea9693"
+    },
+    "retry1/account-composer/verification.json": {
+      "bytes": 3611,
+      "sha256": "fd4daf9e057f0dd6d22ff5b7bfcf6848e8eb12f7ce7572b11775a64eb76de651"
+    },
+    "retry1/anonymous/gallery-1440.png": {
+      "bytes": 61918,
+      "sha256": "f67d7d8f7fbf34cac3e3be7311b871847a88b5baf448d7dc047334ab456cf0c9"
+    },
+    "retry1/anonymous/gallery-320.png": {
+      "bytes": 52392,
+      "sha256": "8cc1de1c8d07a94954b8594fd960578e3826a762a4c91f3fa2f5e5489423588e"
+    },
+    "retry1/anonymous/gallery-390.png": {
+      "bytes": 53388,
+      "sha256": "0ecfa3e20479be1248382a998846376a19560c27236b63cd54486243e2486fc6"
+    },
+    "retry1/anonymous/reimport-cold-offline.thingtime.zip": {
+      "bytes": 2323,
+      "sha256": "0062545ace461d1c8fb2da090becdb8d4e39fba0b11fe2e2eed189b6b5a68070"
+    },
+    "retry1/anonymous/source-cold-offline.thingtime.zip": {
+      "bytes": 2323,
+      "sha256": "4c1ff7ea450cf6f725449fd6a78ffdddaf12506a9687b15e5b970f4c57cdc526"
+    },
+    "retry1/anonymous/source-unchanged.thingtime.zip": {
+      "bytes": 2323,
+      "sha256": "a39b57acf6d0c2710ec5e5154c0127642af61cfeb56196651b7dacc33590ca4a"
+    },
+    "retry1/anonymous/verification.json": {
+      "bytes": 888,
+      "sha256": "56c32885e70320fef9bc1c4b8e8b5a45cc48a05c0f9630e5adc9099023ed4f66"
+    }
+  }
+}

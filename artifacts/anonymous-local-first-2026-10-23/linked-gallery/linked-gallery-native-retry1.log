@@ -1,0 +1,11 @@
+✔ native anonymous linked gallery import preserves mixed order offline (37521.071534ms)
+✔ native account linked gallery import preserves mixed order offline and recovers a lost link receipt privately (56020.278439ms)
+✔ native account URL composer drafts and templates keep independent links through offline posting (26888.772647ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 121027.184466

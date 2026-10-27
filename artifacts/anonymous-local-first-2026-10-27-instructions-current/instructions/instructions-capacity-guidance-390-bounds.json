@@ -1,0 +1,71 @@
+{
+  "label": "capacity guidance",
+  "width": 390,
+  "left": 29,
+  "right": 361,
+  "top": 411.65625,
+  "bottom": 432.65625,
+  "headerBottom": 53,
+  "hitPoints": [
+    {
+      "line": "first",
+      "y": 422.15625,
+      "x": 31,
+      "unobscured": true
+    },
+    {
+      "line": "first",
+      "y": 422.15625,
+      "x": 195,
+      "unobscured": true
+    },
+    {
+      "line": "first",
+      "y": 422.15625,
+      "x": 359,
+      "unobscured": true
+    },
+    {
+      "line": "middle",
+      "y": 422.15625,
+      "x": 31,
+      "unobscured": true
+    },
+    {
+      "line": "middle",
+      "y": 422.15625,
+      "x": 195,
+      "unobscured": true
+    },
+    {
+      "line": "middle",
+      "y": 422.15625,
+      "x": 359,
+      "unobscured": true
+    },
+    {
+      "line": "last",
+      "y": 422.15625,
+      "x": 31,
+      "unobscured": true
+    },
+    {
+      "line": "last",
+      "y": 422.15625,
+      "x": 195,
+      "unobscured": true
+    },
+    {
+      "line": "last",
+      "y": 422.15625,
+      "x": 359,
+      "unobscured": true
+    }
+  ],
+  "unobscured": true,
+  "viewportHeight": 844,
+  "contentWidth": 332,
+  "clientWidth": 332,
+  "height": 21,
+  "lineHeight": 21
+}

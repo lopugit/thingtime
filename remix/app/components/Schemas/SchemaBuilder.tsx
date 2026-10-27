@@ -1,6 +1,8 @@
-import { useAccountDraft } from '~/drafts/useAccountDraft';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { DraftSaveStatus } from '~/drafts/DraftPicker';
+import { createWithDraft } from '~/drafts/createWithDraft';
+import { restoreSchemaBuilderDraft } from './schemaBuilderDraft';
+import { useWorkspaceDraft } from '~/drafts/useWorkspaceDraft';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { DraftSaveStatus, DraftPicker } from '~/drafts/DraftPicker';
 import React from 'react';
 import { Box, Button, Flex, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
 import { CornerDownRight, Plus, Trash2, X } from 'lucide-react';
@@ -41,7 +43,7 @@ type SchemaBuilderProps = {
 const draftId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 
-type DraftField = {
+export type DraftField = {
   id: string;
   name: string;
   type: SchemaFieldType;
@@ -402,26 +404,27 @@ export const SchemaBuilder = ({ prefill, onClose, onCreated }: SchemaBuilderProp
     return prefilled.length ? prefilled : [blankField()];
   });
   const [publishing, setPublishing] = React.useState(false);
+  const creating = React.useRef(false);
   const [showPreview, setShowPreview] = React.useState(true);
 
-	const user = useCurrentUser();
+	const user = useWorkspaceUser();
 	const context = `schema-builder:${prefill?.forkOf || 'new'}`;
-	const draft = useAccountDraft({
-		actor: user?.id,
+	const draft = useWorkspaceDraft({
 		context,
 		surface: 'schema',
+    validateSnapshot: restoreSchemaBuilderDraft,
 		onRestore: (saved) => {
-			const value = JSON.parse(saved.snapshot);
+			const value = restoreSchemaBuilderDraft(saved.snapshot);
 			setName(value.name || '');
 			setDescription(value.description || '');
-			if (Array.isArray(value.fields) && value.fields.length) setDrafts(value.fields);
+			setDrafts(value.fields.length ? value.fields : [blankField()]);
 		}
 	});
 	const snapshot = JSON.stringify({ name, description, fields: drafts });
 	const captureDraft = draft.capture;
  React.useEffect(() => {
-		if (!publishing) captureDraft({ name: name || 'Schema draft', surface: 'schema', context, snapshot, attachmentIds: [] }, true);
-	}, [snapshot, name, publishing, context, captureDraft]);
+		if (!publishing) captureDraft({ name: name || 'Schema draft', surface: 'schema', context: draft.context, snapshot, attachmentIds: [] }, true);
+	}, [snapshot, name, publishing, draft.context, captureDraft]);
   const compiled = React.useMemo(() => compileDrafts(drafts, 1, ''), [drafts]);
   const issues = [...compiled.issues];
   if (!name.trim()) issues.unshift('Give your schema a name');
@@ -435,14 +438,15 @@ export const SchemaBuilder = ({ prefill, onClose, onCreated }: SchemaBuilderProp
   );
 
   const publish = async () => {
+    if (creating.current) return;
     if (issues.length) {
       lopu({ title: issues[0], status: 'error', duration: 8000 });
       return;
     }
+    creating.current = true;
     setPublishing(true);
     try {
-			await draft.flush();
-      const resp: any = await api.v1.things.create({
+      const resp: any = await createWithDraft(draft, () => api.v1.things.create({
         thingtime: ['schema'],
         crystal: {
           name: name.trim(),
@@ -451,14 +455,14 @@ export const SchemaBuilder = ({ prefill, onClose, onCreated }: SchemaBuilderProp
           ...(prefill?.forkOf ? { forkOf: prefill.forkOf } : {}),
           ...(prefill?.render ? { render: prefill.render } : {})
         }
-      });
+      }));
       if (!resp?.ok) throw resp;
-      lopu({ title: `Schema “${name.trim()}” published ✨`, status: 'success', duration: 6000 });
-			await draft.clear();
+      lopu({ title: `Schema “${name.trim()}” saved ✨`, status: 'success', duration: 6000 });
       onCreated(resp.thing);
     } catch (err: any) {
-      lopu({ title: err?.error || 'Publishing hiccuped — try again 🌈', status: 'error' });
+      lopu({ title: err?.error || err?.message || 'Could not save the schema. Try again.', status: 'error' });
     } finally {
+      creating.current = false;
       setPublishing(false);
     }
   };
@@ -485,7 +489,10 @@ export const SchemaBuilder = ({ prefill, onClose, onCreated }: SchemaBuilderProp
         </Button>
       </Flex>
 
-			{user && <DraftSaveStatus status={draft.status} error={draft.error} retry={draft.retry} />}
+			{user && <DraftSaveStatus paused={!!draft.recoveryError} status={draft.status} error={draft.error} retry={draft.retry} />}
+      {draft.legacy && <Button size="xs" onClick={() => { void draft.copyIntoEditor(draft.legacy!).catch(error => lopu({ title: error.message, status: 'error' })); }}>Recover earlier device draft</Button>}
+      {user && !user.localOnly && !user.offline && <DraftPicker actor={user.id} surface="schema" context={context} label="Recover earlier account drafts" onLoad={draft.copyIntoEditor} />}
+
       <Flex gap={2} wrap="wrap">
         <Input
           {...inputSx}
@@ -533,7 +540,7 @@ export const SchemaBuilder = ({ prefill, onClose, onCreated }: SchemaBuilderProp
         </Button>
         <Box flex={1} />
         <Button colorScheme="pink" isLoading={publishing} onClick={publish} size="sm">
-          Publish schema ✨
+          Save schema ✨
         </Button>
       </Flex>
 

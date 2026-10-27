@@ -73,6 +73,7 @@ export async function saveDraft(
 		const decision = draftConflict(previous?.draftRevision ?? 0, input.revision, previous?.draftWriteId, input.writeId);
 		if (decision === 'conflict') throw new DraftError(409, 'This draft changed elsewhere. Your local edits are still available.');
 		if (decision === 'retry') return project(previous);
+		if (previous && mode === 'template') throw new DraftError(409, 'Templates are reusable; create an independent copy to change one');
 		const now = new Date();
 		const doc = {
 			...previous,

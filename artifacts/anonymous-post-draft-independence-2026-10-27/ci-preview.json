@@ -1,0 +1,79 @@
+{
+  "source": "ae245f48bc6ead78daed7150d0eecf9dd99c8ef6",
+  "ciObservedAt": "2026-10-26T19:03:42.966611+00:00",
+  "ciStatus": "success",
+  "runs": {
+    "Web CI": {
+      "conclusion": "success",
+      "createdAt": "2026-10-26T18:50:50Z",
+      "databaseId": 40381374310,
+      "headSha": "ae245f48bc6ead78daed7150d0eecf9dd99c8ef6",
+      "status": "completed",
+      "url": "https://github.com/lopugit/thingtime/actions/runs/40381374310",
+      "workflowName": "Web CI"
+    },
+    "Lopu CodeQL all branches": {
+      "conclusion": "success",
+      "createdAt": "2026-10-26T18:56:22Z",
+      "databaseId": 40382196399,
+      "headSha": "ae245f48bc6ead78daed7150d0eecf9dd99c8ef6",
+      "status": "completed",
+      "url": "https://github.com/lopugit/thingtime/actions/runs/40382196399",
+      "workflowName": "Lopu CodeQL all branches"
+    }
+  },
+  "preview": {
+    "source": "ae245f48bc6ead78daed7150d0eecf9dd99c8ef6",
+    "origin": "https://thingtime-l03ocvchs-lopugits-projects.vercel.app",
+    "observedAt": "2026-10-26T19:01:47.954606+00:00",
+    "scope": "Exact-commit GitHub status plus public HTTP shell and manifest; no deployed account actions",
+    "index": {
+      "status": 200,
+      "bytes": 16524,
+      "fallback": false,
+      "appShell": true,
+      "commitMarkerPresent": false
+    },
+    "capabilities": {
+      "status": 200,
+      "bytes": 74268,
+      "origin": "https://thingtime-l03ocvchs-lopugits-projects.vercel.app",
+      "features": {
+        "api.webpages-suites-install": {
+          "version": "1.7.0"
+        },
+        "api.things-export": {
+          "version": "1.18.0"
+        },
+        "api.things-import": {
+          "version": "1.15.0"
+        },
+        "api.attachment-content": {
+          "version": "1.18.0"
+        }
+      }
+    },
+    "scriptIdentity": [
+      {
+        "path": "/tt-boot.js",
+        "status": 200,
+        "bytes": 3822,
+        "sha256": "39a5dfeca672ecb732a7a67facc4553a86993b026b361dd1709446380dbe8c83",
+        "exactSourcePresent": false,
+        "shortSourcePresent": false
+      },
+      {
+        "path": "/assets/index-Bc2MY_2n.js",
+        "status": 200,
+        "bytes": 974423,
+        "sha256": "fd3510ccb2f9397752c5b3e8f0fee81428ddf4b467d18b9a7e02857ff1ad91b2",
+        "exactSourcePresent": false,
+        "shortSourcePresent": false
+      }
+    ]
+  },
+  "limitations": [
+    "Preview commit association comes from GitHub commit status; no literal source marker was found in the inspected shell/boot/main assets.",
+    "Public HTTP verification only; no deployed account actions or full deployed acceptance."
+  ]
+}

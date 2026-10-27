@@ -7,10 +7,11 @@ import { attachmentImageResponse, parseImageWidth } from '~/api/utils/attachment
 import { json, redirect } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { getAttachmentDownload, getAttachmentDownloadTarget, getAttachmentFingerprint } from '~/api/utils/attachments/attachments';
-import { withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
+import { isSameOriginAttachmentRequest, withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
 import { fetchStoredObject } from '~/api/utils/attachments/localAttachmentStorage';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { viewerOf, withFriendIds, withLinkKeys } from '~/api/utils/things/things';
+import { ORIGINAL_STREAM_POLICY } from '~/utils/thingTransfer/originalStreamPolicy';
 
 type ContentDependencies = {
 	getUser: typeof getCurrentUser;
@@ -19,7 +20,9 @@ type ContentDependencies = {
 	downloadTarget: typeof getAttachmentDownloadTarget;
 	fingerprint: typeof getAttachmentFingerprint;
 	enrichViewer: typeof withFriendIds;
+	fetchObject: typeof fetchStoredObject;
 	rangeFetch: typeof fetchStoredObject;
+	originalStreamPolicy: { idleMs: number; totalMs: number };
 };
 
 const defaultDependencies: ContentDependencies = {
@@ -29,7 +32,9 @@ const defaultDependencies: ContentDependencies = {
 	downloadTarget: getAttachmentDownloadTarget,
 	fingerprint: getAttachmentFingerprint,
 	enrichViewer: withFriendIds,
-	rangeFetch: fetchStoredObject
+	fetchObject: fetchStoredObject,
+	rangeFetch: fetchStoredObject,
+	originalStreamPolicy: ORIGINAL_STREAM_POLICY
 };
 
 export const createAttachmentContentLoader = (overrides: Partial<ContentDependencies> = {}) => {
@@ -37,6 +42,10 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 	return async ({ request }: { request: Request }) =>
 		withAttachmentPrivateResponse(async () => {
 			const url = new URL(request.url);
+				const originalBytes = url.searchParams.get('cache') === 'original-bytes';
+				if (originalBytes && (url.searchParams.get('download') !== '1' ||
+					[...url.searchParams.keys()].some(key => !['id', 'cache', 'download', 'sharedRoot', 'key'].includes(key) || url.searchParams.getAll(key).length !== 1)))
+					return json({ ok: false, error: 'Original streams require one original download without other modes' }, { status: 400 });
 			let range: ReturnType<typeof parseAttachmentRange>;
 			try {
 				range = parseAttachmentRange(url);
@@ -65,6 +74,11 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			// Service credentials are not first-party attachment principals. Treat
 			// them exactly like an anonymous caller for public-post authorization.
 			const user = resolvedUser?.accountKind === 'user' ? resolvedUser : null;
+			const retainBytes = url.searchParams.get('cache') === 'retain-bytes';
+			const retainOwnedFile = retainBytes || url.searchParams.get('cache') === 'retain';
+			if (retainOwnedFile && (!user || !isSameOriginAttachmentRequest(request))) return json({ ok: false, error: 'A same-origin full user session is required' }, { status: user ? 403 : 401 });
+			if (retainOwnedFile && (sharedRoot || url.searchParams.has('key') || url.searchParams.has('width') || url.searchParams.get('download') !== '1'))
+				return json({ ok: false, error: 'File retention requires an unscoped original download' }, { status: 400 });
 			const limit = await dependencies.enforceLimit(request, 'attachments.read', user ? `user:${user.id}` : null, {
 				failClosed: true
 			});
@@ -101,9 +115,14 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				audience || sharedRoot ? { id: '', ...audience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) } : null,
 				url.searchParams.get('id'),
 				url.searchParams.get('download') === '1',
-				retained ? range!.version : undefined
+				retained ? range!.version : undefined,
+				retainOwnedFile
 			);
 			if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
+			if (retainOwnedFile) {
+				if (!result.retention || result.retention.ownerId !== user!.id) return json({ ok: false, error: 'Saved owned file not found' }, { status: 404 });
+				if (!retainBytes) return json({ ok: true, cacheKey: `${result.cacheKey}:original`, size: result.size, file: result.retention });
+			}
 			if (range) {
 				if (result.version !== range.version) return json({ ok: false, error: 'Attachment version changed' }, { status: 409 });
 				if (range.offset + range.length > result.size) return json({ ok: false, error: 'Attachment range is outside the file' }, { status: 416 });
@@ -160,6 +179,82 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				return json({ ok: true, cacheKey: `${result.cacheKey}:${width || 'original'}`, size: result.size });
 			}
 			const etag = `"${result.cacheKey}:${width || 'original'}:v1"`;
+				if (originalBytes) {
+					// A fresh cache=validate receipt pins the exact authorized object. This
+					// is ordinary read authority, never the owner-only retention exemption.
+					if (request.headers.get('If-Match') !== etag)
+						return json({ ok: false, error: 'Refresh the exact original receipt before streaming' }, { status: 412 });
+					const controller = new AbortController();
+					const signal = AbortSignal.any([request.signal, controller.signal, AbortSignal.timeout(dependencies.originalStreamPolicy.totalMs)]);
+					let upstream: Response;
+					try { upstream = await dependencies.fetchObject(result.url, { redirect: 'error', signal }); }
+					catch { return json({ ok: false, error: 'Original content unavailable' }, { status: 502 }); }
+					if (upstream.status !== 200 || upstream.redirected || !upstream.body ||
+						(upstream.headers.has('Content-Length') && upstream.headers.get('Content-Length') !== String(result.size)) ||
+						(upstream.headers.has('Content-Encoding') && upstream.headers.get('Content-Encoding') !== 'identity')) {
+						controller.abort(); void upstream.body?.cancel().catch(() => {});
+						return json({ ok: false, error: 'Original content changed or is unavailable' }, { status: 502 });
+					}
+					const reader = upstream.body.getReader();
+					let size = 0, closed = false;
+					const onAbort = () => { if (!closed) void reader.cancel().catch(() => {}); };
+					const release = () => { signal.removeEventListener('abort', onAbort); reader.releaseLock(); };
+					const stop = () => { controller.abort(); void reader.cancel().catch(() => {}); release(); };
+					const readNext = async () => {
+						let timer: ReturnType<typeof setTimeout> | undefined;
+						try { return await Promise.race([reader.read(), new Promise<never>((_, reject) => {
+							timer = setTimeout(() => { controller.abort(); reject(new Error('Original upstream stopped making progress')); }, dependencies.originalStreamPolicy.idleMs);
+						})]); } finally { clearTimeout(timer); }
+					};
+					const whileActive = async <T,>(work: Promise<T>): Promise<T> => {
+						let aborted: () => void = () => {};
+						try { return await Promise.race([work, new Promise<never>((_, reject) => {
+							aborted = () => reject(signal.reason ?? new Error('Original stream stopped'));
+							signal.addEventListener('abort', aborted, { once: true });
+							if (signal.aborted) aborted();
+						})]); } finally { signal.removeEventListener('abort', aborted); }
+					};
+					const body = new ReadableStream<Uint8Array>({
+						async pull(output) {
+							try {
+								signal.throwIfAborted();
+								const part = await readNext();
+								signal.throwIfAborted();
+								if (!part.done) {
+									size += part.value.byteLength;
+									if (size > result.size) throw new Error('Original content exceeded its planned size');
+									if (size < result.size) { output.enqueue(part.value); return; }
+									// Do not release the last chunk until exact EOF and live authority
+									// are confirmed: Content-Length consumers may finish at that byte.
+									if (!(await readNext()).done) throw new Error('Original content exceeded its planned size');
+								}
+								if (size !== result.size) throw new Error('Original content was incomplete');
+								await whileActive((async () => {
+								const currentUser = await dependencies.getUser(actorRequest);
+								const currentPrincipal = currentUser?.accountKind === 'user' ? currentUser : null;
+								if (currentPrincipal?.id !== user?.id) throw new Error('Original authority changed');
+								const currentAudience = await dependencies.enrichViewer(withLinkKeys(withFoundPostBrowser(viewerOf(currentPrincipal), request, !currentUser), [url.searchParams.get('key') || '']));
+								const current = await dependencies.download(currentAudience || sharedRoot
+									? { id: '', ...currentAudience, ...(currentPrincipal?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) } : null,
+									url.searchParams.get('id'), true);
+								if (!current.ok || current.version !== result.version || current.cacheKey !== result.cacheKey || current.size !== result.size)
+									throw new Error('Original authority or content changed');
+								})());
+								signal.throwIfAborted(); closed = true; release();
+								if (!part.done) output.enqueue(part.value);
+								output.close();
+							} catch {
+								const cancelled = closed; closed = true; stop();
+								if (!cancelled) output.error(new Error('Original stream changed or became unavailable; no complete copy was delivered'));
+							}
+						},
+						cancel() { closed = true; stop(); }
+						}, { highWaterMark: 0 });
+						signal.addEventListener('abort', onAbort, { once: true });
+						return new Response(body, { headers: { ETag: etag, 'Content-Type': result.contentType,
+							'Content-Disposition': result.disposition, 'Content-Length': String(result.size),
+							'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } });
+				}
 			if ((width || url.searchParams.get('cache') === 'bytes') && request.headers.get('If-None-Match') === etag) {
 				return new Response(null, { status: 304, headers: { ETag: etag } });
 			}
@@ -168,10 +263,10 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				if (response.ok) response.headers.set('ETag', etag);
 				return response;
 			}
-			if (url.searchParams.get('cache') === 'bytes') {
-				if (result.size > 16 * 1024 * 1024) return json({ ok: false, error: 'Use native streaming for large files' }, { status: 413 });
-				const upstream = await fetchStoredObject(result.url, { redirect: 'error', signal: AbortSignal.timeout(25_000) });
-				if (!upstream.ok || !upstream.body) return new Response(null, { status: 502 });
+			if (retainBytes || url.searchParams.get('cache') === 'bytes') {
+				if (!retainBytes && result.size > 16 * 1024 * 1024) return json({ ok: false, error: 'Use native streaming for large files' }, { status: 413 });
+				const upstream = await dependencies.fetchObject(result.url, { redirect: 'error', signal: AbortSignal.any([request.signal, AbortSignal.timeout(25_000)]) });
+				if (!upstream.ok || !upstream.body) { void upstream.body?.cancel().catch(() => {}); return new Response(null, { status: 502 }); }
 				return new Response(upstream.body, {
 					headers: {
 						ETag: etag,
@@ -192,10 +287,10 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 		}).then((response) => {
 			// Bytes may be retained, but the browser must reauthorize before reuse.
 			if (
-				response.status === 304 ||
+					(!['retain-bytes', 'original-bytes'].includes(new URL(request.url).searchParams.get('cache') || '')) && (response.status === 304 ||
 				(response.status === 200 &&
 					response.headers.get('Content-Type') !== 'application/json; charset=utf-8' &&
-					!response.headers.get('Content-Type')?.includes('application/json'))
+					!response.headers.get('Content-Type')?.includes('application/json')))
 			) {
 				response.headers.set('Cache-Control', 'private, no-cache');
 				response.headers.delete('Pragma');

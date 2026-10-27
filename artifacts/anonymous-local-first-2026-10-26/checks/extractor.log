@@ -1,0 +1,13 @@
+✔ saves native host resources with actual provenance and validates before writing (18.202958ms)
+✔ CLI extraction selects the configured unified server explicitly (2.244292ms)
+✔ extracts actual CLI event shape and accepts clean expected invalid-call result (1.718084ms)
+✔ rejects incomplete, ambiguous, unsafe, changed and partial artifacts (84.73775ms)
+✔ saves exclusively after complete validation; existing output and bad input preserve data (27.755917ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 231.782208

@@ -1,4 +1,5 @@
 import { copyBoundedJson } from '../utils/boundedJson.ts';
+import type { TimelinePageRequest } from './sync.ts';
 
 export const TIMELINE_RELATED_MAX_THINGS = 128;
 /** A bounded query projection, never an accumulating history document. */
@@ -6,6 +7,27 @@ export type RelatedTimelineScope = { rootId: string; thingIds: string[]; revisio
 export const timelineRelatedId = (value: unknown): value is string =>
 	typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/.test(value);
 export const timelineRelatedRevision = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+
+export const validRelatedTimelineRequest = (request: TimelinePageRequest): request is TimelinePageRequest & { thingId: string; related: true } =>
+	timelineRelatedId(request.thingId) &&
+	request.related === true &&
+	(request.relatedRevision === undefined || timelineRelatedRevision(request.relatedRevision)) &&
+	((request.before === null && request.after === null) || !!request.relatedRevision);
+
+/** Identical membership identity for account and browser authorities. The
+ * adapter supplies SHA-256; browser hashing happens outside live IDB work. */
+export async function createRelatedTimelineScope(
+	rootId: string,
+	ids: string[],
+	sharedCount: number,
+	digest: (text: string) => string | Promise<string>
+) {
+	const thingIds = [...ids].sort();
+	return parseRelatedTimelineScope(
+		{ rootId, thingIds, sharedCount, revision: await digest(JSON.stringify([rootId, thingIds, sharedCount])) },
+		rootId
+	);
+}
 
 export function parseRelatedTimelineScope(input: unknown, rootId: string): RelatedTimelineScope {
 	const value = copyBoundedJson(input, { maxBytes: 32 * 1024, maxDepth: 3, maxNodes: 300 }, 'Related history scope') as any;

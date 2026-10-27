@@ -1,0 +1,4 @@
+{
+  "scope": "Unretained duplicate fixture attempt; zero draft HTTP requests because network-none Chromium navigator.onLine was false without the existing CDP online-signal setup. Not evidence of a product defect. Duplicate fixture removed; existing accountDraftSync suite reused.",
+  "cleanup": "Own runtime released; cleanup.json remaining is empty."
+}

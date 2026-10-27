@@ -1,0 +1,10 @@
+{
+  "recordedAt": "2026-10-26T13:59:01.013926+00:00",
+  "source": "current worktree after remote transfer runtime changes; tests use the built sanitized server",
+  "files": {
+    "remix/scripts/transfer-capacity-acceptance.mjs": "e573ddf76276806253527d273b55abee02658b713b3326bb927a422a5fb8d644",
+    "remix/.output/server/index.mjs": "d67bb3ec5a4190d85f8979643eaf6ee5cfb5d856b915181520c232baa51934b9",
+    "remix/app/utils/thingTransfer/browser.ts": "8669366d27a2ae4ba43bb34dc23286dcf0117756732dfc9c9d21d47ac62144b6",
+    "remix/app/utils/thingTransfer/remoteCapabilities.ts": "2f83b7b09ca5461661d94606af5927a95f70138766ad65c6cc9af88172844853"
+  }
+}

@@ -1,3 +1,5 @@
+import { interactionWrite, type InteractionState } from '../../../utils/interactionState';
+import { sanitizeTags, MAX_TAGS, MAX_TAG_CHARS } from '../../../schemas/thingTags';
 import { ownerFileSyncUploadOrigin, type FileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { decodeDiscussionCursor, encodeDiscussionCursor, discussionCursorConfigured } from './discussionCursor';
 import { newThingMutationCapture, recordThingMutation, recordFolderPlacement, type ThingMutationCapture } from '../timeline/recordMutation';
@@ -48,7 +50,7 @@ import {
 } from '../moderation/analyzeText';
 import { hasModeratedContent, moderatedContentOf } from '../moderation/textModeration';
 import { attachmentIsBlocked, attachmentModerationStatus } from '../moderation/moderationCore';
-import { sanitizeReactionToken } from '~/utils/reactionTokens';
+import { sanitizeReactionToken, MAX_REACTION_KEYS_PER_POST, MAX_REACTIONS_PER_USER_PER_POST } from '~/utils/reactionTokens';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 import {
   ACL_ALL,
@@ -250,7 +252,7 @@ export type ThingDoc = {
 	// Protected private-S3 attachment envelope. Dedicated attachment utilities
 	// are the only writers; generic Thing CRUD rejects the attachment kind.
 	attachmentEnvelopeVersion?: number;
-	attachmentState?: 'pending' | 'finalizing' | 'ready' | 'deleting';
+	attachmentState?: 'pending' | 'finalizing' | 'ready' | 'deleting' | 'cancelled';
 	objectSizeBytes?: number;
 	objectKey?: string;
 	objectVersionId?: string;
@@ -727,15 +729,11 @@ export const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'p
 // back to every default circle, i.e. the opposite filter.
 export const REQUESTABLE_VISIBILITIES: PostVisibility[] = [...VISIBILITIES, 'hidden', 'custom'];
 
-const MAX_TAGS = 12;
-const MAX_TAG_CHARS = 40;
 const MAX_SHARE_ID_CHARS = 128;
 const MAX_COMMENTS_PER_POST = 500;
 // Reactions are open-vocabulary (any emoji / multi-emoji token), so bound them:
 // a post holds at most this many DISTINCT tokens, and one user contributes at
 // most this many reaction things per post.
-const MAX_REACTION_KEYS_PER_POST = 100;
-const MAX_REACTIONS_PER_USER_PER_POST = 20;
 // Keep content + ledger delete transactions comfortably below MongoDB's
 // transaction duration/operation ceilings. Callers may hand us 500+ rows
 // (notably app-data cleanup and relationship cascades), so each bounded batch
@@ -942,6 +940,10 @@ const applyDeletedStorageDeltas = async (docs: ThingDoc[], session: any): Promis
 				{ session }
 			);
 		}
+	}
+	// Covers both single-root deletes and batched/cascade deletion winners.
+	for (const targetId of [...new Set(docs.filter(doc => doc.targetId && doc.thingtime?.some(kind => kind === 'save' || kind === 'reaction')).map(doc => doc.targetId!))].sort()) {
+		await things.updateOne({ shareId: targetId } as any, { $set: { interactionRevision: randomUUID() } }, { session });
 	}
 };
 export const isFail = (value: unknown): value is Fail => !!value && typeof value === 'object' && !Array.isArray(value) && (value as any).ok === false;
@@ -1167,35 +1169,6 @@ export const withMatch = (base: Record<string, any>, ...clauses: Record<string, 
   return and.length > 1 ? { $and: and } : and[0] || {};
 };
 
-// The tag cap counts code points, never bisecting a surrogate pair, and lone
-// surrogates are dropped — stored tags must be well-formed UTF-16 so the
-// client's encodeURIComponent on a stored tag can never throw during render.
-// NFC normalization keeps composed and decomposed spellings of one visible
-// tag (NFD 'café' pasted from macOS vs typed NFC) in a single stored bucket.
-// components/Feed/hashtags.ts canonicalHashtag and Attachments/
-// attachmentUiCore.ts canonicalPostTags mirror this exactly.
-const canonicalTag = (value: string): string =>
-  Array.from(value.trim().toLowerCase().normalize('NFC'))
-    .filter((char) => {
-      const codePoint = char.codePointAt(0) ?? 0;
-      return codePoint < 0xd800 || codePoint > 0xdfff;
-    })
-    .slice(0, MAX_TAG_CHARS)
-    .join('');
-
-const sanitizeTags = (value: unknown): string[] | Fail => {
-  if (value === undefined || value === null) return [];
-  if (!Array.isArray(value)) return fail(400, 'tags must be a list');
-  const tags: string[] = [];
-  for (const entry of value) {
-    if (typeof entry !== 'string') continue;
-    const tag = canonicalTag(entry);
-    if (tag && !tags.includes(tag)) tags.push(tag);
-    if (tags.length >= MAX_TAGS) break;
-  }
-  return tags;
-};
-
 // The things v1→v2 migration mints deterministic reaction thing ids under this
 // prefix (reactionShareId). Reserving it means a client can never pre-create a
 // thing at a migration destination id to hijack or delete migrated data.
@@ -1250,6 +1223,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
   if (
     trimmed.startsWith('mail_') ||
     trimmed.startsWith('timeline-') ||
+    trimmed.startsWith('instruction-transfer-') || trimmed.startsWith('instruction-part-') ||
     trimmed.startsWith('subspace-space-') ||
     trimmed.startsWith('subspace-general-') ||
     trimmed.startsWith(FOUND_POST_PREFIX) ||
@@ -1418,13 +1392,16 @@ const resolveInputAcl = (input: { acl?: unknown; visibility?: unknown }): string
 // writer can see, and the display name is overwritten from that schema, so no
 // client can attribute its data to a schema under a mismatched schemaId/name
 // pair. Mutates `crystal` in place; a data thing with no schemaId is untouched.
-const resolveDataSchemaProvenance = async (thingtime: string[], crystal: Record<string, unknown>, asOwner: Viewer): Promise<{ ok: true } | Fail> => {
+const resolveDataSchemaProvenance = async (thingtime: string[], crystal: Record<string, unknown>, asOwner: Viewer, transaction?: ThingWriteTransaction): Promise<{ ok: true } | Fail> => {
   if (!thingtime.includes('data') || crystal.schemaId === undefined) return { ok: true };
   const rawSchemaId = crystal.schemaId;
   if (typeof rawSchemaId !== 'string' || !rawSchemaId.trim()) {
     return fail(400, 'crystal.schemaId must be a schema thing id');
   }
-  const schemaThing = await findViewableThing(rawSchemaId.trim(), asOwner);
+  const candidate = transaction ? await (await getThingsCollection()).findOne({ shareId: rawSchemaId.trim() } as any, { session: transaction.session }) as ThingDoc | null : null;
+  const schemaThing = transaction
+    ? candidate && await canViewInherited(candidate, withThingLink(await withFriendIds(asOwner), candidate.shareId)) ? candidate : null
+    : await findViewableThing(rawSchemaId.trim(), asOwner);
   if (!schemaThing || !thingtimeOf(schemaThing).includes('schema')) {
     return fail(400, 'crystal.schemaId does not resolve to a schema you can see');
   }
@@ -1464,7 +1441,7 @@ export const createThing = async (
     return fail(403, `${validated.thingtime.join('+')} things are first-party surfaces — not available to app tokens`);
   }
 
-  const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, asOwner);
+  const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, asOwner, hooks.transaction);
   if (isFail(provenance)) return provenance;
 
   // subspace posting gate (api/utils/subspaces/gate.ts): membership, ban,
@@ -1722,7 +1699,7 @@ export const createThing = async (
 				if (hooks.afterInsert) await hooks.afterInsert(doc, session);
 				if (timelineCapture) await recordThingMutation(things, null, doc, timelineCapture, session);
 				if (target) {
-					const touched = await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: now } }, { session });
+					const touched = await things.updateOne({ shareId: target.shareId } as any, { $set: { updatedAt: now, ...(doc.thingtime.some(kind => kind === 'save' || kind === 'reaction') ? { interactionRevision: randomUUID() } : {}) } }, { session });
 					if (touched.matchedCount === 0) {
 						throw new StorageMutationError(409, 'storage_conflict', 'The target changed while this thing was being created — try again');
 					}
@@ -3020,7 +2997,7 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   // Every `timeline-` kind (events, links, snapshot parts, branches, heads, notes, version names)
   // is protected History metadata reachable only through the Timeline API, never a generic read.
   if (thingtimeOf(doc).some(kind => typeof kind === 'string' && kind.startsWith('timeline-'))) return false;
-  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
+  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['lopu-instruction-transfer', 'lopu-instruction-part', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
 	if ((thingtimeOf(doc).includes(FOUND_POST_KIND) || thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME))) return false;
@@ -3119,7 +3096,7 @@ export const canViewInherited = async (
   viewer: Viewer,
   findByShareId: (shareId: string) => Promise<ThingDoc | null> = findThing
 ): Promise<boolean> => {
-  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
+  if (isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['lopu-instruction-transfer', 'lopu-instruction-part', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return false;
 	// the blocked/pending gates apply to the doc ITSELF, not just its inherit
 	// terminal — a blocked or born-private comment under a clean post must
 	// vanish for non-owners too
@@ -3773,7 +3750,7 @@ export async function getThing(
   if (options.commentProjection && (app || isCustomMongoEndpointActive())) return fail(400, 'Discussion projection requires first-party home storage');
   let viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
-  if (!doc || isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['draft', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return fail(404, 'Thing not found');
+  if (!doc || isDeviceControlThing(doc) || thingtimeOf(doc).some(kind => ['draft', 'lopu-instruction-transfer', 'lopu-instruction-part', 'subspace-embed', 'password-manager-entry', 'mail-account', 'mail-folder', 'mail-message', 'mail-inbox'].includes(kind))) return fail(404, 'Thing not found');
   if (options.commentProjection && doc.appId) return fail(404, 'Thing not found');
   if (!app) {
     const terminal = await resolveInheritChain(doc, d => aclOf(d).includes(ACL_INHERIT), findThing);
@@ -4411,6 +4388,154 @@ export const toggleSave = async (viewerInput: string | Viewer, shareId: unknown)
   return { ok: true, saved: true };
 };
 
+/** First-party synchronization reads one bounded page of private membership.
+ * The target and its children share one Mongo snapshot. Revision tokens are
+ * internal concurrency metadata, never ownership or content export fields. */
+export const readInteractionStates = async (viewer: Viewer, ids: string[]): Promise<Fail | { ok: true; states: InteractionState[] }> => {
+	if (!viewer?.id) return fail(401, 'Unauthorized');
+	if (
+		!Array.isArray(ids) ||
+		!ids.length ||
+		ids.length > 50 ||
+		ids.some((id) => typeof id !== 'string' || !id.trim() || id.length > 200) ||
+		new Set(ids).size !== ids.length
+	)
+		return fail(400, 'Choose 1 to 50 distinct Things.');
+	const targets: ThingDoc[] = [];
+	for (const id of ids) {
+		const target = await findViewableThing(id, viewer);
+		if (!target) return fail(404, 'Thing not found');
+		targets.push(target);
+	}
+	const things = await getThingsCollection(),
+		related = await resolveRelated(targets, viewer.id);
+	return withMongoTransaction(async (session) => {
+		const current = (await things.find({ shareId: { $in: ids } } as any, { session }).toArray()) as any[];
+		if (
+			current.length !== ids.length ||
+			current.some(
+				(row) =>
+					!targets.some(
+						(target) =>
+							target.shareId === row.shareId &&
+							(target as any).interactionRevision === row.interactionRevision &&
+							+new Date(target.updatedAt) === +new Date(row.updatedAt)
+					)
+			)
+		)
+			return fail(409, 'Things changed. Refresh interactions.');
+		// Legacy embedded reactions must be migrated by the existing canonical
+		// writer first; never invent a zero baseline for retained legacy state.
+		if (current.some((row) => row.reactions && Object.keys(row.reactions).length))
+			return fail(409, 'Legacy reactions need reconciliation before offline synchronization.');
+		if (
+			(await legacyThingReadsRequired()) &&
+			(await things.findOne({ kind: 'reaction', parentId: { $in: ids }, ownerId: viewer.id } as any, { session }))
+		)
+			return fail(409, 'Legacy reactions need reconciliation before offline synchronization.');
+		const children = (await things
+			.find({ ownerId: viewer.id, targetId: { $in: ids }, thingtime: { $in: ['save', 'reaction'] } } as any, { session })
+			.limit(5001)
+			.toArray()) as any[];
+		if (children.length > 5000) return fail(413, 'Too many interactions in this page.');
+		return {
+			ok: true as const,
+			states: current.map((target) => ({
+				id: target.shareId,
+				revision: target.interactionRevision ?? null,
+				reactionCounts: reactionCountsOf(mergedReactionsOf(target, related)),
+				saved: children.some((row) => row.targetId === target.shareId && row.thingtime.includes('save')),
+				savedAt:
+					children
+						.filter((row) => row.targetId === target.shareId && row.thingtime.includes('save'))
+						.map((row) => new Date(row.createdAt).toISOString())
+						.sort()
+						.at(-1) ?? null,
+				reactions: [
+					...new Set(
+						children.filter((row) => row.targetId === target.shareId && row.thingtime.includes('reaction')).map((row) => String(row.crystal.emoji))
+					)
+				].sort()
+			}))
+		};
+	});
+};
+
+/** A stale command never toggles or overwrites newer membership. The client
+ * reconciles a lost response by reading state, and requires review on conflict. */
+export const writeInteractionState = async (viewer: Viewer, input: unknown): Promise<Fail | { ok: true; state: InteractionState }> => {
+	if (!viewer?.id) return fail(401, 'Unauthorized');
+	let command: ReturnType<typeof interactionWrite>;
+	try {
+		command = interactionWrite(input);
+	} catch (error) {
+		return fail(400, (error as Error).message);
+	}
+	const things = await getThingsCollection();
+	const effects: (() => Promise<void>)[] = [];
+	try {
+		await withMongoTransaction(async (session) => {
+			effects.length = 0;
+			const target = await findViewableThing(command.id, viewer);
+			if (!target) throw new StorageMutationError(404, 'storage_conflict', 'Thing not found');
+			if (patSandboxBlocks(viewer, target) || (command.kind === 'reaction' && (await customEngageBlocks(viewer, target))))
+				throw new StorageMutationError(403, 'storage_conflict', 'Interaction is not permitted');
+			if (target.reactions && Object.keys(target.reactions).length)
+				throw new StorageMutationError(409, 'storage_conflict', 'Legacy reactions need reconciliation');
+			if (
+				(await legacyThingReadsRequired()) &&
+				(await things.findOne({ kind: 'reaction', parentId: target.shareId, ownerId: viewer.id } as any, { session }))
+			)
+				throw new StorageMutationError(409, 'storage_conflict', 'Legacy reactions need reconciliation');
+			const locked = await things.updateOne(
+				{
+					shareId: target.shareId,
+					updatedAt: target.updatedAt,
+					interactionRevision: command.expectedRevision === null ? { $exists: false } : command.expectedRevision
+				} as any,
+				{ $set: { interactionRevision: randomUUID() } },
+				{ session }
+			);
+			if (!locked.matchedCount)
+				throw new StorageMutationError(409, 'storage_conflict', 'Interactions changed. Review your local choice before syncing.');
+			const existing = (await things
+				.find(
+					{
+						targetId: target.shareId,
+						ownerId: viewer.id,
+						thingtime: command.kind,
+						...(command.kind === 'reaction' ? { 'crystal.emoji': command.emoji } : {})
+					} as any,
+					{ session }
+				)
+				.limit(STORAGE_DELETE_TRANSACTION_BATCH + 1)
+				.toArray()) as any as ThingDoc[];
+			if (existing.length > STORAGE_DELETE_TRANSACTION_BATCH)
+				throw new StorageMutationError(413, 'storage_conflict', 'Too many duplicate interactions');
+			const transaction: ThingWriteTransaction = { session, afterCommit: (effect) => effects.push(effect) };
+			if (!command.active && existing.length) await deleteThingsAtomically(existing, transaction);
+			if (command.active && !existing.length) {
+				const created = await createThing(
+					viewer.id!,
+					{ thingtime: [command.kind], targetId: target.shareId, ...(command.kind === 'reaction' ? { crystal: { emoji: command.emoji } } : {}) },
+					viewer,
+					null,
+					{ transaction }
+				);
+				if (isFail(created)) throw new StorageMutationError(created.status, 'storage_conflict', created.error);
+			}
+		});
+		for (const effect of effects) await effect();
+		const result = await readInteractionStates(viewer, [command.id]);
+		if (result.ok === false) return result;
+		return { ok: true, state: result.states[0] };
+	} catch (error) {
+		const result = storageMutationFail(error);
+		if (result) return result;
+		throw error;
+	}
+};
+
 // Which of these targets has the viewer saved? Batch (one query per page).
 export const savedTargetIds = async (viewer: Viewer, targetIds: string[]): Promise<Set<string>> => {
   if (!viewer?.id || !targetIds.length) return new Set();
@@ -4951,7 +5076,8 @@ const deletionTimeline = (docs: ThingDoc[], actorId?: string) => {
 // bounded transaction for each batch. Only exact findOneAndDelete winners are
 // charged, so competing deletes and concurrent size-changing updates can never
 // double-refund a ledger.
-export const deleteThingsAtomically = async (docs: ThingDoc[]): Promise<ThingDoc[]> => {
+export const deleteThingsAtomically = async (docs: ThingDoc[], transaction?: ThingWriteTransaction): Promise<ThingDoc[]> => {
+  if (transaction && (!transaction.session?.inTransaction() || docs.length > STORAGE_DELETE_TRANSACTION_BATCH)) throw new Error('Invalid composed deletion transaction');
   const candidates = [
     ...new Map(
       docs
@@ -4968,12 +5094,13 @@ export const deleteThingsAtomically = async (docs: ThingDoc[]): Promise<ThingDoc
 	for (let offset = 0; offset < candidates.length; offset += STORAGE_DELETE_TRANSACTION_BATCH) {
 		const batch = candidates.slice(offset, offset + STORAGE_DELETE_TRANSACTION_BATCH);
 		const recordDeleted = deletionTimeline(batch);
-		const batchDeleted = await withMongoTransaction(async (session) => {
+		const remove = async (session: any) => {
 			const winners = await deleteThingCandidatesInSession(batch, session);
 			await applyDeletedStorageDeltas(winners, session);
 			await recordDeleted(winners, session);
 			return winners;
-		});
+		};
+		const batchDeleted = transaction ? await remove(transaction.session) : await withMongoTransaction(remove);
 		deleted.push(...batchDeleted);
 	}
 	return deleted;
@@ -5016,11 +5143,12 @@ type RootDeleteResult = { state: 'blocked' | 'missing' } | { state: 'deleted'; d
 // before-image delete share one snapshot; target-attached creates also write
 // the root, so a concurrent attachment either becomes visible on transaction
 // retry or loses to the deletion and aborts cleanly.
-const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>, actorId: string, capture = newThingMutationCapture(actorId)): Promise<RootDeleteResult> => {
+const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>, actorId: string, capture = newThingMutationCapture(actorId), hooks: DeleteThingHooks = {}): Promise<RootDeleteResult> => {
 	const things = await getThingsCollection();
 	return withMongoTransaction(async (session) => {
 		const root = (await things.findOne(deleteFilter as any, { session })) as any as ThingDoc | null;
 		if (!root) return { state: 'missing' };
+		await hooks.beforeRootDelete?.(root, session);
 		if (isFolderThing(root) && await things.findOne({ ownerId: root.ownerId, folderId: root.shareId }, { session, projection: { _id: 1 } })) return { state: 'blocked' };
 		const child = await things.findOne({ ...await cascadeAttachmentFilter(cascadeLinkIdsOf(root)), _id: { $ne: (root as any)._id } } as any, {
 			session,
@@ -5033,6 +5161,7 @@ const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>, ac
 		if (!deleted) return { state: 'missing' };
 		await applyDeletedStorageDeltas([deleted], session);
 		if (deleted.ownerId !== 'system' && storageSandboxState(deleted) !== 'sandbox') await recordThingMutation(things, deleted, null, capture, session);
+		await hooks.afterRootDelete?.(deleted, session);
 		return { state: 'deleted', doc: deleted };
 	});
 };
@@ -5091,6 +5220,12 @@ const clearSubspaceReportsFor = async (root: ThingDoc, deletedCommentIds: Readon
 };
 
 export type DeleteThingHooks = {
+ // Trusted API-utils hooks, never copied from request input. Validation runs
+ // before any cleanup; completion shares the final root deletion transaction.
+ beforeDelete?: (root: ThingDoc) => Promise<void>;
+ beforeRootDelete?: (root: ThingDoc, session: any) => Promise<void>;
+ afterRootDelete?: (root: ThingDoc, session: any) => Promise<void>;
+ timelineCapture?: ThingMutationCapture;
 	// External objects must become inaccessible before their protected source
 	// Things are removed and quota is refunded. A failure leaves the root and
 	// conservative charge intact for a safe retry.
@@ -5157,9 +5292,10 @@ export const deleteThing = async (
 		_id: (initial as any)._id,
 		...(isFolderThing(initial) || (hooks.expectedUpdatedAt !== undefined && hooks.expectedUpdatedAt !== null) ? { updatedAt: initial.updatedAt } : {})
 	};
-	const deleteCapture = newThingMutationCapture(viewer.id);
+	const deleteCapture = hooks.timelineCapture ?? newThingMutationCapture(viewer.id);
 
 	try {
+		await hooks.beforeDelete?.(initial);
 		if (hooks.beforeCascade) {
 			const prepared = await hooks.beforeCascade(initial);
 			if (prepared.ok === false) return prepared;
@@ -5223,7 +5359,7 @@ export const deleteThing = async (
 			if (rewalk) continue;
 
 			if (isFolderThing(anchoredRoot)) await drainFolderPlacement(anchoredDeleteFilter, deleteCapture);
-			const rootResult = await deleteDrainedRootAtomically(anchoredDeleteFilter, viewer.id, deleteCapture);
+			const rootResult = await deleteDrainedRootAtomically(anchoredDeleteFilter, viewer.id, deleteCapture, hooks);
 			if (rootResult.state === 'blocked') continue;
 			if (rootResult.state === 'deleted') {
 				await refundDeletedNamespaceDocs([rootResult.doc]);
@@ -5264,19 +5400,27 @@ export type UpdateThingInput = {
 // existing crystal; with replaceCrystal (PUT) the crystal is taken whole. Both
 // re-validate against the thing's schemas. v1 posts are upgraded to v2 shape
 // on write (their embedded comments/reactions residue stays until migration).
+/** Trusted callbacks extend a canonical update in its own content transaction.
+ * They cannot bypass authorization, validation, accounting or History. */
+export type ThingUpdateMutationHooks = {
+ capture?: ThingMutationCapture;
+ beforeWrite?: (before: ThingDoc, session: any) => Promise<void>;
+ afterWrite?: (session: any) => Promise<void>;
+};
 export const updateThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
   input: UpdateThingInput,
-  options: { replaceCrystal?: boolean; expectedUpdatedAt?: unknown; timeline?: { expectedHeadId: string; capture: ThingMutationCapture; beforeCommit?: (transaction: ThingWriteTransaction) => Promise<void> } } = {},
+  options: { transaction?: ThingWriteTransaction; replaceCrystal?: boolean; expectedUpdatedAt?: unknown; attachmentIds?: readonly unknown[]; mutation?: ThingUpdateMutationHooks; timeline?: { expectedHeadId: string; capture: ThingMutationCapture; beforeCommit?: (transaction: ThingWriteTransaction) => Promise<void> } } = {},
   app: AppLens = null
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null }> => {
+  if (options.transaction && (!options.transaction.session?.inTransaction() || app?.sandbox)) throw new Error('A composed Thing update requires the active content transaction');
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
   if (shareId.trim().startsWith('timeline-')) return fail(403, 'Timeline records are managed through History');
   const things = await getThingsCollection();
-  const doc = (await things.findOne({ shareId: shareId.trim() } as any)) as any as ThingDoc | null;
+  const doc = (await things.findOne({ shareId: shareId.trim() } as any, options.transaction ? { session: options.transaction.session } : {})) as any as ThingDoc | null;
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
   if (options.timeline && (doc.ownerId !== viewer.id || doc.timelineHeadId !== options.timeline.expectedHeadId)) return fail(409, 'Thing changed after the version preview. Refresh and compare again.');
   if (String(doc.ownerId) !== viewer.id) {
@@ -5358,8 +5502,15 @@ export const updateThing = async (
 	// Post edits validate with the same trusted attachment context creates get:
 	// an attachment-only post's crystal has no text/images, and without this
 	// the sanitizer would reject every edit of it with "Say something first".
-	const postAttachments =
+	let postAttachments =
 		thingtime.includes('post') && !isCustomMongoEndpointActive() ? await boundAttachmentPresence(doc.ownerId, doc.shareId) : undefined;
+	if (options.attachmentIds !== undefined) {
+		if (doc.ownerId !== viewer.id || !thingtime.includes('post') || app) return fail(403, 'Only the owner can edit post attachments');
+		const service = await import('../attachments/attachments');
+		const result = await service.inspectReadyAttachmentsForUpdate(viewer.id, options.attachmentIds, thingtime.includes('comment') ? 'comment' : 'post', doc.shareId);
+		if (result.ok === false) return result;
+		postAttachments = result;
+	}
   const validated = validateThingtimeCrystal(thingtime, nextCrystal, { postAttachments });
   if (isFail(validated)) return validated;
 	if (doc.ownerId !== viewer.id && validated.thingtime.includes('webpage')) {
@@ -5383,7 +5534,7 @@ export const updateThing = async (
       ? ((crystalOf(doc) as Record<string, unknown>).schemaId as string)
       : undefined;
   if (validated.crystal.schemaId !== undefined && validated.crystal.schemaId !== prevSchemaId) {
-    const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, viewer);
+    const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, viewer, options.transaction);
     if (isFail(provenance)) return provenance;
   }
 
@@ -5584,14 +5735,16 @@ export const updateThing = async (
       ? { sizeBytes: doc.sizeBytes }
       : { sizeBytes: { $exists: false } }
     : {};
-  const timelineCapture = doc.ownerId !== 'system' && !storageScope?.sandbox ? options.timeline?.capture ?? newThingMutationCapture(viewer.id) : null;
+  if (options.mutation && storageScope?.sandbox) throw new Error('Composed updates require a persistent content transaction');
+  const timelineCapture = doc.ownerId !== 'system' && !storageScope?.sandbox ? options.timeline?.capture ?? options.mutation?.capture ?? newThingMutationCapture(viewer.id) : null;
   let writeResult;
   let afterCommit: (() => Promise<void>)[] = [];
   try {
-		if (wasBillable || isBillable || registeredStorageScope || hasFolderChange || timelineCapture) {
-			await withMongoTransaction(async (session) => {
+		if (options.transaction || options.mutation || options.attachmentIds !== undefined || wasBillable || isBillable || registeredStorageScope || hasFolderChange || timelineCapture || (doc.targetId && doc.thingtime?.some(kind => kind === 'save' || kind === 'reaction'))) {
+			const write = async (session: any) => {
         // A retry owns a fresh effect list; aborted attempts cannot notify.
         afterCommit = [];
+        await options.mutation?.beforeWrite?.(doc, session);
         await options.timeline?.beforeCommit?.({ session, afterCommit: effect => afterCommit.push(effect) });
 				if (hasFolderChange) await lockFolderDestination(things, viewer.id, nextFolderId, session, isFolderThing(doc) ? doc.shareId : undefined);
 				if (accountDelta !== 0) await applyUserStorageDelta(doc.ownerId, accountDelta, session);
@@ -5603,7 +5756,7 @@ export const updateThing = async (
 						_id: (doc as any)._id,
 						...expectedSize,
 						...(options.timeline ? { timelineHeadId: options.timeline.expectedHeadId } : {}),
-						...((timelineCapture || hasFolderChange || (options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null)) ? { updatedAt: doc.updatedAt } : {})
+						...((options.attachmentIds !== undefined || timelineCapture || hasFolderChange || (options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null)) ? { updatedAt: doc.updatedAt } : {})
 					} as any,
 					{ $set: set, $unset: unset } as any,
 					{ session }
@@ -5611,12 +5764,22 @@ export const updateThing = async (
 				if (writeResult.matchedCount === 0) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Thing changed while it was being updated — try again');
 				}
+				// Attachment order/additions share the successful content version fence.
+				// A stale edit or failed binding rolls back both, including quota.
+				if (options.attachmentIds !== undefined) {
+					const { syncBoundTargetAttachments } = await import('../attachments/attachmentStore');
+					await syncBoundTargetAttachments(viewer.id!, doc.shareId, options.attachmentIds, session);
+				}
+				if (doc.targetId && doc.thingtime?.some(kind => kind === 'save' || kind === 'reaction')) await things.updateOne({ shareId: doc.targetId } as any, { $set: { interactionRevision: randomUUID() } }, { session });
 				if (timelineCapture) {
 					const next = { ...doc, ...set };
 					const entry = await recordThingMutation(things, doc, next, timelineCapture, session);
 					if (entry) set.timelineHeadId = entry.event.id;
 				}
-			});
+        await options.mutation?.afterWrite?.(session);
+			};
+      if (options.transaction) await write(options.transaction.session);
+      else await withMongoTransaction(write);
 		} else {
     writeResult = await things.updateOne(
       {
@@ -5640,7 +5803,8 @@ export const updateThing = async (
   }
 	if (storageScope?.sandbox && appDelta < 0) await refundAppStorage(storageScope, -appDelta);
 
-  for (const effect of afterCommit) await effect();
+  if (options.transaction) for (const effect of afterCommit) options.transaction.afterCommit(effect);
+  else for (const effect of afterCommit) await effect();
   const updated = { ...doc, ...set } as ThingDoc;
   delete (updated as any).kind;
   delete (updated as any).type;
@@ -5659,6 +5823,7 @@ export const updateThing = async (
 		if (!storageScope) delete updated.sizeBytes;
 	}
 
+  const notifyAfterCommit = async () => {
   // A text-changing edit notifies newly ADDED @mentions (posts + comments):
   // the composer autocomplete and PostCard linkification treat edited text
   // exactly like created text, so the notification contract must too. Same
@@ -5687,6 +5852,10 @@ export const updateThing = async (
 	) {
 		queueTextModeration(doc.shareId);
 	}
+
+  };
+  if (options.transaction) options.transaction.afterCommit(notifyAfterCommit);
+  else await notifyAfterCommit();
 
   const thing = (await toPublicThings([updated], viewer))[0];
   if (app) {
@@ -5761,6 +5930,7 @@ export type BulkOp = (typeof BULK_OPS)[number];
 export type BulkThingsInput = {
   op?: unknown;
   ids?: unknown;
+  expectedUpdatedAt?: unknown; // conditional single-item move
   folderId?: unknown; // move/copy destination (null/omitted = root)
   acl?: unknown; // share: the audience to apply
   visibility?: unknown; // share: legacy circle alias, mapped onto acl
@@ -5771,6 +5941,7 @@ export type BulkItemResult = {
   id: string;
   ok: boolean;
   error?: string;
+  status?: number;
   newId?: string;
   // recursive folder ops: how many descendants were copied / acl-updated and
   // how many were skipped (uncopyable kinds, inherit-locked audiences)
@@ -5839,6 +6010,10 @@ export const bulkThings = async (
     if (!ids.includes(id)) ids.push(id);
   }
   if (ids.length > MAX_BULK_IDS) return fail(400, `At most ${MAX_BULK_IDS} things per bulk request`);
+  if (input.expectedUpdatedAt !== undefined && (op !== 'move' || ids.length !== 1 || typeof input.expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(input.expectedUpdatedAt)))) {
+    return fail(400, 'expectedUpdatedAt requires a single-item move and an ISO timestamp');
+  }
+  const expectedUpdatedAt = input.expectedUpdatedAt as string | undefined;
 
   // move/copy destination validated once up front so a bad folder fails the
   // whole request loudly instead of 100 identical per-item errors
@@ -5906,16 +6081,20 @@ export const bulkThings = async (
           results.push({ id, ok: false, error: 'This token cannot move that managed content' });
           continue;
         }
+        if (expectedUpdatedAt !== undefined && Date.parse(expectedUpdatedAt) !== new Date(owned.updatedAt).getTime()) {
+          results.push({ id, ok: false, status: 409, error: 'Content changed before the move. Refresh and compare your changes.' });
+          continue;
+        }
         try {
-          await (placementDependencies.moveRecording || moveManagedContent)(viewer.id, id, folderId, new Date(owned.updatedAt).toISOString());
+          await (placementDependencies.moveRecording || moveManagedContent)(viewer.id, id, folderId, expectedUpdatedAt ?? new Date(owned.updatedAt).toISOString());
           results.push({ id, ok: true });
-        } catch {
-          results.push({ id, ok: false, error: 'Content could not be moved. Refresh and check that it is saved managed content and the destination is in your own library. Legacy themes/algorithms must first be copied into the current library.' });
+        } catch (error) {
+          results.push({ id, ok: false, status: (error as { status?: number })?.status === 409 ? 409 : 400, error: 'Content could not be moved. Refresh and check that it is saved managed content and the destination is in your own library. Legacy themes/algorithms must first be copied into the current library.' });
         }
         continue;
       }
-      const result = await updateThing(viewer, id, { folderId });
-      results.push('error' in result ? { id, ok: false, error: result.error } : { id, ok: true });
+      const result = await updateThing(viewer, id, { folderId }, { expectedUpdatedAt });
+      results.push('error' in result ? { id, ok: false, status: result.status, error: result.error } : { id, ok: true });
       continue;
     }
 

@@ -1,0 +1,365 @@
+✖ Character profile synchronization publishes matching actor-aware route contracts (7.08575ms)
+✔ owner-scoped search advertises and negotiates the same additive contract on both manifests (0.925083ms)
+✖ archive import clients reject missing, pre-archive and breaking contracts on both manifests (0.432083ms)
+✔ owner archive deletion requires the additive Things capability at the chosen origin (0.607708ms)
+✔ archive history readers require the selected origin to support the private snapshot contract (0.561541ms)
+✔ archive emoji readers reject origins without private moderation-aware image projection (0.530666ms)
+✔ archive gallery readers reject origins without moderation-aware media projection (0.523375ms)
+✔ Messenger custom-emoji parsing and projections publish a compatible correction on both manifests (0.528958ms)
+✔ managed-folder transfer clients reject old and breaking import/export contracts (0.097334ms)
+✔ recording import upload requirements cover start and completion lifecycle versions (0.508834ms)
+✖ Thingtime capability manifest is origin scoped and covers the generated API route map (0.750417ms)
+✔ capability negotiation accepts compatible updates and rejects missing or breaking versions (0.086833ms)
+✖ AI archive clients require the presentation contract before import, export and history reads (0.480166ms)
+✔ the Lopu catalog family publishes its verified-provider-key minor updates (8.755583ms)
+✔ historical Lopu receipts advertise a compatible reply patch on both manifests (0.845333ms)
+✔ both manifests publish passkey concurrency and Apple association contracts (0.800292ms)
+✔ both manifests publish notification history and system notification contracts (0.419917ms)
+✔ native recording uploads negotiate durable private Things before sending bytes (0.28675ms)
+✔ saved AI waterfall library is an explicit versioned capability (0.736417ms)
+✔ System vault and deployment reveal contracts are registered and negotiated (0.692083ms)
+✔ algorithm discovery and geographic clients negotiate additive features (0.7055ms)
+✔ Lopu network SDK contract exists on both manifests and refuses missing/breaking origins (0.874333ms)
+✔ upload burst correction is published by both manifests and rejects old or breaking origins (0.570959ms)
+✔ file finalization recovery requires the compatible upload-start correction (0.097916ms)
+✔ crawler discovery endpoints publish their root paths and -docs twins on the origin manifest (0.989291ms)
+✔ inherited audience clients negotiate the additive read and ancestor moderation contracts (0.329083ms)
+✔ Thing discussions and linked post references negotiate additive contracts on both manifests (0.438333ms)
+✔ functional demo capabilities advertise compatible catalog and install contracts (0.320416ms)
+✔ workspace provider diagnostics are explicitly versioned (0.257917ms)
+✔ native animation programs require compatible playback lifecycle support (29.636042ms)
+✔ XPath programs require owned synchronous query support (14.706291ms)
+✔ native traversal requires bounded synchronous callback support on both manifests (1.694917ms)
+✔ server Action outcomes are discoverable in both capability manifests (12.275042ms)
+✔ conditional interaction sync advertises a distinct compatible capability (4.5145ms)
+✔ existing owned file receipt deletion is advertised by both capability manifests (4.539834ms)
+✔ durable upload cancellation requires the additive 1.2.0 contract on both manifests (1.010667ms)
+✔ owned file and recording retention requires the additive content 1.14.0 contract (0.59475ms)
+✔ owned-original streams require additive content 1.16.0 in both origin manifests (0.495834ms)
+✔ full Mac capability lists negotiate additive device contracts (0.371333ms)
+✔ sync ignore rules require the additive saved-policy contract on both manifests (0.432041ms)
+✔ object-only empty finalization corrections remain compatible with shipped clients (0.846375ms)
+✔ sync upload provenance clients require compatible contracts on the selected origin (0.3255ms)
+✔ retry-safe linked galleries require additive link and delete contracts on both manifests (0.458166ms)
+✔ editable media containers require compatible element storage contracts on both manifests (0.452125ms)
+✔ combined local-first and media contracts do not accept either uncombined branch (0.811833ms)
+✔ shared original byte streams require additive content 1.18.0 on both origin manifests (0.440667ms)
+✔ Timeline synchronization is registered and versioned on both capability manifests (3.911459ms)
+✖ dedicated theme writers advertise durable history on both capability manifests (4.205916ms)
+✖ conditional theme synchronization is registered on both manifests (0.459667ms)
+✔ JSON Action inputs and draft-saving suites negotiate both origin manifests (0.597917ms)
+✔ external avatar export requires the bounded-download contract on both manifests (0.491583ms)
+✖ emoji transfer, library and move capabilities reject pre-support origins (0.763041ms)
+✔ archive root moves negotiate the additive bulk contract on both manifests (28.799584ms)
+✔ archive library and folder export reject origins without complete archive traversal (0.782959ms)
+✔ archive re-export is advertised by both manifests and rejects incomplete older implementations (0.469917ms)
+✔ live-chat shared emoji export requires the additive contract on both manifests (0.581416ms)
+✔ shared dependency reads negotiate the additive Things contract on both manifests (0.890125ms)
+✔ standalone Thing copying negotiates the additive copy contract on both manifests (0.511583ms)
+✔ Data Thing controls negotiate the shared-content action contract (0.467ms)
+✔ poll votes publish the shared-identity correction (0.586583ms)
+✔ verified vault reveal is explicit on both manifests with compatible client requirements (0.529917ms)
+✔ relationship consolidation publishes compatible additive migrations on both manifests (0.462958ms)
+✔ capabilities advertise every documented semantic contract (0.381ms)
+✔ both capability manifests advertise the bounded upload v2 contract (8.291042ms)
+✔ capabilities advertise every executable API route, including undocumented routes (78.155459ms)
+✔ account-hint privacy contracts publish their patch-level capability updates (0.29625ms)
+✔ capabilities publish the native Apple notification device contract (0.21625ms)
+✔ notification contracts publish the history filters and the system family as compatible minors (0.182875ms)
+✔ capabilities publish the non-secret data authority used by a bundle (0.78675ms)
+✔ the storage census and ciControl workbench allowlist publish their minor capability updates (0.441959ms)
+✔ packaged Claude Workflow replies publish a compatible runtime correction (7.856625ms)
+✔ reasoning-preserving native GPT-5.6 Sol replies publish a compatible patch (3.16525ms)
+✔ the Lopu family publishes its minor capability updates (own providers, verified keys) (0.6305ms)
+✔ the Lopu verified-access and credits family publishes its contracts (0.169167ms)
+✔ persistent attachment content and resized previews advertise their additive contract (0.398667ms)
+✔ shared audience-boundary corrections reject pre-fix and incompatible origins (0.316ms)
+✔ admin preview dispatch publishes its protected-controller contract version (0.16ms)
+✔ storage-aware health and the corrected email environment gate publish their contract updates (0.144791ms)
+✔ pooled MongoDB diagnostics publish compatible patches in both manifests (0.377666ms)
+✔ subspace lifecycle + notification type additions publish their contract versions (0.15575ms)
+✔ subspace join requests + posting-approval requests publish their contract versions (0.158375ms)
+✔ subspace user flairs publish their contract versions (0.178083ms)
+✔ subspace removal reasons + moderation modals publish their contract versions (0.1855ms)
+✔ subspace reports publish their contract versions (0.170625ms)
+✔ subspace discovery publishes its contract versions (0.158958ms)
+✔ marketing publishing publishes its public read and admin write contracts (0.412666ms)
+✔ run chat advertises both origin-scoped contracts and rejects incompatible responders (0.585083ms)
+✔ agent testing and task installation negotiate their additive contracts (0.391375ms)
+✔ subspace image clients negotiate both origin manifests and reject pre-upload contracts (0.4115ms)
+✔ subspace rename requires the post-media additive contract (0.169166ms)
+✔ exact AI workflow orders negotiate removal of the mandatory default (0.385625ms)
+✔ background AI requires compatible operation and task contracts on both manifests (13.896917ms)
+✔ Lopu continuation clients reject origins without checkpoint and renewable-task contracts (5.831583ms)
+✔ builder SDK contracts reject missing, older and incompatible action origins (0.348625ms)
+✔ uncapped post attachments and profile grants negotiate their own feature contracts (3.419834ms)
+✔ download-all archives are advertised by both manifests and routed as an executable endpoint (0.878292ms)
+✔ filesystem clients negotiate all additive file contracts on both origin manifests (11.406542ms)
+✔ the local development object-storage route is advertised and registered like every executable endpoint (1.29475ms)
+✔ native aggregate chat activities have origin-scoped capability coverage (0.392708ms)
+✔ service workspace clients negotiate the native builder contract (0.185625ms)
+✔ comment media readers require the attachment metadata projection (0.143625ms)
+✔ cursor discussion clients require the additive 1.27 contract while media keeps 1.24 compatibility (0.859166ms)
+✔ CSSOM clients require the asynchronous stylesheet receiver contract (0.813916ms)
+✔ Layout clients require the scoped layout and listener contract (0.533958ms)
+✔ observer catalogue programs require the additive actions-run 1.30 contract (0.128834ms)
+✔ range programs require the additive owned-boundary contract (0.234458ms)
+✔ password manager registers its live route and version on both discovery manifests (0.833667ms)
+✔ mobile pairing requirements are advertised by both manifests and reject desktop-only claims (0.761917ms)
+✔ backup retention advertises owner-only holds and deferred cleanup together (2.444958ms)
+✔ conditional file metadata contracts appear on both capability manifests (0.56475ms)
+✔ both manifests advertise conditional independent draft and template synchronization (0.328542ms)
+✔ draft naming requires the explicit Timeline 1.20 contract (0.144334ms)
+✔ theme title metadata requires compatible synchronization and transfer contracts (0.959625ms)
+✖ home theme receipt context requires its additive sync contract on both manifests (0.37925ms)
+✖ conditional algorithm synchronization and atomic deletion are advertised by both manifests (0.523333ms)
+✖ algorithm display titles require lossless normal transfer capabilities (14.862917ms)
+✔ Gmail OAuth and its one-use callback are advertised on both manifests and registered (0.597125ms)
+✔ combined password search and durable file receipts require the additive 1.3 contract (0.101917ms)
+✔ incident cleanup is versioned on both origin manifests and rejects older or breaking servers (0.604458ms)
+✔ password title search requires the additive 1.2 contract (0.0515ms)
+✔ device instruction sync negotiates resumable private instructions on both origin manifests (0.392417ms)
+✔ local ChatGPT plan capabilities cover both manifests and reject unsupported origins (2.985875ms)
+✔ live overview and saved source contracts exist on both origin manifests (0.384083ms)
+✔ subspace view clients negotiate linked messaging and embedded Thing placements (0.34075ms)
+✔ resource limits and CPU downloads negotiate only their semantic dependencies on both manifests (10.671917ms)
+✖ theme and algorithm catalogue streams have additive negotiated contracts in both manifests (0.727084ms)
+ℹ tests 126
+ℹ suites 0
+ℹ pass 115
+ℹ fail 11
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2009.07225
+
+✖ failing tests:
+
+test at app/api/utils/capabilities/thingtimeCapabilities.test.ts:2:1145
+✖ Character profile synchronization publishes matching actor-aware route contracts (7.08575ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '1.8.0' !== '1.7.0'
+  
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/api/utils/capabilities/thingtimeCapabilities.test.ts:13:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.start (node:internal/test_runner/test:1191:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '1.8.0',
+    expected: '1.7.0',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/api/utils/capabilities/thingtimeCapabilities.test.ts:2:2938
+✖ archive import clients reject missing, pre-archive and breaking contracts on both manifests (0.432083ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '1.14.0' !== '1.13.0'
+  
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/api/utils/capabilities/thingtimeCapabilities.test.ts:33:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '1.14.0',
+    expected: '1.13.0',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/api/utils/capabilities/thingtimeCapabilities.test.ts:2:8679
+✖ Thingtime capability manifest is origin scoped and covers the generated API route map (0.750417ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '1.14.0' !== '1.13.0'
+  
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/api/utils/capabilities/thingtimeCapabilities.test.ts:107:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '1.14.0',
+    expected: '1.13.0',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/api/utils/capabilities/thingtimeCapabilities.test.ts:2:16902
+✖ AI archive clients require the presentation contract before import, export and history reads (0.480166ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '1.14.0' !== '1.13.0'
+  
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/api/utils/capabilities/thingtimeCapabilities.test.ts:270:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '1.14.0',
+    expected: '1.13.0',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/docs/apiCapabilities.test.ts:2:2610
+✖ dedicated theme writers advertise durable history on both capability manifests (4.205916ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '1.3.0' !== '1.1.1'
+  
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/docs/apiCapabilities.test.ts:28:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '1.3.0',
+    expected: '1.1.1',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/docs/apiCapabilities.test.ts:2:3339
+✖ conditional theme synchronization is registered on both manifests (0.459667ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '1.8.0' !== '1.7.0'
+  
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/docs/apiCapabilities.test.ts:38:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '1.8.0',
+    expected: '1.7.0',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/docs/apiCapabilities.test.ts:2:5648
+✖ emoji transfer, library and move capabilities reject pre-support origins (0.763041ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '1.14.0' !== '1.13.0'
+  
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/docs/apiCapabilities.test.ts:69:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '1.14.0',
+    expected: '1.13.0',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/docs/apiCapabilities.test.ts:2:52299
+✖ home theme receipt context requires its additive sync contract on both manifests (0.37925ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '1.8.0' !== '1.7.0'
+  
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/docs/apiCapabilities.test.ts:778:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '1.8.0',
+    expected: '1.7.0',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/docs/apiCapabilities.test.ts:2:53011
+✖ conditional algorithm synchronization and atomic deletion are advertised by both manifests (0.523333ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '1.6.0' !== '1.5.0'
+  
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/docs/apiCapabilities.test.ts:790:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '1.6.0',
+    expected: '1.5.0',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/docs/apiCapabilities.test.ts:2:54067
+✖ algorithm display titles require lossless normal transfer capabilities (14.862917ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '1.14.0' !== '1.13.0'
+  
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/docs/apiCapabilities.test.ts:804:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '1.14.0',
+    expected: '1.13.0',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at app/docs/apiCapabilities.test.ts:2:62901
+✖ theme and algorithm catalogue streams have additive negotiated contracts in both manifests (0.727084ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '1.8.0' !== '1.7.0'
+  
+      at TestContext.<anonymous> (/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/docs/apiCapabilities.test.ts:910:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1325:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)
+      at Test.postRun (node:internal/test_runner/test:1465:19)
+      at Test.run (node:internal/test_runner/test:1390:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '1.8.0',
+    expected: '1.7.0',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

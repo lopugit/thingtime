@@ -1,6 +1,8 @@
+import { createCharacterRequest } from '../local-workspace/characterRequest.client';
+import { workspaceIdentityKey } from '../local-workspace/runtime.client';
 import { useCharacterScope, CHARACTER_HEADER } from '~/components/Characters/CharacterScope';
 import { aiTaskFetch } from '~/components/Lopu/aiTasks.client';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
 import { recordApiCall } from './apiRequestLog';
@@ -8,9 +10,16 @@ import { changesRootIdentity, rootIdentity } from '../utils/rootIdentity';
 import { useDataPlane } from './useDataPlane';
 import { EXPECTED_DATA_PLANE_HEADER } from '../utils/dataPlane';
 import { requireThingtimeCapability } from '../api/utils/capabilities/requireCapability.client';
+import type { CurrentUser } from './useCurrentUser';
 
-export function useAsyncFetcher() {
-  const character = useCharacterScope();
+export function useAsyncFetcher(actorOverride?: CurrentUser) {
+  const inheritedCharacter = useCharacterScope();
+  const character = actorOverride === undefined ? inheritedCharacter : actorOverride;
+  const workspaceKey = workspaceIdentityKey();
+  // Retained submissions belong to the view that created them, including when
+  // characterId is supplied explicitly rather than through CharacterScope.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const characterRequest = useMemo(() => createCharacterRequest(), [workspaceKey]);
   const dataPlane = useDataPlane();
   const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
   const [defaultOpts, setDefaultOpts] = useState({
@@ -26,6 +35,7 @@ export function useAsyncFetcher() {
       const nextOpts = { ...defaultOpts, ...opts };
       const headers = new Headers();
       const characterId = opts.characterId ?? character?.id;
+      const perform = async (characterSignal?: AbortSignal) => {
       // Capture before capability negotiation: a delayed action from a retired
       // view must never be retargeted to a newly selected database.
       const expectedPlane = nextOpts.expectedDataPlane === undefined ? planeRef.current : nextOpts.expectedDataPlane;
@@ -35,7 +45,7 @@ export function useAsyncFetcher() {
         headers.set(EXPECTED_DATA_PLANE_HEADER, expectedPlane);
       }
       if (nextOpts.expectedApiOrigin) headers.set('X-Thingtime-Expected-Api-Origin', nextOpts.expectedApiOrigin);
-      if (nextOpts.expectedActor) headers.set('X-Thingtime-Expected-Actor', nextOpts.expectedActor);
+      if (nextOpts.expectedActor || characterId) headers.set('X-Thingtime-Expected-Actor', nextOpts.expectedActor || characterId!);
       let body: BodyInit | undefined;
 
       if (nextOpts.encType === 'application/json') {
@@ -58,13 +68,14 @@ export function useAsyncFetcher() {
       const started = performance.now();
       let response: Response;
       try {
+        characterSignal?.throwIfAborted();
         response = await aiTaskFetch(nextOpts.action, {
           method,
           credentials: 'include',
           ...(nextOpts.expectedApiOrigin ? { redirect: 'error' as const, cache: 'no-store' as const } : {}),
           headers,
           body,
-          signal: nextOpts.signal
+          signal: characterSignal ? (nextOpts.signal ? AbortSignal.any([characterSignal, nextOpts.signal]) : characterSignal) : nextOpts.signal
         });
         if (nextOpts.expectedApiOrigin && (response.redirected || (nextOpts.expectedApiOrigin !== window.location.origin && response.headers.get('x-thingtime-api-fallback') !== nextOpts.expectedApiOrigin))) {
           await response.body?.cancel().catch(() => {});
@@ -114,8 +125,10 @@ export function useAsyncFetcher() {
 
       if (changesRootIdentity(nextOpts.action, payload, method)) rootIdentity.changed();
       return payload;
+      };
+      return characterId ? characterRequest(perform) : perform();
     },
-    [defaultOpts, character]
+    [defaultOpts, character, characterRequest]
   );
 
   return { submit, setDefaultOpts };

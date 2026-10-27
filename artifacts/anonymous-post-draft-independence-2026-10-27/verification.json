@@ -1,0 +1,33 @@
+{
+  "offlineReload": true,
+  "privateDraftSync": true,
+  "immutableTemplateRetry": true,
+  "failedDraftWrites": 1,
+  "independentPrivatePost": "61496125-4fea-42aa-adf5-153f6cc10828",
+  "postSyncedBeforeDraftReleased": true,
+  "latestImmediateEditorSnapshot": true,
+  "exactRichTextReadback": true,
+  "exactlyOneFirstPost": true,
+  "retirementConverged": true,
+  "templatePreserved": true,
+  "failedPostWrites": 1,
+  "reversePostId": "237b8bcc-e308-4055-9864-301f78f6bc07",
+  "independentDraftId": "ae3fd6db-3290-4d36-b3be-a5fabc6446a8",
+  "draftSyncedBeforePostReleased": true,
+  "postRetrySameIdentity": true,
+  "postAttempts": 2,
+  "exactlyOneRetriedPost": true,
+  "workingDraftPreservedAfterPostRetryAndReload": true,
+  "postStatuses": [
+    503,
+    200
+  ],
+  "postFailures": [],
+  "viewports": [
+    1440,
+    390,
+    320
+  ],
+  "errors": [],
+  "offlineWrites": []
+}

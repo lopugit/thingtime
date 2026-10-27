@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import {
-	TIMELINE_VERSION_NAME_KIND, TIMELINE_VERSION_NAME_LABELS, parseTimelineVersionName, parseTimelineVersionNameCommand, timelineVersionNameEventId, timelineVersionNameId,
+	TIMELINE_VERSION_NAME_KIND, canNameTimelineVersion, parseTimelineVersionName, parseTimelineVersionNameCommand, timelineVersionNameEventId,
 	type TimelineVersionName, type TimelineVersionNameCommand, type TimelineVersionNameResult
 } from '../../../timeline/versionNames.ts';
-import { parseTimelineEvent, type TimelineSnapshot } from '../../../timeline/contract.ts';
+import { planVersionName, replayVersionName, VersionNameMutationError } from '../../../timeline/versionNameMutation';
 import { binaryBytes, fromBin, toBin } from '../auth/binary.ts';
 import { getThingsCollection, withMongoTransaction } from '../mongodb/collections';
 import { COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry.ts';
@@ -50,43 +50,34 @@ const dependencies = {
 };
 export function createVersionNameService(overrides: Partial<typeof dependencies> = {}) {
 	const deps = { ...dependencies, ...overrides };
-	const snapshot = (name: TimelineVersionName): TimelineSnapshot => ({ adapter: TIMELINE_VERSION_NAME_KIND, version: 1, value: name });
 	return async (ownerId: string, input: TimelineVersionNameCommand): Promise<TimelineVersionNameResult> => {
 		const command = parseTimelineVersionNameCommand(input); const things = await deps.collection(); const now = deps.now();
 		const eventId = timelineVersionNameEventId(command.operationId); const signature = digest(command);
 		return deps.transaction(async session => {
 			// The operation id is the retry identity: an identical request returns the stored receipt; a different one is refused.
 			const prior = (await deps.entries(things, ownerId, [eventId], session))[0];
-			if (prior) {
-				if (prior.event.operationId !== signature || prior.event.source !== 'api' || prior.event.actorId !== ownerId || (prior.event.after ?? prior.event.before)?.adapter !== TIMELINE_VERSION_NAME_KIND) refuse(409, 'This operation id was already used for another request.');
-				return { ok: true, name: prior.event.after ? parseTimelineVersionName(prior.event.after.value) : null, entry: prior };
-			}
-			// Only a synced saved version can be named: effects, client drafts and deletions are refused.
+			const replay = replayVersionName(prior ?? null, ownerId, signature);
+			if (replay) return replay;
+			// The authority must already hold this exact version; naming does not alter draft provenance.
 			const target = (await deps.entries(things, ownerId, [command.eventId], session))[0];
 			if (!target || target.event.ownerId !== ownerId || target.event.thingId !== command.thingId) refuse(404, 'Version not found.');
-			if (target!.event.mode !== 'revision' || !target!.event.after) refuse(422, 'Only a saved version can be named.');
+			if (!canNameTimelineVersion(target!.event)) refuse(422, 'Only a retained content version can be named.');
 			const shareId = timelineVersionNameThingId(ownerId, command.eventId);
 			const doc = await things.findOne({ ownerId, thingtime: TIMELINE_VERSION_NAME_KIND, shareId }, { session });
 			// A tombstone (cleared name) reads as "no name" to clients but keeps the revision counter, so a
 			// rename issued against an earlier life (stale expectedRevision) can never land on a later one.
 			const current = doc && doc.timelineVersionNameCleared !== true ? versionNameFromDoc(doc) : null;
 			const baseRevision: number = Number.isSafeInteger(doc?.nameRevision) && doc.nameRevision >= 0 ? doc.nameRevision : 0;
-			if (current ? current.revision !== command.expectedRevision : command.expectedRevision !== 0) refuse(409, 'This version name changed on another device. Refresh and try again.');
-			if (command.name === null ? !current : current?.name === command.name) return { ok: true, name: current, entry: null };
-			if (baseRevision >= Number.MAX_SAFE_INTEGER) refuse(409, 'This version name revision limit has been reached.');
+			const planned = planVersionName({ ownerId, command, signature, target: target ?? null, current, baseRevision,
+				previousUpdatedAt: doc?.updatedAt ? new Date(doc.updatedAt).toISOString() : null, now: now.toISOString() });
+			if (!planned.event) return { ok: true as const, name: planned.name, entry: null };
+			const next = planned.name, updatedAt = planned.updatedAt;
 			const eventShareId = timelineEventThingId(ownerId, command.eventId);
-			const updatedAt = new Date(Math.max(now.getTime(), current ? Date.parse(current.updatedAt) + 1 : 0, doc?.updatedAt ? new Date(doc.updatedAt).getTime() + 1 : 0)).toISOString();
-			const next = command.name === null ? null : parseTimelineVersionName({ formatVersion: 1, id: timelineVersionNameId(command.eventId), ownerId, eventId: command.eventId, thingId: command.thingId, name: command.name, revision: baseRevision + 1, createdAt: current?.createdAt ?? now.toISOString(), updatedAt });
 			// The event is appended FIRST: its Timeline-folder position CAS turns two
 			// concurrent first-time names into one transaction write conflict instead
 			// of a duplicate-key error on the unique shareId index. The effect sits in
 			// the named version's branch lane and is metered like every effect event.
-			const entry = await deps.append(things, parseTimelineEvent({
-				formatVersion: 1, id: eventId, ownerId, thingId: command.thingId, branchId: target!.event.branchId, parentIds: [],
-				operationId: signature, actorId: ownerId, source: 'api', clientId: null, occurredAt: now.toISOString(), mode: 'effect', operation: 'effect',
-				label: !next ? TIMELINE_VERSION_NAME_LABELS.cleared : current ? TIMELINE_VERSION_NAME_LABELS.renamed : TIMELINE_VERSION_NAME_LABELS.named,
-				before: current ? snapshot(current) : null, after: next ? snapshot(next) : null, dependencies: [{ thingId: command.thingId, eventId: command.eventId }]
-			}), session, { debit: deps.debit, now });
+			const entry = await deps.append(things, planned.event, session, { debit: deps.debit, now });
 			try {
 				if (!next) {
 					// Clearing keeps a tombstone: the revision advances, the secure payload goes away, reads skip it.
@@ -106,8 +97,8 @@ export function createVersionNameService(overrides: Partial<typeof dependencies>
 				if (error?.code === 11000) refuse(409, 'This version name changed on another device. Refresh and try again.');
 				throw error;
 			}
-			return { ok: true, name: next, entry };
-		});
+			return { ok: true as const, name: next, entry };
+		}).catch(error => { if (error instanceof VersionNameMutationError) refuse(error.status, error.message); throw error; });
 	};
 }
 export const handleVersionNameCommand = createVersionNameService();
