@@ -20,7 +20,7 @@ jobs:
       github.event.pull_request.base.ref == 'github-actions' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'codex/oauth-native-authority-lifecycle' &&
-      github.event.label.name == format('native-lifecycle-{0}', github.event.pull_request.head.sha)
+      github.event.label.name == format('tt-life-{0}', github.event.pull_request.head.sha)
     runs-on: macos-15
     timeout-minutes: 8
     strategy:
@@ -29,12 +29,12 @@ jobs:
       matrix:
         case: [normal, parent-loss]
     env:
-      EXPERIMENT_HELPER_SHA: 84a6338f87082b61ef665ccea6748fa9fc29697a
+      EXPERIMENT_HELPER_SHA: 5e8da0ea14707276769fc420f2a522b8715fc0a8
     steps:
       - name: Acquire only independently reviewed inert helper
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: 84a6338f87082b61ef665ccea6748fa9fc29697a
+          ref: 5e8da0ea14707276769fc420f2a522b8715fc0a8
           persist-credentials: false
           path: inert-helper
           sparse-checkout-cone-mode: false
@@ -57,7 +57,8 @@ jobs:
           helper, head, workflow = (os.environ[key] for key in ('EXPERIMENT_HELPER_SHA', 'REVIEWED_HEAD', 'WORKFLOW_SHA'))
           assert all(re.fullmatch('[0-9a-f]{40}', value) for value in (helper, head, workflow))
           assert os.environ['REVIEW_ACTOR'] == 'lopugit'
-          assert os.environ['REVIEW_LABEL'] == 'native-lifecycle-' + head
+          assert len(os.environ['REVIEW_LABEL']) <= 50
+          assert os.environ['REVIEW_LABEL'] == 'tt-life-' + head
           pr = os.environ['SOURCE_PR']
           assert re.fullmatch('[1-9][0-9]*', pr)
           current = api('repos/lopugit/thingtime/pulls/' + pr)
@@ -71,7 +72,7 @@ jobs:
           actual = subprocess.run(['git', '-C', 'inert-helper', 'rev-parse', 'HEAD'], check=True, capture_output=True).stdout.decode().strip()
           assert actual == helper
           script = pathlib.Path('inert-helper/.github/scripts/native-lifecycle-experiment.py')
-          assert hashlib.sha256(script.read_bytes()).hexdigest() == 'd6b9168697f5e525355be1be93d99708f893617e601181add3cf95e8524d22de'
+          assert hashlib.sha256(script.read_bytes()).hexdigest() == 'd7c074d4ac55ab3c20d1b80bd9be6b163f5153651d3434b131e4d65850a5fd98'
           provenance = {'helperSha': helper, 'reviewedHeadSha': head, 'workflowSha': workflow,
                         'actor': os.environ['REVIEW_ACTOR'], 'label': os.environ['REVIEW_LABEL'],
                         'workflowBytesEqual': True, 'candidateCheckout': False}
