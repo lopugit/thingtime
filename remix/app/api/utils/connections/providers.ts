@@ -515,9 +515,12 @@ const guardedFetch = async (url: string, init: RequestInit & { method?: string }
 };
 
 // Response-size caps. FEED covers feed/data bodies, TOKEN the much smaller
-// OAuth token responses.
+// OAuth token responses, COMPLETE the registered API operations that must
+// return every record they fetched — a ceiling that no real result reaches,
+// not a product page size.
 const MAX_FEED_RESPONSE_BYTES = 3_000_000;
 const MAX_TOKEN_RESPONSE_BYTES = 1_000_000;
+const MAX_COMPLETE_RESPONSE_BYTES = 25_000_000;
 
 // Read at most `max` bytes of a body; null means "over the cap, give up".
 //
@@ -631,7 +634,11 @@ export const authedJson = async (
     token?: string; method?: 'GET' | 'POST'; body?: unknown; headers?: Record<string, string>;
     // Only fixed, server-registered API operations opt in. User-supplied feed
     // targets retain their transport budget; complete results cannot redirect
-    // to an arbitrary public host. Provider pagination controls processing size.
+    // to an arbitrary public host. Pagination bounds the list operations, but a
+    // single-resource read (a Docs document) has no page size to clamp, so this
+    // keeps a ceiling far above any real result rather than no ceiling at all:
+    // the caller re-encodes and re-parses the payload for redaction, so an
+    // unbounded read costs several times the response in resident memory.
     completeResponse?: boolean; signal?: AbortSignal;
   } = {}
 ): Promise<{ ok: true; data: any } | Fail> => {
@@ -654,7 +661,7 @@ export const authedJson = async (
       const status = resp.status === 401 || resp.status === 403 ? 401 : 502;
       return fail(status, status === 401 ? 'The provider needs a reconnect or additional permission.' : `The provider answered ${resp.status}.`);
     }
-    const text = opts.completeResponse ? await resp.text() : await readBoundedBody(resp, MAX_FEED_RESPONSE_BYTES);
+    const text = await readBoundedBody(resp, opts.completeResponse ? MAX_COMPLETE_RESPONSE_BYTES : MAX_FEED_RESPONSE_BYTES);
     if (text === null) return fail(502, 'The provider response was too large to process');
     try {
       return { ok: true, data: JSON.parse(text) };

@@ -1,4 +1,4 @@
-import { json, requireJsonContentType } from '~/api/http';
+import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { runConnectionRequest } from '~/api/utils/connections/requests';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -13,7 +13,10 @@ export const action = async ({ request }: { request: Request }) => {
   }
   const unsupported = requireJsonContentType(request);
   if (unsupported) return unsupported;
-  const body = await request.json().catch(() => null);
+  // This body only ever carries four short scalars (the vault's deliberately
+  // uncapped credential payloads are a different contract), so it keeps the
+  // same bound as every sibling connections route.
+  const body = await readJsonBody(request, 4 * 1024);
   const result = await runConnectionRequest(user, {
     connectionId: body?.connectionId, operation: body?.operation, resourceId: body?.resourceId, pageToken: body?.pageToken
   }, request.signal);

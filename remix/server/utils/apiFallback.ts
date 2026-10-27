@@ -3,6 +3,33 @@ import { agentTestEnvironment } from '../../app/api/utils/agentTesting';
 
 const MONGO_PASSWORD_PLACEHOLDER = '<db_password>';
 
+// Read at most `max` bytes, cancelling the transfer rather than just refusing
+// to parse what already arrived. Throws past the cap: every caller treats a
+// failed manifest read as "incompatible".
+const readBoundedManifest = async (response: Response, max: number): Promise<string> => {
+  const declared = Number(response.headers.get('content-length'));
+  const body = response.body;
+  if (!body || (Number.isFinite(declared) && declared > max)) {
+    await body?.cancel().catch(() => {});
+    throw new Error('Manifest too large');
+  }
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > max) {
+      await reader.cancel().catch(() => {});
+      throw new Error('Manifest too large');
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+};
+
 const normaliseOrigin = (value?: string | null) => {
   const trimmed = value?.trim();
   if (!trimmed) return null;
@@ -188,9 +215,15 @@ export const proxyApiRequestToFallback = async (request: Request, options: { str
         const response = await fetch(new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, fallbackUrl.origin), {
           headers: { Accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(10_000)
         });
-        const text = response.ok ? await response.text() : '';
-        if (text.length > 512 * 1024) throw new Error('Manifest too large');
-        const manifest = JSON.parse(text);
+        if (!response.ok) {
+          await response.body?.cancel().catch(() => {});
+          throw new Error('Manifest unavailable');
+        }
+        // Enforce the cap WHILE reading. `response.text()` buffers the whole
+        // body first, so checking its length afterwards bounds only the parse:
+        // this negotiation exists precisely because the selected server is not
+        // yet trusted, and it must not be able to stream us out of memory.
+        const manifest = JSON.parse(await readBoundedManifest(response, 512 * 1024));
         if (manifest.schemaVersion !== 1 || manifest.origin !== fallbackUrl.origin ||
             !capabilitySatisfies(manifest.features?.[required[0]]?.version, required[1])) throw new Error('Incompatible manifest');
       } catch {
