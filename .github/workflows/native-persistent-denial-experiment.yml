@@ -25,12 +25,12 @@ jobs:
     timeout-minutes: 8
     env:
       # Independently reviewed E1; never selected by candidate or caller input.
-      EXPERIMENT_HELPER_SHA: '5c5a0e936810e0bf06b7db90717c0827fa531350'
+      EXPERIMENT_HELPER_SHA: '15b92bccb9d6c21f7dc02c95fb6a6e80d2706255'
     steps:
       - name: Acquire only independently reviewed fixed inert helper
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: '5c5a0e936810e0bf06b7db90717c0827fa531350'
+          ref: '15b92bccb9d6c21f7dc02c95fb6a6e80d2706255'
           path: inert-helper
           persist-credentials: false
           sparse-checkout-cone-mode: false
@@ -72,7 +72,7 @@ jobs:
           assert actual == helper
           script = pathlib.Path('inert-helper/.github/scripts/native-persistent-denial-experiment.py')
           digest = hashlib.sha256(script.read_bytes()).hexdigest()
-          assert digest == '52db4cbbe0ace3d2c8693039e6b913b4529e640ab7cd6e53a298216e13e0d4ff'
+          assert digest == '0d90cbc808a92910c652f193cb56827e7c72b19e59eac557cdc9d03c581cf212'
           provenance = {'helperSha': helper, 'helperSha256': digest, 'reviewedHeadSha': head,
                         'workflowSha': workflow, 'workflowSha256': hashlib.sha256(executed_bytes).hexdigest(),
                         'actor': os.environ['REVIEW_ACTOR'], 'label': os.environ['REVIEW_LABEL'],
