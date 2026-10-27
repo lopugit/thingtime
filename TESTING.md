@@ -10584,6 +10584,17 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   Watch and widget targets. Shared tests must not compile macOS-only `Process`
   APIs on iOS. The live Git oracle remains exercised on macOS (4/4 ignore-rule
   tests pass); its unsupported iOS case explicitly skips while fixture tests remain.
+- [x] PR1240 ignore-rule portability recheck (2026-10-27): restore the existing
+  macOS Git helper/body guards and explicit iOS skip; all three portable methods
+  remain byte-identical. The real macOS suite passed 4/4, including the live Git
+  oracle and shared tracked fixture, in a private snapshot with network denied.
+- [x] PR1240 full unsigned iOS `build-for-testing` (2026-10-27): declare the
+  test target's direct AppleFileSync package dependency so shared tests link
+  symbols unused by the host. A fresh snapshot-adapter build passed all seven
+  targets for arm64/x86_64 with the outer network denial intact; no simulator or
+  tests were launched. Generated-graph comparison permits only the added test
+  dependency/link. Canonical Xcode package integration, signing and installed
+  provider/device acceptance remain unverified.
 
 - [ ] Search regression: create a title match older than 50 nonmatching entries.
   Search must find it without Load more; case and literal regex punctuation work.

@@ -224,6 +224,7 @@ targets:
       - path: ../apple/FileSync/Tests/RecoverySupport
     dependencies:
       - target: Thingtime
+      - package: AppleFileSync
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(PRODUCT_BUNDLE_IDENTIFIER).tests

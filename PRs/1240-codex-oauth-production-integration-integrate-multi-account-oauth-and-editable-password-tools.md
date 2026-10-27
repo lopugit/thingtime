@@ -131,3 +131,67 @@ passed with no skipped cases. Targeted lint passed with two pre-existing
 public Nitro requests and synthetic authority responses, without authentication,
 production requests or a database. No graph refresh, staging or publication is
 part of this review freeze.
+
+## Restore shared-test platform guards — 27 October 2026
+
+The frozen native source at `fd43daf` passed an actual unsigned macOS
+host/provider build through the reviewed snapshot-only static-target adapter.
+The iOS build first exposed the standard `@TaskLocal` compiler macro's nested
+sandbox limitation. One reviewed retry omitted only the compiler's additional
+inner macro sandbox while retaining the enforced outer network denial. It
+reached all seven target compile paths, then failed in the shared ignore-rule
+test's unguarded `Foundation.Process` use. No full iOS success, signing,
+installation, app launch or provider ceremony is implied by those observations.
+
+Port only the existing seven-line correction from retained password-manager
+source `faf13e6`: compile the Git helper and oracle body on macOS and explicitly
+skip that one unsupported live oracle on iOS. All three portable test methods
+remain byte-identical.
+
+The fresh `fd43daf` plus exact native patch snapshot includes the tracked shared
+Git fixture from the same base. The actual macOS XCTest suite passed 4/4,
+including the live Git oracle and fixture case (36.653 seconds command elapsed;
+4.597 seconds reported XCTest duration). The once-only unsigned iOS
+`build-for-testing` passed the previous `Process` failure but exited 65 after
+67.376 seconds while linking `ThingtimeTests` for arm64/x86_64. Its unresolved
+AppleFileSync symbols include `MobileFolderBulkReader.read`/`Payload`/`validate`
+and `MobileFolderBatchValidator.check`/`validate`. That failed run is retained separately; it did not establish full iOS
+compilation success.
+
+Both checks retained the enforced outer deny-network sandbox and private
+outputs; direct IPv4/IPv6 controls passed before and after. Owned process groups
+were reaped and listeners closed. The iOS compiler used the reviewed
+`OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox` setting for shipped standard
+macros, omitting only their extra inner sandbox. That run performed no signing, installation, simulator/app launch or provider
+ceremony. Its local receipt is `/tmp/oauth-native-ios-guard-validation.json`;
+logs and xcresult are retained under the receipt's private task root.
+
+Read-only link diagnosis found the test target directly compiled AppleFileSync
+shared tests but declared only its host dependency. The built archive contained
+all five missing symbol definitions for both architectures, while the test
+link command omitted it. Add the canonical `package: AppleFileSync` dependency
+to `ThingtimeTests` in `iOS/project.yml`; the unchanged adapter maps that explicit
+edge to its static library. All four old/new baseline/adapted graph comparisons
+permit only this added test dependency and framework-link entry, preserving
+sources, settings, schemes, resources and entitlements.
+
+One approved fresh unsigned iOS `build-for-testing` then passed all seven
+targets with `** TEST BUILD SUCCEEDED **` (79.610 seconds command elapsed).
+Readback found arm64/x86_64 host, provider, widget, Watch-target and XCTest
+binaries, both library archives and the generated xctestrun. The 196-file
+snapshot binds `fd43daf` plus the exact eight-insertion native diff and shared
+Git fixture. All source/graph pins, direct IPv4/IPv6 controls, owned-group reap
+and listener cleanup passed. The same private environment, outer network denial,
+reviewed standard-macro setting and signing-disabled flags were retained.
+No Mac build/test rerun, test/simulator/app launch, signing or installation took
+place. Receipt: `/tmp/oauth-native-ios-link-validation.json`; log and xcresult
+remain in its separate private task root. Canonical Xcode package integration,
+OS/provider behavior and signed installed-device acceptance remain unverified.
+
+Current Passwords SwiftPM closure was independently checked against `fd43daf`:
+nine selected connection-status/logout tests passed, with zero skips or
+failures (26.179 seconds command elapsed). All 14 package files matched the
+checkout and immutable snapshot before and after; IPv4/IPv6 controls and owned
+cleanup passed. This verifies selected synthetic package behavior, without OS
+identity-store, live session, signing or installed-provider acceptance. The
+parent-reviewed receipt is `/tmp/oauth-native-passwords-nine-current.json`.
