@@ -71,6 +71,21 @@ masked draft until saved. URL icons require anonymous HTTPS CORS from the image
 host; uploads use the existing encrypted attachment configuration above. No icon
 proxy credentials or third-party favicon service are required.
 
+The drawer now has **Password manager** and a dedicated `/settings/passwords`
+category. Thingtime sign-in passkeys remain under Security. The web vault works
+on supported secure browser origins; arbitrary-site passkey creation/sign-in also
+needs an installed provider. For Chromium, run
+`npm --prefix remix run build:password-extension`, extract
+`remix/public/downloads/thingtime-passwords-extension.zip`, and use **Load unpacked**
+in an isolated Chrome/Chromium profile. Enable the extension in its popup and select
+your trusted Thingtime/fork HTTPS origin; explicit localhost/127.0.0.1 origins are
+supported for isolated local development. Reload existing relying-party tabs.
+The extension is off by default, needs no extension-specific secret, and is not a
+store release. Firefox, Safari and mobile browser integration are unverified;
+unsupported WebAuthn options and native-object requirements may require the
+browser's other provider. See [extension setup and limits](browser-extension/README.md).
+A working web vault alone does not prove passkey registration on another website.
+
 Native system AutoFill and passkey registration are implemented in the Apple
 credential provider. Install a properly signed/provisioned provider and enable
 Thingtime in the operating system's Password AutoFill settings. Registration

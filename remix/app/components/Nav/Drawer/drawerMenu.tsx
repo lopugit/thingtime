@@ -73,6 +73,17 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		]
 	},
 	{
+		id: 'passwords',
+		label: 'Password manager',
+		icon: '🔑',
+		to: '/passwords',
+		authOnly: true,
+		children: [
+			{ id: 'passwords-vault', label: 'Passwords and passkeys', to: '/passwords', authOnly: true },
+			{ id: 'passwords-settings', label: 'Password manager settings', to: '/settings/passwords', authOnly: true }
+		]
+	},
+	{
 		id: 'connections',
 		label: 'Connections',
 		icon: '🔗',

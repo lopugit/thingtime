@@ -9,19 +9,18 @@ through global Thing state, local caches, editor history or request diagnostics.
 
 ## Storage and access
 
-`api.passwords` 1.3.0 uses the home data plane. GET returns 50 metadata records
+`api.passwords` 1.4.0 uses the home data plane. GET returns 50 metadata records
 at a time. Optional `q` searches all owned title metadata before pagination using
 a case-insensitive literal substring (outer whitespace is ignored). Keep the same
 query on subsequent pages; restart without a cursor when it changes. Field values
 remain encrypted and are never searched. The UI cancels obsolete list requests
 and keeps prior matches visible while a new search is pending. POST requires a full, live user session and `expectedOwnerId`:
-`read`, `save`, `delete`, `export`, `catalog`, and the `file-*` lifecycle operations. Export pages decrypt at most
+`read`, `save`, `delete`, `export`, `catalog`, `verify-passkey`, and the `file-*` lifecycle operations. Export pages decrypt at most
 50 entries using one bounded query and one account-key load. Scoped tokens, service accounts,
 temporary accounts and internal Action identities are not vault sessions.
 `catalog` returns names, usernames, exact HTTPS domains and public passkey
-identifiers for native selection; passwords, TOTP seeds and signing keys are
-excluded. Responses are private/no-store. The catalog and optional native bridge
-prepare for the separately delivered system provider.
+identifiers for native and browser-provider selection; passwords, TOTP seeds and signing keys are
+excluded. Responses are private/no-store. The browser provider and optional native bridge reuse this catalog without exposing signing keys.
 
 Field contents are AES-256-GCM encrypted with a random account data key, using
 owner, key ID, record ID and purpose as authenticated data. The key is wrapped
@@ -138,15 +137,65 @@ legacy icon envelopes fall back safely. Account/session fences apply before the
 list is returned. Backup restoration maps an icon's original attachment ID to its
 new owner-local file ID and preserves retry-safe write identities.
 
+## Browser passkeys and settings
+
+The drawer's **Password manager** opens `/passwords`; its dedicated settings
+category is `/settings/passwords`, shared by popup and full-page Settings. Both
+use individually editable layouts. Thingtime account sign-in passkeys stay in
+**Security**, reached through the explicitly labelled link in Password manager
+settings; they are different from passkeys saved for other websites.
+
+The web vault works on supported secure browser origins with a live account and
+WebCrypto. Saving and using a passkey for another website additionally requires
+an installed provider. The opt-in [Chromium extension](../browser-extension/README.md)
+relays that website's registration or sign-in to `/passwords/provider` at the
+user-selected trusted Thingtime origin. Each approval shows the website, RP domain
+and account, requires fresh Thingtime password verification, and uses encrypted
+vault storage. Registration completes only after exact saved-credential readback;
+assertions revalidate the session and unchanged credential before returning.
+Retries retain the same immutable request and write identity. Cancellation,
+navigation, account changes and expired requests discard pending authority.
+
+`verify-passkey` returns the request's UUID and a non-secret `sessionBinding`
+after fresh password verification. Every subsequent catalog, read and save in
+that ceremony sends `passkeySession: { requestId, binding: sessionBinding }`.
+The API binds this comparison value to the selected Thingtime origin, account,
+request and exact authenticated session, and rechecks live revocation before
+returning. Replacing a session for the same account invalidates the pending
+ceremony. An uncertain-write retry preserves its original binding, credential
+and write identity and requires fresh password verification again. The binding
+is not a bearer credential and reveals no authentication token or session ID.
+Readback compares complete entries through the canonical password-entry
+validator, preserving exact signing-key, user-handle, RP and credential values
+while accepting the writer's normal field-property ordering.
+
+The extension is off by default and requires explicit installation and enablement.
+It is a Chromium MV3 integration, not a browser-store release or an OS provider.
+Basic ES256 registration/assertion and registration `credProps` are supported;
+conditional mediation, other WebAuthn extensions and unsupported options use the
+browser's native path. Returned credentials are compatible objects, so sites
+requiring native `PublicKeyCredential` internal slots may not interoperate.
+Firefox, Safari and mobile extension interoperability are unverified. A supported
+web vault does not by itself establish arbitrary-site passkey-provider support.
+Native Apple provider installation, signing and device acceptance remain separate.
+
+Forks build the distributable with `npm --prefix remix run build:password-extension`;
+it writes `remix/public/downloads/thingtime-passwords-extension.zip`. Extract it and
+load the resulting directory through Chromium's **Load unpacked**, choose the
+fork's trusted HTTPS origin (explicit localhost/127.0.0.1 for isolated development),
+enable it, and reload relying-party tabs. No extension secret or provider developer
+account is required. Use a separate browser profile, account and replica database
+for testing; never import personal browser sessions or production credentials.
+
 ## Native Password AutoFill
 
 Native provider code is present in `apple/Passwords` and
 `apple/PasswordProvider`; desktop/iOS bridges negotiate the installed provider.
 The provider handles a website-initiated WebAuthn registration, checks the relying
 party and supported algorithm, creates an ES256 key, saves it through the encrypted
-vault, verifies readback and completes the operating-system request. The web
-password editor cannot manufacture a passkey for an arbitrary website: open that
-site's security settings and choose Thingtime in the operating-system passkey flow.
+vault, verifies readback and completes the operating-system request. Registration starts at the destination website rather than in a standalone
+password-entry editor. With this native provider, choose Thingtime in the
+operating-system passkey flow.
 Required device authentication and user presence remain part of that flow.
 
 The inline Passkeys guide explains setup, preserves an unfinished entry, and offers
@@ -166,7 +215,7 @@ http://localhost:<web-port>` exercises a disposable replica through HTTP only.
 
 Screen-capture QA can use a synthetic canvas video stream in a disposable test page to exercise the real decoder and cleanup paths without sharing a desktop. This verifies video processing, cancellation, and stopped tracks, but does not substitute for OS picker/permission validation. Closing the editor aborts its pending scan; a stream returned by a late browser picker is immediately stopped.
 
-For file lifecycle QA, register three disposable accounts through `/api/v1/register`
+For file lifecycle QA, register three disposable accounts through `/api/v1/auth/register`
 in an isolated localhost deployment, then configure the first username in
 `ADMIN_USERNAMES` and restart that deployment. Supply a local JSON array of their
 `{ "username": "qa-user", "password": "synthetic-only" }` credentials to
@@ -178,7 +227,6 @@ Never point this test at production or supply personal credentials.
 The synthetic UI fixture at `scripts/password-tools.browser.html` mounts the real
 password components with a fail-closed synthetic transport. Its Run regression
 control exercises generator presets, target selection, masked values, save/reload,
-icons and draft preservation. Use a task-owned browser and enforced network
-isolation, inspect desktop and 390px layouts, and edit/save representative nested
+icons and draft preservation. Use a task-owned isolated browser/profile with normal networking, inspect desktop and 390px layouts, and edit/save representative nested
 Builder blocks. This fixture is UI regression evidence, not live vault or native
 passkey acceptance. Run the real HTTP verifier separately.

@@ -10324,6 +10324,37 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Passkey readback normalization: reorder object properties in canonical
+  saved field projections without changing values; registration and assertion
+  readback must still accept the entry. Change a secret field value, credential
+  identity or revision between signing/save and readback; completion must fail.
+  Field array order remains meaningful; object property insertion order does not.
+- [ ] Browser provider (real data): use an isolated Chrome/Chromium profile,
+  disposable replica database and API-created test account. Confirm the selected
+  origin's `api.passwords` 1.4.0 and local DB identity before writes. Build/extract
+  the extension ZIP, load unpacked, explicitly enable it and select the test
+  Thingtime origin. Use no personal cookies or production credentials.
+- [ ] On an independent HTTPS relying party (loopback is permitted for local QA),
+  register and then authenticate an actual ES256 passkey through the extension.
+  Check website/RP/account labels, fresh Thingtime password verification, durable
+  exact-ID vault readback/reload, and server verification of registration and
+  assertion. A guide, saved reference or synthetic transport is not acceptance.
+- [ ] Reject wrong passwords, foreign/public-suffix RPs and disallowed credential
+  IDs. Cancel, abort, navigate either tab, switch Thingtime account, expire the
+  request and interrupt the extension worker; no stale response or duplicate
+  credential may complete. An uncertain save retry keeps its write/credential
+  identity. Multiple tabs stay independent; unrelated tabs remain open. Exercise
+  the explicit alternate provider and unsupported-options native fallback.
+- [ ] Open Password manager from the drawer and `/settings/passwords` on the
+  dedicated page and popup. Test reload, Back, keyboard and 390px/desktop full
+  scroll; edit/save/reload representative nested labels and buttons separately.
+  The Security link must open Thingtime sign-in passkeys, not the website vault.
+  Setup must distinguish missing, disabled and connected extension/native states.
+- [ ] Record Chromium version, extension packaging/injection, real vault result,
+  relying-party verification and remaining limits separately. Firefox, Safari,
+  mobile browser and signed Apple provider acceptance require their own evidence;
+  do not infer them from Chromium success. Close only task-owned tabs/resources.
+
 - [ ] When adding optional password fields, run `pnpm --dir remix run test:schemas`
   as well as the password tests. Keep the builtin schema projection pin current;
   verify icon source choices and optional fields survive the schema write gate.

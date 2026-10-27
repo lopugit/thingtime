@@ -18,6 +18,7 @@ components; reuse them instead of adding parallel versions.
 | Toasts / notifications | `app/components/Lopu/useLopu.tsx` (`useLopu()`, `useLopuStream()`) — never raw Chakra `useToast` or `alert()` |
 | Layering (z-index) | `app/components/Things/transferLayers.ts` and the shared layer constants; never ad-hoc z-index escalation |
 | Page shell, nav clearance, drawers | `app/components/Layout/Main.tsx`, `app/components/Nav/*` (`--tt-nav-clearance`, safe-area vars) |
+| Password surfaces | `app/root.tsx` keeps `/passwords/provider` in the focused authorization shell; `/passwords` and `/settings/passwords` retain navigation while hiding floating assistant/developer launchers that can cover narrow credential controls. |
 | Custom drawer links and Thing attachments | `app/components/Nav/Drawer/drawerCustomItems.ts`, `customDrawerBlocks.ts`, `CustomDrawerItems.tsx`, and `useDrawer.tsx`; account-scoped device entries use parent IDs for arbitrary-depth menus, shared Commander search, individually editable Builder blocks. Add finishes both the root list and active submenu and creates in that parent. Submenus stay below the root list with Back and ancestor navigation. Settings exposes parent selection, sibling ordering and the actual menu template, saved as a private webpage Thing through `SettingsDocumentHost`, with scoped legacy device-layout recovery and editable template migrations. `scripts/custom-drawer-acceptance.mjs` checks matched row styling, real API/browser persistence and nested Builder edits; its `nested` scope covers deeper menu navigation |
 | Device menu and full page | `app/components/Things/ThingsPage.tsx`, `ThingsViews.tsx`, `app/components/Devices/deviceNavigation.ts`, `DeviceDetailsDrawer.tsx` (one shared details tree for drawer and page) |
 | Desktop footer build identity | `app/components/Nav/Footer.tsx` reads `thingtimeDesktop.getInfo().buildIdentity` from the packaged `electron/dist/web/metadata.json`; remote-origin status remains separate |
@@ -189,3 +190,16 @@ provides public bindings and a bounded transient native-operation map. Sensitive
 hosts reject external sources, native/component blocks and persisted password/file
 values before rendering; normal Builder insertion and source editing follow the
 same restrictions. Scope changes abort transient controls and fence late results.
+
+## Password manager navigation
+
+`Nav/Drawer/drawerMenu.tsx` exposes an authenticated Password manager entry for
+`/passwords` and `/settings/passwords`. The shared `Settings/settingsTabs.ts`
+category supports full-page/popup navigation, reload and the legacy
+`#password-manager` anchor. `PasswordManagerSettings.tsx` composes an editable
+settings document with `PasswordPasskeySetup`; its explicit Thingtime sign-in
+passkeys link targets `/settings/security#account-passkeys`. Browser approval at
+`/passwords/provider` uses the same safe editable-document and transient-control
+hosts; passwords and signing keys never enter layout blocks. Check keyboard,
+Back, nested Builder selection, narrow/mobile widths and full-page scroll in the
+real browser. See [password manager](../password-manager.md#browser-passkeys-and-settings).
