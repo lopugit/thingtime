@@ -1,5 +1,14 @@
 # Control-plane changelog
 
+## 2026-10-27 — Record the confirmed hosted group-read failure
+
+- Preserve diagnostic run 40447212769: exact E1/E2/W source and artifact digest
+  passed, while `drop-read-groups` identified Python `os.getgroups()` returning
+  EINVAL before positive controls or PF mutation. Upload passed only before PF.
+- Hosted isolation/native admission remains unproven and unchanged. A separately
+  reviewed parent-owned local snapshot-only compile route does not remove the
+  hosted gate. See [the recorded result](.github/NATIVE_PERSISTENT_DENIAL_EXPERIMENT.md#confirmed-diagnostic-run-40447212769--2026-10-27).
+
 ## 2026-10-27 — Identify the inert authority failure operation
 
 - Preserve the hosted authority EINVAL result and add allowlisted numeric-drop,

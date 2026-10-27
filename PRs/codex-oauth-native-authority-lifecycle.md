@@ -121,7 +121,8 @@ stock-service delegation and real transport-credential isolation remain unproven
 No candidate is admitted. Original native H1/H2/PF admission is unchanged.
 The new workflow follows independent E1/digest and E2 pins. Parent readback of
 the immutable local commits precedes runnable publication; hosted execution
-requires a separate exact-head approval. No new run has been triggered.
+requires a separate exact-head approval. No run had been triggered at that
+publication checkpoint; later hosted outcomes are recorded below.
 See [the contract and evidence procedure](../.github/NATIVE_PERSISTENT_DENIAL_EXPERIMENT.md).
 The previous runs 40438204623 and 40440369530 and their terminal receipts remain
 unchanged; their fixtures never reached lifecycle acceptance.
@@ -144,3 +145,30 @@ This makes group readback a strong hypothesis for the deliberately accountless
 fixture, not an identified hosted syscall or matching-binary proof. The next
 reviewed evidence must name the operation before any supported group-observation
 or setup contract is changed. Candidate admission remains false even on success.
+
+## Confirmed group-read failure — run 40447212769, 2026-10-27
+
+[Diagnostic run 40447212769](https://github.com/lopugit/thingtime/actions/runs/40447212769)
+completed with failure on attempt 1. E1
+`15b92bccb9d6c21f7dc02c95fb6a6e80d2706255`, E2
+`ac01bd25f1610bba3e755adda704f179d82d7fe0` and actual W
+`b6abb2ddf668d815364ece06c185102828ee7e26` passed exact-source validation and
+byte/digest readback. Artifact `12708597790` contained only `result.json`;
+upload/readback succeeded and archive SHA256 matched
+`934657634e1a62eaad898cef8e600eecb40d26f7d272112afde5f5854d46a6d2`.
+
+The fixed diagnostic now confirms `failureOperation=drop-read-groups`:
+Python `os.getgroups()` returned EINVAL (`fixed-probe-os-error-22`) in the
+`authority` phase. Prior credential setters and numeric ID verification had
+completed. The underlying libc/kernel branch remains unobserved; the published
+accountless-UID behavior is an interpretation, not matching-binary proof.
+
+No PF mutation was attempted. Positive controls, denial attribution, escape and
+parent-loss observations were not reached. Artifact transport passed only before
+PF. Native/candidate admission, hosted isolation acceptance and provider
+teardown observation remain false/unproven. All initial-run evidence is retained.
+
+The parent is separately pursuing a reviewed local snapshot-only compile route.
+It does not remove or satisfy the unproven hosted gate. This update records the
+result only; helper/workflow/pins/admission are unchanged and no retry is implied.
+See [the full durable evidence](../.github/NATIVE_PERSISTENT_DENIAL_EXPERIMENT.md#confirmed-diagnostic-run-40447212769--2026-10-27).

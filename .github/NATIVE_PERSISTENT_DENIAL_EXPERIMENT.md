@@ -1,7 +1,7 @@
 # Reviewed experiment: inert persistent denial on one disposable hosted VM
 
-Reviewed for publication, 27 October 2026. Hosted execution remains pending and
-requires separate exact-head approval. The workflow's helper references and
+Reviewed for publication, 27 October 2026. Each hosted execution requires separate exact-head approval; recorded outcomes
+below do not authorize a retry. The workflow's helper references and
 digest follow the immutable E1/E2 procedure below; published bytes require the
 safe checker's `--final E1` mode. The preserved local draft receipt records the
 earlier placeholder state. No label, dispatch, candidate or native compilation
@@ -142,3 +142,43 @@ account, changes group expectations, or substitutes a private syscall. A future
 separately reviewed hosted observation must identify the operation first. No
 new execution is authorized here; original native pins/admission and all prior
 terminal evidence remain unchanged.
+
+## Confirmed diagnostic run 40447212769 — 2026-10-27
+
+[The separately approved diagnostic run](https://github.com/lopugit/thingtime/actions/runs/40447212769)
+completed with failure on attempt 1. Exact source validation passed:
+
+- Helper E1: `15b92bccb9d6c21f7dc02c95fb6a6e80d2706255`.
+- Reviewed workflow E2: `ac01bd25f1610bba3e755adda704f179d82d7fe0`.
+- Actual workflow W: `b6abb2ddf668d815364ece06c185102828ee7e26`;
+  its workflow bytes matched E2. The E1 helper bytes/digest matched review.
+
+Artifact `12708597790` contained only allowlisted `result.json`. Upload and
+readback succeeded; provider and downloaded archive SHA256 both matched
+`934657634e1a62eaad898cef8e600eecb40d26f7d272112afde5f5854d46a6d2`.
+The raw result member SHA256 was
+`0806729124e40e68811683e5e299cd3d31d824583347b4b9cf98f1cca4919963`.
+The later provenance checkpoint was not reached, so no `provenance.json` was
+present; the result itself carried the verified E1/E2/W binding.
+
+The result identifies `failureStage=authority`,
+`failureOperation=drop-read-groups` and
+`failureCode=fixed-probe-os-error-22`. The Python `os.getgroups()` operation
+returned EINVAL after the preceding credential setters and numeric ID checks.
+The diagnostic confirms that Python operation, not the specific underlying
+libc/kernel branch or deployed-binary mapping. The primary-source accountless-UID
+explanation above remains a supported interpretation rather than an observed
+internal trace.
+
+`policyMutationAttempted=false`, `denyRulesLoaded=false` and
+`policyChanged=false`: positive controls, PF attribution, escaped-process and
+parent-loss observations were not reached. Successful artifact readback proves
+transport only before PF, not continuity under retained denial. Candidate/native
+admission and platform acceptance remain false; no provider-destruction receipt
+was observed. Earlier run evidence remains intact. No new retry is authorized.
+
+This hosted path remains unproven and its gate remains in force. The parent is
+pursuing a separately reviewed local snapshot-only compile route under its own
+scope; that route neither admits this hosted lane nor removes its lifecycle,
+authority or network requirements. This evidence update changes no helper,
+workflow, immutable pin or admission behavior.
