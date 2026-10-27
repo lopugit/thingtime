@@ -15,8 +15,9 @@ import { MongoClient } from 'mongodb';
 
 assert.equal(process.platform, 'darwin', 'Requires sandbox-exec; never run an unrestricted fallback.');
 const cwd = fileURLToPath(new URL('..', import.meta.url));
-const dir = await mkdtemp(join(tmpdir(), 'tt-environment-gateway-'));
-const ports = { alias: 19771, owner: 19772, follower: 19773, successor: 19774, db: 19775, trap: 19776, vite: 19777, hmr: 19778, dedicated: 19779, dedicatedDb: 19780 };
+const portBase = Number(process.env.THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE || 19771);
+assert.ok(Number.isSafeInteger(portBase) && portBase >= 1024 && portBase <= 65526, 'Choose a valid ten-port acceptance range.');
+const ports = Object.fromEntries(['alias', 'owner', 'follower', 'successor', 'db', 'trap', 'vite', 'hmr', 'dedicated', 'dedicatedDb'].map((key, offset) => [key, portBase + offset]));
 const origin = key => `http://127.0.0.1:${ports[key]}`;
 const children = [];
 let routeTo = 'owner', followerDials = 0;
@@ -25,6 +26,7 @@ for (const port of Object.values(ports)) {
   const socket = createTcpServer(); await new Promise((resolve, reject) => { socket.once('error', reject); socket.listen(port, '127.0.0.1', resolve); });
   await new Promise(resolve => socket.close(resolve));
 }
+const dir = await mkdtemp(join(tmpdir(), 'tt-environment-gateway-'));
 const policy = join(dir, 'network.sb');
 await writeFile(policy, `(version 1)(allow default)(deny network*)
 (allow network-bind (local unix-socket))
@@ -34,6 +36,8 @@ const mongoUri = `mongodb://127.0.0.1:${ports.db}/thingtime?replicaSet=gateway-t
 const dedicatedMongoUri = `mongodb://127.0.0.1:${ports.dedicatedDb}/thingtime?replicaSet=gateway-dedicated-test`;
 const relaySecret = randomBytes(48).toString('hex');
 const jwt = randomBytes(48).toString('hex');
+const userVaultKey = randomBytes(32).toString('base64url');
+const testConnections = process.env.THINGTIME_GATEWAY_ACCEPTANCE_CONNECTIONS === '1';
 const instrumentation = join(dir, 'mongo-command-trace.mjs');
 // Nitro bundles the driver, so instrument that exact generated module rather
 // than a separate node_modules copy. This changes no application source/output.
@@ -46,19 +50,52 @@ const {default:{MongoClient}}=await import(${JSON.stringify(driverBundle)});
 const connect=MongoClient.prototype.connect;const traced=new WeakSet();
 MongoClient.prototype.connect=async function(...args){if(!traced.has(this)){traced.add(this);this.monitorCommands=true;
 for(const event of ['commandStarted','commandSucceeded','commandFailed'])this.on(event,value=>{if(['createIndexes','dropIndexes'].includes(value.commandName))appendFileSync(process.env.GATEWAY_INDEX_TRACE,JSON.stringify({event,id:value.requestId,command:value.commandName})+'\\n')});}return connect.apply(this,args)};`);
+// Optional built Connections2 acceptance replaces only the provider/vault
+// adapters in this disposable test process. Auth, sessions, one-use state,
+// encrypted storage, gateway ingress and real HTTP handlers remain unchanged.
+// No test-only route or bypass is shipped in the product.
+if (testConnections) {
+  const integrationUrl = pathToFileURL(join(cwd, '.output/server/_chunks/integrations.mjs')).href;
+  const connectionsUrl = pathToFileURL(join(cwd, '.output/server/_chunks/connections.mjs')).href;
+  const exported = async (file, symbol) => {
+    const code = await readFile(new URL(file), 'utf8');
+    const entry = code.slice(code.lastIndexOf('export {')).split(',').find(entry => entry.includes(`${symbol} as `));
+    const alias = entry?.match(/ as ([A-Za-z_$][\w$]*)/)?.[1];
+    assert.ok(alias, `Locate the built ${symbol} adapter before synthetic acceptance.`);
+    return alias;
+  };
+  const secretExport = await exported(integrationUrl, 'readAdminAutomationSecret');
+  const providerExport = await exported(connectionsUrl, 'connectionProviderById');
+  const syntheticVault = JSON.stringify({ environments: { development: { origins: {
+    [origin('follower')]: { clientId: 'synthetic-gateway-client', clientSecret: 'synthetic-gateway-secret', redirectUri: origin('follower') + '/api/v1/connections/oauth/callback' }
+  } } } });
+  await writeFile(instrumentation, (await readFile(instrumentation, 'utf8')) + `
+if(process.env.NODE_ENV!=='test')throw new Error('Synthetic provider requires test mode.');
+const {mock}=await import('node:test');
+const integrationUrl=${JSON.stringify(integrationUrl)};
+const original=await import(integrationUrl);
+mock.module(integrationUrl,{namedExports:{...original,[${JSON.stringify(secretExport)}]:async label=>label==='connections-google-oauth'?${JSON.stringify(syntheticVault)}:null}});
+const connections=await import(${JSON.stringify(connectionsUrl)});
+const provider=connections[${JSON.stringify(providerExport)}]('google');
+const record=event=>appendFileSync(process.env.GATEWAY_PROVIDER_TRACE,event+'\\n');
+provider.oauth.exchangeCode=async input=>{if(input.clientId!=='synthetic-gateway-client'||input.clientSecret!=='synthetic-gateway-secret'||input.redirectUri!==${JSON.stringify(origin('follower') + '/api/v1/connections/oauth/callback')})throw new Error('Synthetic OAuth binding mismatch.');record('exchange');return{ok:true,tokens:{accessToken:'synthetic-access',refreshToken:'synthetic-refresh',expiresAt:new Date(0).toISOString(),scopes:['openid']}}};
+provider.oauth.resolveAccountFromTokens=async tokens=>{if(tokens.oauthOrigin!==${JSON.stringify(origin('follower'))}||tokens.oauthEnvironment!=='development')throw new Error('Synthetic saved grant mismatch.');return{ok:true,account:{providerAccountId:'synthetic-account',displayName:'Synthetic account',handle:'fixture@example.invalid',profileUrl:null,avatarUrl:null,config:{}}}};
+provider.oauth.refreshTokens=async(tokens,creds)=>{if(creds.clientId!=='synthetic-gateway-client'||tokens.oauthOrigin!==${JSON.stringify(origin('follower'))}||tokens.oauthEnvironment!=='development')throw new Error('Synthetic refresh binding mismatch.');record('refresh');await new Promise(resolve=>setTimeout(resolve,150));return{accessToken:'synthetic-rotated',expiresAt:new Date(Date.now()+3600000).toISOString()}};
+`);
+}
 function start(executable, args, extra = {}) {
   const child = spawn('/usr/bin/sandbox-exec', ['-f', policy, executable, ...args], { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
     PATH: process.env.PATH, HOME: dir, TMPDIR: dir, NODE_ENV: 'test', HOST: '127.0.0.1',
-    MONGODB_CONNECTION_STRING: mongoUri, JWT_SECRET: jwt, THINGTIME_DATA_ENV: 'development',
-    THINGTIME_GATEWAY_ENVIRONMENT: 'acceptance', THINGTIME_GATEWAY_ORIGIN: origin('alias'),
+    MONGODB_CONNECTION_STRING: mongoUri, JWT_SECRET: jwt, THINGTIME_USER_VAULT_KEY: userVaultKey, THINGTIME_DATA_ENV: 'development',
+    THINGTIME_MONGODB_CONNECTION_MODE: 'proxy', THINGTIME_GATEWAY_ENVIRONMENT: 'acceptance', THINGTIME_GATEWAY_ORIGIN: origin('alias'),
     THINGTIME_GATEWAY_SECRET: relaySecret, THINGTIME_GATEWAY_TEST_LOOPBACK: '1',
     THINGTIME_GATEWAY_SOURCE_ORIGINS: ['owner', 'follower', 'successor', 'dedicated'].map(origin).join(','), ...extra
   } });
   let log = ''; child.stdout.on('data', value => { log += value; }); child.stderr.on('data', value => { log += value; });
   children.push(child); return { child, log: () => log };
 }
-const startNitro = (key, extra = {}) => start(process.execPath, ['--import', instrumentation, '.output/server/index.mjs'], {
-  PORT: String(ports[key]), THINGTIME_GATEWAY_DEPLOYMENT_ID: key, GATEWAY_INDEX_TRACE: join(dir, `${key}-index.jsonl`), ...extra
+const startNitro = (key, extra = {}) => start(process.execPath, [...(testConnections ? ['--experimental-test-module-mocks'] : []), '--import', instrumentation, '.output/server/index.mjs'], {
+  PORT: String(ports[key]), THINGTIME_GATEWAY_DEPLOYMENT_ID: key, GATEWAY_INDEX_TRACE: join(dir, `${key}-index.jsonl`), GATEWAY_PROVIDER_TRACE: join(dir, `${key}-provider.txt`), ...extra
 });
 async function indexTrace(key) {
   let lines;
@@ -161,6 +198,32 @@ try {
   assert.equal((await api('follower', '/api/root-data', { cookie: account.cookie })).data.user.id, account.data.user.id);
   await api('dedicated', '/api/v1/things', { headers: { 'x-thingtime-gateway-relay': 'forged' }, status: 403 });
   const dedicatedIndex = await indexTrace('dedicated'); assert.ok(dedicatedIndex.creates > 0);
+  if (testConnections) {
+    for (const id of ['connections', 'connections-providers', 'connections-feed', 'connections-oauth-begin', 'connections-oauth-callback', 'connections-request'])
+      assert.equal(manifest.features[`api.${id}`].version, '2.0.0');
+    const started = await api('follower', '/api/v1/connections/oauth/begin', { cookie: account.cookie, body: { provider: 'google' } });
+    const authorize = new URL(started.data.authorizeUrl);
+    assert.equal(authorize.searchParams.get('redirect_uri'), origin('follower') + '/api/v1/connections/oauth/callback');
+    const callbackUrl = origin('follower') + '/api/v1/connections/oauth/callback?code=synthetic-code&state=' + encodeURIComponent(authorize.searchParams.get('state'));
+    const callback = await fetch(callbackUrl, { headers: { Cookie: account.cookie }, redirect: 'manual', signal: AbortSignal.timeout(30_000) });
+    assert.equal(callback.status, 302); assert.equal(callback.headers.get('location'), '/connections?connected=google');
+    const replay = await fetch(callbackUrl, { headers: { Cookie: account.cookie }, redirect: 'manual', signal: AbortSignal.timeout(30_000) });
+    assert.equal(replay.status, 302); assert.equal(replay.headers.get('location'), '/connections?oauthError=state');
+    const linked = (await api('follower', '/api/v1/connections', { cookie: account.cookie })).data.connections;
+    assert.equal(linked.length, 1);
+    const request = () => fetch(origin('follower') + '/api/v1/connections/request', { method: 'POST',
+      headers: { Cookie: account.cookie, Origin: origin('follower'), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ connectionId: linked[0].id, operation: 'account.profile' }), signal: AbortSignal.timeout(30_000) });
+    const replies = await Promise.all([request(), request()]);
+    assert.deepEqual(replies.map(reply => reply.status).sort(), [200, 401]);
+    for (const reply of replies) {
+      const data = await reply.json();
+      assert.ok(!JSON.stringify(data).includes('synthetic-access') && !JSON.stringify(data).includes('synthetic-refresh'));
+    }
+    const trace = (await readFile(join(dir, 'owner-provider.txt'), 'utf8')).trim().split('\n');
+    assert.equal(trace.filter(event => event === 'exchange').length, 1);
+    assert.equal(trace.filter(event => event === 'refresh').length, 1);
+  }
   const initialized = await indexTrace('owner'); assert.ok(initialized.creates > 0); assert.ok(initialized.peak <= 2);
   const successor = startNitro('successor'); await ready(successor, 'successor');
   routeTo = 'successor'; await delay(5_100);
@@ -170,7 +233,7 @@ try {
   routeTo = 'owner'; await delay(5_100);
   assert.equal((await api('successor', '/api/root-data', { cookie: account.cookie })).data.user.id, account.data.user.id);
   assert.equal(followerDials, 0, 'Follower must never open its configured MongoDB socket.');
-  console.log(JSON.stringify({ ok: true, transport: 'built-nitro', viteRootDocs: true, registration: true, authCookies: true, crossSiteRefused: true, writes: true, dedicatedOwnHandler: true, dedicatedShellMetadata: true, independentDedicatedDatabase: true, dedicatedIndexCommands: dedicatedIndex, promotion: true, rollback: true, followerMongoDials: followerDials,
+  console.log(JSON.stringify({ ok: true, transport: 'built-nitro', syntheticConnectionsOAuth: testConnections, viteRootDocs: true, registration: true, authCookies: true, crossSiteRefused: true, writes: true, dedicatedOwnHandler: true, dedicatedShellMetadata: true, independentDedicatedDatabase: true, dedicatedIndexCommands: dedicatedIndex, promotion: true, rollback: true, followerMongoDials: followerDials,
     initializedIndexCommands: initialized, unchangedColdIndexCommands: unchanged }));
 } finally {
   for (const child of children.reverse()) {

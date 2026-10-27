@@ -941,6 +941,9 @@ export const LopuHost = () => {
 			{showLauncher && !showSheet && !(showFrame && docked) && (
 				<Box
 					className="lopuLauncher"
+					// Keep credential fields unobscured without changing the user's
+					// launcher preference; the navbar opener remains available.
+					sx={{ 'body:has([data-tt-credential-form]) &': { display: 'none' } }}
 					position="fixed"
 					zIndex={LOPU_LAUNCHER_Z}
 					left={launcherPos ? `${launcherPos.x}px` : undefined}

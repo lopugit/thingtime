@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import { signPurposeToken, verifyPurposeToken } from '../auth/jwt';
+import { signPurposeToken, verifyPurposeToken, verifyJwt } from '../auth/jwt';
+import { getAuthToken } from '../auth/authCookie';
+import { getAuthOtpsCollection } from '../mongodb/collections';
+import { connectionVaultConfigured } from './tokenVault';
+import { resolvePublicOrigin } from '../auth/publicOrigin';
+import { oauthGrantMatches } from './oauthConfig';
 import { upsertAccountAndLink, type PublicConnection } from './connections';
 import { connectionProviderById, oauthCredsFor } from './providers';
 import { fail, pkceVerifierFor, type Fail, type OAuthErrorCode } from './shared';
@@ -26,26 +31,28 @@ import { fail, pkceVerifierFor, type Fail, type OAuthErrorCode } from './shared'
 const STATE_PURPOSE = 'connections-oauth';
 const STATE_TTL = '15m';
 
-type SessionUser = { id: string; username: string };
+type SessionUser = { id: string; username: string; sessionBinding?: string };
 
-export const oauthCallbackPath = '/api/v1/connections/oauth/callback';
-
-// Proxied dev stacks (Vite → Nitro, Tailscale funnel → Vite) reach Nitro on a
-// loopback origin; honour the forwarded host so authorize redirects return to
-// the address the browser actually used.
-export const requestOrigin = (request: Request): string => {
-  const forwardedHost = request.headers.get('x-forwarded-host');
-  const forwardedProto = request.headers.get('x-forwarded-proto') || 'https';
-  if (forwardedHost) return `${forwardedProto}://${forwardedHost.split(',')[0].trim()}`;
-  return new URL(request.url).origin;
+export const oauthSessionBinding = async (request: Request): Promise<string | null> => {
+  const token = await getAuthToken(request);
+  const claims = token ? await verifyJwt(token) : null;
+  return claims ? createHash('sha256').update(`${claims.sub}:${claims.jti}`).digest('hex') : null;
 };
 
-// The redirect URI must EXACTLY match what the provider app has registered.
-// CONNECTIONS_OAUTH_REDIRECT_BASE pins it (e.g. the Tailscale funnel origin in
-// local dev — TikTok and Meta require https); otherwise the request origin.
-const redirectUriFor = (requestOrigin: string): string => {
-  const base = (process.env.CONNECTIONS_OAUTH_REDIRECT_BASE || '').trim().replace(/\/+$/, '') || requestOrigin.replace(/\/+$/, '');
-  return `${base}${oauthCallbackPath}`;
+export { oauthCallbackPath } from './oauthConfig';
+export const requestOrigin = (request: Request): string => resolvePublicOrigin(request).origin;
+
+const consumeState = async (nonce: string, expiresAt: number): Promise<boolean> => {
+  try {
+    await (await getAuthOtpsCollection()).insertOne({
+      challenge: `connections-oauth:${nonce}`, purpose: 'connections-oauth-consumed',
+      expiresAt: new Date(expiresAt * 1000)
+    });
+    return true;
+  } catch (error: any) {
+    if (error?.code === 11000) return false;
+    throw error;
+  }
 };
 
 export const beginOAuth = async (
@@ -53,26 +60,29 @@ export const beginOAuth = async (
   input: { provider?: unknown },
   requestOrigin: string
 ): Promise<{ ok: true; authorizeUrl: string; provider: string } | Fail> => {
+  if (!user.sessionBinding) return fail(401, 'Sign in to Thingtime before connecting an account.');
+  if (!connectionVaultConfigured()) return fail(503, 'Secure account storage is not configured on this deployment.');
   const provider = connectionProviderById(input.provider);
   if (!provider) return fail(400, 'Unknown provider');
   if (!provider.oauth) return fail(400, `${provider.name} does not use OAuth — connect it via POST /api/v1/connections`);
-  const creds = oauthCredsFor(provider);
+  const creds = await oauthCredsFor(provider, requestOrigin);
   if (!creds) {
-    return fail(400, `${provider.name} is not configured on this deployment yet (set ${provider.oauth.clientIdEnv} and ${provider.oauth.clientSecretEnv})`);
+    return fail(503, 'This service is not configured for this Thingtime origin and environment.');
   }
+  const { redirectUri } = creds;
   // PKCE (X requires it): the S256 verifier is derived from a server secret and
   // this nonce, so only the nonce rides the state JWT through the provider round
-  // trip. The flow stays stateless and an attacker altering the nonce breaks the
+  // trip. The verifier needs no stored secret and altering the nonce breaks the
   // signature, but — unlike carrying the verifier itself — whoever reads the
   // callback URL cannot recover it. See pkceVerifierFor in ./shared.
   const nonce = randomUUID();
   const codeVerifier = provider.oauth.pkce ? pkceVerifierFor(provider.id, nonce) : null;
   const codeChallenge = codeVerifier ? createHash('sha256').update(codeVerifier).digest('base64url') : undefined;
-  const state = await signPurposeToken(STATE_PURPOSE, { sub: user.id, provider: provider.id, nonce }, STATE_TTL);
+  const state = await signPurposeToken(STATE_PURPOSE, { sub: user.id, provider: provider.id, nonce, sessionBinding: user.sessionBinding, redirectUri, clientId: creds.clientId, oauthBinding: creds.binding, oauthOrigin: creds.origin, oauthEnvironment: creds.environment }, STATE_TTL);
   return {
     ok: true,
     provider: provider.id,
-    authorizeUrl: provider.oauth.buildAuthorizeUrl({ clientId: creds.clientId, redirectUri: redirectUriFor(requestOrigin), state, codeChallenge })
+    authorizeUrl: provider.oauth.buildAuthorizeUrl({ clientId: creds.clientId, redirectUri, state, codeChallenge, nonce })
   };
 };
 
@@ -90,34 +100,39 @@ export const completeOAuth = async (
   // 200 characters of them into prose the page then rendered in a Lopu toast.
   // See OAUTH_ERROR_CODES. Keeping the raw value out of `error` also keeps it
   // out of any future log line or JSON body this result reaches.
-  if (params.error) return { ...fail(400, 'The provider declined the sign-in'), oauthCode: 'declined' };
   const state = typeof params.state === 'string' ? params.state : '';
   const code = typeof params.code === 'string' ? params.code : '';
-  if (!state || !code) return { ...fail(400, 'The sign-in response was missing its code or state'), oauthCode: 'state' };
+  if (!state || (!code && !params.error)) return { ...fail(400, 'The sign-in response was missing its code or state'), oauthCode: 'state' };
 
   // verifyPurposeToken checks the signature, the expiry, and the purpose — a
   // session cookie, a PAT, or another purpose's token can never satisfy it.
   const claims = await verifyPurposeToken(state, STATE_PURPOSE);
   if (!claims) return { ...fail(400, 'The sign-in state is invalid or expired — start the connect again'), oauthCode: 'state' };
-  if (typeof claims.sub !== 'string' || claims.sub !== user.id) {
+  if (typeof claims.sub !== 'string' || claims.sub !== user.id || !user.sessionBinding || claims.sessionBinding !== user.sessionBinding) {
     return { ...fail(403, 'This sign-in was started from a different Thingtime session'), oauthCode: 'session' };
   }
   const providerId = typeof claims.provider === 'string' ? claims.provider : '';
   const nonce = typeof claims.nonce === 'string' ? claims.nonce : '';
   const provider = connectionProviderById(providerId);
   if (!provider?.oauth) return { ...fail(400, 'The sign-in state names an unknown provider'), oauthCode: 'provider' };
-  const creds = oauthCredsFor(provider);
+  const creds = await oauthCredsFor(provider, requestOrigin);
   if (!creds) return { ...fail(400, `${provider.name} is not configured on this deployment`), oauthCode: 'provider' };
+  if (!oauthGrantMatches(claims, creds) || claims.redirectUri !== creds.redirectUri) return { ...fail(409, 'The service connection settings changed. Start again.'), oauthCode: 'state' };
+  const { redirectUri } = creds;
   // Recomputed, not read back out of the state — the same derivation beginOAuth
   // used, keyed by the nonce the signature covers.
+  if (!/^[a-f0-9-]{36}$/.test(nonce) || typeof claims.exp !== 'number' || !await consumeState(nonce, claims.exp)) {
+    return { ...fail(400, 'This sign-in response has already been used.'), oauthCode: 'state' };
+  }
+  if (params.error) return { ...fail(400, 'The provider declined the sign-in'), oauthCode: 'declined' };
   const codeVerifier = provider.oauth.pkce ? pkceVerifierFor(provider.id, nonce) : undefined;
 
   const exchanged = await provider.oauth.exchangeCode({
     code,
     clientId: creds.clientId,
     clientSecret: creds.clientSecret,
-    redirectUri: redirectUriFor(requestOrigin),
-    codeVerifier
+    redirectUri,
+    codeVerifier, nonce, authMethod: creds.authMethod
   });
   // These three carry the plain Fail their own modules author. Classify them
   // here rather than leaving the route to infer a code from a status: the two
@@ -125,10 +140,11 @@ export const completeOAuth = async (
   // failing, and neither message is ours to put in a URL.
   if (exchanged.ok === false) return { ...exchanged, oauthCode: 'exchange' };
 
-  const resolved = await provider.oauth.resolveAccountFromTokens(exchanged.tokens);
+  const tokens = { ...exchanged.tokens, clientId: creds.clientId, oauthBinding: creds.binding,
+    oauthOrigin: creds.origin, oauthEnvironment: creds.environment };
+  const resolved = await provider.oauth.resolveAccountFromTokens(tokens);
   if (resolved.ok === false) return { ...resolved, oauthCode: 'exchange' };
-
-  const linked = await upsertAccountAndLink(user, provider, resolved.account, exchanged.tokens);
+  const linked = await upsertAccountAndLink(user, provider, resolved.account, tokens);
   if (linked.ok === false) return { ...linked, oauthCode: 'failed' };
   return { ok: true, connection: linked.connection, provider: provider.id };
 };

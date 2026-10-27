@@ -4,7 +4,7 @@ import { H3 } from 'nitro/h3';
 
 import middleware from '../middleware/environment-gateway';
 import { thingtimeCapabilityManifest } from '../../app/api/utils/capabilities/thingtimeCapabilities';
-import { createGatewayAuthority, getGatewaySettings, requireGatewayDatabaseAccess } from '../../app/api/utils/deployment/environmentGateway';
+import { beginGatewayWork, createGatewayAuthority, gatewayAuthority, getGatewaySettings, registerGatewayDrain, requireGatewayDatabaseAccess, runAdmittedGatewayWork, withGatewayWork } from '../../app/api/utils/deployment/environmentGateway';
 import { GATEWAY_RELAY_HEADER, environmentGatewayIngress, proxyEnvironmentRequest, restoreGatewayRequest } from './environmentGateway';
 
 const origin = 'https://gateway.test';
@@ -113,6 +113,105 @@ test('real H3 middleware restores owner request before same-origin checks and st
   const result = await proxyEnvironmentRequest(new Request(follower + '/api/v1/things', { headers: { origin: follower } }), authority!);
   assert.equal(result.status, 200); assert.equal(await result.text(), 'first\n');
 }));
+
+
+const connectionOperations = [
+  ['connections', '/api/v1/connections', 'GET'],
+  ['connections-providers', '/api/v1/connections/providers', 'GET'],
+  ['connections-feed', '/api/v1/connections/feed', 'GET'],
+  ['connections-oauth-begin', '/api/v1/connections/oauth/begin', 'POST'],
+  ['connections-oauth-callback', '/api/v1/connections/oauth/callback', 'GET'],
+  ['connections-request', '/api/v1/connections/request', 'POST']
+] as const;
+for (const [operation, path, method] of connectionOperations) for (const version of [undefined, '1.0.0', '3.0.0', '2.0.0', '2.1.0'])
+ test(`Connections ${operation} requires major2 before forwarding: ${version}`, async t => fixture(async () => {
+  const manifest = aliasManifest();
+  if (version) manifest.features[`api.${operation}`].version = version;
+  else delete manifest.features[`api.${operation}`];
+  const settings = getGatewaySettings()!;
+  const authority = await createGatewayAuthority({ settings: () => settings, fetch: async () => Response.json(manifest) }).current();
+  const mock = t.mock.method(globalThis, 'fetch', async () => Response.json({ ok: true }));
+  const request = new Request(follower + path, { method, ...(method === 'POST' ? { body: 'synthetic' } : {}),
+    headers: { authorization: 'Bearer synthetic' } });
+  const response = await proxyEnvironmentRequest(request, authority!);
+  const supported = version === '2.0.0' || version === '2.1.0';
+  assert.equal(response.status, supported ? 200 : 409);
+  assert.equal(mock.mock.callCount(), supported ? 1 : 0);
+  if (!supported) assert.equal(request.bodyUsed, false);
+}));
+
+for (const version of [undefined, '1.2.0', '2.0.0', '1.3.0', '1.3.0']) test(`password forwarding requires branch contract 1.3.0: ${version}`, async t => fixture(async () => {
+  const manifest = aliasManifest();
+  if (version) manifest.features['api.passwords'].version = version;
+  else delete manifest.features['api.passwords'];
+  const settings = getGatewaySettings()!;
+  const authority = await createGatewayAuthority({ settings: () => settings, fetch: async () => Response.json(manifest) }).current();
+  const mock = t.mock.method(globalThis, 'fetch', async () => Response.json({ ok: true }));
+  const request = new Request(follower + '/api/v1/passwords', { method: 'POST', body: 'synthetic',
+    headers: { authorization: 'Bearer synthetic' } });
+  const response = await proxyEnvironmentRequest(request, authority!);
+  const supported = version === '1.3.0' || version === '1.3.0';
+  assert.equal(response.status, supported ? 200 : 409);
+  assert.equal(mock.mock.callCount(), supported ? 1 : 0);
+  if (!supported) assert.equal(request.bodyUsed, false);
+}));
+
+for (const mismatch of ['path', 'method', 'unknown', 'source-origin'] as const) test(`relay refuses ${mismatch} mismatch before forwarding`, async t => fixture(async () => {
+  const manifest = aliasManifest();
+  const operation = manifest.operations.find(operation => operation.feature === 'api.connections-request' && operation.path === '/api/v1/connections/request')!;
+  if (mismatch === 'path') operation.path += '/other';
+  if (mismatch === 'method') operation.methods = ['GET'];
+  const settings = getGatewaySettings()!;
+  const authority = await createGatewayAuthority({ settings: () => settings, fetch: async () => Response.json(manifest) }).current();
+  const mock = t.mock.method(globalThis, 'fetch', async () => { throw new Error('must not forward'); });
+  const source = mismatch === 'source-origin' ? 'https://unassigned.test' : follower;
+  const path = mismatch === 'unknown' ? '/api/v1/not-registered' : '/api/v1/connections/request';
+  const request = new Request(source + path, { method: 'POST', body: 'synthetic', headers: { authorization: 'Bearer synthetic' } });
+  assert.equal((await proxyEnvironmentRequest(request, authority!)).status, mismatch === 'source-origin' ? 421 : 409);
+  assert.equal(mock.mock.callCount(), 0);
+  assert.equal(request.bodyUsed, false);
+}));
+
+test('demotion drains after admitted streams and detached work, and rollback waits for pool eviction', async t => fixture(async () => {
+  process.env.THINGTIME_GATEWAY_DEPLOYMENT_ID = 'owner';
+  let deploymentId = 'owner';
+  t.mock.method(globalThis, 'fetch', async () => {
+    const manifest = aliasManifest(); manifest.gateway!.deploymentId = deploymentId;
+    return Response.json(manifest);
+  });
+  await gatewayAuthority.current(true);
+  let drains = 0;
+  let releaseDrain!: () => void;
+  const unregister = registerGatewayDrain(() => { drains++; return new Promise<void>(resolve => { releaseDrain = resolve; }); });
+  const endStream = beginGatewayWork();
+  let releaseDetached!: () => void;
+  const detached = withGatewayWork(() => new Promise<void>(resolve => { releaseDetached = resolve; }));
+  try {
+    deploymentId = 'successor';
+    await gatewayAuthority.current(true);
+    await assert.rejects(requireGatewayDatabaseAccess(), /environment API gateway/);
+    assert.equal(drains, 0);
+    endStream(); assert.equal(drains, 0);
+    releaseDetached(); await detached;
+    await Promise.resolve(); assert.equal(drains, 1);
+    deploymentId = 'owner'; await gatewayAuthority.current(true);
+    let admitted = false;
+    const rollback = runAdmittedGatewayWork(async () => { admitted = true; await requireGatewayDatabaseAccess(); });
+    await Promise.resolve(); assert.equal(admitted, false);
+    releaseDrain(); await rollback; assert.equal(admitted, true);
+  } finally { endStream(); releaseDetached(); releaseDrain?.(); unregister(); }
+}));
+
+test('unconfigured local runtime retains direct admission but refuses forged relays', async () => {
+  const before = keys.map(key => process.env[key]);
+  keys.forEach(key => { delete process.env[key]; });
+  try {
+    await requireGatewayDatabaseAccess();
+    assert.equal(await environmentGatewayIngress(new Request('http://localhost/api/v1/things')), null);
+    const response = await environmentGatewayIngress(new Request('http://localhost/api/v1/things', { headers: { [GATEWAY_RELAY_HEADER]: 'forged' } }));
+    assert.ok(response instanceof Response); assert.equal(response.status, 403);
+  } finally { keys.forEach((key, i) => { if (before[i] === undefined) delete process.env[key]; else process.env[key] = before[i]; }); }
+});
 
 
 test('explicit dedicated build executes its own handler, allows its Mongo client, and refuses relays', async t => fixture(async () => {

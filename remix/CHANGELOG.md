@@ -102,6 +102,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-27: Split Connections 2, owner-bound encrypted OAuth/vault credentials,
+  editable service/password tools, origin-scoped manifests and fail-closed
+  gateway admission into an independent web/backend release. Retain older
+  Connections request shapes and conservative legacy password-bridge status.
+  Native setup/indexing/build changes and installed/provider acceptance remain
+  deferred in PR #1240; see the web release PR note for exact checks and limits.
+
 - 2026-10-27: Admit the reviewed Darwin kernel-group verification fix and bounded trusted failure diagnostics for the native compile runner. Preserve default inert preflight, immutable pinning, network denial, and separate hosted/native acceptance gates. **Codex (AI)**
 
 - 2026-10-27: Pin the native compile listener to the independently reviewed process-lifecycle repair: verified numeric identity drops, bounded watchdog readiness, separate denial-probe deadlines, and readable failure evidence. Hosted preflight and full native acceptance remain open. **Codex (AI)**

@@ -15,6 +15,8 @@ import { SETTINGS_BLOCK_TYPES, localSettingsDocumentAdapter, settingsDocumentSee
 export type SettingsDocumentHostProps = {
   documentKey: string;
   defaultDocument: WebpageBlock[];
+  /** Additive authored-template migrations; never receives live form values. */
+  upgradeDocument?: (blocks: WebpageBlock[]) => WebpageBlock[];
   scopeKey: string;
   title?: string;
   /** Keep a live commit's transient authority mounted until it settles. */
@@ -69,15 +71,16 @@ function ScopedSettingsDocument(props: SettingsDocumentHostProps) {
     writable={props.persistence === 'device' || (!!user?.id && !!dataPlane && !user.temporary)} />;
 }
 
-function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', persistence = 'account', accountTransport, children, documentScope, writable, layoutEditingDisabled = false, showLayoutControls = true, loadFallbackDocument, migrateBlocks }: SettingsDocumentHostProps & {
+function SettingsDocumentSession({ defaultDocument, upgradeDocument, title = 'Settings layout', persistence = 'account', accountTransport, children, documentScope, writable, layoutEditingDisabled = false, showLayoutControls = true, loadFallbackDocument, migrateBlocks }: SettingsDocumentHostProps & {
   documentScope: Parameters<typeof settingsDocumentKey>[0]; writable: boolean;
 }) {
   const key = settingsDocumentKey(documentScope);
   const [defaults] = React.useState(() => settingsDocumentBlocks(defaultDocument));
+  const upgrade = React.useCallback((value: SettingsDocument): SettingsDocument => upgradeDocument ? { ...value, blocks: settingsDocumentBlocks(upgradeDocument(value.blocks)) } : value, [upgradeDocument]);
   const cacheKey = `tt-settings-preview:${key}`;
   const initial = (): SettingsDocument => settingsDocumentSeed(defaults, title,
     readLocalCache<unknown>(persistence === 'device' ? key : cacheKey), loadFallbackDocument);
-  const [document, setDocument] = React.useState<SettingsDocument>(() => { const seed = initial(); return migrateBlocks ? { ...seed, blocks: settingsDocumentBlocks(migrateBlocks(seed.blocks)) } : seed; });
+  const [document, setDocument] = React.useState<SettingsDocument>(() => { const seed = initial(); return migrateBlocks ? { ...seed, blocks: settingsDocumentBlocks(migrateBlocks(upgrade(seed).blocks)) } : upgrade(seed); });
   const [saved, setSaved] = React.useState(document);
   const [editing, setEditing] = React.useState(false);
   const [ready, setReady] = React.useState(!writable);
@@ -108,11 +111,12 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
       if (revision.current !== edit || dirtyRef.current) return;
       const fallback = !value ? loadFallbackDocument?.() : null;
       const next = value || (fallback ? { blocks: settingsDocumentBlocks(fallback.blocks), name: fallback.name, revision: null } : { blocks: defaults, name: title, revision: null });
-      setDocument(migrateBlocks ? { ...next, blocks: settingsDocumentBlocks(migrateBlocks(next.blocks)) } : next); setSaved(next);
+      const upgraded = upgrade(next);
+      setDocument(migrateBlocks ? { ...upgraded, blocks: settingsDocumentBlocks(migrateBlocks(upgraded.blocks)) } : upgraded); setSaved(next);
       if (persistence === 'account' && value) writeLocalCache(cacheKey, value);
     }).catch(() => { if (active && !signal.aborted && load === loadingRevision.current) { setReady(false); setError('Could not load your layout. The current view is preserved; retry before saving.'); } });
     return () => { active = false; };
-  }, [adapter, reload, writable, cacheKey, defaults, persistence, title, loadFallbackDocument, migrateBlocks]);
+  }, [adapter, reload, writable, cacheKey, defaults, persistence, title, loadFallbackDocument, migrateBlocks, upgrade]);
   React.useEffect(() => {
     const reconcile = (event: Event) => {
       const changedKey = event instanceof CustomEvent ? event.detail?.key : (event as StorageEvent).key;
@@ -158,7 +162,7 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
     componentsByRef: {}, addComponent: () => setError('External component sources cannot run inside this settings layout.'),
     ensureComponent: async () => { throw new Error('Use intrinsic blocks in this settings layout.'); }, markSaved: () => {},
     save, resetToDefault: async () => { update(defaults); return { ok: true }; },
-    discardDraft: () => { revision.current++; setDocument(saved); }, refresh: () => setReload(value => value + 1)
+    discardDraft: () => { revision.current++; setDocument(migrateBlocks ? { ...upgrade(saved), blocks: settingsDocumentBlocks(migrateBlocks(upgrade(saved).blocks)) } : upgrade(saved)); }, refresh: () => setReload(value => value + 1)
   };
   return <Box minW={0} data-settings-document={documentScope.documentKey}>
     {showLayoutControls && <Flex gap={2} mb={2} align="center" flexWrap="wrap">
