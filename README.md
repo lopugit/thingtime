@@ -6558,7 +6558,7 @@ already use the same separate build/publish pattern.
 matchers map to that environment (`develop` today), and other product branches
 map to Preview. The default-branch listener also observes requested push runs
 of Web CI and Lopu CodeQL so older branches need not contain the new listener.
-Duplicate ready SHAs are skipped. Deleted, stale and fork PR events never
+Duplicate READY SHAs reuse their artifacts and reconcile aliases/status without recompiling. Deleted, stale and fork PR events never
 authorize a deployment. Use **Actions → Vercel prebuilt deployments → Run
 workflow**, on `main`, to deploy a branch manually; `auto` selects its target.
 Production always requires the current `main` head. Use `preview` explicitly
@@ -6576,7 +6576,13 @@ and the always-skip ignore command as repository safeguards. Existing runtime
 variables, vault selection, regions, domains and production cron definitions
 remain managed by their normal contracts. The publisher copies only regions,
 Fluid settings and production cron definitions from the immutable source
-configuration; it never executes source in its credential-bearing job.
+configuration into the prebuilt output and explicitly pins the deployment region;
+it never executes source in its credential-bearing job. The publisher verifies
+the accepted cron list and region as well as the deployed app.
+
+`staging` now runs the current app at https://staging.thingtime.com using
+Preview runtime settings. Its history is preserved; the existing `develop`
+custom environment remains on https://dev.thingtime.com.
 
 See [Vercel deployment references](VERCEL_DEPLOYMENTS.md) for the project and
 verification receipts. Standard Actions usage for this public repository is
