@@ -3,7 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('thingtimeDesktop', {
 	activityVersion: '1.0.0',
 	activityRequest: (request) => ipcRenderer.invoke('thingtime-desktop:activity', request),
-	passwordsVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	passwordsVersion: process.platform === 'darwin' ? '1.1.0' : undefined,
 	passwordProvider: (request) => ipcRenderer.invoke('thingtime-desktop:password-provider', request),
 	fileExportVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
 	fileExportRequest: (request) => ipcRenderer.invoke('thingtime-desktop:file-export', request),

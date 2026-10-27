@@ -8,6 +8,7 @@ components; reuse them instead of adding parallel versions.
 
 | Concern | Path |
 | --- | --- |
+| Native desktop View menu and Command/Control zoom input | `electron/main.cjs`, `electron/lib/window-zoom.cjs`; regression: `electron/test/window-zoom.test.cjs`, `pnpm --dir electron verify:window-zoom` (real Electron fixture) |
 | Thing context menu model (sections, actions, submenus, drill paths) | `app/components/Thingtime/ContextMenu/contextMenuModel.ts` |
 | Menu renderer, trigger, hover/right-click/pinned behaviour | `app/components/Thingtime/ContextMenu/ThingContextMenu.tsx`, `ThingContextMenuTrigger.tsx`, `useThingContextMenu.tsx` |
 | Base verbs every persisted Thing inherits (`open`, `inspect`, `copy-link`, `edit`, `share`, `delete`, `send-to-lopu`) | `app/schemas/thingActions.ts` (`THING_ACTIONS`), `ContextMenu/thingEntityMenu.ts` (`buildThingEntityMenu(capabilities, extensions)`) |
@@ -17,9 +18,12 @@ components; reuse them instead of adding parallel versions.
 | Toasts / notifications | `app/components/Lopu/useLopu.tsx` (`useLopu()`, `useLopuStream()`) — never raw Chakra `useToast` or `alert()` |
 | Layering (z-index) | `app/components/Things/transferLayers.ts` and the shared layer constants; never ad-hoc z-index escalation |
 | Page shell, nav clearance, drawers | `app/components/Layout/Main.tsx`, `app/components/Nav/*` (`--tt-nav-clearance`, safe-area vars) |
+| Password surfaces | `app/root.tsx` keeps `/passwords/provider` in the focused authorization shell; `/passwords` and `/settings/passwords` retain navigation while hiding floating assistant/developer launchers that can cover narrow credential controls. |
+| Custom drawer links and Thing attachments | `app/components/Nav/Drawer/drawerCustomItems.ts`, `customDrawerBlocks.ts`, `CustomDrawerItems.tsx`, and `useDrawer.tsx`; account-scoped device entries use parent IDs for arbitrary-depth menus, shared Commander search, individually editable Builder blocks. Add finishes both the root list and active submenu and creates in that parent. Submenus stay below the root list with Back and ancestor navigation. Settings exposes parent selection, sibling ordering and the actual menu template, saved as a private webpage Thing through `SettingsDocumentHost`, with scoped legacy device-layout recovery and editable template migrations. `scripts/custom-drawer-acceptance.mjs` checks matched row styling, real API/browser persistence and nested Builder edits; its `nested` scope covers deeper menu navigation |
 | Device menu and full page | `app/components/Things/ThingsPage.tsx`, `ThingsViews.tsx`, `app/components/Devices/deviceNavigation.ts`, `DeviceDetailsDrawer.tsx` (one shared details tree for drawer and page) |
 | Desktop footer build identity | `app/components/Nav/Footer.tsx` reads `thingtimeDesktop.getInfo().buildIdentity` from the packaged `electron/dist/web/metadata.json`; remote-origin status remains separate |
 | Design tokens / CSS vars | `var(--tt-*)` tokens (surface, border, muted, ink, accent, radius); rainbow text in `app/theme/rainbow.ts` |
+| Shared native selects | `app/Providers/Chakra/Components/Select.tsx`, registered in `theme.tsx`; Chakra `Select` consumers (including Character posting and CI providers) inherit runtime colors, borders, radii and keyboard focus; Theme Studio controls the focus border and two-color glow through `theme/tokens.ts` and `theme/customise.ts` |
 | Design system docs page | `/docs/design-system` (`app/routes/docs/*`) |
 | Local cache tiers (first-paint) | `app/hooks/localCache.ts` (`tt-<domain>` keys) |
 
@@ -89,6 +93,14 @@ browser acceptance also checks reload and repeated search through the renderer.
 - Lopu has no gender; use **it**.
 
 ## Tests
+
+- `node remix/scripts/run-select-theme-browser.mjs` builds the real shared theme
+  and Character selector in a network-isolated browser fixture. Set
+  `TT_QA_IMAGE` to an installed isolated runtime and `TT_QA_SECCOMP` to its
+  Chromium sandbox profile, as required by the runner. It checks desktop/mobile,
+  light/dark themes, native options, keyboard focus and selection, overflow,
+  and real Theme Studio editing/save/reload against synthetic HTTP;
+  it does not perform live-account or CI-provider mutations.
 
 - `scripts/lopu-popovers.browser.html` mounts the real floating host, full page,
   or embedded chat with synthetic HTTP/preferences. It checks popup hit testing,
@@ -178,3 +190,16 @@ provides public bindings and a bounded transient native-operation map. Sensitive
 hosts reject external sources, native/component blocks and persisted password/file
 values before rendering; normal Builder insertion and source editing follow the
 same restrictions. Scope changes abort transient controls and fence late results.
+
+## Password manager navigation
+
+`Nav/Drawer/drawerMenu.tsx` exposes an authenticated Password manager entry for
+`/passwords` and `/settings/passwords`. The shared `Settings/settingsTabs.ts`
+category supports full-page/popup navigation, reload and the legacy
+`#password-manager` anchor. `PasswordManagerSettings.tsx` composes an editable
+settings document with `PasswordPasskeySetup`; its explicit Thingtime sign-in
+passkeys link targets `/settings/security#account-passkeys`. Browser approval at
+`/passwords/provider` uses the same safe editable-document and transient-control
+hosts; passwords and signing keys never enter layout blocks. Check keyboard,
+Back, nested Builder selection, narrow/mobile widths and full-page scroll in the
+real browser. See [password manager](../password-manager.md#browser-passkeys-and-settings).

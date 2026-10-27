@@ -16,11 +16,21 @@ public enum PasswordSessionStore {
                 kSecAttrSynchronizable as String: false]
     }
     public static func load() throws -> ProviderSession {
+        guard let session = try loadIfPresent() else { throw PasswordProviderError.invalidSession }
+        return session
+    }
+    static func loadIfPresent() throws -> ProviderSession? {
         var lookup = try query(accessGroup: group); lookup[kSecReturnData as String] = true; lookup[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
-        guard SecItemCopyMatching(lookup as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { throw PasswordProviderError.invalidSession }
-        let decoded = try JSONDecoder().decode(ProviderSession.self, from: data)
+        let status = SecItemCopyMatching(lookup as CFDictionary, &item)
+        if status == errSecItemNotFound { return nil }
+        try validateLoadStatus(status)
+        guard let data = item as? Data, let decoded = try? JSONDecoder().decode(ProviderSession.self, from: data) else { throw PasswordProviderError.invalidSession }
         return try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie)
+    }
+    static func validateLoadStatus(_ status: OSStatus) throws {
+        if status == errSecItemNotFound { throw PasswordProviderError.invalidSession }
+        guard status == errSecSuccess else { throw PasswordProviderError.sessionUnavailable }
     }
     public static func save(_ session: ProviderSession) throws {
         let query = try query(accessGroup: group)

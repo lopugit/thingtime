@@ -4,7 +4,7 @@ import SwiftUI
 import ThingtimePasswordCore
 @main enum PasswordApp {
     @MainActor static func main() {
-        if CommandLine.arguments.contains("--connect") || CommandLine.arguments.contains("--disconnect") || CommandLine.arguments.contains("--sync") {
+        if CommandLine.arguments.contains("--connect") || CommandLine.arguments.contains("--disconnect") || CommandLine.arguments.contains("--sync") || CommandLine.arguments.contains("--status") {
             let disconnect = CommandLine.arguments.contains("--disconnect")
             Task { @MainActor in
                 do {
@@ -15,6 +15,11 @@ import ThingtimePasswordCore
                         guard let data = try FileHandle.standardInput.read(upToCount: 65537), data.count <= 65536 else { throw PasswordProviderError.invalidSession }
                         let decoded = try JSONDecoder().decode(ProviderSession.self, from: data)
                         let session = try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie)
+                        if CommandLine.arguments.contains("--status") {
+                            let status = PasswordConnectionStatus.current(for: session)
+                            FileHandle.standardOutput.write(try JSONEncoder().encode(status))
+                            exit(0)
+                        }
                         if CommandLine.arguments.contains("--sync") {
                             guard let prior = try? PasswordSessionStore.load() else { exit(0) }
                             guard prior.origin == session.origin, prior.ownerId == session.ownerId else { try PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait(); exit(0) }
@@ -40,7 +45,7 @@ import ThingtimePasswordCore
     private var window: NSWindow?
     func applicationDidFinishLaunching(_ notification: Notification) {
         let content = VStack(alignment: .leading, spacing: 16) {
-            Text("Thingtime Passwords").font(.title).bold()
+            Text("Thingtime").font(.title).bold()
             Text("Open Passwords in the Thingtime desktop app and select Connect Password AutoFill. Then enable Thingtime in System Settings → General → AutoFill & Passwords.")
                 .fixedSize(horizontal: false, vertical: true)
             Button("Open Thingtime") {
@@ -48,7 +53,7 @@ import ThingtimePasswordCore
             }
             Button("Open Password AutoFill settings") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Passwords-Settings.extension")!) }
         }.padding(24).frame(width: 420)
-        let window = NSWindow(contentViewController: NSHostingController(rootView: content)); window.title = "Thingtime Passwords"; window.center(); window.makeKeyAndOrderFront(nil); self.window = window
+        let window = NSWindow(contentViewController: NSHostingController(rootView: content)); window.title = "Thingtime"; window.center(); window.makeKeyAndOrderFront(nil); self.window = window
         NSApp.activate(ignoringOtherApps: true)
     }
 }

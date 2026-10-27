@@ -1,5 +1,9 @@
 # Things and folders
 
+`validateThingtimeCrystal` preserves explicit `renderComponent` metadata across
+typed and data Thing writes. See [the presentation contract](api-endpoints-and-capabilities.md)
+for saved/embedded definitions, PATCH/replacement semantics and tests.
+
 Server Action admission/outcomes use `api/utils/timeline/actionOutcome.ts` and
 shared `timeline/actionOutcome.ts`, called from the canonical server executor.
 They retain safe effect receipts in the existing Timeline, never a new history
@@ -36,6 +40,7 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Trusted Action/AI attribution and relational operation grouping | `app/api/utils/timeline/mutationContext.ts`, established by `actions/execute.ts`, `actions/firstPartyActionHost.ts` and `lopu/chatTools.ts`; not request-controlled |
 | Shared History modal and managed Timeline folder | `app/components/Timeline/TimelineHost.tsx` |
 | Account/database-qualified History links and Thing caches | `app/utils/dataPlane.ts`, `app/hooks/useDataPlane.ts`, `app/routes/thing.tsx`; root identity invalidation also handles database selection across tabs |
+| Explicit data-Thing presentation | `app/components/Thingtime/ThingView.tsx`, `ThingRenderComponent.tsx`; `renderComponent` points to an independently readable saved Component or embeds its canonical render definition. See [the authoring and access contract](posts-comments-and-feed.md#subspace-messages-and-embedded-things). |
 | Approved saved-theme content history, home transaction and retained deletion accounting | `app/timeline/themeContent.ts`, `app/api/utils/timeline/themeContent.ts`, dedicated `app/api/utils/themes/themes.ts` writer |
 
 ## Authorization helper
@@ -68,6 +73,16 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Universal Thing page `/thing/:id` | `app/routes/thing.tsx` |
 | Device page `/things?device=<id>&deviceView=page` | `app/components/Things/ThingsPage.tsx` selects the same `DeviceDetailsDrawer.tsx` content used in the drawer; device cards/rows have a navigation-only right-click menu |
 
+Shared item activation is defined in `browseInteraction.ts`: ordinary clicks
+open once; Cmd/Ctrl/Shift clicks select, and title links retain native
+middle-click navigation. `ThingsViews.tsx` supplies labelled hover/focus
+checkboxes and action menus for Things, files and devices in every layout;
+coarse-pointer controls remain visible. Device controls are siblings of their
+primary button to preserve independent keyboard and pointer actions.
+`FolderTree.tsx` reuses those controls only when browsing handlers are supplied;
+Move dialog pickers remain independent. Its folder button expands children in
+place, while modifier clicks select and context controls preserve location.
+
 Adding an item action: extend `ThingsItemAction` in `ThingsViews.tsx`, add the
 action to `buildThingsItemMenu`, handle it in both `onItemAction` and
 `onItemMenuAction` in `ThingsPage.tsx`, and keep bulk selections in mind
@@ -91,6 +106,9 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
 
 ## Tests
 
+- `scripts/things-single-click-acceptance.mjs` exercises the real isolated API
+  and browser click, selection, context-menu and file-download paths; prerequisites
+  and invocation are in the "Things page" section of `TESTING.md`.
 - `npm --prefix remix run test:things` (menu models, page cores, transfer),
   `test:acl`, `test:collections` (index registry), `test:transfer-binary` /
   `test:transfer-archives` (opt-in integration on a disposable replica set).
@@ -304,7 +322,15 @@ cover this boundary; existing account drafts and import permissions are unchange
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
+`PasswordGenerator.tsx`, `PasswordIcon.tsx` and `PasswordPasskeySetup.tsx` compose
+editable settings blocks; secret output stays in the controlled entry draft.
+`passwords/generator.ts` owns WebCrypto/preset validation. `passwords/icons.ts`,
+`icons.client.ts` and `api/utils/passwords/icons.ts` own descriptors, anonymous
+image loading and the separately sealed list projection. `test:passwords` covers
+these boundaries; `scripts/password-tools.browser.html` is an isolated synthetic
+UI fixture, not native-provider acceptance.
+
+See [password-manager.md](../password-manager.md). `api.passwords` 1.3.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and

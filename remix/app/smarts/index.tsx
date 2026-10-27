@@ -19,6 +19,34 @@ try {
 // babel.babylon = require('@babel/parser')
 // babel.prettier = require('prettier')
 
+interface ThingOptions {
+  option?: unknown;
+  options?: unknown[];
+  list?: unknown[];
+  obj?: boolean;
+  keys?: string[];
+  keymatchtype?: string;
+  push?: boolean;
+  async?: boolean;
+  retIndex?: boolean;
+  strings?: boolean;
+  defaultValue?: unknown;
+}
+
+interface ReplacerOptions {
+  firstRun?: boolean;
+  stringifier: (key: string, value: unknown, options: ReplacerOptions) => { key: unknown; value: unknown };
+  known: Map<unknown, string>;
+  input: unknown[];
+}
+
+interface LegacyContext {
+  // Ordinary callers use the exported smarts object as the method receiver.
+  getsmart?: typeof getsmart;
+  $set?: (target: object, key: string | undefined, value: unknown) => void;
+  $delete?: (target: object, key: string) => void;
+}
+
 const objList = [];
 const stringList = [];
 
@@ -249,9 +277,7 @@ export const stringify = (value, opts: any = {}) => {
 
   return '[' + opts.output.join(',') + ']';
 };
-export const replacer = (key, value) => {
-  const opts = opts || {};
-
+export const replacer = (key, value, opts: ReplacerOptions) => {
   if (opts.firstRun) {
     opts.firstRun = !opts.firstRun;
     return value;
@@ -323,7 +349,7 @@ export const stringifier = (key, val, opts) => {
         : {
             type: 'Array',
             js: ret.value,
-            uuid: ret.value.uuid
+            uuid: (ret.value as unknown[] & { uuid?: unknown }).uuid
           },
       key: val
     };
@@ -446,7 +472,7 @@ export const revive = (input, parsed, output, parser, opts) => {
     let value = output[key];
     // if the value hasn't been revived yet
     if (value instanceof String) {
-      const tmp = input[value];
+      const tmp = input[String(value)];
       if (typeof tmp === 'object' && !parsed.get(tmp)) {
         parsed.set(tmp, value);
         output[key] = primitives(parser(key, revive(input, parsed, tmp, parser, opts)));
@@ -1169,7 +1195,7 @@ export const create = (obj1, obj2, opts) => {
   return ret;
 };
 
-export const merge = (value1, value2, opts: any = {}, seen = new Map()) => {
+export const merge = function (this: LegacyContext | void, value1, value2, opts: any = {}, seen = new Map()) {
   if (seen.has(value1)) return seen.get(value1);
 
   if (value1 instanceof Array && value2 instanceof Array) {
@@ -1252,7 +1278,7 @@ export const merge = (value1, value2, opts: any = {}, seen = new Map()) => {
       getsmart.bind(this)(this, '$set', getsmart.bind(this)(local.vue, 'Vue.set', false)) &&
       value1
     ) {
-      const setToUse = this.$set || local.vue.Vue.set;
+      const setToUse = (this && this.$set) || local.vue.Vue.set;
       setToUse?.(value1, value2Property, newVal);
       if (typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
         window.$store.commit(local.vue.basePath || 'graph/thing');
@@ -1270,7 +1296,7 @@ export const merge = (value1, value2, opts: any = {}, seen = new Map()) => {
 
 export const basic = (value) => {
   const valueType = typeof value;
-  const ret = !(valueType == 'object' || valueType == 'array' || valueType == 'function') || value === null;
+  const ret = !(valueType == 'object' || valueType == 'function') || value === null;
   return ret;
 };
 export const mod = (args, mod) => {
@@ -1404,7 +1430,7 @@ export const setThings = ({
   keymatchtype,
   push,
   async
-} = {}) => {
+}: ThingOptions = {}) => {
   if (options && options instanceof Array && list) {
     for (const option of options) {
       if (async) {
@@ -1433,7 +1459,7 @@ export const setThings = ({
 
   return list;
 };
-export const optIn = (option, list = getsmart.bind(this)(stringList), obj, keys = ['uuid', '_id', 'id'], keymatchtype, index) => {
+export const optIn = (option, list = getsmart.bind(this)(stringList), obj, keys = ['uuid', '_id', 'id'], keymatchtype, index?: boolean) => {
   if (typeof option === 'object') {
     obj = true;
   }
@@ -1493,7 +1519,7 @@ export const thingIn = ({
   keymatchtype,
   retIndex
   // vue = local.vue
-} = {}) => {
+}: ThingOptions = {}) => {
   if (typeof option === 'object') {
     obj = true;
   }
@@ -1590,7 +1616,7 @@ export const optsIn = (options, list = getsmart.bind(this)(stringList), obj, key
 
   return true;
 };
-export const thingsIn = ({ options, list = getsmart.bind(this)(stringList), obj, keys = ['uuid', '_id', 'id'], keymatchtype } = {}) => {
+export const thingsIn = ({ options, list = getsmart.bind(this)(stringList), obj, keys = ['uuid', '_id', 'id'], keymatchtype }: ThingOptions = {}) => {
   if (!(options instanceof Array)) return true;
   for (const option of options) {
     // if(typeof option === 'object'){
@@ -1630,7 +1656,7 @@ export const anyOptsIn = (options, list = getsmart.bind(this)(stringList), obj, 
 
   return false;
 };
-export const anyThingsIn = ({ options, list = getsmart.bind(this)(stringList), obj, keys = ['uuid', '_id', 'id'], keymatchtype } = {}) => {
+export const anyThingsIn = ({ options, list = getsmart.bind(this)(stringList), obj, keys = ['uuid', '_id', 'id'], keymatchtype }: ThingOptions = {}) => {
   if (!(options instanceof Array)) return false;
   for (const option of options) {
     // if(typeof option === 'object'){
@@ -1688,7 +1714,7 @@ export const thingIndex = ({ option, list, obj, keys = ['uuid', '_id', 'id'], ke
 
   return -1;
 };
-export const pushOpt = (option, list = getsmart.bind(this)(stringList), obj, keys = ['uuid', '_id', 'id'], keymatchtype, index) => {
+export const pushOpt = (option, list = getsmart.bind(this)(stringList), obj, keys = ['uuid', '_id', 'id'], keymatchtype, index?: boolean) => {
   if (typeof list == 'object' && !optIn(option, list, obj, keys, keymatchtype)) {
     if (getsmart.bind(this)(local.vue, 'reactiveSetter', false) || getsmart.bind(this)(local.vue, 'store', false)) {
       list.splice(list.length, 0, option);
@@ -1702,7 +1728,7 @@ export const pushOpt = (option, list = getsmart.bind(this)(stringList), obj, key
 
   return index ? optIn(option, list, obj, keys, keymatchtype, index) : optIn(option, list, obj, keys, keymatchtype, index);
 };
-export const addOpt = (option, list = getsmart.bind(this)(stringList), obj, keys = ['uuid', '_id', 'id'], keymatchtype, index) => {
+export const addOpt = (option, list = getsmart.bind(this)(stringList), obj, keys = ['uuid', '_id', 'id'], keymatchtype, index?: boolean) => {
   if (typeof list == 'object') {
     if (getsmart.bind(this)(local.vue, 'reactiveSetter', false) || getsmart.bind(this)(local.vue, 'store', false)) {
       list.splice(list.length, 0, option);
@@ -1716,7 +1742,7 @@ export const addOpt = (option, list = getsmart.bind(this)(stringList), obj, keys
 
   return index ? optIn(option, list, obj, keys, keymatchtype, index) : optIn(option, list, obj, keys, keymatchtype, index);
 };
-export const pushThing = ({ option, list = getsmart.bind(this)(stringList), obj, keys = ['uuid', '_id', 'id'], keymatchtype } = {}) => {
+export const pushThing = ({ option, list = getsmart.bind(this)(stringList), obj, keys = ['uuid', '_id', 'id'], keymatchtype }: ThingOptions = {}) => {
   if (typeof list == 'object' && !thingIn({ option, list, obj, keys, keymatchtype })) {
     if (getsmart.bind(this)(local.vue, 'reactiveSetter', false) || getsmart.bind(this)(local.vue, 'store', false)) {
       list.splice(list.length, 0, option);
@@ -1734,7 +1760,7 @@ export const pushOpts = (options, list = getsmart.bind(this)(stringList), obj, k
     pushOpt(option, list, obj, keys, keymatchtype);
   }
 };
-export const pushThings = ({ options, list = getsmart.bind(this)(stringList), obj, keys = ['uuid', '_id', 'id'], keymatchtype } = {}) => {
+export const pushThings = ({ options, list = getsmart.bind(this)(stringList), obj, keys = ['uuid', '_id', 'id'], keymatchtype }: ThingOptions = {}) => {
   if (!(options instanceof Array)) return;
   for (const option of options) {
     pushThing({ option, list, obj, keys, keymatchtype });
@@ -1750,7 +1776,7 @@ export const popOpt = (option, list = getsmart.bind(this)(stringList), obj, keys
     }
   }
 };
-export const popThing = ({ option, list = getsmart.bind(this)(stringList), obj = true, keys = ['uuid', '_id', 'id'], keymatchtype } = {}) => {
+export const popThing = ({ option, list = getsmart.bind(this)(stringList), obj = true, keys = ['uuid', '_id', 'id'], keymatchtype }: ThingOptions = {}) => {
   if (
     typeof list == 'object' &&
     thingIn({
@@ -1784,7 +1810,7 @@ export const popOpts = (options, list = getsmart.bind(this)(stringList), obj, ke
     popOpt(option, list, obj, keys, keymatchtype);
   }
 };
-export const popThings = ({ options, list = getsmart.bind(this)(stringList), obj = true, keys = ['uuid', '_id', 'id'], keymatchtype } = {}) => {
+export const popThings = ({ options, list = getsmart.bind(this)(stringList), obj = true, keys = ['uuid', '_id', 'id'], keymatchtype }: ThingOptions = {}) => {
   if (!(options instanceof Array)) return;
   for (const option of options) {
     popOpt(option, list, obj, keys, keymatchtype);
@@ -1797,7 +1823,7 @@ export const toggleOpt = (option, list = getsmart.bind(this)(stringList), obj, k
     pushOpt(option, list, obj, keys, keymatchtype);
   }
 };
-export const toggleThing = ({ option, list = getsmart.bind(this)(stringList), obj = true, keys = ['uuid', '_id', 'id'], keymatchtype } = {}) => {
+export const toggleThing = ({ option, list = getsmart.bind(this)(stringList), obj = true, keys = ['uuid', '_id', 'id'], keymatchtype }: ThingOptions = {}) => {
   if (optIn(option, list, obj, keys, keymatchtype)) {
     popOpt(option, list, obj, keys, keymatchtype);
   } else {
@@ -1810,7 +1836,7 @@ export const toggleOpts = (options, list = getsmart.bind(this)(stringList), obj,
     toggleOpt(option, list, obj, keys, keymatchtype);
   }
 };
-export const toggleThings = ({ options, list = getsmart.bind(this)(stringList), obj = true, keys = ['uuid', '_id', 'id'], keymatchtype } = {}) => {
+export const toggleThings = ({ options, list = getsmart.bind(this)(stringList), obj = true, keys = ['uuid', '_id', 'id'], keymatchtype }: ThingOptions = {}) => {
   if (!(options instanceof Array)) return;
   for (const option in options) {
     if (optIn(option, list, obj, keys, keymatchtype)) {
@@ -1939,8 +1965,7 @@ export const epp = (path = '') => {
 };
 export const escapeEscapes = (path = '') => {
   let newPath = '';
-  for (let i in path) {
-    i = +i;
+  for (let i = 0; i < path.length; i++) {
     const char = path[i];
     if (i > 0 && i < path.length - 1) {
       const prevChar = path[i - 1];
@@ -2022,7 +2047,7 @@ export const parsePropertyPath = (path = '') => {
   return array;
 };
 export const ppp = (path = '') => {
-  return this.parsePropertyPath(path);
+  return parsePropertyPath(path);
 };
 export const parsePropertyArray = (pathArray) => {
   let path = '';
@@ -2038,7 +2063,7 @@ export const parsePropertyArray = (pathArray) => {
   return path;
 };
 export const ppa = (pathArray) => {
-  return this.parsePropertyArray(pathArray);
+  return parsePropertyArray(pathArray);
 };
 export const pathToArray = (path) => {
   if (typeof path == 'string') {
@@ -2049,15 +2074,13 @@ export const pathToArray = (path) => {
 };
 export const pathToString = (path) => {
   if (typeof path == 'string') {
-    let ret = parsePropertyPath(path);
-    ret = parsePropertyArray(ret);
-    return ret;
+    return parsePropertyArray(parsePropertyPath(path));
   } else {
     const ret = parsePropertyArray(path);
     return ret;
   }
 };
-export const setsmart = (obj, property, value, context?: any) => {
+export const setsmart = function (this: LegacyContext | void, obj, property, value, context?: any) {
 	if (!property && typeof obj == 'string') {
 		property = obj.split('.');
 		try {
@@ -2109,7 +2132,7 @@ export const setsmart = (obj, property, value, context?: any) => {
 			getsmart.bind(this)(this, '$set', getsmart.bind(this)(local.vue, 'Vue.set', false)) &&
 			obj
 		) {
-			const setToUse = this.$set || local.vue.Vue.set;
+			const setToUse = (this && this.$set) || local.vue.Vue.set;
 			setToUse(obj, undefined, value);
 			if (typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
 				window.$store.commit(local.vue.basePath || 'graph/thing');
@@ -2134,7 +2157,7 @@ export const setsmart = (obj, property, value, context?: any) => {
 
 	// In order to avoid constantly checking the type of the property
 	// we separate the real logic out into an inner function.
-	function deepSetByArrayUnbound(obj, propsArray, value) {
+	function deepSetByArrayUnbound(this: LegacyContext | void, obj, propsArray, value) {
 		// If the path array has only 1 more element, we've reached
 		// the intended property and set its value
 		if (propsArray.length == 1) {
@@ -2143,7 +2166,7 @@ export const setsmart = (obj, property, value, context?: any) => {
 				getsmart.bind(this)(this, '$set', getsmart.bind(this)(local.vue, 'Vue.set', false)) &&
 				obj
 			) {
-				const setToUse = this.$set || local.vue.Vue.set;
+				const setToUse = (this && this.$set) || local.vue.Vue.set;
 				setToUse(obj, ee(propsArray[0]), value);
 				if (typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
 					window.$store.commit(local.vue.basePath || 'graph/thing');
@@ -2176,7 +2199,7 @@ export const setsmart = (obj, property, value, context?: any) => {
 				getsmart.bind(this)(this, '$set', getsmart.bind(this)(local.vue, 'Vue.set', false)) &&
 				obj
 			) {
-				const setToUse = this.$set || local.vue.Vue.set;
+				const setToUse = (this && this.$set) || local.vue.Vue.set;
 				setToUse(obj, ee(propsArray[0]), {});
 				if (typeof getsmart.bind(this)(window, '$store.commit', undefined) == 'function') {
 					window.$store.commit(local.vue.basePath || 'graph/thing');
@@ -2192,7 +2215,7 @@ export const setsmart = (obj, property, value, context?: any) => {
 		return deepSetByArray(obj[ee(propsArray[0])], remainingProps, value);
 	}
 };
-export const deletesmart = (obj, property) => {
+export const deletesmart = function (this: LegacyContext | void, obj, property) {
   if (!property && typeof obj == 'string') {
     property = obj.split('.');
     try {
@@ -2219,7 +2242,9 @@ export const deletesmart = (obj, property) => {
     getsmart.bind(this)(this, '$set', getsmart.bind(this)(local.vue, 'Vue.set', false)) &&
     obj
   ) {
-    this.$delete(parentObj, path);
+    const deleteToUse = (this && this.$delete) || local.vue.Vue?.delete;
+    if (deleteToUse) deleteToUse(parentObj, path);
+    else delete parentObj[path];
   } else {
     delete parentObj[path];
   }
@@ -2321,8 +2346,8 @@ export const flatten = (arrays, func = (i) => i) => {
 
   return flat;
 };
-export const mapsmart = (list, keyProperty = 'title', returnExistant) => {
-  return new Promise((resolve, reject) => {
+export const mapsmart = function (this: LegacyContext | void, list, keyProperty = 'title', returnExistant) {
+  return new Promise<boolean | void>((resolve, reject) => {
     if (!keyProperty) {
       reject();
     } else if (list && typeof list.length == 'number') {
@@ -2342,7 +2367,7 @@ export const mapsmart = (list, keyProperty = 'title', returnExistant) => {
           getsmart.bind(this)(this, '$set', getsmart.bind(this)(local.vue, 'Vue.set', false)) &&
           list
         ) {
-          const setToUse = this.$set || local.vue.Vue.set;
+          const setToUse = (this && this.$set) || local.vue.Vue.set;
           setToUse(list, 'mapped', {});
         } else {
           list['mapped'] = {};
@@ -2356,7 +2381,7 @@ export const mapsmart = (list, keyProperty = 'title', returnExistant) => {
             getsmart.bind(this)(this, '$set', getsmart.bind(this)(local.vue, 'Vue.set', false)) &&
             list.mapped
           ) {
-            const setToUse = this.$set || local.vue.Vue.set;
+            const setToUse = (this && this.$set) || local.vue.Vue.set;
             setToUse(list.mapped, list[i][keyProperty], list[i]);
           } else {
             list['mapped'][list[i][keyProperty]] = list[i];
@@ -2381,8 +2406,8 @@ export const mapsmart = (list, keyProperty = 'title', returnExistant) => {
         //   })
         //   this.$options.sockets['giveThing'] = data => {
         //     if(this._uid == data.clientId && data.funCounter == funCounter){
-        //       (this.$set || local.vue.Vue.set)(list, i.toString(), data.thing)
-        //       (this.$set || local.vue.Vue.set)(list.mapped, list[i][keyProperty], list[i])
+        //       ((this && this.$set) || local.vue.Vue.set)(list, i.toString(), data.thing)
+        //       ((this && this.$set) || local.vue.Vue.set)(list.mapped, list[i][keyProperty], list[i])
         //     }
         //     if(i==list.length-1){
         //       if((returnExistant && getsmart.bind(this)(list, 'mapped.'+returnExistant, false)) || !returnExistant){
@@ -2407,7 +2432,7 @@ export const mapsmart = (list, keyProperty = 'title', returnExistant) => {
       }
 
       // if(list.mapped && !list.mapped['agora-client-mapped']){
-      //   (this.$set || local.vue.Vue.set)(list.mapped, 'agora-client-mapped', true)
+      //   ((this && this.$set) || local.vue.Vue.set)(list.mapped, 'agora-client-mapped', true)
       // }
     }
   });
@@ -2415,7 +2440,7 @@ export const mapsmart = (list, keyProperty = 'title', returnExistant) => {
 export const domval = (thing) => {
   return getsmart.bind(this)(thing, 'properties.description', '');
 };
-export const getParent = (levels = Infinity) => {
+export const getParent = function (this: { pathAsArray: unknown[] }, levels: number | string = Infinity) {
   if (typeof levels == 'string') levels = (levels.match(/\.\./g) || []).length;
 
   if (levels >= this.pathAsArray.length - 1) {
@@ -2426,14 +2451,14 @@ export const getParent = (levels = Infinity) => {
 
   return this.pathAsArray[level];
 };
-export const getThing = (props = {}) => {
+export const getThing = (props: ThingOptions = {}) => {
   const { list = getsmart.bind(this)(objList), defaultValue = undefined } = props;
 
   const index = thingIn({
     ...props,
     retIndex: true
   });
-  if (index >= 0) {
+  if (typeof index === 'number' && index >= 0) {
     return list[index];
   } else {
     return defaultValue;

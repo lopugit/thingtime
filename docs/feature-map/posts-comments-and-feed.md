@@ -1,5 +1,11 @@
 # Posts, comments and feed
 
+Typed Posts and comments retain explicit `crystal.renderComponent` metadata.
+The root declaration takes precedence over legacy nested `crystal.thing` in
+`PostInteractiveThing`; the linked embed still reads its Component through its
+own ACL. See [the presentation contract](api-endpoints-and-capabilities.md)
+for validation, versions and regression checks.
+
 Posts are `post` Things; comments share the post schema
 (`thingtime: ['post', 'comment']`, `targetId` = parent) so every comment is
 reactable and has a `/post/:id` permalink. Reactions, saves, votes and views are
@@ -99,7 +105,30 @@ protected relational `subspace-embed` Thing. Readers must pass the subspace gate
 and the referenced Thing's independent ACL on every load. Embedding never
 changes an audience or shares a hidden link secret.
 
+`PostInteractiveThing` delegates ordinary data Things to the shared `ThingView`.
+Human-facing data declares `renderComponent: { id: "<saved Component Thing ID>" }`
+or embeds the canonical Component crystal directly, for example
+`renderComponent: { render: { tag: "p", children: ["{text}"] } }`.
+`ThingRenderComponent` reads a referenced Component through the normal Things
+API and its independent ACL, then uses the existing Component argument/template
+resolver and inert HTML/Chakra renderers. Bindings receive the displayed data
+(also available as `thing`), defaults and saved arguments. Sources and Actions
+do not execute in this display context. Saved Component/Webpage Things retain
+their existing editable definitions and rendering paths.
+
+An explicit declaration takes priority over legacy kind rendering, including
+when invalid or inaccessible; it never falls back to a type alias. The data
+inspector is a deliberate toggle. Identity changes fence pending reads, and
+focus/visibility refreshes recheck referenced Component access. The containing
+Thing does not grant access to its renderer or dependencies. Preserve data,
+ownership and audiences when assigning renderers to older Things.
+`TransientBlockHost` captures only its own transient Action controls, allowing
+the embedded Thing's native view toggle and nested controls to receive events.
+
 Run `test:subspaces`, `test:messenger`, `test:feed`, `test:api-capabilities`, then
 `test:subspace-messages-acceptance` against the built server. The latter creates
 its own OS-fenced disposable replica and real API fixtures; `--ui` additionally
 checks desktop/mobile rendering and saved controls.
+The feed suite includes `thingRenderComponent.test.ts`; the acceptance harness
+covers saved/embedded render declarations, exact saved content and both embed
+placements with rendered/data views and reload.

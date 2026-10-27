@@ -1,5 +1,26 @@
 # API endpoints and capabilities
 
+Explicit Thing presentation is shared crystal metadata: `registry.ts`
+`validateThingtimeCrystal` retains `renderComponent` after each typed content
+allowlist and validates embedded definitions through the canonical Component
+sanitizer. `api.things` 1.42.0 and `api.things-update` 1.13.0 advertise it through
+both generated manifests. The first-party create/PATCH/PUT client negotiates
+1.42.0 when it sends a declaration. Omitted PATCH metadata survives content
+edits; `null` remains an explicit unavailable renderer; replacement omission
+removes the declaration. Malformed declarations fail validation. Saved pointers
+never grant Component/dependency access. `renderComponentDeclaration.ts` shares
+the declaration grammar and root-over-nested post precedence with rendering.
+Run `test:schemas`, `test:feed`, `test:api-capabilities` and the isolated
+`subspace-messages-acceptance.mjs` typed-post/comment persistence checks.
+
+Environment API gateway ingress is negotiated through `api.environment-gateway`
+1.1.0 and `/.well-known/thingtime-capabilities.json`. Server deployments use
+the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by
+opt-in) with the `THINGTIME_MONGODB_CONNECTION_MODE` runtime override. Dedicated
+mode executes its own backend, advertises `gateway: null`, and refuses relay
+traffic; it does not imply an isolated database. See [the gateway runbook](../environment-api-gateway.md)
+for the audited environment mapping and pending activation evidence.
+
 Mobile device descriptors use `app/devices/platform.ts` across validation,
 projection, schemas and client types. `api.devices` 1.10.0 and
 `api.devices-pairing-claim` 1.1.0 add iOS/Android to the existing signed pairing
@@ -91,6 +112,12 @@ Saved theme history uses `api.themes` / `api.themes-delete` 1.1.0 and
 `api.timeline` 1.5.0. The dedicated home writer records approved token versions
 and retained deletion in its content transaction; no new endpoint or collection
 is introduced. See [the Timeline contract](../unified-timeline.md).
+
+`api.themes` 1.2.0 and `api.themes-shared` 1.1.0 add optional focus border,
+two glow colours, blur and strength tokens. Theme saves negotiate 1.2.0 through
+`theme/capabilities.ts`; older theme documents receive defaults without losing
+other settings. `test:theme` covers normalization and the authenticated route,
+while `test:api-capabilities` covers both manifests and client compatibility.
 
 All data access goes through `/api/v1/...` (`FUNDAMENTALS.md` §1). Nitro
 routes every documented endpoint to one catch-all handler; the docs registry is
@@ -189,6 +216,17 @@ empty page; only known-clean saved pages may fetch their persisted tree.
 - Built server smoke: the discovery endpoint must return JSON with the selected
   origin, not the SPA shell (`verify:vercel-output`, preview `curl`).
 - `curl <base>/api/v1/<group>/<name>-docs` returns the entry as JSON.
+
+## MongoDB health failure shape
+
+`app/routes/api/v1/health/mongodb/_mongodb.tsx` preserves the complete
+`MongoConnectionStatus` shape when remote probes fail. `api.health-mongodb` 1.0.2
+includes `custom: false` (the remote request has no viewer-selected database)
+and `replicaSet: null` (unknown), alongside the existing disconnected/null
+fields, timestamp and sanitized error. The status response remains HTTP 200;
+it does not imply the database is connected. Remote health/status-data probes
+must not forward the local session cookie. Run the adjacent `_mongodb.test.ts`
+through `node --import tsx --test` from `remix/`, plus `test:api-capabilities`.
 
 ## Gotchas
 
@@ -406,7 +444,15 @@ both manifests and conditional client negotiation use the canonical docs entry.
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.2.0 is a
+`PasswordGenerator.tsx`, `PasswordIcon.tsx` and `PasswordPasskeySetup.tsx` compose
+editable settings blocks; secret output stays in the controlled entry draft.
+`passwords/generator.ts` owns WebCrypto/preset validation. `passwords/icons.ts`,
+`icons.client.ts` and `api/utils/passwords/icons.ts` own descriptors, anonymous
+image loading and the separately sealed list projection. `test:passwords` covers
+these boundaries; `scripts/password-tools.browser.html` is an isolated synthetic
+UI fixture, not native-provider acceptance.
+
+See [password-manager.md](../password-manager.md). `api.passwords` 1.3.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -454,15 +500,8 @@ installation. No image-byte HTTP endpoint is introduced.
 
 ## Environment gateway and index readiness
 
-Environment API gateway ingress is negotiated through `api.environment-gateway`
-1.1.0 and `/.well-known/thingtime-capabilities.json`. Server deployments use
-the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by
-opt-in) with the `THINGTIME_MONGODB_CONNECTION_MODE` runtime override. Dedicated
-mode executes its own backend, advertises `gateway: null`, and refuses relay
-traffic; it does not imply an isolated database. See [the gateway runbook](../environment-api-gateway.md)
-for the audited environment mapping and pending activation evidence.
-
-`app/api/utils/deployment/environmentGateway.ts` owns bounded discovery,
+The negotiated ingress contract and connection-mode policy are summarized at the
+top of this map. `app/api/utils/deployment/environmentGateway.ts` owns bounded discovery,
 admission and pool draining; `server/utils/environmentGateway.ts` validates
 origin-preserving signed relays before the normal route authorization path.
 `server/middleware/environment-gateway.ts`, the SPA fallback and capability

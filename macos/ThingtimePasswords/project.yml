@@ -9,10 +9,12 @@ settings:
   base:
     SWIFT_VERSION: "5.9"
     ENABLE_DEBUG_DYLIB: false
-    MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.0.2"
+    CURRENT_PROJECT_VERSION: "3"
     CODE_SIGN_STYLE: Automatic
     ENABLE_HARDENED_RUNTIME: true
+    THINGTIME_PASSWORD_HOST_BUNDLE_ID: com.thingtime.passwords
+    THINGTIME_PASSWORD_PROVIDER_BUNDLE_ID: com.thingtime.passwords.provider
     THINGTIME_PASSWORD_KEYCHAIN_GROUP: $(AppIdentifierPrefix)com.thingtime.passwords
     THINGTIME_WEB_URL: https://thingtime.com
 targets:
@@ -26,13 +28,16 @@ targets:
     info:
       path: Resources/Info.plist
       properties:
-        CFBundleDisplayName: Thingtime Passwords
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDisplayName: Thingtime
+        CFBundleName: Thingtime
         ThingtimePasswordKeychainGroup: $(THINGTIME_PASSWORD_KEYCHAIN_GROUP)
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
         LSUIElement: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.thingtime.passwords
+        PRODUCT_BUNDLE_IDENTIFIER: $(THINGTIME_PASSWORD_HOST_BUNDLE_ID)
         PROVISIONING_PROFILE_SPECIFIER: $(THINGTIME_PASSWORD_HOST_PROFILE)
         PRODUCT_NAME: Thingtime Passwords
     entitlements:
@@ -52,6 +57,8 @@ targets:
     info:
       path: Resources/Extension-Info.plist
       properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDisplayName: Thingtime
         ThingtimePasswordKeychainGroup: $(THINGTIME_PASSWORD_KEYCHAIN_GROUP)
         NSExtension:
@@ -65,7 +72,7 @@ targets:
               ProvidesOneTimeCodes: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.thingtime.passwords.provider
+        PRODUCT_BUNDLE_IDENTIFIER: $(THINGTIME_PASSWORD_PROVIDER_BUNDLE_ID)
         PROVISIONING_PROFILE_SPECIFIER: $(THINGTIME_PASSWORD_PROVIDER_PROFILE)
         APPLICATION_EXTENSION_API_ONLY: true
         SKIP_INSTALL: true

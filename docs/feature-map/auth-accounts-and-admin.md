@@ -76,7 +76,15 @@ private draft API, editor recovery, account isolation and independent media copi
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
+`PasswordGenerator.tsx`, `PasswordIcon.tsx` and `PasswordPasskeySetup.tsx` compose
+editable settings blocks; secret output stays in the controlled entry draft.
+`passwords/generator.ts` owns WebCrypto/preset validation. `passwords/icons.ts`,
+`icons.client.ts` and `api/utils/passwords/icons.ts` own descriptors, anonymous
+image loading and the separately sealed list projection. `test:passwords` covers
+these boundaries; `scripts/password-tools.browser.html` is an isolated synthetic
+UI fixture, not native-provider acceptance.
+
+See [password-manager.md](../password-manager.md). `api.passwords` 1.4.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -84,9 +92,35 @@ fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
 intentionally bypasses general request diagnostics and automatic origin fallback
 so decrypted fields never enter shared client history/cache. The reusable
 `Thingtime` fields mod renders the entry without global Thing persistence.
-Native provider implementation and signed release are tracked separately in
-[PR #996](https://github.com/lopugit/thingtime/pull/996); this release exposes the
-private catalog and negotiates an optional supported native bridge.
+`passwords/browserPasskey.ts` validates RP/origin/options and implements ES256;
+`browserProviderCeremony.ts` owns fresh `verify-passkey`, catalog selection,
+retry identity and durable readback. `BrowserPasswordProvider.tsx` serves
+`/passwords/provider` with editable `browserProviderBlocks.ts`. Chromium transport
+and trusted tab/document checks live in `browser-extension/`; package with
+`build:password-extension`, test with `test:password-extension` and
+`test:passwords`. Browser acceptance must use the real local API/vault and an
+independent relying party; unit signatures and synthetic UI alone are insufficient.
+`Settings/passwordManagerSettingsBlocks.ts` and `PasswordManagerSettings.tsx`
+share `/settings/passwords`; Thingtime login passkeys remain in Security.
+`NativePasswordConnection.tsx` and `nativePasswordConnectionBlocks.ts` supply the
+single editable device connection control shared by Password manager and Passwords
+settings. `nativeConnection.ts` owns ephemeral status, refresh and identity fences;
+`native.client.ts` requires desktop `passwordsVersion` 1.1.0. Electron's
+`password-provider.cjs` calls the read-only host `--status` path, backed by
+`PasswordConnectionStatus.swift` owner/origin linkage. Status does not probe the
+network or assert OS AutoFill enablement. Older bridges require an app update;
+this checkout's iOS web-only path has no native-password bridge.
+Native provider implementation lives in `apple/Passwords` and
+`apple/PasswordProvider`. `ProviderFeedback.swift` owns closed progress/error text,
+request fencing and immutable registration retry identity; `PasswordClient.swift`
+classifies HTTP failures and walks complete cursor-based catalogs. The provider
+controller starts registration once after OS selection when its view is visible,
+preserving device authentication, cancellation, retry and session fences. The macOS host
+and provider display Thingtime while retaining installed bundle/Keychain identities.
+Run `swift test --package-path apple/Passwords` and
+`bash apple/PasswordProvider/tests/render-preview.sh`; the latter renders the
+actual SwiftUI view with synthetic status only. Signed packaging and real device registration/sign-in
+remain separate acceptance checks; the web guide uses the existing native bridge.
 
 ## Account content snapshots
 
