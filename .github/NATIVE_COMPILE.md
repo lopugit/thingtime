@@ -114,6 +114,42 @@ VM. No `.env`, personal profiles, account credentials or signing assets are
 copied. Only local Swift packages are required; XcodeGen acquisition precedes
 the network boundary.
 
+## Task lifecycle gate — unavailable
+
+The current source refuses both `preflight` and `native` immediately after
+read-only runner admission, before UID allocation, account creation, watchdog
+launch, policy mutation or candidate access. Its fixed-label `result.json`
+reports `task-lifecycle-admission` and `direct-setuid-unsupported`; these are
+unavailable-capability diagnostics, not isolation or cleanup acceptance. There
+is no caller flag, environment variable or saved-receipt override. Existing
+immutable workflow pins remain unchanged and do not activate this source gate.
+
+The direct numeric credential launcher does not establish exclusive bootstrap
+namespace/service ownership. An empty UID process inventory, successful group
+kill, or an arbitrary failed `launchctl print` cannot prove a dormant service
+will not respawn. The cleanup implementation below remains unaccepted for that
+boundary; do not admit it merely because process tests pass.
+
+A future reviewed backend must reserve and verify a fresh exclusive task UID
+and its service/bootstrap namespace before candidate execution, launch every
+candidate descendant in that owned namespace, and prohibit registration in a
+foreign namespace. The trusted supervisor and detached watchdog must retain
+that ownership independently of the candidate and parent lifetime. Cleanup
+must close launch admission, remove the exact owned services/domain through a
+supported lifecycle operation, verify successful teardown, and observe no
+remaining or respawned task processes/services before restoring PF. Uncertain
+ownership, teardown, inventory errors and respawn must retain denial. Never
+boot out a runner/login/system domain or broadly kill unrelated services.
+
+Use an authorized disposable hosted Mac or separately consented VM for the
+next gate: first prove the domain/UID is unused and the candidate sees only its
+owned namespace; then exercise a task-owned KeepAlive service and escaped
+process, supervisor loss, cancellation, and failed teardown. Require exact
+owned-resource readback, no-respawn and post-restoration positive evidence.
+Record the OS/tool contract and its failure classification; mocks and ordinary
+process absence do not establish this platform authority. This design is a
+required next implementation/acceptance gate, not a claim that it exists.
+
 ## Enforced network policy and cleanup
 
 On the dedicated ephemeral hosted macOS VM, trusted root code first verifies

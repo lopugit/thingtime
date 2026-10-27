@@ -55,6 +55,37 @@ class NativeCompileBoundaryTests(unittest.TestCase):
         self.assertNotIn('ref: ${{ github.workflow_sha }}',text)
         self.assertNotIn('steps.controller.outputs.sha',text)
 
+    def test_lifecycle_unavailable_gate_has_no_caller_receipt_or_environment_bypass(self):
+        for mode in ['preflight','native']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                report=Path(directory)
+                # A caller-authored success receipt must not become authority.
+                (report/'result.json').write_text(json.dumps({'launchdOwnershipVerified':True,
+                    'exclusiveTaskUidVerified':True,'noRespawnVerified':True}))
+                with patch.dict(os.environ,{'THINGTIME_NATIVE_LIFECYCLE_VERIFIED':'true'}),patch.object(native,'phase'),patch.object(native,'run') as command,self.assertRaises(RuntimeError):
+                    native.admit_task_lifecycle(report,'a'*40,'b'*40,mode)
+                command.assert_not_called()
+                result=json.loads((report/'result.json').read_text())
+                self.assertEqual(result['failureStage'],'task-lifecycle-admission')
+                self.assertEqual(result['lifecycleBackend'],'direct-setuid-unsupported')
+                for field in ['exclusiveTaskUidVerified','launchdOwnershipVerified','noRespawnVerified',
+                              'policyChanged','candidateExtracted','candidateExecuted']:
+                    self.assertIs(result[field],False)
+
+    def test_supervise_lifecycle_refuses_before_identity_watchdog_policy_or_candidate(self):
+        for mode in ['preflight','native']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory).resolve();report=root/'report';pr=root/'pr.json'
+                pr.write_text('{}')
+                with patch.dict(os.environ,{'RUNNER_TEMP':str(root),'DEVELOPER_DIR':'/Applications/Xcode.app'}),patch.object(native,'require_hosted_runner',return_value=(501,'runner')),patch.object(native,'validate_source'),patch.object(Path,'is_dir',return_value=True),patch.object(native,'admit_runner',return_value=[]) as runner,patch.object(native,'phase'),patch.object(native,'run') as command,patch.object(native.tempfile,'mkdtemp') as allocate,patch.object(native,'start_watchdog') as watchdog,patch.object(native.shutil,'copyfile') as copy,patch.object(native,'cleanup') as cleanup,self.assertRaises(RuntimeError):
+                    native.supervise(str(root/'missing-candidate.tar.gz'),str(report),'a'*40,'b'*40,str(pr),mode)
+                runner.assert_called_once()
+                for operation in [command,allocate,watchdog,copy,cleanup]:operation.assert_not_called()
+                result=json.loads((report/'result.json').read_text())
+                self.assertEqual(result['mode'],mode)
+                self.assertFalse(result['policyChanged'])
+                self.assertFalse(result['candidateExecuted'])
+
     def test_source_identity_and_exact_sha_are_required(self):
         sha='a'*40
         pr={'state':'open','author_association':'OWNER','head':{'repo':{'full_name':'lopugit/thingtime'},'sha':sha},

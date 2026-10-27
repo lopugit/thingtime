@@ -1,5 +1,14 @@
 # Control-plane changelog
 
+## 2026-10-27 — Stop before unsupported task lifecycle mutation
+
+- Refuse both native-helper modes after read-only runner admission and before
+  identity/watchdog/PF/candidate operations. Emit fixed unavailable-lifecycle
+  diagnostics; no caller setting or receipt bypasses the source gate.
+- Exclusive task UID/bootstrap/service ownership and teardown/no-respawn proof
+  remain unimplemented. Document the next disposable-platform gate without
+  claiming process tests establish launchd authority. Immutable pins unchanged.
+
 ## 2026-10-27 — Refuse unavailable native network controls
 
 - Require usable IPv4/IPv6 TCP and UDP/DNS positive controls before policy

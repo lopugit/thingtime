@@ -226,6 +226,26 @@ def admit_runner(runner_uid,report,source_sha,control_sha,mode):
     return daemons
 
 
+def admit_task_lifecycle(report, source_sha, control_sha, mode):
+    """No executable backend yet owns a task's bootstrap domain and services.
+
+    Numeric setuid and an empty process inventory cannot establish that a
+    dormant launchd job cannot respawn after PF restoration. Keep this an
+    unconditional source gate: caller flags, environment or receipt files
+    must not promote the current direct-setuid launcher into lifecycle proof.
+    """
+    result={'sourceSha':source_sha,'controllerSha':control_sha,'mode':mode,
+            'result':'task lifecycle admission unavailable before mutation',
+            'failureStage':'task-lifecycle-admission',
+            'lifecycleBackend':'direct-setuid-unsupported',
+            'exclusiveTaskUidVerified':False,'launchdOwnershipVerified':False,
+            'noRespawnVerified':False,'policyChanged':False,
+            'candidateExtracted':False,'candidateExecuted':False}
+    (Path(report)/'result.json').write_text(json.dumps(result)+'\n')
+    phase(report,'task-lifecycle-unavailable-before-mutation')
+    raise RuntimeError('Task lifecycle backend unavailable; identity and policy remain unchanged')
+
+
 def phase(report, name):
     # Trusted labels only: no candidate output, URLs, arguments or secrets.
     entry = {'phase':name, 'at':time.time()}
@@ -685,6 +705,7 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
     # Before any mutation, verify the actual transport daemons, not just shell UID.
     report.mkdir(mode=0o755)
     daemons=admit_runner(runner_uid,report,expected_sha,control_sha,mode)
+    admit_task_lifecycle(report,expected_sha,control_sha,mode)
     runner_gid=int(run(['/usr/bin/id','-g',runner_user],capture_output=True).stdout.strip())
     work=Path(tempfile.mkdtemp(prefix='thingtime-native-control-',dir='/private/tmp'))
     work.chmod(0o755)

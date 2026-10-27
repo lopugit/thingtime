@@ -51,3 +51,21 @@ source correction, with no hosted or native acceptance claimed.
 
 See [the regression checklist](../.github/TESTING.md) and
 [the native control-plane contract](../.github/NATIVE_COMPILE.md).
+
+## Explicit unavailable task-lifecycle admission
+
+The next audit found no executable backend that establishes exclusive launchd
+bootstrap/service ownership. Numeric setuid, process-group reap and UID process
+absence cannot supply that authority or exclude dormant service respawn. The
+source now refuses both modes after read-only runner admission and before UID
+allocation, watchdog/account/PF mutation or candidate access. Fixed diagnostics
+identify the unsupported backend and do not claim cleanup or isolation passed.
+Caller environment or existing receipt files cannot enable it.
+
+Two new deterministic regressions cover both modes, no-receipt/no-environment
+bypass and actual supervisor ordering with every downstream operation mocked.
+No privileged, real-process, network, candidate or hosted execution is required.
+The runbook records the exact next namespace/lifecycle implementation and
+KeepAlive/escaped-child/parent-loss/cancellation/teardown/no-respawn acceptance
+gate. This is an inactive source safety stop, not a delivered launchd backend;
+existing admission and helper/workflow pins remain unchanged.

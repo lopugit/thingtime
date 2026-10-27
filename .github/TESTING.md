@@ -310,6 +310,18 @@ pre-queued with no jobs, logs, or cancellable run graph.
   hosted direct IPv4/IPv6, UDP/DNS and child-sandbox checks, cancellation/watchdog
   cleanup, and full unsigned Xcode acceptance. Static tests do not prove these.
 
+## Native task lifecycle admission
+
+- Safe deterministic tests must prove both modes refuse after runner admission
+  and before UID allocation, watchdog launch, account/PF mutation or candidate
+  access. Caller-authored receipts and environment values cannot enable the
+  unsupported direct-setuid lifecycle backend. Verify fixed no-mutation fields.
+- The executable helper remains unavailable until a reviewed backend proves
+  exclusive UID/bootstrap/service ownership and exact teardown/no-respawn
+  evidence before PF restoration. Do not count process-only cleanup tests or
+  arbitrary launchctl errors as that proof. The required disposable-platform
+  cases are in [the lifecycle gate](NATIVE_COMPILE.md#task-lifecycle-gate--unavailable).
+
 ## Native control continuity and bounded bootstrap
 
 - Run the trusted native helper tests and actionlint without privileged local
