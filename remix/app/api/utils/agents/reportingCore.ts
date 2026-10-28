@@ -28,6 +28,6 @@ export const validReportingWorkspace = (value: any): value is ReportingWorkspace
   !!value.schemas && REPORT_SCHEMA_ROLES.every(role => typeof value.schemas[role] === 'string' && !!value.schemas[role]) &&
   new Set(Object.values(value.schemas)).size === REPORT_SCHEMA_ROLES.length &&
   !!value.actions && Object.keys(value.actions).length > 0 && Object.entries(value.actions).every(([name, id]) =>
-    Object.hasOwn(REPORT_ACTION_ROLES, name) && typeof id === 'string' && !!id) &&
+    Object.prototype.hasOwnProperty.call(REPORT_ACTION_ROLES, name) && typeof id === 'string' && !!id) &&
   (value.subspaceId === undefined || typeof value.subspaceId === 'string') &&
   (value.subspaceSlug === undefined || typeof value.subspaceSlug === 'string');

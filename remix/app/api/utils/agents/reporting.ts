@@ -88,7 +88,7 @@ export async function agentReporting(request: Request, input: any) {
       if (reportingDigest(binding.crystal.workspaceRequest) !== reportingDigest(workspace)) return fail(409, 'This task is already bound to different workspace references');
       if (binding.crystal.prepared === true) {
         await assertOwner(); await verifyBinding(binding, ownerId, ownerViewer);
-        return { ok: true, binding: safeBinding(binding) };
+        return { ok: true as const, binding: safeBinding(binding) };
       }
       const character = await requireLiveCharacter(binding, ownerId);
       const existing = await membershipOf(String(subspace.shareId), String(character._id));
@@ -118,7 +118,7 @@ export async function agentReporting(request: Request, input: any) {
       }
       await verifyBinding(binding, ownerId, ownerViewer);
       await things.updateOne(filter as any, { $set: { 'crystal.prepared': true } });
-      return { ok: true, binding: safeBinding(binding) };
+      return { ok: true as const, binding: safeBinding(binding) };
     }
     if (!binding) return fail(404, 'Prepare this stable task identity first');
     const verified = await verifyBinding(binding, ownerId, ownerViewer);
@@ -136,7 +136,7 @@ export async function agentReporting(request: Request, input: any) {
       const active = activeId ? await things.findOne({ thingtime: 'agent-reporting-operation', ownerId, targetId: binding.shareId,
         ...thingUniqueKeyFilter('agentReportingOperation', reportingDigest([binding.shareId, activeId])) } as any) : null;
       const coordinationPost = binding.crystal.coordinationPostId ? requireOk(await getThing(ownerViewer, binding.crystal.coordinationPostId)).thing : null;
-      return { ok: true, binding: safeBinding(binding), records, coordinationPost,
+      return { ok: true as const, binding: safeBinding(binding), records, coordinationPost,
         activeOperation: activeId ? { requestId: activeId, status: active?.crystal.status || 'unknown',
           createdIds: active?.crystal.createdIds || [], mutationAttempted: active?.crystal.mutationAttempted === true } : null };
 
@@ -144,7 +144,7 @@ export async function agentReporting(request: Request, input: any) {
     if (input.operation === 'coordinate') return await coordinateReporting({ things, binding, filter, ownerId, ownerViewer, character: verified.character, viewer: verified.viewer, assertOwner, input });
     if (input.operation !== 'report') return fail(400, 'operation must be prepare, get, report or coordinate');
     if (!ref(input.requestId) || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId) ||
-        !Object.hasOwn(REPORT_ACTION_ROLES, input.actionName) || !input.inputs || typeof input.inputs !== 'object' || Array.isArray(input.inputs))
+        !Object.prototype.hasOwnProperty.call(REPORT_ACTION_ROLES, input.actionName) || !input.inputs || typeof input.inputs !== 'object' || Array.isArray(input.inputs))
       return fail(400, 'A stable UUID requestId, reporting actionName and object inputs are required');
     const actionName = input.actionName as ReportAction;
     if (actionName === 'readOverview') return fail(409, 'Use get for independently authorized task record readback; this endpoint does not execute HTTP Actions');
@@ -193,7 +193,7 @@ export async function agentReporting(request: Request, input: any) {
       await things.updateOne(filter as any, { $set: { 'crystal.records': records, updatedAt: new Date() } });
       binding.crystal.records = records;
       await things.updateOne(receiptFilter as any, { $set: { 'crystal.status': 'complete', 'crystal.result': { ids }, updatedAt: new Date() } });
-      return { ok: true, binding: safeBinding(binding), receipt: { requestId: input.requestId, status: 'complete', result: { ids } } };
+      return { ok: true as const, binding: safeBinding(binding), receipt: { requestId: input.requestId, status: 'complete', result: { ids } } };
     } finally {
       // Release only complete operations or failures proven to precede every
       // data mutation. Ambiguous outcomes require explicit reconciliation.
@@ -211,7 +211,7 @@ export async function agentReporting(request: Request, input: any) {
 function receiptResponse(receipt: any, digest: string, binding: any) {
   if (receipt.crystal.digest !== digest) return fail(409, 'This requestId belongs to a different immutable reporting payload');
   if (receipt.crystal.status !== 'complete') return fail(409, `Reporting operation is ${receipt.crystal.status}; it will not be replayed`);
-  return { ok: true, binding: safeBinding(binding), receipt: { requestId: receipt.crystal.requestId, status: 'complete', result: receipt.crystal.result } };
+  return { ok: true as const, binding: safeBinding(binding), receipt: { requestId: receipt.crystal.requestId, status: 'complete', result: receipt.crystal.result } };
 }
 const referenceIds = (workspace: ReportingWorkspace): string[] => [...new Set([...Object.values(workspace.pages), ...Object.values(workspace.schemas), ...Object.values(workspace.actions)])] as string[];
 async function requirePrivateReference(ownerId: string, viewer: Viewer, id: string, kind?: string) {
@@ -309,7 +309,7 @@ function reportingPolicy(things: any, binding: any, character: any, ownerUsernam
     update: async (id, values) => {
       const doc = await things.findOne({ shareId: id, ownerId: String(character._id), thingtime: 'data' });
       for (const field of ['parentId', 'projectId', 'taskId', 'agentId', 'schema', 'schemaId'])
-        if (Object.hasOwn(values, field) && values[field] !== doc?.crystal?.[field]) throw new ReportingError(403, 'Reporting cannot reparent or relabel a workspace record');
+        if (Object.prototype.hasOwnProperty.call(values, field) && values[field] !== doc?.crystal?.[field]) throw new ReportingError(403, 'Reporting cannot reparent or relabel a workspace record');
       await onAttempt([...createdIds]);
     },
     search: async (schema, searchScope) => { if ((searchScope && searchScope !== 'own') || !schemaIds.includes(String(schema))) throw new ReportingError(403, 'Reporting search requires an exact workspace schema and own scope'); }
@@ -372,7 +372,7 @@ async function coordinateReporting(context: {
     await things.updateOne(filter as any, { $set: { 'crystal.coordinationPostId': postId, updatedAt: new Date() } });
     binding.crystal.coordinationPostId = postId;
     await things.updateOne(receiptFilter as any, { $set: { 'crystal.status': 'complete', 'crystal.result': { ids: [postId] }, updatedAt: new Date() } });
-    return { ok: true, binding: safeBinding(binding), receipt: { requestId: input.requestId, status: 'complete', result: { ids: [postId] } } };
+    return { ok: true as const, binding: safeBinding(binding), receipt: { requestId: input.requestId, status: 'complete', result: { ids: [postId] } } };
   } catch (error) {
     if (!attempted && receipt) await things.updateOne(receiptFilter as any, { $set: { 'crystal.status': 'failed', 'crystal.noDataEffects': true } });
     if (error instanceof ReportingError) return fail(error.status, error.message);
