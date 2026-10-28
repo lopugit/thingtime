@@ -46,16 +46,21 @@ and disconnect as irreversible from the current ChatGPT connection.
 
 The user may explicitly set an **always allow** preference for this skill's
 current task session, or ask to save one for their global skill installation.
-Bind it to the named Thingtime origin, connected account, permitted action
-kinds, and exact targets or a clear target-selection rule. Use the narrowest
-scope the request supports; a vague preference grants no broader authority.
-A session preference ends with that task. A global preference applies only when
-the user explicitly requests durable installation and its scoped, revocable
-record is actually saved in user-owned skill settings and read back. Do not
-mistake this shared skill text for the user's consent record. Honor a later
-revocation immediately. Neither preference covers an unlisted account, origin,
-action, target, delete, disconnect, or another irreversible operation; obtain
-fresh confirmation for those.
+Bind it to the exact HTTPS Thingtime origin, connected account, permitted action
+kinds, and exact Thing target IDs. A session preference lives only in this task's
+context and ends with the task. Do not save it to disk. For a global preference,
+only after an explicit request to persist it, use this skill's
+`scripts/consent_preferences.py` helper to `grant --user-consented --origin
+<origin> --account <connected-account-id> --action <kind> --target <thing-id>`;
+repeat `--action` and `--target` for an explicitly requested set. The helper
+saves `${CODEX_HOME:-~/.codex}/thingtime/consent-preferences.json` atomically
+with mode 0600. Run `list` to read back the exact grant and its ID. Run `check`
+with the same origin, account, action and target before relying on it; any
+missing, malformed, expired or nonmatching grant means confirmation is needed.
+Run `revoke --id <grant-id>` promptly when the user withdraws consent. Never
+put credentials in the origin or preference file. A vague preference grants no
+authority. Delete, disconnect, public sharing, security changes and other
+irreversible operations always need fresh confirmation.
 
 An always-allow preference can remove only this skill's own routine confirmation
 checkpoint for matching direct actions. It never overrides connector or tool
