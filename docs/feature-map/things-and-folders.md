@@ -52,6 +52,10 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
   `thingsScope`.
 - Folder listing (`listThings({ folder })`) is owner-only; `FOLDER_UNFILEABLE`
   kinds (reactions, saves, votes, updowns) live under their target.
+- Builder apps are top-level owner `folder` Things with `crystal.builderApp=true`.
+  `GET /api/v1/things?folder=root&builderApp=true` filters them before cursor
+  pagination (`api.things` 1.45.0). A child's existing `folderId` organizes it
+  into the app; it never grants access or changes protected OAuth `appId`.
 - Optional `GET /api/v1/things?thingtime=data&schemaId=<saved Schema Thing ID>&parentId=<related Thing ID>`
   narrows exact `crystal.schemaId` and `crystal.parentId` before canonical cursor pagination. Owner, app
   namespace, PAT visibility and per-Thing ACL checks still apply; exact-ID and
@@ -73,6 +77,7 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Piece | Path |
 | --- | --- |
 | Page state, fetching, DnD, dialogs, action dispatch (`onItemAction`, `onItemMenuAction`) | `app/components/Things/ThingsPage.tsx` |
+| Builder app/type browsing reusing the same page, app metadata and assignment dialogs | `app/components/Builder/BuilderPage.tsx`, `BuilderAppDialog.tsx`, `BuilderAssignDialog.tsx` |
 | Grid/list/columns views, tile menu button, `ThingsItemAction` union | `app/components/Things/ThingsViews.tsx` |
 | Item and background context-menu models | `app/components/Things/thingsMenuModel.ts` (built on `buildThingEntityMenu`) |
 | Pure helpers/types (`ThingsThing`, `isFolder`, sort/group options, cache keys) | `app/components/Things/thingsCore.ts`, `thingsLocation.ts` |

@@ -1031,10 +1031,16 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
    {editing && <small style={{ color: 'var(--tt-muted)' }}>{block.condition?.negate ? 'Otherwise' : 'When'} {String(block.condition?.arg || '')}</small>}{children}
   </div>;
  }
- if (block.type === 'collection' && attributes.transparent === true && !editing) return <ComponentCollection {...attributes} renderItem={() => children} />;
+ // Expanded Component collections still own their saved source binding. The
+ // collection loader requires this same live-control context as a Component;
+ // without it the live page silently renders an empty catalogue.
+ const collection = block.type === 'collection' && !editing
+  ? <NativeControlsEnabled.Provider value={!!props.interactive}><ComponentCollection {...attributes} renderItem={() => children} /></NativeControlsEnabled.Provider>
+  : null;
+ if (block.type === 'collection' && attributes.transparent === true && !editing) return collection;
  if (block.type === 'collection') return <div {...editorProps}>
   {editing ? <><small>List template · {String(attributes.label || 'Records')}</small>{children}</> :
-   <ComponentCollection {...attributes} renderItem={() => children} />}
+   collection}
  </div>;
  const slot = contentSlot(props.contentSlots, attributes['data-tt-content-slot']);
  const text = block.format ? resolveTemplate({ ttFormat: block.format }, { ...scope, clock: { now: formatNow } }) : resolveTemplate(block.text || '', scope);
