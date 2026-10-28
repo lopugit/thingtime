@@ -3861,6 +3861,10 @@ export async function getThing(
 export type ListThingsQuery = {
   commentProjection?: boolean;
   thingtime?: string[];
+  // Exact saved Schema Thing ID stamped on data.crystal.schemaId.
+  schemaId?: string | null;
+  // Exact user-authored relationship ID stamped on data.crystal.parentId.
+  parentId?: string | null;
   targetId?: string | null;
   // folder browse (own-things mode only): 'root' = things not filed anywhere,
   // a folder shareId = that folder's direct children, absent = everything
@@ -3871,6 +3875,16 @@ export type ListThingsQuery = {
   // this app stored for me" surface): own-things mode narrowed to root appId.
   appId?: string | null;
 };
+
+// Keep the filter as a literal equality predicate so it can be conjoined with
+// owner/namespace/ACL predicates before the chronological cursor and limit.
+export const listCrystalIdMatch = (field: 'schemaId' | 'parentId', value: unknown): { ok: true; match: Record<string, string> | null } | Fail => {
+  if (value == null) return { ok: true, match: null };
+  if (typeof value !== 'string' || !value || value.length > MAX_SHARE_ID_CHARS || /[$.\s]/.test(value) || Array.from(value).some(char => char.charCodeAt(0) < 32))
+    return fail(400, `${field} must be a Thing ID`);
+  return { ok: true, match: { [`crystal.${field}`]: value } };
+};
+export const listSchemaIdMatch = (schemaId: unknown) => listCrystalIdMatch('schemaId', schemaId);
 
 // Unified list. Two modes:
 // - targetId set: things attached to a viewable target (comments/reactions of
@@ -3886,6 +3900,7 @@ export const listThings = async (
   const cursorScope = { targetId: query.targetId || '', viewerId: asViewer(viewerInput)?.id || '', tokenId: asViewer(viewerInput)?.pat?.tokenId || '' };
   const discussionCursor = query.commentProjection && query.cursor != null ? decodeDiscussionCursor(query.cursor, cursorScope) : null;
   if (query.commentProjection) {
+    if (query.schemaId != null || query.parentId != null) return fail(400, 'Discussion projection does not accept crystal filters');
     if (app || query.appId != null || isCustomMongoEndpointActive()) return fail(400, 'Discussion projection requires first-party home storage');
     if (!query.targetId || query.folder || query.thingtime?.length !== 1 || query.thingtime[0] !== 'comment') return fail(400, 'Discussion projection requires target and thingtime=comment');
     if (query.limit !== undefined && (!Number.isInteger(query.limit) || query.limit < 1 || query.limit > 20)) return fail(400, 'limit must be an integer between 1 and 20');
@@ -3895,6 +3910,10 @@ export const listThings = async (
   let viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const thingtime = (query.thingtime || []).filter((id) => typeof id === 'string' && id.trim());
+  const schemaFilter = listSchemaIdMatch(query.schemaId);
+  if (isFail(schemaFilter)) return schemaFilter;
+  const parentFilter = listCrystalIdMatch('parentId', query.parentId);
+  if (isFail(parentFilter)) return parentFilter;
 
   let match: Record<string, any>;
   let discussionTarget: ThingDoc | null = null;
@@ -3943,6 +3962,8 @@ export const listThings = async (
   if (thingtime.length) {
     match = withMatch(match, await thingtimeInClause(thingtime));
   }
+  if (schemaFilter.match) match = withMatch(match, schemaFilter.match);
+  if (parentFilter.match) match = withMatch(match, parentFilter.match);
   if (!app) {
     // visibility-restricted tokens: conjoin the audience fence so pages stay
     // full instead of being trimmed to nothing in memory (the per-doc

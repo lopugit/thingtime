@@ -9438,8 +9438,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.42.0',
-    contractVersion: '1.42.0',
+    featureVersion: '1.44.0',
+    contractVersion: '1.44.0',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -9447,6 +9447,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.44 accepts guarded tt-form, tt-select, tt-style, tt-change and tt-mapbox element blocks in saved editable Webpages; their nested children and repeated collection templates retain independent Builder selection and bindings. ' +
+      'Version 1.43 adds optional exact schemaId and parentId filtering to canonical GET Thing lists. They match stored crystal.schemaId and crystal.parentId before cursor pagination, with the existing owner, app namespace, PAT visibility and per-Thing ACL checks unchanged; exact-ID and discussion projection requests refuse these filters. ' +
       'Version 1.41 adds the validated tt-media-pipeline intrinsic container for individually editable local image/video compression controls; its child elements remain ordinary Builder blocks. Selected bytes are never saved. ' +
       'Version 1.40 adds owner-session-only fileSyncOrigin on individual attachment Thing reads. It records the original client-reported sync source path and intended destination before upload; it is omitted from public, app, PAT and list projections and is never evidence of a current file location or native access. ' +
       'Version 1.39.1 corrects root containment: folder=root excludes parent/target children, storage attachment blobs and file-sync configuration records. Durable unbound attachments remain reachable in the Unfiled files collection and owner search. Expiring unbound uploads are not durable library content. Explicit folder/target and search scopes, canonical file hierarchy and legacy durable standalone files remain supported. ' +
@@ -9495,7 +9497,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Omit thingtime entirely to create a schema-less thing: { crystal: { any: "shape" } } defaults to thingtime ["data"].',
       'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"]. tt:inherit is stamped by the SERVER on target-attached things — sending it yourself is a 400 on create and update alike, because a thing whose audience is detached from its own acl can never be judged or re-edited.',
-      "GET ?id= reads one thing; post projections include viewer-relative commentCounts { direct, replies, total, loaded } while commentCount remains the backward-compatible total. Hidden ACL/moderation rows are never counted or disclosed. GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
+      "GET ?id= reads one thing; post projections include viewer-relative commentCounts { direct, replies, total, loaded } while commentCount remains the backward-compatible total. Hidden ACL/moderation rows are never counted or disclosed. GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&schemaId=<saved Schema Thing ID>&parentId=<user-authored related Thing ID>&cursor=&limit= lists your own Things with optional exact crystal.schemaId and crystal.parentId filters applied before pagination. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
       "GET ?id=&commentSort=top|new|old orders the shipped comment page (the post’s direct comments, 20 per read): top = net up/down score descending, ties older first; new = newest first; old = oldest first. Absent keeps the default page — the newest 20 shown oldest → newest — and any other value is a 400. The response echoes commentSort (null when absent). The whole first level is ordered before the page is cut, so top is the highest-scoring comments of the post, not the newest ones re-shuffled; the nested reply levels that ship with a comment (the newest 5 per parent) are re-ordered among themselves the same way, never re-fetched per parent — a deeper thread’s full order comes from its own GET ?id=<comment>&commentSort=.",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
       'PATCH { id, attachmentIds } syncs a post’s (or rich comment’s) private attachments: the list is the full desired display order — it must include every id already bound to that thing (removals are rejected; 409 when the bound set changed) and may append the ids of newly uploaded ready drafts, which are bound to the post with the same fences create-time binding uses. Same-origin JSON from a full user session only, like attachment creation.',
@@ -11453,13 +11455,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'things-update',
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.13.0',
-    contractVersion: '1.13.0',
+    featureVersion: '1.14.0',
+    contractVersion: '1.14.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.14 accepts guarded tt-form, tt-select, tt-style, tt-change and tt-mapbox element blocks in saved editable Webpages; their nested children and repeated collection templates retain independent Builder selection and bindings. ' +
       'Version 1.13 preserves and validates shared crystal.renderComponent metadata exactly as api.things 1.42.0, including PATCH preservation and replacement/explicit-null semantics. References do not grant access. ' +
       'Version 1.12 accepts validated intrinsic media containers with individually editable child blocks; selected local bytes are never stored. ' +
       'JSON Action inputs accept bounded JSON values; form controls decode their JSON text before transport. Literal strings are never reparsed by the API. JSON defaults preserve arrays, objects and null; input references remain inert data. Resolved defaults and nested calls obey the input byte budget. The Web standards workbench can save the edited program and current inputs as a private reusable Component through its authored browser Action. ' +
@@ -13306,14 +13309,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.8.0',
-    featureVersion: '1.8.0',
+    contractVersion: '1.8.1',
+    featureVersion: '1.8.1',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
     summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
     detail:
-      'Version 1.8 resolves saved intrinsic media containers and ordinary editable child controls for browser-local image and video compression. ' +
+      'Version 1.8.1 resolves saved Component dependencies nested in element, collection and condition blocks, including inactive condition branches, through the same visibility and shared-writer checks as top-level references. Version 1.8 resolves saved intrinsic media containers and ordinary editable child controls for browser-local image and video compression. ' +
       'Version 1.7 adds registered authenticated live SSE source bindings. Shared-root execution cannot borrow viewer stream authority. Version 1.6 adds individually editable element, collection and condition blocks, any-block Action sources, transparent option repetition and Show all pagination. Element props/text and child templates use the existing safe binding language. Authored trees no longer have product block-count/depth limits; transport and storage constraints still apply. ' +
       'In 1.5.0, authenticated POST with ownerId and dataPlane in the query and {blocks} in the body resolves current components for an unsaved or branch draft. It sanitizes block trees and uses a 192-KiB request cap and 4-MiB response cap. Returns {ok,components,refs}; it reads no live page, grants no inherited audience from caller-supplied blocks and writes nothing. Recheck the scope before adopting results. These are current component definitions, not a historical dependency checkout. All POST replies are private/no-store. ' +
       'Owner-created service workspaces add live membership-based read/comment access to enrolled records and the bound webpage; customer and B2B users are limited to their linked customer and properties. Inherited comments/media recheck membership on every request; app/PAT scopes, custom endpoints, explicit private ACL changes and moderation remain enforced. Webpage things (thingtime ["webpage"]) hold a bounded ordered block tree: component blocks reference ' +
@@ -13384,6 +13387,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         }
       }
     ]
+  }),
+  endpoint({
+    id: 'maps', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'maps',
+    title: 'Mapbox maps and route optimization', endpoint: '/api/v1/maps',
+    summary: 'Owner-scoped Mapbox address search, selected permanent geocoding, route optimization and public browser map configuration.',
+    detail: 'POST operation suggest, optimize or browser-config with an owned Vault entry reference. Fixed Mapbox destinations only; no caller URLs, credentials or headers. Suggest returns transient address candidates; permanent:true requires expectedId from the selected candidate and a matching fresh permanent result. Account entitlement and Mapbox storage conditions still apply. Optimize accepts 2–12 stops (the Optimization v1 provider constraint), unique stop IDs and longitude/latitude pairs, driving, driving-traffic, walking or cycling, and roundtrip. A non-roundtrip keeps the first and last input stops fixed. Returns optimized stop IDs, GeoJSON, distance and duration for the current view only. Mapbox standard terms prohibit caching Navigation API results. browser-config returns only an owned public pk token for the Mapbox SDK, never a secret sk token. Responses are private/no-store; clients must not persist tokens or temporary provider results. Each operation is explicit and may incur provider usage charges. Negotiate api.maps 1.0.0 on the selected origin.',
+    auth: { mode: 'session', description: 'Full signed-in owner account; Vault references grant no access to another owner.' },
+    methods: ['POST'],
+    steps: ['Save a Mapbox token in your private Vault.', 'Negotiate api.maps 1.0.0.', 'Call an explicit operation with that Vault entry ID.', 'Render temporary results without persistence.'],
+    requestExamples: [{ name: 'Find an address', description: 'A Vault entry reference, not a token.', method: 'POST', body: { operation: 'suggest', vaultId: '<owned-vault-entry-id>', query: 'Federation Square Melbourne' } }],
+    responseExamples: [{ status: 200, description: 'Transient address candidates', body: { ok: true, suggestions: [], cachePolicy: 'transient' } }, { status: 401, description: 'Sign in required', body: { ok: false, error: 'Sign in with a full account to use Maps.' } }, { status: 409, description: 'Selected address changed or provider unavailable', body: { ok: false, error: 'Map request could not be completed.' } }]
   }),
   endpoint({
     id: 'library-request', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'library',
