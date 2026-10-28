@@ -26,6 +26,16 @@ function refusalCode(message) {
   return 'refused';
 }
 function diagnostic(error) { return failure(error?.diagnostic?.stage, error?.diagnostic?.code, error?.diagnostic?.operation).diagnostic; }
+// The bundled Puppeteer Keyboard.press accepts individual keys, not chords.
+// Keep selection fixed and local to the focused editable field; no renderer
+// expression or field value crosses this adapter. Works with retained images.
+const SELECT_ALL = `(() => {
+  const field = document.activeElement;
+  if (!(field instanceof HTMLTextAreaElement) && !(field instanceof HTMLInputElement && ['text', 'search', 'url', 'tel', 'password'].includes(field.type))) return false;
+  if (field.disabled || field.readOnly) return false;
+  field.select();
+  return field.selectionStart === 0 && field.selectionEnd === field.value.length;
+})()`;
 const KEYS = new Set(['Enter', 'Tab', 'Escape', 'Backspace', 'Delete', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', 'Control+A', 'Meta+A']);
 function allowedURL(value, blank = false) {
   if (blank && value === 'about:blank') return true;
@@ -68,7 +78,7 @@ function rpc(binding, method, params = {}) {
   });
 }
 function createBridge(binding, request = (method, params) => rpc(binding, method, params)) {
-  let pending = Promise.resolve();
+  let pending = Promise.resolve(), needsRefresh = false;
   const browser = (operation, args = {}) => request('browser', { leaseId: binding.leaseId, token: binding.token, operation, args });
   async function execute(input, retryContext = true) {
     let stage = 'input', requested = 'input';
@@ -90,6 +100,7 @@ function createBridge(binding, request = (method, params) => rpc(binding, method
       stage = 'tab';
       const tab = tabs?.find(value => value.id === binding.pageId);
       if (!tab || !allowedURL(tab.url, true)) throw new Error(FAILURE);
+      if (needsRefresh && !['tabs', 'frame'].includes(operation)) throw new Error(FAILURE);
       if (operation === 'tabs') return [{ id: binding.pageId, url: tab.url === 'about:blank' ? tab.url : ORIGIN + new URL(tab.url).pathname }];
       stage = 'arguments';
       if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error(FAILURE);
@@ -106,10 +117,15 @@ function createBridge(binding, request = (method, params) => rpc(binding, method
       }
       if (Object.keys(args).some(key => !Object.hasOwn(safe, key))) throw new Error(FAILURE);
       stage = 'command-' + operation;
-      const result = await browser(operation, { ...safe, pageId: binding.pageId });
+      const selecting = operation === 'key' && ['Control+A', 'Meta+A'].includes(safe.key);
+      const result = selecting
+        ? await browser('evaluate', { expression: SELECT_ALL, pageId: binding.pageId })
+        : await browser(operation, { ...safe, pageId: binding.pageId });
+      if (selecting && result?.value !== true) throw new Error(FAILURE);
       if (operation === 'frame') {
         stage = 'frame-result';
         if (!result || typeof result.image !== 'string' || !/^[A-Za-z0-9+/=]+$/.test(result.image) || ![result.viewport?.width, result.viewport?.height].every(value => Number.isSafeInteger(value) && value > 0 && value <= 8192)) throw new Error(FAILURE);
+        needsRefresh = false;
         return { image: result.image, viewport: { width: result.viewport.width, height: result.viewport.height } };
       }
       return { ok: true };
@@ -119,6 +135,7 @@ function createBridge(binding, request = (method, params) => rpc(binding, method
       // No input has been dispatched at this stage. Revalidate the complete
       // binding once, then retry this read; never replay a browser command.
       if (stage === 'tabs' && code === 'page-context' && retryContext) return execute(input, false);
+      needsRefresh = true;
       throw failure(stage, code, requested);
     }
   }

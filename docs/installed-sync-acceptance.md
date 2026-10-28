@@ -65,7 +65,16 @@ printf '%s' '{"operation":"tabs"}' | node electron/scripts/agent-browser.mjs bro
 
 Existing operations (`navigate`, `frame`, `click`, `type`, `key`, `viewport`,
 `evaluate`, etc.) control this same container browser. Renew its lease with the
-CLI `renew` command before fifteen minutes. Expiry/release closes only the owned
+CLI `renew` command before fifteen minutes. For a retained fixture, run
+`node electron/scripts/acceptance-relay-keeper.cjs <private-state-directory> <relay-pid> <UTC-deadline>`
+through a task-owned, non-restarting lifecycle entry. Its deadline must be within
+72 hours and must not be extended on continuation. The keeper derives socket
+and lease paths from the same validated descriptor, checks the exact relay
+process, renews immediately, then every four minutes. Before account/UI work,
+verify its live PID and `keeper-status.json` with an actual future `expiresAt`.
+A renewal failure records a sanitized failed status and exits without retry;
+resolve it before continuing. At the original deadline it stops only the
+verified task relay. Keep the script and private state outside temporary storage. Expiry/release closes only the owned
 namespace and makes the relay refuse requests. Never claim a second browser to
 reach this backend, broaden network policy, publish the relay, or reuse a
 personal Chrome profile.
@@ -112,7 +121,14 @@ The local renderer uses sandbox/context isolation/web security, denies external
 requests, navigation, popups, downloads and permissions, and uses a private
 temporary profile/session. Quitting removes that profile and leaves the
 existing relay/lease running for installed-app acceptance. It never modifies
-or launches the production app. Frames refresh on explicit actions only; this
+or launches the production app. Select all selects only the focused editable text/password field through a fixed
+origin-scoped operation; no arbitrary expression or field value is returned.
+The bundled Puppeteer key API accepts individual keys, so do not send modifier
+chord strings directly to it. After any refusal, pending text is cleared and
+input stays disabled until **Refresh frame** succeeds. Do not continue a
+credential sequence after a refused edit. First prove replacement with a
+non-secret sentinel, then verify the saved vault credential with actual browser
+logout/login before native sign-in. Frames refresh on explicit actions only; this
 is a test operator GUI, not a shipped Builder page. Visual and real sign-in
 acceptance still require exercising this actual GUI and installed app.
 

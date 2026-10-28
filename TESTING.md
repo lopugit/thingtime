@@ -20,6 +20,10 @@
 
 ## Agent browsers and editable tasks
 
+- [ ] Retain an acceptance fixture using its canonical keeper: verify immediate real renewal, matching descriptor/socket/lease directory, correct live relay and keeper PIDs, future lease expiry and unchanged bounded deadline before account work. Crossed paths or renewal errors must record failed status and stop without retry; a deadline stops only the verified task relay.
+
+- [ ] In the isolated acceptance viewer, fill a non-secret password sentinel, Select all, then type its replacement; verify exact equality, Backspace and Tab through the retained browser. A refused selection or failed frame must clear pending text and disable all input until explicit Refresh frame succeeds; no following edit may append silently. Verify vault-backed browser logout/login before native pairing.
+
 - [ ] Install the task suite, create a task, add/complete todos and append progress;
       compare the rendered records with API readback and reload both pages.
 - [ ] Exercise browser install, cancellation, duplication, exclusive claims,

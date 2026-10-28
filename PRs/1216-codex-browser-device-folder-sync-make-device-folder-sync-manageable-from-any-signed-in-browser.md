@@ -290,3 +290,13 @@ separately from the historical browser/compiled-server harness results above.
 - Merged source `48925abc31f481b4a2010986ff06e5779c32e2b7` is installed through the canonical installer. Deep/strict signature verification and the unchanged designated requirement passed; the UI reports exact source `48925abc`, with the Nikk/@lopu production account retained.
 - DJ DODA was manually paused at 239/751 prepared operations for the update, resumed from its saved journal at 242/754, and remained active at 246/758 after closing and reopening the window. These are observed progress counts, not backup completion. Home access remains absent; its prior 4788/5300 journal was untouched, and Home was not started.
 - Full synthetic acceptance remains incomplete: the retained fixture awaits fresh native pairing confirmation. Exact-commit preview `https://thingtime-788uaponq3-lopugits-projects.vercel.app` returned HTTP 200 and CodeQL succeeded. The PR is MERGEABLE/UNSTABLE; the rollup is 30 success, 3 queued, 100 skipped, 12 cancelled and 1 neutral. CI is not fully green.
+
+
+### Acceptance viewer input recovery — 2026-10-28
+
+- Reproduced the retained Puppeteer runtime rejecting the viewer's `Control+A` with `Unknown key`. A later type could append to a field whose selection had failed; this invalidated the replacement test credential's native sign-in, despite a healthy browser account. No unknown credential was extracted or guessed.
+- Select-all now uses a fixed, origin/task/tab-checked operation on the focused editable text/password field, returning only verified selection success. The renderer exposes no general evaluation interface. Retained immutable runtime images remain usable; the installed personal app is unchanged.
+- Refusals now clear pending text and fence queued input in both bridge and viewer until a successful current-frame refresh. Errors retain sanitized operation/stage/code and an explicit recovery action.
+- Focused viewer regression checks: 20 passed. Live retained-image sentinel verification proved exact password-field replacement, Control/Meta select-all, Backspace, refused-input fencing and explicit frame recovery. Browser/native account recovery and fresh pairing consent remain separate acceptance gates.
+
+- Lifecycle follow-up: replaced ad hoc path substitution with the canonical bounded acceptance relay keeper. Six focused checks cover descriptor/socket/lease mismatches, process identity, renewal refusal, closed CLI stdin, sanitized failure status and original-deadline shutdown. Immediate real renewal and running keeper PID were verified before resuming account work. Prior expired-fixture evidence remains private and preserved.

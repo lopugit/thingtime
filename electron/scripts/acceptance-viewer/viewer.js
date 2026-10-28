@@ -1,7 +1,7 @@
 'use strict';
 const api = window.acceptanceViewer;
 const element = id => document.getElementById(id);
-let frame, busy = false;
+let frame, busy = false, blocked = false;
 async function refresh() {
   const tabs = await api.tabs();
   element('current').textContent = 'Bound tab ' + tabs[0].id + ' · ' + tabs[0].url;
@@ -9,24 +9,29 @@ async function refresh() {
   element('frame').src = 'data:image/jpeg;base64,' + frame.image;
   element('frame').hidden = false;
 }
-async function act(operation) {
-  if (busy) return;
+async function act(operation, recover = false) {
+  if (busy || (blocked && !recover)) return;
   busy = true;
   document.querySelectorAll('button').forEach(button => { button.disabled = true; });
   element('status').textContent = 'Working…';
-  try { await operation(); await refresh(); element('status').textContent = 'Ready'; }
+  try { await operation(); await refresh(); blocked = false; element('status').textContent = 'Ready'; }
   catch (error) {
-    element('frame').hidden = true; frame = null;
+    element('frame').hidden = true; frame = null; blocked = true;
+    element('text').value = '';
     // contextBridge retains Error.message, so display only our fixed operation/stage/code enums.
     const code = /\[((?:input|tabs|frame|navigate|type|key|click|scroll|viewport))\/((?:input|manifest|status|binding|tabs|tab|arguments|frame-result|command-(?:frame|navigate|type|key|click|scroll|viewport))):((?:refused|invalid|timeout|disconnected|transport|protocol|page-context|page-closed|runtime|lease))\]/.exec(error?.message || '');
-    element('status').textContent = 'Request refused or disconnected' + (code ? ' [' + code[1] + '/' + code[2] + ':' + code[3] + ']' : '') + '. Inspect the task and refresh before retrying.';
+    element('status').textContent = 'Request refused or disconnected' + (code ? ' [' + code[1] + '/' + code[2] + ':' + code[3] + ']' : '') + '. Input is stopped. Choose Refresh frame to inspect the current page before retrying.';
   }
-  finally { busy = false; document.querySelectorAll('button').forEach(button => { button.disabled = false; }); }
+  finally {
+    busy = false;
+    document.querySelectorAll('button').forEach(button => { button.disabled = blocked && button.id !== 'refresh'; });
+    element('text').disabled = blocked;
+  }
 }
 element('go').onclick = () => act(() => api.navigate(element('url').value));
-element('refresh').onclick = () => act(async () => {});
+element('refresh').onclick = () => act(async () => {}, true);
 element('type').onclick = () => {
-  if (busy) return;
+  if (busy || blocked) return;
   const text = element('text').value;
   element('text').value = '';
   if (text) void act(() => api.type(text));

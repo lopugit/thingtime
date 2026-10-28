@@ -209,3 +209,81 @@ test('renderer displays only allowlisted operation/stage/code and clears the fra
     assert.equal(element('status').textContent.includes('[click/tabs:page-context]'), message.includes('[click/tabs:page-context]'));
   }
 });
+
+test('select-all chords use only fixed focused-field selection on retained runtimes', async () => {
+  const vm = require('node:vm');
+  for (const key of ['Control+A', 'Meta+A']) {
+    const { command, commands } = fixture();
+    const bridge = createBridge(binding, async (method, params) => {
+      if (params?.operation === 'evaluate') {
+        commands.push(params);
+        class Input {
+          constructor() { this.type = 'password'; this.value = 'non-secret-sentinel'; }
+          select() { this.selectionStart = 0; this.selectionEnd = this.value.length; }
+        }
+        const field = new Input();
+        const value = vm.runInNewContext(params.args.expression, { document: { activeElement: field }, HTMLInputElement: Input, HTMLTextAreaElement: class {} });
+        assert.equal(value, true);
+        assert.equal(params.args.expression.includes(field.value), false);
+        return { value };
+      }
+      if (method === 'manifest') return { protocol: 'thingtime-agent-browser/1', features: { 'agent.browsers': '1.0.0', 'agent.network-policy': '1.0.0' } };
+      if (method === 'status') return { leases: [{ id: 'lease', taskId: 'task' }], sessions: [{ id: 'session', leaseId: 'lease', state: 'ready', proof: { isolated: true }, policy: { mode: 'isolated' }, application: { origin: ORIGIN } }] };
+      if (params.operation === 'tabs') return [{ id: '1', url: ORIGIN }];
+    });
+    assert.deepEqual(await bridge({ operation: 'key', args: { key } }), { ok: true });
+    assert.equal(commands.at(-1).operation, 'evaluate');
+    await assert.rejects(command({ operation: 'evaluate', args: { expression: 'document.activeElement.value' } }), { message: FAILURE });
+  }
+});
+
+test('refused selection fences queued input until a successful current frame', async () => {
+  let types = 0;
+  const command = createBridge(binding, async (method, params) => {
+    if (method === 'manifest') return { protocol: 'thingtime-agent-browser/1', features: { 'agent.browsers': '1.0.0', 'agent.network-policy': '1.0.0' } };
+    if (method === 'status') return { leases: [{ id: 'lease', taskId: 'task' }], sessions: [{ id: 'session', leaseId: 'lease', state: 'ready', proof: { isolated: true }, policy: { mode: 'isolated' }, application: { origin: ORIGIN } }] };
+    if (params.operation === 'tabs') return [{ id: '1', url: ORIGIN }];
+    if (params.operation === 'evaluate') return { value: false };
+    if (params.operation === 'type') types++;
+    if (params.operation === 'frame') return { image: 'YWJj', viewport: { width: 800, height: 600 } };
+    return { ok: true };
+  });
+  const selection = command({ operation: 'key', args: { key: 'Control+A' } });
+  const queued = command({ operation: 'type', args: { text: 'must-not-append' } });
+  await assert.rejects(selection, error => diagnostic(error).stage === 'command-key');
+  await assert.rejects(queued, { message: FAILURE });
+  assert.equal(types, 0);
+  await command({ operation: 'tabs' });
+  await assert.rejects(command({ operation: 'type', args: { text: 'still-blocked' } }));
+  await command({ operation: 'frame' });
+  await command({ operation: 'type', args: { text: 'explicitly-recovered' } });
+  assert.equal(types, 1);
+});
+
+test('renderer keeps failed edits visible and input disabled until explicit refresh', async () => {
+  const vm = require('node:vm');
+  const source = await fs.readFile(path.join(__dirname, '../scripts/acceptance-viewer/viewer.js'), 'utf8');
+  const elements = new Map();
+  const element = id => { if (!elements.has(id)) elements.set(id, { id, hidden: false, disabled: false, value: '', textContent: '' }); return elements.get(id); };
+  const keyButton = { id: 'select-all', dataset: { key: 'Control+A' } };
+  const buttons = [element('go'), element('refresh'), element('type'), keyButton];
+  let typed = 0;
+  const api = { tabs: async () => [{ id: '1', url: ORIGIN }], frame: async () => ({ image: 'YWJj' }), key: async () => { throw new Error('SECRET [key/command-key:refused]'); }, type: async () => { typed++; } };
+  vm.runInNewContext(source, { window: { acceptanceViewer: api, addEventListener() {} }, document: { getElementById: element, querySelectorAll: selector => selector === '[data-key]' ? [keyButton] : buttons } });
+  await new Promise(resolve => setImmediate(resolve));
+  element('text').value = 'sensitive-input-must-clear';
+  await keyButton.onclick();
+  assert.equal(element('text').value, '');
+  assert.equal(element('text').disabled, true);
+  assert.equal(element('type').disabled, true);
+  assert.equal(element('refresh').disabled, false);
+  assert.match(element('status').textContent, /Input is stopped/);
+  assert.equal(element('status').textContent.includes('SECRET'), false);
+  element('text').value = 'must-not-send';
+  element('type').onclick();
+  assert.equal(typed, 0);
+  await element('refresh').onclick();
+  assert.equal(element('text').disabled, false);
+  assert.equal(element('type').disabled, false);
+  assert.equal(element('status').textContent, 'Ready');
+});
