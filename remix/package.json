@@ -5,7 +5,7 @@
   "packageManager": "pnpm@10.12.1",
   "scripts": {
     "build": "node scripts/ensure-dependencies.js && npm run ensure-bcrypt && ./scripts/pre-dev.sh && npm run build:client && npm run sync:nitro-template && NITRO_PRESET=vercel npm run build:server && node scripts/package-claude-oauth.mjs && npm run patch:vercel-output && npm run verify:vercel-output",
-    "build:client": "node scripts/ensure-dependencies.js && npm run build:password-extension && vite build && npm run build:platform && npm run build:library && npm run build:embed && npm run build:draft",
+    "build:client": "node scripts/ensure-dependencies.js && node scripts/ensure-mapbox-assets.mjs && npm run build:password-extension && vite build && npm run build:platform && npm run build:library && npm run build:embed && npm run build:draft",
     "build:password-extension": "node scripts/build-password-extension.mjs",
     "test:password-extension": "node --test ../browser-extension/test/*.test.mjs",
     "build:library": "vite build --config vite.library.config.ts",
@@ -248,6 +248,7 @@
     "lodash-es": "^4.17.21",
     "lucide-react": "^1.21.0",
     "mailparser": "3.9.40",
+    "mapbox-gl": "3.30.0",
     "mediabunny": "1.61.6",
     "mongodb": "^6.5.0",
     "nitro": "^3.0.260610-beta",
