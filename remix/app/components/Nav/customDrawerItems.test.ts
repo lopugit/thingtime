@@ -122,7 +122,16 @@ test('template migration happens once and preserves subsequent authored deletion
  const { upgradeCustomDrawerBlocks } = await import('./Drawer/customDrawerBlocks');
  const legacy: any[] = [{ id: 'custom-drawer-root', type: 'element', tag: 'section', children: [{ id: 'custom-drawer-row', type: 'element', tag: 'div', children: [] }] }];
  const migrated = settingsDocumentBlocks(upgradeCustomDrawerBlocks(legacy, false));
- assert.equal(migrated[0].props?.['data-tt-drawer-template-version'], '2');
+ assert.equal(migrated[0].props?.['data-tt-drawer-template-version'], '3');
  migrated[0].children![0].children = [];
  assert.deepEqual(upgradeCustomDrawerBlocks(migrated, false)[0].children![0].children, []);
+});
+
+
+test('submenu visibility migration preserves controls intentionally deleted from v2 templates', async () => {
+ const { upgradeCustomDrawerBlocks } = await import('./Drawer/customDrawerBlocks');
+ const blocks = customDrawerBlocks(false);
+ blocks[0].props!['data-tt-drawer-template-version'] = '2';
+ blocks[0].children![0].children![0].children = [];
+ assert.deepEqual(upgradeCustomDrawerBlocks(blocks, false)[0].children![0].children![0].children, []);
 });

@@ -63,6 +63,10 @@ export function drawerParentOptions(items: CustomDrawerItem[], loggedIn: boolean
  }
  return result;
 }
+/** Only available direct children make a submenu reachable. Recomputed after every edit. */
+export function drawerChildParentIds(items: DrawerParentOption[]): Set<string> {
+ return new Set(items.flatMap(item => item.parentId ? [item.parentId] : []));
+}
 export function drawerAncestorPath(id: string | undefined, parents: DrawerParentOption[]): DrawerParentOption[] {
  const byId = new Map(parents.map(item => [item.id, item])); const path: DrawerParentOption[] = []; const seen = new Set<string>();
  while (id && !seen.has(id)) { seen.add(id); const item = byId.get(id); if (!item) return []; path.unshift(item); id = item.parentId; }
