@@ -22,6 +22,15 @@ were left untouched. [Retained attempts, exact source and remaining work](../art
 No production code, shared service, VM setting or account data changed in this
 fixture-readiness follow-up. Later commits need their own hosted checks.
 
+The separate host preflight also allocated no resources: exclusive bind of the
+app safety guard's required `127.0.0.1:27017` returned `EADDRINUSE`; existing
+mongod was untouched. The guard remains unchanged. The last recorded
+`48bda316` checkpoint has compute selector queued (run `40676291296`), sibling
+jobs skipped and no established Web CI/CodeQL pass or exact-head preview
+association. These retained observations do not describe later heads. No owned
+runtime/observer remains; corrected-fixture acceptance awaits a real capacity
+change. [Host preflight and durable checkpoint](../artifacts/anonymous-site-editable-2026-10-28/README.md).
+
 ### Retained earlier checkpoint
 
 The existing Thingtime MCP has actual desktop-host and CLI-agent render/export

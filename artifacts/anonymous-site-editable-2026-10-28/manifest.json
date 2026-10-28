@@ -1,13 +1,18 @@
 {
-  "scope": "current final prepared fixture plus retained failed/native and preflight evidence",
+  "scope": "final prepared fixture, failed native execution, preflight refusals and retained external checkpoint",
   "nativeExecutions": 1,
   "nativePasses": 0,
   "correctedFixtureExecutions": 0,
   "files": [
     {
       "path": "artifacts/anonymous-site-editable-2026-10-28/README.md",
-      "bytes": 3864,
-      "sha256": "28c8503aeb24f5c241627e448fdc32cb17b2a28a65c646439d9a9c47ed10f8e9"
+      "bytes": 5233,
+      "sha256": "c5455de9b183d14747a7ec081657e394b65a4813a763a41003a9f4f199037a58"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28/capacity-ci-checkpoint.json",
+      "bytes": 2507,
+      "sha256": "24bba6c8557fed0a4e47e31a2f9d6fb54aa8a64b29b63a9d167dd524b239151d"
     },
     {
       "path": "artifacts/anonymous-site-editable-2026-10-28/capacity-result.json",
@@ -93,6 +98,11 @@
       "path": "artifacts/anonymous-site-editable-2026-10-28-r3/preflight-result.json",
       "bytes": 167,
       "sha256": "815c02869bc811736321a273f1e8286364c65824aa4480743469646dbf4c9928"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28-r5-host/result.json",
+      "bytes": 1491,
+      "sha256": "4358bc9b823ede84faaaeef655d074b9160a18fbef0111023dcc51f31360e358"
     }
   ]
 }

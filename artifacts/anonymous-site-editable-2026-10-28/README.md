@@ -42,6 +42,27 @@ with zero additional runs. It used bounded Docker observations with 15/30/60-sec
 backoff and never stopped or reclaimed the other task’s runtime. Total native
 fixture executions remain **one failed test**; corrected-fixture executions **zero**.
 
+## Host-lane preflight and last external checkpoint
+
+The [r5-host preflight](../anonymous-site-editable-2026-10-28-r5-host/result.json)
+failed exclusive bind with `EADDRINUSE` at `127.0.0.1:27017`. Existing `mongod`
+connections were observed read-only and left untouched. No browser, backend,
+database, temporary profile or private state was allocated; no fixture executed.
+The app-server safety guard in `remix/app/api/utils/agentTesting.ts:11` requires
+that loopback port and a task-specific replica set. This guard supplements the
+container boundary; it was preserved rather than loosened for acceptance.
+
+The [last recorded capacity/CI checkpoint](capacity-ci-checkpoint.json) for
+`48bda31698b726331d9eae050ec028b1e0134c34` found another task's runtime active,
+compute selector queued (run `40676291296`, check `122782413451`) and sibling jobs
+skipped. No Web CI or CodeQL pass was established. The previously reachable
+[PR preview](https://pr-1000.previews.dev.thingtime.com) is not verified as serving
+that commit. These are retained observations, not fresh checks of later heads.
+No observer or owned runtime remains active. Next: after a concrete capacity
+change, recheck headroom and run the corrected fixture once; await actual hosted
+check/deployment results before claiming exact-head delivery. Checklist totals
+remain 65 completed, 22 partial and 2 open.
+
 ## Final corrected source and remaining work
 
 [Prepared source](prepared-source.ts), [compiled fixture](prepared-fixture.mjs)
