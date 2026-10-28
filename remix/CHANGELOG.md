@@ -102,7 +102,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-28: Add private MCP task reporting with an independent delegation
+- 2026-10-28: Add private MCP task reporting with an independent delegation [Validation and delivery boundaries](../PRs/1270-codex-mcp-private-reporting-private-agent-task-reporting.md).
   permission, distinct task Characters, saved workspace Actions, guarded retries
   and exact record readback. Existing Things connections require explicit
   reporting authorization. See [setup and acceptance](../docs/agent-reporting.md).
