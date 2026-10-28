@@ -21,6 +21,7 @@ import { sendRecordingThingToLopu } from '~/components/Lopu/recordingThingHandof
 import { useIsMobileViewport } from '~/components/Nav/Drawer/useDrawer';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { BuilderAppDialog } from '~/components/Builder/BuilderAppDialog';
+import { ThingDefinitionEditor } from '~/components/Builder/DefinitionEditor/ThingDefinitionEditor';
 import { BuilderAssignDialog } from '~/components/Builder/BuilderAssignDialog';
 import { DeviceDetailsDrawer } from '~/components/Devices/DeviceDetailsDrawer';
 import { deviceThingsPageHref } from '~/components/Devices/deviceNavigation';
@@ -346,8 +347,9 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
   const [deleteThings, setDeleteThings] = useState<ThingsThing[]>([]);
   const [previewThing, setPreviewThing] = useState<ThingsThing | null>(null);
   const [builderAppDialog, setBuilderAppDialog] = useState<ThingsThing | 'new' | null>(null);
+  const [definitionThingId, setDefinitionThingId] = useState<string | null>(null);
 
-	const dialogOpen = importOpen || !!exportIds.length || newFolderOpen || !!renameThing || moveOpen || assignOpen || !!shareThings.length || !!deleteThings.length || !!previewThing || !!deviceParam;
+	const dialogOpen = importOpen || !!exportIds.length || newFolderOpen || !!renameThing || moveOpen || assignOpen || !!builderAppDialog || !!definitionThingId || !!shareThings.length || !!deleteThings.length || !!previewThing || !!deviceParam;
 
   // ------------------------------------------------------------------ data
 
@@ -1122,7 +1124,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     const existing = builderAppDialog && builderAppDialog !== 'new' ? builderAppDialog : null;
     const crystal = { name: draft.name, description: draft.description, icon: draft.icon, iconUrl: draft.iconUrl, metadata: draft.metadata, builderApp: true };
     const resp = existing
-      ? await apiRef.current.v1.things.update({ id: existing.id, crystal })
+      ? await apiRef.current.v1.things.update({ id: existing.id, crystal, expectedUpdatedAt: existing.updatedAt })
       : await apiRef.current.v1.things.create({ thingtime: ['folder'], crystal, folderId: null, acl: ['tt:user'] });
     if (!resp?.ok) throw new Error(resp?.error || 'Could not save the Builder app.');
     const thing: ThingsThing | undefined = resp.thing;
@@ -1180,6 +1182,9 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
       const group = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
       switch (action) {
         case 'history': openThingHistory(thing.id, thing.thingtime); break;
+        case 'edit-definition':
+          if (builderMode && thing.thingtime.includes('component') && thing.author?.id === user?.id) setDefinitionThingId(thing.id);
+          break;
         case 'download':
           setExportIds(group.map((entry) => entry.id));
           break;
@@ -1242,7 +1247,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
           break;
       }
     },
-    [archive, copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo, builderMode]
+    [archive, copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo, builderMode, user?.id]
   );
 
   // ------------------------------------------------------------------ drag & drop
@@ -1340,8 +1345,8 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
 
   const itemMenuModel = useMemo(
     () =>
-			menuThing ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString() }) : { sections: [] },
-    [menuThing, menuActCount, clipboard?.ids.length, user?.id, searchParams]
+			menuThing ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode }) : { sections: [] },
+    [menuThing, menuActCount, clipboard?.ids.length, user?.id, searchParams, builderMode]
   );
 
   const onItemMenuAction = useCallback(
@@ -1349,6 +1354,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
       if (!menuThing) return;
       switch (action.command) {
         case 'history': openThingHistory(menuThing.id, menuThing.thingtime); break;
+        case 'edit-definition': onItemAction(menuThing, 'edit-definition'); break;
         case 'download':
           onItemAction(menuThing, 'download');
           break;
@@ -1550,6 +1556,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
   }
 
   const itemHandlers: ThingsItemHandlers = {
+    ...(builderMode ? { itemMenuFor: (thing: ThingsThing) => buildThingsItemMenu({ thing, actCount: selection.has(thing.id) ? Math.max(1, selection.size) : 1, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode: true }) } : {}),
     ...(builderMode ? { itemHref: (thing: ThingsThing) => isFolder(thing)
       ? `/builder?folder=${encodeURIComponent(thing.id)}&kind=all`
       : thing.thingtime.includes('webpage') ? `/builder?page=${encodeURIComponent(thing.id)}` : thingOpenHref(thing, 'things') } : {}),
@@ -2091,6 +2098,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
       <NewFolderDialog isOpen={newFolderOpen} onClose={() => setNewFolderOpen(false)} onCreate={createFolder} />
       {builderMode && <BuilderAssignDialog isOpen={assignOpen} onClose={() => setAssignOpen(false)} onAssign={moveConfirmed} />}
       {builderMode && <BuilderAppDialog isOpen={builderAppDialog !== null} app={builderAppDialog === 'new' ? null : builderAppDialog} onClose={() => setBuilderAppDialog(null)} onSave={saveBuilderApp} />}
+      {builderMode && definitionThingId && <ThingDefinitionEditor id={definitionThingId} onClose={() => setDefinitionThingId(null)} onSaved={() => refreshAfterMutation([folderId])} />}
       <RenameDialog onClose={() => setRenameThing(null)} onRename={renameApplied} thing={renameThing} />
       <MoveDialog
         count={selectedThings.length || (previewThing ? 1 : 0)}

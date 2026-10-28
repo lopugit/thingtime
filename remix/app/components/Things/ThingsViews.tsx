@@ -123,6 +123,7 @@ export type ThingsItemAction =
   | 'paste-into'
   | 'rename'
   | 'edit'
+  | 'edit-definition'
   | 'move'
   | 'share'
   | 'copy'
