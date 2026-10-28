@@ -13254,3 +13254,21 @@ separate from deterministic discovery/lease tests.
   stable domains. Inspect the source-build controls and confirm no native Git
   link or source deploy hook remains. A repeated unchanged request must skip
   compilation. Keep production runtime charges distinct from build charges.
+
+## Editable Mapbox maps and route planning
+
+- Negotiate api.maps on the exact origin; unsigned/scoped callers and foreign
+  Vault references cannot read a token or make provider requests. A secret sk
+  token cannot become browser configuration. Invalid provider replies and
+  failures never expose tokens, upstream bodies or request URLs.
+- Type an address, choose one explicit suggestion, then save using permanent
+  geocoding with the exact selected ID. A changed match must refuse saving;
+  temporary search results must not survive reload in Things or localStorage.
+- Optimize two or more known points; compare displayed order, line, distance
+  and duration with the provider response. Non-roundtrip keeps endpoints fixed.
+  Mapbox v1 exceeds its provider limit at 13 stops and must explain that limit.
+- Open the saved page at desktop/mobile widths, scroll fully, open all controls,
+  and individually edit nested labels, inputs, buttons, row fields and map props.
+  Save/reload user data. Provider navigation results remain transient. Verify
+  account switches and unmount remove the map and its old token; attribution
+  stays visible. A fixture or passing build is not a live provider result.

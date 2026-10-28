@@ -179,7 +179,9 @@
     "test:activity": "node --import tsx --test app/activity/*.test.ts",
     "test:activity-ui": "node scripts/test-activity-manager-ui.mjs",
     "test:environment-gateway": "node --import tsx --test app/api/utils/deployment/environmentGateway.test.ts server/utils/environmentGateway.test.ts",
-    "test:environment-gateway:acceptance": "node scripts/environment-gateway-acceptance.mjs"
+    "test:environment-gateway:acceptance": "node scripts/environment-gateway-acceptance.mjs",
+    "test:maps": "node --import tsx --test app/api/utils/maps/*.test.ts app/components/Builder/Maps/*.test.ts",
+    "test:maps-built": "node scripts/maps-built-smoke.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "2.1.272",

@@ -1035,8 +1035,8 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
  const element = <HtmlBlockElement tag={block.tag || 'div'} attributes={{ ...attributes, ...(editing && ['details', 'dialog'].includes(block.tag || '') ? { open: true } : {}) }} editorProps={editorProps}>
   {typeof text === 'string' || typeof text === 'number' ? (editing && !text && block.text ? block.text : text) : null}{block.children ? children : null}{slot ? slot({ scope, editing }) : null}
  </HtmlBlockElement>;
- return block.tag === 'tt-media-pipeline'
-  ? <NativeControlsEnabled.Provider value={props.interactive !== false && !editing}>{element}</NativeControlsEnabled.Provider>
+ return block.tag === 'tt-media-pipeline' || block.tag === 'tt-mapbox'
+  ? <NativeControlsEnabled.Provider value={block.tag === 'tt-mapbox' ? !!props.interactive && !editing : props.interactive !== false && !editing}>{element}</NativeControlsEnabled.Provider>
   : element;
 };
 

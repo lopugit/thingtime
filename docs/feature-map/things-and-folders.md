@@ -52,6 +52,10 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
   `thingsScope`.
 - Folder listing (`listThings({ folder })`) is owner-only; `FOLDER_UNFILEABLE`
   kinds (reactions, saves, votes, updowns) live under their target.
+- Optional `GET /api/v1/things?thingtime=data&schemaId=<saved Schema Thing ID>&parentId=<related Thing ID>`
+  narrows exact `crystal.schemaId` and `crystal.parentId` before canonical cursor pagination. Owner, app
+  namespace, PAT visibility and per-Thing ACL checks still apply; exact-ID and
+  discussion projection reads do not accept this list filter (`api.things` 1.43.0).
 - Deleting a folder drains direct children to its parent in bounded transactions
   before removing the folder. Each child move and its Timeline event commit
   together; subfolder descendants stay nested. `things/folderPlacement.ts` writes

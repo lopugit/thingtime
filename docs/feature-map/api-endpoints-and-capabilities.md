@@ -497,3 +497,11 @@ with separately editable children. `api.webpages-suites-install` 1.7.0 installs
 the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
+
+## Mapbox provider integration
+
+`POST /api/v1/maps` negotiates `api.maps` 1.0.0. `api/utils/maps/route.ts`
+uses full-account authorization, owner-scoped Vault references and operation
+rate limits; `mapbox.ts` fixes provider destinations and redacts responses.
+Register `_maps.tsx` in Nitro and the canonical docs registry. Run `test:maps`
+and `test:api-capabilities`; see [maps](../maps.md) for provider storage constraints.
