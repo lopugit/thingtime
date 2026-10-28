@@ -152,9 +152,10 @@ export const loader = async ({ request }: { request: Request }) => {
   }
 
   const id = (params.get('id') || '').trim();
-  if (['schemaId', 'parentId'].some(key => params.getAll(key).length > 1)) return json({ ok: false, error: 'Crystal filters must be supplied once' }, { status: 400, headers: cors });
+  if (['schemaId', 'parentId', 'builderApp'].some(key => params.getAll(key).length > 1)) return json({ ok: false, error: 'Crystal filters must be supplied once' }, { status: 400, headers: cors });
+  if (params.has('builderApp') && params.get('builderApp') !== 'true') return json({ ok: false, error: 'builderApp must be true' }, { status: 400, headers: cors });
   if (id) {
-    if (params.has('schemaId') || params.has('parentId')) return json({ ok: false, error: 'Crystal filters apply to Thing lists only' }, { status: 400, headers: cors });
+    if (params.has('schemaId') || params.has('parentId') || params.has('builderApp')) return json({ ok: false, error: 'Crystal filters apply to Thing lists only' }, { status: 400, headers: cors });
     // commentSort=top|new|old re-orders the shipped comment page of the post
     // projection (round 2 S7); absent keeps the default page, a typo is a 400
     // (never a silently re-ordered thread)
@@ -188,7 +189,8 @@ export const loader = async ({ request }: { request: Request }) => {
       folder: (params.get('folder') || '').trim() || null,
       cursor: params.get('cursor'),
       limit: Number(params.get('limit')) || undefined,
-      appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null
+      appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null,
+      builderAppOnly: params.get('builderApp') === 'true'
     },
     app,
     { archiveOwnerId: actor.kind === 'user' && user?.accountKind === 'user' ? user.id : undefined }

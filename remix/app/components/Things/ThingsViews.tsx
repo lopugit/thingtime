@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Box, Button, Checkbox, Flex, Grid, IconButton, Text } from '@chakra-ui/react';
+import { Box, Button, Checkbox, Flex, Grid, IconButton, Image, Text } from '@chakra-ui/react';
 import type { TextProps } from '@chakra-ui/react';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { Link } from 'react-router';
@@ -25,6 +25,7 @@ import {
   formatWhen,
   interpolateRenderTree,
   isFolder,
+  isBuilderApp,
   primaryKindOf,
   thingDisplayName,
   thingIcon
@@ -293,9 +294,14 @@ const selectionStyles = (selected: boolean) =>
 
 const KindChip = ({ thing }: { thing: ThingsThing }) => (
 	<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="10px" textTransform="uppercase">
-    {primaryKindOf(thing)}
+    {isBuilderApp(thing) ? 'app' : primaryKindOf(thing)}
   </Text>
 );
+
+const ThingIconDisplay = ({ thing, size = 34 }: { thing: ThingsThing; size?: number }) =>
+  isBuilderApp(thing) && typeof thing.crystal.iconUrl === 'string' && thing.crystal.iconUrl
+    ? <Image alt="" src={thing.crystal.iconUrl} boxSize={`${size}px`} borderRadius="8px" objectFit="cover" />
+    : <Text fontSize={`${size}px`} lineHeight="1.1">{thingIcon(thing)}</Text>;
 
 const VisibilityChip = ({ thing }: { thing: ThingsThing }) => {
   const meta = VISIBILITY_META[thing.visibility] || VISIBILITY_META.private;
@@ -346,11 +352,7 @@ export const ThingsGridView = ({
 		)}
     {items.map((thing) => {
       const selected = handlers.selected.has(thing.id);
-      const iconBlock = (
-        <Text fontSize="34px" lineHeight="1.1" marginTop={0} textAlign="center">
-          {thingIcon(thing)}
-        </Text>
-      );
+      const iconBlock = <ThingIconDisplay thing={thing} />;
       return (
         <Flex
           key={thing.id}
@@ -390,6 +392,8 @@ export const ThingsGridView = ({
             iconBlock
           )}
           <TitleLink fontSize="13px" fontWeight={600} handlers={handlers} noOfLines={2} textAlign="center" thing={thing} wordBreak="break-word" />
+          {isBuilderApp(thing) && typeof thing.crystal.description === 'string' && thing.crystal.description ?
+            <Text color="var(--tt-muted, #9a9aa6)" fontSize="12px" noOfLines={2} textAlign="center">{thing.crystal.description}</Text> : null}
           <Flex alignItems="center" gap={2}>
             <KindChip thing={thing} />
             <Text color="var(--tt-faint, #b6b6c0)" fontSize="10px">
@@ -508,7 +512,7 @@ export const ThingsListView = ({
         <Flex alignItems="center" gap={3}>
           <ItemSelection handlers={handlers} thing={thing} />
           <Flex alignItems="center" flex="1" gap={2} minWidth={0}>
-            <Text fontSize="16px">{thingIcon(thing)}</Text>
+            <ThingIconDisplay thing={thing} size={16} />
             <TitleLink fontSize="13px" fontWeight={500} handlers={handlers} noOfLines={1} thing={thing} wordBreak="break-all" />
             {isFolder(thing) && <ChevronRight color="var(--tt-faint, #b6b6c0)" size={13} />}
           </Flex>
@@ -642,7 +646,7 @@ export const ThingsColumnsView = ({
               >
                 <Flex alignItems="center" gap={2}>
                   <ItemSelection handlers={handlers} thing={thing} />
-                  <Text fontSize="14px">{thingIcon(thing)}</Text>
+                  <ThingIconDisplay thing={thing} size={14} />
                   <TitleLink
                     flex="1"
                     fontSize="13px"

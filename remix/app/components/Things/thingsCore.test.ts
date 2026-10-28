@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { isTopLevelLibraryThing, groupThings, parseThingsReferrer, schemaRenderOf, thingLink, thingOpenHref, type ThingsThing } from './thingsCore';
+import { isBuilderApp, isTopLevelLibraryThing, groupThings, parseThingsReferrer, schemaRenderOf, thingLink, thingOpenHref, type ThingsThing } from './thingsCore';
 
 const makeThing = (id: string, kind: string): ThingsThing => ({
   id,
@@ -16,6 +16,14 @@ const makeThing = (id: string, kind: string): ThingsThing => ({
   tags: [],
   createdAt: '2026-08-12T00:00:00.000Z',
   updatedAt: '2026-08-12T00:00:00.000Z'
+});
+
+test('Builder app recognition requires an explicit top-level folder marker', () => {
+  const app = { ...makeThing('app', 'folder'), crystal: { name: 'Routes', builderApp: true } };
+  assert.equal(isBuilderApp(app), true);
+  assert.equal(isBuilderApp({ ...app, folderId: 'other' }), false);
+  assert.equal(isBuilderApp({ ...app, thingtime: ['data'] }), false);
+  assert.equal(isBuilderApp({ ...app, crystal: { name: 'Routes' } }), false);
 });
 
 test('kind grouping resolves canonical icons for populated sections', () => {
