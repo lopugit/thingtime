@@ -5,7 +5,15 @@ import { createRequire } from 'node:module';
 import { deflateSync } from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { ImageMagick, MagickFormat, Orientation } from '@imagemagick/magick-wasm';
-import { compressImage, imageDimensions, isImageFile, pngAnimationFrames, validateStaticSvg, type ImageWasmAssets } from './imagePipeline';
+import {
+	compressImage,
+	imageDimensions,
+	isImageFile,
+	pngAnimationFrames,
+	startsSvgDocument,
+	validateStaticSvg,
+	type ImageWasmAssets
+} from './imagePipeline';
 
 const require = createRequire(import.meta.url);
 const assets: ImageWasmAssets = {
@@ -323,6 +331,18 @@ test('missing and malformed local image engines reject without starting decode',
 	assert.equal(result.error, undefined);
 	assert.equal(result.status, 0, result.stderr);
 	assert.match(result.stdout, /EXPECTED_REJECTION/);
+});
+test('SVG prologue detection stays linear on untrusted comment bytes', () => {
+	for (const prologue of ['', '  ', '<?xml version="1.0"?>', '<?xml version="1.0"?>\n<!-- note -->', '<!--a--><!--b-->\n'])
+		assert.ok(startsSvgDocument(`${prologue}<svg xmlns="http://www.w3.org/2000/svg"/>`), prologue);
+	for (const text of ['', 'GIF89a', '<?xml version="1.0"?>', '<!-- unterminated <svg>', '<html><svg/></html>', '<svg'])
+		assert.equal(startsSvgDocument(text), false, text);
+	// The old nested-quantifier regex backtracked exponentially on exactly this
+	// shape; 4096 unterminated-comment bytes must still decide immediately.
+	const hostile = `<!--${'--><!--'.repeat(585)}`.slice(0, 4096);
+	const started = process.hrtime.bigint();
+	assert.equal(startsSvgDocument(hostile), false);
+	assert.ok(process.hrtime.bigint() - started < 100_000_000n, 'prologue scan must not backtrack');
 });
 test('static SVG renders locally while text, animation and external dependencies fail', async () => {
 	const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24"><rect width="32" height="24" fill="#ff0000"/></svg>';

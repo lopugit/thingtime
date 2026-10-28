@@ -16,12 +16,15 @@ public struct PasswordCatalogItem: Codable, Identifiable, Sendable {
 public final class PasswordClient: @unchecked Sendable {
     public let account: ProviderSession
     private let transport: URLSession
-    public init(account: ProviderSession) {
-        self.account = account
+    static func makeTransport() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil; configuration.urlCache = nil; configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest = 25; configuration.timeoutIntervalForResource = 40
-        transport = URLSession(configuration: configuration, delegate: NoRedirect(), delegateQueue: nil)
+        return URLSession(configuration: configuration, delegate: NoRedirect(), delegateQueue: nil)
+    }
+    public convenience init(account: ProviderSession) { self.init(account: account, transport: Self.makeTransport()) }
+    init(account: ProviderSession, transport: URLSession) {
+        self.account = account; self.transport = transport
     }
     deinit { transport.invalidateAndCancel() }
     private struct Reply: Decodable {
@@ -42,11 +45,47 @@ public final class PasswordClient: @unchecked Sendable {
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         var content = body; content["expectedOwnerId"] = account.ownerId
         request.httpBody = try JSONSerialization.data(withJSONObject: content)
-        let (data, response) = try await transport.data(for: request)
-        guard let response = response as? HTTPURLResponse, response.statusCode == 200, response.url == request.url, data.count <= 2 * 1024 * 1024 else { throw PasswordProviderError.unavailable }
-        let reply = try JSONDecoder().decode(Reply.self, from: data)
-        guard reply.ok, reply.ownerId == account.ownerId else { throw PasswordProviderError.invalidSession }
+        let data = try await Self.response(request, transport: transport)
+        guard let reply = try? JSONDecoder().decode(Reply.self, from: data), reply.ok else { throw PasswordProviderError.invalidResponse }
+        guard reply.ownerId == account.ownerId else { throw PasswordProviderError.accountMismatch }
         return reply
+    }
+    /// A credential-provider extension runs under a hard system memory limit, so
+    /// every reply stays bounded. This ceiling is deliberately far above a real
+    /// entry or catalog page; it only stops an unbounded body from evicting the
+    /// extension instead of failing the request.
+    static let responseLimit = 16 * 1024 * 1024
+    static func response(_ request: URLRequest, transport: URLSession) async throws -> Data {
+        let data: Data, response: URLResponse
+        do { (data, response) = try await transport.data(for: request) }
+        catch let error as URLError {
+            if error.code == .cancelled { throw PasswordProviderError.cancelled }
+            throw PasswordProviderError.network
+        }
+        guard let response = response as? HTTPURLResponse, response.url == request.url else { throw PasswordProviderError.invalidResponse }
+        if response.statusCode == 401 { throw PasswordProviderError.invalidSession }
+        if response.statusCode == 403 { throw PasswordProviderError.accountMismatch }
+        guard response.statusCode == 200 else { throw PasswordProviderError.unavailable }
+        guard data.count <= responseLimit else { throw PasswordProviderError.invalidResponse }
+        return data
+    }
+    /// A native Connect button may adopt only its own WebView session. The API
+    /// supplies the owner; a cookie/JWT claim never grants an owner identity.
+    public static func webSession(origin: URL, cookie: String, expectedOwner: String?) async throws -> ProviderSession {
+        let transport = makeTransport(); defer { transport.invalidateAndCancel() }
+        return try await webSession(origin: origin, cookie: cookie, expectedOwner: expectedOwner, transport: transport)
+    }
+    static func webSession(origin: URL, cookie: String, expectedOwner: String?, transport: URLSession) async throws -> ProviderSession {
+        // Validate destination and header syntax before sending anything.
+        _ = try ProviderSession(origin: origin, ownerId: "pending-verification", cookie: cookie)
+        var request = URLRequest(url: origin.appendingPathComponent(".well-known/thingtime-capabilities.json"))
+        let manifest = try await response(request, transport: transport)
+        guard compatibleCapabilities(manifest, origin: origin) else { throw PasswordProviderError.capabilityUnavailable }
+        request = URLRequest(url: origin.appendingPathComponent("api/v1/passwords"))
+        request.setValue(cookie, forHTTPHeaderField: "Cookie")
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        let data = try await response(request, transport: transport)
+        return try PasswordWebConnectionAuthority.session(data, origin: origin, cookie: cookie, expectedOwner: expectedOwner)
     }
     // The provider uses only these semantic operations. Origin and schema are
     // part of negotiation; a manifest from another account endpoint is invalid.
@@ -69,9 +108,8 @@ public final class PasswordClient: @unchecked Sendable {
     public func requireCapability() async throws {
         var request = URLRequest(url: account.origin.appendingPathComponent(".well-known/thingtime-capabilities.json"))
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        let (data, response) = try await transport.data(for: request)
-        guard let response = response as? HTTPURLResponse, response.statusCode == 200,
-              response.url == request.url, Self.compatibleCapabilities(data, origin: account.origin) else { throw PasswordProviderError.unavailable }
+        let data = try await Self.response(request, transport: transport)
+        guard Self.compatibleCapabilities(data, origin: account.origin) else { throw PasswordProviderError.capabilityUnavailable }
     }
     public func catalog() async throws -> [PasswordCatalogItem] {
         try await requireCapability()
