@@ -19,10 +19,11 @@ internal enum AIIntegrationConfiguration {
     }
     static func rootKey(kind: AIIntegrationKind) -> String { kind == .vscode ? "servers" : kind == .openCode ? "mcp" : "mcpServers" }
     enum OpenCodeLayout { case flat, nested }
+    static func isBlankJSON(_ data: Data) -> Bool { data.allSatisfy { [9, 10, 13, 32].contains($0) } }
     /// Existing executable configuration establishes the contract without
     /// launching an untrusted discovered binary or guessing its major version.
     static func openCodeLayout(_ data: Data?) throws -> OpenCodeLayout? {
-        guard let data else { return nil }
+        guard let data, !isBlankJSON(data) else { return nil }
         try JSONKeyValidator.validate(data)
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any], let mcp = root["mcp"] as? [String: Any] else { return nil }
         let flat = !mcp.isEmpty && mcp.values.allSatisfy({ value in
@@ -68,7 +69,9 @@ internal enum AIIntegrationConfiguration {
             return text.isEmpty ? nil : Data(text.utf8)
         }
         var root: [String: Any] = [:]
-        if let data {
+        // An empty or JSON-whitespace-only file has no settings to discard.
+        // Nonempty malformed input still fails closed in the strict parser.
+        if let data, !isBlankJSON(data) {
             try JSONKeyValidator.validate(data)
             guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw problem("Configuration must be a JSON object.") }
             root = parsed

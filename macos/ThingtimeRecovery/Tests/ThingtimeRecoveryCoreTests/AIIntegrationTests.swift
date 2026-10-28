@@ -229,3 +229,39 @@ func integrationVSCodeInsiders() throws {
     _ = try f.manager.install(target: target)
     #expect(!FileManager.default.fileExists(atPath: f.home.appendingPathComponent("Library/Application Support/Code/User/mcp.json").path))
 }
+
+@Test("integration uninitialized JSON files install and restore their exact blank bytes")
+func integrationBlankJSONConfiguration() throws {
+    for blank in [Data(), Data(" \n\t\r ".utf8)] {
+        let f = try AIFixture(), config = f.home.appendingPathComponent("Library/Application Support/Code - Insiders/User/mcp.json")
+        try FileManager.default.createDirectory(at: config.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try blank.write(to: config)
+        let target = try #require(f.manager.discover().first { $0.title == "Visual Studio Code Insiders" })
+        #expect(target.status == .available)
+        _ = try f.manager.install(target: target)
+        try f.package("1.1.0", "# New skill version")
+        _ = try f.manager.install(target: target)
+        _ = try f.manager.rollback(target: target)
+        _ = try f.manager.uninstall(target: target)
+        #expect(try Data(contentsOf: config) == blank)
+        for invalid in ["{", " \n{broken", "// comment only"] {
+            try Data(invalid.utf8).write(to: config)
+            #expect(throws: (any Error).self) { try f.manager.install(target: target) }
+            #expect(try Data(contentsOf: config) == Data(invalid.utf8))
+        }
+    }
+}
+
+@Test("integration removing a blank-file installation preserves settings added later")
+func integrationBlankJSONPreservesLaterSettings() throws {
+    let f = try AIFixture(), config = f.home.appendingPathComponent(".cursor/mcp.json")
+    try f.write("", config)
+    let target = try #require(f.manager.discover().first { $0.kind == .cursor })
+    _ = try f.manager.install(target: target)
+    var value = try JSONSerialization.jsonObject(with: Data(contentsOf: config)) as! [String: Any]
+    value["foreignSetting"] = ["enabled": true]
+    try JSONSerialization.data(withJSONObject: value).write(to: config)
+    _ = try f.manager.uninstall(target: target)
+    let remaining = try JSONSerialization.jsonObject(with: Data(contentsOf: config)) as! [String: Any]
+    #expect((remaining["foreignSetting"] as? [String: Bool])?["enabled"] == true)
+}

@@ -20,6 +20,7 @@ public final class AIIntegrationManager: @unchecked Sendable {
         var entry: Data
         var configPath: String
         var skillPath: String?
+        var originalBlankConfiguration: Data? = nil
     }
     private struct Preference: Codable { var autoUpdate = true; var pinnedVersion: String? }
     private struct Database: Codable {
@@ -81,7 +82,9 @@ public final class AIIntegrationManager: @unchecked Sendable {
                 guard Self.compareVersions(payload.version, previous.version) != .orderedAscending else { throw failure("Bundled version is older than the installed integration. Use explicit rollback instead.") }
                 if Self.compareVersions(payload.version, previous.version) == .orderedSame && currentFiles(payload, for: current).mapValues(Self.hash) != previous.hashes { throw failure("Bundled content changed without a version change.") }
             }
-            let receipt = Receipt(version: payload.version, files: current.supportsSkills ? payload.files : [:], hashes: current.supportsSkills ? payload.files.mapValues(Self.hash) : [:], entry: try AIIntegrationConfiguration.ownedEntry(kind: current.kind), configPath: current.configurationPath!, skillPath: current.skillPath)
+            let original = try readConfig(current)
+            let blank = previous?.originalBlankConfiguration ?? (current.kind != .codex && original.map(AIIntegrationConfiguration.isBlankJSON) == true ? original : nil)
+            let receipt = Receipt(version: payload.version, files: current.supportsSkills ? payload.files : [:], hashes: current.supportsSkills ? payload.files.mapValues(Self.hash) : [:], entry: try AIIntegrationConfiguration.ownedEntry(kind: current.kind), configPath: current.configurationPath!, skillPath: current.skillPath, originalBlankConfiguration: blank)
             try apply(current, previous: previous, next: receipt, database: &database)
             if let previous, previous.version != receipt.version || previous.hashes != receipt.hashes { database.history[current.id, default: []].append(previous) }
             database.receipts[current.id] = receipt
@@ -107,7 +110,8 @@ public final class AIIntegrationManager: @unchecked Sendable {
             guard let previous = database.receipts[current.id], let older = database.history[current.id]?.last else { throw failure("No installed version with a previous Recovery receipt is available.") }
             try check(current, receipt: previous)
             guard older.configPath == current.configurationPath, older.skillPath == current.skillPath,
-                  older.hashes == older.files.mapValues(Self.hash) else { throw failure("Archived rollback receipt integrity check failed.") }
+                  older.hashes == older.files.mapValues(Self.hash),
+                  older.originalBlankConfiguration.map(AIIntegrationConfiguration.isBlankJSON) != false else { throw failure("Archived rollback receipt integrity check failed.") }
             try apply(current, previous: previous, next: older, database: &database)
             database.history[current.id]?.removeLast()
             database.receipts[current.id] = older
@@ -224,7 +228,8 @@ public final class AIIntegrationManager: @unchecked Sendable {
     }
     private func check(_ target: AIIntegrationTarget, receipt: Receipt) throws {
         guard receipt.configPath == target.configurationPath, receipt.skillPath == target.skillPath,
-              receipt.hashes == receipt.files.mapValues(Self.hash) else { throw failure("Installation receipt integrity check failed.") }
+              receipt.hashes == receipt.files.mapValues(Self.hash),
+              receipt.originalBlankConfiguration.map(AIIntegrationConfiguration.isBlankJSON) != false else { throw failure("Installation receipt integrity check failed.") }
         _ = try AIIntegrationConfiguration.transform(try readConfig(target), kind: target.kind, oldEntry: receipt.entry, removing: true)
         if let path = receipt.skillPath {
             let directory = URL(fileURLWithPath: path)
@@ -235,6 +240,12 @@ public final class AIIntegrationManager: @unchecked Sendable {
         let config = URL(fileURLWithPath: target.configurationPath!)
         let oldConfig = try readConfig(target)
         var newConfig = try AIIntegrationConfiguration.transform(oldConfig, kind: target.kind, oldEntry: previous?.entry, removing: next == nil)
+        if next == nil, target.kind != .codex, let blank = previous?.originalBlankConfiguration,
+           let transformed = newConfig, let root = try JSONSerialization.jsonObject(with: transformed) as? [String: Any], root.isEmpty {
+            // Restore exact pre-install blank bytes only when no independently
+            // added settings remain after removing the managed entry.
+            newConfig = blank
+        }
         if let next, next.entry != (try AIIntegrationConfiguration.ownedEntry(kind: target.kind)) {
             throw failure("Archived MCP receipt has an unsupported endpoint contract.")
         }

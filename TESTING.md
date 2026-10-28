@@ -8026,6 +8026,8 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Verify VS Code Stable and Insiders have separate user MCP targets and
       that discovering Insiders alone does not create a Stable installation.
 - [ ] Enable automatic setup; discover a new supported target; verify one install.
+      An empty or whitespace-only JSON settings file initializes safely; uninstall
+      restores its original bytes unless unrelated settings were added later.
       Publish a newer fixture bundle, check update, pin, restart, rollback, and
       uninstall. Uninstall must not auto-reinstall. Preserve unrelated settings;
       changed owned entries/files, duplicate JSON keys, malformed/unsupported TOML,
