@@ -168,7 +168,9 @@ private struct ProviderView: View {
     override func prepareInterface(forPasskeyRegistration registrationRequest: any ASCredentialRequest) {
         _ = view
         guard let request = registrationRequest as? ASPasskeyCredentialRequest, let identity = request.credentialIdentity as? ASPasskeyCredentialIdentity else { cancel(.failed); return }
-        epoch = UUID(); task?.cancel(); authentication?.invalidate(); pendingRegistration = nil
+        // A superseded task no longer owns the epoch, so it can never clear busy
+        // again; leave it set and every new choice stays permanently disabled.
+        epoch = UUID(); task?.cancel(); authentication?.invalidate(); authentication = nil; pendingRegistration = nil; model.busy = false
         model.title = "Save a passkey in Thingtime"
         model.message = "\(identity.userName) · \(identity.relyingPartyIdentifier)"
         model.choices = [.init(id: "register", title: "Create and save passkey", detail: "Verify with your device", select: { [weak self] in self?.register(request, identity: identity) })]
