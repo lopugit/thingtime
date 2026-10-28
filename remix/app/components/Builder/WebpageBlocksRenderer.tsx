@@ -1047,8 +1047,8 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
  const element = <HtmlBlockElement tag={block.tag || 'div'} attributes={{ ...attributes, ...(editing && ['details', 'dialog'].includes(block.tag || '') ? { open: true } : {}) }} editorProps={editorProps}>
   {typeof text === 'string' || typeof text === 'number' ? (editing && !text && block.text ? block.text : text) : null}{block.children ? children : null}{slot ? slot({ scope, editing }) : null}
  </HtmlBlockElement>;
- return block.tag === 'tt-media-pipeline' || block.tag === 'tt-mapbox' || block.tag === 'tt-form'
-  ? <NativeControlsEnabled.Provider value={block.tag === 'tt-form' ? editing || props.interactive !== false : block.tag === 'tt-mapbox' ? !!props.interactive && !editing : props.interactive !== false && !editing}>{element}</NativeControlsEnabled.Provider>
+ return block.tag === 'tt-media-pipeline' || block.tag === 'tt-mapbox' || block.tag === 'tt-form' || block.tag === 'tt-change' || block.tag === 'tt-select'
+  ? <NativeControlsEnabled.Provider value={block.tag === 'tt-form' ? editing || props.interactive !== false : ['tt-mapbox', 'tt-change', 'tt-select'].includes(block.tag || '') ? !!props.interactive && !editing : props.interactive !== false && !editing}>{element}</NativeControlsEnabled.Provider>
   : element;
 };
 

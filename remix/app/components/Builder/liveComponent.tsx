@@ -22,7 +22,7 @@ import { DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS, MAX_WEBPAGE_SOURCE_INTERVAL_MS, MIN
 import { ChakraThingRenderer, isChakraThingNode, type ChakraThingNode } from '../Kinds/ChakraThingRenderer';
 import { HtmlThingRenderer, type HtmlThingNode } from '../Kinds/HtmlThingRenderer';
 import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
-import { useTtActionClicks, type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
+import { clickTtActionForEnter, useTtActionClicks, type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
 import { clearSourceCache, readSourceCache, useWebpageRuntime, writeSourceCache } from './webpageRuntime';
 
 // The ONE live-component path. A component thing renders live in exactly
@@ -457,27 +457,7 @@ export const LiveTemplate = ({
 							}
 							onKeyDownCapture={
 								interactive
-									? (event) => {
-											const field = event.target as HTMLInputElement;
-											if (field.closest('[data-tt-native-control], [data-tt-native-upload]')) return;
-											if (
-												event.key !== 'Enter' ||
-												event.nativeEvent.isComposing ||
-												field.tagName !== 'INPUT' ||
-												['checkbox', 'radio', 'range', 'button', 'file'].includes(field.type)
-											)
-												return;
-											const group = field.closest('fieldset') || event.currentTarget;
-											const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
-											if (submit) {
-												const action = submit.getAttribute('data-tt-action');
-												const inputs = submit.getAttribute('data-tt-action-inputs') || '';
-												if (action !== LOCAL_UI_ACTION || /"op":"search"/.test(inputs)) {
-													event.preventDefault();
-													submit.click();
-												}
-											}
-									  }
+										? (event) => clickTtActionForEnter(event)
 									: undefined
 							}
 							onDoubleClickCapture={onDoubleClickCapture}
