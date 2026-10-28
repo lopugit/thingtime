@@ -39,10 +39,30 @@ revoked or an account is missing.
 Never expose token values, authorization codes, bridge credentials, or refresh
 credentials in a response.
 
-Read/search actions may proceed when the user asks. Before any create, update,
-delete, comment, reaction, save, or share action, show the intended account,
-target, and effect and obtain clear confirmation. Treat delete and disconnect
-as irreversible from the current ChatGPT connection.
+Read/search actions may proceed when the user asks. By default, before any
+create, update, delete, comment, reaction, save, or share action, show the
+intended account, target, and effect and obtain clear confirmation. Treat delete
+and disconnect as irreversible from the current ChatGPT connection.
+
+The user may explicitly set an **always allow** preference for this skill's
+current task session, or ask to save one for their global skill installation.
+Bind it to the named Thingtime origin, connected account, permitted action
+kinds, and exact targets or a clear target-selection rule. Use the narrowest
+scope the request supports; a vague preference grants no broader authority.
+A session preference ends with that task. A global preference applies only when
+the user explicitly requests durable installation and its scoped, revocable
+record is actually saved in user-owned skill settings and read back. Do not
+mistake this shared skill text for the user's consent record. Honor a later
+revocation immediately. Neither preference covers an unlisted account, origin,
+action, target, delete, disconnect, or another irreversible operation; obtain
+fresh confirmation for those.
+
+An always-allow preference can remove only this skill's own routine confirmation
+checkpoint for matching direct actions. It never overrides connector or tool
+requirements, authentication, scopes, ACLs, signed previews, stale-precondition
+checks, or a required confirmation at apply time. In particular,
+`apply_thingtime_mutation` requires explicit confirmation of its reviewed plan
+before `confirmed: true`, even when an always-allow preference matches.
 
 For more than one exact ID, use `get_thingtime_things`; preserve its ordered
 per-ID found/not-found results. Discover and validate schemas before creating
