@@ -13270,6 +13270,9 @@ separate from deterministic discovery/lease tests.
   Vite assets, the style/tiles load from approved Mapbox service hosts, the
   browser reports no CSP violations, and the map visibly renders with
   attribution. A CSP-blocked SDK must show an error, not a claimed map success.
+- Open and close the Thingtime drawer while the map is visible, then resize the
+  viewport at desktop and mobile widths. The Mapbox canvas and tiles must fill
+  the changed map container, without a blank strip or horizontal overflow.
 - Negotiate api.maps on the exact origin; unsigned/scoped callers and foreign
   Vault references cannot read a token or make provider requests. A secret sk
   token cannot become browser configuration. Invalid provider replies and
