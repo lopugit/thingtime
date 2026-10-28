@@ -3598,6 +3598,89 @@ binary.
 
 ### Recovery release catalogue and cloud publishing
 
+#### AI app integrations
+
+Thingtime Recovery's **AI Apps** section discovers installed desktop clients and
+CLI tools, installs the remote Thingtime MCP connector and the canonical
+Thingtime skill where the client supports them, and tracks manager-owned
+versions. **Automatic setup** includes newly discovered supported clients.
+Each target also has automatic-update and version-pin controls. Rollback restores
+the preceding managed version and pins it; uninstall opts that target out of
+automatic reinstallation. Authentication remains in each client's own sign-in
+flow; Recovery never copies credentials between apps.
+
+Discovery reads application bundle metadata, executable locations and known
+configuration-directory names. It does not launch discovered executables or
+read chat histories, browser profiles or credential stores. Separate Codex homes
+are separate targets. The standard Codex skill path is shared `~/.agents/skills`;
+the exact destinations are visible in each target's details. Existing unmanaged
+Thingtime entries, modified managed files, unsupported configuration syntax and
+symbolic-link destinations require attention and are preserved.
+
+Automatic MCP adapters cover Codex, Claude Code, Cursor, Gemini CLI, VS Code,
+Windsurf/Cascade and Devin Desktop/Cascade. All except VS Code also receive the
+skill. Windsurf uses `~/.codeium/windsurf/mcp_config.json` and its sibling
+`skills/thingtime`; current Devin uses `~/.config/devin/mcp_config.json` and its
+sibling skill directory. Devin's in-home `XDG_CONFIG_HOME` is respected; an
+external override is reported without writing to another destination. See the
+[Cascade MCP contract](https://docs.devin.ai/desktop/cascade/mcp) and
+[skill locations](https://docs.devin.ai/desktop/cascade/skills).
+
+OpenCode receives MCP and the skill when an existing strict JSON configuration
+establishes its documented layout: V1 places servers under `mcp`, while V2 uses
+`mcp.servers`. Recovery preserves other servers and V2 global MCP settings. An
+absent/empty ambiguous configuration, JSONC syntax or an explicit custom
+configuration override remains manual rather than guessing the installed major
+version or launching a discovered executable. See the
+[V1 contract](https://dev.opencode.ai/docs/mcp-servers/) and
+[V2 contract](https://dev.opencode.ai/v2/docs/mcp-servers/).
+
+Claude Desktop and cloud/account ChatGPT plugins retain their supported
+account-connection UI; Recovery does not install an opaque local OAuth bridge
+or claim that writing a local skill configures a cloud account. Other recognized AI applications
+and CLI tools remain visible with their support status. This is an extensible
+client registry, not a claim that arbitrary third-party apps accept MCP or skills.
+
+The canonical package is
+`integrations/ChatGPT/plugin/thingtime-chatgpt`; Recovery's build copies its
+metadata, MCP endpoint and skill files into the signed bundle with SHA-256
+checksums. Automatic updates can retrieve integration payloads from compatible
+stable Recovery releases through the existing same-team Developer ID and
+notarization checks; unsigned/prerelease archives are not auto-trusted. The
+installed app is not replaced by an integration update. Offline failures retain
+the last verified bundle. Pins and local edits remain protected. The remote MCP
+service itself is hosted at `https://thingtime.com/api/v1/integrations/chatgpt/mcp`.
+
+Enabled background maintenance uses the bundled `ThingtimeIntegrationManager`
+helper and user LaunchAgent `com.thingtime.recovery.ai-integrations`, running
+hourly without Recovery's window. Its private receipts, backups and preferences
+live under `~/Library/Application Support/com.thingtime.desktop/ai-integrations`.
+Existing unrelated LaunchAgents are never replaced. Recovery reports scheduling
+failures separately from successful local installation.
+
+Development and verification:
+
+```sh
+swift test --package-path macos/ThingtimeRecovery
+macos/ThingtimeRecovery/script/dev.sh       # isolated debug app and integration home
+macos/ThingtimeRecovery/script/dev.sh stop
+macos/ThingtimeRecovery/script/build_and_run.sh --verify
+```
+
+The development bundle is **Thingtime Recovery Dev.app** under the dedicated
+Recovery cache, with its own bundle ID and fixture home. It does not register the
+real background job. The final command uses the canonical signed installation
+path in `~/Applications/Thingtime Recovery.app`; set
+`THINGTIME_RECOVERY_SIGNING_IDENTITY` to the intended stable identity. Forks must
+supply their own signing identity and notarization credentials through the
+existing release workflow; never commit these values.
+
+The installed helper supports `scan`, `state`, `sync`, `enable`, `disable`,
+`install`, `uninstall`, and `rollback`. Mutation of one target requires its exact
+discovered `--target` ID. An explicit absolute `--home` isolates discovery and
+settings for acceptance tests; pair it with `--bundle` for a synthetic payload.
+It never borrows the invoking shell's real `CODEX_HOME` in that mode.
+
 Recovery reads all published GitHub release pages (including prereleases) in one
 refresh, then selects desktop and companion Recovery ZIPs for the current Mac.
 Its sidebar reports GitHub's published count separately from compatible archives;

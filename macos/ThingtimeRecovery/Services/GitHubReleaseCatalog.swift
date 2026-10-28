@@ -139,7 +139,7 @@ public actor GitHubReleaseCatalog {
                 let suffix = String(name[range])
                 let compatible = suffix.hasPrefix("-macos-universal") || suffix.hasPrefix("-macos-\(architecture)-") || suffix.hasPrefix("-macos-\(architecture).") || (architecture == "x64" && suffix.hasPrefix("-macos-x86_64"))
                 guard compatible else { return nil }
-                return RecoveryReleaseAsset(downloadURL: url, name: name, size: asset.size)
+                return RecoveryReleaseAsset(downloadURL: url, name: name, size: asset.size, id: asset.id, updatedAt: asset.updatedAt)
             }
             .sorted { $0.name < $1.name }
             .first
@@ -199,9 +199,12 @@ private struct GitHubAsset: Decodable {
     let browserDownloadURL: String?
     let name: String?
     let size: Int64?
+    let id: Int?
+    let updatedAt: String?
 
     enum CodingKeys: String, CodingKey {
-        case name, size
+        case name, size, id
         case browserDownloadURL = "browser_download_url"
+        case updatedAt = "updated_at"
     }
 }
