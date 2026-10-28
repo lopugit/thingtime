@@ -4235,6 +4235,10 @@ email whose link points at the attacker.
       Unauthorized built-in ancestors hide their custom descendants. Legacy
       templates gain selectable, editable hierarchy controls; after an explicit
       save, intentionally deleted template controls must not reappear.
+- [ ] Custom drawer submenu controls: a leaf has no Submenu button at root or
+      nested levels. Add its first child, remove or reparent its last child and
+      reload: controls appear only for actual parents. Repeat with an existing
+      customized menu template; preserve authored styles, links and Add +.
 - [ ] Custom drawer items: use **Add +** to save an emoji, title, hover tooltip
       and relative or absolute HTTP(S) link. Check URL validation, cancel,
       keyboard focus/Escape, navigation, edit/remove from Settings → Appearance →
