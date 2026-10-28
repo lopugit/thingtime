@@ -39,10 +39,41 @@ revoked or an account is missing.
 Never expose token values, authorization codes, bridge credentials, or refresh
 credentials in a response.
 
-Read/search actions may proceed when the user asks. Before any create, update,
-delete, comment, reaction, save, or share action, show the intended account,
-target, and effect and obtain clear confirmation. Treat delete and disconnect
-as irreversible from the current ChatGPT connection.
+Read/search actions may proceed when the user asks. By default, before any
+create, update, delete, comment, reaction, save, or share action, show the
+intended account, target, and effect and obtain clear confirmation. Treat delete
+and disconnect as irreversible from the current ChatGPT connection.
+
+The user may explicitly set an **always allow** preference for this skill's
+current task session, or ask to save one for their global skill installation.
+Bind it to the exact HTTPS Thingtime origin, connected account, permitted action
+kinds, and exact Thing target IDs or an explicitly requested all-owned-Things
+scope. A session preference lives only in this task's
+context and ends with the task. Do not save it to disk. For a global preference,
+only after an explicit request to persist it, use this skill's
+`scripts/consent_preferences.py` helper to `grant --user-consented --origin
+<origin> --account <connected-account-id> --action <kind> --target <thing-id>`;
+repeat `--action` and `--target` for an explicitly requested set. The helper
+saves an explicit all-owned scope only with `--all-owned` instead of `--target`.
+For that scope, read the exact target Thing through the connected account and
+verify its author matches that account immediately before `check --owned-verified`;
+without that proof, `check` denies it. Never infer all-owned consent from a
+general request to use the skill. The helper
+saves `${CODEX_HOME:-~/.codex}/thingtime/consent-preferences.json` atomically
+with mode 0600. Run `list` to read back the exact grant and its ID. Run `check`
+with the same origin, account, action and target before relying on it; any
+missing, malformed, expired or nonmatching grant means confirmation is needed.
+Run `revoke --id <grant-id>` promptly when the user withdraws consent. Never
+put credentials in the origin or preference file. A vague preference grants no
+authority. Delete, disconnect, public sharing, security changes and other
+irreversible operations always need fresh confirmation.
+
+An always-allow preference can remove only this skill's own routine confirmation
+checkpoint for matching direct actions. It never overrides connector or tool
+requirements, authentication, scopes, ACLs, signed previews, stale-precondition
+checks, or a required confirmation at apply time. In particular,
+`apply_thingtime_mutation` requires explicit confirmation of its reviewed plan
+before `confirmed: true`, even when an always-allow preference matches.
 
 For more than one exact ID, use `get_thingtime_things`; preserve its ordered
 per-ID found/not-found results. Discover and validate schemas before creating
