@@ -1,7 +1,7 @@
 import Foundation
 
 public enum AIIntegrationKind: String, Codable, Hashable, CaseIterable {
-    case codex, chatGPT, claudeDesktop, claudeCode, cursor, vscode, windsurf, gemini, openCode, unsupported
+    case codex, chatGPT, claudeDesktop, claudeCode, cursor, vscode, windsurf, gemini, openCode, copilot, unsupported
 }
 public enum AIIntegrationStatus: String, Codable, Hashable {
     case available, installed, updateAvailable, conflict, manual, unsupported

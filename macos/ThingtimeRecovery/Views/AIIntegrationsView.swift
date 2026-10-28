@@ -72,7 +72,7 @@ struct AIIntegrationsView: View {
                     }.padding(.vertical, 16)
                 }
                 Section {
-                    Text("When automatic setup or an installed app’s updates are enabled, Recovery checks canonical releases for integration bundles from same-team signed, notarized Recovery downloads. It verifies the bundle without replacing this app. The available version reflects the selected verified or installed bundle; a remote update may not exist yet. The Thingtime MCP service updates at its origin. Restart or sign in to your AI app when prompted.")
+                    Text("Recovery keeps enabled integrations up to date using verified Thingtime releases. Pinned versions stay unchanged. After installation, your AI app may ask you to restart or sign in to Thingtime.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     ForEach(Array(store.diagnostics.enumerated()), id: \.offset) { _, diagnostic in
                         Text(diagnostic).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
@@ -196,7 +196,7 @@ private struct AIIntegrationTargetRow: View {
         case .installed: return target.pinnedVersion == nil ? "Up to date" : "Installed · pinned"
         case .updateAvailable: return target.pinnedVersion == nil ? "Update available" : "Update available · pinned"
         case .conflict: return "Needs attention · settings preserved"
-        case .manual: return "Manual setup required"
+        case .manual: return "Connection managed in the app"
         case .unsupported: return "Automatic setup unavailable"
         }
     }
@@ -208,6 +208,7 @@ private struct AIIntegrationTargetRow: View {
         case .claudeDesktop: address = "https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp"
         case .claudeCode: address = "https://code.claude.com/docs/en/mcp"
         case .codex: address = "https://developers.openai.com/codex/mcp"
+        case .copilot: address = "https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers"
         case .cursor: address = "https://docs.cursor.com/context/model-context-protocol"
         case .vscode: address = "https://code.visualstudio.com/docs/copilot/customization/mcp-servers"
         case .windsurf: address = "https://docs.windsurf.com/windsurf/cascade/mcp"

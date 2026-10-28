@@ -7,12 +7,13 @@ internal enum AIIntegrationConfiguration {
     static let end = "# END Thingtime Recovery managed MCP"
     static let tomlBlock = "\(begin)\n[mcp_servers.thingtime]\nurl = \"\(endpoint)\"\n\(end)\n"
 
-    static func entry(kind: AIIntegrationKind) -> [String: String] {
+    static func entry(kind: AIIntegrationKind) -> [String: Any] {
         switch kind {
         case .claudeCode: return ["type": "http", "url": endpoint]
         case .gemini: return ["httpUrl": endpoint]
         case .windsurf: return ["serverUrl": endpoint]
         case .openCode: return ["type": "remote", "url": endpoint]
+        case .copilot: return ["type": "http", "url": endpoint, "tools": ["*"]]
         default: return ["url": endpoint]
         }
     }
@@ -94,6 +95,50 @@ internal enum AIIntegrationConfiguration {
     }
     static func problem(_ text: String) -> RecoveryError { .operationFailed(text) }
 
+    /// Quoted TOML keys may contain paths, punctuation, spaces and equals signs.
+    /// Parse delimiters without rewriting those names; escaped keys are refused
+    /// until their aliases can be decoded with the complete TOML string grammar.
+    static func assignment(_ line: String) throws -> ([String], String) {
+        var quote: Character?
+        for index in line.indices {
+            let char = line[index]
+            if let active = quote {
+                if char == "\\" { throw problem("Escaped TOML keys require manual setup.") }
+                if char == active { quote = nil }
+            } else if char == "\"" || char == "'" { quote = char }
+            else if char == "=" {
+                return (try keyPath(String(line[..<index])), String(line[line.index(after: index)...]).trimmingCharacters(in: .whitespaces))
+            }
+        }
+        throw problem("Malformed TOML assignment.")
+    }
+    static func keyPath(_ key: String) throws -> [String] {
+        let bytes = Array(key.utf8); var position = 0; var keys: [String] = []
+        func whitespace(_ byte: UInt8) -> Bool { byte == 32 || byte == 9 }
+        while true {
+            while position < bytes.count && whitespace(bytes[position]) { position += 1 }
+            guard position < bytes.count else { throw problem("Malformed TOML key.") }
+            if bytes[position] == 34 || bytes[position] == 39 {
+                let quote = bytes[position]; position += 1; let start = position
+                while position < bytes.count && bytes[position] != quote {
+                    guard bytes[position] >= 32, bytes[position] != 92, bytes[position] != 127 else { throw problem("Escaped or control-character TOML keys require manual setup.") }
+                    position += 1
+                }
+                guard position < bytes.count else { throw problem("Unclosed TOML key.") }
+                keys.append(String(decoding: bytes[start..<position], as: UTF8.self)); position += 1
+            } else {
+                let start = position
+                while position < bytes.count && (bytes[position] == 45 || bytes[position] == 95 || (48...57).contains(bytes[position]) || (65...90).contains(bytes[position]) || (97...122).contains(bytes[position])) { position += 1 }
+                guard position > start else { throw problem("Malformed TOML key.") }
+                keys.append(String(decoding: bytes[start..<position], as: UTF8.self))
+            }
+            while position < bytes.count && whitespace(bytes[position]) { position += 1 }
+            if position == bytes.count { return keys }
+            guard bytes[position] == 46 else { throw problem("Malformed TOML dotted key.") }
+            position += 1
+        }
+    }
+
     /// Conservative TOML subset, rejecting syntax that cannot be preserved safely.
     /// Existing multiline strings/arrays require manual setup instead of a rewrite.
     static func validateTOML(_ text: String) throws {
@@ -108,13 +153,8 @@ internal enum AIIntegrationConfiguration {
                 section = section.replacingOccurrences(of: "\"", with: "").replacingOccurrences(of: "'", with: "").replacingOccurrences(of: " ", with: "")
                 guard seen.insert("table:" + section).inserted else { throw problem("Duplicate TOML table.") }
             } else {
-                guard let separator = line.firstIndex(of: "=") else { throw problem("Malformed TOML assignment.") }
-                let key = String(line[..<separator]).trimmingCharacters(in: .whitespaces)
-                let value = String(line[line.index(after: separator)...]).trimmingCharacters(in: .whitespaces)
-                let normalizedKey = key.replacingOccurrences(of: "\"", with: "").replacingOccurrences(of: "'", with: "").replacingOccurrences(of: " ", with: "")
-                guard !key.isEmpty, !value.isEmpty, !key.contains("\\"),
-                      normalizedKey.range(of: "^[A-Za-z0-9_.-]+$", options: .regularExpression) != nil,
-                      seen.insert(section + ":" + normalizedKey).inserted else { throw problem("Malformed or duplicate TOML key.") }
+                let (keys, value) = try assignment(line)
+                guard !value.isEmpty, seen.insert(section + ":key:" + keys.joined(separator: "\0")).inserted else { throw problem("Malformed or duplicate TOML key.") }
                 var scanner = TOMLValueValidator(bytes: Array(value.utf8))
                 try scanner.validate()
             }
@@ -191,7 +231,7 @@ private struct TOMLValueValidator {
                 if position < bytes.count && [34,39].contains(bytes[position]) { try string() }
                 else { while position < bytes.count && (bytes[position] == 45 || bytes[position] == 95 || (48...57).contains(bytes[position]) || (65...90).contains(bytes[position]) || (97...122).contains(bytes[position])) { position += 1 } }
                 let key = String(decoding: bytes[start..<position], as: UTF8.self).replacingOccurrences(of: "\"", with: "").replacingOccurrences(of: "'", with: "")
-                whitespace(); guard !key.isEmpty, keys.insert(key).inserted, position < bytes.count, bytes[position] == 61 else { throw invalid() }
+                whitespace(); guard !key.isEmpty, !key.contains("\\"), keys.insert(key).inserted, position < bytes.count, bytes[position] == 61 else { throw invalid() }
                 position += 1; try value(); whitespace(); guard position < bytes.count else { throw invalid() }
                 if bytes[position] == 125 { position += 1; return }
                 guard bytes[position] == 44 else { throw invalid() }; position += 1

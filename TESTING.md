@@ -8019,6 +8019,12 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       update and uninstall. A V1 server named `servers` must remain V1. Unknown
       formats, duplicate JSON keys, JSONC and custom OpenCode config overrides
       must remain untouched with explicit setup guidance.
+- [ ] Verify the installed GitHub Copilot CLI receives an HTTP `mcpServers`
+      entry with the canonical URL and enabled tools, plus its own Thingtime
+      skill. Preserve other MCP entries and keep `COPILOT_HOME` destinations
+      separate; never read or modify Copilot authentication/secret storage.
+      Verify VS Code Stable and Insiders have separate user MCP targets and
+      that discovering Insiders alone does not create a Stable installation.
 - [ ] Enable automatic setup; discover a new supported target; verify one install.
       Publish a newer fixture bundle, check update, pin, restart, rollback, and
       uninstall. Uninstall must not auto-reinstall. Preserve unrelated settings;

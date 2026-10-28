@@ -5,6 +5,7 @@ extension AIIntegrationManager {
     internal func candidates() -> [AIIntegrationTarget] {
         let fm = FileManager.default
         var apps: [AIIntegrationKind: [String]] = [:]
+        var vscodeInsiderApps: [String] = []
         let identifiers: [String: AIIntegrationKind] = ["com.openai.codex": .codex, "com.openai.chat": .chatGPT, "com.anthropic.claudefordesktop": .claudeDesktop, "com.todesktop.230313mzl4w4u92": .cursor, "com.microsoft.VSCode": .vscode, "com.exafunction.windsurf": .windsurf]
         for directory in applicationDirectories {
             guard let enumerator = fm.enumerator(at: directory, includingPropertiesForKeys: [.isSymbolicLinkKey, .isDirectoryKey], options: [.skipsHiddenFiles]) else { continue }
@@ -16,18 +17,22 @@ extension AIIntegrationManager {
                 let info = (try? Data(contentsOf: infoURL)).flatMap { try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any] }
                 let identifier = info?["CFBundleIdentifier"] as? String ?? ""
                 let name = app.deletingPathExtension().lastPathComponent.lowercased()
+                if identifier == "com.microsoft.VSCodeInsiders" || (name.contains("visual studio code") && name.contains("insiders")) {
+                    vscodeInsiderApps.append(app.path); continue
+                }
                 let kind = identifiers[identifier] ?? (name.contains("codex") ? .codex : name.contains("chatgpt") ? .chatGPT : name.contains("claude") ? .claudeDesktop : name.contains("cursor") ? .cursor : name.contains("windsurf") || name == "devin" || name == "devin desktop" ? .windsurf : name.contains("visual studio code") && !name.contains("insiders") ? .vscode : nil)
                 if let kind { apps[kind, default: []].append(app.path) }
                 else if ["ollama", "lm studio", "jan", "perplexity", "msty", "cherry studio", "open webui", "kiro", "trae", "zed", "goose", "continue", "qwen", "aider", "gemini", "grok", "deepseek", "mistral", "chatbox", "boltai", "typingmind", "anythingllm", "visual studio code", "vscodium"].contains(where: { name.contains($0) }) { apps[.unsupported, default: []].append(app.path) }
             }
         }
-        let binaryNames: [AIIntegrationKind: [String]] = [.codex:["codex"], .claudeCode:["claude"], .cursor:["cursor"], .vscode:["code"], .windsurf:["windsurf"], .gemini:["gemini"], .openCode:["opencode"], .unsupported:["copilot", "aider", "goose", "qwen", "amp", "continue", "kiro"]]
+        let binaryNames: [AIIntegrationKind: [String]] = [.codex:["codex"], .claudeCode:["claude"], .cursor:["cursor"], .vscode:["code"], .windsurf:["windsurf"], .gemini:["gemini"], .openCode:["opencode"], .copilot:["copilot"], .unsupported:["aider", "goose", "qwen", "amp", "continue", "kiro"]]
         var bins: [AIIntegrationKind:[String]] = [:]
         let dirs = (environment["PATH"] ?? "").split(separator: ":").map(String.init) + [homeDirectory.appendingPathComponent(".local/bin").path] + (includesSystemBinaryDirectories ? ["/opt/homebrew/bin", "/usr/local/bin"] : [])
         for (kind, names) in binaryNames { for dir in Set(dirs) { for name in names {
             let path = URL(fileURLWithPath: dir).appendingPathComponent(name).path
             if fm.isExecutableFile(atPath: path) { bins[kind, default: []].append(path) }
         } } }
+        let vscodeInsiderBins = Set(dirs).map { URL(fileURLWithPath: $0).appendingPathComponent("code-insiders").path }.filter { fm.isExecutableFile(atPath: $0) }
         var results: [AIIntegrationTarget] = []
         func add(_ kind: AIIntegrationKind, _ title: String, _ config: URL?, _ skill: URL?, detected: Bool = false, manual: String? = nil) {
             guard detected || !(apps[kind] ?? []).isEmpty || !(bins[kind] ?? []).isEmpty || config.map({ $0.deletingLastPathComponent() != homeDirectory && fm.fileExists(atPath: $0.deletingLastPathComponent().path) }) == true else { return }
@@ -36,14 +41,24 @@ extension AIIntegrationManager {
         }
         let defaultCodex = homeDirectory.appendingPathComponent(".codex")
         var codexHomes = [defaultCodex]
-        if let custom = environment["CODEX_HOME"], custom.hasPrefix("/") { codexHomes.append(URL(fileURLWithPath: custom)) }
-        for path in (try? fm.contentsOfDirectory(at: homeDirectory, includingPropertiesForKeys: nil)) ?? [] where path.lastPathComponent.hasPrefix(".codex-") {
-            var isDir: ObjCBool = false; if fm.fileExists(atPath: path.path, isDirectory: &isDir), isDir.boolValue { codexHomes.append(path) }
+        let explicitCodexHome = environment["CODEX_HOME"].flatMap { $0.hasPrefix("/") ? URL(fileURLWithPath: $0).standardizedFileURL : nil }
+        if let explicitCodexHome { codexHomes.append(explicitCodexHome) }
+        for path in (try? fm.contentsOfDirectory(at: homeDirectory, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey])) ?? [] where path.lastPathComponent.hasPrefix(".codex-") {
+            // A shared prefix is not evidence of a Codex installation: the
+            // local LLM proxy and other helpers use .codex-* names too. Inspect
+            // only configuration metadata, never auth.json or other credentials.
+            let config = path.appendingPathComponent("config.toml")
+            guard (try? safe(config, anchor: homeDirectory)) != nil,
+                  let directoryValues = try? path.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+                  directoryValues.isDirectory == true, directoryValues.isSymbolicLink != true,
+                  let configValues = try? config.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+                  configValues.isRegularFile == true, configValues.isSymbolicLink != true else { continue }
+            codexHomes.append(path)
         }
         for dir in Set(codexHomes.map(\.standardizedFileURL)).sorted(by: { $0.path < $1.path }) {
             // The standard home uses Codex's documented shared skill directory.
             let skills = dir == defaultCodex ? homeDirectory.appendingPathComponent(".agents/skills/thingtime") : dir.appendingPathComponent("skills/thingtime")
-            add(.codex, dir == defaultCodex ? "Codex" : "Codex (\(dir.lastPathComponent))", dir.appendingPathComponent("config.toml"), skills, detected: fm.fileExists(atPath: dir.path))
+            add(.codex, dir == defaultCodex ? "Codex" : "Codex (\(dir.lastPathComponent))", dir.appendingPathComponent("config.toml"), skills, detected: dir == explicitCodexHome || fm.fileExists(atPath: dir.path))
         }
         let claude = environment["CLAUDE_CONFIG_DIR"].flatMap { $0.hasPrefix("/") ? URL(fileURLWithPath: $0) : nil } ?? homeDirectory.appendingPathComponent(".claude")
         let claudeConfig = claude == homeDirectory.appendingPathComponent(".claude") ? homeDirectory.appendingPathComponent(".claude.json") : claude.appendingPathComponent(".claude.json")
@@ -51,6 +66,19 @@ extension AIIntegrationManager {
         add(.cursor, "Cursor", homeDirectory.appendingPathComponent(".cursor/mcp.json"), homeDirectory.appendingPathComponent(".cursor/skills/thingtime"))
         add(.gemini, "Gemini CLI", homeDirectory.appendingPathComponent(".gemini/settings.json"), homeDirectory.appendingPathComponent(".gemini/skills/thingtime"))
         add(.vscode, "Visual Studio Code", homeDirectory.appendingPathComponent("Library/Application Support/Code/User/mcp.json"), nil)
+        let vscodeApps = apps[.vscode], vscodeBins = bins[.vscode]
+        apps[.vscode] = vscodeInsiderApps; bins[.vscode] = vscodeInsiderBins
+        add(.vscode, "Visual Studio Code Insiders", homeDirectory.appendingPathComponent("Library/Application Support/Code - Insiders/User/mcp.json"), nil)
+        apps[.vscode] = vscodeApps; bins[.vscode] = vscodeBins
+        let defaultCopilotHome = homeDirectory.appendingPathComponent(".copilot")
+        let copilotOverride = environment["COPILOT_HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasCopilotOverride = copilotOverride.map { !$0.isEmpty } == true
+        let configuredCopilotHome = copilotOverride.flatMap { !$0.isEmpty && $0.hasPrefix("/") ? URL(fileURLWithPath: $0).standardizedFileURL : nil }
+        let copilotHome = configuredCopilotHome ?? defaultCopilotHome
+        let copilotOverrideSafe = !hasCopilotOverride || configuredCopilotHome.map { $0.path.hasPrefix(homeDirectory.path + "/") } == true
+        add(.copilot, "GitHub Copilot CLI", copilotHome.appendingPathComponent("mcp-config.json"), copilotHome.appendingPathComponent("skills/thingtime"),
+            detected: hasCopilotOverride || fm.fileExists(atPath: defaultCopilotHome.path),
+            manual: copilotOverrideSafe ? nil : "Copilot uses an external or relative COPILOT_HOME. Recovery preserved its override instead of writing to a guessed destination.")
         add(.chatGPT, "ChatGPT", nil, nil, manual: "Enable Thingtime in ChatGPT's app directory or account settings; this signed-in account operation requires ChatGPT's supported UI.")
         add(.claudeDesktop, "Claude Desktop", nil, nil, manual: "Add the remote Thingtime connector in Claude Settings → Connectors using \(AIIntegrationConfiguration.endpoint). Local claude_desktop_config.json does not support direct remote HTTP connectors.")
         let windsurf = homeDirectory.appendingPathComponent(".codeium/windsurf")

@@ -86,7 +86,7 @@ func integrationTOML() throws {
 @Test("integration discovery separates homes and recognizes renamed app copies")
 func integrationDiscovery() throws {
     let f = try AIFixture()
-    try FileManager.default.createDirectory(at: f.home.appendingPathComponent(".codex-work"), withIntermediateDirectories: true)
+    try f.write("model = \"fixture\"\n", f.home.appendingPathComponent(".codex-work/config.toml"))
     for name in ["Copies/Codex Work.app", "Renamed.app"] {
         let info = f.apps.appendingPathComponent(name + "/Contents/Info.plist")
         try FileManager.default.createDirectory(at: info.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -178,4 +178,54 @@ func integrationRollbackReceiptIntegrity() throws {
     #expect(throws: (any Error).self) { try f.manager.rollback(target: target) }
     #expect(try f.codex().installedVersion == "1.1.0")
     #expect(try String(contentsOf: URL(fileURLWithPath: target.skillPath!).appendingPathComponent("SKILL.md"), encoding: .utf8) == "# Current skill version")
+}
+
+@Test("integration extra Codex homes require configuration evidence, not helper directory names")
+func integrationCodexHomeEvidence() throws {
+    let f = try AIFixture()
+    let proxy = f.home.appendingPathComponent(".codex-llm-proxy")
+    try FileManager.default.createDirectory(at: proxy, withIntermediateDirectories: true)
+    try f.write("model = \"fixture\"\n", f.home.appendingPathComponent(".codex-2/config.toml"))
+    try FileManager.default.createSymbolicLink(at: f.home.appendingPathComponent(".codex-linked"), withDestinationURL: f.home.appendingPathComponent(".codex-2"))
+    let linkedConfig = f.home.appendingPathComponent(".codex-linked-config/config.toml")
+    try FileManager.default.createDirectory(at: linkedConfig.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(at: linkedConfig, withDestinationURL: f.home.appendingPathComponent(".codex-2/config.toml"))
+    let targets = f.manager.discover().filter { $0.kind == .codex }
+    #expect(Set(targets.map(\.title)) == ["Codex", "Codex (.codex-2)"])
+    try f.manager.setAutomaticSetup(true)
+    #expect(f.manager.sync().filter(\.success).count == 2)
+    #expect(!FileManager.default.fileExists(atPath: proxy.appendingPathComponent("config.toml").path))
+    #expect(!FileManager.default.fileExists(atPath: proxy.appendingPathComponent("skills").path))
+    let explicit = f.home.appendingPathComponent("new-explicit-home")
+    let manager = AIIntegrationManager(homeDirectory: f.home, bundleDirectory: f.bundle, applicationDirectories: [], environment: ["PATH": "", "CODEX_HOME": explicit.path])
+    #expect(manager.discover().contains { $0.configurationPath == explicit.appendingPathComponent("config.toml").path })
+}
+
+@Test("integration TOML preserves valid quoted punctuation paths and equals signs")
+func integrationQuotedTOMLKeys() throws {
+    let f = try AIFixture(), config = f.home.appendingPathComponent(".codex/config.toml")
+    let original = "model = \"fixture\"\n[notice.model_migrations]\n\"model@provider (long context)\" = \"next\"\n\"key=with=equals\" = true\n'/Users/example/project path' = \"trusted\"\n"
+    try f.write(original, config)
+    let target = try f.codex()
+    #expect(target.status == .available)
+    _ = try f.manager.install(target: target)
+    #expect(try String(contentsOf: config, encoding: .utf8).hasPrefix(original))
+    _ = try f.manager.uninstall(target: target)
+    #expect(try String(contentsOf: config, encoding: .utf8) == original)
+    try f.write("[notice]\n\"same key\" = true\n'same key' = false\n", config)
+    #expect(throws: (any Error).self) { try f.manager.install(target: target) }
+}
+
+@Test("integration VS Code Insiders has its own configuration and does not imply stable Code")
+func integrationVSCodeInsiders() throws {
+    let f = try AIFixture(), app = f.apps.appendingPathComponent("Renamed Editor.app/Contents/Info.plist")
+    try FileManager.default.createDirectory(at: app.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try PropertyListSerialization.data(fromPropertyList: ["CFBundleIdentifier": "com.microsoft.VSCodeInsiders"], format: .xml, options: 0).write(to: app)
+    let editors = f.manager.discover().filter { $0.kind == .vscode }
+    #expect(editors.count == 1)
+    let target = try #require(editors.first)
+    #expect(target.title == "Visual Studio Code Insiders")
+    #expect(target.configurationPath == f.home.appendingPathComponent("Library/Application Support/Code - Insiders/User/mcp.json").path)
+    _ = try f.manager.install(target: target)
+    #expect(!FileManager.default.fileExists(atPath: f.home.appendingPathComponent("Library/Application Support/Code/User/mcp.json").path))
 }

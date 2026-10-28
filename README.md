@@ -3617,7 +3617,7 @@ the exact destinations are visible in each target's details. Existing unmanaged
 Thingtime entries, modified managed files, unsupported configuration syntax and
 symbolic-link destinations require attention and are preserved.
 
-Automatic MCP adapters cover Codex, Claude Code, Cursor, Gemini CLI, VS Code,
+Automatic MCP adapters cover Codex, Claude Code, Cursor, Gemini CLI, GitHub Copilot CLI, VS Code,
 Windsurf/Cascade and Devin Desktop/Cascade. All except VS Code also receive the
 skill. Windsurf uses `~/.codeium/windsurf/mcp_config.json` and its sibling
 `skills/thingtime`; current Devin uses `~/.config/devin/mcp_config.json` and its
@@ -3625,6 +3625,19 @@ sibling skill directory. Devin's in-home `XDG_CONFIG_HOME` is respected; an
 external override is reported without writing to another destination. See the
 [Cascade MCP contract](https://docs.devin.ai/desktop/cascade/mcp) and
 [skill locations](https://docs.devin.ai/desktop/cascade/skills).
+
+GitHub Copilot CLI uses `~/.copilot/mcp-config.json` with an HTTP server entry
+under `mcpServers`, and `~/.copilot/skills/thingtime` for the skill. An in-home
+absolute `COPILOT_HOME` replaces both destinations; an external or relative
+override remains explicit manual setup. Recovery does not inspect Copilot's
+authentication/internal-state files, OAuth storage or secret placeholders. See
+[GitHub's MCP setup](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers),
+[skill locations](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills)
+and [custom configuration home](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference).
+VS Code Stable and Insiders are separate targets with independent
+`~/Library/Application Support/Code/User/mcp.json` and
+`~/Library/Application Support/Code - Insiders/User/mcp.json` files; both use the
+documented VS Code `servers` schema. Recovery does not merge their settings.
 
 OpenCode receives MCP and the skill when an existing strict JSON configuration
 establishes its documented layout: V1 places servers under `mcp`, while V2 uses
