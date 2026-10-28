@@ -7,11 +7,12 @@ import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { ComponentDataScope } from '../Builder/ComponentSelect';
 import { ThingtimeContext } from '~/Providers/ThingtimeProvider';
 import { useDrawer } from './Drawer/useDrawer';
-import { customDrawerBlocks } from './Drawer/customDrawerBlocks';
+import { customDrawerBlocks, upgradeCustomDrawerBlocks } from './Drawer/customDrawerBlocks';
+import { drawerChildParentIds, drawerParentOptions, removeCustomDrawerItem, type CustomDrawerItem } from './Drawer/drawerCustomItems';
 import { settingsDocumentBlocks } from '../Settings/settingsDocument';
-function render(scope: Record<string, unknown>, chrome?: any) {
+function render(scope: Record<string, unknown>, chrome?: any, blocks = customDrawerBlocks(false)) {
  const element = React.createElement(ComponentDataScope.Provider, { value: scope }, React.createElement(WebpageBlocksRenderer, {
-  blocks: settingsDocumentBlocks(customDrawerBlocks(false)), componentsByRef: {}, bare: true, chrome
+  blocks: settingsDocumentBlocks(blocks), componentsByRef: {}, bare: true, chrome
  }));
  const router = createMemoryRouter([{ id: 'root', path: '*', element }], { initialEntries: ['/'], hydrationData: { loaderData: { root: { user: null, dataPlane: null } } } });
  try { return renderToStaticMarkup(React.createElement(RouterProvider, { router })); } finally { router.dispose(); }
@@ -54,4 +55,36 @@ test('menu Add and custom links use shared rows with independently editable icon
  const rootChildren = blocks[0].children!;
  assert.ok(rootChildren.findIndex(block => block.id === 'custom-drawer-items') < rootChildren.findIndex(block => block.id === 'custom-drawer-add'));
  assert.equal(byId('custom-drawer-add').css, undefined);
+});
+
+
+test('submenu controls follow actual children through add, remove and reparent at every depth', () => {
+ const row = (id: string, parentId?: string): CustomDrawerItem => ({ id, parentId, title: id, url: `/things?item=${id}`, emoji: '⭐', tooltip: '' });
+ const root = row('custom-root'); const child = row('custom-child', root.id); const grandchild = row('custom-grandchild', child.id);
+ const verify = (items: CustomDrawerItem[], expected: string[], blocks = customDrawerBlocks(false)) => {
+  const ids = drawerChildParentIds(drawerParentOptions(items, true, false, () => true));
+  // Render each level through the actual saved-block renderer and its item binding scope.
+  for (const item of items) {
+   const html = render({ drawer: { browse: true, items: [{ ...item, hasChildren: ids.has(item.id) }], draft: {}, results: [] } }, undefined, blocks);
+   assert.equal(html.includes(`Open submenu for ${item.title}`), expected.includes(item.id), item.id);
+   assert.ok(html.includes(`href="${item.url}"`));
+   assert.ok(html.includes('Add +'));
+  }
+ };
+ verify([root], []);
+ verify([root, child], [root.id]);
+ verify([root, child, grandchild], [root.id, child.id]);
+ verify(removeCustomDrawerItem([root, child, grandchild], grandchild.id), [root.id]);
+ verify(removeCustomDrawerItem([root, child], child.id), []);
+ verify([root, { ...child, parentId: undefined }], []);
+ const legacy = customDrawerBlocks(false);
+ legacy[0].props!['data-tt-drawer-template-version'] = '2';
+ const browse = legacy[0].children![0].children![0].children!.find(block => block.id === 'custom-drawer-browse-visible')!;
+ browse.children = browse.children![0].children;
+ browse.children![0].css = { color: 'red' };
+ const upgraded = upgradeCustomDrawerBlocks(legacy, false);
+ verify([root, child, grandchild], [root.id, child.id], upgraded);
+ verify([root], [], upgraded);
+ assert.equal(upgraded[0].children![0].children![0].children!.find(block => block.id === browse.id)!.children![0].children![0].css?.color, 'red');
+ assert.equal(upgradeCustomDrawerBlocks(upgraded, false), upgraded);
 });
