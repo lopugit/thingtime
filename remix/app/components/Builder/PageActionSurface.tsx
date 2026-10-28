@@ -75,7 +75,7 @@ export const PageActionSurface = ({
 	};
 	const onAction = useTtActionClicks({ onUnowned, confirm, onLocal, fallbackGroup: expandedActionGroup });
 	return <ComponentLocalControl.Provider value={actionEnabled ? onLocal : null}>
-		<ComponentDataScope.Provider value={{ ...parentScope, ...values }}>
+		<ComponentDataScope.Provider value={{ ...parentScope, ...values, ...(runtime.pageId ? { query: runtime.query, last: runtime.last, viewer: runtime.viewer, page: { id: runtime.pageId } } : {}) }}>
 		<Box
 		{...props}
 		ref={surfaceRef}

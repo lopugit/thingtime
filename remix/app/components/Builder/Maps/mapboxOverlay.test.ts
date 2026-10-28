@@ -36,3 +36,46 @@ test('changing stops and route updates a loaded map without replacing it', () =>
 		else (globalThis as any).document = priorDocument;
 	}
 });
+
+test('reconciled marker selection restores keyboard focus to the same point', () => {
+	const priorDocument = (globalThis as any).document;
+	const doc: any = { activeElement: null, createElement: () => ({ style: {}, attributes: {} as Record<string, string>, setAttribute(key: string, value: string) { this.attributes[key] = value; }, getAttribute(key: string) { return this.attributes[key]; }, focus() { doc.activeElement = this; } }) };
+	(globalThis as any).document = doc;
+	try {
+		const gl = {
+			LngLatBounds: class { extend() {} isEmpty() { return true; } },
+			Marker: class { node: any; constructor({ element }: any) { this.node = element; } getElement() { return this.node; } setLngLat() { return this; } addTo() { return this; } remove() {} }
+		};
+		const map = { getSource: () => null };
+		const data = { points: [{ id: 'fav', coordinates: [144, -37] as [number, number], label: 'Favourite' }], route: null, center: [144, -37] as [number, number], zoom: 10, fitBounds: false };
+		const first = updateMapboxOverlay(map, gl, [], data);
+		first[0].getElement().focus();
+		const second = updateMapboxOverlay(map, gl, first, { ...data, points: [{ ...data.points[0], selected: true }] });
+		assert.equal(doc.activeElement, second[0].getElement());
+		assert.match(second[0].getElement().style.cssText, /min-width:44px;min-height:44px/);
+	} finally { (globalThis as any).document = priorDocument; }
+});
+
+test('route fitting keeps favourites visible, numbered buttons select without HTML injection', () => {
+	const priorDocument = (globalThis as any).document;
+	const nodes: any[] = [], coordinates: unknown[] = [], selected: string[] = [];
+	(globalThis as any).document = { createElement: () => { const node = { style: {}, attributes: {} as Record<string, string>, setAttribute(key: string, value: string) { this.attributes[key] = value; }, textContent: '' }; nodes.push(node); return node; } };
+	try {
+		const map = { getSource: () => null, fitBounds: () => {} };
+		const gl = {
+			LngLatBounds: class { extend(value: unknown) { coordinates.push(value); } isEmpty() { return !coordinates.length; } },
+			Marker: class { setLngLat() { return this; } addTo() { return this; } }
+		};
+		const favourite = { id: 'fav', coordinates: [110, -20] as [number, number], label: '<img onerror=evil>', markerLabel: '•', color: '#167d8d' };
+		const stop = { id: 'stop', coordinates: [144, -37] as [number, number], label: 'Stop name', markerLabel: '1', color: '#c4513c', selected: true };
+		updateMapboxOverlay(map, gl, [], { points: [favourite, stop], fitPoints: [stop], route: null, center: [144, -37], zoom: 10, fitBounds: true, onSelect: (point) => selected.push(point.id) });
+		assert.equal(nodes.length, 2);
+		assert.equal(nodes[0].textContent, '•');
+		assert.equal(nodes[0].title, '<img onerror=evil>');
+		assert.equal(nodes[1].textContent, '1');
+		assert.equal(nodes[1].attributes['aria-pressed'], 'true');
+		assert.deepEqual(coordinates, [[144, -37]]);
+		nodes[0].onclick(); nodes[1].onclick();
+		assert.deepEqual(selected, ['fav', 'stop']);
+	} finally { (globalThis as any).document = priorDocument; }
+});
