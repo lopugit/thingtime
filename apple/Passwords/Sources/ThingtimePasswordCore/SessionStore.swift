@@ -16,11 +16,17 @@ public enum PasswordSessionStore {
                 kSecAttrSynchronizable as String: false]
     }
     public static func load() throws -> ProviderSession {
+        guard let session = try loadIfPresent() else { throw PasswordProviderError.invalidSession }
+        return session
+    }
+    public static func loadIfPresent() throws -> ProviderSession? {
         var lookup = try query(accessGroup: group); lookup[kSecReturnData as String] = true; lookup[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
-        guard SecItemCopyMatching(lookup as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { throw PasswordProviderError.invalidSession }
-        let decoded = try JSONDecoder().decode(ProviderSession.self, from: data)
-        return try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie)
+        let status = SecItemCopyMatching(lookup as CFDictionary, &item)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess, let data = item as? Data else { throw PasswordProviderError.storageUnavailable }
+        guard let decoded = try? JSONDecoder().decode(ProviderSession.self, from: data) else { throw PasswordProviderError.invalidSession }
+        return try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie, companionConnectionID: decoded.companionConnectionID)
     }
     /// Configuration metadata only. Never seed a separate web session with
     /// the provider's stored credential (which may become device-scoped).
@@ -41,7 +47,7 @@ public enum PasswordSessionStore {
         // to a different origin/account in the normal-sign-in editor.
         guard status == errSecSuccess, let data else { throw PasswordProviderError.unavailable }
         let decoded = try JSONDecoder().decode(ProviderSession.self, from: data)
-        let session = try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie)
+        let session = try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie, companionConnectionID: decoded.companionConnectionID)
         return (session.origin, session.ownerId)
     }
     public static func save(_ session: ProviderSession) throws {
@@ -51,8 +57,8 @@ public enum PasswordSessionStore {
         let updated = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if updated == errSecItemNotFound {
             let status = SecItemAdd(query.merging(attributes) { _, new in new } as CFDictionary, nil)
-            guard status == errSecSuccess else { throw PasswordProviderError.unavailable }
-        } else if updated != errSecSuccess { throw PasswordProviderError.unavailable }
+            guard status == errSecSuccess else { throw PasswordProviderError.storageUnavailable }
+        } else if updated != errSecSuccess { throw PasswordProviderError.storageUnavailable }
     }
     public static func clear() throws {
         try clear(accessGroup: group, delete: { SecItemDelete($0 as CFDictionary) })

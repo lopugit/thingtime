@@ -102,6 +102,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-28: Add standalone Password AutoFill connection and scoped recovery,
+  retain the same pending passkey on retries, and protect independent companion
+  links from automatic Electron lifecycle changes. Restore complete saved-provider
+  responses and opaque pagination bodies without arbitrary size ceilings
+  (`api.connections-request` 2.0.1). Correct provider setup to the encrypted Admin
+  Integrations vault; signed installed-device and real-provider acceptance remain
+  pending. [Details](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**
+
 - 2026-10-27: Add opt-in canonical Password AutoFill preparation under unchanged network denial and a separate manifest-bound Developer ID signing stage; preserve the default build, require fixed artifacts/manual profiles/secure timestamps, and reject mutation or extension-signing failure before host signing. Reviewed source preparation and staged Developer ID/secure-timestamp verification passed; the new requirements are stable across two rebuilds and satisfy the installed old requirements despite different text. Verified standalone installation/launch and updated-extension AutoFill registration passed; authenticated fill/passkey and main-app bridge acceptance remain pending. [PR #1240 notes](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**
 
 - 2026-10-27: Restore macOS-only Git-oracle guards and the explicit iOS skip in shared FileSync tests, preserving three portable cases; declare the test target's direct AppleFileSync package dependency. The real macOS suite passes 4/4 and the full unsigned iOS snapshot-adapter build-for-testing passes; signed installed-provider acceptance remains separate. [Details](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**

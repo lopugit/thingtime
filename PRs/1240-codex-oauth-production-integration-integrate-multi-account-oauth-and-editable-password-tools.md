@@ -310,3 +310,44 @@ and are unavailable for a fresh audit. The durable current-install receipt at
 confirms current installed signatures, executable hashes, install path, and
 selected plugin only; it does not re-establish the earlier build history or a
 real provider/passkey ceremony.
+
+
+## Standalone recovery and provider-size correction — 28 October 2026
+
+The companion adds explicit **Connect Password AutoFill** through its private
+connection view, verifies the intended origin/account before protected storage,
+and distinguishes missing/expired sessions, unavailable API configuration and
+Keychain failures. An independently owned companion connection cannot be replaced
+or erased by automatic Electron synchronization or disconnect. Passkey retries
+retain the same credential and write identity through exact readback and indexing;
+owner/origin changes invalidate the pending ceremony.
+
+The automated review introduced 25 MB complete-response and 4 KiB request-body
+ceilings. These are removed for fixed saved-provider operations, preserving
+DNS/redirect checks, authentication, rate admission, cancellation and the separate
+API-fallback manifest stream-budget security fix. `api.connections-request` 2.0.1
+is a compatible patch in both manifests; the existing major-2 client floor remains.
+Regressions exercise a complete response over 25 MB and a handler pagination body
+over 8 KiB, alongside token-preserving fixed-endpoint pagination and denial paths.
+
+The [setup guide](../docs/provider-access-setup.md) and README use origin/environment
+scoped Admin Integrations server-vault records for Google, Meta and ChatGPT. No
+provider-secret environment fallback is supported. Native core verification at
+this checkpoint: 38 tests, two opt-in skips, zero failures; unsigned host/extension
+build passed (native-worker reported). These results do not establish signed
+installation, real provider consent, passkey registration/assertion or production
+acceptance; the parent task owns those remaining checks.
+
+Focused verification for this correction: 71 Connections tests passed (including
+large response, route body, account ACL/pagination and cancellation checks); both
+capability-generator suites passed 113 tests. No real-provider calls were made.
+
+
+Release-review gate: the Electron resolver invokes its bundled
+`Helpers/Thingtime Passwords.app` executable. Standalone installation alone cannot
+ship the ownership fix: an old nested helper can still clear the shared Keychain
+link. Canonically verify, rebuild and safely reinstall the complete signed
+Electron app including the updated helper; retain the working production app until
+replacement is verified. Then run synthetic independent-link ownership checks
+through that exact installed nested helper. No deployed ownership protection is
+claimed before this gate passes.

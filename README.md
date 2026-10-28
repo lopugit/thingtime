@@ -110,6 +110,22 @@ access. iOS Fastlane syncs a separate provider profile; its override is
 before native builds, and pass preview URLs explicitly as the
 `THINGTIME_WEB_URL=https://<your-deployment>` Xcode build setting.
 
+The standalone macOS Thingtime Passwords companion offers **Connect Password
+AutoFill**: select the intended API origin, sign in through its private connection
+view, and explicitly connect the verified account. Main-app login and system
+provider enablement remain separate. Connection errors distinguish an absent link,
+expired authentication, unavailable server configuration, and locked or inaccessible
+Keychain storage. Correct that prerequisite and retry; no failure silently changes
+accounts, origins or credentials. The companion's explicit link is independently
+owned: automatic Electron synchronization and disconnect cannot replace or remove
+it. Use its own Disconnect control to remove that link.
+
+A pending passkey registration keeps the same credential and server write identity
+through save, readback and index retries. A retry after uncertain completion must
+not create a second key. Account/origin changes invalidate the ceremony. Verify
+signed installed-provider creation and a subsequent assertion before claiming live
+passkey support; unsigned builds and synthetic tests do not establish acceptance.
+
 Users connect their current native session from Passwords and enable Thingtime
 in **Settings → General → AutoFill & Passwords**. New passkeys are created through
 that system picker; uploaded passkey handoff QR images are not imported as keys.
@@ -3205,13 +3221,17 @@ stopped copy, create a fresh replica set, and recreate fixtures through the
 normal API. Reconnect real test OAuth accounts afterward. Do not apply this
 replacement procedure to a production database.
 
+See the [provider access and setup guide](docs/provider-access-setup.md) for the
+provider registrations, vault labels, consent scopes and separate acceptance gates.
+
 Google Cloud setup:
 
 1. Create or select your own project, configure its OAuth consent branding and
    audience, and add your test Google accounts while it is in Testing mode.
 2. Create an OAuth client of type **Web application**, register the exact
    callback below (and your local callback separately), then store its client
-   ID/secret in the env variables above. Do not use a service-account key.
+   ID/secret in the `connections-google-oauth` server-vault record above.
+   Do not use a service-account key.
 3. Enable the APIs you plan to use: Drive, Gmail, Calendar, Docs, Sheets,
    People (Contacts), and YouTube Data. Identity uses `openid profile email`;
    each service adds only its documented readonly scope. Gmail and other
@@ -3222,16 +3242,17 @@ Google Cloud setup:
    authorization requests use PKCE, offline access, and explicit account choice.
 
 Meta setup: select your own app in Meta for Developers, configure Facebook
-Login and its valid OAuth redirect URI, set `FACEBOOK_APP_ID` and
-`FACEBOOK_APP_SECRET`, and add test users/app roles while the app is in
+Login and its valid OAuth redirect URI, save `clientId` and `clientSecret` in
+the `connections-facebook-oauth` server-vault record, and add test users/app roles while the app is in
 Development mode. The Facebook account card requests only `public_profile`;
 the separate Facebook posts card requests `user_posts`, which needs the applicable Meta approval for public
 use. Do not assume app-admin testing proves public availability.
 
 The **ChatGPT identity** card implements the [hosted OpenAI identity flow](https://developers.openai.com/siwc/website)
-for approved partner clients. Set `CHATGPT_OAUTH_CLIENT_ID`,
-`CHATGPT_OAUTH_AUTH_METHOD` (`client_secret_basic` or the explicitly registered
-`none` method), and `CHATGPT_OAUTH_CLIENT_SECRET` for confidential clients.
+for approved partner clients. Save `clientId`, `authMethod` (`client_secret_basic`
+or the explicitly registered `none` method), and `clientSecret` in the
+`connections-chatgpt-oauth` server-vault record. Confidential clients require a
+nonempty secret; registered public clients use an empty secret.
 Register the same exact callback below. PKCE, one-use session-bound state, and
 signature/issuer/audience/expiry/nonce checks protect the callback. The saved
 ID token is encrypted and is never sent as an API bearer token. Identity sign-in

@@ -160,3 +160,14 @@ environment and explicit fixed bundle IDs; legacy callers retain their defaults.
 See README "Prepare and sign the standalone Password AutoFill companion" and
 TESTING.md's split companion checklist. Safe checks:
 `node --test electron/scripts/password-provider-release.test.mjs`.
+
+
+Standalone companion recovery uses `WebConnection.swift`,
+`PasskeyRegistration.swift`, `SessionStore.swift` and `PasswordClient.swift` under
+`apple/Passwords/Sources/ThingtimePasswordCore/`, with the private native connection
+view in `macos/ThingtimePasswords/PasswordSetupEditor.swift`. Explicit companion
+links are independently owned; Electron's automatic host lifecycle cannot adopt
+or delete them. `NativeRecoveryTests.swift` covers synthetic failure/retry and
+ownership boundaries. Signed installed-device passkey creation/assertion and
+Keychain/AutoFill acceptance remain separate gates. Provider prerequisites and
+vault labels are in [provider-access-setup.md](../provider-access-setup.md).

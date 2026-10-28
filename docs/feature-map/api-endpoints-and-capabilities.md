@@ -523,3 +523,10 @@ shipped explicit renderer contracts at 1.42.0/1.13.0. Writers negotiate only the
 capability they use. Bundled desktop fallback validates the actual selected
 origin before forwarding every password operation (1.3.0) and all six
 Connections operations (2.0.0), in both ordinary and forwarded-origin paths.
+
+Saved service requests (`connections/request`) advertise `api.connections-request`
+2.0.1 in both manifest generators. Complete fixed-operation results and opaque
+pagination bodies preserve valid data without arbitrary byte ceilings; owner/rate,
+scope, DNS/redirect and cancellation checks remain required. Focused regressions:
+`connections/outboundTarget.test.ts`, `accountLibrary.test.mts` and
+`requestRoute.test.mts`, plus both capability-generator suites.

@@ -13574,3 +13574,38 @@ Automated: `npm --prefix remix run test:connections`, `test:api-capabilities`, `
 - Load an older saved password layout, enter Builder, edit and discard: required
   private-property and list-icon migrations remain active while authored labels
   and order are preserved. No decrypted input enters saved layouts.
+
+
+### Standalone AutoFill recovery and provider-size regressions (28 October 2026)
+
+- In the signed installed Thingtime Passwords companion, select the intended
+  origin, sign in, choose **Connect Password AutoFill**, and verify the account
+  and synchronized catalog. Cancel/navigation/logout/origin changes during a
+  pending connection must prevent stale credentials from being saved.
+- Separately exercise missing session, expired authentication, unconfigured API,
+  and locked/denied Keychain failures. Preserve existing entries and offer a
+  useful retry; never treat a linked session alone as system-provider acceptance.
+- Keep an independent companion connection active while Electron synchronizes,
+  changes account and disconnects. Its origin/account/link must remain intact;
+  only the companion's explicit Disconnect removes its own link.
+- In one OS passkey-registration ceremony, inject an uncertain save and an index
+  failure, then retry. Assert the same credential ID, immutable payload and write
+  ID, exact readback, one stored key, and scope fencing on owner/origin change.
+  Complete a real relying-party assertion using the signed installed provider.
+- Run the focused Connections outbound-target, requestRoute and accountLibrary
+  suites. Complete saved-operation JSON larger than 25 MB and an HTTP pagination
+  body larger than 4 KiB must survive intact. Keep opaque tokens on fixed provider
+  endpoints, preserve same-origin credentials, refuse cross-origin redirects,
+  propagate cancellation and refuse unauthorized/service/rate-limited callers.
+  Public capability manifests must report api.connections-request 2.0.1; compatible
+  major-2 client requirements remain valid. Fixtures do not prove real Google
+  consent or provider data access.
+
+- Release gate: rebuilding/installing only the standalone companion is insufficient.
+  The signed Electron app resolves its bundled `Helpers/Thingtime Passwords.app`
+  executable. Rebuild and reinstall the full affected Electron bundle with the new
+  helper after canonical verification and a safe quit, preserving the working
+  production app until replacement is verified. Exercise synthetic independent-link
+  ownership through that exact installed nested helper: automatic disconnect and
+  mismatched synchronization must preserve the companion link. An older nested
+  helper can erase it despite an updated standalone companion.

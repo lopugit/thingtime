@@ -15,7 +15,7 @@ test('service-account clients negotiate owner-fenced writes and scoped credentia
     ['api.connections-feed', '2.0.0', '1.1.1'],
     ['api.connections-filters', '1.1.0', '1.0.0'],
     ['api.lopu-vault', '1.4.0', '1.3.1'],
-    ['api.connections-request', '2.0.0', '1.1.1'],
+    ['api.connections-request', '2.0.1', '1.1.1'],
   ]) {
     assert.equal(api.features[feature], required);
     assert.equal(origin.features[feature]?.version, required);
@@ -35,7 +35,7 @@ test('saved-account clients require the bound-grant major contract', () => {
     createApiCapabilitiesManifest().features['api.connections-request'],
     thingtimeCapabilityManifest('https://accounts.test').features['api.connections-request'].version,
   ]) {
-    assert.equal(version, '2.0.0');
+    assert.equal(version, '2.0.1');
     assert.equal(capabilitySatisfies(version, '2.0.0'), true);
     assert.equal(capabilitySatisfies(version, '1.1.0'), false);
   }
