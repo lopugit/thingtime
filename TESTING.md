@@ -13285,6 +13285,10 @@ separate from deterministic discovery/lease tests.
   Mapbox v1 exceeds its provider limit at 13 stops and must explain that limit.
 - Open the saved page at desktop/mobile widths, scroll fully, open all controls,
   and individually edit nested labels, inputs, buttons, row fields and map props.
+  After expanding source-backed Components into editable blocks and saving,
+  reload the live page and verify existing Favorites, Contacts, Groups and
+  Routes still populate from their saved Actions. Builder editing must leave
+  those Actions inert, without presenting an empty live catalogue as success.
   Switch query-selected views and reload each URL: page-level condition blocks
   must receive the current query, and inactive views must leave no empty gap.
   Save/reload user data. Provider navigation results remain transient. Verify
