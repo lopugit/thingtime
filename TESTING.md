@@ -13289,6 +13289,13 @@ separate from deterministic discovery/lease tests.
   reload the live page and verify existing Favorites, Contacts, Groups and
   Routes still populate from their saved Actions. Builder editing must leave
   those Actions inert, without presenting an empty live catalogue as success.
+  In an expanded repeated row, activate a saved Action button by pointer and
+  Enter, then submit a row form with an edited named field by click and input
+  Enter. Select an item with a `$ui` row picker and verify the selected value
+  appears in a sibling field without running a saved Action. Each gesture must
+  run exactly once with that row's ID and revision and persist the intended
+  change. A nested saved Component must also run once, while Builder edit
+  clicks must run nothing.
   Switch query-selected views and reload each URL: page-level condition blocks
   must receive the current query, and inactive views must leave no empty gap.
   Save/reload user data. Provider navigation results remain transient. Verify
