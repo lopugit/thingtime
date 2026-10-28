@@ -3,6 +3,7 @@ import { resolveBlockProps } from './templateBlocks';
 import { contentSlot } from './contentSlots';
 import { ComponentCollection } from './ComponentCollection';
 import { ComponentDataScope } from './ComponentSelect';
+import { useWebpageRuntime } from './webpageRuntime';
 import React from 'react';
 import { componentTextOverrides } from './componentTextOverrides';
 import { builderPoint, builderRect } from './builderCoordinates';
@@ -991,6 +992,7 @@ const SourceBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }
 const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }) => {
  const { block, chrome } = props;
  const scope = React.useContext(ComponentDataScope);
+ const runtime = useWebpageRuntime();
  const formatNow = useFormatClock(block.format, scope);
  const editing = !!chrome && chrome.seamlessMode !== 'view';
  const attributes = resolveBlockProps(block.props || {}, scope) as Record<string, any>;
@@ -1019,7 +1021,11 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
   } : {})
  };
  if (block.type === 'condition') {
-  const matches = resolveTemplate({ ttIf: { ...block.condition, then: 'yes', else: 'no' } }, scope) === 'yes';
+  // Page conditions see the selected page runtime's bounded URL query. Keep
+  // inherited Component data intact; an inert Builder/preview runtime must not
+  // replace a nested Component's own query scope with an empty object.
+  const conditionScope = runtime.pageId ? { ...scope, query: runtime.query } : scope;
+  const matches = resolveTemplate({ ttIf: { ...block.condition, then: 'yes', else: 'no' } }, conditionScope) === 'yes';
   if (!editing) return matches === !!block.condition?.negate ? null : <>{children}</>;
   return <div {...editorProps} style={{ ...editorProps.style, ...(editing ? { padding: '4px', border: '1px dashed var(--tt-border, #ddd)' } : { display: 'contents' }) }}>
    {editing && <small style={{ color: 'var(--tt-muted)' }}>{block.condition?.negate ? 'Otherwise' : 'When'} {String(block.condition?.arg || '')}</small>}{children}
@@ -1035,8 +1041,8 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
  const element = <HtmlBlockElement tag={block.tag || 'div'} attributes={{ ...attributes, ...(editing && ['details', 'dialog'].includes(block.tag || '') ? { open: true } : {}) }} editorProps={editorProps}>
   {typeof text === 'string' || typeof text === 'number' ? (editing && !text && block.text ? block.text : text) : null}{block.children ? children : null}{slot ? slot({ scope, editing }) : null}
  </HtmlBlockElement>;
- return block.tag === 'tt-media-pipeline'
-  ? <NativeControlsEnabled.Provider value={props.interactive !== false && !editing}>{element}</NativeControlsEnabled.Provider>
+ return block.tag === 'tt-media-pipeline' || block.tag === 'tt-mapbox' || block.tag === 'tt-form'
+  ? <NativeControlsEnabled.Provider value={block.tag === 'tt-form' ? editing || props.interactive !== false : block.tag === 'tt-mapbox' ? !!props.interactive && !editing : props.interactive !== false && !editing}>{element}</NativeControlsEnabled.Provider>
   : element;
 };
 

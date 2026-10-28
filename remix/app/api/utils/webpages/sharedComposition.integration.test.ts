@@ -70,7 +70,9 @@ test('shared page audience includes its author components, never a foreign priva
 		const foreign = await create(stranger, ['component'], crystal);
 		const page = await create(owner, ['webpage'], { name: 'Shared test root', blocks: [
 			{ id: 'nested', type: 'container', children: [{ id: 'card', type: 'component', component: key, args: { picture: mediaSource('arg-page') } }] },
-			{ id: 'foreign', type: 'component', component: foreign.id }
+			{ id: 'foreign-branch', type: 'condition', condition: { arg: 'query.view', equals: 'private' }, children: [
+				{ id: 'foreign', type: 'component', component: foreign.id }
+			] }
 		] }, ['tt:hidden', 'tt:user']);
 		assert.ok(page.linkKey);
 		const url = `/api/v1/webpages/resolve?id=${page.id}`;
@@ -535,6 +537,8 @@ test('shared page audience includes its author components, never a foreign priva
 			assert.equal((await request('/api/v1/actions/run', 'POST', { action: foreignAction.id, sharedRoot: writableForeignPage.id }, boundaryWriter)).data.result, 'Foreign authored action');
 			const inject = await request(endpoint, endpoint.endsWith('/update') ? 'POST' : 'PATCH', { id: writableForeignPage.id, crystal: { blocks: [{ id: 'public', type: 'component', component: publicForeign.id, args: { action: foreignSecret.id } }] } }, boundaryWriter);
 			assert.equal(inject.response.status, 403, 'An unresolved private dependency introduced by a foreign override fails before writing');
+			const injectHidden = await request(endpoint, endpoint.endsWith('/update') ? 'POST' : 'PATCH', { id: writableForeignPage.id, crystal: { blocks: [{ id: 'hidden-branch', type: 'condition', condition: { arg: 'query.view', equals: 'private' }, children: [{ id: 'foreign-private', type: 'component', component: foreign.id }] }] } }, boundaryWriter);
+			assert.equal(injectHidden.response.status, 403, 'An inactive condition branch cannot grant a writer access to a foreign private Component');
 			const injectMedia = await request(endpoint, endpoint.endsWith('/update') ? 'POST' : 'PATCH', { id: writableForeignPage.id, crystal: { blocks: [{ id: 'image', type: 'component', component: foreignImageTemplate.id, args: { picture: mediaSource('foreign-guessed') } }] } }, boundaryWriter);
 			assert.equal(injectMedia.response.status, 403, 'Foreign argument media is inspected without receiving inherited authority');
 		}
