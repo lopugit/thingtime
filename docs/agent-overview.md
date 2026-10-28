@@ -50,6 +50,11 @@ messages, tool calls, process state, billing or agent runtime.
 
 ## Saved Things and reporting
 
+For a connected ChatGPT/Codex account, use the [private reporting gateway](agent-reporting.md)
+to authorize a distinct task Character and reuse this saved workspace through
+MCP. Its independent `agents.report` permission is separate from Things access;
+the read adapter itself does not create that delegation.
+
 Author the page and its reusable components, schema references, and any
 write Actions in Thingtime's Builder as saved Things. Use the normal ACL-checked
 Thing APIs and write controls. Keep task records relational: link a subtask to

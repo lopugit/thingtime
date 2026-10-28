@@ -111,6 +111,32 @@ See [the runbook](docs/agent-browsers.md) for commands and evidence boundaries.
 
 ## Agent overview and task reporting
 
+- [ ] Through the actual connected MCP, verify a plain `things` token cannot
+      delegate Characters; authorize `agents.report` explicitly and negotiate
+      the exact origin's reporting/Characters/overview capabilities.
+- [ ] Prepare twice with one stable external task ID and confirm one Character
+      and binding. Use existing private saved pages, six schemas and Actions;
+      preserve their definitions and private audience. Reject a wrong origin,
+      foreign reference, public subspace and revoked membership.
+- [ ] Execute saved lifecycle/progress/question Actions, compare exact record
+      readback, and verify Character authorship plus owner-private visibility.
+      Retry the identical UUID request and verify no duplicate; reject changed
+      inputs, concurrent writes, foreign targets and ambiguous replay.
+- [ ] Revoke the PAT, disable the Character or remove workspace access and
+      verify reporting stops. Unknown measurements remain unknown. Run the
+      disposable HTTP/OAuth/MCP harness with an external synthetic fixture.
+- [ ] Prepare child and grandchild tasks through `parentExternalTaskId`; verify
+      distinct Characters, one inherited project, actual parent task links and
+      shared root task IDs. Parent/project mutation and ancestor revocation
+      must be refused. A caller delayed before lock acquisition must use fresh
+      bound records after acquiring it, without creating duplicate roots.
+- [ ] Create, retry and update one coordination post with an explicit renderer;
+      compare exact readback, verify anonymous/outsider refusal and preserve
+      the same post ID. Missing Components return structured failures.
+- [ ] Expand OAuth Advanced at desktop and mobile widths, inspect the separate
+      reporting permission and description, and scroll the full page. Keep
+      generated token fields masked in retained screenshots.
+
 - [ ] Author the dashboard page, components, schema references and write
       Actions as saved Things in Thingtime. Confirm no account-specific Thing
       definitions or credentials are committed with the reusable adapter.

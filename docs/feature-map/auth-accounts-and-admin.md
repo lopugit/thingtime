@@ -199,6 +199,13 @@ OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpe
 `ai/chatgptPlanProtocol.ts` validates dynamic registration, JWT identity, scopes, rotation and Responses restrictions. `chatgptPlanRuntime.ts` owns protected local credentials, loopback callbacks, one-use attempts, account/session/origin fences and per-account cancellation. The authenticated `ai/chatgpt-plan` route publishes redacted state only; `Settings/ChatGPTPlanSettings.tsx` negotiates its capability. Model discovery and Lopu use the existing provider path with strict saved plan pins and no billing fallback. See README ChatGPT plan usage, TESTING and `test:chatgpt-plan`. `chatgptPlanStorage.ts` encrypts owner/origin-scoped records in the account MongoDB and fences its single refresh authority. `chatgptPlanTransfer.ts` seals explicit moves to a destination-owned key. Electron `local-runtime.cjs` manages optional authenticated local Mongo and generated OS-protected secrets; API switching uses separate sessions and restart.
 ## Characters
 
+Private MCP task delegation uses `api/utils/agents/reporting.ts`, the independent
+`agents.report` PAT scope, and `/api/v1/agents/reporting`. It revalidates the owner,
+Character, exact private workspace references and subspace membership. Protected
+binding/operation Things fence duplicate and ambiguous writes; the executor's
+server-only operation policy constrains saved Actions. See
+[setup, recovery and acceptance](../agent-reporting.md).
+
 See [Characters](../characters.md) for the settings, login modes, private ownership,
 admin lookup, session selection, agent coordination and acceptance runbook.
 `characterCore.ts`, `characterSession.ts`, `characters.ts` and

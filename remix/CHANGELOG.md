@@ -102,6 +102,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-28: Add private MCP task reporting with an independent delegation
+  permission, distinct task Characters, saved workspace Actions, guarded retries
+  and exact record readback. Existing Things connections require explicit
+  reporting authorization. See [setup and acceptance](../docs/agent-reporting.md).
+  [Validation and delivery boundaries](../PRs/1270-codex-mcp-private-reporting-private-agent-task-reporting.md).
+  **Codex (AI)**
+
 - 2026-10-28: Extend editable Mapbox viewports with cursor-paged favourite and route sources, numbered route stops, query selection and route-scoped transient geometry. Expose current runtime fields to ordinary page blocks so persistent maps can sit outside draft-resetting source panels. Saved app definitions remain private Things. **Codex (AI)**
 
 - 2026-10-28: Restore saved Action buttons and row form submissions in expanded editable Builder collections. The live page uses the canonical delegated Action handler once per gesture; Builder edit mode remains inert. **Codex (AI)**

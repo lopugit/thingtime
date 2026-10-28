@@ -4,6 +4,14 @@ https://thingtime.com
 
 ### Agent browsers and tasks
 
+ChatGPT/Codex private lifecycle reporting uses the existing saved workspace
+through the [MCP reporting gateway](docs/agent-reporting.md). Authorize the
+independent `agents.report` permission once; routine calls then reuse a distinct
+task Character, saved Actions and stable request receipts. Existing Things
+permissions are not upgraded automatically. Forks supply their own private
+workspace references and external test fixtures, with no account-specific
+definitions or credentials committed.
+
 Thingtime for Mac includes task-owned browser installs, claims and a live
 viewer, with isolated, IP-restricted and unrestricted network settings. The
 Agent work records, dashboards, schemas, components and Actions are ordinary saved

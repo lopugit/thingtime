@@ -4258,6 +4258,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  'agent-reporting-binding', 'agent-reporting-operation',
   'file',
   'mail-account', 'mail-folder', 'mail-message', 'mail-inbox', 'mail-operation',
   'password-manager-entry',
