@@ -10,6 +10,9 @@
 # generated) and to a managed block in .env so scripts/dev.mjs and the PM2
 # stack pick it up.
 
+# Vite serves the pinned Mapbox npm assets from the app origin in dev and build.
+node scripts/ensure-mapbox-assets.mjs || exit 1
+
 if [ -n "${VERCEL_ENV:-}" ]; then
 	BRANCH_NAME="${VERCEL_GIT_COMMIT_REF:-${THINGTIME_BRANCH_NAME:-}}"
 	if [ -z "$BRANCH_NAME" ]; then
