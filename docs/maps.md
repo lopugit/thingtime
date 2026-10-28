@@ -5,6 +5,13 @@ individually editable Builder element. Headings, fields, route cards and actions
 remain ordinary blocks beside it. Application pages, schemas and Actions are
 private saved Things; the framework does not install a hardcoded route app.
 
+Builder's **Expand into editable blocks** converts guarded `tt-form`, `tt-select`,
+`tt-style`, `tt-change`, `tt-mapbox`, `tt-collection` and repeated `ttEach` nodes
+into normal nested blocks. Each form field, button and repeated-card template
+child keeps its own selection identity. Expansion retains the Component's source
+Action and arguments; saving these intrinsic blocks negotiates `api.things`
+1.44.0 and, for updates, `api.things-update` 1.14.0.
+
 ## Provider contract
 
 Negotiate origin-scoped `api.maps` 1.0.0 before `POST /api/v1/maps`.

@@ -13269,6 +13269,8 @@ separate from deterministic discovery/lease tests.
   Mapbox v1 exceeds its provider limit at 13 stops and must explain that limit.
 - Open the saved page at desktop/mobile widths, scroll fully, open all controls,
   and individually edit nested labels, inputs, buttons, row fields and map props.
+  Switch query-selected views and reload each URL: page-level condition blocks
+  must receive the current query, and inactive views must leave no empty gap.
   Save/reload user data. Provider navigation results remain transient. Verify
   account switches and unmount remove the map and its old token; attribution
   stays visible. A fixture or passing build is not a live provider result.

@@ -2,11 +2,12 @@ import { collectionStyles } from '../Collections/collectionStyles';
 import React from 'react';
 import { COLLECTION_SIZES, type CollectionSize } from '../Collections/collectionWindow';
 import { CollectionList } from '../Collections/CollectionList';
-import { componentScopeValue, createTemplateResolver } from '../ComponentsLibrary/componentTemplate';
+import { componentScopeValue, createTemplateResolver, resolveTemplate } from '../ComponentsLibrary/componentTemplate';
 import { HtmlThingRenderer } from '../Kinds/HtmlThingRenderer';
 import { ComponentDataScope } from './ComponentSelect';
 import { useCollectionSource } from './useCollectionSource';
 import { ComponentLocalControl, NativeControlsEnabled } from './NativeComponentControls';
+import { templateEachRows, templateEachRowScope } from './templateBlocks';
 
 // Stack collections using a shared branch allowance rather than limiting apps
 // to two levels. Visible siblings split their parent's allowance; pagination
@@ -41,7 +42,9 @@ export function ComponentCollection({
 	filterValue,
 	countStateKey,
 	renderItem,
-	transparent
+	transparent,
+	maxItems,
+	templateEach
 }: Record<string, unknown>) {
 	const scope = React.useContext(ComponentDataScope),
 		budget = React.useContext(Nesting);
@@ -59,6 +62,7 @@ export function ComponentCollection({
 	}, [enabled, countStateKey, count]);
 	const items: Record<string, any>[] = Array.isArray(data) ? data.filter((item) => item && typeof item === 'object' && !Array.isArray(item) &&
 		(typeof filterPath !== 'string' || String(componentScopeValue(item, filterPath) ?? '') === String(filterValue ?? ''))) : [];
+	const visibleItems = typeof maxItems === 'number' && Number.isInteger(maxItems) && maxItems > 0 ? items.slice(0, maxItems) : items;
 	const positions = new Map(items.map((item, index) => [item, index]));
 	if (budget.depth >= 32) return <p role="alert">This collection exceeds the nested rendering budget.</p>;
 	const specs = Array.isArray(filters)
@@ -66,9 +70,10 @@ export function ComponentCollection({
 				.slice(0, 10)
 				.filter((filter) => filter && typeof filter === 'object' && typeof filter.path === 'string' && typeof filter.label === 'string')
 		: [];
- if (transparent === true) return <>{items.map((item, index) => {
-  const rowScope = { ...scope, item, index, collection: { index, count: items.length } };
-  return <Nesting.Provider key={String(item.id ?? index)} value={{...budget, depth:budget.depth+1}}><ComponentDataScope.Provider value={rowScope}>
+ const repeated = templateEach === true ? templateEachRows(data, maxItems) : visibleItems;
+ if (transparent === true) return <>{repeated.length === 0 && typeof empty === 'string' ? resolveTemplate(empty, scope) : null}{repeated.map((item, index) => {
+  const rowScope = templateEach === true ? templateEachRowScope(scope, item, index, repeated.length) : { ...scope, item, index, collection: { index, count: repeated.length } };
+  return <Nesting.Provider key={templateEach === true ? index : String((item as Record<string, unknown>).id ?? index)} value={{...budget, depth:budget.depth+1}}><ComponentDataScope.Provider value={rowScope}>
    {typeof renderItem === 'function' ? renderItem(rowScope) : <HtmlThingRenderer node={createTemplateResolver()(itemTemplate, rowScope) as any} />}
   </ComponentDataScope.Provider></Nesting.Provider>;
  })}</>;

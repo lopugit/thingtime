@@ -1,5 +1,5 @@
 import { LIVE_SOURCES } from '~/schemas/liveSources';
-import { templateToBlocks } from './templateBlocks';
+import { expandedComponentBlock, templateToBlocks } from './templateBlocks';
 import { collectBlockIds, newBlockId } from './webpageBlocks';
 import { HEIC_IMAGE_ACCEPT } from '../Attachments/heicImage';
 import React from 'react';
@@ -12,7 +12,7 @@ import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl'
 import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
 import { sharePathForThing } from '~/components/Sharing/audienceCore';
 import { DRAWER_Z } from '../Nav/Drawer/useDrawer';
-import { defaultsFromArgs, sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
+import { sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
 import { BorderControl, CornersControl, SegmentedControl, ShadowControl, SidesControl } from './FigmaControls';
 import { cssLinesToRecord, cssRecordToLines } from './figmaControlValues';
 import {
@@ -655,7 +655,7 @@ const BlockInspector = ({
        const ids = collectBlockIds(draft.blocks);
        const children = templateToBlocks(component?.crystal?.render, kind => { const id = newBlockId(kind, ids); ids.add(id); return id; });
        const replace = (blocks: WebpageBlock[]): WebpageBlock[] => blocks.map(entry => entry.id === block.id
-        ? { id: entry.id, type: 'container', direction: 'column', gap: 0, css: entry.css, source: entry.source || component?.crystal?.source, args: { ...defaultsFromArgs(sanitizeArgSpecs(component?.crystal?.args)), ...component?.crystal?.savedArgs, ...entry.args }, children }
+        ? expandedComponentBlock(entry, component?.crystal, children)
         : { ...entry, ...(entry.children ? { children: replace(entry.children) } : {}) });
        draft.setBlocks(replace(draft.blocks)); setExpandError('');
       } catch (error) { setExpandError(error instanceof Error ? error.message : 'Could not expand this component'); }

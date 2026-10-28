@@ -94,8 +94,8 @@ try {
 	const manifest = (await request('/.well-known/thingtime-capabilities.json')).data;
 	assert.equal(manifest.origin, origin);
 	assert.equal(manifest.features['api.maps'].version, '1.0.0');
-	assert.equal(manifest.features['api.things'].version, '1.43.0');
-	console.log('Built manifest: api.maps 1.0.0, api.things 1.43.0, exact origin');
+	assert.equal(manifest.features['api.things'].version, '1.44.0');
+	console.log('Built manifest: api.maps 1.0.0, api.things 1.44.0, exact origin');
 	const anonymous = await request('/api/v1/maps', { method: 'POST', body: { operation: 'browser-config', vaultId: 'synthetic-vault' }, status: 401 });
 	assert.equal(anonymous.response.headers.get('cache-control'), 'private, no-store');
 	console.log('Anonymous maps request: 401, private/no-store');

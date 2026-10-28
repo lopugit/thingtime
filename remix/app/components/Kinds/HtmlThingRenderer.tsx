@@ -420,6 +420,10 @@ export function HtmlBlockElement({ tag, attributes, editorProps, children }: {
  const mediaUrl = useSharedMediaUrl();
  if (tag === 'tt-media-pipeline') return <LocalMediaPipeline pipeline={attributes?.pipeline} editorProps={editorProps}>{children}</LocalMediaPipeline>;
  if (tag === 'tt-mapbox') return <div {...editorProps}><ComponentMapbox {...attributes} /></div>;
+ if (tag === 'tt-style') return <div {...editorProps}><ComponentStyle rules={attributes?.rules}>{children}</ComponentStyle></div>;
+ if (tag === 'tt-form') return <div {...editorProps}><ComponentForm {...attributes}>{children}</ComponentForm></div>;
+ if (tag === 'tt-select') return <div {...editorProps}><ComponentSelect {...attributes} /></div>;
+ if (tag === 'tt-change') return <span {...editorProps}><ComponentChange {...attributes}>{children}</ComponentChange></span>;
  const safeTag = ALLOWED_TAGS.has(tag) && !tag.startsWith('tt-') ? tag : 'div';
  const props = fieldProps(safeTag, sanitizeProps(attributes, safeTag));
  if (props.style) props.style = mapStyleMediaUrls(props.style, mediaUrl);

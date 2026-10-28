@@ -22,7 +22,10 @@ export function webpageComponentRefs(blocks: unknown): string[] {
 			if (!raw || typeof raw !== 'object') continue;
 			if (raw.type === 'component' && typeof raw.component === 'string' && validRef(raw.component.trim())) refs.add(raw.component.trim());
 			if (refs.size > MAX_COMPONENT_BINDINGS) throw new Error('Page components exceed the capture limit.');
-			if (raw.type === 'container') walk(raw.children, depth + 1);
+			// Every authored container can hide a Component dependency, including
+			// inactive condition branches. Discovery must match the renderer so
+			// resolution, sharing, and captured versions apply the same ACL fence.
+			if (['container', 'element', 'collection', 'condition'].includes(raw.type)) walk(raw.children, depth + 1);
 		}
 	};
 	walk(blocks, 0);

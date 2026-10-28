@@ -323,3 +323,14 @@ export function requiresEditableBlockContract(blocks: WebpageBlock[]): boolean {
  }
  return false;
 }
+
+/** New intrinsic element boundaries accepted by the saved Webpage writer. */
+export function requiresEditableIntrinsicContract(blocks: WebpageBlock[]): boolean {
+ const pending = [...blocks];
+ while (pending.length) {
+  const block = pending.pop()!;
+  if (block.type === 'element' && ['tt-form', 'tt-select', 'tt-style', 'tt-change', 'tt-mapbox'].includes(block.tag || '')) return true;
+  if (block.children) pending.push(...block.children);
+ }
+ return false;
+}

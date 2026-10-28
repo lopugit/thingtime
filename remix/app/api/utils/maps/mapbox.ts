@@ -86,11 +86,13 @@ export async function mapboxOptimize(ownerId: string, input: any, transport: typ
 	const data = await providerJson(`/optimized-trips/v1/mapbox/${profile}/${coordinates}`, { geometries: 'geojson', overview: 'full', steps: 'false', source: 'first', destination: roundtrip ? 'any' : 'last', roundtrip: String(roundtrip) }, key, transport, signal);
 	const trip = data?.trips?.[0];
 	const waypoints = data?.waypoints;
-	if (!trip || !Array.isArray(waypoints) || waypoints.length !== stops.length || !Array.isArray(trip?.geometry?.coordinates) || !trip.geometry.coordinates.every(coordinate) || !Number.isFinite(trip.distance) || !Number.isFinite(trip.duration))
+	if (data?.code !== 'Ok' || !trip || !Array.isArray(waypoints) || waypoints.length !== stops.length || trip?.geometry?.type !== 'LineString' || !Array.isArray(trip.geometry.coordinates) || trip.geometry.coordinates.length < 2 || !trip.geometry.coordinates.every(coordinate) || !Number.isFinite(trip.distance) || trip.distance < 0 || !Number.isFinite(trip.duration) || trip.duration < 0)
 		return fail(502, 'Mapbox returned an incomplete optimized route.');
 	const indices = waypoints.map((point: any) => point?.waypoint_index);
 	if (indices.some((index: any) => !Number.isInteger(index) || index < 0 || index >= stops.length) || new Set(indices).size !== stops.length)
 		return fail(502, 'Mapbox returned an incomplete stop order.');
+	if (indices[0] !== 0 || (!roundtrip && indices[indices.length - 1] !== stops.length - 1))
+		return fail(502, 'Mapbox returned a route that does not preserve the selected endpoints.');
 	const orderedStopIds = (stops as MapStop[]).map((stop, index) => ({ id: stop.id, order: indices[index] })).sort((a, b) => a.order - b.order).map((stop) => stop.id);
 	return { ok: true as const, orderedStopIds, geometry: { type: 'LineString' as const, coordinates: trip.geometry.coordinates as MapCoordinate[] }, distanceMeters: trip.distance as number, durationSeconds: trip.duration as number, cachePolicy: 'transient' as const, notice: 'Mapbox navigation results are for current display only and must not be stored or cached.' };
 }

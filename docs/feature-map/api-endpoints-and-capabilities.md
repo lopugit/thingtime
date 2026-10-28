@@ -123,6 +123,11 @@ All data access goes through `/api/v1/...` (`FUNDAMENTALS.md` §1). Nitro
 routes every documented endpoint to one catch-all handler; the docs registry is
 the source of truth for the route table and both capability manifests.
 
+Saved Webpage writes with editable intrinsic `tt-form`, `tt-select`, `tt-style`,
+`tt-change` and `tt-mapbox` blocks require `api.things` 1.44.0 on create and
+`api.things-update` 1.14.0 on update. Builder negotiates these before saving;
+`api.webpages-resolve` remains the independent read contract.
+
 ## Where the code lives
 
 | Concern | Path |
