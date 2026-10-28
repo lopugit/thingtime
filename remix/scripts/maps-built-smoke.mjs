@@ -94,8 +94,8 @@ try {
 	const manifest = (await request('/.well-known/thingtime-capabilities.json')).data;
 	assert.equal(manifest.origin, origin);
 	assert.equal(manifest.features['api.maps'].version, '1.0.0');
-	assert.equal(manifest.features['api.things'].version, '1.44.0');
-	console.log('Built manifest: api.maps 1.0.0, api.things 1.44.0, exact origin');
+	assert.equal(manifest.features['api.things'].version, '1.45.0');
+	console.log('Built manifest: api.maps 1.0.0, api.things 1.45.0, exact origin');
 	const anonymous = await request('/api/v1/maps', { method: 'POST', body: { operation: 'browser-config', vaultId: 'synthetic-vault' }, status: 401 });
 	assert.equal(anonymous.response.headers.get('cache-control'), 'private, no-store');
 	console.log('Anonymous maps request: 401, private/no-store');
@@ -165,6 +165,36 @@ try {
 	const invalidParent = await request('/api/v1/things?thingtime=data&parentId=%24ne', { cookie, status: 400 });
 	assert.equal(invalidParent.data.ok, false);
 	console.log('Parent groups: exact intersection, two-page cursor, schema-free data, owner isolation, operator-shaped ID refusal');
+	const makeApp = async (name, asCookie = cookie) => {
+		const result = await request('/api/v1/things', { method: 'POST', cookie: asCookie, body: { thingtime: ['folder'], folderId: null, acl: ['tt:user'], crystal: { name, description: `${name} workspace`, builderApp: true, metadata: { owner: name } } } });
+		return result.data.thing.id;
+	};
+	const appA = await makeApp('Maps app A');
+	const appB = await makeApp('Maps app B');
+	await create('folder', { name: 'Ordinary folder' });
+	const otherApp = await makeApp('Other owner app', secondCookie);
+	const appIds = [];
+	let appCursor = null;
+	for (let page = 0; page < 4; page++) {
+		const result = await request(`/api/v1/things?folder=root&builderApp=true&limit=1${appCursor ? `&cursor=${encodeURIComponent(appCursor)}` : ''}`, { cookie });
+		appIds.push(...result.data.things.map((thing) => thing.id));
+		assert(result.data.things.every((thing) => thing.crystal.builderApp === true && thing.folderId == null));
+		appCursor = result.data.nextCursor;
+		if (!appCursor) break;
+		assert(page < 3, 'Builder app listing did not terminate');
+	}
+	assert.deepEqual(new Set(appIds), new Set([appA, appB]));
+	assert.equal(appIds.length, 2);
+	assert(!(await request('/api/v1/things?folder=root&builderApp=true', { cookie: secondCookie })).data.things.some((thing) => appIds.includes(thing.id)));
+	assert.deepEqual((await request('/api/v1/things?folder=root&builderApp=true', { cookie: secondCookie })).data.things.map((thing) => thing.id), [otherApp]);
+	await request('/api/v1/things?folder=root&builderApp=true', { status: 401 });
+	await request('/api/v1/things?builderApp=true', { cookie, status: 400 });
+	await request(`/api/v1/things?id=${encodeURIComponent(appA)}&builderApp=true`, { cookie, status: 400 });
+	const child = await request('/api/v1/things', { method: 'POST', cookie, body: { thingtime: ['data'], folderId: appA, acl: ['tt:user'], crystal: { title: 'Private app child' } } });
+	assert.equal(child.data.thing.folderId, appA);
+	await request(`/api/v1/things?id=${encodeURIComponent(child.data.thing.id)}`, { cookie: secondCookie, status: 404 });
+	await request('/api/v1/things', { method: 'POST', cookie, body: { thingtime: ['folder'], folderId: appA, acl: ['tt:user'], crystal: { name: 'Invalid nested app', builderApp: true } }, status: 400 });
+	console.log('Builder app folders: owner-only pre-page filter, cursor, ungrouped visibility, independent child ACL, top-level fence');
 	console.log('PASS maps built HTTP smoke (disposable account and replica set)');
 } finally {
 	for (const child of children.reverse()) await stop(child).catch(() => {});

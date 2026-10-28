@@ -1,5 +1,13 @@
 # TESTING.md — per-area manual test checklists
 
+## Builder app browser (2026-10-28)
+
+- [ ] At `/builder`, verify All apps is the default and app folders can be created and edited with name, description, upload-first icon and structured metadata. Reload and compare with exact Thing reads.
+- [ ] Assign a saved Component, Webpage, Action, Schema and data Thing to an app. Confirm each remains independently accessible under its original ACL, and ungrouped items remain in their global type views.
+- [ ] Exercise app/type filters, cursor-backed Load more search results, folder navigation, single and bulk assignment, and page editing at desktop and narrow mobile widths, including opened menus and dialogs and full-page scroll.
+- [ ] Verify `GET /api/v1/things?folder=root&builderApp=true` paginates before ACL projection and rejects anonymous, other-owner and non-root use; protected OAuth `appId` is unchanged.
+- [ ] From a Component in each Builder type/app view, open its item menu and Edit definition. Edit and save a field, reload, and confirm exact Thing readback. Verify another owner's Component has no edit command. Open app metadata in two tabs; save in one, then confirm the stale tab is refused rather than overwriting it.
+
 ## Native desktop UI zoom — 2026-10-27
 
 - [ ] Run `node --test electron/test/window-zoom.test.cjs` and `corepack pnpm@10.12.1 --dir electron verify:window-zoom`. The latter requires a graphical macOS desktop and uses a separate task process, disposable local document/profile, real `sendInputEvent` and native menu dispatch. Normal networking and Chromium's standard sandbox remain enabled; the runner bounds execution and cleans its process group/profile. No sign-in or account writes occur.
@@ -13283,6 +13291,14 @@ separate from deterministic discovery/lease tests.
 
 ## Editable Mapbox maps and route planning
 
+- On the deployed origin, open a saved map after a successful public-token
+  `browser-config` response. Confirm the Mapbox JS and CSS load from same-origin
+  Vite assets, the style/tiles load from approved Mapbox service hosts, the
+  browser reports no CSP violations, and the map visibly renders with
+  attribution. A CSP-blocked SDK must show an error, not a claimed map success.
+- Open and close the Thingtime drawer while the map is visible, then resize the
+  viewport at desktop and mobile widths. The Mapbox canvas and tiles must fill
+  the changed map container, without a blank strip or horizontal overflow.
 - Negotiate api.maps on the exact origin; unsigned/scoped callers and foreign
   Vault references cannot read a token or make provider requests. A secret sk
   token cannot become browser configuration. Invalid provider replies and
@@ -13295,6 +13311,17 @@ separate from deterministic discovery/lease tests.
   Mapbox v1 exceeds its provider limit at 13 stops and must explain that limit.
 - Open the saved page at desktop/mobile widths, scroll fully, open all controls,
   and individually edit nested labels, inputs, buttons, row fields and map props.
+  After expanding source-backed Components into editable blocks and saving,
+  reload the live page and verify existing Favorites, Contacts, Groups and
+  Routes still populate from their saved Actions. Builder editing must leave
+  those Actions inert, without presenting an empty live catalogue as success.
+  In an expanded repeated row, activate a saved Action button by pointer and
+  Enter, then submit a row form with an edited named field by click and input
+  Enter. Select an item with a `$ui` row picker and verify the selected value
+  appears in a sibling field without running a saved Action. Each gesture must
+  run exactly once with that row's ID and revision and persist the intended
+  change. A nested saved Component must also run once, while Builder edit
+  clicks must run nothing.
   Switch query-selected views and reload each URL: page-level condition blocks
   must receive the current query, and inactive views must leave no empty gap.
   Save/reload user data. Provider navigation results remain transient. Verify

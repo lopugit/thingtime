@@ -6652,7 +6652,9 @@ A saved Builder app can use the `tt-mapbox` viewport and the origin-scoped
 `api.maps` 1.0.0 operations. Save your own Mapbox token in the private Thingtime
 Vault and configure its entry ID (`<owned-vault-entry-id>`) in the saved app.
 The browser map requires a public `pk` token; never put secret tokens in page
-definitions. Configure a style URL from your own Mapbox Studio account.
+definitions. The map SDK and CSS are staged from the pinned npm package as same-origin app assets; browser
+tile/style requests still go directly to Mapbox service origins. Configure a
+style URL from your own Mapbox Studio account.
 Autocomplete and live optimization require the corresponding provider access;
 saving selected geocodes additionally requires Mapbox Permanent Geocoding
 entitlement and its storage conditions. No new Vercel provider-key variable is

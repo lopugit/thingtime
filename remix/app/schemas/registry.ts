@@ -2930,13 +2930,11 @@ const pushDeviceThingSchema: ThingtimeSchema = {
 // move path cycle-checks the ancestor chain. Organization is personal:
 // folderId only ever points at a folder the SAME owner holds, and folders
 // default private (organization structure is not content).
-export const MAX_FOLDER_NAME_CHARS = 120;
 export const MAX_FOLDER_ICON_CHARS = 32;
-export const MAX_FOLDER_DESCRIPTION_CHARS = 500;
 
 const folderSchema: ThingtimeSchema = {
   id: 'folder',
-  version: 1,
+  version: 2,
   kind: 'crystal',
   collection: null,
   title: 'Folder',
@@ -2949,9 +2947,12 @@ const folderSchema: ThingtimeSchema = {
     'they re-parent to the deleted folder’s parent. Folders default private (acl ["tt:user"]): ' +
     'how you organise your things is yours even when the things themselves are public.',
   fields: [
-    { name: 'name', type: 'string', required: true, max: MAX_FOLDER_NAME_CHARS, description: 'Folder display name.' },
+    { name: 'name', type: 'string', required: true, description: 'Folder display name.' },
     { name: 'icon', type: 'string', required: false, max: MAX_FOLDER_ICON_CHARS, description: 'Optional emoji shown instead of the default 📁.' },
-    { name: 'description', type: 'string', required: false, max: MAX_FOLDER_DESCRIPTION_CHARS, description: 'Optional note about what lives here.' }
+    { name: 'description', type: 'string', required: false, description: 'Optional note about what lives here.' },
+    { name: 'builderApp', type: 'boolean', required: false, description: 'Marks an owner-owned top-level folder as a Builder app workspace. Folder membership never grants access to its contents.' },
+    { name: 'iconUrl', type: 'string', required: false, description: 'Uploaded image URL or an explicit HTTPS fallback for the app icon.' },
+    { name: 'metadata', type: 'object', required: false, description: 'Owner-authored structured workspace metadata, validated with the ordinary data crystal codec.' }
   ],
   example: { name: 'Recipes', icon: '🍜', description: 'Everything I want to cook someday.' }
 };
@@ -7009,7 +7010,6 @@ const sanitizeFeedAlgorithmCrystal = (input: Record<string, unknown>): { ok: tru
 const sanitizeFolderCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   if (!name) return fail(400, 'Folder name is required');
-  if (name.length > MAX_FOLDER_NAME_CHARS) return fail(400, `Folder name is too long (max ${MAX_FOLDER_NAME_CHARS})`);
   const crystal: Record<string, unknown> = { name };
   if (input.icon !== undefined && input.icon !== null) {
     if (typeof input.icon !== 'string' || input.icon.trim().length > MAX_FOLDER_ICON_CHARS) {
@@ -7018,10 +7018,25 @@ const sanitizeFolderCrystal = (input: Record<string, unknown>): { ok: true; crys
     if (input.icon.trim()) crystal.icon = input.icon.trim();
   }
   if (input.description !== undefined && input.description !== null) {
-    if (typeof input.description !== 'string' || input.description.trim().length > MAX_FOLDER_DESCRIPTION_CHARS) {
-      return fail(400, `Folder description is too long (max ${MAX_FOLDER_DESCRIPTION_CHARS})`);
-    }
+    if (typeof input.description !== 'string') return fail(400, 'Folder description must be text');
     if (input.description.trim()) crystal.description = input.description.trim();
+  }
+  if (input.builderApp !== undefined) {
+    if (input.builderApp !== true && input.builderApp !== false) return fail(400, 'builderApp must be a boolean');
+    if (input.builderApp) crystal.builderApp = true;
+  }
+  if (input.iconUrl !== undefined && input.iconUrl !== null) {
+    if (typeof input.iconUrl !== 'string') return fail(400, 'Folder icon URL must be text');
+    const iconUrl = input.iconUrl.trim();
+    if (iconUrl && !/^https:\/\/[^\s]+$/i.test(iconUrl) && !/^\/api\/v1\/attachments\/content\?id=[A-Za-z0-9_-]+$/.test(iconUrl))
+      return fail(400, 'Folder icon URL must be HTTPS or an uploaded Thingtime image');
+    if (iconUrl) crystal.iconUrl = iconUrl;
+  }
+  if (input.metadata !== undefined && input.metadata !== null) {
+    if (typeof input.metadata !== 'object' || Array.isArray(input.metadata)) return fail(400, 'Folder metadata must be an object');
+    const validated = sanitizeDataValue(input.metadata, { path: 'metadata', depth: 2 });
+    if (validated.ok === false) return validated;
+    crystal.metadata = validated.value;
   }
   return { ok: true, crystal };
 };

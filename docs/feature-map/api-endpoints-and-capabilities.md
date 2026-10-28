@@ -510,6 +510,13 @@ uses full-account authorization, owner-scoped Vault references and operation
 rate limits; `mapbox.ts` fixes provider destinations and redacts responses.
 Register `_maps.tsx` in Nitro and the canonical docs registry. Run `test:maps`
 and `test:api-capabilities`; see [maps](../maps.md) for provider storage constraints.
+The saved Builder `tt-mapbox` viewport loads the official `mapbox-gl` npm
+distribution JavaScript and CSS staged as Vite's same-origin public assets
+(`components/Builder/Maps/mapboxSdk.ts`).
+The application CSP permits only the Mapbox service and events origins in
+`connect-src`, with its existing `blob:` worker allowance; it does not permit a
+remote Mapbox script or eval. The separate Library SDK demo keeps its own
+opaque-origin policy and CDN loader.
 
 ## Environment gateway and index readiness
 

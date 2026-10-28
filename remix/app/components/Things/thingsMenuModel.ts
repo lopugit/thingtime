@@ -40,9 +40,10 @@ export type ThingsItemMenuArgs = {
   clipboardCount: number;
   ownerId?: string;
   locationSearch?: string;
+  builderMode?: boolean;
 };
 
-export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch }: ThingsItemMenuArgs): ThingContextMenuModel => {
+export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch, builderMode }: ThingsItemMenuArgs): ThingContextMenuModel => {
   if (thing.id.startsWith('timeline-folder-')) return buildThingEntityMenu({ open: { href: thingBrowseHref(thing, locationSearch) }, 'copy-link': true });
   const folder = isFolder(thing);
   const archive = thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive';
@@ -59,6 +60,9 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
     delete: !archive && { hint: bulkHint, kbd: '⌫' },
     'send-to-lopu': actCount === 1 && canOfferRecordingHandoff(thing, ownerId)
   }, [
+    ...(builderMode && thing.thingtime.includes('component') && actCount === 1 && thing.author?.id === ownerId
+      ? [{ id: 'builder-definition', actions: [{ id: 'edit-definition', command: 'edit-definition', label: 'Edit definition…', icon: '✏️', lucide: 'pencil' }] }]
+      : []),
     ...(!folder && !archive ? [{ id: 'preview', actions: [{ id: 'preview', command: 'preview', label: 'Preview', icon: '👀', lucide: 'eye' }] }] : []),
     ...(files ? [files] : []),
     { id: 'organise', label: 'Organise', actions: [

@@ -91,6 +91,8 @@ export const isTopLevelLibraryThing = (thing: Pick<ThingsThing, 'thingtime' | 'f
   !thing.folderId && !thing.targetId && !thing.parentId && !thing.crystal?.parentId && !thing.thingtime.some(kind => kind === 'attachment' || kind === 'file-sync');
 
 export const isFolder = (thing: Pick<ThingsThing, 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>): boolean => isFolderThing(thing);
+export const isBuilderApp = (thing: Pick<ThingsThing, 'thingtime' | 'crystal' | 'folderId'>): boolean =>
+  isFolder(thing) && thing.folderId == null && thing.crystal?.builderApp === true;
 
 // Kinds the server refuses to copy (mirrors UNCOPYABLE in
 // api/utils/things/things.ts): attached children live under their target — a
@@ -106,16 +108,29 @@ export const isDuplicable = (thing: Pick<ThingsThing, 'thingtime'>): boolean =>
 // kinds the listing can actually contain (protected kinds never appear).
 export const THINGS_KIND_FILTERS = [
   { id: 'all', label: 'All', icon: '🌀' },
+  { id: 'apps', label: 'Apps', icon: '▦' },
   { id: 'folder', label: 'Folders', icon: '📁' },
   { id: 'attachment', label: 'Files', icon: '💾' },
   { id: 'post', label: 'Posts', icon: '📝' },
   { id: 'data', label: 'Data', icon: '📦' },
   { id: 'schema', label: 'Schemas', icon: '💎' },
   { id: 'component', label: 'Components', icon: '🧩' },
+  { id: 'webpage', label: 'Pages', icon: '▤' },
   { id: 'action', label: 'Actions', icon: '⚡' },
   { id: 'comment', label: 'Comments', icon: '💬' }
 ] as const;
 export type ThingsKindFilter = (typeof THINGS_KIND_FILTERS)[number]['id'];
+
+export const BUILDER_KIND_FILTERS = [
+  { id: 'apps', label: 'All apps', icon: '▦' },
+  { id: 'component', label: 'All components', icon: '🧩' },
+  { id: 'webpage', label: 'All pages', icon: '▤' },
+  { id: 'data', label: 'All data', icon: '📦' },
+  { id: 'action', label: 'All Actions', icon: '⚡' },
+  { id: 'schema', label: 'All schemas', icon: '💎' },
+  { id: 'all', label: 'All app items', icon: '◫' }
+] as const;
+export type BuilderKindFilter = (typeof BUILDER_KIND_FILTERS)[number]['id'];
 
 const firstLine = (value: string, max = 80): string => {
   const line = value.split('\n').find((entry) => entry.trim()) || '';

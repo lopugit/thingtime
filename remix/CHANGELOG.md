@@ -104,6 +104,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-28: Restore saved Action buttons and row form submissions in expanded editable Builder collections. The live page uses the canonical delegated Action handler once per gesture; Builder edit mode remains inert. **Codex (AI)**
+
+- 2026-10-28: Restore saved Action data in live collections after expanding Components into editable Builder blocks; collection controls remain inert while editing. **Codex (AI)**
+
+- 2026-10-28: Resize saved Mapbox maps when their containing Builder layout changes, including the Thingtime drawer opening and closing. The canvas now follows the map region without reloading tiles or persisting route results. **Codex (AI)**
+
+- 2026-10-28: Serve the saved Builder map's official Mapbox GL JS npm distribution and CSS as same-origin assets, and permit only Mapbox service and events connections in the strict application CSP. Add production CSP regression checks after live SDK loading was blocked. Provider-backed map rendering still needs deployed-origin acceptance. **Codex (AI)**
+
 - 2026-10-28: Add owner-scoped Mapbox address lookup and route optimization plus an editable map viewport for saved Builder apps. Credentials stay in Vault; navigation results remain transient under provider terms. Live app acceptance pending. [Details](../PRs/1260-codex-thingtime-route-planner-support-editable-mapbox-route-planner-apps.md). **Codex (AI)**
 
 - 2026-10-27: Native Password AutoFill now reports safe progress and recovery categories, retains registration identity across retries, fences stale requests and reads complete paginated catalogs. Display the macOS provider as Thingtime without changing credential-store identities; add isolated native build overrides, a shared editable Connect/Disconnect control backed by read-only device status, and automatic device verification after OS-picker selection. Real GitHub creation was user-confirmed; installed status controls and the final automatic-start provider remain separate acceptance. [Details](../PRs/1258-codex-native-passkey-repair-20261027-fix-native-passkey-recovery-and-thingtime-provider-naming.md). **Codex (AI)**

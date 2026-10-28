@@ -1603,6 +1603,8 @@ export const createThing = async (
 
   const folderAssignment = await resolveFolderAssignment(ownerId, input.folderId, validated.thingtime);
   if (isFail(folderAssignment)) return folderAssignment;
+  if (validated.thingtime.includes('folder') && validated.crystal.builderApp === true && folderAssignment.folderId)
+    return fail(400, 'Builder apps must be top-level folders');
 
   // subspace rules on attached things: banned users can't comment or react
   // inside the subspace, and locked posts take no new comments (mods excepted).
@@ -3874,6 +3876,8 @@ export type ListThingsQuery = {
   // First-party browsing of ONE app's namespace (the in-Thingtime "what has
   // this app stored for me" surface): own-things mode narrowed to root appId.
   appId?: string | null;
+  // First-party Builder app folders; this narrows the owner library before pagination.
+  builderAppOnly?: boolean;
 };
 
 // Keep the filter as a literal equality predicate so it can be conjoined with
@@ -3910,6 +3914,8 @@ export const listThings = async (
   let viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const thingtime = (query.thingtime || []).filter((id) => typeof id === 'string' && id.trim());
+  if (query.builderAppOnly && (app || query.targetId || query.folder !== 'root' || query.appId || query.commentProjection))
+    return fail(400, 'Builder apps require the first-party root folder list');
   const schemaFilter = listSchemaIdMatch(query.schemaId);
   if (isFail(schemaFilter)) return schemaFilter;
   const parentFilter = listCrystalIdMatch('parentId', query.parentId);
@@ -3962,6 +3968,7 @@ export const listThings = async (
   if (thingtime.length) {
     match = withMatch(match, await thingtimeInClause(thingtime));
   }
+  if (query.builderAppOnly) match = withMatch(match, { thingtime: 'folder', 'crystal.builderApp': true });
   if (schemaFilter.match) match = withMatch(match, schemaFilter.match);
   if (parentFilter.match) match = withMatch(match, parentFilter.match);
   if (!app) {
@@ -5511,6 +5518,8 @@ export const updateThing = async (
     }
     nextFolderId = assignment.folderId;
   }
+  if (thingtime.includes('folder') && validated.crystal.builderApp === true && nextFolderId)
+    return fail(400, 'Builder apps must be top-level folders');
 
   // token grants replace whole too (merging grant lists is ambiguous; null
   // clears). The sandbox guard above already ran, so a sandboxed token can

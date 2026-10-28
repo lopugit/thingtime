@@ -5,6 +5,7 @@ import { NativeControlsEnabled } from '../NativeComponentControls';
 import { loadMapbox } from './mapboxSdk';
 import { mapboxPoints, mapboxRoute, mapboxStyle, publicMapboxToken, validCoordinates, type LngLat } from './mapboxData';
 import { updateMapboxOverlay, type MapboxOverlayData } from './mapboxOverlay';
+import { observeMapboxContainer } from './mapboxResize';
 
 type MapProps = {
 	vaultId?: unknown;
@@ -65,6 +66,7 @@ function MapboxViewport({ vaultId, styleUrl, center, zoom, points, route, fitBou
 		if (!enabled || !id || !host.current) return;
 		const abort = new AbortController();
 		let live = true;
+		let stopObservingResize = () => {};
 		setError('');
 		void (async () => {
 			try {
@@ -89,6 +91,7 @@ function MapboxViewport({ vaultId, styleUrl, center, zoom, points, route, fitBou
 				});
 				mapRef.current = map;
 				glRef.current = gl;
+				stopObservingResize = observeMapboxContainer(host.current, map);
 				viewportRef.current = { center: current.center, zoom: current.zoom };
 				map.addControl(new gl.NavigationControl({ showCompass: false }), 'top-right');
 				map.on('load', () => {
@@ -105,6 +108,7 @@ function MapboxViewport({ vaultId, styleUrl, center, zoom, points, route, fitBou
 		return () => {
 			live = false;
 			abort.abort();
+			stopObservingResize();
 			readyRef.current = false;
 			for (const pin of pinsRef.current) pin.remove();
 			pinsRef.current = [];

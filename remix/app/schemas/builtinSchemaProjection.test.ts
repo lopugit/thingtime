@@ -57,7 +57,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "subspace-tombstone": ["slug", "subspaceId", "previousOwnerId", "deletedAt"],
   "subspace-report": ["postId", "commentId", "reason", "note", "status", "resolution", "resolvedById", "resolvedAt", "reportKey"],
   "file-sync": ["configurationVersion", "name", "deviceId", "localRootId", "remoteFolderId", "sourceKind", "mode", "paused", "propagateDeletes", "network", "chargingOnly", "excludedPaths", "resourceLimits", "ignoreRules"],
-  "folder": ["name", "icon", "description"],
+  "folder": ["name", "icon", "description", "builderApp", "iconUrl", "metadata"],
   "app": ["clientId", "name", "origins", "nativeRedirectUris", "subscriptionTier", "subscriptionTierVersionId", "subscriptionTierVersion", "storageAllowanceBytes", "storageAllowanceOverrideBytes", "storageUsedBytes", "userStorageAllowanceBytes", "storageAccountingVersion"],
   "app-data": ["appId", "key", "value"],
   "subscription-tier": ["quotaKind", "tierId", "version", "status", "title", "tagline", "emoji", "bannerImageUrl", "sortOrder", "metered", "currency", "prices", "discountOverrides", "discounts", "discountFormulaVersion", "inclusions", "quotas", "sourceVersionId", "createdBy", "updatedBy", "publishedAt", "archivedAt"],
