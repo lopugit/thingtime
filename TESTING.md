@@ -13257,6 +13257,11 @@ separate from deterministic discovery/lease tests.
 
 ## Editable Mapbox maps and route planning
 
+- On the deployed origin, open a saved map after a successful public-token
+  `browser-config` response. Confirm the Mapbox JS and CSS load from same-origin
+  Vite assets, the style/tiles load from approved Mapbox service hosts, the
+  browser reports no CSP violations, and the map visibly renders with
+  attribution. A CSP-blocked SDK must show an error, not a claimed map success.
 - Negotiate api.maps on the exact origin; unsigned/scoped callers and foreign
   Vault references cannot read a token or make provider requests. A secret sk
   token cannot become browser configuration. Invalid provider replies and
