@@ -11,6 +11,23 @@ import { MAPS_FEATURE, MAPS_FEATURE_VERSION } from '../schemas/maps';
 import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
+test('private agent reporting is registered in both manifests with an independent contract', () => {
+  assert.equal(typeof routeModules['v1/agents/reporting'], 'function');
+  const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
+  const manifest = thingtimeCapabilityManifest('https://reporting.example');
+  assert.equal(legacy.features['api.agent-reporting'], '1.0.0');
+  assert.equal(manifest.origin, 'https://reporting.example');
+  assert.equal(manifest.features['api.agent-reporting'].version, '1.0.0');
+  assert.equal(manifest.features['api.chatgpt-mcp'].version, '1.1.0');
+  assert.equal(legacy.features['api.tokens'], '1.1.0');
+  assert.equal(manifest.features['api.tokens'].version, '1.1.0');
+  assert.equal(legacy.features['api.chatgpt-oauth-authorize'], '1.1.0');
+  assert.equal(manifest.features['api.chatgpt-oauth-authorize'].version, '1.1.0');
+  assert.ok(manifest.operations.some(operation => operation.path === '/api/v1/agents/reporting' && operation.feature === 'api.agent-reporting' && operation.methods.includes('POST')));
+  for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), true);
+  for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+});
+
 test('maps runtime and both manifests expose the negotiated owner provider contract', () => {
   assert.equal(typeof routeModules['v1/maps'], 'function');
   const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));

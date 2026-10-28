@@ -94,7 +94,17 @@ export type ActionRunTraceEntry = {
 	note?: string;
 };
 
+// Trusted server-side policy only. No HTTP request can supply these hooks.
+export type ActionOperationPolicy = {
+  step: (operation: string) => Promise<void>;
+  create: (schemaId: string, values: Record<string, unknown>, step: string) => Promise<{ acl: string[]; shareId?: string; crystal?: Record<string, unknown> }>;
+  access: (id: string, operation: 'read' | 'update') => Promise<void>;
+  update: (id: string, values: Record<string, unknown>) => Promise<void>;
+  search: (schema: unknown, scope: unknown) => Promise<void>;
+};
+
 type ActionBudget = {
+	operationPolicy?: ActionOperationPolicy;
 	assertAuthorized?: () => Promise<void>;
 	usedLookup?: boolean;
 	deadline: number;
@@ -490,6 +500,7 @@ const executeProgram = async (
 		for (let index = 0; index < program.steps.length; index += 1) {
 			await budget.assertAuthorized?.();
 			const step = program.steps[index];
+			await budget.operationPolicy?.step(step.op);
 			const label = stepPrefix ? `${stepPrefix}.${index + 1}` : String(index + 1);
 			const startedAt = Date.now();
 			let target: string | undefined;
@@ -538,6 +549,7 @@ const executeProgram = async (
 				}
 				const values = resolveValue(step.values, scope);
 				if (!values || typeof values !== 'object' || Array.isArray(values)) runError(`Step ${label} values resolved to non-object data`);
+				const policyCreate = await budget.operationPolicy?.create(schema.id, values as Record<string, unknown>, label);
 				const created = await createThing(
 					viewer!.id,
 					{
@@ -551,10 +563,11 @@ const executeProgram = async (
 						// thing would otherwise republish it to the world. An explicit
 						// audience is a v2 grammar question (declared + derived as an
 						// effect), never an implicit default.
-						acl: [ACL_OWNER],
+						acl: policyCreate?.acl ?? [ACL_OWNER],
+						...(policyCreate?.shareId ? { shareId: policyCreate.shareId } : {}),
 						// scope/provenance stamps spread LAST so no resolved value
 						// can clobber them (SchemaThingForm posture)
-						crystal: { ...(values as Record<string, unknown>), schema: schema.name, schemaId: schema.id }
+						crystal: { ...(values as Record<string, unknown>), ...policyCreate?.crystal, schema: schema.name, schemaId: schema.id }
 					},
 					viewer
 				);
@@ -565,6 +578,7 @@ const executeProgram = async (
 			} else if (step.op === 'things.get') {
 				const id = resolveValue(step.id, scope);
 				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
+				await budget.operationPolicy?.access(String(id), 'read');
 				const included = budget.shared?.data.get(String(id));
 				const got = included
 					? { ok: true as const, thing: { id: included.shareId, thingtime: included.thingtime, crystal: included.crystal } }
@@ -581,6 +595,7 @@ const executeProgram = async (
 				target = thing.id;
 				scope.steps[index] = { id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal };
 			} else if (step.op === 'things.search') {
+				await budget.operationPolicy?.search(step.schema, step.scope);
 				// Scope 'own' (default) = YOUR OWN data things; 'public' = tt:all
 				// data things of ONE schema from ANYONE; 'system' = tt:all data
 				// things of ONE schema that the SEED owns (the sanitizer requires
@@ -657,11 +672,13 @@ const executeProgram = async (
 					const permissions = await Promise.all(docs.map((doc: any) => canViewInherited(doc, null)));
 					docs = docs.filter((_doc: any, index: number) => permissions[index]);
 				}
+				if (budget.operationPolicy) for (const doc of docs) await budget.operationPolicy.access(String(doc.shareId), 'read');
 				note = `${docs.length} match${docs.length === 1 ? '' : 'es'}${scopeKind === 'own' ? '' : ` (${scopeKind})`}`;
 				scope.steps[index] = docs.map((doc: any) => ({ id: doc.shareId, crystal: doc.crystal || {}, createdAt: doc.createdAt, ownerId: doc.ownerId }));
 			} else if (step.op === 'things.update') {
 				const id = resolveValue(step.id, scope);
 				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
+				await budget.operationPolicy?.access(String(id), 'update');
 				const current = await getThing(viewer, String(id));
 				if (current.ok === false) runError(`Step ${label} update target unreadable: ${current.error}`);
 				const currentThing = (current as { ok: true; thing: { id: string; thingtime?: string[]; crystal: unknown } }).thing;
@@ -688,6 +705,7 @@ const executeProgram = async (
 				// `$step.2.crystal` read, or a returned `$step.2`, would silently
 				// carry (or lose) schema/schemaId. Spreading keeps the stamp local
 				// to this update, exactly like the things.create path above.
+				await budget.operationPolicy?.update(String(id), values as Record<string, unknown>);
 				const patch: Record<string, unknown> = { ...(values as Record<string, unknown>) };
 				const currentCrystal = (currentThing.crystal || {}) as Record<string, unknown>;
 				if (typeof currentCrystal.schema === 'string') patch.schema = currentCrystal.schema;
@@ -702,6 +720,7 @@ const executeProgram = async (
 			} else if (step.op === 'things.delete') {
 				const id = resolveValue(step.id, scope);
 				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
+				await budget.operationPolicy?.access(String(id), 'update');
 				const current = await getThing(viewer, String(id));
 				if (current.ok === false) runError(`Step ${label} delete target unreadable: ${current.error}`);
 				const currentThing = (current as { ok: true; thing: { id: string; thingtime?: string[]; crystal: unknown; author?: { id?: string } } }).thing;
@@ -879,7 +898,7 @@ const executeActionRun = async (
 	viewer: Viewer,
 	request: { action?: unknown; inputs?: unknown; source?: unknown; execution?: unknown; executionVersion?: unknown },
 	shared?: SharedComposition,
-	context?: { firstPartyActorId?: string; browserOnly?: boolean; assertAuthorized?: () => Promise<void> }
+	context?: { firstPartyActorId?: string; browserOnly?: boolean; assertAuthorized?: () => Promise<void>; operationPolicy?: ActionOperationPolicy }
 ): Promise<RunActionResult> => {
 	// Shared programs receive neither the author's nor the visitor's private
 	// account authority. Only stored composition reads are added below.
@@ -934,6 +953,7 @@ const executeActionRun = async (
 	const startedAt = new Date();
 	const budget: ActionBudget = {
 		assertAuthorized: context?.assertAuthorized,
+		operationPolicy: context?.operationPolicy,
 		deadline: Date.now() + limits.timeoutMs,
 		opsRemaining: limits.maxOperations,
 		maxDepth: limits.maxDepth,

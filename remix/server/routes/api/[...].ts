@@ -180,6 +180,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
 	'v1/watch/sync': () => import('../../../app/routes/api/v1/watch/sync/_sync'),
 	'v1/watch/things': () => import('../../../app/routes/api/v1/watch/things/_things'),
   'v1/agent-overview': () => import('../../../app/routes/api/v1/agent-overview/_agent-overview'),
+  'v1/agents/reporting': () => import('../../../app/routes/api/v1/agents/reporting/_reporting'),
   'v1/communities': () => import('../../../app/routes/api/v1/communities/_communities'),
   'v1/communities/get': () => import('../../../app/routes/api/v1/communities/get/_get'),
   'v1/communities/invites': () => import('../../../app/routes/api/v1/communities/invites/_invites'),

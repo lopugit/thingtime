@@ -1271,7 +1271,7 @@ const setUserFlair = async (viewer: NonNullable<Viewer>, subspace: any, input: M
 	return { ok: true, member: toPublicMember(fresh, profiles.get(targetUserId) || null, subspace) };
 };
 
-export const mutateMember = async (viewerInput: string | Viewer, input: MutateMemberInput): Promise<Fail | { ok: true; member: PublicSubspaceMember }> => {
+export const mutateMember = async (viewerInput: string | Viewer, input: MutateMemberInput, options: { insertOnly?: boolean } = {}): Promise<Fail | { ok: true; member: PublicSubspaceMember }> => {
 	const auth = requireViewer(viewerInput);
 	if (auth.ok === false) return auth;
 	const actorId = auth.viewer.id;
@@ -1292,6 +1292,7 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 	if (isFail(targetUserId)) return targetUserId;
 	const things = await getThingsCollection();
 	const existing = await findSubspaceMemberDoc(id, targetUserId);
+	if (options.insertOnly && (action !== 'add' || existing)) return fail(409, 'Membership changed; insert-only addition cannot replace or revive it');
 	const target = existing ? membershipOfDoc(existing) : null;
 	if (target?.role === 'owner') return fail(403, 'The owner can’t be moderated');
 	if (target && target.role === 'moderator' && !target.left && !actorIsOwner && (action === 'ban' || action === 'remove' || action === 'role')) {
@@ -1428,6 +1429,7 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 			await things.insertOne(newSubspaceMemberDoc(id, targetUserId, crystal) as any);
 		} catch (err) {
 			if (!isDuplicateKey(err)) throw err;
+			if (options.insertOnly) return fail(409, 'Membership changed; insert-only addition cannot replace or revive it');
 			await things.updateOne(
 				{ thingtime: 'subspace-member', targetId: id, ownerId: targetUserId } as any,
 				{ $set: { ...set, updatedAt: now } }
