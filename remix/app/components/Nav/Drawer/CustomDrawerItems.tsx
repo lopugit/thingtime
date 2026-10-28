@@ -15,7 +15,7 @@ import { drawerRowStyles } from './drawerRow';
 import { customDrawerBlocks, upgradeCustomDrawerBlocks } from './customDrawerBlocks';
 import { useMarketingPublications } from '~/components/Marketing/marketingPublicationsStore';
 import { isKeyPublished } from '~/marketing/publishingCore';
-import { drawerAncestorPath, drawerParentOptions, normalizeCustomDrawerItems, removeCustomDrawerItem, moveCustomDrawerSibling, customDrawerUrl, updateCustomDrawerDraft, type CustomDrawerItem } from './drawerCustomItems';
+import { drawerAncestorPath, drawerChildParentIds, drawerParentOptions, normalizeCustomDrawerItems, removeCustomDrawerItem, moveCustomDrawerSibling, customDrawerUrl, updateCustomDrawerDraft, type CustomDrawerItem } from './drawerCustomItems';
 export const OPEN_CUSTOM_DRAWER_SECTION = 'thingtime:drawer-open-section';
 const ADD_FROM_PREVIEW = 'thingtime:custom-drawer-add';
 const emptyDraft = (parentId?: string): CustomDrawerItem => ({ ...(parentId ? { parentId } : {}), id: '', emoji: '🔗', title: '', tooltip: '', url: '' });
@@ -36,6 +36,7 @@ function CustomDrawerScope({ scopeKey, settings, preview, onNavigate, parentId, 
  const dataPlane = useDataPlane();
  const { publications } = useMarketingPublications();
  const parents = React.useMemo(() => drawerParentOptions(customItems, !!user, !!user?.isAdmin, key => isKeyPublished(publications, key)), [customItems, user, publications]);
+ const childParentIds = React.useMemo(() => drawerChildParentIds(parents), [parents]);
  const accountMenu = !settings && !!user?.id && !user.temporary && !!dataPlane;
  const legacyDocument = React.useCallback(() => {
   try { return legacyDeviceSettingsDocument({ origin: window.location.origin, ownerId: user?.id || 'anonymous', dataPlane: dataPlane || 'unavailable', documentKey: 'custom-drawer-menu' }, window.localStorage); } catch { return null; }
@@ -144,7 +145,7 @@ function CustomDrawerScope({ scopeKey, settings, preview, onNavigate, parentId, 
  };
  return <div ref={host} data-drawer-custom-level={parentId || "toplevel"} className={parentId ? "tt-drawer-sublevel" : undefined}><SettingsDocumentHost documentKey={settings ? 'custom-drawer-settings' : 'custom-drawer-menu'} title={settings ? "Custom drawer management" : "Drawer menu template"} showLayoutControls={settings || templateEditor} loadFallbackDocument={accountMenu ? legacyDocument : undefined} layoutEditingDisabled={saving} defaultDocument={blocks} migrateBlocks={migrateBlocks} scopeKey={scopeKey} persistence={accountMenu ? "account" : "device"}>
   {({ blocks, chrome, editing }) => <TransientBlockHost key={editorGeneration} scopeKey={scopeKey} enabled={!editing} scope={{ drawer: {
-   items: customItems.filter(item => parents.some(parent => parent.id === item.id) && (settings || item.parentId === parentId)).map(item => ({ ...item, selected: item.id === selectedItem, closes: closesOnClick(item.id), location: drawerAncestorPath(item.parentId, parents).map(parent => parent.title).join(' / ') || 'Top level' })), parents: parentChoices.map(parent => ({ ...parent, title: drawerAncestorPath(parent.id, parents).map(ancestor => ancestor.title).join(' / ') })), nested: !!parentId, browse: !!onOpenChildren, open, draft, heading: draft.id ? 'Edit drawer item' : 'Add drawer item',
+   items: customItems.filter(item => parents.some(parent => parent.id === item.id) && (settings || item.parentId === parentId)).map(item => ({ ...item, hasChildren: childParentIds.has(item.id), selected: item.id === selectedItem, closes: closesOnClick(item.id), location: drawerAncestorPath(item.parentId, parents).map(parent => parent.title).join(' / ') || 'Top level' })), parents: parentChoices.map(parent => ({ ...parent, title: drawerAncestorPath(parent.id, parents).map(ancestor => ancestor.title).join(' / ') })), nested: !!parentId, browse: !!onOpenChildren, open, draft, heading: draft.id ? 'Edit drawer item' : 'Add drawer item',
    attached: draft.thingId ? (draft.thingTitle ? `Attached Thing: ${draft.thingTitle}` : 'Thing attached') : '', query, results, error, searchMessage, saving, managementError, hasMore: !!nextCursor
   } }} actions={actions}>
    <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
