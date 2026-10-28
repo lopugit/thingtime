@@ -67,6 +67,13 @@ edge cases live in `api/utils/migrations/migrations.ts`.
 
 System-kind rules (never bypass):
 
+- `agent-reporting-binding` and `agent-reporting-operation` are protected,
+  home-pinned `storageClass: "control"` Things. The reporting gateway alone
+  writes their task bindings and relational retry receipts, using existing
+  root `uniqueKeys` indexes. Generic CRUD, search and inherited reads refuse
+  them; the gateway returns only its authorized task projection. The
+  `agent-reporting-*` shareId namespace is reserved for this control state.
+
 - **Protected** kinds — `user`, `theme`, `feed-algorithm`, `waitlist`, `app`,
   `subscription-tier`, `subscription`, `app-storage`, `service-quota`,
   `account-link`, `migration-diagnostic`, `attachment`, `ai-model`,

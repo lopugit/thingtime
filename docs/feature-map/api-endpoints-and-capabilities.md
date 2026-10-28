@@ -1,5 +1,14 @@
 # API endpoints and capabilities
 
+Private task reporting publishes `api.agent-reporting` 1.0.0 on
+`POST /api/v1/agents/reporting`; both manifests derive it from `apiDocs.ts` and
+the Nitro route map. The ChatGPT MCP surface publishes `api.chatgpt-mcp` 1.1.0
+and its separate `chatgpt.agent-reporting` 1.0.0 contract. Its four tools
+negotiate reporting, Characters and overview at the connected account's exact
+origin, and require `agents.report` independently of `things`. Run
+`test:agent-reporting`, `test:chatgpt` and `test:api-capabilities`; see
+[the reporting runbook](../agent-reporting.md).
+
 Explicit Thing presentation is shared crystal metadata: `registry.ts`
 `validateThingtimeCrystal` retains `renderComponent` after each typed content
 allowlist and validates embedded definitions through the canonical Component
