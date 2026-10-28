@@ -13269,6 +13269,18 @@ separate from deterministic discovery/lease tests.
 
 ## Editable Mapbox maps and route planning
 
+- Load favourite and route sources with multiple cursor pages. Compare every
+  valid favourite and route stop with Action readback, including records after
+  the first page. Favourite pins remain visible when selecting a route; the
+  selected route's stop order uses numbered pins and controls map fitting.
+  Toggle favourites through both boolean and query-string false, click pins,
+  focus a place, pan the map and switch selection without recreating the SDK
+  or resetting the camera on a highlight-only change. Refused/repeated-cursor
+  pages stop cleanly; account/Character changes cannot publish late data.
+  Optimize route A, then select route B: A's geometry and optimization order
+  must disappear immediately. Selection alone makes no Navigation request.
+  Resize the map-first layout and open drawers on desktop and narrow mobile;
+  the canvas, attribution and controls must stay within the available bounds.
 - On the deployed origin, open a saved map after a successful public-token
   `browser-config` response. Confirm the Mapbox JS and CSS load from same-origin
   Vite assets, the style/tiles load from approved Mapbox service hosts, the
