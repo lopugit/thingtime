@@ -64,6 +64,10 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
   `tt-change` and `tt-mapbox` element blocks with nested editable children.
   Builder conversion keeps repeated-card templates, source bindings and child
   selection IDs (`api.things` 1.44.0, `api.things-update` 1.14.0).
+  The map viewport's reusable favourites/route Action sources drain cursor
+  pages through `useThingSource` and `Maps/mapboxSource.ts`; numbered route
+  overlays preserve favourite pins and scope transient geometry to the selected
+  route. See [editable maps](../maps.md) and `pnpm --dir remix run test:maps`.
 - Deleting a folder drains direct children to its parent in bounded transactions
   before removing the folder. Each child move and its Timeline event commit
   together; subfolder descendants stay nested. `things/folderPlacement.ts` writes
