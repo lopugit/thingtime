@@ -430,6 +430,7 @@ deployment webhook is configured:
   otherwise the live poll decides. Without that check a failed sibling build
   would show a healthy deployment as failed in the footer and in
   `/api/v1/health/vercel` until the next event for that branch arrived.
+
 # GitHub Actions prebuilt migration — 2026-10-23
 
 Production, Preview and custom environments build on GitHub Actions through
