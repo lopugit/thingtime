@@ -47,12 +47,18 @@ and disconnect as irreversible from the current ChatGPT connection.
 The user may explicitly set an **always allow** preference for this skill's
 current task session, or ask to save one for their global skill installation.
 Bind it to the exact HTTPS Thingtime origin, connected account, permitted action
-kinds, and exact Thing target IDs. A session preference lives only in this task's
+kinds, and exact Thing target IDs or an explicitly requested all-owned-Things
+scope. A session preference lives only in this task's
 context and ends with the task. Do not save it to disk. For a global preference,
 only after an explicit request to persist it, use this skill's
 `scripts/consent_preferences.py` helper to `grant --user-consented --origin
 <origin> --account <connected-account-id> --action <kind> --target <thing-id>`;
 repeat `--action` and `--target` for an explicitly requested set. The helper
+saves an explicit all-owned scope only with `--all-owned` instead of `--target`.
+For that scope, read the exact target Thing through the connected account and
+verify its author matches that account immediately before `check --owned-verified`;
+without that proof, `check` denies it. Never infer all-owned consent from a
+general request to use the skill. The helper
 saves `${CODEX_HOME:-~/.codex}/thingtime/consent-preferences.json` atomically
 with mode 0600. Run `list` to read back the exact grant and its ID. Run `check`
 with the same origin, account, action and target before relying on it; any

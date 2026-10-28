@@ -2,19 +2,21 @@
 """Local, scoped Thingtime skill preferences. This cannot waive tool approvals."""
 
 import argparse
+import fcntl
 import json
 import os
 import re
 import sys
 import tempfile
 import uuid
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
 
 ACTIONS = frozenset({"create", "update", "comment", "reaction", "save"})
-TARGET = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
+TARGET = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*\Z")
 
 
 def store_path():
@@ -22,6 +24,8 @@ def store_path():
 
 
 def origin(value):
+    if not isinstance(value, str):
+        raise ValueError("Origin must be a string")
     parsed = urlsplit(value)
     if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
             or parsed.path or parsed.query or parsed.fragment or value != f"https://{parsed.netloc}"):
@@ -35,10 +39,14 @@ def nonempty(value, label):
     return value
 
 
-def scope(actions, targets):
+def scope(actions, targets, all_owned=False):
     if not actions or any(action not in ACTIONS for action in actions):
         raise ValueError("Actions must be explicit and limited to create, update, comment, reaction, save")
-    if not targets or any(not isinstance(target, str) or not TARGET.fullmatch(target) for target in targets):
+    if not isinstance(all_owned, bool) or bool(targets) == all_owned:
+        raise ValueError("Choose explicit Thing IDs or all owned Things, never both")
+    if all_owned and "create" in actions:
+        raise ValueError("All-owned scope cannot cover creation without an existing owned target")
+    if any(not isinstance(target, str) or not TARGET.fullmatch(target) for target in targets):
         raise ValueError("Targets must be explicit Thing IDs; wildcards are not allowed")
     if len(set(actions)) != len(actions) or len(set(targets)) != len(targets):
         raise ValueError("Duplicate actions or targets are not allowed")
@@ -62,7 +70,9 @@ def validate(data):
         raise ValueError("Malformed or unsupported consent store")
     ids = set()
     for grant in data["grants"]:
-        if not isinstance(grant, dict) or set(grant) != {"id", "origin", "account", "actions", "targets", "expiresAt"}:
+        if not isinstance(grant, dict) or set(grant) not in (
+                {"id", "origin", "account", "actions", "targets", "expiresAt"},
+                {"id", "origin", "account", "actions", "targets", "expiresAt", "allOwned"}):
             raise ValueError("Malformed consent grant")
         uuid.UUID(nonempty(grant["id"], "grant ID"))
         if grant["id"] in ids:
@@ -72,7 +82,7 @@ def validate(data):
         nonempty(grant["account"], "account")
         if not isinstance(grant["actions"], list) or not isinstance(grant["targets"], list):
             raise ValueError("Malformed grant scope")
-        scope(grant["actions"], grant["targets"])
+        scope(grant["actions"], grant["targets"], grant.get("allOwned", False))
         if grant["expiresAt"] is not None:
             try:
                 until = datetime.fromisoformat(grant["expiresAt"].replace("Z", "+00:00"))
@@ -115,14 +125,30 @@ def write(path, data):
             os.unlink(temporary)
 
 
-def allowed(data, requested_origin, account, action, target, now=None):
+@contextmanager
+def mutation_lock(path):
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    lock_path = path.with_name(path.name + ".lock")
+    if path.parent.is_symlink() or lock_path.is_symlink():
+        raise ValueError("Consent path must not be a symlink")
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def allowed(data, requested_origin, account, action, target, owned_verified=False, now=None):
     origin(requested_origin)
     nonempty(account, "account")
-    if action not in ACTIONS or not TARGET.fullmatch(target or ""):
+    if action not in ACTIONS or not isinstance(target, str) or not TARGET.fullmatch(target):
         return False
     current = now or datetime.now(timezone.utc)
     return any(grant["origin"] == requested_origin and grant["account"] == account
-               and action in grant["actions"] and target in grant["targets"]
+               and action in grant["actions"] and (target in grant["targets"] or (grant.get("allOwned") is True and owned_verified is True))
                and (grant["expiresAt"] is None or datetime.fromisoformat(grant["expiresAt"].replace("Z", "+00:00")) > current)
                for grant in data["grants"])
 
@@ -135,7 +161,9 @@ def run(argv=None, path=None):
     grant.add_argument("--origin", required=True)
     grant.add_argument("--account", required=True)
     grant.add_argument("--action", action="append", required=True)
-    grant.add_argument("--target", action="append", required=True)
+    grant_targets = grant.add_mutually_exclusive_group(required=True)
+    grant_targets.add_argument("--target", action="append")
+    grant_targets.add_argument("--all-owned", action="store_true")
     grant.add_argument("--expires-at")
     revoke = commands.add_parser("revoke", help="Remove one grant by ID")
     revoke.add_argument("--id", required=True)
@@ -144,31 +172,34 @@ def run(argv=None, path=None):
     check.add_argument("--account", required=True)
     check.add_argument("--action", required=True)
     check.add_argument("--target", required=True)
+    check.add_argument("--owned-verified", action="store_true", help="Assert a fresh exact-Thing read proved this target belongs to the connected account")
     commands.add_parser("list", help="Read back saved grant scopes")
     args = parser.parse_args(argv)
     file = path or store_path()
     try:
-        data = read(file)
-        if args.command == "grant":
-            origin(args.origin)
-            nonempty(args.account, "account")
-            scope(args.action, args.target)
-            expiry(args.expires_at)
-            data["grants"].append({"id": str(uuid.uuid4()), "origin": args.origin, "account": args.account,
-                                   "actions": args.action, "targets": args.target, "expiresAt": args.expires_at})
-            write(file, data)
-            print(json.dumps(data["grants"][-1], sort_keys=True))
-        elif args.command == "revoke":
-            prior = len(data["grants"])
-            data["grants"] = [item for item in data["grants"] if item["id"] != args.id]
-            if len(data["grants"]) == prior:
-                raise ValueError("Grant not found")
-            write(file, data)
-            print(json.dumps({"revoked": args.id}))
-        elif args.command == "check":
-            print(json.dumps({"allowed": allowed(data, args.origin, args.account, args.action, args.target)}))
-        else:
-            print(json.dumps(data, sort_keys=True))
+        with mutation_lock(file) if args.command in {"grant", "revoke"} else nullcontext():
+            data = read(file)
+            if args.command == "grant":
+                origin(args.origin)
+                nonempty(args.account, "account")
+                scope(args.action, args.target or [], args.all_owned)
+                expiry(args.expires_at)
+                data["grants"].append({"id": str(uuid.uuid4()), "origin": args.origin, "account": args.account,
+                                       "actions": args.action, "targets": args.target or [], "allOwned": args.all_owned,
+                                       "expiresAt": args.expires_at})
+                write(file, data)
+                print(json.dumps(data["grants"][-1], sort_keys=True))
+            elif args.command == "revoke":
+                prior = len(data["grants"])
+                data["grants"] = [item for item in data["grants"] if item["id"] != args.id]
+                if len(data["grants"]) == prior:
+                    raise ValueError("Grant not found")
+                write(file, data)
+                print(json.dumps({"revoked": args.id}))
+            elif args.command == "check":
+                print(json.dumps({"allowed": allowed(data, args.origin, args.account, args.action, args.target, args.owned_verified)}))
+            else:
+                print(json.dumps(data, sort_keys=True))
         return 0
     except (ValueError, OSError) as error:
         print(f"Consent preference unavailable: {error}", file=sys.stderr)
