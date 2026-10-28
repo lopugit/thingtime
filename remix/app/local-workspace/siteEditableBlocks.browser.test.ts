@@ -24,16 +24,22 @@ test('global and site nested blocks remain individually editable after offline s
   args: ['--no-proxy-server', '--disable-background-networking', '--js-flags=--max-old-space-size=128'] });
  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
  const page = await context.newPage(); page.setDefaultTimeout(20_000);
- const errors: string[] = [], accountRequests: string[] = [], checks: string[] = [], views: unknown[] = [];
+ const errors: string[] = [], apiRequests: { method: string; path: string }[] = [], accountMutations: string[] = [], protectedReads: string[] = [], checks: string[] = [], views: unknown[] = [];
  const identities: Record<string, { frame: string; text: string; button: string; icon: string; input: string }> = {};
  page.on('pageerror', (error: Error) => errors.push(error.message));
  page.on('request', (request: any) => {
-  const path = new URL(request.url()).pathname;
-  if (/^\/api\/v1\/(things|drafts|actions|attachments|auth\/temporary)(\/|$)/.test(path)) accountRequests.push(`${request.method()} ${path}`);
+  const url = new URL(request.url()), method = request.method(), path = url.pathname;
+  if (url.origin !== base || !/^\/api(?:\/|$)/.test(path)) return;
+  apiRequests.push({ method, path });
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) accountMutations.push(`${method} ${path}`);
+  if (['GET', 'HEAD'].includes(method) && /^\/api\/v1\/(things|drafts|actions|attachments|auth\/temporary)(\/|$)/.test(path)) protectedReads.push(`${method} ${path}`);
  });
  const open = async () => {
-  if (!await page.getByLabel('Select block', { exact: true }).isVisible()) await page.getByRole('button', { name: 'Open the builder inspector', exact: true }).click();
-  await page.getByLabel('Select block', { exact: true }).waitFor();
+  const selectBlock = page.getByLabel('Select block', { exact: true });
+  const opener = page.getByRole('button', { name: 'Open the builder inspector', exact: true });
+  await Promise.any([selectBlock.waitFor({ state: 'visible' }), opener.waitFor({ state: 'visible' })]);
+  if (!await selectBlock.isVisible()) await opener.click();
+  await selectBlock.waitFor({ state: 'visible' });
  };
  const selected = () => page.getByLabel('Select block', { exact: true }).inputValue();
  const select = async (id: string) => { await open(); await page.getByLabel('Select block', { exact: true }).selectOption(id); assert.equal(await selected(), id); };
@@ -137,11 +143,24 @@ test('global and site nested blocks remain individually editable after offline s
    for (const scope of ['global', 'site']) {
     await page.getByText(scope + ' edited nested text', { exact: true }).waitFor();
     await page.locator(`[data-block-id="${identities[scope].icon}"]`).filter({ hasText: '★' }).first().waitFor();
-    const button = page.getByRole('button', { name: scope + ' edited button', exact: true }); await button.focus();
+    const assertHitTarget = async (control: any, label: string) => {
+     await control.scrollIntoViewIfNeeded();
+     const hit = await control.evaluate((el: HTMLElement) => {
+      const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const target = document.elementFromPoint(x, y);
+      return { visible: r.width > 0 && r.height > 0 && r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight,
+       unobscured: !!target && (target === el || el.contains(target)), rect: { left: r.left, right: r.right, top: r.top, bottom: r.bottom } };
+     });
+     assert.ok(hit.visible, label + ' visible in viewport'); assert.ok(hit.unobscured, label + ' hit target not covered');
+     views.push({ scope, width, control: label, hit });
+    };
+    const button = page.getByRole('button', { name: scope + ' edited button', exact: true });
+    await assertHitTarget(button, scope + ' composed button'); await button.focus();
     assert.ok(await button.evaluate((el: HTMLElement) => document.activeElement === el));
     const input = page.locator(`[data-block-id="${identities[scope].input}"] input, input[data-block-id="${identities[scope].input}"]`).first();
     await page.keyboard.press('Tab');
     assert.ok(await input.evaluate((el: HTMLElement) => document.activeElement === el), scope + ' button-to-input keyboard navigation');
+    await assertHitTarget(input, scope + ' composed input');
     await input.fill(scope + ' functional input'); assert.equal(await input.inputValue(), scope + ' functional input');
    }
    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth); assert.equal(overflow, false);
@@ -149,8 +168,8 @@ test('global and site nested blocks remain individually editable after offline s
    views.push({ scope: 'native /ode composition', width, overflow });
   }
   checks.push('native /ode renders both saved scopes with button-to-input keyboard navigation and editable live inputs at desktop/390/320px; no Action execution or input-value persistence is claimed');
-  assert.deepEqual(errors, []); assert.deepEqual(accountRequests, []);
-  await writeFile(resolve(artifacts!, 'verification.json'), JSON.stringify({ checks, identities, views, errors, accountRequests }, null, 2));
+  assert.deepEqual(errors, []); assert.deepEqual(accountMutations, []); assert.deepEqual(protectedReads, []);
+  await writeFile(resolve(artifacts!, 'verification.json'), JSON.stringify({ checks, identities, views, errors, apiRequests, accountMutations, protectedReads }, null, 2));
  } catch (error) {
   await page.screenshot({ path: resolve(artifacts!, 'failure.png') }).catch(() => {});
   await writeFile(resolve(artifacts!, 'failure.txt'), await page.locator('body').innerText().catch(() => 'Unavailable'));

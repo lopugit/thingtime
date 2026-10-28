@@ -1,0 +1,98 @@
+{
+  "scope": "current final prepared fixture plus retained failed/native and preflight evidence",
+  "nativeExecutions": 1,
+  "nativePasses": 0,
+  "correctedFixtureExecutions": 0,
+  "files": [
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28/README.md",
+      "bytes": 3864,
+      "sha256": "28c8503aeb24f5c241627e448fdc32cb17b2a28a65c646439d9a9c47ed10f8e9"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28/capacity-result.json",
+      "bytes": 516,
+      "sha256": "95e6a5f64eb54612d2653822b61924a184554ea07dd159275c037ac785dc1169"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28/prepared-fixture.mjs",
+      "bytes": 14185,
+      "sha256": "43c4f14be17a936cbf4193207cbfa0da2b6db7bfd621172e4f7fe1d81ba12831"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28/prepared-source.ts",
+      "bytes": 13925,
+      "sha256": "34fbc86482ee27831f48b1cde57a901e487b166bc5b3c5a62b8b12cc20cfc6ff"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28/source-proof.json",
+      "bytes": 415,
+      "sha256": "0b3a154246970097550c244efb04a74d8fcef04df9853ab5af6740f6ed9dd846"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28-r1/preflight-result.json",
+      "bytes": 172,
+      "sha256": "dbbfa45de00a227f7c17be8bba9473938766e7e6ef5662afc9cd235a03866690"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28-r2/site-editable/boundary.json",
+      "bytes": 263,
+      "sha256": "cac663e41aef3f41d264009b74c6166270757010f322f524c999e32118acc0f7"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28-r2/site-editable/cleanup.json",
+      "bytes": 74,
+      "sha256": "acdc783e63146fca9d5f809adf1229f7739104cd4aadb72e9393463035ba9bb3"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28-r2/site-editable/executed-fixture.mjs",
+      "bytes": 14032,
+      "sha256": "adff080da6cd5ab7471a2d99fb20e43af7d0bc4c37699404687956a521bbeb30"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28-r2/site-editable/failure.png",
+      "bytes": 50880,
+      "sha256": "982e262d8d81515d2baa24879c64888b7c159b29339b9a3a454745211db4b346"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28-r2/site-editable/failure.txt",
+      "bytes": 744,
+      "sha256": "51e6b77daad70dcf997ad718e2a5d02f6e9ca3e38c2ad274f173dcfa73ad4a92"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28-r2/site-editable/network-proof.json",
+      "bytes": 422,
+      "sha256": "a9e74e956d0e714c28586d4798649fcbbb1125dafbae90daffcde4725d8c3f6b"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28-r2/site-editable/package-proof.json",
+      "bytes": 4608,
+      "sha256": "e9f233d2f8308a40ebbe9c1c64457eb9f0f5a486c714c95bc7898b30150b54f0"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28-r2/site-editable/package.json",
+      "bytes": 242,
+      "sha256": "0f5b912033050b17fad8d1f8a6113205953d4d0aeb5d068b28413656b6d0f13c"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28-r2/site-editable/resources.json",
+      "bytes": 580,
+      "sha256": "1814eb00e3603e98eeda18ae220efb82e48e5bb630342a3e2e1914d0b1c1b1ad"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28-r2/site-editable/source-proof.json",
+      "bytes": 436,
+      "sha256": "b7cab7f8e05c2979ee90ec44c9f11df402df877ff270f155a7da639327e7404e"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28-r2/site-editable/test-1.log",
+      "bytes": 818,
+      "sha256": "d7526b5a50b25483669172ad7ab17ad8337a0b96fab18e58e75ec60ee0430537"
+    },
+    {
+      "path": "artifacts/anonymous-site-editable-2026-10-28-r3/preflight-result.json",
+      "bytes": 167,
+      "sha256": "815c02869bc811736321a273f1e8286364c65824aa4480743469646dbf4c9928"
+    }
+  ]
+}

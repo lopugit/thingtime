@@ -104,6 +104,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-28 — **Codex (AI):** Correct the global/site Builder acceptance fixture readiness race and strengthen page-observed API and composed-control hit checks. Lint/compilation pass; native acceptance remains incomplete, with the failed run and capacity refusals retained. [Evidence](../artifacts/anonymous-site-editable-2026-10-28/README.md).
+
 - 2026-10-27 — **Codex (AI):** Prepared the opt-in native regression for individually editable nested global/site Builder blocks and documented its isolated run path. Lint and skipped discovery pass; native execution remains pending after a ten-minute headroom wait launched zero browsers. Recorded completed CI/preview checks for the preceding post-delete checkpoint. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
 - 2026-10-27: Keep pending local post deletions hidden from stale online conversation projections, preserving raw Thing shapes and account retirement. Portal the quote popup so its closed content cannot widen a hidden phone container, and keep the Repost menu positioned against the viewport through scrolling. Final native account/anonymous deletion, queue recovery and settled quote/control checks pass at 1440/390/320px. [PR 1000 detail](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**

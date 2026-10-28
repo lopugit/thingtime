@@ -12,10 +12,13 @@ passed [Web CI](https://github.com/lopugit/thingtime/actions/runs/40432792534) a
 assets and origin-scoped manifest checks. Deployment `7347973206` identifies the
 source; these checks do not prove deployed functional acceptance.
 
-The next global/site nested-block fixture is prepared and reviewed. Lint and
-opt-in skipped discovery pass, but its preflight and one ten-minute capacity wait
-started zero browsers because another task's runtime remained active. Native
-acceptance stays open. [Prepared fixture, run instructions and observed blocker](../artifacts/anonymous-site-editable-2026-10-27/README.md).
+The 28 October global/site nested-block follow-up executed one native test,
+which failed before block creation at an eager inspector readiness check. That
+fixture race is corrected; lint and compilation pass. Page-observed API tracking
+and composed-control hit checks are strengthened; worker traffic is outside the
+request listener. A six-minute capacity observer launched zero additional tests.
+Corrected native acceptance remains open; other active runtimes
+were left untouched. [Retained attempts, exact source and remaining work](../artifacts/anonymous-site-editable-2026-10-28/README.md).
 No production code, shared service, VM setting or account data changed in this
 fixture-readiness follow-up. Later commits need their own hosted checks.
 

@@ -1,0 +1,7 @@
+{
+  "source": "remix/app/local-workspace/siteEditableBlocks.browser.test.ts",
+  "sourceSha256": "34fbc86482ee27831f48b1cde57a901e487b166bc5b3c5a62b8b12cc20cfc6ff",
+  "compiledSha256": "43c4f14be17a936cbf4193207cbfa0da2b6db7bfd621172e4f7fe1d81ba12831",
+  "compiler": "esbuild0.28.1 transform loader ts format esm target node22",
+  "reason": "wait for inspector selector or opener before selecting readiness branch"
+}
