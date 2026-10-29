@@ -102,6 +102,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-29: Restore repeated child insertion in populated Builder parents,
+  add above/below/left/right insertion, and replace overlapping nested title
+  chips with a shared ancestor breadcrumb. Add an editable block-structure
+  dialog whose page/parent/block views select the real inspector target.
+  **Codex (AI)**
+
 - 2026-10-29: Unify native and optional browser-provider display naming as Thingtime, verify matching branded bundles, and present native macOS passkey setup and discovery before optional browser interception.
 
 - 2026-10-29: Recover native Password AutoFill linking for an enabled provider, preserve explicit disconnect and independent account links, explain local HTTPS requirements, and install matching standalone/nested companions.

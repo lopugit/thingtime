@@ -26,6 +26,8 @@ components; reuse them instead of adding parallel versions.
 | Shared native selects | `app/Providers/Chakra/Components/Select.tsx`, registered in `theme.tsx`; Chakra `Select` consumers (including Character posting and CI providers) inherit runtime colors, borders, radii and keyboard focus; Theme Studio controls the focus border and two-color glow through `theme/tokens.ts` and `theme/customise.ts` |
 | Design system docs page | `/docs/design-system` (`app/routes/docs/*`) |
 | Local cache tiers (first-paint) | `app/hooks/localCache.ts` (`tt-<domain>` keys) |
+| Nested Builder insertion and ancestry | `Builder/WebpageBlocksRenderer.tsx`, `blockChromePath.ts`, `useBuilderChrome.tsx`, `webpageBlocks.ts`; one ancestor toolbar, populated-parent append controls, and directional insertion that preserves neighboring layout |
+| Editable block structure dialog | `Builder/BlockContextMenu.tsx`, `BlockStructureModal.tsx`, `blockStructure.ts`; page/parent/block projections rendered through `SettingsDocumentHost` and `TransientBlockHost`, selecting the original page block in its inspector |
 
 ## Adding a menu action (any Thing surface)
 
@@ -93,6 +95,12 @@ browser acceptance also checks reload and repeated search through the renderer.
 - Lopu has no gender; use **it**.
 
 ## Tests
+
+- `pnpm --dir remix run test:webpages` covers block mutations and structure
+  projections. `node remix/scripts/builder-nesting-acceptance.mjs` exercises
+  repeated nested insertion, directional menus, ancestry, structure selection,
+  save/readback/reload and responsive layouts against a disposable real API and
+  replica set. It owns its browser profile, database, ports and cleanup.
 
 - `node remix/scripts/run-select-theme-browser.mjs` builds the real shared theme
   and Character selector in a network-isolated browser fixture. Set
