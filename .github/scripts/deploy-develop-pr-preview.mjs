@@ -2,7 +2,7 @@
 import { assertPreviewGatewaySource } from './preview-gateway-source.mjs';
 
 import assert from 'node:assert/strict';
-import { reconcileOrphanPreviews } from './orphan-preview-cleanup.mjs';
+import { completeInventory, reconcileOrphanPreviews } from './orphan-preview-cleanup.mjs';
 import { deploymentIssue as stablePublisherDeploymentIssue, marker as stablePublisherMarker, policyVersion as stablePublisherPolicyVersion, verifyAlias, verifyCanonicalGateway, compatibilityAliasCandidates } from './deploy-vercel-prebuilt.mjs';
 import { gatewayPolicy, gatewayMetadata, gatewayDeploymentIssue, gatewayRuntimeArgs, gatewayPublisherEnvironment, restoreGatewayAliases } from './environment-gateway-policy.mjs';
 import { isManagedPreviewComment as isManagedComment, upsertPreviewComment, publishPreviewNotifications } from './preview-comments.mjs';
@@ -39,7 +39,6 @@ const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
 const CLEANUP_ACTIONS = new Set(['closed', 'converted_to_draft', 'edited']);
 const MAX_DEPLOYMENT_PAGES = 20;
 const MAX_WORKFLOW_DEPLOYMENTS = 500;
-const MAX_RECONCILE_PULL_REQUESTS = 100;
 const MAX_GITHUB_PAGES = 10;
 const REQUEST_TIMEOUT_MS = 30_000;
 const CANCEL_TIMEOUT_MS = 2 * 60 * 1000;
@@ -2418,12 +2417,8 @@ const reconcile = async (config) => {
 	}
 	// The old sweep only visited PRs with Vercel objects. A failed authorization
 	// or missed event creates no such object, so those PRs were never repaired.
-	const open = await githubRequest(`/repos/${config.repository}/pulls?state=open&per_page=100`);
-	if (!Array.isArray(open) || open.length >= 100) throw new Error('Open preview PR inventory exceeds its safety bound');
+	const open = await completeInventory(githubRequest, `/repos/${config.repository}/pulls?state=open`, null, { github: true });
 	for (const pr of open) if (!byPullRequest.has(pr.number)) byPullRequest.set(pr.number, []);
-	if (byPullRequest.size > MAX_RECONCILE_PULL_REQUESTS) {
-		throw new Error('Scheduled reconciliation exceeded its pull-request safety bound');
-	}
 
 	let removedAliases = 0;
 	let removedDeployments = 0;
