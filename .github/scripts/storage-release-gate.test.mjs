@@ -140,3 +140,16 @@ test('production gates run before alias movement and inside existing merge-requi
   assert.match(monitor, /vercel@59\.10\.0/);
   assert.doesNotMatch(monitor, /ADMIN.*TOKEN|continue-on-error/);
 });
+test('required API-suite job runs real storage integration when present without warning-only fallback', () => {
+  const workflow = readFileSync(new URL('../workflows/web-ci.yml', import.meta.url), 'utf8');
+  const api = workflow.split('\n  api-tests:\n')[1].split(/\n  [\w-]+:\n/)[0];
+  const start = api.indexOf('      - name: Verify durable storage recovery against an isolated replica');
+  const end = api.indexOf('      - name: Start dev stack', start);
+  assert.ok(start >= 0 && end > start);
+  assert.ok(api.indexOf('      - name: Install dependencies') < start);
+  const step = api.slice(start, end);
+  assert.match(step, /hashFiles\('remix\/scripts\/storage-recovery\.integration\.mts'\) != ''/);
+  assert.match(step, /THINGTIME_TEST_MONGO_RUNTIME: docker/);
+  assert.match(step, /run: pnpm run test:storage-recovery:integration/);
+  assert.doesNotMatch(step, /continue-on-error|\|\| true|secrets\./);
+});

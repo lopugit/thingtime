@@ -391,6 +391,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The integration owns its replica and scrubs inherited configuration;
+      # it never reuses this job's application Mongo service or data.
+      # Historical trees may omit it; a present failing script fails this job.
+      - name: Verify durable storage recovery against an isolated replica
+        if: ${{ hashFiles('remix/scripts/storage-recovery.integration.mts') != '' }}
+        env:
+          THINGTIME_TEST_MONGO_RUNTIME: docker
+        run: pnpm run test:storage-recovery:integration
+
       - name: Start dev stack
         run: |
           nohup npm run dev > /tmp/tt-dev.log 2>&1 &
