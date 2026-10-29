@@ -12519,6 +12519,11 @@ separate from deterministic discovery/lease tests.
 
 ## Automatic iOS TestFlight and vault delivery
 
+- [ ] Run the shared FileSync package and native suite on the release runner.
+  The simulator uses its host kernel: exercise the unsupported rename-flag
+  fallback with `NativeFileDestinationTests`, retain no-follow/exclusive/swap
+  protections, and reject symlinks, occupied targets and intervening mutations.
+  Errors other than `EINVAL` must not trigger the compatibility retry.
 - [ ] Run `test:ios-release`, both capability suites and `server/utils/apiFallback.test.ts`.
   Reject foreign repo/owner/workflow/source, PR/develop/tag events, stale/replayed
   tokens, previews, disabled policy, oversized payloads and arbitrary environment
@@ -12532,6 +12537,8 @@ separate from deterministic discovery/lease tests.
   stop publishing before upload. Inspect signed entitlements on both archive and IPA.
 - [ ] After approved rollout, verify a native main push triggers the workflow,
   web-only pushes do not, and feature-branch manual dispatch cannot publish.
+  Include shared `apple/FileSync/**` changes in this trigger check; its source
+  and tests are part of the iOS build even when no `iOS/**` file changes.
   Check exact App Store Connect build, internal tester availability and the real
   iPhone Home/Lock Screen widget pickers before claiming device delivery.
 

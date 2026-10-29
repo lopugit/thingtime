@@ -6,6 +6,7 @@ on:
     paths:
       - 'iOS/**'
       - 'apple/Shared/**'
+      - 'apple/FileSync/**'
       - 'apple/Widgets/**'
       - 'apple/Passwords/**'
       - 'apple/PasswordProvider/**'
