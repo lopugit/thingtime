@@ -102,6 +102,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-29: Identify Builder-authored Things through the existing schema array, open owned Builder Things in their editors, and add shared Open in Builder / Open live page menu actions while preserving view/share links and ordinary Thing navigation. — Codex (AI)
+
 - 2026-10-29: Restore shared Apple file publication and recovery on older host
   kernels while retaining path, symlink, identity and content protections.
   Cover the unsupported rename-flag retry and include FileSync changes in

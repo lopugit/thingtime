@@ -1,3 +1,4 @@
+import { BUILDER_THING_KIND, withBuilderThingKind } from './builderThing';
 import { renderComponentDeclaration } from '../components/Thingtime/renderComponentDeclaration';
 import { validateMediaPipeline } from '../webPlatform/mediaPipeline';
 import { validateLiveSource } from './liveSources';
@@ -4543,6 +4544,12 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   shareSchema,
   dataSchema,
   {
+    id: BUILDER_THING_KIND, version: 1, kind: 'crystal', collection: null,
+    title: 'Builder Thing', summary: 'Content authored through the Thingtime Builder.',
+    detail: 'Composable authorship metadata alongside a content schema. It does not change content validation, rendering, ownership or access. Legacy Builder kinds remain recognizable without a migration.',
+    fields: [], example: {}
+  },
+  {
     id: 'scheduled-task-run', version: 1, kind: 'crystal', collection: null,
     title: 'Scheduled task run', summary: 'An owner-private, editable run note linked to its task by targetId.',
     requiresTarget: true,
@@ -7115,25 +7122,28 @@ export const validateThingtimeCrystal = (
     if (!ids.includes(id)) ids.push(id);
   }
 
+  const contentIds = ids.filter(id => id !== BUILDER_THING_KIND);
+  if (!contentIds.length) return fail(400, 'builder-thing requires a content schema');
+
   // Free-form 'data' crystals stand alone. Combining data with a typed schema
   // would let arbitrary keys ride past that schema's whitelist (verified:
   // ["post","data"] smuggled non-post fields into the stored crystal), so the
   // open shape and the closed shapes never share one thing.
-  if (ids.includes('data') && ids.length > 1) {
+  if (contentIds.includes('data') && contentIds.length > 1) {
     return fail(400, 'data crystals stand alone — publish a separate data thing and link it via targetId or tags');
   }
 
   // Folders are pure organization: combining them with a content schema would
   // make a doc that is both a container and content (and would let e.g.
   // ["post","folder"] ride the folder sanitizer past the post whitelist).
-  if (ids.includes('folder') && ids.length > 1) {
+  if (contentIds.includes('folder') && contentIds.length > 1) {
     return fail(400, 'folder things stand alone — put content IN the folder via folderId instead');
   }
 
   const input = crystal && typeof crystal === 'object' && !Array.isArray(crystal) ? (crystal as Record<string, unknown>) : {};
   const merged: Record<string, unknown> = {};
   let requiresTarget = false;
-  for (const id of ids) {
+  for (const id of contentIds) {
     const schema = getThingtimeSchema(id)!;
     if (schema.requiresTarget) requiresTarget = true;
     const sanitizer = crystalSanitizers[id];
@@ -7143,7 +7153,7 @@ export const validateThingtimeCrystal = (
       // refuse with the real reason instead of pretending they don't exist.
       return fail(403, `${id} things are managed by their own endpoints`);
     }
-		const sanitized = sanitizer(input, ids, options);
+		const sanitized = sanitizer(input, contentIds, options);
     if (sanitized.ok === false) return sanitized;
     Object.assign(merged, sanitized.crystal);
   }
@@ -7178,5 +7188,5 @@ export const validateThingtimeCrystal = (
       }
     }
   }
-  return { ok: true, thingtime: ids, crystal: merged, requiresTarget };
+  return { ok: true, thingtime: withBuilderThingKind(ids, merged), crystal: merged, requiresTarget };
 };

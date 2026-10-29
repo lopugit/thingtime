@@ -1,3 +1,5 @@
+import { thingOpenHref, type ThingsAuthor } from '../Things/thingsCore';
+import { PersistedThingMenu } from '../Thingtime/ContextMenu/PersistedThingMenu';
 import React from 'react';
 import { Badge, Box, Button, Flex, Text } from '@chakra-ui/react';
 import { ArrowLeft, BookOpen, ExternalLink, Link as LinkIcon, Search } from 'lucide-react';
@@ -6,7 +8,6 @@ import { Link, useParams } from 'react-router';
 import { timeAgo } from '~/components/Feed/feedTypes';
 import { RenderThing } from '~/components/Kinds';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { thingDetailPath } from '~/components/Search/commanderSearch';
 import { SchemaTemplateRender } from '~/components/Things/ThingsViews';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -69,6 +70,7 @@ const MAX_CACHED_OWN_THING_LISTS = 16;
 const ownThingsCacheKey = (userId: string, schemaKey: string) => `${OWN_THINGS_CACHE_PREFIX}${userId}:${schemaKey}`;
 
 type OwnThing = {
+  author?: ThingsAuthor;
   id: string;
   thingtime: string[];
   crystal: Record<string, any>;
@@ -81,6 +83,7 @@ const asOwnThing = (thing: unknown): OwnThing | null => {
   if (typeof record.id !== 'string' || !record.id) return null;
   return {
     id: record.id,
+    author: record.author && typeof record.author === 'object' && typeof (record.author as { id?: unknown }).id === 'string' ? record.author as ThingsAuthor : null,
     thingtime: Array.isArray(record.thingtime) ? record.thingtime.filter((entry): entry is string => typeof entry === 'string') : [],
     crystal: record.crystal && typeof record.crystal === 'object' && !Array.isArray(record.crystal) ? (record.crystal as Record<string, any>) : {},
     createdAt: typeof record.createdAt === 'string' ? record.createdAt : ''
@@ -137,6 +140,7 @@ const CrystalChips = ({ crystal }: { crystal: Record<string, any> }) => {
 };
 
 const OwnThingCard = ({ thing, source }: { thing: OwnThing; source: SchemaCardSource }) => {
+  const user = useCurrentUser();
   const title = titleOf(thing);
   const rendered = React.useMemo(() => ({ kind: kindOf(source.name), ...thing.crystal }), [source.name, thing.crystal]);
   return (
@@ -164,11 +168,12 @@ const OwnThingCard = ({ thing, source }: { thing: OwnThing; source: SchemaCardSo
           fontSize="xs"
           gap={1}
           textDecoration="underline"
-          to={thingDetailPath(thing.id)}
+          to={thingOpenHref(thing, 'things', user?.id)}
         >
           Open thing
           <ExternalLink size={11} />
         </Flex>
+        <PersistedThingMenu id={thing.id} initialThing={thing} label={`${title || "Thing"} actions`} />
       </Flex>
       {source.render ? (
         // the schema's render over the viewer's own values — INERT: {field}
