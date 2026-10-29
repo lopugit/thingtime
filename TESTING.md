@@ -1,5 +1,14 @@
 # TESTING.md — per-area manual test checklists
 
+## Builder Thing navigation (2026-10-29)
+
+- [ ] Create a page, Component, Action, Schema, data Thing and app folder through Builder. Exact-ID API reads and reloads retain `builder-thing` in the existing `thingtime` array without replacing their other schemas. Ordinary data created outside Builder remains ordinary data.
+- [ ] On `/things`, activate an owned Builder Thing in grid, list and columns views; webpages open their page editor, other authored Things open their Builder definition editor and app folders open their Builder contents. Older canonical Builder kinds and app folders work before their next save.
+- [ ] Open the same Thing's right-click and overflow menus. **Open in Builder** targets the owner editor; **Open live page** appears only for supported live presentations. Copy link and Share retain the canonical view link. Inspect/data access remains available.
+- [ ] Verify another owner's Thing and a signed-out view never advertise owner editing; direct Builder editor links still enforce ownership. Ordinary Things, files and folders retain their existing navigation.
+- [ ] Exercise iconized Thing links and shared persisted-Thing menus outside the library. Confirm the authenticated viewer, rather than cached ownership or a Builder marker alone, determines the default editor link.
+- [ ] At desktop and narrow mobile widths, open menus near viewport edges, use keyboard focus/Enter/Escape and touch overflow controls, scroll top to bottom, and verify no clipping, horizontal overflow or obstructed menu actions. Edit, save and reload one representative Builder Thing through the opened editor.
+
 ## Builder app browser (2026-10-28)
 
 - [ ] At `/builder`, verify All apps is the default and app folders can be created and edited with name, description, upload-first icon and structured metadata. Reload and compare with exact Thing reads.
@@ -7733,6 +7742,35 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
 
+### Nested insertion, ancestry and structure (2026-10-29)
+
+- [ ] Add a second and third child to populated grid, row, column and HTML
+      element parents using both the visible Add a block control and seamless
+      inline +. Empty eligible elements accept their first child; void elements
+      and leaf blocks never offer invalid children.
+- [ ] Insert above, below, beside left and beside right from the block menu.
+      Check both compatible parent layouts and the two-block wrapper used for
+      a different axis; surrounding sibling layout and existing IDs survive.
+      Restricted HTML control parents must reject both paths: inserting beside
+      an authored option must not place an ordinary container inside a select.
+- [ ] Hover nested zero-padding blocks and navigate every ancestor in the pink
+      breadcrumb. The active title, menu and insertion controls remain reachable
+      with mouse, keyboard and touch, including the responsive preview iframe.
+      Layout or viewport changes must not let an ancestor claim the toolbar
+      while the pointer still hits its child; deliberate parent hovering works.
+- [ ] Open structure for the whole page, up to parent and this block. Each scope
+      shows the correct live subtree. Selecting a row selects that exact page
+      block and opens its inspector, even if the same block was selected before
+      closing the drawer. Escape closes the modal and returns focus.
+- [ ] Customize the structure Component through its Builder controls: edit a
+      heading, scope button and repeated row field separately, save and reload.
+      Live tree actions still work and the underlying page content is unchanged.
+- [ ] Save the page, verify its exact ID through the real API, reload and repeat
+      selection. At desktop, 390px and 320px scroll the canvas, inspector and
+      structure dialog to the bottom; long/deep labels and open menus must not
+      clip, overlap or create horizontal overflow. Automated real-API coverage:
+      `node remix/scripts/builder-nesting-acceptance.mjs`.
+
 ### Saved collection source pagination (2026-09-27)
 
 - [ ] Bind an HTML/Chakra collection to a saved Action returning cursor pages. Next and infinite scrolling append older rows; duplicate IDs replace in place and empty intermediate pages continue.
@@ -10394,9 +10432,16 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Host display-name localization: the physical `Thingtime Passwords.app`
+  basename and raw host display name stay equal; bundled `en.lproj/InfoPlist.strings`
+  resolves display/short names to **Thingtime**. Check FileManager display name,
+  URL localized name and the native Save-in picker on the installed copy. Missing
+  or wrong localization must fail packaged verification. Keep IDs, executable,
+  entitlement/Keychain identities and physical bundle paths unchanged.
+
 - [ ] Native-first provider experience: confirm the installed host and active
-  extension both expose CFBundleDisplayName/CFBundleName **Thingtime** with matching
-  versions; browser manifest, action tooltip and popup use the same brand.
+  extension both resolve their user-visible display/short names as **Thingtime**
+  with matching versions; browser manifest, action tooltip and popup use the same brand.
   Keep bundle IDs, executable paths, Keychain group and designated requirements
   stable. With competing browser passkey offers disabled, create a passkey on an
   independent site and sign in from Chrome's native flow; confirm the catalog RP

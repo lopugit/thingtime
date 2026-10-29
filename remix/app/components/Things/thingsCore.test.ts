@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { isBuilderApp, isTopLevelLibraryThing, groupThings, parseThingsReferrer, schemaRenderOf, thingLink, thingOpenHref, type ThingsThing } from './thingsCore';
+import { isBuilderApp, isTopLevelLibraryThing, groupThings, parseThingsReferrer, schemaRenderOf, thingLink, thingOpenHref, thingBuilderHref, thingLiveHref, type ThingsThing } from './thingsCore';
 
 const makeThing = (id: string, kind: string): ThingsThing => ({
   id,
@@ -119,4 +119,37 @@ test('cached root uses the same structural placement contract without removing s
   assert.equal(isTopLevelLibraryThing(makeThing('top', 'data')), true);
   for (const row of [makeThing('blob', 'attachment'), makeThing('settings','file-sync'), {...makeThing('child','data'),parentId:'parent'}, {...makeThing('report','data'),crystal:{parentId:'task',body:'Progress'}}, {...makeThing('nested','file'),folderId:'folder'}, {...makeThing('linked','data'),targetId:'owner'}]) assert.equal(isTopLevelLibraryThing(row), false);
   assert.equal(isTopLevelLibraryThing(makeThing('file','file')), true);
+});
+
+
+test('owner activation opens legacy and explicitly marked Builder Things without changing permalinks', () => {
+  const expected = { webpage: '/builder?page=owned', component: '/builder?thing=owned', action: '/builder?thing=owned', schema: '/builder?thing=owned' };
+  for (const [kind, href] of Object.entries(expected)) {
+    const thing = { ...makeThing('owned', kind), author: { id: 'owner' } };
+    assert.equal(thingOpenHref(thing, 'things', 'owner'), href);
+    assert.equal(thingBuilderHref(thing, 'owner'), href);
+    assert.equal(thingOpenHref(thing, 'things', 'other'), thingOpenHref(thing, 'things'));
+    assert.equal(thingBuilderHref(thing), null);
+    assert.ok(!thingLink(thing).startsWith('/builder'));
+  }
+  const data = { ...makeThing('saved data/1', 'data'), thingtime: ['data', 'builder-thing'], author: { id: 'owner' } };
+  assert.equal(thingOpenHref(data, 'feed', 'owner'), '/builder?thing=saved%20data%2F1');
+  assert.equal(thingBuilderHref({ ...data, thingtime: ['data'] }, 'owner'), null);
+  assert.equal(thingBuilderHref({ ...data, author: null }, 'owner'), null);
+  assert.equal(thingBuilderHref({ ...data, thingtime: ['folder', 'builder-thing'] }, 'owner'), '/builder?folder=saved%20data%2F1&kind=all');
+});
+
+test('live navigation requires an existing presentation contract', () => {
+  for (const kind of ['webpage', 'component', 'action', 'schema']) {
+    const thing = makeThing('live', kind);
+    assert.equal(thingLiveHref(thing), thingLink(thing));
+  }
+  const data = { ...makeThing('data', 'data'), thingtime: ['data', 'builder-thing'] };
+  assert.equal(thingLiveHref(data), null);
+  assert.equal(thingLiveHref({ ...data, thingtime: ['data'], crystal: { renderComponent: { id: 'saved-component' } } }), '/thing/data');
+  assert.equal(thingLiveHref({ ...data, crystal: { tag: 'div', blocks: [], type: 'webpage' } }), null);
+  assert.equal(thingLiveHref({ ...data, crystal: { renderComponent: null } }), null);
+  assert.equal(thingLiveHref({ ...data, crystal: { renderComponent: { id: 'saved-component' } } }), '/thing/data');
+  assert.equal(thingLiveHref({ ...data, crystal: { renderComponent: { render: { tag: 'section' } } } }), '/thing/data');
+  assert.equal(thingLiveHref({ ...data, thingtime: ['folder', 'builder-thing'] }), null);
 });

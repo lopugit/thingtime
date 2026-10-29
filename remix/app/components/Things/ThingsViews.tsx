@@ -28,6 +28,7 @@ import {
   isBuilderApp,
   primaryKindOf,
   thingDisplayName,
+  thingBuilderHref,
   thingIcon
 } from './thingsCore';
 
@@ -118,6 +119,8 @@ export type ThingsItemAction =
   | 'history'
   | 'send-to-lopu'
   | 'open'
+  | 'open-builder'
+  | 'open-live'
   | 'preview'
   | 'inspect'
   | 'paste-into'
@@ -247,7 +250,7 @@ const TitleLink = ({
       handleItemClick(thing, handlers, event, onOpen);
     }}
     onDoubleClick={(event: React.MouseEvent) => event.stopPropagation()}
-    to={handlers.itemHref?.(thing) || (thing.inode ? `/things?files=${encodeURIComponent(thing.inode.deviceId)}&path=${encodeURIComponent(thing.inode.type === 'folder' ? thing.inode.path : thing.inode.path.split('/').slice(0, -1).join('/'))}` : thingBrowseHref(thing, handlers.locationSearch))}
+    to={handlers.itemHref?.(thing) || (thing.inode ? `/things?files=${encodeURIComponent(thing.inode.deviceId)}&path=${encodeURIComponent(thing.inode.type === 'folder' ? thing.inode.path : thing.inode.path.split('/').slice(0, -1).join('/'))}` : thingBrowseHref(thing, handlers.locationSearch, handlers.ownerId))}
     {...textProps}
   >
     {thingDisplayName(thing)}
@@ -637,7 +640,7 @@ export const ThingsColumnsView = ({
                 cursor="pointer"
                 data-thing-id={thing.id}
                 direction="column"
-                onClick={(event) => handleItemClick(thing, handlers, event, folder ? () => onOpenFolderAt(depth, thing.id) : undefined)}
+                onClick={(event) => handleItemClick(thing, handlers, event, folder && !thingBuilderHref(thing, handlers.ownerId) ? () => onOpenFolderAt(depth, thing.id) : undefined)}
                 sx={BROWSE_CONTROLS_SX}
                 onContextMenu={(event) => handlers.onItemContextMenu(thing, event)}
                 opacity={handlers.cutIds.has(thing.id) ? 0.45 : 1}
@@ -653,7 +656,7 @@ export const ThingsColumnsView = ({
                     fontSize="13px"
                     handlers={handlers}
                     noOfLines={1}
-                    onOpen={folder ? () => onOpenFolderAt(depth, thing.id) : undefined}
+                    onOpen={folder && !thingBuilderHref(thing, handlers.ownerId) ? () => onOpenFolderAt(depth, thing.id) : undefined}
                     thing={thing}
                     wordBreak="break-all"
                   />

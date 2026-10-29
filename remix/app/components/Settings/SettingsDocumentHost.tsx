@@ -175,8 +175,9 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
 }
 
 function SettingsEditor({ draft, name, onName, children }: { draft: UseWebpageDraft; name: string; onName: (name: string) => void; children: (chrome: BuilderChrome) => React.ReactNode }) {
-  const builder = useBuilderChrome(draft, { allowedBlockTypes: SETTINGS_BLOCK_TYPES });
   const [open, setOpen] = React.useState(false);
+  const inspectBlock = React.useCallback(() => setOpen(true), []);
+  const builder = useBuilderChrome(draft, { allowedBlockTypes: SETTINGS_BLOCK_TYPES, onInspect: inspectBlock });
   React.useEffect(() => { if (builder.selectedId) setOpen(true); }, [builder.selectedId]);
   return <>
     <Button size="xs" mb={2} onClick={() => setOpen(true)}>Open Builder inspector</Button>

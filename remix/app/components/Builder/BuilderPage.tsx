@@ -11,6 +11,7 @@ import { BuilderDrawer, InspectorReopenPill, useBuilderDrawerWidth } from './Bui
 import { useBuilderChrome } from './useBuilderChrome';
 import { useWebpageDraft } from './useWebpage';
 import { countBlocks } from './webpageBlocks';
+import { ThingDefinitionEditor } from './DefinitionEditor/ThingDefinitionEditor';
 import { ThingsPage } from '~/components/Things/ThingsPage';
 
 // /builder — create and edit block-based webpages. Without ?page= it lists
@@ -25,7 +26,13 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 	const draft = useWebpageDraft(
 		React.useMemo(() => (isGlobal ? { kind: 'global' as const } : { kind: 'id' as const, id: pageId }), [isGlobal, pageId])
 	);
-	const { chrome, selectedId, deselect, insertMenu, uploadToBlock, uploadToPosition } = useBuilderChrome(draft);
+	const [drawerOpen, setDrawerOpen] = React.useState(
+		() => typeof window === 'undefined' || window.innerWidth >= 768
+	);
+	const inspectBlock = React.useCallback(() => setDrawerOpen(true), []);
+	const { chrome, selectedId, deselect, insertMenu, uploadToBlock, uploadToPosition } = useBuilderChrome(draft, {
+		onInspect: inspectBlock
+	});
 	// ?page= can open someone else's page on the fork path, so previewBg is not
 	// necessarily the viewer's own. Screen it with the same shared render-time
 	// check the component previews apply to this field.
@@ -66,9 +73,6 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 	// phones: the drawer covers nearly the whole viewport, so edit mode
 	// starts with the CANVAS visible — selecting a block opens the drawer
 	// (existing effect), and the 🧱 Inspector pill reopens it any time
-	const [drawerOpen, setDrawerOpen] = React.useState(
-		() => typeof window === 'undefined' || window.innerWidth >= 768
-	);
 	const namedForRef = React.useRef<string | null>(null);
 
 	// selecting a block is a request to inspect it — reopen a collapsed drawer
@@ -170,8 +174,10 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 };
 
 export const BuilderPage = () => {
-	const [searchParams] = useSearchParams();
+	const [searchParams, setSearchParams] = useSearchParams();
 	const pageId = searchParams.get('page');
+	const thingId = searchParams.get('thing');
+	if (thingId) return <><ThingsPage builderMode /><ThingDefinitionEditor id={thingId} requireBuilder onClose={() => { const next = new URLSearchParams(searchParams); next.delete('thing'); setSearchParams(next); }} /></>;
 	if (searchParams.has('branchId')) return <BranchWebpage pageId={pageId || ''} />;
 	if (!pageId) return <ThingsPage builderMode />;
 	if (pageId === '__global__') return <BuilderCanvas pageId={pageId} />;
