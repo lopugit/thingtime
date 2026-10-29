@@ -4136,6 +4136,31 @@ email whose link points at the attacker.
 
 ## Post engagement row & comment threads (`remix/app/components/Feed/PostCard.tsx`)
 
+- [ ] EMOJI COMBINATIONS: paste more than 12 emoji and more than 80 code
+      points into the full picker on a post and a comment. Add remains visible;
+      Add and Enter submit the complete combination as one reaction. Verify
+      exact API readback and reload. Invalid text and embedded whitespace stay
+      rejected. Run `npm --prefix remix run test:emoji-picker-acceptance` for
+      isolated real-API and desktop/mobile browser coverage.
+- [ ] EMOJI DRAFT: enter a combination, dismiss by click-away or Escape, reopen
+      through + and confirm the exact unsubmitted input. Another post/comment
+      and a different account must not inherit it. Successful submission clears
+      the input; dismissal alone does not.
+- [ ] QUICK RECENTS: the first popup keeps its six defaults and appends up to
+      nine recent distinct tokens in most-recent-first order, excluding defaults
+      already shown. Confirm new reactions appear in another mounted card and
+      after reload; delay the initial recents GET and concurrent add replies so
+      neither can erase or reorder newer successful selections. At desktop,
+      narrow mobile and short heights, scroll the popup and full picker; complete
+      combinations wrap, Add remains reachable, and nothing overflows sideways.
+      Open near the fixed navigation: both popovers remain above it through the
+      shared popup layer on both content and Popper positioning wrapper; use
+      hit-testing to confirm the + button is clickable at 390px width. The
+      reaction summary on posts/comments wraps long complete tokens within the
+      card, retaining the total and neighboring controls without clipping.
+      Escape dismisses the quick popup while its trigger
+      retains focus, as well as from focused picker controls.
+
 - [ ] MODERATION/PERMALINK: when comment moderation is temporarily pending,
       the comment author still sees the new standalone comment and its count
       after reloading `/post/:id`; another viewer does not see it until it is
@@ -7109,6 +7134,18 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       reaction renders its image chip for OTHER members too (resolved by id,
       `custom:<emoji id>`); custom tokens are REJECTED by the post react
       endpoint (namespace isolation both ways).
+- [ ] Long unicode combinations in both Chats and Spaces: paste more than twelve
+      emojis into a message reaction picker, dismiss and reopen, then Add. Confirm
+      exact `chats/messages` readback, full wrapping chips without horizontal
+      clipping or overlap with the following message, and single-emoji compact
+      placement at desktop/mobile widths. The picker must fit its parent and
+      remain clickable above fixed navigation. Repeat with a 200-emoji token.
+- [ ] Messenger composer emoji input survives click-away/Escape and reopening;
+      Add inserts the complete combination into the text field and clears only
+      the submitted picker input. Another message, chat/thread, account or data
+      plane must not display the prior target's draft. Run
+      `npm --prefix remix run test:emoji-picker-acceptance` for the real API/browser
+      regression and `test:messenger` for the focused Messenger contracts.
 - [ ] Custom emojis: upload ≤512KB gif/webp/png/jpeg → renders inline via
       `:name:` in messages, animated gifs animate; duplicate name in scope
       409s. Personal emoji can render for authenticated recipients where it was

@@ -1186,7 +1186,8 @@ export function useApi() {
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
-          if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', '1.15.0');
+          if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.1');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           if (args?.crystal?.configurationVersion !== undefined && args?.crystal?.localRootId !== undefined) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
@@ -1250,6 +1251,7 @@ export function useApi() {
       ),
       upsert: useCallback(
         async (args) => {
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.1');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           return asyncFetcher.submit(
@@ -1273,6 +1275,7 @@ export function useApi() {
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.1');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           if (args?.thingtime?.includes('file-sync')) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
@@ -1298,7 +1301,7 @@ export function useApi() {
       ),
       react: useCallback(
         async (args) => {
-          await requireThingtimeCapability('api.things-react', '1.2.0');
+          await requireThingtimeCapability('api.things-react', '1.2.1');
           return asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react', errorContext: 'save your reaction' });
         },
         [asyncFetcher]

@@ -102,6 +102,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-29: Restore Add for long custom emoji combinations, retain unfinished
+  reaction-picker input after dismissal, and append nine recent choices to the
+  quick reaction popup. Reuse shared validation and account-scoped reaction
+  history with responsive wrapping and real API/browser regression coverage.
+  **Codex (AI)**
+
 - 2026-10-29: Restore the original browser tab before explicit native passkey fallback starts WebAuthn; approval-page cancellation returns consistently while background opt-out/cancellation stays non-disruptive.
 
 - 2026-10-29: Restore successful browser passkey approvals to the exact requesting tab/window before the site handles its response.

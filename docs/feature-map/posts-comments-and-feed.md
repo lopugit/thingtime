@@ -25,6 +25,8 @@ relational children aggregated on read (`FUNDAMENTALS.md` §3).
 | Composer (Editor.js rich text, attachments, tags, audience) | `app/components/Feed/PostComposer.tsx`, `app/components/Editor/*` |
 | Lists and pages | `app/components/Feed/PostList.tsx`, `Feed.tsx`, `app/routes/feed.tsx`, `post.tsx`, `media.tsx`, `explore.tsx` |
 | Reaction overlays and thread cache (optimistic rendering) | `app/components/Feed/reactionOverlay.ts`, `threadCache.ts`, `useFeedEngagement.ts` |
+| Emoji picker, retained input and personal quick reactions | `app/components/Emoji/EmojiPicker.tsx`, `useRecentReactions.tsx`, `reactionPickerState.ts`; `PostCard.tsx` shares them across posts/comments |
+| Messenger reaction chips and retained emoji input | `app/components/Messenger/MessageRow.tsx`, `MessengerEmojiPicker.tsx`, `Composer.tsx`; shared `Emoji/useEmojiPickerDraft.ts` scopes drafts to identity and message/chat/thread |
 | Subspaces (communities) moderation on posts | `app/api/utils/subspaces/*`, `app/components/Subspaces/*` |
 
 ## Authorization helper
@@ -73,6 +75,22 @@ projection or changes target permissions.
   `test:hooks` (payload shaping).
 - `TESTING.md`: "Post interactions & inherit chains", "Post views", poll and
   up/down sections, "Post and comment attachments".
+- `test:feed` includes reaction token/schema, recent ordering and identity-scope
+  regressions. `test:emoji-picker-acceptance` exercises long combinations,
+  dismissal/reopening, nine quick recents and real post/comment reaction readback
+  in an isolated API/browser environment at desktop and mobile sizes. It also
+  checks Messenger Chats/Spaces reaction readback, full wrapping chips, dismissal
+  drafts and composer insertion; `test:messenger` covers its API contracts.
+
+Reaction combinations share `utils/reactionTokens.ts` across feed, Messenger
+and the canonical reaction schema. `api.things-react` 1.2.1,
+`api.chats-react` 1.0.3, `api.things` 1.46.1, `api.things-update` 1.15.1 and
+`api.schemas` 1.1.1 remove the obsolete token-length caps. Emoji-only grammar,
+ACLs, storage accounting and request transport validation remain enforced.
+The custom input survives popover dismissal per account/origin/database/target;
+the quick popup supplements defaults with nine unique recent tokens. Server
+snapshots retain current server order, including other-device use; delayed
+older replies cannot displace newer confirmed selections.
 
 ## Account drafts and templates
 
