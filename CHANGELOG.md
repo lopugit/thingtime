@@ -1,5 +1,93 @@
 # Control-plane changelog
 
+## 2026-10-27 — Record the confirmed hosted group-read failure
+
+- Preserve diagnostic run 40447212769: exact E1/E2/W source and artifact digest
+  passed, while `drop-read-groups` identified Python `os.getgroups()` returning
+  EINVAL before positive controls or PF mutation. Upload passed only before PF.
+- Hosted isolation/native admission remains unproven and unchanged. A separately
+  reviewed parent-owned local snapshot-only compile route does not remove the
+  hosted gate. See [the recorded result](.github/NATIVE_PERSISTENT_DENIAL_EXPERIMENT.md#confirmed-diagnostic-run-40447212769--2026-10-27).
+
+## 2026-10-27 — Identify the inert authority failure operation
+
+- Preserve the hosted authority EINVAL result and add allowlisted numeric-drop,
+  sudo, transport-setuid and synthetic-canary operation labels to sanitized
+  child/root diagnostics. Keep every enforcement check and group readback.
+- Document the primary-source group-read hypothesis without claiming the actual
+  hosted syscall is known or authorizing another run. Original native admission
+  is unchanged; see [the experiment evidence](.github/NATIVE_PERSISTENT_DENIAL_EXPERIMENT.md#hosted-run-40444943200-and-diagnostic-only-follow-up--2026-10-27).
+
+## 2026-10-27 — Prepare inert denial through provider disposal
+
+- Prepare a separate reviewed-source experiment with no candidate/native
+  admission: retain PF denial through hosted VM disposal, attribute fixed probe
+  packets, observe escaped work after supervisor loss, and verify real artifact
+  transport separately. Synthetic canary/IPC observations do not establish broad
+  credential or service isolation. Original native pins remain unchanged; hosted execution requires separate approval.
+- See [the reviewed experiment](.github/NATIVE_PERSISTENT_DENIAL_EXPERIMENT.md).
+
+## 2026-10-27 — Preserve inert initialization failure evidence
+
+- Repair allowlisted report-directory access under the private supervisor
+  umask, with a local control/mode regression that preserves existing folders.
+- Add bounded allocator predicate counts and fixed stage/outcome diagnostics
+  without widening UID bounds, accepting unknown domain statuses or publishing
+  raw private state. The first hosted run failed before lifecycle fixtures;
+  cleanup and native acceptance remain unverified. See
+  [the run evidence and plan](.github/NATIVE_LIFECYCLE_EXPERIMENT.md#hosted-run-40438204623-initialization-evidence-and-proposed-repair).
+
+## 2026-10-27 — Fit exact-head experiment labels within GitHub
+
+- Use `tt-life-` plus the full forty-character SHA for a 48-character label.
+  Preserve exact-head owner binding and add a name-length/no-truncation
+  regression after GitHub rejected the previous prefix before label creation.
+- Keep hosted triggering withheld until the updated helper/workflow pins are
+  independently reviewed. No label or experiment run was created by the failed
+  request.
+
+## 2026-10-27 — Prepare an inert hosted lifecycle experiment
+
+- Add a fixed helper and safe mocked checks for fresh task user-domain
+  ownership, KeepAlive/escaped-child observations and exact owned cleanup on
+  disposable hosted macOS guests. Preserve quarantine on uncertain authority.
+- Keep the experiment separate from native helper/workflow admission. The
+  owner label/run require final exact-source review; publishing is not hosted
+  or unsigned native compile acceptance. See
+  [the experiment spec](.github/NATIVE_LIFECYCLE_EXPERIMENT.md).
+
+## 2026-10-27 — Stop before unsupported task lifecycle mutation
+
+- Refuse both native-helper modes after read-only runner admission and before
+  identity/watchdog/PF/candidate operations. Emit fixed unavailable-lifecycle
+  diagnostics; no caller setting or receipt bypasses the source gate.
+- Exclusive task UID/bootstrap/service ownership and teardown/no-respawn proof
+  remain unimplemented. Document the next disposable-platform gate without
+  claiming process tests establish launchd authority. Immutable pins unchanged.
+
+## 2026-10-27 — Refuse unavailable native network controls
+
+- Require usable IPv4/IPv6 TCP and UDP/DNS positive controls before policy
+  activation and gate completion. Reject no-route/refusal/permission failures
+  as denial evidence; retain only timeout-class denial observations.
+- 49 selected safe regressions pass with live signaling/forking guarded;
+  three existing live-process fixtures were excluded from this bounded audit.
+  Launchd ownership, task-owned IPv6 fixtures/counters, immutable admission,
+  hosted execution and native acceptance remain incomplete. See
+  [the repair note](PRs/codex-oauth-native-authority-lifecycle.md).
+
+## 2026-10-27 — Bound the negative native authority command
+
+- Let the trusted root supervisor register, time out, kill and reap the fixed
+  negative sudo command directly, without a nested unprivileged timeout or
+  captured command pipes. Preserve numeric credential checks and distinguish
+  launcher failures from normal refusal.
+- 48 safe regressions pass, including five new authority/lifecycle cases. This
+  partial repair is not admitted by existing immutable workflow pins. Launchd
+  service ownership/teardown and usable IPv6 denial proof remain release gates;
+  no hosted/native acceptance or dispatch is implied. See
+  [the repair note](PRs/codex-oauth-native-authority-lifecycle.md).
+
 ## 2026-10-27 — Verify Darwin kernel groups after numeric drop
 
 - Replace the invalid empty Python directory-group assertion with exact kernel
@@ -189,6 +277,8 @@ Details: [PR #637](PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-rev
   and allowed/denied caller-event regression cases.
 
 ## [Unreleased]
+
+- 2026-10-27: Keep the native authority regression checklist in `.github/TESTING.md` and correct its links, preserving the bare control-plane root contract. Helper logic, workflows and admission pins are unchanged. **Codex (AI)**
 
 - 2026-09-05: Publish Graphify writer ownership atomically, preserve replacement
   locks during delayed cleanup, and retain query snapshot locks through child

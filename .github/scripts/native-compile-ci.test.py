@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Non-privileged trusted-controller admission tests; never load candidate code."""
 import importlib.util
+import errno
 import io
 import json
 import os
+import socket
 from pathlib import Path
 import subprocess
 import sys
@@ -53,6 +55,37 @@ class NativeCompileBoundaryTests(unittest.TestCase):
         self.assertNotIn('ref: ${{ github.workflow_sha }}',text)
         self.assertNotIn('steps.controller.outputs.sha',text)
 
+    def test_lifecycle_unavailable_gate_has_no_caller_receipt_or_environment_bypass(self):
+        for mode in ['preflight','native']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                report=Path(directory)
+                # A caller-authored success receipt must not become authority.
+                (report/'result.json').write_text(json.dumps({'launchdOwnershipVerified':True,
+                    'exclusiveTaskUidVerified':True,'noRespawnVerified':True}))
+                with patch.dict(os.environ,{'THINGTIME_NATIVE_LIFECYCLE_VERIFIED':'true'}),patch.object(native,'phase'),patch.object(native,'run') as command,self.assertRaises(RuntimeError):
+                    native.admit_task_lifecycle(report,'a'*40,'b'*40,mode)
+                command.assert_not_called()
+                result=json.loads((report/'result.json').read_text())
+                self.assertEqual(result['failureStage'],'task-lifecycle-admission')
+                self.assertEqual(result['lifecycleBackend'],'direct-setuid-unsupported')
+                for field in ['exclusiveTaskUidVerified','launchdOwnershipVerified','noRespawnVerified',
+                              'policyChanged','candidateExtracted','candidateExecuted']:
+                    self.assertIs(result[field],False)
+
+    def test_supervise_lifecycle_refuses_before_identity_watchdog_policy_or_candidate(self):
+        for mode in ['preflight','native']:
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory).resolve();report=root/'report';pr=root/'pr.json'
+                pr.write_text('{}')
+                with patch.dict(os.environ,{'RUNNER_TEMP':str(root),'DEVELOPER_DIR':'/Applications/Xcode.app'}),patch.object(native,'require_hosted_runner',return_value=(501,'runner')),patch.object(native,'validate_source'),patch.object(Path,'is_dir',return_value=True),patch.object(native,'admit_runner',return_value=[]) as runner,patch.object(native,'phase'),patch.object(native,'run') as command,patch.object(native.tempfile,'mkdtemp') as allocate,patch.object(native,'start_watchdog') as watchdog,patch.object(native.shutil,'copyfile') as copy,patch.object(native,'cleanup') as cleanup,self.assertRaises(RuntimeError):
+                    native.supervise(str(root/'missing-candidate.tar.gz'),str(report),'a'*40,'b'*40,str(pr),mode)
+                runner.assert_called_once()
+                for operation in [command,allocate,watchdog,copy,cleanup]:operation.assert_not_called()
+                result=json.loads((report/'result.json').read_text())
+                self.assertEqual(result['mode'],mode)
+                self.assertFalse(result['policyChanged'])
+                self.assertFalse(result['candidateExecuted'])
+
     def test_source_identity_and_exact_sha_are_required(self):
         sha='a'*40
         pr={'state':'open','author_association':'OWNER','head':{'repo':{'full_name':'lopugit/thingtime'},'sha':sha},
@@ -73,6 +106,55 @@ class NativeCompileBoundaryTests(unittest.TestCase):
         self.assertTrue(all('user' not in r and 'proto' not in r for r in rules[4:]))
         for uid in [0,-1,'501\npass out all']:
             with self.assertRaises(ValueError):native.firewall_rules(uid)
+
+    def test_positive_controls_require_both_usable_families_and_udp(self):
+        valid={'runnerPositiveControls':[{'family':int(family),'positiveTcp':True}
+                   for family in [socket.AF_INET,socket.AF_INET6]],'positiveUdpDns':True}
+        native.require_positive_controls(valid)
+        invalid=[None,{},dict(valid,positiveUdpDns=False),dict(valid,positiveUdpDns=1),
+                 dict(valid,runnerPositiveControls=[]),dict(valid,runnerPositiveControls={})]
+        for rows in [[valid['runnerPositiveControls'][0]]*2,
+                     [{'family':int(socket.AF_INET),'positiveTcp':True},
+                      {'family':int(socket.AF_INET6),'positiveTcp':False,'errno':errno.ENETUNREACH}],
+                     [{'family':int(socket.AF_INET),'positiveTcp':True},
+                      {'family':str(int(socket.AF_INET6)),'positiveTcp':True}],
+                     [{'family':int(socket.AF_INET),'positiveTcp':True},
+                      {'family':int(socket.AF_INET6),'positiveTcp':1}]]:
+            invalid.append(dict(valid,runnerPositiveControls=rows))
+        for evidence in invalid:
+            with self.subTest(evidence=evidence),self.assertRaises(RuntimeError):
+                native.require_positive_controls(evidence)
+
+    def test_unrouted_ipv6_baseline_fails_with_fixed_diagnostic(self):
+        client=Mock();client.connect.side_effect=[None,OSError(errno.ENETUNREACH,'fixture')]
+        output,error=io.StringIO(),io.StringIO()
+        with patch('socket.socket',return_value=client),patch('sys.stdout',output),patch('sys.stderr',error):
+            with self.assertRaises(OSError):exec(native.BASELINE,{})
+        self.assertEqual(output.getvalue(),'')
+        diagnostic=native.preflight_failure(subprocess.CalledProcessError(1,[],stderr=error.getvalue()))
+        self.assertEqual(diagnostic['baseline'],{'stage':'baseline-tcp6','errorType':'OSError','errno':errno.ENETUNREACH})
+
+    def test_direct_denial_requires_timeout_not_route_or_refusal_errors(self):
+        for part in ['tcp4','tcp6','udp']:
+            for code in [errno.ENETUNREACH,errno.EHOSTUNREACH,errno.ECONNREFUSED,errno.EACCES]:
+                client=Mock();client.connect.side_effect=OSError(code,'fixture')
+                client.recvfrom.side_effect=OSError(code,'fixture')
+                with self.subTest(part=part,code=code),patch('socket.socket',return_value=client),\
+                        patch.object(sys,'argv',['probe','5500',part]),patch.object(native.os,'geteuid',return_value=5500):
+                    with self.assertRaises(RuntimeError):exec(native.PROBE,{})
+
+    def test_direct_denial_records_timeout_and_rejects_connected_transport(self):
+        for part in ['tcp4','tcp6','udp']:
+            for error in [socket.timeout(),TimeoutError(),OSError(errno.ETIMEDOUT,'fixture')]:
+                client=Mock();client.connect.side_effect=error;client.recvfrom.side_effect=error
+                output=io.StringIO()
+                with self.subTest(part=part,error=type(error).__name__),patch('socket.socket',return_value=client),\
+                        patch.object(sys,'argv',['probe','5500',part]),patch.object(native.os,'geteuid',return_value=5500),\
+                        patch('sys.stdout',output):exec(native.PROBE,{})
+                self.assertEqual(json.loads(output.getvalue()),{'uid':5500,'subprobe':part,'passed':True})
+            with patch('socket.socket',return_value=Mock()),patch.object(sys,'argv',['probe','5500',part]),\
+                    patch.object(native.os,'geteuid',return_value=5500),self.assertRaises(AssertionError):
+                exec(native.PROBE,{})
 
     def make_archive(self,root,extras=()):
         archive=root/'candidate.tar.gz'
@@ -171,10 +253,13 @@ class NativeCompileBoundaryTests(unittest.TestCase):
     def test_failed_hostname_probe_fails_positive_gate_without_network_access(self):
         with patch('socket.create_connection',side_effect=OSError),patch.object(sys,'argv',['probe','allow']):
             with self.assertRaises(RuntimeError):exec(native.CONTROL_PROBE,{})
-        output=io.StringIO()
-        with patch('socket.create_connection',side_effect=OSError),patch.object(sys,'argv',['probe','deny']),patch('sys.stdout',output):
-            exec(native.CONTROL_PROBE,{})
-        self.assertTrue(json.loads(output.getvalue())['rootControlDenied'])
+        with patch('socket.create_connection',side_effect=OSError),patch.object(sys,'argv',['probe','deny']):
+            with self.assertRaises(RuntimeError):exec(native.CONTROL_PROBE,{})
+        for error in [socket.timeout(),TimeoutError()]:
+            output=io.StringIO()
+            with patch('socket.create_connection',side_effect=error),patch.object(sys,'argv',['probe','deny']),patch('sys.stdout',output):
+                exec(native.CONTROL_PROBE,{})
+            self.assertTrue(json.loads(output.getvalue())['rootControlDenied'])
 
     def test_owned_probe_group_must_be_gone_before_restore(self):
         calls=[]
@@ -267,12 +352,50 @@ class NativeCompileBoundaryTests(unittest.TestCase):
                     except ProcessLookupError:pass
                 if process.poll() is None:process.kill();process.wait(timeout=2)
 
+    def test_authority_probe_is_direct_fixed_command_with_no_capture_pipes(self):
+        environment=['/usr/bin/env','-i','PATH=/usr/bin:/bin']
+        with patch.object(native,'run',return_value=subprocess.CompletedProcess([],1)) as run:
+            native.authority_probe(5500,5500,Path('/trusted/helper.py'),environment)
+        run.assert_called_once_with([native.PYTHON,'-I','-S','/trusted/helper.py','authority-drop','5500','5500',*environment],
+                                    check=False,timeout=5,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+
+    def test_authority_probe_rejects_success_signal_and_launcher_failure(self):
+        for code in [0,-9,111,2,127]:
+            with self.subTest(code=code),patch.object(native,'run',return_value=subprocess.CompletedProcess([],code)),self.assertRaises(RuntimeError):
+                native.authority_probe(5500,5500,Path('/trusted/helper.py'),[])
+        with patch.object(native,'run',side_effect=subprocess.TimeoutExpired('fixed-fixture',5)),self.assertRaises(subprocess.TimeoutExpired):
+            native.authority_probe(5500,5500,Path('/trusted/helper.py'),[])
+
+    def test_authority_drop_cannot_alias_identity_error_to_normal_refusal(self):
+        for error in [RuntimeError('fixed-fixture'),SystemExit(1),OSError(1,'fixed-fixture')]:
+            with self.subTest(error=type(error).__name__),patch.object(native,'drop_identity',side_effect=error),self.assertRaises(SystemExit) as result:
+                native.authority_drop(5500,5500,[])
+            self.assertEqual(result.exception.code,111)
+
+    def test_authority_drop_has_only_fixed_sudo_target_and_fails_if_exec_returns(self):
+        environment=['/usr/bin/env','-i','PATH=/usr/bin:/bin']
+        with patch.object(native,'drop_identity') as drop,self.assertRaises(SystemExit) as result:
+            native.authority_drop(5500,5500,environment)
+        drop.assert_called_once_with(5500,5500,[*environment,'/usr/bin/sudo','-n','/usr/bin/true'])
+        self.assertEqual(result.exception.code,111)
+
+    def test_direct_authority_supervision_reaps_only_own_timeout_fixture(self):
+        # No sudo, identity change or process enumeration. Only this fixture group.
+        with patch.object(native,'GROUP_REGISTRAR',None),patch.object(native,'COMMAND_CONTEXT',None):
+            result=native.run([sys.executable,'-I','-S','-c','raise SystemExit(1)'],check=False,timeout=2,
+                              stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            self.assertEqual(result.returncode,1)
+            with self.assertRaises(subprocess.TimeoutExpired):
+                native.run([sys.executable,'-I','-S','-c','import time; time.sleep(30)'],timeout=.05,
+                           stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+
     def test_each_denial_subprobe_has_its_own_budget_and_no_sudo_or_lookup(self):
         self.assertNotIn('check_output',native.PROBE)
-        self.assertIn("part == 'authority'",native.PROBE)
+        self.assertNotIn("part == 'authority'",native.PROBE)
+        self.assertNotIn('/usr/bin/sudo',native.PROBE)
         # Network arms do not execute subprocesses or use host DNS.
         self.assertIn("s.settimeout(3)",native.PROBE)
-        self.assertIn("timeout=12",HELPER.read_text())
+        self.assertIn("timeout=5,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL",HELPER.read_text())
         workflow=(HELPER.parent.parent/'workflows/native-compile.yml').read_text()
         self.assertIn("inputs.mode == 'native' && 65 || 10",workflow)
 

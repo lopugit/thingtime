@@ -11,6 +11,7 @@ import re
 import select
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tarfile
@@ -225,6 +226,26 @@ def admit_runner(runner_uid,report,source_sha,control_sha,mode):
     return daemons
 
 
+def admit_task_lifecycle(report, source_sha, control_sha, mode):
+    """No executable backend yet owns a task's bootstrap domain and services.
+
+    Numeric setuid and an empty process inventory cannot establish that a
+    dormant launchd job cannot respawn after PF restoration. Keep this an
+    unconditional source gate: caller flags, environment or receipt files
+    must not promote the current direct-setuid launcher into lifecycle proof.
+    """
+    result={'sourceSha':source_sha,'controllerSha':control_sha,'mode':mode,
+            'result':'task lifecycle admission unavailable before mutation',
+            'failureStage':'task-lifecycle-admission',
+            'lifecycleBackend':'direct-setuid-unsupported',
+            'exclusiveTaskUidVerified':False,'launchdOwnershipVerified':False,
+            'noRespawnVerified':False,'policyChanged':False,
+            'candidateExtracted':False,'candidateExecuted':False}
+    (Path(report)/'result.json').write_text(json.dumps(result)+'\n')
+    phase(report,'task-lifecycle-unavailable-before-mutation')
+    raise RuntimeError('Task lifecycle backend unavailable; identity and policy remain unchanged')
+
+
 def phase(report, name):
     # Trusted labels only: no candidate output, URLs, arguments or secrets.
     entry = {'phase':name, 'at':time.time()}
@@ -332,7 +353,7 @@ def trusted_failure(label,error,returncode=None):
 def preflight_failure(error,label='runner-baseline'):
     failure=trusted_failure(label,error)
     accepted={'native-identity ':('identity',{'identity-admission','groups-clear','gid-set','uid-set','credential-verify','identity-exec'}),
-              'native-baseline ':('baseline',{'baseline-tcp4','baseline-udp-dns'})}
+              'native-baseline ':('baseline',{'baseline-tcp4','baseline-tcp6','baseline-udp-dns'})}
     stderr=getattr(error,'stderr',None) or ''
     if isinstance(stderr,bytes):stderr=stderr.decode('utf-8',errors='replace')
     if not isinstance(stderr,str):stderr=''
@@ -348,6 +369,23 @@ def preflight_failure(error,label='runner-baseline'):
                 all(type(record[k]) is int for k in set(record)&{'errno','exitCode'})):
                 failure[field]=record
     return failure
+
+
+def require_positive_controls(evidence):
+    """No unavailable address family can become successful denial evidence."""
+    if not isinstance(evidence,dict) or evidence.get('positiveUdpDns') is not True:
+        raise RuntimeError('Trusted positive UDP/DNS control unavailable')
+    controls=evidence.get('runnerPositiveControls')
+    if not isinstance(controls,list) or len(controls)!=2:
+        raise RuntimeError('Trusted positive TCP controls incomplete')
+    families=[]
+    for control in controls:
+        if (not isinstance(control,dict) or type(control.get('family')) is not int or
+                control.get('positiveTcp') is not True):
+            raise RuntimeError('Trusted positive TCP control unavailable')
+        families.append(control['family'])
+    if set(families)!={int(socket.AF_INET),int(socket.AF_INET6)}:
+        raise RuntimeError('Trusted positive controls require both address families')
 
 
 def drop_identity(uid,gid,args):
@@ -369,6 +407,26 @@ def drop_identity(uid,gid,args):
         # command's arbitrary output as an identity diagnostic.
         print('native-identity '+json.dumps(trusted_failure(stage,error)),file=sys.stderr,flush=True)
         raise RuntimeError('Trusted numeric identity stage failed') from None
+
+
+
+def authority_drop(uid,gid,environment):
+    """Exec the fixed negative test; launcher failure must not look like sudo denial."""
+    try:
+        drop_identity(uid,gid,[*environment,'/usr/bin/sudo','-n','/usr/bin/true'])
+    except BaseException:
+        # sudo's normal refusal is 1. Any trusted launch/drop failure is distinct.
+        raise SystemExit(111) from None
+    raise SystemExit(111)  # exec must never return.
+
+
+def authority_probe(uid,gid,helper,environment):
+    """The root supervisor owns timeout/kill/reap; no nested unprivileged waiter."""
+    result=run([PYTHON,'-I','-S',str(helper),'authority-drop',str(uid),str(gid),*environment],
+               check=False,timeout=5,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    # Success, signals, launcher errors and timeout are never evidence of denial.
+    if result.returncode != 1:
+        raise RuntimeError('Trusted negative authority gate did not prove normal refusal')
 
 
 def cleanup(work,watchdog_parent=None):
@@ -558,9 +616,7 @@ for family,host in [(socket.AF_INET,'1.1.1.1'),(socket.AF_INET6,'2606:4700:4700:
     s=socket.socket(family,socket.SOCK_STREAM);s.settimeout(5)
     try: s.connect((host,443)); results.append({'family':family,'positiveTcp':True})
     except OSError as e:
-        if family == socket.AF_INET:
-            failure('baseline-tcp4',e);raise
-        results.append({'family':family,'positiveTcp':False,'errno':e.errno})
+        failure('baseline-tcp4' if family == socket.AF_INET else 'baseline-tcp6',e);raise
     finally: s.close()
 s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.settimeout(5)
 try:
@@ -577,10 +633,7 @@ PROBE = r'''
 import json, os, socket, subprocess, sys
 expected_uid = int(sys.argv[1]); part=sys.argv[2]
 assert os.geteuid() == expected_uid
-if part == 'authority':
-    assert expected_uid != 0  # Canonical numeric drop already verified kernel groups.
-    assert subprocess.run(['/usr/bin/sudo','-n','/usr/bin/true'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,timeout=5).returncode != 0
-elif part == 'sandbox':
+if part == 'sandbox':
     subprocess.run(['/usr/bin/sandbox-exec','-p','(version 1)(allow default)', '/usr/bin/true'],check=True,timeout=5)
 elif part in ('tcp4','tcp6','udp'):
     family=socket.AF_INET6 if part == 'tcp6' else socket.AF_INET
@@ -592,7 +645,9 @@ elif part in ('tcp4','tcp6','udp'):
             s.sendto(q,(host,53));s.recvfrom(4096)
         else:s.connect((host,443))
         raise AssertionError('Outbound subprobe escaped PF')
-    except OSError:pass
+    except (socket.timeout,TimeoutError):pass
+    except OSError:
+        raise RuntimeError('Outbound denial probe failed without timeout evidence') from None
     finally:s.close()
 else:raise ValueError('Unknown trusted subprobe')
 print(json.dumps({'uid':os.geteuid(),'subprobe':part,'passed':True}),flush=True)
@@ -614,7 +669,7 @@ try:
         raise AssertionError('Root/broker UID escaped PF')
     print(json.dumps({'hostname':'api.github.com','tlsVerified':True,'https':200}))
 except (OSError,ssl.SSLError) as error:
-    if expected:
+    if expected or not isinstance(error,(socket.timeout,TimeoutError)):
         raise RuntimeError('Fixed control hostname/TLS preflight failed') from None
     print(json.dumps({'rootControlDenied':True}))
 '''
@@ -650,6 +705,7 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
     # Before any mutation, verify the actual transport daemons, not just shell UID.
     report.mkdir(mode=0o755)
     daemons=admit_runner(runner_uid,report,expected_sha,control_sha,mode)
+    admit_task_lifecycle(report,expected_sha,control_sha,mode)
     runner_gid=int(run(['/usr/bin/id','-g',runner_user],capture_output=True).stdout.strip())
     work=Path(tempfile.mkdtemp(prefix='thingtime-native-control-',dir='/private/tmp'))
     work.chmod(0o755)
@@ -730,6 +786,7 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
         phase(report,'runner-baseline-started')
         try:
             baseline=as_runner([PYTHON,'-I','-S',str(work/'baseline.py')],capture_output=True,timeout=25)
+            require_positive_controls(json.loads(baseline.stdout))
         except BaseException as error:
             failure=preflight_failure(error)
             (report/'trusted-failure.json').write_text(json.dumps(failure)+'\n')
@@ -738,7 +795,7 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
         (report/'positive-controls.json').write_text(baseline.stdout)
         phase(report,'authority-probe-started-before-policy')
         try:
-            as_build([PYTHON,'-I','-S',str(work/'probe.py'),str(uid),'authority'],capture_output=True,timeout=12)
+            authority_probe(uid,uid,trusted_helper,build_environment(home,user,developer))
         except BaseException as error:
             (report/'trusted-failure.json').write_text(json.dumps(preflight_failure(error,'authority-before-policy'))+'\n')
             raise RuntimeError('Trusted authority gate failed; see fixed-label evidence') from None
@@ -783,6 +840,7 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
         for broker_uid in sorted({row['uid'] for row in daemons if row['executable']=='mDNSResponder'}-{0}):
             subprobes('broker',broker_uid,lambda command,**kwargs:as_uid(broker_uid,broker_uid,command,
                        ['/usr/bin/env','-i',f'PATH={PATH}'],**kwargs))
+        require_positive_controls(json.loads((report/'positive-controls.json').read_text()))
         phase(report,'all-control-and-isolation-gates-passed')
         if mode == 'preflight':
             phase(report,'inert-watchdog-cleanup-requested')
@@ -838,7 +896,9 @@ def supervise(archive_arg, report_arg, expected_sha, control_sha, pr_json_arg, m
 
 
 def main():
-    if len(sys.argv) >= 6 and sys.argv[1] == 'drop':
+    if len(sys.argv) >= 5 and sys.argv[1] == 'authority-drop':
+        authority_drop(int(sys.argv[2]),int(sys.argv[3]),sys.argv[4:])
+    elif len(sys.argv) >= 6 and sys.argv[1] == 'drop':
         drop_identity(int(sys.argv[2]),int(sys.argv[3]),sys.argv[4:])
     elif len(sys.argv) >= 4 and sys.argv[1] == 'spawn':
         if os.geteuid() != 0:raise RuntimeError('Trusted command gate requires root supervisor')

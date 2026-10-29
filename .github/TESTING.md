@@ -323,6 +323,40 @@ pre-queued with no jobs, logs, or cancellable run graph.
   hosted direct IPv4/IPv6, UDP/DNS and child-sandbox checks, cancellation/watchdog
   cleanup, and full unsigned Xcode acceptance. Static tests do not prove these.
 
+## Inert native lifecycle platform experiment
+
+- Run `python3 .github/scripts/native-lifecycle-experiment.test.py` for syntax,
+  pinned-workflow checks and fourteen deterministic label/report/allocation/cleanup regressions. Before the
+  separate workflow commit exists, use `--helper-only`. These checks execute no
+  system commands, real signals, UID mutations or hosted work.
+- Run `actionlint .github/workflows/native-lifecycle-experiment.yml` after the
+  workflow is added. Preserve the exact helper SHA/digest and owner label bound
+  to the final reviewed PR head. Publishing never authorizes the label or run.
+- Follow [the experiment spec](NATIVE_LIFECYCLE_EXPERIMENT.md) for hosted normal
+  and simulated parent-loss observations, exact task-only teardown, quarantine
+  boundaries and platform return-code hypotheses. Neither safe tests nor the
+  inert experiment establish network isolation or unsigned native compilation.
+- Under a restored local `umask 077`, reproduce plain `mkdir(0755)` as `0700`,
+  then verify only the new allowlisted report is explicitly `0755` and JSON is
+  `0644`. Existing directories must not be repermissioned. This does not prove
+  hosted artifact upload; verify the next authorized run's actual artifacts.
+- Mock numeric-field search, PID and domain predicates independently. Confirm
+  bounded allocation skip counts contain no raw records and unknown domain
+  errors remain rejected. Do not widen the UID range to hide unexplained
+  hosted exhaustion. Preserve the original failed run and its actual E1/E2/W.
+
+## Native task lifecycle admission
+
+- Safe deterministic tests must prove both modes refuse after runner admission
+  and before UID allocation, watchdog launch, account/PF mutation or candidate
+  access. Caller-authored receipts and environment values cannot enable the
+  unsupported direct-setuid lifecycle backend. Verify fixed no-mutation fields.
+- The executable helper remains unavailable until a reviewed backend proves
+  exclusive UID/bootstrap/service ownership and exact teardown/no-respawn
+  evidence before PF restoration. Do not count process-only cleanup tests or
+  arbitrary launchctl errors as that proof. The required disposable-platform
+  cases are in [the lifecycle gate](NATIVE_COMPILE.md#task-lifecycle-gate--unavailable).
+
 ## Native control continuity and bounded bootstrap
 
 - Run the trusted native helper tests and actionlint without privileged local
@@ -364,3 +398,69 @@ pre-queued with no jobs, logs, or cancellable run graph.
   privileged identity drop. Verify failure diagnostics reject arbitrary output,
   command arguments/messages, environment values and unregistered labels;
   malformed prefixed JSON and non-string stage/error-type fields are ignored.
+
+## Native negative-authority supervision
+
+Run only the trusted controller tests, with no privileged invocation:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -I -S .github/scripts/native-compile-ci.test.py
+```
+
+- [x] Fixed numeric-drop launcher executes only `sudo -n /usr/bin/true` for
+  this probe; the root supervisor owns command registration, deadline and reap.
+- [x] Normal refusal 1 is distinct from launch failure 111. Success, signals,
+  other exit codes, timeout and unexpected return from exec fail closed.
+- [x] No probe capture pipes or nested unprivileged timeout are involved.
+- [x] Timeout regression signals only its own spawned fixture process group;
+  tests do not invoke sudo, change identities or enumerate/kill a host UID.
+- [x] IPv4/IPv6 TCP and UDP/DNS baseline positives are required before policy
+  activation and revalidated before the gate can pass. Missing, malformed,
+  duplicate-family or false control evidence refuses admission.
+- [x] Synthetic unrouted IPv6 fails with the fixed `baseline-tcp6` diagnostic;
+  route/refusal/permission errors cannot become successful denial probes.
+  Only timeout-class failures pass the direct socket denial check; connected
+  transport fails. These observations do not prove PF counter attribution.
+- [ ] Establish supported exclusive task-UID/domain/service ownership and
+  teardown/no-respawn proof before PF restoration; keep absence failures closed.
+- [ ] Establish usable task-owned IPv6 positive controls, actual policy traversal
+  and exact denial counters plus restoration-positive evidence. An unreachable
+  public IPv6 route is not denial proof.
+- [ ] Independently admit a new immutable H1/helper and H2/workflow pin pair
+  before any authorized hosted preflight; existing pins intentionally stay put.
+- [ ] Retain full unsigned Mac/iOS build and signed installed-provider acceptance
+  as separate gates. Unit tests are not runtime security acceptance.
+
+- [ ] Keep this control-plane checklist under `.github/`; stage owned changes and run
+  `node .github/scripts/workflow-control-plane-contract.mjs --self-test` so the
+  tracked root remains within `CONTROL_PLANE_ROOTS` without widening its allowlist.
+
+## Inert persistent denial experiment — 2026-10-27
+
+- Run `python3 .github/scripts/native-persistent-denial-experiment.test.py --draft`
+  locally for mocked failure, counter attribution, source-binding and receipt
+  checks; use `--final E1` only after approved immutable pin publication.
+- Run `actionlint .github/workflows/native-persistent-denial-experiment.yml`.
+- Follow [the reviewed specification](NATIVE_PERSISTENT_DENIAL_EXPERIMENT.md). Do
+  not trigger before exact parent review. An unusable positive IPv6 control must
+  stop before PF, and timeout without a labeled rule-counter delta must fail.
+- Keep synthetic credential/IPC observations distinct from broad live runner
+  authority and real credential isolation; candidate admission remains false.
+- After an authorized hosted run, verify the actual upload artifact ID/digest
+  and exact E1/E2/W bytes; preserve denial through provider disposal and never
+  claim PF restoration or an observed destruction receipt.
+
+### Fixed authority-operation diagnostics — 2026-10-27
+
+- During helper-only preparation, run `PYTHONDONTWRITEBYTECODE=1 python3
+  .github/scripts/native-persistent-denial-experiment.test.py --helper-only`;
+  this does not verify publication pins. Use `--final E1` for the final pair.
+- Inject EINVAL separately at every numeric setter/getter, sudo launch,
+  transport-setuid attempt and synthetic canary open; require its exact
+  allowlisted operation label and numeric error code to survive child and
+  root receipt projection. Do not expose exception strings/paths/identities.
+- Keep group readback and mismatch rejection. EINVAL, launcher failure,
+  timeout and unexpected return codes must never count as normal denial.
+  Transport setuid still accepts only EPERM, canary access only EACCES.
+- Preserve prior hosted terminal receipts byte-for-byte. Do not label or retry
+  while preparing the diagnostic source/pins for exact parent review.
