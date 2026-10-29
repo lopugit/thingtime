@@ -6684,3 +6684,11 @@ saving selected geocodes additionally requires Mapbox Permanent Geocoding
 entitlement and its storage conditions. No new Vercel provider-key variable is
 needed. Standard Mapbox navigation output cannot be cached. See
 [editable maps and routing](docs/maps.md) for operation contracts and verification.
+
+### Storage recovery and production checks
+
+See [account storage recovery](docs/storage-recovery.md) for the 100 MiB pending
+accounting budget, the existing cron/admin recovery entry point, private
+controller setup and pre-merge/deployment/runtime verification. It reuses the
+existing home MongoDB replica set, scheduler secret and protected Vercel
+controller environment; no additional application secret is required.

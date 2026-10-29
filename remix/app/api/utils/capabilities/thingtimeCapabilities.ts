@@ -1,4 +1,4 @@
-import { apiEndpointDocs } from '../../../docs/apiDocs';
+import { apiEndpointDocs, apiSharedFeatureVersions } from '../../../docs/apiDocs';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from './capabilityContract';
 import { gatewayDescriptor } from '../deployment/environmentGateway';
 
@@ -14,6 +14,7 @@ export const thingtimeCapabilityManifest = (origin: string) => {
   const normalizedOrigin = new URL(origin).origin;
   const features: Record<string, { version: string }> = Object.fromEntries([
     ['api.capabilities', { version: '1.0.0' }],
+    ...Object.entries(apiSharedFeatureVersions).map(([feature, version]) => [feature, { version }]),
     ...apiEndpointDocs.map((doc) => [`api.${doc.id}`, { version: doc.featureVersion ?? '1.0.0' }])
   ]);
   for (const feature of Object.values(features)) {

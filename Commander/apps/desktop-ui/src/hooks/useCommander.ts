@@ -8,7 +8,7 @@ import type {
   RecentSearchCommand,
   SearchHit,
 } from '@commander/protocol';
-import { addRecentSearch } from '@commander/protocol';
+import { addRecentSearch, extensionCommandItemId } from '@commander/protocol';
 import { api } from '../lib/api.js';
 import { hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
 
@@ -221,6 +221,20 @@ export function useCommander(): CommanderState {
 
   const executeCommand = useCallback(
     async (itemId: string, actionId: string, searchQuery = queryRef.current) => {
+      // An enabled bundled local view must not wait behind indexing HTTP work.
+      const emojiExtension = bootstrap?.extensions.find((extension) => extension.id === 'builtin:emoji-symbols');
+      const emojiCommand = emojiExtension?.commands.find((command) => command.name === 'search-emoji-symbols');
+      if (actionId === 'run'
+        && itemId === extensionCommandItemId('builtin:emoji-symbols', 'search-emoji-symbols')
+        && emojiExtension?.enabled && emojiCommand?.mode === 'view' && !emojiCommand.disabled) {
+        setActiveView('emoji-symbols');
+        setActionsOpen(false);
+        setError(null);
+        // Retain execution/history without replaying its eventual view response
+        // over the user's later navigation. This bundled command only opens UI.
+        void api.execute(itemId, actionId, searchQuery).catch(() => undefined);
+        return;
+      }
       let nativeRequestMethod: string | undefined;
       const response = await api.execute(itemId, actionId, searchQuery);
       if (response.notice) setNotice(response.notice);
@@ -262,7 +276,7 @@ export function useCommander(): CommanderState {
       setActionsOpen(false);
       setError(null);
     },
-    [refresh, refreshSearch],
+    [bootstrap, refresh, refreshSearch],
   );
 
   useEffect(() => {
