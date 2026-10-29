@@ -19,7 +19,10 @@ export const createPreviewRetentionHandlers = (deps: Dependencies) => {
       return json({ ok: true, ...await deps.set(body.policy, body.expectedRevision, gate.user.id) });
     } catch (error) {
       if (error instanceof Response) throw error;
-      const status = error instanceof PreviewRetentionConflict ? 409 : error instanceof TypeError ? 400 : 503;
+      // Only a submitted policy is the caller's fault. A stored policy this
+      // deployment cannot validate (corruption, or a newer saved version) is
+      // unavailable, not a 400: cleanup must preserve deployments.
+      const status = error instanceof PreviewRetentionConflict ? 409 : write && error instanceof TypeError ? 400 : 503;
       return json({ ok: false, error: status === 503 ? 'Preview retention settings are unavailable. Cleanup must preserve deployments.' : (error as Error).message }, { status });
     }
   });
