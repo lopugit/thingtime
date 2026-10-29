@@ -6355,6 +6355,12 @@ development run still needs its own provisioned identity and independent test
 session. Do not install or register an unsigned fixture as the user's provider.
 The visible host/provider name is Thingtime; existing production bundle IDs,
 Keychain group and `Thingtime Passwords.app` packaging path remain unchanged.
+Packaged verification requires Thingtime for both display-name keys and matching
+host/provider versions. On macOS prefer the native provider in Chrome; the
+Thingtime browser adapter remains optional and does not talk to the native host.
+An enabled provider needs a saved matching RP passkey before a site sign-in entry
+can appear. Other browser extensions' passkey offers can intercept this flow;
+macOS and the browser control provider order. See [provider setup and discovery](docs/password-manager.md#native-progress-recovery-and-naming).
 
 The desktop bridge reports `passwordsVersion` 1.1.0 when the bundled host supports
 read-only connection status. Password manager and Passwords settings then show one

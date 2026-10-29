@@ -81,4 +81,4 @@ if (unsigned) {
 }
 run('/usr/bin/codesign', ['--verify', '--deep', '--strict', staging]);
 await verifyPasswordProvider(staging, { unsigned, teamIdentifier: unsigned ? undefined : team, signingIdentity: unsigned ? undefined : identity });
-console.log('Thingtime Passwords credential provider built and verified.');
+console.log('Thingtime credential provider built and verified.');

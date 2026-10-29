@@ -147,7 +147,9 @@ settings; they are different from passkeys saved for other websites.
 
 The web vault works on supported secure browser origins with a live account and
 WebCrypto. Saving and using a passkey for another website additionally requires
-an installed provider. The opt-in [Chromium extension](../browser-extension/README.md)
+an installed provider. On macOS, prefer the connected and enabled native Thingtime
+Password AutoFill provider; Chrome can use it without a Thingtime browser extension.
+The optional opt-in [Chromium extension](../browser-extension/README.md)
 relays that website's registration or sign-in to `/passwords/provider` at the
 user-selected trusted Thingtime origin. Each approval shows the website, RP domain
 and account, requires fresh Thingtime password verification, and uses encrypted
@@ -245,7 +247,27 @@ works on the user's device; upgrading only the provider extension is insufficien
 The macOS provider and host display **Thingtime** in the operating-system flow.
 The existing bundle identifiers, shared Keychain group and packaged
 `Thingtime Passwords.app` path remain stable so this label change does not create
-a new credential store or require migration.
+a new credential store or require migration. Packaged verification checks both
+`CFBundleDisplayName` and `CFBundleName` and matching host/provider versions; it
+rejects old branding before installation. The optional browser adapter's manifest,
+action tooltip and popup also display Thingtime.
+
+For sign-in, an enabled provider has a site/account entry only when its catalog
+contains a passkey with the requested relying-party identifier and an allowed
+credential ID (when the site supplies an allowlist). A password record with the
+same website URL is not a passkey. Passkey identity indexing uses the relying-party
+identifier even when no password-URL field exists. Registration and assertion
+requests use the native provider; registration creates that site's credential.
+
+Another password-manager browser extension can intercept WebAuthn before the
+native provider picker. For example, disable 1Password's **Offer to sign in with
+passkeys** and **Offer to save passkeys** browser-extension preferences to use the
+native flow while retaining its OS provider setting. Provider ordering belongs
+to macOS and the browser; Thingtime does not programmatically set itself first.
+The optional Thingtime browser adapter intercepts supported explicit `create`/`get`
+requests when enabled and opens the existing `/passwords/provider` approval page.
+Conditional and unsupported requests retain the browser's native flow. It does
+not communicate with the native host or migrate credentials.
 
 The provider shows the current connection, device verification, vault, save,
 readback, AutoFill indexing or browser-return step. Failures use closed error
