@@ -26,6 +26,7 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 
 | Concern | Path |
 | --- | --- |
+| Builder identity, legacy detection and additive marker updates | `app/schemas/builderThing.ts`, `registry.ts`; `builder-thing` composes with the original content schema. Generic Things writes persist it for canonical Builder kinds; Builder-created data and app folders explicitly retain it. The marker grants no access and never chooses a renderer. |
 | Canonical Thing utilities: `createThing`, `updateThing`, `deleteThing`, `listThings`, `getThing`, `findViewableThing`, projections (`toPublicThings`, posts) | `app/api/utils/things/things.ts` (large; grep the export you need) |
 | Folder rules (`resolveFolderAssignment`, `FOLDER_UNFILEABLE`, cycle checks) | `app/api/utils/things/things.ts` (`folderId` handling) |
 | Bulk move/copy/delete/share | `app/routes/api/v1/things/bulk` |
@@ -42,6 +43,19 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Account/database-qualified History links and Thing caches | `app/utils/dataPlane.ts`, `app/hooks/useDataPlane.ts`, `app/routes/thing.tsx`; root identity invalidation also handles database selection across tabs |
 | Explicit data-Thing presentation | `app/components/Thingtime/ThingView.tsx`, `ThingRenderComponent.tsx`; `renderComponent` points to an independently readable saved Component or embeds its canonical render definition. See [the authoring and access contract](posts-comments-and-feed.md#subspace-messages-and-embedded-things). |
 | Approved saved-theme content history, home transaction and retained deletion accounting | `app/timeline/themeContent.ts`, `app/api/utils/timeline/themeContent.ts`, dedicated `app/api/utils/themes/themes.ts` writer |
+
+## Builder provenance
+
+`app/schemas/builderThing.ts` defines the composable `builder-thing` schema id
+and legacy recognition for Webpages, Components, Actions, Schemas and explicit
+`builderApp` folders. Canonical validation adds the marker on writes; ordinary
+data/folders opt in explicitly. PATCH/PUT and the update alias may add the marker
+without changing stored content schemas. Marker metadata grants no access and
+does not select a renderer. The contracts are `api.things` 1.46.0 and
+`api.things-update` 1.15.0. Draft export/reopen and archive folder destinations
+ignore the marker when enforcing content-kind exclusivity. Coverage lives in
+`schemas/builderThing.test.ts`, `draftPreview/prepare.test.ts`,
+`api/utils/things/chatArchiveTransfer.test.ts` and both capability test suites.
 
 ## Authorization helper
 

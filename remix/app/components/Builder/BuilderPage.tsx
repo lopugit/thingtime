@@ -11,6 +11,7 @@ import { BuilderDrawer, InspectorReopenPill, useBuilderDrawerWidth } from './Bui
 import { useBuilderChrome } from './useBuilderChrome';
 import { useWebpageDraft } from './useWebpage';
 import { countBlocks } from './webpageBlocks';
+import { ThingDefinitionEditor } from './DefinitionEditor/ThingDefinitionEditor';
 import { ThingsPage } from '~/components/Things/ThingsPage';
 
 // /builder — create and edit block-based webpages. Without ?page= it lists
@@ -170,8 +171,10 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 };
 
 export const BuilderPage = () => {
-	const [searchParams] = useSearchParams();
+	const [searchParams, setSearchParams] = useSearchParams();
 	const pageId = searchParams.get('page');
+	const thingId = searchParams.get('thing');
+	if (thingId) return <><ThingsPage builderMode /><ThingDefinitionEditor id={thingId} requireBuilder onClose={() => { const next = new URLSearchParams(searchParams); next.delete('thing'); setSearchParams(next); }} /></>;
 	if (searchParams.has('branchId')) return <BranchWebpage pageId={pageId || ''} />;
 	if (!pageId) return <ThingsPage builderMode />;
 	if (pageId === '__global__') return <BuilderCanvas pageId={pageId} />;
