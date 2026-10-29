@@ -27,12 +27,12 @@ export class NativePasswordConnectionController {
     let connection: Connection = 'unavailable';
     try {
       const result = await this.provider('status', this.ownerId);
-      if (result.ok && ['connected', 'disconnected', 'differentSession', 'unavailable'].includes(result.connection || '')) connection = result.connection!;
+      if (result.ok && ['connected', 'disconnected', 'differentSession', 'unavailable', 'unsupportedOrigin'].includes(result.connection || '')) connection = result.connection!;
     } catch { /* A failed read must never imply a disconnected device. */ }
     if (!this.disposed && generation === this.generation) this.publish({ ...this.snapshot, connection, busy: false });
   }
   async activate() {
-    if (this.disposed || this.snapshot.busy) return;
+    if (this.disposed || this.snapshot.busy || this.snapshot.connection === 'unsupportedOrigin') return;
     if (this.snapshot.connection === 'unavailable' || this.snapshot.connection === 'checking') { await this.refresh(); return; }
     const action = this.snapshot.connection === 'connected' ? 'disconnect' : 'connect';
     this.mutating = true; this.generation++;
@@ -50,8 +50,8 @@ export class NativePasswordConnectionController {
 export function nativeConnectionPresentation(snapshot: ConnectionSnapshot, supported = true) {
   const connected = snapshot.connection === 'connected';
   return {
-    label: !supported ? 'Update Thingtime to check AutoFill' : snapshot.connection === 'checking' ? 'Checking AutoFill connection…' : snapshot.connection === 'unavailable' ? 'Retry AutoFill status' : connected ? 'Disconnect AutoFill' : 'Connect Password AutoFill',
-    disabled: snapshot.busy || !supported,
-    status: !supported ? 'This app version cannot read the device’s AutoFill connection. Update Thingtime to manage it.' : connected ? 'This account is connected on this device. System AutoFill must also be enabled in device settings.' : snapshot.connection === 'disconnected' ? 'Password AutoFill is disconnected on this device.' : snapshot.connection === 'differentSession' ? 'This account is not connected on this device. Connect to replace the previous account connection.' : snapshot.connection === 'unavailable' ? 'The device’s connection could not be checked. Retry when the native provider is available.' : 'Checking this device’s Password AutoFill connection.',
+    label: snapshot.connection === 'unsupportedOrigin' ? 'HTTPS account required' : !supported ? 'Update Thingtime to check AutoFill' : snapshot.connection === 'checking' ? 'Checking AutoFill connection…' : snapshot.connection === 'unavailable' ? 'Retry AutoFill status' : connected ? 'Disconnect AutoFill' : 'Connect Password AutoFill',
+    disabled: snapshot.busy || !supported || snapshot.connection === 'unsupportedOrigin',
+    status: snapshot.connection === 'unsupportedOrigin' ? 'This app is using a local account endpoint. Password AutoFill requires a signed-in HTTPS account. In the macOS menu bar, choose Thingtime → API Endpoint → Production, then sign in to your account. An existing AutoFill connection is kept.' : !supported ? 'This app version cannot read the device’s AutoFill connection. Update Thingtime to manage it.' : connected ? 'This account is connected on this device. System AutoFill must also be enabled in device settings.' : snapshot.connection === 'disconnected' ? 'Password AutoFill is disconnected on this device.' : snapshot.connection === 'differentSession' ? 'This account is not connected on this device. Connect to replace the previous account connection.' : snapshot.connection === 'unavailable' ? 'The device’s connection could not be checked. Retry when the native provider is available.' : 'Checking this device’s Password AutoFill connection.',
   };
 }

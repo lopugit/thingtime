@@ -102,6 +102,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-29: Recover native Password AutoFill linking for an enabled provider, preserve explicit disconnect and independent account links, explain local HTTPS requirements, and install matching standalone/nested companions.
+
 - 2026-10-29: Restore shared Apple file publication and recovery on older host
   kernels while retaining path, symlink, identity and content protections.
   Cover the unsupported rename-flag retry and include FileSync changes in
