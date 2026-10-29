@@ -38,3 +38,19 @@ test('bounded input and explicit root validation', async () => {
   await assert.rejects(() => prepareDraft('{'), /valid JSON/);
   await assert.rejects(() => prepareDraft(fixture(), 'account-thing'), /not in the supplied/);
 });
+
+
+test('Builder provenance survives draft export/reopen in either schema order without admitting mixed content kinds', async () => {
+  for (const prepend of [true, false]) {
+    const input = fixture();
+    for (const thing of input.things) thing.thingtime = prepend ? ['builder-thing', ...thing.thingtime] : [...thing.thingtime, 'builder-thing'];
+    const prepared = await prepareDraft(input);
+    for (const thing of prepared.manifest.things) assert.equal(thing.thingtime.at(-1), 'builder-thing');
+    assert.equal((await prepareDraft(prepared.json)).hash, prepared.hash);
+    assert.equal(prepared.manifest.things.length, 2);
+  }
+  for (const extra of ['data', 'action', 'schema', 'webpage']) {
+    const input = fixture(); input.things[1].thingtime.push('builder-thing', extra);
+    await assert.rejects(() => prepareDraft(input), /component and webpage Things only/);
+  }
+});

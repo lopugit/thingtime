@@ -1,3 +1,4 @@
+import { BUILDER_THING_KIND } from '~/schemas/builderThing';
 import { UnfiledAttachmentsPage } from './UnfiledAttachmentsPage';
 import { ActivityManagerPage } from '~/components/Activity/ActivityManagerPage';
 import { DeviceSyncPanel, DeviceSyncedFilesPage } from '~/components/Devices/DeviceSyncBrowser';
@@ -7,7 +8,7 @@ import { isManagedLibraryThing, isTopLevelLibraryThing } from './thingsCore';
 import { FilesystemThingsPage } from './FilesystemThingsBrowser';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { transferIntent } from '~/utils/thingTransfer/intent';
-import { readThingsLocation, writeThingsLocation, type ThingsLocationState } from './thingsLocation';
+import { thingBrowseHref, readThingsLocation, writeThingsLocation, type ThingsLocationState } from './thingsLocation';
 
 import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, MenuDivider, MenuOptionGroup, MenuItemOption, Portal, Text } from '@chakra-ui/react';
 import { ArrowUpDown, Columns3, Eye, FolderDown, LayoutGrid, Layers, Plus, Rows3, Settings, Search as SearchIcon, Tag, X } from 'lucide-react';
@@ -67,6 +68,8 @@ import {
   thingRenameCrystal,
   thingShareLink,
   thingOpenHref,
+  thingBuilderHref,
+  thingLiveHref,
   thingsCacheKey
 } from './thingsCore';
 import type {
@@ -765,19 +768,20 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     [currentKey, fetchFolder]
   );
 
-  // Open = the thing's OWN page (thingsCore.thingLink: post/action/webpage/
-  // schema pages, the universal /thing/:id for components, data and the
-  // rest) with the referrer hint for its back link; folders open in place.
+  // Owners open saved Builder content in its editor. Other Things retain
+  // their readable page; ordinary folders navigate within the current view.
   // The PreviewModal stays the explicit quick-look ('preview' / ?preview=).
   const openThing = useCallback(
     (thing: ThingsThing) => {
+      const builderHref = thingBuilderHref(thing, user?.id);
+      if (builderHref) { navigate(builderHref); return; }
       if (isFolder(thing)) {
         navigateToFolder(thing.id);
         return;
       }
-      navigate(builderMode && thing.thingtime.includes('webpage') ? `/builder?page=${encodeURIComponent(thing.id)}` : thingOpenHref(thing, 'things'));
+      navigate(thingOpenHref(thing, 'things', user?.id));
     },
-    [navigate, navigateToFolder, builderMode]
+    [navigate, navigateToFolder, user?.id]
   );
 
   const toggleSelect = useCallback((thing: ThingsThing) => {
@@ -1100,7 +1104,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     async (name: string, icon: string) => {
       try {
         const resp = await apiRef.current.v1.things.create({
-          thingtime: ['folder'],
+          thingtime: builderMode ? ['folder', BUILDER_THING_KIND] : ['folder'],
           crystal: { name, ...(icon ? { icon } : {}) },
           folderId: newFolderParent
         });
@@ -1116,7 +1120,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
         return false;
       }
     },
-    [newFolderParent, rememberFolderMeta]
+    [newFolderParent, rememberFolderMeta, builderMode]
   );
 
   const saveBuilderApp = useCallback(async (draft: { name: string; description: string; icon: string; iconUrl: string; metadata: Record<string, unknown> }) => {
@@ -1182,6 +1186,8 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
       const group = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
       switch (action) {
         case 'history': openThingHistory(thing.id, thing.thingtime); break;
+        case 'open-builder': { const href = thingBuilderHref(thing, user?.id); if (href) navigate(href); break; }
+        case 'open-live': { const href = thingLiveHref(thing); if (href) navigate(href); break; }
         case 'edit-definition':
           if (builderMode && thing.thingtime.includes('component') && thing.author?.id === user?.id) setDefinitionThingId(thing.id);
           break;
@@ -1354,6 +1360,8 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
       if (!menuThing) return;
       switch (action.command) {
         case 'history': openThingHistory(menuThing.id, menuThing.thingtime); break;
+        case 'open-builder':
+        case 'open-live': onItemAction(menuThing, action.command); break;
         case 'edit-definition': onItemAction(menuThing, 'edit-definition'); break;
         case 'download':
           onItemAction(menuThing, 'download');
@@ -1557,9 +1565,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
 
   const itemHandlers: ThingsItemHandlers = {
     ...(builderMode ? { itemMenuFor: (thing: ThingsThing) => buildThingsItemMenu({ thing, actCount: selection.has(thing.id) ? Math.max(1, selection.size) : 1, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode: true }) } : {}),
-    ...(builderMode ? { itemHref: (thing: ThingsThing) => isFolder(thing)
-      ? `/builder?folder=${encodeURIComponent(thing.id)}&kind=all`
-      : thing.thingtime.includes('webpage') ? `/builder?page=${encodeURIComponent(thing.id)}` : thingOpenHref(thing, 'things') } : {}),
+    itemHref: (thing: ThingsThing) => thingBrowseHref(thing, searchParams.toString(), user?.id),
     locationSearch: searchParams.toString(),
     clipboardCount: clipboard?.ids.length || 0,
     ownerId: user?.id,

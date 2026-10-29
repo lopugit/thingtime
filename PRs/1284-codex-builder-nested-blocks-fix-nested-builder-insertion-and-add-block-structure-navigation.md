@@ -7,6 +7,8 @@ block retains its seamless sibling insertion control. A single ancestor
 breadcrumb replaces overlapping title chips for nested zero-padding blocks.
 The context menu offers insert above/below/beside left/beside right and structure
 views for the page, the parent subtree, or the selected block subtree.
+Nested pointer re-entry and focus share an innermost-block ownership guard, so
+layout changes cannot let an ancestor steal the child's active toolbar.
 
 Directional insertion uses an existing compatible layout axis. Otherwise it
 wraps only the selected block and its new neighbor, preserving unrelated
@@ -28,9 +30,12 @@ subtree; a root-level block falls back to the page.
 
 ## Verification
 
-- `pnpm --dir remix run test:webpages`: 195 passed, four existing opt-in skips.
+- `pnpm --dir remix run test:webpages`: 196 passed, four existing opt-in skips.
   The final review regression covers restricted HTML control parents in every
   direction and both direct-sibling and wrapper paths.
+  A pointer trace reproduces layout-driven ancestor takeover; the fixed
+  retained-browser replay verifies child ownership, deliberate parent hover,
+  breadcrumb selection and parent-to-child handoff.
 - Raw `pnpm --dir remix run typecheck`: passed; changed-file lint passed.
 - Real API/browser acceptance exercises an isolated replica set, synthetic
   identity, task-owned browser and private webpage. It checks repeated nested
@@ -65,6 +70,9 @@ subtree; a root-level block falls back to the page.
   and `af58d6bf1cc06b55339c0399debb720d61f656b9` before final source delivery,
   preserving the upstream password-provider work. Only the changelog and
   generated snapshots overlapped; Builder source did not conflict.
+- Integrated `main` at `2772e4192be05d0592b5dcb21d089a3699f5a1cd` after
+  PR 1280 landed. Its Builder Thing navigation composes with this inspector
+  wiring; both changelog entries are preserved.
 - User explicitly authorized merging this completed change into
   `lopugit/thingtime` main.
 - Private overview task: `cf904d89-394b-44e1-8130-e5a19f6ea341`;

@@ -14,8 +14,8 @@ export const blockChromePath = (blocks: WebpageBlock[], id: string | null): Webp
 
 export { canAddBlockChildren } from './webpageBlocks';
 
-/** Focus bubbles out of nested inline editors; only their own block owns it. */
-export const ownsBlockFocus = (target: EventTarget | null, currentTarget: EventTarget): boolean =>
+/** Nested focus and pointer re-entry belong to the innermost block boundary. */
+export const ownsBlockTarget = (target: EventTarget | null, currentTarget: EventTarget): boolean =>
  (target as Element | null)?.closest?.('[data-block-id]') === currentTarget;
 
 /** Bound the full measured toolbar, not just its anchor, to its owning viewport. */

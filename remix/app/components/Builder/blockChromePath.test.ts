@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { blockChromePath, canAddBlockChildren, ownsBlockFocus, blockChromePosition, blockChromeBottomInset, shouldReleaseBlockChromePin, blockChromeSelectionState } from './blockChromePath';
+import { blockChromePath, canAddBlockChildren, ownsBlockTarget, blockChromePosition, blockChromeBottomInset, shouldReleaseBlockChromePin, blockChromeSelectionState } from './blockChromePath';
 import type { WebpageBlock } from './webpageBlocks';
 
 test('breadcrumb keeps every editable ancestor through DOM, list and conditional children', () => {
@@ -30,9 +30,9 @@ test('inline editor focus belongs to the innermost frame rather than authored an
  const inner = {};
  const outer = {};
  const editor = { closest: (selector: string) => selector === '[data-block-id]' ? inner : null } as unknown as EventTarget;
- assert.equal(ownsBlockFocus(editor, inner as EventTarget), true);
- assert.equal(ownsBlockFocus(editor, outer as EventTarget), false);
- assert.equal(ownsBlockFocus(null, outer as EventTarget), false);
+ assert.equal(ownsBlockTarget(editor, inner as EventTarget), true);
+ assert.equal(ownsBlockTarget(editor, outer as EventTarget), false);
+ assert.equal(ownsBlockTarget(null, outer as EventTarget), false);
 });
 
 
@@ -82,4 +82,26 @@ test('host toolbar clearance projects into scaled iframe and skips previews abov
  assert.equal(blockChromeBottomInset(800, 680, 0, 1), 120);
  assert.equal(blockChromeBottomInset(800, 680, 100, 0.8), 75);
  assert.equal(blockChromeBottomInset(600, 680, 0, 1), 0);
+});
+
+
+test('layout-driven pointer re-entry cannot let an ancestor steal a child hover', () => {
+ // Real acceptance trace: unchanged pointer hit bottom-right before/after a
+ // layout/screenshot re-entry, but the ancestor grid's enter handler won.
+ const grid = {} as EventTarget;
+ const child = {} as EventTarget;
+ const hit = (owner: EventTarget) => ({ closest: () => owner }) as unknown as EventTarget;
+ let hovered: string | null = null;
+ const enter = (target: EventTarget, frame: EventTarget, id: string) => {
+  if (ownsBlockTarget(target, frame)) hovered = id;
+ };
+ enter(hit(child), grid, 'bottom-grid');
+ enter(hit(child), child, 'bottom-right');
+ assert.equal(hovered, 'bottom-right');
+ // Ancestor enter delivered after child mouseover must also be ignored.
+ enter(hit(child), grid, 'bottom-grid');
+ assert.equal(hovered, 'bottom-right');
+ // Moving deliberately to exposed parent space still selects parent chrome.
+ enter(hit(grid), grid, 'bottom-grid');
+ assert.equal(hovered, 'bottom-grid');
 });

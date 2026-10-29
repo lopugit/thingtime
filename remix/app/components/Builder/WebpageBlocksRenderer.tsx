@@ -7,7 +7,7 @@ import { useWebpageRuntime } from './webpageRuntime';
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { BuilderOverlayHost } from './BuilderOverlayHost';
-import { blockChromePath, canAddBlockChildren, ownsBlockFocus, blockChromePosition, blockChromeBottomInset, shouldReleaseBlockChromePin, blockChromeSelectionState } from './blockChromePath';
+import { blockChromePath, canAddBlockChildren, ownsBlockTarget, blockChromePosition, blockChromeBottomInset, shouldReleaseBlockChromePin, blockChromeSelectionState } from './blockChromePath';
 import { componentTextOverrides } from './componentTextOverrides';
 import { builderPoint, builderRect } from './builderCoordinates';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
@@ -513,12 +513,14 @@ const BlockFrame = ({
 			}}
 			cursor={chrome.seamlessMode === 'edit' ? 'text' : 'pointer'}
 			onFocus={(event) => {
-				if (!ownsBlockFocus(event.target, event.currentTarget)) return;
+				if (!ownsBlockTarget(event.target, event.currentTarget)) return;
 				event.stopPropagation();
 				chrome.onHover(block.id);
 			}}
 			onMouseEnter={(event) => {
-				if (live) return;
+				// React dispatches ancestor enter handlers before descendants. Only
+				// the actual target boundary may claim hover after layout re-entry.
+				if (live || !ownsBlockTarget(event.target, event.currentTarget)) return;
 				event.stopPropagation();
 				chrome.onHover(block.id);
 			}}
@@ -906,7 +908,7 @@ const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock
   style: { ...cssRecordToStyle(block.css), ...(editing && (selected || hovered) ? { outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '2px' } : {}) },
   ...(editing ? {
    ...(attributes.hidden === true ? { hidden:false, style:{ ...cssRecordToStyle(block.css), display:'block', minHeight:44, outline:selected || hovered ? '2px solid var(--tt-accent, hotpink)' : undefined } } : {}),
-   onFocus: (event: React.FocusEvent<HTMLElement>) => { if (!ownsBlockFocus(event.target, event.currentTarget)) return; event.stopPropagation(); chrome.onHover(block.id); },
+   onFocus: (event: React.FocusEvent<HTMLElement>) => { if (!ownsBlockTarget(event.target, event.currentTarget)) return; event.stopPropagation(); chrome.onHover(block.id); },
    onMouseLeave: (event: React.MouseEvent<HTMLElement>) => { if (!(event.relatedTarget as Element | null)?.closest?.('.ttBlockChip')) chrome.onHover(null); },
    onMouseOver: (event: React.MouseEvent<HTMLElement>) => { event.stopPropagation(); chrome.onHover(block.id); },
    onClick: (event: React.MouseEvent<HTMLElement>) => {

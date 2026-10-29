@@ -1,5 +1,14 @@
 # TESTING.md — per-area manual test checklists
 
+## Builder Thing navigation (2026-10-29)
+
+- [ ] Create a page, Component, Action, Schema, data Thing and app folder through Builder. Exact-ID API reads and reloads retain `builder-thing` in the existing `thingtime` array without replacing their other schemas. Ordinary data created outside Builder remains ordinary data.
+- [ ] On `/things`, activate an owned Builder Thing in grid, list and columns views; webpages open their page editor, other authored Things open their Builder definition editor and app folders open their Builder contents. Older canonical Builder kinds and app folders work before their next save.
+- [ ] Open the same Thing's right-click and overflow menus. **Open in Builder** targets the owner editor; **Open live page** appears only for supported live presentations. Copy link and Share retain the canonical view link. Inspect/data access remains available.
+- [ ] Verify another owner's Thing and a signed-out view never advertise owner editing; direct Builder editor links still enforce ownership. Ordinary Things, files and folders retain their existing navigation.
+- [ ] Exercise iconized Thing links and shared persisted-Thing menus outside the library. Confirm the authenticated viewer, rather than cached ownership or a Builder marker alone, determines the default editor link.
+- [ ] At desktop and narrow mobile widths, open menus near viewport edges, use keyboard focus/Enter/Escape and touch overflow controls, scroll top to bottom, and verify no clipping, horizontal overflow or obstructed menu actions. Edit, save and reload one representative Builder Thing through the opened editor.
+
 ## Builder app browser (2026-10-28)
 
 - [ ] At `/builder`, verify All apps is the default and app folders can be created and edited with name, description, upload-first icon and structured metadata. Reload and compare with exact Thing reads.
@@ -7743,6 +7752,8 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Hover nested zero-padding blocks and navigate every ancestor in the pink
       breadcrumb. The active title, menu and insertion controls remain reachable
       with mouse, keyboard and touch, including the responsive preview iframe.
+      Layout or viewport changes must not let an ancestor claim the toolbar
+      while the pointer still hits its child; deliberate parent hovering works.
 - [ ] Open structure for the whole page, up to parent and this block. Each scope
       shows the correct live subtree. Selecting a row selects that exact page
       block and opens its inspector, even if the same block was selected before

@@ -2,6 +2,7 @@ import {
 	AppWindow,
 	Banknote,
 	BookOpen,
+	Blocks,
 	Bookmark,
 	Bot,
 	Box,
@@ -22,6 +23,7 @@ import {
 	Download,
 	DraftingCompass,
 	Eye,
+	ExternalLink,
 	Flower2,
 	FolderDown,
 	Gem,
@@ -125,6 +127,7 @@ export const LUCIDE_ICONS: Record<string, TtLucideIconDef> = {
 	'app-window': { Icon: AppWindow, color: MUTED },
 	banknote: { Icon: Banknote, color: POSITIVE },
 	'book-open': { Icon: BookOpen, color: LINKC },
+	blocks: { Icon: Blocks, color: PURPLE },
 	bookmark: { Icon: Bookmark, color: LINKC },
 	bot: { Icon: Bot, color: MUTED },
 	box: { Icon: Box, color: AMBER },
@@ -144,6 +147,7 @@ export const LUCIDE_ICONS: Record<string, TtLucideIconDef> = {
 	'copy-plus': { Icon: CopyPlus, color: MUTED },
 	'drafting-compass': { Icon: DraftingCompass, color: MUTED },
 	eye: { Icon: Eye, color: INK },
+	'external-link': { Icon: ExternalLink, color: LINKC },
 	'flower-2': { Icon: Flower2, color: ACCENT },
 	gem: { Icon: Gem, color: PURPLE },
 	gift: { Icon: Gift, color: ACCENT },
@@ -219,6 +223,8 @@ export const LUCIDE_ICONS: Record<string, TtLucideIconDef> = {
 
 /** Fallback for icons that only exist as emoji strings (no explicit name). */
 export const LUCIDE_FOR_EMOJI: Record<string, string> = {
+	'🧱': 'blocks',
+	'🌐': 'globe',
 	'🎨': 'palette',
 	'👀': 'eye',
 	'▸': 'chevron-right',

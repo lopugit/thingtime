@@ -49,6 +49,21 @@ components; reuse them instead of adding parallel versions.
 
 ## Shared navigation and Builder controls
 
+Builder-authored Things carry the composable `builder-thing` schema in the
+existing `thingtime` array. Shared Builder classification also recognizes legacy
+canonical Builder kinds and app folders. Owner opening is separate from the
+canonical permalink: webpages use `/builder?page=<id>`, other authored Things
+use `/builder?thing=<id>`, and app folders use Builder folder navigation. The
+shared Thing menus expose **Open in Builder** and supported **Open live page**
+destinations while Copy link/Share retain view links. See the Builder Thing
+navigation checklist in `TESTING.md` for ownership, legacy data and mobile menus.
+`node remix/scripts/builder-thing-navigation-acceptance.mjs` exercises the real
+API with disposable accounts, replica data and browser profiles. Build the Nitro
+node server first, supply `BUILDER_NAVIGATION_EVIDENCE_DIR`, and select an installed
+browser with `PLAYWRIGHT_MODULE` and `CHROMIUM_EXECUTABLE`; `THINGTIME_TEST_MONGOD`
+overrides the local Mongo binary. Ports 19651–19654 must be free. The runner
+starts its own Vite shell and removes its test processes and private fixtures.
+
 Agent browsers are linked from Lopu's drawer group to `/agent-browsers` and
 `/agent-browsers/:taskId`. `AgentTasks/AgentNetworkSettings.tsx` shares the device
 default and task checkbox controls; `AgentBrowserViewer.tsx` observes or controls
