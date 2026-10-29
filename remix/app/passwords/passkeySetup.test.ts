@@ -137,3 +137,14 @@ test('native-first migration updates recognized browser-first defaults and prese
   assert.ok(find(migrated, 'native-first'));
   assert.equal(migratePasswordPasskeyBlocks(migrated), migrated);
 });
+
+
+test('recognized coexistence guidance updates without replacing authored guide text', () => {
+  const blocks = structuredClone(PASSWORD_PASSKEY_BLOCKS);
+  find(blocks, 'availability').text = "For sign-in, Thingtime is offered when it has a passkey matching the website’s relying-party identifier and allowed credentials. An enabled provider alone does not create that passkey. Other password-manager extensions can intercept browser prompts; turn off their passkey offers if you want the native flow. Provider order is controlled by the system and browser.";
+  find(blocks, 'install-steps').text = 'My browser setup';
+  const migrated = migratePasswordPasskeyBlocks(blocks);
+  assert.match(find(migrated, 'availability').text, /disable its Chrome extension while keeping its macOS AutoFill provider enabled/);
+  assert.equal(find(migrated, 'install-steps').text, 'My browser setup');
+  assert.equal(migratePasswordPasskeyBlocks(migrated), migrated);
+});

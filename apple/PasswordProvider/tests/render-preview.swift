@@ -16,6 +16,14 @@
         model.busy = !args.contains("--error")
         model.status = phase.message
         model.choices = [.init(id: "synthetic", title: "Create and save passkey", detail: "Verify with your device", select: {})]
+        if args.contains("--empty-passkeys") {
+            model.title = "Thingtime"
+            model.busy = false; model.status = ""; model.choices = []
+            model.message = "No matching passkey is saved in Thingtime for this website. Create a passkey in the website's account security settings and choose Thingtime."
+            model.requestedSite = "github.com"
+            model.selectionSummary = PasswordCatalogSelection.passkeySummary([], relyingParty: model.requestedSite)
+            model.requestDetailsExpanded = args.contains("--details")
+        }
         if args.contains("--error") {
             let failure: PasswordProviderError = phase == .indexing ? .unavailable : .networkUnavailable
             model.message = phase.failure(failure)
