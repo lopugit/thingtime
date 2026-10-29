@@ -10390,9 +10390,16 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Host display-name localization: the physical `Thingtime Passwords.app`
+  basename and raw host display name stay equal; bundled `en.lproj/InfoPlist.strings`
+  resolves display/short names to **Thingtime**. Check FileManager display name,
+  URL localized name and the native Save-in picker on the installed copy. Missing
+  or wrong localization must fail packaged verification. Keep IDs, executable,
+  entitlement/Keychain identities and physical bundle paths unchanged.
+
 - [ ] Native-first provider experience: confirm the installed host and active
-  extension both expose CFBundleDisplayName/CFBundleName **Thingtime** with matching
-  versions; browser manifest, action tooltip and popup use the same brand.
+  extension both resolve their user-visible display/short names as **Thingtime**
+  with matching versions; browser manifest, action tooltip and popup use the same brand.
   Keep bundle IDs, executable paths, Keychain group and designated requirements
   stable. With competing browser passkey offers disabled, create a passkey on an
   independent site and sign in from Chrome's native flow; confirm the catalog RP
