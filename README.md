@@ -694,6 +694,33 @@ before each server-side provider request, redirects are rejected, and
 ordinary responses never include stored credentials. The explicit Show action
 requires fresh password or passkey verification for one owner-authorized entry.
 
+### Lopu defaults and chat credentials
+
+**Settings → Lopu → Default AI for new chats** chooses Thingtime credits or
+one of the current account's saved AI connections. Credit-backed defaults
+include the model, reasoning effort and speed. Defaults are account- and
+origin-scoped on this device; existing conversations retain their own choices.
+The **Chat settings** gear in the full-page, floating and embedded Lopu composer
+saves a credential override with that conversation. The endpoint and model
+shown for personal credentials come from the saved connection.
+
+Use **Manage saved credentials, models and endpoints** to configure a
+connection in Secure Vault. ChatGPT OAuth uses the supported ChatGPT plan
+runtime and its discovered model; it is not an API key for an arbitrary URL.
+Connect and discover models on a persistent local/self-hosted runtime that
+advertises `api.ai-chatgpt-plan` and the Lopu chat capabilities, following the
+ChatGPT plan setup below. Hosted deployments without that runtime report the
+connection unavailable. Custom endpoints use their own saved credentials and
+the existing provider host allowlist described above. This UI adds no new
+secret, endpoint, OAuth client registration or token storage mechanism.
+
+Missing/unavailable selections stay pinned. Sending waits for pending choice
+writes, refused writes prevent that send, cold chat links load saved metadata,
+and an unknown chat delegates its stored choice to the server without sending
+new-chat defaults. There is no automatic fallback from a selected personal
+credential to Thingtime credits. Layouts use ordinary editable Builder blocks;
+only authored labels, styles and bindings are stored in the layout Thing.
+
 ## Conflict-free Graphify snapshots
 
 Thingtime does not ask every branch to modify the same generated Graphify JSON
@@ -1517,11 +1544,11 @@ servers without gateway settings retain direct connections. Dedicated mode
 owns its MongoDB pools but uses the configured environment database, so it does
 not imply database isolation or an Atlas tier change. The intended mapping is
 `thingtime.com`/production to production data, `dev.thingtime.com`/develop to
-development data, and ordinary PR previews to `master.previews.thingtime.com` /
-preview on development data. PR builds keep their existing custom develop
-credential scope; the publisher explicitly selects the logical preview gateway
-without exposing unrelated standard-preview settings to branch code. A recent
-configuration audit found previews and
+development data, and both standard previews and ordinary PR previews to
+`master.previews.thingtime.com` / preview on development data. PR builds keep
+their existing custom develop credential scope; the publisher explicitly selects
+the logical preview gateway without exposing unrelated standard-preview settings
+to branch code. A recent configuration audit found previews and
 custom develop already share the development cluster, separate from production;
 the master preview alias and gateway activation are still pending.
 
@@ -6605,6 +6632,7 @@ No source watermark or baseline is advanced by this recovery decision.
 These changes target folder-constrained file frontiers. Controlled tests and
 isolated native/Mongo fixtures are distinct evidence; installed same-job
 throughput and byte-identical recovery remain release acceptance requirements.
+
 # GitHub-built Vercel deployments
 
 Thingtime builds production, custom environments and previews on standard

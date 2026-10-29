@@ -537,3 +537,21 @@ existing protected scheduler. Both manifests derive versions from apiDocs.ts.
 The dispatcher records allowlisted storage failure codes without logging response
 bodies. See [storage recovery](../storage-recovery.md) for transactional queue,
 worker, controller gates and the scheduled production monitor.
+
+## Environment gateway and index readiness
+
+The negotiated ingress contract and connection-mode policy are summarized at the
+top of this map. `app/api/utils/deployment/environmentGateway.ts` owns bounded discovery,
+admission and pool draining; `server/utils/environmentGateway.ts` validates
+origin-preserving signed relays before the normal route authorization path.
+`server/middleware/environment-gateway.ts`, the SPA fallback and capability
+handler retain local discovery/static serving while routing data operations.
+`mongodb/indexLifecycle.ts` and `indexMaintenance.mts` coordinate durable index
+readiness without blocking read-only authentication. Existing admin migration
+status/run contracts and Lopu background-task contracts carry their deliberate
+compatible patch versions in both generated manifests.
+
+Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
+the built `test:environment-gateway:acceptance` runner. See
+[the gateway runbook](../environment-api-gateway.md) for server settings,
+environment partitioning and outstanding live rollout acceptance.
