@@ -104,6 +104,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-29: Split the historical-file export test fixture into typed JSON
+  sections so Xcode 26.2 can check it without exhausting expression inference.
+  Preserve the fingerprint bytes and all five export regressions. **Codex (AI)**
+
 - 2026-10-29: Type native upload progress expectations explicitly as 64-bit byte
   counts so the Xcode 26.2 TestFlight regression build compiles. The existing
   ordered-progress assertion remains intact. **Codex (AI)**
