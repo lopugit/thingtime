@@ -13564,7 +13564,9 @@ separate from deterministic discovery/lease tests.
   confirm null persists. A stale revision must return 409 and preserve the newer
   values; anonymous and ordinary accounts must be refused.
 - Verify admin retention 1.0.1 and controller retention 1.0.0 in both manifest
-  generators and the built/runtime manifest. A stored policy this server cannot
+  generators and the built/runtime manifest. The route/manifest test must assert
+  each independent feature version when only one contract receives a PATCH.
+  A stored policy this server cannot
   validate must GET as 503 unavailable; malformed submitted policy stays 400. Signed
   controller reads require the exact repository/ref and a fresh timestamp,
   return only the policy and no revision/audit data. Wrong signatures, stale

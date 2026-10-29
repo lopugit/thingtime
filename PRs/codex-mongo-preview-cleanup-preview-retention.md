@@ -111,3 +111,14 @@ Task branch `codex/mongo-preview-cleanup` began at freshly fetched origin/main
 acceptance used ports 18210/18211/18212 and a disposable replica at 17343; task
 browsers and processes are cleaned up after verification. A Funnel was not
 provisioned for the isolated admin fixture.
+
+
+## Exact-head CI follow-up
+
+The `b71fe0af9` unit job found one stale assertion in the original route/manifest
+contract test: it still expected both independently versioned features to equal
+1.0.0 after the deliberate admin PATCH. The correction gives that test explicit
+per-feature expectations (admin 1.0.1; controller 1.0.0). Runtime source is unchanged.
+The complete API-capability test entry point passes all 127 tests, with clean
+changed-file lint. The signed `b71fe0af9` artifact and packaged manifest smoke
+remain the runtime evidence.
