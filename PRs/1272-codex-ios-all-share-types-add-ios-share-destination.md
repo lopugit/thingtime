@@ -34,6 +34,40 @@ The new share App ID is associated with the containing app's existing App Group.
 
 Merge triggers the canonical automatic TestFlight workflow on main. Upload, Apple processing, internal tester availability and installation are separate states. The physical iPhone was unavailable during this task, and iCloud-only original hydration is not covered by local synthetic fixtures.
 
+## Release compatibility recovery
+
+The feature merged in [#1272](https://github.com/lopugit/thingtime/pull/1272).
+The Xcode 26.2 release compiler then exposed two existing test expressions:
+[#1274](https://github.com/lopugit/thingtime/pull/1274) types upload byte counts
+explicitly, and [#1275](https://github.com/lopugit/thingtime/pull/1275) splits a
+nested file-export JSON fixture into typed dictionaries. All required checks
+passed before both merges; their four and five focused local tests passed.
+
+The [next native release](https://github.com/lopugit/thingtime/actions/runs/40828529026)
+compiled successfully and passed all 19 sharing tests. Its full 233-test suite
+had eight skips and 24 failing staging/Trash cases (42 assertions/errors). The
+common cause was `RENAME_RESOLVE_BENEATH`: the macOS 15 runner's host kernel
+rejects that flag with `EINVAL` before moving bytes, even for an iOS 26.2
+simulator. The newer local host accepts it. Apple's
+[older kernel implementation](https://github.com/apple-oss-distributions/xnu/blob/xnu-11417.140.69/bsd/vfs/vfs_syscalls.c#L9933)
+confirms the unsupported flag mask; a local iOS 26.1 probe on the newer host
+also accepts the flag, distinguishing host-kernel behavior from simulator OS.
+
+The shared compatibility helper validates relative components and directory
+anchors, retains `RENAME_NOFOLLOW_ANY` and exclusive/swap behavior, and retries
+only `EINVAL` without the unsupported bit. Existing identity, hash, race and
+receipt checks remain. Five new regressions plus all staging/Trash tests pass
+(39 focused); the full AppleFileSync package passes 113 tests with seven
+existing skips. Actual older-host CI and the affected signed Mac installation
+remain separate acceptance gates for this recovery.
+
+The optional pre-merge native preflight hit the shared Actions installation API
+rate limit twice, including one retry after more than five minutes. No
+credentials or policy were changed. The last test-only merge did not trigger
+an automatic release because `apple/FileSync/**` was missing from the workflow
+filters; the supported manual upload retained every test and signing gate.
+This recovery adds that shared dependency to the automatic filters.
+
 ## Graph indexing
 
 Attempted the semantic incremental extraction through the local Codex proxy. The existing manifest had 563 Markdown entries without semantic hashes, so this expanded into pre-existing documentation indexing and exceeded the bounded 180-second attempt. The final structural refresh retains usable code relationships, manifest, report and HTML; this task does not claim completed semantic indexing of the changed documents.

@@ -89,6 +89,14 @@ primitive: a racing uncoordinated writer is retained and leaves a pending confli
 Unsupported providers/volumes refuse. Process-kill, provider and authenticated
 installed-app acceptance remain tracked in the full sync ledger.
 
+`NativeFileDestination.rename` validates both descriptor-relative paths and
+directory anchors, retaining no-follow and exclusive/swap semantics. An older
+host kernel may reject `RENAME_RESOLVE_BENEATH` with `EINVAL`; only that error
+permits retry without the unsupported bit. Validated components and
+`RENAME_NOFOLLOW_ANY` still prevent path escape. Identity, content and recovery
+checks remain mandatory. `NativeFileDestinationTests` cover the compatibility
+path, symlinks, occupied destinations and mutation between attempts.
+
 
 `apple/FileSync/MobileSyncTrash.swift` (under `Sources/AppleFileSync`) provides
 recoverable same-volume Apple moves and explicit exclusive restore. It reuses

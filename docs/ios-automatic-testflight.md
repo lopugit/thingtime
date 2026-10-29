@@ -1,6 +1,6 @@
 # Automatic iOS TestFlight releases
 
-Native changes under `iOS/`, shared Apple widgets/passwords, and the TestFlight
+Native changes under `iOS/`, shared Apple FileSync/widgets/passwords, and the TestFlight
 workflow trigger a release after a push to `main`. Web-only changes do not
 rebuild the native shell. Manual `upload` and read-only `status` remain available.
 All operations require the workflow on `main` and serialize through one release
