@@ -102,6 +102,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-29: Type native upload progress expectations explicitly as 64-bit byte
+  counts so the Xcode 26.2 TestFlight regression build compiles. The existing
+  ordered-progress assertion remains intact. **Codex (AI)**
+
 - 2026-10-29: Add the native iOS Thingtime share destination for source-provided
   text, links, media, documents, folders and custom types, with local atomic
   batches, cancellation and retry. Include the extension in TestFlight signing
