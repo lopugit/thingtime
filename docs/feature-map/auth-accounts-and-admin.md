@@ -235,3 +235,14 @@ admin lookup, session selection, agent coordination and acceptance runbook.
 `resolveSessionUser` defaults to the authenticated principal for roster and
 credential callers; request authentication passes an explicit selection (or null
 for the session default). Never re-mint a principal session with an acting user ID.
+
+## Account storage recovery
+
+`storage/userStorage.ts` owns transactional admission and exact recovery;
+`storagePending.ts` validates the requested 100 MiB gross positive queue budget.
+`userStorageRecovery.ts` owns protected durable jobs, leases and bounded retries.
+The dispatcher triggers recovery after mutations; the existing protected
+`lopu/recordings/run` scheduler resumes it independently of provider jobs.
+`userStorageReadiness.ts` verifies ledger and source readiness. Run `test:storage`,
+`test:storage-recovery`, `test:error-logs`, `test:api-capabilities` and the
+replica integration. See [storage recovery](../storage-recovery.md).
