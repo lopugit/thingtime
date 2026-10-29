@@ -31,6 +31,8 @@ const context = await browser.newContext({ viewport: { width: 1440, height: 1000
 await context.addCookies(fixture.cookie.split('; ').map(pair => { const i = pair.indexOf('='); return { name: pair.slice(0, i), value: pair.slice(i + 1), url: origin, httpOnly: true, sameSite: 'Lax' }; }));
 const page = await context.newPage();
 const errors = [];
+const diagnostics = [];
+page.on('console', message => { if (message.type() === 'error') diagnostics.push(message.text().slice(0, 1600)); });
 page.on('pageerror', error => errors.push(error.message));
 const toggle = async (name, checked) => {
   const control = page.getByRole('checkbox', { name, exact: true });
@@ -138,10 +140,67 @@ try {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'Settings Admin overflow');
     await page.screenshot({ path: join(out, `settings-admin-${width}.png`), fullPage: true });
   }
+  // Individually select/edit a nested text block and an independent input in
+  // the real Builder, persist the private layout and read it through the API.
+  await page.goto(origin + '/admin/preview-retention', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Save retention rules', exact: true }).waitFor({ timeout: 60000 });
+  console.log('Policy, readback and identity cases passed; starting Builder editing.');
+  let layoutId;
+  const flattenBlocks = blocks => blocks.flatMap(block => [block, ...flattenBlocks(block.children || [])]);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 950 });
+    const host = page.locator('[data-settings-document="preview-retention-settings"]');
+    await host.getByRole('button', { name: 'Edit layout', exact: true }).click();
+    await host.getByRole('button', { name: 'Open Builder inspector', exact: true }).click();
+    const select = page.getByRole('combobox', { name: 'Select block', exact: true });
+    await select.selectOption('preview-retention-cleanup-description');
+    await page.getByRole('textbox', { name: 'Block text', exact: true }).fill(`Editable retention guidance ${width}`);
+    await select.selectOption('preview-retention-orphan-grace-input');
+    await page.getByRole('textbox', { name: 'Element title', exact: true }).fill(`Editable grace input ${width}`);
+    await page.getByRole('textbox', { name: 'Element title', exact: true }).blur();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'Opened Builder inspector overflow');
+    await page.screenshot({ path: join(out, `retention-builder-${width}.png`), fullPage: true });
+    await page.getByRole('button', { name: 'Close builder', exact: true }).click();
+    console.log(`Builder nested text/input edited at ${width}; saving layout.`);
+    const [layoutResponse] = await Promise.all([
+      page.waitForResponse(response => {
+        try { return new URL(response.url()).pathname === '/api/v1/things' && ['POST', 'PATCH'].includes(response.request().method()) && response.request().postDataJSON()?.crystal?.pageKey === 'settings-preview-retention-settings'; }
+        catch { return false; }
+      }),
+      host.getByRole('button', { name: 'Save layout', exact: true }).click()
+    ]);
+    const layout = await layoutResponse.json();
+    assert.equal(layoutResponse.status(), 200, JSON.stringify(layout)); layoutId = layout.thing.id;
+    const exactLayout = (await read('/api/v1/things?id=' + encodeURIComponent(layoutId))).body.thing;
+    assert.deepEqual(exactLayout.acl, ['tt:user']);
+    const flat = flattenBlocks(exactLayout.crystal.blocks);
+    assert.equal(flat.find(block => block.id === 'preview-retention-cleanup-description').text, `Editable retention guidance ${width}`);
+    assert.equal(flat.find(block => block.id === 'preview-retention-orphan-grace-input').props.title, `Editable grace input ${width}`);
+    assert.equal(flat.find(block => block.id === 'preview-retention-orphan-grace-label').text, 'Closed or missing PR grace period (hours)');
+    await host.getByText('Unsaved layout', { exact: true }).waitFor({ state: 'hidden' });
+    await host.getByRole('button', { name: 'Done editing layout', exact: true }).click();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByText(`Editable retention guidance ${width}`, { exact: true }).waitFor({ timeout: 60000 });
+    assert.equal(await page.getByLabel('Closed or missing PR grace period (hours)', { exact: true }).getAttribute('title'), `Editable grace input ${width}`);
+    await page.evaluate(async () => { for (let y = 0; y < document.documentElement.scrollHeight; y += 500) { window.scrollTo(0, y); await new Promise(resolve => setTimeout(resolve, 20)); } });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'Saved editable layout overflow');
+    await page.screenshot({ path: join(out, `retention-saved-builder-${width}.png`), fullPage: true });
+  }
+  await page.getByLabel('Closed or missing PR grace period (hours)', { exact: true }).fill('14');
+  const afterLayoutSave = page.waitForResponse(r => new URL(r.url()).pathname === endpoint && r.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Save retention rules', exact: true }).click();
+  assert.equal((await afterLayoutSave).status(), 200);
+  assert.equal((await read(endpoint)).body.policy.noOpenPrGraceHours, 14);
+  await page.goto(origin + '/settings/admin', { waitUntil: 'domcontentloaded' });
+  await page.locator('summary').filter({ hasText: 'Global controls' }).click();
+  await page.getByText('Editable retention guidance 390', { exact: true }).waitFor({ timeout: 60000 });
+  assert.equal(await page.getByLabel('Closed or missing PR grace period (hours)', { exact: true }).getAttribute('title'), 'Editable grace input 390');
+  assert.equal(await page.getByLabel('Closed or missing PR grace period (hours)', { exact: true }).inputValue(), '14');
   assert.deepEqual(errors, []);
-  await writeFile(join(out, 'result.json'), JSON.stringify({ passed: true, databaseHost: ready.body.host, origin, uiSaveReadback: true, staleSaveRefused: true, desktopMobile: true, inactiveDisabledReadback: true, sharedSettingsAdmin: true, delayedOriginReadsAndSavesFenced: true, revision: receipt.revision, pageErrors: errors }, null, 2));
+  await writeFile(join(out, 'result.json'), JSON.stringify({ passed: true, databaseHost: ready.body.host, origin, uiSaveReadback: true, staleSaveRefused: true, desktopMobile: true, inactiveDisabledReadback: true, sharedSettingsAdmin: true, delayedOriginReadsAndSavesFenced: true, builderNestedTextAndControl: true, savedPrivateLayoutId: layoutId, builderDesktopMobile: true, policyAfterBuilderEdit: true, revision: receipt.revision, pageErrors: errors }, null, 2));
   console.log('PASS: actual admin save, independent API readback, stale revision refusal, reload, conditional states and desktop/mobile layouts on both admin surfaces.');
 } catch (error) {
+  await writeFile(join(out, 'builder-diagnostics.json'), JSON.stringify({ diagnostics, pageErrors: errors, url: page.url() }, null, 2));
   await page.screenshot({ path: join(out, 'failure.png'), fullPage: true }).catch(() => {});
   throw error;
 } finally { await context.close(); await browser.close(); }

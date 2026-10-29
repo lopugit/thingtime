@@ -6668,7 +6668,12 @@ controller environment; no additional application secret is required.
 ### Preview cleanup policy
 
 Administrators use **Admin → Preview retention** (`/admin/preview-retention`) or
-Settings → Admin to save Vercel cleanup and PR liveliness rules. Defaults enable
+Settings → Admin to save Vercel cleanup and PR liveliness rules. **Edit layout**
+opens the existing Builder: labels, controls, descriptions, buttons and containers
+are individual editable blocks. **Save layout** persists the intended account's
+private settings webpage through the Things API, independently of **Save retention
+rules**, which updates the admin policy. Both placements reuse that same saved
+layout; live operations pause while editing. Defaults enable
 cleanup for deployments with no open PR, with zero grace; superseded active-PR
 cleanup and inactivity expiry are off. Grace periods are whole hours. Tagged
 previews count closed-PR grace from the later of creation and PR closure;

@@ -250,7 +250,12 @@ replica integration. See [storage recovery](../storage-recovery.md).
 ## Preview retention and PR liveliness
 
 `Admin → Preview retention` (`/admin/preview-retention`) and Settings → Admin
-share `Admin/PreviewRetentionSettings.tsx`, `SettingsSection` and `SettingRow`.
+share `Admin/PreviewRetentionSettings.tsx` and `previewRetentionSettingsBlocks.ts`.
+`SettingsDocumentHost`/`accountSettingsDocumentAdapter` save the private block
+layout through the existing Things API; `WebpageBlocksRenderer` supplies nested
+Builder selection and `TransientBlockHost` binds ordinary controls to scoped
+policy handlers. No opaque form slot or saved credential is used. Layout edits
+pause live operations and use the existing revision fence.
 `GET/POST /api/v1/admin/ci/preview-retention` requires the current admin and
 negotiated `api.admin-ci-preview-retention` 1.0.0. `ciControl/previewRetention.ts`
 reads the home settings singleton afresh and saves with a revision comparison;
@@ -265,5 +270,5 @@ deployments if policy discovery, authentication, reads or validation fail.
 The product API must roll out to the selected gateway origin before enabling the
 new policy reader; a UI-only preview forwarding to the old gateway cannot prove
 the new backend. See README “Preview cleanup policy” for defaults and rollout.
-Run `test:ci-control`, `test:api-capabilities`, and Admin route tests. Manual
+Run `test:ci-control` (including the retention block-tree regression), `test:api-capabilities`, and Admin route tests. Manual
 coverage: TESTING.md “Preview retention and PR liveliness”.

@@ -3,7 +3,7 @@
 The cleanup controller previously had no administrator-editable retention policy.
 This change adds `/admin/preview-retention` and the same shared sections to
 Settings → Admin, backed by a fresh home-plane settings singleton with revision
-comparisons. It uses existing SettingsSection/SettingRow and shared control tokens.
+comparisons. It now uses the existing SettingsDocumentHost/accountSettingsDocumentAdapter, WebpageBlocksRenderer and TransientBlockHost. Every title, description, label, hint, input, checkbox, conditional section and action button is an independently editable block; the host retains only scoped policy operations and display state. Layouts are private saved webpage Things, with the normal Builder revision fence.
 
 Defaults enable cleanup of previews without an open PR, with no grace. Pruning
 superseded active-PR previews and expiring inactive open-PR previews are optional.
@@ -29,18 +29,46 @@ the actual Vite-generated engine URLs and valid WASM bytes for both engines.
 
 ## Verification
 
-- CI control suite: 88 tests pass; capability suite: 123 tests pass.
+- Prior API/security validation is retained: CI control suite 88 tests and
+  capability suite 123 tests passed before the UI-only conversion.
+- Editable conversion: 21 focused block/settings-store/native-proxy tests pass,
+  with clean raw TypeScript and changed-file lint. Different UI/API origins use
+  the existing same-origin authenticated proxy with exact actor/data-plane/origin
+  checks; existing sync transports retain their home-plane default.
 - Focused route coverage includes anonymous/non-admin denial, stale revisions,
   form-content CSRF rejection, invalid signatures/repository/ref/timestamps,
   bounded chunked bodies and storage errors. Raw TypeScript and changed-file lint pass.
 - Real local API with a task-owned disposable replica and synthetic admin:
   Chrome for Testing at 1440 and 390 pixels exercised both settings placements,
   switches and conditional fields, save, independent readback, reload, stale 409,
-  inactivity disable and delayed prior-origin read/save responses. No page errors
-  or horizontal overflow; screenshots inspected.
+  inactivity disable and delayed prior-origin read/save responses. In the actual
+  Builder it separately selected a nested description and numeric input, edited
+  text and the control title, saved the private webpage, compared both edits and
+  ACL with an independent exact-Thing API read, then reloaded both placements.
+  Policy save/readback still works after layout editing. StrictMode layout
+  readiness and opened inspector states were exercised. No page errors or
+  horizontal overflow; screenshots inspected.
+- A focused real-viewport inspector test reproduces launcher interception and
+  checks title/type/placeholder hit targets at desktop/mobile widths. The shared
+  Builder overlay CSS suppresses only floating launch buttons while the inspector
+  is open and restores them on close; chat/panel state and preferences remain.
 - Signed controller read and built-runtime capability responses verified against
   that isolated API. Both image-engine URLs still return actual WASM bytes.
 - No production configuration or real provider deletion is exercised by this fixture.
+
+## Individually editable Builder acceptance
+
+The initial React-only controls did not satisfy the editable-block requirement.
+They have been converted to ordinary intrinsic WebpageBlocks, sharing one saved
+settings document across both placements. No native form slot or opaque Component
+stands in for the controls. The existing transient adapter invokes the same scoped
+policy handlers, and live operations pause during layout editing. Layout persistence
+uses the existing private Things API and origin/account/data-plane fences.
+
+Production saved-layout/Builder acceptance remains open until an authorized
+owning-account session is available; isolated acceptance does not establish that
+production check. Keep `no-ai-merge` until the required remaining acceptance and
+product gateway/controller rollout are resolved.
 
 ## Rollout and limitations
 

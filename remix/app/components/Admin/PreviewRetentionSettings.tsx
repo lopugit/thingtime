@@ -1,7 +1,11 @@
 import React from 'react';
-import { Box, Button, Flex, FormControl, FormLabel, Input, Switch, Text } from '@chakra-ui/react';
-import { SettingsSection, SettingRow, RainbowButton } from '~/components/Settings/SettingsSection';
+import { SettingsDocumentHost } from '~/components/Settings/SettingsDocumentHost';
+import { WebpageBlocksRenderer } from '~/components/Builder/WebpageBlocksRenderer';
+import { TransientBlockHost, type TransientBlockActions } from '~/components/Builder/TransientBlockHost';
+import { PREVIEW_RETENTION_SETTINGS_BLOCKS } from './previewRetentionSettingsBlocks';
 import { useApi } from '~/hooks/useApi';
+import { createFolderHostFetch } from '~/fileSync/folderHostFetch.client';
+import { useDataPlane } from '~/hooks/useDataPlane';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { rootIdentity } from '~/utils/rootIdentity';
 import { getElectronBridge } from '~/utils/electronBridge';
@@ -32,6 +36,7 @@ export const PreviewRetentionSettings = () => {
 
 const PreviewRetentionEditor = ({ scope }: { scope: { expectedActor: string; expectedApiOrigin: string } }) => {
   const { expectedActor, expectedApiOrigin } = scope;
+  const dataPlane = useDataPlane();
   const api = useApi();
   const apiRef = React.useRef(api);
   apiRef.current = api;
@@ -73,46 +78,50 @@ const PreviewRetentionEditor = ({ scope }: { scope: { expectedActor: string; exp
     } catch (reason) { if (generation.current === current) setError((reason as Error).message); }
     finally { if (generation.current === current) setSaving(false); }
   };
-  const hours = (key: 'noOpenPrGraceHours' | 'supersededGraceHours', label: string) => (
-    <FormControl isInvalid={Boolean(invalid)}>
-      <FormLabel htmlFor={`preview-${key}`} fontSize="sm">{label}</FormLabel>
-      <Input id={`preview-${key}`} type="number" inputMode="numeric" min={0} step={1} maxW="180px" minH="44px"
-        value={draft?.[key] ?? ''} isDisabled={saving} onChange={(event) => patch({ [key]: event.target.value === '' ? NaN : Number(event.target.value) })} />
-    </FormControl>
-  );
-  return <Flex direction="column" gap={4} minW={0}>
-    <SettingsSection open eyebrow="Vercel preview retention" description="Control automatic cleanup of deployment snapshots for this repository. Changes apply to the next protected controller run." summary={saved ? (saved.policy.enabled ? 'Automatic cleanup enabled' : 'Automatic cleanup paused') : 'Saved policy unavailable'}>
-      {loading && !saved && <Text fontSize="sm" role="status">Reading the saved policy…</Text>}
-      {draft && <>
-        <SettingRow label="Automatic preview cleanup" hint="Pause deployment deletion without changing the saved retention rules.">
-          <Switch minH="44px" display="flex" alignItems="center" aria-label="Automatic preview cleanup" isDisabled={saving} isChecked={draft.enabled} onChange={(event) => patch({ enabled: event.target.checked })} />
-        </SettingRow>
-        {hours('noOpenPrGraceHours', 'Closed or missing PR grace period (hours)')}
-        <Text fontSize="xs" color="var(--tt-text, #5a5a66)">0 removes eligible previews on the next run. Tagged previews count from the later of deployment creation or PR closure; untagged branch snapshots count from creation.</Text>
-        <SettingRow label="Remove superseded previews on active PRs" hint="Keep the newest ready preview for the current PR head and all active builds. Older snapshots become eligible after the grace period.">
-          <Switch minH="44px" display="flex" alignItems="center" aria-label="Remove superseded previews on active PRs" isDisabled={saving} isChecked={draft.pruneSupersededOpenPr} onChange={(event) => patch({ pruneSupersededOpenPr: event.target.checked })} />
-        </SettingRow>
-        {draft.pruneSupersededOpenPr && hours('supersededGraceHours', 'Superseded preview grace period (hours)')}
-      </>}
-    </SettingsSection>
-    {draft && <SettingsSection open eyebrow="Pull request liveliness" description="Choose when an open PR stops keeping its previews alive. This never closes or edits a pull request." summary={draft.inactivePullRequestDays === null ? 'Open PRs stay live indefinitely' : `Inactive after ${draft.inactivePullRequestDays} days`}>
-      <SettingRow label="Expire previews for inactive open PRs" hint="Opt in to removing all previews for an open PR after the chosen number of days since its last PR update on GitHub. Preview publishing stays suspended until that PR becomes active again.">
-        <Switch minH="44px" display="flex" alignItems="center" aria-label="Expire previews for inactive open PRs" isDisabled={saving} isChecked={draft.inactivePullRequestDays !== null} onChange={(event) => patch({ inactivePullRequestDays: event.target.checked ? 30 : null })} />
-      </SettingRow>
-      {draft.inactivePullRequestDays !== null && <FormControl>
-        <FormLabel htmlFor="preview-inactive-days" fontSize="sm">Days without PR activity</FormLabel>
-        <Input id="preview-inactive-days" type="number" inputMode="numeric" min={1} step={1} maxW="180px" minH="44px" value={draft.inactivePullRequestDays} isDisabled={saving} onChange={(event) => patch({ inactivePullRequestDays: event.target.value === '' ? NaN : Number(event.target.value) })} />
-      </FormControl>}
-    </SettingsSection>}
-    <Box borderRadius="var(--tt-radius-md, 12px)" bg="var(--tt-surface-alt, #f5f5f7)" p={4}>
-      <Text fontSize="sm" fontWeight={600}>Always protected</Text>
-      <Text fontSize="sm" mt={1} color="var(--tt-text, #5a5a66)">Production, stable environment and gateway deployments, protected aliases and resources outside the configured project remain protected. An unavailable or invalid policy preserves deployments.</Text>
-    </Box>
-    {(error || invalid) && <Text role="alert" fontSize="sm" color="red.600">{error || invalid}</Text>}
-    <Flex gap={3} flexWrap="wrap" alignItems="center">
-      {draft && <RainbowButton minH="44px" onClick={save} isLoading={saving} isDisabled={!dirty || Boolean(invalid) || loading}>Save retention rules</RainbowButton>}
-      <Button minH="44px" variant="outline" onClick={() => setReload((value) => value + 1)} isDisabled={saving || loading}>Reload saved policy</Button>
-      {dirty && <Text fontSize="xs" color="var(--tt-muted, #777783)">Unsaved changes</Text>}
-    </Flex>
-  </Flex>;
+  const actions: TransientBlockActions = {
+    'policy.enabled': ({ value }) => patch({ enabled: value === true }),
+    'policy.orphan-grace': ({ value }) => patch({ noOpenPrGraceHours: value === '' ? NaN : Number(value) }),
+    'policy.superseded': ({ value }) => patch({ pruneSupersededOpenPr: value === true }),
+    'policy.superseded-grace': ({ value }) => patch({ supersededGraceHours: value === '' ? NaN : Number(value) }),
+    'policy.inactive': ({ value }) => patch({ inactivePullRequestDays: value === true ? 30 : null }),
+    'policy.inactive-days': ({ value }) => patch({ inactivePullRequestDays: value === '' ? NaN : Number(value) }),
+    'policy.save': save,
+    'policy.reload': () => setReload(value => value + 1)
+  };
+  const ids = React.useId();
+  const fieldNames = ['enabled', 'noOpenPrGraceHours', 'pruneSupersededOpenPr', 'supersededGraceHours', 'inactiveEnabled', 'inactivePullRequestDays'];
+  const display = {
+    ids: Object.fromEntries(fieldNames.map(name => [name, `${ids}-${name}`])),
+    ready: Boolean(draft), coldLoading: loading && !saved, disabled: saving,
+    enabled: draft?.enabled === true, pruneSupersededOpenPr: draft?.pruneSupersededOpenPr === true,
+    noOpenPrGraceHours: Number.isFinite(draft?.noOpenPrGraceHours) ? draft!.noOpenPrGraceHours : '',
+    supersededGraceHours: Number.isFinite(draft?.supersededGraceHours) ? draft!.supersededGraceHours : '',
+    inactiveEnabled: draft?.inactivePullRequestDays !== null && draft?.inactivePullRequestDays !== undefined,
+    inactivePullRequestDays: Number.isFinite(draft?.inactivePullRequestDays) ? draft!.inactivePullRequestDays : '',
+    cleanupSummary: saved ? (saved.policy.enabled ? 'Automatic cleanup enabled' : 'Automatic cleanup paused') : 'Saved policy unavailable',
+    livelinessSummary: draft?.inactivePullRequestDays == null ? 'Open PRs stay live indefinitely' : `Inactive after ${draft.inactivePullRequestDays} days`,
+    hasError: Boolean(error || invalid), error: error || invalid, dirty,
+    saveDisabled: !dirty || Boolean(invalid) || loading || saving,
+    reloadDisabled: saving || loading, saveLabel: saving ? 'Saving retention rules…' : 'Save retention rules'
+  };
+  const scopeKey = JSON.stringify([expectedActor, expectedApiOrigin]);
+  const accountTransport = React.useMemo(() => {
+    const identityGeneration = rootIdentity.read().generation;
+    const check = () => {
+      const identity = rootIdentity.read();
+      if (identity.pending || identity.generation !== identityGeneration) throw new Error('The settings account or server changed.');
+    };
+    return { origin: expectedApiOrigin, currentOrigin: () => { check(); return expectedApiOrigin; },
+      fetch: createFolderHostFetch({ origin: expectedApiOrigin, localOrigin: window.location.origin, ownerId: expectedActor,
+        // SettingsDocumentHost supplies its abort signal on every request;
+        // duplicating that lifetime here breaks StrictMode effect remounts.
+        expectedDataPlane: dataPlane ?? 'unavailable', signal: new AbortController().signal, check, fetch: window.fetch.bind(window) }) };
+  }, [expectedApiOrigin, expectedActor, dataPlane]);
+  return <SettingsDocumentHost documentKey="preview-retention-settings" title="Preview retention settings layout" defaultDocument={PREVIEW_RETENTION_SETTINGS_BLOCKS}
+    scopeKey={scopeKey} accountTransport={accountTransport} layoutEditingDisabled={saving}>
+    {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={{ retention: display }} actions={actions} enabled={!editing}
+      onError={() => setError('This control could not complete. Reload the saved policy and try again.')}>
+      <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} interactive={!editing} bare />
+    </TransientBlockHost>}
+  </SettingsDocumentHost>;
 };

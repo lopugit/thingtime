@@ -13530,6 +13530,23 @@ separate from deterministic discovery/lease tests.
 
 ### Preview retention and PR liveliness
 
+- Use Edit layout → Builder inspector to select a nested label and a separate
+  input/control, change the label and a control attribute independently, and save
+  the layout. Compare its exact private webpage Thing through the API, reload both
+  placements, and confirm both edits and the live policy path still work at 1440
+  and 390 pixels. Exercise the opened inspector and page scrolling for overflow.
+  In development StrictMode, opening/closing the inspector must not leave layout
+  readiness permanently aborted or Save layout disabled after an edit. For a
+  desktop UI whose selected API origin differs, verify private layout requests
+  use the supported same-origin session proxy and refuse stale actor/plane/origin.
+  Check actual elementFromPoint targets at inspector title/type/placeholder inputs
+  (including near their right edge) while floating launchers would overlap. The
+  shared overlay contract suppresses launcher buttons only while the inspector
+  exists; closing it must restore them without changing settings or panel state.
+  JSON/source editing alone or a single outer selection is insufficient. Do the
+  same on the intended production account after sign-in; local fixtures cannot
+  establish production saved-layout acceptance.
+
 - In an isolated API/database with a synthetic admin, open `/admin/preview-retention`
   at desktop and mobile widths. Scroll top to bottom, expand/collapse both
   sections, exercise all switches and conditional numeric fields. Check keyboard
