@@ -29,14 +29,14 @@ async function closeOwnedProvider(request) {
     && (!tab.url || tab.url === 'about:blank') && providerUrl(tab.pendingUrl);
   if (current || initial) await chrome.tabs.remove(request.providerTabId).catch(() => {});
 }
-async function finish(request, result) {
+async function finish(request, result, {restoreFocus = !!result.response} = {}) {
   if (pending.get(request.tabId) !== request) return;
   pending.delete(request.tabId); clearTimeout(request.timer);
   await chrome.alarms.clear(alarmName(request.id));
   if (request.providerDocumentId) await send(request.providerTabId, request.providerDocumentId, {action: 'provider-cancel', id: request.id});
   await closeOwnedProvider(request);
   await checkpoint();
-  if (result.response) await restoreRequesterFocus(request);
+  if (restoreFocus) await restoreRequesterFocus(request);
   request.respond(result);
 }
 const recovered = (async () => {
@@ -139,7 +139,7 @@ async function handle(message, sender, respond) {
   }
   if (message?.action === 'native-fallback' && internal) {
     const request = pending.get(message.tabId);
-    if (request) await finish(request, {fallback: true});
+    if (request) await finish(request, {fallback: true}, {restoreFocus: true});
     return respond({ok: true});
   }
   if (message?.action === 'status' && internal) return respond({requests: [...pending.values()].map(r => ({tabId: r.tabId, origin: r.origin}))});
@@ -171,7 +171,7 @@ async function handle(message, sender, respond) {
   if (message.action === 'provider-response' && matchesDocument(request, sender, true) && message.version === 1 && message.id === request.id) {
     if (!await currentDocument(sender.tab.id, sender.documentId, request.providerOrigin, true)) return respond({ok: false});
     const result = message.fallback === true ? {fallback: true} : message.error ? {error: safeError(message.error)} : {response: message.response};
-    await finish(request, result); return respond({ok: true});
+    await finish(request, result, {restoreFocus: true}); return respond({ok: true});
   }
   respond({ok: false});
 }

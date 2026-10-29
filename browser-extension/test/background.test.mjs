@@ -243,7 +243,7 @@ test('closed or moved requester and focus errors do not change successful delive
   }finally{env.stop();}
  }
 });
-test('new requester navigation or native fallback never steals focus',async()=>{
+test('new requester navigation never steals focus and explicit fallback restores its requester',async()=>{
  const env=setup();
  try {
   const pending=env.send(env.request,env.sender);await tick();
@@ -256,6 +256,36 @@ test('new requester navigation or native fallback never steals focus',async()=>{
  const fallback=setup();try{
   const pending=fallback.send(fallback.request,fallback.sender);await tick();
   await fallback.send({action:'native-fallback',tabId:1},{id:'extension',url:'chrome-extension://extension/popup.html'});
-  assert.equal((await pending).fallback,true);assert.deepEqual(fallback.focused,[]);
+  assert.equal((await pending).fallback,true);assert.deepEqual(fallback.focused.map(value=>[value[0],value[1]]),[['tab',1],['window',10]]);
  }finally{fallback.stop();}
+});
+
+
+test('explicit native fallback focuses original tab/window before delivering the reply that starts native WebAuthn',async()=>{
+ const env=setup();try{
+  const events=[];
+  const pending=new Promise(resolve=>env.chrome.runtime.onMessage.listeners[0](env.request,env.sender,result=>{
+   assert.deepEqual(env.focused.map(value=>[value[0],value[1]]),[['tab',1],['window',10]]);
+   events.push('native-get');resolve(result);
+  }));
+  await tick();
+  await env.send({action:'native-fallback',tabId:1},{id:'extension',url:'chrome-extension://extension/popup.html'});
+  assert.equal((await pending).fallback,true);assert.deepEqual(events,['native-get']);assert.deepEqual(env.removed,[2]);
+ }finally{env.stop();}
+});
+test('approval-page fallback and cancellation return to requester while background opt-out does not steal focus',async()=>{
+ for(const result of [{fallback:true},{error:{name:'AbortError',message:'Cancelled'}}]){
+  const env=setup();try{
+   const pending=env.send(env.request,env.sender);await tick();await env.send({action:'provider-ready'},env.provider);
+   const forwarded=env.sent.find(value=>value.message.action==='provider-request').message.request;
+   await env.send({action:'provider-response',version:1,id:forwarded.id,...result},env.provider);
+   const reply=await pending;assert.ok(reply.fallback||reply.error?.name==='AbortError');
+   assert.deepEqual(env.focused.map(value=>[value[0],value[1]]),[['tab',1],['window',10]]);
+  }finally{env.stop();}
+ }
+ const disabled=setup();try{
+  disabled.state.enabled=false;
+  assert.equal((await disabled.send(disabled.request,disabled.sender)).fallback,true);
+  assert.deepEqual(disabled.focused,[]);assert.equal(disabled.frames.has(2),false);
+ }finally{disabled.stop();}
 });

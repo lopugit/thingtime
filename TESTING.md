@@ -10402,8 +10402,11 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [ ] Browser approval return: after successful verification, close only the
   owned approval tab and focus the exact requesting tab/window before response
   delivery. The site's resulting success redirect must keep focus. Closed/moved
-  tabs, new pending navigation, cancellation and native fallback must not steal
-  focus; window focus failure must not discard or retry a successful credential.
+  tabs and new pending navigation must not steal focus. Explicit approval-page
+  native fallback must restore the requester before the original native WebAuthn
+  call; explicit approval cancellation also returns there. Background timeout,
+  opt-out and navigation cancellation must not steal focus. Window focus failure
+  must not discard or retry a successful credential.
   Never open a guessed callback URL or a new requester tab.
 
 - [ ] Empty native passkey requests: expand **Request details** and compare the
