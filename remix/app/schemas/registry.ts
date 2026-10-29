@@ -1,5 +1,15 @@
+import { BUILDER_THING_KIND, withBuilderThingKind } from './builderThing';
+import { renderComponentDeclaration } from '../components/Thingtime/renderComponentDeclaration';
+import { validateMediaPipeline } from '../webPlatform/mediaPipeline';
+import { validateLiveSource } from './liveSources';
+import { fileSyncSchema, parseFileSyncConfiguration, FILE_SYNC_KIND } from '../fileSync/configuration';
+import { HTML_ALLOWED_TAGS } from '../components/Kinds/htmlRenderPolicy';
+import { PASSWORD_TYPES, FIELD_TYPES } from '../passwords/model';
 import { TIMELINE_SNAPSHOT_PART_KIND } from '../timeline/snapshotParts.ts';
+import { DEVICE_PLATFORMS } from '../devices/platform.ts';
 import { TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND } from '../timeline/branches.ts';
+import { TIMELINE_NOTE_KIND } from '../timeline/notes.ts';
+import { TIMELINE_VERSION_NAME_KIND } from '../timeline/versionNames.ts';
 import { copyActionJson } from './actionJsonInput.ts';
 import { TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND } from '../timeline/contract.ts';
 import { parseBrowserExpressionLimits } from './browserActions';
@@ -40,7 +50,7 @@ import {
 	sanitizeAttachmentPublicMetadata
 } from '../api/utils/attachments/attachmentCore.ts';
 
-export type ThingtimeFieldType = 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'string[]' | 'object' | 'record' | 'id';
+export type ThingtimeFieldType = 'array' | 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'string[]' | 'object' | 'record' | 'id';
 
 export type ThingtimeSchemaField = {
   name: string;
@@ -576,7 +586,7 @@ export const SUBSPACE_SLUG_HOLD_DAYS = 30;
 // Dedicated-endpoint kinds of the family (no generic crystal sanitizers, so
 // /api/v1/things refuses them; excluded from own-things listings + generic
 // DELETE the way the messenger family is).
-export const SUBSPACE_THINGTIME = ['subspace', 'subspace-member', 'subspace-modlog', 'subspace-tombstone', 'subspace-report'] as const;
+export const SUBSPACE_THINGTIME = ['subspace', 'subspace-member', 'subspace-modlog', 'subspace-tombstone', 'subspace-report', 'subspace-embed'] as const;
 export const UPDOWN_THINGTIME = 'updown';
 // Custom emoji: the image is an inline data URI stored on its own thing doc
 // (the avatar pattern, FUNDAMENTALS §3 relational rule) — ~512KB binary ≈
@@ -794,12 +804,33 @@ const rootThingSchema: ThingtimeSchema = {
 			description: 'Private server-derived fingerprint that makes upload-start retries idempotent without exposing request metadata.'
 		},
 		{
+			name: 'attachmentFileSyncOrigin',
+			type: 'object',
+			required: false,
+			system: true,
+			description: 'Private immutable client-reported sync source/destination identity stored before bytes; owner-session detail only, never a native grant or current location.'
+		},
+		{
 			name: 'attachmentPurpose',
 			type: 'enum',
 			required: false,
 			values: [...ATTACHMENT_PURPOSES],
 			system: true,
 			description: 'Server-owned immutable binding domain: post, comment, message, profile, or custom-emoji media, or a standalone owner-private recording that never binds to a target.'
+		},
+		{
+			name: 'passwordFileEnvelope',
+			type: 'object',
+			required: false,
+			system: true,
+			description: 'Private account-vault envelope containing encrypted password file metadata and its content key; only the full-session password service may open it.'
+		},
+		{
+			name: 'passwordFileParent',
+			type: 'string',
+			required: false,
+			system: true,
+			description: 'Immutable owner-local password entry id used to fence attachment retries and parent deletion before final binding.'
 		},
 		{
 			name: 'attachmentProfileSlot',
@@ -1037,6 +1068,19 @@ const postSchema: ThingtimeSchema = {
     listing: null,
     thing: null
   }
+};
+
+const fileSchema: ThingtimeSchema = {
+  id: 'file', version: 1, kind: 'crystal', collection: null, title: 'File',
+  summary: 'A stable file identity with retained attachment versions and Timeline history.',
+  detail: 'The dedicated file writer changes the current content atomically using an expected revision and immutable operation identity. Bytes remain separately accounted attachment Things linked by parentId/targetId. Trash retains content until an explicit retention workflow removes it.',
+  createdVia: 'POST /api/v1/files',
+  example: { name: 'notes.txt', trashed: false, content: { attachmentId: 'att-example', version: 'a'.repeat(64), size: 1, fingerprint: { algorithm: 'sha256-parts-v1', partSizeBytes: 8388608, partCount: 1, sha256: 'b'.repeat(64) } } },
+  fields: [
+    { name: 'name', type: 'string', required: true, max: 255, description: 'Editable filename.' },
+    { name: 'trashed', type: 'boolean', required: true, description: 'Recoverable trash state; retained bytes remain accounted.' },
+    { name: 'content', type: 'object', required: true, description: 'Verified attachment identity, opaque content version, byte size and multipart fingerprint.' }
+  ]
 };
 
 const attachmentSchema: ThingtimeSchema = {
@@ -1405,14 +1449,14 @@ export const COMPONENT_KEY_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 // Webpage block-tree caps (grammar + sanitizer live beside the component
 // sanitizer further down; see the webpage block grammar section).
-export const MAX_WEBPAGE_BLOCKS = 120;
-export const MAX_WEBPAGE_BLOCK_DEPTH = 8;
+export const MAX_WEBPAGE_BLOCKS = Number.POSITIVE_INFINITY;
+export const MAX_WEBPAGE_BLOCK_DEPTH = Number.POSITIVE_INFINITY;
 export const MAX_WEBPAGE_BLOCK_ID_CHARS = 40;
 export const MAX_WEBPAGE_BLOCK_REF_CHARS = 128;
 export const MAX_WEBPAGE_TEXT_CHARS = 2000;
-export const MAX_WEBPAGE_BLOCKS_BYTES = 48 * 1024;
+export const MAX_WEBPAGE_BLOCKS_BYTES = Number.POSITIVE_INFINITY;
 export const MAX_WEBPAGE_ROUTE_CHARS = 120;
-export const WEBPAGE_BLOCK_TYPES = ['component', 'container', 'text', 'native', 'media', 'html'] as const;
+export const WEBPAGE_BLOCK_TYPES = ['component', 'container', 'text', 'native', 'media', 'html', 'element', 'collection', 'condition'] as const;
 export const WEBPAGE_CONTAINER_DIRECTIONS = ['column', 'row', 'grid'] as const;
 export const WEBPAGE_TEXT_STYLES = ['body', 'heading', 'eyebrow'] as const;
 export const WEBPAGE_BLOCK_ALIGNS = ['start', 'center', 'end', 'stretch'] as const;
@@ -1462,7 +1506,7 @@ const componentSchema: ThingtimeSchema = {
 			description: 'The design language this component follows; user-authored components default to custom.'
 		},
 		{ name: 'category', type: 'string', required: false, max: MAX_COMPONENT_CATEGORY_CHARS, description: 'Catalog category, e.g. buttons, forms, feedback, navigation, flow.' },
-		{ name: 'source', type: 'record', required: false, description: 'Viewer-owned Action binding: { action, inputs?, refresh?: load/manual/interval, intervalMs? }. Source values resolve into result/state/error; the page can override this binding.' },
+		{ name: 'source', type: 'record', required: false, description: 'Viewer-owned Action binding: { action, inputs?, refresh?: load/manual/interval/live, intervalMs? }. Source values resolve into result/state/error; the page can override this binding.' },
 		{ name: 'componentKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Stable slug identity linking saved versions to their source component.' },
 		{ name: 'familyKey', type: 'string', required: false, max: MAX_COMPONENT_KEY_CHARS, description: 'Groups the library renditions (designs) of one functional component — /components shows one card per family.' },
 		{ name: 'version', type: 'number', required: false, min: 1, description: 'Version counter for saved instances of a componentKey.' },
@@ -1555,9 +1599,8 @@ const webpageSchema: ThingtimeSchema = {
 			name: 'blocks',
 			type: 'record',
 			required: true,
-			max: MAX_WEBPAGE_BLOCKS,
 			description:
-				`Ordered block tree, max ${MAX_WEBPAGE_BLOCKS} blocks / ${MAX_WEBPAGE_BLOCK_DEPTH} deep: ` +
+				'Ordered editable block tree: ' +
 				'{ id, type: component (component ref + args), container (direction/gap/columns + children), ' +
 				'text (text + style, optional href link), or native (built-in screen key) — plus align/maxWidth per block }.'
 		}
@@ -2123,6 +2166,23 @@ const subspaceReportSchema: ThingtimeSchema = {
     { name: 'reportKey', type: 'string', required: true, description: 'Unique `<postId>:<reporterId>` pair key.' }
   ],
   example: { postId: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', commentId: null, reason: 'No spam', note: 'Third ad this week from the same account', status: 'open', resolution: null, resolvedById: null, resolvedAt: null, reportKey: '4f6b2c1e…:5eed…' }
+};
+
+const subspaceEmbedSchema: ThingtimeSchema = {
+  id: 'subspace-embed', version: 1, kind: 'crystal', collection: null,
+  title: 'Subspace embedded Thing',
+  summary: 'One moderator-managed Thing reference in the sidebar or feed.',
+  detail: 'targetId is the subspace. Each ordered reference is an accounted relational Thing. ' +
+    'Only current moderators add, move or remove references through /api/v1/subspaces/embeds. ' +
+    'Reads reauthorize both the subspace and the referenced Thing for the current viewer; ' +
+    'embedding never changes the source audience or discloses management capabilities.',
+  createdVia: 'POST /api/v1/subspaces/embeds',
+  fields: [
+    { name: 'region', type: 'enum', required: true, values: ['sidebar', 'feed'], description: 'Where this reference appears.' },
+    { name: 'thingId', type: 'id', required: true, description: 'Referenced Thing shareId; independently authorized on read.' },
+    { name: 'order', type: 'number', required: true, description: 'Server-owned stable position within the region.' }
+  ],
+  example: { region: 'sidebar', thingId: 'example-thing', order: 0 }
 };
 
 const subscriptionSchema: ThingtimeSchema = {
@@ -2871,13 +2931,11 @@ const pushDeviceThingSchema: ThingtimeSchema = {
 // move path cycle-checks the ancestor chain. Organization is personal:
 // folderId only ever points at a folder the SAME owner holds, and folders
 // default private (organization structure is not content).
-export const MAX_FOLDER_NAME_CHARS = 120;
 export const MAX_FOLDER_ICON_CHARS = 32;
-export const MAX_FOLDER_DESCRIPTION_CHARS = 500;
 
 const folderSchema: ThingtimeSchema = {
   id: 'folder',
-  version: 1,
+  version: 2,
   kind: 'crystal',
   collection: null,
   title: 'Folder',
@@ -2890,9 +2948,12 @@ const folderSchema: ThingtimeSchema = {
     'they re-parent to the deleted folder’s parent. Folders default private (acl ["tt:user"]): ' +
     'how you organise your things is yours even when the things themselves are public.',
   fields: [
-    { name: 'name', type: 'string', required: true, max: MAX_FOLDER_NAME_CHARS, description: 'Folder display name.' },
+    { name: 'name', type: 'string', required: true, description: 'Folder display name.' },
     { name: 'icon', type: 'string', required: false, max: MAX_FOLDER_ICON_CHARS, description: 'Optional emoji shown instead of the default 📁.' },
-    { name: 'description', type: 'string', required: false, max: MAX_FOLDER_DESCRIPTION_CHARS, description: 'Optional note about what lives here.' }
+    { name: 'description', type: 'string', required: false, description: 'Optional note about what lives here.' },
+    { name: 'builderApp', type: 'boolean', required: false, description: 'Marks an owner-owned top-level folder as a Builder app workspace. Folder membership never grants access to its contents.' },
+    { name: 'iconUrl', type: 'string', required: false, description: 'Uploaded image URL or an explicit HTTPS fallback for the app icon.' },
+    { name: 'metadata', type: 'object', required: false, description: 'Owner-authored structured workspace metadata, validated with the ordinary data crystal codec.' }
   ],
   example: { name: 'Recipes', icon: '🍜', description: 'Everything I want to cook someday.' }
 };
@@ -3787,7 +3848,7 @@ const deviceSchema: ThingtimeSchema = {
 	fields: [
 		{ name: 'deviceKey', type: 'string', required: true, description: 'Server-hashed unique owner/device key.' },
 		{ name: 'name', type: 'string', required: true, max: 120, description: 'User-facing computer name.' },
-		{ name: 'platform', type: 'enum', required: true, values: ['macos', 'windows', 'linux', 'watchos'], description: 'Operating-system family.' },
+		{ name: 'platform', type: 'enum', required: true, values: [...DEVICE_PLATFORMS], description: 'Operating-system family; capabilities are negotiated separately.' },
 		{ name: 'model', type: 'string', required: false, max: 160, description: 'Bounded hardware model label.' },
 		{ name: 'osVersion', type: 'string', required: false, max: 80, description: 'Bounded OS version label.' },
 		{ name: 'appVersion', type: 'string', required: false, max: 80, description: 'Thingtime node version.' },
@@ -4198,8 +4259,14 @@ export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  'agent-reporting-binding', 'agent-reporting-operation',
+  'file',
+  'mail-account', 'mail-folder', 'mail-message', 'mail-inbox', 'mail-operation',
+  'password-manager-entry',
   'draft',
-  TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, TIMELINE_SNAPSHOT_PART_KIND,
+  // Moderator-managed references; only the subspace embeds endpoint writes them.
+  'subspace-embed',
+  TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_BRANCH_KIND, TIMELINE_BRANCH_HEAD_KIND, TIMELINE_SNAPSHOT_PART_KIND, TIMELINE_NOTE_KIND, TIMELINE_VERSION_NAME_KIND,
   'post-discovery',
   ...CHAT_ARCHIVE_THINGTIME,
 
@@ -4400,6 +4467,33 @@ const waitlistThingSchema: ThingtimeSchema = {
 };
 
 export const thingtimeSchemas: ThingtimeSchema[] = [
+  ...['mail-account', 'mail-folder', 'mail-message', 'mail-inbox', 'mail-operation'].map(id => ({
+    id, version: 1, kind: 'crystal' as const, collection: null, title: id.replace('mail-', 'Mail '),
+    summary: 'Private encrypted mail record.', detail: 'Owned mail records use the same versioned model in the cloud, browser and local connector. Credentials and message content are encrypted. Proxy inboxes contain folder references only. Generic Thing reads, writes and sharing cannot access these records.',
+    createdVia: '/api/v1/mail', fields: [], example: {}
+  })),
+
+  { id: 'password-manager-entry', version: 2, kind: 'crystal', collection: null, title: 'Password manager entry',
+    summary: 'An encrypted, private credential with ordered custom fields.',
+    detail: 'Created only through the password manager API. The title, password type, ordered fields and field types form an extensible document; field values are encrypted together with the account vault key. Generic Thing CRUD, search, sharing and history cannot disclose the entry. The Thing fields mod supplies sectioned and typed field editors. Imported source JSON, account/vault attributes, flags, tags, and password history are encrypted alongside the fields; private encrypted files are relational attachment Things.',
+    createdVia: '/api/v1/passwords', fields: [
+      { name: 'title', type: 'string', required: true, description: 'Entry title.' },
+      { name: 'passwordType', type: 'enum', required: true, values: [...PASSWORD_TYPES], description: 'Credential category. Native passkeys hold encrypted signing material.' },
+      { name: 'icon', type: 'object', required: false, description: 'Explicit uploaded password file or HTTPS URL choice. Sealed separately for private list presentation; never inferred from secret fields.', children: [
+        { name: 'kind', type: 'enum', required: true, values: ['url', 'attachment'], description: 'Selected image source.' },
+        { name: 'url', type: 'string', required: false, description: 'HTTPS image URL without credentials; loaded anonymously only after explicit selection.' },
+        { name: 'fileId', type: 'string', required: false, description: 'Owned ready password attachment bound to this entry.' }
+      ] },
+      { name: 'fields', type: 'array', required: true, children: [
+        { name: 'id', type: 'string', required: true, description: 'Stable field id.' },
+        { name: 'label', type: 'string', required: true, description: 'Field label.' },
+        { name: 'type', type: 'enum', required: true, values: [...FIELD_TYPES], description: 'Field editor.' },
+        { name: 'value', type: 'string', required: false, description: 'Encrypted field value. The password manager has no character-count cap.' },
+        { name: 'section', type: 'string', required: false, description: 'Section heading.' },
+        { name: 'concealed', type: 'boolean', required: false, description: 'Hide the value until revealed.' },
+        { name: 'structured', type: 'boolean', required: false, description: 'Preserve the original JSON type of structured values.' }
+      ], description: 'Ordered fields in the encrypted document: id, label, type and value. Defaults are username, password and website.' }
+    ], example: { title: 'Example login', passwordType: 'login', fields: [{ id: 'username', label: 'Username', type: 'text', value: '' }, { id: 'password', label: 'Password', type: 'password', value: '' }] } },
   { id: 'draft', version: 1, kind: 'crystal', collection: null, title: 'Draft or template',
     summary: 'Private account-backed editing snapshots and reusable templates.',
     detail: 'Owner-only, quota-accounted drafts, version-checked through the drafts API. Each is an atomic Thing; files are relational attachment children. Generic CRUD, feeds and search cannot publish drafts.',
@@ -4414,6 +4508,14 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
 	{ id: TIMELINE_BRANCH_HEAD_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline branch version',
 		summary: 'One current version for one branch and Thing.', detail: 'A protected atomic relationship with scalar branchId, thingId, eventId and optimistic revision. targetId names its Thing and parentId its branch. A push requires the current revision and preserves ancestry; divergence requires a merge. The canonical head record is identical locally and remotely.',
 		createdVia: 'Timeline branch command', fields: [], example: {} },
+	{ id: TIMELINE_NOTE_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline note',
+		summary: 'A private contextual message attached to one immutable Timeline event.',
+		detail: 'Each note is its own protected relational Thing: the identical local/server note record (owner or Lopu author, plain text up to 2000 characters, at most 8192 bytes) lives in secure BinData, targetId points to its event Thing, and hashed crystal.targetId plus crystal.linkKind support reverse lookup through the existing shared index. Events stay immutable and exact-keyed; notes never accumulate as an array on the event, the Thing or the Timeline folder. At most 8 notes per event; the owner may remove either author’s note, refunding metered storage. Only the dedicated Timeline note commands write notes; generic Things reads, search and sharing never expose them.',
+		createdVia: 'Timeline note command', fields: [{ name: 'name', type: 'string', required: true, system: true, description: 'Value-free display label.' }], example: { name: 'Note' } },
+	{ id: TIMELINE_VERSION_NAME_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline version name',
+		summary: 'A private pinned display name for one saved Timeline version.',
+		detail: 'One protected relational Thing per named event: the identical local/server name record (1–80 characters, at most 4096 bytes) lives in secure BinData, targetId points to its event Thing, hashed crystal.targetId plus crystal.linkKind support reverse lookup through the existing shared index, and a root nameRevision fences concurrent renames. The crystal label is constant, so the name text never reaches crystal projections, search or root data. Events stay immutable and exact-keyed; names never accumulate on the event, the Thing or the Timeline folder and invent no version numbers. The record is unbilled control metadata, but every name, rename and clear appends a metered timeline-version-name effect event beside the named version. Only the dedicated name-version Timeline command writes names; generic Things reads, search and sharing never expose them.',
+		createdVia: 'Timeline name-version command', fields: [{ name: 'name', type: 'string', required: true, system: true, description: 'Value-free display label.' }], example: { name: 'Version name' } },
 	{ id: TIMELINE_LINK_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline relationship',
 		summary: 'One immutable private link between an event and a version, Thing, branch or operation.',
 		detail: 'Each relationship is its own protected Thing in Timeline. The identical local/server link record lives in secure BinData; targetId points to its event Thing. Hashed crystal.targetId and crystal.linkKind support reverse lookup through the existing shared index. Links commit with the event, never accumulate in document arrays, and cannot be edited through generic Things APIs.',
@@ -4436,10 +4538,17 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   rootThingSchema,
   postSchema,
 	attachmentSchema,
+	fileSchema,
   commentSchema,
   reactionSchema,
   shareSchema,
   dataSchema,
+  {
+    id: BUILDER_THING_KIND, version: 1, kind: 'crystal', collection: null,
+    title: 'Builder Thing', summary: 'Content authored through the Thingtime Builder.',
+    detail: 'Composable authorship metadata alongside a content schema. It does not change content validation, rendering, ownership or access. Legacy Builder kinds remain recognizable without a migration.',
+    fields: [], example: {}
+  },
   {
     id: 'scheduled-task-run', version: 1, kind: 'crystal', collection: null,
     title: 'Scheduled task run', summary: 'An owner-private, editable run note linked to its task by targetId.',
@@ -4478,7 +4587,9 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   subspaceModlogSchema,
   subspaceTombstoneSchema,
   subspaceReportSchema,
+  subspaceEmbedSchema,
   folderSchema,
+  fileSyncSchema,
   appSchema,
   appDataSchema,
   // admin-plane kinds (PROTECTED: written only through admin endpoints)
@@ -5126,12 +5237,13 @@ const projectBuiltinField = (field: ThingtimeSchemaField, depth: number): Record
   // would publish a machine-readable cap that rejects legal values
   const maxInDefaultUnit = typeof field.max === 'number' && !field.maxUnit;
   if (type === 'string' && maxInDefaultUnit) out.maxLength = field.max;
-  if (type === 'string[]' && maxInDefaultUnit) out.maxItems = field.max;
-  if (type === 'object') {
+  if ((type === 'string[]' || type === 'array') && maxInDefaultUnit) out.maxItems = field.max;
+  if (type === 'object' || type === 'array') {
     const children = (field.children || [])
       .map((child) => projectBuiltinField(child, depth + 1))
       .filter((child): child is Record<string, unknown> => child !== null);
-    if (children.length) out.children = children;
+    if (type === 'array') out.items = children.length ? { type: 'object', children } : { type: 'json' };
+    else if (children.length) out.children = children;
     else out.type = 'json';
   }
   return out;
@@ -5489,10 +5601,15 @@ const sanitizeSourceBinding = (input: unknown): { ok: true; source: Record<strin
 	// (once, on load), or 'interval' (also every intervalMs — a clock, a
 	// live tally; bounded so a page can never poll the executor hard)
 	if (rawSource.refresh !== undefined && rawSource.refresh !== null) {
-		if (rawSource.refresh !== 'load' && rawSource.refresh !== 'manual' && rawSource.refresh !== 'interval') {
-			return fail(400, `Component/page source.refresh must be load, manual, or interval`);
+		if (rawSource.refresh !== 'load' && rawSource.refresh !== 'manual' && rawSource.refresh !== 'interval' && rawSource.refresh !== 'live') {
+			return fail(400, `Component/page source.refresh must be load, manual, interval, or live`);
 		}
 		if (rawSource.refresh !== 'load') source.refresh = rawSource.refresh;
+	}
+	if (rawSource.stream !== undefined || rawSource.refresh === 'live') {
+		const stream = validateLiveSource(rawSource.stream);
+		if (!stream) return fail(400, 'Component/page live source must use a registered read-only stream adapter');
+		source.stream = stream;
 	}
 	if (rawSource.intervalMs !== undefined && rawSource.intervalMs !== null) {
 		const intervalMs = Number(rawSource.intervalMs);
@@ -5706,12 +5823,6 @@ const sanitizeWebpageBlock = (
 		if (Object.keys(css).length) block.css = css;
 	}
 
-	if (type === 'component') {
-		const component = typeof raw.component === 'string' ? raw.component.trim() : '';
-		if (!component || component.length > MAX_WEBPAGE_BLOCK_REF_CHARS || /[$\s]/.test(component)) {
-			return fail(400, `Block ${id} needs a component reference (componentKey or shareId)`);
-		}
-		block.component = component;
 		if (raw.args !== undefined && raw.args !== null) {
 			if (typeof raw.args !== 'object' || Array.isArray(raw.args)) {
 				return fail(400, `Block ${id} args must be an object of scalar arg values`);
@@ -5731,6 +5842,48 @@ const sanitizeWebpageBlock = (
 			}
 			if (Object.keys(args).length) block.args = args;
 		}
+	// Source bindings can scope any editable subtree. Execution retains the
+	// same viewer-owned Action authorization as a component source.
+	if (raw.source != null) {
+		const checked = sanitizeSourceBinding(raw.source);
+		if (isFail(checked)) return checked;
+		block.source = checked.source;
+	}
+	if (type === 'element' || type === 'collection' || type === 'condition') {
+		if (type === 'element') {
+			const tag = typeof raw.tag === 'string' ? raw.tag.toLowerCase() : 'div';
+			if (!HTML_ALLOWED_TAGS.has(tag) || (tag.startsWith('tt-') && !['tt-media-pipeline', 'tt-mapbox', 'tt-form', 'tt-select', 'tt-style', 'tt-change'].includes(tag))) return fail(400, 'Element blocks require a safe HTML tag');
+			if (tag === 'tt-media-pipeline') {
+				try { validateMediaPipeline((raw.props as any)?.pipeline); } catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid media pipeline'); }
+			}
+			block.tag = tag;
+			if (typeof raw.text === 'string') block.text = raw.text;
+		}
+		for (const key of ['props', 'condition', 'format']) {
+			if (raw[key] == null) continue;
+			if (typeof raw[key] !== 'object' || Array.isArray(raw[key])) return fail(400, `Block ${key} must be an object`);
+			const checked = checkSchemaRenderTree(raw[key], 0, { nodes: 0 });
+			if (checked !== true) return checked;
+			block[key] = raw[key];
+		}
+		if (raw.children != null && !Array.isArray(raw.children)) return fail(400, 'Block children must be a list');
+		const children: Record<string, unknown>[] = [];
+		for (const child of (raw.children || []) as unknown[]) {
+			const checked = sanitizeWebpageBlock(child, depth + 1, state);
+			if (isFail(checked)) return checked;
+			children.push(checked.block);
+		}
+		if (children.length || type !== 'element') block.children = children;
+		return { ok: true, block };
+	}
+
+	if (type === 'component') {
+		const component = typeof raw.component === 'string' ? raw.component.trim() : '';
+		if (!component || component.length > MAX_WEBPAGE_BLOCK_REF_CHARS || /[$\s]/.test(component)) {
+			return fail(400, `Block ${id} needs a component reference (componentKey or shareId)`);
+		}
+		block.component = component;
+
 		// source: a DATA BINDING — the page runtime runs this action AS THE
 		// VIEWER (delegated, owner-only resolution like a ttAction click) when
 		// the page loads and again after any control on the page runs, and
@@ -5856,11 +6009,26 @@ export const sanitizeWebpageBlocks = (input: unknown): { ok: true; blocks: Recor
 	if (!Array.isArray(input)) return fail(400, 'Webpage blocks must be a list');
 	const state = { nodes: 0, ids: new Set<string>() };
 	const blocks: Record<string, unknown>[] = [];
-	for (const entry of input) {
-		const sanitized = sanitizeWebpageBlock(entry, 1, state);
-		if (isFail(sanitized)) return sanitized;
-		blocks.push(sanitized.block);
-	}
+	const pending = input.map(entry => ({ entry, target: blocks }));
+ const seen = new Set<object>();
+ for (let cursor = 0; cursor < pending.length; cursor++) {
+  const { entry, target } = pending[cursor];
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return fail(400, 'Each webpage block must be an object');
+  if (seen.has(entry)) return fail(400, 'Webpage blocks must be an acyclic tree');
+  seen.add(entry);
+  const raw = entry as Record<string, unknown>;
+  if (raw.children != null && !Array.isArray(raw.children)) return fail(400, 'Block children must be a list');
+  const sanitized = sanitizeWebpageBlock({ ...raw, children: undefined }, 1, state);
+  if (isFail(sanitized)) return sanitized;
+  target.push(sanitized.block);
+  if (Array.isArray(raw.children)) {
+   if (!['container', 'element', 'collection', 'condition'].includes(String(raw.type))) return fail(400, 'This block type cannot contain children');
+   const children: Record<string, unknown>[] = [];
+   sanitized.block.children = children;
+   for (const child of raw.children) pending.push({ entry: child, target: children });
+  }
+ }
+
 	let serialized = '';
 	try {
 		serialized = JSON.stringify(blocks);
@@ -6850,7 +7018,6 @@ const sanitizeFeedAlgorithmCrystal = (input: Record<string, unknown>): { ok: tru
 const sanitizeFolderCrystal = (input: Record<string, unknown>): { ok: true; crystal: Record<string, unknown> } | Fail => {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   if (!name) return fail(400, 'Folder name is required');
-  if (name.length > MAX_FOLDER_NAME_CHARS) return fail(400, `Folder name is too long (max ${MAX_FOLDER_NAME_CHARS})`);
   const crystal: Record<string, unknown> = { name };
   if (input.icon !== undefined && input.icon !== null) {
     if (typeof input.icon !== 'string' || input.icon.trim().length > MAX_FOLDER_ICON_CHARS) {
@@ -6859,10 +7026,25 @@ const sanitizeFolderCrystal = (input: Record<string, unknown>): { ok: true; crys
     if (input.icon.trim()) crystal.icon = input.icon.trim();
   }
   if (input.description !== undefined && input.description !== null) {
-    if (typeof input.description !== 'string' || input.description.trim().length > MAX_FOLDER_DESCRIPTION_CHARS) {
-      return fail(400, `Folder description is too long (max ${MAX_FOLDER_DESCRIPTION_CHARS})`);
-    }
+    if (typeof input.description !== 'string') return fail(400, 'Folder description must be text');
     if (input.description.trim()) crystal.description = input.description.trim();
+  }
+  if (input.builderApp !== undefined) {
+    if (input.builderApp !== true && input.builderApp !== false) return fail(400, 'builderApp must be a boolean');
+    if (input.builderApp) crystal.builderApp = true;
+  }
+  if (input.iconUrl !== undefined && input.iconUrl !== null) {
+    if (typeof input.iconUrl !== 'string') return fail(400, 'Folder icon URL must be text');
+    const iconUrl = input.iconUrl.trim();
+    if (iconUrl && !/^https:\/\/[^\s]+$/i.test(iconUrl) && !/^\/api\/v1\/attachments\/content\?id=[A-Za-z0-9_-]+$/.test(iconUrl))
+      return fail(400, 'Folder icon URL must be HTTPS or an uploaded Thingtime image');
+    if (iconUrl) crystal.iconUrl = iconUrl;
+  }
+  if (input.metadata !== undefined && input.metadata !== null) {
+    if (typeof input.metadata !== 'object' || Array.isArray(input.metadata)) return fail(400, 'Folder metadata must be an object');
+    const validated = sanitizeDataValue(input.metadata, { path: 'metadata', depth: 2 });
+    if (validated.ok === false) return validated;
+    crystal.metadata = validated.value;
   }
   return { ok: true, crystal };
 };
@@ -6878,6 +7060,11 @@ const crystalSanitizers: Record<
 	attachment: sanitizeAttachmentCrystal,
   post: sanitizePostCrystal,
   folder: sanitizeFolderCrystal,
+  [FILE_SYNC_KIND]: (input, ids) => {
+    if (ids.length !== 1) return fail(400, 'File sync configurations stand alone');
+    try { return { ok: true, crystal: { ...parseFileSyncConfiguration(input) } }; }
+    catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid file sync configuration'); }
+  },
   comment: sanitizeCommentCrystal,
   reaction: sanitizeReactionCrystal,
   share: () => ({ ok: true, crystal: {} }),
@@ -6935,25 +7122,28 @@ export const validateThingtimeCrystal = (
     if (!ids.includes(id)) ids.push(id);
   }
 
+  const contentIds = ids.filter(id => id !== BUILDER_THING_KIND);
+  if (!contentIds.length) return fail(400, 'builder-thing requires a content schema');
+
   // Free-form 'data' crystals stand alone. Combining data with a typed schema
   // would let arbitrary keys ride past that schema's whitelist (verified:
   // ["post","data"] smuggled non-post fields into the stored crystal), so the
   // open shape and the closed shapes never share one thing.
-  if (ids.includes('data') && ids.length > 1) {
+  if (contentIds.includes('data') && contentIds.length > 1) {
     return fail(400, 'data crystals stand alone — publish a separate data thing and link it via targetId or tags');
   }
 
   // Folders are pure organization: combining them with a content schema would
   // make a doc that is both a container and content (and would let e.g.
   // ["post","folder"] ride the folder sanitizer past the post whitelist).
-  if (ids.includes('folder') && ids.length > 1) {
+  if (contentIds.includes('folder') && contentIds.length > 1) {
     return fail(400, 'folder things stand alone — put content IN the folder via folderId instead');
   }
 
   const input = crystal && typeof crystal === 'object' && !Array.isArray(crystal) ? (crystal as Record<string, unknown>) : {};
   const merged: Record<string, unknown> = {};
   let requiresTarget = false;
-  for (const id of ids) {
+  for (const id of contentIds) {
     const schema = getThingtimeSchema(id)!;
     if (schema.requiresTarget) requiresTarget = true;
     const sanitizer = crystalSanitizers[id];
@@ -6963,7 +7153,7 @@ export const validateThingtimeCrystal = (
       // refuse with the real reason instead of pretending they don't exist.
       return fail(403, `${id} things are managed by their own endpoints`);
     }
-		const sanitized = sanitizer(input, ids, options);
+		const sanitized = sanitizer(input, contentIds, options);
     if (sanitized.ok === false) return sanitized;
     Object.assign(merged, sanitized.crystal);
   }
@@ -6976,5 +7166,27 @@ export const validateThingtimeCrystal = (
     if (title.length > 300) return fail(400, 'Thing title is too long (max 300)');
     if (title) merged.title = title;
   }
-  return { ok: true, thingtime: ids, crystal: merged, requiresTarget };
+  // Presentation is common metadata, never a way around a typed content
+  // allowlist. Keep explicit null as an unavailable renderer (not permission
+  // to infer one); PATCH omission preserves the existing declaration, while a
+  // replacement crystal may omit it. This pointer grants no Component access.
+  if (Object.prototype.hasOwnProperty.call(input, 'renderComponent')) {
+    if (input.renderComponent === null) merged.renderComponent = null;
+    else {
+      const declaration = renderComponentDeclaration(input);
+      if (!declaration || declaration.kind === 'invalid') return fail(400, 'renderComponent must reference a Component id or embed a render template');
+      if (declaration.kind === 'reference') {
+        const id = declaration.id.trim();
+        if (/[$\s/\\]/.test(id)) return fail(400, 'renderComponent.id must be a Thing id');
+        merged.renderComponent = { id };
+      } else {
+        // Inline definitions use the same canonical Component sanitizer as
+        // saved Components, including the render/argument/source safety gates.
+        const component = sanitizeComponentCrystal({ name: 'Thing presentation', ...declaration.component });
+        if (component.ok === false) return component;
+        merged.renderComponent = component.crystal;
+      }
+    }
+  }
+  return { ok: true, thingtime: withBuilderThingKind(ids, merged), crystal: merged, requiresTarget };
 };

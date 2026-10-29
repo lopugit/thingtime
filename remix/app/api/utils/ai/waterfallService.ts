@@ -2,7 +2,8 @@ import { resolveClaudeOAuthToken } from './claudeOAuth';
 import { getUserVaultProvider, listUserVaultProviders } from '../lopu/userVault';
 import { callVaultProviderPlainCompletion, type PlainCompletionInput, type LopuVaultProviderRecord } from '../lopu/vaultProviderClient';
 import { isLopuVaultProviderKind } from '../lopu/vaultProviders';
-import { AI_WORKFLOW_BASE_MODELS } from '../settings/prConflictResolverModelWaterfallCore';
+import { listAiModels } from './models';
+import { refreshUnavailableAiModel } from './modelSync';
 import { parseAiWaterfallConfig, type AiWaterfallConfig, type AiWaterfallEntry } from './waterfallConfig';
 import { executeAiWaterfall } from './waterfallExecution';
 import { AiTransportFailure } from './providerWaterfall';
@@ -10,12 +11,13 @@ import { AiTransportFailure } from './providerWaterfall';
 export const authorizeAiWaterfall = async (ownerId: string, value: unknown): Promise<AiWaterfallConfig> => {
 	const config = parseAiWaterfallConfig(value);
 	const vault = config.entries.some((entry) => entry.endpointId.startsWith('vault:')) ? await listUserVaultProviders(ownerId) : [];
+	const models = config.entries.some((entry) => entry.endpointId.startsWith('server:')) ? (await listAiModels()).models : [];
 	for (const entry of config.entries) {
 		if (entry.endpointId.startsWith('vault:')) {
 			if (!vault.some((row) => row.id === entry.endpointId.slice(6) && isLopuVaultProviderKind(row.provider)))
 				throw new TypeError('Choose your own AI endpoint connections.');
 		} else {
-			const model = AI_WORKFLOW_BASE_MODELS.find((model) => model.id === entry.modelId && entry.endpointId === `server:${model.provider}`);
+			const model = models.find((model) => model.available && model.id === entry.modelId && entry.endpointId === `server:${model.provider}`);
 			if (!model || (entry.effort && !(model.efforts as readonly string[]).includes(entry.effort)) || !model.speeds.includes(entry.speed))
 				throw new TypeError('Unsupported server endpoint/model selection.');
 		}
@@ -54,15 +56,22 @@ export const completeAiWaterfall = async (
 		authorize: async (entry) => {
 			await authorizeAiWaterfall(ownerId, { version: 1, entries: [entry] });
 		},
-		attempt: async (entry, attemptSignal) =>
-			callVaultProviderPlainCompletion(await resolve(ownerId, entry), {
-				system,
-				prompt,
-				history: [],
-				maxTokens: 16000,
-				model: entry.modelId,
-				effort: entry.effort as PlainCompletionInput['effort'],
-				speed: entry.speed,
-				signal: attemptSignal
-			})
+		attempt: async (entry, attemptSignal) => {
+			try {
+				return await callVaultProviderPlainCompletion(await resolve(ownerId, entry), {
+					system,
+					prompt,
+					history: [],
+					maxTokens: 16000,
+					model: entry.modelId,
+					effort: entry.effort as PlainCompletionInput['effort'],
+					speed: entry.speed,
+					signal: attemptSignal
+				});
+			} catch (error) {
+				if (entry.endpointId.startsWith('server:'))
+					await refreshUnavailableAiModel(entry.endpointId === 'server:anthropic' ? 'anthropic' : 'openai', error);
+				throw error;
+			}
+		}
 	});

@@ -1,11 +1,20 @@
+import { isBuilderThing } from '~/schemas/builderThing';
+import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
+import { hasLiveSourceBinding } from '~/schemas/liveSources';
+import { FILE_SYNC_REQUIREMENTS } from '~/fileSync/configuration';
+import { parseCloudFile, parseCloudFileCommit, type CloudFileCommit } from '~/fileSync/cloudFile';
+import type { TimelineScope } from '~/timeline/contract';
+import { useCharacterScope, CHARACTER_HEADER } from '~/components/Characters/CharacterScope';
 import type { VersionRequest } from '../timeline/publishedVersion';
 import type { BranchCheckoutRequest } from '../timeline/branchCheckout';
 import { timelineRequestScope, type TimelineStorage } from '../timeline/storageScope';
 import { draftRequest } from '~/drafts/draftClient';
 import type { BranchMergeRequest } from '../timeline/branchMerge';
 import { parseTimelineBranchLookup, parseTimelineBranchLookupResult, type TimelineBranchCommand } from '../timeline/branches';
+import type { TimelineNote, TimelineNoteCommand } from '../timeline/notes';
+import { parseTimelineVersionName, type TimelineVersionName, type TimelineVersionNameCommand } from '../timeline/versionNames';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
-import type { TimelineEvent } from '~/timeline/contract';
+import { parseTimelineEntry, type TimelineEvent, type TimelineReceipt, type TimelineSnapshot } from '~/timeline/contract';
 import { retainActionOutcomeRecovery, type ActionOutcomeRecovery } from '~/timeline/actionRecovery';
 import { enqueueActionOutcomeRecovery } from '~/timeline/localBackend.client';
 import type { TimelinePageRequest } from '~/timeline/sync';
@@ -19,6 +28,7 @@ import { rootIdentity } from '../utils/rootIdentity';
 import { createBrowserActionHost, finishBrowserAction } from '~/components/Actions/browserActionHost';
 import { withPostRequestDeadline } from './postRequest';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
+import { THEME_CAPABILITY_REQUIREMENTS } from '~/theme/capabilities';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
@@ -41,13 +51,19 @@ const refreshRootData = () => {
 // GET helper mirroring useAsyncFetcher semantics: parses JSON and throws the
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 // Every call is recorded in the DevKit request log (method/path/status/ms).
-const getJson = async (url: string, options?: { signal?: AbortSignal; expectedDataPlane?: string | null }) => {
+export type ThingRequestOptions = { signal?: AbortSignal; expectedDataPlane?: string | null; expectedActor?: string; expectedApiOrigin?: string; characterId?: string };
+const getJsonRequest = async (url: string, options?: ThingRequestOptions) => {
   if (url.startsWith('/api/v1/things')) ensureFoundPostBrowserIdentity();
   const started = performance.now();
   let response: Response;
   try {
     response = await fetch(url, { credentials: 'include', signal: options?.signal,
-      ...(options?.expectedDataPlane ? { headers: { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } } : {}) });
+      ...(options?.expectedApiOrigin ? { redirect: 'error' as const, cache: 'no-store' as const } : {}),
+      headers: { ...(options?.expectedApiOrigin ? { 'X-Thingtime-Expected-Api-Origin': options.expectedApiOrigin } : {}), ...(options?.expectedDataPlane ? { [EXPECTED_DATA_PLANE_HEADER]: options.expectedDataPlane } : {}), ...(options?.expectedActor ? { 'X-Thingtime-Expected-Actor': options.expectedActor } : {}), ...(options?.characterId ? { [CHARACTER_HEADER]: options.characterId } : {}) } });
+    if (options?.expectedApiOrigin && (response.redirected || (options.expectedApiOrigin !== window.location.origin && response.headers.get('x-thingtime-api-fallback') !== options.expectedApiOrigin))) {
+      await response.body?.cancel().catch(() => {});
+      throw Error('The selected API server changed.');
+    }
   } catch (error) {
     const aborted = error instanceof Error && error.name === 'AbortError';
     recordApiCall({
@@ -86,6 +102,23 @@ const getJson = async (url: string, options?: { signal?: AbortSignal; expectedDa
 
 // Build "?a=1&b=2" from an args object, skipping null/undefined/'' and
 // joining array values with commas (the feed API's csv convention).
+/** One saved version as the server exports it (`export=1`): the raw event and
+ * receipt, its resolved restorable content, notes and 📌 name. Parsed leniently
+ * so a later server may add fields; the entry itself is parsed exactly. */
+export type TimelineVersionExport = {
+  formatVersion: 1; exportedAt: string; event: TimelineEvent; receipt: TimelineReceipt;
+  content: TimelineSnapshot; notes: TimelineNote[]; name: TimelineVersionName | null;
+};
+const parseTimelineVersionExport = (input: unknown, ownerId: string, eventId: string): TimelineVersionExport => {
+  const data = (input as any)?.export;
+  if ((input as any)?.ok !== true || !data || typeof data !== 'object' || Array.isArray(data) || data.formatVersion !== 1) throw new Error('Invalid Timeline export');
+  const entry = parseTimelineEntry({ event: data.event, receipt: data.receipt });
+  if (entry.event.id !== eventId || entry.event.ownerId !== ownerId) throw new Error('Server exported a different version');
+  const name = data.name === undefined || data.name === null ? null : parseTimelineVersionName(data.name);
+  if (name && (name.eventId !== eventId || name.ownerId !== ownerId)) throw new Error('Server exported a different version');
+  return { ...data, event: entry.event, receipt: entry.receipt, notes: Array.isArray(data.notes) ? data.notes : [], name };
+};
+
 const toQuery = (args?: Record<string, unknown>) => {
   const params = new URLSearchParams();
   Object.entries(args || {}).forEach(([key, value]) => {
@@ -98,6 +131,9 @@ const toQuery = (args?: Record<string, unknown>) => {
 };
 
 export function useApi() {
+  const character = useCharacterScope();
+  const getJson = useCallback((url: string, options?: ThingRequestOptions) =>
+    getJsonRequest(url, { ...options, ...(character ? { characterId: character.id } : {}) }), [character]);
   const dataPlane = useDataPlane();
   const planeRef = useRef(dataPlane); planeRef.current = dataPlane;
   const asyncFetcher = useAsyncFetcher();
@@ -106,6 +142,25 @@ export function useApi() {
   actionActor.current = actionUser?.id;
 
   const v1 = {
+    files: {
+      read: useCallback(async (scope: TimelineScope, id: string, options?: { signal?: AbortSignal }) => {
+        if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
+        await requireThingtimeCapability('api.files', '1.0.0');
+        await requireThingtimeCapability('api.actions-run', '1.7.0');
+        await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+        const result = await getJson(`/api/v1/files${toQuery({ id })}`, { ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
+        const file = parseCloudFile(result?.file);
+        if (file.id !== id) throw Error('File identity changed.');
+        return file;
+      }, []),
+      commit: useCallback(async (scope: TimelineScope, input: CloudFileCommit, options?: { signal?: AbortSignal }) => {
+        if (scope.dataPlane !== 'home') throw Error('Files require home storage.');
+        const command = parseCloudFileCommit(input);
+        await requireThingtimeCapability('api.files', '1.0.0');
+        await requireThingtimeCapability('api.actions-run', '1.7.0');
+        return asyncFetcher.submit(command, { action: '/api/v1/files', ...options, expectedActor: scope.ownerId, expectedDataPlane: 'home', expectedApiOrigin: scope.apiOrigin });
+      }, [asyncFetcher])
+    },
     drafts: useCallback((input?: Record<string, unknown>, query?: Record<string, string>) => draftRequest(actionActor.current || '', input, query), []),
     webpages: {
       resolveComponents: useCallback(async (scope: { ownerId: string; dataPlane: string }, blocks: unknown[], options?: { signal?: AbortSignal }) => {
@@ -148,6 +203,21 @@ export function useApi() {
         await requireThingtimeCapability('api.timeline', scope.dataPlane === 'home' ? '1.6.0' : '1.2.0');
         return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
+      note: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineNoteCommand, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.17.0');
+        return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      // Online only: there is no offline name queue, so the editor stays disabled without a verified connection.
+      nameVersion: useCallback(async (scope: { ownerId: string; dataPlane: string }, command: TimelineVersionNameCommand, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.18.0');
+        return asyncFetcher.submit(command, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
+      }, [asyncFetcher]),
+      // Strict gate: a 1.17 server answers `export=1&eventId=` with a plain entry read (HTTP 200), so the manifest is the only reliable signal.
+      exportVersion: useCallback(async (scope: { ownerId: string; dataPlane: string }, eventId: string, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.timeline', '1.18.0');
+        const result = await getJson(`/api/v1/timeline${toQuery({ ...timelineRequestScope(scope), eventId, export: 1 })}`, options);
+        return parseTimelineVersionExport(result, scope.ownerId, eventId);
+      }, []),
       discover: useCallback(async (ownerId: string, options?: { signal?: AbortSignal; storage?: TimelineStorage }) => {
         const expectedDataPlane = planeRef.current;
         if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
@@ -163,7 +233,8 @@ export function useApi() {
         return asyncFetcher.submit(event, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId, signal: options?.signal });
       }, [asyncFetcher]),
       version: useCallback(async (scope: { ownerId: string; dataPlane: string }, request: VersionRequest) => {
-        await requireThingtimeCapability('api.timeline', request.recover ? '1.14.0' : request.componentMode ? '1.12.0' : scope.dataPlane === 'home' ? '1.6.0' : '1.1.0');
+        // Undo first: it always carries componentMode, which alone would negotiate 1.12.0 and earn a 400 from an older server.
+        await requireThingtimeCapability('api.timeline', request.mode === 'undo' ? '1.18.0' : request.recover ? '1.14.0' : request.componentMode ? '1.12.0' : scope.dataPlane === 'home' ? '1.6.0' : '1.1.0');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId });
       }, [asyncFetcher])
     },
@@ -380,18 +451,28 @@ export function useApi() {
     // + for a signed-in viewer their Secure Vault providers as metadata only:
     // vaultProviders: [{ id, name, kind, model, endpointHost, available, reason? }], vault: { configured })
     ai: {
-      models: useCallback(async () => getJson('/api/v1/ai/models'), []),
+      models: useCallback(async () => {
+        const result = await getJson('/api/v1/ai/models');
+        if (result?.vaultProviders?.some((provider: { planChatEligible?: boolean }) => provider.planChatEligible === true)) {
+          try { await requireThingtimeCapability('api.ai-models', '1.8.0'); }
+          catch { return { ...result, vaultProviders: result.vaultProviders.map(({ planChatEligible: _hint, ...provider }: any) => provider) }; }
+        }
+        return result;
+      }, []),
       complete: useCallback(async (input: AiCompletionInput) => {
         for (const [feature, minimum] of Object.entries(AI_COMPLETION_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
         return asyncFetcher.submit(input, { action: '/api/v1/ai/complete', errorContext: 'complete text with your selected AI connections' });
       }, [asyncFetcher])
     },
     admin: {
+      aiModels: useCallback(async () => getJson('/api/v1/admin/ai/models'), []),
       // { id, enabled } toggles one catalog model; { seed: true } re-runs the catalog upsert;
       // { probe: true } re-checks the provider keys (fresh providers.<p>.verified + the re-projected list)
       setAiModel: useCallback(
-        async (args: { id?: string; enabled?: boolean; seed?: boolean; probe?: boolean }) =>
-          asyncFetcher.submit(args, { action: '/api/v1/admin/ai/models', errorContext: 'update the Lopu model catalog' }),
+        async (args: { id?: string; enabled?: boolean; seed?: boolean; probe?: boolean; sync?: boolean; provider?: string; allowAll?: boolean; autoAllowNewModels?: boolean }) => {
+          await requireThingtimeCapability('api.admin-ai-models', '1.4.0');
+          return asyncFetcher.submit(args, { action: '/api/v1/admin/ai/models', errorContext: 'update the Lopu model catalog' });
+        },
         [asyncFetcher]
       ),
       setLopuChatDefaults: useCallback(
@@ -526,20 +607,25 @@ export function useApi() {
         async (args) => asyncFetcher.submit({ action: 'settings', settings: args?.settings }, { action: '/api/v1/admin/moderation' }),
         [asyncFetcher]
       ),
-      migrations: useCallback(async () => getJson('/api/v1/admin/migrations'), []),
+      migrations: useCallback(async () => {
+        await requireThingtimeCapability('api.admin-migrations', '1.4.1');
+        return getJson('/api/v1/admin/migrations');
+      }, []),
 			migrationDiagnostic: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/migrations/diagnostic${toQuery({ id: args?.id })}`, options),
 				[]
 			),
       migrationsRun: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          await requireThingtimeCapability('api.admin-migrations-run', '1.4.1');
+          return asyncFetcher.submit(
             { migration: args?.migration, dryRun: args?.dryRun, confirm: args?.confirm },
             {
               action: '/api/v1/admin/migrations/run',
               errorContext: args?.dryRun ? `preview migration ${args?.migration}` : `run migration ${args?.migration}`
             }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
       usersOverview: useCallback(
@@ -601,6 +687,7 @@ export function useApi() {
         // → vaultProviders[].id); null clears it back to the catalog model
         create: useCallback(
           async (args?: { title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; accessMode?: 'ask' | 'full'; management?: 'client' | 'server' }) => {
+            if (typeof args?.providerId === 'string' && args.providerId.startsWith('chatgpt-plan-')) await requireThingtimeCapability('api.lopu-chats', '1.7.0');
             if (args?.accessMode) await requireThingtimeCapability('api.lopu-chats', '1.6.0');
             if (args?.management) await requireThingtimeCapability('api.lopu-chats', '1.5.0');
             return asyncFetcher.submit(args || {}, { action: '/api/v1/lopu/chats', errorContext: 'start a Lopu chat' });
@@ -609,6 +696,7 @@ export function useApi() {
         ),
         update: useCallback(
           async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; accessMode?: 'ask' | 'full'; management?: 'client' | 'server'; archived?: boolean }) => {
+            if (typeof args.providerId === 'string' && args.providerId.startsWith('chatgpt-plan-')) await requireThingtimeCapability('api.lopu-chats-update', '1.6.1');
             if (args.accessMode) await requireThingtimeCapability('api.lopu-chats-update', '1.5.0');
             if (args.management) {
               await requireThingtimeCapability('api.lopu-chats', '1.5.0');
@@ -884,6 +972,14 @@ export function useApi() {
     // plain GETs (guest-visible); every mutation goes through the fetcher so
     // failures surface through the shared API-failure path.
     subspaces: {
+      embeds: useCallback(async (args: { id: string; region: 'sidebar' | 'feed'; cursor?: string }) => {
+        await requireThingtimeCapability('api.subspaces-embeds', '1.0.0');
+        return getJson(`/api/v1/subspaces/embeds${toQuery(args)}`);
+      }, [getJson]),
+      mutateEmbed: useCallback(async (body: Record<string, unknown>) => {
+        await requireThingtimeCapability('api.subspaces-embeds', '1.0.0');
+        return asyncFetcher.submit(body, { action: '/api/v1/subspaces/embeds', errorContext: 'update subspace embedded Things' });
+      }, [asyncFetcher]),
       // sort: new (default, cursor-paged) | members | active (ranked over a
       // bounded window, offset-paged; rows under active carry recentPostCount
       // — a private subspace's only for its members). `anon: 1` keeps
@@ -1049,18 +1145,22 @@ export function useApi() {
 			// /post pages) — lets anyone holding the link view the unlisted thing.
 			// sharedRoot scopes a dependency read to an authorized composition.
 			get: useCallback(
-				async (args, options?: { signal?: AbortSignal }) => {
-          const expectedDataPlane = planeRef.current;
+				async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
-          await requireThingtimeCapability('api.things', args?.sharedRoot ? '1.31.0' : '1.27.0');
+          await requireThingtimeCapability('api.things', args?.sharedRoot ? '1.31.0' : '1.40.0');
           await requireThingtimeCapability('api.attachment-content', '1.9.0');
           return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
         },
-				[]
+				[getJson]
 			),
       list: useCallback(
-        async (args, options?: { signal?: AbortSignal }) => {
-          await requireThingtimeCapability('api.things', args?.commentProjection ? '1.27.0' : args?.target ? '1.22.0' : '1.14.0');
+        async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
+          if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+          await requireThingtimeCapability('api.things', args?.builderApp ? '1.45.0' : args?.commentProjection ? '1.27.0' : args?.target ? '1.22.0' : args?.folder === 'root' ? '1.39.1' : '1.14.0');
           return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
@@ -1071,8 +1171,9 @@ export function useApi() {
               cursor: args?.cursor,
               limit: args?.limit,
               // session-auth data browser: narrow own-things to ONE app's namespace
-              appId: args?.appId
-            })}`, options
+              appId: args?.appId,
+              builderApp: args?.builderApp
+            })}`, { ...options, expectedDataPlane }
           );
         },
         []
@@ -1082,19 +1183,28 @@ export function useApi() {
         return getJson(`/api/v1/things${toQuery({ id: args.id, archive: true })}`, options);
       }, []),
       update: useCallback(
-        async (args) => {
+        async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', '1.15.0');
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
+          if (args?.crystal?.configurationVersion !== undefined && args?.crystal?.localRootId !== undefined) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
           if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
-          if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
+          if (hasLiveSourceBinding(args?.crystal)) await requireThingtimeCapability('api.things', '1.37.0');
+          else if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
           if (args?.crystal?.inputs?.some?.((input: { type?: string }) => input?.type === 'json')) await requireThingtimeCapability('api.things-update', '1.10.0');
           if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
           else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
-          if (args?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+          if (expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+          options?.signal?.throwIfAborted();
           return asyncFetcher.submit(
             {
               id: args?.id,
+              ...(args?.thingtime !== undefined ? { thingtime: args.thingtime } : {}),
               geo: args?.geo,
               crystal: args?.crystal,
               ...(args?.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: args.expectedUpdatedAt } : {}),
@@ -1111,7 +1221,7 @@ export function useApi() {
               // ready drafts to bind; removals are rejected server-side)
               ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
-            { action: '/api/v1/things', method: 'PATCH', expectedActor: args?.expectedActor }
+            { action: '/api/v1/things', method: 'PATCH', expectedActor, expectedDataPlane, expectedApiOrigin: options?.expectedApiOrigin, signal: options?.signal }
           );
         },
         [asyncFetcher]
@@ -1139,8 +1249,10 @@ export function useApi() {
         [asyncFetcher]
       ),
       upsert: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
+          return asyncFetcher.submit(
             {
               id: args?.id,
               thingtime: args?.thingtime,
@@ -1152,24 +1264,31 @@ export function useApi() {
               tokenAcl: args?.tokenAcl
             },
             { action: '/api/v1/things', method: 'PUT' }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
-        async (args) => {
+        async (args, options?: ThingRequestOptions) => {
+          const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
+          const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
+          if (args?.thingtime?.includes('file-sync')) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
 					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
           if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
-          if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
+          if (hasLiveSourceBinding(args?.crystal)) await requireThingtimeCapability('api.things', '1.37.0');
+          else if (args?.crystal?.source) await requireThingtimeCapability('api.things', '1.30.0');
           if (args?.crystal?.inputs?.some?.((input: { type?: string }) => input?.type === 'json')) await requireThingtimeCapability('api.things', '1.33.0');
           if (args?.crystal && browserActionMinimumVersion(args.crystal) === '1.11.0') await requireThingtimeCapability('api.things', '1.32.0');
           else if (args?.crystal?.runtime === 'browser') await requireThingtimeCapability('api.things', browserActionMinimumVersion(args.crystal) === '1.9.0' ? '1.30.0' : browserActionMinimumVersion(args.crystal) === '1.8.0' ? '1.29.0' : '1.28.0');
-          if (args?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
+          if (expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
           const payload = buildThingCreateRequestPayload(args);
 					const attachmentIds = args?.attachmentIds;
-					const ret = withPostRequestDeadline(signal => asyncFetcher.submit(payload, { action: '/api/v1/things', errorContext: 'publish your post', signal, expectedActor: args?.expectedActor }));
+					const ret = withPostRequestDeadline(signal => asyncFetcher.submit(payload, { action: '/api/v1/things', errorContext: 'publish your post', signal, expectedActor, expectedDataPlane, expectedApiOrigin: options?.expectedApiOrigin }), 30_000, options?.signal);
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
 						ret.then(refreshRootData).catch(() => {});
 					}
@@ -1216,7 +1335,7 @@ export function useApi() {
 					const attachmentIds = args?.attachmentIds;
 					const ret = asyncFetcher.submit(
 						buildThingCommentRequestPayload(args),
-						{ action: '/api/v1/things/comment' }
+						{ action: '/api/v1/things/comment', ...(args?.characterId ? { characterId: args.characterId, expectedActor: args.characterId } : {}) }
 					);
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
 						ret.then(refreshRootData).catch(() => {});
@@ -1512,6 +1631,7 @@ export function useApi() {
       save: useCallback(
         async (args) => {
           const { id, name, theme, visibility } = args;
+          await requireThingtimeCapability('api.themes', THEME_CAPABILITY_REQUIREMENTS['api.themes']);
           return asyncFetcher.submit({ id, name, theme, visibility }, { action: '/api/v1/themes' });
         },
         [asyncFetcher]

@@ -76,7 +76,8 @@ struct ThingtimeWebView: View {
                     onSelect: select,
                     onRefreshDeployments: refreshDeployments,
                     onClose: closeDestinationPicker,
-                    onWidgetSettings: { closeDestinationPicker(); widgetSettingsOpen = true }
+                    onWidgetSettings: { closeDestinationPicker(); widgetSettingsOpen = true },
+                    onMail: { closeDestinationPicker(); widgetPath = "/mail" }
                 )
                 .accessibilityHidden(!isDestinationPickerOpen)
                 .frame(width: max(drawerWidth, 280))

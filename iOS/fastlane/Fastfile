@@ -3,6 +3,9 @@ require "fileutils"
 require "plist"
 require "shellwords"
 require "tempfile"
+require "tmpdir"
+require "yaml"
+require_relative "lib/release_version"
 
 ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] ||= "60"
 
@@ -57,7 +60,9 @@ end
 
 def manual_profile_signing?
   !ENV["PROVISIONING_PROFILE_SPECIFIER"].to_s.empty? ||
-    !ENV["WATCH_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
+    !ENV["WATCH_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty? ||
+    !ENV["LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty? ||
+    !ENV["SHARE_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
 end
 
 def distribution_profile_suffix
@@ -87,6 +92,24 @@ def lopu_widget_profile_name
   ENV.fetch("LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER", "Thingtime Lopu Widget App Store #{lopu_widget_bundle_identifier}#{distribution_profile_suffix}")
 end
 
+def share_bundle_identifier
+  "#{ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER')}.share"
+end
+
+def share_profile_name
+  ENV.fetch("SHARE_PROVISIONING_PROFILE_SPECIFIER", "Thingtime Share App Store #{share_bundle_identifier}#{distribution_profile_suffix}")
+end
+
+# Public Connect API can register/enable the extension App ID. The App Group
+# association itself is made by Xcode automatic provisioning, not a guessed API.
+def prepare_share_bundle_identifier
+  bundle = Spaceship::ConnectAPI::BundleId.find(share_bundle_identifier)
+  bundle ||= Spaceship::ConnectAPI::BundleId.create(name: "Thingtime Share", platform: "IOS", identifier: share_bundle_identifier)
+  unless bundle.get_capabilities.any? { |capability| capability.capability_type == "APP_GROUPS" }
+    bundle.create_capability("APP_GROUPS")
+  end
+end
+
 def xcodebuild_xcargs
   args = []
   if manual_profile_signing?
@@ -95,10 +118,13 @@ def xcodebuild_xcargs
     args << "THINGTIME_IOS_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(ios_provisioning_profile_name)}"
     args << "THINGTIME_WATCH_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(watch_provisioning_profile_name)}"
     args << "THINGTIME_LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(lopu_widget_profile_name)}"
+    args << "THINGTIME_SHARE_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(share_profile_name)}"
   else
     args << api_key_xcargs
   end
   args << "DEVELOPMENT_TEAM=#{ENV.fetch('DEVELOPMENT_TEAM')}"
+  args << "THINGTIME_IOS_BUNDLE_IDENTIFIER=#{Shellwords.escape(ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER'))}"
+  args << "THINGTIME_WATCH_BUNDLE_IDENTIFIER=#{Shellwords.escape(ENV.fetch('WATCH_BUNDLE_IDENTIFIER'))}"
   args << thingtime_web_url_xcarg
   args.join(" ")
 end
@@ -121,12 +147,53 @@ def export_options(destination: "export")
     provisioningProfiles: {
       ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER") => ios_provisioning_profile_name,
       ENV.fetch("WATCH_BUNDLE_IDENTIFIER") => watch_provisioning_profile_name,
-      lopu_widget_bundle_identifier => lopu_widget_profile_name
+      lopu_widget_bundle_identifier => lopu_widget_profile_name,
+      share_bundle_identifier => share_profile_name
     }
   )
 end
 
 platform :ios do
+  desc "Choose a monotonically increasing TestFlight build number"
+  lane :prepare_release do
+    app_store_api_key
+    app = Spaceship::ConnectAPI::App.find(ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"))
+    UI.user_error!("App Store Connect app not found") unless app
+    spec_path = File.expand_path("../project.yml", __dir__)
+    spec = YAML.load_file(spec_path)
+    builds = Spaceship::ConnectAPI::Build.all(app_id: app.id, platform: "IOS", limit: 100, sort: "-uploadedDate")
+    versions = builds.map(&:version) + [spec.fetch("settings").fetch("base").fetch("CURRENT_PROJECT_VERSION").to_s]
+    number = next_ios_release_number(versions)
+    spec["settings"]["base"]["CURRENT_PROJECT_VERSION"] = number
+    File.write(spec_path, YAML.dump(spec))
+    ENV["EXPECTED_BUILD_NUMBER"] = number
+    File.open(ENV.fetch("GITHUB_ENV"), "a") { |file| file.puts("EXPECTED_BUILD_NUMBER=#{number}") }
+    UI.message("Prepared TestFlight build #{number}")
+  end
+
+  desc "Wait for this exact build to become available to internal testers"
+  lane :verify_release do
+    app_store_api_key
+    app = Spaceship::ConnectAPI::App.find(ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"))
+    UI.user_error!("App Store Connect app not found") unless app
+    expected = ENV.fetch("EXPECTED_BUILD_NUMBER")
+    ready = false
+    30.times do
+      build = Spaceship::ConnectAPI::Build.all(app_id: app.id, platform: "IOS", build_number: expected, limit: 10).find { |candidate| candidate.version == expected }
+      if build
+        UI.user_error!("Apple rejected build #{expected}") if ["FAILED", "INVALID"].include?(build.processing_state)
+        detail = build.build_beta_detail
+        if build.processing_state == "VALID" && detail&.internal_build_state == "IN_BETA_TESTING"
+          UI.message("TESTFLIGHT_RELEASE_READY build=#{expected} internal=IN_BETA_TESTING")
+          ready = true
+          break
+        end
+      end
+      sleep 20
+    end
+    UI.user_error!("Build #{expected} is not yet available to internal testers. Check processing and automatic internal-group distribution in App Store Connect; do not assume upload failed.") unless ready
+  end
+
   desc "Generate the Xcode project from project.yml"
   lane :generate do
     sh("which xcodegen > /dev/null || (echo 'Installing xcodegen...' && brew install xcodegen)")
@@ -173,6 +240,8 @@ platform :ios do
     end
 
     unless ENV["SKIP_PROFILE_SYNC"] == "1"
+      app_store_api_key
+      prepare_share_bundle_identifier
       get_provisioning_profile(
         api_key: app_store_api_key,
         team_id: ENV.fetch("DEVELOPMENT_TEAM"),
@@ -205,6 +274,21 @@ platform :ios do
         output_path: OUTPUT_DIRECTORY
       )
       ENV["LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
+
+      get_provisioning_profile(
+        api_key: app_store_api_key,
+        team_id: ENV.fetch("DEVELOPMENT_TEAM"),
+        app_identifier: share_bundle_identifier,
+        provisioning_name: share_profile_name,
+        cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
+        force: false,
+        output_path: OUTPUT_DIRECTORY
+      )
+      ENV["SHARE_PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
+      verifier = File.expand_path("../scripts/verify-share-profile.py", __dir__)
+      group = File.read(File.expand_path("../config/Base.xcconfig", __dir__))[/^THINGTIME_WIDGET_GROUP\s*=\s*(\S+)/, 1]
+      UI.user_error!("Missing canonical App Group setting") unless group
+      sh("python3", verifier, lane_context[SharedValues::SIGH_PROFILE_PATH], share_bundle_identifier, ENV.fetch("DEVELOPMENT_TEAM"), group)
     end
 
     archive_path = File.expand_path(File.join(OUTPUT_DIRECTORY, "Thingtime.xcarchive"))
@@ -283,6 +367,14 @@ platform :ios do
     UI.user_error!("Xcode did not export #{options.fetch(:ipa_path)}") unless File.exist?(options.fetch(:ipa_path))
 
     archive_path = File.expand_path(File.join(OUTPUT_DIRECTORY, "Thingtime.xcarchive"))
+    if ENV["EXPECTED_BUILD_NUMBER"]
+      verifier = File.expand_path("../scripts/verify-release.py", __dir__)
+      sh("python3", verifier, File.join(archive_path, "Products/Applications/Thingtime.app"))
+      Dir.mktmpdir("thingtime-release-check") do |directory|
+        sh("ditto", "-x", "-k", options.fetch(:ipa_path), directory)
+        sh("python3", verifier, File.join(directory, "Payload/Thingtime.app"))
+      end
+    end
     Tempfile.create(["ThingtimeUploadOptions", ".plist"]) do |upload_options_file|
       upload_options_file.write(export_options(destination: "upload").to_plist)
       upload_options_file.flush

@@ -39,6 +39,26 @@ revoked or an account is missing.
 Never expose token values, authorization codes, bridge credentials, or refresh
 credentials in a response.
 
+Private agent task lifecycle reporting has dedicated tools:
+`prepare_thingtime_agent_task`, `get_thingtime_agent_task`, and
+`report_thingtime_agent_task`. Select the exact connected account and preserve
+its HTTPS origin. These tools require the independent `agents.report` grant;
+`things` alone does not grant it. When absent, explain the one-time Advanced
+connection authorization and reconnect requirement. Never silently expand
+permissions or read credentials. Use the host's supported authorization flow
+for an authorized permission change; never substitute the owner's public identity.
+
+For a task with standing authorization for private lifecycle reporting, use
+these tools without repeated routine confirmation. Prepare once using a stable
+chat/task identity; reuse the returned distinct Character and task IDs after
+resuming. Report only actual progress, verification, blockers, artifacts and
+measured values. Keep secrets and private source content out of summaries. A
+failed capability, membership or saved workspace check means reporting remains
+unavailable; continue independent authorized work and state the precise gap.
+This exception applies only to the bounded private lifecycle tools. Generic
+mutations, composed previews/apply, sharing and security operations retain their
+confirmation rules below.
+
 Read/search actions may proceed when the user asks. Before any create, update,
 delete, comment, reaction, save, or share action, show the intended account,
 target, and effect and obtain clear confirmation. Treat delete and disconnect
@@ -71,3 +91,26 @@ scope and ask the user to reconnect, open Advanced connection settings, and
 regenerate the scoped credential with that access rule. Removing the final
 account revokes every bridge and refresh credential in that ChatGPT connection.
 Do not suggest an unrestricted account-session credential.
+
+`coordinate_thingtime_agent_task` maintains one stable task post in the bound
+private Thingtime Agents subspace under the task Character. Supply a stable
+UUID-v4 `requestId`, `title`, `text`, and explicit `renderComponent` object.
+Keep content editable and reuse the existing post after restarts; verify its
+readback. This bounded operation uses standing private coordination authorization
+and retains the same scope, capability, membership and privacy checks.
+
+Coordination uses the existing private-subspace audience rules. It never changes
+the subspace visibility. If its owner deliberately changes that visibility,
+the ordinary product sharing rules apply and further reporting is refused.
+A successful coordinate receipt includes the stable `coordinationPostId`; use
+`get_thingtime_agent_task` to read the saved post back independently.
+
+Before delegation, prepare the child with its own stable `externalTaskId` and
+`parentExternalTaskId` set to the existing parent's stable task identity. The
+parent must already have a prepared live binding, project and task in the same
+owner, origin and exact saved workspace. The server derives `parentTaskId`,
+`sharedTaskId` and the inherited project, and grants the child's distinct
+Character read access only to the exact parent roots. Child records retain
+their own task parent while sharing the root task; the child cannot update
+parent roots. Preserve returned IDs and pass them to the delegate. Never invent
+parent IDs or silently create a replacement project.

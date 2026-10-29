@@ -5,6 +5,8 @@ import { TimelineConnectionPool, timelineConnectionForViewer } from './connectio
 import { IndexedDbTimelineBackend } from './indexedDb.ts';
 import { TimelineLocalStore } from './localStore.ts';
 import { TimelineBranchStore } from './branchStore.ts';
+import { TimelineNoteStore } from './noteStore.ts';
+import { TimelineNameStore } from './nameStore.ts';
 import { TimelineSync } from './sync.ts';
 import { entryFixture, eventFixture } from './testFixtures.ts';
 import { historyStorageForThing, timelineFolderHref, timelineRequestScope } from './storageScope.ts';
@@ -25,7 +27,7 @@ test('signed-out and reconnecting renders expose no history connection and canno
 test('home routing is explicit without changing canonical scope, and managed history keeps its folder location', () => {
 	assert.deepEqual(timelineRequestScope(home), { ownerId: 'user-1', dataPlane: 'home', storage: 'home' });
 	assert.deepEqual(timelineRequestScope({ ...home, dataPlane: 'custom-one' }), { ownerId: 'user-1', dataPlane: 'custom-one' });
-	for (const kind of ['theme', 'feed-algorithm', 'custom-emoji', 'chat-archive', 'attachment']) assert.equal(historyStorageForThing([kind]), 'home');
+	for (const kind of ['theme', 'feed-algorithm', 'custom-emoji', 'chat-archive', 'attachment', 'file']) assert.equal(historyStorageForThing([kind]), 'home');
 	for (const kinds of [undefined, [], ['component'], ['data'], ['timeline-event'], ['timeline-branch'], ['theme', 'data']]) assert.equal(historyStorageForThing(kinds), 'selected');
 	assert.equal(timelineFolderHref('timeline-folder-user-1', 'home'), '/things?folder=timeline-folder-user-1&historyStorage=home');
 	assert.equal(timelineFolderHref('timeline-folder-user-1', 'selected'), '/things?folder=timeline-folder-user-1');
@@ -36,9 +38,9 @@ test('shared home sessions upload once and releasing selected history cannot sto
 	let pushes = 0;
 	let finish!: () => void; const gate = new Promise<void>(resolve => { finish = resolve; });
 	const pool = new TimelineConnectionPool((scope, folderId) => {
-		const store = new TimelineLocalStore(scope, backend); const branches = new TimelineBranchStore(scope, backend);
+		const store = new TimelineLocalStore(scope, backend); const branches = new TimelineBranchStore(scope, backend); const notes = new TimelineNoteStore(scope, backend); const names = new TimelineNameStore(scope);
 		const sync = new TimelineSync(store, { push: async event => { pushes++; await gate; return entryFixture(event); }, page: async () => ({ entries: [], nextBefore: null, nextAfter: null }) }, branches);
-		return { scope, folderId, store, branches, sync };
+		return { scope, folderId, store, branches, notes, names, sync };
 	});
 	const selected = pool.acquire(home, 'folder'); const account = pool.acquire({ ...home }, 'folder');
 	assert.equal(selected.connection.sync, account.connection.sync);
@@ -59,8 +61,8 @@ test('identical event ids in different databases remain separate through pending
 	const backend = new IndexedDbTimelineBackend(new IDBFactory());
 	const uploads: string[] = [];
 	const pool = new TimelineConnectionPool((scope, folderId) => {
-		const store = new TimelineLocalStore(scope, backend); const branches = new TimelineBranchStore(scope, backend);
-		return { scope, folderId, store, branches, sync: new TimelineSync(store, { push: async event => { uploads.push(`${scope.dataPlane}:${event.label}`); return entryFixture(event); }, page: async () => ({ entries: [], nextBefore: null, nextAfter: null }) }, branches) };
+		const store = new TimelineLocalStore(scope, backend); const branches = new TimelineBranchStore(scope, backend); const notes = new TimelineNoteStore(scope, backend); const names = new TimelineNameStore(scope);
+		return { scope, folderId, store, branches, notes, names, sync: new TimelineSync(store, { push: async event => { uploads.push(`${scope.dataPlane}:${event.label}`); return entryFixture(event); }, page: async () => ({ entries: [], nextBefore: null, nextAfter: null }) }, branches) };
 	});
 	const account = pool.acquire(home, 'folder'); const custom = pool.acquire({ ...home, dataPlane: 'custom-one' }, 'folder');
 	await account.connection.store.enqueue(eventFixture('same-id', { label: 'Home edit' }));

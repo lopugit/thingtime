@@ -103,3 +103,30 @@ test('archive clients reject missing, older and breaking contracts but accept co
   }
  }
 });
+
+
+test('owned-plan clients negotiate each new operation and reject pre-admission or breaking origins', async (t) => {
+  for (const [feature, minimum, old] of [
+    ['api.ai-models', '1.8.0', '1.7.0'], ['api.lopu-chats', '1.7.0', '1.6.0'],
+    ['api.lopu-chats-update', '1.6.0', '1.5.0'], ['api.lopu-chats-reply', '1.21.0', '1.20.0']
+  ]) {
+    for (const version of [undefined, old, '2.0.0', minimum, '1.99.0']) {
+      const response = t.mock.method(globalThis, 'fetch', async () => Response.json({ schemaVersion: 1, origin: 'https://thingtime.test', features: version ? { [feature]: { version } } : {} }));
+      const check = createThingtimeCapabilityChecker();
+      if (version === minimum || version === '1.99.0') await check(feature, minimum);
+      else await assert.rejects(check(feature, minimum));
+      response.mock.restore();
+    }
+  }
+});
+
+
+test('theme saves refuse stale manifests then retry compatible focus-setting support', async (t) => {
+  const { THEME_CAPABILITY_REQUIREMENTS } = await import('../../../theme/capabilities');
+  let version = '1.1.0';
+  t.mock.method(globalThis, 'fetch', async () => Response.json({ schemaVersion: 1, origin: 'https://thingtime.test', features: { 'api.themes': { version } } }));
+  const check = createThingtimeCapabilityChecker();
+  await assert.rejects(check('api.themes', THEME_CAPABILITY_REQUIREMENTS['api.themes']), /incompatible/);
+  version = '1.2.1';
+  await check('api.themes', THEME_CAPABILITY_REQUIREMENTS['api.themes']);
+});

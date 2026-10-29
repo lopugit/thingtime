@@ -30,6 +30,7 @@ test('the drawer lists Lopu right after Messages with chat, conversations and se
 			['lopu-chat', '/lopu'],
 			['lopu-voice', '/lopu/voice'],
 			['lopu-tasks', '/lopu/tasks'],
+			['lopu-agent-browsers', '/agent-browsers'],
 			['lopu-conversations', '/messages'],
 			['lopu-vault', '/settings#secure-vault'],
 			['lopu-settings', '/settings#lopu']
@@ -53,7 +54,7 @@ test('the drawer lists Lopu right after Messages with chat, conversations and se
 	);
 	assert.deepEqual(
 		filterDrawerItemsByAuth(lopu.children, true).map((child) => child.id),
-		['lopu-chat', 'lopu-voice', 'lopu-tasks', 'lopu-conversations', 'lopu-vault', 'lopu-settings']
+		['lopu-chat', 'lopu-voice', 'lopu-tasks', 'lopu-agent-browsers', 'lopu-conversations', 'lopu-vault', 'lopu-settings']
 	);
 
 	// a navigating hub: clicking it closes the drawer like Feed/Messages do
@@ -81,14 +82,16 @@ test('useDrawer exports the Lopu z rungs and documents them in the ladder', () =
 	assert.ok(drawerZ + 200 > hoverZ && drawerZ + 200 < popupZ, 'LOPU_LAUNCHER_Z must sit above the hovered drawer and below popups');
 });
 
-test('root mounts the floating host after DrawerSystem, client-only and never in the authorize popup', () => {
+test('root mounts the floating host after DrawerSystem, client-only and outside popup/password surfaces', () => {
 	const source = read('root.tsx');
 	assert.match(source, /import \{ LopuHost \} from '\.\/components\/Lopu\/LopuHost';/);
 	const drawerAt = source.indexOf('<DrawerSystem />');
-	const hostAt = source.indexOf('{mounted && !isAuthorizePopup ? <LopuHost /> : null}');
+	const hostAt = source.indexOf('{mounted && !isAuthorizePopup && !isPasswordSurface ? <LopuHost /> : null}');
 	assert.notEqual(drawerAt, -1);
 	assert.notEqual(hostAt, -1);
 	assert.ok(hostAt > drawerAt, 'LopuHost must mount after DrawerSystem');
+	assert.match(source, /const isPasswordSurface = pathname === '\/passwords' \|\| pathname === '\/settings\/passwords';/);
+	assert.match(source, /const isAuthorizePopup = .*pathname === '\/passwords\/provider'/);
 });
 
 test('the drawer row and the floating host show the shared streaming badge', () => {

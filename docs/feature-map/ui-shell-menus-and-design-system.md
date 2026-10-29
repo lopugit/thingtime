@@ -8,6 +8,7 @@ components; reuse them instead of adding parallel versions.
 
 | Concern | Path |
 | --- | --- |
+| Native desktop View menu and Command/Control zoom input | `electron/main.cjs`, `electron/lib/window-zoom.cjs`; regression: `electron/test/window-zoom.test.cjs`, `pnpm --dir electron verify:window-zoom` (real Electron fixture) |
 | Thing context menu model (sections, actions, submenus, drill paths) | `app/components/Thingtime/ContextMenu/contextMenuModel.ts` |
 | Menu renderer, trigger, hover/right-click/pinned behaviour | `app/components/Thingtime/ContextMenu/ThingContextMenu.tsx`, `ThingContextMenuTrigger.tsx`, `useThingContextMenu.tsx` |
 | Base verbs every persisted Thing inherits (`open`, `inspect`, `copy-link`, `edit`, `share`, `delete`, `send-to-lopu`) | `app/schemas/thingActions.ts` (`THING_ACTIONS`), `ContextMenu/thingEntityMenu.ts` (`buildThingEntityMenu(capabilities, extensions)`) |
@@ -17,7 +18,12 @@ components; reuse them instead of adding parallel versions.
 | Toasts / notifications | `app/components/Lopu/useLopu.tsx` (`useLopu()`, `useLopuStream()`) — never raw Chakra `useToast` or `alert()` |
 | Layering (z-index) | `app/components/Things/transferLayers.ts` and the shared layer constants; never ad-hoc z-index escalation |
 | Page shell, nav clearance, drawers | `app/components/Layout/Main.tsx`, `app/components/Nav/*` (`--tt-nav-clearance`, safe-area vars) |
+| Password surfaces | `app/root.tsx` keeps `/passwords/provider` in the focused authorization shell; `/passwords` and `/settings/passwords` retain navigation while hiding floating assistant/developer launchers that can cover narrow credential controls. |
+| Custom drawer links and Thing attachments | `app/components/Nav/Drawer/drawerCustomItems.ts`, `customDrawerBlocks.ts`, `CustomDrawerItems.tsx`, and `useDrawer.tsx`; account-scoped device entries use parent IDs for arbitrary-depth menus, shared Commander search, individually editable Builder blocks. Add finishes both the root list and active submenu and creates in that parent. Submenu controls bind to each row’s available direct children (including migrated authored templates); leaf links and Add + stay available. Submenus stay below the root list with Back and ancestor navigation. Settings exposes parent selection, sibling ordering and the actual menu template, saved as a private webpage Thing through `SettingsDocumentHost`, with scoped legacy device-layout recovery and editable template migrations. `scripts/custom-drawer-acceptance.mjs` checks matched row styling, real API/browser persistence and nested Builder edits; its `nested` scope covers deeper menu navigation |
+| Device menu and full page | `app/components/Things/ThingsPage.tsx`, `ThingsViews.tsx`, `app/components/Devices/deviceNavigation.ts`, `DeviceDetailsDrawer.tsx` (one shared details tree for drawer and page) |
+| Desktop footer build identity | `app/components/Nav/Footer.tsx` reads `thingtimeDesktop.getInfo().buildIdentity` from the packaged `electron/dist/web/metadata.json`; remote-origin status remains separate |
 | Design tokens / CSS vars | `var(--tt-*)` tokens (surface, border, muted, ink, accent, radius); rainbow text in `app/theme/rainbow.ts` |
+| Shared native selects | `app/Providers/Chakra/Components/Select.tsx`, registered in `theme.tsx`; Chakra `Select` consumers (including Character posting and CI providers) inherit runtime colors, borders, radii and keyboard focus; Theme Studio controls the focus border and two-color glow through `theme/tokens.ts` and `theme/customise.ts` |
 | Design system docs page | `/docs/design-system` (`app/routes/docs/*`) |
 | Local cache tiers (first-paint) | `app/hooks/localCache.ts` (`tt-<domain>` keys) |
 
@@ -41,10 +47,36 @@ components; reuse them instead of adding parallel versions.
 
 ## Shared navigation and Builder controls
 
+Builder-authored Things carry the composable `builder-thing` schema in the
+existing `thingtime` array. Shared Builder classification also recognizes legacy
+canonical Builder kinds and app folders. Owner opening is separate from the
+canonical permalink: webpages use `/builder?page=<id>`, other authored Things
+use `/builder?thing=<id>`, and app folders use Builder folder navigation. The
+shared Thing menus expose **Open in Builder** and supported **Open live page**
+destinations while Copy link/Share retain view links. See the Builder Thing
+navigation checklist in `TESTING.md` for ownership, legacy data and mobile menus.
+`node remix/scripts/builder-thing-navigation-acceptance.mjs` exercises the real
+API with disposable accounts, replica data and browser profiles. Build the Nitro
+node server first, supply `BUILDER_NAVIGATION_EVIDENCE_DIR`, and select an installed
+browser with `PLAYWRIGHT_MODULE` and `CHROMIUM_EXECUTABLE`; `THINGTIME_TEST_MONGOD`
+overrides the local Mongo binary. Ports 19651–19654 must be free. The runner
+starts its own Vite shell and removes its test processes and private fixtures.
+
+Agent browsers are linked from Lopu's drawer group to `/agent-browsers` and
+`/agent-browsers/:taskId`. `AgentTasks/AgentNetworkSettings.tsx` shares the device
+default and task checkbox controls; `AgentBrowserViewer.tsx` observes or controls
+the current claim. The task board and detail pages come from the editable
+`schemas/appSuites/agentTasks.ts` suite, using normal Things and Actions for
+tasks, todos and progress. See [the runtime contract](../agent-browsers.md) and
+the Agent browsers section of `TESTING.md` for real data, responsive layout and
+live-viewer acceptance. Device-only operations use the trusted desktop bridge.
+
 Owned Things inherit `history` from `THING_ACTIONS`. `TimelineHost` opens the
 same History modal from Things, persisted entity menus and Builder definitions;
 `TimelineLibrary` renders the managed Timeline folder through PageShell.
 `TimelineVersionActions` previews restores/merges and presents conflict choices.
+`TimelineMessages` renders note/Lopu/system bubbles in every look and the
+Message tab composer (add note, Ask Lopu, remove) over `connection.notes`.
 `TimelineBranches` creates named alternatives from a selected version, pulls heads,
 loads an exact version and pushes a selection with a durable command queue. A
 refused push stays visible on that branch; it does not turn healthy History reads
@@ -77,6 +109,21 @@ browser acceptance also checks reload and repeated search through the renderer.
 
 ## Tests
 
+- `node remix/scripts/run-select-theme-browser.mjs` builds the real shared theme
+  and Character selector in a network-isolated browser fixture. Set
+  `TT_QA_IMAGE` to an installed isolated runtime and `TT_QA_SECCOMP` to its
+  Chromium sandbox profile, as required by the runner. It checks desktop/mobile,
+  light/dark themes, native options, keyboard focus and selection, overflow,
+  and real Theme Studio editing/save/reload against synthetic HTTP;
+  it does not perform live-account or CI-provider mutations.
+
+- `scripts/lopu-popovers.browser.html` mounts the real floating host, full page,
+  or embedded chat with synthetic HTTP/preferences. It checks popup hit testing,
+  model/list selection and scrolling, setting persistence, repeat taps, Escape
+  and outside dismissal. Lopu popovers set `rootProps.zIndex` on Chakra’s
+  positioner, using `DRAWER_POPUP_Z`; child content alone cannot escape a lower
+  stacking context.
+
 - `scripts/lopu-dictation.browser.html` exercises the real Lopu voice surface
   with synthetic speech/HTTP: live composer revisions, stop/resume, edits,
   mode switches, stale callbacks, recognition failure and rejected-send recovery.
@@ -105,3 +152,69 @@ browser acceptance also checks reload and repeated search through the renderer.
 expanded transfer dialog without changing the ordinary library defaults.
 Popup menus use the shared transfer layer constants; keyboard copy/cut/paste
 only intercepts events inside the browser and leaves editable inputs alone.
+
+
+## Native mobile device setup
+
+`components/Devices/MobileDeviceSetupCard.tsx` is shared by Things and Things
+settings. `mobileDeviceBridge.ts` negotiates the explicit native capability and
+fences responses by request, account and origin. iOS implements the bounded
+bridge in `iOS/Thingtime/Devices/`; Android uses `android/app/src/main/java/com/thingtime/mobile/`. Native credentials never reach the renderer.
+Run `test:devices` and the opt-in iOS/Android mobile-device acceptance scripts. See
+[full mobile and sync scope](../mobile-file-sync.md).
+## Incoming mail
+
+See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
+
+## Settings sections
+
+`SettingsSection.tsx` is the shared, initially collapsed disclosure card for
+personal settings (page and popup) and admin configuration. It keeps children
+mounted, exposes a title/description/summary, and opens enclosing cards for
+fragment links. `SettingRow` gives labels a readable wrapping basis before
+controls move to the next line. Admin categories live in `adminRoutesCore.ts`:
+AI Providers, Lopu, Platform, and Access & limits replace System; legacy System
+links resolve to AI Providers or to Lopu for Lopu anchors. Browser regression:
+`/scripts/settings-sections.browser.html`; route coverage: `test:admin-integrations`.
+
+## Native Commander controls
+
+The desktop launcher gear reuses `builtin:settings` / `open-settings` in
+`Commander/apps/desktop-ui/src/components/Launcher.tsx`. `ProcessesPanel.tsx`
+and `processModel.ts` share sorting, averaging, filters and local view preferences
+between Activity and `ProcessesWindow.tsx`. `useSystemMetrics.ts` polls the native
+bridge without overlapping requests. `SystemMetricsService` and
+`ProcessUsageHistory` share sampled history across native windows, with stable
+process identities and explicit coverage. `CommanderUtilityWindow` implements
+maximize/restore; `SettingsWindowController` hosts Settings and Processes, and the
+native bridge applies Keep above only to the requesting utility window. Checks:
+Commander TypeScript/Vitest and Swift tests, plus TESTING.md's native launcher
+checklist on the installed signed app.
+
+## Editable private settings
+
+`Settings/SettingsDocumentHost.tsx` composes the ordinary Builder drawer/chrome
+with authored `WebpageBlock[]`. Account layouts use private keyed webpages through
+`settingsDocument.client.ts` and existing Things revision fences. Device recovery
+uses the same document format with origin/authority scoped local storage and Web
+Locks. Neither adapter captures form DOM or runtime credential state.
+
+`desktopSettingsDocuments.ts` defines the runtime, endpoint and previous-workspace
+recovery controls as editable intrinsic blocks. `useDesktopSettingsAdapter.ts`
+provides public bindings and a bounded transient native-operation map. Sensitive
+hosts reject external sources, native/component blocks and persisted password/file
+values before rendering; normal Builder insertion and source editing follow the
+same restrictions. Scope changes abort transient controls and fence late results.
+
+## Password manager navigation
+
+`Nav/Drawer/drawerMenu.tsx` exposes an authenticated Password manager entry for
+`/passwords` and `/settings/passwords`. The shared `Settings/settingsTabs.ts`
+category supports full-page/popup navigation, reload and the legacy
+`#password-manager` anchor. `PasswordManagerSettings.tsx` composes an editable
+settings document with `PasswordPasskeySetup`; its explicit Thingtime sign-in
+passkeys link targets `/settings/security#account-passkeys`. Browser approval at
+`/passwords/provider` uses the same safe editable-document and transient-control
+hosts; passwords and signing keys never enter layout blocks. Check keyboard,
+Back, nested Builder selection, narrow/mobile widths and full-page scroll in the
+real browser. See [password manager](../password-manager.md#browser-passkeys-and-settings).

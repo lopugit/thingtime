@@ -4,6 +4,7 @@ const rows: any[] = [],
 	pending: Promise<unknown>[] = [];
 let beforeUpdate: ((update:any)=>Promise<void>) | null = null;
 let chatAccessible = true;
+let savedProviderId: string | null = null;
 let admissionMode: 'okay' | 'throw' | 'claimed-throw' = 'okay';
 let user: any = { id: 'owner', accountKind: 'user', temporary: false };
 const match = (row: any, filter: any) =>
@@ -55,7 +56,7 @@ mock.module('../mongodb/endpoint', {
 });
 mock.module('../auth/getCurrentUser', { namedExports: { getCurrentUser: async () => user } });
 mock.module('../messenger/lopuChats', {
-	namedExports: { persistLopuUserTurn: async (_owner: string, input: any) => chatAccessible ? { ok: true, messages: [input] } : { ok: false, status: 404, error: 'Not found' }, getLopuChat: async () => (chatAccessible ? { ok: true } : { ok: false, status: 404, error: 'Not found' }) }
+	namedExports: { persistLopuUserTurn: async (_owner: string, input: any) => chatAccessible ? { ok: true, messages: [input] } : { ok: false, status: 404, error: 'Not found' }, getLopuChat: async () => (chatAccessible ? { ok: true, settings: { providerId: savedProviderId } } : { ok: false, status: 404, error: 'Not found' }) }
 });
 mock.module('../rateLimit/enforce', {
 	namedExports: { enforceRateLimit: async () => ({ allowed: true }), rateLimitedResponseInit: () => ({ status: 429 }) }
@@ -68,7 +69,7 @@ mock.module('./continuationAdmission.server', {namedExports: {admitLopuWorkflow:
 }}});
 const { startBackgroundTask, executeBackgroundTask, readBackgroundTasks, stopBackgroundTask, readCheckpointToolResults } = await import('./backgroundTasks');
 beforeEach(() => {
-	chatAccessible = true; admissionMode='okay'; beforeUpdate=null;
+	chatAccessible = true; savedProviderId = null; admissionMode='okay'; beforeUpdate=null;
 	rows.length = 0;
 	pending.length = 0;
 	user = { id: 'owner', accountKind: 'user', temporary: false };
@@ -452,4 +453,46 @@ test('continuation tool output stays bound to the exact account, chat, request a
  assert.deepEqual(await readResults(), []);
  chatAccessible = true; rows[0].outputExpiresAt = new Date(0);
  assert.deepEqual(await readResults(), []);
+});
+
+
+test('personal-plan background admission never invokes Vercel Workflow for explicit or saved pins', async () => {
+  admissionMode = 'throw'; // Any attempted Workflow admission would fail the send.
+  for (const [index, body] of [
+    { providerId: 'chatgpt-plan-test' },
+    { chatId: 'saved-plan' }
+  ].entries()) {
+    savedProviderId = 'chatgpt-plan-test';
+    let executed = 0;
+    const response = await startBackgroundTask(request(`plan-${index}`, { text: 'Hi', requestId: `plan-${index}`, management: 'server', ...body }), async () => {
+      executed++;
+      return new Response('{"type":"done"}\n', { headers: { 'Content-Type': 'application/x-ndjson' } });
+    });
+    assert.equal(response.status, 202);
+    await Promise.all(pending);
+    assert.equal(executed, 1);
+    assert.equal(rows[index].crystal.management, 'client');
+    assert.equal(rows[index].workflowInput, undefined);
+  }
+});
+
+for (const claimed of [false, true]) test(`gateway promotion reconciles expired ${claimed ? 'claimed' : 'unclaimed'} workflow without replay`, async t => {
+  const { row } = await pendingServerRoot();
+  row.workflowGatewayDeploymentId = 'previous-owner'; row.deadlineAt = new Date(0);
+  if (claimed) { row.workerStarted = true; row.activeWorkerRequestId = row.crystal.requestId; }
+  const gateway = await import('../deployment/environmentGateway');
+  const keys = ['THINGTIME_GATEWAY_ENVIRONMENT', 'THINGTIME_GATEWAY_ORIGIN', 'THINGTIME_GATEWAY_SECRET', 'THINGTIME_GATEWAY_DEPLOYMENT_ID'] as const;
+  const before = keys.map(key => process.env[key]);
+  process.env.THINGTIME_GATEWAY_ENVIRONMENT = 'preview'; process.env.THINGTIME_GATEWAY_ORIGIN = 'https://gateway.test';
+  process.env.THINGTIME_GATEWAY_SECRET = 'synthetic'.repeat(8); process.env.THINGTIME_GATEWAY_DEPLOYMENT_ID = 'current-owner';
+  t.mock.method(gateway.gatewayAuthority, 'current', async () => ({ owner: true, settings: gateway.getGatewaySettings()!, manifest: {} }) as any);
+  try {
+    assert.equal((await read(row.shareId)).status, 200);
+    assert.equal(row.cancelRequested, true);
+    assert.match(row.crystal.error, /gateway changed/i);
+    assert.equal(row.workflowFinalStatus, 'needs-attention');
+    assert.equal(row.workflowInput, undefined);
+    if (claimed) { assert.ok(row.uniqueKeys); assert.equal(row.workflowFinalizedAt, undefined); }
+    else { assert.equal(row.crystal.workflowStatus, 'needs-attention'); assert.equal(row.uniqueKeys, undefined); }
+  } finally { keys.forEach((key, i) => { if (before[i] === undefined) delete process.env[key]; else process.env[key] = before[i]; }); }
 });

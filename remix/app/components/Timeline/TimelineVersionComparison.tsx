@@ -10,6 +10,10 @@ const data = (value: VersionValue) => {
 	return text.length > 24_000 ? `${text.slice(0, 24_000)}\n… Display shortened.` : text;
 };
 
+/** How the incoming side is named: a restore/merge reviews "This version",
+ * an undo reviews the value from "Before this change". */
+export type TimelineComparisonLabels = { incoming?: string; useIncoming?: string };
+
 /** The same comparison and conflict review for live restoration and branch merges. */
 export function TimelineVersionComparison({
 	current,
@@ -20,7 +24,8 @@ export function TimelineVersionComparison({
 	onChoose,
 	componentLabels = false,
 	hideCopiedIdentity = false,
-	matchingMessage
+	matchingMessage,
+	labels
 }: {
 	current: TimelineSnapshot | null;
 	result: TimelineSnapshot;
@@ -28,10 +33,13 @@ export function TimelineVersionComparison({
 	componentLabels?: boolean;
 	hideCopiedIdentity?: boolean;
 	matchingMessage?: string;
+	labels?: TimelineComparisonLabels;
 	choices: VersionChoices;
 	busy: boolean;
 	onChoose: (key: string, side: 'current' | 'incoming') => void;
 }) {
+	const incomingLabel = labels?.incoming ?? 'This version';
+	const useIncomingLabel = labels?.useIncoming ?? 'Use this version';
 	const pathLabel = (path: string[]) => {
 		const ref = path[0];
 		const componentName = [current, result]
@@ -78,7 +86,7 @@ export function TimelineVersionComparison({
 							Current: {valueLabel(conflict.current)}
 						</Text>
 						<Text fontSize="sm" mt={1} overflowWrap="anywhere" noOfLines={4}>
-							This version: {valueLabel(conflict.incoming)}
+							{incomingLabel}: {valueLabel(conflict.incoming)}
 						</Text>
 						<Box as="details" mt={2}>
 							<Box as="summary" fontSize="sm" cursor="pointer">
@@ -87,7 +95,7 @@ export function TimelineVersionComparison({
 							{(
 								[
 									['Current', conflict.current],
-									['This version', conflict.incoming]
+									[incomingLabel, conflict.incoming]
 								] as const
 							).map(([title, value]) => (
 								<Box key={title} mt={2}>
@@ -110,7 +118,7 @@ export function TimelineVersionComparison({
 									isDisabled={busy}
 									onClick={() => onChoose(key, side)}
 								>
-									{side === 'current' ? 'Keep current' : 'Use this version'}
+									{side === 'current' ? 'Keep current' : useIncomingLabel}
 								</Button>
 							))}
 						</Flex>

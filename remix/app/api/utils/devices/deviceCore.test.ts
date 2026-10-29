@@ -61,6 +61,7 @@ import {
 	DEVICE_CONTROL_EVENT_MAX_COUNT,
 	DEVICE_CONTROL_EVENT_RETENTION_MS,
 	claimDevicePairing,
+	minimalPublicDevice,
 	deviceConnectorIsFresh,
 	newDeviceThing
 } from './devices.ts';
@@ -191,6 +192,11 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 		normalizeDeviceState({ locked: false, battery: { level: 0.5, charging: true }, openApps: [] })?.battery,
 		{ level: 0.5, charging: true, isExternalPower: null, isPreventingIdleSleep: false, isLowPowerModeEnabled: false }
 	);
+	const measured = normalizeDeviceState({ locked: false, battery: { level: 0.8, charging: false, cycleCount: 280, currentMA: -1200, voltageMV: 12000, adapterWatts: 100 }, openApps: [] });
+	assert.equal(measured?.battery?.cycleCount, 280);
+	assert.equal(measured?.battery?.currentMA, -1200);
+	assert.equal(normalizeDeviceState({ locked: false, battery: { level: 0.8, serial: 'private' }, openApps: [] }), null);
+	assert.equal(normalizeDeviceState({ locked: false, battery: { level: 0.8, adapterWatts: -10 }, openApps: [] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, displays: [{ id: 1, width: 1, height: 1, isMain: true, isBuiltIn: false, brightness: null, brightnessControlSupported: false, currentMode: null, availableModes: [], originX: 0, originY: 0, mirroredDisplayId: null, hdrActive: false, path: '/private' }] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, appleMusic: { isInstalled: true, isRunning: false, queue: ['private'] } }), null);
 	assert.equal(normalizeDeviceState({ locked: false, spotify: { isInstalled: true, isRunning: false, queue: ['private'] } }), null);
@@ -328,6 +334,7 @@ test('device-wide commands require the capability from the signed pairing claim'
 
 test('command vocabulary is closed and every input envelope is kind-specific', () => {
 	assert.deepEqual(DEVICE_COMMAND_KINDS, [
+ 'script.run',
     'filesystem',
 		'connector.start',
 		'connector.stop',
@@ -511,7 +518,7 @@ test('paired account execution preferences default to always allow, with reversi
 	assert.equal(normalizeDevicePermissionMode('ask-every-time'), 'ask-every-time');
 	assert.equal(normalizeDevicePermissionMode('deny'), 'deny');
 	for (const kind of DEVICE_COMMAND_KINDS) {
-		assert.equal(deviceCommandRequiresApproval(kind, false), ['app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.power.idle-timer.set', 'system.policy.airdrop.profile.propose', 'system.policy.camera.profile.propose', 'system.media.apple-music.playback.set', 'system.media.apple-music.volume.set', 'system.media.spotify.playback.set', 'system.media.spotify.volume.set', 'system.media.chrome-youtube.volume.set', 'input.pointer.move', 'input.pointer.click', 'input.pointer.scroll', 'input.keyboard.type', 'input.keyboard.shortcut'].includes(kind), kind);
+		assert.equal(deviceCommandRequiresApproval(kind, false), ['script.run', 'app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.power.idle-timer.set', 'system.policy.airdrop.profile.propose', 'system.policy.camera.profile.propose', 'system.media.apple-music.playback.set', 'system.media.apple-music.volume.set', 'system.media.spotify.playback.set', 'system.media.spotify.volume.set', 'system.media.chrome-youtube.volume.set', 'input.pointer.move', 'input.pointer.click', 'input.pointer.scroll', 'input.keyboard.type', 'input.keyboard.shortcut'].includes(kind), kind);
 		assert.equal(deviceCommandRequiresApproval(kind, true), true, kind);
 	}
 	const semantic = { kind: 'claude-thingtime', capabilities: ['session.send', 'explicit-approval'] };
@@ -579,4 +586,26 @@ test('event cursors round-trip and malformed cursors fail closed', () => {
 	const value = { at: new Date('2026-08-18T00:00:00.000Z'), id: 'event-1' };
 	assert.deepEqual(decodeDeviceEventCursor(encodeDeviceEventCursor(value)), value);
 	assert.equal(decodeDeviceEventCursor('not-json'), null);
+});
+
+for (const platform of ['ios', 'android'] as const) {
+ test(`${platform} pairs with the existing descriptor and signed proof boundary`, () => {
+  const device = normalizeDeviceDescriptor({ name: 'My phone', platform, model: 'Phone', osVersion: '1', appVersion: '1' });
+  assert.ok(device); assert.equal(device.platform, platform);
+  const projected = minimalPublicDevice({ shareId: 'mobile', createdAt: new Date(), crystal: { ...device, credential: 'never-return' }, secure: 'never-return' });
+  assert.equal(projected.platform, platform);
+  assert.equal(JSON.stringify(projected).includes('never-return'), false);
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+  const claim = { pairingId: 'pair', pairingSecret: generatePairingSecret(), credential: generateDeviceCredential(),
+   publicKey: (publicKey.export({ format: 'der', type: 'spki' }) as Buffer).subarray(-32).toString('base64url'),
+   nonce: generateDevicePairingNonce(), serverNonce: generateDevicePairingNonce(), device, capabilities: [] };
+  const signature = sign(null, canonicalDevicePairingClaimBytes(claim), privateKey).toString('base64url');
+  assert.equal(verifyDevicePairingClaim(claim, signature), true);
+  assert.equal(verifyDevicePairingClaim({ ...claim, device: { ...device, platform: 'macos' } }, signature), false);
+  assert.equal(verifyDevicePairingClaim({ ...claim, capabilities: ['filesystem.v1'] }, signature), false);
+  assert.equal(normalizeDeviceDescriptor({ ...device, credential: 'secret' }), null);
+ });
+}
+test('unknown device platforms are still refused', () => {
+ for (const platform of ['', 'iOS', 'Android', 'browser', 'unknown', null]) assert.equal(normalizeDeviceDescriptor({ name: 'Phone', platform }), null);
 });

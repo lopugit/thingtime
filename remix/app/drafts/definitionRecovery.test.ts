@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import { withBuilderThingKind } from '../schemas/builderThing';
 
 const text = readFileSync(new URL('../components/Builder/DefinitionEditor/ThingDefinitionEditor.tsx', import.meta.url), 'utf8');
 const source = ts.createSourceFile('ThingDefinitionEditor.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -40,12 +41,13 @@ test('a server conflict preserves both account and Timeline drafts', async () =>
 	await evaluate('save', {
 		pending: { current: false }, active: { current: true }, thing: { thingtime: ['component'], updatedAt: 'new-version' },
 		parsed: { name: 'Recovered' }, parseError: '', staleDraft: false, draftBase: 'old-version', id: 'component-id', actor: 'owner-id',
-		validateThingtimeCrystal: () => ({ ok: true }), setSaving: () => {}, setError: (value: string) => { error = value; },
+		withBuilderThingKind, validateThingtimeCrystal: () => ({ ok: true }), setSaving: () => {}, setError: (value: string) => { error = value; },
 		accountDraft: { flush: async () => {}, clear: async () => { cleared = true; } },
 		draft: { flush: async () => 'event-id', release: async () => { released = true; } },
 		apiRef: { current: { v1: { things: { update: async (input: any) => { submitted = input; return { ok: false, error: 'Version conflict' }; } } } } }
 	})();
 	assert.equal(submitted.expectedUpdatedAt, 'old-version');
+	assert.deepEqual(submitted.thingtime, ['component', 'builder-thing'], 'The original content kind and Builder provenance accompany the guarded save');
 	assert.equal(error, 'Version conflict');
 	assert.equal(cleared, false);
 	assert.equal(released, false);

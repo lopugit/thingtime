@@ -7,7 +7,7 @@ import {
 } from '../../../schemas/registry.ts';
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
 import { attachmentObjectSizeBytesForAccounting } from '../attachments/attachmentCore.ts';
-import { timelinePayloadBytes } from '../timeline/envelope.ts';
+import { timelineNoteBytes, timelinePayloadBytes } from '../timeline/envelope.ts';
 import { TIMELINE_EVENT_KIND } from '../../../timeline/contract.ts';
 
 export class InvalidTimelineStorageEnvelopeError extends Error {
@@ -37,6 +37,7 @@ export const thingStorageSizeBytes = (doc: {
   objectSizeBytes?: unknown;
   objectKey?: unknown;
   timelineEnvelopeVersion?: unknown;
+  timelineNoteVersion?: unknown;
   secure?: unknown;
 }): number => {
   const payloadBytes = Buffer.byteLength(
@@ -51,8 +52,10 @@ export const thingStorageSizeBytes = (doc: {
   if (objectBytes === null) throw new InvalidAttachmentStorageEnvelopeError();
   const historyBytes = timelinePayloadBytes(doc);
   if (historyBytes === null) throw new InvalidTimelineStorageEnvelopeError();
+  const noteBytes = timelineNoteBytes(doc);
+  if (noteBytes === null) throw new InvalidTimelineStorageEnvelopeError();
   const timelineV2 = Array.isArray(doc.thingtime) && doc.thingtime.includes(TIMELINE_EVENT_KIND) && (doc.timelineEnvelopeVersion === 2 || doc.timelineEnvelopeVersion === 3);
-  const total = (timelineV2 ? 0 : payloadBytes) + (objectBytes ?? 0) + historyBytes;
+  const total = (timelineV2 ? 0 : payloadBytes) + (objectBytes ?? 0) + historyBytes + noteBytes;
   if (!Number.isSafeInteger(total)) throw new RangeError('Thing storage size exceeds the exact counter range');
   return total;
 };

@@ -11,6 +11,7 @@ import { burstAtEvent } from '../Landing/confetti';
 import { motionOK, pickIncantation } from '~/eggs/eggs';
 import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName, getUserMention } from '~/utils/userIdentity';
 import { SUPPORT_EMAIL, SUPPORT_PATH } from '../Support/supportContent';
+import { getElectronBridge, type ThingtimeDesktopInfo } from '~/utils/electronBridge';
 
 const BRANCH_NAME =
   typeof process !== 'undefined' && process.env?.THINGTIME_BRANCH_NAME
@@ -25,9 +26,20 @@ const COMMIT_SHA =
 export const Footer = (props) => {
   const rootData = useRouteLoaderData('root') as any;
   const envFromCookie = rootData?.envFromCookie || {};
+  const [desktopBuildIdentity, setDesktopBuildIdentity] = React.useState<ThingtimeDesktopInfo['buildIdentity'] | null>(null);
 
-  const branchName = envFromCookie.THINGTIME_BRANCH_NAME || BRANCH_NAME || 'git/unknown';
-  const commitSha = envFromCookie.THINGTIME_VERCEL_GIT_COMMIT_SHA || COMMIT_SHA;
+  React.useEffect(() => {
+    const bridge = getElectronBridge();
+    if (!bridge?.getInfo) return;
+    let active = true;
+    void bridge.getInfo().then((info) => {
+      if (active) setDesktopBuildIdentity(info?.buildIdentity || null);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  const branchName = desktopBuildIdentity?.gitBranch || envFromCookie.THINGTIME_BRANCH_NAME || BRANCH_NAME || 'git/unknown';
+  const commitSha = desktopBuildIdentity?.gitCommit || envFromCookie.THINGTIME_VERCEL_GIT_COMMIT_SHA || COMMIT_SHA;
   const showDeploymentStatus = envFromCookie.THINGTIME_SHOW_DEPLOYMENT_STATUS === 'true';
 
   const year = new Date().getFullYear();

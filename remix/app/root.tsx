@@ -1,4 +1,5 @@
 import { ThingDraftsProvider } from './drafts/ThingDrafts';
+import { NativeSyncBootstrap } from './fileSync/NativeSyncBootstrap';
 import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
 import { LOPU_WINDOW_Z } from './components/Nav/Drawer/useDrawer';
 import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
@@ -68,7 +69,8 @@ export default function App() {
   const { envFromCookie, titlePrefix } = rootData;
   const { pathname, search, hash } = useLocation();
   const isStandalonePage = pathname.startsWith('/t/');
-  const isAuthorizePopup = isStandalonePage || pathname === '/invite' || pathname === '/authorize' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
+  const isPasswordSurface = pathname === '/passwords' || pathname === '/settings/passwords';
+  const isAuthorizePopup = isStandalonePage || pathname === '/invite' || pathname === '/authorize' || pathname === '/passwords/provider' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
   React.useLayoutEffect(() => bindTransferIdentity(rootIdentity, rootData.user?.id, rootData.clientIdentityGeneration),
@@ -142,12 +144,15 @@ export default function App() {
         {/* Mirrors settings.lopu.position into the cache useLopu reads at fire time. */}
         <LopuPositionSync />
         {mounted ? <ElectronBridgeHost /> : null}
+        {mounted && !identity.pending && rootData.dataPlane === 'home' && rootData.user?.id &&
+          rootData.user.accountKind === 'user' && !rootData.user.temporary ?
+          <NativeSyncBootstrap ownerId={rootData.user.id} generation={identity.generation} /> : null}
         {mounted ? <NativeBridgeHost /> : null}
         {/* Invite signup and authorization/pairing use a focused auth
             surface with their own chrome, so the app shell (nav, drawer trigger,
             DevKit bubble, Main's footer + its 900px spacer) stays out of it. */}
         <div id="lopuPageViewport">
-        {isAuthorizePopup ? null : <DevKit />}
+        {isAuthorizePopup || isPasswordSurface ? null : <DevKit />}
         {isAuthorizePopup ? null : <Nav />}
         <div id="lopuPageScroll">
         {isAuthorizePopup ? (
@@ -165,7 +170,7 @@ export default function App() {
         {isAuthorizePopup ? null : <DrawerSystem />}
         </div>
         {/* 🦄 Lopu: global floating launcher + draggable chat window (hidden on /lopu). */}
-        {mounted && !isAuthorizePopup ? <LopuHost /> : null}
+        {mounted && !isAuthorizePopup && !isPasswordSurface ? <LopuHost /> : null}
         {/* ⌘K quick switcher — global palette; renders nothing until opened. */}
         {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
         {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}

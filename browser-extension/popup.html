@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Thingtime</title><link rel="stylesheet" href="popup.css"></head>
+<body>
+<main>
+  <header><span class="mark" aria-hidden="true">T</span><div><h1>Thingtime</h1><p>Passkeys, in your vault.</p></div></header>
+  <form id="settings">
+    <label class="toggle"><input id="enabled" type="checkbox"><span>Use Thingtime for website passkeys</span></label>
+    <p class="hint">Off by default. When enabled, a website’s passkey request opens a Thingtime tab for your approval.</p>
+    <label for="origin">Thingtime origin</label>
+    <input id="origin" type="url" required spellcheck="false" autocomplete="off" placeholder="https://thingtime.com" aria-describedby="origin-hint">
+    <p id="origin-hint" class="hint">Use your trusted HTTPS Thingtime deployment. HTTP is allowed only for explicit localhost development.</p>
+    <button type="submit">Save settings</button>
+    <p id="feedback" role="status" aria-live="polite"></p>
+  </form>
+  <section aria-labelledby="requests-title"><h2 id="requests-title">Active requests</h2><div id="requests"><p class="hint">No active passkey requests.</p></div></section>
+  <footer>No passwords or passkey keys are stored in this extension. Conditional sign-in and unsupported options use the browser’s native provider.</footer>
+</main>
+<script src="popup.js" type="module"></script>
+</body>
+</html>

@@ -7,7 +7,7 @@ export type AttachmentState = (typeof ATTACHMENT_STATES)[number];
 // A purpose is stamped before any upload URL is issued and never changes.
 // That keeps a private draft created for one surface from being replayed into
 // a different audience (for example, a DM attachment becoming a public post).
-export const ATTACHMENT_PURPOSES = ['post', 'comment', 'message', 'profile', 'emoji', 'recording', 'file', 'subspace-icon', 'subspace-banner'] as const;
+export const ATTACHMENT_PURPOSES = ['post', 'comment', 'message', 'profile', 'emoji', 'recording', 'file', 'subspace-icon', 'subspace-banner', 'password'] as const;
 export type AttachmentPurpose = (typeof ATTACHMENT_PURPOSES)[number];
 export const ATTACHMENT_PROFILE_SLOTS = ['avatar', 'banner'] as const;
 export type ProfileAttachmentSlot = (typeof ATTACHMENT_PROFILE_SLOTS)[number];
@@ -466,7 +466,7 @@ const canonicalLinkedAttachmentCrystal = (raw: Record<string, unknown>): Attachm
 		: null;
 };
 
-const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null => {
+export const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null => {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
 	if ('url' in (value as Record<string, unknown>)) return canonicalLinkedAttachmentCrystal(value as Record<string, unknown>);
 	const sanitized = sanitizeAttachmentPublicMetadata(value);

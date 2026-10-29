@@ -4,6 +4,7 @@ import { joinTimelineEvent, parseTimelineEventRecord, parseTimelineLink, splitTi
 import { binaryBytes, fromBin, toBin } from '../auth/binary.ts';
 import { FOLDER_PLACEMENT_ADAPTER, MANAGED_FOLDER_PLACEMENT_ADAPTER, folderPlacementValue } from '../../../timeline/folderPlacement.ts';
 import { THEME_CONTENT_ADAPTER, themeContentStoragePayload } from '../../../timeline/themeContent.ts';
+import { TIMELINE_NOTE_KIND, TIMELINE_NOTE_MAX_BYTES } from '../../../timeline/notes.ts';
 
 export const TIMELINE_ENVELOPE_VERSION = 3;
 export const packTimelineEntry = (input: TimelineEntry) => {
@@ -23,7 +24,7 @@ const validEnvelope = (doc: Envelope): boolean => {
 	return [1, 2, TIMELINE_ENVELOPE_VERSION].includes(doc.timelineEnvelopeVersion as number) && bytes !== null && bytes > 0 && bytes <= TIMELINE_EVENT_MAX_BYTES + 2048;
 };
 
-function readEnvelope(doc: Envelope) {
+export function readTimelineEnvelope(doc: Envelope) {
 	if (!Array.isArray(doc.thingtime) || !doc.thingtime.includes(TIMELINE_EVENT_KIND) || !validEnvelope(doc)) throw new Error('Invalid Timeline storage envelope');
 	const value = JSON.parse(fromBin(doc.secure));
 	if (doc.timelineEnvelopeVersion !== 3) return parseTimelineEntry(value);
@@ -44,7 +45,7 @@ export function timelinePayloadBytes(doc: Envelope): number | null {
 	if (!validEnvelope(doc)) return null;
 	if (doc.timelineEnvelopeVersion === 1) return binaryBytes(doc.secure);
 	try {
-		const { event } = readEnvelope(doc);
+		const { event } = readTimelineEnvelope(doc);
 		if (event.mode !== 'revision' || event.source === 'client') return Buffer.byteLength(JSON.stringify({ before: event.before, after: event.after }));
 		let total = 0;
 		for (const snapshot of [event.before, event.after]) {
@@ -69,6 +70,15 @@ export function timelinePayloadBytes(doc: Envelope): number | null {
 }
 
 export function unpackTimelineEntry(doc: Envelope, links: TimelineLink[] = []): TimelineEntry {
-	const entry = readEnvelope(doc);
+	const entry = readTimelineEnvelope(doc);
 	return doc.timelineEnvelopeVersion === 3 ? { event: joinTimelineEvent(entry.event as ReturnType<typeof parseTimelineEventRecord>, links), receipt: entry.receipt } : entry as TimelineEntry;
+}
+
+/** Contextual notes keep their text only in the secure record, so the ordinary
+ * crystal/extended/tags projection would meter them as free. Ordinary Things
+ * add zero; a malformed note envelope fails closed like a malformed event. */
+export function timelineNoteBytes(doc: { thingtime?: unknown; timelineNoteVersion?: unknown; secure?: unknown }): number | null {
+	if (!Array.isArray(doc.thingtime) || !doc.thingtime.includes(TIMELINE_NOTE_KIND)) return 0;
+	const bytes = binaryBytes(doc.secure);
+	return doc.timelineNoteVersion === 1 && bytes !== null && bytes > 0 && bytes <= TIMELINE_NOTE_MAX_BYTES ? bytes : null;
 }

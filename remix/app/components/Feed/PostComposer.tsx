@@ -1,3 +1,4 @@
+import { CharacterComposer } from '~/components/Characters/CharacterComposer';
 import { useAccountDraft } from '~/drafts/useAccountDraft';
 import { DraftPicker, DraftSaveStatus } from '~/drafts/DraftPicker';
 import { PostThingPicker } from './PostThingPicker';
@@ -163,7 +164,8 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 
 export const PostComposer = (props: PostComposerProps) => {
   const user = useCurrentUser();
-  return <AccountPostComposer key={`${user?.id || 'guest'}:${props.editPost?.id || props.parentId || 'new'}:${props.subspace?.id || ''}`} {...props} />;
+  const composer = <AccountPostComposer key={`${user?.id || 'guest'}:${props.editPost?.id || props.parentId || 'new'}:${props.subspace?.id || ''}`} {...props} />;
+  return props.editPost ? composer : <CharacterComposer key={user?.id || 'guest'}>{composer}</CharacterComposer>;
 };
 const AccountPostComposer = (props: PostComposerProps) => {
   const { onPosted, parentId, onClose, editPost, subspace } = props;
@@ -618,17 +620,6 @@ const AccountPostComposer = (props: PostComposerProps) => {
 				return;
 			}
 		}
-
-		try {
-      if (!pendingPostSubmissionRef.current) {
-        accountDraft.capture({ ...draftContent, snapshot: JSON.stringify({ ...JSON.parse(draftSnapshot), postEditorValue: submittedEditorValue }) }, true, true);
-        await accountDraft.flush();
-      }
-    } catch {
-      setPosting(false);
-      lopu({ title: 'Your draft has not synced yet', description: 'Retry saving before posting so your work stays recoverable.', status: 'error' });
-      return;
-    }
 		const currentAttachmentIds = [...draftAttachments.map(file => file.id), ...attachmentSnapshot.attachmentIds];
 		const currentPostShareId = crypto.randomUUID();
 		// polls publish as thingtime posts; the question lives on the thing (the
@@ -752,7 +743,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
 		const submittedPostType = pendingSubmission?.postType ?? type;
 
 		const finishPost = async (created: PublicPost) => {
-      await accountDraft.clear().catch(() => lopu({ title: 'Posted successfully; draft cleanup will need a retry', status: 'info' }));
+      void accountDraft.retire().catch(() => lopu({ title: 'Posted successfully; draft cleanup will retry separately', status: 'info' }));
 			if (attachmentIds.length > 0) {
 				// A successful or exactly reconciled save means the server claimed
 				// these drafts (create binds in the insert transaction; an edit binds
@@ -785,12 +776,16 @@ const AccountPostComposer = (props: PostComposerProps) => {
 		};
 
 		try {
-      if (!pendingSubmission?.unknownOutcome && !isEdit) {
-        // Persist the immutable publish identity before sending it so reloads
-        // reconcile or replay this exact post after an uncertain response.
-        accountDraft.capture({ ...draftContent, snapshot: JSON.stringify({ ...JSON.parse(draftSnapshot),
-          postEditorValue: submittedEditorValue, pendingSubmission: { ...pendingSubmission, unknownOutcome: true } }) }, true, true);
-        await accountDraft.flush();
+      if (!pendingSubmission?.unknownOutcome) {
+        // Capture the immutable publish identity on this device before sending.
+        // Account draft sync runs independently and cannot block the post.
+        try {
+          accountDraft.capture({ ...draftContent, snapshot: JSON.stringify({ ...JSON.parse(draftSnapshot),
+            postEditorValue: submittedEditorValue, pendingSubmission: { ...pendingSubmission, unknownOutcome: true } }) }, true, true);
+          void accountDraft.flush().catch(() => {}); // DraftSaveStatus reports sync errors.
+        } catch {
+          lopu({ title: 'Draft recovery is unavailable', description: 'Posting will continue. Keep this page open until the result is confirmed.', status: 'info' });
+        }
       }
 			if (pendingSubmission?.unknownOutcome && !isComment && !isEdit && postShareId && committedExpectation) {
 				try {

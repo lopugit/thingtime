@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import { subscribeBackgroundRefresh } from '~/hooks/backgroundRefresh';
 import React from 'react';
 import { Box, Button, Flex, Input, Spinner } from '@chakra-ui/react';
@@ -46,6 +47,9 @@ const dedupeNewestFirst = (lists: ChatMessage[][]): ChatMessage[] => {
 
 export type ChatViewProps = {
   api: MessengerApi;
+  // Hidden embedded views retain drafts without polling or marking unread data.
+  active?: boolean;
+  onAccessRevoked?: () => void;
   chatSummary: ChatSummary;
   mode: MessengerMode;
   onBack?: () => void;
@@ -57,12 +61,14 @@ export type ChatViewProps = {
 // visibility-aware poll for fresh pages, optimistic sends and reactions with
 // per-item reconcile, Slack thread panel, and read-receipt advancement.
 export const ChatView = (props: ChatViewProps) => {
-  const { chatSummary, mode } = props;
+  const { chatSummary, mode, active = true } = props;
   const chatId = chatSummary.id;
   const user = useCurrentUser();
   const userId = user?.id || null;
   const lopu = useLopu();
   const api = props.api;
+  const onAccessRevoked = React.useRef(props.onAccessRevoked);
+  onAccessRevoked.current = props.onAccessRevoked;
 	const liveSource = isLiveAiSource(chatSummary.externalSource) ? chatSummary.externalSource : null;
 	const agent = useAgentSession(userId, liveSource, props.onChatsChanged);
 
@@ -126,6 +132,7 @@ export const ChatView = (props: ChatViewProps) => {
 
   // initial load + 4s poll while visible
   React.useEffect(() => {
+    if (!active) return;
     let cancelled = false;
     const seq = ++seqRef.current;
     const load = async () => {
@@ -138,6 +145,12 @@ export const ChatView = (props: ChatViewProps) => {
       } catch (err: any) {
         if (cancelled) return;
         setLoading(false);
+        if ([401, 403, 404].includes(Number(err?.status))) {
+          setMessages([]); setMembers([]); setThreadRoot(null); setNextCursor(null);
+          writeMessages(userId, chatId, []);
+          onAccessRevoked.current?.();
+          return;
+        }
         if (!messagesRef.current.length) lopu({ title: err?.error || 'Could not load this chat 😞', status: 'error' });
       }
     };
@@ -146,7 +159,8 @@ export const ChatView = (props: ChatViewProps) => {
       cancelled = true;
       unsubscribe();
     };
-  }, [api, applyPage, chatId, lopu, userId]);
+  // The optional revocation callback is read through the latest props ref.
+  }, [active, api, applyPage, chatId, lopu, userId]);
 
   // custom emoji palette for this chat (community set + personal set)
   React.useEffect(() => {
@@ -170,7 +184,7 @@ export const ChatView = (props: ChatViewProps) => {
   // the server, deduped here) — this is what clears the unread badge. Pending
   // requests never leave receipts: "seen" must not leak before accept.
   React.useEffect(() => {
-    if (pendingRequest) return;
+    if (!active || pendingRequest) return;
     const newest = messages.find((m) => !m.id.startsWith('pending-'));
     if (!newest || readMarkRef.current === newest.id) return;
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
@@ -179,7 +193,7 @@ export const ChatView = (props: ChatViewProps) => {
 			.markRead({ chatId, messageId: newest.id })
 			.then(() => props.onChatsChanged())
 			.catch(() => {});
-  }, [api, chatId, messages, pendingRequest, props]);
+  }, [active, api, chatId, messages, pendingRequest, props]);
 
   // reaction chips reference emojis by id with { name, animated } only —
   // fetch the image bytes once per unknown id and cache them
@@ -573,6 +587,7 @@ export const ChatView = (props: ChatViewProps) => {
         </Flex>
         {threadRoot ? (
           <ThreadPanel
+            active={active}
             api={api}
             chatId={chatId}
             root={messages.find((m) => m.id === threadRoot.id) || threadRoot}
@@ -606,6 +621,7 @@ export const ChatView = (props: ChatViewProps) => {
 
 // Slack-style thread side panel: its own page + composer, one level deep.
 const ThreadPanel = ({
+  active,
   api,
   chatId,
   root,
@@ -618,6 +634,7 @@ const ThreadPanel = ({
   onUploadEmoji,
   onSent
 }: {
+  active: boolean;
   api: MessengerApi;
   chatId: string;
   root: ChatMessage;
@@ -645,12 +662,13 @@ const ThreadPanel = ({
   }, [api, chatId, root.id]);
 
   React.useEffect(() => {
+    if (!active) return;
     void load();
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void load();
+    const interval = activityInterval('timer:components/Messenger/ChatView:1', 'Chat View', () => {
+      if (document.visibilityState === 'visible') return load();
     }, ACTIVE_POLL_MS);
-    return () => window.clearInterval(interval);
-  }, [load]);
+    return () => clearActivityInterval(interval);
+  }, [active, load]);
 
   const reactInThread = async (message: ChatMessage, token: string) => {
     if (message.id === root.id) return onReact(message, token);

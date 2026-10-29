@@ -1,3 +1,5 @@
+import LocalMediaPipeline from '../../webPlatform/LocalMediaPipeline';
+import { isPngThumbnail } from '../../utils/pngThumbnail';
 import { ComponentChange } from '../Builder/ComponentChange';
 import { ComponentMenu } from '../Builder/ComponentMenu';
 import { ComponentSelect } from '../Builder/ComponentSelect';
@@ -10,7 +12,8 @@ import { componentPageHref, componentNavigationState } from '../Builder/componen
 import { ComponentAttachments, ComponentMedia } from '../Builder/ComponentAttachments';
 import { ComponentDiscussion } from '../Builder/ComponentDiscussion';
 import { ComponentMap } from '../Builder/ComponentMap';
-import { ComponentDialog, ComponentForm, ComponentCountdown, NativeControlsEnabled } from '../Builder/NativeComponentControls';
+import { ComponentMapbox } from '../Builder/Maps/ComponentMapbox';
+import { ComponentDialog, ComponentForm, ComponentCountdown, NativeControlsEnabled, ComponentDisplayOnly } from '../Builder/NativeComponentControls';
 import { ComponentUpload } from '../Builder/ComponentUpload';
 import React from 'react';
 import { HtmlTemplateField } from './HtmlTemplateField';
@@ -24,6 +27,8 @@ import {
 } from './htmlRenderPolicy';
 
 import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './safeUrl';
+
+
 
 const WebPlatformSurface = React.lazy(() => import('../../webPlatform/WebPlatformSurface'));
 
@@ -71,6 +76,12 @@ export function InteractiveWorkspace({ name, children }: { name?: string; childr
 // back by habit should fail a test rather than ship.
 export const ALLOWED_PROPS = new Set([
 	'style',
+	'id',
+	'accept',
+	'hidden',
+	'download',
+	'preload',
+	'playsInline',
 	'className',
 	'class',
 	'href',
@@ -104,6 +115,12 @@ export const ALLOWED_PROPS = new Set([
 	// assistive tech — no URL, no JS sink, no validation engine
 	'role',
 	'aria-label',
+	'aria-live',
+	'aria-atomic',
+	'aria-valuenow',
+	'aria-valuemin',
+	'aria-valuemax',
+	'aria-valuetext',
 	'aria-hidden',
 	'aria-pressed',
 	'aria-expanded',
@@ -184,7 +201,7 @@ const sanitizeStyle = (style: unknown): React.CSSProperties | undefined => {
 	return out;
 };
 
-const sanitizeProps = (props: unknown): Record<string, unknown> => {
+const sanitizeProps = (props: unknown, tag?: string): Record<string, unknown> => {
 	if (!props || typeof props !== 'object' || Array.isArray(props)) return {};
 
 	const out: Record<string, unknown> = {};
@@ -203,7 +220,7 @@ const sanitizeProps = (props: unknown): Record<string, unknown> => {
 			return;
 		}
 		if ((key === 'href' || key === 'src' || key === 'poster') && typeof value === 'string') {
-			if (!isSafeUrl(value)) return;
+			if (!isSafeUrl(value) && !(tag === 'img' && key === 'src' && isPngThumbnail(value))) return;
 			out[key] = value;
 			return;
 		}
@@ -230,7 +247,10 @@ const fieldProps = (tag: string, props: Record<string, unknown>): Record<string,
 	const out: Record<string, unknown> = { ...props };
 	// Local bindings are controlled by LiveTemplate's bounded instance state.
 	// Keep the DOM in sync after another control changes a value or resets it.
-	if (out['data-tt-action'] === '$ui') return { ...out, value: out.value ?? '', onChange: () => {} };
+	if (out.type === 'file') { delete out.value; delete out.defaultValue; return out; }
+ if (out['data-tt-action'] === '$ui' || (out['data-tt-action'] === '$transient' && ('value' in out || 'checked' in out))) {
+  return { ...out, ...('checked' in out ? { checked: out.checked === true || out.checked === 'true' || out.checked === 'checked' } : { value: out.value ?? '' }), onChange: () => {} };
+ }
 	if ('value' in out) {
 		out.defaultValue = out.value;
 		delete out.value;
@@ -251,7 +271,7 @@ export type HtmlThingNode =
 			children?: HtmlThingNode[] | HtmlThingNode;
 	  };
 
-type RenderState = { count: number; mediaUrl: (url: string) => string };
+type RenderState = { displayOnly?: boolean; count: number; mediaUrl: (url: string) => string };
 
 function ComponentLink({ href, children, ...props }: Record<string, any>) {
 	const inRouter = useInRouterContext();
@@ -282,6 +302,8 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	if (!node || typeof node !== 'object' || Array.isArray(node)) return null;
 
 	const tag = String(node.tag || 'div').toLowerCase();
+	if (tag === 'tt-media-pipeline') return <LocalMediaPipeline key={key} pipeline={node.props?.pipeline}>{renderChildren(node.children, depth + 1, state)}</LocalMediaPipeline>;
+	if (tag === 'tt-web-platform' && state.displayOnly) return <p key={key}>Web Platform programs are available on the interactive page.</p>;
 	if (tag === 'tt-web-platform') return <React.Suspense key={key} fallback={<p>Web Platform program</p>}><WebPlatformSurface program={node.props?.program} name={node.props?.name} /></React.Suspense>;
 	if (tag === 'tt-service-workspace') {
 		const name = typeof node.props?.name === 'string' ? node.props.name : undefined;
@@ -309,6 +331,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	if (tag === 'tt-media') return <ComponentMedia key={key} {...node.props} />;
 	if (tag === 'tt-select') return <ComponentSelect key={key} {...node.props} />;
 	if (tag === 'tt-map') return <ComponentMap key={key} {...node.props} />;
+	if (tag === 'tt-mapbox') return <ComponentMapbox key={key} {...node.props} />;
 	if (tag === 'tt-form')
 		return (
 			<ComponentForm
@@ -349,7 +372,8 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 		return <span key={key}>{renderChildren(node.children, depth + 1, state)}</span>;
 	}
 
-	const props = fieldProps(tag, sanitizeProps(node.props));
+	const props = fieldProps(tag, sanitizeProps(node.props, tag));
+	if (state.displayOnly) { delete props['data-tt-action']; delete props['data-tt-action-inputs']; }
 	if (props.style) props.style = mapStyleMediaUrls(props.style, state.mediaUrl);
 	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
 
@@ -385,6 +409,27 @@ const renderChildren = (children: HtmlThingNode[] | HtmlThingNode | undefined, d
 };
 
 export const HtmlThingRenderer = ({ node }: { node: HtmlThingNode }) => {
-	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl() };
+	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl(), displayOnly: React.useContext(ComponentDisplayOnly) };
 	return <>{renderNode(node, 0, 0, state)}</>;
 };
+
+/** Individual Builder elements share the exact HTML allowlist and URL policy. */
+export function HtmlBlockElement({ tag, attributes, editorProps, children }: {
+ tag: string; attributes?: Record<string, unknown>; editorProps?: Record<string, any>; children?: React.ReactNode;
+}) {
+ const mediaUrl = useSharedMediaUrl();
+ if (tag === 'tt-media-pipeline') return <LocalMediaPipeline pipeline={attributes?.pipeline} editorProps={editorProps}>{children}</LocalMediaPipeline>;
+ if (tag === 'tt-mapbox') return <div {...editorProps}><ComponentMapbox {...attributes} /></div>;
+ if (tag === 'tt-style') return <div {...editorProps}><ComponentStyle rules={attributes?.rules}>{children}</ComponentStyle></div>;
+ if (tag === 'tt-form') return <div {...editorProps}><ComponentForm {...attributes}>{children}</ComponentForm></div>;
+ if (tag === 'tt-select') return <div {...editorProps}><ComponentSelect {...attributes} /></div>;
+ if (tag === 'tt-change') return <span {...editorProps}><ComponentChange {...attributes}>{children}</ComponentChange></span>;
+ const safeTag = ALLOWED_TAGS.has(tag) && !tag.startsWith('tt-') ? tag : 'div';
+ const props = fieldProps(safeTag, sanitizeProps(attributes, safeTag));
+ if (props.style) props.style = mapStyleMediaUrls(props.style, mediaUrl);
+ for (const key of ['src', 'poster', 'href']) if (typeof props[key] === 'string') props[key] = mediaUrl(props[key]);
+ const merged = { ...props, ...editorProps, style: { ...(props.style as React.CSSProperties), ...editorProps?.style } };
+ if (FIELD_TAGS.has(safeTag)) return <HtmlTemplateField tag={safeTag as 'input' | 'textarea' | 'select'} fieldProps={merged}>{safeTag === 'select' ? children : undefined}</HtmlTemplateField>;
+ if (safeTag === 'a') return <ComponentLink {...merged}>{children}</ComponentLink>;
+ return React.createElement(safeTag, merged, VOID_TAGS.has(safeTag) ? undefined : children);
+}

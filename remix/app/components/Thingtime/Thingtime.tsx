@@ -1,3 +1,4 @@
+import { ThingFields } from './ThingFields';
 import React from 'react';
 import ContentEditable from 'react-contenteditable';
 import * as Chakras from '@chakra-ui/react';
@@ -155,7 +156,12 @@ export const NumberValueInput = (props: { value: number; onValueChange: (value: 
 
 // join any with ThingtimeProps
 type ThingtimeComponentProps = ThingtimeProps & any;
-export const Thingtime = (args: ThingtimeComponentProps = {}) => {
+// Controlled fields mods keep sensitive editors out of the global Thing store,
+// context-menu exports, window.meta, undo history and persistent caches.
+export const Thingtime = (args: ThingtimeComponentProps = {}) => args.mods?.layout === 'fields'
+  ? <ThingFields thing={args.thing ?? args.value ?? {}} mods={args.mods} onChange={args.onChange} onModsChange={args.onModsChange} />
+  : <ThingtimeTree {...args} />;
+const ThingtimeTree = (args: ThingtimeComponentProps = {}) => {
 	const props = {
 		...args
 	};
@@ -186,7 +192,7 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 
 	const [circular, setCircular] = React.useState(props?.circular);
 
-	const thingtimeRef = React.useRef();
+	const thingtimeRef = React.useRef<HTMLDivElement | null>(null);
 
 	const [showFullPathContext, setShowFullPathContext] = React.useState(false);
 	// hover context on the key/property name itself (claude-todo 08 §5): shown

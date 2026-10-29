@@ -1,15 +1,23 @@
 import { parseTimelineEntry, TIMELINE_PAGE_SIZE, type TimelineEntry, type TimelineEvent } from './contract.ts';
 import type { TimelineLocalStore } from './localStore.ts';
 import type { TimelineBranchStore } from './branchStore.ts';
+import type { TimelineNoteStore } from './noteStore.ts';
+import type { TimelineNameStore } from './nameStore.ts';
+import { parseTimelineNote, parseTimelineNoteResult, TIMELINE_NOTES_PER_EVENT, type TimelineNote, type TimelineNoteCommand, type TimelineNoteResult } from './notes.ts';
+import { parseTimelineVersionName, type TimelineVersionName } from './versionNames.ts';
 import { parseRelatedTimelineScope, timelineRelatedId, timelineRelatedRevision, type RelatedTimelineScope } from './relatedHistory.ts';
 import { parseTimelineBranchEntry, parseTimelineBranchLookup, parseTimelineBranchLookupResult, type TimelineBranchEntry, type TimelineBranchCommand, type TimelineBranchResult, type TimelineBranchPage } from './branches.ts';
 
 export type TimelineCursor = { before?: number; after?: number; related?: true; relatedRevision?: string };
 export type TimelinePageRequest = { thingId: string | null; before: number | null; after: number | null; limit: number; related?: true; relatedRevision?: string };
-export type TimelinePage = { entries: TimelineEntry[]; nextBefore: number | null; nextAfter: number | null; related?: RelatedTimelineScope; reset?: true };
+/** `notes` are the contextual messages for the page's events (see notes.ts) and
+ * `names` their 📌 version names (see versionNames.ts); older servers omit both. */
+export type TimelinePage = { entries: TimelineEntry[]; nextBefore: number | null; nextAfter: number | null; related?: RelatedTimelineScope; reset?: true; notes?: TimelineNote[]; names?: TimelineVersionName[] };
 /** The queue persisted a definitive command outcome. History reads remain
  * healthy; the owning branch control presents the actionable refusal. */
 export class TimelineBranchCommandRefusal extends Error {}
+/** The queue persisted a definitive note refusal; events and branches synced. */
+export class TimelineNoteCommandRefusal extends Error {}
 export interface TimelineTransport {
 	push(event: TimelineEvent, signal: AbortSignal): Promise<TimelineEntry>;
 	recoverOutcome?(event: TimelineEvent, proof: string, signal: AbortSignal): Promise<TimelineEntry>;
@@ -17,7 +25,9 @@ export interface TimelineTransport {
 	branch?(command: TimelineBranchCommand, signal: AbortSignal): Promise<TimelineBranchResult>;
 	branches?(thingId: string, before: number | undefined, signal: AbortSignal): Promise<TimelineBranchPage>;
 	branchHead?(branchId: string, thingId: string, signal: AbortSignal): Promise<TimelineBranchEntry>;
-	entry?(eventId: string, signal: AbortSignal): Promise<TimelineEntry>;
+	/** A bare entry remains accepted; servers with contextual notes wrap it. */
+	entry?(eventId: string, signal: AbortSignal): Promise<TimelineEntry | { entry: TimelineEntry; notes?: TimelineNote[]; names?: TimelineVersionName[] }>;
+	note?(command: TimelineNoteCommand, signal: AbortSignal): Promise<TimelineNoteResult>;
 }
 
 /** One instance per signed-in origin/data-plane scope. The UI owns the live
@@ -27,7 +37,7 @@ export class TimelineSync {
 	private pushing: Promise<number> | null = null;
 	private pages = new Map<string, Promise<TimelinePage>>();
 	private branchPages = new Map<string, Promise<TimelineBranchPage>>();
-	constructor(readonly store: TimelineLocalStore, private transport: TimelineTransport, readonly branchStore?: TimelineBranchStore) {}
+	constructor(readonly store: TimelineLocalStore, private transport: TimelineTransport, readonly branchStore?: TimelineBranchStore, readonly noteStore?: TimelineNoteStore, readonly nameStore?: TimelineNameStore) {}
 	stop() { this.controller.abort(); }
 	/** Fetch one pointer directly; the bounded cache is not a branch directory.
 	 * Accepting a read never acknowledges or replaces a queued push. */
@@ -56,10 +66,15 @@ export class TimelineSync {
 		// an upload may reference an edit that missed this pass's event snapshot;
 		// defer both to the next pass instead of mistaking that version for a 404.
 		const commands = await this.branchStore?.pending() ?? [];
+		const noteCommands = await this.noteStore?.pending() ?? [];
 		const refused = new Set<string>(); let outcomeFailure: unknown;
 		// A bounded drain: later edits schedule another pass. Uncertain replies
 		// stop the pass; definitive recovery refusals retain all dependent work.
-		for (const { event, recoveryProof } of await this.store.pendingWrites()) {
+		const writes = await this.store.pendingWrites();
+		// A note for a version that has not been uploaded yet waits for it;
+		// the server cannot know that event and would refuse the note as missing.
+		const waiting = new Set(writes.map(row => row.event.id));
+		for (const { event, recoveryProof } of writes) {
 			this.assertActive();
 			if ([...event.parentIds, ...event.dependencies.map(link => link.eventId)].some(id => refused.has(id))) { refused.add(event.id); continue; }
 			if (recoveryProof && !this.transport.recoverOutcome) throw new Error('This server does not support Action history recovery. Your local outcome is preserved.');
@@ -78,6 +93,7 @@ export class TimelineSync {
 			this.assertActive();
 			if (entry.event.id !== event.id) throw new Error('Timeline server acknowledged a different event');
 			await this.store.accept([entry]);
+			waiting.delete(event.id);
 			accepted++;
 		}
 		let branchFailure: unknown;
@@ -104,9 +120,60 @@ export class TimelineSync {
 			await this.store.releaseDraft(command.eventId);
 			accepted++;
 		}
+		let noteFailure: unknown;
+		for (const command of noteCommands) {
+			this.assertActive();
+			if (command.command !== 'remove-note' && (refused.has(command.eventId) || waiting.has(command.eventId))) continue;
+			if (!this.transport.note) throw new Error('This server does not support note synchronization. Your note is preserved.');
+			let response: TimelineNoteResult;
+			try { response = await this.transport.note(command, this.controller.signal); }
+			catch (error: any) {
+				this.assertActive();
+				if (![400, 404, 409, 413, 422].includes(error?.status)) throw error;
+				await this.noteStore!.reject(command.operationId, error.status, error.error || error.message || 'Note command was refused.');
+				noteFailure ??= error; continue;
+			}
+			this.assertActive();
+			const result = parseTimelineNoteResult(response, this.store.scope.ownerId, command);
+			if ('removed' in result) await this.noteStore!.removed([result.noteId], command.operationId);
+			else await this.noteStore!.accept([result.note], { operationId: command.operationId });
+			accepted++;
+		}
 		if (branchFailure) throw new TimelineBranchCommandRefusal('A branch push needs attention. Its selected version remains in History.');
+		if (noteFailure) throw new TimelineNoteCommandRefusal('A note needs attention. Your other changes are synced.');
 		if (outcomeFailure) throw outcomeFailure;
 		return accepted;
+	}
+	/** Notes travel beside the entries they belong to; a server without them
+	 * omits the field, and an unknown event or another account fails the read. */
+	private pageNotes(input: unknown, eventIds: string[]): TimelineNote[] | undefined {
+		if (input === undefined) return undefined;
+		if (!Array.isArray(input) || input.length > TIMELINE_PAGE_SIZE * TIMELINE_NOTES_PER_EVENT) throw new Error('Invalid Timeline page');
+		const events = new Set(eventIds); const seen = new Set<string>();
+		return input.map(item => {
+			const note = parseTimelineNote(item);
+			if (note.ownerId !== this.store.scope.ownerId || !events.has(note.eventId) || seen.has(note.id)) throw new Error('Invalid Timeline page');
+			seen.add(note.id); return note;
+		});
+	}
+	/** One 📌 name per page event, same owner, and never for an event outside
+	 * the page; a server without names omits the field. */
+	private pageNames(input: unknown, eventIds: string[]): TimelineVersionName[] | undefined {
+		if (input === undefined) return undefined;
+		if (!Array.isArray(input) || input.length > TIMELINE_PAGE_SIZE) throw new Error('Invalid Timeline page');
+		const events = new Set(eventIds); const seen = new Set<string>();
+		return input.map(item => {
+			const name = parseTimelineVersionName(item);
+			if (name.ownerId !== this.store.scope.ownerId || !events.has(name.eventId) || seen.has(name.eventId)) throw new Error('Invalid Timeline page');
+			seen.add(name.eventId); return name;
+		});
+	}
+	/** Accepted name-change effects keep already-loaded versions current. Pages
+	 * before a cursor arrive newest-first; apply in acceptance order so a later
+	 * clear or rename is never undone by the effect it superseded. */
+	private applyNameEffects(entries: TimelineEntry[]) {
+		if (!this.nameStore) return;
+		for (const entry of [...entries].sort((a, b) => a.receipt.position - b.receipt.position)) this.nameStore.applyEffect(entry.event);
 	}
 	branchPage(thingId: string, before?: number): Promise<TimelineBranchPage> {
 		const key = JSON.stringify([thingId, before ?? null]); const current = this.branchPages.get(key); if (current) return current;
@@ -127,9 +194,17 @@ export class TimelineSync {
 	async entry(eventId: string): Promise<TimelineEntry> {
 		this.assertActive();
 		if (!this.transport.entry) throw new Error('Loading this version is unavailable.');
-		const entry = parseTimelineEntry(await this.transport.entry(eventId, this.controller.signal)); this.assertActive();
+		const response = await this.transport.entry(eventId, this.controller.signal); this.assertActive();
+		const wrapped = !!response && typeof response === 'object' && 'entry' in response;
+		const entry = parseTimelineEntry(wrapped ? response.entry : response);
 		if (entry.event.id !== eventId) throw new Error('Server returned a different version');
-		await this.store.accept([entry]); return entry;
+		const notes = this.pageNotes(wrapped ? response.notes : undefined, [eventId]);
+		const names = this.pageNames(wrapped ? response.names : undefined, [eventId]);
+		this.applyNameEffects([entry]);
+		await this.store.accept([entry]);
+		if (notes) await this.noteStore?.accept(notes, { events: [eventId] });
+		if (names) this.nameStore?.accept(names, { events: [eventId] });
+		return entry;
 	}
 	page(thingId: string | null, cursor: TimelineCursor = {}): Promise<TimelinePage> {
 		const key = JSON.stringify([thingId, cursor.before ?? null, cursor.after ?? null, cursor.related ?? false, cursor.relatedRevision ?? null]);
@@ -169,7 +244,13 @@ export class TimelineSync {
 		if (paging.after !== undefined ? response.nextBefore !== null : response.nextAfter !== null) throw new Error('Invalid Timeline continuation direction');
 		const next = paging.after !== undefined ? response.nextAfter : response.nextBefore;
 		if (next !== null && next !== previous) throw new Error('Timeline continuation would skip events');
+		const ids = entries.map(entry => entry.event.id);
+		const notes = this.pageNotes(response.notes, ids);
+		const names = this.pageNames(response.names, ids);
+		this.applyNameEffects(entries);
 		await this.store.accept(entries);
-		return { entries, nextBefore: response.nextBefore, nextAfter: response.nextAfter, ...(related ? { related } : {}), ...(response.reset ? { reset: true } : {}) };
+		if (notes) await this.noteStore?.accept(notes, { events: ids });
+		if (names) this.nameStore?.accept(names, { events: ids });
+		return { entries, nextBefore: response.nextBefore, nextAfter: response.nextAfter, ...(related ? { related } : {}), ...(response.reset ? { reset: true } : {}), ...(notes ? { notes } : {}), ...(names ? { names } : {}) };
 	}
 }

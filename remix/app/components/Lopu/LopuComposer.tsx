@@ -1,3 +1,4 @@
+import { LopuCredentialSettings } from './LopuCredentialSettings';
 import { chatAttachmentInput } from '../Attachments/chatAttachmentInput';
 import { LOPU_MAX_MESSAGE_CHARS } from './composerDictation';
 import { useLopuVisualViewport } from './useLopuVisualViewport';
@@ -227,6 +228,7 @@ export const LopuComposer = ({
 		[inputRef]
 	);
 	const fieldDisabled = disabled || inputDisabled;
+	const localPlan = settings.providerId?.startsWith('chatgpt-plan-') === true;
 	const canSend = !fieldDisabled && !sendDisabled && (!streaming || !!onQueue) && value.trim().length > 0;
 	const controlSize = isMobile ? LOPU_UI.touchTarget : compact ? 30 : 36;
 	const iconSize = isMobile ? LOPU_UI.touchTarget : compact ? 28 : 32;
@@ -278,7 +280,7 @@ export const LopuComposer = ({
 			? 'Enter to queue · Shift+Enter for a new line'
 			: 'Enter to send · Shift+Enter for a new line'
 		: 'Shift+Enter for a new line · ⌘Enter to send';
-	const showSettings = !hideSettings && (!!preferences || !!settingsContent);
+	const showSettings = !hideSettings;
 
 	return (
 		<Box className="lopuComposerWrap" minW={0} maxW="100%" sx={{ '&, & *': { boxSizing: 'border-box' } }}>
@@ -371,7 +373,7 @@ export const LopuComposer = ({
 					) : null}
 					<Flex align="center" gap={1.5} flexShrink={0} ml="auto">
 						{showSettings ? (
-							<Popover placement="top-end" isLazy strategy="fixed" gutter={8} modifiers={[{ name: "preventOverflow", options: { padding: 12 } }, { name: "flip", options: { padding: 12 } }]}>
+							<Popover placement="top-end" isLazy strategy="fixed" gutter={8} modifiers={[{ name: "preventOverflow", options: { padding: 12, altAxis: true, tether: false } }, { name: "flip", options: { padding: 12 } }]}>
 								<PopoverTrigger>
 									<Box as="span" display="inline-flex">
 										<IconButton label="Chat settings" size={iconSize}>
@@ -379,7 +381,7 @@ export const LopuComposer = ({
 										</IconButton>
 									</Box>
 								</PopoverTrigger>
-								<Portal appendToParentPortal={false}><PopoverContent zIndex={DRAWER_POPUP_Z}
+								<Portal appendToParentPortal={false}><PopoverContent rootProps={{ zIndex: DRAWER_POPUP_Z }} zIndex={DRAWER_POPUP_Z}
 									width="300px"
 									maxW="calc(100vw - 24px)"
 									sx={lopuPopoverSx}
@@ -387,10 +389,11 @@ export const LopuComposer = ({
 									_focusVisible={{ outline: 'none', boxShadow: LOPU_UI.shadowPopover }}
 									aria-label="Chat settings"
 								>
-									<PopoverBody px={3} py={2}>
+									<PopoverBody px={3} py={2} maxH="min(70dvh, calc(100dvh - 24px))" overflowY="auto" overscrollBehavior="contain">
 										<Text as="span" display="block" sx={lopuEyebrowSx} pt={1} pb={1}>
 											This chat
 										</Text>
+										<LopuCredentialSettings value={settings} models={models} providers={vaultProviders || []} onChange={onSettingsChange} disabled={disabled || streaming} />
 										{preferences ? (
 											<>
                                                 <SettingsRow
@@ -440,7 +443,7 @@ export const LopuComposer = ({
             </Select>
             <Text fontSize="11px" color={LOPU_UI.muted} mt={1} lineHeight="1.3">{settings.accessMode === 'full' ? 'Lopu can run Actions and change things without asking in this chat.' : 'Lopu asks before running Actions or changing things in this chat.'}</Text>
           </Box>
-          <SettingsRow label="Vercel chat management" hint="Server continues saved work after this page closes" control={<LopuToggle checked={settings.management === 'server'} onChange={value => onSettingsChange({ management: value ? 'server' : 'client' })} label="Vercel chat management" />} />
+          <SettingsRow label="Vercel chat management" hint={localPlan ? "ChatGPT plans use this runtime. Keep the page open for continuation." : "Server continues saved work after this page closes"} control={<LopuToggle disabled={localPlan} checked={!localPlan && settings.management === 'server'} onChange={value => onSettingsChange({ management: value ? 'server' : 'client' })} label="Vercel chat management" />} />
 										{settingsContent ? (
 											<Box borderTop={preferences ? LOPU_UI.border : undefined} pt={preferences ? 2 : 0} mt={preferences ? 1 : 0}>
 												{settingsContent}
@@ -471,7 +474,7 @@ export const LopuComposer = ({
 												<ChevronDown size={14} />
 											</Box>
 										</PopoverTrigger>
-										<Portal appendToParentPortal={false}><PopoverContent zIndex={DRAWER_POPUP_Z} width="220px" maxW="calc(100vw - 24px)" sx={lopuPopoverSx}>
+										<Portal appendToParentPortal={false}><PopoverContent rootProps={{ zIndex: DRAWER_POPUP_Z }} zIndex={DRAWER_POPUP_Z} width="220px" maxW="calc(100vw - 24px)" sx={lopuPopoverSx}>
 											<PopoverBody p={2}>
 												<Button width="100%" size="sm" variant="ghost" justifyContent="flex-start" isDisabled={!canSend} onClick={submit}>
 													Send after reply
@@ -520,10 +523,10 @@ export const LopuComposer = ({
 <Flex align="center" gap={1}>
         {onSendManaged ? <Popover placement="top-end" isLazy strategy="fixed" gutter={8} modifiers={[{ name: "preventOverflow", options: { padding: 12 } }, { name: "flip", options: { padding: 12 } }]}>
           <PopoverTrigger><Box as="button" type="button" aria-label="More send options" width={isMobile ? '40px' : '28px'} height={`${controlSize}px`} display="grid" placeItems="center" borderRadius="full"><ChevronDown size={14} /></Box></PopoverTrigger>
-          <Portal appendToParentPortal={false}><PopoverContent zIndex={DRAWER_POPUP_Z} width="260px" maxW="calc(100vw - 24px)" sx={lopuPopoverSx}><PopoverBody p={2}>
-           <Button width="100%" size="sm" variant="ghost" justifyContent="flex-start" isDisabled={!canSend} onClick={() => onSendManaged(value.trim(), 'server')}>Send with Vercel management</Button>
+          <Portal appendToParentPortal={false}><PopoverContent rootProps={{ zIndex: DRAWER_POPUP_Z }} zIndex={DRAWER_POPUP_Z} width="260px" maxW="calc(100vw - 24px)" sx={lopuPopoverSx}><PopoverBody p={2}>
+           <Button width="100%" size="sm" variant="ghost" justifyContent="flex-start" isDisabled={!canSend || localPlan} onClick={() => onSendManaged(value.trim(), 'server')}>Send with Vercel management</Button>
            <Button width="100%" size="sm" variant="ghost" justifyContent="flex-start" isDisabled={!canSend} onClick={() => onSendManaged(value.trim(), 'client')}>Send with local management</Button>
-           <Text fontSize="xs" color={LOPU_UI.muted} px={3} py={2}>Local management needs an open page to continue. Both modes use your selected AI provider.</Text>
+           <Text fontSize="xs" color={LOPU_UI.muted} px={3} py={2}>{localPlan ? "ChatGPT plans use local management. Keep this page open for continuation." : "Local management needs an open page to continue. Both modes use your selected AI provider."}</Text>
           </PopoverBody></PopoverContent></Portal>
         </Popover> : null}
         <ActionButton kind="send" size={controlSize} disabled={!canSend} onClick={submit} label={isMobile || !enterSends ? 'Send' : 'Send (Enter)'} />

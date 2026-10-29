@@ -1,3 +1,4 @@
+import { SettingsSection } from '~/components/Settings/SettingsSection';
 import React from 'react';
 import { Box, Button, Flex, Input, Select, Text } from '@chakra-ui/react';
 
@@ -71,13 +72,31 @@ const Chip = ({ children, tone = 'muted' }: { children: React.ReactNode; tone?: 
 		letterSpacing="0.02em"
 		lineHeight={1}
 		whiteSpace="nowrap"
-		color={tone === 'danger' ? LOPU_UI.danger : tone === 'positive' ? LOPU_UI.positive : tone === 'warning' ? LOPU_UI.warning : tone === 'ink' ? LOPU_UI.ink : LOPU_UI.muted}
+		color={
+			tone === 'danger'
+				? LOPU_UI.danger
+				: tone === 'positive'
+				? LOPU_UI.positive
+				: tone === 'warning'
+				? LOPU_UI.warning
+				: tone === 'ink'
+				? LOPU_UI.ink
+				: LOPU_UI.muted
+		}
 	>
 		{children}
 	</Box>
 );
 
-const SmallButton = (props: { onClick: () => void; children: React.ReactNode; busy?: boolean; disabled?: boolean; primary?: boolean; danger?: boolean; title?: string }) => (
+const SmallButton = (props: {
+	onClick: () => void;
+	children: React.ReactNode;
+	busy?: boolean;
+	disabled?: boolean;
+	primary?: boolean;
+	danger?: boolean;
+	title?: string;
+}) => (
 	<Button
 		size="xs"
 		variant={props.primary ? 'solid' : 'outline'}
@@ -102,7 +121,10 @@ const errorMessage = (error: unknown, fallback: string): string => {
 };
 
 const sameAccess = (a: LopuAccessSettings, b: LopuAccessSettings): boolean =>
-	a.requireVerification === b.requireVerification && a.allowByoUnverified === b.allowByoUnverified && a.starterCredits === b.starterCredits && a.lowBalanceWarningCredits === b.lowBalanceWarningCredits;
+	a.requireVerification === b.requireVerification &&
+	a.allowByoUnverified === b.allowByoUnverified &&
+	a.starterCredits === b.starterCredits &&
+	a.lowBalanceWarningCredits === b.lowBalanceWarningCredits;
 
 const readAccessCache = (): LopuAccessSettings => normalizeLopuAccessSettings(readLocalCache<unknown>(ACCESS_CACHE_KEY) ?? LOPU_ACCESS_DEFAULTS);
 
@@ -203,43 +225,52 @@ const AccessSettingsEditor = () => {
 	);
 
 	return (
-		<Flex direction="column" gap={1} data-lopu-access-editor>
-			<Text sx={eyebrow}>Access rules</Text>
-			<Flex align="center" gap={3} py={1.5}>
-				<Box minW={0} flex={1}>
-					<Text fontSize="sm" fontWeight={600} color={LOPU_UI.ink} lineHeight="1.3">
-						Require verification
-					</Text>
-					<Text fontSize="11px" color={LOPU_UI.muted} lineHeight="1.4">
-						New accounts start unverified — Lopu is invite-only until you verify them below. Admins are always verified.
-					</Text>
-				</Box>
-				<LopuToggle checked={current.requireVerification} onChange={(next) => patch({ requireVerification: next })} label="Require verification" />
+		<SettingsSection
+			eyebrow="Access rules"
+			description="Verification, personal providers, starter credits, and balance warnings."
+			summary={current.requireVerification ? 'Verification required' : 'Verification optional'}
+		>
+			<Flex direction="column" gap={1} data-lopu-access-editor>
+				<Flex align="center" gap={3} py={1.5}>
+					<Box minW={0} flex={1}>
+						<Text fontSize="sm" fontWeight={600} color={LOPU_UI.ink} lineHeight="1.3">
+							Require verification
+						</Text>
+						<Text fontSize="11px" color={LOPU_UI.muted} lineHeight="1.4">
+							New accounts start unverified — Lopu is invite-only until you verify them below. Admins are always verified.
+						</Text>
+					</Box>
+					<LopuToggle checked={current.requireVerification} onChange={(next) => patch({ requireVerification: next })} label="Require verification" />
+				</Flex>
+				<Flex align="center" gap={3} py={1.5}>
+					<Box minW={0} flex={1}>
+						<Text fontSize="sm" fontWeight={600} color={LOPU_UI.ink} lineHeight="1.3">
+							Allow own providers when unverified
+						</Text>
+						<Text fontSize="11px" color={LOPU_UI.muted} lineHeight="1.4">
+							An unverified account may still chat on a Secure Vault provider of its own (no Thingtime credits are used).
+						</Text>
+					</Box>
+					<LopuToggle
+						checked={current.allowByoUnverified}
+						onChange={(next) => patch({ allowByoUnverified: next })}
+						label="Allow own providers when unverified"
+					/>
+				</Flex>
+				{numberField('Starter credits', 'starterCredits', 'Granted once when an account first meets Lopu (1 credit = 1 USD of list price).')}
+				{numberField('Low-balance warning', 'lowBalanceWarningCredits', 'The balance chip turns amber under this many credits.')}
+				<Flex gap={2} align="center" pt={1}>
+					<SmallButton primary busy={saving} disabled={!dirty} onClick={() => void save()}>
+						Save access settings
+					</SmallButton>
+					{dirty ? (
+						<Button size="xs" variant="ghost" color={LOPU_UI.muted} onClick={() => setDraft(null)}>
+							Discard
+						</Button>
+					) : null}
+				</Flex>
 			</Flex>
-			<Flex align="center" gap={3} py={1.5}>
-				<Box minW={0} flex={1}>
-					<Text fontSize="sm" fontWeight={600} color={LOPU_UI.ink} lineHeight="1.3">
-						Allow own providers when unverified
-					</Text>
-					<Text fontSize="11px" color={LOPU_UI.muted} lineHeight="1.4">
-						An unverified account may still chat on a Secure Vault provider of its own (no Thingtime credits are used).
-					</Text>
-				</Box>
-				<LopuToggle checked={current.allowByoUnverified} onChange={(next) => patch({ allowByoUnverified: next })} label="Allow own providers when unverified" />
-			</Flex>
-			{numberField('Starter credits', 'starterCredits', 'Granted once when an account first meets Lopu (1 credit = 1 USD of list price).')}
-			{numberField('Low-balance warning', 'lowBalanceWarningCredits', 'The balance chip turns amber under this many credits.')}
-			<Flex gap={2} align="center" pt={1}>
-				<SmallButton primary busy={saving} disabled={!dirty} onClick={() => void save()}>
-					Save access settings
-				</SmallButton>
-				{dirty ? (
-					<Button size="xs" variant="ghost" color={LOPU_UI.muted} onClick={() => setDraft(null)}>
-						Discard
-					</Button>
-				) : null}
-			</Flex>
-		</Flex>
+		</SettingsSection>
 	);
 };
 
@@ -281,7 +312,15 @@ const AccountRow = ({
 	};
 
 	return (
-		<Box className="lopuAccountRow" data-user-id={row.user.id} px={3} py={2} borderRadius={LOPU_UI.radiusMd} border={LOPU_UI.border} bg={LOPU_UI.surfaceAlt}>
+		<Box
+			className="lopuAccountRow"
+			data-user-id={row.user.id}
+			px={3}
+			py={2}
+			borderRadius={LOPU_UI.radiusMd}
+			border={LOPU_UI.border}
+			bg={LOPU_UI.surfaceAlt}
+		>
 			<Flex align="center" gap={3} wrap="wrap">
 				<Box minW={0} flex="1 1 200px">
 					<Flex align="center" gap={2} wrap="wrap">
@@ -297,11 +336,18 @@ const AccountRow = ({
 						{row.noAccount ? <Chip>has not met Lopu yet</Chip> : null}
 					</Flex>
 					<Text fontSize="11px" color={LOPU_UI.muted} mt="2px">
-						This month {formatCredits(row.month.costMicros)} over {row.month.turns} {row.month.turns === 1 ? 'turn' : 'turns'} · lifetime {formatCredits(row.lifetime.costMicros)} over{' '}
-						{row.lifetime.turns} {row.lifetime.turns === 1 ? 'turn' : 'turns'}
+						This month {formatCredits(row.month.costMicros)} over {row.month.turns} {row.month.turns === 1 ? 'turn' : 'turns'} · lifetime{' '}
+						{formatCredits(row.lifetime.costMicros)} over {row.lifetime.turns} {row.lifetime.turns === 1 ? 'turn' : 'turns'}
 					</Text>
 				</Box>
-				<Text fontSize="sm" fontWeight={700} fontFamily={LOPU_UI.fontMono} color={row.balanceMicros <= 0 ? LOPU_UI.danger : LOPU_UI.ink} flexShrink={0} title="Balance">
+				<Text
+					fontSize="sm"
+					fontWeight={700}
+					fontFamily={LOPU_UI.fontMono}
+					color={row.balanceMicros <= 0 ? LOPU_UI.danger : LOPU_UI.ink}
+					flexShrink={0}
+					title="Balance"
+				>
 					{formatCredits(row.balanceMicros)}
 				</Text>
 				{/* the caption is a button too: a 44px hit target beside the 26px switch */}
@@ -311,7 +357,13 @@ const AccountRow = ({
 						type="button"
 						disabled={busy || row.user.isAdmin}
 						aria-label={verified ? `Unverify ${row.user.username} for Lopu` : `Verify ${row.user.username} for Lopu`}
-						title={row.user.isAdmin ? 'Admins are always verified' : verified ? 'Make Lopu invite-only for this account again' : 'Let this account build with Lopu'}
+						title={
+							row.user.isAdmin
+								? 'Admins are always verified'
+								: verified
+								? 'Make Lopu invite-only for this account again'
+								: 'Let this account build with Lopu'
+						}
 						minH={`${LOPU_UI.touchTarget}px`}
 						px={2}
 						fontSize="xs"
@@ -344,8 +396,20 @@ const AccountRow = ({
 					</Text>
 					{declining ? (
 						<>
-							<Input size="xs" width="180px" value={declineReason} placeholder="Reason (optional)" aria-label="Decline reason" onChange={(event) => setDeclineReason(event.target.value)} sx={inputSx} />
-							<SmallButton danger busy={busy} onClick={() => void onRequest(row, false, declineReason.trim()).then((ok) => ok && setDeclining(false))}>
+							<Input
+								size="xs"
+								width="180px"
+								value={declineReason}
+								placeholder="Reason (optional)"
+								aria-label="Decline reason"
+								onChange={(event) => setDeclineReason(event.target.value)}
+								sx={inputSx}
+							/>
+							<SmallButton
+								danger
+								busy={busy}
+								onClick={() => void onRequest(row, false, declineReason.trim()).then((ok) => ok && setDeclining(false))}
+							>
 								Decline
 							</SmallButton>
 							<Button size="xs" variant="ghost" color={LOPU_UI.muted} onClick={() => setDeclining(false)}>
@@ -367,15 +431,41 @@ const AccountRow = ({
 
 			{open ? (
 				<Flex align="center" gap={2} wrap="wrap" mt={2} pt={2} borderTop={LOPU_UI.border}>
-					<Input size="xs" type="number" inputMode="decimal" step="0.5" width="96px" value={credits} aria-label="Credits" isInvalid={credits !== '' && !amountValid} onChange={(event) => setCredits(event.target.value)} sx={inputSx} />
-					<Select size="xs" width="130px" value={entry} aria-label="Ledger entry" onChange={(event) => setEntry(event.target.value as CreditEntry)} sx={inputSx}>
+					<Input
+						size="xs"
+						type="number"
+						inputMode="decimal"
+						step="0.5"
+						width="96px"
+						value={credits}
+						aria-label="Credits"
+						isInvalid={credits !== '' && !amountValid}
+						onChange={(event) => setCredits(event.target.value)}
+						sx={inputSx}
+					/>
+					<Select
+						size="xs"
+						width="130px"
+						value={entry}
+						aria-label="Ledger entry"
+						onChange={(event) => setEntry(event.target.value as CreditEntry)}
+						sx={inputSx}
+					>
 						{CREDIT_ENTRIES.map((option) => (
 							<option key={option.value} value={option.value}>
 								{option.label}
 							</option>
 						))}
 					</Select>
-					<Input size="xs" flex="1 1 160px" value={reason} placeholder="Reason" aria-label="Reason" onChange={(event) => setReason(event.target.value)} sx={inputSx} />
+					<Input
+						size="xs"
+						flex="1 1 160px"
+						value={reason}
+						placeholder="Reason"
+						aria-label="Reason"
+						onChange={(event) => setReason(event.target.value)}
+						sx={inputSx}
+					/>
 					<SmallButton primary busy={busy} disabled={!amountValid} onClick={() => void submitCredits()}>
 						{amount < 0 ? 'Take credits' : 'Add credits'}
 					</SmallButton>
@@ -448,7 +538,8 @@ export const LopuAccountsAdmin = () => {
 		void load(q, null);
 	};
 
-	const patchRow = (userId: string, patch: (row: LopuAdminAccountRow) => LopuAdminAccountRow) => setRows((current) => current.map((row) => (row.user.id === userId ? patch(row) : row)));
+	const patchRow = (userId: string, patch: (row: LopuAdminAccountRow) => LopuAdminAccountRow) =>
+		setRows((current) => current.map((row) => (row.user.id === userId ? patch(row) : row)));
 
 	const verify = async (row: LopuAdminAccountRow, verified: boolean) => {
 		if (busyId) return;
@@ -461,7 +552,11 @@ export const LopuAccountsAdmin = () => {
 			if (resp?.ok === false) throw new Error(errorMessage(resp, 'Could not update the account'));
 			const saved = resp?.user && typeof resp.user === 'object' && typeof resp.user.lopuVerified === 'boolean' ? resp.user.lopuVerified : verified;
 			patchRow(row.user.id, (entry) => ({ ...entry, user: { ...entry.user, lopuVerified: saved } }));
-			lopu({ title: saved ? `@${row.user.username} can use Lopu ✨` : `@${row.user.username} is invite-only again`, status: 'success', duration: 5000 });
+			lopu({
+				title: saved ? `@${row.user.username} can use Lopu ✨` : `@${row.user.username} is invite-only again`,
+				status: 'success',
+				duration: 5000
+			});
 			if (row.user.id === me?.id) void refreshLopuAccount();
 		} catch (error: unknown) {
 			patchRow(row.user.id, (entry) => ({ ...entry, user: { ...entry.user, lopuVerified: previous } }));
@@ -488,7 +583,12 @@ export const LopuAccountsAdmin = () => {
 		if (busyId) return false;
 		setBusyId(row.user.id);
 		try {
-			const resp = await apiRef.current.v1.admin.lopuCredits({ userId: row.user.id, credits: args.credits, entry: args.entry, reason: args.reason || `${args.entry} by admin` });
+			const resp = await apiRef.current.v1.admin.lopuCredits({
+				userId: row.user.id,
+				credits: args.credits,
+				entry: args.entry,
+				reason: args.reason || `${args.entry} by admin`
+			});
 			if (resp?.ok === false) throw new Error(errorMessage(resp, 'Could not update the credits'));
 			applyCreditsResponse(row, resp, Math.round(args.credits * 1_000_000));
 			lopu({ title: `${args.credits > 0 ? '+' : ''}${args.credits} credits for @${row.user.username} ✨`, status: 'success', duration: 5000 });
@@ -509,12 +609,29 @@ export const LopuAccountsAdmin = () => {
 		try {
 			const credits = pending.amountMicros / 1_000_000;
 			const resp = approve
-				? await apiRef.current.v1.admin.lopuCredits({ userId: row.user.id, credits, entry: 'topup', reason: reason || 'top-up request approved', ...(pending.id ? { requestId: pending.id } : {}) })
-				: await apiRef.current.v1.admin.lopuCredits({ userId: row.user.id, ...(pending.id ? { requestId: pending.id } : {}), decline: true, reason: reason || 'declined by admin' });
+				? await apiRef.current.v1.admin.lopuCredits({
+						userId: row.user.id,
+						credits,
+						entry: 'topup',
+						reason: reason || 'top-up request approved',
+						...(pending.id ? { requestId: pending.id } : {})
+				  })
+				: await apiRef.current.v1.admin.lopuCredits({
+						userId: row.user.id,
+						...(pending.id ? { requestId: pending.id } : {}),
+						decline: true,
+						reason: reason || 'declined by admin'
+				  });
 			if (resp?.ok === false) throw new Error(errorMessage(resp, 'Could not settle the request'));
 			patchRow(row.user.id, (entry) => ({ ...entry, pendingRequest: null }));
 			if (approve) applyCreditsResponse({ ...row, pendingRequest: null }, resp, pending.amountMicros);
-			lopu({ title: approve ? `Approved ${formatTurnCredits(pending.amountMicros)} credits for @${row.user.username} ✨` : `Declined @${row.user.username}'s request`, status: 'success', duration: 5000 });
+			lopu({
+				title: approve
+					? `Approved ${formatTurnCredits(pending.amountMicros)} credits for @${row.user.username} ✨`
+					: `Declined @${row.user.username}'s request`,
+				status: 'success',
+				duration: 5000
+			});
 			if (row.user.id === me?.id) void refreshLopuAccount();
 			return true;
 		} catch (error: unknown) {
@@ -529,72 +646,92 @@ export const LopuAccountsAdmin = () => {
 
 	return (
 		<Flex flexDirection="column" rowGap={3} data-lopu-accounts-admin>
-			<Text sx={eyebrow}>Lopu accounts 🦄</Text>
-			<Text fontSize="xs" color={LOPU_UI.muted} lineHeight="1.5">
-				Lopu is invite-only: verify an account to let it build with Lopu, and grant credits for the turns Thingtime&apos;s own keys pay for (1 credit = 1 USD of list
-				price). People using their own Secure Vault providers spend nothing here.
-			</Text>
-
 			<AccessSettingsEditor />
 
-			<Text sx={eyebrow}>Accounts{pendingCount ? ` · ${pendingCount} pending ${pendingCount === 1 ? 'request' : 'requests'}` : ''}</Text>
-			<Flex columnGap={2} rowGap={2} wrap="wrap">
-				<Input
-					size="sm"
-					flex="1 1 220px"
-					placeholder="🔍 username or name"
-					aria-label="Search accounts"
-					value={query}
-					onChange={(event) => setQuery(event.target.value)}
-					onKeyDown={(event) => {
-						if (event.key === 'Enter') {
-							event.preventDefault();
-							search();
-						}
-					}}
-					sx={inputSx}
-				/>
-				<Button size="sm" variant="outline" borderColor={LOPU_UI.borderColor} color={LOPU_UI.ink} borderRadius={LOPU_UI.radiusSm} isLoading={loading && !rows.length} onClick={search} flexShrink={0}>
-					Search
-				</Button>
-				{activeQuery ? (
+			<SettingsSection
+				eyebrow="Lopu accounts"
+				description="Verify accounts and manage balances for turns paid by Thingtime. Personal providers do not spend these credits."
+				summary={
+					rows.length || (loaded && !failed)
+						? `${rows.length}${nextCursor ? '+' : ''} accounts shown · ${pendingCount} pending requests`
+						: 'Accounts not yet loaded'
+				}
+			>
+				<Flex columnGap={2} rowGap={2} wrap="wrap">
+					<Input
+						size="sm"
+						flex="1 1 220px"
+						placeholder="🔍 username or name"
+						aria-label="Search accounts"
+						value={query}
+						onChange={(event) => setQuery(event.target.value)}
+						onKeyDown={(event) => {
+							if (event.key === 'Enter') {
+								event.preventDefault();
+								search();
+							}
+						}}
+						sx={inputSx}
+					/>
 					<Button
 						size="sm"
-						variant="ghost"
-						color={LOPU_UI.muted}
-						onClick={() => {
-							setQuery('');
-							setActiveQuery('');
-							void load('', null);
-						}}
+						variant="outline"
+						borderColor={LOPU_UI.borderColor}
+						color={LOPU_UI.ink}
+						borderRadius={LOPU_UI.radiusSm}
+						isLoading={loading && !rows.length}
+						onClick={search}
+						flexShrink={0}
 					>
-						Clear
+						Search
 					</Button>
-				) : null}
-			</Flex>
+					{activeQuery ? (
+						<Button
+							size="sm"
+							variant="ghost"
+							color={LOPU_UI.muted}
+							onClick={() => {
+								setQuery('');
+								setActiveQuery('');
+								void load('', null);
+							}}
+						>
+							Clear
+						</Button>
+					) : null}
+				</Flex>
 
-			{failed ? (
-				<Text fontSize="xs" color={LOPU_UI.danger}>
-					{failed}
-				</Text>
-			) : null}
-			<Flex flexDirection="column" rowGap={1}>
-				{rows.map((row) => (
-					<AccountRow key={row.user.id} row={row} me={me?.id ?? null} busy={busyId === row.user.id} onVerify={verify} onCredits={grant} onRequest={settleRequest} />
-				))}
-				{!rows.length ? (
-					<Text fontSize="xs" color={LOPU_UI.muted}>
-						{loaded && !loading ? (activeQuery ? 'No accounts match that search.' : 'No accounts have met Lopu yet.') : 'Loading accounts…'}
+				{failed ? (
+					<Text fontSize="xs" color={LOPU_UI.danger}>
+						{failed}
 					</Text>
 				) : null}
-			</Flex>
-			{nextCursor ? (
-				<Flex>
-					<SmallButton busy={loading} onClick={() => void load(activeQuery, nextCursor)}>
-						Load more
-					</SmallButton>
+				<Flex flexDirection="column" rowGap={1}>
+					{rows.map((row) => (
+						<AccountRow
+							key={row.user.id}
+							row={row}
+							me={me?.id ?? null}
+							busy={busyId === row.user.id}
+							onVerify={verify}
+							onCredits={grant}
+							onRequest={settleRequest}
+						/>
+					))}
+					{!rows.length ? (
+						<Text fontSize="xs" color={LOPU_UI.muted}>
+							{loaded && !loading ? (activeQuery ? 'No accounts match that search.' : 'No accounts have met Lopu yet.') : 'Loading accounts…'}
+						</Text>
+					) : null}
 				</Flex>
-			) : null}
+				{nextCursor ? (
+					<Flex>
+						<SmallButton busy={loading} onClick={() => void load(activeQuery, nextCursor)}>
+							Load more
+						</SmallButton>
+					</Flex>
+				) : null}
+			</SettingsSection>
 		</Flex>
 	);
 };

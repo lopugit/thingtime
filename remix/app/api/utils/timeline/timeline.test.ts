@@ -6,8 +6,10 @@ import { Binary } from 'mongodb';
 import { splitTimelineEvent } from '../../../timeline/records.ts';
 import { entryFixture, eventFixture } from '../../../timeline/testFixtures.ts';
 import { TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, parseTimelineEntry } from '../../../timeline/contract.ts';
-import { appendTimelineEvent, readTimelinePage, readTimelineNodes, timelineFolderId, TIMELINE_PAGE_MAX_BYTES } from './repository.ts';
+import { appendTimelineEvent, readTimelinePage, readTimelineNodes, timelineEventThingId, timelineFolderId, TIMELINE_PAGE_MAX_BYTES } from './repository.ts';
 import { packTimelineEntry, unpackTimelineEntry, unpackTimelineLink } from './envelope.ts';
+import { packTimelineNote, timelineNoteThingId } from './notes.ts';
+import { TIMELINE_NOTE_KIND } from '../../../timeline/notes.ts';
 import { thingContentSnapshot, thingMutationEvent, prepareThingMutation } from './recordMutation.ts';
 import { validateClientTimelineEvent } from './service.ts';
 import { thingStorageSizeBytes, currentContentStorageSizeBytes, USER_STORAGE_ACCOUNTING_VERSION } from '../storage/storageCore.ts';
@@ -187,7 +189,7 @@ test('client uploads cannot forge server provenance or another owner, and generi
 	assert.equal(isProtectedThingtime([TIMELINE_LINK_KIND]), true);
 	assert.equal((sanitizeShareId('timeline-forged') as any).ok, false);
 	const doc: any = { shareId: 'event', ownerId: 'user-1', thingtime: [TIMELINE_EVENT_KIND], acl: ['tt:all'] };
-	for (const viewer of [null, { id: 'user-1' }, { id: 'other' }]) for (const kind of [TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND]) assert.equal(canView({ ...doc, thingtime: [kind] }, viewer), false);
+	for (const viewer of [null, { id: 'user-1' }, { id: 'other' }]) for (const kind of [TIMELINE_EVENT_KIND, TIMELINE_LINK_KIND, TIMELINE_NOTE_KIND, 'timeline-version-name', 'timeline-branch-head']) assert.equal(canView({ ...doc, thingtime: [kind] }, viewer), false);
 });
 
 test('server content projection omits credentials and counters, suppresses bookkeeping-only changes, and preserves baseline content', () => {
@@ -318,4 +320,24 @@ test('generic recovery refuses protected and target-attached snapshots', async (
   await h.append(eventFixture('deleted', { source: 'api', clientId: null, mode: 'revision', operation: 'delete', before: content, after: null }));
   await assert.rejects(readDeletedThingState(h.things, 'user-1', 'page-1', h.session), /own editor|parent Thing/);
  }
+});
+
+test('notes share the page byte budget: a page that would overflow ends earlier and continues from its last entry', async () => {
+	const h = harness();
+	for (let n = 0; n < 3; n++) await h.append(eventFixture(`big-${n}`, { after: { adapter: 'thing', version: 1, value: 'x'.repeat(2_000_000) } }));
+	const noteDoc = (n: number, eventId: string) => {
+		const note = { formatVersion: 1, id: `note-${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`, ownerId: 'user-1', eventId, thingId: 'page-1', author: 'owner', text: 'n'.repeat(1900), createdAt: new Date(1_700_000_000_000 + n).toISOString() };
+		const eventShareId = timelineEventThingId('user-1', eventId);
+		return { _id: `note-${n}`, shareId: timelineNoteThingId('user-1', note.id), schemaVersion: COLLECTION_SCHEMA_VERSIONS.things, thingtime: [TIMELINE_NOTE_KIND], ownerId: 'user-1', acl: ['tt:user'], folderId: timelineFolderId('user-1'), targetId: eventShareId, crystal: { name: 'Note', targetId: eventShareId, linkKind: TIMELINE_NOTE_KIND }, extended: null, tags: [], createdAt: new Date(note.createdAt), updatedAt: new Date(note.createdAt), ...packTimelineNote(note as any) };
+	};
+	for (let n = 0; n < 8; n++) h.rows().push(noteDoc(n, 'big-1'));
+	const seen: string[] = []; let before: number | null = null;
+	do {
+		const page = await readTimelinePage(h.things, 'user-1', { thingId: 'page-1', before, after: null, limit: 40 });
+		assert.ok(Buffer.byteLength(JSON.stringify(page)) <= TIMELINE_PAGE_MAX_BYTES + 512, 'the page with its notes stays within the budget');
+		for (const note of page.notes ?? []) assert.ok(page.entries.some(entry => entry.event.id === note.eventId), 'notes belong only to kept entries');
+		if (page.entries.some(entry => entry.event.id === 'big-1')) assert.equal(page.notes?.length, 8);
+		seen.push(...page.entries.map(entry => entry.event.id)); before = page.nextBefore;
+	} while (before !== null);
+	assert.deepEqual(seen, ['big-2', 'big-1', 'big-0']);
 });

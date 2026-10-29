@@ -344,3 +344,15 @@ test('loadLopuAccountHistory returns a normalised page through the bound client'
 	assert.deepEqual(calls[0].args, { cursor: 'c0', limit: 25 });
 	resetLopuAccountForTests();
 });
+
+test('a selected server-eligible text plan unlocks only its BYO choice, without granting account verification', () => {
+  const account = normalizeLopuAccount(ACCOUNT_WIRE)!;
+  const access = selectLopuAccess(account, VIEWER, { byo: true, planChatEligible: true });
+  assert.equal(access.locked, false);
+  assert.equal(access.verified, false);
+  assert.equal(access.allowByoUnverified, false);
+  assert.equal(selectLopuAccess(account, VIEWER, { byo: true }).locked, true, 'ordinary provider / voice has no plan hint');
+  assert.equal(selectLopuAccess(account, VIEWER, { byo: false, planChatEligible: true }).locked, true, 'switching to a hosted model relocks');
+  assert.equal(selectLopuAccess(account, { ...VIEWER, temporary: true }, { byo: true, planChatEligible: true }).locked, true);
+  assert.equal(selectLopuAccess(null, { ...VIEWER, verifiedHint: false }, { byo: true, planChatEligible: true }).locked, false, 'fresh catalog can admit before accounting cache');
+});

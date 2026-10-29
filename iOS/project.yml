@@ -14,7 +14,7 @@ options:
 settings:
   base:
     MARKETING_VERSION: "1.0"
-    CURRENT_PROJECT_VERSION: "31"
+    CURRENT_PROJECT_VERSION: "33"
     SWIFT_VERSION: "5.9"
     DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
   configs:
@@ -29,12 +29,17 @@ configFiles:
   Debug: config/Debug.xcconfig
   Release: config/Release.xcconfig
 
+packages:
+  AppleFileSync:
+    path: ../apple/FileSync
+
 targets:
   Thingtime:
     type: application
     platform: iOS
     sources:
       - path: Thingtime
+      - path: ShareSupport
       - path: ../apple/Shared
       - path: ../apple/Widgets
       - path: Shared
@@ -52,10 +57,13 @@ targets:
         NSCameraUsageDescription: Thingtime uses the camera so you can take photos and videos to share.
         NSMicrophoneUsageDescription: Thingtime uses the microphone for Lopu voice conversations and when you record a video to share.
         NSSpeechRecognitionUsageDescription: Thingtime transcribes your speech so Lopu can respond or save private transcription pages.
-        NSPhotoLibraryUsageDescription: Thingtime uses your photo library so you can choose photos and videos to share.
+        NSPhotoLibraryUsageDescription: Thingtime uses your photo library so you can choose photos and videos to share or back up original files with their embedded metadata.
         UILaunchScreen: {}
+        BGTaskSchedulerPermittedIdentifiers:
+          - $(PRODUCT_BUNDLE_IDENTIFIER).file-upload
         UIBackgroundModes:
           - audio
+          - processing
         NSSupportsLiveActivities: true
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
@@ -74,6 +82,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         ENABLE_PREVIEWS: true
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_OBJC_BRIDGING_HEADER: ShareSupport/ShareItemProviderBridge.h
     entitlements:
       path: Thingtime/Resources/Thingtime.entitlements
       properties:
@@ -83,10 +92,14 @@ targets:
         com.apple.developer.associated-domains:
           - webcredentials:thingtime.com
     dependencies:
+      - package: AppleFileSync
       - target: ThingtimeWatch
         embed: true
         codeSign: true
       - target: ThingtimeLopuWidget
+      - target: ThingtimeShare
+        embed: true
+        codeSign: true
 
   ThingtimeWatch:
     type: application
@@ -158,11 +171,48 @@ targets:
         SKIP_INSTALL: true
         APPLICATION_EXTENSION_API_ONLY: true
 
+  ThingtimeShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+      - path: ShareSupport
+      - path: Thingtime/Resources/Assets.xcassets
+        buildPhase: resources
+    info:
+      path: ShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Thingtime
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ThingtimeWidgetGroup: $(THINGTIME_WIDGET_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule: 'SUBQUERY(extensionItems, $item, $item.attachments.@count > 0 OR $item.attributedContentText.length > 0).@count > 0'
+    entitlements:
+      path: ShareExtension/ThingtimeShare.entitlements
+      properties:
+        com.apple.security.application-groups: [$(THINGTIME_WIDGET_GROUP)]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(THINGTIME_IOS_BUNDLE_IDENTIFIER).share
+        PROVISIONING_PROFILE_SPECIFIER: $(THINGTIME_SHARE_PROVISIONING_PROFILE_SPECIFIER)
+        GENERATE_INFOPLIST_FILE: false
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: true
+        APPLICATION_EXTENSION_API_ONLY: true
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_OBJC_BRIDGING_HEADER: ShareSupport/ShareItemProviderBridge.h
+
   ThingtimeTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: ThingtimeTests
+      - path: ../apple/FileSync/Tests/AppleFileSyncTests
+      - path: ../apple/FileSync/Tests/RecoverySupport
     dependencies:
       - target: Thingtime
     settings:

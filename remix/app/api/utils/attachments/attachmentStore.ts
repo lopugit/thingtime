@@ -1,3 +1,4 @@
+import { parseFileSyncUploadOrigin, sameFileSyncUploadOrigin, type FileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { ownedMediaDraftIds } from '../drafts/media';
 import { MAX_POST_ATTACHMENTS, attachmentCountLimit } from '../../../schemas/attachmentLimits';
 import { isDeepStrictEqual } from 'node:util';
@@ -66,6 +67,7 @@ export type AttachmentDoc = {
 	objectKey: string;
 	objectVersionId?: string;
 	attachmentRequestFingerprint?: string;
+	attachmentFileSyncOrigin?: FileSyncUploadOrigin;
 	attachmentPurpose?: AttachmentPurpose;
 	// Server-only import lifecycle marker; never copied from portable content.
 	attachmentImportDraft?: true;
@@ -76,6 +78,8 @@ export type AttachmentDoc = {
 	attachmentMpuEmptyVerifiedAt?: Date;
 	uploadId?: string;
 	attachmentExpiresAt?: Date;
+	attachmentRetainUntil?: Date;
+	attachmentRetentionClosed?: true;
 	// true only on linked (external URL) attachments: no S3 object exists, the
 	// crystal carries the url, and object bytes are always zero
 	attachmentLinked?: true;
@@ -98,6 +102,7 @@ export type AttachmentDoc = {
 };
 
 type PendingInput = {
+	fileSyncOrigin?: FileSyncUploadOrigin;
 	id: string;
 	ownerId: string;
 	crystal: AttachmentCrystal;
@@ -164,6 +169,7 @@ const attachmentMatch = (id: string) => ({ shareId: id, thingtime: ATTACHMENT_TH
 
 export type AttachmentStore = {
 	reservePending(input: PendingInput): Promise<AttachmentDoc>;
+	recordFileSyncOrigin(ownerId: string, id: string, requestFingerprint: string, origin: FileSyncUploadOrigin): Promise<AttachmentDoc>;
 	insertLinkedReady(input: LinkedReadyInput): Promise<AttachmentDoc>;
 	claimUploadInitialization(ownerId: string, id: string, staleAtOrBefore: Date): Promise<AttachmentDoc | null>;
 	setUploadId(ownerId: string, id: string, uploadId: string): Promise<AttachmentDoc>;
@@ -220,7 +226,28 @@ export const expiredAttachmentDraftFilter = (
 });
 
 export const attachmentStore: AttachmentStore = {
-	async reservePending({ id, ownerId, crystal, objectKey, requestFingerprint, purpose, profileSlot, expiresAt, recordingImportDraft }) {
+	async recordFileSyncOrigin(ownerId, id, requestFingerprint, originInput) {
+    const origin = parseFileSyncUploadOrigin(originInput);
+    return withHomeMongoTransaction(async session => {
+      const things = await getHomeThingsCollection();
+      const before = await things.findOne({ ...attachmentMatch(id), ownerId, attachmentRequestFingerprint: requestFingerprint } as any, { session }) as any as AttachmentDoc;
+      if (!before || before.attachmentPurpose !== 'file' || before.attachmentImportDraft || !['pending', 'finalizing', 'ready'].includes(before.attachmentState) || before.attachmentLinked ||
+        (before.targetId != null && before.targetId !== origin.fileId) || (before.targetId == null && !isDeepStrictEqual(before.acl, [ACL_OWNER]))) throw new AttachmentStoreConflictError('Sync upload reservation changed');
+      if (before.attachmentFileSyncOrigin) {
+        if (!sameFileSyncUploadOrigin(before.attachmentFileSyncOrigin, origin)) throw new AttachmentStoreConflictError('Sync upload origin changed');
+        return before;
+      }
+      const next = { ...before, attachmentFileSyncOrigin: origin, updatedAt: new Date() };
+      const nextSize = thingStorageSizeBytes(next);
+      await applyUserStorageDelta(ownerId, nextSize - canonicalStoredBytes(before), session);
+      const written = await things.updateOne({ _id: before._id, ownerId, attachmentRequestFingerprint: requestFingerprint, attachmentFileSyncOrigin: { $exists: false }, updatedAt: before.updatedAt, sizeBytes: before.sizeBytes } as any,
+        { $set: { attachmentFileSyncOrigin: origin, sizeBytes: nextSize, updatedAt: next.updatedAt } }, { session });
+      if (written.matchedCount !== 1) throw new AttachmentStoreConflictError();
+      return { ...next, sizeBytes: nextSize };
+    });
+  },
+	async reservePending({ id, ownerId, crystal, objectKey, requestFingerprint, purpose, profileSlot, expiresAt, recordingImportDraft, fileSyncOrigin }) {
+		if (fileSyncOrigin && (purpose !== 'file' || recordingImportDraft)) throw new AttachmentBindingError(400, 'Sync origin requires an ordinary file reservation');
 		if (recordingImportDraft && (!['recording', 'file'].includes(purpose) || profileSlot)) throw new AttachmentBindingError(400, 'Recording import drafts must retain recording purpose');
 		const now = new Date();
 		const unstamped = {
@@ -239,6 +266,7 @@ export const attachmentStore: AttachmentStore = {
 			objectSizeBytes: crystal.size,
 			objectKey,
 			attachmentRequestFingerprint: requestFingerprint,
+			...(fileSyncOrigin ? { attachmentFileSyncOrigin: parseFileSyncUploadOrigin(fileSyncOrigin) } : {}),
 			attachmentPurpose: purpose,
 			...(recordingImportDraft ? { attachmentImportDraft: true as const } : {}),
 			...(profileSlot ? { attachmentProfileSlot: profileSlot } : {}),
@@ -403,7 +431,7 @@ export const attachmentStore: AttachmentStore = {
 				attachmentState: 'pending',
 				targetId: { $exists: false },
 				attachmentExpiresAt: { $gt: now },
-				uploadId: { $type: 'string' }
+				$or: [{ uploadId: { $type: 'string' } }, { objectSizeBytes: 0, attachmentPurpose: 'file' }]
 			} as any,
 			{ $set: { attachmentState: 'finalizing', attachmentFinalizationLeaseId: leaseId, updatedAt: now } },
 			{ returnDocument: 'after' }
@@ -497,7 +525,9 @@ export const attachmentStore: AttachmentStore = {
 				// Quarantine every newly durable object until analysis either clears/
 				// flags it or deliberately marks it skipped. This lands before complete
 				// returns, so a fast bind cannot expose unscreened bytes during outage.
-				moderation: { status: 'pending' as const },
+				moderation: before.objectSizeBytes === 0 && before.attachmentPurpose === 'file'
+                    ? { status: 'skipped' as const, provider: 'verified-empty-object', categories: ['empty-content'], analyzedAt: new Date() }
+                    : { status: before.attachmentPurpose === 'password' ? 'skipped' as const : 'pending' as const },
 				attachmentExpiresAt: expiresAt,
 				updatedAt: new Date()
 			};
@@ -524,7 +554,7 @@ export const attachmentStore: AttachmentStore = {
 						crystal,
 						objectVersionId,
 						attachmentState: 'ready',
-						moderation: { status: 'pending' },
+						moderation: next.moderation,
 						...(isDurableRecordingUpload(before) ? {} : { attachmentExpiresAt: expiresAt }),
 						sizeBytes: nextSize,
 						updatedAt: next.updatedAt
@@ -627,7 +657,10 @@ export const attachmentStore: AttachmentStore = {
 							$set: {
 								attachmentState: 'deleting',
 								attachmentExpiresAt: {
-									$cond: [{ $eq: [{ $type: '$attachmentPartsIssuedAt' }, 'date'] }, attachmentMpuSettlementAt(now), attachmentDeletingRetryAt(now)]
+									$max: [
+										{ $cond: [{ $eq: [{ $type: '$attachmentPartsIssuedAt' }, 'date'] }, attachmentMpuSettlementAt(now), attachmentDeletingRetryAt(now)] },
+										{ $ifNull: ['$attachmentRetainUntil', attachmentDeletingRetryAt(now)] }
+									]
 								},
 								updatedAt: now
 							}
@@ -743,6 +776,7 @@ export const attachmentStore: AttachmentStore = {
 				attachmentState: 'ready',
 				'crystal.contentType': 'application/octet-stream',
 				'crystal.detectedContentType': { $exists: false },
+				attachmentPurpose: { $ne: 'password' },
 				...(afterId ? { shareId: { $gt: afterId } } : {})
 			} as any)
 			.sort({ shareId: 1 })
@@ -791,7 +825,7 @@ export const attachmentStore: AttachmentStore = {
 	}
 };
 
-type BindableAttachmentPurpose = Exclude<AttachmentPurpose, 'profile' | 'recording' | 'file'>;
+type BindableAttachmentPurpose = Exclude<AttachmentPurpose, 'profile' | 'recording' | 'file' | 'password'>;
 
 const attachmentPurposeLabel: Record<BindableAttachmentPurpose, string> = {
 	post: 'post',
@@ -941,7 +975,7 @@ export const annotateOwnedAttachment = async (ownerId: string, id: string, patch
 	withHomeMongoTransaction(async (session) => {
 		const things = await getHomeThingsCollection();
 		const before = (await things.findOne({ ...attachmentMatch(id), ownerId } as any, { session })) as any as AttachmentDoc | null;
-		if (!before) throw new AttachmentBindingError(404, 'Attachment not found');
+		if (!before || before.attachmentPurpose === 'password') throw new AttachmentBindingError(404, 'Attachment not found');
 		if (before.attachmentState !== 'ready') {
 			throw new AttachmentBindingError(409, 'This file is still uploading — try again once it is ready');
 		}

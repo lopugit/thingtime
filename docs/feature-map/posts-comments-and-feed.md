@@ -1,5 +1,11 @@
 # Posts, comments and feed
 
+Typed Posts and comments retain explicit `crystal.renderComponent` metadata.
+The root declaration takes precedence over legacy nested `crystal.thing` in
+`PostInteractiveThing`; the linked embed still reads its Component through its
+own ACL. See [the presentation contract](api-endpoints-and-capabilities.md)
+for validation, versions and regression checks.
+
 Posts are `post` Things; comments share the post schema
 (`thingtime: ['post', 'comment']`, `targetId` = parent) so every comment is
 reactable and has a `/post/:id` permalink. Reactions, saves, votes and views are
@@ -34,6 +40,8 @@ Moderation actions require subspace moderator roles (`canModerateSubspace`).
   route/body validation → `createThing`/`updateThing` → storage → public
   projection → `PostCard`. Adding a field to one layer is not enough.
 - Await the live Editor.js snapshot before freezing a create/edit payload.
+  Draft account sync and cleanup run independently: neither may block a post,
+  edit, comment or reply. Retire only the completed draft, preserving newer input.
 - Optimistic rendering: paint cached state, reconcile in the background, revert
   on failure; never flash a spinner when prior state exists.
 - Retries after an uncertain write reuse the original operation identity
@@ -70,3 +78,57 @@ projection or changes target permissions.
 
 See [account-drafts-and-templates.md](account-drafts-and-templates.md) for the
 private draft API, editor recovery, account isolation and independent media copies.
+
+## Post as a Character
+
+`components/Characters/CharacterComposer.tsx` supplies the selected account to
+the existing PostComposer, useApi and private drafts through a keyed context.
+Quick comments and nested replies use PostAsSelect with a captured actor header.
+See [Characters](../characters.md). Subspace permissions are checked as the
+selected Character; owning the Character does not inherit private membership.
+
+## Subspace messages and embedded Things
+
+Subspaces provision a stable Messenger space and general channel through
+`api/utils/messenger/subspaceMessages.ts`. `subspaceAccess.ts` checks current
+subspace membership for chats, previews and media. The registered
+`subspace-messaging-spaces` migration provisions existing subspaces.
+
+`SubspaceViewControls.tsx` uses editable Builder blocks. Viewer-scoped
+`subspaceViewPrefs.ts` persists Posts/Messages and automatic comment expansion.
+`SubspaceMessagesPanel.tsx` shares Messenger's ChatView; hidden views preserve
+drafts without advancing message read receipts.
+
+Moderators manage sidebar and above-feed Thing placements with
+`/api/v1/subspaces/embeds` (`api.subspaces-embeds` 1.0.0). Each placement is a
+protected relational `subspace-embed` Thing. Readers must pass the subspace gate
+and the referenced Thing's independent ACL on every load. Embedding never
+changes an audience or shares a hidden link secret.
+
+`PostInteractiveThing` delegates ordinary data Things to the shared `ThingView`.
+Human-facing data declares `renderComponent: { id: "<saved Component Thing ID>" }`
+or embeds the canonical Component crystal directly, for example
+`renderComponent: { render: { tag: "p", children: ["{text}"] } }`.
+`ThingRenderComponent` reads a referenced Component through the normal Things
+API and its independent ACL, then uses the existing Component argument/template
+resolver and inert HTML/Chakra renderers. Bindings receive the displayed data
+(also available as `thing`), defaults and saved arguments. Sources and Actions
+do not execute in this display context. Saved Component/Webpage Things retain
+their existing editable definitions and rendering paths.
+
+An explicit declaration takes priority over legacy kind rendering, including
+when invalid or inaccessible; it never falls back to a type alias. The data
+inspector is a deliberate toggle. Identity changes fence pending reads, and
+focus/visibility refreshes recheck referenced Component access. The containing
+Thing does not grant access to its renderer or dependencies. Preserve data,
+ownership and audiences when assigning renderers to older Things.
+`TransientBlockHost` captures only its own transient Action controls, allowing
+the embedded Thing's native view toggle and nested controls to receive events.
+
+Run `test:subspaces`, `test:messenger`, `test:feed`, `test:api-capabilities`, then
+`test:subspace-messages-acceptance` against the built server. The latter creates
+its own OS-fenced disposable replica and real API fixtures; `--ui` additionally
+checks desktop/mobile rendering and saved controls.
+The feed suite includes `thingRenderComponent.test.ts`; the acceptance harness
+covers saved/embedded render declarations, exact saved content and both embed
+placements with rendered/data views and reload.

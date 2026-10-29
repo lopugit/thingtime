@@ -1,5 +1,84 @@
 # API endpoints and capabilities
 
+Private task reporting publishes `api.agent-reporting` 1.0.0 on
+`POST /api/v1/agents/reporting`; both manifests derive it from `apiDocs.ts` and
+the Nitro route map. The ChatGPT MCP surface publishes `api.chatgpt-mcp` 1.1.0
+and its separate `chatgpt.agent-reporting` 1.0.0 contract. Its four tools
+negotiate reporting, Characters and overview at the connected account's exact
+origin, and require `agents.report` independently of `things`. Run
+`test:agent-reporting`, `test:chatgpt` and `test:api-capabilities`; see
+[the reporting runbook](../agent-reporting.md).
+
+Explicit Thing presentation is shared crystal metadata: `registry.ts`
+`validateThingtimeCrystal` retains `renderComponent` after each typed content
+allowlist and validates embedded definitions through the canonical Component
+sanitizer. `api.things` 1.42.0 and `api.things-update` 1.13.0 advertise it through
+both generated manifests. The first-party create/PATCH/PUT client negotiates
+1.42.0 when it sends a declaration. Omitted PATCH metadata survives content
+edits; `null` remains an explicit unavailable renderer; replacement omission
+removes the declaration. Malformed declarations fail validation. Saved pointers
+never grant Component/dependency access. `renderComponentDeclaration.ts` shares
+the declaration grammar and root-over-nested post precedence with rendering.
+Run `test:schemas`, `test:feed`, `test:api-capabilities` and the isolated
+`subspace-messages-acceptance.mjs` typed-post/comment persistence checks.
+
+Environment API gateway ingress is negotiated through `api.environment-gateway`
+1.1.0 and `/.well-known/thingtime-capabilities.json`. Server deployments use
+the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by
+opt-in) with the `THINGTIME_MONGODB_CONNECTION_MODE` runtime override. Dedicated
+mode executes its own backend, advertises `gateway: null`, and refuses relay
+traffic; it does not imply an isolated database. See [the gateway runbook](../environment-api-gateway.md)
+for the audited environment mapping and pending activation evidence.
+
+Mobile device descriptors use `app/devices/platform.ts` across validation,
+projection, schemas and client types. `api.devices` 1.10.0 and
+`api.devices-pairing-claim` 1.1.0 add iOS/Android to the existing signed pairing
+protocol. Run `test:devices`, `test:schemas` and `test:api-capabilities`.
+See [mobile sync acceptance](../mobile-file-sync.md) for pending native clients.
+
+`api.devices-node-identity` 1.0.0 is a private device-token-only GET: the token
+fixes both IDs and the owned device must still exist. `api.devices-disconnect`
+1.0.0 is a full-user POST accepting only `deviceId`; `disconnectDevice.ts` revokes
+that owner's matching device sessions in the home transaction while retaining
+Things/files. Both routes use the import map and docs registry. Native
+`ThingtimeAPIClient.verifyFileSyncIdentity` negotiates the optional identity
+feature and selects the exact local credential. `device-identity.integration.mts`
+checks real signed pairing, privacy, owner-only disconnect and no claim revival.
+Character agent discovery uses `remix/scripts/character-coordination-preflight.ts`
+and the shared `capabilityContract.ts` SemVer/origin contract. Run
+`npm --prefix remix run characters:preflight -- --origin <selected-origin>` and
+`test:characters-preflight`; see [the coordination runbook](../characters.md#agent-coordination).
+This read-only client adds no route, permission or server contract. Edge refusal
+must remain distinct from missing capabilities, authentication and membership.
+
+Paired Mac inventory uses `api.devices` 1.10.0 and `api.devices-node-state`
+1.11.0 (`deviceMenuBar.ts`, native `MenuBarTelemetry.swift`). Approved Bash uses
+`api.devices-commands` / `api.devices-node-commands` 1.10.0 (`deviceScript.ts`,
+native `DeviceScript.swift`). Both extend existing routes. Optional native
+negotiation preserves compatibility with older origins; script leases require
+explicit approved envelopes. Editable suites live in `appSuites/macMenuBar.ts`
+and `appSuites/deviceScripts.ts`; scripts retain results only on explicit
+private-Thing creation. See README and TESTING for limits and acceptance.
+
+Timeline 1.18.0 adds named versions, undo and version export on the existing
+route: the POST command `name-version` (`api/utils/timeline/versionNames.ts`,
+shared `timeline/versionNames.ts`, protected kind `timeline-version-name`),
+`mode: 'undo'` on preview-version/apply-version (`api/utils/timeline/versions.ts`
+with injectable `entries/nodes/snapshot/deleted/recorded/live` seams,
+`TIMELINE_UNDO_LABEL` in `timeline/publishedVersion.ts`), GET `export=1`
+(`api/utils/timeline/exportVersion.ts`, `timeline.export` rate limit), and
+page / `eventId` reads carrying `names` beside `notes`. Register changes in
+`apiDocs.ts` (both capability pins), keep the kind in `schemas/registry.ts`,
+and run `test:timeline`, `test:api-capabilities` and `test:timeline:versions`.
+
+Timeline 1.17.0 adds contextual notes on the existing route: POST commands
+`add-note`, `explain-change` and `remove-note` (`api/utils/timeline/notes.ts`,
+shared `timeline/notes.ts`), page and `eventId` reads carry `notes`, and
+`timeline.explain` rate-limits Lopu explanations (`api/utils/timeline/explain.ts`
+over the Lopu platform model routing). Register changes in `apiDocs.ts`, keep the
+`timeline-note` protected kind in `schemas/registry.ts`, and run
+`test:timeline`, `test:api-capabilities` and `test:timeline:notes`.
+
 Server Action admission/outcomes use `api/utils/timeline/actionOutcome.ts` and
 shared `timeline/actionOutcome.ts`, called from the canonical server executor.
 They retain safe effect receipts in the existing Timeline, never a new history
@@ -43,9 +122,20 @@ Saved theme history uses `api.themes` / `api.themes-delete` 1.1.0 and
 and retained deletion in its content transaction; no new endpoint or collection
 is introduced. See [the Timeline contract](../unified-timeline.md).
 
+`api.themes` 1.2.0 and `api.themes-shared` 1.1.0 add optional focus border,
+two glow colours, blur and strength tokens. Theme saves negotiate 1.2.0 through
+`theme/capabilities.ts`; older theme documents receive defaults without losing
+other settings. `test:theme` covers normalization and the authenticated route,
+while `test:api-capabilities` covers both manifests and client compatibility.
+
 All data access goes through `/api/v1/...` (`FUNDAMENTALS.md` §1). Nitro
 routes every documented endpoint to one catch-all handler; the docs registry is
 the source of truth for the route table and both capability manifests.
+
+Saved Webpage writes with editable intrinsic `tt-form`, `tt-select`, `tt-style`,
+`tt-change` and `tt-mapbox` blocks require `api.things` 1.44.0 on create and
+`api.things-update` 1.14.0 on update. Builder negotiates these before saving;
+`api.webpages-resolve` remains the independent read contract.
 
 ## Where the code lives
 
@@ -140,6 +230,17 @@ empty page; only known-clean saved pages may fetch their persisted tree.
 - Built server smoke: the discovery endpoint must return JSON with the selected
   origin, not the SPA shell (`verify:vercel-output`, preview `curl`).
 - `curl <base>/api/v1/<group>/<name>-docs` returns the entry as JSON.
+
+## MongoDB health failure shape
+
+`app/routes/api/v1/health/mongodb/_mongodb.tsx` preserves the complete
+`MongoConnectionStatus` shape when remote probes fail. `api.health-mongodb` 1.0.2
+includes `custom: false` (the remote request has no viewer-selected database)
+and `replicaSet: null` (unknown), alongside the existing disconnected/null
+fields, timestamp and sanitized error. The status response remains HTTP 200;
+it does not imply the database is connected. Remote health/status-data probes
+must not forward the local session cookie. Run the adjacent `_mongodb.test.ts`
+through `node --import tsx --test` from `remix/`, plus `test:api-capabilities`.
 
 ## Gotchas
 
@@ -353,3 +454,93 @@ entries; old clients refuse versions with retained dependencies. Metadata is
 preflighted before up to 360 unique captures are read in batches of 128, with
 aggregate 4 MiB/200,000-node response bounds. No new route, collection or schema;
 both manifests and conditional client negotiation use the canonical docs entry.
+
+
+## Password manager
+
+`PasswordGenerator.tsx`, `PasswordIcon.tsx` and `PasswordPasskeySetup.tsx` compose
+editable settings blocks; secret output stays in the controlled entry draft.
+`passwords/generator.ts` owns WebCrypto/preset validation. `passwords/icons.ts`,
+`icons.client.ts` and `api/utils/passwords/icons.ts` own descriptors, anonymous
+image loading and the separately sealed list projection. `test:passwords` covers
+these boundaries; `scripts/password-tools.browser.html` is an isolated synthetic
+UI fixture, not native-provider acceptance.
+
+See [password-manager.md](../password-manager.md). `api.passwords` 1.3.0 is a
+private, session-bound home-plane API over protected `password-manager-entry`
+Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
+fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
+`vaultKeys.ts` own password/session/recovery key wrapping. `passwords/client.ts`
+intentionally bypasses general request diagnostics and automatic origin fallback
+so decrypted fields never enter shared client history/cache. The reusable
+`Thingtime` fields mod renders the entry without global Thing persistence.
+Native integrations live in `apple/Passwords`, `apple/PasswordProvider`,
+`iOS/Thingtime/Web/PasswordBridge.swift` and `electron/lib/password-provider.cjs`.
+
+
+## Incoming mail
+
+See [incoming-mail.md](incoming-mail.md) for Email settings, IMAP/POP3, private cloud storage, the paired local connector, offline reading and proxy inbox views.
+
+## iOS TestFlight delivery
+
+`api.integration-ios-release` 1.0.0 registers the production-only
+`POST /api/v1/integrations/ios-release` in both manifests and the Nitro import map.
+The native release script negotiates the origin manifest before requesting a
+single-use GitHub OIDC credential delivery or explicitly enabled create-only
+migration. No origin fallback is allowed. Run `test:ios-release`, capability and
+API fallback tests; see [the release runbook](../ios-automatic-testflight.md).
+
+Password migration coverage and encrypted file lifecycle: `passwords/onePassword.ts`,
+`transfer.ts`, `fileCrypto.ts`, `files.client.ts`, `backup.client.ts`, and
+`api/utils/passwords/files.ts`. Every original 1PUX member is retained as an
+encrypted attachment to a source archive entry; item editors preserve structured
+values, source context and password history. See [the password contract](../password-manager.md).
+
+The admin migration status/run contracts are `1.4.0` for guarded incident cleanup;
+the migration UI negotiates both before use. Missing local Mongo/JWT settings
+produce a no-store `503 LOCAL_API_NOT_CONFIGURED` before handler/body execution.
+Public docs and capability discovery remain local and available.
+
+
+`api.ai-chatgpt-plan` 1.1.0 registers GET redacted account/attempt status, local authorization availability and storage mode; same-origin POST begin/cancel/select-model/refresh-models/disconnect/prepare-import/move-account/import-account. An optional `X-Thingtime-Expected-User` header rejects stale-account UI requests. `api.ai-models` 1.7.0 lists owner-scoped plan connections; `api.lopu-chats-reply` 1.20.0 resolves those IDs strictly even when saved and uses plan Responses without API billing fallback. Explicit desktop remote selections negotiate and pin the receiving API before proxying; local mode never falls back. `api.capabilities` 1.2.0 permits custom loopback data authorities for local runtimes. Both manifests derive these versions from the canonical docs registry; tests live in `ai/chatgpt-plan`, `apiCapabilities.test.ts` and the Lopu stream suite.
+
+General compressor storage adds `api.things` 1.41.0, `api.things-update`
+1.12.0 and `api.webpages-resolve` 1.8.0 for validated intrinsic media containers
+with separately editable children. `api.webpages-suites-install` 1.7.0 installs
+the upgraded media-tools definitions. Both manifest generators consume the
+canonical endpoint registry; media suite clients require the new minor before
+installation. No image-byte HTTP endpoint is introduced.
+
+## Mapbox provider integration
+
+`POST /api/v1/maps` negotiates `api.maps` 1.0.0. `api/utils/maps/route.ts`
+uses full-account authorization, owner-scoped Vault references and operation
+rate limits; `mapbox.ts` fixes provider destinations and redacts responses.
+Register `_maps.tsx` in Nitro and the canonical docs registry. Run `test:maps`
+and `test:api-capabilities`; see [maps](../maps.md) for provider storage constraints.
+The saved Builder `tt-mapbox` viewport loads the official `mapbox-gl` npm
+distribution JavaScript and CSS staged as Vite's same-origin public assets
+(`components/Builder/Maps/mapboxSdk.ts`).
+The application CSP permits only the Mapbox service and events origins in
+`connect-src`, with its existing `blob:` worker allowance; it does not permit a
+remote Mapbox script or eval. The separate Library SDK demo keeps its own
+opaque-origin policy and CDN loader.
+
+## Environment gateway and index readiness
+
+The negotiated ingress contract and connection-mode policy are summarized at the
+top of this map. `app/api/utils/deployment/environmentGateway.ts` owns bounded discovery,
+admission and pool draining; `server/utils/environmentGateway.ts` validates
+origin-preserving signed relays before the normal route authorization path.
+`server/middleware/environment-gateway.ts`, the SPA fallback and capability
+handler retain local discovery/static serving while routing data operations.
+`mongodb/indexLifecycle.ts` and `indexMaintenance.mts` coordinate durable index
+readiness without blocking read-only authentication. Existing admin migration
+status/run contracts and Lopu background-task contracts carry their deliberate
+compatible patch versions in both generated manifests.
+
+Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
+the built `test:environment-gateway:acceptance` runner. See
+[the gateway runbook](../environment-api-gateway.md) for server settings,
+environment partitioning and outstanding live rollout acceptance.

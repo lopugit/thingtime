@@ -1,10 +1,15 @@
 import { timelineLocalIndex, validateTimelineRow, type LocalTimelineRow, type TimelineLocalBackend, type TimelineLocalIndex, type TimelineLocalSelection } from './localStore.ts';
 import { joinTimelineEvent, splitTimelineEvent, type TimelineEventRecord, type TimelineLink } from './records.ts';
 import { TIMELINE_BRANCH_CACHE_HEADS, TIMELINE_BRANCH_PENDING_LIMIT, type BranchLocalState, type TimelineBranchBackend } from './branchStore.ts';
+import { TIMELINE_NOTE_CACHE_LIMIT, TIMELINE_NOTE_PENDING_LIMIT, type NoteLocalState, type TimelineNoteBackend } from './noteStore.ts';
 
 type StoredRow = Omit<LocalTimelineRow, 'event'> & { event: TimelineEventRecord };
 type StoredLink = { scope: string; link: TimelineLink };
+/** One scoped per-record store per state field: [field, object store, record key]. */
+type RecordSpecs<State> = readonly (readonly [keyof State & string, string, (row: any) => string])[];
 const stores = ['events', 'eventIndex', 'links'];
+const branchSpecs: RecordSpecs<BranchLocalState> = [['branches', 'branches', row => row.branch.id], ['heads', 'branchHeads', row => row.head.id], ['pending', 'branchCommands', row => row.command.operationId]];
+const noteSpecs: RecordSpecs<NoteLocalState> = [['notes', 'notes', row => row.note.id], ['pending', 'noteCommands', row => row.command.operationId]];
 const hydrate = (row: StoredRow, links: StoredLink[]): LocalTimelineRow => {
 	if (links.some(link => link.scope !== row.scope)) throw new Error('Timeline relationship scope changed');
 	return { ...row, event: joinTimelineEvent(row.event, links.map(item => item.link)) };
@@ -17,12 +22,12 @@ const putRow = (row: LocalTimelineRow, payloads: IDBObjectStore, index: IDBObjec
 
 /** Snapshot records, atomic relationship records and their index commit together. There is no
  * localStorage fallback that could report a successful save while losing edits. */
-export class IndexedDbTimelineBackend implements TimelineLocalBackend, TimelineBranchBackend {
+export class IndexedDbTimelineBackend implements TimelineLocalBackend, TimelineBranchBackend, TimelineNoteBackend {
 	private database: Promise<IDBDatabase> | null = null;
 	constructor(private factory: IDBFactory, private name = 'thingtime-timeline-v1') {}
 	private open(): Promise<IDBDatabase> {
 		if (!this.database) this.database = new Promise<IDBDatabase>((resolve, reject) => {
-			const request = this.factory.open(this.name, 5);
+			const request = this.factory.open(this.name, 6);
 			let abandoned = false;
 			request.onupgradeneeded = change => {
 				const db = request.result;
@@ -35,9 +40,11 @@ export class IndexedDbTimelineBackend implements TimelineLocalBackend, TimelineB
 				const links = db.objectStoreNames.contains('links') ? request.transaction!.objectStore('links') : db.createObjectStore('links', { keyPath: ['scope', 'link.id'] });
 				if (!links.indexNames.contains('event')) links.createIndex('event', ['scope', 'link.eventId']);
 				if (!links.indexNames.contains('target')) links.createIndex('target', ['scope', 'link.relation', 'link.targetId']);
-				for (const [storeName, key] of [['branches', 'branch.id'], ['branchHeads', 'head.id'], ['branchCommands', 'command.operationId']]) {
+				for (const [storeName, key] of [['branches', 'branch.id'], ['branchHeads', 'head.id'], ['branchCommands', 'command.operationId'], ['notes', 'note.id'], ['noteCommands', 'command.operationId']]) {
 					if (!db.objectStoreNames.contains(storeName)) { const store = db.createObjectStore(storeName, { keyPath: ['scope', key] }); store.createIndex('scope', 'scope'); }
 				}
+				const notes = request.transaction!.objectStore('notes');
+				if (!notes.indexNames.contains('event')) notes.createIndex('event', ['scope', 'note.eventId']);
 				// Upgrade existing pending work in place; invalid data aborts the
 				// upgrade, preserving the original DB for recovery.
 				if ((change as IDBVersionChangeEvent).oldVersion >= 4) return;
@@ -127,23 +134,24 @@ export class IndexedDbTimelineBackend implements TimelineLocalBackend, TimelineB
 			transaction.onabort = () => reject(failure ?? transaction.error ?? new Error('Timeline save failed'));
 		});
 	}
-	private async branchTransaction(scope: string, update?: (state: BranchLocalState) => BranchLocalState): Promise<BranchLocalState> {
+	/** One bounded read of every per-record store behind a state view, then an
+	 * atomic diff write of the updated view: unchanged records are not rewritten. */
+	private async recordTransaction<State extends Record<string, { scope: string }[]>>(specs: RecordSpecs<State>, limit: number, label: string, scope: string, update?: (state: State) => State): Promise<State> {
 		const db = await this.open();
 		return new Promise((resolve, reject) => {
-			const specs = [['branches', 'branches', (row: any) => row.branch.id], ['heads', 'branchHeads', (row: any) => row.head.id], ['pending', 'branchCommands', (row: any) => row.command.operationId]] as const;
 			const tx = db.transaction(specs.map(([, name]) => name), update ? 'readwrite' : 'readonly', update ? { durability: 'strict' } : undefined);
-			const reads = specs.map(([, name]) => tx.objectStore(name).index('scope').getAll(scope, TIMELINE_BRANCH_CACHE_HEADS + TIMELINE_BRANCH_PENDING_LIMIT + 1));
-			let waiting = reads.length; let result: BranchLocalState; let failure: unknown;
+			const reads = specs.map(([, name]) => tx.objectStore(name).index('scope').getAll(scope, limit));
+			let waiting = reads.length; let result: State; let failure: unknown;
 			const ready = () => {
 				if (--waiting) return;
 				try {
-					const before = { branches: reads[0].result, heads: reads[1].result, pending: reads[2].result };
+					const before = Object.fromEntries(specs.map(([field], n) => [field, reads[n].result])) as State;
 					result = update ? update(before) : before;
 					if (!update) return;
 					for (const [field, name, key] of specs) {
 						const store = tx.objectStore(name); const old = new Map(before[field].map(row => [key(row), JSON.stringify(row)]));
 						for (const row of result[field]) {
-							if (row.scope !== scope) throw new Error('Timeline branch scope changed');
+							if (row.scope !== scope) throw new Error(`Timeline ${label} scope changed`);
 							const id = key(row); if (old.get(id) !== JSON.stringify(row)) store.put(row); old.delete(id);
 						}
 						for (const id of old.keys()) store.delete([scope, id]);
@@ -151,10 +159,18 @@ export class IndexedDbTimelineBackend implements TimelineLocalBackend, TimelineB
 				} catch (error) { failure = error; tx.abort(); }
 			};
 			reads.forEach(read => { read.onsuccess = ready; });
-			tx.oncomplete = () => resolve(result); tx.onabort = () => reject(failure ?? tx.error ?? new Error('Timeline branch storage failed'));
+			tx.oncomplete = () => resolve(result); tx.onabort = () => reject(failure ?? tx.error ?? new Error(`Timeline ${label} storage failed`));
 		});
+	}
+	private branchTransaction(scope: string, update?: (state: BranchLocalState) => BranchLocalState): Promise<BranchLocalState> {
+		return this.recordTransaction(branchSpecs, TIMELINE_BRANCH_CACHE_HEADS + TIMELINE_BRANCH_PENDING_LIMIT + 1, 'branch', scope, update);
+	}
+	private noteTransaction(scope: string, update?: (state: NoteLocalState) => NoteLocalState): Promise<NoteLocalState> {
+		return this.recordTransaction(noteSpecs, TIMELINE_NOTE_CACHE_LIMIT + TIMELINE_NOTE_PENDING_LIMIT + 1, 'note', scope, update);
 	}
 	readBranchState(scope: string): Promise<BranchLocalState> { return this.branchTransaction(scope); }
 	async changeBranchState(scope: string, update: (state: BranchLocalState) => BranchLocalState): Promise<void> { await this.branchTransaction(scope, update); }
+	readNoteState(scope: string): Promise<NoteLocalState> { return this.noteTransaction(scope); }
+	async changeNoteState(scope: string, update: (state: NoteLocalState) => NoteLocalState): Promise<void> { await this.noteTransaction(scope, update); }
 	async close(): Promise<void> { const db = this.database; this.database = null; (await db)?.close(); }
 }

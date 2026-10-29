@@ -1,4 +1,5 @@
 import Foundation
+import AppleFileSync
 
 public struct NodeStatus: Codable, Equatable, Sendable {
     public let service: String
@@ -56,6 +57,7 @@ public actor ThingtimeNodeController {
     private static let maximumPairingAttempts = 3
     private static let basePairingCapabilities = [
         "filesystem.v1",
+        "script.bash.v1",
         "ai.session.create",
         "ai.session.interrupt",
         "ai.session.list",
@@ -128,6 +130,7 @@ public actor ThingtimeNodeController {
     private static let readMethods: Set<String> = [
         "node.status",
         "telemetry.snapshot",
+        "telemetry.battery",
         "permissions.preflight",
         "pairing.status",
         "pairing.begin",
@@ -148,10 +151,11 @@ public actor ThingtimeNodeController {
         "desktop-chat.send"
     ]
 
+    private let folderSync: MacFolderSync?
     private let journal: CommandJournal
     private let pairing: PairingManager
     private let connector: ConnectorRuntime
-    private let telemetry: DeviceTelemetryCollector
+    private let telemetry: any DeviceTelemetryProviding
     private let actionExecutor: SafeActionExecutor
     private let controlPlaneClient: (any ControlPlaneClient)?
     private let desktopChat: DesktopChatRuntime?
@@ -159,14 +163,16 @@ public actor ThingtimeNodeController {
 
     public init(
         journal: CommandJournal,
+        folderSync: MacFolderSync? = nil,
         pairing: PairingManager,
         connector: ConnectorRuntime,
-        telemetry: DeviceTelemetryCollector,
+        telemetry: any DeviceTelemetryProviding,
         actionExecutor: SafeActionExecutor,
         controlPlaneClient: (any ControlPlaneClient)? = nil,
         desktopChat: DesktopChatRuntime? = nil,
         pairingScopeChanged: @escaping @Sendable (String?) async throws -> Void = { _ in }
     ) {
+        self.folderSync = folderSync
         self.journal = journal
         self.pairing = pairing
         self.connector = connector
@@ -175,6 +181,21 @@ public actor ThingtimeNodeController {
         self.controlPlaneClient = controlPlaneClient
         self.desktopChat = desktopChat
         self.pairingScopeChanged = pairingScopeChanged
+    }
+
+    public func handleLocalFolderSync(_ request: NodeRequest, stream: (@Sendable (Data) throws -> Void)? = nil, receive: (@Sendable (Int) throws -> Data)? = nil, batchCallback: (@Sendable (JSONValue, TimeInterval) async throws -> JSONValue)? = nil) async -> NodeResponse {
+        guard request.method == "folder-sync.request", let folderSync else {
+            return .failure(id: request.id, code: "unsupported_feature", message: "This node does not support local folder sync.")
+        }
+        do { return .success(id: request.id, result: try await folderSync.handle(request.parameters, stream: stream, receive: receive, batchCallback: batchCallback)) }
+        catch let error as MobileFolderStore.Failure { return .failure(id: request.id, code: "folder_unavailable", message: error.localizedDescription) }
+        catch is CancellationError { return .failure(id: request.id, code: "cancelled", message: "Folder access was cancelled.") }
+        catch where MacFolderSync.identityVerificationIsTransient(error) {
+            // Electron IPC preserves messages, but may drop custom Error fields.
+            // This fixed marker carries no upstream error text or private data.
+            return .failure(id: request.id, code: "folder_identity_retry", message: "[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.")
+        }
+        catch { return .failure(id: request.id, code: "folder_unavailable", message: "Folder access could not be verified. Check pairing, consent and the selected account.") }
     }
 
     public func handle(_ request: NodeRequest) async -> NodeResponse {
@@ -217,6 +238,8 @@ public actor ThingtimeNodeController {
             result = try JSONValue.from(status)
         case "telemetry.snapshot":
             result = try await JSONValue.from(telemetry.snapshot())
+        case "telemetry.battery":
+            result = .object(["battery": try await JSONValue.from(telemetry.batterySnapshot())])
         case "permissions.preflight":
             result = try await JSONValue.from(telemetry.permissionPreflight())
         case "pairing.status":
@@ -421,6 +444,7 @@ public actor ThingtimeNodeController {
 
     public static func runtimeCapabilities(for device: DeviceTelemetry) -> [String] {
         var pairingCapabilities = Self.basePairingCapabilities
+        if device.menuBar != nil { pairingCapabilities.append("system.menu-bar.read.v1") }
         if let mainDisplay = device.displays.first(where: { $0.isMain }), mainDisplay.brightness != nil {
             pairingCapabilities.append("system.brightness.read")
             if mainDisplay.brightnessControlSupported {
@@ -502,7 +526,7 @@ public actor ThingtimeNodeController {
             }
             payload["commandId"] = .string(command.commandID)
             if DesktopChatRuntime.supports(connectorID: connectorID) {
-                let device = await telemetry.snapshot()
+                let session = await telemetry.sessionSnapshot()
                 return NodeRequest(
                     id: requestID,
                     commandId: command.commandID,
@@ -512,7 +536,7 @@ public actor ThingtimeNodeController {
                         "operation": .string(command.method),
                         "payload": .object(payload),
                         "explicitlyApproved": .bool(command.approvedForExecution),
-                        "sessionLocked": .bool(device.session.isLocked)
+                        "sessionLocked": .bool(session.isLocked)
                     ])
                 )
             }
@@ -552,6 +576,9 @@ public actor ThingtimeNodeController {
         let action: SafeActionRequest
         let input = try requireObject(command.parameters)
         switch command.method {
+        case "script.run":
+            guard command.approvedForExecution else { throw ThingtimeNodeError.approvalRequired("Approve this exact script before execution.") }
+            action = SafeActionRequest(kind: .runScript, parameters: input)
         case "filesystem":
             action = SafeActionRequest(kind: .filesystem, parameters: input)
         case "system.volume.set":
@@ -826,12 +853,12 @@ public actor ThingtimeNodeController {
         default:
             throw ThingtimeNodeError.invalidRequest("Unknown leased command kind.")
         }
-        let device = await telemetry.snapshot()
+        let session = await telemetry.sessionSnapshot()
         let envelope = ActionEnvelope(
             action: action,
             context: SafeActionContext(
                 origin: .remoteAccount,
-                sessionLocked: device.session.isLocked,
+                sessionLocked: session.isLocked,
                 userApproved: command.approvedForExecution
             )
         )

@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -121,7 +122,7 @@ export const useLocalThingtimeNode = (
 			});
 	}, [bridge, state.status, state.permissions, state.permissionsCheckedAt, state.permissionCheckError]);
 
-	const refresh = useCallback(() => {
+	const refresh = useCallback((options?: { quiet?: boolean }) => {
 		if (refreshInFlightRef.current) return refreshInFlightRef.current;
 		const run = async () => {
 			const generation = ++statusRefreshGenerationRef.current;
@@ -130,7 +131,7 @@ export const useLocalThingtimeNode = (
 				setState((previous) => ({ ...previous, available: false, checking: false }));
 				return null;
 			}
-			setState((previous) => ({ ...previous, available: true, checking: true }));
+			setState((previous) => ({ ...previous, available: true, checking: !options?.quiet || !previous.status }));
 			try {
 				const [statusResult, permissionsResult] = await Promise.allSettled([currentBridge.nodeGetStatus(), currentBridge.nodeGetPermissions?.()]);
 				if (statusResult.status === 'rejected') throw statusResult.reason;
@@ -169,15 +170,15 @@ export const useLocalThingtimeNode = (
 	useEffect(() => {
 		if (!bridge?.nodeGetStatus || typeof window === 'undefined') return;
 		const refreshAfterSettings = () => {
-			if (document.visibilityState === 'visible') void refresh();
+			if (document.visibilityState === 'visible') return refresh({ quiet: true });
 		};
-		window.addEventListener('focus', refreshAfterSettings);
-		document.addEventListener('visibilitychange', refreshAfterSettings);
-		const timer = window.setInterval(refreshAfterSettings, 5_000);
+		activityEvents(window, 'events:components/Devices/useLocalThingtimeNode', 'useLocalThingtimeNode').addEventListener('focus', refreshAfterSettings);
+		activityEvents(document, 'events:components/Devices/useLocalThingtimeNode', 'useLocalThingtimeNode').addEventListener('visibilitychange', refreshAfterSettings);
+		const timer = activityInterval('timer:components/Devices/useLocalThingtimeNode:1', 'Local node status', refreshAfterSettings, 30_000);
 		return () => {
-			window.clearInterval(timer);
-			window.removeEventListener('focus', refreshAfterSettings);
-			document.removeEventListener('visibilitychange', refreshAfterSettings);
+			clearActivityInterval(timer);
+			activityEvents(window, 'events:components/Devices/useLocalThingtimeNode', 'useLocalThingtimeNode').removeEventListener('focus', refreshAfterSettings);
+			activityEvents(document, 'events:components/Devices/useLocalThingtimeNode', 'useLocalThingtimeNode').removeEventListener('visibilitychange', refreshAfterSettings);
 		};
 	}, [bridge?.nodeGetStatus, refresh]);
 

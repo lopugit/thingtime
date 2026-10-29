@@ -1,3 +1,5 @@
+import { createHostMediaPipeline } from './hostMediaPipeline';
+import { mediaExport } from './mediaExport';
 import React from 'react';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { validatePlatformProgram } from './compiler';
@@ -9,7 +11,10 @@ import type { PlatformProgram } from './types';
 export default function WebPlatformSurface({ program: raw, name }: { program?: unknown; name?: unknown }) {
 	const user = useCurrentUser();
 	const serialized = JSON.stringify([user?.id ?? null, raw ?? null]);
-	const fieldName = typeof name === 'string' && /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/.test(name) && !['constructor', 'prototype', '__proto__'].includes(name) ? name : undefined;
+	const fieldName =
+		typeof name === 'string' && /^[A-Za-z_][A-Za-z0-9_-]{0,39}$/.test(name) && !['constructor', 'prototype', '__proto__'].includes(name)
+			? name
+			: undefined;
 	return <PlatformInstance key={serialized} raw={raw} fieldName={fieldName} />;
 }
 function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string }) {
@@ -23,24 +28,83 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 	const [definition, setDefinition] = React.useState(() => JSON.stringify(initial, null, 2));
 	const [inputs, setInputs] = React.useState<PlatformInputEdits>({});
 	const current = React.useMemo(() => {
-		try { return validatePlatformProgram(JSON.parse(definition)); } catch { return null; }
+		try {
+			return validatePlatformProgram(JSON.parse(definition));
+		} catch {
+			return null;
+		}
 	}, [definition]);
 	const draft = React.useMemo(() => {
-		try { return { value: snapshotPlatformDraft(definition, inputs), error: '' }; }
-		catch (error) { return { value: null, error: error instanceof Error ? error.message : 'Check the program and inputs' }; }
+		try {
+			return { value: snapshotPlatformDraft(definition, inputs), error: '' };
+		} catch (error) {
+			return { value: null, error: error instanceof Error ? error.message : 'Check the program and inputs' };
+		}
 	}, [definition, inputs]);
-	const [job, setJob] = React.useState<{ program: PlatformProgram; input: Record<string, unknown>; id: string } | null>(null);
+	const [job, setJob] = React.useState<{ program: PlatformProgram; input: Record<string, unknown>; id: string } | null>(() => {
+		if (!initial?.media) return null;
+		const saved = snapshotPlatformDraft(JSON.stringify(initial), {});
+		return { ...saved, id: crypto.randomUUID() };
+	});
+	const liveDraft = React.useRef(draft);
+	liveDraft.current = draft;
+	const [frameHeight, setFrameHeight] = React.useState(560);
 	const [result, setResult] = React.useState('');
 	const [error, setError] = React.useState('');
+	const [download, setDownload] = React.useState<{ url: string; name: string; runId: string } | null>(null);
 	const frame = React.useRef<HTMLIFrameElement>(null);
 	React.useEffect(() => {
 		if (!job) return;
+		const media = job.program.media
+			? createHostMediaPipeline(
+					job.program.media,
+					() => {
+						const current = liveDraft.current;
+						if (!current.value) throw new Error(current.error);
+						if (JSON.stringify(current.value.program.media) !== JSON.stringify(job.program.media)) throw new Error('Apply the edited program before starting.');
+						return current.value.input;
+					},
+					() => new Worker(new URL('./mediaWorker.ts', import.meta.url), { type: 'module' }),
+					(requestId, result) => {
+						frame.current?.contentWindow?.postMessage({ type: 'tt-platform-media-result', runId: job.id, requestId, result }, '*');
+					},
+					async signal => (await import('./imageAssets')).loadImageWasmAssets(signal)
+			  )
+			: undefined;
 		let ready = false;
+		let outputUrl: string | undefined;
+		const clearOutput = () => {
+			if (outputUrl) URL.revokeObjectURL(outputUrl);
+			outputUrl = undefined;
+			setDownload(null);
+		};
 		const receive = (e: MessageEvent) => {
 			if (e.source !== frame.current?.contentWindow) return;
+			if (
+				e.data?.type === 'tt-platform-layout' &&
+				e.data.runId === job.id &&
+				job.program.media &&
+				Number.isFinite(e.data.height) &&
+				e.data.height > 0
+			)
+				setFrameHeight(Math.min(10000, e.data.height));
+			if (e.data?.runId === job.id) media?.receive(e.data);
 			if (e.data?.type === 'tt-platform-ready' && !ready) {
 				ready = true;
 				frame.current?.contentWindow?.postMessage({ type: 'tt-platform-start', program: job.program, input: job.input, runId: job.id }, '*');
+			}
+			if (e.data?.type === 'tt-platform-file' && e.data.runId === job.id && job.program.media) {
+				try {
+					const output = mediaExport(e.data.file);
+					clearOutput();
+					if (output) {
+						outputUrl = URL.createObjectURL(output.blob);
+						setDownload({ url: outputUrl, name: output.name, runId: job.id });
+					}
+				} catch {
+					clearOutput();
+					setError('The media runtime returned an invalid output.');
+				}
 			}
 			if (e.data?.type === 'tt-platform-result' && e.data.runId === job.id && typeof e.data.text === 'string' && e.data.text.length <= 65536) {
 				setResult(e.data.text);
@@ -54,6 +118,8 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 		return () => {
 			removeEventListener('message', receive);
 			clearTimeout(timeout);
+			media?.dispose();
+			clearOutput();
 		};
 	}, [job]);
 	if (!initial) return <p role="note">{invalid}</p>;
@@ -81,13 +147,19 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 	};
 	return (
 		<section aria-label={initial.title} style={{ display: 'grid', gap: 14, minWidth: 0 }}>
-			{fieldName && <input type="hidden" name={fieldName} data-tt-input-type="json" value={draft.value ? JSON.stringify(draft.value.program) : ''} readOnly />}
+			{fieldName && (
+				<input type="hidden" name={fieldName} data-tt-input-type="json" value={draft.value ? JSON.stringify(draft.value.program) : ''} readOnly />
+			)}
 			<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,220px),1fr))', gap: 12 }}>
 				{(current || initial).parameters?.map((p) => (
 					<label key={p.name} style={{ display: 'grid', gap: 5, fontSize: 13 }}>
 						{p.label}
 						{p.type === 'boolean' ? (
-							<input type="checkbox" checked={platformFieldValue(p, inputs) === true} onChange={(e) => setInputs({ ...inputs, [p.name]: { type: p.type, value: e.target.checked } })} />
+							<input
+								type="checkbox"
+								checked={platformFieldValue(p, inputs) === true}
+								onChange={(e) => setInputs({ ...inputs, [p.name]: { type: p.type, value: e.target.checked } })}
+							/>
 						) : (
 							<input
 								style={field}
@@ -102,9 +174,9 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 			</div>
 			<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
 				<button type="button" style={{ ...field, width: 'auto', background: '#18181b', color: '#fff', cursor: 'pointer' }} onClick={run}>
-					Run example
+					{initial.media ? 'Reset selection / apply program' : 'Run example'}
 				</button>
-				<button
+				{!initial.media && <button
 					type="button"
 					style={{ ...field, width: 'auto', cursor: 'pointer' }}
 					onClick={() => {
@@ -114,7 +186,7 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 					}}
 				>
 					Stop / clear
-				</button>
+				</button>}
 			</div>
 			{(error || draft.error) && (
 				<p role="status" style={{ color: '#9f1239', overflowWrap: 'anywhere' }}>
@@ -130,13 +202,19 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 					sandbox={job.program.allowFormEvents ? 'allow-scripts allow-forms' : 'allow-scripts'}
 					referrerPolicy="no-referrer"
 					style={{
+						order: job.program.media ? -1 : undefined,
 						width: '100%',
-						height: job.program.document?.length ? 320 : 0,
+						height: job.program.document?.length ? (job.program.media ? frameHeight : 320) : 0,
 						border: job.program.document?.length ? '1px solid #e4e4e7' : 0,
 						borderRadius: 12,
 						background: '#fff'
 					}}
 				/>
+			)}
+			{download && job?.id === download.runId && (
+				<a href={download.url} download={download.name} style={{ ...field, width: 'fit-content', maxWidth: '100%', overflowWrap: 'anywhere' }}>
+					Download output
+				</a>
 			)}
 			{result && (
 				<pre
@@ -159,8 +237,10 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 			<details>
 				<summary style={{ cursor: 'pointer', fontSize: 13 }}>Edit reusable program</summary>
 				<p style={{ fontSize: 13 }}>
-					Change the document, CSS rules, parameters and Action steps. Run uses this draft.
-					{fieldName ? ' Save edited component keeps the complete program and your current inputs as defaults.' : ' Save the definition on your Component Thing to keep it.'}
+					Change the document, CSS rules, parameters and Action steps. Apply uses this draft. Settings take effect on the next Start.
+					{fieldName
+						? ' Save edited component keeps the complete program and your current inputs as defaults.'
+						: ' Save the definition on your Component Thing to keep it.'}
 				</p>
 				<textarea
 					aria-label="Web Platform program"
@@ -171,8 +251,10 @@ function PlatformInstance({ raw, fieldName }: { raw: unknown; fieldName?: string
 						setDefinition(value);
 						try {
 							const next = validatePlatformProgram(JSON.parse(value));
-							setInputs(previous => reconcilePlatformInputs(next, previous));
-						} catch { /* Keep edits while incomplete JSON is being typed. */ }
+							setInputs((previous) => reconcilePlatformInputs(next, previous));
+						} catch {
+							/* Keep edits while incomplete JSON is being typed. */
+						}
 					}}
 					maxLength={24576}
 				/>

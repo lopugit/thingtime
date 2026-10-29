@@ -21,7 +21,7 @@ final class WireCodecTests: XCTestCase {
     }
 
     func testXPCPolicyLimitsBridgeToOnboardingAndPresenceGatedPairing() {
-        for method in ["node.status", "permissions.preflight", "pairing.status", "pairing.begin"] {
+        for method in ["node.status", "telemetry.battery", "permissions.preflight", "pairing.status", "pairing.begin"] {
             XCTAssertEqual(ThingtimeNodeXPCRequestPolicy.access(for: method), .onboardingRead)
         }
         for method in ["pairing.claim", "pairing.resume", "pairing.unpair"] {

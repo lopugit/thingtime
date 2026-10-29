@@ -7,9 +7,12 @@ import { versionContent, type VersionChoices, type VersionConflict } from './ver
 
 /** Three independently bounded content snapshots plus component comparison. */
 export const PUBLISHED_PREVIEW_MAX_BYTES = 16 * 1024 * 1024;
+/** The label is the only signal old and new clients share for an undo: the
+ * committed event keeps operation 'restore', never a new operation value. */
+export const TIMELINE_UNDO_LABEL = 'Undid change';
 export type VersionRequest = {
 	command: 'preview-version' | 'apply-version';
-	mode: 'restore' | 'merge';
+	mode: 'restore' | 'merge' | 'undo';
 	eventId: string;
 	expectedHeadId?: string;
 	operationId?: string;
@@ -75,7 +78,7 @@ export function parseVersionRequest(input: unknown): VersionRequest {
 				].includes(key)
 		) ||
 		!['preview-version', 'apply-version'].includes(value.command) ||
-		!['restore', 'merge'].includes(value.mode) ||
+		!['restore', 'merge', 'undo'].includes(value.mode) ||
 		!id(value.eventId)
 	)
 		throw new Error('Invalid version request.');

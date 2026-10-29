@@ -1,3 +1,9 @@
+import { useFormatClock } from './useFormatClock';
+import { resolveBlockProps } from './templateBlocks';
+import { contentSlot } from './contentSlots';
+import { ComponentCollection } from './ComponentCollection';
+import { ComponentDataScope } from './ComponentSelect';
+import { useWebpageRuntime } from './webpageRuntime';
 import React from 'react';
 import { componentTextOverrides } from './componentTextOverrides';
 import { builderPoint, builderRect } from './builderCoordinates';
@@ -6,9 +12,9 @@ import { mapCssMediaUrls } from '../Sharing/renderMediaCore';
 import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { isExternalHref, isSafeUrl } from '../Kinds/safeUrl';
-import { HtmlThingRenderer } from '../Kinds/HtmlThingRenderer';
+import { HtmlThingRenderer, HtmlBlockElement } from '../Kinds/HtmlThingRenderer';
 import { NativeControlsEnabled } from './NativeComponentControls';
-import { defaultsFromArgs, sanitizeArgSpecs } from '../ComponentsLibrary/componentTemplate';
+import { defaultsFromArgs, sanitizeArgSpecs, resolveTemplate } from '../ComponentsLibrary/componentTemplate';
 import { type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
 import { LiveTemplate, useThingSource } from './liveComponent';
 import { htmlToNode } from './htmlToNode';
@@ -52,7 +58,7 @@ export type BuilderChrome = {
 	hoverId: string | null;
 	selectedId: string | null;
 	onHover: (id: string | null) => void;
-	onSelect: (id: string, element: HTMLElement) => void;
+	onSelect: (id: string, element?: HTMLElement) => void;
 	// open the inline "+ add new block" menu for (containerId, index)
 	onInsert: (containerId: string | null, index: number, anchor: HTMLElement) => void;
 	// drag/drop reorder — move block `id` to (containerId, index)
@@ -941,6 +947,11 @@ const ComponentBlockView = ({
 };
 
 export type WebpageBlocksRendererProps = {
+  // Host-registered authorized data adapters inside ordinary editable elements.
+  // Authored blocks can only select a name from this explicit local map.
+  contentSlots?: Record<string, (context: { scope: Record<string, unknown>; editing: boolean }) => React.ReactNode>;
+  // Inert addresses for caller-supplied draft crops; no behavior or authority.
+  draftAddresses?: boolean;
 	// Keep the live DOM mounted as editor overlays appear or change modes.
 	seamless?: boolean;
 	blocks: WebpageBlock[];
@@ -965,6 +976,80 @@ export type WebpageBlocksRendererProps = {
 	// WITHOUT the root column Flex so the shell's own layout (centering, gap)
 	// applies to sections exactly as it does on the route render
 	bare?: boolean;
+};
+
+const SourceBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }) => {
+ const source = useBlockSource(props.block, props.block.args || {}, !!props.interactive);
+ return <LiveTemplate render={{ tag: 'span' }} scope={{ ...props.block.args, ...source.scope }}
+  interactive={!!props.interactive && (!props.chrome || props.chrome.seamlessMode === 'view')}
+  confirm={props.confirm} onUnowned={props.onTtActionUnowned}>
+  <BlockView {...props} block={{ ...props.block, source: undefined, args: undefined }} />
+ </LiveTemplate>;
+};
+
+/** Authored DOM elements are the selection boundary themselves. No wrapper div
+ * breaks a summary, a grid, or a row. Repeated rows share one editable template. */
+const AuthoredBlock = (props: WebpageBlocksRendererProps & { block: WebpageBlock }) => {
+ const { block, chrome } = props;
+ const scope = React.useContext(ComponentDataScope);
+ const runtime = useWebpageRuntime();
+ const formatNow = useFormatClock(block.format, scope);
+ const editing = !!chrome && chrome.seamlessMode !== 'view';
+ const attributes = resolveBlockProps(block.props || {}, scope) as Record<string, any>;
+ if (attributes['data-tt-action-inputs'] && typeof attributes['data-tt-action-inputs'] === 'object') attributes['data-tt-action-inputs'] = JSON.stringify(attributes['data-tt-action-inputs']);
+ const selected = chrome?.selectedId === block.id;
+ const hovered = chrome?.hoverId === block.id;
+ const children = attributes.transparent === true || block.tag === 'select'
+  ? (block.children || []).map(child => <BlockView {...props} key={child.id} block={child} />)
+  : <BlockList {...props} blocks={block.children || []} containerId={block.id} />;
+ const editorProps: Record<string, any> = {
+  'data-block-id': block.id,
+  style: { ...cssRecordToStyle(block.css), ...(editing && (selected || hovered) ? { outline: '2px solid var(--tt-accent, hotpink)', outlineOffset: '2px' } : {}) },
+  ...(editing ? {
+   ...(attributes.hidden === true ? { hidden:false, style:{ ...cssRecordToStyle(block.css), display:'block', minHeight:44, outline:selected || hovered ? '2px solid var(--tt-accent, hotpink)' : undefined } } : {}),
+   onMouseOver: (event: React.MouseEvent<HTMLElement>) => { event.stopPropagation(); chrome.onHover(block.id); },
+   onClick: (event: React.MouseEvent<HTMLElement>) => {
+    if ((event.target as Element).closest('[data-block-id]') !== event.currentTarget) return;
+    event.preventDefault(); event.stopPropagation(); chrome.onSelect(block.id, event.currentTarget);
+   },
+   onContextMenu: (event: React.MouseEvent<HTMLElement>) => {
+    if ((event.target as Element).closest('[data-block-id]') !== event.currentTarget) return;
+    event.preventDefault(); event.stopPropagation(); chrome.onSelect(block.id, event.currentTarget);
+    const point = builderPoint(event.currentTarget, event.clientX, event.clientY);
+    chrome.onContextMenu?.(block.id, point.x, point.y);
+   }
+  } : {})
+ };
+ if (block.type === 'condition') {
+  // Page conditions see the selected page runtime's bounded URL query. Keep
+  // inherited Component data intact; an inert Builder/preview runtime must not
+  // replace a nested Component's own query scope with an empty object.
+  const conditionScope = runtime.pageId ? { ...scope, query: runtime.query } : scope;
+  const matches = resolveTemplate({ ttIf: { ...block.condition, then: 'yes', else: 'no' } }, conditionScope) === 'yes';
+  if (!editing) return matches === !!block.condition?.negate ? null : <>{children}</>;
+  return <div {...editorProps} style={{ ...editorProps.style, ...(editing ? { padding: '4px', border: '1px dashed var(--tt-border, #ddd)' } : { display: 'contents' }) }}>
+   {editing && <small style={{ color: 'var(--tt-muted)' }}>{block.condition?.negate ? 'Otherwise' : 'When'} {String(block.condition?.arg || '')}</small>}{children}
+  </div>;
+ }
+ // Expanded Component collections still own their saved source binding. The
+ // collection loader requires this same live-control context as a Component;
+ // without it the live page silently renders an empty catalogue.
+ const collection = block.type === 'collection' && !editing
+  ? <NativeControlsEnabled.Provider value={!!props.interactive}><ComponentCollection {...attributes} renderItem={() => children} /></NativeControlsEnabled.Provider>
+  : null;
+ if (block.type === 'collection' && attributes.transparent === true && !editing) return collection;
+ if (block.type === 'collection') return <div {...editorProps}>
+  {editing ? <><small>List template · {String(attributes.label || 'Records')}</small>{children}</> :
+   collection}
+ </div>;
+ const slot = contentSlot(props.contentSlots, attributes['data-tt-content-slot']);
+ const text = block.format ? resolveTemplate({ ttFormat: block.format }, { ...scope, clock: { now: formatNow } }) : resolveTemplate(block.text || '', scope);
+ const element = <HtmlBlockElement tag={block.tag || 'div'} attributes={{ ...attributes, ...(editing && ['details', 'dialog'].includes(block.tag || '') ? { open: true } : {}) }} editorProps={editorProps}>
+  {typeof text === 'string' || typeof text === 'number' ? (editing && !text && block.text ? block.text : text) : null}{block.children ? children : null}{slot ? slot({ scope, editing }) : null}
+ </HtmlBlockElement>;
+ return block.tag === 'tt-media-pipeline' || block.tag === 'tt-mapbox' || block.tag === 'tt-form' || block.tag === 'tt-change' || block.tag === 'tt-select'
+  ? <NativeControlsEnabled.Provider value={block.tag === 'tt-form' ? editing || props.interactive !== false : ['tt-mapbox', 'tt-change', 'tt-select'].includes(block.tag || '') ? !!props.interactive && !editing : props.interactive !== false && !editing}>{element}</NativeControlsEnabled.Provider>
+  : element;
 };
 
 const BlockView = (
@@ -1008,6 +1093,8 @@ const BlockView = (
 		[cssTypo]
 	);
 
+	if ((block.source || block.args) && block.type !== 'component') return <SourceBlock {...props} />;
+	if (['element', 'collection', 'condition'].includes(block.type)) return <AuthoredBlock {...props} />;
 	let body: React.ReactNode = null;
 	if (block.type === 'text') {
 		const typo = mergedTypo;
@@ -1210,7 +1297,7 @@ const BlockView = (
 		// defeat page-owned shells that center their children (e.g. /welcome)
 		if (block.type === 'native') return <>{body}</>;
 		return (
-			<Box {...selfPlacement(block, parentDirection)} style={cssRecordToStyle(block.css, mediaUrl)}>
+			<Box data-draft-block={props.draftAddresses ? block.id : undefined} {...selfPlacement(block, parentDirection)} style={cssRecordToStyle(block.css, mediaUrl)}>
 				{body}
 			</Box>
 		);

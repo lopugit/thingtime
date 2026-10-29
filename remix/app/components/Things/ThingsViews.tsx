@@ -1,8 +1,8 @@
 import React from 'react';
 
-import { Box, Button, Checkbox, Flex, Grid, Text } from '@chakra-ui/react';
+import { Box, Button, Checkbox, Flex, Grid, IconButton, Image, Text } from '@chakra-ui/react';
 import type { TextProps } from '@chakra-ui/react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { ChakraThingRenderer, HtmlThingRenderer, RenderThing, isChakraThingNode } from '~/components/Kinds';
@@ -14,6 +14,7 @@ import { CARD_STYLES } from '~/theme/card';
 import { ThingActionMenuButton } from '../Thingtime/ContextMenu/ThingActionMenuButton';
 import { buildThingsItemMenu } from './thingsMenuModel';
 import { thingBrowseHref } from './thingsLocation';
+import { browseClickIntent, BROWSE_CONTROLS_SX } from './browseInteraction';
 import { RecordingTranscript } from '../Attachments/RecordingTranscript';
 
 import type {
@@ -24,8 +25,10 @@ import {
   formatWhen,
   interpolateRenderTree,
   isFolder,
+  isBuilderApp,
   primaryKindOf,
   thingDisplayName,
+  thingBuilderHref,
   thingIcon
 } from './thingsCore';
 
@@ -58,8 +61,8 @@ export const SchemaTemplateRender = ({ template, crystal }: { template: Record<s
 };
 
 // Bounded, non-interactive live render of a thing. pointerEvents none keeps
-// clicks selecting the tile (a link inside a preview must never hijack
-// selection), and the height clamp keeps arbitrary things from bloating rows.
+// clicks activating the tile (a link inside a preview must never hijack
+// its primary action), and the height clamp keeps arbitrary things from bloating rows.
 // A data thing whose schema ships a render template draws through THAT
 // template with its own crystal values interpolated ({field} tokens) — always
 // via the sanitising allowlist renderers, same as /schemas cards.
@@ -109,18 +112,21 @@ const ThingPreviewBox = ({
 };
 
 // Per-item actions the page implements; views only surface them. 'open' is
-// double-click / the title link (folders navigate in place, every other kind
+// single-click / the title link (folders navigate in place, every other kind
 // opens its own page — thingsCore.thingLink); 'preview' is the explicit
 // quick-look modal. Rename applies to kinds whose crystal carries a name.
 export type ThingsItemAction =
   | 'history'
   | 'send-to-lopu'
   | 'open'
+  | 'open-builder'
+  | 'open-live'
   | 'preview'
   | 'inspect'
   | 'paste-into'
   | 'rename'
   | 'edit'
+  | 'edit-definition'
   | 'move'
   | 'share'
   | 'copy'
@@ -143,7 +149,7 @@ export type ThingsItemHandlers = {
   selected: Set<string>;
   cutIds: Set<string>;
   isMobile: boolean;
-  // click = selection semantics (meta/shift handled by the page)
+  // Ordinary clicks open; modifier clicks select (range handled by the page).
   onItemClick: (thing: ThingsThing, event: React.MouseEvent) => void;
   onItemOpen: (thing: ThingsThing) => void;
   onItemToggle: (thing: ThingsThing) => void;
@@ -165,7 +171,10 @@ export type ThingsDevicePresentation = {
 	devices?: DeviceRuntimeState[];
 	deviceCounts?: Record<string, { commands: number; approvals: number }>;
 	selectedDeviceId?: string | null;
+	deviceMenuId?: string | null;
 	onDeviceSelect?: (deviceId: string) => void;
+	onDeviceOpen?: (deviceId: string) => void;
+	onDeviceContextMenu?: (deviceId: string, event: React.MouseEvent) => void;
 };
 
 const pendingCommandCount = (state: DeviceRuntimeState): number =>
@@ -208,17 +217,18 @@ const dropHighlight = (thing: ThingsThing, handlers: ThingsItemHandlers) =>
 // What "Open" opens, named per kind so the menu never promises a preview
 // where a page will appear.
 
-// A plain left click, no modifier — the one case the tile handles itself;
-// ⌘/ctrl/shift/middle clicks stay with the browser (new tab, window).
-const isPlainClick = (event: React.MouseEvent): boolean =>
-  event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+// Titles retain real hrefs for keyboard and middle-click navigation. Modifier
+// clicks use the same selection path as the surrounding tile or row.
+const handleItemClick = (thing: ThingsThing, handlers: ThingsItemHandlers, event: React.MouseEvent, onOpen?: () => void) => {
+  const intent = browseClickIntent(event);
+  if (intent === 'native') return;
+  event.preventDefault();
+  if (intent === 'ignore') return;
+  if (intent === 'select') handlers.onItemClick(thing, event);
+  else if (onOpen) onOpen();
+  else handlers.onItemOpen(thing);
+};
 
-// The tile's title is a REAL link to the thing's own page: middle-click,
-// ⌘-click and the keyboard (Tab, Enter) work natively through the href. A
-// plain click stops at the link — the tile's single-click selection is not
-// disturbed — and hands off to the page's open handler, which keeps folder
-// navigation (selection + search resets) and the referrer hint on one path.
-// Never draggable itself: the tile is the drag source.
 const TitleLink = ({
   thing,
   handlers,
@@ -237,25 +247,44 @@ const TitleLink = ({
     draggable={false}
     onClick={(event: React.MouseEvent) => {
       event.stopPropagation();
-      if (!isPlainClick(event)) return;
-      event.preventDefault();
-      if (onOpen) onOpen();
-      else handlers.onItemOpen(thing);
+      handleItemClick(thing, handlers, event, onOpen);
     }}
     onDoubleClick={(event: React.MouseEvent) => event.stopPropagation()}
-    to={handlers.itemHref?.(thing) || (thing.inode ? `/things?files=${encodeURIComponent(thing.inode.deviceId)}&path=${encodeURIComponent(thing.inode.type === 'folder' ? thing.inode.path : thing.inode.path.split('/').slice(0, -1).join('/'))}` : thingBrowseHref(thing, handlers.locationSearch))}
+    to={handlers.itemHref?.(thing) || (thing.inode ? `/things?files=${encodeURIComponent(thing.inode.deviceId)}&path=${encodeURIComponent(thing.inode.type === 'folder' ? thing.inode.path : thing.inode.path.split('/').slice(0, -1).join('/'))}` : thingBrowseHref(thing, handlers.locationSearch, handlers.ownerId))}
     {...textProps}
   >
     {thingDisplayName(thing)}
   </Text>
 );
 
-const ItemMenu = ({ thing, handlers }: { thing: ThingsThing; handlers: ThingsItemHandlers }) => (
-  <ThingActionMenuButton zIndex={handlers.menuZIndex} identity={`${handlers.ownerId}:${thing.id}`}
+export const ItemMenu = ({ thing, handlers }: { thing: ThingsThing; handlers: ThingsItemHandlers }) => (
+  <Box className="thing-item-controls" display="inline-flex" flexShrink={0}>
+  <ThingActionMenuButton label={`${thingDisplayName(thing)} actions`} zIndex={handlers.menuZIndex} identity={`${handlers.ownerId}:${thing.id}`}
     model={handlers.itemMenuFor?.(thing) || buildThingsItemMenu({ thing, ownerId: handlers.ownerId, locationSearch: handlers.locationSearch,
       actCount: handlers.selected.has(thing.id) ? Math.max(1, handlers.selected.size) : 1,
       clipboardCount: handlers.clipboardCount || 0 })}
     onAction={({ action }) => handlers.onItemAction(thing, (action.command === 'copy-link' ? 'copyLink' : action.command) as ThingsItemAction)} />
+  </Box>
+);
+
+export const ItemSelection = ({ thing, handlers }: { thing: ThingsThing; handlers: ThingsItemHandlers }) => (
+  <Box className="thing-item-controls" data-visible={handlers.selected.has(thing.id) || undefined}
+    display="inline-flex" flexShrink={0} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
+    <Checkbox aria-label={`Select ${thingDisplayName(thing)}`} colorScheme="pink" isChecked={handlers.selected.has(thing.id)}
+      onChange={() => handlers.onItemToggle(thing)} size="sm" />
+  </Box>
+);
+
+const DeviceControls = ({ state, selected, menuOpen, onSelect, onContextMenu }: {
+  state: DeviceRuntimeState; selected: boolean; menuOpen: boolean; onSelect?: (id: string) => void;
+  onContextMenu?: (id: string, event: React.MouseEvent) => void;
+}) => (
+  <Flex className="thing-item-controls" data-visible={selected || menuOpen || undefined} position="absolute" right={2} top={2} alignItems="center" gap={2}
+    onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
+    <Checkbox aria-label={`Select ${state.summary?.name || 'device'}`} colorScheme="pink" isChecked={selected} onChange={() => onSelect?.(state.deviceId)} size="sm" />
+    {onContextMenu && <IconButton aria-label={`${state.summary?.name || 'Device'} actions`} aria-haspopup="menu" aria-expanded={menuOpen} icon={<MoreHorizontal size={16} />}
+      size="xs" variant="ghost" onClick={event => onContextMenu(state.deviceId, event)} />}
+  </Flex>
 );
 
 const selectionStyles = (selected: boolean) =>
@@ -269,9 +298,14 @@ const selectionStyles = (selected: boolean) =>
 
 const KindChip = ({ thing }: { thing: ThingsThing }) => (
 	<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, monospace)" fontSize="10px" textTransform="uppercase">
-    {primaryKindOf(thing)}
+    {isBuilderApp(thing) ? 'app' : primaryKindOf(thing)}
   </Text>
 );
+
+const ThingIconDisplay = ({ thing, size = 34 }: { thing: ThingsThing; size?: number }) =>
+  isBuilderApp(thing) && typeof thing.crystal.iconUrl === 'string' && thing.crystal.iconUrl
+    ? <Image alt="" src={thing.crystal.iconUrl} boxSize={`${size}px`} borderRadius="8px" objectFit="cover" />
+    : <Text fontSize={`${size}px`} lineHeight="1.1">{thingIcon(thing)}</Text>;
 
 const VisibilityChip = ({ thing }: { thing: ThingsThing }) => {
   const meta = VISIBILITY_META[thing.visibility] || VISIBILITY_META.private;
@@ -293,7 +327,10 @@ export const ThingsGridView = ({
 	devices = [],
 	deviceCounts = {},
 	selectedDeviceId = null,
-	onDeviceSelect
+	deviceMenuId = null,
+	onDeviceSelect,
+	onDeviceOpen,
+	onDeviceContextMenu
 }: {
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
@@ -305,8 +342,11 @@ export const ThingsGridView = ({
 			state.summary ? (
 				<DeviceCard
 					device={state.summary}
+					controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
 					key={`device:${state.deviceId}`}
 					onSelect={onDeviceSelect || noopDeviceSelect}
+					onOpen={onDeviceOpen}
+					onContextMenu={onDeviceContextMenu}
 					pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 					pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
 					selected={selectedDeviceId === state.deviceId}
@@ -316,11 +356,7 @@ export const ThingsGridView = ({
 		)}
     {items.map((thing) => {
       const selected = handlers.selected.has(thing.id);
-      const iconBlock = (
-        <Text fontSize="34px" lineHeight="1.1" marginTop={displayMode === 'preview' ? 0 : 3} textAlign="center">
-          {thingIcon(thing)}
-        </Text>
-      );
+      const iconBlock = <ThingIconDisplay thing={thing} />;
       return (
         <Flex
           key={thing.id}
@@ -334,39 +370,34 @@ export const ThingsGridView = ({
           data-thing-id={thing.id}
           direction="column"
           gap={1}
-          onClick={(event) => handlers.onItemClick(thing, event)}
+          onClick={(event) => handleItemClick(thing, handlers, event)}
           onContextMenu={(event) => handlers.onItemContextMenu(thing, event)}
-          onDoubleClick={() => handlers.onItemOpen(thing)}
           opacity={handlers.cutIds.has(thing.id) ? 0.45 : 1}
           padding={3}
           position="relative"
           role="group"
+          sx={{ ...BROWSE_CONTROLS_SX, paddingTop: '44px', '@media (hover: none), (pointer: coarse)': {
+            ...BROWSE_CONTROLS_SX['@media (hover: none), (pointer: coarse)'], paddingTop: '56px'
+          } }}
           transition="box-shadow 120ms ease, background 120ms ease"
           userSelect="none"
         >
-          <Box
-            _groupHover={{ opacity: 1 }}
-            left={2}
-            onClick={(event) => event.stopPropagation()}
-            onDoubleClick={(event) => event.stopPropagation()}
-            opacity={selected || handlers.isMobile ? 1 : 0}
-            position="absolute"
-            top={2}
-            transition="opacity 120ms ease"
-          >
-            <Checkbox colorScheme="pink" isChecked={selected} onChange={() => handlers.onItemToggle(thing)} size="sm" />
+          <Box position="absolute" left={2} top={2}>
+            <ItemSelection handlers={handlers} thing={thing} />
           </Box>
           <Box position="absolute" right={1} top={1}>
             <ItemMenu handlers={handlers} thing={thing} />
           </Box>
           {displayMode === 'preview' ? (
-            <Box marginTop={4} width="100%">
+            <Box width="100%">
 							<ThingPreviewBox fallback={iconBlock} maxHeight="150px" schemaRender={schemaRenderFor?.(thing) || null} thing={thing} />
             </Box>
           ) : (
             iconBlock
           )}
           <TitleLink fontSize="13px" fontWeight={600} handlers={handlers} noOfLines={2} textAlign="center" thing={thing} wordBreak="break-word" />
+          {isBuilderApp(thing) && typeof thing.crystal.description === 'string' && thing.crystal.description ?
+            <Text color="var(--tt-muted, #9a9aa6)" fontSize="12px" noOfLines={2} textAlign="center">{thing.crystal.description}</Text> : null}
           <Flex alignItems="center" gap={2}>
             <KindChip thing={thing} />
             <Text color="var(--tt-faint, #b6b6c0)" fontSize="10px">
@@ -393,7 +424,10 @@ export const ThingsListView = ({
 	devices = [],
 	deviceCounts = {},
 	selectedDeviceId = null,
-	onDeviceSelect
+	deviceMenuId = null,
+	onDeviceSelect,
+	onDeviceOpen,
+	onDeviceContextMenu
 }: {
   items: ThingsThing[];
   handlers: ThingsItemHandlers;
@@ -409,8 +443,11 @@ export const ThingsListView = ({
 					state.summary ? (
 						<DeviceListRow
 							device={state.summary}
+							controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
 							key={`device:${state.deviceId}`}
 							onSelect={onDeviceSelect || noopDeviceSelect}
+					onOpen={onDeviceOpen}
+					onContextMenu={onDeviceContextMenu}
 							pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 							pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
 							selected={selectedDeviceId === state.deviceId}
@@ -468,21 +505,18 @@ export const ThingsListView = ({
           cursor="pointer"
           data-thing-id={thing.id}
           direction="column"
-          onClick={(event) => handlers.onItemClick(thing, event)}
+          onClick={(event) => handleItemClick(thing, handlers, event)}
           onContextMenu={(event) => handlers.onItemContextMenu(thing, event)}
-          onDoubleClick={() => handlers.onItemOpen(thing)}
           opacity={handlers.cutIds.has(thing.id) ? 0.45 : 1}
           paddingX={3}
           paddingY={2}
-          sx={{ '&:last-of-type': { borderBottom: 'none' } }}
+          sx={{ ...BROWSE_CONTROLS_SX, '&:last-of-type': { borderBottom: 'none' } }}
           userSelect="none"
         >
         <Flex alignItems="center" gap={3}>
-          <Box onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
-            <Checkbox colorScheme="pink" isChecked={selected} onChange={() => handlers.onItemToggle(thing)} size="sm" />
-          </Box>
+          <ItemSelection handlers={handlers} thing={thing} />
           <Flex alignItems="center" flex="1" gap={2} minWidth={0}>
-            <Text fontSize="16px">{thingIcon(thing)}</Text>
+            <ThingIconDisplay thing={thing} size={16} />
             <TitleLink fontSize="13px" fontWeight={500} handlers={handlers} noOfLines={1} thing={thing} wordBreak="break-all" />
             {isFolder(thing) && <ChevronRight color="var(--tt-faint, #b6b6c0)" size={13} />}
           </Flex>
@@ -543,7 +577,10 @@ export const ThingsColumnsView = ({
 	devices = [],
 	deviceCounts = {},
 	selectedDeviceId = null,
-	onDeviceSelect
+	deviceMenuId = null,
+	onDeviceSelect,
+	onDeviceOpen,
+	onDeviceContextMenu
 }: {
   // folder ids by depth; index 0 is always null (the root)
   path: (string | null)[];
@@ -576,8 +613,11 @@ export const ThingsColumnsView = ({
 								state.summary ? (
 									<DeviceListRow
 										device={state.summary}
+										controls={<DeviceControls state={state} menuOpen={deviceMenuId === state.deviceId} selected={selectedDeviceId === state.deviceId} onSelect={onDeviceSelect} onContextMenu={onDeviceContextMenu} />}
 										key={`device:${state.deviceId}`}
 										onSelect={onDeviceSelect || noopDeviceSelect}
+					onOpen={onDeviceOpen}
+					onContextMenu={onDeviceContextMenu}
 										pendingApprovalCount={deviceCounts[state.deviceId]?.approvals ?? pendingApprovalCount(state)}
 										pendingCommandCount={deviceCounts[state.deviceId]?.commands ?? pendingCommandCount(state)}
 										selected={selectedDeviceId === state.deviceId}
@@ -600,28 +640,23 @@ export const ThingsColumnsView = ({
                 cursor="pointer"
                 data-thing-id={thing.id}
                 direction="column"
-                onClick={(event) => {
-                  if (folder && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
-                    onOpenFolderAt(depth, thing.id);
-                  } else {
-                    handlers.onItemClick(thing, event);
-                  }
-                }}
+                onClick={(event) => handleItemClick(thing, handlers, event, folder && !thingBuilderHref(thing, handlers.ownerId) ? () => onOpenFolderAt(depth, thing.id) : undefined)}
+                sx={BROWSE_CONTROLS_SX}
                 onContextMenu={(event) => handlers.onItemContextMenu(thing, event)}
-                onDoubleClick={() => handlers.onItemOpen(thing)}
                 opacity={handlers.cutIds.has(thing.id) ? 0.45 : 1}
                 paddingX={3}
                 paddingY="6px"
                 userSelect="none"
               >
                 <Flex alignItems="center" gap={2}>
-                  <Text fontSize="14px">{thingIcon(thing)}</Text>
+                  <ItemSelection handlers={handlers} thing={thing} />
+                  <ThingIconDisplay thing={thing} size={14} />
                   <TitleLink
                     flex="1"
                     fontSize="13px"
                     handlers={handlers}
                     noOfLines={1}
-                    onOpen={folder ? () => onOpenFolderAt(depth, thing.id) : undefined}
+                    onOpen={folder && !thingBuilderHref(thing, handlers.ownerId) ? () => onOpenFolderAt(depth, thing.id) : undefined}
                     thing={thing}
                     wordBreak="break-all"
                   />

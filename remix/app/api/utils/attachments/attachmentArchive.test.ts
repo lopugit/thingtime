@@ -52,7 +52,7 @@ const service = (fixture: Fixture, overrides: Record<string, unknown> = {}) => {
 				ok: true,
 				url: `https://bucket.test/${id}`,
 				expiresAt: '2026-01-01T00:10:00Z',
-				cacheKey: 'k',
+				cacheKey: 'k', version: 'a'.repeat(64),
 				size,
 				contentType: 'application/octet-stream',
 				disposition: 'attachment',

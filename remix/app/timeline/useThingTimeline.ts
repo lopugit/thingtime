@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import type { LocalTimelineRow } from './localStore';
@@ -6,10 +7,18 @@ import { useTimelineSession, timelineAccessFailure } from './TimelineProvider';
 import { TIMELINE_CHANGED_EVENT } from './clientEvents';
 import type { RelatedTimelineScope } from './relatedHistory';
 import { readRelatedHistoryCache, writeRelatedHistoryCache, clearRelatedHistoryCache } from './relatedHistoryCache';
+import { historyNoteViews } from './noteStore';
+import type { HistoryNoteView } from './notes';
+import type { TimelineVersionName } from './versionNames';
 export { TIMELINE_CHANGED_EVENT } from './clientEvents';
 
-type View = { identity: string; rows: LocalTimelineRow[]; error: string; ready: boolean; nextBefore: number | null; folderId: string | null; related?: RelatedTimelineScope | null };
-const emptyView = (identity: string): View => ({ identity, rows: [], error: '', ready: false, nextBefore: null, folderId: null });
+/** `notes` holds the contextual messages per loaded event id (see notes.ts);
+ * `names` the 📌 version name per loaded event id (see versionNames.ts). Names
+ * are a cache: a rename made elsewhere for an already-loaded version arrives
+ * only with its effect event on the `after` cursor or when the event is paged
+ * again, exactly like notes. */
+type View = { identity: string; rows: LocalTimelineRow[]; notes: Map<string, HistoryNoteView[]>; names: Map<string, TimelineVersionName>; error: string; ready: boolean; nextBefore: number | null; folderId: string | null; related?: RelatedTimelineScope | null };
+const emptyView = (identity: string): View => ({ identity, rows: [], notes: new Map(), names: new Map(), error: '', ready: false, nextBefore: null, folderId: null });
 
 /** Only open history views pull pages. The account queue runs independently. */
 export function useThingTimeline(thingId: string | null, enabled = true, related = false) {
@@ -24,7 +33,7 @@ export function useThingTimeline(thingId: string | null, enabled = true, related
 	useEffect(() => {
 		if (!enabled || !connection) { refreshRef.current = () => sessionRef.current.retry(); return; }
 		let alive = true; let busy = false; let unavailable = false; let after: number | null = null; let before: number | null = null;
-		const { store, sync, folderId } = connection;
+		const { store, sync, folderId, notes: noteStore, names: nameStore } = connection;
 		let membership = related && thingId ? readRelatedHistoryCache(connection.scope, thingId) : null;
 		const fail = async (error: unknown) => {
 			if (!alive) return;
@@ -35,7 +44,10 @@ export function useThingTimeline(thingId: string | null, enabled = true, related
 		const cached = async () => {
 			if (unavailable) return;
 			const rows = membership ? await store.forThings(membership.thingIds) : await store.forThing(thingId);
-			if (alive) setView(previous => ({ ...(previous.identity === identity ? previous : emptyView(identity)), identity, rows, ready: true, folderId, nextBefore: before, related: membership }));
+			const [stored, queued] = await Promise.all([noteStore.forEvents(rows.map(row => row.event.id)), noteStore.queued()]);
+			const notes = historyNoteViews(connection.scope.ownerId, rows, stored, queued);
+			const names = nameStore.forEvents(rows.map(row => row.event.id));
+			if (alive) setView(previous => ({ ...(previous.identity === identity ? previous : emptyView(identity)), identity, rows, notes, names, ready: true, folderId, nextBefore: before, related: membership }));
 		};
 		const refresh = async (force = false) => {
 			if (!alive || busy || (!force && document.visibilityState === 'hidden')) return;
@@ -72,9 +84,9 @@ export function useThingTimeline(thingId: string | null, enabled = true, related
 			catch (error) { await fail(error); } finally { busy = false; }
 		};
 		const changed = () => void refresh();
-		window.addEventListener('focus', changed); window.addEventListener('online', changed); window.addEventListener(TIMELINE_CHANGED_EVENT, changed); document.addEventListener('visibilitychange', changed);
-		const timer = setInterval(changed, 10_000); void refresh(true);
-		return () => { alive = false; clearInterval(timer); refreshRef.current = async () => {}; olderRef.current = async () => {}; window.removeEventListener('focus', changed); window.removeEventListener('online', changed); window.removeEventListener(TIMELINE_CHANGED_EVENT, changed); document.removeEventListener('visibilitychange', changed); };
+		activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').addEventListener('focus', changed); activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').addEventListener('online', changed); activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').addEventListener(TIMELINE_CHANGED_EVENT, changed); activityEvents(document, 'events:timeline/useThingTimeline', 'useThingTimeline').addEventListener('visibilitychange', changed);
+		const timer = activityInterval('timer:timeline/useThingTimeline:1', 'Thing history', changed, 10_000); void refresh(true);
+		return () => { alive = false; clearActivityInterval(timer); refreshRef.current = async () => {}; olderRef.current = async () => {}; activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').removeEventListener('focus', changed); activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').removeEventListener('online', changed); activityEvents(window, 'events:timeline/useThingTimeline', 'useThingTimeline').removeEventListener(TIMELINE_CHANGED_EVENT, changed); activityEvents(document, 'events:timeline/useThingTimeline', 'useThingTimeline').removeEventListener('visibilitychange', changed); };
 	}, [identity, enabled, thingId, connection, related]);
 	const current = view.identity === identity ? view : emptyView(identity);
 	return { ...current, identity: related ? `${identity}:${current.related?.revision ?? 'unknown'}` : identity, error: current.error || session.error, signedIn: !!user?.id, refresh: useCallback(() => refreshRef.current(), []), older: useCallback(() => olderRef.current(), []) };

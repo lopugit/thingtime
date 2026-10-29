@@ -1,11 +1,13 @@
+import { collectionStyles } from '../Collections/collectionStyles';
 import React from 'react';
 import { COLLECTION_SIZES, type CollectionSize } from '../Collections/collectionWindow';
 import { CollectionList } from '../Collections/CollectionList';
-import { componentScopeValue, createTemplateResolver } from '../ComponentsLibrary/componentTemplate';
+import { componentScopeValue, createTemplateResolver, resolveTemplate } from '../ComponentsLibrary/componentTemplate';
 import { HtmlThingRenderer } from '../Kinds/HtmlThingRenderer';
 import { ComponentDataScope } from './ComponentSelect';
 import { useCollectionSource } from './useCollectionSource';
 import { ComponentLocalControl, NativeControlsEnabled } from './NativeComponentControls';
+import { templateEachRows, templateEachRowScope } from './templateBlocks';
 
 // Stack collections using a shared branch allowance rather than limiting apps
 // to two levels. Visible siblings split their parent's allowance; pagination
@@ -20,7 +22,7 @@ const rowSearchText = new WeakMap<object, string>();
 const searchTextForRow = (item: Record<string, any>): string => {
 	const cached = rowSearchText.get(item);
 	if (cached !== undefined) return cached;
-	const text = JSON.stringify(item);
+	const text = JSON.stringify(item, (key, value) => key === 'iconDataUrl' ? undefined : value);
 	rowSearchText.set(item, text);
 	return text;
 };
@@ -33,16 +35,23 @@ export function ComponentCollection({
 	filters,
 	hideSearch,
 	hideSize,
+	hideCount,
 	size,
 	source,
 	filterPath,
 	filterValue,
-	countStateKey
+	countStateKey,
+	renderItem,
+	transparent,
+	maxItems,
+	templateEach
 }: Record<string, unknown>) {
 	const scope = React.useContext(ComponentDataScope),
 		budget = React.useContext(Nesting);
 	const paged = useCollectionSource(source);
 	const data = paged.bound ? paged.items : typeof itemsPath === 'string' ? componentScopeValue(scope, itemsPath) : undefined;
+	const [chosenSize, setChosenSize] = React.useState<CollectionSize | undefined>();
+	React.useEffect(() => setChosenSize(undefined), [size]);
 	const enabled = React.useContext(NativeControlsEnabled);
 	const local = React.useContext(ComponentLocalControl);
 	const localRef = React.useRef(local);
@@ -51,9 +60,9 @@ export function ComponentCollection({
 	React.useEffect(() => {
 		if (enabled && typeof countStateKey === 'string') localRef.current?.({ op: 'set', key: countStateKey, value: count });
 	}, [enabled, countStateKey, count]);
-	if (Array.isArray(data) && data.length > 10000) return <p role="alert">Filter or page the source to at most 10,000 records.</p>;
 	const items: Record<string, any>[] = Array.isArray(data) ? data.filter((item) => item && typeof item === 'object' && !Array.isArray(item) &&
 		(typeof filterPath !== 'string' || String(componentScopeValue(item, filterPath) ?? '') === String(filterValue ?? ''))) : [];
+	const visibleItems = typeof maxItems === 'number' && Number.isInteger(maxItems) && maxItems > 0 ? items.slice(0, maxItems) : items;
 	const positions = new Map(items.map((item, index) => [item, index]));
 	if (budget.depth >= 32) return <p role="alert">This collection exceeds the nested rendering budget.</p>;
 	const specs = Array.isArray(filters)
@@ -61,8 +70,16 @@ export function ComponentCollection({
 				.slice(0, 10)
 				.filter((filter) => filter && typeof filter === 'object' && typeof filter.path === 'string' && typeof filter.label === 'string')
 		: [];
+ const repeated = templateEach === true ? templateEachRows(data, maxItems) : visibleItems;
+ if (transparent === true) return <>{repeated.length === 0 && typeof empty === 'string' ? resolveTemplate(empty, scope) : null}{repeated.map((item, index) => {
+  const rowScope = templateEach === true ? templateEachRowScope(scope, item, index, repeated.length) : { ...scope, item, index, collection: { index, count: repeated.length } };
+  return <Nesting.Provider key={templateEach === true ? index : String((item as Record<string, unknown>).id ?? index)} value={{...budget, depth:budget.depth+1}}><ComponentDataScope.Provider value={rowScope}>
+   {typeof renderItem === 'function' ? renderItem(rowScope) : <HtmlThingRenderer node={createTemplateResolver()(itemTemplate, rowScope) as any} />}
+  </ComponentDataScope.Provider></Nesting.Provider>;
+ })}</>;
 	return (
 		<>
+            <style>{collectionStyles}</style>
 			{paged.error && <p role="alert">{paged.error}</p>}
 			<CollectionList<Record<string, any>>
 				hasMore={paged.hasMore}
@@ -76,9 +93,11 @@ export function ComponentCollection({
 				empty={typeof empty === 'string' ? empty : 'Nothing here yet.'}
 				hideSearch={hideSearch === true}
 				hideSize={hideSize === true}
-				size={
-					size === 'infinite' ? 'infinite' : COLLECTION_SIZES.includes(Number(size) as CollectionSize) ? (Number(size) as CollectionSize) : undefined
-				}
+				hideCount={hideCount === true}
+				onSizeChange={setChosenSize}
+				size={chosenSize ?? (
+					size === 'all' ? 'all' : size === 'infinite' ? 'infinite' : COLLECTION_SIZES.includes(Number(size) as CollectionSize) ? (Number(size) as CollectionSize) : undefined
+				)}
 				filters={specs
 					.filter((spec) => items.some((item) => componentScopeValue(item, spec.path)))
 					.map((spec) => ({
@@ -102,7 +121,6 @@ export function ComponentCollection({
 					}))}
 			>
 				{(visible) => {
-					if (visible.length > budget.rows) return <p role="alert">Reduce the page size to fit the nested rendering budget.</p>;
 					const resolveRow = createTemplateResolver();
 					const nextBudget = { depth: budget.depth + 1, rows: Math.floor((budget.rows - visible.length) / Math.max(1, visible.length)) };
 					return (
@@ -124,7 +142,7 @@ export function ComponentCollection({
 								return (
 									<Nesting.Provider key={String(item?.id ?? index)} value={nextBudget}>
 										<ComponentDataScope.Provider value={rowScope}>
-											<HtmlThingRenderer node={resolveRow(itemTemplate, rowScope) as any} />
+											{typeof renderItem === 'function' ? renderItem(rowScope) : <HtmlThingRenderer node={resolveRow(itemTemplate, rowScope) as any} />}
 										</ComponentDataScope.Provider>
 									</Nesting.Provider>
 								);

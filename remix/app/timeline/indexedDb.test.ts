@@ -3,6 +3,7 @@ import test from 'node:test';
 import { IDBFactory } from 'fake-indexeddb';
 import { IndexedDbTimelineBackend } from './indexedDb.ts';
 import { TimelineLocalStore } from './localStore.ts';
+import { TimelineNoteStore } from './noteStore.ts';
 import { TimelineDraftRecorder } from './draftRecorder.ts';
 import { eventFixture, entryFixture } from './testFixtures.ts';
 import { parseTimelineEvent, timelineScopeKey } from './contract.ts';
@@ -108,8 +109,53 @@ test('a v3 database upgrades pending work to relations without reviving an alrea
  }); old.close();
  const backend = new IndexedDbTimelineBackend(factory, name); const store = new TimelineLocalStore(scope, backend);
  assert.deepEqual(await store.pending(), [event]); assert.equal(await store.draft(event.thingId, event.branchId), null);
- const db = await openDatabase(factory, name); assert.equal(db.version, 5); assert.equal((await rawRows(db, 'links')).length, 4);
+ const db = await openDatabase(factory, name); assert.equal(db.version, 6); assert.equal((await rawRows(db, 'links')).length, 4);
  assert.equal('parentIds' in (await rawRows(db, 'events'))[0].event, false);
+ assert.equal(db.objectStoreNames.contains('notes') && db.objectStoreNames.contains('noteCommands'), true);
+ db.close(); await backend.close();
+});
+
+test('a v5 database gains the note stores without re-running the relation migration over its rows', async () => {
+ const factory = new IDBFactory(); const name = 'notes-upgrade'; const key = timelineScopeKey(scope);
+ const command = { scope: key, command: { command: 'create-branch', operationId: '277abf25-b322-4ac0-9707-a59c36e7bcd5', branchId: 'branch-177abf25-b322-4ac0-9707-a59c36e7bcd5', thingId: 'page', eventId: 'base', expectedRevision: 0, name: 'Experiment' }, queuedAt: 1 };
+ const old = await openDatabase(factory, name, 5, db => {
+  const events = db.createObjectStore('events', { keyPath: ['scope', 'event.id'] }); events.createIndex('scope', 'scope');
+  const index = db.createObjectStore('eventIndex', { keyPath: ['scope', 'id'] });
+  index.createIndex('scope', 'scope'); index.createIndex('thing', ['scope', 'thingId']); index.createIndex('status', ['scope', 'status']); index.createIndex('draft', ['scope', 'draftKey']);
+  const links = db.createObjectStore('links', { keyPath: ['scope', 'link.id'] }); links.createIndex('event', ['scope', 'link.eventId']); links.createIndex('target', ['scope', 'link.relation', 'link.targetId']);
+  for (const [storeName, path] of [['branches', 'branch.id'], ['branchHeads', 'head.id'], ['branchCommands', 'command.operationId']]) db.createObjectStore(storeName, { keyPath: ['scope', path] }).createIndex('scope', 'scope');
+ });
+ await new Promise<void>((resolve, reject) => {
+  const tx = old.transaction(['events', 'branchCommands'], 'readwrite');
+  // A row the v3 migration would reject proves the cursor is skipped for v4+ databases.
+  tx.objectStore('events').put({ scope: key, event: { id: 'damaged' }, receipt: null, status: 'pending', accessedAt: 1, bytes: 1 });
+  tx.objectStore('branchCommands').put(command); tx.oncomplete = () => resolve(); tx.onabort = () => reject(tx.error);
+ }); old.close();
+ const backend = new IndexedDbTimelineBackend(factory, name);
+ await new TimelineNoteStore(scope, backend).enqueue({ command: 'remove-note', operationId: '377abf25-b322-4ac0-9707-a59c36e7bcd5', noteId: 'note-477abf25-b322-4ac0-9707-a59c36e7bcd5' });
+ assert.deepEqual((await backend.readBranchState(key)).pending, [command]);
+ const db = await openDatabase(factory, name); assert.equal(db.version, 6);
+ assert.deepEqual((await rawRows(db, 'noteCommands')).map(row => row.command.operationId), ['377abf25-b322-4ac0-9707-a59c36e7bcd5']);
+ assert.deepEqual([...db.transaction('notes').objectStore('notes').indexNames].sort(), ['event', 'scope']);
+ db.close(); await backend.close();
+});
+
+test('note rows survive reload and concurrent tabs as per-record rows; an invalid note write aborts without partial application', async () => {
+ const factory = new IDBFactory(); const name = 'notes'; const a = new IndexedDbTimelineBackend(factory, name); const b = new IndexedDbTimelineBackend(factory, name);
+ const note = { formatVersion: 1 as const, id: 'note-277abf25-b322-4ac0-9707-a59c36e7bcd5', ownerId: scope.ownerId, eventId: 'base', thingId: 'page', author: 'owner' as const, text: 'Why', createdAt: '2026-09-27T05:02:00.000Z' };
+ const removal = { command: 'remove-note' as const, operationId: '377abf25-b322-4ac0-9707-a59c36e7bcd5', noteId: note.id };
+ await Promise.all([new TimelineNoteStore(scope, a).accept([note]), new TimelineNoteStore(scope, b).enqueue(removal)]);
+ await Promise.all([a.close(), b.close()]);
+ const backend = new IndexedDbTimelineBackend(factory, name); const store = new TimelineNoteStore(scope, backend);
+ assert.deepEqual((await store.forEvents(['base'])).get('base'), [note]); assert.deepEqual(await store.pending(), [removal]);
+ const key = timelineScopeKey(scope);
+ await assert.rejects(backend.changeNoteState(key, state => ({ notes: [{ scope: 'forged', note: { ...note, id: 'note-477abf25-b322-4ac0-9707-a59c36e7bcd5' }, accessedAt: 1 }], pending: [] })), /scope changed/);
+ await assert.rejects(backend.changeNoteState(key, () => { throw new Error('disk full'); }), /disk full/);
+ const db = await openDatabase(factory, name);
+ assert.deepEqual((await rawRows(db, 'notes')).map(row => [row.scope, row.note.id]), [[key, note.id]]);
+ assert.deepEqual((await rawRows(db, 'noteCommands')).map(row => [row.scope, row.command.operationId]), [[key, removal.operationId]]);
+ await store.removed([note.id], removal.operationId);
+ assert.equal((await rawRows(db, 'notes')).length + (await rawRows(db, 'noteCommands')).length, 0);
  db.close(); await backend.close();
 });
 

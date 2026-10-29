@@ -1,3 +1,5 @@
+import { CharactersSettings } from '~/components/Characters/CharactersSettings';
+import { EmailSettings } from '~/components/Mail/EmailSettings';
 import { LopuPromptSettings } from './LopuPromptSettings';
 import { InvitePanel } from '~/components/Invites/InvitePanel';
 import { SavedAiWaterfallsSettings } from './SavedAiWaterfallsSettings';
@@ -12,6 +14,7 @@ import { LinkedDeployments } from './LinkedDeployments';
 import { NotificationSettingsSection } from './NotificationSettings';
 import { SubspacePreferencesSection } from '~/components/Subspaces/SubspacePreferencesSection';
 import { PasskeysManager } from './PasskeysManager';
+import { PasswordManagerSettings } from './PasswordManagerSettings';
 import { TokenMinter } from './TokenMinter';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
 import { SecureVault } from './SecureVault';
@@ -31,6 +34,7 @@ import { useApi } from '~/hooks/useApi';
 import { useTtTheme } from '~/hooks/useTtTheme';
 import { SETTINGS_TABS, settingsTabHref, type SettingsTab } from './settingsTabs';
 import { DesktopSettings } from './DesktopSettings';
+import { CustomDrawerItems } from '~/components/Nav/Drawer/CustomDrawerItems';
 import { DrawerItemSettings } from './DrawerItemSettings';
 import { ThingsSettings } from './ThingsSettings';
 import { ProfileMediaField, type ProfileMediaFieldHandle } from '~/components/Profile/ProfileMediaField';
@@ -546,11 +550,16 @@ export const SettingsContent = ({
 				))}
 			</Flex>
 			<Box as="section" aria-label={`${SETTINGS_TABS.find((item) => item.id === tab)?.label} settings`} minW={0}>
+				{tab === 'email' && <EmailSettings />}
 				{tab === 'account' && (
 					<Flex direction="column" gap={4} minW={0}>
 						{/* 1 · account — the switcher lists every signed-in account and hosts
             the add / register-new inline forms */}
-						<SettingsSection eyebrow="Account">
+						<SettingsSection
+							eyebrow="Account"
+							description="Your signed-in accounts, storage, and session."
+							summary={user?.displayName || user?.username || 'Not signed in'}
+						>
 							<AccountSwitcher onNavigate={onNavigate} />
 							{user && (
 								<Flex flexDirection="column" rowGap={3} width="100%">
@@ -580,7 +589,7 @@ export const SettingsContent = ({
 							)}
 						</SettingsSection>
 						{user && !user.temporary && (
-							<SettingsSection eyebrow="Invitations">
+							<SettingsSection eyebrow="Invitations" description="Invite someone to Thingtime and manage your invitations.">
 								<InvitePanel key={`invites-${user.id}`} />
 							</SettingsSection>
 						)}
@@ -598,7 +607,7 @@ export const SettingsContent = ({
 								</SettingsSection>
 							</Box>
 						)}
-						<SettingsSection eyebrow="Plan & features">
+						<SettingsSection eyebrow="Plan & features" description="Compare account plans, storage, and available features.">
 							<TierFeatureComparison />
 						</SettingsSection>
 					</Flex>
@@ -606,7 +615,11 @@ export const SettingsContent = ({
 				{tab === 'profile' && (
 					<Flex direction="column" gap={4} minW={0}>
 						{user && !user.temporary && (
-							<SettingsSection eyebrow="Privacy" description="Choose what other people can see on your public profile.">
+							<SettingsSection
+								eyebrow="Privacy"
+								description="Choose what other people can see on your public profile."
+								summary={hideEmailOnProfile ? 'Email hidden' : 'Email visible to you'}
+							>
 								<Flex flexDirection="column">
 									<SettingRow
 										label="Hide email on profile"
@@ -650,7 +663,7 @@ export const SettingsContent = ({
 					<Flex direction="column" gap={4} minW={0}>
 						<MediaCacheSettings />
 						{/* 4 · appearance — mirrors UserSettingsModal's theming section */}
-						<SettingsSection eyebrow="Appearance">
+						<SettingsSection eyebrow="Appearance" description="Colours, type, shadows, and the look of Thingtime." summary={theme.name || preset}>
 							<Flex flexDirection="column">
 								<SettingRow label="Theme" hint={appliedThemeShareId ? `Custom theme applied: ${theme.name}` : 'Pick a base look'}>
 									<Flex columnGap={1} flexWrap="wrap" justifyContent="flex-end">
@@ -713,7 +726,7 @@ export const SettingsContent = ({
 							</Flex>
 						</SettingsSection>
 						{/* 5 · drawer — mirrors UserSettingsModal's drawer section */}
-						<SettingsSection eyebrow="Drawer">
+						<SettingsSection eyebrow="Drawer" description="Choose how the navigation menu looks and behaves.">
 							<Flex flexDirection="column">
 								<SettingRow label="Opens from" hint="Which edge the drawer slides out from">
 									<Flex columnGap={1}>
@@ -759,7 +772,12 @@ export const SettingsContent = ({
 								</SettingRow>
 							</Flex>
 						</SettingsSection>
-						<DrawerItemSettings />
+						<SettingsSection eyebrow="Custom drawer items" description="Add links and Things to your drawer.">
+							<CustomDrawerItems settings />
+						</SettingsSection>
+						<SettingsSection eyebrow="Close menu after click" description="Choose which navigation items close the drawer on desktop and mobile.">
+							<DrawerItemSettings />
+						</SettingsSection>
 					</Flex>
 				)}
 				{tab === 'notifications' && (
@@ -776,11 +794,16 @@ export const SettingsContent = ({
 						)}
 					</Flex>
 				)}
+				{tab === 'passwords' && user && !user.temporary && <PasswordManagerSettings key={user.id} ownerId={user.id} onNavigate={onNavigate} />}
 				{tab === 'security' && (
 					<Flex direction="column" gap={4} minW={0}>
 						{/* security (auth only) — email 2FA + the reset flow's home */}
 						{user && !user.temporary && (
-							<SettingsSection eyebrow="Security" description="Extra checks between a password and a session.">
+							<SettingsSection
+								eyebrow="Security"
+								description="Extra checks between a password and a session."
+								summary={twoFactorEnabled ? 'Email 2FA enabled' : 'Email 2FA off'}
+							>
 								<Flex flexDirection="column">
 									<SettingRow
 										label="Email 2FA 🔐"
@@ -799,8 +822,8 @@ export const SettingsContent = ({
 											Reset 🔑
 										</Button>
 									</SettingRow>
-									<Box paddingY={2}>
-										<PasskeysManager />
+									<Box id="account-passkeys" paddingY={2} scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
+										<PasskeysManager key={user.id} />
 									</Box>
 								</Flex>
 							</SettingsSection>
@@ -844,6 +867,7 @@ export const SettingsContent = ({
 						)}
 					</Flex>
 				)}
+				{tab === 'characters' && user && <SettingsSection open eyebrow="Characters" description="Private identities for you and your agents."><CharactersSettings key={user.id} /></SettingsSection>}
 				{tab === 'lopu' && (
 					<Flex direction="column" gap={4} minW={0}>
 						{/* 6 · Lopu — local-first,
@@ -875,9 +899,9 @@ export const SettingsContent = ({
 								</Flex>
 							</SettingsSection>
 						</Box>
-              <SettingsSection eyebrow="Lopu prompt" description="Shared guidance and your personal instructions.">
-                <LopuPromptSettings key={user?.id ?? 'anonymous'} userId={user?.accountKind !== 'service' ? user?.id : undefined} />
-              </SettingsSection>
+						<SettingsSection eyebrow="Lopu prompt" description="Shared guidance and your personal instructions.">
+							<LopuPromptSettings key={user?.id ?? 'anonymous'} userId={user?.accountKind !== 'service' ? user?.id : undefined} />
+						</SettingsSection>
 					</Flex>
 				)}
 				{tab === 'ai-waterfalls' && (
@@ -899,7 +923,7 @@ export const SettingsContent = ({
 						)}
 					</Flex>
 				)}
-				{!user && ['profile', 'notifications', 'security', 'connections'].includes(tab) && (
+				{(!user || (tab === 'passwords' && user.temporary)) && ['profile', 'notifications', 'security', 'passwords', 'connections'].includes(tab) && (
 					<SettingsSection eyebrow={tab} description="Sign in to manage these account settings.">
 						<Button onClick={() => navigate('/login')}>Log in</Button>
 					</SettingsSection>

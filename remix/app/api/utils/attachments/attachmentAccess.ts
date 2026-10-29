@@ -1,3 +1,4 @@
+import { linkedSubspaceId, subspaceMessagingAccess } from '../messenger/subspaceAccess';
 import { withFoundPostGrant } from '../things/foundPosts';
 import { subspaceAttachmentTargetAllows } from '../subspaces/subspaceMediaCore';
 import { ObjectId } from 'mongodb';
@@ -136,6 +137,16 @@ const canViewMessageAttachment = async (
 	) {
 		return false;
 	}
+  const chat = await things.findOne({ thingtime: 'chat', shareId: message.targetId } as any);
+  if (!chat) return false;
+  if ((chat as any).crystal?.communityId) {
+    const community = await things.findOne({ thingtime: 'community', shareId: (chat as any).crystal.communityId } as any);
+    if (!community) return false;
+    if (linkedSubspaceId(community)) {
+      const access = await subspaceMessagingAccess(things, community, viewer.id);
+      if (!access?.allowed) return false;
+    }
+  }
 	const memberKey = `${message.targetId}:${viewer.id}`;
 	const member = await things.findOne(
 		{
@@ -170,6 +181,12 @@ const canViewEmojiAttachment = async (
 	}
 	if (emoji.targetId === null || emoji.targetId === undefined) return true;
 	if (typeof emoji.targetId !== 'string' || !emoji.targetId) return false;
+  const community = await things.findOne({ thingtime: 'community', shareId: emoji.targetId } as any);
+  if (!community) return false;
+  if (linkedSubspaceId(community)) {
+    const access = await subspaceMessagingAccess(things, community, viewer.id);
+    return !!access?.allowed;
+  }
 	const member = await things.findOne(
 		{
 			thingtime: 'community-member',

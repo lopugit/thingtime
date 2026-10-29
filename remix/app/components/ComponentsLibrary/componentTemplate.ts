@@ -1,3 +1,4 @@
+import { formatElapsedTime } from './elapsedTime';
 import { copiedMediaRefs, mapResolvedCopiedMedia } from '../Sharing/copiedMediaRefs';
 
 // Arg-template resolver for component things. A component's crystal.render is
@@ -392,7 +393,9 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 	if ('ttFormat' in template) {
 		const spec = isPlainObject(template.ttFormat) ? template.ttFormat : {};
 		const value = resolveScopeValue(argValue(scope, String(spec.arg)), budget);
-		return resolveScopeValue(formatValue(spec, value), budget);
+		return resolveScopeValue(spec.kind === 'elapsed'
+			? formatElapsedTime(value, typeof spec.endArg === 'string' ? argValue(scope, spec.endArg) : undefined, argValue(scope, 'clock.now') ?? Date.now())
+			: formatValue(spec, value), budget);
 	}
 	if ('ttMerge' in template) {
 		const parts = Array.isArray(template.ttMerge) ? template.ttMerge : [];
@@ -527,10 +530,11 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 // Server media discovery resolves several stored render positions on ONE
 // budget. Unknown runtime tokens must not collapse into another attachment id.
 // Ordinary UI resolution retains its existing empty-token behavior.
-export const createTemplateResolver = (options: { preserveUnboundTokens?: boolean } = {}) => {
+export const createTemplateResolver = (options: { preserveUnboundTokens?: boolean; onExhausted?: () => void } = {}) => {
 	const budget: ResolveBudget = { left: MAX_RESOLVED_NODES, chars: MAX_RESOLVED_CHARS, ...options };
 	return (template: unknown, scope: ComponentScope = {}): unknown => {
 		const resolved = resolveNode(template, scope, budget);
+		if (budget.left <= 0 || budget.chars <= 0) options.onExhausted?.();
 		const refs = copiedMediaRefs(isPlainObject(template) ? template.ttMediaRefs : undefined);
 		return mapResolvedCopiedMedia(resolved, refs, budget);
 	};

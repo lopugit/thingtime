@@ -44,8 +44,16 @@ private final class ThingtimeAPIRedirectDelegate: NSObject, URLSessionTaskDelega
 
 private actor DeviceCapabilityCache {
     private var checkedAt: Date?
+    private var batteryDetails = false
+    private var fileSyncIdentity = false
+    private var menuBar = false
+    private var scripts = false
     func isFresh() -> Bool { checkedAt.map { Date().timeIntervalSince($0) < 300 } ?? false }
-    func accept() { checkedAt = Date() }
+    func supportsBatteryDetails() -> Bool { batteryDetails }
+    func supportsFileSyncIdentity() -> Bool { fileSyncIdentity }
+    func supportsMenuBar() -> Bool { menuBar }
+    func supportsScripts() -> Bool { scripts }
+    func accept(supportsBatteryDetails: Bool, supportsFileSyncIdentity: Bool, supportsMenuBar: Bool, supportsScripts: Bool) { batteryDetails = supportsBatteryDetails; fileSyncIdentity = supportsFileSyncIdentity; menuBar = supportsMenuBar; scripts = supportsScripts; checkedAt = Date() }
 }
 
 public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
@@ -71,16 +79,146 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             return actual[0] == minimum[0] && (actual[1] > minimum[1] || (actual[1] == minimum[1] && actual[2] >= minimum[2]))
         }
     }
-    private func requireCapabilities() async throws {
-        if await capabilityCache.isFresh() { return }
+    static func supportsBatteryDetails(_ data: Data, origin: URL) -> Bool {
+        guard compatibleManifest(data, origin: origin),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [String: [String: Any]],
+              let version = features["api.devices-node-state"]?["version"] as? String else { return false }
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        return parts.count == 3 && parts[0] == 1 && parts[1] >= 10
+    }
+    static func supportsMenuBar(_ data: Data, origin: URL) -> Bool {
+        guard compatibleManifest(data, origin: origin),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [String: [String: Any]],
+              let version = features["api.devices-node-state"]?["version"] as? String else { return false }
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        return parts.count == 3 && parts[0] == 1 && parts[1] >= 13
+    }
+    static func supportsScripts(_ data: Data, origin: URL) -> Bool {
+        guard compatibleManifest(data, origin: origin),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [String: [String: Any]],
+              let version = features["api.devices-node-commands"]?["version"] as? String else { return false }
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        return parts.count == 3 && parts[0] == 1 && parts[1] >= 10
+    }
+    static func supportsFileSyncIdentity(_ data: Data, origin: URL) -> Bool {
+        guard compatibleManifest(data, origin: origin),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [String: [String: Any]],
+              let version = features["api.devices-node-identity"]?["version"] as? String else { return false }
+        return version.range(of: "^1\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$", options: .regularExpression) != nil
+    }
+
+    /// Select the exact native credential; never infer the owner from renderer input.
+    // Closed scalar diagnostics only. Fast successful checks stay quiet; no
+    // owner/device/session IDs, headers, URLs, body text or throwable messages.
+    static func fileSyncIdentityDiagnostic(status: Int, elapsedMilliseconds: Int, attempt: Int, cooldownSeconds: Int?, admissionMilliseconds: Int = 0) -> String? {
+        guard (100...599).contains(status), (0...120_000).contains(elapsedMilliseconds), (0...300_000).contains(admissionMilliseconds), (0...1).contains(attempt),
+              cooldownSeconds == nil || (status == 429 && attempt == 0 && (1...60).contains(cooldownSeconds!)),
+              status != 200 || elapsedMilliseconds > 1000 || admissionMilliseconds > 1000 || attempt > 0 else { return nil }
+        let retry = cooldownSeconds != nil ? "cooldown" : attempt == 1 ? "after-cooldown" : "none"
+        return "File-sync identity: status=\(status) elapsedMilliseconds=\(elapsedMilliseconds) attempt=\(attempt) retry=\(retry) cooldownSeconds=\(cooldownSeconds ?? 0) admissionMs=\(admissionMilliseconds)"
+    }
+
+    // The canonical limiter emits only integer Retry-After (no limit/remaining
+    // pacing headers). Longer custom windows still fence other queued callers;
+    // this individual RPC retains its existing single <=60-second retry bound.
+    static func identityCooldown(_ response: HTTPURLResponse) -> Int? {
+        guard response.statusCode == 429,
+              let text = response.value(forHTTPHeaderField: "Retry-After"),
+              text.range(of: "^[1-9][0-9]{0,4}$", options: .regularExpression) != nil,
+              let seconds = Int(text), seconds <= 86_400 else { return nil }
+        return seconds
+    }
+
+    // A malformed injected clock disables only diagnostics, never identity checks.
+    static func fileSyncDiagnosticMilliseconds(from start: Double, to end: Double) -> Int? {
+        let elapsed = (end - start) * 1000
+        guard start.isFinite, end.isFinite, start >= 0, elapsed.isFinite, (0...300_000).contains(elapsed) else { return nil }
+        return Int(elapsed)
+    }
+
+    /// Identity is uncached, and local unpairing during the request also fails closed.
+    public func verifyFileSyncIdentity(ownerID: String, deviceID: String) async throws {
+        try Task.checkCancellation()
+        try await requireCapabilities(force: !(await capabilityCache.supportsFileSyncIdentity()), preserveTransientHTTPFailures: true)
+        guard await capabilityCache.supportsFileSyncIdentity() else { throw ThingtimeAPIClientError.incompatibleCapabilities }
+        let matching = try await credentialStore.loadAll().filter { $0.deviceID == deviceID }
+        guard matching.count == 1, let credential = matching.first else { throw ThingtimeAPIClientError.notPaired }
+        struct Identity: Decodable { let ok: Bool; let ownerId: String; let deviceId: String }
+        let url = URL(string: "/api/v1/devices/node/identity", relativeTo: baseURL)!.absoluteURL
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(credential.refreshToken)", forHTTPHeaderField: "Authorization")
+        let admissionScope = FileSyncIdentityAdmission.scope(origin: baseURL, credential: credential)
+        for attempt in 0...1 {
+            let admissionBegan = fileSyncNow()
+            let permit = try await identityAdmission.acquire(admissionScope)
+            let admission = Self.fileSyncDiagnosticMilliseconds(from: admissionBegan, to: fileSyncNow())
+            let data: Data, response: HTTPURLResponse, elapsed: Int?
+            do {
+                try Task.checkCancellation()
+                // Admission can wait behind another lane or a shared cooldown.
+                // Never send a credential that was revoked/rotated while queued.
+                let current = try await credentialStore.loadAll().filter { $0.deviceID == deviceID }
+                guard current == [credential] else { throw ThingtimeAPIClientError.notPaired }
+                try Task.checkCancellation()
+                try await identityAdmission.willSend(permit)
+                try Task.checkCancellation()
+                let began = fileSyncNow()
+                let received = try await session.data(for: request)
+                guard let http = received.1 as? HTTPURLResponse, http.url == url else {
+                    throw ThingtimeAPIClientError.invalidResponse
+                }
+                response = http; data = received.0
+                elapsed = Self.fileSyncDiagnosticMilliseconds(from: began, to: fileSyncNow())
+                // Publish the response's cooldown before another queued lane runs,
+                // even if this caller was cancelled as the response arrived.
+                await identityAdmission.finish(permit, cooldownSeconds: Self.identityCooldown(response))
+                try Task.checkCancellation()
+            } catch {
+                await identityAdmission.finish(permit)
+                throw error
+            }
+            let cooldown = attempt == 0 ? Self.identityCooldown(response).flatMap { $0 <= 60 ? $0 : nil } : nil
+            if let elapsed, let admission,
+               let diagnostic = Self.fileSyncIdentityDiagnostic(status: response.statusCode, elapsedMilliseconds: elapsed,
+                                                                attempt: attempt, cooldownSeconds: cooldown, admissionMilliseconds: admission) {
+                fileSyncIdentityLog(diagnostic)
+            }
+            // A single server-directed cooldown stays within the folder request
+            // deadline. Never shorten a longer delay, retry auth failures, cache
+            // identity, or use a replacement credential after local unpairing.
+            if let cooldown {
+                try await fileSyncRetrySleep(UInt64(cooldown))
+                continue
+            }
+            guard response.statusCode == 200 else { throw ThingtimeAPIClientError.rejected(status: response.statusCode) }
+            guard data.count <= 16_384 else { throw ThingtimeAPIClientError.invalidResponse }
+            let identity = try decoder.decode(Identity.self, from: data)
+            guard identity.ok, identity.ownerId == ownerID, identity.deviceId == deviceID,
+                  try await credentialStore.loadAll().filter({ $0.deviceID == deviceID }) == [credential] else { throw ThingtimeAPIClientError.notPaired }
+            return
+        }
+    }
+
+    private func requireCapabilities(force: Bool = false, preserveTransientHTTPFailures: Bool = false) async throws {
+        if !force, await capabilityCache.isFresh() { return }
         guard let url = URL(string: "/.well-known/thingtime-capabilities.json", relativeTo: baseURL)?.absoluteURL else { throw ThingtimeAPIClientError.invalidBaseURL }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, raw) = try await session.data(for: request)
+        if preserveTransientHTTPFailures, let response = raw as? HTTPURLResponse,
+           response.url?.scheme == baseURL.scheme, response.url?.host == baseURL.host, response.url?.port == baseURL.port,
+           response.statusCode == 408 || response.statusCode == 429 || (500...599).contains(response.statusCode) {
+            throw ThingtimeAPIClientError.rejected(status: response.statusCode)
+        }
         guard let response = raw as? HTTPURLResponse, response.statusCode == 200,
               response.url?.scheme == baseURL.scheme, response.url?.host == baseURL.host, response.url?.port == baseURL.port,
               data.count <= 2_097_152, Self.compatibleManifest(data, origin: baseURL) else { throw ThingtimeAPIClientError.incompatibleCapabilities }
-        await capabilityCache.accept()
+        await capabilityCache.accept(supportsBatteryDetails: Self.supportsBatteryDetails(data, origin: baseURL), supportsFileSyncIdentity: Self.supportsFileSyncIdentity(data, origin: baseURL), supportsMenuBar: Self.supportsMenuBar(data, origin: baseURL), supportsScripts: Self.supportsScripts(data, origin: baseURL))
     }
 
 
@@ -161,7 +299,43 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             struct Camera: Encodable { let id: String; let name: String; let isConnected: Bool; let isPreferred: Bool; let authorization: String }
             struct BluetoothDevice: Encodable { let id: String; let name: String; let isConnected: Bool }
             struct VPNService: Encodable { let id: String; let name: String; let isConnected: Bool }
-            struct Battery: Encodable { let level: Double?; let charging: Bool?; let isExternalPower: Bool?; let isPreventingIdleSleep: Bool; let isLowPowerModeEnabled: Bool }
+            struct Battery: Encodable {
+                let level: Double?; let charging: Bool?; let isExternalPower: Bool?
+                let isPreventingIdleSleep: Bool; let isLowPowerModeEnabled: Bool
+                let fullyCharged: Bool?; let cycleCount: Int?; let designCycleCount: Int?
+                let designCapacityMAh: Int?; let fullChargeCapacityMAh: Int?; let remainingCapacityMAh: Int?
+                let currentMA: Int?; let voltageMV: Int?; let temperatureC: Double?
+                let timeToEmptyMinutes: Int?; let timeToFullMinutes: Int?
+                let adapterWatts: Int?; let adapterVoltageMV: Int?; let adapterCurrentMA: Int?
+                enum CodingKeys: String, CodingKey {
+                    case level, charging, isExternalPower, isPreventingIdleSleep, isLowPowerModeEnabled
+                    case fullyCharged, cycleCount, designCycleCount, designCapacityMAh, fullChargeCapacityMAh, remainingCapacityMAh
+                    case currentMA, voltageMV, temperatureC, timeToEmptyMinutes, timeToFullMinutes
+                    case adapterWatts, adapterVoltageMV, adapterCurrentMA
+                }
+                func encode(to encoder: Encoder) throws {
+                    var values = encoder.container(keyedBy: CodingKeys.self)
+                    try values.encode(level, forKey: .level)
+                    try values.encode(charging, forKey: .charging)
+                    try values.encode(isExternalPower, forKey: .isExternalPower)
+                    try values.encode(isPreventingIdleSleep, forKey: .isPreventingIdleSleep)
+                    try values.encode(isLowPowerModeEnabled, forKey: .isLowPowerModeEnabled)
+                    try values.encodeIfPresent(fullyCharged, forKey: .fullyCharged)
+                    try values.encodeIfPresent(cycleCount, forKey: .cycleCount)
+                    try values.encodeIfPresent(designCycleCount, forKey: .designCycleCount)
+                    try values.encodeIfPresent(designCapacityMAh, forKey: .designCapacityMAh)
+                    try values.encodeIfPresent(fullChargeCapacityMAh, forKey: .fullChargeCapacityMAh)
+                    try values.encodeIfPresent(remainingCapacityMAh, forKey: .remainingCapacityMAh)
+                    try values.encodeIfPresent(currentMA, forKey: .currentMA)
+                    try values.encodeIfPresent(voltageMV, forKey: .voltageMV)
+                    try values.encodeIfPresent(temperatureC, forKey: .temperatureC)
+                    try values.encodeIfPresent(timeToEmptyMinutes, forKey: .timeToEmptyMinutes)
+                    try values.encodeIfPresent(timeToFullMinutes, forKey: .timeToFullMinutes)
+                    try values.encodeIfPresent(adapterWatts, forKey: .adapterWatts)
+                    try values.encodeIfPresent(adapterVoltageMV, forKey: .adapterVoltageMV)
+                    try values.encodeIfPresent(adapterCurrentMA, forKey: .adapterCurrentMA)
+                }
+            }
             struct PowerTimers: Encodable { let displayIdleMinutes: Int?; let systemSleepMinutes: Int?; let diskIdleMinutes: Int? }
             struct AppleMusic: Encodable { let isInstalled: Bool; let isRunning: Bool }
             struct Spotify: Encodable { let isInstalled: Bool; let isRunning: Bool }
@@ -174,6 +348,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
             let soundEffectsVolume: Double?
             let soundEffectsMuted: Bool?
             let brightness: Double?
+            let menuBar: MenuBarTelemetry?
             let openApps: [App]
             let audioDevices: [AudioDevice]
             let wifi: WiFi
@@ -229,18 +404,40 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
 
     private let baseURL: URL
     private let credentialStore: any DeviceCredentialStore
+    private let identityAdmission: FileSyncIdentityAdmission
+    private let fileSyncRetrySleep: @Sendable (UInt64) async throws -> Void
+    private let fileSyncNow: @Sendable () -> Double
+    private let fileSyncIdentityLog: @Sendable (String) -> Void
     private let session: URLSession
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    public init(
+    public convenience init(
         baseURL: URL,
         credentialStore: any DeviceCredentialStore,
-        session: URLSession? = nil
+        session: URLSession? = nil,
+        fileSyncRetrySleep: @escaping @Sendable (UInt64) async throws -> Void = { seconds in
+            try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+        }
     ) throws {
+        try self.init(baseURL: baseURL, credentialStore: credentialStore, session: session,
+                      identityAdmission: .shared, fileSyncRetrySleep: fileSyncRetrySleep)
+    }
+
+    init(baseURL: URL, credentialStore: any DeviceCredentialStore, session: URLSession? = nil,
+         identityAdmission: FileSyncIdentityAdmission,
+         fileSyncNow: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime },
+         fileSyncIdentityLog: @escaping @Sendable (String) -> Void = { diagnostic in ThingtimeNodeLog.actions.notice("\(diagnostic, privacy: .public)") },
+         fileSyncRetrySleep: @escaping @Sendable (UInt64) async throws -> Void = { seconds in
+             try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+         }) throws {
         guard Self.allowed(baseURL) else { throw ThingtimeAPIClientError.invalidBaseURL }
+        self.identityAdmission = identityAdmission
+        self.fileSyncNow = fileSyncNow
+        self.fileSyncIdentityLog = fileSyncIdentityLog
         self.baseURL = baseURL
         self.credentialStore = credentialStore
+        self.fileSyncRetrySleep = fileSyncRetrySleep
         if let session {
             self.session = session
         } else {
@@ -322,6 +519,9 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
 
     public func sendHeartbeat(_ heartbeat: DeviceHeartbeat) async throws {
         let credential = try await requireCredential(deviceID: heartbeat.deviceID)
+        try await requireCapabilities()
+        let detailedBattery = await capabilityCache.supportsBatteryDetails()
+        let menuBarSupported = await capabilityCache.supportsMenuBar()
         let telemetry = heartbeat.telemetry
         let brightness = telemetry.displays.first(where: { $0.isMain })?.brightness
         var connectors = [StateBody.Connector(
@@ -353,6 +553,7 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 soundEffectsVolume: telemetry.soundEffectsOutputVolume,
                 soundEffectsMuted: telemetry.soundEffectsOutputMuted,
                 brightness: brightness,
+                menuBar: menuBarSupported ? telemetry.menuBar : nil,
                 openApps: Array(telemetry.runningApplications.compactMap { application in
                     guard let identifier = application.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
                           !identifier.isEmpty else { return nil }
@@ -397,7 +598,12 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
                 cameras: Array(telemetry.cameras.prefix(32)).map { .init(id: String($0.id.prefix(512)), name: String($0.name.prefix(120)), isConnected: $0.isConnected, isPreferred: $0.isPreferred, authorization: $0.authorization.rawValue) },
                 bluetoothDevices: Array(telemetry.bluetoothDevices.prefix(64)).map { .init(id: String($0.id.prefix(120)), name: String($0.name.prefix(120)), isConnected: $0.isConnected) },
                 vpnServices: Array(telemetry.vpnServices.prefix(32)).map { .init(id: String($0.id.prefix(512)), name: String($0.name.prefix(120)), isConnected: $0.isConnected) },
-                battery: .init(level: telemetry.battery.level, charging: telemetry.battery.isCharging, isExternalPower: telemetry.battery.isExternalPower, isPreventingIdleSleep: telemetry.battery.isPreventingIdleSleep, isLowPowerModeEnabled: telemetry.battery.isLowPowerModeEnabled),
+                battery: .init(level: telemetry.battery.level, charging: telemetry.battery.isCharging, isExternalPower: telemetry.battery.isExternalPower, isPreventingIdleSleep: telemetry.battery.isPreventingIdleSleep, isLowPowerModeEnabled: telemetry.battery.isLowPowerModeEnabled,
+                               fullyCharged: detailedBattery ? telemetry.battery.fullyCharged : nil, cycleCount: detailedBattery ? telemetry.battery.cycleCount : nil, designCycleCount: detailedBattery ? telemetry.battery.designCycleCount : nil,
+                               designCapacityMAh: detailedBattery ? telemetry.battery.designCapacityMAh : nil, fullChargeCapacityMAh: detailedBattery ? telemetry.battery.fullChargeCapacityMAh : nil, remainingCapacityMAh: detailedBattery ? telemetry.battery.remainingCapacityMAh : nil,
+                               currentMA: detailedBattery ? telemetry.battery.currentMA : nil, voltageMV: detailedBattery ? telemetry.battery.voltageMV : nil, temperatureC: detailedBattery ? telemetry.battery.temperatureC : nil,
+                               timeToEmptyMinutes: detailedBattery ? telemetry.battery.timeToEmptyMinutes : nil, timeToFullMinutes: detailedBattery ? telemetry.battery.timeToFullMinutes : nil,
+                               adapterWatts: detailedBattery ? telemetry.battery.adapterWatts : nil, adapterVoltageMV: detailedBattery ? telemetry.battery.adapterVoltageMV : nil, adapterCurrentMA: detailedBattery ? telemetry.battery.adapterCurrentMA : nil),
                 powerTimers: .init(displayIdleMinutes: telemetry.powerTimers.displayIdleMinutes, systemSleepMinutes: telemetry.powerTimers.systemSleepMinutes, diskIdleMinutes: telemetry.powerTimers.diskIdleMinutes),
                 appleMusic: .init(isInstalled: telemetry.appleMusic.isInstalled, isRunning: telemetry.appleMusic.isRunning),
 				spotify: .init(isInstalled: telemetry.spotify.isInstalled, isRunning: telemetry.spotify.isRunning),
@@ -422,12 +628,13 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         )
         guard response.ok else { throw ThingtimeAPIClientError.invalidResponse }
         guard let command = response.command else { return CommandLeaseBatch(commands: []) }
+        if command.kind == "script.run", !(await capabilityCache.supportsScripts()) { throw ThingtimeAPIClientError.incompatibleCapabilities }
         guard let leaseID = command.leaseId,
               !leaseID.isEmpty,
               let expiresAt = Self.isoDate(command.leaseExpiresAt) else {
             throw ThingtimeAPIClientError.invalidResponse
         }
-        guard !command.requiresApproval || command.approvalState == "approved" else {
+        guard (command.kind != "script.run" || command.requiresApproval), !command.requiresApproval || command.approvalState == "approved" else {
             throw ThingtimeAPIClientError.invalidResponse
         }
         return CommandLeaseBatch(commands: [LeasedCommand(
@@ -461,6 +668,9 @@ public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
         }
         if report.status == .succeeded, let filesystem = report.response.result?.objectValue?["filesystem"] {
             body["result"] = filesystem
+        }
+        if report.status == .succeeded, let script = report.response.result?.objectValue?["script"] {
+            body["result"] = script
         }
         if let outputReference = Self.commandOutputReference(report.response) {
             body["outputRef"] = .string(outputReference)

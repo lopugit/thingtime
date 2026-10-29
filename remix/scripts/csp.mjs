@@ -52,6 +52,9 @@ const directives = ({ dev = false } = {}) => ({
 	'media-src': ["'self'", 'data:', 'blob:', 'https:'],
 	'connect-src': [
 		"'self'",
+		// Opt-in incoming mail uses a token-paired loopback adapter. Keep this
+		// fixed origin; never permit arbitrary localhost ports or network hosts.
+		'http://127.0.0.1:17879',
 		'https://cdn.jsdelivr.net',
 		// Direct-to-S3 attachment uploads: the composer PUTs signed multipart
 		// parts straight at the private bucket (attachments/privateS3), so the
@@ -68,6 +71,10 @@ const directives = ({ dev = false } = {}) => ({
 		'https://mapsresources-pa.googleapis.com',
 		'https://maps.gstatic.com',
 		'https://csi.gstatic.com',
+		// The native map SDK and stylesheet are self-hosted by Vite. Mapbox GL JS
+		// fetches styles, tiles, glyphs and telemetry from these service origins.
+		'https://api.mapbox.com',
+		'https://events.mapbox.com',
 		// Dev only: Vite HMR websocket (separate port) + analytics debug beacons.
 		...(dev ? ['ws:', 'wss:', 'https://va.vercel-scripts.com'] : [])
 	],
@@ -152,4 +159,15 @@ export const platformRuntimeCsp = serialize({
  'style-src': ["'unsafe-inline'"], 'img-src': ['data:', 'blob:'],
  'media-src': ['data:', 'blob:'], 'font-src': ['data:'],
  'base-uri': ["'none'"], 'form-action': ["'none'"], sandbox: ['allow-scripts', 'allow-forms']
+});
+
+// Drafts have an opaque origin: even an already signed-in browser cannot read
+// account cookies/storage. Only the shipped classic script loads; no data egress.
+export const draftPreviewCsp = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; sandbox allow-scripts allow-downloads";
+
+// Trusted secure-context WebCodecs worker. No authored scripts, child workers,
+// remote codec imports or network requests are permitted in this worker.
+export const mediaWorkerCsp = serialize({
+ 'default-src': ["'none'"], 'script-src': ["'self'", "'wasm-unsafe-eval'"],
+ 'connect-src': ["'none'"], 'worker-src': ["'none'"]
 });

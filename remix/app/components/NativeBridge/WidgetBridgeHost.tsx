@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import React from 'react';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -45,15 +46,15 @@ export function WidgetBridgeHost() {
       void sync();
     };
     const refresh = () => postNativeBridgeMessage({ type: 'widget-state-request' });
-    window.addEventListener(nativeBridgeMessageEvent, receive);
-    window.addEventListener('focus', refresh);
-    const timer = window.setInterval(refresh, 60000);
+    activityEvents(window, 'events:components/NativeBridge/WidgetBridgeHost', 'WidgetBridgeHost').addEventListener(nativeBridgeMessageEvent, receive);
+    activityEvents(window, 'events:components/NativeBridge/WidgetBridgeHost', 'WidgetBridgeHost').addEventListener('focus', refresh);
+    const timer = activityInterval('timer:components/NativeBridge/WidgetBridgeHost:1', 'Widget Bridge Host', refresh, 60000);
     refresh();
     return () => {
       cancelled = true;
-      clearInterval(timer);
-      window.removeEventListener(nativeBridgeMessageEvent, receive);
-      window.removeEventListener('focus', refresh);
+      clearActivityInterval(timer);
+      activityEvents(window, 'events:components/NativeBridge/WidgetBridgeHost', 'WidgetBridgeHost').removeEventListener(nativeBridgeMessageEvent, receive);
+      activityEvents(window, 'events:components/NativeBridge/WidgetBridgeHost', 'WidgetBridgeHost').removeEventListener('focus', refresh);
       postNativeBridgeMessage({ type: 'widget-clear' });
     };
   }, [user?.id, user?.temporary]);

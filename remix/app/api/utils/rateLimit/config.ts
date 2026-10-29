@@ -11,6 +11,11 @@ export type RateLimitRule = { limit: number; windowMs: number; enabled: boolean 
 export type RateLimitConfig = Record<string, RateLimitRule>;
 
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
+  'mail.read': { limit: 120, windowMs: 60_000, enabled: true },
+  'mail.write': { limit: 60, windowMs: 60_000, enabled: true },
+  'mail.sync': { limit: 30, windowMs: 60_000, enabled: true },
+  'passwords.read': { limit: 120, windowMs: 60_000, enabled: true },
+  'passwords.write': { limit: 240, windowMs: 60_000, enabled: true },
   'drafts.read': { limit: 180, windowMs: 60_000, enabled: true },
   'drafts.write': { limit: 240, windowMs: 60_000, enabled: true },
   'invites.create': { limit: 20, windowMs: 3_600_000, enabled: true },
@@ -144,6 +149,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'notifications.record': { limit: 120, windowMs: 60_000, enabled: true },
   'timeline.read': { limit: 240, windowMs: 60_000, enabled: true },
   'timeline.write': { limit: 240, windowMs: 60_000, enabled: true },
+  'timeline.explain': { limit: 20, windowMs: 600_000, enabled: true },
+  // version export (GET export=1) resolves one full version plus its notes and
+  // name into a 4 MiB file; bounded separately from ordinary history reads
+  'timeline.export': { limit: 30, windowMs: 60_000, enabled: true },
   'notifications.settings': { limit: 30, windowMs: 60_000, enabled: true },
   'notifications.devices': { limit: 30, windowMs: 60_000, enabled: true },
   // one-click email unsubscribe — anonymous (keys by IP), tokens are HMACs so
@@ -254,6 +263,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // token cap
   // Lopu model catalog (GET /api/v1/ai/models) — public read of a code-backed
   // list plus one indexed row scan; browse-shaped, anonymous callers key by IP
+  'ai.chatgpt-plan': { limit: 120, windowMs: 60_000, enabled: true },
   'ai.models': { limit: 120, windowMs: 60_000, enabled: true },
   'ai.complete': { limit: 20, windowMs: 600_000, enabled: true },
   // admin catalog toggles, on-demand re-seed and provider-key re-check
@@ -313,6 +323,12 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
 	// User Secure Vault writes are rare and credential-sensitive; voice replies
 	// can spend a user-supplied provider quota, so both fail closed at routes.
   'library.request': { limit: 20, windowMs: 60_000, enabled: true },
+  // Provider calls for the editable route planner. Suggestions need headroom
+  // for ordinary typing; optimized routes are costlier and have a smaller cap.
+  'maps.suggest': { limit: 120, windowMs: 60_000, enabled: true },
+  'maps.optimize': { limit: 20, windowMs: 60_000, enabled: true },
+  'maps.browser-config': { limit: 60, windowMs: 60_000, enabled: true },
+  'maps.request': { limit: 60, windowMs: 60_000, enabled: true },
 	'lopu.vault': { limit: 60, windowMs: 60_000, enabled: true },
 	'lopu.voiceReply': { limit: 30, windowMs: 60_000, enabled: true },
 	// Paired device mesh. Pairing creates credentials and therefore fails

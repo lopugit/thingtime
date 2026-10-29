@@ -8,7 +8,7 @@ import { gunzipSync } from 'node:zlib';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { prodCsp, devCsp } from './csp.mjs';
-import { platformRuntimeCsp } from './csp.mjs';
+import { mediaWorkerCsp, draftPreviewCsp, platformRuntimeCsp } from './csp.mjs';
 import { execFileSync } from 'node:child_process';
 import { claudeRuntimeFunctions, packageClaudeOAuthArtifacts, verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';
 
@@ -34,6 +34,23 @@ test('emitted Web Platform routes prevent stale compiler reuse and keep document
 	await fs.writeFile(join(output, 'functions/__server.func/.vc-config.json'), '{}');
 	execFileSync(process.execPath, [join(repositoryRoot, 'remix/scripts/patch-vercel-output.mjs')], { cwd: root, stdio: 'pipe' });
 	const { routes } = JSON.parse(await fs.readFile(join(output, 'config.json'), 'utf8'));
+	const media = routes.find(route => route.src === '^/assets/mediaWorker-[A-Za-z0-9_-]+\\.js$');
+	assert.equal(media.headers['Content-Security-Policy'], mediaWorkerCsp);
+	assert.equal(media.headers['Cross-Origin-Resource-Policy'], 'same-origin');
+	assert.ok(routes.indexOf(media) < routes.findIndex(route => route.handle === 'filesystem'));
+	assert.match(mediaWorkerCsp, /connect-src 'none'/);
+	assert.match(mediaWorkerCsp, /worker-src 'none'/);
+	assert.ok(!mediaWorkerCsp.includes("'unsafe-eval'"));
+	assert.match(mediaWorkerCsp, /script-src 'self' 'wasm-unsafe-eval'/);
+	assert.ok(!prodCsp.includes('wasm-unsafe-eval'));
+	const draft = routes.find(route => route.src === '^/draft-preview(?:/.*)?$');
+	assert.equal(draft.headers['Content-Security-Policy'], draftPreviewCsp);
+	assert.equal(draft.headers['Cache-Control'], 'no-store');
+	assert.ok(routes.indexOf(draft) < routes.findIndex(route => route.handle === 'filesystem'));
+	assert.match(draftPreviewCsp, /sandbox allow-scripts allow-downloads/);
+	assert.ok(!draftPreviewCsp.includes('allow-same-origin'));
+	assert.match(draftPreviewCsp, /connect-src 'none'/);
+
 	for (const extension of ['html', 'js']) {
 		const matches = routes.filter(route => route.src === `^/platform/runtime\\.${extension}$`);
 		assert.equal(matches.length, 1);
@@ -73,7 +90,8 @@ test('recording processing, attachment cleanup, moderation sweep, peer sync, and
 		{
 			path: '/api/v1/notifications/email/weekly-summary',
 			schedule: '37 21 * * 0'
-		}
+		},
+		{ path: '/api/v1/ai/models/sync', schedule: '23 3 * * *' }
 	]);
 });
 
@@ -99,9 +117,13 @@ test('native Maps can load under the deployed policy without broad script or eva
 			'https://maps.googleapis.com',
 			'https://mapsresources-pa.googleapis.com',
 			'https://maps.gstatic.com',
-			'https://csi.gstatic.com'
+			'https://csi.gstatic.com',
+			'https://api.mapbox.com',
+			'https://events.mapbox.com'
 		])
 			assert(cspSources(policy, 'connect-src').includes(host));
+		assert(!cspSources(policy, 'script-src').includes('https://api.mapbox.com'));
+		assert(cspSources(policy, 'worker-src').includes('blob:'));
 	}
 });
 
@@ -250,4 +272,12 @@ test('Claude discovery finds a runtime reference in an emitted chunk and rejects
 	assert.equal((await packageClaudeOAuthArtifacts(f.options)).length, 2);
 	await f.json(join(f.step, '.vc-config.json'), { runtime: 'nodejs22.x', handler: '../../../../../__server.func/index.js' });
 	await assert.rejects(claudeRuntimeFunctions(f.options.functionsRoot));
+});
+
+test('mail connector is the only HTTP loopback destination in the application CSP', async () => {
+  const { prodCsp, devCsp } = await import('./csp.mjs');
+  for (const policy of [prodCsp, devCsp]) {
+    assert.deepEqual(cspSources(policy, 'connect-src').filter((source) => source.startsWith('http:')), ['http://127.0.0.1:17879']);
+    assert(!cspSources(policy, 'script-src').includes('http://127.0.0.1:17879'));
+  }
 });

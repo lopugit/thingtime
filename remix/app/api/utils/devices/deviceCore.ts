@@ -1,7 +1,11 @@
+import { normalizeDeviceScriptInput, type DeviceScriptInput } from './deviceScript';
+import { normalizeDeviceMenuBar, type DeviceMenuBar } from './deviceMenuBar';
 import { normalizeFilesystemInput, type FilesystemInput } from './deviceFilesystemCore';
 import { createHash } from 'node:crypto';
+import { isDevicePlatform, type DevicePlatform } from '../../../devices/platform';
 
 export const DEVICE_COMMAND_KINDS = [
+	'script.run',
 	'filesystem',
 	'connector.start',
 	'connector.stop',
@@ -77,6 +81,7 @@ export const normalizeDevicePermissionMode = (value: unknown): DevicePermissionM
 // Force quitting can discard unsaved work. It must always create a fresh
 // approval, even when the paired device otherwise allows routine controls.
 const ALWAYS_APPROVAL_DEVICE_COMMANDS = new Set<DeviceCommandKind>([
+	'script.run',
 	'app.force-quit',
 	'system.restart',
 	'system.shutdown',
@@ -169,7 +174,7 @@ export const devicePayloadHash = (value: unknown): string => createHash('sha256'
 
 export type DeviceDescriptor = {
 	name: string;
-	platform: 'macos' | 'windows' | 'linux' | 'watchos';
+	platform: DevicePlatform;
 	model: string | null;
 	osVersion: string | null;
 	appVersion: string | null;
@@ -180,10 +185,7 @@ export const normalizeDeviceDescriptor = (value: unknown): DeviceDescriptor | nu
 	const raw = value as Record<string, unknown>;
 	if (!Object.keys(raw).every((key) => ['name', 'platform', 'model', 'osVersion', 'appVersion'].includes(key))) return null;
 	const name = bounded(raw.name, 120);
-	const platform =
-		raw.platform === 'macos' || raw.platform === 'windows' || raw.platform === 'linux' || raw.platform === 'watchos'
-			? raw.platform
-			: null;
+	const platform = isDevicePlatform(raw.platform) ? raw.platform : null;
 	if (!name || !platform) return null;
 	return {
 		name,
@@ -227,12 +229,21 @@ export type DevicePrinter = { id: string; name: string; isDefault: boolean };
 export type DeviceCamera = { id: string; name: string; isConnected: boolean; isPreferred: boolean; authorization: 'granted' | 'denied' };
 export type DeviceBluetoothDevice = { id: string; name: string; isConnected: boolean };
 export type DeviceVPNService = { id: string; name: string; isConnected: boolean };
-export type DeviceBatteryState = { level: number | null; charging: boolean | null; isExternalPower: boolean | null; isPreventingIdleSleep: boolean; isLowPowerModeEnabled: boolean };
+export type DeviceBatteryState = {
+	level: number | null; charging: boolean | null; isExternalPower: boolean | null;
+	isPreventingIdleSleep: boolean; isLowPowerModeEnabled: boolean;
+	fullyCharged?: boolean | null; cycleCount?: number | null; designCycleCount?: number | null;
+	designCapacityMAh?: number | null; fullChargeCapacityMAh?: number | null; remainingCapacityMAh?: number | null;
+	currentMA?: number | null; voltageMV?: number | null; temperatureC?: number | null;
+	timeToEmptyMinutes?: number | null; timeToFullMinutes?: number | null;
+	adapterWatts?: number | null; adapterVoltageMV?: number | null; adapterCurrentMA?: number | null;
+};
 export type DevicePowerTimersState = { displayIdleMinutes: number | null; systemSleepMinutes: number | null; diskIdleMinutes: number | null };
 export type DeviceAppleMusicState = { isInstalled: boolean; isRunning: boolean };
 export type DeviceSpotifyState = { isInstalled: boolean; isRunning: boolean };
 export type DeviceChromeYouTubeState = { isInstalled: boolean; isRunning: boolean };
 export type DeviceStateSnapshot = {
+	menuBar?: DeviceMenuBar;
 	locked: boolean;
 	volume: number | null;
 	muted: boolean | null;
@@ -306,11 +317,13 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		!Object.keys(raw).every((key) =>
 			[
 				'locked', 'volume', 'muted', 'inputVolume', 'inputMuted', 'soundEffectsVolume', 'soundEffectsMuted', 'brightness', 'battery', 'powerTimers', 'openApps', 'audioDevices', 'wifi',
-				'displays', 'printers', 'cameras', 'bluetoothDevices', 'vpnServices', 'appleMusic', 'spotify', 'chromeYouTube'
+				'displays', 'printers', 'cameras', 'bluetoothDevices', 'vpnServices', 'appleMusic', 'spotify', 'chromeYouTube', 'menuBar'
 			].includes(key)
 		)
 	)
 		return null;
+	const menuBar = raw.menuBar === undefined ? undefined : normalizeDeviceMenuBar(raw.menuBar);
+	if (menuBar === null || (raw.locked === true && menuBar && (menuBar.status !== 'locked' || menuBar.items.length))) return null;
 	const appsRaw = raw.openApps === undefined ? [] : raw.openApps;
 	if (!Array.isArray(appsRaw) || appsRaw.length > MAX_DEVICE_OPEN_APPS) return null;
 	const openApps: DeviceOpenApp[] = [];
@@ -362,14 +375,25 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 	if (raw.battery !== undefined && raw.battery !== null) {
 		if (!raw.battery || typeof raw.battery !== 'object') return null;
 		const candidate = raw.battery as Record<string, unknown>;
-		if (!Object.keys(candidate).every((key) => ['level', 'charging', 'isExternalPower', 'isPreventingIdleSleep', 'isLowPowerModeEnabled'].includes(key))) return null;
+		const detailKeys = ['fullyCharged', 'cycleCount', 'designCycleCount', 'designCapacityMAh', 'fullChargeCapacityMAh', 'remainingCapacityMAh', 'currentMA', 'voltageMV', 'temperatureC', 'timeToEmptyMinutes', 'timeToFullMinutes', 'adapterWatts', 'adapterVoltageMV', 'adapterCurrentMA'] as const;
+		if (!Object.keys(candidate).every((key) => ['level', 'charging', 'isExternalPower', 'isPreventingIdleSleep', 'isLowPowerModeEnabled', ...detailKeys].includes(key as typeof detailKeys[number]))) return null;
 		const level = candidate.level === null || candidate.level === undefined ? null : unitInterval(candidate.level);
 		const charging = candidate.charging === null || candidate.charging === undefined ? null : typeof candidate.charging === 'boolean' ? candidate.charging : null;
 		const isExternalPower = candidate.isExternalPower === null || candidate.isExternalPower === undefined ? null : typeof candidate.isExternalPower === 'boolean' ? candidate.isExternalPower : null;
 		const isPreventingIdleSleep = candidate.isPreventingIdleSleep ?? false;
 		const isLowPowerModeEnabled = candidate.isLowPowerModeEnabled ?? false;
 		if ((candidate.level !== null && candidate.level !== undefined && level === null) || (candidate.charging !== null && candidate.charging !== undefined && charging === null) || (candidate.isExternalPower !== null && candidate.isExternalPower !== undefined && isExternalPower === null) || typeof isPreventingIdleSleep !== 'boolean' || typeof isLowPowerModeEnabled !== 'boolean') return null;
-		battery = { level, charging, isExternalPower, isPreventingIdleSleep, isLowPowerModeEnabled };
+		const details: Record<string, number | boolean | null> = {};
+		for (const key of detailKeys) {
+			if (candidate[key] === undefined) continue;
+			const value = candidate[key];
+			if (value === null) { details[key] = null; continue; }
+			if (key === 'fullyCharged') {
+				if (typeof value !== 'boolean') return null;
+			} else if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 1_000_000 || (key !== 'temperatureC' && !Number.isInteger(value)) || (key !== 'currentMA' && value < 0)) return null;
+			details[key] = value as number | boolean;
+		}
+		battery = { level, charging, isExternalPower, isPreventingIdleSleep, isLowPowerModeEnabled, ...details };
 	}
 	let powerTimers: DevicePowerTimersState | undefined;
 	if (raw.powerTimers !== undefined) {
@@ -489,7 +513,8 @@ export const normalizeDeviceState = (value: unknown): DeviceStateSnapshot | null
 		vpnServices,
 		appleMusic,
 		spotify,
-		chromeYouTube
+		chromeYouTube,
+		...(menuBar ? { menuBar } : {})
 	};
 };
 
@@ -663,6 +688,7 @@ type ConnectorInput = { connectorId: string };
 type CursorPageInput = { cursor?: string; limit?: number };
 
 export type DeviceCommandInputByKind = {
+	'script.run': DeviceScriptInput;
 	'filesystem': FilesystemInput;
 	'connector.start': ConnectorInput;
 	'connector.stop': ConnectorInput;
@@ -770,6 +796,7 @@ export const deviceConnectorSupportsCommand = (
 
 const DEVICE_COMMAND_CAPABILITY: Partial<Record<DeviceCommandKind, string>> = {
 	'filesystem': 'filesystem.v1',
+	'script.run': 'script.bash.v1',
 	'app.focus': 'apps.launch',
 	'app.launch': 'apps.launch',
 	'app.quit': 'apps.quit',
@@ -949,6 +976,10 @@ export const normalizeDeviceCommand = <K extends DeviceCommandKind>(
 	const ok = (input: unknown) => ({ ok: true as const, input: input as DeviceCommandInputByKind[K] });
 
 	switch (kind) {
+		case	'script.run': {
+			const input = normalizeDeviceScriptInput(raw);
+			return input ? ok(input) : deviceFail(400, 'Invalid bounded Bash script');
+		}
 		case 'filesystem': {
 			const input = normalizeFilesystemInput(raw);
 			return input ? ok(input) : deviceFail(400, 'Invalid bounded filesystem operation');
