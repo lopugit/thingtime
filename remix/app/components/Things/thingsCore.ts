@@ -1,3 +1,5 @@
+import { isBuilderThing } from '../../schemas/builderThing';
+import { renderComponentDeclaration } from '../Thingtime/renderComponentDeclaration';
 import { isFolderThing } from '../../schemas/folderThing';
 // Shared vocabulary for the /things page — types, display helpers, and the
 // localCache shape. Pure module (no React) so views/dialogs/tests can all
@@ -175,9 +177,8 @@ export const formatWhen = (iso: string): string => {
   return date.toLocaleDateString();
 };
 
-// Where a thing's OWN page lives — the permalink Copy link / Share hand out
-// and the page a double-click opens, so a pasted link and an opened tile
-// land on the same surface. Every kind with a dedicated page routes there
+// Where a thing's public/readable page lives — the permalink Copy link /
+// Share hand out. Owner edit navigation is separate in thingOpenHref. Every kind with a dedicated page routes there
 // (folders open in place on /things); components, data and whatever kind
 // comes next land on the universal /thing/:id page. The /things?preview=
 // deep link stays the explicit quick-look, never the permalink.
@@ -192,11 +193,34 @@ export const thingShareLink = (
 // The surfaces the universal page can send a viewer back to.
 export type ThingsReferrer = 'things' | 'actions' | 'feed';
 
-// The href a browse surface NAVIGATES to: the permalink plus the referrer
+type NavigableThing = Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>> & { author?: { id: string } | null };
+
+/** Builder identity is explicit (with canonical legacy kinds supported). A
+ * viewer's access to a saved Thing never implies ownership or edit authority. */
+export const thingBuilderHref = (thing: NavigableThing, viewerId?: string | null): string | null => {
+  if (!viewerId || thing.author?.id !== viewerId || !isBuilderThing(thing)) return null;
+  const id = encodeURIComponent(thing.id);
+  if (isFolder(thing)) return `/builder?folder=${id}&kind=all`;
+  if (thing.thingtime.includes('webpage')) return `/builder?page=${id}`;
+  return `/builder?thing=${id}`;
+};
+
+/** A live presentation uses an existing reader, never an inferred data shape. */
+export const thingLiveHref = (thing: NavigableThing): string | null => {
+  if (isFolder(thing)) return null;
+  const presentation = renderComponentDeclaration(thing.crystal);
+  if (thing.thingtime.some(kind => ['webpage', 'component', 'action', 'schema'].includes(kind)) || (presentation && presentation.kind !== 'invalid')) return thingLink(thing);
+  return null;
+};
+
+// The href a browse surface NAVIGATES to: owners edit Builder Things; other
+// activation uses the readable permalink plus the referrer
 // hint the universal /thing/:id page reads for its back link. Only that page
 // consumes the hint, so dedicated pages (post/action/webpage/schema) and the
 // shareable permalink itself never carry it.
-export const thingOpenHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>, from: ThingsReferrer): string => {
+export const thingOpenHref = (thing: NavigableThing, from: ThingsReferrer, viewerId?: string | null): string => {
+  const builderHref = thingBuilderHref(thing, viewerId);
+  if (builderHref) return builderHref;
   const href = thingLink(thing);
   return href.startsWith('/thing/') ? `${href}${href.includes('?') ? '&' : '?'}from=${from}` : href;
 };

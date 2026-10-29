@@ -14,6 +14,7 @@ import type {
 import { canOfferRecordingHandoff } from '../Lopu/recordingThingHandoff';
 import { archiveNounForKinds, buildArchiveMenuSection } from '../Attachments/attachmentArchiveActions';
 import { buildThingEntityMenu } from '../Thingtime/ContextMenu/thingEntityMenu';
+import { builderThingMenuSections } from '../Thingtime/ContextMenu/builderThingMenu';
 import { thingBrowseHref } from './thingsLocation';
 
 import {
@@ -44,7 +45,7 @@ export type ThingsItemMenuArgs = {
 };
 
 export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch, builderMode }: ThingsItemMenuArgs): ThingContextMenuModel => {
-  if (thing.id.startsWith('timeline-folder-')) return buildThingEntityMenu({ open: { href: thingBrowseHref(thing, locationSearch) }, 'copy-link': true });
+  if (thing.id.startsWith('timeline-folder-')) return buildThingEntityMenu({ open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, 'copy-link': true });
   const folder = isFolder(thing);
   const archive = thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive';
   const bulkHint = actCount > 1 ? `Applies to ${actCount} selected Things` : undefined;
@@ -54,12 +55,13 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
   const files = archiveNoun ? buildArchiveMenuSection({ fileCount: null, noun: archiveNoun, bulk: actCount > 1 }) : null;
   return buildThingEntityMenu({
     history: actCount === 1 && !!ownerId && thing.author?.id === ownerId,
-    open: { href: thingBrowseHref(thing, locationSearch) }, inspect: !archive && { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true,
+    open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, inspect: !archive && { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true,
     rename: actCount === 1 && (!ownerId || thing.author?.id === ownerId),
     share: !archive && { hint: bulkHint || (folder ? 'Audience for the folder — optionally everything inside' : undefined) },
     delete: !archive && { hint: bulkHint, kbd: '⌫' },
     'send-to-lopu': actCount === 1 && canOfferRecordingHandoff(thing, ownerId)
   }, [
+    ...builderThingMenuSections(thing, ownerId, actCount),
     ...(builderMode && thing.thingtime.includes('component') && actCount === 1 && thing.author?.id === ownerId
       ? [{ id: 'builder-definition', actions: [{ id: 'edit-definition', command: 'edit-definition', label: 'Edit definition…', icon: '✏️', lucide: 'pencil' }] }]
       : []),

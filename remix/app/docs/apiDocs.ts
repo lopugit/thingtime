@@ -9448,8 +9448,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.45.0',
-    contractVersion: '1.45.0',
+    featureVersion: '1.46.0',
+    contractVersion: '1.46.0',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -9505,6 +9505,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST { thingtime: ["post"], crystal: { type, text, richText?, images, listing, thing }, acl, tags } — or the legacy post body — to create. type is text, image, marketplace, or thingtime.',
       'Post captions may include richText: a bounded native Editor.js document ({ kind: "rich-text", blocks: [...] }). The server derives crystal.text from those blocks as the canonical plain-text search, moderation, notification, and older-client fallback.',
       'Thingtime posts (type "thingtime") carry a free-form structured thing under crystal.thing — bounded like data crystals and searchable as crystal.thing.<field> on /search. They can also carry images and an optional marketplace listing (validated like a marketplace post’s when present).',
+      'In 1.46.0 Builder-authored content carries the composable builder-thing schema id. New webpage, component, action, schema and builderApp folder writes add it automatically. Builder data/folders opt in explicitly. PATCH/PUT can add builder-thing while preserving every stored content schema; removal or kind changes are not supported. The marker grants no access and never changes content validation or chooses a renderer.',
       'Omit thingtime entirely to create a schema-less thing: { crystal: { any: "shape" } } defaults to thingtime ["data"].',
       'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"]. tt:inherit is stamped by the SERVER on target-attached things — sending it yourself is a 400 on create and update alike, because a thing whose audience is detached from its own acl can never be judged or re-edited.',
@@ -11466,13 +11467,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'things-update',
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.14.0',
-    contractVersion: '1.14.0',
+    featureVersion: '1.15.0',
+    contractVersion: '1.15.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.15 accepts additive thingtime: [...storedContentSchemas, \"builder-thing\"] provenance without permitting content-kind changes or losing the marker; canonical Builder kinds are marked automatically on save. ' +
       'Version 1.14 accepts guarded tt-form, tt-select, tt-style, tt-change and tt-mapbox element blocks in saved editable Webpages; their nested children and repeated collection templates retain independent Builder selection and bindings. ' +
       'Version 1.13 preserves and validates shared crystal.renderComponent metadata exactly as api.things 1.42.0, including PATCH preservation and replacement/explicit-null semantics. References do not grant access. ' +
       'Version 1.12 accepts validated intrinsic media containers with individually editable child blocks; selected local bytes are never stored. ' +

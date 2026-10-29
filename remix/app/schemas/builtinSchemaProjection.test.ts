@@ -39,6 +39,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   "comment": ["text"],
   "reaction": ["emoji"],
   "share": [],
+  "builder-thing": [],
   "data": [],
   "scheduled-task-run": ["title", "chatId", "scheduledAt", "status", "notificationStatus"],
   "schema": ["name", "description", "fields", "forkOf", "render"],
@@ -264,7 +265,7 @@ for (const schema of crystalSchemas) {
     assert.equal(validated.ok, true, `expected ok, got: ${JSON.stringify(validated)}`);
     if (validated.ok !== true) return;
 
-    assert.deepEqual(validated.thingtime, ['schema']);
+    assert.deepEqual(validated.thingtime, ['schema', 'builder-thing']);
     assert.equal(validated.crystal.name, schema.title);
     assert.deepEqual(fieldNames(validated.crystal), EXPECTED_PROJECTED_FIELDS[schema.id]);
     // Every concrete top-level field survives; open objects must not disappear
