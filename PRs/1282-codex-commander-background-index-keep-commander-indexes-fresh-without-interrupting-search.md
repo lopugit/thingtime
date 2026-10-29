@@ -104,7 +104,34 @@ Canonical bundle output is `Commander/dist/Commander.app`; the installed copy is
 `~/Applications/Commander.app`. The final recovery bundle must retain the
 stable Developer ID signing requirement, verify its installed signature, launch
 from that installed path, and pass real enabled-root responsiveness and change
-acceptance. The parent task owns installation, final acceptance and any merge.
+acceptance. The native acceptance lane owns the next installation and final acceptance; the parent task owns any merge.
+
+The signed build `2026102902` subsequently passed real installed responsiveness
+and automatic file/folder/child/app create, rename and delete acceptance. Sixty
+health probes returned HTTP 200, with maximum 56 ms. The saved profile remained
+unchanged. However, its full reconciliation exceeded the saved 512 MiB memory
+ceiling (observed 707/780 MiB), preserving the old snapshot but leaving file and
+folder totals unmeasured. That count failure remains a release gate.
+
+The memory repair replaces the pinned ignore walker's unbounded pre-callback
+sibling queue with lazy bounded-depth chunks and a private on-disk SQLite
+frontier. A bounded channel backpressures metadata, directory handles remain
+within the saved ceiling, and SQLite temporary work uses files. The frontier has
+a 2 MiB cache; its file and the index database/WAL/SHM are excluded from indexing.
+Ordinary disappearing or inaccessible boundary entries remain diagnostics;
+storage and resource failures abort the transaction and preserve the old index.
+This trades temporary disk I/O for bounded traversal memory without changing
+settings, schema, search limits or eligibility rules.
+
+Focused regressions compare the real ignore walker across directory-handle and
+depth settings, cover wide file/directory siblings and concurrent boundary
+removal, and verify exact SQLite reconciliation counts and private-file
+exclusion. The opt-in release metadata traversal of `/` completed 3,995,979
+records in 181.115 seconds with peak resident memory 18 MiB. It did not write the
+production index and does not prove the full SQLite writer or final footer.
+Native build `2026102903` must still complete the installed full reconciliation
+under the unchanged saved 512 MiB policy and verify the measured total/freshness.
+The native acceptance lane owns that signed installation; the parent owns merge.
 
 ## Graphify evidence boundary
 

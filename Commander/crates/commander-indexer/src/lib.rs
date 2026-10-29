@@ -29,6 +29,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 #[cfg(unix)]
 pub mod backup;
 pub mod backup_ignore;
+mod bounded_walk;
 mod read_policy;
 mod resources;
 use read_policy::ReadPolicy;
@@ -393,7 +394,7 @@ impl IndexDatabase {
         retry_database_busy(|| {
             connection.execute_batch(
                 "PRAGMA synchronous=NORMAL;
-                 PRAGMA temp_store=MEMORY;
+                 PRAGMA temp_store=FILE;
                  PRAGMA foreign_keys=ON;",
             )
         })?;
@@ -884,6 +885,7 @@ impl IndexDatabase {
             &transaction,
             ScanContext {
                 source,
+                database_path: &self.database_path,
                 root: &root,
                 root_text: &root_text,
                 matcher,
@@ -1318,7 +1320,7 @@ fn configure_database_resources(
     connection.pragma_update(None, "mmap_size", 0_i64)?;
     connection.execute_batch(
         "PRAGMA cache_spill=ON;
-         PRAGMA temp_store=MEMORY;",
+         PRAGMA temp_store=FILE;",
     )?;
     Ok(())
 }
@@ -1562,6 +1564,7 @@ fn is_database_busy(error: &rusqlite::Error) -> bool {
 
 struct ScanContext<'a> {
     source: &'a IndexSource,
+    database_path: &'a Path,
     root: &'a Path,
     root_text: &'a str,
     matcher: Arc<CustomIgnoreMatcher>,
@@ -1597,6 +1600,7 @@ fn scan_and_store(
 ) -> Result<SourceReport, IndexerError> {
     let ScanContext {
         source,
+        database_path,
         root,
         root_text,
         matcher,
@@ -1605,8 +1609,18 @@ fn scan_and_store(
         generation,
         governor,
     } = context;
-    let builder = source_walker(root, source, &governor);
-    let walker = builder.build_parallel();
+    let source_owned = source.clone();
+    let database_path = fs::canonicalize(database_path)?;
+    let frontier_directory = database_path
+        .parent()
+        .expect("database directory")
+        .to_owned();
+    let mut excluded_paths = vec![database_path.clone()];
+    for suffix in ["-wal", "-shm"] {
+        let mut path = database_path.as_os_str().to_os_string();
+        path.push(suffix);
+        excluded_paths.push(PathBuf::from(path));
+    }
     let kinds: HashSet<IndexKind> = normalized_kinds(&source.kinds).into_iter().collect();
     let (sender, receiver) =
         mpsc::sync_channel::<ScanMessage>(governor.effective().channel_capacity);
@@ -1631,7 +1645,7 @@ fn scan_and_store(
         let walker_discovered = Arc::clone(&discovered);
         let walker_governor = Arc::clone(&governor);
         scope.spawn(move || {
-            walker.run(|| {
+            let visitor: bounded_walk::Visitor = {
                 let sender = walker_sender.clone();
                 let cancelled = Arc::clone(&walker_cancelled);
                 let discovered = Arc::clone(&walker_discovered);
@@ -1640,78 +1654,92 @@ fn scan_and_store(
                 let kinds = kinds.clone();
                 let root = root_owned.clone();
                 let changed_paths = changed_paths.clone();
-                Box::new(move |entry| {
-                    if cancelled.load(Ordering::Relaxed) {
-                        return WalkState::Quit;
-                    }
-                    if let Err(error) = governor.checkpoint() {
-                        cancelled.store(true, Ordering::Relaxed);
-                        let _ = sender.send(ScanMessage::Fatal(error));
-                        return WalkState::Quit;
-                    }
-                    let entry = match entry {
-                        Ok(entry) => entry,
-                        Err(error) => {
-                            let _ = sender.send(ScanMessage::WalkError(error.to_string()));
-                            return WalkState::Continue;
+                Arc::new(
+                    move |entry: Result<ignore::DirEntry, ignore::Error>, depth| {
+                        if cancelled.load(Ordering::Relaxed) {
+                            return WalkState::Quit;
                         }
-                    };
-                    let path = entry.path();
-                    #[cfg(target_os = "macos")]
-                    if root == Path::new("/") && path == Path::new("/System/Volumes/Data") {
-                        return WalkState::Skip;
-                    }
-                    if !changed_paths.is_empty()
-                        && !changed_paths
-                            .iter()
-                            .any(|changed| path.starts_with(changed) || changed.starts_with(path))
-                    {
-                        return WalkState::Skip;
-                    }
-                    let within_change = changed_paths.is_empty()
-                        || changed_paths
-                            .iter()
-                            .any(|changed| path.starts_with(changed));
-                    let relative = path.strip_prefix(&root).unwrap_or(path);
-                    if entry.depth() > 0 && matcher.is_match(path, relative) {
-                        let _ = sender.send(ScanMessage::Skipped);
-                        return if entry
-                            .file_type()
-                            .is_some_and(|file_type| file_type.is_dir())
-                        {
-                            WalkState::Skip
-                        } else {
-                            WalkState::Continue
+                        if let Err(error) = governor.checkpoint() {
+                            cancelled.store(true, Ordering::Relaxed);
+                            let _ = sender.send(ScanMessage::Fatal(error));
+                            return WalkState::Quit;
+                        }
+                        let entry = match entry {
+                            Ok(entry) => entry,
+                            Err(error) => {
+                                let _ = sender.send(ScanMessage::WalkError(error.to_string()));
+                                return WalkState::Continue;
+                            }
                         };
-                    }
-                    let (candidate, skip_children) = match candidate_from_entry(&entry, &kinds) {
-                        Ok(result) => result,
-                        Err(error) => {
-                            let _ = sender.send(ScanMessage::WalkError(error.message));
-                            return WalkState::Continue;
+                        let path = entry.path();
+                        #[cfg(target_os = "macos")]
+                        if root == Path::new("/") && path == Path::new("/System/Volumes/Data") {
+                            return WalkState::Skip;
                         }
-                    };
-                    if let Some(candidate) = candidate.filter(|_| within_change) {
-                        if let Some(max_entries) = max_entries {
-                            let next = discovered.fetch_add(1, Ordering::Relaxed) + 1;
-                            if next > max_entries {
+                        if !changed_paths.is_empty()
+                            && !changed_paths.iter().any(|changed| {
+                                path.starts_with(changed) || changed.starts_with(path)
+                            })
+                        {
+                            return WalkState::Skip;
+                        }
+                        let within_change = changed_paths.is_empty()
+                            || changed_paths
+                                .iter()
+                                .any(|changed| path.starts_with(changed));
+                        let relative = path.strip_prefix(&root).unwrap_or(path);
+                        if depth > 0 && matcher.is_match(path, relative) {
+                            let _ = sender.send(ScanMessage::Skipped);
+                            return if entry
+                                .file_type()
+                                .is_some_and(|file_type| file_type.is_dir())
+                            {
+                                WalkState::Skip
+                            } else {
+                                WalkState::Continue
+                            };
+                        }
+                        let (candidate, skip_children) = match candidate_from_entry(&entry, &kinds)
+                        {
+                            Ok(result) => result,
+                            Err(error) => {
+                                let _ = sender.send(ScanMessage::WalkError(error.message));
+                                return WalkState::Continue;
+                            }
+                        };
+                        if let Some(candidate) = candidate.filter(|_| within_change) {
+                            if let Some(max_entries) = max_entries {
+                                let next = discovered.fetch_add(1, Ordering::Relaxed) + 1;
+                                if next > max_entries {
+                                    cancelled.store(true, Ordering::Relaxed);
+                                    let _ = sender.send(ScanMessage::LimitExceeded(max_entries));
+                                    return WalkState::Quit;
+                                }
+                            }
+                            if sender.send(ScanMessage::Record(candidate)).is_err() {
                                 cancelled.store(true, Ordering::Relaxed);
-                                let _ = sender.send(ScanMessage::LimitExceeded(max_entries));
                                 return WalkState::Quit;
                             }
                         }
-                        if sender.send(ScanMessage::Record(candidate)).is_err() {
-                            cancelled.store(true, Ordering::Relaxed);
-                            return WalkState::Quit;
+                        if skip_children {
+                            WalkState::Skip
+                        } else {
+                            WalkState::Continue
                         }
-                    }
-                    if skip_children {
-                        WalkState::Skip
-                    } else {
-                        WalkState::Continue
-                    }
-                })
-            });
+                    },
+                )
+            };
+            if let Err(error) = bounded_walk::walk(
+                &root_owned,
+                &source_owned,
+                Arc::clone(&walker_governor),
+                &frontier_directory,
+                excluded_paths,
+                visitor,
+            ) {
+                walker_cancelled.store(true, Ordering::Relaxed);
+                let _ = walker_sender.send(ScanMessage::Fatal(error));
+            }
         });
         drop(sender);
 
@@ -3761,6 +3789,37 @@ mod tests {
         assert!(report.resources.effective.channel_capacity <= 4_096);
         assert!(report.resources.average_cpu_percent <= 100);
         assert!(report.resources.memory_checks > 0);
+    }
+
+    #[test]
+    fn wide_full_reconciliation_keeps_exact_counts_and_excludes_its_private_files() {
+        let temp = TempDir::new().unwrap();
+        for index in 0..1_024 {
+            write(temp.path().join(format!("wide-file-{index}")), "").unwrap();
+            create_dir_all(temp.path().join(format!("wide-dir-{index}"))).unwrap();
+        }
+        let mut config = configuration(temp.path(), vec![IndexKind::File, IndexKind::Directory]);
+        config.sources[0].include_hidden = true;
+        let mut database = database(&temp);
+        let report = database.index(&config).unwrap();
+        assert!(report.resources.peak_memory_bytes <= 512 * 1024 * 1024);
+        assert_eq!(report.status.total_records, 2_050); // root, private state directory, 2,048 entries
+        assert_eq!(
+            database
+                .connection
+                .query_row("PRAGMA temp_store", [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        let private_records: i64 = database.connection.query_row(
+            "SELECT COUNT(*) FROM records WHERE name LIKE '.commander-frontier-%' OR name IN ('index.sqlite3', 'index.sqlite3-wal', 'index.sqlite3-shm')",
+            [], |row| row.get(0),
+        ).unwrap();
+        assert_eq!(private_records, 0);
+        fs::remove_file(temp.path().join("wide-file-0")).unwrap();
+        fs::remove_dir(temp.path().join("wide-dir-0")).unwrap();
+        let refreshed = database.index(&config).unwrap();
+        assert_eq!(refreshed.status.total_records, 2_048);
     }
 
     #[test]

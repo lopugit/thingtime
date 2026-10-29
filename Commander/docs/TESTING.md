@@ -179,6 +179,11 @@
 - [ ] With an index above one million records, leave Search Settings open for at least four status polls. Counts and
       database size must stay populated, each poll must complete within five seconds, and no timeout may replace the
       last-known values with zeroes. Search a long nonexistent term afterward and verify status polling recovers.
+- [ ] Under the existing saved 512 MiB memory ceiling, reconcile a wide/deep enabled whole-volume root
+      in the signed installed app without raising or resetting the policy. Verify the writer commits, the launcher
+      leaves Not measured for an independently checked unique total/freshness, and health/search remain responsive.
+      Cover directory-handle limits 1, 2 and 16, cross-chunk ignore rules, disappearing boundary directories and
+      exclusion of the index database, WAL/SHM and temporary frontier; failure must preserve the previous snapshot.
 - [ ] Change Scanner threads, Parallel tasks, Open folders, Max CPU, and Max memory; close/reopen Settings and verify
       every value persists. Run a scan and verify the last-run line reports effective workers, average CPU, peak RAM,
       and throttle time. Set the three concurrency ceilings to different values and verify effective workers use the

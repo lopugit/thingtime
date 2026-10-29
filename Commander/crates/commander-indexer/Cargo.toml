@@ -27,10 +27,13 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 unicode-normalization = "0.1"
+# File creation remains atomic and owner-only; avoid the optional entropy
+# dependency raising the production compiler requirement above Rust 1.75.
+tempfile = { version = "3", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 notify = "=6.1.1"
 rustix = { version = "1", features = ["fs"] }
 
-[dev-dependencies]
-tempfile = "3"
+[target.'cfg(windows)'.dependencies]
+winapi-util = "0.1"

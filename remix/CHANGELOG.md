@@ -102,8 +102,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-29: Refresh Commander indexes in the background, preserve responsive search and report measured unique totals and refresh age. Add isolated native acceptance and recover real-root watcher starvation; final installed recovery acceptance remains a release gate. [Details](../PRs/1282-codex-commander-background-index-keep-commander-indexes-fresh-without-interrupting-search.md). **Codex (AI)**
-
 - 2026-10-29: Restore the original browser tab before explicit native passkey fallback starts WebAuthn; approval-page cancellation returns consistently while background opt-out/cancellation stays non-disruptive.
 
 - 2026-10-29: Restore successful browser passkey approvals to the exact requesting tab/window before the site handles its response.
@@ -6790,6 +6788,9 @@ Detailed PR notes:
   — _Codex (AI), 2026-06-22_
 
 ---
+
+- 2026-10-29: Refresh Commander indexes in the background with responsive search, measured unique totals and refresh age. Recover real-root watcher starvation and bound traversal memory without changing the saved policy; installed full-count acceptance under 512 MiB remains pending. [Details](../PRs/1282-codex-commander-background-index-keep-commander-indexes-fresh-without-interrupting-search.md). **Codex (AI)**
+
 
 <!--
 
