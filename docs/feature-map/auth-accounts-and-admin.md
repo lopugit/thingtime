@@ -122,6 +122,13 @@ classifies HTTP failures and walks complete cursor-based catalogs. The provider
 controller starts registration once after OS selection when its view is visible,
 preserving device authentication, cancellation, retry and session fences. The macOS host
 and provider display Thingtime while retaining installed bundle/Keychain identities.
+Packaged metadata verification rejects old branding and mismatched host/provider
+versions. The passkey guide puts the native macOS provider before the optional
+browser adapter, and exact-default migration preserves authored guide blocks.
+`IdentityIndexTests.swift` verifies passkey discovery without password URL fields
+and prevents treating ordinary password entries as passkeys. `CatalogSelection.swift`
+owns the real chooser filter; assertion requests require an exact RP and allowed
+credential ID and cannot fall through to password/OTP website matching.
 Run `swift test --package-path apple/Passwords` and
 `bash apple/PasswordProvider/tests/render-preview.sh`; the latter renders the
 actual SwiftUI view with synthetic status only. Signed packaging and real device registration/sign-in

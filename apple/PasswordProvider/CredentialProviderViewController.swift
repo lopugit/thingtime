@@ -172,14 +172,12 @@ private struct ProviderView: View {
             let session = try PasswordSessionStore.load(), client = PasswordClient(account: session)
             self.show(.vault)
             let catalog = try await client.catalog(); try self.verify(current, session: session)
-            let matches = catalog.filter { item in
-                if let rp = item.relyingParty {
-                    guard let parameters, rp == parameters.relyingPartyIdentifier, let id = item.credentialId.flatMap({ Data(base64URL: $0) }) else { return false }
-                    return parameters.allowedCredentials.isEmpty || parameters.allowedCredentials.contains(id)
-                }
-                return (otp ? item.hasTotp : item.hasPassword) && (services.isEmpty || item.domains.contains(where: hosts.contains))
-            }
-            self.model.message = matches.isEmpty ? "No matching credentials. Add this site's exact HTTPS address to an entry in Thingtime." : "Choose an account. Your device will verify you before filling."
+            let matches = PasswordCatalogSelection.matching(catalog, hosts: hosts, anyService: services.isEmpty,
+                relyingParty: parameters?.relyingPartyIdentifier, allowedCredentialIDs: parameters?.allowedCredentials ?? [], otp: otp)
+            let emptyMessage = parameters == nil
+                ? "No matching credentials. Add this site's exact HTTPS address to an entry in Thingtime."
+                : "No matching passkey is saved in Thingtime for this website. Create a passkey in the website's account security settings and choose Thingtime."
+            self.model.message = matches.isEmpty ? emptyMessage : "Choose an account. Your device will verify you before filling."
             self.model.choices = matches.map { item in .init(id: item.id, title: item.title, detail: item.username, select: { [weak self] in
                 self?.select(item.id, hosts: hosts, anySite: services.isEmpty, parameters: parameters, otp: otp)
             }) }
@@ -193,7 +191,9 @@ private struct ProviderView: View {
             self.show(.vault)
             let entry = try await client.read(id); try self.verify(current, session: session)
             self.show(.filling)
-            if entry.passwordType == "passkey" {
+            // The request type stays authoritative after live readback: a
+            // changed record cannot turn an assertion into password filling.
+            if parameters != nil || passkeyRequest != nil || entry.passwordType == "passkey" {
                 let material = try PasskeyMaterial(entry: entry)
                 let identity = passkeyRequest?.credentialIdentity as? ASPasskeyCredentialIdentity
                 guard let rp = parameters?.relyingPartyIdentifier ?? identity?.relyingPartyIdentifier,

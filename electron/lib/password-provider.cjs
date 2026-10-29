@@ -15,7 +15,7 @@ function runHelper(executable, action, value) {
       output += chunk.toString('utf8');
     });
     const timer = setTimeout(() => { child.kill(); reject(new Error('Password AutoFill connection timed out.')); }, 60000);
-    child.once('error', () => { clearTimeout(timer); reject(new Error('Install the Thingtime Passwords native helper to enable AutoFill.')); });
+    child.once('error', () => { clearTimeout(timer); reject(new Error('Install the Thingtime native helper to enable AutoFill.')); });
     child.once('close', code => {
       clearTimeout(timer);
       if (code !== 0 || invalidOutput) return reject(new Error('Could not check or update Password AutoFill. Sign in and try again.'));

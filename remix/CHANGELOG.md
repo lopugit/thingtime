@@ -103,6 +103,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - 2026-10-29: Identify Builder-authored Things through the existing schema array, open owned Builder Things in their editors, and add shared Open in Builder / Open live page menu actions while preserving view/share links and ordinary Thing navigation. [PR 1280 details](../PRs/1280-codex-builder-thing-navigation-open-builder-things-in-their-editors.md). — Codex (AI)
+- 2026-10-29: Unify native and optional browser-provider display naming as Thingtime, verify matching branded bundles, and present native macOS passkey setup and discovery before optional browser interception.
 
 - 2026-10-29: Recover native Password AutoFill linking for an enabled provider, preserve explicit disconnect and independent account links, explain local HTTPS requirements, and install matching standalone/nested companions.
 

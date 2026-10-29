@@ -115,3 +115,25 @@ test('a relocated extension descendant is not duplicated by legacy migration', (
   assert.equal(flatten(migrated).filter(item => item.id === relocated.id).length, 1);
   assert.equal(find(migrated, 'extension-install'), undefined);
 });
+
+
+test('guide puts native macOS before optional browser interception and explains discovery limits', () => {
+  const blocks = settingsDocumentBlocks(structuredClone(PASSWORD_PASSKEY_BLOCKS));
+  const instructions = find(blocks, 'instructions').children;
+  assert.ok(instructions.findIndex((item: any) => item.id === 'password-passkey-native-first') < instructions.findIndex((item: any) => item.id === 'password-passkey-extension-install'));
+  assert.match(find(blocks, 'native-first').text, /without the Thingtime browser extension/);
+  assert.match(find(blocks, 'availability').text, /relying-party identifier/);
+  assert.match(find(blocks, 'availability').text, /order is controlled by the system and browser/);
+});
+
+test('native-first migration updates recognized browser-first defaults and preserves authored text', () => {
+  const blocks = structuredClone(PASSWORD_PASSKEY_BLOCKS);
+  find(blocks, 'instructions').children = find(blocks, 'instructions').children.filter((item: any) => item.id !== 'password-passkey-native-first');
+  find(blocks, 'browser-setup').text = 'On desktop Chrome and compatible Chromium browsers, install the Thingtime Passwords extension and enable it. Your passwords and passkeys stay in your Thingtime vault; the extension carries only the website’s passkey request and response.';
+  find(blocks, 'install-steps').text = 'My installation preference';
+  const migrated = migratePasswordPasskeyBlocks(blocks);
+  assert.match(find(migrated, 'browser-setup').text, /optional Thingtime extension/);
+  assert.equal(find(migrated, 'install-steps').text, 'My installation preference');
+  assert.ok(find(migrated, 'native-first'));
+  assert.equal(migratePasswordPasskeyBlocks(migrated), migrated);
+});
