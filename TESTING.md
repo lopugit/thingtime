@@ -13539,6 +13539,12 @@ separate from deterministic discovery/lease tests.
   readiness permanently aborted or Save layout disabled after an edit. For a
   desktop UI whose selected API origin differs, verify private layout requests
   use the supported same-origin session proxy and refuse stale actor/plane/origin.
+  In the actual native bundled UI, select a different API origin and verify
+  capability discovery reaches that selected public origin without account
+  cookies or redirects, then exercise policy and private layout save/readback/
+  reload. A bundled local manifest must never satisfy a remote-origin check.
+  Cancel discovery and immediately remount before the old rejection settles;
+  the new request must succeed and its cache survive the late old failure.
   Check actual elementFromPoint targets at inspector title/type/placeholder inputs
   (including near their right edge) while floating launchers would overlap. The
   shared overlay contract suppresses launcher buttons only while the inspector

@@ -35,6 +35,13 @@ the actual Vite-generated engine URLs and valid WASM bytes for both engines.
   with clean raw TypeScript and changed-file lint. Different UI/API origins use
   the existing same-origin authenticated proxy with exact actor/data-plane/origin
   checks; existing sync transports retain their home-plane default.
+- Native capability correction: 30 focused capability/layout/identity tests pass,
+  including two actual loopback HTTP servers proving discovery reaches the
+  selected API rather than the bundled UI. Public discovery omits account
+  credentials and redirects; exact manifest-origin checks remain enforced.
+  Immediate abort/remount cannot reuse an aborted negotiation or evict a newer
+  success. Raw TypeScript is clean; changed checker/component lint is clean
+  (the existing broad useApi file retains hook warnings and no lint errors).
 - Focused route coverage includes anonymous/non-admin denial, stale revisions,
   form-content CSRF rejection, invalid signatures/repository/ref/timestamps,
   bounded chunked bodies and storage errors. Raw TypeScript and changed-file lint pass.
@@ -64,6 +71,18 @@ settings document across both placements. No native form slot or opaque Componen
 stands in for the controls. The existing transient adapter invokes the same scoped
 policy handlers, and live operations pause during layout editing. Layout persistence
 uses the existing private Things API and origin/account/data-plane fences.
+
+Native bundled-UI acceptance uses a separate selected API and disposable replica;
+the earlier signed candidate at `1577f21ad` predates the selected-origin correction
+and is not accepted or installed. Final native functional source is
+`6a48cf5ce26618d43b2c3a4c348dbf00766f87de`. Real `dev:parallel` native
+acceptance passed with bundled UI origin 28640 and separately selected API 18473
+on a disposable replica: policy 17-hour save and independent readback; separate
+Builder description/input-title edits; private exact-ID layout readback; native
+reload restoring both edits and policy at 1440/390; no horizontal overflow.
+The worker removed its dev bundle/profile/processes/API/DB fixture. Final signed
+build verification and intended installed-copy acceptance remain separate gates;
+no replacement of the existing installed app is claimed.
 
 Production saved-layout/Builder acceptance remains open until an authorized
 owning-account session is available; isolated acceptance does not establish that

@@ -6673,7 +6673,10 @@ opens the existing Builder: labels, controls, descriptions, buttons and containe
 are individual editable blocks. **Save layout** persists the intended account's
 private settings webpage through the Things API, independently of **Save retention
 rules**, which updates the admin policy. Both placements reuse that same saved
-layout; live operations pause while editing. Defaults enable
+layout; live operations pause while editing. The native bundled UI negotiates
+the selected API's public manifest through the existing scoped transport; private
+policy/layout operations retain the authenticated local proxy and actor, data-plane
+and selected-origin fences. Defaults enable
 cleanup for deployments with no open PR, with zero grace; superseded active-PR
 cleanup and inactivity expiry are off. Grace periods are whole hours. Tagged
 previews count closed-PR grace from the later of creation and PR closure;
