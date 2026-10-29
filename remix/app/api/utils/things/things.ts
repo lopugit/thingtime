@@ -1,3 +1,4 @@
+import { builderThingUpdateKinds } from '../../../schemas/builderThing';
 import { ownerFileSyncUploadOrigin, type FileSyncUploadOrigin } from '../../../fileSync/uploadOrigin';
 import { decodeDiscussionCursor, encodeDiscussionCursor, discussionCursorConfigured } from './discussionCursor';
 import { newThingMutationCapture, recordThingMutation, recordFolderPlacement, type ThingMutationCapture } from '../timeline/recordMutation';
@@ -5278,6 +5279,7 @@ export const deleteThing = async (
 export const deletePost = deleteThing;
 
 export type UpdateThingInput = {
+  thingtime?: unknown; // may add builder-thing; content schemas remain immutable
   crystal?: unknown;
   extended?: unknown;
   geo?: unknown;
@@ -5367,7 +5369,8 @@ export const updateThing = async (
         }
       : null);
 
-  const thingtime = thingtimeOf(doc);
+  const thingtime = builderThingUpdateKinds(thingtimeOf(doc), input.thingtime);
+  if (!thingtime) return fail(400, 'Updates may add builder-thing but cannot change content schemas');
   // system kinds mutate only through their dedicated utils (profile update,
   // themes, algorithms) — never the generic PATCH/PUT surface
   if (isProtectedThingtime(thingtime)) {
@@ -5539,7 +5542,7 @@ export const updateThing = async (
 	const nextStorageDoc: ThingDoc = {
 		...doc,
 		schemaVersion: THINGS_SCHEMA_VERSION,
-		thingtime,
+		thingtime: validated.thingtime,
       crystal: validated.crystal,
 		extended: nextExtended,
       tags
@@ -5570,7 +5573,7 @@ export const updateThing = async (
   const now = new Date();
   const set: Record<string, any> = {
     schemaVersion: THINGS_SCHEMA_VERSION,
-    thingtime,
+    thingtime: validated.thingtime,
     crystal: validated.crystal,
     ...(hasExtendedChange ? { extended: extended.value } : {}),
     ...(input.geo !== undefined ? { geo } : {}),
@@ -5764,13 +5767,10 @@ export const upsertThing = async (
   // A non-array, non-empty thingtime is a real (rejected) attempt to change it.
   const thingtimeProvided =
     input.thingtime !== undefined && input.thingtime !== null && !(Array.isArray(input.thingtime) && input.thingtime.length === 0);
-  if (thingtimeProvided) {
-    const wanted = Array.isArray(input.thingtime) ? [...input.thingtime].sort().join(',') : String(input.thingtime);
-    if (wanted !== [...thingtimeOf(existing)].sort().join(',')) {
-      return fail(400, 'A thing’s thingtime schemas can’t be changed');
-    }
+  if (thingtimeProvided && !builderThingUpdateKinds(thingtimeOf(existing), input.thingtime)) {
+    return fail(400, 'A thing’s content schemas cannot be changed');
   }
-  const updated = await updateThing(viewer || ownerId, shareId, input as UpdateThingInput, { replaceCrystal: true }, app);
+  const updated = await updateThing(viewer || ownerId, shareId, { ...input, thingtime: thingtimeProvided ? input.thingtime : undefined } as UpdateThingInput, { replaceCrystal: true }, app);
   if (isFail(updated)) return updated;
   return { ok: true, created: false, thing: updated.thing, post: updated.post };
 };

@@ -1,3 +1,4 @@
+import { PersistedThingMenu } from '../Thingtime/ContextMenu/PersistedThingMenu';
 import React from 'react';
 import { Flex } from '@chakra-ui/react';
 import { useApi } from '~/hooks/useApi';
@@ -6,7 +7,7 @@ import { useDataPlane } from '~/hooks/useDataPlane';
 import { subscribeBackgroundRefresh } from '~/hooks/backgroundRefresh';
 import { subspaceEmbedSearchResults } from './subspaceEmbedSearch';
 import { PostInteractiveThing } from '../Feed/PostInteractiveThing';
-import { thingDisplayName, thingLink, type ThingsThing } from '../Things/thingsCore';
+import { thingDisplayName, thingOpenHref, type ThingsThing } from '../Things/thingsCore';
 import { SettingsDocumentHost } from '../Settings/SettingsDocumentHost';
 import { WebpageBlocksRenderer } from '../Builder/WebpageBlocksRenderer';
 import { TransientBlockHost } from '../Builder/TransientBlockHost';
@@ -116,11 +117,12 @@ const DISPLAY_BLOCKS: WebpageBlock[] = [el('embed-placement', 'section', '', { '
 ], { 'min-width': '0' })];
 
 function ScopedEmbedView({ subspaceId, region, scopeKey, active }: { subspaceId: string; region: EmbedRegion; scopeKey: string; active?: boolean }) {
+  const user = useCurrentUser();
   const list = useEmbeds(subspaceId, region, active);
   if (!list.embeds.length && !list.error) return null;
   const scope = { result: { title: region === 'sidebar' ? 'Sidebar Things' : 'Things above posts', busy: list.loading, error: list.error, canLoad: !!list.cursor || !!list.error,
     moreLabel: list.error ? 'Retry embedded Things' : 'Load more embedded Things',
-    embeds: list.embeds.map(embed => ({ ...embed, name: embed.thing ? thingDisplayName(embed.thing) : 'Unavailable Thing', href: embed.thing ? thingLink(embed.thing) : '' })) } };
+    embeds: list.embeds.map(embed => ({ ...embed, name: embed.thing ? thingDisplayName(embed.thing) : 'Unavailable Thing', href: embed.thing ? thingOpenHref(embed.thing, 'feed', user?.id) : '' })) } };
   return <div data-testid={`subspace-${region}-embeds`}><SettingsDocumentHost documentKey={`subspace-display-${region}`} title="Embedded Things layout" defaultDocument={DISPLAY_BLOCKS} scopeKey={scopeKey} persistence="device">
     {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={scope} enabled={!editing} actions={{ 'embed.more': () => { if (!list.loading) return list.load(list.error ? undefined : list.cursor); } }}>
       <WebpageBlocksRenderer blocks={blocks} componentsByRef={{}} chrome={chrome} bare contentSlots={{ 'embedded-thing': ({ scope: itemScope, editing: editingContent }) => {
@@ -128,7 +130,7 @@ function ScopedEmbedView({ subspaceId, region, scopeKey, active }: { subspaceId:
         const item = list.embeds.find(entry => entry.id === rowId);
         // Only the already authorized current response supplies content. Layout
         // authors cannot supply a source, a private grant or another Thing id.
-        return item?.thing ? editingContent ? <div>Thing content · edit the original Thing to change its fields.</div> : <PostInteractiveThing thing={item.thing} compact={region === 'sidebar'} /> : <p>This embedded Thing is unavailable or private.</p>;
+        return item?.thing ? editingContent ? <div>Thing content · edit the original Thing to change its fields.</div> : <><Flex justify="flex-end"><PersistedThingMenu id={item.thing.id} initialThing={item.thing} label={`${thingDisplayName(item.thing)} actions`} /></Flex><PostInteractiveThing thing={item.thing} compact={region === 'sidebar'} /></> : <p>This embedded Thing is unavailable or private.</p>;
       } }} />
     </TransientBlockHost>}
   </SettingsDocumentHost></div>;
@@ -140,6 +142,7 @@ export function SubspaceEmbeddedThings(props: { subspaceId: string; region: Embe
 }
 
 function EmbedRegionEditor({ subspaceId, region, scopeKey, active }: { subspaceId: string; region: EmbedRegion; scopeKey: string; active?: boolean }) {
+  const user = useCurrentUser();
   const list = useEmbeds(subspaceId, region, active);
   const [busy, setBusy] = React.useState(false);
   const [notice, setNotice] = React.useState('');
@@ -184,7 +187,7 @@ function EmbedRegionEditor({ subspaceId, region, scopeKey, active }: { subspaceI
   };
   const scope = { result: { title: region === 'sidebar' ? 'Sidebar Things' : 'Things above posts', busy: busy || list.loading, hasMore: !!list.cursor, notice: notice || list.error,
     searchResults, searchHasMore: !!searchCursor, searchStatus,
-    embeds: list.embeds.map(embed => ({ id: embed.id, name: embed.thing ? thingDisplayName(embed.thing) : `${embed.thingId} (unavailable or private)`, href: embed.thing ? thingLink(embed.thing) : `/thing/${encodeURIComponent(embed.thingId)}` })) } };
+    embeds: list.embeds.map(embed => ({ id: embed.id, name: embed.thing ? thingDisplayName(embed.thing) : `${embed.thingId} (unavailable or private)`, href: embed.thing ? thingOpenHref(embed.thing, 'feed', user?.id) : `/thing/${encodeURIComponent(embed.thingId)}` })) } };
   return <SettingsDocumentHost documentKey={`subspace-embed-${region}`} title="Embedded Thing controls" defaultDocument={editorBlocks(region)} scopeKey={scopeKey} persistence="device">
     {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={scope} enabled={!editing} actions={{
       'embed.add': ({ readField, signal }) => {
