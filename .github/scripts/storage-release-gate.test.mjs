@@ -45,6 +45,11 @@ test('runtime log summary detects nested migration errors and never returns priv
   assert.deepEqual(summary, { records: 1, storageFailures: 1 });
   assert.ok(!JSON.stringify(summary).includes(secret));
   assert.deepEqual(summarizeRuntimeLogs(''), { records: 0, storageFailures: 0 });
+  for (const code of ['STORAGE_MIGRATION_REQUIRED', 'STORAGE_RECOVERY_BUSY', 'STORAGE_ACCOUNTING_UNAVAILABLE', 'STORAGE_INVARIANT']) {
+    assert.equal(summarizeRuntimeLogs(JSON.stringify({ logs: [{ message: JSON.stringify({ source: 'storage-accounting', code, message: 'HTTP request returned a server error' }) }] })).storageFailures, 1);
+  }
+  assert.equal(summarizeRuntimeLogs(JSON.stringify({ logs: [{ message: 'Storage accounting requires recovery' }] })).storageFailures, 1);
+  assert.equal(summarizeRuntimeLogs(JSON.stringify({ logs: [{ message: 'HTTP request returned a server error' }] })).storageFailures, 0);
   assert.throws(() => summarizeRuntimeLogs('unexpected provider response'), /invalid/);
   assert.throws(() => summarizeRuntimeLogs(JSON.stringify({ logs: [{ messageTruncated: true }] })), /truncated/);
   assert.throws(() => summarizeRuntimeLogs(('{}\n').repeat(logLimit)), /truncated/);
@@ -53,6 +58,8 @@ const options = { cli: '/verified/vercel', projectId: 'prj_test', deploymentId: 
 test('pinned CLI queries a bounded exact production deployment with credentials only in environment', async () => {
   const args = runtimeLogArgs(options);
   assert.ok(args.includes('--no-follow'));
+  assert.equal(args.filter((arg) => arg === '--level').length, 2);
+  assert.equal(args.includes('--query'), false);
   assert.equal(args[args.indexOf('--deployment') + 1], 'dpl_test');
   assert.equal(args[args.indexOf('--limit') + 1], String(logLimit));
   await checkRuntimeLogs(options, { environment: { VERCEL_API_TOKEN: 'synthetic-secret', GH_TOKEN: 'synthetic-github-secret' }, runner: async (cli, actual, config) => {

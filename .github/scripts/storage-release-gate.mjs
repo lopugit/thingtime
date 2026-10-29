@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 const exec = promisify(execFile);
 export const productionOrigin = 'https://thingtime.com';
 export const logLimit = 500;
-export const storageFailure = /Account content requires storage migration before its ledger can be reconciled|Storage accounting requires migration|storage migration required/i;
+export const storageFailure = /Account content requires storage migration before its ledger can be reconciled|Storage accounting requires (?:migration|recovery)|storage migration required|\bSTORAGE_(?:MIGRATION_REQUIRED|RECOVERY_BUSY|ACCOUNTING_UNAVAILABLE|INVARIANT)\b/i;
 const failure = (code) => new Error(`Storage release gate: ${code}`);
 
 export function requireStorageReady(manifest, health, origin, minimumVersion = '1.2.0') {
@@ -72,7 +72,7 @@ export function summarizeRuntimeLogs(stdout, expected) {
 export function runtimeLogArgs({ projectId, deploymentId, scope, since, until }) {
   if (!/^prj_[a-zA-Z0-9]+$/.test(projectId) || !/^dpl_[a-zA-Z0-9]+$/.test(deploymentId) || !/^[a-z0-9-]+$/.test(scope)) throw failure('invalid-provider-scope');
   return ['logs', '--project', projectId, '--deployment', deploymentId, '--environment', 'production', '--scope', scope,
-    '--since', since, '--until', until, '--query', '"storage migration"', '--limit', String(logLimit), '--json', '--no-follow'];
+    '--since', since, '--until', until, '--level', 'error', '--level', 'fatal', '--limit', String(logLimit), '--json', '--no-follow'];
 }
 
 export async function checkRuntimeLogs(options, { runner = exec, environment = process.env } = {}) {
