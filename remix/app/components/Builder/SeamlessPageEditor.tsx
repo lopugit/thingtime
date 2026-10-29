@@ -70,7 +70,9 @@ export default function SeamlessPageEditor({
 	mode: SeamlessMode;
 	onMode: (mode: SeamlessMode) => void;
 }) {
-	const builder = useBuilderChrome(draft, { enabled: mode !== 'view' && !draft.branch?.locked });
+	const [drawerOpen, setDrawerOpen] = React.useState(() => window.innerWidth >= 768);
+	const inspectBlock = React.useCallback(() => setDrawerOpen(true), []);
+	const builder = useBuilderChrome(draft, { enabled: mode !== 'view' && !draft.branch?.locked, onInspect: inspectBlock });
 	const chromeRef = React.useRef(builder.chrome);
 	chromeRef.current = builder.chrome;
 	const chrome = React.useMemo<BuilderChrome>(
@@ -89,7 +91,6 @@ export default function SeamlessPageEditor({
 		}),
 		[mode, builder.chrome.hoverId, builder.chrome.selectedId]
 	);
-	const [drawerOpen, setDrawerOpen] = React.useState(() => window.innerWidth >= 768);
 	const [pageName, setPageName] = React.useState(draft.resolved?.page?.crystal?.name || 'Untitled page');
 	const [acl, setAcl] = React.useState<string[]>(() => initialPageAudience(draft.resolved?.source, draft.resolved?.page?.acl));
 	const [preset, setPreset] = React.useState('full');
