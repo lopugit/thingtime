@@ -71,3 +71,65 @@ social-card feature than the selected shared gateway. This was a rollout gap,
 not successful deployed image acceptance. Production merge and a newly composed
 messenger preview remain separate release checks. No primary-branch merge is
 authorized by this task.
+
+
+## Automatic defaults and optional page metadata — 2026-10-29
+
+The actual application router now generates preview defaults for 97 declared
+routes. Adding an ordinary route requires no second backend metadata entry. A
+route module may optionally export literal public `socialPreview` copy; the
+extractor never executes modules or scrapes private/runtime JSX content. Client
+document-title defaults and the anonymous resolver share this generated data.
+Unknown/wildcard paths retain the generic brand fallback, and route parameters,
+queries and fragments never become default preview copy.
+
+Public saved `/p/:id` and `/t/:id` pages infer their heading, prose and managed
+photos from the authorized stored blocks and Component presentation. Existing
+`name`/`description` override inference; placeholder names do not. Component
+default/saved/instance arguments, literal text edits and known conditions use
+canonical template semantics. Hidden content, unknown runtime bindings, Actions,
+source queries, form values and unrelated private references are omitted.
+Component copy edits contribute to the card revision without needing a parent
+page edit. API compatibility manifests remain: metadata is 1.1.0 and cards 1.3.0.
+
+Final automatic-preview source checks: 71 social-preview/generator tests and
+121 capability tests passed; full lint reported 0 errors/389 warnings, raw
+TypeScript and the zero-baseline ratchet passed, and the canonical production
+build including Vercel output verification passed. Logs are retained at
+`/tmp/tt-auto-final-{focused,lint,types,build}.log`.
+
+Real API acceptance used a fresh task-only replica and local object store. A
+new public page referenced a nested saved Component with no meaningful title or
+description. Anonymous JSON and raw HTML inferred its actual heading/body,
+and its 1200x630 PNG contained 48,118 distinctive pixels from the real 3.5 MB
+upload. A guarded name/description PATCH overrode both metadata surfaces. A
+separate private page exposed no content, and `/support` produced automatic
+metadata and a branded PNG without a route override. Artifacts:
+`/tmp/tt-auto-page-preview-acceptance-20261029/`.
+
+Browser inspection matched source text to the generated card at desktop and
+390px mobile widths and checked the page footer. It also exposed a shared-root
+media compatibility bug: canonical new Builder Things carry `builder-thing`,
+which the fork/composition predicate rejected. The public card could load the
+photo but the page's media URL could not. The shared predicate now ignores only that passive marker alongside an otherwise
+supported content kind; marker-only, unknown/control kinds, relationships and
+inaccessible roots remain refused. The five affected API features and dependent
+client minimums carry explicit compatible patch versions.
+
+After the repair, six fork/copy regressions and 122 capability tests passed;
+changed-file lint had zero errors, raw TypeScript passed, and a second canonical
+build/Vercel output verification passed. The same fixture's page and Component
+shared-root URLs returned the original 1300x1200 PNG and a 640px thumbnail.
+Private page and unsupported attachment roots still returned 404. Both manifests
+advertised the patched contracts. The card retained all 48,118 measured photo
+pixels, and the exact JSON/HTML overrides still matched. Evidence and build log:
+`result.json` in the acceptance directory and
+`/tmp/tt-auto-shared-root-build.log`.
+
+The final source photo was inspected in the actual browser at desktop and
+390px mobile widths (natural dimensions 1300x1200; mobile rendered width 375px),
+with top-to-footer scrolling and no horizontal overflow. The generated page and
+Support cards were also inspected at desktop/mobile sizes. This follow-up used
+the in-app browser. No Builder interface was added or replaced; saved content
+remains ordinary editable blocks and Components. Task tabs were closed and the
+temporary viewport override cleared.

@@ -82,3 +82,12 @@ validate exact linked event/Thing identities, and never resolve current componen
 as a historical fallback. Choosing a definition changes the private branch event's
 links, not live sharing or the source component. Preview Actions and sources
 stay inert. The ordinary owner/source fences apply to comparison and upload.
+
+Canonical Builder content carries `builder-thing` provenance alongside its
+content kind. `forkThingCore.ts` ignores only that passive marker when checking
+standalone shared composition roots; the marker alone, unknown/control kinds
+and target-attached records remain ineligible. This keeps sharedRoot media,
+dependency reads, read-only Actions, copies and exports working for newly saved
+Webpages/Components without changing their audiences. Run the fork-core and
+capability suites, then verify original/thumbnail media on a real anonymous
+saved page, including denial for private roots.

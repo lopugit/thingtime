@@ -93,8 +93,8 @@ use the deployed PR preview for public crawler acceptance.
 `/invite` now selects an invitation card rather than the homepage wordmark:
 “You’re invited to Thingtime”, a short invitation description, and the shared
 1200×630 card renderer with envelope artwork. The client document title uses
-“Thingtime - Invitation”. The image URL carries a fixed invitation revision so
-future card edits can deliberately refresh image caches.
+“Thingtime - Invitation”. The image URL fingerprints the invitation copy and optional revision so
+future card edits can refresh image caches.
 
 The preview is deliberately shared across invitations. Tokens remain in the
 fragment and are never sent to the crawler endpoint or image URL. The resolver
@@ -111,19 +111,73 @@ raw HTML and PNG responses as well as a newly composed message after deployment.
 ## Shared metadata API and exact branding — 2026-10-29
 
 `GET /api/v1/social-previews?path=/post/<id>` exposes the same anonymous resolver
-used by the page HTML and `/social-card`. Negotiate `api.social-previews` 1.0.0
+used by the page HTML and `/social-card`. Negotiate `api.social-previews` 1.1.0
 before using it. The response contains title, description, canonical URL, Open
 Graph type and an image descriptor (URL, dimensions, MIME type and alt text).
 It accepts a local path or a URL on the serving origin; query strings and
 fragments are discarded. It never scrapes an arbitrary external website,
 uses a caller's signed-in access or accepts a caller-selected database.
 
-Posts, comments, profiles, media, Things and published Builder pages use their
-canonical public data. Published pages prefer their saved title/description
-and use safely extracted block copy as a description fallback. Static routes
-use registered descriptions; unavailable/private targets use generic metadata.
-Adding a static application route still requires a deliberate resolver entry:
-there is no authenticated browser screenshot or hidden-page scraping fallback.
+Posts, comments, profiles, media, Things and anonymously readable published
+Builder pages use canonical public projections. The same resolved preview feeds
+HTML tags, JSON metadata and the branded image. Private, missing, unavailable
+and unknown targets retain safe generic metadata.
+
+### Application routes are discovered automatically
+
+`scripts/generate-route-previews.mjs` parses the actual `createBrowserRouter`
+tree in `app/routes.tsx` with TypeScript's AST. It follows eager route imports,
+lazy module imports, nested/index routes, aliases and optional route parameters
+without importing or executing application pages. Vite regenerates the portable
+`app/utils/automaticRoutePreviews.generated.json` during builds and when route
+or route-module files change; Nitro also regenerates before its build. Add the
+ordinary application route once: no manually maintained backend page-metadata
+registry or extra per-page API registration is required.
+
+`app/utils/automaticRoutePreview.ts` provides a title, description, eyebrow and
+branded card automatically from the matched route's trusted literal pattern.
+Dynamic parameter values, query strings and fragments never become that copy.
+The homepage keeps its canonical brand asset; matched application routes get
+named generated cards. Wildcard/unknown paths keep the generic site fallback.
+These defaults do not grant access, assert public content or change indexing.
+`app/utils/pageTitle.ts` uses the same discovered document-title defaults.
+
+A page may optionally export a literal `socialPreview` object from its route
+module. Supported overrides are `title`, `description`, `eyebrow`, `badges`,
+`variant`, `revision` and `pageTitle` (a document-title label separate from the
+social headline). Existing invitation/feed copy uses this optional mechanism.
+No export is needed for automatic defaults. Only literal display fields are
+read: functions, getters, spreads, interpolated runtime values, arbitrary image
+URLs and access/indexing declarations are not evaluated or accepted. The
+extractor does not scrape arbitrary JSX text, authenticated screens or an
+unpublished marketing catalog. It does not launch a browser or execute client
+JavaScript, loaders or account-creation flows to discover metadata.
+
+### Saved pages infer their public presentation
+
+New saved pages at `/p/:id` and `/t/:id` need no metadata code or registration.
+`meta/publicWebpageContent.ts` reads only the result of `resolveWebpage` for the
+anonymous viewer. It derives a headline from supported visible headings,
+a description from supported prose and images from literal managed-attachment
+references, including authorized Component presentation with known saved/default
+primitive arguments. Existing saved `name` and `description` fields are optional
+overrides and take precedence over inferred copy. The default `Untitled page`
+placeholder is not an override. Clearing an override restores inference; no new metadata Thing/schema is required.
+
+This is a bounded projection of stored public presentation, not execution of
+the page. It omits hidden/unknown conditional content, unresolved bindings,
+runtime sources, Actions, viewer/query/state data, private references and
+arbitrary remote images. It does not infer private system `siteRoute` block
+layouts or use their stored definitions as anonymous presentation. If supported
+public content cannot be inferred, a safe generic page preview remains. Managed
+images still pass fresh anonymous attachment authorization and exact-version
+checks before pixels are embedded. Page/Component copy changes contribute to
+the content revision; the independent renderer revision refreshes brand assets.
+
+API capability manifests remain mandatory. Automatic page discovery removes
+per-page metadata registration, not endpoint registration or version negotiation.
+The shared metadata behavior is `api.social-previews` 1.1.0 and the generated
+card behavior is `api.social-card` 1.3.0.
 
 The card image is a real 1200×630 PNG containing the public photos. The old
 loader discarded original attachments over 2 MiB, which turned ordinary phone
@@ -139,7 +193,7 @@ tokens. Its bundled Space Grotesk, Hanken Grotesk and JetBrains Mono faces match
 the brand font families without relying on server-installed fonts. Dynamic
 image URLs include an independent renderer revision as well as their content
 revision, so a branding fix can change the image URL for existing posts.
-This expanded card contract is `api.social-card` 1.2.0.
+The current card contract is `api.social-card` 1.3.0.
 
 See [PR 1287 delivery evidence](../PRs/1287-invite-previews-profile-choice-shared-branded-social-previews.md)
 for the source revision, checks and deployment limitations. A gateway preview

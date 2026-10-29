@@ -1,0 +1,626 @@
+[
+  {
+    "pattern": "/",
+    "label": "Home",
+    "preview": {}
+  },
+  {
+    "pattern": "/",
+    "label": "Home",
+    "index": true,
+    "preview": {}
+  },
+  {
+    "pattern": "/actions",
+    "label": "Actions",
+    "preview": {
+      "title": "Thingtime actions",
+      "description": "Small, clear actions that turn your things into useful little workflows.",
+      "eyebrow": "THINGTIME · ACTIONS",
+      "badges": [
+        "Do more",
+        "Keep context"
+      ],
+      "variant": "collection"
+    }
+  },
+  {
+    "pattern": "/actions/:key",
+    "label": "Actions",
+    "preview": {}
+  },
+  {
+    "pattern": "/admin",
+    "label": "Admin",
+    "preview": {}
+  },
+  {
+    "pattern": "/admin/:section",
+    "label": "Admin",
+    "preview": {}
+  },
+  {
+    "pattern": "/agent-browsers/:taskId?",
+    "label": "Agent Browsers",
+    "preview": {}
+  },
+  {
+    "pattern": "/algorithms",
+    "label": "Algorithms",
+    "preview": {}
+  },
+  {
+    "pattern": "/apps",
+    "label": "Apps",
+    "preview": {}
+  },
+  {
+    "pattern": "/apps/manage",
+    "label": "Apps Manage",
+    "preview": {}
+  },
+  {
+    "pattern": "/authorize",
+    "label": "Authorize",
+    "preview": {}
+  },
+  {
+    "pattern": "/branding",
+    "label": "Branding",
+    "preview": {
+      "pageTitle": "Brand resources"
+    }
+  },
+  {
+    "pattern": "/branding_old",
+    "label": "Branding Old",
+    "preview": {}
+  },
+  {
+    "pattern": "/builder",
+    "label": "Builder",
+    "preview": {}
+  },
+  {
+    "pattern": "/builder/demos",
+    "label": "Builder Demos",
+    "preview": {}
+  },
+  {
+    "pattern": "/builder/demos/:slug",
+    "label": "Builder Demos",
+    "preview": {}
+  },
+  {
+    "pattern": "/builder/docs",
+    "label": "Builder Docs",
+    "preview": {}
+  },
+  {
+    "pattern": "/components",
+    "label": "Components",
+    "preview": {
+      "title": "Thingtime components",
+      "description": "Reusable interface pieces, ready to explore and make your own.",
+      "eyebrow": "THINGTIME · COMPONENTS",
+      "badges": [
+        "Composable",
+        "Shareable"
+      ],
+      "variant": "collection"
+    }
+  },
+  {
+    "pattern": "/components/:key",
+    "label": "Components",
+    "preview": {}
+  },
+  {
+    "pattern": "/components/:key/docs",
+    "label": "Components Docs",
+    "preview": {}
+  },
+  {
+    "pattern": "/connections",
+    "label": "Connections",
+    "preview": {}
+  },
+  {
+    "pattern": "/connections/feed",
+    "label": "Connections Feed",
+    "preview": {
+      "pageTitle": "Connections"
+    }
+  },
+  {
+    "pattern": "/crypto",
+    "label": "Crypto",
+    "preview": {}
+  },
+  {
+    "pattern": "/design-system",
+    "label": "Design System",
+    "preview": {}
+  },
+  {
+    "pattern": "/docs",
+    "label": "Docs",
+    "preview": {
+      "title": "Thingtime docs",
+      "description": "The product, API and design system behind a world where everything is a thing.",
+      "eyebrow": "THINGTIME · DOCS",
+      "badges": [
+        "Build with Thingtime",
+        "API + SDK"
+      ],
+      "variant": "docs",
+      "pageTitle": "Thingtime docs"
+    }
+  },
+  {
+    "pattern": "/docs",
+    "label": "Docs",
+    "index": true,
+    "preview": {
+      "title": "Thingtime docs",
+      "description": "The product, API and design system behind a world where everything is a thing.",
+      "eyebrow": "THINGTIME · DOCS",
+      "badges": [
+        "Build with Thingtime",
+        "API + SDK"
+      ],
+      "variant": "docs",
+      "pageTitle": "Thingtime docs"
+    }
+  },
+  {
+    "pattern": "/docs/api",
+    "label": "Docs API",
+    "preview": {}
+  },
+  {
+    "pattern": "/docs/api/:group",
+    "label": "Docs API",
+    "preview": {}
+  },
+  {
+    "pattern": "/docs/api/:group/:docId",
+    "label": "Docs API",
+    "preview": {}
+  },
+  {
+    "pattern": "/docs/builder",
+    "label": "Docs Builder",
+    "preview": {}
+  },
+  {
+    "pattern": "/docs/builder/:section",
+    "label": "Docs Builder",
+    "preview": {}
+  },
+  {
+    "pattern": "/docs/concepts",
+    "label": "Docs Concepts",
+    "preview": {}
+  },
+  {
+    "pattern": "/docs/design",
+    "label": "Docs Design",
+    "preview": {
+      "pageTitle": "Thingtime docs - Design mockups"
+    }
+  },
+  {
+    "pattern": "/docs/design-system",
+    "label": "Docs Design System",
+    "preview": {}
+  },
+  {
+    "pattern": "/docs/embed",
+    "label": "Docs Embed",
+    "preview": {}
+  },
+  {
+    "pattern": "/docs/mcp",
+    "label": "Docs MCP",
+    "preview": {}
+  },
+  {
+    "pattern": "/docs/schemas",
+    "label": "Docs Schemas",
+    "preview": {}
+  },
+  {
+    "pattern": "/email",
+    "label": "Email",
+    "preview": {}
+  },
+  {
+    "pattern": "/explore",
+    "label": "Explore",
+    "preview": {
+      "title": "Explore Thingtime",
+      "description": "Discover conversations, photos, polls and useful things worth keeping.",
+      "eyebrow": "THINGTIME · EXPLORE",
+      "badges": [
+        "Trending now",
+        "Made by people"
+      ],
+      "variant": "explore"
+    }
+  },
+  {
+    "pattern": "/feed",
+    "label": "Feed",
+    "preview": {
+      "title": "Your Thingtime feed",
+      "description": "Posts, photos, polls, finds and little moments from your people.",
+      "eyebrow": "THINGTIME · FEED",
+      "badges": [
+        "Fresh things",
+        "People you follow"
+      ],
+      "variant": "feed"
+    }
+  },
+  {
+    "pattern": "/history",
+    "label": "History",
+    "preview": {}
+  },
+  {
+    "pattern": "/invite",
+    "label": "Invite",
+    "preview": {
+      "title": "You’re invited to Thingtime",
+      "description": "Join your people on Thingtime. Create an account to accept your invitation and make yourself at home.",
+      "eyebrow": "THINGTIME · AN INVITATION",
+      "badges": [
+        "Your people",
+        "Make it yours"
+      ],
+      "variant": "invite",
+      "pageTitle": "Invitation",
+      "revision": "invite-20261029"
+    }
+  },
+  {
+    "pattern": "/legal",
+    "label": "Legal",
+    "preview": {}
+  },
+  {
+    "pattern": "/library",
+    "label": "Library",
+    "preview": {}
+  },
+  {
+    "pattern": "/library/:id",
+    "label": "Library",
+    "preview": {}
+  },
+  {
+    "pattern": "/login",
+    "label": "Login",
+    "preview": {}
+  },
+  {
+    "pattern": "/lopu",
+    "label": "Lopu",
+    "preview": {}
+  },
+  {
+    "pattern": "/lopu/:chatId",
+    "label": "Lopu",
+    "preview": {}
+  },
+  {
+    "pattern": "/lopu/recordings",
+    "label": "Lopu Recordings",
+    "preview": {}
+  },
+  {
+    "pattern": "/lopu/tasks",
+    "label": "Lopu Tasks",
+    "preview": {}
+  },
+  {
+    "pattern": "/lopu/voice",
+    "label": "Lopu Voice",
+    "preview": {}
+  },
+  {
+    "pattern": "/mail",
+    "label": "Mail",
+    "preview": {}
+  },
+  {
+    "pattern": "/marketing",
+    "label": "Marketing",
+    "preview": {}
+  },
+  {
+    "pattern": "/marketing/:category",
+    "label": "Marketing",
+    "preview": {}
+  },
+  {
+    "pattern": "/marketing/social-media",
+    "label": "Marketing Social Media",
+    "preview": {}
+  },
+  {
+    "pattern": "/media/:id",
+    "label": "Media",
+    "preview": {}
+  },
+  {
+    "pattern": "/messages",
+    "label": "Messages",
+    "preview": {}
+  },
+  {
+    "pattern": "/migrations",
+    "label": "Migrations",
+    "preview": {}
+  },
+  {
+    "pattern": "/mongodb-status",
+    "label": "Mongodb Status",
+    "preview": {}
+  },
+  {
+    "pattern": "/notifications",
+    "label": "Notifications",
+    "preview": {}
+  },
+  {
+    "pattern": "/ode",
+    "label": "Ode",
+    "preview": {}
+  },
+  {
+    "pattern": "/p/:id",
+    "label": "P",
+    "preview": {
+      "title": "A page on Thingtime",
+      "pageTitle": "Page"
+    }
+  },
+  {
+    "pattern": "/pages/:slug",
+    "label": "Pages",
+    "preview": {}
+  },
+  {
+    "pattern": "/pages/:slug/:version",
+    "label": "Pages",
+    "preview": {}
+  },
+  {
+    "pattern": "/pair/:code",
+    "label": "Pair",
+    "preview": {}
+  },
+  {
+    "pattern": "/passwords",
+    "label": "Passwords",
+    "preview": {}
+  },
+  {
+    "pattern": "/passwords/provider",
+    "label": "Passwords Provider",
+    "preview": {}
+  },
+  {
+    "pattern": "/peers",
+    "label": "Peers",
+    "preview": {}
+  },
+  {
+    "pattern": "/post/:id",
+    "label": "Post",
+    "preview": {}
+  },
+  {
+    "pattern": "/privacy",
+    "label": "Privacy",
+    "preview": {}
+  },
+  {
+    "pattern": "/profile",
+    "label": "Profile",
+    "preview": {
+      "title": "Your Thingtime profile",
+      "description": "Your posts, photos, polls and the things you want people to find.",
+      "eyebrow": "THINGTIME · PROFILE",
+      "badges": [
+        "Your people",
+        "Your things"
+      ],
+      "variant": "profile"
+    }
+  },
+  {
+    "pattern": "/profile/:username",
+    "label": "Profile",
+    "preview": {
+      "title": "Your Thingtime profile",
+      "description": "Your posts, photos, polls and the things you want people to find.",
+      "eyebrow": "THINGTIME · PROFILE",
+      "badges": [
+        "Your people",
+        "Your things"
+      ],
+      "variant": "profile"
+    }
+  },
+  {
+    "pattern": "/raw",
+    "label": "Raw",
+    "preview": {}
+  },
+  {
+    "pattern": "/register",
+    "label": "Register",
+    "preview": {}
+  },
+  {
+    "pattern": "/reset-password",
+    "label": "Reset Password",
+    "preview": {}
+  },
+  {
+    "pattern": "/s",
+    "label": "S",
+    "preview": {}
+  },
+  {
+    "pattern": "/s/:slug",
+    "label": "S",
+    "preview": {}
+  },
+  {
+    "pattern": "/s/:slug/mod",
+    "label": "S Mod",
+    "preview": {}
+  },
+  {
+    "pattern": "/saved",
+    "label": "Saved",
+    "preview": {}
+  },
+  {
+    "pattern": "/schemas",
+    "label": "Schemas",
+    "preview": {
+      "title": "Thingtime schemas",
+      "description": "Browse the building blocks that make every kind of thing understandable.",
+      "eyebrow": "THINGTIME · SCHEMAS",
+      "badges": [
+        "Open building blocks",
+        "Make it yours"
+      ],
+      "variant": "collection"
+    }
+  },
+  {
+    "pattern": "/schemas/:key",
+    "label": "Schemas",
+    "preview": {}
+  },
+  {
+    "pattern": "/search",
+    "label": "Search",
+    "preview": {
+      "title": "Search Thingtime",
+      "description": "Find the people, posts and things that matter to you.",
+      "eyebrow": "THINGTIME · SEARCH",
+      "badges": [
+        "People",
+        "Posts",
+        "Things"
+      ],
+      "variant": "collection"
+    }
+  },
+  {
+    "pattern": "/settings",
+    "label": "Settings",
+    "preview": {}
+  },
+  {
+    "pattern": "/settings/:tab",
+    "label": "Settings",
+    "preview": {}
+  },
+  {
+    "pattern": "/status",
+    "label": "Status",
+    "preview": {}
+  },
+  {
+    "pattern": "/support",
+    "label": "Support",
+    "preview": {}
+  },
+  {
+    "pattern": "/t/:id",
+    "label": "T",
+    "preview": {
+      "title": "A page on Thingtime",
+      "pageTitle": "Page"
+    }
+  },
+  {
+    "pattern": "/terms",
+    "label": "Terms",
+    "preview": {}
+  },
+  {
+    "pattern": "/tests",
+    "label": "Tests",
+    "preview": {}
+  },
+  {
+    "pattern": "/themes",
+    "label": "Themes",
+    "preview": {
+      "title": "Thingtime themes",
+      "description": "A colourful collection of ways to make Thingtime feel like yours.",
+      "eyebrow": "THINGTIME · THEMES",
+      "badges": [
+        "Colour your space",
+        "Made to share"
+      ],
+      "variant": "collection"
+    }
+  },
+  {
+    "pattern": "/themes/gallery",
+    "label": "Themes Gallery",
+    "preview": {}
+  },
+  {
+    "pattern": "/thing/:id",
+    "label": "Thing",
+    "preview": {
+      "title": "A thing on Thingtime",
+      "pageTitle": "Thing"
+    }
+  },
+  {
+    "pattern": "/things",
+    "label": "Things",
+    "preview": {
+      "title": "Your Things",
+      "description": "A place for the files, notes, ideas and tiny details you want to keep close.",
+      "eyebrow": "THINGTIME · THINGS",
+      "badges": [
+        "Everything is a thing",
+        "Made for keeping"
+      ],
+      "variant": "collection"
+    }
+  },
+  {
+    "pattern": "/vercel",
+    "label": "Vercel",
+    "preview": {}
+  },
+  {
+    "pattern": "/verify-email",
+    "label": "Verify Email",
+    "preview": {}
+  },
+  {
+    "pattern": "/watch/pair",
+    "label": "Watch Pair",
+    "preview": {}
+  },
+  {
+    "pattern": "/welcome",
+    "label": "Welcome",
+    "preview": {}
+  }
+]

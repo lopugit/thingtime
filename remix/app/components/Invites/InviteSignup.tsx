@@ -112,3 +112,18 @@ export const InviteSignup = () => {
 		</Flex>
 	);
 };
+
+
+// Optional shared preview copy. Route discovery works without this override.
+export const socialPreview = {
+  "title": "You’re invited to Thingtime",
+  "description": "Join your people on Thingtime. Create an account to accept your invitation and make yourself at home.",
+  "eyebrow": "THINGTIME · AN INVITATION",
+  "badges": [
+    "Your people",
+    "Make it yours"
+  ],
+  "variant": "invite",
+  "pageTitle": "Invitation",
+  "revision": "invite-20261029"
+} as const;

@@ -9,3 +9,16 @@ export default function Profile() {
 
   return <ProfilePage username={params.username} />;
 }
+
+
+// Optional shared preview copy. Route discovery works without this override.
+export const socialPreview = {
+  "title": "Your Thingtime profile",
+  "description": "Your posts, photos, polls and the things you want people to find.",
+  "eyebrow": "THINGTIME · PROFILE",
+  "badges": [
+    "Your people",
+    "Your things"
+  ],
+  "variant": "profile"
+} as const;
