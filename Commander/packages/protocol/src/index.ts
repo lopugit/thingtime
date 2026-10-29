@@ -893,9 +893,9 @@ export interface IndexingStatus {
   available: boolean;
   running: IndexScope[];
   totalRecords: number;
-  /** Unique currently searchable apps, enabled commands, files and folders. */
+  /** Latest measured committed file/folder snapshot plus the enabled command/application catalogue; live observations may precede this count. */
   searchableRecords?: number;
-  /** False while a legacy snapshot is eligibility-filtered before current totals are measured. */
+  /** True when measured counters apply to the current policy and roots; ordinary pending changes retain the last measured snapshot. */
   countsCurrent?: boolean;
   /** Oldest successful full refresh across active indexes. */
   lastIndexedAtMs?: number;

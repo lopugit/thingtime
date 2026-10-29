@@ -89,7 +89,7 @@ describe('background filesystem inventory', () => {
   }, 35_000);
 
   it.skipIf(process.platform === 'win32')(
-    'publishes real file, child directory and app changes while the actual full writer is stopped inside its transaction',
+    'retains measured counts through live file, child directory and app events while the full writer is stopped',
     async () => {
       const temporary = await realpath(await mkdtemp(path.join(os.tmpdir(), 'commander-held-writer-')));
       const root = path.join(temporary, 'files');
@@ -138,6 +138,9 @@ describe('background filesystem inventory', () => {
         await vi.waitFor(async () => expect((await service.status()).running).toEqual([]), {
           timeout: 10_000,
         });
+        const snapshot = await service.status();
+        expect(snapshot.countsCurrent).toBe(true);
+        expect(snapshot.searchableRecords).toBeDefined();
         const { stdout: childIds } = await promisify(execFile)('/usr/bin/pgrep', ['-P', String(process.pid)]);
         const ownedPids = childIds.trim().split(/\s+/u).filter(Boolean);
         const { stdout: commands } = await promisify(execFile)('/bin/ps', [
@@ -169,6 +172,20 @@ describe('background filesystem inventory', () => {
           await vi.waitFor(async () => expect(await check()).toBe(true), { timeout: 5000, interval: 40 });
           measurements[label] = Math.round(performance.now() - start);
           expect(stopped).toBe(true); // visibility cannot come from the held writer
+          // Every notification remains uncommitted while the same full writer
+          // is held. Repeated live changes must never erase this valid snapshot.
+          const status = await service.status();
+          expect(status.countsCurrent).toBe(true);
+          expect(status.lastIndexedAtMs).toBeDefined();
+          for (const kind of ['file', 'directory']) {
+            expect(status.kinds.find((entry) => entry.kind === kind)).toEqual(
+              snapshot.kinds.find((entry) => entry.kind === kind),
+            );
+          }
+          expect(status.searchableRecords).toBe(
+            snapshot.kinds.filter((entry) => entry.kind !== 'application').reduce((total, entry) => total + entry.count, 0)
+              + apps.items.length + 7,
+          );
         };
         await writeFile(path.join(root, 'live-created.txt'), 'new');
         await observe('fileCreateMs', () => visible('live-created', 'live-created.txt'));
@@ -215,6 +232,17 @@ describe('background filesystem inventory', () => {
             !(await visible('live-child', 'live-child.txt')) &&
             !apps.items.some((item) => item.path === path.join(root, 'LiveOverlayRenamed.app')),
         );
+        expect((await service.status()).searchableRecords).toBe(snapshot.searchableRecords);
+        // A real policy change still invalidates the snapshot immediately,
+        // including while live changes and an older full write remain pending.
+        service.updateSettings({
+          ...DEFAULT_SETTINGS,
+          indexing: {
+            ...DEFAULT_SETTINGS.indexing,
+            roots: [root],
+            includeHidden: !DEFAULT_SETTINGS.indexing.includeHidden,
+          },
+        });
         expect((await service.status()).countsCurrent).toBe(false);
         expect((await service.status()).searchableRecords).toBeUndefined();
         console.info('Held full-writer live metadata measurements', measurements);

@@ -6789,7 +6789,7 @@ Detailed PR notes:
 
 ---
 
-- 2026-10-29: Refresh Commander indexes in the background with responsive search, measured unique totals and refresh age. Recover real-root watcher starvation and bound traversal memory without changing the saved policy; installed full-count acceptance under 512 MiB remains pending. [Details](../PRs/1282-codex-commander-background-index-keep-commander-indexes-fresh-without-interrupting-search.md). **Codex (AI)**
+- 2026-10-30: Refresh Commander indexes in the background with responsive search and measured totals/age. Recover real-root watcher starvation, complete whole-volume traversal under the saved 512 MiB policy, and retain valid measured counts during pending updates; final rendered footer acceptance remains pending. [Details](../PRs/1282-codex-commander-background-index-keep-commander-indexes-fresh-without-interrupting-search.md). **Codex (AI)**
 
 
 <!--

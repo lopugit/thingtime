@@ -10,7 +10,7 @@
       must never enable legacy adoption. After full reconciliation, verify normal counts and index age resume.
 
 - [ ] Leave background indexing active and search repeatedly: prior committed apps/files stay searchable, typing
-      never starts or awaits a scan, and the footer shows the current unique searchable total plus relative index age.
+      never starts or awaits a scan, and the footer retains its last measured unique index count plus relative index age.
       Resize the native launcher below 720px: keep the summary visible, with no overlap at the minimum window width.
       Detailed processed/total progress appears only in Search Settings. Check the footer in a narrow launcher.
 - [ ] Under an isolated root, create/rename/delete files, folders and app bundles, including an inner bundle change;
@@ -20,7 +20,10 @@
 - [ ] Keep a deliberately long full scan active, then create/rename/delete disposable files, folders and app bundles.
       Verify changed exact-path metadata becomes searchable before the full writer commits; missing/ineligible paths
       become tombstones, ignored descendants stay absent, and temporary observations never claim a measured committed
-      total. After reconciliation, verify the measured unique count and current results converge.
+      total. Keep a valid measured baseline visible through repeated pending notifications without returning to
+      Ready/Not measured; live results may precede its committed count. A root or ignore/hidden policy change must
+      immediately make the total unmeasured until a matching full replacement commits. After reconciliation, verify
+      the measured unique count and current results converge.
 - [ ] Pause a broad background metadata traversal, then add a file to an already visited folder. Exact new events
       must remain prompt while older descendant work is pending. Change enabled roots during a pending search and
       make that old read fail: neither its fallback nor yielded older work may restore the previous root's results.

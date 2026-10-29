@@ -46,12 +46,14 @@ it('requires the additive searchable-count status contract and rejects missing/b
     features: { 'commander.index-status': { version: '1.1.0' } },
   };
   expect(() => assertDaemonIndexCapabilities(manifest, manifest.origin)).not.toThrow();
-  expect(() =>
-    assertDaemonIndexCapabilities(
-      { ...manifest, features: { 'commander.index-status': { version: '1.2.0' } } },
-      manifest.origin,
-    ),
-  ).not.toThrow();
+  for (const version of ['1.1.1', '1.2.0']) {
+    expect(() =>
+      assertDaemonIndexCapabilities(
+        { ...manifest, features: { 'commander.index-status': { version } } },
+        manifest.origin,
+      ),
+    ).not.toThrow();
+  }
   for (const features of [
     {},
     { 'commander.index-status': { version: '1.0.0' } },

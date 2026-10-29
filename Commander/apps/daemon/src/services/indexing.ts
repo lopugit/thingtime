@@ -364,7 +364,10 @@ export class IndexingService {
         ? ((await this.#safeRustStatus()) ?? this.#lastStatus)
         : this.#lastStatus;
     const filesystemEnabled = this.#settings.enabled && this.#filesystemCurrent;
-    const countsCurrent = !this.#legacySnapshot && (!this.#settings.enabled || !this.#overlay.pending);
+    // Live observations can precede their queued commit without invalidating
+    // the last measured snapshot. Only a policy/root mismatch or an unmeasured
+    // legacy snapshot makes the committed filesystem counters ineligible.
+    const countsCurrent = !this.#legacySnapshot && (!this.#settings.enabled || this.#filesystemCurrent);
     const kinds = (status?.kinds ?? emptyKindStatuses()).map((kind) => ({
       ...kind,
       count:

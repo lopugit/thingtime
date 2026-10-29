@@ -120,6 +120,7 @@ describe('application candidate coverage', () => {
   });
 
   it('loads a fresh saved catalogue on launch without starting indexing', async () => {
+    const persistedIndexTime = Date.now() - 60_000;
     readCatalogue.mockResolvedValue({ records: [record('Thingtime Recovery', 'application')] });
     quickApps.mockResolvedValue([]);
     readStatus.mockResolvedValue({
@@ -133,7 +134,7 @@ describe('application candidate coverage', () => {
       kinds: ['application', 'file', 'directory'].map((kind) => ({
         kind,
         count: 1501,
-        lastIndexedAtMs: Date.now(),
+        lastIndexedAtMs: persistedIndexTime,
       })),
     });
     const service = new IndexingService({
@@ -144,6 +145,12 @@ describe('application candidate coverage', () => {
     });
     try {
       expect(await service.initialize()).toEqual([expect.objectContaining({ title: 'Thingtime Recovery' })]);
+      const restored = await service.status();
+      expect(restored.countsCurrent).toBe(true);
+      expect(restored.searchableRecords).toBe(3003); // saved files/folders plus the actual app catalogue
+      expect(restored.lastIndexedAtMs).toBe(persistedIndexTime);
+      expect(writeIndex).not.toHaveBeenCalled();
+      expect(readPolicy).not.toHaveBeenCalled();
       await vi.waitFor(() => expect(readStatus).toHaveBeenCalledTimes(2));
       expect(writeIndex).not.toHaveBeenCalled();
       expect((await service.status()).running).toEqual([]);
@@ -343,7 +350,9 @@ describe('legacy snapshot adoption', () => {
       totalRecords: 10,
       databaseSizeBytes: 100,
       configurationFingerprints: { 'filesystem:': 'known-old-settings' },
-      kinds: [],
+      kinds: ['application', 'file', 'directory'].map((kind) => ({
+        kind, count: 2, lastIndexedAtMs: Date.now(),
+      })),
     });
     readCatalogue.mockResolvedValue({ records: [] });
     quickApps.mockResolvedValue([]);
@@ -359,6 +368,8 @@ describe('legacy snapshot adoption', () => {
       expect(readPolicy).not.toHaveBeenCalled();
       expect(await service.queryItems('old-root-file')).toEqual([]);
       expect(queryIndex).not.toHaveBeenCalled();
+      expect((await service.status()).countsCurrent).toBe(false);
+      expect((await service.status()).searchableRecords).toBeUndefined();
     } finally {
       await service.close();
     }

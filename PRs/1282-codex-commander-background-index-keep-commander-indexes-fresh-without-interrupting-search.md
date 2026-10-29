@@ -10,8 +10,11 @@ Filesystem notifications coalesce into affected-subtree refreshes, with periodic
 full reconciliation and source pruning. Search combines committed SQLite WAL
 snapshots with transient exact-path metadata observations during a full scan;
 it never starts or waits for an indexing run. The launcher footer
-shows a measured unique searchable total and refresh age; detailed scan progress
-remains in Settings. Unknown legacy totals stay explicitly unmeasured.
+shows the last measured committed file/folder count plus the enabled application
+and command catalogue, alongside conservative full-refresh age; detailed scan
+progress remains in Settings. Ordinary pending changes retain that measured
+baseline while live results can update ahead of its count. Legacy or changed
+root/policy totals stay explicitly unmeasured.
 
 Overlapping sources use reference-counted unique path/kind counters. Saved
 configuration fingerprints include effective filesystem roots. Legacy schema-3
@@ -48,12 +51,12 @@ Disabled extension and command settings still apply.
   Final recovery verification passed a focused 25-test runtime batch (six
   overlay, four notification-worker, thirteen scheduler/counts and two real
   integrations), plus TypeScript checks/builds.
-- Task-reported final Rust indexer 63 tests passed; core 33 tests and Swift 45
+- Task-reported final Rust indexer 67 tests passed; core 33 tests and Swift 45
   tests remain retained evidence for their unchanged final implementations.
   Coverage includes incremental rename/delete, overlapping sources and unique
   counts, current-source catalogue reads, legacy policy versus the actual
   walker, and a separate WAL reader during an uncommitted writer transaction.
-  Three additional metadata regressions cover new unindexed files/apps/folders,
+  Metadata regressions also cover new unindexed files/apps/folders,
   ignored or missing paths, exact-path scope and operation during a held writer
   transaction without catalogue writes, safe directory traversal and scoped raw
   readback before and after commit.
@@ -129,9 +132,24 @@ removal, and verify exact SQLite reconciliation counts and private-file
 exclusion. The opt-in release metadata traversal of `/` completed 3,995,979
 records in 181.115 seconds with peak resident memory 18 MiB. It did not write the
 production index and does not prove the full SQLite writer or final footer.
-Native build `2026102903` must still complete the installed full reconciliation
-under the unchanged saved 512 MiB policy and verify the measured total/freshness.
-The native acceptance lane owns that signed installation; the parent owns merge.
+Signed installed build `2026102903` subsequently completed all five active
+filesystem roots under the unchanged saved 512 MiB policy. The native lane
+observed peak Rust RSS 124.64 MiB and 101 health probes, all HTTP 200 with maximum
+54.74 ms. Permission warnings were nonfatal, and the profile remained unchanged.
+The final aggregate must still be checked against the kind-specific active-source
+SQL reference: application catalogue from `applications:` sources, file/folder
+counters from active `filesystem:` sources, plus enabled commands.
+
+That successful full commit exposed a footer defect: continuous ordinary live
+updates kept `overlay.pending` true and hid a valid measured count indefinitely.
+The status correction retains committed counters through transient updates while
+preserving legacy, configuration, policy and root mismatch invalidation. It uses
+existing cached counters and performs no new per-event count query. The compatible
+status correction is advertised as `commander.index-status` 1.1.1. A held real
+writer regression repeatedly checks the measured baseline through file/folder/app
+notifications, then checks immediate invalidation after a hidden-policy change.
+The native acceptance lane owns the final signed installation and rendered count/
+freshness verification for build `2026103001`; the parent owns merge.
 
 ## Graphify evidence boundary
 

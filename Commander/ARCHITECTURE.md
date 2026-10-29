@@ -163,8 +163,10 @@ changed branches, preserving inherited ignore, package and mount boundaries. Not
 a three-second deadline, remain queued during writes and widen to parent subtrees under a burst. Mount removal prunes
 inactive sources; saved settings plus effective roots fingerprint the file snapshot across restarts. Search uses a
 separate WAL reader and never starts or joins an indexing operation. Periodic reconciliation is the fallback for
-unavailable/missed notifications. The launcher uses `commander.index-status` 1.1.0 for current searchable totals and
-conservative full-refresh age; detailed running progress stays in Search Settings.
+unavailable/missed notifications. The launcher uses `commander.index-status` 1.1.1 for the latest measured committed file/folder counters plus the
+enabled application/command catalogue and conservative full-refresh age. Ordinary pending observations retain
+that measured baseline; legacy adoption or a root/policy mismatch keeps the total unmeasured. Detailed running
+progress stays in Search Settings.
 
 Linux shares the protocol and product implementation but remains runtime-unverified until WebKitGTK, global-hotkey,
 tray, accessibility, IME, drag/drop, and credential-store behavior have dedicated testing.

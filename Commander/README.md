@@ -212,8 +212,8 @@ a bounded 15-minute writer window; a custom-capped scan normally stops a blocked
 prior committed snapshot searchable, and reports actionable guidance. Deliberately constraining a capped indexer
 below 25% CPU extends that shorter deadline proportionally, up to 15 minutes.
 
-The launcher footer replaces its idle status with the current source label and live processed/indexed count during
-a scan. Search settings also expose the result-section order and a private cache policy: enable/disable, maximum
+The launcher footer retains its measured count and index age during a scan; live processed/indexed progress
+appears in Search Settings. Search settings also expose the result-section order and a private cache policy: enable/disable, maximum
 size, expiry, custom cache-directory override, reveal, and clear. Cache files contain result metadata only, use
 owner-only permissions, and are never included in Thingtime cloud settings sync. Commander warms recent snapshots
 into a bounded in-memory tier and re-ranks cached filesystem candidates while a refined live query completes. When
@@ -298,9 +298,10 @@ The preview supplements the canonical signed installed-app acceptance checks.
 
 ### Background search indexes and isolated development
 
-The launcher footer shows the unique current searchable total (applications, enabled local commands/extensions,
-files and folders) and the age of the oldest successful full index refresh. It keeps that summary while background
-work runs; detailed progress, errors and resource controls remain in Search Settings. Remote Store results, disabled
+The launcher footer combines the latest measured committed file/folder snapshot with the enabled application and
+command catalogue, alongside the age of the oldest successful full index refresh. It keeps that summary while ordinary
+background changes are pending; live search can reflect changes before the measured count catches up. Detailed
+progress, errors and resource controls remain in Search Settings. Remote Store results, disabled
 file sources and duplicate paths are excluded. An absent age means that an active source has not completed its first
 index. Full application reconciliation runs six-hourly; file/folder reconciliation uses the saved interval (six hours
 by default), and the command catalogue refreshes each minute. Supported OS notifications normally refresh affected
