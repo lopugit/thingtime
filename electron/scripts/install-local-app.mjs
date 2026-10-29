@@ -336,7 +336,7 @@ export function installLocalApp(options = {}) {
         throw new Error(`${qualifier} before replacing the app (running PID${nodePids.length === 1 ? '' : 's'}: ${nodePids.join(', ')}).`);
       }
       if (hasCompanion && companionRunningPids(join(targetCompanion, 'Contents', 'MacOS', 'Thingtime Passwords')).length) {
-        throw new Error('Quit Thingtime Passwords before replacing its installed companion.');
+        throw new Error('Quit the Thingtime AutoFill companion before replacing it.');
       }
       if (targetExists) {
         renameSync(targetApp, backupApp);

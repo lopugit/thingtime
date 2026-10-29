@@ -9,8 +9,8 @@ settings:
   base:
     SWIFT_VERSION: "5.9"
     ENABLE_DEBUG_DYLIB: false
-    MARKETING_VERSION: "1.0.3"
-    CURRENT_PROJECT_VERSION: "4"
+    MARKETING_VERSION: "1.0.4"
+    CURRENT_PROJECT_VERSION: "5"
     CODE_SIGN_STYLE: Automatic
     ENABLE_HARDENED_RUNTIME: true
     THINGTIME_PASSWORD_HOST_BUNDLE_ID: com.thingtime.passwords
@@ -60,6 +60,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDisplayName: Thingtime
+        CFBundleName: Thingtime
         ThingtimePasswordKeychainGroup: $(THINGTIME_PASSWORD_KEYCHAIN_GROUP)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.authentication-services-credential-provider-ui
