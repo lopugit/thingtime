@@ -104,6 +104,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-29: Restore shared Apple file publication and recovery on older host
+  kernels while retaining path, symlink, identity and content protections.
+  Cover the unsupported rename-flag retry and include FileSync changes in
+  automatic iOS releases. [Release evidence](../PRs/1272-codex-ios-all-share-types-add-ios-share-destination.md).
+  **Codex (AI)**
+
 - 2026-10-29: Split the historical-file export test fixture into typed JSON
   sections so Xcode 26.2 can check it without exhausting expression inference.
   Preserve the fingerprint bytes and all five export regressions. **Codex (AI)**
