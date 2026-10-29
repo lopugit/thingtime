@@ -2,19 +2,18 @@
 
 ## Agent operating foundations
 
-- **Make Character coordination and Agent overview reporting executable and verifiable.**
-  The current automation instructions reference `docs/characters.md`,
-  `docs/agent-overview.md`, and
-  `npm --prefix remix run characters:preflight -- --origin <origin>`, but none
-  exists on the inspected PR head or `origin/develop` snapshot (2026-10-19;
-  the script is absent from `remix/package.json`).
-  The public capability manifest advertises `api.auth-characters` 1.0.0 and
-  `api.agent-overview` 2.0.0; this does not establish an authenticated
-  Character session or private workspace membership. Build a documented,
-  origin-bound preflight and reusable reporting runbook without exposing
-  private workspace identifiers or treating a manifest as access proof.
-  [Acceptance and phases](claude-todo/58-agent-coordination-and-task-reporting.md);
-  related developer-ecosystem context:
+- **Complete authorized connected-host acceptance for Character coordination and Agent overview reporting.**
+  The current integration tree now contains the Character, Agent overview, and
+  Agent reporting runbooks, an origin-bound preflight, and focused test scripts;
+  see the [2026-10-29 evidence note](../NOTES/agent-coordination-runtime-evidence-2026-10-29.md).
+  Those artifacts and the recorded local synthetic acceptance do not prove the
+  selected deployed origin, connected host, independent `agents.report` grant,
+  saved workspace references, or private-subspace membership are available
+  now. Complete the separately gated workflow only through the intended
+  authorized account, then verify stable task reuse and exact readback without
+  owner/public fallback. [Acceptance criteria](claude-todo/58-agent-coordination-and-task-reporting.md);
+  [phased roadmap](../PLAN/agent-coordination-and-task-reporting-roadmap.md).
+  Related developer-ecosystem context:
   [baseline](../NOTES/trusted-developer-ecosystem-baseline.md) and
   [roadmap](../PLAN/trusted-developer-ecosystem-roadmap.md).
 

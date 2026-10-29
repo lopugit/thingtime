@@ -28,9 +28,14 @@ The related
 [trusted developer ecosystem roadmap](../PLAN/trusted-developer-ecosystem-roadmap.md)
 sequences that work. The proposed execution backlog is
 [TODO 27](../TODO/claude-todo/27-trusted-developer-ecosystem.md).
-The separate agent-runtime gap around origin-bound Character checks and
-private task reporting is tracked in
+The separate agent-runtime follow-up is tracked in
 [TODO 58](../TODO/claude-todo/58-agent-coordination-and-task-reporting.md).
+**2026-10-29 update:** the current integration tree now has the Character,
+Agent overview, and Agent reporting runbooks plus an origin-bound preflight.
+The remaining gap is current connected-host authorization and private-workspace
+acceptance, not missing documentation; see the dated
+[runtime evidence note](./agent-coordination-runtime-evidence-2026-10-29.md)
+and [task-reporting roadmap](../PLAN/agent-coordination-and-task-reporting-roadmap.md).
 
 ## Evidence ledger
 

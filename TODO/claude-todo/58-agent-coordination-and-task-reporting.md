@@ -1,99 +1,95 @@
 # 58 — Agent coordination and task reporting
 
-**Status:** Proposed; requires owner review of capability, privacy, and tool
-boundaries.
+**Status:** Foundation documented and locally exercised; authorized connected-host
+acceptance remains open.
 
-**Evidence checkpoint:** 2026-10-19 (Melbourne). The public manifest at the
-selected Thingtime origin advertised `api.auth-characters` 1.0.0 and
-`api.agent-overview` 2.0.0. The checked PR head and `origin/develop` did not
-contain `docs/characters.md` or `docs/agent-overview.md`, and
-`remix/package.json` had no `characters:preflight` script. This is a repository
-workflow/documentation gap, not evidence that the private workspace, a
-Character, or membership is unavailable. Public capability discovery alone
-does not establish Character identity or private-subspace access.
+**Evidence checkpoint:** 2026-10-29, Australia/Melbourne. The fetched integration
+tree `origin/develop` at `018233fef` contains `docs/characters.md`,
+`docs/agent-overview.md`, `docs/agent-reporting.md`, the origin-bound
+`characters:preflight` script, and named Character/Agent test scripts. This
+supersedes the 2026-10-19 checkpoint that said the docs and preflight were
+missing. The runbooks record local synthetic acceptance, but this documentation
+pass did not rerun those checks or verify a live connected host, private saved
+workspace, Character session, or membership.
+
+Read the [dated evidence note](../../NOTES/agent-coordination-runtime-evidence-2026-10-29.md)
+and [roadmap](../../PLAN/agent-coordination-and-task-reporting-roadmap.md)
+before continuing. Current contract details live in
+[`docs/characters.md`](../../docs/characters.md),
+[`docs/agent-overview.md`](../../docs/agent-overview.md), and
+[`docs/agent-reporting.md`](../../docs/agent-reporting.md).
 
 ## Goal
 
-Give agents one supported, auditable way to establish task identity and report
-progress in the authorized private workspace. Make each proof explicit:
-public capability compatibility, authenticated Character identity, private
-subspace membership, and successful task-record readback are separate checks.
-Never infer one from another.
+Allow an authorized agent to establish one distinct task Character and report
+through the existing private saved workspace, with each boundary verified
+separately: origin capability compatibility, independent reporting permission,
+authenticated Character identity, saved-reference access, private-subspace
+membership, and successful task-record readback. A public manifest or local
+test cannot stand in for any of the later proofs.
 
-## Phase A — Document the actual contracts
+## Completed foundation
 
-- [ ] Add `docs/characters.md` from the current Character capability and API
-  contracts. Explain origin selection, compatible-version checks, Character
-  authentication, private-subspace membership, supported controls, and the
-  difference between public discovery and authenticated authorization.
-- [ ] Add `docs/agent-overview.md` for the private saved-Things workspace:
-  describe task/agent/project relationships, idempotent lookup and reuse,
-  lifecycle/status semantics, measurement provenance, and the supported saved
-  Actions. Treat IDs as runtime references, not grants; do not publish
-  account-specific IDs, private page contents, or credentials.
-- [ ] Cross-link both runbooks to the feature/capability documentation and
-  relevant identity and trusted-developer ecosystem notes. Record any behavior
-  the live contract cannot confirm as an open question, not an implementation
-  claim.
+- [x] Document Character sign-in, private coordination, and the distinction
+  between public capability discovery and authenticated membership in
+  `docs/characters.md` on the current integration tree.
+- [x] Document the saved Thing workspace contract and explicit unknown-value
+  behavior in `docs/agent-overview.md`.
+- [x] Document the origin-bound reporting gateway, the independent
+  `agents.report` permission, retry identity, and failure boundaries in
+  `docs/agent-reporting.md`.
+- [x] Add the explicit `characters:preflight` entry point and focused test
+  scripts; these are present in `remix/package.json` on the current integration
+  tree. Script presence is not a passing test result.
+- [x] Record local synthetic read-adapter and reporting acceptance in the
+  runbooks. Treat that as dated repository evidence, not production or current
+  host acceptance.
 
-## Phase B — Provide a safe preflight
+## Remaining work — connected-host acceptance
 
-- [ ] Implement the documented
-  `npm --prefix remix run characters:preflight -- --origin <origin>` entry
-  point only after locating the canonical manifest/capability client and its
-  validation rules. Keep the origin explicit and normalized; do not accept an
-  arbitrary route, spoof browser headers, read browser credentials, or fall
-  back to another origin.
-- [ ] Require the declared compatible `api.auth-characters` version before
-  attempting supported Character operations. The public manifest result must
-  say only that the feature is advertised; it must never claim a Character is
-  authenticated or a private membership is present.
-- [ ] Keep private workspace reads/writes on the documented saved Actions and
-  APIs. Preview composed writes and honor any tool-level confirmation gate;
-  never bypass it with raw HTTP or an invented endpoint.
-- [ ] Add focused tests for malformed/mismatched origins, missing or
-  incompatible capability versions, manifest success without authenticated
-  membership, and errors that do not disclose tokens or private workspace
-  data.
-
-## Phase C — Verify durable reporting
-
-- [ ] Search by a stable task identity before creating records; reuse existing
-  project, task, and agent Things when present. Link child agent records to the
-  actual parent IDs and shared task instead of inventing identifiers.
-- [ ] Record a start time only when observed, progress only when measured, and
-  token usage only when supplied by an authorized measurement source. Keep
-  unavailable values unknown rather than writing zero or estimates.
-- [ ] Read back each permitted update and distinguish submitted, saved,
-  visible, and complete. Persist a final record with verification, limitations,
-  and artifact links before marking the task complete.
-- [ ] Add integration coverage using an isolated account/workspace fixture;
-  prove an unauthorized or wrong-origin session cannot read or write the
-  private Agent workspace. Do not exercise production membership mutation as
-  a test substitute.
+- [ ] Through the intended authorized connection, negotiate
+  `api.agent-reporting` 1.0.0, `api.auth-characters` 1.0.0, and
+  `api.agent-overview` 2.0.0 at the selected origin. Keep discovery and
+  authorization outcomes distinct.
+- [ ] Verify the independent `agents.report` grant, the exact saved workspace
+  references, and membership in the existing private Thingtime Agents
+  subspace. Ordinary `things` access does not imply the reporting grant.
+- [ ] Prepare a stable external task identity, record one actually observed
+  progress update, read back the exact task/progress Things, and repeat
+  preparation to confirm the same Character and binding are reused.
+- [ ] Verify unknown progress, token usage, and start/end times remain unknown
+  unless measured and attributable. Keep credentials, private page contents,
+  account data, and private ownership links out of public docs and logs.
+- [ ] In an isolated authorized fixture, verify a missing grant, inaccessible
+  reference, changed origin, revoked membership, or disabled Character stops
+  dependent writes without public-owner fallback. Reuse the original request ID
+  and immutable inputs after an ambiguous write; read back before retrying.
 
 ## Acceptance criteria
 
-1. Both referenced runbooks exist, are discoverable from the docs index, and
-   match the current versioned capability contracts.
-2. The named preflight command works from the repository root, fails closed on
-   an origin or compatibility mismatch, and makes no claim about authenticated
-   identity or private membership from public metadata alone.
-3. An isolated end-to-end test reuses an existing task idempotently, records
-   only measured/observed lifecycle fields through the supported Actions, and
-   reads back the saved state; a negative access test proves private data stays
-   inaccessible across origins and identities.
-4. No credential, private workspace ID/content, owner data, or browser session
-   state is emitted in docs, logs, test snapshots, or public responses.
+1. The current runbooks, preflight, and test scripts remain discoverable and
+   match the selected-origin capability contracts.
+2. The exact source revision passes the focused preflight, Character, Agent
+   overview, reporting, PAT-scope, and API-capability checks when those sources
+   change; local synthetic acceptance is labeled separately from host/live
+   acceptance.
+3. A connected-host run proves all capability, grant, identity, saved-reference,
+   membership, idempotent reuse, and exact readback gates using the intended
+   authorized account and origin. Missing access is reported as a blocker; no
+   fallback identity or new workspace is created.
+4. Revocation and ambiguous-write cases remain safe, retries do not duplicate
+   lifecycle records, and no credentials or private workspace content appear in
+   public artifacts or logs.
 
-## Risks and next action
+## Next action and stop condition
 
-The instructions may outrun the checked-in client or change independently from
-the live saved workspace. Do not duplicate private schemas or Actions in source,
-and do not label a public capability check as user consent. First compare the
-current API contract and the supported Thingtime tooling with the live runbook;
-then ask the owner to resolve only genuine contract gaps before implementation.
+Run the documented public preflight from a checkout that contains the current
+script, then verify host authorization and private saved-Thing access through
+the supported reporting tools. If the intended connection lacks the separate
+`agents.report` permission or any exact saved reference, stop only that
+dependent reporting action and keep unrelated task work moving. Do not upgrade
+ordinary Things access silently, copy a credential, post as the owner, or
+interpret local test success as production acceptance.
 
-Related context: [trusted developer ecosystem baseline](../../NOTES/trusted-developer-ecosystem-baseline.md),
-[trusted developer ecosystem roadmap](../../PLAN/trusted-developer-ecosystem-roadmap.md),
-[identity and context-safe presence TODO](35-identity-agency-and-context-safe-presence.md).
+Related developer-ecosystem context: [baseline](../../NOTES/trusted-developer-ecosystem-baseline.md)
+and [roadmap](../../PLAN/trusted-developer-ecosystem-roadmap.md).
