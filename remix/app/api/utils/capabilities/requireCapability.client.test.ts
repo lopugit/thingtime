@@ -220,3 +220,25 @@ test('scoped discovery combines caller cancellation with its deadline and permit
   await check('api.lopu-reminders', '1.1.0', 'https://selected.test', { ...transport, signal: undefined });
   assert.equal(calls, 2);
 });
+
+
+test("an immediate remount never inherits the previous caller's aborted discovery", async () => {
+  let calls = 0;
+  const cancelled = new AbortController();
+  const transport = {
+    currentOrigin: () => 'https://selected.test',
+    fetch: (async (_target, init) => {
+      calls++;
+      if (calls > 1) return Response.json({ ...manifest(), origin: 'https://selected.test' });
+      return new Promise<Response>((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true }));
+    }) as typeof fetch
+  };
+  const check = createThingtimeCapabilityChecker();
+  const old = assert.rejects(check('api.lopu-reminders', '1.1.0', 'https://selected.test', { ...transport, signal: cancelled.signal }), /abort/i);
+  cancelled.abort();
+  // Deliberately do not await the aborted promise: React can remount first.
+  await check('api.lopu-reminders', '1.1.0', 'https://selected.test', transport);
+  await old;
+  await check('api.lopu-reminders', '1.1.0', 'https://selected.test', transport);
+  assert.equal(calls, 2, 'Late old failure must preserve the successful remount cache');
+});

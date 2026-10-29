@@ -16,6 +16,7 @@ export const createThingtimeCapabilityChecker = () => {
   let manifestPromise: Promise<CapabilityManifest> | null = null;
   let manifestOrigin: string | null = null;
   let manifestFetcher: typeof fetch | undefined;
+  let manifestSignal: AbortSignal | undefined;
 
   return async (feature: string, minimumVersion: string, expectedOrigin = window.location.origin, transport?: CapabilityTransport) => {
     const origin = new URL(expectedOrigin);
@@ -38,6 +39,7 @@ export const createThingtimeCapabilityChecker = () => {
     const scoped = Boolean(transport) || expectedOrigin !== window.location.origin;
     const load = () => {
       const deadline = AbortSignal.timeout(20_000);
+      manifestSignal = transport?.signal ? AbortSignal.any([deadline, transport.signal]) : deadline;
       return (transport?.fetch ?? fetch)(scoped ? new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, origin).href : THINGTIME_CAPABILITY_MANIFEST_PATH, {
         headers: { Accept: 'application/json' },
         credentials: scoped ? 'omit' : 'same-origin',
@@ -45,12 +47,15 @@ export const createThingtimeCapabilityChecker = () => {
         // A retry after deployment must not replay the browser's older manifest.
         // Successful checks still share this checker's in-memory request.
         cache: 'no-store',
-        signal: transport?.signal ? AbortSignal.any([deadline, transport.signal]) : deadline
+        signal: manifestSignal
       }).then(async response => {
         if (!response.ok) throw new Error('Thingtime capability manifest is unavailable');
         return response.json() as Promise<CapabilityManifest>;
       });
     };
+    // StrictMode cleanup or a cancelled view may abort before the previous
+    // promise rejection clears the cache. A new scope must not inherit it.
+    if (manifestSignal?.aborted) manifestPromise = null;
     const request = manifestPromise ??= load();
     try {
       const manifest = await request;
