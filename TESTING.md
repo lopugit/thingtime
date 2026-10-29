@@ -10390,6 +10390,26 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Empty native passkey requests: expand **Request details** and compare the
+  actual requested site, catalog total, exact site matches, valid credential-ID
+  count, site allowlist count (zero means unrestricted) and eligible count with
+  the independent request/catalog metadata. Cover empty catalogs, wrong RP,
+  malformed/empty IDs, a 43-character unpadded ID and restrictive allowlists.
+  Keep Cancel reachable and details scrollable in narrow/short provider windows.
+  Details must clear on retry/new request/cancellation and contain no credential
+  values, IDs, names, account/session data or logs. Counts are diagnostic evidence,
+  not proof of a successful registration or assertion.
+
+- [ ] Browser interception diagnostics: from an independently verified website
+  tab, open the Thingtime toolbar popup and refresh status. Check installed versus
+  current save/sign-in hooks, missing bridge/hook, unknown/disabled/enabled state,
+  conditional/unsupported fallback and explicit native selection. Replace a hook
+  in an isolated fixture: report replacement without restoring it. Navigate while
+  a reply is pending: discard it. Confirm diagnostic fields contain only booleans
+  and closed reasons, never request/options/credential/session data or routing IDs.
+  With the observed GitHub request shape, perform real provider routing separately;
+  a green diagnostic or unit fixture does not prove live interception.
+
 - [ ] Host display-name localization: the physical `Thingtime Passwords.app`
   basename and raw host display name stay equal; bundled `en.lproj/InfoPlist.strings`
   resolves display/short names to **Thingtime**. Check FileManager display name,

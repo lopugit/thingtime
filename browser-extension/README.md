@@ -18,6 +18,28 @@ Use the action popup to enable it, then reload already-open relying-party tabs.
 No browser install, user account access or OS provider enablement occurs as part of
 building the source. The extension is not a Chrome Web Store release.
 
+## Connection diagnostics
+
+From the website tab, open the Thingtime toolbar popup and use **Refresh connection
+status**. This performs one bounded, read-only handshake with that exact document.
+It reports whether the save/sign-in hooks were installed, whether they remain
+current, whether the page observed the opt-in, and a closed native-fallback reason.
+A replaced hook is reported; the extension never takes over another extension's
+replacement. Missing bridge/hook state gives reload and site-access guidance.
+
+These are page-reported diagnostics, not authentication or routing authority.
+Only booleans and a fixed reason code cross the diagnostic boundary; no request
+options, challenges, credential IDs, account/session data or responses are retained
+or displayed. Nothing is persisted. Navigation invalidates a pending reply.
+This does not promise a successful passkey ceremony or native provider ranking.
+
+If hook installation fails while a competing password-manager extension is on,
+turn that browser extension off and reload the website before checking again.
+Its own passkey-off preference may leave its JavaScript hook locked. For example,
+1Password's Chrome extension can be disabled while keeping its macOS AutoFill
+provider enabled. This trades its browser UI/autofill for Thingtime-first handling
+of supported explicit requests; conditional and unsupported requests stay native.
+
 ## Design and trust boundary
 
 A `document_start` MAIN-world hook wraps `navigator.credentials.create/get`. An

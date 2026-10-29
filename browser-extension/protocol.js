@@ -36,3 +36,27 @@ export function safeError(error, fallback = 'The passkey request could not compl
   const names = ['AbortError', 'NotAllowedError', 'NotSupportedError', 'SecurityError', 'InvalidStateError', 'ConstraintError'];
   return {name: names.includes(error?.name) ? error.name : 'NotAllowedError', message: fallback};
 }
+
+
+// Closed labels for the hook's fixed numeric status. No page-supplied text is
+// presented, and these diagnostics never authorize interception or vault access.
+export const DIAGNOSTIC_REASONS = [
+  'No native fallback observed.', 'Page observed Thingtime disabled.',
+  'Page did not receive extension state before the request.', 'Conditional sign-in uses the native provider.',
+  'Unsupported request options use the native provider.', 'Website hints use the native provider.',
+  'Unsupported WebAuthn extensions use the native provider.', 'Unsupported algorithms use the native provider.',
+  'Requested attestation uses the native provider.', 'Requested authenticator attachment uses the native provider.',
+  'The extension delegated to the browser’s native provider.', 'WebAuthn is unavailable in this document.',
+  'The page did not allow a Thingtime hook to be installed.'
+];
+export function hookDiagnostics(value) {
+  if (value?.available !== true) return {available: false};
+  const hook = value.hook;
+  if (!hook || typeof hook !== 'object') return {available: true, hook: null};
+  return {available: true, hook: {
+    installed: {create: hook.installed?.create === true, get: hook.installed?.get === true},
+    current: {create: hook.current?.create === true, get: hook.current?.get === true},
+    enabledSeen: typeof hook.enabledSeen === 'boolean' ? hook.enabledSeen : null,
+    fallbackReason: Number.isInteger(hook.fallbackReason) && hook.fallbackReason >= 0 && hook.fallbackReason < DIAGNOSTIC_REASONS.length ? hook.fallbackReason : 0
+  }};
+}

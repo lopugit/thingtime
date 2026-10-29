@@ -13,7 +13,7 @@ function setup(options = {}) {
   let nextTab = 2, optionsOpened = 0;
   const chrome = {runtime: {openOptionsPage: async () => { optionsOpened++; }, id: 'extension', getURL: path => `chrome-extension://extension/${path}`, onMessage: event()},
     storage: {local: {get: async () => { if (options.settingsWait) await options.settingsWait; return state; }, set: async value => Object.assign(state, value)}, session: {get: async () => session, set: async value => Object.assign(session, value), remove: async key => { delete session[key]; }}},
-    tabs: {get: async id => { const frame = frames.get(id); return frame ? {id, url: frame.url, ...(options.pendingUrls?.has(id) ? {pendingUrl: options.pendingUrls.get(id)} : {})} : null; }, create: async ({url}) => { const id = nextTab++; frames.set(id, {documentId: 'provider', url}); return {id}; }, remove: async id => { removed.push(id); frames.delete(id); }, sendMessage: async (tabId, message, opts) => { sent.push({tabId, message, opts}); return {ok: true}; }, onRemoved: event(), onUpdated: event()},
+    tabs: {query: async () => [{id:1}], get: async id => { const frame = frames.get(id); return frame ? {id, url: frame.url, ...(options.pendingUrls?.has(id) ? {pendingUrl: options.pendingUrls.get(id)} : {})} : null; }, create: async ({url}) => { const id = nextTab++; frames.set(id, {documentId: 'provider', url}); return {id}; }, remove: async id => { removed.push(id); frames.delete(id); }, sendMessage: async (tabId, message, opts) => { sent.push({tabId, message, opts}); return {ok: true}; }, onRemoved: event(), onUpdated: event()},
     webNavigation: {getFrame: async ({tabId}) => frames.get(tabId), onCommitted: event()},
     alarms: {create: async (name, value) => alarmValues.set(name, value), clear: async name => alarmValues.delete(name), onAlarm: event()}};
   if (options.frames) for (const [id, frame] of options.frames) frames.set(id, frame);
@@ -189,4 +189,22 @@ test('the real options-tab sender can save settings without granting web senders
     assert.equal((await env.send({action: 'settings', enabled: true, origin: 'https://evil.example'}, {...sender, frameId: 1})).ok, false);
     assert.equal((await env.send({action: 'settings', enabled: true, origin: 'https://evil.example'}, {...sender, id: 'other-extension'})).ok, false);
   } finally { env.stop(); }
+});
+
+
+test('read-only diagnostics are popup-only, exact-document fenced and have no routing identity fields',async()=>{
+ const env=setup(); const popup={id:'extension',url:'chrome-extension://extension/popup.html'};
+ try {
+  env.chrome.tabs.sendMessage=async(tabId,message,options)=>{
+   assert.equal(tabId,1);assert.equal(message.action,'diagnostics-query');assert.equal(options.documentId,'original');
+   return {available:true,hook:{installed:{create:true,get:true},current:{create:true,get:false},enabledSeen:true,fallbackReason:0,id:'private',publicKey:'private'}};
+  };
+  const result=await env.send({action:'diagnostics'},popup);
+  assert.equal(result.hook.current.get,false);assert.equal(JSON.stringify(result).includes('private'),false);
+  assert.equal('documentId' in result,false);assert.equal('tabId' in result,false);
+  assert.equal((await env.send({action:'diagnostics'},env.sender)).ok,false);
+  env.chrome.tabs.sendMessage=async()=>{env.frames.set(1,{documentId:'replacement',url:'https://rp.example/login'});return{available:true,hook:{}};};
+  assert.equal((await env.send({action:'diagnostics'},popup)).available,false);
+  assert.equal(env.frames.has(2),false);assert.equal(env.session.pending,undefined);
+ } finally {env.stop();}
 });

@@ -1,4 +1,4 @@
-import {DEFAULT_ORIGIN, PROVIDER_PATH, safeOrigin, providerOrigin, senderOrigin, matchesDocument, validRequest, safeError} from './protocol.js';
+import {DEFAULT_ORIGIN, PROVIDER_PATH, safeOrigin, providerOrigin, senderOrigin, matchesDocument, validRequest, safeError, hookDiagnostics} from './protocol.js';
 
 const pending = new Map();
 const settings = async () => ({enabled: false, origin: DEFAULT_ORIGIN, ...await chrome.storage.local.get(['enabled', 'origin'])});
@@ -95,6 +95,19 @@ async function handle(message, sender, respond) {
     && (sender.frameId === undefined || sender.frameId === 0)
     && (sender.origin === undefined || sender.origin === chrome.runtime.getURL('').replace(/\/$/, ''));
   if (message?.action === 'state') { const config = await settings(); return respond({enabled: config.enabled === true, origin: config.origin}); }
+  if (message?.action === 'diagnostics' && internal) {
+    try {
+      const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
+      if (!Number.isInteger(tab?.id)) return respond({available: false});
+      const frame = await chrome.webNavigation.getFrame({tabId: tab.id, frameId: 0});
+      const origin = safeOrigin(frame?.url);
+      if (!origin || !frame.documentId) return respond({available: false});
+      const value = await chrome.tabs.sendMessage(tab.id, {action: 'diagnostics-query'}, {documentId: frame.documentId});
+      if (!await currentDocument(tab.id, frame.documentId, origin)) return respond({available: false});
+      return respond(hookDiagnostics(value));
+    } catch { return respond({available: false}); }
+  }
+
   if (['extension-query', 'extension-configure'].includes(message?.action)) {
     const config = await settings();
     const origin = senderOrigin(sender);

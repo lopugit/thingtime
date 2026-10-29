@@ -268,7 +268,15 @@ requests use the native provider; registration creates that site's credential.
 Another password-manager browser extension can intercept WebAuthn before the
 native provider picker. For example, disable 1Password's **Offer to sign in with
 passkeys** and **Offer to save passkeys** browser-extension preferences to use the
-native flow while retaining its OS provider setting. Provider ordering belongs
+native flow while retaining its OS provider setting. Some browser extensions can
+still block another provider's initial WebAuthn hooks after their own passkey
+offers are off. If Thingtime's toolbar diagnostics show failed hook installation,
+disable the conflicting browser extension and reload the website. For example,
+1Password's Chrome extension can be off while its macOS AutoFill provider and
+vault remain available; its browser UI/autofill will no longer run. This gives
+Thingtime's enabled adapter first chance at supported explicit browser requests,
+while conditional and unsupported requests still use the native flow.
+Provider ordering belongs
 to macOS and the browser; Thingtime does not programmatically set itself first.
 The optional Thingtime browser adapter intercepts supported explicit `create`/`get`
 requests when enabled and opens the existing `/passwords/provider` approval page.
@@ -293,6 +301,15 @@ installed provider completed a relying-party registration: verify a signed build
 the active extension and a real create-and-sign-in flow independently.
 
 ## Validation and setup
+
+When a native passkey request has no eligible result, **Request details** shows
+the actual requested site and selection counts: catalog total, exact site matches,
+valid credential IDs for that site, supplied allowlist size and eligible passkeys.
+A zero allowlist size means any credential is permitted. These ephemeral details
+contain no account/session data, credential values or identifiers and are never
+logged or persisted. They distinguish a catalog mismatch from the request's RP
+or allowlist without revealing a passkey. Successful signing still needs its own
+live verification.
 
 See the [README setup](../README.md#password-manager-setup) and
 [manual QA checklist](../TESTING.md#password-manager-and-native-autofill).
