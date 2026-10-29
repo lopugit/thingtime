@@ -7275,13 +7275,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-react',
-    featureVersion: '1.0.2',
-    contractVersion: '1.0.2',
+    featureVersion: '1.0.3',
+    contractVersion: '1.0.3',
     group: 'messenger',
     title: 'React to message',
     endpoint: '/api/v1/chats/react',
     summary: 'Toggles an emoji reaction on a message.',
     detail:
+      'Version 1.0.3 accepts complete unicode emoji combinations without the former emoji/count caps, matching the shared post-reaction grammar. Uploaded custom token IDs keep their existing grammar and access checks. ' +
       'Subspace-linked spaces require current active subspace membership on every read and write; removed, pending, banned and left memberships or deleted parents grant no access. Membership administration uses the subspace controls. ' +
       'POST a messageId and an emoji token to add the reaction, or again to remove it. The token is either a ' +
       'unicode emoji (the same grammar post reactions use) or custom:<emojiId> referencing an uploaded custom ' +
@@ -9448,8 +9449,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.46.1',
-    contractVersion: '1.46.1',
+    featureVersion: '1.46.2',
+    contractVersion: '1.46.2',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -9457,6 +9458,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.46.2 accepts complete emoji-only reaction combinations without the former 12-emoji / 80-code-point caps, through the shared reaction validator. Existing authorization, storage accounting and request transport validation still apply. ' +
       'Version 1.46.1 reserves storage-pending- and storage-recovery- share IDs for transactional accounting records; generic create and upsert cannot squat those namespaces. ' +
       'Version 1.45 adds owner-only GET ?folder=root&builderApp=true to list top-level Builder app folders before cursor pagination. A Builder app is an ordinary folder Thing with validated crystal.builderApp, iconUrl and structured metadata; folderId groups independently authorized Things without changing their ACL or protected OAuth appId. The filter rejects exact-ID and non-root/app-lens use. ' +
       'Version 1.44 accepts guarded tt-form, tt-select, tt-style, tt-change and tt-mapbox element blocks in saved editable Webpages; their nested children and repeated collection templates retain independent Builder selection and bindings. ' +
@@ -10426,13 +10428,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-react',
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.2.1',
+    contractVersion: '1.2.1',
     group: 'things',
     title: 'React to post',
     endpoint: '/api/v1/things/react',
     summary: 'Toggles one of the current user reactions on a visible post (multi-react). OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.2.1 accepts the complete emoji-only combination without a character or emoji-count limit; invalid text, whitespace inside tokens and Mongo-key-hostile characters remain rejected. ' +
       'Unlisted targets and shared roots accept their canonical id without a secret key; existing identity, engagement, write, scope and moderation rules still apply. ' +
       'emoji may be a single emoji or a multi-emoji group typed/pasted as one token (e.g. "🤣🤣🙌💀💦"). Toggling a token you already have removes it, a new one is added — you can hold several at once. Adding a token also records it in your recent reactions; posting null is a no-op. Reactions are standalone things (thingtime ["reaction"], crystal.emoji = the token) pointing at their target via targetId — this route is toggle sugar over the unified thing path. Reaction counts are returned for immediate card updates.',
     auth: {
@@ -11468,13 +11471,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'things-update',
     // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.15.0',
-    contractVersion: '1.15.0',
+    featureVersion: '1.15.1',
+    contractVersion: '1.15.1',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Version 1.15.1 accepts complete emoji-only reaction combinations without the former 12-emoji / 80-code-point caps, through the shared reaction validator. Existing authorization, storage accounting and request transport validation still apply. ' +
       'Version 1.15 accepts additive thingtime: [...storedContentSchemas, \"builder-thing\"] provenance without permitting content-kind changes or losing the marker; canonical Builder kinds are marked automatically on save. ' +
       'Version 1.14 accepts guarded tt-form, tt-select, tt-style, tt-change and tt-mapbox element blocks in saved editable Webpages; their nested children and repeated collection templates retain independent Builder selection and bindings. ' +
       'Version 1.13 preserves and validates shared crystal.renderComponent metadata exactly as api.things 1.42.0, including PATCH preservation and replacement/explicit-null semantics. References do not grant access. ' +
@@ -12854,10 +12858,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'schemas',
     title: 'Thingtime Schemas',
     endpoint: '/api/v1/schemas',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.1.1',
+    featureVersion: '1.1.1',
     summary: 'Returns every Thingtime Schema — the root thing schema, crystal sub-schemas, and collection schemas.',
     detail:
+      'Version 1.1.1 removes the obsolete emoji-count maximum from the built-in reaction schema, matching the shared validator. ' +
       'The registry the API validates against, as data: field lists, versions, examples, and the schema version each collection currently writes. Browse the same registry visually at /docs/schemas; published community schemas live at /schemas.',
     auth: {
       mode: 'none',
