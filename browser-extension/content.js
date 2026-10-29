@@ -46,6 +46,24 @@
     providerActive = null; void chrome.runtime.sendMessage({action: 'provider-response', ...value}).catch(() => {});
   });
   chrome.runtime.onMessage.addListener((message, _sender, respond) => {
+    if (message.action === 'diagnostics-query') {
+      let timer;
+      const finish = value => { clearTimeout(timer); document.removeEventListener('thingtime:extension-diagnostics', receive); respond({available: true, hook: value}); };
+      const receive = event => {
+        const value = parse(event); if (value?.version !== 1) return;
+        // MAIN-world events are page-controlled. Project only booleans and the
+        // fixed numeric reason range before crossing the extension boundary.
+        finish({installed: {create: value.installed?.create === true, get: value.installed?.get === true},
+          current: {create: value.current?.create === true, get: value.current?.get === true},
+          enabledSeen: typeof value.enabledSeen === 'boolean' ? value.enabledSeen : null,
+          fallbackReason: Number.isInteger(value.fallbackReason) && value.fallbackReason >= 0 && value.fallbackReason <= 12 ? value.fallbackReason : 0});
+      };
+      document.addEventListener('thingtime:extension-diagnostics', receive);
+      timer = setTimeout(() => finish(null), 250);
+      dispatch('thingtime:extension-diagnostics-query', {version: 1});
+      return true;
+    }
+
     if (message.action === 'provider-init') dispatch('thingtime:password-provider-init', {version: 1});
     else if (message.action === 'provider-request') {
       providerActive = message.request.id;
