@@ -60,7 +60,9 @@ end
 
 def manual_profile_signing?
   !ENV["PROVISIONING_PROFILE_SPECIFIER"].to_s.empty? ||
-    !ENV["WATCH_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
+    !ENV["WATCH_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty? ||
+    !ENV["LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty? ||
+    !ENV["SHARE_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
 end
 
 def distribution_profile_suffix
@@ -90,6 +92,24 @@ def lopu_widget_profile_name
   ENV.fetch("LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER", "Thingtime Lopu Widget App Store #{lopu_widget_bundle_identifier}#{distribution_profile_suffix}")
 end
 
+def share_bundle_identifier
+  "#{ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER')}.share"
+end
+
+def share_profile_name
+  ENV.fetch("SHARE_PROVISIONING_PROFILE_SPECIFIER", "Thingtime Share App Store #{share_bundle_identifier}#{distribution_profile_suffix}")
+end
+
+# Public Connect API can register/enable the extension App ID. The App Group
+# association itself is made by Xcode automatic provisioning, not a guessed API.
+def prepare_share_bundle_identifier
+  bundle = Spaceship::ConnectAPI::BundleId.find(share_bundle_identifier)
+  bundle ||= Spaceship::ConnectAPI::BundleId.create(name: "Thingtime Share", platform: "IOS", identifier: share_bundle_identifier)
+  unless bundle.get_capabilities.any? { |capability| capability.capability_type == "APP_GROUPS" }
+    bundle.create_capability("APP_GROUPS")
+  end
+end
+
 def xcodebuild_xcargs
   args = []
   if manual_profile_signing?
@@ -98,6 +118,7 @@ def xcodebuild_xcargs
     args << "THINGTIME_IOS_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(ios_provisioning_profile_name)}"
     args << "THINGTIME_WATCH_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(watch_provisioning_profile_name)}"
     args << "THINGTIME_LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(lopu_widget_profile_name)}"
+    args << "THINGTIME_SHARE_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(share_profile_name)}"
   else
     args << api_key_xcargs
   end
@@ -126,7 +147,8 @@ def export_options(destination: "export")
     provisioningProfiles: {
       ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER") => ios_provisioning_profile_name,
       ENV.fetch("WATCH_BUNDLE_IDENTIFIER") => watch_provisioning_profile_name,
-      lopu_widget_bundle_identifier => lopu_widget_profile_name
+      lopu_widget_bundle_identifier => lopu_widget_profile_name,
+      share_bundle_identifier => share_profile_name
     }
   )
 end
@@ -218,6 +240,8 @@ platform :ios do
     end
 
     unless ENV["SKIP_PROFILE_SYNC"] == "1"
+      app_store_api_key
+      prepare_share_bundle_identifier
       get_provisioning_profile(
         api_key: app_store_api_key,
         team_id: ENV.fetch("DEVELOPMENT_TEAM"),
@@ -250,6 +274,21 @@ platform :ios do
         output_path: OUTPUT_DIRECTORY
       )
       ENV["LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
+
+      get_provisioning_profile(
+        api_key: app_store_api_key,
+        team_id: ENV.fetch("DEVELOPMENT_TEAM"),
+        app_identifier: share_bundle_identifier,
+        provisioning_name: share_profile_name,
+        cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
+        force: false,
+        output_path: OUTPUT_DIRECTORY
+      )
+      ENV["SHARE_PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
+      verifier = File.expand_path("../scripts/verify-share-profile.py", __dir__)
+      group = File.read(File.expand_path("../config/Base.xcconfig", __dir__))[/^THINGTIME_WIDGET_GROUP\s*=\s*(\S+)/, 1]
+      UI.user_error!("Missing canonical App Group setting") unless group
+      sh("python3", verifier, lane_context[SharedValues::SIGH_PROFILE_PATH], share_bundle_identifier, ENV.fetch("DEVELOPMENT_TEAM"), group)
     end
 
     archive_path = File.expand_path(File.join(OUTPUT_DIRECTORY, "Thingtime.xcarchive"))

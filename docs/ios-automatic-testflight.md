@@ -9,7 +9,7 @@ concurrency group. Only trusted main code runs with release access.
 The workflow runs native tests before loading Apple credentials, reads App Store
 Connect's build history to allocate a larger integer, stamps the disposable
 runner's XcodeGen `project.yml`, and builds phone, Watch and widget with matching
-versions. Nothing commits a build-number change back to the repository. Before
+versions, including the embedded Share extension. Nothing commits a build-number change back to the repository. Before
 upload it verifies the archive and IPA, executable presence, identifiers,
 signatures and shared App Group entitlements. It then waits up to ten minutes for
 that exact build to reach `VALID` and `IN_BETA_TESTING`. A timeout means inspect
@@ -18,6 +18,16 @@ Apple processing before rerunning; it does not mean the upload failed.
 Internal tester groups must have automatic build distribution enabled in App Store
 Connect. External testers may still need Apple's Beta App Review. Real-device
 widget placement and microphone acceptance remain separate checks.
+
+The Share target uses `<iPhone bundle ID>.share` and the containing app's existing
+`THINGTIME_WIDGET_GROUP`. The release lane registers its App ID/capability and
+syncs a separate distribution profile. Associate that App ID with the existing
+App Group through Xcode automatic signing or Apple Developer before the first
+signed release; enabling the capability alone does not prove that association.
+The profile check fails before archive if the signed group is missing. Archive
+and IPA verification also require the embedded extension, production activation
+rule, matching versions, signing identity and shared group. Never substitute the
+widget's profile or omit the extension to make a release pass.
 
 ## Existing GitHub secrets and vault migration
 

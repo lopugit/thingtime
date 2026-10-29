@@ -3,6 +3,7 @@ import Foundation
 import XCTest
 
 final class MobileFolderIgnoreRulesTests: XCTestCase {
+    #if os(macOS)
     private func git(_ args: [String], at directory: URL, input: Data? = nil) throws -> Int32 {
         let process = Process()
         // Match the shared TypeScript oracle's explicit Git selection.
@@ -57,6 +58,8 @@ final class MobileFolderIgnoreRulesTests: XCTestCase {
             }
         }
     }
+    #endif
+
     func testEscapedGlobstarSeparatorAndHyphenFollowGit() throws {
         let separator = try MobileFolderIgnoreRules("a/**\\/b")
         XCTAssertFalse(separator.ignores("a/b", isDirectory: false))
