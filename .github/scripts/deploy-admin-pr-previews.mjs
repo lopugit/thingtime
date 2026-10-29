@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { assertPreviewGatewaySource } from './preview-gateway-source.mjs';
 
 import assert from 'node:assert/strict';
 import { isManagedPreviewComment as isManagedComment, upsertPreviewComment, publishPreviewNotifications } from './preview-comments.mjs';
@@ -366,6 +367,7 @@ const prebuiltDeploymentArgs = ({ config, environment, prebuiltDirectory, metada
 };
 
 const deployPrebuiltOutput = async (config, pullRequest, environment) => {
+	await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
 	const prebuiltDirectory = resolve(requiredEnv('VERCEL_PREBUILT_ROOT'), environment);
 	await assertPrebuiltOutput(prebuiltDirectory);
 	await mkdir(resolve(prebuiltDirectory, '.vercel'), { recursive: true });
@@ -594,6 +596,7 @@ const prepareAdminBuild = async () => {
 		return;
 	}
 	if (payload.action !== 'closed') {
+		await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
 		const rows = initialRows(config, pullRequest, payload.environments, Date.now());
 		await publishAdminStatus(config, pullRequest, rows);
 	}

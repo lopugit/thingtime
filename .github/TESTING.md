@@ -1,5 +1,21 @@
 # Control-plane regression checklist
 
+## Orphan Vercel deployment cleanup (2026-10-30)
+
+- Run `node --test .github/scripts/preview-gateway-source.test.mjs .github/scripts/orphan-preview-cleanup.test.mjs .github/scripts/deploy-vercel-prebuilt.test.mjs`
+  and both PR publisher self-tests. Cover complete multi-page inventories,
+  repeats/missing cursors, provider failures, source mismatch, deleted/reopened
+  PRs, same-branch replacement PRs, legacy previews and active-build cancellation.
+- Verify stable branches, production, gateway owners, stale production/custom target
+  pointers, fresh canonical/custom domain bindings and foreign PR aliases survive.
+  Test races at cancellation/deletion fences; a failed read is never absence.
+- After authorized rollout on `github-actions`, run the existing preview sweep,
+  verify each deleted ID returns 404, immutable URLs stop serving, repeat with
+  no remaining orphan mutations, and confirm production/develop/staging/master
+  aliases retain their original IDs. Exercise a real PR close during upload.
+  Local fixture success is not live deletion or rollout evidence.
+
+
 ## PR lifecycle settlement (2026-09-16)
 
 - Run `node --test .github/scripts/lopu-pr-lifecycle.test.mjs`.

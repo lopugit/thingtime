@@ -218,6 +218,47 @@ valid preview. Projects without directory listings can stage with
 `PREVIEW_FALLBACK_ROOT_STATUS=404` for a true root 404. This tool never changes
 the project-wide directory-listing setting.
 
+### Orphan deployment cleanup (2026-10-30)
+
+The existing protected preview controller now scans the complete project deployment
+inventory before each six-hour recovery sweep and on PR close. It removes actual
+Vercel deployments (including their immutable URLs), rather than only removing
+PR aliases. Legacy source-build previews and ordinary prebuilt branch previews
+are included when exact source/project/repository ownership is established and
+no open same-repository PR uses the branch. Open drafts still protect their
+branch from this orphan sweep; the existing current-policy draft cleanup remains
+separate. Closed PR events also inspect branch previews without PR metadata.
+
+Production targets, untagged main/develop/staging/controller/fallback branches,
+gateway owners, production/custom stable target pointers, all bound project domains, arbitrary
+custom aliases, foreign identities and unknown metadata are preserved. Explicit PR-tagged snapshots of closed promotions may be cleaned
+even when their source branch is `develop`; current owners and bindings remain
+protected. The controller paginates before deletion and rechecks deployment, alias and PR state
+before canceling or deleting; the generic `targets.preview` last-deployment
+pointer does not protect an orphan; a reopened/new PR or changed alias stops the action.
+A still-canceling upload is left for the next sweep. Provider errors preserve
+unknown resources and fail the run. Separate API checks are not an atomic
+provider transaction: a subsequent sweep reconciles a concurrent late upload.
+
+Ordinary prebuilt feature previews now require an open same-repository PR before
+build planning, upload, immutable acceptance and alias publication. A PR closed
+during upload causes guarded removal of that exact deployment. Stable gateway
+publication is exempt. All three preview publishers additionally read the exact
+immutable source SHA and require Mongo's connect fence, gateway middleware,
+authority and explicit connection policy. Old source fails admission even if
+publisher metadata claims gateway support. This is a compatibility gate, not
+proof against hostile source or a measurement of live Mongo connections. The
+existing explicit `dedicated` branch opt-in remains supported; missing/old
+source never falls back to it. The PR publisher retains its exact-head fences.
+
+Roll out by merging the controller PR into `github-actions`, then run the existing
+scheduled/manual preview controller and inspect its sanitized removal count and
+Vercel readback. The default-branch thin listener already supplies PR-close and
+six-hour schedule events; no new secret, cron or product listener is introduced.
+Use the current project/team vars and protected deployment token. An unavailable
+or insufficiently scoped token fails closed and must not be worked around by
+weakening ownership checks. Local regression fixtures do not prove live cleanup.
+
 ### Discoverable preview status and recovery
 
 Both publishers post expected persistent URLs and a ready-time estimate before

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
+import { assertPreviewGatewaySource } from './preview-gateway-source.mjs';
 
 import assert from 'node:assert/strict';
+import { reconcileOrphanPreviews } from './orphan-preview-cleanup.mjs';
 import { deploymentIssue as stablePublisherDeploymentIssue, marker as stablePublisherMarker, policyVersion as stablePublisherPolicyVersion, verifyAlias, verifyCanonicalGateway, compatibilityAliasCandidates } from './deploy-vercel-prebuilt.mjs';
 import { gatewayPolicy, gatewayMetadata, gatewayDeploymentIssue, gatewayRuntimeArgs, gatewayPublisherEnvironment, restoreGatewayAliases } from './environment-gateway-policy.mjs';
 import { isManagedPreviewComment as isManagedComment, upsertPreviewComment, publishPreviewNotifications } from './preview-comments.mjs';
@@ -1288,6 +1290,12 @@ const runSelfTest = async () => {
 	truthy(!source.slice(source.lastIndexOf('const main = async')).includes('reconcileStableDevelopAlias('));
 	const deployHandler = source.slice(source.lastIndexOf('const deploy = async')).split('const writePrepareOutputs')[0];
 	truthy(deployHandler.includes('if (!error.preservePreviewAttempt) await Promise.allSettled([cleanupPrResources('));
+	let inactiveClosed = 0;
+	const closedCleanup = { cleanup: async () => ['dpl_removed'], read: async () => ({ ...base, state: 'closed' }), inactive: async () => { inactiveClosed++; } };
+	equal(await cleanupClosedPrResources(config, base.number, base.head.ref, closedCleanup), { aliasRemoved: false, deleted: 1 });
+	equal(inactiveClosed, 1);
+	await cleanupClosedPrResources(config, base.number, base.head.ref, { ...closedCleanup, read: async () => base });
+	equal(inactiveClosed, 1);
 	console.log(`develop PR preview self-test: ${checks}/${checks} passed`);
 };
 
@@ -2359,9 +2367,21 @@ const cleanupPrResources = async (config, prNumber, deployments = null) => {
 	return { aliasRemoved, deleted };
 };
 
+const cleanupClosedPrResources = async (config, prNumber, prBranch, {
+	cleanup = reconcileOrphanPreviews, read = getPullRequest, inactive = markGithubEnvironmentInactive
+} = {}) => {
+	const removed = await cleanup(config, { github: githubRequest, vercel: vercelRequest, prNumber, prBranch });
+	const current = await read(config.repository, prNumber);
+	if (current.state === 'closed' && current.head?.ref === prBranch &&
+		current.head.repo?.full_name === config.repository && Number(current.head.repo.id) === config.repositoryId) {
+		await inactive(config.repository, prNumber);
+	}
+	return { aliasRemoved: false, deleted: removed.length };
+};
+
 const cleanupComment = (reason) => {
 	if (reason === 'closed') {
-		return '### 🧹 PR preview removed\n\nThe PR-specific alias and current-policy custom-develop PR deployments were removed when this PR closed.';
+		return '### 🧹 PR preview removed\n\nVerified orphan PR deployments and their aliases were removed when this PR closed. Production, gateway owners and protected aliases are preserved.';
 	}
 	if (reason === 'draft') {
 		return '### ⏭️ PR preview paused\n\nDraft PRs do not keep current-policy Preview resources. The preview will be rebuilt after an allowlisted maintainer marks the PR ready.';
@@ -2374,14 +2394,14 @@ const cleanupComment = (reason) => {
 
 const handleIneligible = async (config, pullRequest, reason, { comment = true } = {}) => {
 	const prNumber = boundedInteger(pullRequest.number, 'PR number');
-	const cleaned = await cleanupPrResources(config, prNumber);
+	const cleaned = reason === 'closed' ? await cleanupClosedPrResources(config, prNumber, pullRequest.head.ref) : await cleanupPrResources(config, prNumber);
 	await syncPreviewLabels({ request: githubRequest, repository: config.repository,
 		number: prNumber, sha: pullRequest.head.sha, status: 'removed' });
 	if (comment && (cleaned.aliasRemoved || cleaned.deleted > 0)) {
 		await upsertComment(
 			config.repository,
 			prNumber,
-			`${cleanupComment(reason)}\n\nThe ordinary generated Vercel Preview remains available on the shared development runtime.`
+			reason === 'closed' ? cleanupComment(reason) : `${cleanupComment(reason)}\n\nThe ordinary generated Vercel Preview remains available on the shared development runtime.`
 		);
 	}
 	console.log(`PR preview ineligible for PR #${prNumber}: ${reason}; alias=${cleaned.aliasRemoved}; deployments=${cleaned.deleted}`);
@@ -2422,7 +2442,7 @@ const reconcile = async (config) => {
 		}
 
 		if (!pullRequest) {
-			const cleaned = await cleanupPrResources(config, prNumber, owned);
+			const cleaned = candidate?.state === 'closed' ? await cleanupClosedPrResources(config, prNumber, candidate.head.ref) : await cleanupPrResources(config, prNumber, owned);
 			if (cleaned.aliasRemoved) removedAliases += 1;
 			removedDeployments += cleaned.deleted;
 			if (candidate) await syncPreviewLabels({ request: githubRequest, repository: config.repository,
@@ -2555,6 +2575,7 @@ const reportFailure = async (config, pullRequest, githubDeployment, vercelDeploy
 };
 
 const deploy = async (config, pullRequest) => {
+	await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
 	await assertTrustedPullRequestStack(config, pullRequest, { actor: config.actor });
 	const corsProbeUrl = safeCorsProbeUrl(requiredEnv('DEVELOP_S3_CORS_PROBE_URL'));
 	const snapshot = pullRequestSnapshot(pullRequest);
@@ -2682,6 +2703,7 @@ const prepareBuildPlan = async () => {
 		console.log(`GitHub prebuild not required for PR #${prNumber}: ${error.reason}`);
 		return;
 	}
+	await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
 	const expectedReady = expectedReadyAt();
 	await publishDevelopStatus(config, pullRequest, {
 			state: 'deploying',
@@ -2705,7 +2727,8 @@ const main = async () => {
 	let config = runtimeConfig();
 	const eventName = requiredEnv('GITHUB_EVENT_NAME');
 	if (eventName === 'schedule') {
-		const results = await Promise.allSettled([reconcile(config)]);
+		const orphanResults = await Promise.allSettled([reconcileOrphanPreviews(config, { github: githubRequest, vercel: vercelRequest })]);
+		const results = [...orphanResults, ...await Promise.allSettled([reconcile(config)])];
 		const failures = results.filter((result) => result.status === 'rejected');
 		if (failures.length) throw new AggregateError(failures.map((result) => result.reason),
 			`Scheduled preview reconciliation failed: ${failures.map((result) => result.reason.message).join('; ')}`);
