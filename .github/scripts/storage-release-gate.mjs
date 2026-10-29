@@ -10,31 +10,44 @@ export const logLimit = 500;
 export const storageFailure = /Account content requires storage migration before its ledger can be reconciled|Storage accounting requires (?:migration|recovery)|storage migration required|\bSTORAGE_(?:MIGRATION_REQUIRED|RECOVERY_BUSY|ACCOUNTING_UNAVAILABLE|INVARIANT)\b/i;
 const failure = (code) => new Error(`Storage release gate: ${code}`);
 
-export function requireStorageReady(manifest, health, origin, minimumVersion = '1.2.0') {
+export function requireStorageManifest(manifest, origin, minimumVersion = '1.2.0', gateway) {
   const version = manifest?.features?.['api.health-nitro']?.version;
   const parts = /^1\.(\d+)\.(\d+)$/.exec(version || '');
   const minimum = minimumVersion.split('.').map(Number);
   if (manifest?.origin !== origin || !parts || Number(parts[1]) < minimum[1] || (Number(parts[1]) === minimum[1] && Number(parts[2]) < minimum[2])) throw failure('health-capability-unavailable');
   if (minimum[1] >= 3 && !/^1\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(manifest?.features?.['api.storage-accounting']?.version || '')) throw failure('storage-capability-unavailable');
+  if (minimum[1] >= 3 && (manifest.schemaVersion !== 1 || !Array.isArray(manifest.operations) || !manifest.operations.some((operation) => operation?.feature === 'api.health-nitro' && operation.path === '/api/v1/health/nitro' && Array.isArray(operation.methods) && operation.methods.includes('GET')))) throw failure('health-operation-unavailable');
+  if (gateway && ['origin', 'environment', 'deploymentId'].some((key) => manifest.gateway?.[key] !== gateway[key])) throw failure('gateway-identity-mismatch');
+}
+
+export function requireStorageReady(manifest, health, origin, minimumVersion = '1.2.0', gateway) {
+  requireStorageManifest(manifest, origin, minimumVersion, gateway);
   if (health?.origin !== origin || health?.targetOrigin !== origin || health?.service !== 'nitro') throw failure('health-origin-mismatch');
   if (health?.storageAccounting?.state === 'recovering') throw failure('storage-recovering');
   if (health?.ok !== true || health?.state !== 'ready' || health?.storageAccounting?.state !== 'ready' || !Number.isSafeInteger(health.storageAccounting.expectedVersion) || health.storageAccounting.expectedVersion < 1) throw failure('storage-not-ready');
   return { state: 'ready', accountingVersion: health.storageAccounting.expectedVersion };
 }
 
-export async function checkStorageReadiness(origin, { fetcher = fetch, signal, minimumVersion = '1.2.0' } = {}) {
+async function readStorageJson(origin, path, { fetcher = fetch, signal } = {}) {
   // Never follow a health endpoint to a login, a different origin or a proxy target.
   if (new URL(origin).origin !== origin || !origin.startsWith('https://')) throw failure('invalid-origin');
-  const read = async (path) => {
-    let response;
-    try { response = await fetcher(origin + path, { redirect: 'error', cache: 'no-store', signal: signal || AbortSignal.timeout(30_000) }); }
-    catch { throw failure('health-request-unavailable'); }
-    if (!response.ok || !(response.headers.get('content-type') || '').includes('application/json')) throw failure('health-response-unavailable');
-    try { return await response.json(); } catch { throw failure('health-response-invalid'); }
-  };
-  const manifest = await read('/.well-known/thingtime-capabilities.json');
-  const health = await read('/api/v1/health/nitro');
-  return requireStorageReady(manifest, health, origin, minimumVersion);
+  let response;
+  try { response = await fetcher(origin + path, { redirect: 'error', cache: 'no-store', signal: signal || AbortSignal.timeout(30_000) }); }
+  catch { throw failure('health-request-unavailable'); }
+  if (!response.ok || !(response.headers.get('content-type') || '').includes('application/json')) throw failure('health-response-unavailable');
+  try { return await response.json(); } catch { throw failure('health-response-invalid'); }
+}
+
+export async function checkStorageManifest(origin, { minimumVersion = '1.3.0', gateway, ...options } = {}) {
+  const manifest = await readStorageJson(origin, '/.well-known/thingtime-capabilities.json', options);
+  requireStorageManifest(manifest, origin, minimumVersion, gateway);
+}
+
+export async function checkStorageReadiness(origin, { minimumVersion = '1.2.0', gateway, ...options } = {}) {
+  const manifest = await readStorageJson(origin, '/.well-known/thingtime-capabilities.json', options);
+  requireStorageManifest(manifest, origin, minimumVersion, gateway);
+  const health = await readStorageJson(origin, '/api/v1/health/nitro', options);
+  return requireStorageReady(manifest, health, origin, minimumVersion, gateway);
 }
 
 export async function waitForStorageReadiness(origin, { timeoutMs = 90_000, now = Date.now, wait = (ms) => new Promise((done) => setTimeout(done, ms)), check = checkStorageReadiness, ...options } = {}) {

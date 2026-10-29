@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { checkRuntimeLogs, checkStorageReadiness, logLimit, monitor, productionOrigin as origin, requireStorageReady, runtimeLogArgs, shouldPublishStatus, summarizeRuntimeLogs, waitForStorageReadiness } from './storage-release-gate.mjs';
+import { checkRuntimeLogs, checkStorageManifest, checkStorageReadiness, logLimit, monitor, productionOrigin as origin, requireStorageManifest, requireStorageReady, runtimeLogArgs, shouldPublishStatus, summarizeRuntimeLogs, waitForStorageReadiness } from './storage-release-gate.mjs';
 
-const manifest = { origin, features: { 'api.health-nitro': { version: '1.3.0' }, 'api.storage-accounting': { version: '1.0.0' } } };
+const manifest = { schemaVersion: 1, origin, features: { 'api.health-nitro': { version: '1.3.0' }, 'api.storage-accounting': { version: '1.0.0' } }, operations: [{ feature: 'api.health-nitro', path: '/api/v1/health/nitro', methods: ['GET'] }] };
 const health = { origin, targetOrigin: origin, service: 'nitro', ok: true, state: 'ready', storageAccounting: { state: 'ready', expectedVersion: 1 } };
 test('only negotiated origin-specific healthy storage passes, including HTTP-200 degraded bodies', () => {
   assert.deepEqual(requireStorageReady(manifest, health, origin), { state: 'ready', accountingVersion: 1 });
@@ -48,6 +48,19 @@ test('discovery and health fail closed on redirects, HTML, unauthorized, invalid
   assert.ok(calls.every(({ options }) => options.redirect === 'error' && options.cache === 'no-store'));
   for (const response of [new Response('html'), new Response('{}', { status: 403 }), new Response('{', { headers: { 'content-type': 'application/json' } })]) await assert.rejects(checkStorageReadiness(origin, { fetcher: async () => response }));
   await assert.rejects(checkStorageReadiness(origin, { fetcher: async () => { throw new Error('private response'); } }), (error) => !error.message.includes('private'));
+});
+test('candidate manifest binds gateway identity and health operation without calling follower health', async () => {
+  const gateway = { origin, environment: 'production', deploymentId: 'dpl_candidate' };
+  const local = { ...manifest, gateway };
+  const paths = [];
+  await checkStorageManifest(origin, { gateway, fetcher: async (url) => {
+    paths.push(new URL(url).pathname);
+    if (!url.endsWith('/.well-known/thingtime-capabilities.json')) throw new Error('Follower health must not be called before promotion');
+    return Response.json(local);
+  } });
+  assert.deepEqual(paths, ['/.well-known/thingtime-capabilities.json']);
+  for (const patch of [{ origin: 'https://other.example' }, { environment: 'preview' }, { deploymentId: 'dpl_other' }]) assert.throws(() => requireStorageManifest({ ...local, gateway: { ...gateway, ...patch } }, origin, '1.3.0', gateway), /gateway-identity-mismatch/);
+  for (const operations of [[], [{ feature: 'api.health-nitro', path: '/wrong', methods: ['GET'] }], [{ feature: 'api.health-nitro', path: '/api/v1/health/nitro', methods: ['POST'] }]]) assert.throws(() => requireStorageManifest({ ...local, operations }, origin, '1.3.0', gateway), /health-operation-unavailable/);
 });
 test('runtime log summary detects nested migration errors and never returns private content', () => {
   const secret = 'synthetic-private-account';
@@ -126,7 +139,8 @@ test('unchanged monitor observations do not duplicate statuses', () => {
 });
 test('production gates run before alias movement and inside existing merge-required contexts', () => {
   const publisher = readFileSync(new URL('./deploy-vercel-prebuilt.mjs', import.meta.url), 'utf8');
-  assert.ok(publisher.indexOf('await waitForStorageReadiness(url') < publisher.indexOf('await reconcileGatewayAliases'));
+  assert.ok(publisher.indexOf('await checkStorageManifest(url') < publisher.indexOf('await reconcileGatewayAliases'));
+  assert.ok(publisher.indexOf('await waitForStorageReadiness(plan.gateway.origin') < publisher.indexOf('await reconcileGatewayAliases'));
   assert.ok(publisher.indexOf('await runtimeLogs') < publisher.indexOf('await reconcileGatewayAliases'));
   assert.match(publisher, /checkStorageReadiness\(`https:\/\/\$\{name\}`/);
   const workflow = readFileSync(new URL('../workflows/web-ci.yml', import.meta.url), 'utf8');

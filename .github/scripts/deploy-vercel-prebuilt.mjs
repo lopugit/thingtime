@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gatewayPolicy, gatewayMetadata, gatewayDeploymentIssue, gatewayRuntimeArgs, gatewayPublisherEnvironment, gatewaySecretConfigured, reconcileGatewayAliases, restoreGatewayAliases } from './environment-gateway-policy.mjs';
-import { checkStorageReadiness, checkRuntimeLogs, waitForStorageReadiness } from './storage-release-gate.mjs';
+import { checkStorageManifest, checkStorageReadiness, checkRuntimeLogs, waitForStorageReadiness } from './storage-release-gate.mjs';
 
 const exec = promisify(execFile);
 export const marker = 'thingtimeGithubActionsBuild';
@@ -249,7 +249,7 @@ async function smoke(url, { api = true, signal } = {}) {
   await apiResponse.json();
 }
 
-export async function publish({ runtimeLogs = checkRuntimeLogs } = {}) {
+export async function publish({ runtimeLogs = checkRuntimeLogs, aliasVerifier = verifyAlias } = {}) {
   const branch = required('SOURCE_REF');
   const plan = await context(branch, required('TARGET_ENVIRONMENT'));
   if (plan.sha !== required('SOURCE_SHA') || plan.target.id !== (process.env.TARGET_ID || '')) {
@@ -331,20 +331,28 @@ export async function publish({ runtimeLogs = checkRuntimeLogs } = {}) {
     if (issue || deployment.readyState !== 'READY') throw new Error(`Deployment verification failed (${issue || deployment.readyState})`);
     url = `https://${deployment.url}`;
     await smoke(url, { api: !plan.gateway.owner });
-    // A READY upload and a Vite shell do not establish writable account storage.
-    // The selected backend must be ready before any production alias moves.
+    // Before promotion this immutable candidate is intentionally a follower.
+    // Validate its local contract without granting it database ownership, then
+    // require the currently selected owner to report honest storage readiness.
     if (plan.target.kind === 'production') {
-      await waitForStorageReadiness(url, { minimumVersion: '1.3.0' });
+      await checkStorageManifest(url, { minimumVersion: '1.3.0', gateway: { ...plan.gateway, deploymentId: deployment.id } });
+      const currentOwner = aliasBefore.get(canonicalHost)?.deploymentId;
+      if (!currentOwner) throw new Error('Canonical storage owner missing before promotion');
+      await waitForStorageReadiness(plan.gateway.origin, { minimumVersion: '1.2.0', gateway: { ...plan.gateway, deploymentId: currentOwner } });
       const until = Date.now();
       await runtimeLogs({ cli: required('VERCEL_CLI_PATH'), projectId: plan.projectId, deploymentId: deployment.id, scope: required('VERCEL_TEAM_SLUG'), since: new Date(until - 30 * 60_000).toISOString(), until: new Date(until).toISOString() });
     }
     if ((await context(branch, plan.target.slug)).sha !== plan.sha) throw new Error('Branch advanced before alias publication');
+    if (plan.target.kind === 'production' && (await readAlias(canonicalHost))?.deploymentId !== aliasBefore.get(canonicalHost)?.deploymentId) throw new Error('Canonical storage owner changed before promotion');
+    // The canonical alias elects the database owner. Move it first so every
+    // subsequent alias can verify the new owner's real API, never the old one.
+    const orderedAliases = plan.target.kind === 'production' ? [canonicalHost, ...[...aliases].filter((name) => name !== canonicalHost)] : [...aliases];
     await reconcileGatewayAliases({
-      names: [...aliases], before: aliasBefore, deploymentId: deployment.id, read: readAlias, assign: assignAlias, remove: removeAlias,
-      verify: (name) => verifyAlias(async ({ signal }) => {
+      names: orderedAliases, before: aliasBefore, deploymentId: deployment.id, read: readAlias, assign: assignAlias, remove: removeAlias,
+      verify: (name) => aliasVerifier(async ({ signal }) => {
         if (name === new URL(plan.gateway.origin).hostname && plan.gateway.owner) await verifyCanonicalGateway(name, plan.gateway, deployment.id, signal);
         await smoke(`https://${name}`, { signal });
-        if (plan.target.kind === 'production') await checkStorageReadiness(`https://${name}`, { signal, minimumVersion: '1.3.0' });
+        if (plan.target.kind === 'production') await checkStorageReadiness(`https://${name}`, { signal, minimumVersion: '1.3.0', gateway: { ...plan.gateway, deploymentId: deployment.id } });
       })
     });
   } catch (error) {
