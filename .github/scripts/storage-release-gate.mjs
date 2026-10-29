@@ -108,7 +108,11 @@ export async function monitor({ fetcher = fetch, now = Date.now, runtimeLogs = c
   const required = (key) => { if (!process.env[key]) throw failure(`missing-${key}`); return process.env[key]; };
   const provider = async (base, path, token, init = {}) => {
     const response = await fetcher(base + path, { ...init, redirect: 'error', signal: AbortSignal.timeout(30_000), headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
-    if (!response.ok) throw failure('provider-read-unavailable');
+    if (!response.ok) {
+      const providerName = base === 'https://api.github.com' ? 'github' : 'vercel';
+      const exhausted = response.headers.get('x-ratelimit-remaining') === '0' ? '-rate-limit-exhausted' : '';
+      throw failure(`${providerName}-http-${response.status}${exhausted}`);
+    }
     return response.json();
   };
   const team = required('VERCEL_TEAM_ID'), project = required('VERCEL_PROJECT_ID');
