@@ -37,6 +37,18 @@ export const PreviewRetentionSettings = () => {
 const PreviewRetentionEditor = ({ scope }: { scope: { expectedActor: string; expectedApiOrigin: string } }) => {
   const { expectedActor, expectedApiOrigin } = scope;
   const dataPlane = useDataPlane();
+  const accountTransport = React.useMemo(() => {
+    const identityGeneration = rootIdentity.read().generation;
+    const check = () => {
+      const identity = rootIdentity.read();
+      if (identity.pending || identity.generation !== identityGeneration) throw new Error('The settings account or server changed.');
+    };
+    return { origin: expectedApiOrigin, currentOrigin: () => { check(); return expectedApiOrigin; },
+      fetch: createFolderHostFetch({ origin: expectedApiOrigin, localOrigin: window.location.origin, ownerId: expectedActor,
+        // SettingsDocumentHost supplies its abort signal on every request;
+        // duplicating that lifetime here breaks StrictMode effect remounts.
+        expectedDataPlane: dataPlane ?? 'unavailable', signal: new AbortController().signal, check, fetch: window.fetch.bind(window) }) };
+  }, [expectedApiOrigin, expectedActor, dataPlane]);
   const api = useApi();
   const apiRef = React.useRef(api);
   apiRef.current = api;
@@ -50,33 +62,40 @@ const PreviewRetentionEditor = ({ scope }: { scope: { expectedActor: string; exp
   const generation = React.useRef(0);
   React.useEffect(() => {
     const current = ++generation.current;
+    const controller = new AbortController();
     setLoading(true);
-    apiRef.current.v1.admin.ciPreviewRetention({ expectedActor, expectedApiOrigin }).then((response: any) => {
+    apiRef.current.v1.admin.ciPreviewRetention({ expectedActor, expectedApiOrigin, capabilityTransport: accountTransport, signal: controller.signal }).then((response: any) => {
       if (generation.current !== current) return;
       if (!response?.ok) throw new Error(response?.error || 'Could not load the saved policy.');
       const next = { policy: parsePreviewRetentionPolicy(response.policy), revision: response.revision };
       setSaved(next); setDraft(next.policy); setError('');
     }).catch((reason: Error) => { if (generation.current === current) setError(reason.message); })
       .finally(() => { if (generation.current === current) setLoading(false); });
-    return () => { generation.current = current + 1; };
-  }, [reload, expectedActor, expectedApiOrigin]);
+    return () => { controller.abort(); generation.current = current + 1; };
+  }, [reload, expectedActor, expectedApiOrigin, accountTransport]);
   const patch = (value: Partial<PreviewRetentionPolicy>) => setDraft((previous) => previous && { ...previous, ...value });
   let invalid = '';
   if (draft) { try { parsePreviewRetentionPolicy(draft); } catch (reason) { invalid = (reason as Error).message; } }
   const dirty = Boolean(saved && draft && JSON.stringify(saved.policy) !== JSON.stringify(draft));
+  const pendingSaves = React.useRef(new Set<AbortController>());
+  React.useEffect(() => {
+    const pending = pendingSaves.current;
+    return () => { for (const controller of pending) controller.abort(); pending.clear(); };
+  }, []);
   const save = async () => {
     if (!saved || !draft || invalid || saving) return;
     const current = generation.current;
+    const controller = new AbortController(); pendingSaves.current.add(controller);
     setSaving(true); setError('');
     try {
-      const response = await apiRef.current.v1.admin.setCiPreviewRetention({ policy: draft, expectedRevision: saved.revision }, { expectedActor, expectedApiOrigin });
+      const response = await apiRef.current.v1.admin.setCiPreviewRetention({ policy: draft, expectedRevision: saved.revision }, { expectedActor, expectedApiOrigin, capabilityTransport: accountTransport, signal: controller.signal });
       if (generation.current !== current) return;
       if (!response?.ok) throw new Error(response?.error || 'Could not save preview retention.');
       const next = { policy: parsePreviewRetentionPolicy(response.policy), revision: response.revision };
       setSaved(next); setDraft(next.policy);
       lopu({ title: 'Preview retention saved', status: 'success' });
     } catch (reason) { if (generation.current === current) setError((reason as Error).message); }
-    finally { if (generation.current === current) setSaving(false); }
+    finally { pendingSaves.current.delete(controller); if (generation.current === current) setSaving(false); }
   };
   const actions: TransientBlockActions = {
     'policy.enabled': ({ value }) => patch({ enabled: value === true }),
@@ -105,18 +124,6 @@ const PreviewRetentionEditor = ({ scope }: { scope: { expectedActor: string; exp
     reloadDisabled: saving || loading, saveLabel: saving ? 'Saving retention rules…' : 'Save retention rules'
   };
   const scopeKey = JSON.stringify([expectedActor, expectedApiOrigin]);
-  const accountTransport = React.useMemo(() => {
-    const identityGeneration = rootIdentity.read().generation;
-    const check = () => {
-      const identity = rootIdentity.read();
-      if (identity.pending || identity.generation !== identityGeneration) throw new Error('The settings account or server changed.');
-    };
-    return { origin: expectedApiOrigin, currentOrigin: () => { check(); return expectedApiOrigin; },
-      fetch: createFolderHostFetch({ origin: expectedApiOrigin, localOrigin: window.location.origin, ownerId: expectedActor,
-        // SettingsDocumentHost supplies its abort signal on every request;
-        // duplicating that lifetime here breaks StrictMode effect remounts.
-        expectedDataPlane: dataPlane ?? 'unavailable', signal: new AbortController().signal, check, fetch: window.fetch.bind(window) }) };
-  }, [expectedApiOrigin, expectedActor, dataPlane]);
   return <SettingsDocumentHost documentKey="preview-retention-settings" title="Preview retention settings layout" defaultDocument={PREVIEW_RETENTION_SETTINGS_BLOCKS}
     scopeKey={scopeKey} accountTransport={accountTransport} layoutEditingDisabled={saving}>
     {({ blocks, chrome, editing }) => <TransientBlockHost scopeKey={scopeKey} scope={{ retention: display }} actions={actions} enabled={!editing}
