@@ -89,7 +89,7 @@ Disabled extension and command settings still apply.
   actual OS fixture passed. These focused results do not replace final
   installed real-root acceptance.
 
-## Installed acceptance and recovery gate
+## Installed recovery and acceptance
 
 The first signed installation from `dd437255d` failed real-root acceptance:
 the parent task observed approximately 93% Node CPU and a sample dominated by
@@ -100,21 +100,19 @@ The installed database has already migrated to schema 4. Preserve that data;
 the old schema-3-only bundle is not a safe rollback. The recovery changes move
 filesystem notification handling off the daemon event loop and normalize
 macOS Data-volume aliases before excluding database writes. Their focused
-verification and the final installed result must be recorded in the PR before
-completion or merge; source publication alone does not pass this gate.
+verification was followed by the signed installed acceptance below.
 
 Canonical bundle output is `Commander/dist/Commander.app`; the installed copy is
-`~/Applications/Commander.app`. The final recovery bundle must retain the
-stable Developer ID signing requirement, verify its installed signature, launch
-from that installed path, and pass real enabled-root responsiveness and change
-acceptance. The native acceptance lane owns the next installation and final acceptance; the parent task owns any merge.
+`~/Applications/Commander.app`. The final recovery bundle retained the stable
+Developer ID signing requirement, passed installed signature/notarization-ticket
+checks, and ran from that installed path. The parent task owns any merge.
 
 The signed build `2026102902` subsequently passed real installed responsiveness
 and automatic file/folder/child/app create, rename and delete acceptance. Sixty
 health probes returned HTTP 200, with maximum 56 ms. The saved profile remained
 unchanged. However, its full reconciliation exceeded the saved 512 MiB memory
 ceiling (observed 707/780 MiB), preserving the old snapshot but leaving file and
-folder totals unmeasured. That count failure remains a release gate.
+folder totals unmeasured. That failure led to the memory repair below.
 
 The memory repair replaces the pinned ignore walker's unbounded pre-callback
 sibling queue with lazy bounded-depth chunks and a private on-disk SQLite
@@ -136,9 +134,9 @@ Signed installed build `2026102903` subsequently completed all five active
 filesystem roots under the unchanged saved 512 MiB policy. The native lane
 observed peak Rust RSS 124.64 MiB and 101 health probes, all HTTP 200 with maximum
 54.74 ms. Permission warnings were nonfatal, and the profile remained unchanged.
-The final aggregate must still be checked against the kind-specific active-source
-SQL reference: application catalogue from `applications:` sources, file/folder
-counters from active `filesystem:` sources, plus enabled commands.
+Final aggregate verification used a kind-specific active-source SQL reference:
+application catalogue from `applications:` sources, file/folder counters from
+active `filesystem:` sources, plus enabled commands.
 
 That successful full commit exposed a footer defect: continuous ordinary live
 updates kept `overlay.pending` true and hid a valid measured count indefinitely.
@@ -148,8 +146,38 @@ existing cached counters and performs no new per-event count query. The compatib
 status correction is advertised as `commander.index-status` 1.1.1. A held real
 writer regression repeatedly checks the measured baseline through file/folder/app
 notifications, then checks immediate invalidation after a hidden-policy change.
-The native acceptance lane owns the final signed installation and rendered count/
-freshness verification for build `2026103001`; the parent owns merge.
+On 2026-10-30, the native lane completed final technical acceptance of installed
+build `2026103001`, signed from `9c51cb52b25bf6e4591ee0cd080902619533eae4`.
+Its Commander tree `ac4db53b28d4c4279faae57ef306aaaf58a7c614` is identical to
+integration head `43d240c38c232903831901c3ec70fe82076f5626`. The soft install
+preserved the saved-state digest, designated requirement, valid signature and
+notarization ticket; the built manifest reported status contract 1.1.1. The
+indexer CDHash matched build 03, retaining that build's real 512 MiB full-scan
+and peak-RSS evidence without changing the saved resource policy.
+
+The rendered footer's 2,834,547 items exactly matched the paired read-only SQL
+reference: 630 applications + 494,087 directories + 2,339,775 files + 55 enabled
+commands. The oldest of 15 eligible source-kind timestamps was independently
+44.2 minutes old, agreeing with the rendered 44-minute age. Measured counts
+remained visible through continuous ordinary deltas. These are paired acceptance
+snapshots; normal filesystem activity changes later totals and age. The final
+60 health samples all returned HTTP 200, maximum 38.68 ms. Test fixtures were
+removed with zero remaining raw fixture rows; the launcher was left empty and
+unpinned. The native receipt is retained in the task's local acceptance cache
+at `native04.noindex/final-acceptance.json`.
+
+Physical Cmd+E delivery remains unverified. The ordinary emoji command rendered
+1,964 entries. With the launcher unpinned for both controls, app-targeted CUA
+Cmd+E and Cmd+Space both produced no action. This comparison does not establish
+a physical global-hotkey failure. The retained working build
+`2026101902` identifies source `9eca5963d12e7e174927a9000156601887aa9bc0`;
+its `GlobalHotKey.swift` is byte-identical to the final source (Git blob
+`a9ac8879c85441d49c924b2a6537438c207d3656`). Registration, identifiers and
+callbacks, native presentation/bridge and the JavaScript hotkey listener are
+unchanged. The added isolated-development guard is inactive for the installed
+production bundle. The reviewed local emoji fastpath has focused regression
+coverage, but source comparison and ordinary command execution do not prove a
+physical key event reaches that path.
 
 ## Graphify evidence boundary
 
@@ -165,5 +193,6 @@ Keep source eligibility and totals conservative during legacy adoption; retain
 eligible cached results without pretending the old source totals are current.
 Use existing indexes and bounded metadata filtering rather than a foreground
 rebuild or a legacy-policy view that defeats the covering search index. Preserve
-the user's installed data and isolate development fixtures. Do not merge until
-the corrected signed installation passes real-root acceptance.
+the user's installed data and isolate development fixtures. Final signed
+real-root count, freshness and responsiveness acceptance passed; retain the
+physical-keyboard limitation explicitly. The parent owns the merge decision.
