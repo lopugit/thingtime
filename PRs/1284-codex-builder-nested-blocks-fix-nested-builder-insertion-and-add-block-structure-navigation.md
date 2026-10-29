@@ -57,11 +57,14 @@ subtree; a root-level block falls back to the page.
 - Fresh starting base: `origin/main` at
   `51e12a37fb70d55a5c49430f885ce9e5112b28d2`.
 - Integrated upstream `main` at `6f6944ffb12b18d8bd8399ae3cc909726dd2af8d`
-  before final source delivery, preserving the upstream password-provider work.
+  and `af58d6bf1cc06b55339c0399debb720d61f656b9` before final source delivery,
+  preserving the upstream password-provider work. Only the changelog and
+  generated snapshots overlapped; Builder source did not conflict.
 - User explicitly authorized merging this completed change into
   `lopugit/thingtime` main.
 - Private overview task: `cf904d89-394b-44e1-8130-e5a19f6ea341`;
   renderer child: `56f1a744-7e32-47bb-a0ad-77b244d1a33e`.
-  Further reporting was interrupted by unavailable Chrome extension control;
-  a structure-child submission has an uncertain outcome and must be read back
-  before any retry. No Character or private-subspace post was claimed.
+  Lead agent: `cacd38a7-9582-4c22-b5c8-4cbd02c81dce`.
+  Browser reporting recovered after a control interruption; the current
+  milestone is saved and child contributions are parent-reported there.
+  No Character or private-subspace post was claimed.

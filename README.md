@@ -6355,8 +6355,9 @@ development run still needs its own provisioned identity and independent test
 session. Do not install or register an unsigned fixture as the user's provider.
 The visible host/provider name is Thingtime; existing production bundle IDs,
 Keychain group and `Thingtime Passwords.app` packaging path remain unchanged.
-Packaged verification requires Thingtime for both display-name keys and matching
-host/provider versions. On macOS prefer the native provider in Chrome; the
+Packaged verification requires resolved Thingtime display/short names and matching
+host/provider versions. The host uses bundled name localization so its physical
+`Thingtime Passwords.app` filename and identity remain stable. On macOS prefer the native provider in Chrome; the
 Thingtime browser adapter remains optional and does not talk to the native host.
 An enabled provider needs a saved matching RP passkey before a site sign-in entry
 can appear. Other browser extensions' passkey offers can intercept this flow;

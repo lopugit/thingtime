@@ -8,9 +8,13 @@ function run(command, args, input) {
   return result.stdout;
 }
 const plist = text => JSON.parse(run('/usr/bin/plutil', ['-convert', 'json', '-o', '-', '-'], text));
-export function assertPasswordProviderMetadata(info, expectedIdentifier, expectedVersion) {
+export function assertPasswordProviderMetadata(info, expectedIdentifier, expectedVersion, { hostName, localizedInfo } = {}) {
   if (info.CFBundleIdentifier !== expectedIdentifier) throw new Error('Password provider bundle identifier mismatch.');
-  if (info.CFBundleDisplayName !== 'Thingtime' || info.CFBundleName !== 'Thingtime') throw new Error('Password provider display name must be Thingtime.');
+  // Finder ignores localization when the raw display name differs from the
+  // physical basename. Preserve that filename and require its visible
+  // branding in the actual bundled localization instead.
+  if (info.CFBundleDisplayName !== (hostName || 'Thingtime') || info.CFBundleName !== 'Thingtime') throw new Error('Password provider display name must be Thingtime.');
+  if (hostName && (localizedInfo?.CFBundleDisplayName !== 'Thingtime' || localizedInfo?.CFBundleName !== 'Thingtime')) throw new Error('Password provider host localization must display Thingtime.');
   const version = `${info.CFBundleShortVersionString}/${info.CFBundleVersion}`;
   if (!info.CFBundleShortVersionString || !info.CFBundleVersion || expectedVersion && version !== expectedVersion) throw new Error('Password provider host and extension versions must match.');
   return version;
@@ -24,7 +28,9 @@ export async function verifyPasswordProvider(app, { unsigned = false, teamIdenti
   let sharedGroup, sharedVersion;
   for (const [bundle, identifier] of bundles) {
     const info = plist(await readFile(path.join(bundle, 'Contents/Info.plist')));
-    sharedVersion = assertPasswordProviderMetadata(info, identifier, sharedVersion);
+    const host = bundle === app;
+    const branding = host ? { hostName: path.basename(bundle, '.app'), localizedInfo: plist(await readFile(path.join(bundle, 'Contents/Resources/en.lproj/InfoPlist.strings'))) } : {};
+    sharedVersion = assertPasswordProviderMetadata(info, identifier, sharedVersion, branding);
     run('/usr/bin/codesign', ['--verify', '--deep', '--strict', bundle]);
     if (unsigned) continue; // Ad-hoc builds exercise structure, not system permission.
     if (signingIdentity) {
