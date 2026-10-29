@@ -132,6 +132,53 @@ logout/login before native sign-in. Frames refresh on explicit actions only; thi
 is a test operator GUI, not a shipped Builder page. Visual and real sign-in
 acceptance still require exercising this actual GUI and installed app.
 
+## Noninteractive native regression lane
+
+Routine native byte-transfer checks do not require the installed pairing popup.
+Use the existing XCTest injection seam, which runs the production `MacFolderSync`
+adapter with disposable local files, synthetic cloud bytes, an in-memory grant
+store and a test-only approval closure:
+
+```sh
+swift test --package-path macos/ThingtimeNode --filter 'MacFolderSyncTests.testNoninteractiveNativeByteRoundTripResumesStagingWithoutAnotherApproval|MacFolderSyncTests.testSavedWriteApprovalCheckNeverPromptsAndSurvivesAdapterRestart|MacFolderSyncTests.testBackupExplicitCancellationIsDistinctFromTransportRequestCancellation'
+```
+
+This checks independent SHA-256 hashes of native reads and published writes,
+interrupted staging/restart at the accepted offset, idempotent publication,
+exact saved approval reuse, refusal without approval and backup cancellation /
+restart. It never invokes the AppKit picker or pairing dialogs in the test path,
+uses no installed Keychain or personal pairing store, and does not approve the
+real installed helper. The synthetic cloud bytes are a fixture; this command
+is not HTTP/cloud-provider or installed UI acceptance.
+
+For the existing real HTTP + native adapter lane, build the current Nitro
+server and `MacFolderSyncFixture`, install `mongod`/`mongosh`, then run
+`pnpm --dir remix run test:files:mac-paged` (see the README runbook).
+The same existing integration entry can use a separately owned immutable
+full-app relay when host Mongo binaries or a local Nitro build are unavailable.
+Launch `test-agent-desktop-relay.cjs` above with a fresh state directory, unused
+port and disposable fixture username; register that username through the real
+API. Store `{base, username, password, userId}` only in a mode-0600 private
+fixture file. Build/sign a separate `MacFolderSyncFixture` with the test bookmark
+entitlement described by `test-mac-paged-sync.mjs`, then run from `remix/`:
+
+```sh
+THINGTIME_MAC_SYNC_FIXTURE_BIN=/absolute/private/MacFolderSyncFixture \
+  node --import tsx scripts/mac-file-sync.integration.mts \
+  /absolute/private/fixture.json --paged --large-upload --large-download
+```
+
+Keep a bounded lifetime, stop only that relay after the run, and remove its
+synthetic credentials and resources. This requires no installed helper pairing
+or password-manager entry because all credentials belong to disposable test
+fixtures. Do not reuse the installed-app acceptance account or its relay.
+
+That nonshipping executable injects its own consent, uses disposable API/account
+and disk fixtures, and verifies real upload/download hashes and lost-reply
+recovery. No autoapprove option is added to the shipped app. Signed installed
+pairing/permission behavior and active window-close continuity remain separate
+acceptance checks; a passing fixture must never close those gates.
+
 ## Synthetic identity and real native acceptance
 
 Use canonical full-account registration (`/register`, backed by

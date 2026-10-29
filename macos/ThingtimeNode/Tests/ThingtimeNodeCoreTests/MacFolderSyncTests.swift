@@ -725,6 +725,72 @@ final class MacFolderSyncTests: XCTestCase {
         XCTAssertEqual(result["conditions"], .object(["network": .string("unknown"), "charging": .null]))
     }
 
+    // Test consent is injected only into this XCTest adapter. No installed pairing,
+    // Keychain, real cloud account or AppKit dialog participates in this lane.
+    func testNoninteractiveNativeByteRoundTripResumesStagingWithoutAnotherApproval() async throws {
+        var saved: [String: Data] = [:], approvals = 0
+        let selected = folder.appendingPathComponent("selected")
+        let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1 })
+        func makeService() throws -> MacFolderSync {
+            try MacFolderSync(origin: origin, store: store,
+                staging: MobileSyncStaging(directory: folder.appendingPathComponent("round-trip-stage")),
+                verify: { owner, device in
+                    guard owner == "owner", device == "device" else { throw MobileFolderStore.Failure.unavailable }
+                }, choose: { selected }, approve: { _ in approvals += 1; return true })
+        }
+        func hash(_ bytes: Data) -> String {
+            SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        }
+        let original = Data((0..<131_089).map { UInt8($0 % 251) })
+        try original.write(to: selected.appendingPathComponent("outgoing.bin"))
+        let first = try makeService(), rootId = try await root(first)
+        let scan = try await first.handle(request("scan", ["rootId": .string(rootId)])).decode([String: JSONValue].self)
+        let entry = try XCTUnwrap(scan["entries"]).decode([MobileFolderReader.Entry].self)[0]
+        // Independent synthetic cloud fixture: bytes read through the real native adapter.
+        var cloudBytes = Data()
+        for offset in stride(from: 0, to: original.count, by: 65_536) {
+            let response = try await first.handle(request("read", ["rootId": .string(rootId),
+                "path": .string(entry.path), "version": .string(entry.version),
+                "offset": .number(Double(offset)), "length": .number(Double(min(65_536, original.count - offset)))])).decode([String: JSONValue].self)
+            let chunk = try XCTUnwrap(response["chunk"]).decode([String: JSONValue].self)
+            guard case .string(let encoded) = chunk["data"] else { return XCTFail("Missing native read bytes") }
+            cloudBytes.append(try XCTUnwrap(Data(base64Encoded: encoded)))
+        }
+        XCTAssertEqual(hash(cloudBytes), hash(try Data(contentsOf: selected.appendingPathComponent("outgoing.bin"))))
+        let scope = MobileSyncStaging.Scope(origin: origin.absoluteString, ownerId: "owner", dataPlane: "home", rootId: "connection", deviceId: "device")
+        let approval = MobileFolderStore.WriteApproval(scope: scope, configurationRevision: "1", configurationHash: String(repeating: "c", count: 64))
+        let source = MobileFolderReader.Entry(path: "incoming.bin", id: "synthetic-cloud", version: "v1", kind: "file", size: Int64(cloudBytes.count), sha256: nil,
+            fingerprint: .init(partSizeBytes: 8_388_608, partCount: 1, sha256: hash(Data(SHA256.hash(data: cloudBytes)))))
+        let transfer = MobileSyncStaging.Request(scope: scope, rootId: rootId, operation: .init(id: UUID().uuidString.lowercased(),
+            mutation: .init(kind: "copy", from: "remote", path: source.path, source: source, expectedTarget: nil), confirmed: false))
+        var fields: [String: JSONValue] = ["rootId": .string(rootId), "transfer": try .from(transfer), "approval": try .from(approval)]
+        await rejects { try await first.handle(self.request("write-check", fields)) }
+        XCTAssertEqual(approvals, 0, "A background check must never request consent")
+        _ = try await first.handle(request("write-approve", fields))
+        _ = try await first.handle(request("stage-begin", fields))
+        let split = 65_536
+        _ = try await first.handle(request("stage-append", fields.merging(["offset": .number(0),
+            "data": .string(cloudBytes.prefix(split).base64EncodedString())]) { _, value in value }))
+        first.suspend()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: selected.appendingPathComponent("incoming.bin").path))
+        let restarted = try makeService()
+        defer { restarted.suspend() }
+        _ = try await restarted.handle(request("write-check", fields))
+        let resumed = try await restarted.handle(request("stage-begin", fields)).decode([String: JSONValue].self)
+        XCTAssertEqual(try XCTUnwrap(resumed["staging"]).decode(MobileSyncStaging.Progress.self).received, Int64(split))
+        for offset in stride(from: split, to: cloudBytes.count, by: 65_536) {
+            _ = try await restarted.handle(request("stage-append", fields.merging(["offset": .number(Double(offset)),
+                "data": .string(cloudBytes.subdata(in: offset..<min(offset + 65_536, cloudBytes.count)).base64EncodedString())]) { _, value in value }))
+        }
+        let finished = try await restarted.handle(request("stage-finish", fields)).decode([String: JSONValue].self)
+        fields["stage"] = try XCTUnwrap(finished["staging"]).decode([String: JSONValue].self)["stage"]
+        let receipt = try await restarted.handle(request("publish", fields))
+        XCTAssertEqual(hash(try Data(contentsOf: selected.appendingPathComponent("incoming.bin"))), hash(original))
+        let repeated = try await restarted.handle(request("publish", fields))
+        XCTAssertEqual(try receipt.decode([String: JSONValue].self)["publication"], try repeated.decode([String: JSONValue].self)["publication"])
+        XCTAssertEqual(approvals, 1, "Restart and retry reuse only the exact saved test approval")
+    }
+
     func testSavedWriteApprovalCheckNeverPromptsAndSurvivesAdapterRestart() async throws {
         var saved: [String: Data] = [:], prompts = 0, writes = 0
         let store = MobileFolderStore(load: { saved[$0.key] }, save: { saved[$0.key] = $1; writes += 1 })
