@@ -157,3 +157,21 @@ test('status helper stdout accepts only closed JSON state and never returns addi
   await assert.rejects(run('/fixture','status',{}),/Password AutoFill/);
  }
 });
+
+
+test('local endpoint status and automatic sync explain the origin without touching an existing native link', {skip: process.platform !== 'darwin'}, async t => {
+ const previous=process.resourcesPath; process.resourcesPath='/fixture'; t.after(()=>{if(previous===undefined) delete process.resourcesPath; else process.resourcesPath=previous;});
+ const mainFrame={url:'http://127.0.0.1:28630/passwords'}, sender={mainFrame,session:{cookies:{get:async()=>{throw new Error('must not read local credentials');}}}};
+ const provider=createPasswordProvider({app:{isPackaged:true},root:'/fixture',origin:()=> 'http://127.0.0.1:28630',endpoint:()=> 'http://127.0.0.1:28630',helper:async()=>{throw new Error('must preserve existing provider');}});
+ for(const action of ['status','sync']) assert.deepEqual(await provider({sender,senderFrame:mainFrame},{action,ownerId:'fixture'}),{ok:true,connection:'unsupportedOrigin'});
+});
+
+test('automatic logout and runtime retirement are distinguished from explicit user disconnect', {skip: process.platform !== 'darwin'}, async () => {
+ const mainFrame={url:'https://thingtime.example/passwords'},sender={mainFrame};
+ const calls=[];
+ const provider=createPasswordProvider({app:{isPackaged:false},root:'/fixture',origin:()=> 'https://thingtime.example',endpoint:()=> 'https://thingtime.example',helper:async(_exe,action,value)=>{calls.push([action,value]);}});
+ await provider({sender,senderFrame:mainFrame},{action:'sync'});
+ await provider({sender,senderFrame:mainFrame},{action:'disconnect'});
+ await provider.disconnect();
+ assert.deepEqual(calls,[['disconnect',{automatic:true,origin:'https://thingtime.example'}],['disconnect',undefined],['disconnect',{automatic:true,origin:'https://thingtime.example'}]]);
+});

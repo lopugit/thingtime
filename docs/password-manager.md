@@ -220,6 +220,16 @@ origin; `disconnected` means no saved connection; `differentSession` means anoth
 owner or origin is linked; `unavailable` means that protected status could not be
 read. Cookie rotation alone does not change this linkage.
 
+Desktop bridge 1.2.0 automatically establishes the initial link only when the
+OS provider is enabled and its own signed-in HTTPS account passes the live
+origin/capability/owner catalog checks. It renews an existing matching desktop
+link. Explicit Disconnect saves an account/origin opt-out until Connect; automatic
+work never replaces a foreign or independently linked companion session. A local
+runtime returns `unsupportedOrigin` and directs macOS users to **Thingtime →
+API Endpoint → Production** in the menu bar, then account sign-in. It leaves an
+existing provider untouched. Canonical installation updates both the
+nested and standalone signed companion from the same verified source.
+
 Only a matching connection shows Disconnect; disconnected or different-session
 states show Connect. Unavailable status shows Retry, and older app bridges show
 an update instruction. Refresh after actions, focus and native bridge changes;

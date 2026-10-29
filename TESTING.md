@@ -10399,6 +10399,17 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Automatic native linking: with a disposable HTTPS account and the OS
+  provider enabled, an unlinked device connects from its own signed-in session.
+  Disabled providers remain unlinked. Explicit Disconnect survives focus/restart
+  and prevents relinking until Connect; another account/origin or independent
+  companion link remains untouched. Local-runtime status explains the HTTPS
+  requirement without reading local credentials or clearing an existing link.
+  Change the saved connection while catalog verification is pending; the late
+  completion must not overwrite it. During canonical installation verify the
+  standalone companion and nested provider have identical source/build versions;
+  force a companion verification failure and confirm both previous apps return.
+
 - [ ] Native connection control: on Password manager and Passwords settings,
   compare the single editable control with the helper's read-only saved owner/origin
   linkage. Matching connection shows Disconnect; absent/different linkage shows

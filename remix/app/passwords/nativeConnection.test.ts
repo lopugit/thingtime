@@ -62,3 +62,16 @@ test('newer status read wins and failed disconnect still reads the remaining dev
   assert.equal(failed.getSnapshot().connection, 'connected');
   assert.match(failed.getSnapshot().notice, /could not be updated/);
 });
+
+
+test('a local account has a precise non-mutating HTTPS recovery state', async () => {
+  const calls: string[] = [];
+  const controller = new NativePasswordConnectionController('local-fixture', async action => { calls.push(action); return { ok: true, connection: 'unsupportedOrigin' }; });
+  await controller.refresh();
+  const presentation = nativeConnectionPresentation(controller.getSnapshot());
+  assert.equal(presentation.label, 'HTTPS account required');
+  assert.equal(presentation.disabled, true);
+  assert.match(presentation.status, /Thingtime → API Endpoint → Production/);
+  await controller.activate();
+  assert.deepEqual(calls, ['status']);
+});

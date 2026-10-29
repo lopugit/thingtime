@@ -108,7 +108,12 @@ settings. `nativeConnection.ts` owns ephemeral status, refresh and identity fenc
 `native.client.ts` requires desktop `passwordsVersion` 1.1.0. Electron's
 `password-provider.cjs` calls the read-only host `--status` path, backed by
 `PasswordConnectionStatus.swift` owner/origin linkage. Status does not probe the
-network or assert OS AutoFill enablement. Older bridges require an app update;
+network or assert OS AutoFill enablement. Bridge 1.2.0 reports local-origin
+incompatibility explicitly. `HostConnection.swift` gates automatic initial linking
+on OS provider enablement and an account/origin opt-out; matching links renew while
+foreign or independently linked companion connections stay untouched. The native
+host verifies the live catalog before saving and fences concurrent link changes.
+The canonical Electron installer updates the standalone and nested provider together. Older bridges require an app update;
 this checkout's iOS web-only path has no native-password bridge.
 Native provider implementation lives in `apple/Passwords` and
 `apple/PasswordProvider`. `ProviderFeedback.swift` owns closed progress/error text,

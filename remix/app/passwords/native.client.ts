@@ -1,5 +1,5 @@
 import { getNativeBridge } from '~/utils/nativeBridge';
-export type NativePasswordConnection = 'connected' | 'disconnected' | 'differentSession' | 'unavailable';
+export type NativePasswordConnection = 'connected' | 'disconnected' | 'differentSession' | 'unavailable' | 'unsupportedOrigin';
 export type NativePasswordResult = { ok: boolean; message?: string; connection?: NativePasswordConnection };
 export const nativePasswordConnectionEvent = 'thingtime:password-provider-changed';
 const compatible = (version: unknown, minor = 0) => typeof version === 'string' && /^1\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version) && Number(version.split('.')[1]) >= minor;
