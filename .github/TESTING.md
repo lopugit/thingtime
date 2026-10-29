@@ -16,6 +16,8 @@
   activity expiry/resumption and disabling mid-run. Paused admin lanes must
   never bypass policy through alias-only or direct backend deletion.
   Retained closed previews must not acquire removed labels/inactive statuses.
+  Failed late-upload cleanup must preserve the original publication error,
+  report the secondary failure without credentials and leave retry to the sweep.
   Inactive-open expiry must not post activity that immediately recreates it.
 - Deploy the product policy endpoint first, then activate the controller. Exercise
   signed read and immediate reconcile with the existing trusted listener:
