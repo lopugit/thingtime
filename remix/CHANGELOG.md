@@ -107,6 +107,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   batches, cancellation and retry. Include the extension in TestFlight signing
   and archive verification, and add real system-sheet byte checks. Native
   installation is required; a web deployment cannot add the destination.
+  [Verification and delivery boundaries](../PRs/1272-codex-ios-all-share-types-add-ios-share-destination.md).
   **Codex (AI)**
 
 - 2026-10-28: Add private MCP task reporting with an independent delegation
