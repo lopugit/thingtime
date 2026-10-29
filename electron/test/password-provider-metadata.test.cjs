@@ -4,12 +4,12 @@ const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const contract = import('../scripts/verify-password-provider.mjs');
-const info = (identifier = 'com.thingtime.passwords') => ({ CFBundleIdentifier: identifier, CFBundleDisplayName: 'Thingtime', CFBundleName: 'Thingtime', CFBundleShortVersionString: '1.0.5', CFBundleVersion: '6' });
+const info = (identifier = 'com.thingtime.passwords') => ({ CFBundleIdentifier: identifier, CFBundleDisplayName: 'Thingtime', CFBundleName: 'Thingtime', CFBundleShortVersionString: '1.0.6', CFBundleVersion: '7' });
 
 test('packaged verification rejects stale host or provider branding and mismatched sibling builds', async () => {
  const { assertPasswordProviderMetadata } = await contract;
  const version = assertPasswordProviderMetadata(info(), 'com.thingtime.passwords');
- assert.equal(version,'1.0.5/6');
+ assert.equal(version,'1.0.6/7');
  assert.equal(assertPasswordProviderMetadata(info('com.thingtime.passwords.provider'), 'com.thingtime.passwords.provider',version), version);
  for (const field of ['CFBundleDisplayName','CFBundleName']) {
   assert.throws(()=>assertPasswordProviderMetadata({...info(),[field]:'Thingtime Passwords'}, 'com.thingtime.passwords'), /display name/);
@@ -49,7 +49,7 @@ test('host branding accepts its intentional raw basename only with complete Thin
  const {assertPasswordProviderMetadata}=await contract;
  const host={...info(),CFBundleDisplayName:'Thingtime Passwords'};
  const branding={hostName:'Thingtime Passwords',localizedInfo:{CFBundleDisplayName:'Thingtime',CFBundleName:'Thingtime'}};
- assert.equal(assertPasswordProviderMetadata(host,'com.thingtime.passwords',undefined,branding),'1.0.5/6');
+ assert.equal(assertPasswordProviderMetadata(host,'com.thingtime.passwords',undefined,branding),'1.0.6/7');
  for(const localizedInfo of [undefined,{}, {CFBundleDisplayName:'Thingtime'}, {CFBundleDisplayName:'Thingtime Passwords',CFBundleName:'Thingtime'}, {CFBundleDisplayName:'Thingtime',CFBundleName:'Wrong'}]) {
   assert.throws(()=>assertPasswordProviderMetadata(host,'com.thingtime.passwords',undefined,{...branding,localizedInfo}),/localization/);
  }

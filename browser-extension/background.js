@@ -1,4 +1,4 @@
-import {DEFAULT_ORIGIN, PROVIDER_PATH, safeOrigin, providerOrigin, senderOrigin, matchesDocument, validRequest, safeError} from './protocol.js';
+import {DEFAULT_ORIGIN, PROVIDER_PATH, safeOrigin, providerOrigin, senderOrigin, matchesDocument, validRequest, safeError, hookDiagnostics} from './protocol.js';
 
 const pending = new Map();
 const settings = async () => ({enabled: false, origin: DEFAULT_ORIGIN, ...await chrome.storage.local.get(['enabled', 'origin'])});
@@ -29,13 +29,15 @@ async function closeOwnedProvider(request) {
     && (!tab.url || tab.url === 'about:blank') && providerUrl(tab.pendingUrl);
   if (current || initial) await chrome.tabs.remove(request.providerTabId).catch(() => {});
 }
-async function finish(request, result) {
+async function finish(request, result, {restoreFocus = !!result.response} = {}) {
   if (pending.get(request.tabId) !== request) return;
   pending.delete(request.tabId); clearTimeout(request.timer);
   await chrome.alarms.clear(alarmName(request.id));
   if (request.providerDocumentId) await send(request.providerTabId, request.providerDocumentId, {action: 'provider-cancel', id: request.id});
   await closeOwnedProvider(request);
-  await checkpoint(); request.respond(result);
+  await checkpoint();
+  if (restoreFocus) await restoreRequesterFocus(request);
+  request.respond(result);
 }
 const recovered = (async () => {
   const saved = await chrome.storage.session.get('pending');
@@ -52,6 +54,19 @@ async function currentDocument(tabId, documentId, origin, provider = false) {
       && (!provider || new URL(frame.url).pathname === PROVIDER_PATH);
   } catch { return false; }
 }
+async function restoreRequesterFocus(request) {
+  try {
+    if (!Number.isInteger(request.windowId)) return;
+    const tab = await chrome.tabs.get(request.tabId);
+    if (!tab || tab.windowId !== request.windowId || tab.pendingUrl
+      || !await currentDocument(request.tabId, request.documentId, request.origin)) return;
+    // Restore the exact requester before delivery. Its response-triggered
+    // success navigation must not be mistaken for a stale request afterward.
+    await chrome.tabs.update(request.tabId, {active: true});
+    if (!await currentDocument(request.tabId, request.documentId, request.origin)) return;
+    await chrome.windows.update(request.windowId, {focused: true});
+  } catch { /* Focus failure never replaces or retries a successful credential. */ }
+}
 async function start(message, sender, respond) {
   const origin = senderOrigin(sender);
   if (!origin || !validRequest(message)) return respond(errorResult('SecurityError', 'This page cannot request a Thingtime passkey.'));
@@ -59,7 +74,7 @@ async function start(message, sender, respond) {
   // Admit synchronously before the first async read: a cancellation during
   // settings or document lookup must fence the operation before any tab opens.
   const request = {id: crypto.randomUUID(), callerId: message.id, type: message.type, publicKey: message.publicKey,
-    tabId: sender.tab.id, documentId: sender.documentId, origin, providerOrigin: null,
+    tabId: sender.tab.id, windowId: sender.tab.windowId, documentId: sender.documentId, origin, providerOrigin: null,
     providerTabId: null, providerDocumentId: null, delivered: false, respond};
   pending.set(request.tabId, request);
   const live = () => pending.get(request.tabId) === request;
@@ -95,6 +110,19 @@ async function handle(message, sender, respond) {
     && (sender.frameId === undefined || sender.frameId === 0)
     && (sender.origin === undefined || sender.origin === chrome.runtime.getURL('').replace(/\/$/, ''));
   if (message?.action === 'state') { const config = await settings(); return respond({enabled: config.enabled === true, origin: config.origin}); }
+  if (message?.action === 'diagnostics' && internal) {
+    try {
+      const [tab] = await chrome.tabs.query({active: true, currentWindow: true});
+      if (!Number.isInteger(tab?.id)) return respond({available: false});
+      const frame = await chrome.webNavigation.getFrame({tabId: tab.id, frameId: 0});
+      const origin = safeOrigin(frame?.url);
+      if (!origin || !frame.documentId) return respond({available: false});
+      const value = await chrome.tabs.sendMessage(tab.id, {action: 'diagnostics-query'}, {documentId: frame.documentId});
+      if (!await currentDocument(tab.id, frame.documentId, origin)) return respond({available: false});
+      return respond(hookDiagnostics(value));
+    } catch { return respond({available: false}); }
+  }
+
   if (['extension-query', 'extension-configure'].includes(message?.action)) {
     const config = await settings();
     const origin = senderOrigin(sender);
@@ -111,7 +139,7 @@ async function handle(message, sender, respond) {
   }
   if (message?.action === 'native-fallback' && internal) {
     const request = pending.get(message.tabId);
-    if (request) await finish(request, {fallback: true});
+    if (request) await finish(request, {fallback: true}, {restoreFocus: true});
     return respond({ok: true});
   }
   if (message?.action === 'status' && internal) return respond({requests: [...pending.values()].map(r => ({tabId: r.tabId, origin: r.origin}))});
@@ -143,7 +171,7 @@ async function handle(message, sender, respond) {
   if (message.action === 'provider-response' && matchesDocument(request, sender, true) && message.version === 1 && message.id === request.id) {
     if (!await currentDocument(sender.tab.id, sender.documentId, request.providerOrigin, true)) return respond({ok: false});
     const result = message.fallback === true ? {fallback: true} : message.error ? {error: safeError(message.error)} : {response: message.response};
-    await finish(request, result); return respond({ok: true});
+    await finish(request, result, {restoreFocus: true}); return respond({ok: true});
   }
   respond({ok: false});
 }
