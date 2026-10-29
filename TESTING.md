@@ -10390,6 +10390,13 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Browser approval return: after successful verification, close only the
+  owned approval tab and focus the exact requesting tab/window before response
+  delivery. The site's resulting success redirect must keep focus. Closed/moved
+  tabs, new pending navigation, cancellation and native fallback must not steal
+  focus; window focus failure must not discard or retry a successful credential.
+  Never open a guessed callback URL or a new requester tab.
+
 - [ ] Empty native passkey requests: expand **Request details** and compare the
   actual requested site, catalog total, exact site matches, valid credential-ID
   count, site allowlist count (zero means unrestricted) and eligible count with

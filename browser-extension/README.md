@@ -18,6 +18,11 @@ Use the action popup to enable it, then reload already-open relying-party tabs.
 No browser install, user account access or OS provider enablement occurs as part of
 building the source. The extension is not a Chrome Web Store release.
 
+After a successful provider response, the extension closes its owned approval
+page and restores the exact requesting tab/window before delivering the response.
+Closed, moved or newly navigating requesters are not focused; failures, cancellation
+and native fallback do not take focus. No callback URL is guessed or new tab opened.
+
 ## Connection diagnostics
 
 From the website tab, open the Thingtime toolbar popup and use **Refresh connection

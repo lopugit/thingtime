@@ -35,7 +35,9 @@ async function finish(request, result) {
   await chrome.alarms.clear(alarmName(request.id));
   if (request.providerDocumentId) await send(request.providerTabId, request.providerDocumentId, {action: 'provider-cancel', id: request.id});
   await closeOwnedProvider(request);
-  await checkpoint(); request.respond(result);
+  await checkpoint();
+  if (result.response) await restoreRequesterFocus(request);
+  request.respond(result);
 }
 const recovered = (async () => {
   const saved = await chrome.storage.session.get('pending');
@@ -52,6 +54,19 @@ async function currentDocument(tabId, documentId, origin, provider = false) {
       && (!provider || new URL(frame.url).pathname === PROVIDER_PATH);
   } catch { return false; }
 }
+async function restoreRequesterFocus(request) {
+  try {
+    if (!Number.isInteger(request.windowId)) return;
+    const tab = await chrome.tabs.get(request.tabId);
+    if (!tab || tab.windowId !== request.windowId || tab.pendingUrl
+      || !await currentDocument(request.tabId, request.documentId, request.origin)) return;
+    // Restore the exact requester before delivery. Its response-triggered
+    // success navigation must not be mistaken for a stale request afterward.
+    await chrome.tabs.update(request.tabId, {active: true});
+    if (!await currentDocument(request.tabId, request.documentId, request.origin)) return;
+    await chrome.windows.update(request.windowId, {focused: true});
+  } catch { /* Focus failure never replaces or retries a successful credential. */ }
+}
 async function start(message, sender, respond) {
   const origin = senderOrigin(sender);
   if (!origin || !validRequest(message)) return respond(errorResult('SecurityError', 'This page cannot request a Thingtime passkey.'));
@@ -59,7 +74,7 @@ async function start(message, sender, respond) {
   // Admit synchronously before the first async read: a cancellation during
   // settings or document lookup must fence the operation before any tab opens.
   const request = {id: crypto.randomUUID(), callerId: message.id, type: message.type, publicKey: message.publicKey,
-    tabId: sender.tab.id, documentId: sender.documentId, origin, providerOrigin: null,
+    tabId: sender.tab.id, windowId: sender.tab.windowId, documentId: sender.documentId, origin, providerOrigin: null,
     providerTabId: null, providerDocumentId: null, delivered: false, respond};
   pending.set(request.tabId, request);
   const live = () => pending.get(request.tabId) === request;

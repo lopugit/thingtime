@@ -1,1 +1,1 @@
-{"name":"thingtime-passwords-browser-extension","private":true,"version":"0.1.2","type":"module","scripts":{"test":"node --test test/*.test.mjs"}}
+{"name":"thingtime-passwords-browser-extension","private":true,"version":"0.1.3","type":"module","scripts":{"test":"node --test test/*.test.mjs"}}

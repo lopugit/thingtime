@@ -102,6 +102,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-29: Restore successful browser passkey approvals to the exact requesting tab/window before the site handles its response.
+
 - 2026-10-29: Add privacy-safe browser passkey hook diagnostics and native empty-request site/count details to identify missed Thingtime routing without changing permissions or credential matching.
 
 - 2026-10-29: Localize the native AutoFill host name as Thingtime while preserving its installed filename and identity; verify bundled localization rather than raw plist branding alone.
