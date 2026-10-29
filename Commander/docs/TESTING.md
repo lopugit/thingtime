@@ -17,6 +17,21 @@
       verify event-driven changes without Index Now. Exercise continuous events during a scan, inherited/custom ignores,
       root disable/removal, overlapping roots, mounted-volume removal while running and while stopped, and relaunch
       after a saved settings change. Counts must exclude removed/disabled sources and duplicate public/Data-volume paths.
+- [ ] Keep a deliberately long full scan active, then create/rename/delete disposable files, folders and app bundles.
+      Verify changed exact-path metadata becomes searchable before the full writer commits; missing/ineligible paths
+      become tombstones, ignored descendants stay absent, and temporary observations never claim a measured committed
+      total. After reconciliation, verify the measured unique count and current results converge.
+- [ ] Pause a broad background metadata traversal, then add a file to an already visited folder. Exact new events
+      must remain prompt while older descendant work is pending. Change enabled roots during a pending search and
+      make that old read fail: neither its fallback nor yielded older work may restore the previous root's results.
+      A denied/failed directory enumeration must not by itself mark previously usable children as deleted.
+      Repeat a notification for a directory whose earlier walk is paused: known live children must stay visible.
+      With filesystem indexing disabled, delete/recreate a parent containing an app and verify its old tombstone
+      neither hides the recreated app nor prevents verified overlay retirement.
+- [ ] Exercise notification bursts and the installed app with all real enabled roots, including public/Data-volume
+      aliases of its database directory. Verify health/search and the native launcher remain responsive, database/WAL
+      writes do not feed another scan, and covered repeated events still trigger a bounded notification deadline.
+      A small-root fixture or synthetic event burst alone cannot pass installed whole-root acceptance.
 - [ ] Run `node script/verify-background-index.mjs '<development app path>'` after `script/dev-parallel.sh build`;
       retain its measured search latency and inventory assertions. Run `script/dev-parallel.sh clean` before the final
       signed install. Verify the installed app retains its original account/settings/profile and runs the new source.
@@ -104,9 +119,13 @@
       the icon and choose Open New Window; verify the newly created window starts pinned even when the global default
       is off, and both windows retain independent queries. Exercise the configured pin/unpin shortcut and confirm the
       icon's active opacity follows native pinned state.
-- [ ] Run an index while the launcher is visible. Verify the idle footer is replaced by the active source label and
-      processed/indexed counts, advances without reopening the launcher, then returns to ready when complete.
+- [ ] Run an index while the launcher is visible. Keep scan labels and processed/indexed progress in Search Settings;
+      the launcher footer retains its measured searchable-total/age summary, or explicitly unmeasured state when
+      current eligibility has not been counted. Indexing must not interrupt typing or replace the search view.
 - [ ] Search `emoji` or `symbols`, run Search Emoji & Symbols, and verify the launcher changes into the eight-column picker without opening Settings or an external app.
+- [ ] With execution HTTP deliberately stalled, invoke the enabled Emoji & Symbols command's native shortcut.
+      The local picker must open immediately; a disabled extension/command must remain disabled. Navigate away
+      before completing the old request and verify its late view response cannot reopen or replace the current view.
 - [ ] In the emoji picker, search `heart`; verify semantic matches, category and skin-tone selectors, Left/Right/Up/Down navigation, selected-cell scrolling, and Command-K actions. Command-Return copies and Shift-Command-C copies Unicode code points.
 - [ ] Type `ear` and verify macOS does not show a spelling/correction pill over the picker; while the search field remains focused, arrow keys must move the selected emoji instead of entering correction UI. Search misspellings such as `haert` and `hert` and verify relevant heart emoji still appear.
 - [ ] Search `heart`, arrow to a non-leading heart, and choose it twice. Reopen the picker and search `heart` again; verify that emoji is promoted. Quit/relaunch Commander and repeat the query to verify the bounded device-local query/emoji counts persist.

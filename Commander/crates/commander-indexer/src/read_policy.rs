@@ -41,24 +41,44 @@ impl ReadPolicy {
         connection: &Connection,
         record: &IndexRecord,
     ) -> Result<bool, IndexerError> {
-        let candidate = Path::new(&record.path);
-        // Deleted entries and broken links are different: symlink_metadata keeps
-        // an existing broken link searchable without following its target.
-        if fs::symlink_metadata(candidate).is_err() {
+        if !self.allows_path(record)? {
             return Ok(false);
         }
         let mut member = connection.prepare_cached(
             "SELECT EXISTS(SELECT 1 FROM main.records WHERE path = ?1 AND kind = ?2
              AND source_id IN (SELECT value FROM json_each(?3)))",
         )?;
-        if !member.query_row(
+        Ok(member.query_row(
             params![record.path, record.kind.as_str(), self.source_ids],
             |row| row.get::<_, bool>(0),
-        )? {
+        )?)
+    }
+
+    // Live observations have no committed membership yet. Apply exactly the
+    // same source and filesystem eligibility without depending on a DB writer.
+    pub(crate) fn allows_path(&self, record: &IndexRecord) -> Result<bool, IndexerError> {
+        self.allows_path_kind(record, true)
+    }
+
+    pub(crate) fn allows_container(&self, record: &IndexRecord) -> Result<bool, IndexerError> {
+        self.allows_path_kind(record, false)
+    }
+
+    fn allows_path_kind(
+        &self,
+        record: &IndexRecord,
+        require_kind: bool,
+    ) -> Result<bool, IndexerError> {
+        let candidate = Path::new(&record.path);
+        // Deleted entries and broken links are different: symlink_metadata keeps
+        // an existing broken link searchable without following its target.
+        if fs::symlink_metadata(candidate).is_err() {
             return Ok(false);
         }
         for source in &self.configuration.sources {
-            if !source.kinds.contains(&record.kind) || !candidate.starts_with(&source.root) {
+            if (require_kind && !source.kinds.contains(&record.kind))
+                || !candidate.starts_with(&source.root)
+            {
                 continue;
             }
             let mut allowed = true;

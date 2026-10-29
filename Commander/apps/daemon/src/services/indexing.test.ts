@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '@commander/protocol';
-import type { IndexRecord, QueryRequest } from '@commander/filesystem-indexer';
+import type { IndexConfiguration, IndexRecord, QueryRequest } from '@commander/filesystem-indexer';
 import {
   decodeIndexedItemId,
   indexedItemId,
@@ -10,14 +13,17 @@ import {
   IndexingService,
 } from './indexing.js';
 
-const { queryIndex, readCatalogue, readStatus, writeIndex, quickApps, readPolicy } = vi.hoisted(() => ({
-  queryIndex: vi.fn(),
-  readCatalogue: vi.fn(),
-  readStatus: vi.fn(),
-  writeIndex: vi.fn(),
-  quickApps: vi.fn(),
-  readPolicy: vi.fn(async () => undefined),
-}));
+const { queryIndex, readCatalogue, readStatus, writeIndex, quickApps, readPolicy, observePaths, readback } =
+  vi.hoisted(() => ({
+    queryIndex: vi.fn(),
+    readCatalogue: vi.fn(),
+    readStatus: vi.fn(),
+    writeIndex: vi.fn(),
+    quickApps: vi.fn(),
+    readPolicy: vi.fn(async () => undefined),
+    observePaths: vi.fn(),
+    readback: vi.fn(),
+  }));
 vi.mock('@commander/filesystem-indexer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@commander/filesystem-indexer')>()),
   FileSystemIndexerClient: class {
@@ -25,6 +31,8 @@ vi.mock('@commander/filesystem-indexer', async (importOriginal) => ({
     catalogue = readCatalogue;
     status = readStatus;
     readPolicy = readPolicy;
+    observe = observePaths;
+    readback = readback;
     index = writeIndex;
     close = vi.fn(async () => undefined);
   },
@@ -353,6 +361,123 @@ describe('legacy snapshot adoption', () => {
       expect(queryIndex).not.toHaveBeenCalled();
     } finally {
       await service.close();
+    }
+  });
+});
+
+describe('application namespace scheduling', () => {
+  it('does not repeat a successful application refresh because old filesystem app rows have an older timestamp', async () => {
+    const old = Date.now() - 7 * 60 * 60_000;
+    const saved = {
+      schemaVersion: 4,
+      totalRecords: 10,
+      databaseSizeBytes: 100,
+      configurationFingerprints: {
+        'filesystem:': createHash('sha256')
+          .update(JSON.stringify({ settings: DEFAULT_SETTINGS.indexing, roots: ['/'] }))
+          .digest('hex'),
+      },
+      kinds: [
+        { kind: 'application', count: 2, lastIndexedAtMs: old },
+        { kind: 'file', count: 5, lastIndexedAtMs: Date.now() },
+        { kind: 'directory', count: 3, lastIndexedAtMs: Date.now() },
+      ],
+    };
+    readStatus.mockResolvedValue(saved);
+    readCatalogue.mockResolvedValue({ records: [] });
+    quickApps.mockResolvedValue([]);
+    writeIndex.mockResolvedValue({ completedAtMs: Date.now(), durationMs: 1, resources: {}, status: saved });
+    const service = new IndexingService({
+      binaryPath: '/mock/indexer',
+      platform: 'linux',
+      settings: DEFAULT_SETTINGS,
+      callbacks: { applications: vi.fn(), commands: () => 0 },
+    });
+    try {
+      await service.start('applications');
+      await vi.waitFor(async () => expect((await service.status()).running).toEqual([]));
+      await service.initialize();
+      await vi.waitFor(() => expect(readStatus.mock.calls.length).toBeGreaterThanOrEqual(2));
+      expect(writeIndex).toHaveBeenCalledTimes(1);
+    } finally {
+      await service.close();
+    }
+  });
+});
+
+describe('live query settings fence', () => {
+  it('does not return old overlay data from a failed request after sources are disabled', async () => {
+    const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'commander-overlay-fence-')));
+    const settings = { ...DEFAULT_SETTINGS, indexing: { ...DEFAULT_SETTINGS.indexing, roots: [root] } };
+    const saved = {
+      schemaVersion: 4,
+      totalRecords: 1,
+      databaseSizeBytes: 100,
+      configurationFingerprints: {
+        'filesystem:': createHash('sha256')
+          .update(JSON.stringify({ settings: settings.indexing, roots: [root] }))
+          .digest('hex'),
+      },
+      kinds: ['application', 'file', 'directory'].map((kind) => ({
+        kind,
+        count: 0,
+        lastIndexedAtMs: Date.now(),
+      })),
+    };
+    readStatus.mockResolvedValue(saved);
+    readCatalogue.mockResolvedValue({ records: [] });
+    quickApps.mockResolvedValue([]);
+    queryIndex.mockResolvedValue({ records: [] });
+    writeIndex.mockResolvedValue({ completedAtMs: Date.now(), durationMs: 1, resources: {}, status: saved });
+    observePaths.mockImplementation(async (_config: IndexConfiguration, paths: string[]) => ({
+      observations: paths.map((itemPath) => ({
+        path: itemPath,
+        record: {
+          path: itemPath,
+          name: path.basename(itemPath),
+          parent: path.dirname(itemPath),
+          kind: 'file',
+          score: 0,
+        },
+        descend: false,
+      })),
+    }));
+    readback.mockImplementation(async (paths: string[]) => ({
+      entries: paths.map((itemPath) => ({ path: itemPath, records: [], hasDescendants: false })),
+    }));
+    const service = new IndexingService({
+      binaryPath: '/mock/indexer',
+      platform: process.platform === 'darwin' ? 'macos' : 'linux',
+      databasePath: path.join(root, 'state', 'index.sqlite3'),
+      applicationRoots: [root],
+      settings,
+      callbacks: { applications: () => undefined, commands: () => 0 },
+    });
+    const itemPath = path.join(root, 'live-fenced.txt');
+    try {
+      await service.initialize();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await writeFile(itemPath, 'fixture');
+      await vi.waitFor(
+        async () =>
+          expect((await service.queryItems('live-fenced')).some((item) => item.path === itemPath)).toBe(true),
+        { timeout: 5000, interval: 40 },
+      );
+      let rejectQuery!: (error: Error) => void;
+      queryIndex.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectQuery = reject;
+          }),
+      );
+      const pending = service.queryItems('live-fenced');
+      service.updateSettings({ ...settings, indexing: { ...settings.indexing, enabled: false } });
+      rejectQuery(new Error('old request failed'));
+      expect(await pending).toEqual([]);
+      expect(await service.resolveItem(indexedItemId('file', itemPath))).toBeUndefined();
+    } finally {
+      await service.close();
+      await rm(root, { recursive: true, force: true });
     }
   });
 });

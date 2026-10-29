@@ -48,6 +48,11 @@ const FUZZY_FTS_BUDGET: Duration = Duration::from_millis(350);
 const COARSE_FUZZY_BUDGET: Duration = Duration::from_millis(350);
 const PATH_FALLBACK_BUDGET: Duration = Duration::from_millis(250);
 const DATABASE_JOURNAL_SIZE_LIMIT_BYTES: u64 = 64 * 1024 * 1024;
+const READBACK_DESCENDANTS_QUERY: &str =
+    "SELECT EXISTS(SELECT 1 FROM main.records WHERE path>=?1 AND path<?2
+     AND source_id IN (SELECT value FROM json_each(?3)))";
+const READBACK_ALL_DESCENDANTS_QUERY: &str =
+    "SELECT EXISTS(SELECT 1 FROM main.records WHERE path>=?1 AND path<?2)";
 const MAX_RESOURCE_MEMORY_MIB: usize = 131_072;
 
 #[derive(Debug)]
@@ -203,6 +208,35 @@ pub struct QueryResponse {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PathObservation {
+    pub path: String,
+    pub descend: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record: Option<IndexRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObservationResponse {
+    pub observations: Vec<PathObservation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PathReadback {
+    pub path: String,
+    pub records: Vec<IndexRecord>,
+    pub has_descendants: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadbackResponse {
+    pub entries: Vec<PathReadback>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct KindStatus {
     pub kind: IndexKind,
     pub count: usize,
@@ -268,6 +302,15 @@ pub enum IndexerOperation {
     Status,
     ReadPolicy {
         configuration: Option<IndexConfiguration>,
+    },
+    Observe {
+        configuration: IndexConfiguration,
+        paths: Vec<PathBuf>,
+    },
+    Readback {
+        paths: Vec<PathBuf>,
+        #[serde(default, rename = "sourceIds")]
+        source_ids: Option<Vec<String>>,
     },
     Catalogue {
         kinds: Vec<IndexKind>,
@@ -458,6 +501,160 @@ impl IndexDatabase {
         })
     }
 
+    /// Read exact changed-path metadata without traversing descendants or
+    /// reading/writing catalogue rows. This remains available during a full
+    /// writer transaction and does not pretend to update committed counts.
+    pub fn observe(
+        &self,
+        configuration: &IndexConfiguration,
+        paths: &[PathBuf],
+    ) -> Result<ObservationResponse, IndexerError> {
+        if configuration.sources.iter().any(|source| {
+            !source.root.is_absolute()
+                || source
+                    .root
+                    .components()
+                    .any(|part| matches!(part, std::path::Component::ParentDir))
+        }) {
+            return Err(IndexerError::new(
+                "invalid_observation_policy",
+                "observation source roots must be absolute without parent traversal",
+            ));
+        }
+        let policy = ReadPolicy::new(configuration.clone())?;
+        let kinds = configuration
+            .sources
+            .iter()
+            .flat_map(|source| source.kinds.iter().copied())
+            .collect::<HashSet<_>>();
+        let mut observations = Vec::with_capacity(paths.len());
+        for changed in paths {
+            if !changed.is_absolute()
+                || changed
+                    .components()
+                    .any(|part| matches!(part, std::path::Component::ParentDir))
+            {
+                return Err(IndexerError::new(
+                    "invalid_observation_path",
+                    "observed paths must be absolute without parent traversal",
+                ));
+            }
+            let observed_path = path_text(changed)?;
+            let entry = WalkBuilder::new(changed)
+                .max_depth(Some(0))
+                .hidden(false)
+                .parents(false)
+                .ignore(false)
+                .git_ignore(false)
+                .git_global(false)
+                .git_exclude(false)
+                .follow_links(false)
+                .build()
+                .next()
+                .and_then(Result::ok);
+            let (candidate, skip_children) = entry
+                .as_ref()
+                .map(|entry| candidate_from_entry(entry, &kinds))
+                .transpose()?
+                .unwrap_or((None, false));
+            let container = IndexRecord {
+                path: observed_path.clone(),
+                name: String::new(),
+                parent: String::new(),
+                kind: IndexKind::Directory,
+                modified_at_ms: None,
+                size: None,
+                score: 0,
+            };
+            let descend = entry
+                .as_ref()
+                .is_some_and(|entry| entry.file_type().is_some_and(|kind| kind.is_dir()))
+                && !skip_children
+                && policy.allows_container(&container)?;
+            let record = candidate.map(|candidate| IndexRecord {
+                path: candidate.path,
+                name: candidate.name,
+                parent: candidate.parent,
+                kind: candidate.kind,
+                modified_at_ms: candidate.modified_at_ms,
+                size: candidate.size,
+                score: 0,
+            });
+            let record = match record {
+                Some(record) if policy.allows_path(&record)? => Some(record),
+                _ => None,
+            };
+            observations.push(PathObservation {
+                path: observed_path,
+                descend,
+                record,
+            });
+        }
+        Ok(ObservationResponse { observations })
+    }
+
+    /// Raw committed metadata for retiring transient observations. Ineligible
+    /// or deleted filesystem paths must remain visible here until their stored
+    /// rows disappear; normal search and lookup retain their eligibility policy.
+    pub fn readback(
+        &self,
+        paths: &[PathBuf],
+        source_ids: Option<&[String]>,
+    ) -> Result<ReadbackResponse, IndexerError> {
+        let scope = source_ids
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(|error| IndexerError::new("invalid_readback_scope", error.to_string()))?;
+        let mut exact = self.connection.prepare_cached(
+            "SELECT DISTINCT path,name,parent,kind,modified_at_ms,size FROM main.records WHERE path=?1
+             AND (?2 IS NULL OR source_id IN (SELECT value FROM json_each(?2)))",
+        )?;
+        let mut descendants = self.connection.prepare_cached(if scope.is_some() {
+            READBACK_DESCENDANTS_QUERY
+        } else {
+            READBACK_ALL_DESCENDANTS_QUERY
+        })?;
+        let mut entries = Vec::with_capacity(paths.len());
+        for path in paths {
+            if !path.is_absolute()
+                || path
+                    .components()
+                    .any(|part| matches!(part, std::path::Component::ParentDir))
+            {
+                return Err(IndexerError::new(
+                    "invalid_readback_path",
+                    "readback paths must be absolute without parent traversal",
+                ));
+            }
+            let path = path_text(path)?;
+            let empty_scope = source_ids.is_some_and(|ids| ids.is_empty());
+            let records = if empty_scope {
+                Vec::new()
+            } else {
+                collect_rows(exact.query_map(params![&path, &scope], row_to_record)?)?
+            };
+            let prefix = format!(
+                "{}{}",
+                path.trim_end_matches(std::path::MAIN_SEPARATOR),
+                std::path::MAIN_SEPARATOR
+            );
+            let upper = prefix_range_end(&prefix).expect("ASCII path separator has a successor");
+            let has_descendants = if empty_scope {
+                false
+            } else if scope.is_some() {
+                descendants.query_row(params![prefix, upper, &scope], |row| row.get(0))?
+            } else {
+                descendants.query_row(params![prefix, upper], |row| row.get(0))?
+            };
+            entries.push(PathReadback {
+                path,
+                records,
+                has_descendants,
+            });
+        }
+        Ok(ReadbackResponse { entries })
+    }
+
     pub fn query(&self, request: &QueryRequest) -> Result<QueryResponse, IndexerError> {
         let limit = request.limit.unwrap_or(usize::MAX);
         if limit == 0 {
@@ -607,6 +804,10 @@ impl IndexDatabase {
                 self.read_policy = configuration.map(ReadPolicy::new).transpose()?;
                 serde_json::to_value(())
             }
+            IndexerOperation::Observe { configuration, paths } => {
+                serde_json::to_value(self.observe(&configuration, &paths)?)
+            }
+            IndexerOperation::Readback { paths, source_ids } => serde_json::to_value(self.readback(&paths, source_ids.as_deref())?),
             IndexerOperation::Catalogue {
                 kinds,
                 source_prefix,
@@ -2349,6 +2550,248 @@ mod tests {
         fs::remove_dir_all(root.join("changed")).unwrap();
         db.index(&config).unwrap();
         assert_eq!(db.status().unwrap().kinds[1].count, 1);
+    }
+
+    #[test]
+    fn observes_new_exact_paths_without_catalogue_membership_or_descendant_traversal() {
+        let temp = TempDir::new().unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap().join("root");
+        create_dir_all(root.join(".git")).unwrap();
+        let mut database = database(&temp);
+        let mut config = configuration(
+            &root,
+            vec![
+                IndexKind::Application,
+                IndexKind::File,
+                IndexKind::Directory,
+            ],
+        );
+        database.index(&config).unwrap();
+        create_dir_all(root.join("Visible.app")).unwrap();
+        create_dir_all(root.join("folder")).unwrap();
+        create_dir_all(root.join("excluded")).unwrap();
+        create_dir_all(root.join("git-blocked")).unwrap();
+        for relative in [
+            "new.txt",
+            "Visible.app/child.txt",
+            "folder/child.txt",
+            "excluded/private.txt",
+            "git-blocked/private.txt",
+            ".hidden.txt",
+        ] {
+            write(root.join(relative), "synthetic").unwrap();
+        }
+        write(root.join(".gitignore"), "git-blocked/\n").unwrap();
+        let outside = fs::canonicalize(temp.path()).unwrap().join("outside.txt");
+        write(&outside, "outside").unwrap();
+        config.custom_ignores.push(IgnoreRule {
+            kind: IgnoreRuleKind::Glob,
+            pattern: "excluded/**".into(),
+        });
+        let paths = [
+            "new.txt",
+            "Visible.app",
+            "folder",
+            "missing.txt",
+            "excluded/private.txt",
+            "git-blocked/private.txt",
+            ".hidden.txt",
+        ]
+        .map(|relative| root.join(relative))
+        .into_iter()
+        .chain([outside])
+        .collect::<Vec<_>>();
+        let writes = database.connection.total_changes();
+        let observed = database.observe(&config, &paths).unwrap();
+        assert_eq!(
+            observed.observations.len(),
+            paths.len(),
+            "one observation per exact request, no descendants"
+        );
+        assert_eq!(
+            observed
+                .observations
+                .iter()
+                .map(|entry| entry.descend)
+                .collect::<Vec<_>>(),
+            vec![false, false, true, false, false, false, false, false]
+        );
+        assert_eq!(
+            observed
+                .observations
+                .iter()
+                .filter_map(|entry| entry.record.as_ref())
+                .map(|record| (record.name.as_str(), record.kind))
+                .collect::<Vec<_>>(),
+            vec![
+                ("new.txt", IndexKind::File),
+                ("Visible", IndexKind::Application),
+                ("folder", IndexKind::Directory)
+            ]
+        );
+        assert!(
+            database
+                .lookup(&path_text(&root.join("new.txt")).unwrap(), IndexKind::File)
+                .unwrap()
+                .is_none(),
+            "observation never persists a catalogue row"
+        );
+        fs::remove_file(root.join("new.txt")).unwrap();
+        assert!(database
+            .observe(&config, &[root.join("new.txt")])
+            .unwrap()
+            .observations[0]
+            .record
+            .is_none());
+        assert_eq!(database.connection.total_changes(), writes);
+        config.sources[0].kinds = vec![IndexKind::Application];
+        let app_container = database.observe(&config, &[root.join("folder")]).unwrap();
+        assert!(app_container.observations[0].record.is_none());
+        assert!(
+            app_container.observations[0].descend,
+            "app-only sources must reach nested app bundles"
+        );
+        create_dir_all(root.join("opaque.bundle")).unwrap();
+        assert!(
+            !database
+                .observe(&config, &[root.join("opaque.bundle")])
+                .unwrap()
+                .observations[0]
+                .descend
+        );
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(root.join("folder"), root.join("linked-folder")).unwrap();
+            assert!(
+                !database
+                    .observe(&config, &[root.join("linked-folder")])
+                    .unwrap()
+                    .observations[0]
+                    .descend
+            );
+        }
+        config.sources.clear();
+        assert!(database
+            .observe(&config, &[root.join("folder")])
+            .unwrap()
+            .observations[0]
+            .record
+            .is_none());
+        assert!(database
+            .observe(&config, &[PathBuf::from("relative.txt")])
+            .is_err());
+    }
+
+    #[test]
+    fn raw_readback_retains_deleted_rows_until_commit_and_uses_a_path_range() {
+        let temp = TempDir::new().unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap().join("root");
+        create_dir_all(root.join("parent")).unwrap();
+        let child = root.join("parent/child.txt");
+        write(&child, "old").unwrap();
+        let mut writer = database(&temp);
+        let config = configuration(&root, vec![IndexKind::File, IndexKind::Directory]);
+        writer.index(&config).unwrap();
+        let mut reader =
+            IndexDatabase::open_reader(temp.path().join(".state/index.sqlite3")).unwrap();
+        reader.read_policy = Some(ReadPolicy::new(config.clone()).unwrap());
+        fs::remove_file(&child).unwrap();
+        assert!(reader
+            .lookup(&path_text(&child).unwrap(), IndexKind::File)
+            .unwrap()
+            .is_none());
+        let transaction = writer.connection.transaction().unwrap();
+        transaction
+            .execute(
+                "DELETE FROM records WHERE path=?1",
+                [path_text(&child).unwrap()],
+            )
+            .unwrap();
+        let before = Instant::now();
+        let observed = reader
+            .readback(&[child.clone(), root.join("parent")], None)
+            .unwrap();
+        assert_eq!(
+            observed.entries[0].records.len(),
+            1,
+            "raw readback ignores deleted-path search policy and sees committed data"
+        );
+        assert_eq!(observed.entries[0].records[0].size, Some(3));
+        assert!(observed.entries[1].has_descendants);
+        let scoped = reader
+            .readback(&[child.clone(), root.join("parent")], Some(&[]))
+            .unwrap();
+        assert!(
+            scoped
+                .entries
+                .iter()
+                .all(|entry| entry.records.is_empty() && !entry.has_descendants),
+            "empty scope cannot retain removed-source overlays"
+        );
+        let scoped = reader
+            .readback(
+                &[child.clone(), root.join("parent")],
+                Some(&["test".into()]),
+            )
+            .unwrap();
+        assert_eq!(scoped.entries[0].records.len(), 1);
+        assert!(scoped.entries[1].has_descendants);
+        assert!(before.elapsed() < Duration::from_secs(1));
+        transaction.commit().unwrap();
+        let observed = reader
+            .readback(&[child, root.join("parent")], None)
+            .unwrap();
+        assert!(observed.entries[0].records.is_empty());
+        assert!(!observed.entries[1].has_descendants);
+        let plan = reader
+            .connection
+            .prepare(&format!("EXPLAIN QUERY PLAN {READBACK_DESCENDANTS_QUERY}"))
+            .unwrap()
+            .query_map(params!["/parent/", "/parent0", Some("[\"test\"]")], |row| {
+                row.get::<_, String>(3)
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .join(" ");
+        assert!(
+            plan.contains("SEARCH") && plan.contains("path>?") && plan.contains("path<?"),
+            "must use bounded indexed existence: {plan}"
+        );
+        assert_eq!(reader.connection.total_changes(), 0);
+    }
+
+    #[test]
+    fn exact_path_observation_does_not_wait_for_an_uncommitted_writer() {
+        let temp = TempDir::new().unwrap();
+        let root = fs::canonicalize(temp.path()).unwrap().join("root");
+        create_dir_all(&root).unwrap();
+        let mut writer = database(&temp);
+        let config = configuration(&root, vec![IndexKind::File]);
+        writer.index(&config).unwrap();
+        let reader = IndexDatabase::open_reader(temp.path().join(".state/index.sqlite3")).unwrap();
+        let transaction = writer.connection.transaction().unwrap();
+        transaction
+            .execute(
+                "UPDATE metadata SET value=value+1 WHERE key='generation'",
+                [],
+            )
+            .unwrap();
+        write(root.join("during-full-scan.txt"), "new").unwrap();
+        let before = Instant::now();
+        let observed = reader
+            .observe(&config, &[root.join("during-full-scan.txt")])
+            .unwrap();
+        assert_eq!(
+            observed.observations[0].record.as_ref().unwrap().name,
+            "during-full-scan.txt"
+        );
+        assert!(
+            before.elapsed() < Duration::from_secs(1),
+            "exact metadata does not depend on writer lock"
+        );
+        assert_eq!(reader.connection.total_changes(), 0);
+        transaction.rollback().unwrap();
     }
 
     #[test]

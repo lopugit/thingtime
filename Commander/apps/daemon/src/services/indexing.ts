@@ -1,5 +1,4 @@
 import { access, readdir, realpath, lstat } from 'node:fs/promises';
-import { watch, type FSWatcher } from 'node:fs';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -31,6 +30,8 @@ import {
 } from './applications.js';
 import { commanderDataDirectory } from './config.js';
 import { pathActions } from './pathActions.js';
+import { FileChangeObserver } from './filesystemChanges.js';
+import { IndexOverlay } from './indexOverlay.js';
 
 // Application bundle changes under active volumes are watched with FSEvents.
 // This slower reconciliation is only the safety net for a missed native event
@@ -50,6 +51,7 @@ interface IndexingServiceOptions {
   platform: Platform;
   settings: CommanderSettings;
   callbacks: IndexingCallbacks;
+  onProgress?: (progress: FileIndexProgress) => void;
 }
 
 interface ScheduledIndexRun {
@@ -69,12 +71,21 @@ const INDEX_STATUS_CACHE_MS = 30_000;
 export class IndexingService {
   readonly #platform: Platform;
   readonly #callbacks: IndexingCallbacks;
+  readonly #onProgress: ((progress: FileIndexProgress) => void) | undefined;
   readonly #binaryPath: string | undefined;
   readonly #databasePath: string;
   readonly #applicationRoots: string[];
   readonly #customApplicationRoots: boolean;
   #settings: IndexingSettings;
   #reader: FileSystemIndexerClient | undefined;
+  #metadataReader: FileSystemIndexerClient | undefined;
+  readonly #overlay: IndexOverlay;
+  #persistentApplications: SearchItem[] = [];
+  #pendingDeltaPaths = new Set<string>();
+  #pendingFullDelta = false;
+  #overlayJobs = 0;
+  #overlayContext = 0;
+  #retiringOverlay = false;
   #writer: FileSystemIndexerClient | undefined;
   #available = false;
   #message: string | undefined;
@@ -82,10 +93,11 @@ export class IndexingService {
   #activeRun: ScheduledIndexRun | undefined;
   #pendingRun: ScheduledIndexRun | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
-  #applicationWatchers: FSWatcher[] = [];
-  #applicationDebounce: ReturnType<typeof setTimeout> | undefined;
-  #changeDeadline: ReturnType<typeof setTimeout> | undefined;
-  #changedPaths = new Set<string>();
+  #changeObserver: FileChangeObserver | undefined;
+  #watchSignature: string | undefined;
+  #notificationWarning: string | undefined;
+  #changesPending = false;
+  #takingChanges = false;
   #closed = false;
   #watchGeneration = 0;
   #applications: SearchItem[] = [];
@@ -95,9 +107,8 @@ export class IndexingService {
   #legacyRoots = '';
   #effectiveFilesystemRoots: string[] = [];
   #settingsDirty = false;
-  #fullReconciliationNeeded = false;
   #lastCommandsIndexedAtMs: number | undefined;
-  #lastFallbackApplicationsAtMs: number | undefined;
+  #lastApplicationsReconciledAtMs: number | undefined;
   #commandCount = 0;
   #lastRunResources: IndexResourceUsage | undefined;
   #recentTimings: IndexRunTiming[] = [];
@@ -113,10 +124,26 @@ export class IndexingService {
     this.#applicationRoots = options.applicationRoots ?? ['/'];
     this.#customApplicationRoots = options.applicationRoots !== undefined;
     this.#callbacks = options.callbacks;
+    this.#onProgress = options.onProgress;
     this.#settings = structuredClone(options.settings.indexing);
     this.#binaryPath = options.binaryPath;
     this.#databasePath =
       options.databasePath ?? path.join(commanderDataDirectory(), 'filesystem-index.sqlite3');
+    this.#overlay = new IndexOverlay(
+      (configuration, paths) =>
+        this.#metadataReader?.observe(configuration, paths) ?? Promise.resolve({ observations: [] }),
+      async (paths) => {
+        const configuration = await this.#observationConfiguration();
+        return (
+          this.#reader?.readback(
+            paths,
+            configuration.sources.map((source) => source.id),
+          ) ?? { entries: [] }
+        );
+      },
+      () => this.#refreshApplications(),
+      { excludedDirectories: [path.dirname(this.#databasePath)] },
+    );
     if (!options.binaryPath) {
       this.#message =
         'The bundled Rust filesystem indexer is unavailable; application refresh uses a fallback scan.';
@@ -124,6 +151,9 @@ export class IndexingService {
     }
     const clientOptions = { binaryPath: options.binaryPath, databasePath: this.#databasePath };
     this.#reader = new FileSystemIndexerClient({ ...clientOptions, reader: true });
+    // Exact-path observations and bounded descendant batches never queue ahead
+    // of interactive search or contend with the canonical SQLite writer.
+    this.#metadataReader = new FileSystemIndexerClient({ ...clientOptions, reader: true });
     this.#writer = new FileSystemIndexerClient({
       ...clientOptions,
       indexTimeoutMs: COMMANDER_INDEX_TIMEOUT_MS,
@@ -177,6 +207,9 @@ export class IndexingService {
     if (previous !== JSON.stringify(this.#settings)) {
       this.#filesystemCurrent = false;
       this.#legacySnapshot = false;
+      this.#overlayContext++;
+      this.#overlay.clear();
+      this.#pendingDeltaPaths.clear();
       void this.#watchSources();
       // A settings change during an active run must rebuild with the new rules.
       if (this.#activeRun) this.#settingsDirty = true;
@@ -185,26 +218,49 @@ export class IndexingService {
   }
 
   async queryItems(query: string, limit = FILESYSTEM_RESULT_PAGE_SIZE): Promise<SearchItem[]> {
-    if (!this.#reader || !this.#settings.enabled || !this.#filesystemCurrent || !query.trim()) return [];
+    if (!this.#reader || !this.#settings.enabled || !query.trim()) return [];
+    const context = this.#overlayContext;
+    const live = this.#overlay.query(query, Math.max(1, limit));
     try {
-      // All apps are already in the in-memory catalogue. Only read files and
-      // folders here: a crowded filename page cannot exclude a matching app,
-      // and search never needs to initiate an indexing run or discovery scan.
-      const response = await this.#reader.query({
-        query,
-        kinds: ['file', 'directory'],
-        limit: Math.max(1, limit),
-      });
-      return response.records.map(indexRecordToSearchItem);
+      const response = this.#filesystemCurrent
+        ? await this.#reader.query({ query, kinds: ['file', 'directory'], limit: Math.max(1, limit) })
+        : { records: [] };
+      let persistent = response.records;
+      if (this.#overlay.pending && persistent.length && this.#metadataReader) {
+        const eligible = await this.#metadataReader.observe(
+          await this.#observationConfiguration(),
+          persistent.map((record) => record.path),
+        );
+        persistent = eligible.observations.flatMap((observation) =>
+          observation.record && observation.record.kind !== 'application' ? [observation.record] : [],
+        );
+      }
+      if (context !== this.#overlayContext) return [];
+      const merged = new Map<string, SearchItem>();
+      for (const record of persistent) {
+        if (!this.#overlay.masks(record.path))
+          merged.set(`${record.kind}:${record.path}`, indexRecordToSearchItem(record));
+      }
+      const liveRecords = await live;
+      if (context !== this.#overlayContext || !this.#settings.enabled) return [];
+      for (const record of liveRecords)
+        merged.set(`${record.kind}:${record.path}`, indexRecordToSearchItem(record));
+      return [...merged.values()];
     } catch (error) {
+      const records = await live;
+      if (context !== this.#overlayContext || !this.#settings.enabled) return [];
       this.#message = errorMessage(error);
-      return [];
+      return records.map(indexRecordToSearchItem);
     }
   }
 
   async resolveItem(itemId: string): Promise<SearchItem | undefined> {
     const decoded = decodeIndexedItemId(itemId);
     if (!decoded || !this.#reader) return undefined;
+    if (decoded.kind !== 'application' && !this.#settings.enabled) return undefined;
+    const live = this.#overlay.resolve(decoded.path);
+    if (live !== undefined)
+      return live === null || live.kind !== decoded.kind ? undefined : indexRecordToSearchItem(live);
     if (decoded.kind === 'application') return this.#applications.find((item) => item.path === decoded.path);
     if (!this.#settings.enabled || !this.#filesystemCurrent) return undefined;
     try {
@@ -288,7 +344,11 @@ export class IndexingService {
           void replacement.promise.catch(() => undefined);
           this.#activateRun(replacement);
         } else if (next) this.#activateRun(next);
-        else this.#flushChanges();
+        else {
+          this.#pumpDeltas();
+          this.#flushChanges();
+          void this.#retireOverlay();
+        }
       });
   }
 
@@ -304,7 +364,7 @@ export class IndexingService {
         ? ((await this.#safeRustStatus()) ?? this.#lastStatus)
         : this.#lastStatus;
     const filesystemEnabled = this.#settings.enabled && this.#filesystemCurrent;
-    const countsCurrent = !this.#legacySnapshot;
+    const countsCurrent = !this.#legacySnapshot && (!this.#settings.enabled || !this.#overlay.pending);
     const kinds = (status?.kinds ?? emptyKindStatuses()).map((kind) => ({
       ...kind,
       count:
@@ -316,7 +376,7 @@ export class IndexingService {
     }));
     const timestamps = [
       this.#lastCommandsIndexedAtMs,
-      this.#lastFallbackApplicationsAtMs ??
+      this.#lastApplicationsReconciledAtMs ??
         kinds.find((kind) => kind.kind === 'application')?.lastIndexedAtMs,
       ...(filesystemEnabled
         ? kinds.filter((kind) => kind.kind !== 'application').map((kind) => kind.lastIndexedAtMs)
@@ -330,7 +390,7 @@ export class IndexingService {
       running: [...this.#running],
       totalRecords: status?.totalRecords ?? 0,
       countsCurrent,
-      ...(this.#legacySnapshot || (status && status.schemaVersion < 4)
+      ...(!countsCurrent || (status && status.schemaVersion < 4)
         ? {}
         : {
             searchableRecords: kinds.reduce((total, kind) => total + kind.count, this.#commandCount),
@@ -354,24 +414,25 @@ export class IndexingService {
       timing: timingSummary(this.#recentTimings),
       timeoutAttempts: structuredClone(this.#timeoutAttempts),
       ...(this.#progress ? { progress: structuredClone(this.#progress) } : {}),
-      ...(this.#message ? { message: this.#message } : {}),
+      ...(this.#notificationWarning || this.#message
+        ? { message: this.#notificationWarning ?? this.#message! }
+        : {}),
     };
   }
 
   async close(): Promise<void> {
     this.#closed = true;
+    this.#overlayContext++;
+    this.#overlay.clear();
     this.#watchGeneration += 1;
-    if (this.#changeDeadline) clearTimeout(this.#changeDeadline);
-    this.#changedPaths.clear();
     if (this.#timer) clearInterval(this.#timer);
-    if (this.#applicationDebounce) clearTimeout(this.#applicationDebounce);
     this.#timer = undefined;
-    this.#applicationDebounce = undefined;
-    for (const watcher of this.#applicationWatchers.splice(0)) watcher.close();
+    await this.#changeObserver?.close().catch(() => undefined);
+    this.#changeObserver = undefined;
     const pending = this.#pendingRun;
     this.#pendingRun = undefined;
     pending?.reject(new Error('Filesystem indexing service closed'));
-    await Promise.allSettled([this.#reader?.close(), this.#writer?.close()]);
+    await Promise.allSettled([this.#reader?.close(), this.#writer?.close(), this.#metadataReader?.close()]);
     this.#reader = undefined;
     this.#writer = undefined;
     this.#available = false;
@@ -393,7 +454,7 @@ export class IndexingService {
               changedPaths.map(async (changed) => {
                 if (
                   isApplicationCatalogChange(changed) ||
-                  this.#applications.some((item) => item.path && isWithin(item.path, changed))
+                  this.#persistentApplications.some((item) => item.path && isWithin(item.path, changed))
                 )
                   return changed;
                 return await lstat(changed).then(
@@ -422,7 +483,7 @@ export class IndexingService {
       return;
     }
     const roots = await indexRoots(this.#platform, this.#applicationRoots);
-    await this.#writeIndex({
+    const report = await this.#writeIndex({
       sources: roots.map((root) => ({
         id: `applications:${root}`,
         root,
@@ -437,6 +498,7 @@ export class IndexingService {
       pruneSourcePrefixes: ['applications:'],
       ...(changedPaths ? { changedPaths } : {}),
     });
+    if (!changedPaths) this.#lastApplicationsReconciledAtMs = report.completedAtMs;
     this.#available = true;
     this.#message = undefined;
     this.#publishApplications(await this.#queryApplications());
@@ -562,6 +624,7 @@ export class IndexingService {
   }
 
   #recordProgress(progress: FileIndexProgress): void {
+    this.#onProgress?.(progress);
     if (!this.#progress) return;
     this.#progressSources.set(progress.sourceId, progress.processed);
     const processed = [...this.#progressSources.values()].reduce((sum, value) => sum + value, 0);
@@ -599,8 +662,8 @@ export class IndexingService {
     if (!status) {
       if (
         !this.#running.has('applications') &&
-        (!this.#lastFallbackApplicationsAtMs ||
-          Date.now() - this.#lastFallbackApplicationsAtMs >= APPLICATION_REFRESH_MINUTES * 60_000)
+        (!this.#lastApplicationsReconciledAtMs ||
+          Date.now() - this.#lastApplicationsReconciledAtMs >= APPLICATION_REFRESH_MINUTES * 60_000)
       )
         void this.start('applications').catch(() => undefined);
       return;
@@ -610,7 +673,10 @@ export class IndexingService {
       void this.start('all').catch(() => undefined);
       return;
     }
-    const applicationsDue = isDue(status, 'application', APPLICATION_REFRESH_MINUTES, now);
+    const applicationsDue =
+      this.#lastApplicationsReconciledAtMs === undefined
+        ? isDue(status, 'application', APPLICATION_REFRESH_MINUTES, now)
+        : now - this.#lastApplicationsReconciledAtMs >= APPLICATION_REFRESH_MINUTES * 60_000;
     if (!this.#settings.enabled) {
       if (applicationsDue) void this.start('applications').catch(() => undefined);
       return;
@@ -648,7 +714,7 @@ export class IndexingService {
     const applications = this.#customApplicationRoots
       ? await discoverApplicationsIn(this.#applicationRoots)
       : await discoverApplications();
-    this.#lastFallbackApplicationsAtMs = Date.now();
+    this.#lastApplicationsReconciledAtMs = Date.now();
     this.#publishApplications(applications);
   }
 
@@ -679,7 +745,16 @@ export class IndexingService {
   }
 
   #publishApplications(applications: SearchItem[]): void {
+    this.#persistentApplications = applications;
+    this.#refreshApplications();
+  }
+
+  #refreshApplications(): void {
     if (this.#closed) return;
+    const applications = mergeApplications(
+      this.#persistentApplications.filter((item) => !item.path || !this.#overlay.masks(item.path)),
+      this.#overlay.applications().map(indexRecordToSearchItem),
+    );
     const signature = JSON.stringify(applications);
     this.#applications = applications;
     if (signature === this.#applicationSignature) return;
@@ -689,7 +764,6 @@ export class IndexingService {
 
   async #watchSources(): Promise<void> {
     const generation = ++this.#watchGeneration;
-    for (const watcher of this.#applicationWatchers.splice(0)) watcher.close();
     const filesystemRoots =
       this.#reader && this.#settings.enabled ? await indexRoots(this.#platform, this.#settings.roots) : [];
     const roots = await existingDirectories([
@@ -698,81 +772,139 @@ export class IndexingService {
       ...(!this.#customApplicationRoots ? applicationDirectories(this.#platform) : []),
     ]);
     if (this.#closed || generation !== this.#watchGeneration) return;
-    const watchedRoots: string[] = [];
-    for (const root of roots) {
-      if (this.#platform !== 'linux' && watchedRoots.some((watched) => isWithin(root, watched))) continue;
-      try {
-        const watcher = watch(
-          root,
-          { persistent: false, recursive: this.#platform !== 'linux' },
-          (_event, filename) => {
-            const raw = filename ? path.resolve(root, filename.toString()) : root;
-            const changed = applicationBundleRoot(raw);
-            // WAL/status writes must never schedule another indexing run.
-            if (isWithin(changed, path.dirname(this.#databasePath))) return;
-            const filesystemRelevant =
-              this.#settings.enabled &&
-              filesystemRoots.some((entry) => isWithin(changed, entry) || isWithin(entry, changed));
-            // A rename can remove an entire subtree containing applications, so
-            // non-file events remain relevant to the global app inventory.
-            if (!filesystemRelevant && _event !== 'rename' && !isApplicationCatalogChange(changed)) return;
-            if (
-              changed === '/Volumes' ||
-              path.dirname(changed) === '/Volumes' ||
-              /(?:^|\/)git\/ignore$/u.test(changed)
-            ) {
-              this.#fullReconciliationNeeded = true;
-              void this.#watchSources();
-            }
-            const coalesced = collapsePaths([...this.#changedPaths, changed]);
-            // Bound pending event memory by widening to affected parents, never
-            // dropping a change. This is a batching budget, not an index limit.
-            this.#changedPaths = new Set(
-              coalesced.length > 256
-                ? collapsePaths(coalesced.map((entry) => path.dirname(entry)))
-                : coalesced,
-            );
-            if (this.#applicationDebounce) clearTimeout(this.#applicationDebounce);
-            this.#applicationDebounce = setTimeout(() => this.#flushChanges(), 750);
-            this.#applicationDebounce.unref();
-            if (!this.#changeDeadline) {
-              this.#changeDeadline = setTimeout(() => this.#flushChanges(), 3_000);
-              this.#changeDeadline.unref();
-            }
-          },
-        );
-        watcher.on('error', () => undefined);
-        this.#applicationWatchers.push(watcher);
-        watchedRoots.push(root);
-      } catch {
-        // Periodic reconciliation remains the safety net for unavailable watches.
-      }
-    }
+    const options = {
+      roots,
+      filesystemRoots,
+      databaseDirectory: path.dirname(this.#databasePath),
+      filesystemEnabled: this.#settings.enabled,
+      recursive: this.#platform !== 'linux',
+    };
+    const signature = JSON.stringify(options);
+    if (signature === this.#watchSignature) return;
+    const previous = this.#changeObserver;
+    this.#watchSignature = signature;
+    this.#notificationWarning = undefined;
+    this.#changeObserver = new FileChangeObserver(
+      options,
+      () => {
+        this.#changesPending = true;
+        this.#flushChanges();
+      },
+      () => {
+        this.#notificationWarning =
+          'Live filesystem notifications are unavailable; periodic reconciliation remains active.';
+      },
+    );
+    void previous?.close().catch(() => undefined);
   }
 
   #flushChanges(): void {
-    if (this.#applicationDebounce) clearTimeout(this.#applicationDebounce);
-    if (this.#changeDeadline) clearTimeout(this.#changeDeadline);
-    this.#applicationDebounce = undefined;
-    this.#changeDeadline = undefined;
-    if (this.#closed || this.#activeRun || !this.#changedPaths.size) return;
-    const changedPaths = collapsePaths([...this.#changedPaths]);
-    this.#changedPaths.clear();
+    if (this.#closed || this.#takingChanges || !this.#changesPending || !this.#changeObserver) return;
+    const observer = this.#changeObserver;
+    this.#changesPending = false;
+    this.#takingChanges = true;
+    void observer
+      .take()
+      .then(async (batch) => {
+        if (this.#closed || observer !== this.#changeObserver || !batch.paths.length) return;
+        if (batch.volumesChanged) void this.#watchSources();
+        const context = this.#overlayContext;
+        const configuration = await this.#observationConfiguration();
+        if (context !== this.#overlayContext || this.#closed) return;
+        const observedPaths = [
+          ...new Set([
+            ...batch.paths,
+            ...this.#persistentApplications.flatMap((item) =>
+              item.path && batch.paths.some((changed) => isWithin(item.path!, changed)) ? [item.path] : [],
+            ),
+          ]),
+        ];
+        this.#overlayJobs++;
+        void this.#overlay
+          .apply(configuration, observedPaths)
+          .catch((error) => {
+            if (!this.#closed && context === this.#overlayContext) this.#message = errorMessage(error);
+          })
+          .finally(() => {
+            this.#overlayJobs--;
+            void this.#retireOverlay();
+          });
+        // Persistence and subsequent event batches are independent of a long
+        // descendant observation walk. The single canonical writer remains serialized.
+        for (const changed of batch.paths) this.#pendingDeltaPaths.add(changed);
+        this.#pendingFullDelta ||= batch.fullReconciliation || this.#settings.maxEntries !== null;
+        this.#pumpDeltas();
+      })
+      .catch((error) => {
+        if (!this.#closed) this.#message = errorMessage(error);
+      })
+      .finally(() => {
+        this.#takingChanges = false;
+        if (this.#changesPending) this.#flushChanges();
+        else void this.#retireOverlay();
+      });
+  }
+
+  async #observationConfiguration(): Promise<IndexConfiguration> {
+    const [applications, filesystem] = await Promise.all([
+      indexRoots(this.#platform, this.#applicationRoots),
+      this.#settings.enabled ? indexRoots(this.#platform, this.#settings.roots) : Promise.resolve([]),
+    ]);
+    return {
+      sources: [
+        ...applications.map((root) => ({
+          id: `applications:${root}`,
+          root,
+          kinds: ['application' as const],
+        })),
+        ...filesystem.map((root) => ({
+          id: `filesystem:${root}`,
+          root,
+          kinds: ['file' as const, 'directory' as const],
+        })),
+      ].map((source) => ({
+        ...source,
+        respectGitIgnore: this.#settings.respectGitIgnore,
+        includeHidden: this.#settings.includeHidden,
+        followSymlinks: false,
+      })),
+      customIgnores: structuredClone(this.#settings.customIgnores),
+    };
+  }
+
+  #pumpDeltas(): void {
+    if (this.#closed || this.#activeRun || !this.#pendingDeltaPaths.size) return;
     const run = this.#createRun('all');
-    if (!this.#fullReconciliationNeeded && this.#settings.maxEntries === null) {
-      run.changedPaths = collapsePaths(
-        changedPaths.map((changed) =>
-          changed.endsWith(`${path.sep}.git${path.sep}info${path.sep}exclude`)
-            ? path.resolve(changed, '../../..')
-            : ['.gitignore', '.ignore'].includes(path.basename(changed))
-              ? path.dirname(changed)
-              : changed,
-        ),
-      );
-    }
-    this.#fullReconciliationNeeded = false;
+    if (!this.#pendingFullDelta) {
+      // Processing page only: subsequent runs drain every queued path.
+      run.changedPaths = [...this.#pendingDeltaPaths].slice(0, 256);
+      for (const changed of run.changedPaths) this.#pendingDeltaPaths.delete(changed);
+    } else this.#pendingDeltaPaths.clear();
+    this.#pendingFullDelta = false;
     void run.promise.catch(() => undefined);
     this.#activateRun(run);
+  }
+
+  async #retireOverlay(): Promise<void> {
+    if (
+      this.#closed ||
+      this.#retiringOverlay ||
+      this.#activeRun ||
+      this.#takingChanges ||
+      this.#changesPending ||
+      this.#overlayJobs ||
+      this.#pendingDeltaPaths.size ||
+      !this.#overlay.pending
+    )
+      return;
+    this.#retiringOverlay = true;
+    try {
+      await this.#overlay.retireAfterReadback();
+    } catch {
+      /* Keep live metadata until committed readback can be verified. */
+    } finally {
+      this.#retiringOverlay = false;
+    }
   }
 }
 

@@ -129,6 +129,8 @@ export interface IndexResourceUsage {
 type RequestOperation =
   | { operation: 'status' }
   | { operation: 'readPolicy'; configuration: IndexConfiguration | null }
+  | { operation: 'observe'; configuration: IndexConfiguration; paths: string[] }
+  | { operation: 'readback'; paths: string[]; sourceIds?: string[] }
   | { operation: 'catalogue'; kinds: IndexKind[]; sourcePrefix: string; sourceIds?: string[] }
   | { operation: 'index'; configuration: IndexConfiguration }
   | { operation: 'query'; request: QueryRequest }
@@ -213,6 +215,20 @@ export class FileSystemIndexerClient {
     this.#start();
     this.#cpuTimer = setInterval(() => void this.#checkWorkerCpu(), INDEXER_CPU_SAMPLE_MS);
     this.#cpuTimer.unref();
+  }
+
+  observe(
+    configuration: IndexConfiguration,
+    paths: string[],
+  ): Promise<{ observations: { path: string; record?: IndexRecord; descend: boolean }[] }> {
+    return this.#request({ operation: 'observe', configuration, paths });
+  }
+
+  readback(
+    paths: string[],
+    sourceIds?: string[],
+  ): Promise<{ entries: { path: string; records: IndexRecord[]; hasDescendants: boolean }[] }> {
+    return this.#request({ operation: 'readback', paths, ...(sourceIds ? { sourceIds } : {}) });
   }
 
   readPolicy(configuration: IndexConfiguration | null): Promise<void> {
@@ -399,7 +415,7 @@ export class FileSystemIndexerClient {
         timeout,
         ...(onProgress ? { onProgress } : {}),
       });
-      if (operation.operation === 'index') this.#indexRequests.add(id);
+      if (['index', 'observe', 'readback'].includes(operation.operation)) this.#indexRequests.add(id);
       child.stdin.write(`${JSON.stringify({ id, ...operation })}\n`, (error) => {
         if (!error) return;
         const pending = this.#pending.get(id);
