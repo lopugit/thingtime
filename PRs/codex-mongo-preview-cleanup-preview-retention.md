@@ -80,9 +80,18 @@ acceptance passed with bundled UI origin 28640 and separately selected API 18473
 on a disposable replica: policy 17-hour save and independent readback; separate
 Builder description/input-title edits; private exact-ID layout readback; native
 reload restoring both edits and policy at 1440/390; no horizontal overflow.
-The worker removed its dev bundle/profile/processes/API/DB fixture. Final signed
-build verification and intended installed-copy acceptance remain separate gates;
-no replacement of the existing installed app is claimed.
+The worker removed its dev bundle/profile/processes/API/DB fixture. The signed candidate at that runtime SHA passed its strict signature verifier
+and executable check; notarization is omitted by the local build contract.
+Intended installed-copy acceptance remains a separate gate; no replacement of the
+existing installed app is claimed.
+
+A concurrent Lopu review-bot commit (`61209de14`) was preserved by normal merge.
+It corrects unreadable stored-policy GET errors to 503 unavailable instead of 400
+form errors, with six route tests passing. The compatible admin capability is
+1.0.1 in both generated manifests; the signed controller capability remains
+1.0.0. Electron bundles this server and registry, so the merged runtime requires
+a new signed build. The unchanged native happy-path evidence remains valid for
+the UI; the earlier signed artifact does not represent the final merged runtime.
 
 Production saved-layout/Builder acceptance remains open until an authorized
 owning-account session is available; isolated acceptance does not establish that

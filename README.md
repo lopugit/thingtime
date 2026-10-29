@@ -6698,8 +6698,9 @@ Production, stable/gateway deployments, protected aliases and unrelated project
 resources are protected independently of these settings. Invalid or unavailable
 policy preserves deployments instead of using a stale enabled value.
 
-Roll out the product API to the selected gateway first, verify both 1.0.0
-capabilities and admin save/readback there, then roll out the protected controller
+Roll out the product API to the selected gateway first, verify admin capability
+1.0.1, controller capability 1.0.0 and admin save/readback
+there, then roll out the protected controller
 policy consumer. An ordinary gateway-backed UI preview does not contain a new
 API; leave cleanup fail-closed until its selected origin exposes the contract.
 This changes deployed policy only after that rollout.
