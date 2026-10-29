@@ -5069,6 +5069,16 @@ halves.
       `mentions.test.ts`). Mentions in Settings → Notifications has its own
       push/email switch row.
 
+## Account storage queue and autonomous recovery
+
+- Generic create and upsert reject `storage-pending-` and `storage-recovery-` custom IDs before database writes.
+- [ ] Against a disposable replica set, enter a trusted needs-reconcile state and perform real create/update/delete paths. Unlimited accounts admit at most 100 MiB gross positive pending deltas; finite uncertain allowances, malformed ledgers and wrong identities fail closed. Ordinary healthy writes larger than that budget still use exact accounting.
+- [ ] Race reservations at the budget boundary and force transaction rollback. Content, aggregate, receipt and recovery job must commit together; retries cannot double count and queued deletes cannot grant more growth capacity.
+- [ ] Interrupt a worker, reclaim its lease and race new writes against final reconciliation. A stale worker cannot stamp/clear later work, source-before-accounting updates are counted exactly once, and restart resumes the persisted cursor. Legacy/malformed sources remain blocked; newer canonical repair can rearm a blocked job.
+- [ ] Check health with exact ledgers but one invalid source stamp: it must remain degraded. Pending trusted jobs report recovering, never ready; blocked, missing or stale jobs and malformed ledgers do not pass the release gate.
+- [ ] On the deployed revision, exercise a private saved-post write, reload to confirm persistence and restore its original state. Verify the public manifest, selected production alias and storage status. Run the protected runtime monitor and confirm it queries that exact deployment; access/truncation failures cannot look like a clean log window.
+- [ ] Confirm handled and unhandled storage failures emit only the fixed storage codes and safe summary, without response bodies, account data or secrets. Check pre-merge required context, candidate failure before alias changes, rollback on alias verification failure, scheduled status deduplication and stale-alias refusal.
+
 ## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
 
 - [ ] Before and after deploying any `USER_STORAGE_ACCOUNTING_VERSION` bump,
