@@ -238,7 +238,7 @@ test('READY reuse publishes alias, status and summary, then retries without anot
     if (['thingtime-ready.vercel.app', 'thingtime.com'].includes(url.hostname)) {
       if (url.pathname === '/' || url.pathname === '/index.html') return new Response('<div id="root"></div><script src="/assets/app.js"></script>', { headers: { 'Content-Type': 'text/html' } });
       if (url.pathname === '/assets/app.js') return new Response('console.log("fixture")', { headers: { 'Content-Type': 'application/javascript' } });
-      if (url.pathname === '/.well-known/thingtime-capabilities.json') return json({ origin: url.origin, features: { 'api.health-nitro': { version: '1.3.0' } }, gateway: { environment: 'production', origin: 'https://thingtime.com', deploymentId: deployment.id } });
+      if (url.pathname === '/.well-known/thingtime-capabilities.json') return json({ origin: url.origin, features: { 'api.health-nitro': { version: '1.3.0' }, 'api.storage-accounting': { version: '1.0.0' } }, gateway: { environment: 'production', origin: 'https://thingtime.com', deploymentId: deployment.id } });
       if (url.pathname === '/api/v1/health/nitro') return json({ origin: url.origin, targetOrigin: url.origin, service: 'nitro', ok: storageReady, state: storageReady ? 'ready' : 'degraded', storageAccounting: { state: storageReady ? 'ready' : 'migration-required', expectedVersion: 1 } });
       if (url.pathname === '/api/root-data') return json({ ok: true });
     }

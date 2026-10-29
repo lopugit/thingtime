@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { checkRuntimeLogs, checkStorageReadiness, logLimit, monitor, productionOrigin as origin, requireStorageReady, runtimeLogArgs, shouldPublishStatus, summarizeRuntimeLogs, waitForStorageReadiness } from './storage-release-gate.mjs';
 
-const manifest = { origin, features: { 'api.health-nitro': { version: '1.3.0' } } };
+const manifest = { origin, features: { 'api.health-nitro': { version: '1.3.0' }, 'api.storage-accounting': { version: '1.0.0' } } };
 const health = { origin, targetOrigin: origin, service: 'nitro', ok: true, state: 'ready', storageAccounting: { state: 'ready', expectedVersion: 1 } };
 test('only negotiated origin-specific healthy storage passes, including HTTP-200 degraded bodies', () => {
   assert.deepEqual(requireStorageReady(manifest, health, origin), { state: 'ready', accountingVersion: 1 });
@@ -29,6 +29,16 @@ test('premerge admits repaired 1.2.0 while new production candidates require 1.3
   assert.doesNotThrow(() => requireStorageReady(previous, health, origin));
   assert.throws(() => requireStorageReady(previous, health, origin, '1.3.0'));
   assert.doesNotThrow(() => requireStorageReady(manifest, health, origin, '1.3.0'));
+});
+test('candidate requires shared storage-accounting major 1 even with ready health 1.3', () => {
+  for (const version of [undefined, '0.9.0', '2.0.0', '1.0.0-preview', 'invalid']) {
+    const candidate = { ...manifest, features: { ...manifest.features, 'api.storage-accounting': { version } } };
+    assert.throws(() => requireStorageReady(candidate, health, origin, '1.3.0'), /storage-capability-unavailable/);
+    assert.doesNotThrow(() => requireStorageReady(candidate, health, origin, '1.2.0'));
+  }
+  for (const version of ['1.0.0', '1.0.1', '1.2.0']) {
+    assert.doesNotThrow(() => requireStorageReady({ ...manifest, features: { ...manifest.features, 'api.storage-accounting': { version } } }, health, origin, '1.3.0'));
+  }
 });
 test('discovery and health fail closed on redirects, HTML, unauthorized, invalid JSON and unavailable transport', async () => {
   const calls = [];

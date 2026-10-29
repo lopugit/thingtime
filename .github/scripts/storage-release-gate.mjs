@@ -15,6 +15,7 @@ export function requireStorageReady(manifest, health, origin, minimumVersion = '
   const parts = /^1\.(\d+)\.(\d+)$/.exec(version || '');
   const minimum = minimumVersion.split('.').map(Number);
   if (manifest?.origin !== origin || !parts || Number(parts[1]) < minimum[1] || (Number(parts[1]) === minimum[1] && Number(parts[2]) < minimum[2])) throw failure('health-capability-unavailable');
+  if (minimum[1] >= 3 && !/^1\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(manifest?.features?.['api.storage-accounting']?.version || '')) throw failure('storage-capability-unavailable');
   if (health?.origin !== origin || health?.targetOrigin !== origin || health?.service !== 'nitro') throw failure('health-origin-mismatch');
   if (health?.storageAccounting?.state === 'recovering') throw failure('storage-recovering');
   if (health?.ok !== true || health?.state !== 'ready' || health?.storageAccounting?.state !== 'ready' || !Number.isSafeInteger(health.storageAccounting.expectedVersion) || health.storageAccounting.expectedVersion < 1) throw failure('storage-not-ready');
