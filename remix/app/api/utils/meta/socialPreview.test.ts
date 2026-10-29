@@ -61,7 +61,7 @@ test('social preview paths never become a redirect or an arbitrary route', () =>
 test('social-card URLs carry only a normalized local path and a safe revision', () => {
 	assert.equal(
 		socialPreviewCardUrl('https://thingtime.example', '/post/hello?source=chat', '2026-09-04T12:00:00.000Z'),
-		'https://thingtime.example/social-card?path=%2Fpost%2Fhello&v=2026-09-04T12%3A00%3A00.000Z'
+		'https://thingtime.example/social-card?path=%2Fpost%2Fhello&r=brand-20261029&v=2026-09-04T12%3A00%3A00.000Z'
 	);
 });
 
@@ -253,11 +253,92 @@ test('invitation links have a shared card without reading or validating their pr
 		assert.equal(tags.get('og:title'), expected.title);
 		assert.equal(tags.get('og:description'), expected.description);
 		assert.equal(tags.get('twitter:card'), 'summary_large_image');
-		assert.equal(tags.get('og:image'), 'https://thingtime.example/social-card?path=%2Finvite&v=invite-20261029');
+		assert.equal(tags.get('og:image'), 'https://thingtime.example/social-card?path=%2Finvite&r=brand-20261029&v=invite-20261029');
 		assert.equal(tags.get('robots'), 'noindex, follow');
 		assert.equal(meta.canonical, 'https://thingtime.example/invite');
 		assert.doesNotMatch(renderSocialMetaHtml(meta), /private|expired|person|%E0|gift|<script>/);
 	}
 	assert.equal(pageTitle('/invite'), 'Thingtime - Invitation');
 	assert.equal(pageTitle('/invite#private', '[LC]'), '[LC] Thingtime - Invitation');
+});
+
+
+test('metadata API accepts only same-origin paths and drops queries, fragments and caller identity', async () => {
+	const { resolveSocialMetadata, socialMetadataPath } = await import('./socialMetadata');
+	for (const value of ['/post/public?token=secret#secret', 'https://thingtime.example/post/public?token=secret#secret'])
+		assert.equal(socialMetadataPath('https://thingtime.example', value), '/post/public');
+	for (const value of ['https://other.example/post/public', '//other.example/a', 'https://user:secret@thingtime.example/a', 'file:///a', ['javascript', 'alert(1)'].join(':'), '/a\\b', '/a\nsecret'])
+		assert.throws(() => socialMetadataPath('https://thingtime.example', value));
+	const resolved: string[][] = [];
+	const resolve = async (origin: string, path: string) => {
+		resolved.push([origin, path]);
+		return { ...staticSocialPreview(path), title: 'Public title', description: 'Public description', publicContent: true, secret: 'never-project', crystal: { private: true } };
+	};
+	const url = 'https://thingtime.example/api/v1/social-previews?path=' + encodeURIComponent('/post/public?token=secret#secret');
+	const anonymous = await resolveSocialMetadata(new Request(url), resolve);
+	const signedIn = await resolveSocialMetadata(new Request(url, { headers: { Cookie: 'tt_auth=private; tt_mongo=private', Authorization: 'Bearer private', 'x-tt-mongo-url': 'mongodb://attacker.invalid/thingtime' } }), resolve);
+	assert.deepEqual(signedIn, anonymous);
+	assert.deepEqual(resolved, [['https://thingtime.example', '/post/public'], ['https://thingtime.example', '/post/public']]);
+	assert.deepEqual(Object.keys(anonymous).sort(), ['canonical', 'description', 'image', 'publicContent', 'title', 'type', 'url']);
+	assert.equal(anonymous.canonical, 'https://thingtime.example/post/public');
+	assert.equal(anonymous.title, 'Public title');
+	assert.equal(anonymous.image.width, 1200);
+	assert.equal(anonymous.image.height, 630);
+	assert.equal(anonymous.image.type, 'image/png');
+	assert.doesNotMatch(JSON.stringify(anonymous), /secret|private|crystal|never-project/);
+	const unavailable = await resolveSocialMetadata(new Request(url), async () => { throw new Error('private database detail'); });
+	const missing = await resolveSocialMetadata(new Request(url), async (_, path) => staticSocialPreview(path));
+	assert.deepEqual(unavailable, missing);
+	assert.equal(missing.publicContent, false);
+});
+
+test('metadata route leaves inherited custom databases and rate limits anonymously before resolving', async () => {
+	const { createSocialPreviewsLoader } = await import('../../../routes/api/v1/social-previews/_social-previews');
+	const { runWithMongoEndpoint, getActiveMongoEndpoint } = await import('../mongodb/endpoint');
+	const { resolveSocialMetadata } = await import('./socialMetadata');
+	let calls = 0;
+	const handler = createSocialPreviewsLoader({
+		limit: async (_request, key, identity, options) => {
+			assert.equal(getActiveMongoEndpoint(), null);
+			assert.equal(key, 'social-previews.read');
+			assert.equal(identity, null);
+			assert.equal(options?.failClosed, true);
+			return { allowed: true, limit: 120, remaining: 119, resetAt: new Date().toISOString() };
+		},
+		resolve: async (request) => {
+			calls++;
+			assert.equal(getActiveMongoEndpoint(), null);
+			return resolveSocialMetadata(request, async (_, path) => staticSocialPreview(path));
+		}
+	});
+	const selection = { url: 'mongodb://attacker.invalid/thingtime', savedId: null };
+	await runWithMongoEndpoint(selection, async () => {
+		const response = await handler({ request: new Request('https://thingtime.example/api/v1/social-previews?path=%2Finvite', { headers: { Cookie: 'tt_auth=private', 'x-tt-mongo-url': selection.url } }) });
+		assert.equal(response.status, 200);
+		assert.equal(response.headers.get('cache-control'), 'no-store');
+		assert.equal(getActiveMongoEndpoint()?.url, selection.url);
+		assert.equal((await response.json()).publicContent, false);
+	});
+	const refused = createSocialPreviewsLoader({ limit: async () => ({ allowed: false, limit: 120, remaining: 0, resetAt: new Date().toISOString() }), resolve: async () => { throw new Error('must not resolve'); } });
+	const limited = await refused({ request: new Request('https://thingtime.example/api/v1/social-previews') });
+	assert.equal(limited.status, 429);
+	assert.ok(limited.headers.get('retry-after'));
+	const unavailable = createSocialPreviewsLoader({ limit: async () => ({ allowed: false, unavailable: true, limit: 120, remaining: 0, resetAt: new Date().toISOString() }) });
+	assert.equal((await unavailable({ request: new Request('https://thingtime.example/api/v1/social-previews') })).status, 503);
+	assert.equal((await handler({ request: new Request('https://thingtime.example/api/v1/social-previews', { method: 'POST' }) })).status, 405);
+	assert.equal(calls, 1);
+});
+
+
+test('all dynamic card URLs carry a global brand revision independently of content revision', async () => {
+	const { SOCIAL_CARD_RENDERER_REVISION } = await import('./socialPreview');
+	for (const path of ['/invite#secret', '/feed', '/post/public?token=secret', '/profile/example', '/p/public']) {
+		const base = new URL(socialPreviewCardUrl('https://thingtime.example', path));
+		const edited = new URL(socialPreviewCardUrl('https://thingtime.example', path, 'content-edit'));
+		assert.equal(base.searchParams.get('r'), SOCIAL_CARD_RENDERER_REVISION);
+		assert.equal(edited.searchParams.get('r'), SOCIAL_CARD_RENDERER_REVISION);
+		assert.equal(edited.searchParams.get('v'), 'content-edit');
+		assert.equal(base.searchParams.has('v'), false);
+		assert.doesNotMatch(edited.href, /secret|token/);
+	}
 });

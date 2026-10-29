@@ -5,11 +5,11 @@ import { apiEndpointDocs, apiV1DocsRouteKeys, apiV1RouteKeys, createApiCapabilit
 import { capabilitySatisfies } from './capabilityContract';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from './thingtimeCapabilities';
 
-test('invitation previews publish the additive social-card contract on both manifests', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.social-card'], '1.1.0');
-  assert.equal(thingtimeCapabilityManifest('https://invite.test').features['api.social-card'].version, '1.1.0');
-  for (const version of ['1.1.0', '1.1.1', '1.2.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), true);
-  for (const version of ['', '1.0.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
+test('branded photo previews publish the additive social-card contract on both manifests', () => {
+  assert.equal(createApiCapabilitiesManifest().features['api.social-card'], '1.2.0');
+  assert.equal(thingtimeCapabilityManifest('https://invite.test').features['api.social-card'].version, '1.2.0');
+  for (const version of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), true);
+  for (const version of ['', '1.1.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
 });
 
 test('archive import clients reject missing, pre-archive and breaking contracts on both manifests', () => {

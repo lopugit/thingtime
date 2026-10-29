@@ -107,3 +107,41 @@ private/no-store, and invitation pages remain `noindex, follow`. The generic
 card has no account-dependent data, so its PNG uses the existing public cache
 policy safely. Previously sent WhatsApp cards can remain cached; verify fresh
 raw HTML and PNG responses as well as a newly composed message after deployment.
+
+## Shared metadata API and exact branding — 2026-10-29
+
+`GET /api/v1/social-previews?path=/post/<id>` exposes the same anonymous resolver
+used by the page HTML and `/social-card`. Negotiate `api.social-previews` 1.0.0
+before using it. The response contains title, description, canonical URL, Open
+Graph type and an image descriptor (URL, dimensions, MIME type and alt text).
+It accepts a local path or a URL on the serving origin; query strings and
+fragments are discarded. It never scrapes an arbitrary external website,
+uses a caller's signed-in access or accepts a caller-selected database.
+
+Posts, comments, profiles, media, Things and published Builder pages use their
+canonical public data. Published pages prefer their saved title/description
+and use safely extracted block copy as a description fallback. Static routes
+use registered descriptions; unavailable/private targets use generic metadata.
+Adding a static application route still requires a deliberate resolver entry:
+there is no authenticated browser screenshot or hidden-page scraping fallback.
+
+The card image is a real 1200×630 PNG containing the public photos. The old
+loader discarded original attachments over 2 MiB, which turned ordinary phone
+photos into placeholder tiles. The replacement requests canonical bounded
+thumbnails, normalizes them to a renderer-supported PNG and rechecks anonymous
+access and the stored version before embedding. Source/decode limits remain
+resource safeguards in the existing thumbnail service, not upload limits.
+Denied, changed, malformed or unavailable attachments use safe fallback art.
+
+The shared card renderer takes its wordmark and icon from the same voxel
+matrices and exporter as `/branding`, and its colours from the canonical theme
+tokens. Its bundled Space Grotesk, Hanken Grotesk and JetBrains Mono faces match
+the brand font families without relying on server-installed fonts. Dynamic
+image URLs include an independent renderer revision as well as their content
+revision, so a branding fix can change the image URL for existing posts.
+This expanded card contract is `api.social-card` 1.2.0.
+
+See [PR 1287 delivery evidence](../PRs/1287-invite-previews-profile-choice-shared-branded-social-previews.md)
+for the source revision, checks and deployment limitations. A gateway preview
+must negotiate the new metadata/card capabilities with its selected backend;
+successful HTML alone does not establish that the PNG endpoint is ready.

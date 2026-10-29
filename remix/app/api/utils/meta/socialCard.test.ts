@@ -14,6 +14,9 @@ import {
 } from './socialCard';
 import type { SocialPreview } from './socialPreview';
 import { staticSocialPreview } from './socialPreview';
+import { socialCardLogoSvg, SOCIAL_CARD_BRAND } from './socialCardBrand';
+import { buildLogoSvg, LOGO_FULL_MATRIX, LOGO_ICON_MATRIX, LOGO_DEFAULT_COLOURS } from '../../../components/Branding/logoMatrix';
+import { SOCIAL_CARD_BRAND_FONTS } from './socialCardBrandFontData';
 
 const gallery: SocialPreview = {
 	kind: 'gallery',
@@ -81,7 +84,7 @@ test('every post-shaped card variant gets its own deliberate visual panel', () =
 });
 
 const titleLinesOf = (svg: string): Array<{ y: number; text: string }> =>
-	[...svg.matchAll(/<text x="86" y="(\d+)" fill="#17112D"[^>]*>([^<]*)<\/text>/g)].map((match) => ({ y: Number(match[1]), text: match[2] }));
+	[...svg.matchAll(/<text x="86" y="(\d+)" fill="#16161a"[^>]*>([^<]*)<\/text>/g)].map((match) => ({ y: Number(match[1]), text: match[2] }));
 
 test('multi-line titles stack instead of overprinting, with and without an author', () => {
 	const longTitle = 'Nikolaj Lopusanschi: we spent the whole weekend rebuilding the little garden bed out the back';
@@ -122,7 +125,7 @@ test('descriptions are wrapped by measured width too', () => {
 		images: [],
 		imageCount: 0
 	});
-	const lines = [...svg.matchAll(/<text x="86" y="\d+" fill="#5F5872"[^>]*>([^<]*)<\/text>/g)].map((match) => match[1]);
+	const lines = [...svg.matchAll(/<text x="86" y="\d+" fill="#5a5a66"[^>]*>([^<]*)<\/text>/g)].map((match) => match[1]);
 	assert.ok(lines.length > 1, 'expected the description to wrap');
 	for (const line of lines) assert.ok(socialTextWidth(line, 21) <= 594, `description line "${line}" runs past the art panel`);
 });
@@ -285,9 +288,13 @@ test('cards draw real glyphs on a host with no system fonts (the deployed runtim
 	const blankInk = inkInBand(blank, { top: 200, bottom: 340, left: 86, right: 700, dark: true });
 	assert.ok(titleInk > blankInk * 20, `headline ink (${titleInk}) is indistinguishable from an empty card (${blankInk})`);
 
-	// White wordmark ink inside the dark browser chrome bar.
-	const wordmarkInk = inkInBand(pixels, { top: 52, bottom: 80, left: 130, right: 320, dark: false });
-	assert.ok(wordmarkInk > 100, `expected the THINGTIME wordmark to render, found ${wordmarkInk} light pixels`);
+	// The canonical wordmark is a coloured voxel asset, not white text.
+	let wordmarkInk = 0;
+	for (let y = 47; y < 83; y++) for (let x = 74; x < 298; x++) {
+		const i = (y * 1200 + x) * 4;
+		if (Math.max(pixels[i], pixels[i + 1], pixels[i + 2]) > 100) wordmarkInk++;
+	}
+	assert.ok(wordmarkInk > 300, `expected the canonical voxel wordmark, found ${wordmarkInk} coloured pixels`);
 });
 
 test('nothing on a card is drawn as a missing-glyph box', () => {
@@ -578,4 +585,23 @@ test('invitation previews render a complete distinct PNG using only shared invit
 	assert.equal(bytes.readUInt32BE(16), 1200);
 	assert.equal(bytes.readUInt32BE(20), 630);
 	assert.ok(png.byteLength > 1_000);
+});
+
+
+test('every preview carries the exact canonical voxel wordmark and brand typography', () => {
+	for (const icon of [false, true]) assert.equal(socialCardLogoSvg(icon), buildLogoSvg({
+		matrix: icon ? LOGO_ICON_MATRIX : LOGO_FULL_MATRIX, colourMap: LOGO_DEFAULT_COLOURS
+	}).svg);
+	for (const path of ['/', '/invite', '/feed', '/docs', '/profile']) {
+		const svg = buildSocialCardSvg(staticSocialPreview(path));
+		const encoded = svg.match(/data-brand-asset="wordmark"[^>]*href="data:image\/svg\+xml;base64,([^"]+)"/);
+		assert.ok(encoded, path);
+		assert.equal(Buffer.from(encoded[1], 'base64').toString('utf8'), socialCardLogoSvg());
+		assert.doesNotMatch(svg, />THINGTIME<|font-family="Arial/);
+		assert.ok(svg.includes(`font-family="${SOCIAL_CARD_BRAND.heading}, sans-serif"`));
+		assert.ok(svg.includes(`font-family="${SOCIAL_CARD_BRAND.body}, sans-serif"`));
+		assert.ok(svg.includes(`font-family="${SOCIAL_CARD_BRAND.mono}, monospace"`));
+	}
+	assert.deepEqual([...new Set(SOCIAL_CARD_BRAND_FONTS.map((font) => font.family))].sort(),
+		[SOCIAL_CARD_BRAND.heading, SOCIAL_CARD_BRAND.body, SOCIAL_CARD_BRAND.mono].sort());
 });

@@ -83,6 +83,9 @@ export type SocialPreview = {
 	indexable?: boolean;
 };
 
+// Global renderer/brand version refreshes every dynamic card, independently
+// of the content revision carried in v. Never include viewer or bearer data.
+export const SOCIAL_CARD_RENDERER_REVISION = 'brand-20261029';
 export const SOCIAL_PREVIEW_WIDTH = 1200;
 export const SOCIAL_PREVIEW_HEIGHT = 630;
 
@@ -170,7 +173,7 @@ export const normaliseSocialPreviewPath = (value: unknown): string => {
 };
 
 export const socialPreviewCardUrl = (origin: string, path: string, revision?: string): string => {
-	const query = new URLSearchParams({ path: normaliseSocialPreviewPath(path) });
+	const query = new URLSearchParams({ path: normaliseSocialPreviewPath(path), r: SOCIAL_CARD_RENDERER_REVISION });
 	if (revision) query.set('v', truncateSocialText(revision, 80));
 	return `${origin}/social-card?${query.toString()}`;
 };

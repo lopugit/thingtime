@@ -669,9 +669,9 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
-    id: 'social-card', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'root',
+    id: 'social-card', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'root',
     title: 'Public social card', endpoint: '/social-card', summary: 'Renders an anonymous public social preview PNG.',
-    detail: 'GET accepts a normalized local path query; the controller resolves only public home-plane metadata. It ignores custom database selection and falls back to a safe generic card. HEAD returns image headers without resolving data. No arbitrary remote image URL is accepted. The /invite path renders a shared invitation card without resolving tokens, exposing private invite fields or consuming an invitation.',
+    detail: 'GET accepts a normalized local path query; the controller resolves only public home-plane metadata. It ignores custom database selection and falls back to a safe generic card. HEAD returns image headers without resolving data. Canonical brand artwork, palette and bundled fonts are embedded in the generated card. Eligible public managed photo thumbnails are baked into the PNG after anonymous attachment authorization; unsafe or unavailable photos fall back to brand artwork. Dynamic image URLs carry an independent renderer/brand revision and content revision. No arbitrary remote image URL is accepted. The /invite path renders a shared invitation card without resolving tokens, exposing private invite fields or consuming an invitation.',
     auth: { mode: 'none', description: 'Anonymous public projection only.' }, methods: ['GET'],
     steps: ['GET /social-card?path=/p/<public-id>.'], requestExamples: [{ name: 'Public preview', description: 'Render a public page preview.', method: 'GET', query: { path: '/' } }],
     responseExamples: [{ status: 200, description: 'PNG image.', headers: { 'Content-Type': 'image/png' } }]
@@ -3925,6 +3925,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'bearer', description: 'Deployment CRON_SECRET only.' },
     steps: ['Configure CRON_SECRET and the Vercel hourly schedule.'], requestExamples: [],
     responseExamples: [{ status: 200, description: 'Bounded expiry pass completed.', body: { ok: true } }]
+  }),
+  endpoint({
+    id: 'social-previews', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'content',
+    title: 'Public page metadata', endpoint: '/api/v1/social-previews', methods: ['GET'],
+    summary: 'Resolve crawler-safe title, description, canonical URL and social image for a Thingtime page.',
+    detail: 'Optional path accepts a root-relative path or same-origin HTTP(S) URL, default /. Query values and fragments are discarded before lookup. Remote origins, URL credentials and malformed paths are refused; this endpoint does not scrape remote URLs. Uses the shared anonymous page/post/profile/media resolver and resets custom database selections regardless of supplied session cookies or scoped tokens. Private, missing and unavailable content receives the same generic metadata as anonymous unfurling. Only title, description, canonical/url, Open Graph type, publicContent and image URL/type/dimensions/alt are returned, never raw Thing data. Responses are no-store and rate-limited by anonymous IP.',
+    auth: { mode: 'none', description: 'Anonymous public projection only; supplied authentication never grants additional visibility.' },
+    steps: ['Negotiate api.social-previews 1.0.0 on the selected origin.', 'GET with path for the page to share.'],
+    requestExamples: [{ name: 'Page metadata', description: 'Resolve a public page on the current origin.', method: 'GET', query: { path: '/feed' } }],
+    responseExamples: [{ status: 200, description: 'Anonymous page metadata.', body: { ok: true, title: 'Thingtime - Feed', description: 'Public posts on Thingtime.', url: 'https://thingtime.com/feed', canonical: 'https://thingtime.com/feed', type: 'website', publicContent: false, image: { url: 'https://thingtime.com/social-card?path=%2Ffeed', type: 'image/png', width: 1200, height: 630, alt: 'Thingtime preview card' } } }]
   }),
   endpoint({
     id: 'auth-invites', featureVersion: '2.2.0', contractVersion: '2.2.0', group: 'auth',

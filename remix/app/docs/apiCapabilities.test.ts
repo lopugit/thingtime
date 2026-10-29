@@ -843,3 +843,14 @@ test('resource limits and CPU downloads negotiate only their semantic dependenci
  assert.equal(capabilitySatisfies('1.16.0', requirements['api.attachment-content']), false);
  assert.equal(capabilitySatisfies('1.18.0', requirements['api.attachment-content']), true);
 });
+
+
+test('anonymous public social metadata is executable and registered in both manifests', () => {
+	assert.equal(typeof routeModules['v1/social-previews'], 'function');
+	assert.equal(createApiCapabilitiesManifest(Object.keys(routeModules)).features['api.social-previews'], '1.0.0');
+	const manifest = thingtimeCapabilityManifest('https://thingtime.example');
+	assert.equal(manifest.features['api.social-previews'].version, '1.0.0');
+	assert.ok(manifest.operations.some((operation) => operation.path === '/api/v1/social-previews' && operation.feature === 'api.social-previews' && operation.methods.includes('GET')));
+	for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), true);
+	for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+});

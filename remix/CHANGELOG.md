@@ -104,7 +104,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-29: Add a dedicated invitation link preview while keeping invite tokens and recipient details private. Name and username suggestions are optional when creating an invite; recipients choose their own profile at signup. **Codex (AI)**
+- 2026-10-29: Add dedicated invitation previews and optional recipient profile suggestions. Expose the shared anonymous metadata API, embed canonical public-photo thumbnails and use Thingtime's exact logo, palette and font assets in social cards. [PR 1287 details and acceptance](../PRs/1287-invite-previews-profile-choice-shared-branded-social-previews.md). **Codex (AI)**
 
 - 2026-10-29: Restore the original browser tab before explicit native passkey fallback starts WebAuthn; approval-page cancellation returns consistently while background opt-out/cancellation stays non-disruptive.
 
