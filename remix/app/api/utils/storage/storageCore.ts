@@ -2,7 +2,7 @@
 import {
 	COLLECTION_SCHEMA_VERSIONS,
 	DEVICE_CONTROL_THINGTIME,
-	MIGRATION_DIAGNOSTIC_THINGTIME, ERROR_LOG_THINGTIME,
+	MIGRATION_DIAGNOSTIC_THINGTIME, ERROR_LOG_THINGTIME, STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
 	USER_STORAGE_ACCOUNTING_VERSION
 } from '../../../schemas/registry.ts';
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
@@ -118,6 +118,7 @@ export type UserStorageUsage = {
 };
 
 export const CONTROL_PLANE_STORAGE_THINGTIMES = [
+  STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
   'post-discovery',
 	'lopu-recording-settings',
 	'lopu-background-task',
@@ -187,6 +188,23 @@ export const nonSandboxStorageCandidateExpression = {
 };
 export const realStorageSourceExpression = {
   $eq: [{ $type: '$sandboxExpiresAt' }, 'missing']
+};
+
+// The same source-stamp proof is required by reconciliation and release
+// readiness. Keep malformed/legacy candidates outside this match rather than
+// silently dropping them from the billable census.
+export const currentStorageSourceMatch = {
+  schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+  thingtime: { $type: 'array' },
+  storageClass: 'content',
+  storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+  sizeBytes: { $type: 'number', $gte: 0, $lte: Number.MAX_SAFE_INTEGER },
+  $expr: {
+    $and: [
+      realStorageSourceExpression,
+      { $eq: ['$sizeBytes', { $convert: { input: '$sizeBytes', to: 'long', onError: null, onNull: null } }] }
+    ]
+  }
 };
 
 export const billableStorageCandidateExpression = {
