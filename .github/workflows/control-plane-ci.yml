@@ -94,7 +94,7 @@ jobs:
         run: node --test .github/scripts/control-plane-events.test.mjs .github/scripts/preview-comments.test.mjs .github/scripts/preview-labels.test.mjs .github/scripts/preview-recovery.test.mjs .github/scripts/preview-fallback.test.mjs .github/scripts/preview-pr-summary.test.mjs
 
       - name: Validate prebuilt-only deployment contracts
-        run: node --test .github/scripts/deploy-vercel-prebuilt.test.mjs .github/scripts/environment-gateway-policy.test.mjs
+        run: node --test .github/scripts/deploy-vercel-prebuilt.test.mjs .github/scripts/environment-gateway-policy.test.mjs .github/scripts/storage-release-gate.test.mjs
 
       - name: Validate all-branch event and doctor contracts
         run: node .github/scripts/build-all-branch.mjs --self-test

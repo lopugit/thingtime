@@ -203,6 +203,18 @@ pre-queued with no jobs, logs, or cancellable run graph.
 - Run `node --test .github/scripts/admin-model-order.test.mjs .github/scripts/lopu-credential-vault.test.mjs`.
 # Prebuilt-only deployments (2026-10-23)
 
+## Storage release protection (2026-10-29)
+
+- Run `node --test .github/scripts/storage-release-gate.test.mjs .github/scripts/deploy-vercel-prebuilt.test.mjs .github/scripts/environment-gateway-policy.test.mjs`.
+- The existing required `control-plane / Build + typecheck ratchet + unit tests` context checks public production Nitro storage readiness in both full and lightweight paths. An HTTP-200 degraded body, unavailable endpoint, wrong origin, incompatible capability or missing storage status must fail the check. No new ruleset exemption or credential grant is needed.
+- Publication checks the exact candidate health contract (`api.health-nitro >= 1.2.1`, major 1) and storage readiness before production alias changes, then checks every reassigned alias. A failure after alias assignment uses the existing ownership-safe rollback. Premerge accepts repaired 1.2.0 so rollout of the stronger source-readiness contract is possible.
+- The protected runtime monitor is called by the product default-branch thin listener `storage-release-monitor.yml`, every 15 minutes and after deployment completion. Activate the controller PR before that product listener. It reuses `vercel-prebuilt-control`'s existing `VERCEL_DEPLOY_TOKEN` and project/team vars; it does not create an admin token or run production migrations.
+- Verify one live manual monitor run, not only fixtures: resolve `thingtime.com` to its current project-owned production deployment, negotiate health on that origin, then query that exact deployment's last 30 minutes through pinned Vercel CLI 59.10.0 `logs --project ... --deployment ... --environment production --since ... --until ... --query '"storage migration"' --limit 500 --json --no-follow`. Pass the token only in `VERCEL_TOKEN`. Current [CLI docs](https://vercel.com/docs/cli/logs) describe newer flags; use the pinned package's `logs --help` for this implementation.
+- Capture CLI output only in memory; report aggregate counts or fixed failure codes, never raw provider stdout/stderr, messages, URLs, account identifiers or credentials. Access failure, invalid JSON, message truncation and a saturated result window fail closed. The monitor checks storage-specific errors, not every unrelated application error. Provider retention and best-effort application log capture bound detection; healthy sampled logs alone do not prove a real account write succeeded.
+- The monitor publishes a source-specific `Production storage runtime` commit status and a failing workflow run. Deduplicate unchanged status state/description and stop stale observations when the production alias moves. A success requires both current readiness and no matching errors in the complete bounded query. Review the workflow failure before any recovery; no automatic migration or destructive repair is granted by this gate.
+
+## Prebuilt artifact acceptance
+
 - Prebuilt publication must write the immutable source cron list into Build Output API `config.json` for Production only, and set each function region from that source. Verify the live deployment reports Sydney only and the active project cron list contains all seven expected schedules. A changed output-policy marker must replace older READY artifacts.
 
 - If publication stops after Vercel becomes READY, a fresh run skips compilation

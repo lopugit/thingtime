@@ -303,6 +303,19 @@ jobs:
           cache: pnpm
           cache-dependency-path: remix/pnpm-lock.yaml
 
+      - name: Read protected storage release gate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: github-actions
+          path: .storage-controller
+          persist-credentials: false
+          sparse-checkout: .github/scripts/storage-release-gate.mjs
+
+      # Inside the existing required build context: failed readiness cannot
+      # become a skipped dependent check which GitHub considers mergeable.
+      - name: Require production storage readiness before merge
+        run: node ../.storage-controller/.github/scripts/storage-release-gate.mjs
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -404,6 +417,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
+      - name: Read protected storage release gate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: github-actions
+          persist-credentials: false
+          sparse-checkout: .github/scripts/storage-release-gate.mjs
+      - name: Require production storage readiness before merge
+        run: node .github/scripts/storage-release-gate.mjs
       - name: Report the non-Remix build context
         run: echo "No Remix or Web CI workflow changes; the full build is not required."
 

@@ -189,7 +189,7 @@ test('READY reuse publishes alias, status and summary, then retries without anot
     VERCEL_TEAM_ID: 'team_test', VERCEL_TEAM_SLUG: 'team',
     VERCEL_PROJECT_ID: 'prj_test', VERCEL_PROJECT_NAME: 'thingtime',
     SOURCE_REF: 'main', SOURCE_SHA: 'a'.repeat(40), TARGET_ENVIRONMENT: 'production', TARGET_ID: '',
-    GITHUB_RUN_ID: '123', GITHUB_STEP_SUMMARY: summary
+    GITHUB_RUN_ID: '123', GITHUB_STEP_SUMMARY: summary, VERCEL_CLI_PATH: '/verified/vercel'
   };
   const originalEnvironment = Object.fromEntries(Object.keys(environment).map((key) => [key, process.env[key]]));
   const originalFetch = globalThis.fetch;
@@ -204,6 +204,8 @@ test('READY reuse publishes alias, status and summary, then retries without anot
   let binding = { projectId: 'prj_test', alias: 'thingtime.com', deploymentId: 'dpl_previous' };
   const statuses = [];
   const calls = [];
+  let storageReady = true;
+  const runtimeLogs = async (options) => { assert.equal(options.deploymentId, deployment.id); calls.push('runtime-log-gate'); };
   const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
   Object.assign(process.env, environment);
   globalThis.fetch = async (input, init = {}) => {
@@ -236,13 +238,22 @@ test('READY reuse publishes alias, status and summary, then retries without anot
     if (['thingtime-ready.vercel.app', 'thingtime.com'].includes(url.hostname)) {
       if (url.pathname === '/' || url.pathname === '/index.html') return new Response('<div id="root"></div><script src="/assets/app.js"></script>', { headers: { 'Content-Type': 'text/html' } });
       if (url.pathname === '/assets/app.js') return new Response('console.log("fixture")', { headers: { 'Content-Type': 'application/javascript' } });
-      if (url.pathname === '/.well-known/thingtime-capabilities.json') return json({ origin: 'https://thingtime.com', gateway: { environment: 'production', origin: 'https://thingtime.com', deploymentId: deployment.id } });
+      if (url.pathname === '/.well-known/thingtime-capabilities.json') return json({ origin: url.origin, features: { 'api.health-nitro': { version: '1.2.1' } }, gateway: { environment: 'production', origin: 'https://thingtime.com', deploymentId: deployment.id } });
+      if (url.pathname === '/api/v1/health/nitro') return json({ origin: url.origin, targetOrigin: url.origin, service: 'nitro', ok: storageReady, state: storageReady ? 'ready' : 'degraded', storageAccounting: { state: storageReady ? 'ready' : 'migration-required', expectedVersion: 1 } });
       if (url.pathname === '/api/root-data') return json({ ok: true });
     }
     throw new Error(`Unexpected fixture request: ${method} ${url.origin}${url.pathname}`);
   };
   try {
-    await publish();
+    storageReady = false;
+    await assert.rejects(publish({ runtimeLogs }), /storage-not-ready/);
+    assert.equal(binding.deploymentId, 'dpl_previous');
+    assert.equal(calls.filter((call) => call.startsWith('POST ')).length, 0);
+    storageReady = true;
+    await assert.rejects(publish({ runtimeLogs: async () => { throw new Error('runtime-storage-errors-1'); } }), /runtime-storage-errors-1/);
+    assert.equal(binding.deploymentId, 'dpl_previous');
+    assert.equal(calls.filter((call) => call.startsWith('POST ')).length, 0);
+    await publish({ runtimeLogs });
     assert.equal(binding.deploymentId, deployment.id);
     assert.equal(statuses.length, 1);
     assert.equal(statuses[0].target_url, 'https://thingtime-ready.vercel.app');
@@ -251,9 +262,10 @@ test('READY reuse publishes alias, status and summary, then retries without anot
     assert.ok(calls.includes('GET https://thingtime.com/.well-known/thingtime-capabilities.json'));
     assert.ok(calls.includes('GET https://thingtime.com/api/root-data'));
     assert.equal(calls.filter((call) => call.startsWith('POST ')).length, 2);
+    assert.ok(calls.indexOf('runtime-log-gate') < calls.findIndex((call) => call.startsWith('POST ')));
     const firstCalls = calls.length;
     await writeFile(summary, '');
-    await publish();
+    await publish({ runtimeLogs });
     assert.equal(statuses.length, 1);
     assert.equal(calls.slice(firstCalls).filter((call) => call.startsWith('POST ')).length, 0);
     assert.match(await readFile(summary, 'utf8'), /Environment: `production`/);
