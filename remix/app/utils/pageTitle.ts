@@ -8,6 +8,7 @@ export const pageTitle = (pathname: string, prefix = ''): string => {
 	if (path === '/docs/design' || path.startsWith('/docs/design/')) return `${base} docs - Design mockups`;
 	if (path === '/docs') return `${base} docs`;
 	const exact: Record<string, string> = {
+		'/invite': 'Invitation',
 		'/feed': 'Feed',
 		'/messages': 'Messages',
 		'/settings': 'Settings',

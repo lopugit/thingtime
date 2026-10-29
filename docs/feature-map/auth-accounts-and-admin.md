@@ -225,3 +225,14 @@ admin lookup, session selection, agent coordination and acceptance runbook.
 `resolveSessionUser` defaults to the authenticated principal for roster and
 credential callers; request authentication passes an explicit selection (or null
 for the session default). Never re-mint a principal session with an acting user ID.
+
+## Gift invites
+
+`Invites/InvitePanel.tsx` uses the shared `InviteProfileFields` with optional
+creator suggestions. `inviteCore.ts::inviteProfile` validates supplied suggestions;
+`invites.ts::createInvite` accepts omitted or blank names/usernames. The recipient
+chooses their final profile in `InviteSignup.tsx`; `prepareInviteSignup` still
+requires a valid final name and username, supports legacy suggested defaults, and
+never lets suggestions override explicit recipient input. `api.auth-invites` 2.2.0
+advertises optional creator fields and the client negotiates that minimum.
+`test:invites` covers empty suggestions, recipient choice and escrow/replay safety.

@@ -37,6 +37,17 @@ for (const path of paths) {
       assert.match(meta.get('robots'), /noindex/);
       assert.equal(schema['@graph'][1].mainEntity, undefined);
     }
+    if (new URL(path, origin).pathname === '/invite') {
+      assert.equal(meta.get('og:title'), 'You’re invited to Thingtime');
+      assert.match(meta.get('og:description'), /accept your invitation/);
+      const cardUrl = new URL(meta.get('og:image'));
+      assert.equal(cardUrl.pathname, '/social-card');
+      assert.equal(cardUrl.searchParams.get('path'), '/invite');
+      assert.equal(cardUrl.searchParams.get('v'), 'invite-20261029');
+      assert.deepEqual([...cardUrl.searchParams.keys()].sort(), ['path', 'v']);
+      assert.match(meta.get('robots'), /noindex/);
+      assert.equal(schema['@graph'][1].mainEntity, undefined);
+    }
     const image = meta.get('og:image');
     assert.equal(new URL(image).origin, origin);
     const imageCheck = `${agent}|${image}`;

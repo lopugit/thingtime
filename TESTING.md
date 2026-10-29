@@ -2049,11 +2049,18 @@ is fixed, and cite the checklist you ran in the PR description.
       Check a freshly composed Messages/Messenger preview separately from old
       cached bubbles; see `docs/seo-social-metadata.md`.
 
-- [ ] `/invite`, `/branding`, `/`, and an unknown SPA path return the white
+- [ ] `/branding`, `/`, and an unknown SPA path return the white
       press-kit wordmark PNG as absolute `og:image` and `twitter:image`, with
       1200×630 dimensions and a large Twitter card. Branding uses the shared
       page title; unknown paths use `Thingtime - Your Home for Everything`. Query/fragment secrets never
       enter metadata. Custom `/feed` and public post cards remain custom.
+
+- [ ] `/invite` returns invitation-specific title/description and the revisioned
+      `/social-card?path=%2Finvite` PNG. Valid, expired and malformed fragment
+      tokens share the same anonymous invitation card; neither crawler HTML
+      nor PNG reveals tokens, recipient details, email, gift amounts or validity.
+      Unfurling must never consume an invite. Confirm noindex and canonical
+      `/invite`, then separately check a newly composed messaging-app link.
 
 Crawlers never run JS, so verify with plain `curl` against the Nitro port (the
 Vite dev port serves the raw shell without injection; in production, Vercel
@@ -9165,9 +9172,14 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Gifted signup invitations (2026-09-13)
 
-- [ ] In Settings → Lopu, create an invite with a profile photo, display name,
+- [ ] In Settings → Account, create an invite with a profile photo, display name,
       username and fractional gift. The balance decreases once; copied links use
       the browser/deployment origin, never the internal Nitro port.
+- [ ] Create an invitation with both name and username blank, then with each
+      suggestion supplied independently. The optional labels have no required
+      marker; creation succeeds. Open the blank invite and choose a fresh name
+      and username; signup requires valid final values and persists the
+      recipient's choices. Invalid values must leave the invite and gift usable.
 - [ ] Visit the link signed out at desktop and mobile widths; scroll top to
       bottom. The avatar/name/username are prefilled, editable, and remain after
       refresh. Remove and replace the photo; submit stays disabled while it is

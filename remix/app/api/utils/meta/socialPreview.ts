@@ -9,6 +9,7 @@ export const DEFAULT_SOCIAL_IMAGE_PATH = '/branding/presskit/thingtime-og-card-1
 
 export type SocialPreviewKind =
 	| 'home'
+	| 'invite'
 	| 'feed'
 	| 'explore'
 	| 'docs'
@@ -34,6 +35,7 @@ export type SocialPreviewKind =
 // post. This keeps every shareable Thingtime shape distinguishable at a glance.
 export type SocialPreviewVariant =
 	| 'app'
+	| 'invite'
 	| 'feed'
 	| 'explore'
 	| 'docs'
@@ -92,6 +94,7 @@ const staticVariantFor = (kind: SocialPreviewKind): SocialPreviewVariant => {
 	switch (kind) {
 		case 'home':
 			return 'app';
+		case 'invite':
 		case 'feed':
 		case 'explore':
 		case 'docs':
@@ -179,6 +182,19 @@ export const staticSocialPreview = (pathInput: string): SocialPreview => {
 	const label = (value: string): string => value.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 	const detail = (() => {
 		switch (segment) {
+			case 'invite':
+				// Invitation payloads live in the fragment, which crawlers never
+				// receive. Keep one useful invitation card without resolving an
+				// invite, disclosing its private fields or consuming its use.
+				return {
+					kind: 'invite' as const,
+					title: 'You’re invited to Thingtime',
+					description: 'Join your people on Thingtime. Create an account to accept your invitation and make yourself at home.',
+					eyebrow: 'THINGTIME · AN INVITATION',
+					badges: ['Your people', 'Make it yours'],
+					revision: 'invite-20261029',
+					indexable: false
+				};
 			case 'feed':
 				return {
 					kind: 'feed' as const,

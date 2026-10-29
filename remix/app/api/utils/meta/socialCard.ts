@@ -52,6 +52,7 @@ const EYEBROW_LETTER_SPACING = 2;
 type CardTheme = { primary: string; end: string; panelStart: string; panelEnd: string };
 
 const CARD_THEMES: Record<SocialPreviewVariant, CardTheme> = {
+	invite: { primary: '#7C3AED', end: '#EC4899', panelStart: '#6D28D9', panelEnd: '#DB2777' },
 	app: { primary: '#5B3CC4', end: '#EC4899', panelStart: '#46308C', panelEnd: '#E060B6' },
 	feed: { primary: '#7C3AED', end: '#EC4899', panelStart: '#6D3EC7', panelEnd: '#EC71BA' },
 	explore: { primary: '#0E7490', end: '#7C3AED', panelStart: '#0F766E', panelEnd: '#7C3AED' },
@@ -275,6 +276,8 @@ const imageTile = (href: string | undefined, index: number, x: number, y: number
 
 const panelArt = (variant: SocialPreviewVariant): string => {
 	switch (variant) {
+		case 'invite':
+			return '<rect x="788" y="202" width="272" height="174" rx="26" fill="#FDE047"/><path d="m802 220 122 88 122-88m-244 140 80-66m164 66-80-66" fill="none" stroke="#6D28D9" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/><circle cx="1038" cy="194" r="40" fill="#F9A8D4"/><path d="M1038 176v36m-18-18h36" stroke="#6D28D9" stroke-width="10" stroke-linecap="round"/>';
 		case 'text-post':
 			return '<path d="M796 226h190a28 28 0 0 1 28 28v104a28 28 0 0 1-28 28h-93l-44 37v-37h-53a28 28 0 0 1-28-28V254a28 28 0 0 1 28-28Z" fill="#FDE047" opacity=".96"/><path d="M812 282h150M812 316h112" stroke="#5B21B6" stroke-width="14" stroke-linecap="round"/>';
 		case 'image-post':
@@ -321,6 +324,8 @@ const panelArt = (variant: SocialPreviewVariant): string => {
 
 const panelCopy = (variant: SocialPreviewVariant): [string, string] => {
 	switch (variant) {
+		case 'invite':
+			return ['Good things start', 'with your people.'];
 		case 'text-post':
 			return ['A thought,', 'with its context.'];
 		case 'poll':

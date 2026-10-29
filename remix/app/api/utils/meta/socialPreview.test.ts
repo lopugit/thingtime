@@ -17,7 +17,6 @@ import {
 test('uncustomized pages use the press-kit PNG and safe shared page titles', async () => {
 	for (const [path, title] of [
 		['/', DEFAULT_PAGE_TITLE],
-		['/invite#secret-token', DEFAULT_PAGE_TITLE],
 		['/branding', 'Thingtime - Brand resources'],
 		['/unknown/private-name?token=secret', DEFAULT_PAGE_TITLE],
 		['/settings', 'Thingtime - Settings']
@@ -236,4 +235,29 @@ test('an anonymously readable unlisted photo post has contextual metadata but st
   assert.equal(tags.get('robots'), 'noindex, follow');
   assert.equal(await publicPostPreview('/post/private', { ...result, ok: false }), null);
   assert.equal(await publicPostPreview('/post/private', { ...result, post: { ...result.post, acl: ['tt:user'] } }), null);
+});
+
+
+test('invitation links have a shared card without reading or validating their private payload', async () => {
+	const expected = staticSocialPreview('/invite');
+	assert.equal(expected.kind, 'invite');
+	assert.equal(expected.variant, 'invite');
+	assert.equal(expected.title, 'You’re invited to Thingtime');
+	assert.equal(expected.indexable, false);
+	assert.equal(expected.publicContent, undefined);
+	// Fragments never reach a real HTTP server. These inputs also cover the
+	// safe helper path and legacy query payloads; none may enter the card URL.
+	for (const suffix of ['', '#valid-private-token', '#expired-private-token', '#%E0%A4%A', '?token=private&email=person%40example.com&gift=99#<script>']) {
+		const meta = await resolveSocialMeta(new Request(`https://thingtime.example/invite${suffix}`));
+		const tags = new Map(meta.tags.map((tag) => [tag.key, tag.content]));
+		assert.equal(tags.get('og:title'), expected.title);
+		assert.equal(tags.get('og:description'), expected.description);
+		assert.equal(tags.get('twitter:card'), 'summary_large_image');
+		assert.equal(tags.get('og:image'), 'https://thingtime.example/social-card?path=%2Finvite&v=invite-20261029');
+		assert.equal(tags.get('robots'), 'noindex, follow');
+		assert.equal(meta.canonical, 'https://thingtime.example/invite');
+		assert.doesNotMatch(renderSocialMetaHtml(meta), /private|expired|person|%E0|gift|<script>/);
+	}
+	assert.equal(pageTitle('/invite'), 'Thingtime - Invitation');
+	assert.equal(pageTitle('/invite#private', '[LC]'), '[LC] Thingtime - Invitation');
 });

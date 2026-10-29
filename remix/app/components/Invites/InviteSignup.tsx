@@ -26,8 +26,8 @@ export const InviteSignup = () => {
 			.then(({ invite: data }) => {
 				if (!active) return;
 				setInvite(data);
-				setProfile({ username: data.username, displayName: data.displayName, avatarUrl: data.avatarUrl });
-				setOriginalAvatar(data.avatarUrl);
+				setProfile({ username: data.username ?? '', displayName: data.displayName ?? '', avatarUrl: data.avatarUrl ?? null });
+				setOriginalAvatar(data.avatarUrl ?? null);
 			})
 			.catch((e) => {
 				if (active) setError(e.message);
@@ -45,7 +45,7 @@ export const InviteSignup = () => {
 				{!invite && !error && <Text mt={4}>Opening your invite…</Text>}
 				{invite && (
 					<>
-						<Text my={4}>Your new account comes with {invite.credits} gifted credits. Keep these profile details or make them your own.</Text>
+						<Text my={4}>Your new account comes with {invite.credits} gifted credits. Choose your name and username below. You can change any suggestions.</Text>
 						<form
 							onSubmit={async (event) => {
 								event.preventDefault();

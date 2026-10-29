@@ -86,3 +86,24 @@ use the deployed PR preview for public crawler acceptance.
   and [quality guidelines](https://developers.google.com/search/docs/appearance/structured-data/sd-policies).
   Valid markup does not guarantee a rich result; it must reflect accessible,
   visible content and satisfy the requirements of a supported feature.
+
+
+## Invitation cards — 2026-10-29
+
+`/invite` now selects an invitation card rather than the homepage wordmark:
+“You’re invited to Thingtime”, a short invitation description, and the shared
+1200×630 card renderer with envelope artwork. The client document title uses
+“Thingtime - Invitation”. The image URL carries a fixed invitation revision so
+future card edits can deliberately refresh image caches.
+
+The preview is deliberately shared across invitations. Tokens remain in the
+fragment and are never sent to the crawler endpoint or image URL. The resolver
+never reads, validates, redeems or consumes an invite, and does not publish its
+recipient, inviter, email, display name, username, gifts or validity. Valid,
+expired, missing and malformed payloads therefore get the same invitation
+card; the interactive acceptance page determines availability. Canonical and
+Open Graph URLs remain `/invite`, query strings stay excluded, HTML remains
+private/no-store, and invitation pages remain `noindex, follow`. The generic
+card has no account-dependent data, so its PNG uses the existing public cache
+policy safely. Previously sent WhatsApp cards can remain cached; verify fresh
+raw HTML and PNG responses as well as a newly composed message after deployment.

@@ -102,6 +102,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-29: Add a dedicated invitation link preview while keeping invite tokens and recipient details private. Name and username suggestions are optional when creating an invite; recipients choose their own profile at signup. **Codex (AI)**
+
 - 2026-10-29: Restore repeated child insertion in populated Builder parents,
   add above/below/left/right insertion, and replace overlapping nested title
   chips with a shared ancestor breadcrumb. Add an editable block-structure

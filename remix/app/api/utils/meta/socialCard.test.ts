@@ -562,3 +562,20 @@ test('a decompression bomb is rejected on its pixel count, not its byte count', 
 	const photo = socialCardImageExtent(pngOfSize(4032, 3024))!;
 	assert.ok(photo.width * photo.height < 40_000_000);
 });
+
+
+test('invitation previews render a complete distinct PNG using only shared invitation copy', async () => {
+	const preview = staticSocialPreview('/invite#recipient-private-token');
+	const svg = buildSocialCardSvg(preview);
+	assert.match(svg, /data-preview-variant="invite"/);
+	assert.match(svg, /data-preview-panel="invite"/);
+	assert.equal(titleLinesOf(svg).map((line) => line.text).join(' '), preview.title);
+	assert.match(svg, /Good things start/);
+	assert.doesNotMatch(svg, /recipient|private|token|Every thing deserves/);
+	const png = await renderSocialCardPng(preview);
+	assert.deepEqual([...png.slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+	const bytes = Buffer.from(png);
+	assert.equal(bytes.readUInt32BE(16), 1200);
+	assert.equal(bytes.readUInt32BE(20), 630);
+	assert.ok(png.byteLength > 1_000);
+});
