@@ -106,6 +106,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   reaction-picker input after dismissal, and append nine recent choices to the
   quick reaction popup. Reuse shared validation and account-scoped reaction
   history with responsive wrapping and real API/browser regression coverage.
+  [PR #1290 delivery notes](../PRs/1290-codex-emoji-picker-drafts-recents--fix-custom-emoji-add-drafts-and-recents.md).
   **Codex (AI)**
 
 - 2026-10-29: Restore the original browser tab before explicit native passkey fallback starts WebAuthn; approval-page cancellation returns consistently while background opt-out/cancellation stays non-disruptive.
