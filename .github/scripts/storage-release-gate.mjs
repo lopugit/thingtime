@@ -16,6 +16,7 @@ export function requireStorageReady(manifest, health, origin, minimumVersion = '
   const minimum = minimumVersion.split('.').map(Number);
   if (manifest?.origin !== origin || !parts || Number(parts[1]) < minimum[1] || (Number(parts[1]) === minimum[1] && Number(parts[2]) < minimum[2])) throw failure('health-capability-unavailable');
   if (health?.origin !== origin || health?.targetOrigin !== origin || health?.service !== 'nitro') throw failure('health-origin-mismatch');
+  if (health?.storageAccounting?.state === 'recovering') throw failure('storage-recovering');
   if (health?.ok !== true || health?.state !== 'ready' || health?.storageAccounting?.state !== 'ready' || !Number.isSafeInteger(health.storageAccounting.expectedVersion) || health.storageAccounting.expectedVersion < 1) throw failure('storage-not-ready');
   return { state: 'ready', accountingVersion: health.storageAccounting.expectedVersion };
 }
@@ -33,6 +34,23 @@ export async function checkStorageReadiness(origin, { fetcher = fetch, signal, m
   const manifest = await read('/.well-known/thingtime-capabilities.json');
   const health = await read('/api/v1/health/nitro');
   return requireStorageReady(manifest, health, origin, minimumVersion);
+}
+
+export async function waitForStorageReadiness(origin, { timeoutMs = 90_000, now = Date.now, wait = (ms) => new Promise((done) => setTimeout(done, ms)), check = checkStorageReadiness, ...options } = {}) {
+  const start = now();
+  let waited = 0, attempt = 0;
+  while (true) {
+    const remaining = timeoutMs - Math.max(now() - start, waited);
+    if (remaining <= 0) throw failure('storage-recovery-deadline');
+    try { return await check(origin, { ...options, signal: AbortSignal.timeout(remaining) }); }
+    catch (error) {
+      // Merely admitting queued writes never establishes healthy release.
+      // Allow the durable worker to drain, then require the exact ready state.
+      if (error.message !== 'Storage release gate: storage-recovering') throw error;
+      const delay = Math.min(2_000 * 2 ** attempt++, 30_000, remaining);
+      await wait(delay); waited += delay;
+    }
+  }
 }
 
 export function summarizeRuntimeLogs(stdout, expected) {

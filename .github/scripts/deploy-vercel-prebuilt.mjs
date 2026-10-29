@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gatewayPolicy, gatewayMetadata, gatewayDeploymentIssue, gatewayRuntimeArgs, gatewayPublisherEnvironment, gatewaySecretConfigured, reconcileGatewayAliases, restoreGatewayAliases } from './environment-gateway-policy.mjs';
-import { checkStorageReadiness, checkRuntimeLogs } from './storage-release-gate.mjs';
+import { checkStorageReadiness, checkRuntimeLogs, waitForStorageReadiness } from './storage-release-gate.mjs';
 
 const exec = promisify(execFile);
 export const marker = 'thingtimeGithubActionsBuild';
@@ -334,7 +334,7 @@ export async function publish({ runtimeLogs = checkRuntimeLogs } = {}) {
     // A READY upload and a Vite shell do not establish writable account storage.
     // The selected backend must be ready before any production alias moves.
     if (plan.target.kind === 'production') {
-      await checkStorageReadiness(url, { minimumVersion: '1.2.1' });
+      await waitForStorageReadiness(url, { minimumVersion: '1.3.0' });
       const until = Date.now();
       await runtimeLogs({ cli: required('VERCEL_CLI_PATH'), projectId: plan.projectId, deploymentId: deployment.id, scope: required('VERCEL_TEAM_SLUG'), since: new Date(until - 30 * 60_000).toISOString(), until: new Date(until).toISOString() });
     }
@@ -344,7 +344,7 @@ export async function publish({ runtimeLogs = checkRuntimeLogs } = {}) {
       verify: (name) => verifyAlias(async ({ signal }) => {
         if (name === new URL(plan.gateway.origin).hostname && plan.gateway.owner) await verifyCanonicalGateway(name, plan.gateway, deployment.id, signal);
         await smoke(`https://${name}`, { signal });
-        if (plan.target.kind === 'production') await checkStorageReadiness(`https://${name}`, { signal, minimumVersion: '1.2.1' });
+        if (plan.target.kind === 'production') await checkStorageReadiness(`https://${name}`, { signal, minimumVersion: '1.3.0' });
       })
     });
   } catch (error) {

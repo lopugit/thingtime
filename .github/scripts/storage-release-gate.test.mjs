@@ -1,21 +1,34 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { checkRuntimeLogs, checkStorageReadiness, logLimit, monitor, productionOrigin as origin, requireStorageReady, runtimeLogArgs, shouldPublishStatus, summarizeRuntimeLogs } from './storage-release-gate.mjs';
+import { checkRuntimeLogs, checkStorageReadiness, logLimit, monitor, productionOrigin as origin, requireStorageReady, runtimeLogArgs, shouldPublishStatus, summarizeRuntimeLogs, waitForStorageReadiness } from './storage-release-gate.mjs';
 
-const manifest = { origin, features: { 'api.health-nitro': { version: '1.2.1' } } };
+const manifest = { origin, features: { 'api.health-nitro': { version: '1.3.0' } } };
 const health = { origin, targetOrigin: origin, service: 'nitro', ok: true, state: 'ready', storageAccounting: { state: 'ready', expectedVersion: 1 } };
 test('only negotiated origin-specific healthy storage passes, including HTTP-200 degraded bodies', () => {
   assert.deepEqual(requireStorageReady(manifest, health, origin), { state: 'ready', accountingVersion: 1 });
-  for (const patch of [{ ok: false }, { state: 'degraded' }, { storageAccounting: { state: 'migration-required', expectedVersion: 1 } }, { storageAccounting: null }, { origin: 'https://other.example' }, { targetOrigin: 'https://other.example' }]) assert.throws(() => requireStorageReady(manifest, { ...health, ...patch }, origin));
+  for (const patch of [{ ok: false }, { state: 'degraded' }, { storageAccounting: { state: 'migration-required', expectedVersion: 1 } }, { storageAccounting: { state: 'recovering', expectedVersion: 1, pending: true } }, { storageAccounting: null }, { origin: 'https://other.example' }, { targetOrigin: 'https://other.example' }]) assert.throws(() => requireStorageReady(manifest, { ...health, ...patch }, origin));
   for (const version of ['1.1.0', '2.0.0', '1.2.1-preview', null]) assert.throws(() => requireStorageReady({ ...manifest, features: { 'api.health-nitro': { version } } }, health, origin));
   assert.throws(() => requireStorageReady({ ...manifest, origin: 'https://other.example' }, health, origin));
 });
-test('premerge admits repaired 1.2.0 while new production candidates require 1.2.1 source readiness', () => {
+test('recovering gets one bounded drain observer; stuck recovery and source migration never pass', async () => {
+  let elapsed = 0, reads = 0;
+  const wait = async (ms) => { elapsed += ms; };
+  const check = async () => { if (++reads < 4) throw new Error('Storage release gate: storage-recovering'); return { state: 'ready' }; };
+  assert.deepEqual(await waitForStorageReadiness(origin, { wait, now: () => elapsed, check }), { state: 'ready' });
+  assert.equal(reads, 4); assert.equal(elapsed, 14_000);
+  elapsed = 0; reads = 0;
+  await assert.rejects(waitForStorageReadiness(origin, { wait, now: () => elapsed, check: async () => { reads++; throw new Error('Storage release gate: storage-recovering'); } }), /storage-recovery-deadline/);
+  assert.equal(elapsed, 90_000); assert.equal(reads, 6);
+  elapsed = 0; reads = 0;
+  await assert.rejects(waitForStorageReadiness(origin, { wait, now: () => elapsed, check: async () => { reads++; throw new Error('Storage release gate: storage-not-ready'); } }), /storage-not-ready/);
+  assert.equal(elapsed, 0); assert.equal(reads, 1);
+});
+test('premerge admits repaired 1.2.0 while new production candidates require 1.3.0 source readiness', () => {
   const previous = { ...manifest, features: { 'api.health-nitro': { version: '1.2.0' } } };
   assert.doesNotThrow(() => requireStorageReady(previous, health, origin));
-  assert.throws(() => requireStorageReady(previous, health, origin, '1.2.1'));
-  assert.doesNotThrow(() => requireStorageReady(manifest, health, origin, '1.2.1'));
+  assert.throws(() => requireStorageReady(previous, health, origin, '1.3.0'));
+  assert.doesNotThrow(() => requireStorageReady(manifest, health, origin, '1.3.0'));
 });
 test('discovery and health fail closed on redirects, HTML, unauthorized, invalid JSON and unavailable transport', async () => {
   const calls = [];
@@ -96,14 +109,14 @@ test('unchanged monitor observations do not duplicate statuses', () => {
 });
 test('production gates run before alias movement and inside existing merge-required contexts', () => {
   const publisher = readFileSync(new URL('./deploy-vercel-prebuilt.mjs', import.meta.url), 'utf8');
-  assert.ok(publisher.indexOf('await checkStorageReadiness(url') < publisher.indexOf('await reconcileGatewayAliases'));
+  assert.ok(publisher.indexOf('await waitForStorageReadiness(url') < publisher.indexOf('await reconcileGatewayAliases'));
   assert.ok(publisher.indexOf('await runtimeLogs') < publisher.indexOf('await reconcileGatewayAliases'));
   assert.match(publisher, /checkStorageReadiness\(`https:\/\/\$\{name\}`/);
   const workflow = readFileSync(new URL('../workflows/web-ci.yml', import.meta.url), 'utf8');
   for (const job of ['build', 'required-build-context']) {
     const section = workflow.split(`\n  ${job}:\n`)[1].split(/\n  [\w-]+:\n/)[0];
     assert.match(section, /Require production storage readiness before merge/);
-    assert.match(section, /ref: github-actions/);
+    assert.match(section, /github\.base_ref == 'github-actions' && github\.event\.pull_request\.head\.sha/);
   }
   const monitor = readFileSync(new URL('../workflows/storage-release-monitor.yml', import.meta.url), 'utf8');
   assert.match(monitor, /environment: vercel-prebuilt-control/);
