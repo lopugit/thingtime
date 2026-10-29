@@ -311,6 +311,7 @@ jobs:
           ref: ${{ github.base_ref == 'github-actions' && github.event.pull_request.head.sha || 'github-actions' }}
           path: .storage-controller
           persist-credentials: false
+          sparse-checkout-cone-mode: false
           sparse-checkout: .github/scripts/storage-release-gate.mjs
 
       # Inside the existing required build context: failed readiness cannot
@@ -426,6 +427,7 @@ jobs:
           # product PRs always use the protected implementation.
           ref: ${{ github.base_ref == 'github-actions' && github.event.pull_request.head.sha || 'github-actions' }}
           persist-credentials: false
+          sparse-checkout-cone-mode: false
           sparse-checkout: .github/scripts/storage-release-gate.mjs
       - name: Require production storage readiness before merge
         run: node .github/scripts/storage-release-gate.mjs
