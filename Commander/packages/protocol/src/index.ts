@@ -893,6 +893,12 @@ export interface IndexingStatus {
   available: boolean;
   running: IndexScope[];
   totalRecords: number;
+  /** Unique currently searchable apps, enabled commands, files and folders. */
+  searchableRecords?: number;
+  /** False while a legacy snapshot is eligibility-filtered before current totals are measured. */
+  countsCurrent?: boolean;
+  /** Oldest successful full refresh across active indexes. */
+  lastIndexedAtMs?: number;
   databaseSizeBytes: number;
   kinds: IndexKindStatus[];
   commands: {

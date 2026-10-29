@@ -37,3 +37,27 @@ describe('Commander login capability negotiation', () => {
     await expect(verifyDaemonLoginCapabilities(origin)).rejects.toThrow('compatibility (404)');
   });
 });
+
+it('requires the additive searchable-count status contract and rejects missing/breaking origins', async () => {
+  const { assertDaemonIndexCapabilities } = await import('./daemonCapabilities');
+  const manifest = {
+    schemaVersion: 1,
+    origin: 'http://127.0.0.1:47820',
+    features: { 'commander.index-status': { version: '1.1.0' } },
+  };
+  expect(() => assertDaemonIndexCapabilities(manifest, manifest.origin)).not.toThrow();
+  expect(() =>
+    assertDaemonIndexCapabilities(
+      { ...manifest, features: { 'commander.index-status': { version: '1.2.0' } } },
+      manifest.origin,
+    ),
+  ).not.toThrow();
+  for (const features of [
+    {},
+    { 'commander.index-status': { version: '1.0.0' } },
+    { 'commander.index-status': { version: '2.0.0' } },
+  ]) {
+    expect(() => assertDaemonIndexCapabilities({ ...manifest, features }, manifest.origin)).toThrow();
+  }
+  expect(() => assertDaemonIndexCapabilities(manifest, 'http://127.0.0.1:49999')).toThrow();
+});

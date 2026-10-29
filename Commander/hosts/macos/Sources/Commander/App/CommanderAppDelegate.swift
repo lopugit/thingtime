@@ -334,6 +334,7 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
     launcherShortcut: String?,
     commandShortcuts: [String: String]
   ) throws -> GlobalHotKeyRegistry? {
+    guard !CommanderDevelopmentEnvironment.enabled else { return nil }
     var shortcuts = commandShortcuts
     if let launcherShortcut { shortcuts[Self.launcherHotKeyIdentifier] = launcherShortcut }
     guard !shortcuts.isEmpty else { return nil }

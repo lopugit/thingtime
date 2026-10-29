@@ -29,12 +29,14 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 #[cfg(unix)]
 pub mod backup;
 pub mod backup_ignore;
+mod read_policy;
 mod resources;
+use read_policy::ReadPolicy;
 
 use resources::{validate_resource_limits, ResourceGovernor};
 pub use resources::{EffectiveResourceLimits, IndexResourceLimits, IndexResourceUsage};
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 const MAX_SOURCES: usize = 128;
 const MAX_IGNORE_RULES: usize = 512;
 const MAX_COARSE_QUERY_CHARACTERS: usize = 16;
@@ -159,6 +161,12 @@ pub struct IndexConfiguration {
     /// independently indexed namespace.
     #[serde(default)]
     pub prune_source_prefixes: Vec<String>,
+    /// Refresh only these absolute subtrees, retaining all other committed rows.
+    /// Traversal still begins at each source root to preserve ignore boundaries.
+    #[serde(default)]
+    pub changed_paths: Vec<PathBuf>,
+    #[serde(default)]
+    pub settings_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -212,6 +220,7 @@ pub struct IndexStatus {
     pub schema_version: i64,
     pub total_records: usize,
     pub database_size_bytes: u64,
+    pub configuration_fingerprints: BTreeMap<String, String>,
     pub kinds: Vec<KindStatus>,
 }
 
@@ -257,9 +266,26 @@ pub struct IndexReport {
 #[serde(tag = "operation", rename_all = "camelCase")]
 pub enum IndexerOperation {
     Status,
-    Index { configuration: IndexConfiguration },
-    Query { request: QueryRequest },
-    Lookup { path: String, kind: IndexKind },
+    ReadPolicy {
+        configuration: Option<IndexConfiguration>,
+    },
+    Catalogue {
+        kinds: Vec<IndexKind>,
+        #[serde(rename = "sourcePrefix")]
+        source_prefix: String,
+        #[serde(default, rename = "sourceIds")]
+        source_ids: Option<Vec<String>>,
+    },
+    Index {
+        configuration: IndexConfiguration,
+    },
+    Query {
+        request: QueryRequest,
+    },
+    Lookup {
+        path: String,
+        kind: IndexKind,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -296,11 +322,19 @@ pub struct IndexerErrorResponse {
 pub struct IndexDatabase {
     connection: Connection,
     database_path: PathBuf,
+    read_policy: Option<ReadPolicy>,
 }
 
 impl IndexDatabase {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, IndexerError> {
-        let path = path.as_ref();
+        Self::open_mode(path.as_ref(), false)
+    }
+
+    pub fn open_reader(path: impl AsRef<Path>) -> Result<Self, IndexerError> {
+        Self::open_mode(path.as_ref(), true)
+    }
+
+    fn open_mode(path: &Path, reader: bool) -> Result<Self, IndexerError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -325,11 +359,19 @@ impl IndexDatabase {
             "journal_size_limit",
             DATABASE_JOURNAL_SIZE_LIMIT_BYTES,
         )?;
-        initialize_schema(&connection)?;
+        let existing: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name = 'source_status')",
+            [],
+            |row| row.get(0),
+        )?;
+        if !reader || !existing {
+            initialize_schema(&connection)?;
+        }
         secure_database_files(path)?;
         Ok(Self {
             connection,
             database_path: path.to_path_buf(),
+            read_policy: None,
         })
     }
 
@@ -345,6 +387,12 @@ impl IndexDatabase {
         configuration: &IndexConfiguration,
         progress: &mut dyn FnMut(&IndexProgress) -> Result<(), IndexerError>,
     ) -> Result<IndexReport, IndexerError> {
+        if self.read_policy.is_some() {
+            return Err(IndexerError::new(
+                "read_only",
+                "a scoped reader cannot index",
+            ));
+        }
         validate_configuration(configuration)?;
         let governor = Arc::new(ResourceGovernor::new(&configuration.resource_limits)?);
         configure_database_resources(&self.connection, governor.effective())?;
@@ -354,10 +402,19 @@ impl IndexDatabase {
         let mut reports = Vec::with_capacity(configuration.sources.len());
 
         for source in &configuration.sources {
+            if !configuration.changed_paths.is_empty()
+                && !configuration
+                    .changed_paths
+                    .iter()
+                    .any(|path| path.starts_with(&source.root) || source.root.starts_with(path))
+            {
+                continue;
+            }
             match self.index_source(
                 source,
                 Arc::clone(&matcher),
                 configuration.max_entries,
+                &configuration.changed_paths,
                 Arc::clone(&governor),
                 progress,
             ) {
@@ -369,6 +426,16 @@ impl IndexDatabase {
             }
         }
         self.prune_absent_sources(configuration)?;
+        if configuration.changed_paths.is_empty() {
+            if let Some(fingerprint) = &configuration.settings_fingerprint {
+                for prefix in &configuration.prune_source_prefixes {
+                    self.connection.execute(
+                        "INSERT OR REPLACE INTO metadata(key, value) VALUES (?1, ?2)",
+                        params![format!("settings_fingerprint:{prefix}"), fingerprint],
+                    )?;
+                }
+            }
+        }
 
         let indexed = reports.iter().map(|report| report.indexed).sum();
         let skipped = reports.iter().map(|report| report.skipped).sum();
@@ -403,9 +470,11 @@ impl IndexDatabase {
         let query_length = query.chars().count();
         let mut records = if query_length >= 3 {
             let mut matches = self.query_fts(query, &kinds, limit)?;
+            self.filter_read_policy(&mut matches)?;
             if matches.is_empty() {
                 matches = self.query_coarse_fuzzy(query, &kinds, limit)?;
                 rank_records(&mut matches, query);
+                self.filter_read_policy(&mut matches)?;
             }
             if matches.is_empty() {
                 matches = self.query_path_fallback(query, &kinds, limit)?;
@@ -419,8 +488,33 @@ impl IndexDatabase {
             rank_records(&mut matches, query);
             matches
         };
+        self.filter_read_policy(&mut records)?;
         deduplicate_records(&mut records, limit);
         Ok(QueryResponse { records })
+    }
+
+    fn filter_read_policy(&self, records: &mut Vec<IndexRecord>) -> Result<(), IndexerError> {
+        if let Some(policy) = &self.read_policy {
+            let mut filtered = Vec::with_capacity(records.len());
+            for mut record in records.drain(..) {
+                if policy.allows(&self.connection, &record)? {
+                    #[cfg(target_os = "macos")]
+                    if let Some(path) = record.path.strip_prefix("/System/Volumes/Data/") {
+                        record.path = format!("/{path}");
+                        if let Some(parent) = record.parent.strip_prefix("/System/Volumes/Data") {
+                            record.parent = if parent.is_empty() {
+                                "/".to_owned()
+                            } else {
+                                parent.to_owned()
+                            };
+                        }
+                    }
+                    filtered.push(record);
+                }
+            }
+            *records = filtered;
+        }
+        Ok(())
     }
 
     pub fn lookup(&self, path: &str, kind: IndexKind) -> Result<Option<IndexRecord>, IndexerError> {
@@ -428,15 +522,20 @@ impl IndexDatabase {
             "SELECT path, name, parent, kind, modified_at_ms, size
              FROM records WHERE path = ?1 AND kind = ?2 LIMIT 1",
         )?;
-        statement
+        let record = statement
             .query_row(params![path, kind.as_str()], row_to_record)
-            .optional()
-            .map_err(Into::into)
+            .optional()?;
+        if let (Some(policy), Some(record)) = (&self.read_policy, &record) {
+            if !policy.allows(&self.connection, record)? {
+                return Ok(None);
+            }
+        }
+        Ok(record)
     }
 
     pub fn status(&self) -> Result<IndexStatus, IndexerError> {
         let total_records: i64 = self.connection.query_row(
-            "SELECT COALESCE(SUM(count), 0) FROM source_status",
+            "SELECT COALESCE(SUM(value), 0) FROM metadata WHERE key LIKE 'unique_count:%'",
             [],
             |row| row.get(0),
         )?;
@@ -447,12 +546,12 @@ impl IndexDatabase {
             IndexKind::Directory,
         ] {
             let count: i64 = self.connection.query_row(
-                "SELECT COALESCE(SUM(count), 0) FROM source_status WHERE kind = ?1",
-                [kind.as_str()],
+                "SELECT COALESCE((SELECT value FROM metadata WHERE key = ?1), 0)",
+                [format!("unique_count:{}", kind.as_str())],
                 |row| row.get(0),
             )?;
             let status = self.connection.query_row(
-                "SELECT MAX(last_indexed_at_ms), MAX(last_duration_ms),
+                "SELECT CASE WHEN COUNT(*) = COUNT(last_indexed_at_ms) THEN MIN(last_indexed_at_ms) END, MAX(last_duration_ms),
                             MAX(CASE WHEN last_error IS NOT NULL THEN last_error END)
                      FROM source_status WHERE kind = ?1",
                 [kind.as_str()],
@@ -472,8 +571,26 @@ impl IndexDatabase {
                 last_error: status.2,
             });
         }
+        let mut fingerprints = self
+            .connection
+            .prepare("SELECT key, value FROM metadata WHERE key LIKE 'settings_fingerprint:%'")?;
+        let configuration_fingerprints = fingerprints
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?
+                        .trim_start_matches("settings_fingerprint:")
+                        .to_owned(),
+                    row.get::<_, String>(1)?,
+                ))
+            })?
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
         Ok(IndexStatus {
-            schema_version: SCHEMA_VERSION,
+            configuration_fingerprints,
+            schema_version: self.connection.query_row(
+                "SELECT value FROM metadata WHERE key = 'schema_version'",
+                [],
+                |row| row.get(0),
+            )?,
             total_records: usize::try_from(total_records).unwrap_or(usize::MAX),
             database_size_bytes: database_size_bytes(&self.database_path),
             kinds,
@@ -486,6 +603,30 @@ impl IndexDatabase {
     ) -> Result<IndexerSuccessResponse, IndexerError> {
         let result = match request.operation {
             IndexerOperation::Status => serde_json::to_value(self.status()?),
+            IndexerOperation::ReadPolicy { configuration } => {
+                self.read_policy = configuration.map(ReadPolicy::new).transpose()?;
+                serde_json::to_value(())
+            }
+            IndexerOperation::Catalogue {
+                kinds,
+                source_prefix,
+                source_ids,
+            } => {
+                let mut statement = self.connection.prepare(
+                    "SELECT DISTINCT path, name, parent, kind, modified_at_ms, size FROM records
+                     WHERE source_id LIKE ?1 ESCAPE '\\' AND kind = ?2
+                     AND (?3 = 'null' OR source_id IN (SELECT value FROM json_each(?3))) ORDER BY path",
+                )?;
+                let mut records = Vec::new();
+                for kind in kinds {
+                    records.extend(collect_rows(statement.query_map(
+                        params![format!("{}%", escape_like(&source_prefix)), kind.as_str(), serde_json::to_string(&source_ids).unwrap_or_else(|_| "[]".into())],
+                        row_to_record,
+                    )?)?);
+                }
+                deduplicate_records(&mut records, usize::MAX);
+                serde_json::to_value(QueryResponse { records })
+            }
             IndexerOperation::Index { configuration } => {
                 serde_json::to_value(self.index(&configuration)?)
             }
@@ -507,6 +648,7 @@ impl IndexDatabase {
         source: &IndexSource,
         matcher: Arc<CustomIgnoreMatcher>,
         max_entries: Option<usize>,
+        changed_paths: &[PathBuf],
         governor: Arc<ResourceGovernor>,
         progress: &mut dyn FnMut(&IndexProgress) -> Result<(), IndexerError>,
     ) -> Result<SourceReport, IndexerError> {
@@ -522,6 +664,16 @@ impl IndexDatabase {
                 format!("index root is not a directory: {}", root.display()),
             ));
         }
+        let changed_paths: Vec<PathBuf> = changed_paths
+            .iter()
+            .map(|changed| {
+                changed
+                    .strip_prefix(&source.root)
+                    .map(|relative| root.join(relative))
+                    .unwrap_or_else(|_| changed.clone())
+            })
+            .filter(|changed| changed.starts_with(&root) || root.starts_with(changed))
+            .collect();
         let root_text = path_text(&root)?;
         let generation = next_generation(&self.connection)?;
         let started = Instant::now();
@@ -535,6 +687,7 @@ impl IndexDatabase {
                 root_text: &root_text,
                 matcher,
                 max_entries,
+                changed_paths: changed_paths.clone(),
                 generation,
                 governor: Arc::clone(&governor),
             },
@@ -543,14 +696,25 @@ impl IndexDatabase {
         let scan_warning = report.diagnostics.first().map(String::as_str);
 
         for kind in normalized_kinds(&source.kinds) {
-            transaction.execute(
-                "DELETE FROM records
-                 WHERE source_id = ?1 AND kind = ?2 AND generation <> ?3",
-                params![source.id, kind.as_str(), generation],
-            )?;
+            if changed_paths.is_empty() {
+                transaction.execute(
+                    "DELETE FROM records WHERE source_id = ?1 AND kind = ?2 AND generation <> ?3",
+                    params![source.id, kind.as_str(), generation],
+                )?;
+            } else {
+                for changed in &changed_paths {
+                    let changed = path_text(changed)?;
+                    let prefix = format!("{}/", changed.trim_end_matches('/'));
+                    transaction.execute(
+                        "DELETE FROM records WHERE source_id = ?1 AND kind = ?2 AND generation <> ?3
+                         AND (path = ?4 OR (path >= ?5 AND path < ?6))",
+                        params![source.id, kind.as_str(), generation, changed, prefix, format!("{prefix}\u{10ffff}")],
+                    )?;
+                }
+            }
             let count: i64 = transaction.query_row(
-                "SELECT COUNT(*) FROM records WHERE source_id = ?1 AND kind = ?2",
-                params![source.id, kind.as_str()],
+                "SELECT COALESCE((SELECT value FROM metadata WHERE key = ?1), 0)",
+                [format!("source_count:{}:{}", source.id, kind.as_str())],
                 |row| row.get(0),
             )?;
             transaction.execute(
@@ -560,7 +724,7 @@ impl IndexDatabase {
                  ON CONFLICT(source_id, kind) DO UPDATE SET
                    root = excluded.root,
                    count = excluded.count,
-                   last_indexed_at_ms = excluded.last_indexed_at_ms,
+                   last_indexed_at_ms = CASE WHEN ?8 THEN source_status.last_indexed_at_ms ELSE excluded.last_indexed_at_ms END,
                    last_duration_ms = excluded.last_duration_ms,
                    last_error = excluded.last_error",
                 params![
@@ -571,6 +735,7 @@ impl IndexDatabase {
                     indexed_at,
                     i64::try_from(duration_ms(started)).unwrap_or(i64::MAX),
                     scan_warning,
+                    !changed_paths.is_empty(),
                 ],
             )?;
         }
@@ -732,25 +897,47 @@ impl IndexDatabase {
         limit: usize,
     ) -> Result<Vec<IndexRecord>, IndexerError> {
         let prefix = format!("{}%", escape_like(query));
+        let lower = query.to_ascii_lowercase();
+        let upper = prefix_range_end(&lower);
         let mut records = Vec::with_capacity(limit.min(1_024));
-        let mut statement = self.connection.prepare(
-            "SELECT path, name, parent, kind, modified_at_ms, size
-             FROM records
-             WHERE kind = ?1
-               AND name LIKE ?2 ESCAPE '\\' COLLATE NOCASE
+        // Rank basename groups using only the covering kind/name index before
+        // loading paths and metadata. The best N names contain the best N rows:
+        // each name contributes at least one row, and path only breaks name ties.
+        // Explicit bounds also avoid SQLite treating the escaped LIKE as a scan
+        // of every record of this kind on existing multi-million-row indexes.
+        let upper_condition = if upper.is_some() {
+            "AND name < ?5 COLLATE NOCASE"
+        } else {
+            ""
+        };
+        let sql = format!(
+            "WITH names AS MATERIALIZED (
+               SELECT name FROM records
+               WHERE kind = ?1 AND name >= ?2 COLLATE NOCASE {upper_condition}
+                 AND name LIKE ?6 ESCAPE '\\' COLLATE NOCASE
+               GROUP BY name COLLATE NOCASE
+               ORDER BY CASE WHEN name = ?3 COLLATE NOCASE THEN 0 ELSE 1 END,
+                        length(name), name COLLATE NOCASE
+               LIMIT ?4
+             )
+             SELECT path, name, parent, kind, modified_at_ms, size FROM records
+             WHERE kind = ?1 AND name COLLATE NOCASE IN (SELECT name FROM names)
              ORDER BY CASE WHEN name = ?3 COLLATE NOCASE THEN 0 ELSE 1 END,
                       length(name), name COLLATE NOCASE, path
-             LIMIT ?4",
-        )?;
+             LIMIT ?4"
+        );
+        let mut statement = self.connection.prepare(&sql)?;
         for kind in kinds {
             // This is an output page after SQL ranking, never a pre-ranking
             // alphabetic candidate slice. An exact name anywhere wins.
             let rows = statement.query_map(
                 params![
                     kind.as_str(),
-                    &prefix,
+                    &lower,
                     query,
-                    i64::try_from(limit).unwrap_or(i64::MAX)
+                    i64::try_from(limit).unwrap_or(i64::MAX),
+                    upper,
+                    &prefix,
                 ],
                 row_to_record,
             )?;
@@ -1024,11 +1211,72 @@ fn initialize_schema(connection: &Connection) -> Result<(), IndexerError> {
         migrate_fts_update_trigger(connection)?;
         schema_version = 3;
     }
+    if schema_version == 3 {
+        migrate_unique_counts(connection)?;
+        schema_version = 4;
+    }
     if schema_version != SCHEMA_VERSION {
         return Err(IndexerError::new(
             "unsupported_schema",
             format!("database schema {schema_version} is not supported"),
         ));
+    }
+    Ok(())
+}
+
+// Materialize unique searchable path/kind counts once; status reads never scan
+// the million-row record table. Reference counts preserve overlapping sources.
+fn migrate_unique_counts(connection: &Connection) -> Result<(), IndexerError> {
+    retry_database_busy(|| connection.execute_batch("BEGIN IMMEDIATE;"))?;
+    let version: i64 = connection.query_row(
+        "SELECT value FROM metadata WHERE key = 'schema_version'",
+        [],
+        |row| row.get(0),
+    )?;
+    if version >= 4 {
+        connection.execute_batch("COMMIT;")?;
+        return Ok(());
+    }
+    #[cfg(target_os = "macos")]
+    connection.execute_batch(
+        "UPDATE OR IGNORE records SET path = substr(path, 21),
+           parent = CASE WHEN parent = '/System/Volumes/Data' THEN '/' ELSE substr(parent, 21) END
+         WHERE path LIKE '/System/Volumes/Data/%';
+         DELETE FROM records WHERE path LIKE '/System/Volumes/Data/%';",
+    )?;
+    let result = connection.execute_batch(
+        "CREATE TABLE IF NOT EXISTS searchable_paths (
+           path TEXT NOT NULL, kind TEXT NOT NULL, refs INTEGER NOT NULL,
+           PRIMARY KEY(path, kind)
+         ) WITHOUT ROWID;
+         INSERT OR REPLACE INTO searchable_paths SELECT path, kind, COUNT(*) FROM records GROUP BY path, kind;
+         INSERT OR REPLACE INTO metadata(key, value)
+           SELECT 'unique_count:' || kinds.kind, COUNT(searchable_paths.path)
+           FROM (SELECT 'application' AS kind UNION ALL SELECT 'file' UNION ALL SELECT 'directory') kinds
+           LEFT JOIN searchable_paths ON searchable_paths.kind = kinds.kind GROUP BY kinds.kind;
+         INSERT OR REPLACE INTO metadata(key, value)
+           SELECT 'source_count:' || source_id || ':' || kind, COUNT(*) FROM records GROUP BY source_id, kind;
+         CREATE TRIGGER IF NOT EXISTS records_unique_insert AFTER INSERT ON records BEGIN
+           INSERT INTO metadata(key, value) VALUES ('source_count:' || new.source_id || ':' || new.kind, 1)
+             ON CONFLICT(key) DO UPDATE SET value = value + 1;
+           INSERT INTO searchable_paths(path, kind, refs) VALUES (new.path, new.kind, 1)
+             ON CONFLICT(path, kind) DO UPDATE SET refs = refs + 1;
+           UPDATE metadata SET value = value + 1 WHERE key = 'unique_count:' || new.kind
+             AND (SELECT refs FROM searchable_paths WHERE path = new.path AND kind = new.kind) = 1;
+         END;
+         CREATE TRIGGER IF NOT EXISTS records_unique_delete AFTER DELETE ON records BEGIN
+           UPDATE metadata SET value = value - 1 WHERE key = 'source_count:' || old.source_id || ':' || old.kind;
+           UPDATE searchable_paths SET refs = refs - 1 WHERE path = old.path AND kind = old.kind;
+           UPDATE metadata SET value = value - 1 WHERE key = 'unique_count:' || old.kind
+             AND (SELECT refs FROM searchable_paths WHERE path = old.path AND kind = old.kind) = 0;
+           DELETE FROM searchable_paths WHERE path = old.path AND kind = old.kind AND refs = 0;
+         END;
+         UPDATE metadata SET value = 4 WHERE key = 'schema_version';
+         COMMIT;"
+    );
+    if let Err(error) = result {
+        let _ = connection.execute_batch("ROLLBACK;");
+        return Err(error.into());
     }
     Ok(())
 }
@@ -1117,6 +1365,7 @@ struct ScanContext<'a> {
     root_text: &'a str,
     matcher: Arc<CustomIgnoreMatcher>,
     max_entries: Option<usize>,
+    changed_paths: Vec<PathBuf>,
     generation: i64,
     governor: Arc<ResourceGovernor>,
 }
@@ -1151,6 +1400,7 @@ fn scan_and_store(
         root_text,
         matcher,
         max_entries,
+        changed_paths,
         generation,
         governor,
     } = context;
@@ -1188,6 +1438,7 @@ fn scan_and_store(
                 let governor = Arc::clone(&walker_governor);
                 let kinds = kinds.clone();
                 let root = root_owned.clone();
+                let changed_paths = changed_paths.clone();
                 Box::new(move |entry| {
                     if cancelled.load(Ordering::Relaxed) {
                         return WalkState::Quit;
@@ -1205,6 +1456,21 @@ fn scan_and_store(
                         }
                     };
                     let path = entry.path();
+                    #[cfg(target_os = "macos")]
+                    if root == Path::new("/") && path == Path::new("/System/Volumes/Data") {
+                        return WalkState::Skip;
+                    }
+                    if !changed_paths.is_empty()
+                        && !changed_paths
+                            .iter()
+                            .any(|changed| path.starts_with(changed) || changed.starts_with(path))
+                    {
+                        return WalkState::Skip;
+                    }
+                    let within_change = changed_paths.is_empty()
+                        || changed_paths
+                            .iter()
+                            .any(|changed| path.starts_with(changed));
                     let relative = path.strip_prefix(&root).unwrap_or(path);
                     if entry.depth() > 0 && matcher.is_match(path, relative) {
                         let _ = sender.send(ScanMessage::Skipped);
@@ -1224,7 +1490,7 @@ fn scan_and_store(
                             return WalkState::Continue;
                         }
                     };
-                    if let Some(candidate) = candidate {
+                    if let Some(candidate) = candidate.filter(|_| within_change) {
                         if let Some(max_entries) = max_entries {
                             let next = discovered.fetch_add(1, Ordering::Relaxed) + 1;
                             if next > max_entries {
@@ -1568,7 +1834,7 @@ impl CustomIgnoreMatcher {
 }
 
 fn validate_configuration(configuration: &IndexConfiguration) -> Result<(), IndexerError> {
-    if configuration.sources.is_empty() {
+    if configuration.sources.is_empty() && configuration.prune_source_prefixes.is_empty() {
         return Err(IndexerError::new(
             "invalid_configuration",
             "at least one index source is required",
@@ -1612,6 +1878,17 @@ fn validate_configuration(configuration: &IndexConfiguration) -> Result<(), Inde
                 format!("duplicate source-prune prefix: {prefix}"),
             ));
         }
+    }
+    if configuration.changed_paths.iter().any(|path| {
+        !path.is_absolute()
+            || path
+                .components()
+                .any(|part| matches!(part, std::path::Component::ParentDir))
+    }) {
+        return Err(IndexerError::new(
+            "invalid_configuration",
+            "changed paths must be absolute without parent traversal",
+        ));
     }
     validate_resource_limits(&configuration.resource_limits)?;
     let mut ids = HashSet::new();
@@ -1821,6 +2098,21 @@ fn slash_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
+fn prefix_range_end(prefix: &str) -> Option<String> {
+    let mut characters = prefix.chars().collect::<Vec<_>>();
+    while let Some(last) = characters.pop() {
+        let mut next = u32::from(last) + 1;
+        if (0xd800..=0xdfff).contains(&next) {
+            next = 0xe000;
+        }
+        if let Some(next) = char::from_u32(next) {
+            characters.push(next);
+            return Some(characters.into_iter().collect());
+        }
+    }
+    None
+}
+
 fn escape_like(value: &str) -> String {
     value
         .replace('\\', "\\\\")
@@ -1930,7 +2222,193 @@ mod tests {
             max_entries: Some(10_000),
             resource_limits: IndexResourceLimits::default(),
             prune_source_prefixes: Vec::new(),
+            changed_paths: Vec::new(),
+            settings_fingerprint: None,
         }
+    }
+
+    #[test]
+    fn catalogue_excludes_inactive_application_sources_before_enumeration() {
+        let temp = TempDir::new().unwrap();
+        let active = temp.path().join("active");
+        let removed = temp.path().join("removed");
+        create_dir_all(active.join("Active.app")).unwrap();
+        create_dir_all(removed.join("Removed.app")).unwrap();
+        let mut db = database(&temp);
+        let mut config = configuration(&active, vec![IndexKind::Application]);
+        config.sources[0].id = "applications:active".into();
+        db.index(&config).unwrap();
+        config.sources[0].root = removed.clone();
+        config.sources[0].id = "applications:removed".into();
+        db.index(&config).unwrap();
+        fs::remove_dir_all(removed).unwrap();
+        for (ids, expected) in [(vec!["applications:active".to_owned()], 1), (vec![], 0)] {
+            let response = db
+                .handle_request(IndexerRequest {
+                    id: "catalogue".into(),
+                    operation: IndexerOperation::Catalogue {
+                        kinds: vec![IndexKind::Application],
+                        source_prefix: "applications:".into(),
+                        source_ids: Some(ids),
+                    },
+                })
+                .unwrap();
+            assert_eq!(
+                response.result["records"].as_array().unwrap().len(),
+                expected
+            );
+        }
+        config.sources.clear();
+        config.prune_source_prefixes = vec!["applications:".into()];
+        config.changed_paths = vec![active];
+        db.index(&config).unwrap();
+        assert_eq!(db.status().unwrap().total_records, 0);
+    }
+
+    #[test]
+    fn only_full_reconciliations_publish_the_settings_fingerprint() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().join("root");
+        create_dir_all(&root).unwrap();
+        write(root.join("one.txt"), "one").unwrap();
+        let mut db = database(&temp);
+        let mut config = configuration(&root, vec![IndexKind::File]);
+        config.prune_source_prefixes = vec!["test".into()];
+        config.settings_fingerprint = Some("first".into());
+        db.index(&config).unwrap();
+        config.settings_fingerprint = Some("new-settings".into());
+        config.changed_paths = vec![root.join("one.txt")];
+        db.index(&config).unwrap();
+        assert_eq!(
+            db.status()
+                .unwrap()
+                .configuration_fingerprints
+                .get("test")
+                .unwrap(),
+            "first"
+        );
+        config.changed_paths.clear();
+        db.index(&config).unwrap();
+        assert_eq!(
+            db.status()
+                .unwrap()
+                .configuration_fingerprints
+                .get("test")
+                .unwrap(),
+            "new-settings"
+        );
+    }
+
+    #[test]
+    fn partial_refresh_preserves_siblings_prunes_renames_and_enforces_ignores() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().join("root");
+        create_dir_all(root.join("changed")).unwrap();
+        create_dir_all(root.join("untouched")).unwrap();
+        write(root.join("changed/old.txt"), "old").unwrap();
+        write(root.join("untouched/keep.txt"), "keep").unwrap();
+        let mut db = database(&temp);
+        let mut config = configuration(&root, vec![IndexKind::File, IndexKind::Directory]);
+        db.index(&config).unwrap();
+        let previous = db.status().unwrap().kinds[1].last_indexed_at_ms;
+        fs::rename(root.join("changed/old.txt"), root.join("changed/new.txt")).unwrap();
+        write(root.join("changed/private.tmp"), "ignored").unwrap();
+        config.custom_ignores.push(IgnoreRule {
+            kind: IgnoreRuleKind::Glob,
+            pattern: "*.tmp".into(),
+        });
+        config.changed_paths = vec![root.join("changed")];
+        let report = db.index(&config).unwrap();
+        assert!(report.indexed < 5, "must not traverse unrelated siblings");
+        assert!(db
+            .lookup(
+                &path_text(&fs::canonicalize(root.join("untouched/keep.txt")).unwrap()).unwrap(),
+                IndexKind::File
+            )
+            .unwrap()
+            .is_some());
+        let all = db
+            .query(&QueryRequest {
+                query: "".into(),
+                kinds: vec![IndexKind::File],
+                limit: None,
+            })
+            .unwrap();
+        assert_eq!(
+            all.records
+                .iter()
+                .map(|record| record.name.as_str())
+                .collect::<HashSet<_>>(),
+            HashSet::from(["keep.txt", "new.txt"])
+        );
+        assert_eq!(
+            db.status().unwrap().kinds[1].last_indexed_at_ms,
+            previous,
+            "partial updates must not postpone full reconciliation"
+        );
+        fs::remove_dir_all(root.join("changed")).unwrap();
+        db.index(&config).unwrap();
+        assert_eq!(db.status().unwrap().kinds[1].count, 1);
+    }
+
+    #[test]
+    fn overlapping_sources_have_unique_counts_and_pruning_keeps_shared_paths() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().join("root");
+        create_dir_all(&root).unwrap();
+        write(root.join("shared.txt"), "shared").unwrap();
+        let mut db = database(&temp);
+        let mut config = configuration(&root, vec![IndexKind::File]);
+        let mut second = config.sources[0].clone();
+        second.id = "second".into();
+        config.sources.push(second);
+        db.index(&config).unwrap();
+        assert_eq!(db.status().unwrap().total_records, 1);
+        config.sources.pop();
+        config.prune_source_prefixes = vec!["second".into()];
+        db.index(&config).unwrap();
+        assert_eq!(db.status().unwrap().total_records, 1);
+        fs::remove_file(root.join("shared.txt")).unwrap();
+        config.changed_paths = vec![root.join("shared.txt")];
+        db.index(&config).unwrap();
+        assert_eq!(db.status().unwrap().total_records, 0);
+    }
+
+    #[test]
+    fn independent_reader_remains_searchable_during_writer_transaction() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().join("root");
+        create_dir_all(&root).unwrap();
+        write(root.join("committed.txt"), "first").unwrap();
+        let mut writer = database(&temp);
+        let config = configuration(&root, vec![IndexKind::File]);
+        writer.index(&config).unwrap();
+        let reader = IndexDatabase::open_reader(temp.path().join(".state/index.sqlite3")).unwrap();
+        write(root.join("new.txt"), "second").unwrap();
+        let mut checked = false;
+        writer
+            .index_with_progress(&config, &mut |_| {
+                let before = Instant::now();
+                for query in ["c", "co", "committed"] {
+                    let results = reader.query(&QueryRequest {
+                        query: query.into(),
+                        kinds: vec![IndexKind::File],
+                        limit: None,
+                    })?;
+                    assert_eq!(results.records.len(), 1, "{query}");
+                }
+                assert_eq!(
+                    reader.status()?.total_records,
+                    1,
+                    "reader sees previous atomic snapshot"
+                );
+                assert!(before.elapsed() < Duration::from_secs(1));
+                checked = true;
+                Ok(())
+            })
+            .unwrap();
+        assert!(checked);
+        assert_eq!(reader.status().unwrap().total_records, 2);
     }
 
     #[test]
@@ -2073,7 +2551,10 @@ mod tests {
         drop(legacy);
 
         let migrated = IndexDatabase::open(&database_path).expect("migrate index");
-        assert_eq!(migrated.status().expect("status").schema_version, 3);
+        assert_eq!(
+            migrated.status().expect("status").schema_version,
+            SCHEMA_VERSION
+        );
         let definition: String = migrated
             .connection
             .query_row(
@@ -2118,7 +2599,10 @@ mod tests {
         drop(legacy);
 
         let migrated = IndexDatabase::open(&database_path).expect("migrate index");
-        assert_eq!(migrated.status().expect("status").schema_version, 3);
+        assert_eq!(
+            migrated.status().expect("status").schema_version,
+            SCHEMA_VERSION
+        );
         let definition: String = migrated
             .connection
             .query_row(
@@ -2463,6 +2947,64 @@ mod tests {
             writes,
             "queries must not index or write"
         );
+    }
+
+    #[test]
+    fn prefix_name_groups_preserve_ranked_pages_with_duplicates_case_and_literals() {
+        let temp = TempDir::new().unwrap();
+        let mut db = database(&temp);
+        let transaction = db.connection.transaction().unwrap();
+        for name in [
+            "a",
+            "A",
+            "aa",
+            "ab",
+            "abc",
+            "th",
+            "TH",
+            "the",
+            "thing",
+            "%a",
+            "_a",
+            "\\a",
+            "\u{10ffff}",
+            "\u{10ffff}a",
+        ] {
+            for index in 0..12 {
+                transaction.execute(
+                    "INSERT INTO records(source_id,path,name,parent,kind,generation) VALUES ('names',?1,?2,'/tmp','file',1)",
+                    params![format!("/tmp/{index:02}/{name}"), name],
+                ).unwrap();
+            }
+        }
+        transaction.commit().unwrap();
+        for query in ["a", "A", "th", "TH", "%", "_", "\\", "\u{10ffff}"] {
+            for limit in [1, 5, 30, 200] {
+                let mut old = db
+                    .connection
+                    .prepare(
+                        "SELECT path,name,parent,kind,modified_at_ms,size FROM records
+                     WHERE kind='file' AND name LIKE ?1 ESCAPE '\\' COLLATE NOCASE
+                     ORDER BY CASE WHEN name=?2 COLLATE NOCASE THEN 0 ELSE 1 END,
+                              length(name),name COLLATE NOCASE,path LIMIT ?3",
+                    )
+                    .unwrap();
+                let expected = collect_rows(
+                    old.query_map(
+                        params![format!("{}%", escape_like(query)), query, limit as i64],
+                        row_to_record,
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+                let actual = db.query_prefix(query, &[IndexKind::File], limit).unwrap();
+                assert_eq!(
+                    actual.iter().map(|row| &row.path).collect::<Vec<_>>(),
+                    expected.iter().map(|row| &row.path).collect::<Vec<_>>(),
+                    "query {query:?}, limit {limit}"
+                );
+            }
+        }
     }
 
     #[test]

@@ -1,6 +1,7 @@
-import { access, readdir } from 'node:fs/promises';
+import { access, readdir, realpath, lstat } from 'node:fs/promises';
 import { watch, type FSWatcher } from 'node:fs';
 import os from 'node:os';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import {
   FileSystemIndexerClient,
@@ -22,7 +23,12 @@ import type {
   Platform,
   SearchItem,
 } from '@commander/protocol';
-import { applicationDirectories, discoverApplications, discoverApplicationsQuick } from './applications.js';
+import {
+  applicationDirectories,
+  discoverApplications,
+  discoverApplicationsQuick,
+  discoverApplicationsIn,
+} from './applications.js';
 import { commanderDataDirectory } from './config.js';
 import { pathActions } from './pathActions.js';
 
@@ -39,6 +45,8 @@ interface IndexingCallbacks {
 interface IndexingServiceOptions {
   binaryPath: string | undefined;
   databasePath?: string;
+  /** Isolated test/development catalog roots; production defaults to all volumes. */
+  applicationRoots?: string[];
   platform: Platform;
   settings: CommanderSettings;
   callbacks: IndexingCallbacks;
@@ -49,6 +57,7 @@ interface ScheduledIndexRun {
   promise: Promise<void>;
   resolve(): void;
   reject(error: Error): void;
+  changedPaths?: string[];
 }
 
 // Output page size only: the indexer ranks matching records before returning it.
@@ -62,6 +71,8 @@ export class IndexingService {
   readonly #callbacks: IndexingCallbacks;
   readonly #binaryPath: string | undefined;
   readonly #databasePath: string;
+  readonly #applicationRoots: string[];
+  readonly #customApplicationRoots: boolean;
   #settings: IndexingSettings;
   #reader: FileSystemIndexerClient | undefined;
   #writer: FileSystemIndexerClient | undefined;
@@ -73,6 +84,18 @@ export class IndexingService {
   #timer: ReturnType<typeof setInterval> | undefined;
   #applicationWatchers: FSWatcher[] = [];
   #applicationDebounce: ReturnType<typeof setTimeout> | undefined;
+  #changeDeadline: ReturnType<typeof setTimeout> | undefined;
+  #changedPaths = new Set<string>();
+  #closed = false;
+  #watchGeneration = 0;
+  #applications: SearchItem[] = [];
+  #applicationSignature: string | undefined;
+  #filesystemCurrent = true;
+  #legacySnapshot = false;
+  #legacyRoots = '';
+  #effectiveFilesystemRoots: string[] = [];
+  #settingsDirty = false;
+  #fullReconciliationNeeded = false;
   #lastCommandsIndexedAtMs: number | undefined;
   #lastFallbackApplicationsAtMs: number | undefined;
   #commandCount = 0;
@@ -87,6 +110,8 @@ export class IndexingService {
 
   constructor(options: IndexingServiceOptions) {
     this.#platform = options.platform;
+    this.#applicationRoots = options.applicationRoots ?? ['/'];
+    this.#customApplicationRoots = options.applicationRoots !== undefined;
     this.#callbacks = options.callbacks;
     this.#settings = structuredClone(options.settings.indexing);
     this.#binaryPath = options.binaryPath;
@@ -98,7 +123,7 @@ export class IndexingService {
       return;
     }
     const clientOptions = { binaryPath: options.binaryPath, databasePath: this.#databasePath };
-    this.#reader = new FileSystemIndexerClient(clientOptions);
+    this.#reader = new FileSystemIndexerClient({ ...clientOptions, reader: true });
     this.#writer = new FileSystemIndexerClient({
       ...clientOptions,
       indexTimeoutMs: COMMANDER_INDEX_TIMEOUT_MS,
@@ -110,7 +135,20 @@ export class IndexingService {
     let applications: SearchItem[] = [];
     if (this.#reader) {
       try {
-        await this.#reader.status();
+        this.#effectiveFilesystemRoots = await indexRoots(this.#platform, this.#settings.roots);
+        this.#lastStatus = await this.#reader.status();
+        this.#lastStatusReadAtMs = Date.now();
+        const savedFingerprint = this.#lastStatus.configurationFingerprints?.['filesystem:'];
+        this.#filesystemCurrent = savedFingerprint === this.#settingsFingerprint();
+        if (savedFingerprint === undefined && this.#settings.enabled) {
+          // Legacy absence is distinct from a known mismatched configuration.
+          // Filter the cached snapshot by current source membership and policy
+          // without scanning the index or claiming an unmeasured current total.
+          await this.#reader.readPolicy(this.#legacyReadConfiguration());
+          this.#legacySnapshot = true;
+          this.#legacyRoots = JSON.stringify(this.#effectiveFilesystemRoots);
+          this.#filesystemCurrent = true;
+        }
         this.#available = true;
         applications = await this.#queryApplications();
       } catch (error) {
@@ -119,11 +157,11 @@ export class IndexingService {
     }
     // The fallback gives the launcher freshly installed top-level applications
     // while a missing/stale index is refreshed independently in the background.
-    applications = mergeApplications(applications, await discoverApplicationsQuick());
-    this.#callbacks.applications(applications);
+    applications = mergeApplications(applications, await this.#quickApplications());
+    this.#publishApplications(applications);
     this.#timer = setInterval(() => void this.#automaticRefresh(), 60_000);
     this.#timer.unref();
-    void this.#watchApplications();
+    void this.#watchSources();
     // Search always reads the latest committed catalog snapshot. Indexing runs
     // independently and swaps that catalog when its atomic database update
     // completes, so new searches remain live without a startup race.
@@ -136,13 +174,18 @@ export class IndexingService {
   updateSettings(settings: CommanderSettings): void {
     const previous = JSON.stringify(this.#settings);
     this.#settings = structuredClone(settings.indexing);
-    if (previous !== JSON.stringify(this.#settings) && this.#settings.enabled) {
-      void this.start('all').catch(() => undefined);
+    if (previous !== JSON.stringify(this.#settings)) {
+      this.#filesystemCurrent = false;
+      this.#legacySnapshot = false;
+      void this.#watchSources();
+      // A settings change during an active run must rebuild with the new rules.
+      if (this.#activeRun) this.#settingsDirty = true;
+      else void this.start('all').catch(() => undefined);
     }
   }
 
   async queryItems(query: string, limit = FILESYSTEM_RESULT_PAGE_SIZE): Promise<SearchItem[]> {
-    if (!this.#reader || !this.#settings.enabled || !query.trim()) return [];
+    if (!this.#reader || !this.#settings.enabled || !this.#filesystemCurrent || !query.trim()) return [];
     try {
       // All apps are already in the in-memory catalogue. Only read files and
       // folders here: a crowded filename page cannot exclude a matching app,
@@ -162,6 +205,8 @@ export class IndexingService {
   async resolveItem(itemId: string): Promise<SearchItem | undefined> {
     const decoded = decodeIndexedItemId(itemId);
     if (!decoded || !this.#reader) return undefined;
+    if (decoded.kind === 'application') return this.#applications.find((item) => item.path === decoded.path);
+    if (!this.#settings.enabled || !this.#filesystemCurrent) return undefined;
     try {
       const record = await this.#reader.lookup(decoded.path, decoded.kind);
       return record ? indexRecordToSearchItem(record) : undefined;
@@ -172,6 +217,7 @@ export class IndexingService {
   }
 
   start(scope: IndexScope): Promise<void> {
+    if (this.#closed) return Promise.reject(new Error('Filesystem indexing service closed'));
     const active = this.#activeRun;
     if (!active) return this.#beginRun(scope);
     // A complete run contains every narrower scope, so those requests can
@@ -184,7 +230,8 @@ export class IndexingService {
       // Keep the oldest active database writer intact, but make queued work
       // latest-wins. This preserves automatic indexing without allowing a
       // long queue of stale full-tree scans to build up behind it.
-      pending.resolve();
+      pending.scope = 'all';
+      return pending.promise;
     }
     const next = this.#createRun(scope);
     this.#pendingRun = next;
@@ -217,7 +264,7 @@ export class IndexingService {
     this.#running.add(run.scope);
     if ((!this.#reader || !this.#writer) && (run.scope === 'all' || run.scope === 'applications'))
       void this.#refreshFallbackApplications().catch(() => undefined);
-    void this.#perform(run.scope)
+    void this.#perform(run.scope, run.changedPaths)
       .then(() => run.resolve())
       .catch((error) => {
         this.#message = errorMessage(error);
@@ -230,7 +277,18 @@ export class IndexingService {
         this.#activeRun = undefined;
         const next = this.#pendingRun;
         this.#pendingRun = undefined;
-        if (next) this.#activateRun(next);
+        if (this.#closed) return;
+        if (this.#settingsDirty) {
+          this.#settingsDirty = false;
+          const replacement = this.#createRun('all');
+          void replacement.promise.then(
+            () => next?.resolve(),
+            (error) => next?.reject(error),
+          );
+          void replacement.promise.catch(() => undefined);
+          this.#activateRun(replacement);
+        } else if (next) this.#activateRun(next);
+        else this.#flushChanges();
       });
   }
 
@@ -245,19 +303,41 @@ export class IndexingService {
       !this.#lastStatus || Date.now() - this.#lastStatusReadAtMs >= INDEX_STATUS_CACHE_MS
         ? ((await this.#safeRustStatus()) ?? this.#lastStatus)
         : this.#lastStatus;
+    const filesystemEnabled = this.#settings.enabled && this.#filesystemCurrent;
+    const countsCurrent = !this.#legacySnapshot;
+    const kinds = (status?.kinds ?? emptyKindStatuses()).map((kind) => ({
+      ...kind,
+      count:
+        kind.kind === 'application'
+          ? this.#applications.length
+          : filesystemEnabled && countsCurrent
+            ? kind.count
+            : 0,
+    }));
+    const timestamps = [
+      this.#lastCommandsIndexedAtMs,
+      this.#lastFallbackApplicationsAtMs ??
+        kinds.find((kind) => kind.kind === 'application')?.lastIndexedAtMs,
+      ...(filesystemEnabled
+        ? kinds.filter((kind) => kind.kind !== 'application').map((kind) => kind.lastIndexedAtMs)
+        : []),
+    ];
+    const lastIndexedAtMs = timestamps.every((time) => time !== undefined)
+      ? Math.min(...(timestamps as number[]))
+      : undefined;
     return {
       available: this.#available,
       running: [...this.#running],
       totalRecords: status?.totalRecords ?? 0,
+      countsCurrent,
+      ...(this.#legacySnapshot || (status && status.schemaVersion < 4)
+        ? {}
+        : {
+            searchableRecords: kinds.reduce((total, kind) => total + kind.count, this.#commandCount),
+          }),
+      ...(lastIndexedAtMs === undefined ? {} : { lastIndexedAtMs }),
       databaseSizeBytes: status?.databaseSizeBytes ?? 0,
-      kinds:
-        status?.kinds.map((kind) => ({
-          kind: kind.kind,
-          count: kind.count,
-          ...(kind.lastIndexedAtMs === undefined ? {} : { lastIndexedAtMs: kind.lastIndexedAtMs }),
-          ...(kind.lastDurationMs === undefined ? {} : { lastDurationMs: kind.lastDurationMs }),
-          ...(kind.lastError ? { lastError: kind.lastError } : {}),
-        })) ?? emptyKindStatuses(),
+      kinds,
       commands: {
         count: this.#commandCount,
         ...(this.#lastCommandsIndexedAtMs === undefined
@@ -279,6 +359,10 @@ export class IndexingService {
   }
 
   async close(): Promise<void> {
+    this.#closed = true;
+    this.#watchGeneration += 1;
+    if (this.#changeDeadline) clearTimeout(this.#changeDeadline);
+    this.#changedPaths.clear();
     if (this.#timer) clearInterval(this.#timer);
     if (this.#applicationDebounce) clearTimeout(this.#applicationDebounce);
     this.#timer = undefined;
@@ -293,17 +377,35 @@ export class IndexingService {
     this.#available = false;
   }
 
-  async #perform(scope: IndexScope): Promise<void> {
+  async #perform(scope: IndexScope, changedPaths?: string[]): Promise<void> {
     this.#beginProgress(scope);
+    if (this.#legacySnapshot && this.#reader) await this.#reader.readPolicy(this.#legacyReadConfiguration());
     if (scope === 'commands') {
       this.reindexCommands();
       if (this.#progress) this.#progress.processed = 1;
       return;
     }
     if (scope === 'all') {
-      this.reindexCommands();
-      await this.#indexApplications();
-      if (this.#settings.enabled) await this.#indexFilesystem(['file', 'directory']);
+      if (!changedPaths) this.reindexCommands();
+      const applicationChanges = changedPaths
+        ? (
+            await Promise.all(
+              changedPaths.map(async (changed) => {
+                if (
+                  isApplicationCatalogChange(changed) ||
+                  this.#applications.some((item) => item.path && isWithin(item.path, changed))
+                )
+                  return changed;
+                return await lstat(changed).then(
+                  (entry) => (entry.isDirectory() ? changed : undefined),
+                  () => undefined,
+                );
+              }),
+            )
+          ).filter((changed): changed is string => changed !== undefined)
+        : undefined;
+      if (!applicationChanges || applicationChanges.length) await this.#indexApplications(applicationChanges);
+      if (this.#settings.enabled) await this.#indexFilesystem(['file', 'directory'], changedPaths);
       return;
     }
     if (scope === 'applications') {
@@ -314,16 +416,12 @@ export class IndexingService {
     await this.#indexFilesystem([scope === 'files' ? 'file' : 'directory']);
   }
 
-  async #indexApplications(): Promise<void> {
+  async #indexApplications(changedPaths?: string[]): Promise<void> {
     if (!this.#writer || !this.#reader) {
       await this.#refreshFallbackApplications();
       return;
     }
-    const roots = await indexRoots(this.#platform, ['/']);
-    if (!roots.length) {
-      this.#callbacks.applications([]);
-      return;
-    }
+    const roots = await indexRoots(this.#platform, this.#applicationRoots);
     await this.#writeIndex({
       sources: roots.map((root) => ({
         id: `applications:${root}`,
@@ -337,16 +435,17 @@ export class IndexingService {
       maxEntries: this.#settings.maxEntries,
       resourceLimits: this.#settings.resourceLimits,
       pruneSourcePrefixes: ['applications:'],
+      ...(changedPaths ? { changedPaths } : {}),
     });
     this.#available = true;
     this.#message = undefined;
-    this.#callbacks.applications(await this.#queryApplications());
+    this.#publishApplications(await this.#queryApplications());
   }
 
-  async #indexFilesystem(kinds: IndexKind[]): Promise<void> {
+  async #indexFilesystem(kinds: IndexKind[], changedPaths?: string[]): Promise<void> {
     if (!this.#writer) throw new Error('The bundled Rust filesystem indexer is unavailable');
     const roots = await indexRoots(this.#platform, this.#settings.roots);
-    if (!roots.length) throw new Error('None of the configured filesystem index roots are available');
+    this.#effectiveFilesystemRoots = roots;
     const indexedKinds = [...new Set([...kinds, 'application' as const])];
     const configuration: IndexConfiguration = {
       sources: roots.map((root) => ({
@@ -360,12 +459,22 @@ export class IndexingService {
       customIgnores: this.#settings.customIgnores,
       maxEntries: this.#settings.maxEntries,
       resourceLimits: this.#settings.resourceLimits,
+      settingsFingerprint: this.#settingsFingerprint(),
       pruneSourcePrefixes: ['filesystem:'],
+      ...(changedPaths ? { changedPaths } : {}),
     };
+    const settingsAtStart = JSON.stringify(this.#settings);
     await this.#writeIndex(configuration);
+    if (!changedPaths && settingsAtStart === JSON.stringify(this.#settings)) {
+      // The replacement is now bound to these settings, so normal indexed
+      // queries and cached unique counters can take over atomically.
+      await this.#reader?.readPolicy(null);
+      this.#legacySnapshot = false;
+      this.#filesystemCurrent = true;
+    }
     this.#available = true;
     this.#message = undefined;
-    this.#callbacks.applications(await this.#queryApplications());
+    this.#publishApplications(await this.#queryApplications());
   }
 
   async #writeIndex(configuration: IndexConfiguration): Promise<IndexReport> {
@@ -462,16 +571,30 @@ export class IndexingService {
 
   async #queryApplications(): Promise<SearchItem[]> {
     if (!this.#reader) return [];
-    const response = await this.#reader.catalogue(['application']);
+    const roots = await indexRoots(this.#platform, this.#applicationRoots);
+    const response = await this.#reader.catalogue(
+      ['application'],
+      'applications:',
+      roots.map((root) => `applications:${root}`),
+    );
     // Read the complete persistent app catalogue, including freshly installed
     // apps that the bounded direct scan can see before the index catches up.
-    return mergeApplications(
-      response.records.map(indexRecordToSearchItem),
-      await discoverApplicationsQuick(),
-    );
+    return mergeApplications(response.records.map(indexRecordToSearchItem), await this.#quickApplications());
   }
 
   async #automaticRefresh(): Promise<void> {
+    if (this.#closed || this.#activeRun) return;
+    this.#effectiveFilesystemRoots = await indexRoots(this.#platform, this.#settings.roots);
+    if (this.#legacySnapshot && this.#legacyRoots !== JSON.stringify(this.#effectiveFilesystemRoots)) {
+      this.#legacySnapshot = false;
+      this.#filesystemCurrent = false;
+    } else if (
+      !this.#legacySnapshot &&
+      this.#lastStatus?.configurationFingerprints?.['filesystem:'] !== this.#settingsFingerprint()
+    ) {
+      this.#filesystemCurrent = false;
+    }
+    this.reindexCommands();
     const status = await this.#safeRustStatus();
     if (!status) {
       if (
@@ -483,12 +606,20 @@ export class IndexingService {
       return;
     }
     const now = Date.now();
-    if (isDue(status, 'application', APPLICATION_REFRESH_MINUTES, now))
-      void this.start('applications').catch(() => undefined);
-    if (!this.#settings.enabled) return;
+    if (this.#settings.enabled && (!this.#filesystemCurrent || this.#legacySnapshot)) {
+      void this.start('all').catch(() => undefined);
+      return;
+    }
+    const applicationsDue = isDue(status, 'application', APPLICATION_REFRESH_MINUTES, now);
+    if (!this.#settings.enabled) {
+      if (applicationsDue) void this.start('applications').catch(() => undefined);
+      return;
+    }
     const filesDue = isDue(status, 'file', this.#settings.refreshIntervalMinutes, now);
     const directoriesDue = isDue(status, 'directory', this.#settings.refreshIntervalMinutes, now);
-    if (filesDue && directoriesDue) void this.start('all').catch(() => undefined);
+    if ((filesDue && directoriesDue) || (applicationsDue && (filesDue || directoriesDue)))
+      void this.start('all').catch(() => undefined);
+    else if (applicationsDue) void this.start('applications').catch(() => undefined);
     else if (filesDue) void this.start('files').catch(() => undefined);
     else if (directoriesDue) void this.start('directories').catch(() => undefined);
   }
@@ -514,44 +645,134 @@ export class IndexingService {
   }
 
   async #refreshFallbackApplications(): Promise<void> {
-    const applications = await discoverApplications();
+    const applications = this.#customApplicationRoots
+      ? await discoverApplicationsIn(this.#applicationRoots)
+      : await discoverApplications();
     this.#lastFallbackApplicationsAtMs = Date.now();
+    this.#publishApplications(applications);
+  }
+
+  #legacyReadConfiguration(): IndexConfiguration {
+    return {
+      sources: this.#effectiveFilesystemRoots.map((root) => ({
+        id: `filesystem:${root}`,
+        root,
+        kinds: ['file', 'directory'],
+        respectGitIgnore: this.#settings.respectGitIgnore,
+        includeHidden: this.#settings.includeHidden,
+        followSymlinks: false,
+      })),
+      customIgnores: this.#settings.customIgnores,
+    };
+  }
+
+  #settingsFingerprint(): string {
+    return createHash('sha256')
+      .update(JSON.stringify({ settings: this.#settings, roots: [...this.#effectiveFilesystemRoots].sort() }))
+      .digest('hex');
+  }
+
+  #quickApplications(): Promise<SearchItem[]> {
+    return this.#customApplicationRoots
+      ? discoverApplicationsIn(this.#applicationRoots)
+      : discoverApplicationsQuick();
+  }
+
+  #publishApplications(applications: SearchItem[]): void {
+    if (this.#closed) return;
+    const signature = JSON.stringify(applications);
+    this.#applications = applications;
+    if (signature === this.#applicationSignature) return;
+    this.#applicationSignature = signature;
     this.#callbacks.applications(applications);
   }
 
-  async #watchApplications(): Promise<void> {
-    // Recursive volume watches deliver broad live coverage on macOS. Keep the
-    // familiar application directories as overlapping fallback watches in
-    // case a filesystem declines a recursive root watch.
+  async #watchSources(): Promise<void> {
+    const generation = ++this.#watchGeneration;
+    for (const watcher of this.#applicationWatchers.splice(0)) watcher.close();
+    const filesystemRoots =
+      this.#reader && this.#settings.enabled ? await indexRoots(this.#platform, this.#settings.roots) : [];
     const roots = await existingDirectories([
-      ...(await indexRoots(this.#platform, ['/'])),
-      ...applicationDirectories(this.#platform),
+      ...(this.#reader ? await indexRoots(this.#platform, this.#applicationRoots) : []),
+      ...filesystemRoots,
+      ...(!this.#customApplicationRoots ? applicationDirectories(this.#platform) : []),
     ]);
+    if (this.#closed || generation !== this.#watchGeneration) return;
+    const watchedRoots: string[] = [];
     for (const root of roots) {
+      if (this.#platform !== 'linux' && watchedRoots.some((watched) => isWithin(root, watched))) continue;
       try {
         const watcher = watch(
           root,
-          { persistent: false, recursive: this.#platform === 'macos' },
+          { persistent: false, recursive: this.#platform !== 'linux' },
           (_event, filename) => {
-            // Watching a macOS volume recursively is inexpensive; rescanning
-            // it for every ordinary file save is not. Only application-bundle
-            // and volume-mount events trigger the application catalog refresh.
-            const changedPath = filename?.toString().replaceAll('\\', '/') ?? '';
-            if (changedPath && !isApplicationCatalogChange(changedPath)) return;
+            const raw = filename ? path.resolve(root, filename.toString()) : root;
+            const changed = applicationBundleRoot(raw);
+            // WAL/status writes must never schedule another indexing run.
+            if (isWithin(changed, path.dirname(this.#databasePath))) return;
+            const filesystemRelevant =
+              this.#settings.enabled &&
+              filesystemRoots.some((entry) => isWithin(changed, entry) || isWithin(entry, changed));
+            // A rename can remove an entire subtree containing applications, so
+            // non-file events remain relevant to the global app inventory.
+            if (!filesystemRelevant && _event !== 'rename' && !isApplicationCatalogChange(changed)) return;
+            if (
+              changed === '/Volumes' ||
+              path.dirname(changed) === '/Volumes' ||
+              /(?:^|\/)git\/ignore$/u.test(changed)
+            ) {
+              this.#fullReconciliationNeeded = true;
+              void this.#watchSources();
+            }
+            const coalesced = collapsePaths([...this.#changedPaths, changed]);
+            // Bound pending event memory by widening to affected parents, never
+            // dropping a change. This is a batching budget, not an index limit.
+            this.#changedPaths = new Set(
+              coalesced.length > 256
+                ? collapsePaths(coalesced.map((entry) => path.dirname(entry)))
+                : coalesced,
+            );
             if (this.#applicationDebounce) clearTimeout(this.#applicationDebounce);
-            this.#applicationDebounce = setTimeout(() => {
-              this.#applicationDebounce = undefined;
-              void this.start('applications').catch(() => undefined);
-            }, 750);
+            this.#applicationDebounce = setTimeout(() => this.#flushChanges(), 750);
             this.#applicationDebounce.unref();
+            if (!this.#changeDeadline) {
+              this.#changeDeadline = setTimeout(() => this.#flushChanges(), 3_000);
+              this.#changeDeadline.unref();
+            }
           },
         );
         watcher.on('error', () => undefined);
         this.#applicationWatchers.push(watcher);
+        watchedRoots.push(root);
       } catch {
-        // Periodic reconciliation remains active when a platform directory cannot be watched.
+        // Periodic reconciliation remains the safety net for unavailable watches.
       }
     }
+  }
+
+  #flushChanges(): void {
+    if (this.#applicationDebounce) clearTimeout(this.#applicationDebounce);
+    if (this.#changeDeadline) clearTimeout(this.#changeDeadline);
+    this.#applicationDebounce = undefined;
+    this.#changeDeadline = undefined;
+    if (this.#closed || this.#activeRun || !this.#changedPaths.size) return;
+    const changedPaths = collapsePaths([...this.#changedPaths]);
+    this.#changedPaths.clear();
+    const run = this.#createRun('all');
+    if (!this.#fullReconciliationNeeded && this.#settings.maxEntries === null) {
+      run.changedPaths = collapsePaths(
+        changedPaths.map((changed) =>
+          changed.endsWith(`${path.sep}.git${path.sep}info${path.sep}exclude`)
+            ? path.resolve(changed, '../../..')
+            : ['.gitignore', '.ignore'].includes(path.basename(changed))
+              ? path.dirname(changed)
+              : changed,
+        ),
+      );
+    }
+    this.#fullReconciliationNeeded = false;
+    void run.promise.catch(() => undefined);
+    this.#activateRun(run);
   }
 }
 
@@ -653,12 +874,21 @@ async function mountedVolumeRoots(): Promise<string[]> {
 }
 
 async function existingDirectories(values: string[]): Promise<string[]> {
-  const unique = [...new Set(values.map((value) => path.resolve(value)))];
+  const unique = [
+    ...new Set(
+      values.map((value) => {
+        const resolved = path.resolve(value);
+        return process.platform === 'darwin' && isWithin(resolved, '/System/Volumes/Data')
+          ? path.join('/', path.relative('/System/Volumes/Data', resolved))
+          : resolved;
+      }),
+    ),
+  ];
   const existing = await Promise.all(
     unique.map(async (value) => {
       try {
         await access(value);
-        return value;
+        return await realpath(value);
       } catch {
         return undefined;
       }
@@ -669,34 +899,56 @@ async function existingDirectories(values: string[]): Promise<string[]> {
 
 function mergeApplications(indexed: SearchItem[], fallback: SearchItem[]): SearchItem[] {
   const paths = new Set<string>();
-  return [...indexed, ...fallback].filter((item) => {
-    const key = item.path ?? item.id;
-    if (paths.has(key)) return false;
-    paths.add(key);
-    return true;
-  });
+  return [...indexed, ...fallback]
+    .map((item) => {
+      const prefix = '/System/Volumes/Data';
+      if (process.platform !== 'darwin' || !item.path?.startsWith(`${prefix}/`)) return item;
+      const itemPath = item.path.slice(prefix.length);
+      return {
+        ...item,
+        path: itemPath,
+        subtitle: itemPath,
+        id: item.id.startsWith('index:') ? indexedItemId('application', itemPath) : `app:${itemPath}`,
+      };
+    })
+    .filter((item) => {
+      const key = item.path ?? item.id;
+      if (paths.has(key)) return false;
+      paths.add(key);
+      return true;
+    });
 }
 
-function deduplicateSearchItems(items: SearchItem[]): SearchItem[] {
-  const paths = new Set<string>();
-  return items.filter((item) => {
-    const key = `${item.kind}:${item.path ?? item.id}`;
-    if (paths.has(key)) return false;
-    paths.add(key);
-    return true;
-  });
+export function applicationBundleRoot(changed: string): string {
+  const parts = path.resolve(changed).split(path.sep);
+  const bundle = parts.findIndex((part) => part.toLowerCase().endsWith('.app'));
+  return bundle < 0 ? path.resolve(changed) : parts.slice(0, bundle + 1).join(path.sep);
 }
 
-function isApplicationCatalogChange(changedPath: string): boolean {
-  const normalized = changedPath.toLowerCase();
+function isApplicationCatalogChange(changed: string): boolean {
   return (
-    normalized === 'applications' ||
-    normalized.startsWith('applications/') ||
-    normalized === 'volumes' ||
-    normalized.startsWith('volumes/') ||
-    normalized.endsWith('.app') ||
-    normalized.includes('.app/')
+    changed.endsWith('.app') ||
+    changed.includes('.app/') ||
+    /(?:^|\/)(?:Applications|Volumes)(?:\/|$)/u.test(changed)
   );
+}
+
+function isWithin(candidate: string, root: string): boolean {
+  const relative = path.relative(root, candidate);
+  return (
+    relative === '' ||
+    (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
+  );
+}
+
+export function collapsePaths(paths: readonly string[]): string[] {
+  const result: string[] = [];
+  for (const candidate of [...new Set(paths.map((value) => path.resolve(value)))].sort(
+    (a, b) => a.length - b.length,
+  )) {
+    if (!result.some((root) => isWithin(candidate, root))) result.push(candidate);
+  }
+  return result;
 }
 
 function isDue(status: IndexStatus, kind: IndexKind, minutes: number, now: number): boolean {

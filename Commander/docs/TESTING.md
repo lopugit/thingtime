@@ -2,6 +2,25 @@
 
 ## Launcher
 
+- [ ] Upgrade a schema-3 fixture while a writer migration/first refresh is pending. Valid old files must remain
+      searchable under current roots/ignore/hidden/Git policy, removed/stale-root paths stay absent, and unknown
+      eligible totals display Not measured rather than zero or a global legacy count. Compare contradictory .ignore,
+      .gitignore and info/exclude whitelists against a fresh real scan; source precedence and ignored-parent pruning
+      must agree. A known mismatched fingerprint
+      must never enable legacy adoption. After full reconciliation, verify normal counts and index age resume.
+
+- [ ] Leave background indexing active and search repeatedly: prior committed apps/files stay searchable, typing
+      never starts or awaits a scan, and the footer shows the current unique searchable total plus relative index age.
+      Resize the native launcher below 720px: keep the summary visible, with no overlap at the minimum window width.
+      Detailed processed/total progress appears only in Search Settings. Check the footer in a narrow launcher.
+- [ ] Under an isolated root, create/rename/delete files, folders and app bundles, including an inner bundle change;
+      verify event-driven changes without Index Now. Exercise continuous events during a scan, inherited/custom ignores,
+      root disable/removal, overlapping roots, mounted-volume removal while running and while stopped, and relaunch
+      after a saved settings change. Counts must exclude removed/disabled sources and duplicate public/Data-volume paths.
+- [ ] Run `node script/verify-background-index.mjs '<development app path>'` after `script/dev-parallel.sh build`;
+      retain its measured search latency and inventory assertions. Run `script/dev-parallel.sh clean` before the final
+      signed install. Verify the installed app retains its original account/settings/profile and runs the new source.
+
 - [ ] Type a misspelling in the root launcher and confirm macOS does not show a correction/replacement popover.
 - [ ] Search for an application or path-backed file/folder and confirm its real Finder icon replaces the generic Commander glyph.
 - [ ] Run a broad query with at least 30 path-backed results, then move selection rapidly through the rows. Generic or
@@ -108,6 +127,7 @@
       with Commander host/daemon CPU, memory, storage, and process count plus local Mac CPU, best-effort GPU,
       memory, thermal state, and filesystem values. Disconnect the native bridge only in a test shell and verify the
       unavailable state appears without sending machine metrics to the daemon or Thingtime.
+- [ ] Open Activity repeatedly with real IORegistry GPU output larger than a pipe buffer; metrics must finish, and an unavailable or stalled GPU probe must stop within its deadline instead of freezing the app.
 - [ ] In Activity, verify System memory shows used/total plus Active, Wired, Cached, Compressed, and Purgeable values;
       verify Filesystem includes the macOS purgeable-capacity estimate. Sort the full-width process table by every
       available header, enable Group by parent, and confirm CPU, memory, and disk rows update without crashing the
