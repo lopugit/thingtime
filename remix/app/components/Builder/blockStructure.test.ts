@@ -49,6 +49,23 @@ test('directional insertion understands reversed flex and does not reorder a gri
  assert.equal(findBlock(nextGrid, 'grid')?.children?.[1].id, 'b');
 });
 
+test('relative insertion refuses specialised parent grammars on matching and wrapper axes', () => {
+ const option: WebpageBlock = { id: 'choice', type: 'element', tag: 'option', text: 'Saved choice', props: { value: 'saved' } };
+ for (const tag of ['select', 'SELECT', 'option', 'textarea', 'input']) {
+  for (const css of [undefined, { display: 'flex', 'flex-direction': 'row' }, { display: 'flex', 'flex-direction': 'column' }]) {
+   const blocks: WebpageBlock[] = [{ id: 'control', type: 'element', tag, css, children: [option] }];
+   for (const direction of ['above', 'below', 'left', 'right'] as const) {
+    const next = insertBlockRelative(blocks, option.id, direction, text('new'));
+    assert.equal(next, blocks, `${tag} ${css?.['flex-direction'] || 'wrapper'} ${direction}`);
+    assert.equal(next[0].children?.[0], option);
+    assert.equal(collectBlockIds(next).size, 2);
+   }
+  }
+ }
+ const transparent: WebpageBlock[] = [{ id: 'transparent', type: 'element', tag: 'section', props: { transparent: true }, children: [text('child')] }];
+ assert.equal(insertBlockRelative(transparent, 'child', 'right', text('new')), transparent);
+});
+
 test('first child insertion initializes supported blocks without children; leaves are refused', () => {
  for (const type of ['container', 'element', 'condition', 'collection'] as const) {
   const blocks: WebpageBlock[] = [{ id: 'parent', type, ...(type === 'element' ? { tag: 'section' } : {}) }];

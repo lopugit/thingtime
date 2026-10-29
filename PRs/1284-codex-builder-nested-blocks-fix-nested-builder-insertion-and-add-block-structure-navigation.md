@@ -13,6 +13,9 @@ wraps only the selected block and its new neighbor, preserving unrelated
 siblings. Original block IDs and content remain intact. Eligible HTML elements
 without a `children` array accept their first child; void elements and specialized
 value/option controls reject ordinary children.
+The same parent eligibility guard applies to relative sibling insertion and
+local wrappers, so authored option children cannot introduce invalid select
+content through the directional commands.
 
 The structure dialog uses ordinary editable blocks through
 `SettingsDocumentHost`, `TransientBlockHost`, and `WebpageBlocksRenderer`.
@@ -25,7 +28,9 @@ subtree; a root-level block falls back to the page.
 
 ## Verification
 
-- `pnpm --dir remix run test:webpages`: 194 passed, four existing opt-in skips.
+- `pnpm --dir remix run test:webpages`: 195 passed, four existing opt-in skips.
+  The final review regression covers restricted HTML control parents in every
+  direction and both direct-sibling and wrapper paths.
 - Raw `pnpm --dir remix run typecheck`: passed; changed-file lint passed.
 - Real API/browser acceptance exercises an isolated replica set, synthetic
   identity, task-owned browser and private webpage. It checks repeated nested
@@ -37,7 +42,7 @@ subtree; a root-level block falls back to the page.
   viewport/footer bounds and View/Edit transitions. All owned processes and
   listeners were cleaned up. Local evidence is in
   `/tmp/thingtime-builder-nesting-final-evidence/`.
-- Electron tests: 339 passed before integrating the latest upstream helper
+- Electron tests: 343 passed after integrating the latest upstream helper
   changes. Isolated bundled Electron acceptance passed ancestry, structure
   selection, directional insertion, real API save/readback and reload.
   Evidence is in `/tmp/thingtime-builder-native-evidence/`; the dev app,

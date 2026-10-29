@@ -293,10 +293,9 @@ try {
 		await page.goto(`${web}/builder?page=${id}`, { waitUntil: 'domcontentloaded' });
 		await page.locator('[data-block-id="grid-one"]').waitFor({ timeout: 60000 });
 		const select = async (bid) => {
-			await page
-				.locator(`[data-block-id="${bid}"]`)
-				.first()
-				.click({ position: { x: 8, y: 8 } });
+			// The first 18px of grid/row blocks is an intentional insertion seam.
+			// Select the visible body center through normal actionability checks.
+			await page.locator(`[data-block-id="${bid}"]`).first().click();
 		};
 		const insertText = async () => {
 			await page.getByTestId('block-insert-menu').getByRole('button', { name: /Text/ }).first().click();

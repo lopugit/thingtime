@@ -179,6 +179,9 @@ export const insertBlockRelative = (
 	const desired = horizontal ? 'row' : 'column';
 	const before = direction === 'above' || direction === 'left';
 	const parent = parentId === null ? null : findBlock(blocks, parentId);
+	// Both direct siblings and local wrappers change this parent's children.
+	// Preserve specialised DOM grammars instead of bypassing insertBlock's guard.
+	if (parentId !== null && (!parent || !canAddBlockChildren(parent))) return blocks;
 	const display = parent?.css?.display;
 	const flexDirection = parent?.css?.['flex-direction'] || (parent?.type === 'container' ? parent.direction || 'column' : undefined);
 	const compatible = parentId === null ? !horizontal :

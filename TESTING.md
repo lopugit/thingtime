@@ -7738,6 +7738,8 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Insert above, below, beside left and beside right from the block menu.
       Check both compatible parent layouts and the two-block wrapper used for
       a different axis; surrounding sibling layout and existing IDs survive.
+      Restricted HTML control parents must reject both paths: inserting beside
+      an authored option must not place an ordinary container inside a select.
 - [ ] Hover nested zero-padding blocks and navigate every ancestor in the pink
       breadcrumb. The active title, menu and insertion controls remain reachable
       with mouse, keyboard and touch, including the responsive preview iframe.
