@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readPreviewRetentionPolicy, pullRequestIsLive } from './preview-retention-policy.mjs';
 import { assertPreviewGatewaySource } from './preview-gateway-source.mjs';
 
 import assert from 'node:assert/strict';
@@ -41,7 +42,6 @@ const MAX_DEPLOYMENT_PAGES = 20;
 const MAX_WORKFLOW_DEPLOYMENTS = 500;
 const MAX_GITHUB_PAGES = 10;
 const REQUEST_TIMEOUT_MS = 30_000;
-const CANCEL_TIMEOUT_MS = 2 * 60 * 1000;
 const STABLE_DEVELOP_TIMEOUT_MS = 10 * 60 * 1000;
 const STABLE_DEVELOP_POLL_MS = 5_000;
 const MAX_STABLE_DEPLOYMENTS = 50;
@@ -829,7 +829,6 @@ const runSelfTest = async () => {
 		readDeployment: async () => legacyDeployment
 	});
 	equal(legacyBinding.legacy, true);
-	equal(await removeAliasForPr(config, 201, { readBinding: async () => legacyBinding, request: async () => { throw new Error('Legacy alias must not be deleted'); } }), false);
 	await assert.rejects(getAliasBinding(config, 202, {
 		readAlias: async () => ({ deploymentId: legacyDeployment.id }), readDeployment: async () => legacyDeployment
 	}), /wrong-pull-request/);
@@ -1217,32 +1216,7 @@ const runSelfTest = async () => {
 		cleanup: async () => { laterMutations += 1; }
 	}), /still owns protected alias dev\.thingtime\.com/);
 	equal(laterMutations, 0); checks += 1;
-	await assert.rejects(cancelAndDeleteDeployment(prebuiltDeployment, config, base.number, {
-		refresh: async () => prebuiltDeployment, guard: protectedGuard,
-		request: async () => { laterMutations += 1; }
-	}), /still owns protected alias dev\.thingtime\.com/);
-	equal(laterMutations, 0); checks += 1;
 	heldAlias.set('dev.thingtime.com', { deploymentId: 'dpl_operator' });
-	const activeCandidate = { ...prebuiltDeployment, readyState: 'BUILDING' };
-	let activeGuardChecks = 0;
-	let candidateDeleteRequests = 0;
-	await assert.rejects(cancelAndDeleteDeployment(activeCandidate, config, base.number, {
-		refresh: async () => activeCandidate,
-		guard: async () => {
-			activeGuardChecks += 1;
-			if (activeGuardChecks === 1) return;
-			heldAlias.set('master.previews.thingtime.com', { deploymentId: activeCandidate.id });
-			return protectedGuard(config, activeCandidate);
-		},
-		request: async (path) => {
-			if (path.endsWith('/cancel')) { activeCandidate.readyState = 'CANCELED'; return {}; }
-			candidateDeleteRequests += 1;
-			return {};
-		}
-	}), /still owns protected alias master\.previews\.thingtime\.com/);
-	equal(activeGuardChecks, 2);
-	equal(candidateDeleteRequests, 0);
-	checks += 1;
 	heldAlias.set('master.previews.thingtime.com', { deploymentId: 'dpl_operator' });
 	await protectedGuard(config, prebuiltDeployment); checks += 1;
 	let cleanCandidateCleanup = null;
@@ -1290,10 +1264,12 @@ const runSelfTest = async () => {
 	const deployHandler = source.slice(source.lastIndexOf('const deploy = async')).split('const writePrepareOutputs')[0];
 	truthy(deployHandler.includes('if (!error.preservePreviewAttempt) await Promise.allSettled([cleanupPrResources('));
 	let inactiveClosed = 0;
-	const closedCleanup = { cleanup: async () => ['dpl_removed'], read: async () => ({ ...base, state: 'closed' }), inactive: async () => { inactiveClosed++; } };
+	const closedCleanup = { cleanup: async () => ({ disabled: false, removedIds: ['dpl_removed'], retainedIds: [] }), read: async () => ({ ...base, state: 'closed' }), inactive: async () => { inactiveClosed++; } };
 	equal(await cleanupClosedPrResources(config, base.number, base.head.ref, closedCleanup), { aliasRemoved: false, deleted: 1 });
 	equal(inactiveClosed, 1);
 	await cleanupClosedPrResources(config, base.number, base.head.ref, { ...closedCleanup, read: async () => base });
+	equal(inactiveClosed, 1);
+	equal(await cleanupClosedPrResources(config, base.number, base.head.ref, { ...closedCleanup, cleanup: async () => ({ disabled: true, removedIds: [], retainedIds: null }) }), { aliasRemoved: false, deleted: 0, retained: true });
 	equal(inactiveClosed, 1);
 	console.log(`develop PR preview self-test: ${checks}/${checks} passed`);
 };
@@ -1534,8 +1510,10 @@ const assertPreviewBundle = async (config, pullRequest, { hasPreviewBundle = hea
 };
 
 const assertCurrentPullRequest = async (config, snapshot, actor) => {
+	if (config.refreshRetentionPolicy) config.retentionPolicy = await config.refreshRetentionPolicy();
 	const current = await getPullRequest(config.repository, snapshot.number);
 	await assertTrustedPullRequestStack(config, current, { actor });
+	if (config.retentionPolicy && !pullRequestIsLive(current, config.retentionPolicy)) throw new EligibilityError('inactive');
 	if (!pullRequestMatchesSnapshot(current, snapshot)) throw new EligibilityError('stale-head');
 	return current;
 };
@@ -1891,47 +1869,10 @@ const refreshOwnedDeployment = async (deploymentId, config, prNumber) => {
 	return detail;
 };
 
-const cancelAndDeleteDeployment = async (deployment, config, prNumber, {
-	refresh = refreshOwnedDeployment, guard = assertNoProtectedAlias, request = vercelRequest
-} = {}) => {
-	let current = await refresh(deployment.id, config, prNumber);
-	if (!current) return false;
-	await guard(config, current);
-	if (ACTIVE_STATES.has(current.readyState)) {
-		try {
-			await request(`/v12/deployments/${encodeURIComponent(current.id)}/cancel`, {
-				method: 'PATCH',
-				retries: 0,
-				accept: [200]
-			});
-		} catch (error) {
-			if (!(error instanceof HttpError && [400, 404, 409].includes(error.status))) throw error;
-		}
-		const timeoutAt = Date.now() + CANCEL_TIMEOUT_MS;
-		do {
-			await delay(5000);
-			current = await refresh(deployment.id, config, prNumber);
-			if (!current) return false;
-		} while (ACTIVE_STATES.has(current.readyState) && Date.now() < timeoutAt);
-		if (ACTIVE_STATES.has(current.readyState)) {
-			throw new Error('Canceled Vercel deployment did not become terminal within two minutes');
-		}
-	}
-	await guard(config, current);
-	await request(`/v13/deployments/${encodeURIComponent(current.id)}`, {
-		method: 'DELETE',
-		accept: [200, 204, 404]
-	});
-	return true;
-};
 
-const cleanupDeployments = async (deployments, config, prNumber, keepIds = new Set()) => {
-	let deleted = 0;
-	for (const deployment of deployments) {
-		if (keepIds.has(deployment.id)) continue;
-		if (await cancelAndDeleteDeployment(deployment, config, prNumber)) deleted += 1;
-	}
-	return deleted;
+const cleanupDeployments = async (_deployments, config, prNumber, _keepIds = new Set()) => {
+	const report = await reconcileOrphanPreviews(config, { github: githubRequest, vercel: vercelRequest, prNumber });
+	return report.removedIds.length;
 };
 
 const getOwnedAlias = async (config, alias) => {
@@ -1983,16 +1924,6 @@ const getAliasBinding = async (config, prNumber, { readAlias = getOwnedAlias, re
 	return { alias, record: found, deployment, legacy };
 };
 
-const removeAliasForPr = async (config, prNumber, { readBinding = getAliasBinding, request = vercelRequest } = {}) => {
-	const binding = await readBinding(config, prNumber);
-	// Legacy custom-develop resources age out separately; this sweep owns v2 only.
-	if (!binding || binding.legacy) return false;
-	await request(`/v2/aliases/${encodeURIComponent(binding.record.uid)}`, {
-		method: 'DELETE',
-		accept: [200, 204, 404]
-	});
-	return true;
-};
 
 const assignAliasVerified = async (config, deployment, prNumber) => {
 	const alias = previewAlias(prNumber, config.previewAliasSuffix);
@@ -2050,21 +1981,13 @@ const reconcileStableDevelopAlias = async (config, { waitForReady = false } = {}
 };
 
 const prepareDeployment = async (config, pullRequest, {
-	list = listWorkflowDeployments, remove = removeAliasForPr,
-	cleanup = cleanupDeployments, guard = assertNoProtectedAlias
+	list = listWorkflowDeployments, cleanup = cleanupDeployments, guard = assertNoProtectedAlias
 } = {}) => {
 	const deployments = await list(config, { prNumber: pullRequest.number });
 	const reusable = choosePreferredDeployment(deployments, config, pullRequest.head.sha);
 	if (reusable) await guard(config, reusable);
-	let aliasFailure = null;
-	try {
-		await remove(config, pullRequest.number);
-	} catch (error) {
-		aliasFailure = error;
-	}
 	const keepIds = reusable ? new Set([reusable.id]) : new Set();
 	await cleanup(deployments, config, pullRequest.number, keepIds);
-	if (aliasFailure) throw aliasFailure;
 	return reusable;
 };
 
@@ -2340,42 +2263,22 @@ const waitForDeployment = async (config, pullRequest, deployment) => {
 	throw new Error('Vercel deployment did not become ready within 30 minutes');
 };
 
-const cleanupPrResources = async (config, prNumber, deployments = null) => {
-	let aliasRemoved = false;
-	let deleted = 0;
-	const failures = [];
-	try {
-		aliasRemoved = await removeAliasForPr(config, prNumber);
-	} catch (error) {
-		failures.push(error);
-	}
-	try {
-		const owned = deployments ?? (await listWorkflowDeployments(config, { prNumber }));
-		deleted = await cleanupDeployments(owned, config, prNumber);
-	} catch (error) {
-		failures.push(error);
-	}
-	try {
-		await markGithubEnvironmentInactive(config.repository, prNumber);
-	} catch (error) {
-		failures.push(error);
-	}
-	if (failures.length > 0) {
-		throw new AggregateError(failures, 'Develop PR preview cleanup was incomplete');
-	}
-	return { aliasRemoved, deleted };
+const cleanupPrResources = async (config, prNumber) => {
+	const current = await getPullRequest(config.repository, prNumber);
+	return cleanupClosedPrResources(config, prNumber, current.head.ref);
 };
 
 const cleanupClosedPrResources = async (config, prNumber, prBranch, {
 	cleanup = reconcileOrphanPreviews, read = getPullRequest, inactive = markGithubEnvironmentInactive
 } = {}) => {
-	const removed = await cleanup(config, { github: githubRequest, vercel: vercelRequest, prNumber, prBranch });
+	const report = await cleanup(config, { github: githubRequest, vercel: vercelRequest, prNumber, prBranch });
+	if (report.disabled || report.retainedIds?.length) return { aliasRemoved: false, deleted: report.removedIds.length, retained: true };
 	const current = await read(config.repository, prNumber);
-	if (current.state === 'closed' && current.head?.ref === prBranch &&
+	if ((current.state === 'closed' || config.retentionPolicy && !pullRequestIsLive(current, config.retentionPolicy)) && current.head?.ref === prBranch &&
 		current.head.repo?.full_name === config.repository && Number(current.head.repo.id) === config.repositoryId) {
 		await inactive(config.repository, prNumber);
 	}
-	return { aliasRemoved: false, deleted: removed.length };
+	return { aliasRemoved: false, deleted: report.removedIds.length };
 };
 
 const cleanupComment = (reason) => {
@@ -2393,7 +2296,11 @@ const cleanupComment = (reason) => {
 
 const handleIneligible = async (config, pullRequest, reason, { comment = true } = {}) => {
 	const prNumber = boundedInteger(pullRequest.number, 'PR number');
-	const cleaned = reason === 'closed' ? await cleanupClosedPrResources(config, prNumber, pullRequest.head.ref) : await cleanupPrResources(config, prNumber);
+	const cleaned = ['closed', 'inactive'].includes(reason) ? await cleanupClosedPrResources(config, prNumber, pullRequest.head.ref) : await cleanupPrResources(config, prNumber);
+	if (cleaned.retained || reason === 'inactive') {
+		console.log(`PR preview retained or expired without activity mutation for PR #${prNumber}; retained=${!!cleaned.retained}; removed=${cleaned.deleted}`);
+		return;
+	}
 	await syncPreviewLabels({ request: githubRequest, repository: config.repository,
 		number: prNumber, sha: pullRequest.head.sha, status: 'removed' });
 	if (comment && (cleaned.aliasRemoved || cleaned.deleted > 0)) {
@@ -2431,16 +2338,17 @@ const reconcile = async (config) => {
 			candidate = await getPullRequest(config.repository, prNumber);
 			await assertTrustedPullRequestStack(config, candidate);
 			await assertPreviewBundle(config, candidate);
+			if (!pullRequestIsLive(candidate, config.retentionPolicy)) throw new EligibilityError('inactive');
 			pullRequest = candidate;
 		} catch (error) {
 			if (!(error instanceof EligibilityError) && !(error instanceof HttpError && error.status === 404)) throw error;
 		}
 
 		if (!pullRequest) {
-			const cleaned = candidate?.state === 'closed' ? await cleanupClosedPrResources(config, prNumber, candidate.head.ref) : await cleanupPrResources(config, prNumber, owned);
+			const cleaned = candidate && (candidate.state === 'closed' || !pullRequestIsLive(candidate, config.retentionPolicy)) ? await cleanupClosedPrResources(config, prNumber, candidate.head.ref) : await cleanupPrResources(config, prNumber, owned);
 			if (cleaned.aliasRemoved) removedAliases += 1;
 			removedDeployments += cleaned.deleted;
-			if (candidate) await syncPreviewLabels({ request: githubRequest, repository: config.repository,
+			if (candidate?.state === 'closed' && !cleaned.retained) await syncPreviewLabels({ request: githubRequest, repository: config.repository,
 				number: prNumber, sha: candidate.head.sha, status: 'removed' });
 			return;
 		}
@@ -2457,12 +2365,6 @@ const reconcile = async (config) => {
 			workflowDeploymentCommitRef(binding.deployment) === pullRequest.head.ref
 		) {
 			keeper = binding.deployment;
-		} else if (binding && !binding.legacy && !retainPreviousPolicyAliasDuringRecovery(binding, pullRequest)) {
-			await vercelRequest(`/v2/aliases/${encodeURIComponent(binding.record.uid)}`, {
-				method: 'DELETE',
-				accept: [200, 204, 404]
-			});
-			removedAliases += 1;
 		}
 		keeper ??= choosePreferredDeployment(owned.filter((deployment) => workflowDeploymentCommitRef(deployment) === pullRequest.head.ref), config, pullRequest.head.sha);
 		if (keeper) {
@@ -2570,6 +2472,8 @@ const reportFailure = async (config, pullRequest, githubDeployment, vercelDeploy
 };
 
 const deploy = async (config, pullRequest) => {
+	config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
+	if (!pullRequestIsLive(pullRequest, config.retentionPolicy)) { console.log('Inactive PR preview publication skipped'); return; }
 	await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
 	await assertTrustedPullRequestStack(config, pullRequest, { actor: config.actor });
 	const corsProbeUrl = safeCorsProbeUrl(requiredEnv('DEVELOP_S3_CORS_PROBE_URL'));
@@ -2665,6 +2569,11 @@ const prepareBuildPlan = async () => {
 	}
 
 	const event = JSON.parse(await readFile(requiredEnv('GITHUB_EVENT_PATH'), 'utf8'));
+	if (eventName === 'workflow_dispatch' && String(event.inputs?.pr_number) === '0') {
+		await writePrepareOutputs({ shouldBuild: false });
+		console.log('Manual retention reconciliation needs no build');
+		return;
+	}
 	let dispatch = null;
 	try {
 		dispatch = eventName === 'repository_dispatch' ? await assertRepositoryDispatchSource(config, event) : null;
@@ -2698,6 +2607,8 @@ const prepareBuildPlan = async () => {
 		console.log(`GitHub prebuild not required for PR #${prNumber}: ${error.reason}`);
 		return;
 	}
+	config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
+	if (!pullRequestIsLive(pullRequest, config.retentionPolicy)) { await writePrepareOutputs({ shouldBuild: false }); return; }
 	await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
 	const expectedReady = expectedReadyAt();
 	await publishDevelopStatus(config, pullRequest, {
@@ -2722,6 +2633,7 @@ const main = async () => {
 	let config = runtimeConfig();
 	const eventName = requiredEnv('GITHUB_EVENT_NAME');
 	if (eventName === 'schedule') {
+		config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
 		const orphanResults = await Promise.allSettled([reconcileOrphanPreviews(config, { github: githubRequest, vercel: vercelRequest })]);
 		const results = [...orphanResults, ...await Promise.allSettled([reconcile(config)])];
 		const failures = results.filter((result) => result.status === 'rejected');
@@ -2731,6 +2643,12 @@ const main = async () => {
 	}
 
 	const event = JSON.parse(await readFile(requiredEnv('GITHUB_EVENT_PATH'), 'utf8'));
+	if (eventName === 'workflow_dispatch' && String(event.inputs?.pr_number) === '0') {
+		await assertTrustedPrincipal(config, normalizeLogin(process.env.GITHUB_TRIGGERING_ACTOR || requiredEnv('GITHUB_ACTOR')), 'retention-actor');
+		config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
+		await reconcileOrphanPreviews(config, { github: githubRequest, vercel: vercelRequest });
+		return;
+	}
 	const dispatch = eventName === 'repository_dispatch' ? await assertRepositoryDispatchSource(config, event) : null;
 	config = {
 		...config,
@@ -2747,6 +2665,7 @@ const main = async () => {
 		return;
 	}
 	const action = dispatch?.action ?? String(event.action ?? 'workflow_dispatch');
+	config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
 
 	let stackEligibilityError = null;
 	try {

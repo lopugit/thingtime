@@ -7,6 +7,10 @@
 - Preserve production, stable branches, gateway owners and current aliases;
   require open PRs for ordinary prebuilt feature previews and remove exact late
   uploads after closure. Add required regression coverage and rollout checks.
+- Consume saved admin retention policy through capability-negotiated signed CI
+  reads; honor disabled/grace/superseded/inactivity settings and fresh mutation
+  fences. Add trusted zero-PR manual reconciliation; roll out the product policy
+  endpoint before activating this controller.
 
 
 ## 2026-10-27 — Verify Darwin kernel groups after numeric drop

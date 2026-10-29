@@ -9,6 +9,19 @@
 - Verify stable branches, production, gateway owners, stale production/custom target
   pointers, fresh canonical/custom domain bindings and foreign PR aliases survive.
   Test races at cancellation/deletion fences; a failed read is never absence.
+- Run `node --test .github/scripts/preview-retention-policy.test.mjs`; verify
+  origin/operation capability negotiation, exact signed repository/ref/time,
+  invalid/missing/disabled policy, closed grace, superseded replacement grace,
+  newest READY/lane/PR protection, unaliased READY versus published alias owners,
+  activity expiry/resumption and disabling mid-run. Paused admin lanes must
+  never bypass policy through alias-only or direct backend deletion.
+  Retained closed previews must not acquire removed labels/inactive statuses.
+  Inactive-open expiry must not post activity that immediately recreates it.
+- Deploy the product policy endpoint first, then activate the controller. Exercise
+  signed read and immediate reconcile with the existing trusted listener:
+  `gh workflow run develop-pr-preview.yml --repo lopugit/thingtime --ref main -f pr_number=0`.
+  Zero-PR mode must require current allowlisted actor write/admin permission,
+  bypass builds and never expose the CI HMAC secret to product source.
 - After authorized rollout on `github-actions`, run the existing preview sweep,
   verify each deleted ID returns 404, immutable URLs stop serving, repeat with
   no remaining orphan mutations, and confirm production/develop/staging/master

@@ -125,6 +125,8 @@ jobs:
           # phase may use Lopu's existing repository automation PAT; the
           # separate untrusted build job still receives no secrets.
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
         run: node .github/scripts/deploy-develop-pr-preview.mjs --prepare
 
   build:
@@ -249,6 +251,8 @@ jobs:
         if: needs.prepare.outputs.should_build == 'true' && needs.build.result == 'success'
         env:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
           VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
@@ -259,6 +263,8 @@ jobs:
         if: needs.prepare.outputs.should_build != 'true'
         env:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
           RECOVERY_GH_TOKEN: ${{ github.token }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
@@ -268,6 +274,8 @@ jobs:
         if: needs.prepare.outputs.should_build == 'true' && needs.build.result != 'success'
         env:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           DEVELOP_S3_CORS_PROBE_URL: ${{ secrets.THINGTIME_DEVELOP_S3_CORS_PROBE_URL }}
         run: node .github/scripts/deploy-develop-pr-preview.mjs
@@ -324,6 +332,8 @@ jobs:
         id: plan
         env:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
         run: node .github/scripts/deploy-admin-pr-previews.mjs --prepare
 
   admin_build:
@@ -454,6 +464,8 @@ jobs:
       - name: Publish or clean up exact-SHA admin previews
         env:
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEVELOP_DEPLOY_TOKEN }}
           VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
           VERCEL_PREBUILT_ROOT: ${{ runner.temp }}/validated-admin-prebuilt

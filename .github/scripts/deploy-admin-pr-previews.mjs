@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { readPreviewRetentionPolicy, pullRequestIsLive } from './preview-retention-policy.mjs';
+import { reconcileOrphanPreviews } from './orphan-preview-cleanup.mjs';
 import { assertPreviewGatewaySource } from './preview-gateway-source.mjs';
 
 import assert from 'node:assert/strict';
@@ -309,28 +311,12 @@ const getAlias = async (config, alias) => {
 	}
 };
 
-const removeAlias = async (config, prNumber, environment) => {
-	const alias = previewAlias(prNumber, environment, config);
-	const found = await getAlias(config, alias);
-	if (!found) return false;
-	const deployment = await deploymentDetail(config, found.deploymentId);
-	if (cleanupDeploymentIssue(deployment, config, { prNumber, environment })) {
-		throw new Error('Refusing to remove an alias owned by another deployment');
-	}
-	await vercelRequest(config, `/v2/aliases/${encodeURIComponent(found.uid)}`, { method: 'DELETE', accept: [200, 204, 404] });
-	return true;
-};
 
-const deleteOwnedDeployments = async (config, prNumber, environment, keepIds = new Set()) => {
-	const deployments = await listOwnedDeployments(config, prNumber, environment);
-	for (const deployment of deployments) {
-		const id = String(deployment.id ?? deployment.uid ?? '');
-		if (keepIds.has(id)) continue;
-		const detail = await deploymentDetail(config, id);
-		if (cleanupDeploymentIssue(detail, config, { prNumber, environment })) continue;
-		await vercelRequest(config, `/v13/deployments/${encodeURIComponent(id)}`, { method: 'DELETE', accept: [200, 204, 404] });
-	}
-};
+const retentionConfig = (config) => ({ ...config, customEnvironmentId: config.developEnvironmentId, previewAliasSuffix: config.aliasSuffixes.develop, productionPreviewAliasSuffix: config.aliasSuffixes.production });
+const retentionSweep = (config, options = {}) => reconcileOrphanPreviews(retentionConfig(config), { github: githubRequest, vercel: (path, init) => vercelRequest(config, path, init), ...options });
+
+const deleteOwnedDeployments = async (config, prNumber, _environment, _keepIds = new Set()) =>
+	retentionSweep(config, { prNumber });
 
 const assertPrebuiltOutput = async (directory) => {
 	const outputDirectory = resolve(directory, '.vercel/output');
@@ -516,7 +502,9 @@ const removedCommentBody = (prNumber) =>
 	`### 🧹 Thingtime PR previews removed\n\nThe PR-scoped Develop and Production/Main preview deployments and persistent aliases for PR #${prNumber} were removed.`;
 
 const assertCurrentPullRequest = async (config, payload) => {
+	if (config.refreshRetentionPolicy) config.retentionPolicy = await config.refreshRetentionPolicy();
 	const current = await getPullRequest(config, payload.prNumber);
+	if (config.retentionPolicy && !pullRequestIsLive(current, config.retentionPolicy)) throw new Error('Inactive PR preview publication skipped');
 	const issue = pullRequestIssue(current, payload, config);
 	if (issue) throw new Error(`Pull request is no longer eligible (${issue})`);
 	return current;
@@ -531,12 +519,15 @@ const initialRows = (config, pullRequest, environments, startedAt) =>
 		expectedReadyAt: expectedReadyAt(startedAt)
 	}));
 
-const cleanupEnvironment = async (config, pullRequest, environment) => {
-	await removeAlias(config, pullRequest.number, environment);
-	await deleteOwnedDeployments(config, pullRequest.number, environment);
-	await syncPreviewLabels({ request: githubRequest, repository: config.repository,
+const cleanupEnvironment = async (config, pullRequest, environment, { sweep = retentionSweep, read = getPullRequest, labels = syncPreviewLabels } = {}) => {
+	const report = await sweep(config, { prNumber: pullRequest.number, prBranch: pullRequest.head.ref });
+	if (report.disabled || report.retainedIds?.length || pullRequest.state !== 'closed') return report;
+	const current = await read(config, pullRequest.number);
+	if (current.state !== 'closed' || current.head.ref !== pullRequest.head.ref) return report;
+	await labels({ request: githubRequest, repository: config.repository,
 		number: pullRequest.number, sha: pullRequest.head.sha,
 		lane: environment === 'develop' ? 'admin-develop' : 'production', status: 'removed' });
+	return report;
 };
 
 const deployEnvironment = async ({ config, payload, pullRequest, environment, row, publish }) => {
@@ -585,7 +576,7 @@ const writePrepareOutputs = async ({ shouldBuild, pullRequest = null, environmen
 
 const prepareAdminBuild = async () => {
 	if (requiredEnv('GITHUB_EVENT_NAME') !== 'repository_dispatch') throw new Error('Admin previews require repository_dispatch');
-	const config = runtimeConfig();
+	let config = runtimeConfig();
 	const event = JSON.parse(await readFile(requiredEnv('GITHUB_EVENT_PATH'), 'utf8'));
 	const payload = parseDispatch(event, config);
 	const pullRequest = await getPullRequest(config, payload.prNumber);
@@ -595,6 +586,8 @@ const prepareAdminBuild = async () => {
 		console.log(`Admin preview prebuild skipped for PR #${payload.prNumber}: ${issue}`);
 		return;
 	}
+	config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
+	if (payload.action !== 'closed' && !pullRequestIsLive(pullRequest, config.retentionPolicy)) { await writePrepareOutputs({ shouldBuild: false }); return; }
 	if (payload.action !== 'closed') {
 		await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
 		const rows = initialRows(config, pullRequest, payload.environments, Date.now());
@@ -610,7 +603,7 @@ const prepareAdminBuild = async () => {
 
 const runController = async () => {
 	if (requiredEnv('GITHUB_EVENT_NAME') !== 'repository_dispatch') throw new Error('Admin previews require repository_dispatch');
-	const config = runtimeConfig();
+	let config = runtimeConfig();
 	const event = JSON.parse(await readFile(requiredEnv('GITHUB_EVENT_PATH'), 'utf8'));
 	const payload = parseDispatch(event, config);
 	const pullRequest = await getPullRequest(config, payload.prNumber);
@@ -619,9 +612,12 @@ const runController = async () => {
 		console.log(`Skipped stale admin preview dispatch for PR #${payload.prNumber}: ${issue}`);
 		return;
 	}
+	config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
+	if (payload.action !== 'closed' && !pullRequestIsLive(pullRequest, config.retentionPolicy)) { console.log('Inactive admin PR preview skipped'); return; }
 	const disabled = ENVIRONMENTS.filter((environment) => !payload.environments.includes(environment));
 	if (payload.action === 'closed') {
-		await Promise.all(ENVIRONMENTS.map((environment) => cleanupEnvironment(config, pullRequest, environment)));
+		const result = await retentionSweep(config, { prNumber: pullRequest.number, prBranch: pullRequest.head.ref });
+		if (result.disabled || result.retainedIds?.length) { console.log('Closed admin previews retained by policy or protected ownership'); return; }
 		await upsertComment(config, payload.prNumber, removedCommentBody(payload.prNumber), false);
 		return;
 	}
@@ -643,7 +639,7 @@ const runController = async () => {
 	console.log(`Admin previews ready for PR #${pullRequest.number}: ${payload.environments.join(', ') || 'none'}`);
 };
 
-const runSelfTest = () => {
+const runSelfTest = async () => {
 	const config = {
 		repository: 'lopugit/thingtime',
 		repositoryId: 42,
@@ -757,11 +753,21 @@ const runSelfTest = () => {
 	assert.match(body, /Expected ready/);
 	assert.match(body, /pr-505\.previews\.dev\.thingtime\.com/);
 	assert.match(body, /pr-505\.previews\.thingtime\.com/);
+	const retainedPr = { number: 505, state: 'open', head: { ref: 'codex/example', sha: 'a'.repeat(40) } };
+	let pausedMutations = 0;
+	for (const report of [{ disabled: true, removedIds: [], retainedIds: null }, { disabled: false, removedIds: [], retainedIds: ['dpl_retained'] }]) {
+		const result = await cleanupEnvironment(config, retainedPr, 'develop', {
+			sweep: async () => report, read: async () => { pausedMutations++; throw new Error('Must preserve retained state'); },
+			labels: async () => { pausedMutations++; }
+		});
+		assert.equal(result, report);
+	}
+	assert.equal(pausedMutations, 0);
 	console.log('Admin PR preview controller self-test passed');
 };
 
 if (process.argv.includes('--self-test')) {
-	runSelfTest();
+	runSelfTest().catch((error) => { console.error(error.message); process.exitCode = 1; });
 } else if (process.argv.includes('--prepare')) {
 	prepareAdminBuild().catch((error) => {
 		console.error(error instanceof Error ? error.message : 'Admin PR preview preparation failed');

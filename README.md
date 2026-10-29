@@ -251,13 +251,53 @@ proof against hostile source or a measurement of live Mongo connections. The
 existing explicit `dedicated` branch opt-in remains supported; missing/old
 source never falls back to it. The PR publisher retains its exact-head fences.
 
-Roll out by merging the controller PR into `github-actions`, then run the existing
-scheduled/manual preview controller and inspect its sanitized removal count and
-Vercel readback. The default-branch thin listener already supplies PR-close and
-six-hour schedule events; no new secret, cron or product listener is introduced.
-Use the current project/team vars and protected deployment token. An unavailable
-or insufficiently scoped token fails closed and must not be worked around by
-weakening ownership checks. Local regression fixtures do not prove live cleanup.
+The saved admin policy is the only retention configuration. Protected jobs
+negotiate `api.integration-ci-preview-retention` 1.0.0 and its POST operation at
+`THINGTIME_PREVIEW_POLICY_ORIGIN` (default `https://thingtime.com`), then read
+`/api/v1/integrations/ci/preview-retention`. Requests use the existing
+`THINGTIME_CI_ROUTER_SECRET` and the CI HMAC header, with repository,
+`ref: "github-actions"` and a fresh ISO timestamp. That secret is supplied only
+to protected controller steps; untrusted builds receive none. No separate
+controller retention defaults or public settings fallback exist.
+
+The product admin settings own `enabled`, `noOpenPrGraceHours`,
+`pruneSupersededOpenPr`, `supersededGraceHours` and optional
+`inactivePullRequestDays`. No-open grace uses the later deployment creation or
+known PR close time; untagged branch snapshots use creation age. Superseded
+pruning waits for the replacement's grace and keeps the newest READY live-head
+preview plus active builds. Opt-in inactivity expiry uses fresh GitHub
+`updated_at` (including GitHub's normal automation activity), deletes previews
+without closing the PR, and prevents recovery/publication until new activity.
+Expired-open cleanup avoids comments/labels that would reset that clock.
+
+Disabled cleanup, grace-retained objects and protected owners are not marked
+removed or inactive. Missing/invalid/unreachable policy preserves resources and
+fails the run; there is no destructive fallback. Each cancel/delete fence reads
+fresh policy, so disabling it stops the next mutation. Stable
+production/develop/staging publication does not depend on policy API availability.
+Explicit admin removal of a selected environment remains a separately requested
+operation; retention policy does not grant permission to delete stable services.
+
+Rollout order: deploy the product settings endpoint/capability first and verify
+its signed read in CI, then merge this controller into `github-actions`. The
+existing default-branch listener already supplies close events and the six-hour
+schedule, so no new main listener or cron is needed. Existing old runs may still
+hold their earlier source snapshot. No live acceptance is established by local
+fixtures.
+
+For immediate acceptance, an allowlisted maintainer with current repository
+write/admin permission can use the existing listener's zero-PR reconciliation
+mode. It authorizes the triggering actor, builds no PR code, fetches saved policy
+and runs only retention reconciliation:
+
+```sh
+gh workflow run develop-pr-preview.yml --repo lopugit/thingtime --ref main -f pr_number=0
+```
+
+Inspect the resulting workflow's sanitized counts and exact provider readback;
+repeat for idempotence and verify unchanged production/develop/staging/master
+aliases. This dispatch uses GitHub's existing protected secret; do not retrieve
+CI secrets locally or bypass capability/actor checks to run acceptance.
 
 ### Discoverable preview status and recovery
 

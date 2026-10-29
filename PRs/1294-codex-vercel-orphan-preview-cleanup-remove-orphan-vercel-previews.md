@@ -48,8 +48,9 @@ never falls back to dedicated access.
 
 ## Verification and evidence boundaries
 
-- All 255 Node regression tests passed on the source tree.
-- Develop publisher self-test: 322/322; admin publisher self-test passed.
+- The full Node suite passed 266 tests before the final published-alias guard;
+  the final guard and affected retention/deployment boundaries passed 57 tests.
+- Develop publisher self-test: 318/318; admin publisher self-test passed.
 - Routing, workflow, branch build, Feature Stack plan/progress, sync merger,
   credential classifier, Electron release and archive extractor self-tests passed.
 - JavaScript syntax, workflow YAML parsing and diff hygiene passed.
@@ -64,13 +65,40 @@ never falls back to dedicated access.
   production acceptance or Mongo connection reduction. No live Vercel mutation
   was performed by this controller worktree. Parent-run cleanup is separate.
 
+## Saved retention policy
+
+The user's added admin-settings scope is consumed through the product's
+`api.integration-ci-preview-retention` 1.0.0 POST operation. The selected origin
+(default `https://thingtime.com`) receives only repository, protected
+`github-actions` ref and ISO request time, signed with the existing CI router
+secret. The product owns defaults and persistence; the controller rejects absent,
+invalid or unavailable policy rather than creating a parallel policy source.
+
+Disabled/grace-retained previews are not marked removed/inactive. Optional
+superseded pruning waits for replacement age and preserves newest READY live-head
+previews. Inactivity is an explicit opt-in using fresh `updated_at`: previews may
+expire without closing the PR, recovery/publication stop until activity resumes,
+and expiration avoids comments/labels that would reset its own activity clock.
+Policy is refreshed at destructive and publication activity fences. All automatic
+deployment cleanup, including disabled admin lanes and superseded publication,
+uses the shared guarded policy path. The only publisher alias deletions left
+are existing rollback operations scoped to their own attempted alias binding.
+
 ## Activation and remaining acceptance
 
-Merge only into `github-actions`. The existing default-branch thin listener calls
+Deploy and verify the product policy endpoint/capability first, then merge only
+into `github-actions`. Stable production/develop/staging publication remains
+independent of policy API availability. The existing default-branch thin listener calls
 `lopugit/thingtime/.github/workflows/develop-pr-preview.yml@github-actions`,
 including PR `closed` events and `17 */6 * * *`. No new main listener, secret,
 cron job or product deployment is needed. Existing already-running controller
 jobs can still execute their previous checked-out implementation.
+
+For on-demand acceptance, run
+`gh workflow run develop-pr-preview.yml --repo lopugit/thingtime --ref main -f pr_number=0`.
+This existing-listener mode requires the allowlisted triggering actor's current
+write/admin permission, performs no build and reads the signed canonical policy.
+No local retrieval of CI secrets is needed or permitted by this workflow.
 
 After activation, run the existing controller, check each removed deployment's
 provider 404 and immutable URL, repeat for idempotence, confirm unchanged
@@ -78,3 +106,20 @@ production/develop/staging/master aliases, and exercise PR closure during upload
 Preserve unknown resources rather than weakening guards to obtain a clean run.
 The provider checks cannot form a cross-provider atomic transaction; subsequent
 sweeps reconcile a concurrent late upload.
+
+## Parent-reported one-time operational cleanup
+
+The task's separately authorized one-time removal and final independent provider
+readback are recorded in [the sanitized operational evidence](evidence/1294-preview-cleanup-2026-10-30.json).
+Parent-reported final readback records 399 unique deleted deployments, a fresh
+inventory reduction from 688 to 289, unchanged stable aliases and four
+representative immutable URLs returning 404. All 67 retained ordinary open-PR
+manifests still advertise gateway descriptors: 52 at 1.1.0, 12 at 1.2.0 and
+three at 1.0.1. Production, develop and preview-master health reported connected
+at 21:06:10 UTC. Atlas global connection totals and alert state remain unknown
+because the signed-in account lacks project membership.
+
+That evidence describes the parent-run operation; it does not establish that
+this new controller or the not-yet-deployed saved-policy endpoint ran in
+production. No credential, raw provider response or private connection material
+belongs in this evidence.

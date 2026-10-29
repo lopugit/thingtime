@@ -1,3 +1,4 @@
+import { parsePreviewRetentionPolicy, pullRequestIsLive, previewGraceElapsed } from './preview-retention-policy.mjs';
 // Shared by protected preview lifecycle and prebuilt publisher. No credentials,
 // source code execution, aliases or provider state are supplied by a PR.
 const ACTIVE = new Set(['QUEUED', 'INITIALIZING', 'BUILDING']);
@@ -69,15 +70,50 @@ export function previewIdentity(deployment, config) {
   return { branch, sha, number };
 }
 
-async function orphaned(identity, config, github) {
+const deploymentLane = (deployment) => JSON.stringify({
+  target: deployment.target || 'preview',
+  custom: deployment.customEnvironment?.id || deployment.customEnvironmentId || null,
+  publisher: deployment.meta?.thingtimeAdminPrPreview === '1' ? 'admin' : deployment.meta?.thingtimeDevelopPrPreview === '1' ? 'develop-pr' : deployment.meta?.thingtimeGithubActionsBuild === '1' ? 'prebuilt' : 'native',
+  environment: deployment.meta?.thingtimePreviewEnvironment || deployment.meta?.thingtimeBuildTarget || null,
+  gateway: deployment.meta?.thingtimeGatewayEnvironment || null,
+  origin: deployment.meta?.thingtimeGatewayOrigin || null
+});
+
+async function retentionDecision(identity, deployment, config, github, vercel, summaries, policy, now) {
+  let tagged = null;
   if (identity.number !== null) {
-    // A missing/deleted PR or unknown provenance is not deletion authority.
-    const pr = await github(`/repos/${config.repository}/pulls/${identity.number}`);
-    if (!sameRepository(pr, config) || pr.number !== identity.number || pr.head.ref !== identity.branch || !['open', 'closed'].includes(pr.state)) throw new Error('Preview PR ownership changed or unknown');
-    if (pr.state === 'open') return false;
+    tagged = await github(`/repos/${config.repository}/pulls/${identity.number}`);
+    if (!sameRepository(tagged, config) || tagged.number !== identity.number || tagged.head.ref !== identity.branch || !['open', 'closed'].includes(tagged.state)) throw new Error('Preview PR ownership changed or unknown');
   }
-  // A new/reopened PR using the same branch protects old deployments too.
-  return (await openBranchPullRequests(config, identity.branch, github)).length === 0;
+  const open = await openBranchPullRequests(config, identity.branch, github);
+  if (tagged?.state === 'open' && !open.some((pr) => pr.number === tagged.number)) open.push(tagged);
+  const live = open.filter((pr) => pullRequestIsLive(pr, policy, now));
+  if (!live.length) {
+    if (open.length) return true; // Explicit inactivity expiry; never close the PR.
+    return previewGraceElapsed(deployment, policy, tagged, now);
+  }
+  if (!policy.pruneSupersededOpenPr || ACTIVE.has(deployment.readyState)) return false;
+  // READY alone does not prove publisher health/alias acceptance. Keep the
+  // currently published live-PR owner until publication moves its aliases.
+  const published = await completeInventory(vercel, `/v2/deployments/${deployment.id}/aliases`, 'aliases');
+  if (published.length) return false;
+  // Never prune the last READY current-head preview. Summary metadata only
+  // selects candidates: keeper identity is independently read and verified.
+  const created = Number(deployment.createdAt ?? deployment.created);
+  if (!Number.isFinite(created) || created <= 0) throw new Error('Superseded preview age unavailable');
+  const heads = new Set(live.map((pr) => pr.head.sha));
+  for (const summary of summaries) {
+    const id = idOf(summary);
+    if (id === deployment.id || !heads.has(summary.meta?.githubCommitSha) || summary.meta?.githubCommitRef !== identity.branch) continue;
+    let keeper;
+    try { keeper = await vercel(`/v13/deployments/${id}?withGitRepoInfo=true`); }
+    catch (error) { if (missing(error)) continue; throw error; }
+    const source = previewIdentity(keeper, config), keeperCreated = Number(keeper.createdAt ?? keeper.created);
+    if (!source || source.number !== identity.number || deploymentLane(keeper) !== deploymentLane(deployment) || source.branch !== identity.branch || !heads.has(source.sha) || keeper.readyState !== 'READY' || !Number.isFinite(keeperCreated) || keeperCreated <= 0) continue;
+    if (heads.has(identity.sha) && keeperCreated <= created) continue;
+    return now - Math.max(created, keeperCreated) >= policy.supersededGraceHours * 3_600_000;
+  }
+  return false;
 }
 
 async function safeAliases(deployment, identity, config, vercel) {
@@ -101,33 +137,46 @@ async function safeAliases(deployment, identity, config, vercel) {
     const name = alias.alias;
     if (typeof name !== 'string' || alias.deploymentId && alias.deploymentId !== deployment.id || alias.projectId && alias.projectId !== config.projectId) throw new Error('Cleanup alias ownership mismatch');
     // Arbitrary custom domains, gateway aliases, and other PRs always survive.
+    if (config.teamSlug && name === `${config.projectName}-${config.teamSlug}.vercel.app`) return false;
+    if ([...protectedBranches(config)].filter(Boolean).some((branch) => name.startsWith(`${config.projectName}-git-${branch}-`) && name.endsWith('.vercel.app'))) return false;
     if (name.endsWith('.vercel.app')) continue;
     if (!identity.number || !suffixes.some((suffix) => name === `pr-${identity.number}.${suffix}`)) return false;
   }
   return true;
 }
 
-export async function reconcileOrphanPreviews(config, { github, vercel, prNumber = null, prBranch = null, deploymentIds = null }) {
+export async function reconcileOrphanPreviews(config, { github, vercel, prNumber = null, prBranch = null, deploymentIds = null, now = Date.now }) {
+  let policy = parsePreviewRetentionPolicy({ ok: true, repository: config.repository, policy: config.retentionPolicy }, config.repository);
+  if (!policy.enabled) {
+    console.log('Preview retention reconciliation disabled by saved policy');
+    return { disabled: true, removedIds: [], retainedIds: null };
+  }
   const repository = await github(`/repos/${config.repository}`);
   if (repository?.full_name !== config.repository || Number(repository.id) !== Number(config.repositoryId) || !repository.default_branch) throw new Error('Cleanup repository identity mismatch');
   config = { ...config, defaultBranch: repository.default_branch };
   const summaries = deploymentIds ? deploymentIds.map((id) => ({ id })) : await completeInventory(vercel, `/v7/deployments?projectId=${encodeURIComponent(config.projectId)}`, 'deployments');
-  const failures = [], removed = [];
-  for (const id of new Set(summaries.map(idOf))) {
-    if (!/^dpl_[A-Za-z0-9]+$/.test(id || '')) throw new Error('Invalid cleanup deployment identifier');
+  const failures = [], removed = [], retained = new Set(), ids = new Set(summaries.map(idOf));
+  if ([...ids].some((id) => !/^dpl_[A-Za-z0-9]+$/.test(id || ''))) throw new Error('Invalid cleanup deployment identifier');
+  for (const id of ids) {
+    if (!policy.enabled) break;
     try {
       let deployment;
       try { deployment = await vercel(`/v13/deployments/${id}?withGitRepoInfo=true`); }
       catch (error) { if (missing(error)) continue; throw error; }
       const identity = previewIdentity(deployment, config);
-      if (!identity || prNumber !== null && identity.number !== prNumber && !(identity.number === null && identity.branch === prBranch) || !await orphaned(identity, config, github)) continue;
+      const scoped = prNumber === null || String(deployment.meta?.githubPrId) === String(prNumber) || deployment.meta?.githubPrId == null && deployment.meta?.githubCommitRef === prBranch;
+      if (!scoped) continue;
+      retained.add(id);
+      if (!identity || !await retentionDecision(identity, deployment, config, github, vercel, summaries, policy, now())) continue;
       if (!await safeAliases(deployment, identity, config, vercel)) continue;
       // Re-read immutable source/project identity, PR state and aliases at each
       // destructive boundary. Failed reads never mean "no PR" or "no alias".
       const fenced = async () => {
+        if (config.refreshRetentionPolicy) policy = parsePreviewRetentionPolicy({ ok: true, repository: config.repository, policy: await config.refreshRetentionPolicy() }, config.repository);
+        if (!policy.enabled) return false;
         deployment = await vercel(`/v13/deployments/${id}?withGitRepoInfo=true`);
         if (JSON.stringify(previewIdentity(deployment, config)) !== JSON.stringify(identity)) throw new Error('Cleanup deployment identity changed');
-        return await safeAliases(deployment, identity, config, vercel) && await orphaned(identity, config, github);
+        return await safeAliases(deployment, identity, config, vercel) && await retentionDecision(identity, deployment, config, github, vercel, summaries, policy, now());
       };
       if (!await fenced()) continue;
       if (ACTIVE.has(deployment.readyState)) {
@@ -139,15 +188,16 @@ export async function reconcileOrphanPreviews(config, { github, vercel, prNumber
       catch (error) { if (!missing(error)) throw error; }
       try { await vercel(`/v13/deployments/${id}`); throw new Error('Deleted preview still exists'); }
       catch (error) { if (!missing(error)) throw error; }
-      removed.push(id);
+      removed.push(id); retained.delete(id);
     } catch (error) { failures.push(error); }
   }
   if (failures.length) throw new AggregateError(failures, 'Orphan preview cleanup incomplete; unknown resources preserved');
-  console.log(`Orphan preview cleanup removed ${removed.length} deployment(s)`);
-  return removed;
+  console.log(`Preview retention reconciliation: removed=${removed.length}; retained=${retained.size}; enabled=${policy.enabled}`);
+  return { disabled: !policy.enabled, removedIds: removed, retainedIds: [...retained] };
 }
 
 export async function assertPreviewHasOpenPullRequest(plan, config, github) {
   if (plan.target.slug !== 'preview' || protectedBranches(config).has(plan.branch)) return;
-  if (!(await openBranchPullRequests(config, plan.branch, github)).length) throw new Error('Preview publication requires an open same-repository PR');
+  const policy = parsePreviewRetentionPolicy({ ok: true, repository: config.repository, policy: config.retentionPolicy }, config.repository);
+  if (!(await openBranchPullRequests(config, plan.branch, github)).some((pr) => pullRequestIsLive(pr, policy))) throw new Error('Preview publication requires an open same-repository PR');
 }

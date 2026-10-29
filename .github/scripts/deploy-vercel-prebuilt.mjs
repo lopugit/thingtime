@@ -1,3 +1,4 @@
+import { readPreviewRetentionPolicy } from './preview-retention-policy.mjs';
 import { assertPreviewGatewaySource } from './preview-gateway-source.mjs';
 import { assertPreviewHasOpenPullRequest, reconcileOrphanPreviews } from './orphan-preview-cleanup.mjs';
 import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
@@ -137,9 +138,15 @@ async function context(branch, requested) {
   return { sha, branch, target, gateway, projectId: project.id, repositoryId: repository.id, defaultBranch: repository.default_branch };
 }
 
-const previewConfig = (plan) => ({ ...plan, repository: required('GITHUB_REPOSITORY'), projectName: required('VERCEL_PROJECT_NAME') });
+const previewConfig = (plan) => ({ ...plan, repository: required('GITHUB_REPOSITORY'), projectName: required('VERCEL_PROJECT_NAME'), teamSlug: required('VERCEL_TEAM_SLUG') });
 const previewGithub = (path, init) => github(path.replace(`/repos/${required('GITHUB_REPOSITORY')}`, ''), init);
-const assertPreviewOpen = (plan) => assertPreviewHasOpenPullRequest(plan, previewConfig(plan), previewGithub);
+const assertPreviewOpen = async (plan) => {
+  if (plan.target.slug === 'preview' && !plan.gateway.owner && !['main', 'master', 'develop', 'staging', plan.defaultBranch].includes(plan.branch)) {
+    plan.retentionPolicy = await readPreviewRetentionPolicy(previewConfig(plan));
+    plan.refreshRetentionPolicy = () => readPreviewRetentionPolicy(previewConfig(plan));
+  }
+  await assertPreviewHasOpenPullRequest(plan, previewConfig(plan), previewGithub);
+};
 const assertGatewaySource = async (plan) => {
   if (plan.target.slug === 'preview' && !plan.gateway.owner) await assertPreviewGatewaySource(required('GITHUB_REPOSITORY'), plan.sha, previewGithub);
 };
@@ -384,7 +391,7 @@ export async function publish({ runtimeLogs = checkRuntimeLogs, aliasVerifier = 
         if (!deploymentIssue(candidate, plan) && candidate.meta?.githubWorkflowRunId === required('GITHUB_RUN_ID')) await restoreGatewayAliases({ before: aliasBefore, deploymentId: candidate.id, read: readAlias, assign: assignAlias, remove: removeAlias });
       }
     }
-    if (deployment && plan.target.slug === 'preview' && !plan.gateway.owner) await reconcileOrphanPreviews(previewConfig(plan), { github: previewGithub, vercel, deploymentIds: [deployment.id] });
+    if (deployment && plan.retentionPolicy && plan.target.slug === 'preview' && !plan.gateway.owner) await reconcileOrphanPreviews(previewConfig(plan), { github: previewGithub, vercel, deploymentIds: [deployment.id] });
     throw error;
   }
   const statusContext = `Vercel prebuilt (${plan.target.slug})`;
