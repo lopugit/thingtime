@@ -540,6 +540,7 @@ export const ChatView = (props: ChatViewProps) => {
 						/>
 					) : null}
           <Composer
+            targetId={chatId}
 						placeholder={
 							isLopuAiSource(chatSummary.externalSource)
 								? 'Ask Lopu anything 🦄'
@@ -778,6 +779,7 @@ const ThreadPanel = ({
         />
       )}
       <Composer
+        targetId={root.id}
         placeholder="Reply in thread"
         pickerEmojis={pickerEmojis}
         replyTo={null}
