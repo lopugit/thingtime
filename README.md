@@ -3594,6 +3594,15 @@ API tokens unprefixed and server-only.
 
 ## Native iOS TestFlight web URL
 
+The iOS app includes a **Thingtime** system Share extension for incoming text,
+links, media and files. Shares are saved locally; opening Thingtime makes them
+available in **Files → On My iPhone → Thingtime → Shared**, where the normal
+upload picker can select them. For forks, register `<iPhone bundle ID>.share`
+with the same App Group as the containing app and its own provisioning profile.
+See [incoming shares and native verification](iOS/README.md#receive-content-from-the-ios-share-sheet).
+An older installed native build needs an app update to gain this share target;
+changing the embedded website cannot install an extension.
+
 Lopu voice requires build 27 or later; build 25's general native bridge did not
 include its recorder or Live Activity widget. Voice support is negotiated with
 `lopuVoiceVersion`, separately from the shell version. For a fork's signed build,

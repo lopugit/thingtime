@@ -144,7 +144,7 @@ jobs:
         working-directory: iOS
         run: bundle exec fastlane prepare_release
 
-      - name: Build, verify phone/Watch/widget and upload
+      - name: Build, verify phone/Watch/widget/share extension and upload
         if: env.RELEASE_OPERATION == 'upload'
         working-directory: iOS
         run: bundle exec fastlane beta

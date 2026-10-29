@@ -125,3 +125,6 @@ graphify-out/snapshots/**/cache/last_query_stamp
 # Generated browser extension download and task-owned isolated acceptance state.
 remix/public/downloads/thingtime-passwords-extension.zip
 .task-password-qa/
+
+# Python bytecode from native release verification tests.
+iOS/scripts/__pycache__/

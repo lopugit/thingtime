@@ -1,5 +1,18 @@
 # Attachments and media
 
+## iOS incoming shares
+
+`iOS/ShareExtension` supplies the system Share target. `iOS/ShareSupport` owns
+provider representations and the atomic local App Group inbox; the containing
+app drains complete batches into Documents/Shared on launch/foreground. The
+extension accepts arbitrary offered types and batches, preserves provider files
+and Live Photo resources, and never uploads under an implicit account. Normal
+Thingtime upload authorization/accounting applies when users explicitly upload
+the saved files. XcodeGen and the Fastlane archive verifier own embedding,
+signing and App Group validation. Run native importer/inbox tests and
+`iOS/scripts/share-acceptance.sh`; see TESTING's incoming-share checklist and
+[the iOS runbook](../../iOS/README.md#receive-content-from-the-ios-share-sheet).
+
 Cloud JSON sync requests classify HTTP 408/429/5xx as temporary transport waits.
 `syncJobJournal.ts` persists an optional, revision-guarded `retryAt`; automatic
 discovery respects it across restart and repeated wake events. Retry-After is
