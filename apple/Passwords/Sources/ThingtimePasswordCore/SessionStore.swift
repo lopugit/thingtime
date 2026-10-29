@@ -19,14 +19,14 @@ public enum PasswordSessionStore {
         guard let session = try loadIfPresent() else { throw PasswordProviderError.invalidSession }
         return session
     }
-    static func loadIfPresent() throws -> ProviderSession? {
+    public static func loadIfPresent() throws -> ProviderSession? {
         var lookup = try query(accessGroup: group); lookup[kSecReturnData as String] = true; lookup[kSecMatchLimit as String] = kSecMatchLimitOne
         var item: CFTypeRef?
         let status = SecItemCopyMatching(lookup as CFDictionary, &item)
         if status == errSecItemNotFound { return nil }
         try validateLoadStatus(status)
         guard let data = item as? Data, let decoded = try? JSONDecoder().decode(ProviderSession.self, from: data) else { throw PasswordProviderError.invalidSession }
-        return try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie)
+        return try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie, companionConnectionID: decoded.companionConnectionID)
     }
     static func validateLoadStatus(_ status: OSStatus) throws {
         if status == errSecItemNotFound { throw PasswordProviderError.invalidSession }

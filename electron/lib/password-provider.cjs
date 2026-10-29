@@ -8,7 +8,7 @@ function requirePasswordSender(event, origin, bundled = false) {
 }
 function runHelper(executable, action, value) {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, [`--${action}`], { stdio: ['pipe', action === 'status' ? 'pipe' : 'ignore', 'ignore'], windowsHide: true });
+    const child = spawn(executable, [`--${action}`, ...(value?.automatic ? ['--automatic'] : [])], { stdio: ['pipe', action === 'status' ? 'pipe' : 'ignore', 'ignore'], windowsHide: true });
     let output = '', invalidOutput = false;
     if (action === 'status') child.stdout.on('data', chunk => {
       if (output.length + chunk.length > 4096) { invalidOutput = true; child.kill(); return; }
@@ -41,13 +41,16 @@ function createPasswordProvider({ app, root, origin, endpoint, helper = runHelpe
     requirePasswordSender(event, activeOrigin, app.isPackaged);
     if (process.platform !== 'darwin' || !['connect', 'sync', 'disconnect', 'status'].includes(input?.action)) throw new Error('Unsupported Password AutoFill request.');
     const authority = new URL(endpoint()).origin;
-    if (!authority.startsWith('https://')) throw new Error('System AutoFill requires an HTTPS account endpoint.');
+    if (!authority.startsWith('https://')) {
+      if (input.action === 'status' || input.action === 'sync') return { ok: true, connection: 'unsupportedOrigin' };
+      throw new Error('System AutoFill requires an HTTPS account endpoint. In the macOS menu bar, choose Thingtime → API Endpoint → Production, then sign in to your account.');
+    }
     const work = async () => {
       if (retiring) throw new Error('Thingtime is restarting. Try again after restart.');
       requirePasswordSender(event, activeOrigin, app.isPackaged);
       if (new URL(origin()).origin !== activeOrigin || new URL(endpoint()).origin !== authority) throw new Error('Your Thingtime endpoint changed.');
       if (input.action === 'status' && !input.ownerId) return { ok: true, connection: 'unavailable' };
-      if (input.action === 'disconnect' || !input.ownerId) { await helper(executable, 'disconnect'); return { ok: true, message: 'Password AutoFill disconnected.' }; }
+      if (input.action === 'disconnect' || !input.ownerId) { await helper(executable, 'disconnect', input.action === 'sync' ? { automatic: true, origin: authority } : undefined); return { ok: true, message: 'Password AutoFill disconnected.' }; }
       if (typeof input.ownerId !== 'string' || input.ownerId.length > 200) throw new Error('Invalid account.');
       const cookies = await event.sender.session.cookies.get({ url: activeOrigin, name: 'tt_auth' });
       const matches = cookies.filter(cookie => cookie.httpOnly && (cookie.secure || activeOrigin.startsWith('http://127.0.0.1:') && app.isPackaged) && cookie.path === '/');
@@ -68,7 +71,7 @@ function createPasswordProvider({ app, root, origin, endpoint, helper = runHelpe
   // Endpoint changes clear the OS vault before switching the app's authority.
   handle.disconnect = () => {
     retiring = true;
-    return process.platform === 'darwin' ? enqueue(() => helper(executable, 'disconnect')) : Promise.resolve();
+    return process.platform === 'darwin' ? enqueue(() => helper(executable, 'disconnect', { automatic: true, origin: new URL(endpoint()).origin })) : Promise.resolve();
   };
   return handle;
 }

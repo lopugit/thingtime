@@ -30,15 +30,17 @@ public struct ProviderSession: Codable, Equatable, Sendable {
     public var origin: URL
     public var ownerId: String
     public var cookie: String
+    public var companionConnectionID: String?
     public func requireUnchanged(from expected: ProviderSession) throws {
         guard self == expected else { throw PasswordProviderError.sessionChanged }
     }
-    public init(origin: URL, ownerId: String, cookie: String) throws {
+    public init(origin: URL, ownerId: String, cookie: String, companionConnectionID: String? = nil) throws {
         guard origin.scheme == "https", origin.host != nil, origin.user == nil, origin.password == nil,
               origin.query == nil, origin.fragment == nil, origin.path.isEmpty || origin.path == "/",
               !ownerId.isEmpty, ownerId.count < 200, cookie.hasPrefix("tt_auth="), cookie.count > 8,
               cookie.unicodeScalars.allSatisfy({ (33...126).contains($0.value) && $0.value != 59 }), cookie.count < 16384 else { throw PasswordProviderError.invalidSession }
-        self.origin = origin; self.ownerId = ownerId; self.cookie = cookie
+        guard companionConnectionID == nil || UUID(uuidString: companionConnectionID!) != nil else { throw PasswordProviderError.invalidSession }
+        self.origin = origin; self.ownerId = ownerId; self.cookie = cookie; self.companionConnectionID = companionConnectionID
     }
 }
 // Closed categories are safe to present in the extension. Never display a raw
