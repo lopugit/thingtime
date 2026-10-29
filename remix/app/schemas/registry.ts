@@ -106,6 +106,8 @@ export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 
 // Protected operational Things created when an admin migration throws. The
 // prefix is reserved so generic callers cannot squat a future diagnostic URL.
+export const STORAGE_PENDING_THINGTIME = 'storage-pending';
+export const STORAGE_RECOVERY_THINGTIME = 'storage-recovery';
 export const ERROR_LOG_THINGTIME = 'error-log';
 export const ERROR_LOG_ID_PREFIX = 'error-log-';
 // One root expiry policy for disposable control Things; excludes content and
@@ -4255,6 +4257,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
   'agent-reporting-binding', 'agent-reporting-operation',
   'file',
   'mail-account', 'mail-folder', 'mail-message', 'mail-inbox', 'mail-operation',

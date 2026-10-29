@@ -31,12 +31,13 @@ lifetime and message-row height are covered too.
 
 ## Verification
 
-- Feed 101/101, Messenger 66/66 and capability 120/120 tests passed; focused
+- Feed 101/101, Messenger 66/66 and capability 121/121 tests passed; focused
   reaction/schema/compatibility regressions passed. Typecheck ratchet: zero
   errors. Changed UI lint and whitespace checks passed.
 - Schema suite: 289/290 on the first run. The unrelated expression timing test
   exceeded its 10ms threshold under load; that exact test passed on isolated
-  retry. No baseline or timing threshold was changed.
+  retry. The final merged-source schema run passed 290/290. No baseline or
+  timing threshold was changed.
 - Built client and Nitro server: disposable replica set, isolated Chromium,
   verified database identity, API-only fixture creation and only loopback
   mutation requests. 200-emoji post/comment/chat tokens survived mutation and
@@ -60,3 +61,18 @@ responses. The structural graph, report and HTML are refreshed, retaining
 available prior semantic data. Changed Markdown is not claimed as freshly
 semantically indexed. Existing extractor warnings for unrelated native files
 remain separate from TypeScript/build results.
+
+## Main integration
+
+While checks ran, main advanced to `d265aba77` through storage-recovery PR
+#1289. This branch integrates that main commit; the repeated built API/browser
+acceptance passed against the updated transactional storage writer. The storage change
+already published `api.things` 1.46.1, so this task's uncapped generic reaction
+contract and client requirement advance to 1.46.2. Keep both documented changes
+and the new shared storage-accounting capability. Other reaction capability
+versions are unchanged. Imported storage changes are not authored by this task.
+
+Merged-source validation passed 121 capability tests, 290 schema tests and 101
+feed tests with zero TypeScript errors. The complete browser/API harness passed
+again and recorded 29 changed-source hashes; its result SHA-256 is
+`cbbe4672056d7895c7b2c5699b702e971b21246f65b1d6d273b653a7e13c9b89`.

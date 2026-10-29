@@ -84,7 +84,7 @@ projection or changes target permissions.
 
 Reaction combinations share `utils/reactionTokens.ts` across feed, Messenger
 and the canonical reaction schema. `api.things-react` 1.2.1,
-`api.chats-react` 1.0.3, `api.things` 1.46.1, `api.things-update` 1.15.1 and
+`api.chats-react` 1.0.3, `api.things` 1.46.2, `api.things-update` 1.15.1 and
 `api.schemas` 1.1.1 remove the obsolete token-length caps. Emoji-only grammar,
 ACLs, storage accounting and request transport validation remain enforced.
 The custom input survives popover dismissal per account/origin/database/target;

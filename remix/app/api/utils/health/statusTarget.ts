@@ -16,7 +16,7 @@ export type BasicServiceHealthStatus = {
   runtime?: string;
   nodeEnv?: string;
   storageAccounting?: {
-    state: 'ready' | 'migration-required' | 'unavailable';
+    state: 'ready' | 'recovering' | 'migration-required' | 'unavailable';
     expectedVersion: number;
     migrationId: string;
   };

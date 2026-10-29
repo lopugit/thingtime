@@ -835,10 +835,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'No queued job for this device.', body: { ok: true, job: null } }, { status: 401, description: 'Pair a device first.', body: { ok: false, error: 'Pair a personal Thingtime device first.' } }]
 	}),
 	endpoint({
-		id: 'lopu-recordings-run', contractVersion: '1.5.0', featureVersion: '1.5.0', group: 'lopu', title: 'Run recording automation',
+		id: 'lopu-recordings-run', contractVersion: '1.6.0', featureVersion: '1.6.0', group: 'lopu', title: 'Run recording automation',
 		endpoint: '/api/v1/lopu/recordings/run', methods: ['GET', 'POST'],
 		summary: 'Protected scheduler/admin entry point for durable Watch recording jobs and due daily reminders.',
-		detail: 'Version 1.5 processes explicitly queued standalone recording Things through the same owner-selected processor, privacy fences and relational output writer. Automatic discovery remains limited to Watch posts. Version 1.4 excludes every device-assigned personal job from the hosted provider worker, including offline and expired leases. Version 1.3 adds scheduled chat messages and read-only AI updates, with separate run Things and ambiguous-run stop protection. It also runs leased one-time/repeating Lopu reminders and at-most-once recording handoffs through normal Lopu chat. Response adds scheduledReminders and handoffs counts. GET requires the exact CRON_SECRET bearer credential; POST requires a current administrator and same-origin request. Home data plane only. Bounded discovery, leased processing, private comment/Thing creation and once-per-local-day reminder delivery. Each job uses only its owner’s selected credential waterfalls, with at most four 20-second attempts per stage. The run request accepts no provider hosts, credentials, owner ids, prompts or execution commands. Retries resume checkpoints instead of duplicating content. Response contains counts and status labels only, never recordings, transcripts, credentials or account ids. providerConfigured describes the claimed job’s selected connection configuration, or the default audio connection if no job is claimed; it does not prove provider health or quota.',
+		detail: 'Version 1.6 also drains durable account-storage recovery jobs before provider-dependent work, with lease fencing, bounded retries and a storageRecovery result containing only aggregate outcomes. Version 1.5 processes explicitly queued standalone recording Things through the same owner-selected processor, privacy fences and relational output writer. Automatic discovery remains limited to Watch posts. Version 1.4 excludes every device-assigned personal job from the hosted provider worker, including offline and expired leases. Version 1.3 adds scheduled chat messages and read-only AI updates, with separate run Things and ambiguous-run stop protection. It also runs leased one-time/repeating Lopu reminders and at-most-once recording handoffs through normal Lopu chat. Response adds scheduledReminders and handoffs counts. GET requires the exact CRON_SECRET bearer credential; POST requires a current administrator and same-origin request. Home data plane only. Bounded discovery, leased processing, private comment/Thing creation and once-per-local-day reminder delivery. Each job uses only its owner’s selected credential waterfalls, with at most four 20-second attempts per stage. The run request accepts no provider hosts, credentials, owner ids, prompts or execution commands. Retries resume checkpoints instead of duplicating content. Response contains counts and status labels only, never recordings, transcripts, credentials or account ids. providerConfigured describes the claimed job’s selected connection configuration, or the default audio connection if no job is claimed; it does not prove provider health or quota.',
 		auth: { mode: 'session-or-bearer', description: 'GET: scheduler secret only. POST: current administrator only.' },
 		steps: ['Configure CRON_SECRET and platform API keys or owner-selected Secure Vault API connections.', 'Version 1.4 excludes personally assigned recording jobs from cloud processing, including expired/offline devices. Paired personal workers process those jobs separately.', 'Vercel invokes the registered cron automatically; an administrator can POST for a bounded manual run.'],
 		requestExamples: [{ name: 'Run scheduler', description: 'Administrator-only manual run.', method: 'POST', body: {} }],
@@ -4450,14 +4450,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-nitro',
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
     group: 'health',
     title: 'Nitro health',
     endpoint: '/api/v1/health/nitro',
     summary: 'Reports Nitro API runtime and critical storage-accounting readiness.',
     detail:
-      'Use this endpoint to confirm the API server is alive, verify that account storage ledgers match the current accounting version, and compare local versus remote runtime status. It reports degraded while backfill-user-storage-accounting is required, because uploads and other positive storage writes intentionally fail closed in that state. Version 1.2 adds testEnvironment {mode: "isolated-agent-test", sessionId, version: "1.0.0"} only on a configured isolated agent backend. In that mode missing test authentication, a mismatched local replica set, or any fallback origin refuses all API requests with 503 before reading request bodies. This marker validates configuration only: the native manager must independently verify the enforced container boundary for browser, backend and database.',
+      'Use this endpoint to confirm the API server is alive, verify that account storage ledgers match the current accounting version, and compare local versus remote runtime status. Version 1.3 verifies canonical billable source stamps as well as ledgers. It reports degraded with storageAccounting.state recovering for trusted pending accounting, or migration-required for missing, malformed or legacy state. Both remain unready for releases until reconciliation finishes. Trusted unlimited accounts may queue at most 100 MiB of gross positive deltas transactionally during recovery; this is a pending-work budget, not a file-size limit. Finite uncertain usage and invalid identities or allowances remain closed. Unknown usage is never zero. Version 1.2 adds testEnvironment {mode: "isolated-agent-test", sessionId, version: "1.0.0"} only on a configured isolated agent backend. In that mode missing test authentication, a mismatched local replica set, or any fallback origin refuses all API requests with 503 before reading request bodies. This marker validates configuration only: the native manager must independently verify the enforced container boundary for browser, backend and database.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint.'
@@ -4467,7 +4467,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Call without query parameters for current runtime status.',
       'Pass target or origin query parameters to check a remote Thingtime runtime when supported.',
       'Read service, state, runtime, nodeEnv, responseMs, and storageAccounting.',
-      'If state is degraded, run the named migration from the admin migrations console and recheck until ready.',
+      'If storageAccounting.state is recovering, allow the leased worker to drain and recheck until ready. For migration-required, use the named canonical migration from the admin console; never mark an unknown ledger ready.',
       'Use this before deeper API tests to separate server availability from endpoint behavior.'
     ],
     requestExamples: [
@@ -9449,8 +9449,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // owner-library files. The combined 1.27.0 contract adds shared
     // Thing discussions, linked references, display-metadata renames and
     // optional cursor-backed rich comment projections.
-    featureVersion: '1.46.1',
-    contractVersion: '1.46.1',
+    featureVersion: '1.46.2',
+    contractVersion: '1.46.2',
     group: 'things',
     // 1.33.1: placement and folder deletion share transactional ancestry fences.
     // 1.33.2: protected library display-title renames commit title-only history.
@@ -9458,7 +9458,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-      'Version 1.46.1 accepts complete emoji-only reaction combinations without the former 12-emoji / 80-code-point caps, through the shared reaction validator. Existing authorization, storage accounting and request transport validation still apply. ' +
+      'Version 1.46.2 accepts complete emoji-only reaction combinations without the former 12-emoji / 80-code-point caps, through the shared reaction validator. Existing authorization, storage accounting and request transport validation still apply. ' +
+      'Version 1.46.1 reserves storage-pending- and storage-recovery- share IDs for transactional accounting records; generic create and upsert cannot squat those namespaces. ' +
       'Version 1.45 adds owner-only GET ?folder=root&builderApp=true to list top-level Builder app folders before cursor pagination. A Builder app is an ordinary folder Thing with validated crystal.builderApp, iconUrl and structured metadata; folderId groups independently authorized Things without changing their ACL or protected OAuth appId. The filter rejects exact-ID and non-root/app-lens use. ' +
       'Version 1.44 accepts guarded tt-form, tt-select, tt-style, tt-change and tt-mapbox element blocks in saved editable Webpages; their nested children and repeated collection templates retain independent Builder selection and bindings. ' +
       'Version 1.43 adds optional exact schemaId and parentId filtering to canonical GET Thing lists. They match stored crystal.schemaId and crystal.parentId before cursor pagination, with the existing owner, app namespace, PAT visibility and per-Thing ACL checks unchanged; exact-ID and discussion projection requests refuse these filters. ' +
@@ -14675,6 +14676,11 @@ export type ApiCapabilitiesManifest = {
 /** A stable machine-readable name for a concrete API route, including internal routes without public docs. */
 export const apiRouteCapabilityId = (routeKey: string) => `route.${routeKey.replace(/\//g, '.')}`;
 
+/** Shared contracts spanning multiple registered operations, not extra routes. */
+export const apiSharedFeatureVersions = {
+	'api.storage-accounting': '1.0.0'
+} as const;
+
 /**
  * Generated from the canonical public API registry plus the active route map.
  * `api.*` names are semantic, versioned client contracts; `route.*` names make
@@ -14685,9 +14691,9 @@ export const createApiCapabilitiesManifest = (
 	routeKeys: Iterable<string> = [],
 	dataEnvironment: DeploymentDataEnvironment | null = null
 ): ApiCapabilitiesManifest => {
-  const features: ApiCapabilitiesManifest['features'] = Object.fromEntries(
+  const features: ApiCapabilitiesManifest['features'] = { ...apiSharedFeatureVersions, ...Object.fromEntries(
     apiEndpointDocs.map((doc) => [`api.${doc.id}`, doc.contractVersion])
-  );
+  ) };
 
   for (const routeKey of routeKeys) {
     features[apiRouteCapabilityId(routeKey)] ||= '1.0.0';
