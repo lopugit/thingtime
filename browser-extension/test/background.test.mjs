@@ -8,21 +8,22 @@ const source = (await readFile(new URL('../background.js', import.meta.url), 'ut
 const tick = async () => { for (let n = 0; n < 12; n++) await new Promise(resolve => setImmediate(resolve)); };
 function event() { const listeners = []; return {addListener: fn => listeners.push(fn), fire: (...args) => listeners.forEach(fn => fn(...args)), listeners}; }
 function setup(options = {}) {
-  const frames = new Map([[1, {documentId: 'original', url: 'https://rp.example/login'}]]), removed = [], sent = [], timers = new Set();
+  const frames = new Map([[1, {documentId: 'original', url: 'https://rp.example/login'}]]), removed = [], focused = [], sent = [], timers = new Set();
   const state = {enabled: true, origin: 'https://thingtime.com'}, session = options.session || {}, alarmValues = new Map();
   let nextTab = 2, optionsOpened = 0;
   const chrome = {runtime: {openOptionsPage: async () => { optionsOpened++; }, id: 'extension', getURL: path => `chrome-extension://extension/${path}`, onMessage: event()},
     storage: {local: {get: async () => { if (options.settingsWait) await options.settingsWait; return state; }, set: async value => Object.assign(state, value)}, session: {get: async () => session, set: async value => Object.assign(session, value), remove: async key => { delete session[key]; }}},
-    tabs: {get: async id => { const frame = frames.get(id); return frame ? {id, url: frame.url, ...(options.pendingUrls?.has(id) ? {pendingUrl: options.pendingUrls.get(id)} : {})} : null; }, create: async ({url}) => { const id = nextTab++; frames.set(id, {documentId: 'provider', url}); return {id}; }, remove: async id => { removed.push(id); frames.delete(id); }, sendMessage: async (tabId, message, opts) => { sent.push({tabId, message, opts}); return {ok: true}; }, onRemoved: event(), onUpdated: event()},
+    tabs: {query: async () => [{id:1}], get: async id => { const frame = frames.get(id); return frame ? {id, windowId: 10, url: frame.url, ...(options.pendingUrls?.has(id) ? {pendingUrl: options.pendingUrls.get(id)} : {})} : null; }, update: async (id, value) => { focused.push(['tab', id, value]); return {id, windowId: 10}; }, create: async ({url}) => { const id = nextTab++; frames.set(id, {documentId: 'provider', url}); return {id}; }, remove: async id => { removed.push(id); frames.delete(id); }, sendMessage: async (tabId, message, opts) => { sent.push({tabId, message, opts}); return {ok: true}; }, onRemoved: event(), onUpdated: event()},
+    windows: {update: async (id, value) => { focused.push(['window', id, value]); return {id}; }},
     webNavigation: {getFrame: async ({tabId}) => frames.get(tabId), onCommitted: event()},
     alarms: {create: async (name, value) => alarmValues.set(name, value), clear: async name => alarmValues.delete(name), onAlarm: event()}};
   if (options.frames) for (const [id, frame] of options.frames) frames.set(id, frame);
   vm.runInNewContext(source, {...protocol, chrome, URL, crypto: webcrypto, setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timers.add(timer); return timer; }, clearTimeout});
   const send = (message, sender) => new Promise(resolve => chrome.runtime.onMessage.listeners[0](message, sender, resolve));
-  const sender = {frameId: 0, documentId: 'original', origin: 'https://rp.example', url: 'https://rp.example/login', tab: {id: 1, url: 'https://rp.example/login'}};
+  const sender = {frameId: 0, documentId: 'original', origin: 'https://rp.example', url: 'https://rp.example/login', tab: {id: 1, windowId: 10, url: 'https://rp.example/login'}};
   const provider = {frameId: 0, documentId: 'provider', origin: state.origin, url: `${state.origin}/passwords/provider`, tab: {id: 2, url: `${state.origin}/passwords/provider`}};
   const request = {action: 'request', version: 1, id: '2e27f3d6-1d63-439a-8719-44cbda72b6a1', type: 'get', publicKey: {challenge: 'AQ'}};
-  return {chrome, frames, removed, sent, session, state, optionsOpened: () => optionsOpened, send, sender, provider, request, stop: () => timers.forEach(clearTimeout)};
+  return {chrome, frames, removed, focused, sent, session, state, optionsOpened: () => optionsOpened, send, sender, provider, request, stop: () => timers.forEach(clearTimeout)};
 }
 test('worker binds provider request to actual sender, ignores page origin claims and fences late documents', async () => {
   const env = setup();
@@ -189,4 +190,102 @@ test('the real options-tab sender can save settings without granting web senders
     assert.equal((await env.send({action: 'settings', enabled: true, origin: 'https://evil.example'}, {...sender, frameId: 1})).ok, false);
     assert.equal((await env.send({action: 'settings', enabled: true, origin: 'https://evil.example'}, {...sender, id: 'other-extension'})).ok, false);
   } finally { env.stop(); }
+});
+
+
+test('read-only diagnostics are popup-only, exact-document fenced and have no routing identity fields',async()=>{
+ const env=setup(); const popup={id:'extension',url:'chrome-extension://extension/popup.html'};
+ try {
+  env.chrome.tabs.sendMessage=async(tabId,message,options)=>{
+   assert.equal(tabId,1);assert.equal(message.action,'diagnostics-query');assert.equal(options.documentId,'original');
+   return {available:true,hook:{installed:{create:true,get:true},current:{create:true,get:false},enabledSeen:true,fallbackReason:0,id:'private',publicKey:'private'}};
+  };
+  const result=await env.send({action:'diagnostics'},popup);
+  assert.equal(result.hook.current.get,false);assert.equal(JSON.stringify(result).includes('private'),false);
+  assert.equal('documentId' in result,false);assert.equal('tabId' in result,false);
+  assert.equal((await env.send({action:'diagnostics'},env.sender)).ok,false);
+  env.chrome.tabs.sendMessage=async()=>{env.frames.set(1,{documentId:'replacement',url:'https://rp.example/login'});return{available:true,hook:{}};};
+  assert.equal((await env.send({action:'diagnostics'},popup)).available,false);
+  assert.equal(env.frames.has(2),false);assert.equal(env.session.pending,undefined);
+ } finally {env.stop();}
+});
+
+
+async function deliverSuccess(env, onResponse) {
+ const result = onResponse ? new Promise(resolve=>env.chrome.runtime.onMessage.listeners[0](env.request,env.sender,value=>{onResponse(value);resolve(value);})) : env.send(env.request,env.sender);
+ await tick(); await env.send({action:'provider-ready'},env.provider);
+ const forwarded=env.sent.find(value=>value.message.action==='provider-request').message.request;
+ await env.send({action:'provider-response',version:1,id:forwarded.id,response:{id:'synthetic-success'}},env.provider);
+ return result;
+}
+test('successful provider return focuses exact requester before its response-triggered redirect',async()=>{
+ const env=setup();
+ try {
+  const result=await deliverSuccess(env,()=>{
+   assert.deepEqual(env.focused.map(value=>[value[0],value[1]]),[['tab',1],['window',10]]);
+   env.frames.set(1,{documentId:'success-redirect',url:'https://rp.example/settings/security'});
+  });
+  assert.equal(result.response.id,'synthetic-success');assert.deepEqual(env.removed,[2]);
+  assert.equal(env.focused[0][2].active,true);assert.equal('url' in env.focused[0][2],false);
+  assert.equal(env.focused[1][2].focused,true);
+ }finally{env.stop();}
+});
+test('closed or moved requester and focus errors do not change successful delivery or open a new tab',async()=>{
+ for(const kind of ['closed','moved','focus-error']) {
+  const env=setup();
+  try {
+   const get=env.chrome.tabs.get;
+   env.chrome.tabs.get=async id=>id!==1?get(id):kind==='closed'?null:kind==='moved'?{id:1,windowId:99,url:env.sender.url}:get(id);
+   if(kind==='focus-error')env.chrome.windows.update=async()=>{throw new Error('window unavailable');};
+   const result=await deliverSuccess(env);
+   assert.equal(result.response.id,'synthetic-success');assert.deepEqual(env.removed,[2]);
+   if(kind!=='focus-error')assert.deepEqual(env.focused,[]);
+  }finally{env.stop();}
+ }
+});
+test('new requester navigation never steals focus and explicit fallback restores its requester',async()=>{
+ const env=setup();
+ try {
+  const pending=env.send(env.request,env.sender);await tick();
+  env.chrome.tabs.get=async id=>id===1?{id:1,windowId:10,url:env.sender.url,pendingUrl:'https://rp.example/elsewhere'}:{id,url:env.provider.url};
+  await env.send({action:'provider-ready'},env.provider);
+  const forwarded=env.sent.find(value=>value.message.action==='provider-request').message.request;
+  await env.send({action:'provider-response',version:1,id:forwarded.id,response:{id:'synthetic-success'}},env.provider);
+  assert.equal((await pending).response.id,'synthetic-success');assert.deepEqual(env.focused,[]);
+ }finally{env.stop();}
+ const fallback=setup();try{
+  const pending=fallback.send(fallback.request,fallback.sender);await tick();
+  await fallback.send({action:'native-fallback',tabId:1},{id:'extension',url:'chrome-extension://extension/popup.html'});
+  assert.equal((await pending).fallback,true);assert.deepEqual(fallback.focused.map(value=>[value[0],value[1]]),[['tab',1],['window',10]]);
+ }finally{fallback.stop();}
+});
+
+
+test('explicit native fallback focuses original tab/window before delivering the reply that starts native WebAuthn',async()=>{
+ const env=setup();try{
+  const events=[];
+  const pending=new Promise(resolve=>env.chrome.runtime.onMessage.listeners[0](env.request,env.sender,result=>{
+   assert.deepEqual(env.focused.map(value=>[value[0],value[1]]),[['tab',1],['window',10]]);
+   events.push('native-get');resolve(result);
+  }));
+  await tick();
+  await env.send({action:'native-fallback',tabId:1},{id:'extension',url:'chrome-extension://extension/popup.html'});
+  assert.equal((await pending).fallback,true);assert.deepEqual(events,['native-get']);assert.deepEqual(env.removed,[2]);
+ }finally{env.stop();}
+});
+test('approval-page fallback and cancellation return to requester while background opt-out does not steal focus',async()=>{
+ for(const result of [{fallback:true},{error:{name:'AbortError',message:'Cancelled'}}]){
+  const env=setup();try{
+   const pending=env.send(env.request,env.sender);await tick();await env.send({action:'provider-ready'},env.provider);
+   const forwarded=env.sent.find(value=>value.message.action==='provider-request').message.request;
+   await env.send({action:'provider-response',version:1,id:forwarded.id,...result},env.provider);
+   const reply=await pending;assert.ok(reply.fallback||reply.error?.name==='AbortError');
+   assert.deepEqual(env.focused.map(value=>[value[0],value[1]]),[['tab',1],['window',10]]);
+  }finally{env.stop();}
+ }
+ const disabled=setup();try{
+  disabled.state.enabled=false;
+  assert.equal((await disabled.send(disabled.request,disabled.sender)).fallback,true);
+  assert.deepEqual(disabled.focused,[]);assert.equal(disabled.frames.has(2),false);
+ }finally{disabled.stop();}
 });

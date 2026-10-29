@@ -13,6 +13,12 @@
     <button type="submit">Save settings</button>
     <p id="feedback" role="status" aria-live="polite"></p>
   </form>
+  <section aria-labelledby="diagnostics-title">
+    <h2 id="diagnostics-title">Current website connection</h2>
+    <p id="diagnostics" class="hint" role="status" aria-live="polite">Checking this website’s connection…</p>
+    <button id="refresh-diagnostics" type="button">Refresh connection status</button>
+    <p class="hint">Read-only, page-reported hook status. No passkey or account data is collected.</p>
+  </section>
   <section aria-labelledby="requests-title"><h2 id="requests-title">Active requests</h2><div id="requests"><p class="hint">No active passkey requests.</p></div></section>
   <footer>No passwords or passkey keys are stored in this extension. Conditional sign-in and unsupported options use the browser’s native provider.</footer>
 </main>

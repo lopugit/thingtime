@@ -5,16 +5,16 @@ import vm from 'node:vm';
 import {webcrypto} from 'node:crypto';
 const code = await readFile(new URL('../page-hook.js', import.meta.url), 'utf8');
 class CustomEvent extends Event { constructor(type, options) { super(type); this.detail = options.detail; } }
-function setup() {
-  const document = new EventTarget(), window = new EventTarget(); window.top = window; window.window = window; window.PublicKeyCredential = class {};
+function setup(options = {}) {
+  const document = new EventTarget(), window = new EventTarget(); window.top = window; window.window = window; window.PublicKeyCredential = options.api === false ? undefined : class {};
   const calls = [], requests = [], cancels = [];
   const navigator = {credentials: {create: async options => { calls.push(['create', options]); return 'native'; }, get: async options => { calls.push(['get', options]); return 'native'; }}};
   const dispatch = (name, detail) => document.dispatchEvent(new CustomEvent(name, {detail: JSON.stringify(detail)}));
-  document.addEventListener('thingtime:extension-state-request', () => dispatch('thingtime:extension-state', {version: 1, enabled: true}));
+  document.addEventListener('thingtime:extension-state-request', () => { if (options.state !== false) dispatch('thingtime:extension-state', {version: 1, enabled: options.enabled !== false}); });
   document.addEventListener('thingtime:extension-request', e => requests.push(JSON.parse(e.detail)));
   document.addEventListener('thingtime:extension-cancel', e => cancels.push(JSON.parse(e.detail)));
   vm.runInNewContext(code, {window, document, navigator, CustomEvent, crypto: webcrypto, ArrayBuffer, Uint8Array, btoa, atob, DOMException, structuredClone, setTimeout, clearTimeout});
-  return {navigator, dispatch, calls, requests, cancels};
+  return {navigator, document, dispatch, calls, requests, cancels};
 }
 const options = () => ({publicKey: {challenge: new Uint8Array([1, 2, 3]), rpId: 'rp.example'}});
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -43,10 +43,11 @@ test('abort rejects and ignores late response without replaying the native cerem
   env.dispatch('thingtime:extension-response', {version: 1, id: request.id, fallback: true});
   assert.equal(env.cancels[0].id, request.id); assert.equal(env.calls.length, 0);
 });
-test('only explicit fallback delegates native and provider errors do not replay', async () => {
+test('a fallback reply delegates native and provider errors do not replay', async () => {
   const env = setup(); const first = env.navigator.credentials.get(options()); await tick();
   env.dispatch('thingtime:extension-response', {version: 1, id: env.requests[0].id, fallback: true});
   assert.equal(await first, 'native');
+  assert.equal(diagnostics(env).fallbackReason, 10);
   const second = env.navigator.credentials.get(options()); await tick();
   env.dispatch('thingtime:extension-response', {version: 1, id: env.requests[1].id, error: {name: 'NotAllowedError', message: 'Cancelled'}});
   await assert.rejects(second, error => error.name === 'NotAllowedError'); assert.equal(env.calls.length, 1);
@@ -85,4 +86,35 @@ test('a valid ES256 offer with none attestation and platform selection stays on 
   const promise = env.navigator.credentials.create({signal: controller.signal, publicKey: {challenge: new Uint8Array([1]), rp: {name: 'Example'}, user: {id: new Uint8Array([2]), name: 'test', displayName: 'Test'}, pubKeyCredParams: [{type: 'public-key', alg: -257}, {type: 'public-key', alg: -7}], attestation: 'none', authenticatorSelection: {authenticatorAttachment: 'platform'}, hints: []}});
   await tick(); assert.equal(env.requests.length, 1); assert.equal(env.calls.length, 0);
   controller.abort(); await assert.rejects(promise, error => error.name === 'AbortError');
+});
+
+
+function diagnostics(env) {
+ let value; env.document.addEventListener('thingtime:extension-diagnostics', event=>{value=JSON.parse(event.detail);},{once:true});
+ env.dispatch('thingtime:extension-diagnostics-query',{version:1}); return value;
+}
+test('diagnostics show installed/current hooks and opt-in without request or identity values',()=>{
+ const env=setup(); const value=diagnostics(env);
+ assert.deepEqual(value,{version:1,installed:{create:true,get:true},current:{create:true,get:true},enabledSeen:true,fallbackReason:0});
+ env.navigator.credentials.get=async()=> 'other-provider';
+ assert.equal(diagnostics(env).current.get,false);
+ assert.equal(diagnostics(env).installed.get,true);
+ assert.equal(env.navigator.credentials.get.toString().includes('other-provider'),true,'Diagnostics never replace another hook');
+});
+test('diagnostics distinguish disabled, unknown state, unsupported shape and missing WebAuthn',async()=>{
+ const disabled=setup({enabled:false});await disabled.navigator.credentials.get(options());
+ assert.equal(diagnostics(disabled).enabledSeen,false);assert.equal(diagnostics(disabled).fallbackReason,1);
+ const unknown=setup({state:false});await unknown.navigator.credentials.get(options());
+ assert.equal(diagnostics(unknown).enabledSeen,null);assert.equal(diagnostics(unknown).fallbackReason,2);
+ const conditional=setup();await conditional.navigator.credentials.get({...options(),mediation:'conditional'});
+ assert.equal(diagnostics(conditional).fallbackReason,3);
+ const missing=setup({api:false});assert.equal(diagnostics(missing).fallbackReason,11);assert.equal(diagnostics(missing).installed.get,false);
+});
+test('the observed GitHub assertion shape routes to Thingtime and diagnostics contain no public options',async()=>{
+ const env=setup(),controller=new AbortController();
+ const pending=env.navigator.credentials.get({signal:controller.signal,publicKey:{userVerification:'required',timeout:60000,challenge:new Uint8Array([1,2,3]),allowCredentials:[],rpId:'github.com'}});
+ await tick();assert.equal(env.requests.length,1);assert.equal(env.calls.length,0);
+ assert.equal(JSON.stringify(diagnostics(env)).includes('github.com'),false);
+ assert.equal(JSON.stringify(diagnostics(env)).includes('challenge'),false);
+ controller.abort();await assert.rejects(pending,error=>error.name==='AbortError');
 });

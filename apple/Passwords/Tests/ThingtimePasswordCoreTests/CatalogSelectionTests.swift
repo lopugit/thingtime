@@ -32,4 +32,31 @@ final class CatalogSelectionTests: XCTestCase {
         XCTAssertTrue(PasswordCatalogSelection.matching(credentials, hosts: [rp], anyService: true).isEmpty)
         XCTAssertTrue(PasswordCatalogSelection.matching(credentials, hosts: [], relyingParty: rp, allowedCredentialIDs: [Data([7])]).isEmpty)
     }
+    func testPasskeySummaryUsesTheSameExactRPDecodingAndAllowlistAsSelection() {
+        let allowed = Data((0..<32).map { UInt8($0) }), other = Data([4, 5, 6])
+        XCTAssertEqual(allowed.base64URL.count, 43)
+        let catalog = [item("allowed", rp: rp, credential: allowed.base64URL),
+            item("other", rp: rp, credential: other.base64URL),
+            item("malformed", rp: rp, credential: "!invalid!"),
+            item("empty", rp: rp, credential: ""), item("missing", rp: rp),
+            item("foreign", rp: "other.example.test", credential: allowed.base64URL), item("password", password: true)]
+        let summary = PasswordCatalogSelection.passkeySummary(catalog, relyingParty: rp, allowedCredentialIDs: [allowed])
+        XCTAssertEqual(summary.catalogTotal, 7)
+        XCTAssertEqual(summary.relyingPartyMatches, 5)
+        XCTAssertEqual(summary.validCredentialIDs, 2)
+        XCTAssertEqual(summary.allowedCredentialCount, 1)
+        XCTAssertEqual(summary.eligiblePasskeys, 1)
+        XCTAssertEqual(summary.eligiblePasskeys, PasswordCatalogSelection.matching(catalog, hosts: [], relyingParty: rp, allowedCredentialIDs: [allowed]).count)
+        let unrestricted = PasswordCatalogSelection.passkeySummary(catalog, relyingParty: rp)
+        XCTAssertEqual(unrestricted.allowedCredentialCount, 0)
+        XCTAssertEqual(unrestricted.eligiblePasskeys, 2)
+        let wrongSite = PasswordCatalogSelection.passkeySummary(catalog, relyingParty: "missing.example.test")
+        XCTAssertEqual(wrongSite.catalogTotal, 7)
+        XCTAssertEqual(wrongSite.relyingPartyMatches, 0)
+        XCTAssertEqual(wrongSite.validCredentialIDs, 0)
+        XCTAssertEqual(wrongSite.eligiblePasskeys, 0)
+        let empty = PasswordCatalogSelection.passkeySummary([], relyingParty: rp)
+        XCTAssertEqual(empty.catalogTotal, 0)
+        XCTAssertEqual(empty.eligiblePasskeys, 0)
+    }
 }

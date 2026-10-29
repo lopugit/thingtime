@@ -102,6 +102,13 @@ and trusted tab/document checks live in `browser-extension/`; package with
 independent relying party; unit signatures and synthetic UI alone are insufficient.
 `Settings/passwordManagerSettingsBlocks.ts` and `PasswordManagerSettings.tsx`
 share `/settings/passwords`; Thingtime login passkeys remain in Security.
+The browser adapter popup's bounded per-document diagnostic handshake reports
+installed/current hooks, observed opt-in and closed fallback reasons. `content.js`
+projects page events before runtime transport; the background fences the active
+document and accepts diagnostic reads only from its own popup. These are untrusted
+status hints, not authority or ceremony evidence; no request or identity fields
+are retained. Browser tests cover missing/replaced hooks, redaction and navigation.
+
 `NativePasswordConnection.tsx` and `nativePasswordConnectionBlocks.ts` supply the
 single editable device connection control shared by Password manager and Passwords
 settings. `nativeConnection.ts` owns ephemeral status, refresh and identity fences;
@@ -129,6 +136,9 @@ browser adapter, and exact-default migration preserves authored guide blocks.
 and prevents treating ordinary password entries as passkeys. `CatalogSelection.swift`
 owns the real chooser filter; assertion requests require an exact RP and allowed
 credential ID and cannot fall through to password/OTP website matching.
+Empty assertion results expose an ephemeral **Request details** disclosure with
+the actual requested site and count-only selection summary, never credential or
+account/session values. Its counts use the same decoder and matching rules.
 Run `swift test --package-path apple/Passwords` and
 `bash apple/PasswordProvider/tests/render-preview.sh`; the latter renders the
 actual SwiftUI view with synthetic status only. Signed packaging and real device registration/sign-in

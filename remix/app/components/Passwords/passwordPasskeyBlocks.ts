@@ -41,7 +41,7 @@ export const PASSWORD_PASSKEY_BLOCKS: WebpageBlock[] = [
           element('step-create', 'li', 'Choose its Create passkey or Add passkey option, then choose Thingtime in the system provider flow. The optional browser adapter opens a separate approval tab when explicitly enabled.'),
           element('step-verify', 'li', 'Check the requesting website and account, then verify with your Thingtime account password in the browser or your device through the system provider. Finish registration on the website.'),
         ], { 'padding-left': '24px', 'line-height': '1.7', 'overflow-wrap': 'anywhere' }),
-        paragraph('availability', 'For sign-in, Thingtime is offered when it has a passkey matching the website’s relying-party identifier and allowed credentials. An enabled provider alone does not create that passkey. Other password-manager extensions can intercept browser prompts; turn off their passkey offers if you want the native flow. Provider order is controlled by the system and browser.'),
+        paragraph('availability', 'For sign-in, Thingtime needs a passkey matching the website’s relying-party identifier and allowed credentials. For Thingtime-first supported browser requests, enable its browser adapter and reload the website. A competing extension can block its hook even with passkey offers off; if 1Password does this, disable its Chrome extension while keeping its macOS AutoFill provider enabled. Check Thingtime’s toolbar connection status. Conditional and unsupported requests retain the native flow. Provider order is controlled by the system and browser.'),
         when('pending', 'result.busy', [paragraph('pending-message', 'Connecting Password AutoFill…', { role: 'status' })]),
         when('notice', 'result.hasNotice', [paragraph('notice-message', '{result.notice}', { role: 'status' })]),
         button('close', 'Close passkey guide', 'passkey.close', { disabled: '{result.busy}' }),
@@ -76,6 +76,7 @@ const PRE_NATIVE_FIRST_TEXT: Record<string, { tag: string; text: string }> = {
     "text": "You can choose another passkey provider or cancel at approval. Unsupported browser requests use your browser’s normal flow. Accounts without a Thingtime password need to set one before using this browser provider."
   }
 };
+const PRE_HOOK_DIAGNOSTIC_TEXT: Record<string, { tag: string; text: string }> = {"password-passkey-availability": {"tag": "p", "text": "For sign-in, Thingtime is offered when it has a passkey matching the website’s relying-party identifier and allowed credentials. An enabled provider alone does not create that passkey. Other password-manager extensions can intercept browser prompts; turn off their passkey offers if you want the native flow. Provider order is controlled by the system and browser."}};
 const passkeyNodes = (blocks: WebpageBlock[]): WebpageBlock[] => blocks.flatMap(block => [block,
   ...passkeyNodes(block.children || []),
 ]);
@@ -97,7 +98,7 @@ export function migratePasswordPasskeyBlocks(blocks: WebpageBlock[]): WebpageBlo
   if (cleaned.some((block, index) => block !== blocks[index]) || cleaned.length !== blocks.length) blocks = cleaned;
   const nodes = passkeyNodes(blocks);
   const matchesLegacy = (block: WebpageBlock) => {
-    return [LEGACY_PASSKEY_TEXT[block.id], PRE_NATIVE_FIRST_TEXT[block.id]].some(legacy =>
+    return [LEGACY_PASSKEY_TEXT[block.id], PRE_NATIVE_FIRST_TEXT[block.id], PRE_HOOK_DIAGNOSTIC_TEXT[block.id]].some(legacy =>
       legacy && block.type === 'element' && block.tag === legacy.tag && block.text === legacy.text);
   };
   if (!nodes.some(matchesLegacy)) return blocks;

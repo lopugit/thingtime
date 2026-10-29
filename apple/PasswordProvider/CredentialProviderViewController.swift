@@ -16,6 +16,9 @@ import UIKit
     @Published var status = ""
     @Published var choices: [Choice] = []
     @Published var retry: (() -> Void)?
+    @Published var requestedSite = ""
+    @Published var selectionSummary: PasswordPasskeySelectionSummary?
+    @Published var requestDetailsExpanded = false
     var cancel: () -> Void = {}
 }
 private struct ProviderView: View {
@@ -34,6 +37,18 @@ private struct ProviderView: View {
                 Button("Try again", action: retry).disabled(model.busy)
             } else {
                 ScrollView { VStack(alignment: .leading, spacing: 10) {
+                    if let summary = model.selectionSummary {
+                        DisclosureGroup("Request details", isExpanded: $model.requestDetailsExpanded) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Requested site: \(model.requestedSite)")
+                                Text("Catalog entries: \(summary.catalogTotal)")
+                                Text("Site matches: \(summary.relyingPartyMatches)")
+                                Text("Valid credential IDs for site: \(summary.validCredentialIDs)")
+                                Text("Site allowlist: \(summary.allowedCredentialCount)\(summary.allowedCredentialCount == 0 ? " (unrestricted)" : "")")
+                                Text("Eligible passkeys: \(summary.eligiblePasskeys)")
+                            }.font(.caption).fixedSize(horizontal: false, vertical: true).padding(.top, 6)
+                        }
+                    }
                     ForEach(model.choices) { choice in
                         Button(action: choice.select) { VStack(alignment: .leading) { Text(choice.title).bold(); Text(choice.detail).font(.caption) }.frame(maxWidth: .infinity, alignment: .leading).padding(8) }.disabled(model.busy)
                     }
@@ -99,6 +114,7 @@ private struct ProviderView: View {
         model.title = "Thingtime"
         model.busy = false; model.choices = []; model.retry = nil
         model.message = ""; model.status = ""
+        model.requestedSite = ""; model.selectionSummary = nil; model.requestDetailsExpanded = false
     }
     private func cancel(_ code: ASExtensionError.Code = .userCanceled) {
         beginRequest()
@@ -109,6 +125,7 @@ private struct ProviderView: View {
         guard let current = requests.start() else { return }
         task?.cancel(); authentication?.invalidate()
         model.busy = true; model.message = ""; model.retry = nil; show(.connection)
+        model.requestedSite = ""; model.selectionSummary = nil; model.requestDetailsExpanded = false
         task = Task { [weak self] in
             guard let self else { return }
             do { try await work(current) }
@@ -174,6 +191,11 @@ private struct ProviderView: View {
             let catalog = try await client.catalog(); try self.verify(current, session: session)
             let matches = PasswordCatalogSelection.matching(catalog, hosts: hosts, anyService: services.isEmpty,
                 relyingParty: parameters?.relyingPartyIdentifier, allowedCredentialIDs: parameters?.allowedCredentials ?? [], otp: otp)
+            if matches.isEmpty, let parameters {
+                self.model.requestedSite = parameters.relyingPartyIdentifier
+                self.model.selectionSummary = PasswordCatalogSelection.passkeySummary(catalog,
+                    relyingParty: parameters.relyingPartyIdentifier, allowedCredentialIDs: parameters.allowedCredentials)
+            }
             let emptyMessage = parameters == nil
                 ? "No matching credentials. Add this site's exact HTTPS address to an entry in Thingtime."
                 : "No matching passkey is saved in Thingtime for this website. Create a passkey in the website's account security settings and choose Thingtime."

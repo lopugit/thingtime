@@ -1,9 +1,26 @@
-import {DEFAULT_ORIGIN, providerOrigin} from './protocol.js';
+import {DEFAULT_ORIGIN, providerOrigin, DIAGNOSTIC_REASONS} from './protocol.js';
 const enabled = document.querySelector('#enabled');
 const origin = document.querySelector('#origin');
 const feedback = document.querySelector('#feedback');
 const requests = document.querySelector('#requests');
 const form = document.querySelector('#settings');
+const diagnostics = document.querySelector('#diagnostics');
+const refreshDiagnostics = document.querySelector('#refresh-diagnostics');
+async function inspectConnection() {
+  refreshDiagnostics.disabled = true;
+  try {
+    const status = await chrome.runtime.sendMessage({action: 'diagnostics'});
+    if (!status.available) { diagnostics.textContent = 'This website’s content bridge is unavailable. Reload the website tab after enabling Thingtime and check the extension’s site access.'; return; }
+    if (!status.hook) { diagnostics.textContent = 'Content bridge connected; the page hook was not detected. Reload this website tab and check the extension’s site access.'; return; }
+    const h = status.hook;
+    const method = (name, label) => !h.installed[name] ? `${label} hook: not installed.` : !h.current[name] ? `${label} hook: replaced by the page or another extension.` : `${label} hook: installed and current.`;
+    const state = h.enabledSeen === null ? 'Extension state not received by the page.' : h.enabledSeen ? 'Page observed Thingtime enabled.' : 'Page observed Thingtime disabled.';
+    diagnostics.textContent = `${method('get', 'Sign-in')} ${method('create', 'Save')} ${state} ${DIAGNOSTIC_REASONS[h.fallbackReason] || DIAGNOSTIC_REASONS[0]}`;
+  } catch { diagnostics.textContent = 'Connection status could not be checked. Reopen the extension to retry.'; }
+  finally { refreshDiagnostics.disabled = false; }
+}
+refreshDiagnostics.addEventListener('click', inspectConnection);
+
 async function refresh() {
   const status = await chrome.runtime.sendMessage({action: 'status'});
   requests.replaceChildren();
@@ -23,7 +40,7 @@ async function refresh() {
 }
 try {
   const config = await chrome.runtime.sendMessage({action: 'state'});
-  enabled.checked = config.enabled === true; origin.value = config.origin || DEFAULT_ORIGIN; await refresh();
+  enabled.checked = config.enabled === true; origin.value = config.origin || DEFAULT_ORIGIN; await Promise.all([refresh(), inspectConnection()]);
 } catch { feedback.textContent = 'The extension is unavailable. Reopen it to try again.'; }
 form.addEventListener('submit', async event => {
   event.preventDefault();
