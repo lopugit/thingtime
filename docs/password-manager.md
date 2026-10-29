@@ -248,8 +248,14 @@ The macOS provider and host display **Thingtime** in the operating-system flow.
 The existing bundle identifiers, shared Keychain group and packaged
 `Thingtime Passwords.app` path remain stable so this label change does not create
 a new credential store or require migration. Packaged verification checks both
-`CFBundleDisplayName` and `CFBundleName` and matching host/provider versions; it
-rejects old branding before installation. The optional browser adapter's manifest,
+the resolved **Thingtime** display/short names and matching host/provider versions.
+The host deliberately keeps raw `CFBundleDisplayName` equal to its unchanged
+`Thingtime Passwords.app` basename; bundled `en.lproj/InfoPlist.strings` localizes
+both visible name keys to Thingtime. macOS otherwise falls back to the filesystem
+name when the raw display name differs from the basename. Verification requires this localization
+rather than mistaking the intentional raw fallback for visible branding. Check
+`FileManager.displayName`, URL localized name and the actual native picker on the
+installed copy; raw plist values alone do not establish the visible result. The optional browser adapter's manifest,
 action tooltip and popup also display Thingtime.
 
 For sign-in, an enabled provider has a site/account entry only when its catalog
