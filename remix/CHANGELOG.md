@@ -102,6 +102,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-29: Add the native iOS Thingtime share destination for source-provided
+  text, links, media, documents, folders and custom types, with local atomic
+  batches, cancellation and retry. Include the extension in TestFlight signing
+  and archive verification, and add real system-sheet byte checks. Native
+  installation is required; a web deployment cannot add the destination.
+  **Codex (AI)**
+
 - 2026-10-28: Add private MCP task reporting with an independent delegation
   permission, distinct task Characters, saved workspace Actions, guarded retries
   and exact record readback. Existing Things connections require explicit

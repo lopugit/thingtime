@@ -83,6 +83,53 @@ This installs XcodeGen if needed, generates `Thingtime.xcodeproj`, and opens Xco
 
 ## Build And Test
 
+### Receive content from the iOS share sheet
+
+The embedded **Thingtime** Share extension accepts the payloads offered by the
+system share sheet without a type allowlist or an item-count ceiling. This
+includes text, links, photos, Live Photos, video, audio, documents, folders and
+custom file types. The sending app still decides which representations it offers
+and can exclude particular activities; Thingtime cannot override that choice or
+the user's share-sheet favourites.
+
+Sharing saves a local batch in the app's existing App Group. Open Thingtime after
+saving to move completed batches into **Files → On My iPhone → Thingtime →
+Shared** (or **On My iPad**). Each batch has its own folder to prevent overwrites.
+Use the normal Thingtime upload picker to select those files when you want to
+upload them. Sharing alone does not publish anything or choose a signed-in
+account, server or audience. Thingtime does not require login or upload the batch;
+the sending app may need network access to retrieve cloud-only originals.
+
+The importer tries the representations actually supplied by the sending app,
+copies temporary provider files while they are valid, and preserves both Live
+Photo resources when a Live Photo is supplied. A failed item prevents the batch
+from being reported as saved; cancel/retry must not expose an incomplete batch.
+There is no automatic deletion of successfully saved shares.
+
+Photos may offer only a still image for a Live Photo, depending on its sharing
+options and destination support. The extension cannot recover motion that the
+sending app does not supply. This differs from receiving a `PHLivePhoto`, for
+which both original resources are retained.
+
+For forks, register `<iPhone bundle ID>.share`, enable App Groups on that App ID,
+and associate the same `THINGTIME_WIDGET_GROUP` as the containing iPhone app.
+The extension's provisioning profile must include that group. The release lane
+and archive verifier include this extension; do not reuse the widget profile for
+it. A web deployment cannot add a native share target to an older installed app:
+install a new native build containing `ThingtimeShare.appex`.
+
+For initial automatic provisioning, verify the resolved App Group in both the
+extension's signed entitlements and its embedded profile. On the development
+machine, Xcode registered the association only after provisioning once with a
+temporary entitlement file containing the resolved group ID instead of the
+build-setting variable. Keep the configurable variable in the source project;
+the temporary file is a local provisioning aid, not a replacement entitlement.
+
+Run `scripts/share-acceptance.sh` with `THINGTIME_SIMULATOR_APP` pointing to the
+final simulator app to exercise the actual system sheet and compare saved fixture
+bytes. The harness uses disposable data and a task-owned simulator; its results
+are distinct from physical-device, signed archive and TestFlight acceptance.
+
 ```sh
 cd iOS
 xcodegen generate

@@ -8,6 +8,34 @@
 - [ ] Verify `GET /api/v1/things?folder=root&builderApp=true` paginates before ACL projection and rejects anonymous, other-owner and non-root use; protected OAuth `appId` is unchanged.
 - [ ] From a Component in each Builder type/app view, open its item menu and Edit definition. Edit and save a field, reload, and confirm exact Thing readback. Verify another owner's Component has no edit command. Open app metadata in two tabs; save in one, then confirm the stale tab is refused rather than overwriting it.
 
+## iOS incoming share sheet
+
+- [ ] Build the complete XcodeGen `Thingtime` scheme. Verify that the installed
+      phone app embeds `ThingtimeShare.appex`, its principal class and production
+      activation predicate, and that app/extension share the intended App Group.
+- [ ] Run the native share importer/inbox regressions and
+      `THINGTIME_SIMULATOR_APP=<built-app> iOS/scripts/share-acceptance.sh`.
+      Verify actual system-sheet visibility, select Thingtime, save, open the
+      app and compare fixture bytes in Documents/Shared. Include text, URL,
+      image, audio, video, PDF, ZIP, custom UTI, folders and mixed/many-item shares.
+- [ ] On an installed physical iPhone/iPad, share from Photos (still, Live Photo,
+      multiple and mixed images/videos, cloud-only original), Safari, Files and
+      Voice Memos. Check **More** as well as favourites. Verify both paired Live
+      Photo resources when offered; distinguish the sender's still-only export
+      from a Live Photo. Compare saved bytes with the exported source.
+- [ ] Exercise a failed first provider representation with a successful fallback,
+      an unreadable item in a mixed batch, cancellation during import, retry,
+      duplicate filenames and interrupted app handoff. No incomplete batch may
+      be presented as saved; retries and app relaunch must not overwrite or
+      duplicate committed content. Verify saved files remain after relaunch.
+- [ ] Inspect the extension's progress, success and error states on phone and
+      iPad, including large text, rotation and long names. Cancel/Retry/Done stay
+      reachable; errors are announced. Verify shares remain local until explicit
+      normal upload, across account and selected-origin changes.
+- [ ] Before signed delivery, run release packaging tests and archive/IPA
+      validation with the new share App ID/profile. Confirm Apple processing and
+      the installed build separately; a main merge is not an iPhone installation.
+
 ## Native desktop UI zoom — 2026-10-27
 
 - [ ] Run `node --test electron/test/window-zoom.test.cjs` and `corepack pnpm@10.12.1 --dir electron verify:window-zoom`. The latter requires a graphical macOS desktop and uses a separate task process, disposable local document/profile, real `sendInputEvent` and native menu dispatch. Normal networking and Chromium's standard sandbox remain enabled; the runner bounds execution and cleans its process group/profile. No sign-in or account writes occur.
