@@ -8,15 +8,23 @@ function run(command, args, input) {
   return result.stdout;
 }
 const plist = text => JSON.parse(run('/usr/bin/plutil', ['-convert', 'json', '-o', '-', '-'], text));
+export function assertPasswordProviderMetadata(info, expectedIdentifier, expectedVersion) {
+  if (info.CFBundleIdentifier !== expectedIdentifier) throw new Error('Password provider bundle identifier mismatch.');
+  if (info.CFBundleDisplayName !== 'Thingtime' || info.CFBundleName !== 'Thingtime') throw new Error('Password provider display name must be Thingtime.');
+  const version = `${info.CFBundleShortVersionString}/${info.CFBundleVersion}`;
+  if (!info.CFBundleShortVersionString || !info.CFBundleVersion || expectedVersion && version !== expectedVersion) throw new Error('Password provider host and extension versions must match.');
+  return version;
+}
+
 export async function verifyPasswordProvider(app, { unsigned = false, teamIdentifier, signingIdentity } = {}) {
   const bundles = [
     [app, process.env.THINGTIME_PASSWORD_HOST_BUNDLE_ID || 'com.thingtime.passwords'],
     [path.join(app, 'Contents/PlugIns/ThingtimePasswordProvider.appex'), process.env.THINGTIME_PASSWORD_PROVIDER_BUNDLE_ID || 'com.thingtime.passwords.provider']
   ];
-  let sharedGroup;
+  let sharedGroup, sharedVersion;
   for (const [bundle, identifier] of bundles) {
     const info = plist(await readFile(path.join(bundle, 'Contents/Info.plist')));
-    if (info.CFBundleIdentifier !== identifier) throw new Error('Password provider bundle identifier mismatch.');
+    sharedVersion = assertPasswordProviderMetadata(info, identifier, sharedVersion);
     run('/usr/bin/codesign', ['--verify', '--deep', '--strict', bundle]);
     if (unsigned) continue; // Ad-hoc builds exercise structure, not system permission.
     if (signingIdentity) {

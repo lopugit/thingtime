@@ -1,4 +1,9 @@
-# Thingtime Passwords browser extension
+# Thingtime browser extension
+
+On macOS, use the signed native Thingtime Password AutoFill provider first. Chrome
+can use the system provider without this extension. This optional browser adapter
+handles public WebAuthn requests through the existing Thingtime approval page; it
+does not communicate with the native host or fill password forms.
 
 Unpacked Manifest V3 Chromium extension. It is **off by default**. Its action popup
 lets the user explicitly enable passkey interception, select their trusted Thingtime

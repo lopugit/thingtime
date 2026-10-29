@@ -10411,6 +10411,18 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Native-first provider experience: confirm the installed host and active
+  extension both expose CFBundleDisplayName/CFBundleName **Thingtime** with matching
+  versions; browser manifest, action tooltip and popup use the same brand.
+  Keep bundle IDs, executable paths, Keychain group and designated requirements
+  stable. With competing browser passkey offers disabled, create a passkey on an
+  independent site and sign in from Chrome's native flow; confirm the catalog RP
+  and credential ID, including a passkey without password-URL fields. A password
+  entry for that URL alone must not invent a passkey. Check matching/missing site
+  UI and actual allowed-credential filtering. Verify the guide presents native
+  macOS first and optional browser interception accurately, preserves authored
+  saved blocks and remains usable in desktop/mobile expanded full-scroll states.
+
 - [ ] Automatic native linking: with a disposable HTTPS account and the OS
   provider enabled, an unlinked device connects from its own signed-in session.
   Disabled providers remain unlinked. Explicit Disconnect survives focus/restart
