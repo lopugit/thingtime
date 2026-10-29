@@ -106,6 +106,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   add above/below/left/right insertion, and replace overlapping nested title
   chips with a shared ancestor breadcrumb. Add an editable block-structure
   dialog whose page/parent/block views select the real inspector target.
+  [Implementation and acceptance](../PRs/1284-codex-builder-nested-blocks-fix-nested-builder-insertion-and-add-block-structure-navigation.md).
   **Codex (AI)**
 
 - 2026-10-29: Unify native and optional browser-provider display naming as Thingtime, verify matching branded bundles, and present native macOS passkey setup and discovery before optional browser interception.
