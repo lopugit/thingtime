@@ -845,3 +845,16 @@ test('resource limits and CPU downloads negotiate only their semantic dependenci
  assert.equal(capabilitySatisfies('1.16.0', requirements['api.attachment-content']), false);
  assert.equal(capabilitySatisfies('1.18.0', requirements['api.attachment-content']), true);
 });
+
+ test('preview retention routes and both manifests share explicit independent contracts', () => {
+  const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
+  const manifest = thingtimeCapabilityManifest('https://thingtime.test');
+  for (const [route, feature] of [['admin/ci/preview-retention', 'admin-ci-preview-retention'], ['integrations/ci/preview-retention', 'integration-ci-preview-retention']]) {
+    assert.equal(typeof routeModules[`v1/${route}`], 'function');
+    assert.equal(legacy.features[`api.${feature}`], '1.0.0');
+    assert.equal(manifest.features[`api.${feature}`].version, '1.0.0');
+    assert.ok(manifest.operations.some(op => op.path === `/api/v1/${route}` && op.methods.includes('POST')));
+    assert.equal(capabilitySatisfies('1.1.0', '1.0.0'), true);
+    for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+  }
+});

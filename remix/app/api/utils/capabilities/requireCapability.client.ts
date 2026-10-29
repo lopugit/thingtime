@@ -8,8 +8,13 @@ type CapabilityManifest = {
 
 export const createThingtimeCapabilityChecker = () => {
   let manifestPromise: Promise<CapabilityManifest> | null = null;
+  let manifestOrigin: string | null = null;
 
-  return async (feature: string, minimumVersion: string) => {
+  return async (feature: string, minimumVersion: string, expectedOrigin = window.location.origin) => {
+    if (manifestOrigin !== expectedOrigin) {
+      manifestPromise = null;
+      manifestOrigin = expectedOrigin;
+    }
     const request = manifestPromise ??= fetch(THINGTIME_CAPABILITY_MANIFEST_PATH, {
       headers: { Accept: 'application/json' },
       credentials: 'same-origin',
@@ -23,7 +28,6 @@ export const createThingtimeCapabilityChecker = () => {
     });
     try {
       const manifest = await request;
-      const expectedOrigin = window.location.origin;
       const version = manifest?.features?.[feature]?.version;
       if (
         manifest?.schemaVersion !== 1 || manifest.origin !== expectedOrigin ||

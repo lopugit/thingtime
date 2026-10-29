@@ -130,3 +130,20 @@ test('theme saves refuse stale manifests then retry compatible focus-setting sup
   version = '1.2.1';
   await check('api.themes', THEME_CAPABILITY_REQUIREMENTS['api.themes']);
 });
+
+test('selected-origin changes fetch a new manifest and late old reads cannot evict it', async (t) => {
+  let releaseOld!: (value: Response) => void;
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    calls++;
+    if (calls === 1) return new Promise<Response>(resolve => { releaseOld = resolve; });
+    return Response.json({ ...manifest(), origin: 'https://selected.test' });
+  });
+  const check = createThingtimeCapabilityChecker();
+  const old = check('api.lopu-reminders', '1.1.0');
+  await check('api.lopu-reminders', '1.1.0', 'https://selected.test');
+  releaseOld(Response.json({ ...manifest(), origin: 'https://wrong.test' }));
+  await assert.rejects(old, /incompatible/);
+  await check('api.lopu-reminders', '1.1.0', 'https://selected.test');
+  assert.equal(calls, 2);
+});

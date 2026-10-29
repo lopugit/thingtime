@@ -29,6 +29,7 @@ import { createBrowserActionHost, finishBrowserAction } from '~/components/Actio
 import { withPostRequestDeadline } from './postRequest';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { THEME_CAPABILITY_REQUIREMENTS } from '~/theme/capabilities';
+import { PREVIEW_RETENTION_REQUIREMENTS } from '~/api/utils/ciControl/previewRetentionCore';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
@@ -527,6 +528,14 @@ export function useApi() {
 				async (args?: { limit?: number }, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
         []
       ),
+      ciPreviewRetention: useCallback(async (scope: { expectedActor: string; expectedApiOrigin: string }) => {
+        await requireThingtimeCapability('api.admin-ci-preview-retention', PREVIEW_RETENTION_REQUIREMENTS['api.admin-ci-preview-retention'], scope.expectedApiOrigin);
+        return getJson('/api/v1/admin/ci/preview-retention', scope);
+      }, []),
+      setCiPreviewRetention: useCallback(async (args: Record<string, unknown>, scope: { expectedActor: string; expectedApiOrigin: string }) => {
+        await requireThingtimeCapability('api.admin-ci-preview-retention', PREVIEW_RETENTION_REQUIREMENTS['api.admin-ci-preview-retention'], scope.expectedApiOrigin);
+        return asyncFetcher.submit(args, { ...scope, action: '/api/v1/admin/ci/preview-retention', errorContext: 'save preview retention rules' });
+      }, [asyncFetcher]),
       ciCredentials: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/credentials', options), []),
       ciFeatureStacks: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/stacks', options), []),
       ciStackChat: useCallback(async (runId: string) => getJson(`/api/v1/admin/ci/stacks/chat${toQuery({ runId })}`), []),

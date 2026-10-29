@@ -102,6 +102,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-30: Add shared Admin preview-retention and PR-liveliness sections with revision-guarded saves, explicit capability negotiation and signed fresh controller policy reads. Preserve deployments on unavailable policy; product gateway rollout precedes controller rollout. Supported lazy WASM initialization restores Nitro startup while retaining real engine asset URLs. [Details](../PRs/codex-mongo-preview-cleanup-preview-retention.md). **Codex (AI)**
+
+
 - 2026-10-29: Restore Add for long custom emoji combinations, retain unfinished
   reaction-picker input after dismissal, and append nine recent choices to the
   quick reaction popup. Reuse shared validation and account-scoped reaction

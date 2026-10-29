@@ -13527,3 +13527,27 @@ separate from deterministic discovery/lease tests.
   Save/reload user data. Provider navigation results remain transient. Verify
   account switches and unmount remove the map and its old token; attribution
   stays visible. A fixture or passing build is not a live provider result.
+
+### Preview retention and PR liveliness
+
+- In an isolated API/database with a synthetic admin, open `/admin/preview-retention`
+  at desktop and mobile widths. Scroll top to bottom, expand/collapse both
+  sections, exercise all switches and conditional numeric fields. Check keyboard
+  labels, focus, wrapping and absence of horizontal overflow. The same controls
+  appear in Settings → Admin.
+- Save cleanup paused, a nonzero orphan grace, superseded pruning/grace and an
+  optional inactivity duration. Independently GET the admin endpoint, reload the
+  page and confirm the exact saved revision/policy. Disable inactivity again and
+  confirm null persists. A stale revision must return 409 and preserve the newer
+  values; anonymous and ordinary accounts must be refused.
+- Negotiate both retention capabilities on the built/runtime manifest. Signed
+  controller reads require the exact repository/ref and a fresh timestamp,
+  return only the policy and no revision/audit data. Wrong signatures, stale
+  requests and DB failure must refuse cleanup. Check both manifest generators.
+- Protected controller tests cover no-open-PR grace, opt-in superseded cleanup,
+  active current-head protection, opt-in inactive open-PR expiry, failed policy
+  reads and stable/production/gateway/alias protection. Real Vercel deletion is
+  separate provider acceptance and must never run from this disposable fixture.
+- Deployment order: product gateway API first, signed read and admin save/readback
+  second, protected controller consumer last. A UI preview using the older
+  gateway cannot establish the new backend's acceptance.

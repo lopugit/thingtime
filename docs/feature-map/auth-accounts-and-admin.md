@@ -246,3 +246,24 @@ The dispatcher triggers recovery after mutations; the existing protected
 `userStorageReadiness.ts` verifies ledger and source readiness. Run `test:storage`,
 `test:storage-recovery`, `test:error-logs`, `test:api-capabilities` and the
 replica integration. See [storage recovery](../storage-recovery.md).
+
+## Preview retention and PR liveliness
+
+`Admin → Preview retention` (`/admin/preview-retention`) and Settings → Admin
+share `Admin/PreviewRetentionSettings.tsx`, `SettingsSection` and `SettingRow`.
+`GET/POST /api/v1/admin/ci/preview-retention` requires the current admin and
+negotiated `api.admin-ci-preview-retention` 1.0.0. `ciControl/previewRetention.ts`
+reads the home settings singleton afresh and saves with a revision comparison;
+concurrent edits return 409. The signed, read-only controller endpoint is
+`POST /api/v1/integrations/ci/preview-retention`, capability
+`api.integration-ci-preview-retention` 1.0.0. `previewRetentionCore.ts` owns
+validation and safe defaults. Both manifests derive these explicit versions
+from `apiDocs.ts`; Nitro imports register both executable routes.
+
+The protected `github-actions` controller consumes the saved policy. It preserves
+deployments if policy discovery, authentication, reads or validation fail.
+The product API must roll out to the selected gateway origin before enabling the
+new policy reader; a UI-only preview forwarding to the old gateway cannot prove
+the new backend. See README “Preview cleanup policy” for defaults and rollout.
+Run `test:ci-control`, `test:api-capabilities`, and Admin route tests. Manual
+coverage: TESTING.md “Preview retention and PR liveliness”.

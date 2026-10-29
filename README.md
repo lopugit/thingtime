@@ -6664,3 +6664,39 @@ accounting budget, the existing cron/admin recovery entry point, private
 controller setup and pre-merge/deployment/runtime verification. It reuses the
 existing home MongoDB replica set, scheduler secret and protected Vercel
 controller environment; no additional application secret is required.
+
+### Preview cleanup policy
+
+Administrators use **Admin → Preview retention** (`/admin/preview-retention`) or
+Settings → Admin to save Vercel cleanup and PR liveliness rules. Defaults enable
+cleanup for deployments with no open PR, with zero grace; superseded active-PR
+cleanup and inactivity expiry are off. Grace periods are whole hours. Tagged
+previews count closed-PR grace from the later of creation and PR closure;
+untagged branch snapshots use creation age because historical closure time may
+be unknown. Optional open-PR inactivity uses GitHub `updated_at`, expires that
+PR's previews and suspends publishing until activity resumes; it never closes
+or edits the PR. Active builds and the newest READY current-head preview of
+each active PR remain protected when pruning superseded snapshots.
+
+The policy is a revision-guarded home settings singleton
+`Thingtime.CiPreviewRetention`. It contains no provider credentials. The
+protected controller reads it through an origin-negotiated, signed
+`/api/v1/integrations/ci/preview-retention` request using the existing
+`THINGTIME_CI_ROUTER_SECRET` bootstrap secret. For a fork, configure the same
+secret securely in its server vault/bootstrap and protected GitHub workflow;
+set `THINGTIME_GITHUB_REPOSITORY=owner/repository` and the controller's selected
+Thingtime origin. Never copy production credentials into a preview or test.
+Production, stable/gateway deployments, protected aliases and unrelated project
+resources are protected independently of these settings. Invalid or unavailable
+policy preserves deployments instead of using a stale enabled value.
+
+Roll out the product API to the selected gateway first, verify both 1.0.0
+capabilities and admin save/readback there, then roll out the protected controller
+policy consumer. An ordinary gateway-backed UI preview does not contain a new
+API; leave cleanup fail-closed until its selected origin exposes the contract.
+This changes deployed policy only after that rollout.
+
+Local acceptance for this change used the task-owned dev stack at
+`http://127.0.0.1:18210` with a disposable replica at `127.0.0.1:17343`.
+A public Funnel was intentionally not provisioned for this disposable admin
+fixture; the isolated local acceptance environment is stopped after testing.
