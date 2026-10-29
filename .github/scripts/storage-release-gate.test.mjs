@@ -103,9 +103,11 @@ test('monitor binds current production source, deduplicates failure and recovery
   const previous = Object.fromEntries(Object.keys(environment).map((key) => [key, process.env[key]]));
   Object.assign(process.env, environment);
   const statuses = [];
-  let healthy = true, race = false, aliasReads = 0, logReads = 0;
+  let healthy = true, race = false, aliasReads = 0, logReads = 0, providerFailure = null;
   const fetcher = async (input, init = {}) => {
     const url = new URL(input);
+    if (providerFailure === 'github' && url.hostname === 'api.github.com') return new Response('private provider response', { status: 403, headers: { 'x-ratelimit-remaining': '0' } });
+    if (providerFailure === 'vercel' && url.hostname === 'api.vercel.com') return new Response('private provider response', { status: 403 });
     if (url.pathname === '/v4/aliases/thingtime.com') return Response.json({ deploymentId: race && ++aliasReads > 1 ? 'dpl_new' : 'dpl_test' });
     if (url.pathname === '/v13/deployments/dpl_test') return Response.json({ id: 'dpl_test', projectId: 'prj_test', target: 'production', meta: { githubCommitRef: 'main', githubCommitSha: 'a'.repeat(40) } });
     if (url.pathname === '/.well-known/thingtime-capabilities.json') return Response.json(manifest);
@@ -128,6 +130,11 @@ test('monitor binds current production source, deduplicates failure and recovery
     assert.equal(statuses.length, 3); assert.equal(statuses.at(-1).state, 'success');
     race = true; aliasReads = 0;
     await assert.rejects(monitor({ fetcher, runtimeLogs }), /production-advanced/);
+    assert.equal(statuses.length, 3);
+    race = false; providerFailure = 'github';
+    await assert.rejects(monitor({ fetcher, runtimeLogs }), { message: 'Storage release gate: github-http-403-rate-limit-exhausted' });
+    providerFailure = 'vercel';
+    await assert.rejects(monitor({ fetcher, runtimeLogs }), { message: 'Storage release gate: vercel-http-403' });
     assert.equal(statuses.length, 3);
   } finally { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
 });
