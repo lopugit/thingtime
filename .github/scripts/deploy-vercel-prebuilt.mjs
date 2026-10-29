@@ -391,7 +391,13 @@ export async function publish({ runtimeLogs = checkRuntimeLogs, aliasVerifier = 
         if (!deploymentIssue(candidate, plan) && candidate.meta?.githubWorkflowRunId === required('GITHUB_RUN_ID')) await restoreGatewayAliases({ before: aliasBefore, deploymentId: candidate.id, read: readAlias, assign: assignAlias, remove: removeAlias });
       }
     }
-    if (deployment && plan.retentionPolicy && plan.target.slug === 'preview' && !plan.gateway.owner) await reconcileOrphanPreviews(previewConfig(plan), { github: previewGithub, vercel, deploymentIds: [deployment.id] });
+    // This sweep reacts to the publication failure below, so it must never
+    // replace it. A provider error, an unreachable retention policy or a
+    // non-200 cancel leaves the upload for the next scheduled sweep instead.
+    if (deployment && plan.retentionPolicy && plan.target.slug === 'preview' && !plan.gateway.owner) {
+      try { await reconcileOrphanPreviews(previewConfig(plan), { github: previewGithub, vercel, deploymentIds: [deployment.id] }); }
+      catch (cleanupError) { console.log(`Failed preview upload left for the next retention sweep: ${cleanupError.message}`); }
+    }
     throw error;
   }
   const statusContext = `Vercel prebuilt (${plan.target.slug})`;
