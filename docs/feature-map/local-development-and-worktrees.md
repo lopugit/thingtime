@@ -62,6 +62,7 @@ process can run a second foreground stack: `TT_WEB_PORT=… npm --prefix remix r
 | Graphify | `scripts/graphify update .` after code changes; `npm run test:graphify-cas` for the wrapper |
 | Electron restart storage | `corepack pnpm --dir electron run verify:renderer-restart` after `build:web` + `verify:web`; isolated multi-process Chromium acceptance of `electron/lib/renderer-server.cjs`, shared journal and drafts. Nitro uses `node_middleware`; the profile owns a stable, collision-checked origin. See `electron/README.md`. |
 | Local Electron bundle | `corepack pnpm --dir electron run build` runs `npm ci` for the separately locked `MCP/` helper before the web/native build and preserves an available installed app signing identity; a fresh worktree needs no manual MCP dependency install |
+| Retained development app | `corepack pnpm@10.12.1 --dir electron dev:parallel --workspace=<task> --prepare-only` snapshots the canonical runtime into a named development app with independent dependencies/profile/managed replica/ports. `dev-workspace.mjs` owns transactional preparation and process ownership; `--stop-workspace` stops its verified group while preserving state. Never install an unmerged candidate over stable. See `electron/README.md` and `electron/test/dev-workspace.test.cjs`. |
 
 See [static analysis baselines](../static-analysis-baselines.md) for the audit,
 workspace coverage and formatter/CI limitations. A compiler launch failure is

@@ -13530,6 +13530,17 @@ separate from deterministic discovery/lease tests.
 
 ### Preview retention and PR liveliness
 
+- For retained native development, prepare a named workspace and verify its
+  development name/bundle identity, executable path, private ports, managed
+  database and synthetic account independently from the stable installed app.
+  Save/read back/reload a real retention change, quit/relaunch the named app and
+  confirm both session and policy survive. A second launcher or preparation must
+  refuse while its app or detached child group remains active. Failed replacement
+  must preserve the last working snapshot. Retained dependencies must resolve
+  within the snapshot rather than the source worktree; stop only the verified
+  workspace group and preserve its app/data for ongoing testing. Never refresh
+  another app's Keychain permissions to make the development namespace work.
+
 - Use Edit layout → Builder inspector to select a nested label and a separate
   input/control, change the label and a control attribute independently, and save
   the layout. Compare its exact private webpage Thing through the API, reload both

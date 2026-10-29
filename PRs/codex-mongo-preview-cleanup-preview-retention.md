@@ -122,3 +122,36 @@ per-feature expectations (admin 1.0.1; controller 1.0.0). Runtime source is unch
 The complete API-capability test entry point passes all 127 tests, with clean
 changed-file lint. The signed `b71fe0af9` artifact and packaged manifest smoke
 remain the runtime evidence.
+
+## Retained development app — 30 October 2026
+
+The newer development-app policy supersedes the earlier fixture cleanup and
+stable-identity candidate workflow above. The ongoing test build is a separate
+`~/Applications/Thingtime Dev mongo-preview-cleanup.app`, backed by its own
+Application Support workspace, development bundle identity, encrypted profile,
+authenticated local replica and loopback API/database/inspection ports
+46533/46534/46535. It snapshots the existing desktop implementation and web build
+from `3de8c0d934b4fd71fa339baeb5e8c90a0e6ad8af`; it is not another app implementation.
+
+Retained tooling stages and verifies replacements before activation, preserves
+the previous snapshot on failure, installs independent production dependencies,
+and refuses preparation while an owned launcher or detached child group remains
+active. Quit signals the verified Electron leader before any bounded child-group
+cleanup so Chromium can flush its persistent session. Parallel development uses
+a workspace-specific app/encryption name and skips the OS password helper during
+local-runtime initialization; packaged/stable behavior is unchanged.
+
+A clearly synthetic local admin exercised a real policy UI write (19 hours),
+independent API readback, reload, and two clean app restarts. The persistent
+future-expiry cookie, admin session and saved policy survived; the development
+app and managed data remain available for ongoing testing. Desktop/mobile
+rendering was checked at 1440/390 pixels. All 349 Electron tests pass, including
+six retained-lifecycle regressions. The stable installed app, sessions, helpers
+and permissions were untouched. The earlier signed stable-identity candidate is
+not the final native artifact for these new dev-only source changes.
+
+Start/stop/cleanup instructions are in [the desktop workflow](../electron/README.md).
+This unsigned development lane proves the local UI path, not production owning-
+account, Atlas/controller rollout, installed stable-app or security-gated helper
+acceptance. Production/private reporting remains separately blocked by access;
+no primary-branch merge or stable-app replacement is authorized by this result.
