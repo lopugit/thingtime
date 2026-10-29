@@ -15,8 +15,8 @@ portable from day one.
   native file icons, compact `.app` badges, and learned/text relevance that can still overcome the preferred order;
 - an automatic, bounded expression evaluator that recognizes complete arithmetic directly in the root search field,
   leads with a dedicated Calculator result, keeps ordinary results underneath, and copies the answer with Return;
-- automatic application-directory watching with five-minute reconciliation, configurable six-hour file/folder
-  refresh, and built-in Index Now, Index Apps, Index Commands, Index Files, and Index Directories commands;
+- coalesced application/file/folder background watching, six-hour full application reconciliation, configurable
+  six-hour file/folder refresh, and built-in Index Now, Index Apps, Index Commands, Index Files, and Index Directories commands;
 - inherited `.gitignore`/Git excludes plus user-defined wildcard and regular-expression ignore rules, editable with
   index roots, an optional entry cap, and live database size/status in dedicated Search Settings;
 - unlimited filesystem entries and hidden files by default, including metadata-only references for executables,
@@ -212,8 +212,8 @@ a bounded 15-minute writer window; a custom-capped scan normally stops a blocked
 prior committed snapshot searchable, and reports actionable guidance. Deliberately constraining a capped indexer
 below 25% CPU extends that shorter deadline proportionally, up to 15 minutes.
 
-The launcher footer replaces its idle status with the current source label and live processed/indexed count during
-a scan. Search settings also expose the result-section order and a private cache policy: enable/disable, maximum
+The launcher footer retains its measured count and index age during a scan; live processed/indexed progress
+appears in Search Settings. Search settings also expose the result-section order and a private cache policy: enable/disable, maximum
 size, expiry, custom cache-directory override, reveal, and clear. Cache files contain result metadata only, use
 owner-only permissions, and are never included in Thingtime cloud settings sync. Commander warms recent snapshots
 into a bounded in-memory tier and re-ranks cached filesystem candidates while a refined live query completes. When
@@ -294,3 +294,40 @@ button exercises native/web double-click coalescing; the titlebar and Keep above
 control exercise native window behavior. Run `./script/window-preview.sh --clean`
 to stop and remove this worktree's generated preview before final verification.
 The preview supplements the canonical signed installed-app acceptance checks.
+
+
+### Background search indexes and isolated development
+
+The launcher footer combines the latest measured committed file/folder snapshot with the enabled application and
+command catalogue, alongside the age of the oldest successful full index refresh. It keeps that summary while ordinary
+background changes are pending; live search can reflect changes before the measured count catches up. Detailed
+progress, errors and resource controls remain in Search Settings. Remote Store results, disabled
+file sources and duplicate paths are excluded. An absent age means that an active source has not completed its first
+index. Full application reconciliation runs six-hourly; file/folder reconciliation uses the saved interval (six hours
+by default), and the command catalogue refreshes each minute. Supported OS notifications normally refresh affected
+subtrees after a 750 ms quiet period, with a three-second batching deadline during continuous activity. Events arriving
+during a scan are coalesced and processed afterward. Missed/unsupported filesystem notifications use periodic
+reconciliation. The Linux non-recursive watcher remains best-effort; macOS is the accepted native target.
+
+A changed index configuration or mounted-source set suppresses the previous file source until its replacement is
+committed, including after relaunch. The schema-4 upgrade computes unique counters once in the writer; the independent
+reader can continue reading committed data while that migration runs. Legacy databases lack the saved settings fingerprint. Their valid cached file results remain searchable under a
+scoped current-root, ignore, hidden-file, Git and existence policy while migration and reconciliation run; totals
+remain explicitly unmeasured until a complete current snapshot is committed. A known mismatched saved fingerprint
+never uses this legacy fallback. During this transition a result page can contain fewer items after ineligible old
+candidates are removed; it does not scan the whole index to refill the page.
+
+For unsigned iteration alongside the installed app:
+
+```bash
+./script/dev-parallel.sh build
+./script/dev-parallel.sh start
+./script/dev-parallel.sh status
+node ./script/verify-background-index.mjs '<printed development app path>'
+./script/dev-parallel.sh clean
+```
+
+The lane owns an isolated bundle identity, data/cache/Keychain identity, fixture application roots and deterministic
+port; it leaves the installed app and profile in place. `COMMANDER_APPLICATION_ROOTS` is a JSON array of absolute
+roots for the isolated daemon application inventory. Production omits it and indexes eligible mounted volumes.
+After development acceptance, clean this lane and use the canonical signed build/install verification above.

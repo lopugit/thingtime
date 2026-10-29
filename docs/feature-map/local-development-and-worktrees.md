@@ -133,3 +133,13 @@ return `503 LOCAL_API_NOT_CONFIGURED`; neither server selects production implici
 a macOS OS network sandbox, including direct-IP and redirect denial. Fixture
 requests accept only a literal loopback HTTP origin and same-origin uploads.
 Keep backend/browser network isolation and dedicated test credentials in place.
+
+
+## Commander native background indexing
+
+`Commander/apps/daemon/src/services/indexing.ts` schedules coalesced subtree updates and periodic full reconciliation;
+`Commander/crates/commander-indexer` owns transactional SQLite/WAL snapshots, ignore traversal and unique counters.
+`Commander/script/dev-parallel.sh` runs an isolated native development bundle beside the installed app;
+`Commander/script/verify-background-index.mjs` verifies its real bundled daemon against disposable filesystem events.
+Run Commander typecheck/tests, both Rust crates and the native checks in `Commander/docs/TESTING.md`. Index status
+changes negotiate the daemon's `commander.index-status` capability; no Thingtime data API is added by this lane.

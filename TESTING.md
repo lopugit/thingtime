@@ -5307,6 +5307,10 @@ halves.
 
 ## Commander desktop launcher
 
+- [ ] Follow `Commander/docs/TESTING.md` background-index checks: real create/rename/delete events, independent search
+      during writes, correct unique enabled-source totals and full-refresh age, unplugged/removed roots across restart,
+      settings fingerprint recovery and isolated development cleanup before the signed installed-app check.
+
 - [ ] Click the launcher Settings gear with an empty query and with search results.
       Tab to it and activate with Return/Space: only Settings opens; the selected
       search result must not run, and the current query must not be rewritten.
