@@ -7,9 +7,15 @@
 // Pure logic, DOM-free: side effects arrive via the context object so the
 // registry is unit-testable in Node and CommanderV2 stays thin.
 
+// The Lopu toast statuses (`useLopu`'s LopuStatus). Mirrored here rather than
+// widened to `string`: a loose type let an invalid 'warning' status through,
+// which the toast silently rendered as neutral.
+export type CommanderLopuStatus = 'success' | 'error' | 'info';
+
 export type CommanderCommandContext = {
 	navigate: (to: string) => void;
-	lopu: (opts: { title: string; description?: string; status?: string }) => void;
+	/** `useLopu()` — returns a toast id, which command handlers ignore. */
+	lopu: (opts: { title: string; description?: string; status?: CommanderLopuStatus; duration?: number }) => unknown;
 	/** Switch the builtin theme preset (useTtTheme().setPreset). */
 	setThemePreset: (name: string) => void;
 	/** Builtin preset names, for validation + discoverability. */
@@ -62,7 +68,7 @@ export const COMMANDER_COMMANDS: CommanderCommand[] = [
 				ctx.lopu({
 					title: wanted ? `🎨 No theme called “${args.trim()}”` : '🎨 Which theme?',
 					description: `Try: ${ctx.builtinThemeNames.join(' · ')}`,
-					status: wanted ? 'warning' : 'info'
+					status: wanted ? 'error' : 'info'
 				});
 				return;
 			}
@@ -112,7 +118,12 @@ export const COMMANDER_COMMANDS: CommanderCommand[] = [
 	},
 	navCommand('feed', '/feed', 'Open the feed', '🌀'),
 	navCommand('things', '/things', 'Open your things', '📦'),
-	navCommand('editor', '/editor', 'Open the editor', '💻', ['edit']),
+	navCommand('lopu', '/lopu', 'Talk to Lopu', '🦄', ['ask', 'chat', 'ai']),
+	// NOTE: no `>editor`. claude-todo/10 lists it as an example, but there is no
+	// `/editor` route in routes.tsx — it fell through to the `*` catch-all tree
+	// viewer at the empty Thingtime path `editor` while toasting "Open the
+	// editor" as a success. Re-add this one line the day an editor page lands —
+	// commanderCommands.test.ts checks every target against routes.tsx.
 	navCommand('themes', '/themes', 'Open the Theme Studio', '🎨'),
 	navCommand('settings', '/settings', 'Open settings', '⚙️'),
 	navCommand('profile', '/profile', 'Open your profile', '🌈'),
@@ -154,6 +165,28 @@ export const matchCommanderCommands = (input: string): CommanderCommand[] => {
 };
 
 /**
+ * Which dropdown row Enter should run in `>` mode, or null to run the raw
+ * input — the command-mode twin of `commanderEnterSuggestionIndex`.
+ *
+ * Rows complete the command NAME, so a highlight only means anything while the
+ * name is all that has been typed. `>theme Midnight` filters to the same two
+ * rows as `>theme` (the args don't narrow the list), so a highlight left on
+ * `>themes` would otherwise still win and Enter would navigate to /themes,
+ * silently dropping a fully-typed command. Once there are arguments, the typed
+ * input is unambiguous — run that.
+ */
+export const commanderCommandEnterIndex = (input: {
+	hoveredSuggestion: number | null;
+	inputValue: string;
+	matchCount: number;
+}): number | null => {
+	if (typeof input.hoveredSuggestion !== 'number') return null;
+	if (input.hoveredSuggestion < 0 || input.hoveredSuggestion >= input.matchCount) return null;
+	if (parseCommanderCommand(input.inputValue)?.args) return null;
+	return input.hoveredSuggestion;
+};
+
+/**
  * Run a `>` command. Returns true when the input was a `>` command (whether or
  * not it named a real one) so the caller stops there; unknown names toast a
  * pointer to `>help`.
@@ -166,7 +199,7 @@ export const runCommanderCommand = (input: string, ctx: CommanderCommandContext)
 		ctx.lopu({
 			title: parsed.name ? `🤷‍♂️ Unknown command “>${parsed.name}”` : '⌨️ Type a command',
 			description: 'Try >help for the list',
-			status: 'warning'
+			status: 'error'
 		});
 		return true;
 	}
