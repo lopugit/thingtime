@@ -1167,6 +1167,26 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Redacted saved stack configuration with bounded workflow and progress-event history.', body: { ok: true, stacks: [{ id: 'ci-feature-stack-example', name: 'Search + Actions', sourcePrNumbers: [427, 486], targets: ['main', 'github-actions'], autoDecideBranches: true, status: 'saved', runs: [{ id: 'ci-dispatch-example', runId: 'feature-stack-run-example', status: 'success', workflowRunId: 123, url: 'https://github.com/lopugit/thingtime/actions/runs/123' }] }], events: [{ id: 'ci-event-example', parentId: 'ci-dispatch-example', eventType: 'feature_stack_progress', statusTo: 'in_progress', occurredAt: '2026-09-01T00:10:00.000Z', data: { message: 'Lopu progress: 1 active, 0 queued, 0/1 finished.', progressPercent: 45 } }] } }]
   }),
   endpoint({
+    id: 'admin-ci-preview-retention', contractVersion: '1.0.1', featureVersion: '1.0.1', group: 'admin',
+    title: 'Configure Vercel preview retention and PR liveliness', endpoint: '/api/v1/admin/ci/preview-retention', methods: ['GET', 'POST'],
+    summary: 'Read or revision-guardedly save the home-plane preview cleanup policy.',
+    detail: 'Admin-only, private/no-store. GET returns policy and revision. POST takes policy and expectedRevision (null for first save); stale saves return 409. Version 1 policy includes enabled, noOpenPrGraceHours, pruneSupersededOpenPr, supersededGraceHours and inactivePullRequestDays (null disables inactivity). Whole nonnegative hours and positive whole days are required. Defaults enable orphan cleanup with zero grace, retain active-PR snapshots, and disable inactivity expiry. Inactivity uses GitHub PR updated_at and expires all its previews without closing the PR. Production, stable/gateway deployments, protected aliases and unrelated resources remain protected. Missing/invalid stored policy returns 503 unavailable (not a caller form error); invalid submitted policy returns 400. Storage fails closed and never serves cached cleanup authority.',
+    auth: { mode: 'session', description: 'Requires a current admin session.' },
+    steps: ['Negotiate api.admin-ci-preview-retention 1.0.0.', 'Read current revision.', 'Save the complete policy with expectedRevision.'],
+    requestExamples: [{ name: 'Pause cleanup', description: 'Retain the other rules while disabling deletion.', method: 'POST', body: { expectedRevision: null, policy: { version: 1, enabled: false, noOpenPrGraceHours: 0, pruneSupersededOpenPr: false, supersededGraceHours: 24, inactivePullRequestDays: null } } }],
+    responseExamples: [{ status: 200, description: 'Saved policy and revision.', body: { ok: true, policy: { version: 1, enabled: false, noOpenPrGraceHours: 0, pruneSupersededOpenPr: false, supersededGraceHours: 24, inactivePullRequestDays: null }, revision: 'saved-revision' } }]
+  }),
+  endpoint({
+    id: 'integration-ci-preview-retention', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'integrations',
+    title: 'Read the protected preview controller policy', endpoint: '/api/v1/integrations/ci/preview-retention', methods: ['POST'],
+    summary: 'Read the fresh non-secret policy using the protected CI router HMAC.',
+    detail: 'Private/no-store read only. Sign the raw JSON with THINGTIME_CI_ROUTER_SECRET using x-thingtime-ci-signature: sha256=<HMAC-SHA256>. Body repository must equal the configured repository, ref must be github-actions, requestedAt must be within ten minutes. Returns ok, repository and policy only. No secrets or audit metadata. Policy errors return 503 and callers must preserve all deployments. Consumers negotiate the exact selected origin and api.integration-ci-preview-retention 1.0.0 before this read.',
+    auth: { mode: 'none', description: 'Requires x-thingtime-ci-signature HMAC authentication with the protected CI router secret.' },
+    steps: ['Negotiate api.integration-ci-preview-retention 1.0.0.', 'Sign and POST a fresh repository/ref request.', 'Validate the full policy; preserve deployments on any refusal or invalid result.'],
+    requestExamples: [{ name: 'Read policy', description: 'Sign this exact JSON with a current timestamp.', method: 'POST', body: { repository: 'lopugit/thingtime', ref: 'github-actions', requestedAt: '2026-10-30T00:00:00.000Z' } }],
+    responseExamples: [{ status: 200, description: 'Fresh shared policy.', body: { ok: true, repository: 'lopugit/thingtime', policy: { version: 1, enabled: true, noOpenPrGraceHours: 0, pruneSupersededOpenPr: false, supersededGraceHours: 24, inactivePullRequestDays: null } } }]
+  }),
+  endpoint({
     id: 'admin-ci-previews',
     contractVersion: '2.0.0',
     group: 'admin',

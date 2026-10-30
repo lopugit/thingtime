@@ -13,7 +13,9 @@ if (parallelDevMode) {
 	if (!profilePath || !path.isAbsolute(profilePath)) {
 		throw new Error('Parallel development requires an isolated absolute profile path.');
 	}
-	app.setName('Thingtime Dev');
+	const developmentName = process.env.THINGTIME_DESKTOP_DEV_NAME || 'Thingtime Dev';
+	if (developmentName !== 'Thingtime Dev' && !/^Thingtime Dev [a-z0-9][a-z0-9-]{0,63}$/.test(developmentName)) throw new Error('Choose a valid isolated development app name.');
+	app.setName(developmentName);
 	app.setPath('userData', profilePath);
 }
 const { checkEndpointCompatibility, compatibilityError, probeEndpointCapabilities } = require('./lib/endpoint-compatibility.cjs');
@@ -1076,7 +1078,7 @@ async function initializeDesktopSettings() {
   }
  });
  await localRuntime.initialize();
- if (localRuntime.snapshot().enabled) await passwordProvider.disconnect();
+ if (localRuntime.snapshot().enabled && !parallelDevMode) await passwordProvider.disconnect();
 	desktopSettings = new DesktopSettingsStore({
 		filePath: path.join(app.getPath('userData'), 'desktop-settings.json'),
 		metadata: readWebBuildMetadata()

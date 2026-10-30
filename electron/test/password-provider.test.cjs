@@ -53,7 +53,7 @@ test('native provider uses the running authority and restarts await disconnect',
  assert.equal(vm.runInNewContext(endpoint+'; activeAccountEndpoint()',context),'http://127.0.0.1:28631');
  assert.match(source,/endpoint: activeAccountEndpoint/);
  assert.match(source,/localRuntime\.configure\(request, \(\) => passwordProvider\.disconnect\(\)\)/);
- assert.match(source,/localRuntime\.snapshot\(\)\.enabled\) await passwordProvider\.disconnect\(\)/);
+ assert.match(source,/localRuntime\.snapshot\(\)\.enabled && !parallelDevMode\) await passwordProvider\.disconnect\(\)/);
  assert.match(source,/await passwordProvider\.disconnect\(\);\n await settings\.selectEndpoint\(target\.id\)/);
  const restart = source.match(/async function restartDesktopRuntime\(\) \{[\s\S]*?\n\}/)[0];
  const calls=[]; let finish;

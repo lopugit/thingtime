@@ -918,7 +918,7 @@ export const SettingsContent = ({
 						{/* admin (admins only) */}
 						{user?.isAdmin && (
 							<SettingsSection eyebrow="Admin" description="Global controls — AI conflict resolution, rate limits, and admin access.">
-								<AdminPanel />
+								<AdminPanel key={user.id} />
 							</SettingsSection>
 						)}
 					</Flex>
