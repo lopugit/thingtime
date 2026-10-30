@@ -272,3 +272,14 @@ new policy reader; a UI-only preview forwarding to the old gateway cannot prove
 the new backend. See README “Preview cleanup policy” for defaults and rollout.
 Run `test:ci-control` (including the retention block-tree regression), `test:api-capabilities`, and Admin route tests. Manual
 coverage: TESTING.md “Preview retention and PR liveliness”.
+
+## Gift invites
+
+`Invites/InvitePanel.tsx` uses the shared `InviteProfileFields` with optional
+creator suggestions. `inviteCore.ts::inviteProfile` validates supplied suggestions;
+`invites.ts::createInvite` accepts omitted or blank names/usernames. The recipient
+chooses their final profile in `InviteSignup.tsx`; `prepareInviteSignup` still
+requires a valid final name and username, supports legacy suggested defaults, and
+never lets suggestions override explicit recipient input. `api.auth-invites` 2.2.0
+advertises optional creator fields and the client negotiates that minimum.
+`test:invites` covers empty suggestions, recipient choice and escrow/replay safety.

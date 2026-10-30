@@ -1,5 +1,6 @@
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
 import { defineNitroConfig } from 'nitro/config';
+import { generateRoutePreviews } from './scripts/generate-route-previews.mjs';
 
 import { apiV1DocsRouteKeys, apiV1RouteKeys } from './app/docs/apiDocs.ts';
 import {
@@ -9,6 +10,9 @@ import {
 } from './app/api/utils/chatgpt/pluginCore.ts';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/thingtimeCapabilities.ts';
 import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore.ts';
+
+// Extract the actual browser route tree without importing/executing its pages.
+generateRoutePreviews();
 
 const publicDir = new URL('./dist', import.meta.url).pathname;
 const embedDir = new URL('./dist/embed', import.meta.url).pathname;

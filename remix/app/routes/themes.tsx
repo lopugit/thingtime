@@ -11,3 +11,16 @@ export default function Themes() {
 		</Flex>
 	);
 }
+
+
+// Optional shared preview copy. Route discovery works without this override.
+export const socialPreview = {
+  "title": "Thingtime themes",
+  "description": "A colourful collection of ways to make Thingtime feel like yours.",
+  "eyebrow": "THINGTIME · THEMES",
+  "badges": [
+    "Colour your space",
+    "Made to share"
+  ],
+  "variant": "collection"
+} as const;

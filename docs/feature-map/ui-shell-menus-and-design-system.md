@@ -227,3 +227,25 @@ passkeys link targets `/settings/security#account-passkeys`. Browser approval at
 hosts; passwords and signing keys never enter layout blocks. Check keyboard,
 Back, nested Builder selection, narrow/mobile widths and full-page scroll in the
 real browser. See [password manager](../password-manager.md#browser-passkeys-and-settings).
+
+
+## Automatic page titles and social previews
+
+`app/utils/pageTitle.ts` and the server's shared social resolver use
+`automaticRoutePreview.ts`. `scripts/generate-route-previews.mjs` discovers the
+real eager/lazy/nested/index route tree from `app/routes.tsx` without importing
+pages. Vite watches route/module changes; Vite and Nitro builds regenerate the
+portable `automaticRoutePreviews.generated.json`. New ordinary routes receive
+safe pattern-derived copy and a branded image automatically. Parameter values,
+queries/fragments and wildcard/unknown paths do not supply metadata text.
+
+Optional literal `socialPreview` exports customize display copy/card variant;
+`pageTitle` is the document-title label, independent of the share headline.
+No backend page-metadata registry is maintained. For saved `/p/:id` and `/t/:id`
+pages, supported anonymous public headings/prose/managed images supply defaults;
+existing saved `name`/`description` fields override them. The extractor does not
+execute Actions, sources or client JavaScript, infer private bindings, or expose
+system `siteRoute` layouts. Access/indexability and attachment ACLs remain in
+the canonical server paths. Run `test:social-previews`; see
+[the metadata contract](../seo-social-metadata.md) and TESTING's social-unfurl
+checklist. Live rendered/crawler acceptance remains a separate check.

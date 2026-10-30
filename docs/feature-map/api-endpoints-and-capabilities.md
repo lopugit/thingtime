@@ -555,3 +555,27 @@ Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
 the built `test:environment-gateway:acceptance` runner. See
 [the gateway runbook](../environment-api-gateway.md) for server settings,
 environment partitioning and outstanding live rollout acceptance.
+
+## Public social metadata
+
+`GET /api/v1/social-previews?path=` exposes `api.social-previews` 1.1.0.
+`meta/socialMetadata.ts` reuses the anonymous `resolveSocialPreview` projection
+and `socialMetaFromPreview`; the route resets custom data-plane selection and
+never resolves caller identity. Same-origin inputs lose query/fragment before
+lookup, remote URLs are refused, and private/missing content uses generic
+metadata. The JSON response is an explicit title/description/URL/type/image
+allowlist. `social-previews.read` applies fail-closed anonymous rate limiting.
+`meta/socialCardImages.ts` embeds canonical public attachment thumbnails in
+cards, with bounded decoding and a fresh anonymous authorization/version check.
+`api.social-card` 1.3.0 shares automatic route defaults from the actual browser
+router (`scripts/generate-route-previews.mjs` →
+`app/utils/automaticRoutePreviews.generated.json`), with optional literal
+`socialPreview` exports in route modules. New app pages need no parallel backend
+metadata registry. Saved `/p/:id` and `/t/:id` pages use
+`meta/publicWebpageContent.ts` over the anonymous `resolveWebpage` projection:
+visible supported copy/managed images are inferred; saved `name`/`description`
+remain optional overrides. Runtime sources, Actions, private bindings and system
+`siteRoute` layouts are never executed or inferred. Endpoint capability manifests
+and semantic version negotiation still apply. See
+[the automatic metadata contract](../seo-social-metadata.md).
+Run `test:social-previews` and `test:api-capabilities`.

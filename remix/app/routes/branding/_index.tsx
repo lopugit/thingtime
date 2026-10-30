@@ -252,3 +252,9 @@ export default function Branding() {
     </Box>
   );
 }
+
+
+// Optional shared preview copy. Route discovery works without this override.
+export const socialPreview = {
+  "pageTitle": "Brand resources"
+} as const;

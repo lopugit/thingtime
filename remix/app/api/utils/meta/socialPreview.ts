@@ -3,12 +3,16 @@
 // so a social preview cannot reveal anything the public page does not reveal.
 
 import { pageTitle } from '../../../utils/pageTitle';
+import { automaticRoutePreview } from '../../../utils/automaticRoutePreview';
+import { inferPublicWebpageContent } from './publicWebpageContent';
+import type { ResolveWebpageResult } from '../webpages/webpages';
 
 // Change the revision when the branded asset changes so image caches can refresh.
 export const DEFAULT_SOCIAL_IMAGE_PATH = '/branding/presskit/thingtime-og-card-1200x630.png?v=20260917';
 
 export type SocialPreviewKind =
 	| 'home'
+	| 'invite'
 	| 'feed'
 	| 'explore'
 	| 'docs'
@@ -34,6 +38,7 @@ export type SocialPreviewKind =
 // post. This keeps every shareable Thingtime shape distinguishable at a glance.
 export type SocialPreviewVariant =
 	| 'app'
+	| 'invite'
 	| 'feed'
 	| 'explore'
 	| 'docs'
@@ -81,27 +86,15 @@ export type SocialPreview = {
 	indexable?: boolean;
 };
 
+// Global renderer/brand version refreshes every dynamic card, independently
+// of the content revision carried in v. Never include viewer or bearer data.
+export const SOCIAL_CARD_RENDERER_REVISION = 'brand-20261029';
 export const SOCIAL_PREVIEW_WIDTH = 1200;
 export const SOCIAL_PREVIEW_HEIGHT = 630;
 
 const SITE_NAME = 'Thingtime';
 const DESCRIPTION_MAX = 200;
 const TITLE_MAX = 70;
-
-const staticVariantFor = (kind: SocialPreviewKind): SocialPreviewVariant => {
-	switch (kind) {
-		case 'home':
-			return 'app';
-		case 'feed':
-		case 'explore':
-		case 'docs':
-		case 'collection':
-		case 'profile':
-			return kind;
-		default:
-			return 'app';
-	}
-};
 
 export const cleanSocialText = (value: unknown): string =>
 	typeof value === 'string'
@@ -167,139 +160,45 @@ export const normaliseSocialPreviewPath = (value: unknown): string => {
 };
 
 export const socialPreviewCardUrl = (origin: string, path: string, revision?: string): string => {
-	const query = new URLSearchParams({ path: normaliseSocialPreviewPath(path) });
+	const query = new URLSearchParams({ path: normaliseSocialPreviewPath(path), r: SOCIAL_CARD_RENDERER_REVISION });
 	if (revision) query.set('v', truncateSocialText(revision, 80));
 	return `${origin}/social-card?${query.toString()}`;
 };
 
 export const staticSocialPreview = (pathInput: string): SocialPreview => {
 	const path = normaliseSocialPreviewPath(pathInput);
-	const segments = path.split('/').filter(Boolean);
-	const segment = segments[0] || '';
-	const label = (value: string): string => value.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-	const detail = (() => {
-		switch (segment) {
-			case 'feed':
-				return {
-					kind: 'feed' as const,
-					title: 'Your Thingtime feed',
-					description: 'Posts, photos, polls, finds and little moments from your people.',
-					eyebrow: 'THINGTIME · FEED',
-					badges: ['Fresh things', 'People you follow']
-				};
-			case 'profile':
-				return {
-					kind: 'profile' as const,
-					title: 'Your Thingtime profile',
-					description: 'Your posts, photos, polls and the things you want people to find.',
-					eyebrow: 'THINGTIME · PROFILE',
-					badges: ['Your people', 'Your things']
-				};
-			case 'explore':
-				return {
-					kind: 'explore' as const,
-					title: 'Explore Thingtime',
-					description: 'Discover conversations, photos, polls and useful things worth keeping.',
-					eyebrow: 'THINGTIME · EXPLORE',
-					badges: ['Trending now', 'Made by people']
-				};
-			case 'docs':
-				return {
-					kind: 'docs' as const,
-					title: 'Thingtime docs',
-					description: 'The product, API and design system behind a world where everything is a thing.',
-					eyebrow: 'THINGTIME · DOCS',
-					badges: ['Build with Thingtime', 'API + SDK']
-				};
-			case 'design-system':
-				return {
-					kind: 'docs' as const,
-					title: 'Thingtime design system',
-					description: 'The colourful, flexible building blocks behind the Thingtime experience.',
-					eyebrow: 'THINGTIME · DESIGN SYSTEM',
-					badges: ['Components', 'Themes']
-				};
-			case 'schemas':
-				return {
-					kind: 'collection' as const,
-					title: 'Thingtime schemas',
-					description: 'Browse the building blocks that make every kind of thing understandable.',
-					eyebrow: 'THINGTIME · SCHEMAS',
-					badges: ['Open building blocks', 'Make it yours']
-				};
-			case 'themes':
-				return {
-					kind: 'collection' as const,
-					title: 'Thingtime themes',
-					description: 'A colourful collection of ways to make Thingtime feel like yours.',
-					eyebrow: 'THINGTIME · THEMES',
-					badges: ['Colour your space', 'Made to share']
-				};
-			case 'components':
-				return {
-					kind: 'collection' as const,
-					title: 'Thingtime components',
-					description: 'Reusable interface pieces, ready to explore and make your own.',
-					eyebrow: 'THINGTIME · COMPONENTS',
-					badges: ['Composable', 'Shareable']
-				};
-			case 'actions':
-				return {
-					kind: 'collection' as const,
-					title: 'Thingtime actions',
-					description: 'Small, clear actions that turn your things into useful little workflows.',
-					eyebrow: 'THINGTIME · ACTIONS',
-					badges: ['Do more', 'Keep context']
-				};
-			case 'search':
-				return {
-					kind: 'collection' as const,
-					title: 'Search Thingtime',
-					description: 'Find the people, posts and things that matter to you.',
-					eyebrow: 'THINGTIME · SEARCH',
-					badges: ['People', 'Posts', 'Things']
-				};
-			case 'things':
-				return {
-					kind: 'collection' as const,
-					title: 'Your Things',
-					description: 'A place for the files, notes, ideas and tiny details you want to keep close.',
-					eyebrow: 'THINGTIME · THINGS',
-					badges: ['Everything is a thing', 'Made for keeping']
-				};
-			default:
-				return {
-					kind: 'home' as const,
-					title: pageTitle(path),
-					description: 'Everything is a thing — share posts, run polls and build a home for the things you care about.',
-					eyebrow: 'THINGTIME · EVERYDAY MAGIC',
-					badges: ['Posts', 'Photos', 'Polls']
-				};
-		}
-	})();
-	// Named catalogue and documentation pages deserve a useful title too, even
-	// though they have no user-authored database record to resolve. That makes
-	// a copied /components/button or /docs/api/things URL distinguishable in a
-	// chat thread at a glance.
-	const leaf = segments.at(-1) || '';
-	if (segments.length > 1 && ['docs', 'schemas', 'themes', 'components', 'actions'].includes(segment)) {
-		const category = segment === 'docs' ? 'docs' : segment.slice(0, -1);
-		// Bounded like every data-backed preview: the leaf is a raw URL segment,
-		// so an unbounded one would put a path-length og:title/og:description in
-		// the head (the card itself wraps and clamps by measured width anyway).
-		return {
-			...detail,
-			variant: staticVariantFor(detail.kind),
-			path,
-			title: truncateSocialText(`Thingtime ${category}: ${label(leaf)}`, TITLE_MAX),
-			description: truncateSocialText(`${detail.description} Open ${label(leaf)} on Thingtime.`, DESCRIPTION_MAX),
-			article: false,
-			options: [],
-			images: [],
-			imageCount: 0
-		};
-	}
-	return { ...detail, variant: staticVariantFor(detail.kind), path, article: false, options: [], images: [], imageCount: 0 };
+	const automatic = automaticRoutePreview(path);
+	const variant = automatic?.variant || 'app';
+	const kind: SocialPreviewKind =
+		variant === 'app'
+			? 'home'
+			: ['invite', 'feed', 'explore', 'docs', 'collection', 'profile'].includes(variant)
+			? (variant as SocialPreviewKind)
+			: 'webpage';
+	const title = truncateSocialText(cleanSocialText(automatic?.title) || pageTitle(path), TITLE_MAX);
+	const description = truncateSocialText(
+		cleanSocialText(automatic?.description) || 'Everything is a thing — share posts, run polls and build a home for the things you care about.',
+		DESCRIPTION_MAX
+	);
+	const eyebrow = cleanSocialText(automatic?.eyebrow) || 'THINGTIME · EVERYDAY MAGIC';
+	const badges = cleanList(automatic?.badges, 4);
+	return {
+		kind,
+		variant,
+		path,
+		title,
+		description,
+		eyebrow,
+		badges,
+		article: false,
+		options: [],
+		images: [],
+		imageCount: 0,
+		indexable: false,
+		// Optional page copy cannot promote a route to public content or change
+		// indexing. The separate public-content/robots policies retain authority.
+		revision: automatic ? socialPreviewRevision(title, description, variant, eyebrow, ...badges, automatic.revision || '') : undefined
+	};
 };
 
 const postImages = (post: any): SocialPreviewImage[] =>
@@ -329,33 +228,6 @@ const formatPrice = (listing: any): string => {
 	} catch {
 		return `${currency || '$'}${price.toLocaleString('en')}`;
 	}
-};
-
-const webpageCopy = (blocks: unknown, result: string[] = []): string[] => {
-	if (!Array.isArray(blocks) || result.length >= 12) return result;
-	for (const block of blocks) {
-		if (!block || typeof block !== 'object') continue;
-		const item = block as Record<string, unknown>;
-		const text = cleanSocialText(item.text);
-		if (text) result.push(text);
-		// Rich text is rendered through the page renderer's sanitising allowlist.
-		// The card is plainer still: it keeps only readable text, never markup.
-		const html = cleanSocialText(typeof item.html === 'string' ? item.html.replace(/<[^>]*>/g, ' ') : '');
-		if (html) result.push(html);
-		const alt = cleanSocialText(item.alt);
-		if (alt) result.push(alt);
-		webpageCopy(item.children, result);
-		if (result.length >= 12) break;
-	}
-	return result;
-};
-
-const webpageBlockCount = (blocks: unknown): number => {
-	if (!Array.isArray(blocks)) return 0;
-	return blocks.reduce((count, block) => {
-		if (!block || typeof block !== 'object') return count;
-		return count + 1 + webpageBlockCount((block as Record<string, unknown>).children);
-	}, 0);
 };
 
 type StructuredThingPreview = {
@@ -441,37 +313,52 @@ export const socialMediaVariant = (value: unknown): Extract<SocialPreviewVariant
 	}
 };
 
-const webpagePreview = async (path: string, id: string): Promise<SocialPreview> => {
+/** Already-authorized stored presentation only. Public page Components and
+ * managed media are inferred without running Actions or loading source data. */
+export const socialPreviewFromPublicWebpage = (path: string, result: ResolveWebpageResult): SocialPreview => {
 	const fallback = staticSocialPreview(path);
-	const { resolveWebpage } = await import('../webpages/webpages');
-	const { viewerOf } = await import('../things/things');
-	const result = await resolveWebpage(viewerOf(null), { id });
 	if (!result.ok || !result.page) return fallback;
-	const page: any = result.page;
-	const crystal = page.crystal || {};
-	const name = cleanSocialText(crystal.title) || cleanSocialText(crystal.name) || 'A page';
-	const pageText = webpageCopy(crystal.blocks).join(' ');
-	const description = cleanSocialText(crystal.description) || pageText || 'A published page made with Thingtime.';
+	const page = result.page;
+	const content = inferPublicWebpageContent(result);
+	const name = content.overrides.title || content.title || 'A page';
+	const description = content.overrides.description || content.description || 'A published page made with Thingtime.';
 	const author = cleanSocialText(page.author?.displayName) || cleanSocialText(page.author?.username);
-	const blockCount = webpageBlockCount(crystal.blocks);
+	const images = content.images.slice(0, 4);
+	const title = `${truncateSocialText(name, TITLE_MAX)} on ${SITE_NAME}`;
+	const summary = truncateSocialText(description, DESCRIPTION_MAX);
 	return {
 		publicContent: true,
 		indexable: page.acl?.includes('tt:all') === true,
 		kind: 'webpage',
 		variant: 'webpage',
 		path,
-		title: `${truncateSocialText(name, TITLE_MAX)} on ${SITE_NAME}`,
-		description: truncateSocialText(description, DESCRIPTION_MAX),
+		title,
+		description: summary,
 		eyebrow: 'THINGTIME · PAGE',
 		article: true,
 		author: author || undefined,
 		initial: author ? initialOf(author.replace(/^@/, '')) : undefined,
-		badges: ['Published page', blockCount ? `${blockCount} content block${blockCount === 1 ? '' : 's'}` : 'Made with Thingtime'],
+		badges: ['Published page', ...(images.length ? [images.length === 1 ? 'Photo' : `${images.length} photos`] : [])],
 		options: [],
-		images: [],
-		imageCount: 0,
-		revision: cleanSocialText(page.updatedAt) || cleanSocialText(page.createdAt)
+		images,
+		imageCount: images.length,
+		// Components can change without touching their parent page. Fingerprint
+		// the actual public presentation so those changes refresh its card too.
+		revision: socialPreviewRevision(
+			title,
+			summary,
+			author,
+			...images.flatMap((image) => [image.attachmentId, image.label]),
+			cleanSocialText(page.updatedAt) || cleanSocialText(page.createdAt)
+		)
 	};
+};
+
+const webpagePreview = async (path: string, id: string): Promise<SocialPreview> => {
+	const { resolveWebpage } = await import('../webpages/webpages');
+	const { viewerOf } = await import('../things/things');
+	const result = await resolveWebpage(viewerOf(null), { id });
+	return result.ok ? socialPreviewFromPublicWebpage(path, result) : staticSocialPreview(path);
 };
 
 export const socialPreviewFromPublicPost = (path: string, post: any, context: { parent?: any; revision?: string } = {}): SocialPreview => {

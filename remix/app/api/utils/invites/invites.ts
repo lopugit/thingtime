@@ -128,7 +128,7 @@ export const lookupInvite = async (token: unknown) => {
 export const previewInvite = async (token: unknown) => publicInvite(await lookupInvite(token));
 
 export const createInvite = async (ownerId: string, input: any) => {
-	const profile = inviteProfile(input);
+	const profile = inviteProfile(input, { optional: true });
 	const amountMicros = inviteAmount(input.credits);
 	const expiresAt = inviteExpiry(input.expiresInDays);
 	await expireInvites(ownerId);

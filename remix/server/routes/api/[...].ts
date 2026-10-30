@@ -20,6 +20,7 @@ type RouteModule = {
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
   ...actionDataRoutes,
+  'v1/social-previews': () => import('../../../app/routes/api/v1/social-previews/_social-previews'),
   'v1/maps': () => import('../../../app/routes/api/v1/maps/_maps'),
   'v1/devices/node/identity': () => import('../../../app/routes/api/v1/devices/node/identity/_identity'),
   'v1/devices/disconnect': () => import('../../../app/routes/api/v1/devices/disconnect/_disconnect'),
