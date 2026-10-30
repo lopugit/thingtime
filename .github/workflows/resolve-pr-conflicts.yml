@@ -1169,6 +1169,26 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Exhausting the one shared installation API budget is repository
+          # wide and self-heals at a published reset. This detector runs on
+          # base pushes and pull_request_target, so letting `set -e` propagate
+          # that read failure reports red on EVERY open PR for an outage no PR
+          # caused or can fix. Defer instead, exactly as this step already
+          # does for every other unsatisfiable precondition. The sentinel is a
+          # file, not a variable: gh_read_retry runs inside command
+          # substitution, so a subshell assignment would be lost.
+          LOPU_GH_BUDGET_SENTINEL="$RUNNER_TEMP/lopu-gh-budget-exhausted"
+          rm -f "$LOPU_GH_BUDGET_SENTINEL"
+          defer_on_exhausted_budget() {
+            local code=$?
+            [ "$code" -ne 0 ] || return 0
+            [ -e "$LOPU_GH_BUDGET_SENTINEL" ] || return 0
+            echo "::notice::Deferring this conflict scan: GitHub's shared installation API budget was exhausted mid-scan. That is an upstream budget reset, not a defect in any PR, and a later detector re-scans."
+            printf 'prs=[]\nany=false\n' >>"$GITHUB_OUTPUT"
+            exit 0
+          }
+          trap defer_on_exhausted_budget EXIT
+
           # "Am I the control-plane revision?" — see CONTROL-PLANE IDENTITY
           # at the top of this file. Either this run started on github-actions,
           # or a thin product-branch listener for this same workflow called us,
@@ -1327,8 +1347,26 @@ jobs:
               : > "$errors"
               if gh api "$@" >"$output" 2>"$errors"; then
                 cat "$output"
-                rm -f "$output" "$errors"
+                rm -f "$output" "$errors" "$RUNNER_TEMP/lopu-gh-budget-exhausted"
                 return 0
+              fi
+              # An exhausted PRIMARY API budget answers HTTP 403 carrying
+              # "API rate limit exceeded", not 429, so status-only matching
+              # classified the most self-healing condition the API has as
+              # "no recoverable transient response" and failed the scan. The
+              # published reset can be most of an hour away, so the backoff
+              # below cannot clear it, and a bare 403 (a real permission
+              # failure) must still fail fast — hence status AND message, the
+              # same pairing the 422 slow-diff case already uses. Record the
+              # exhaustion for this step's deferral trap: one shared
+              # installation budget is never a defect in any PR.
+              if grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
+                 && grep -Fq 'API rate limit exceeded' "$errors"; then
+                : >"$RUNNER_TEMP/lopu-gh-budget-exhausted"
+                echo "::notice::GitHub's shared installation API budget is exhausted; deferring this scan to a later detector." >&2
+                sed -n '1,20p' "$errors" >&2
+                rm -f "$output" "$errors"
+                return 1
               fi
               if grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
                  || grep -Eq "$transport" "$errors" \
@@ -2929,6 +2967,22 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Same shared-budget deferral as the conflict detector above, where
+          # `any=false` is already this step's "nothing to review" answer.
+          # Duplicate GITHUB_OUTPUT keys resolve to the last value, so
+          # appending false only ever declines work, never invents it.
+          LOPU_GH_BUDGET_SENTINEL="$RUNNER_TEMP/lopu-gh-budget-exhausted"
+          rm -f "$LOPU_GH_BUDGET_SENTINEL"
+          defer_on_exhausted_budget() {
+            local code=$?
+            [ "$code" -ne 0 ] || return 0
+            [ -e "$LOPU_GH_BUDGET_SENTINEL" ] || return 0
+            echo "::notice::Deferring this review scan: GitHub's shared installation API budget was exhausted mid-scan. A later detector re-selects after the reset."
+            echo 'any=false' >>"$GITHUB_OUTPUT"
+            exit 0
+          }
+          trap defer_on_exhausted_budget EXIT
+
           verified_lopu_publication() {
             local message="$1" markers marker_count marker_kind run_id pr_number run_json jobs_json expected_job
             case "$EVENT_ACTOR" in
@@ -3039,8 +3093,24 @@ jobs:
               : >"$errors"
               if gh "$@" >"$output" 2>"$errors"; then
                 cat "$output"
-                rm -f "$output" "$errors"
+                rm -f "$output" "$errors" "$RUNNER_TEMP/lopu-gh-budget-exhausted"
                 return 0
+              fi
+              # An exhausted PRIMARY API budget answers HTTP 403 carrying
+              # "API rate limit exceeded", not 429, so status-only matching
+              # made the most self-healing condition the API has fatal. The
+              # published reset can be most of an hour away, so the backoff
+              # below cannot clear it, and a bare 403 (a real permission
+              # failure) must still fail fast — hence status AND message.
+              # Record it for this step's deferral trap: one shared
+              # installation budget is never a defect in any PR.
+              if grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
+                 && grep -Fq 'API rate limit exceeded' "$errors"; then
+                : >"$RUNNER_TEMP/lopu-gh-budget-exhausted"
+                echo "::notice::GitHub's shared installation API budget is exhausted; deferring this scan to a later detector." >&2
+                sed -n '1,20p' "$errors" >&2
+                rm -f "$output" "$errors"
+                return 1
               fi
               # A transport reset never carries an HTTP status line; it is the
               # same retryable edge failure as a 502/504 for an idempotent read.
@@ -4143,8 +4213,24 @@ jobs:
               : >"$errors"
               if gh "$@" >"$output" 2>"$errors"; then
                 cat "$output"
-                rm -f "$output" "$errors"
+                rm -f "$output" "$errors" "$RUNNER_TEMP/lopu-gh-budget-exhausted"
                 return 0
+              fi
+              # An exhausted PRIMARY API budget answers HTTP 403 carrying
+              # "API rate limit exceeded", not 429, so status-only matching
+              # made the most self-healing condition the API has fatal. The
+              # published reset can be most of an hour away, so the backoff
+              # below cannot clear it, and a bare 403 (a real permission
+              # failure) must still fail fast — hence status AND message.
+              # Record it for this step's deferral trap: one shared
+              # installation budget is never a defect in any PR.
+              if grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
+                 && grep -Fq 'API rate limit exceeded' "$errors"; then
+                : >"$RUNNER_TEMP/lopu-gh-budget-exhausted"
+                echo "::notice::GitHub's shared installation API budget is exhausted; deferring this scan to a later detector." >&2
+                sed -n '1,20p' "$errors" >&2
+                rm -f "$output" "$errors"
+                return 1
               fi
               # A transport reset never carries an HTTP status line; it is the
               # same retryable edge failure as a 502/504 for an idempotent read.

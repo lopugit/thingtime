@@ -115,3 +115,48 @@ test('publisher HTTP probe tolerates propagation briefly but never accepts the m
   } }), /missing-build/);
   assert.equal(calls, 5);
 });
+
+
+test('published alias requires its API even when the static shell is healthy', async () => {
+  const calls = [];
+  await assert.rejects(verifyPublishedPreview('https://pr-996.previews.dev.example.com', {
+    verifyApi: true, pause: async () => {}, fetcher: async (url, options) => {
+      calls.push({ url, options });
+      return options.method === 'HEAD' ? new Response(null, { status: 200 })
+        : Response.json({ error: 'ENVIRONMENT_GATEWAY_ORIGIN' }, { status: 421 });
+    }
+  }), /api-http-421/);
+  assert.equal(calls.length, 10);
+  for (const { url, options } of calls.filter(({ options }) => options.method === 'GET')) {
+    assert.equal(url, 'https://pr-996.previews.dev.example.com/api/root-data');
+    assert.equal(options.redirect, 'manual');
+    assert.equal(options.headers.Accept, 'application/json');
+    assert.ok(options.signal instanceof AbortSignal);
+    assert.equal(options.headers.Authorization, undefined);
+  }
+});
+
+test('published alias API refuses redirects, HTML, missing pages and invalid JSON', async () => {
+  for (const response of [
+    () => new Response(null, { status: 302, headers: { location: 'https://other.example' } }),
+    () => new Response('<html>SPA shell</html>', { headers: { 'content-type': 'text/html' } }),
+    () => Response.json({}, { headers: { 'x-thingtime-preview': 'missing' } }),
+    () => new Response('{', { headers: { 'content-type': 'application/json' } }),
+    () => Response.json([])
+  ]) {
+    await assert.rejects(verifyPublishedPreview('https://pr-996.previews.dev.example.com', {
+      verifyApi: true, pause: async () => {}, fetcher: async (_, options) =>
+        options.method === 'HEAD' ? new Response(null, { status: 200 }) : response()
+    }), /HTTPS verification/);
+  }
+});
+
+test('published alias API tolerates bounded propagation and accepts JSON success', async () => {
+  let apiCalls = 0;
+  await verifyPublishedPreview('https://pr-996.previews.dev.example.com', {
+    verifyApi: true, pause: async () => {}, fetcher: async (_, options) =>
+      options.method === 'HEAD' ? new Response(null, { status: 200 })
+        : ++apiCalls === 1 ? Response.json({}, { status: 421 }) : Response.json({ user: null })
+  });
+  assert.equal(apiCalls, 2);
+});

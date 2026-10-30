@@ -1,0 +1,40 @@
+name: Production storage runtime monitor implementation
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: production-storage-runtime-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: vercel-prebuilt-control
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: github-actions
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: .github/scripts/storage-release-gate.mjs
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install the same pinned log client as the publisher
+        run: npm install --global --prefix "$RUNNER_TEMP/vercel-cli" vercel@59.10.0
+      - name: Verify current production health and runtime logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEPLOY_TOKEN }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+          VERCEL_TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
+        run: node .github/scripts/storage-release-gate.mjs --monitor

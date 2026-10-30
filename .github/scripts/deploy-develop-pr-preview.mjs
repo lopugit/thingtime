@@ -1,21 +1,34 @@
 #!/usr/bin/env node
+import { readPreviewRetentionPolicy, pullRequestIsLive } from './preview-retention-policy.mjs';
+import { assertPreviewGatewaySource } from './preview-gateway-source.mjs';
 
 import assert from 'node:assert/strict';
+import { completeInventory, reconcileOrphanPreviews } from './orphan-preview-cleanup.mjs';
+import { deploymentIssue as stablePublisherDeploymentIssue, marker as stablePublisherMarker, policyVersion as stablePublisherPolicyVersion, verifyAlias, verifyCanonicalGateway, compatibilityAliasCandidates } from './deploy-vercel-prebuilt.mjs';
+import { gatewayPolicy, gatewayMetadata, gatewayDeploymentIssue, gatewayRuntimeArgs, gatewayPublisherEnvironment, restoreGatewayAliases } from './environment-gateway-policy.mjs';
 import { isManagedPreviewComment as isManagedComment, upsertPreviewComment, publishPreviewNotifications } from './preview-comments.mjs';
 import { syncPreviewLabels, deploymentBuiltAt, previewBuildTime } from './preview-labels.mjs';
 import { recoverySourceIssue, previewWorkActive, recoveryAttempt, reconcilePreviewInventory } from './preview-recovery.mjs';
 import { publishPreviewSummary } from './preview-pr-summary.mjs';
 import { FALLBACK_BRANCH, fallbackResponseIssue, verifyPublishedPreview } from './preview-fallback.mjs';
 import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { resolveCname } from 'node:dns/promises';
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { appendFile, mkdir, mkdtemp, open, readFile, readdir, rename, rm, unlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 
 const COMMENT_MARKER = '<!-- thingtime-develop-pr-preview -->';
 const WORKFLOW_DEPLOYMENT_MARKER = 'thingtimeDevelopPrPreview';
 const PREBUILT_DEPLOYMENT_MARKER = 'thingtimeGithubPrebuiltPreview';
+// v2 keeps the custom develop credential scope while routing gateway reads to
+// the controlled preview master. The two scopes must remain independent.
+const PR_PREVIEW_POLICY_VERSION = '3';
+const PREVIOUS_PR_PREVIEW_POLICY_VERSION = '2';
+const PR_PREVIEW_TARGET = Object.freeze({ slug: 'preview', kind: 'preview', id: '' });
+const PR_VERCEL_TARGET = 'develop';
 const CONTROLLER_DISPATCH_TYPE = 'develop-pr-preview-controller';
 const CONTROLLER_WORKFLOW_PATH = '.github/workflows/develop-pr-preview.yml';
 const TRUSTED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
@@ -27,10 +40,8 @@ const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
 const CLEANUP_ACTIONS = new Set(['closed', 'converted_to_draft', 'edited']);
 const MAX_DEPLOYMENT_PAGES = 20;
 const MAX_WORKFLOW_DEPLOYMENTS = 500;
-const MAX_RECONCILE_PULL_REQUESTS = 100;
 const MAX_GITHUB_PAGES = 10;
 const REQUEST_TIMEOUT_MS = 30_000;
-const CANCEL_TIMEOUT_MS = 2 * 60 * 1000;
 const STABLE_DEVELOP_TIMEOUT_MS = 10 * 60 * 1000;
 const STABLE_DEVELOP_POLL_MS = 5_000;
 const MAX_STABLE_DEPLOYMENTS = 50;
@@ -249,6 +260,7 @@ const runtimeConfig = () => ({
 	repository: safeRepository(requiredEnv('GITHUB_REPOSITORY')),
 	repositoryId: boundedInteger(requiredEnv('GITHUB_REPOSITORY_ID'), 'GitHub repository id'),
 	actor: null,
+	deploymentAttempt: `${boundedInteger(requiredEnv('GITHUB_RUN_ID'), 'GitHub run id')}-${boundedInteger(optionalEnv('GITHUB_RUN_ATTEMPT', '1'), 'GitHub run attempt')}`,
 	missingBuildPage: optionalEnv('PREVIEW_MISSING_BUILD_PAGE', 'false') === 'true',
 	trustedLogins: parseTrustedLogins(requiredEnv('DEVELOP_PREVIEW_TRUSTED_ACTORS')),
 	projectId: exactPrefixedId(requiredEnv('VERCEL_PROJECT_ID'), 'Vercel project id', 'prj_'),
@@ -364,26 +376,46 @@ const dispatchPullRequestIssue = (pullRequest, dispatch) => {
 const workflowDeploymentCommitSha = (deployment) => deployment?.meta?.githubCommitSha ?? deployment?.gitSource?.sha ?? null;
 const workflowDeploymentCommitRef = (deployment) => deployment?.meta?.githubCommitRef ?? deployment?.gitSource?.ref ?? null;
 
+const prGatewayPolicy = (branch) => gatewayPolicy({ branch, target: PR_PREVIEW_TARGET, follower: true });
 const deploymentMetadata = ({ pullRequest, config }) => {
 	const [githubCommitOrg, githubCommitRepo] = config.repository.split('/');
 	return {
+		...gatewayMetadata(prGatewayPolicy(pullRequest.head.ref)),
 		githubCommitOrg,
 		githubCommitRepo,
 		githubCommitRef: pullRequest.head.ref,
 		githubCommitSha: pullRequest.head.sha,
 		githubPrId: String(pullRequest.number),
 		githubRepoId: String(config.gitRepoId),
+		githubRepositoryId: String(config.repositoryId),
+		thingtimePrPreviewPolicy: PR_PREVIEW_POLICY_VERSION,
+		thingtimePrPreviewAttempt: config.deploymentAttempt,
+		thingtimeBuildTarget: PR_VERCEL_TARGET,
 		thingtimeCustomEnvironmentId: config.customEnvironmentId,
 		[WORKFLOW_DEPLOYMENT_MARKER]: '1',
 		[PREBUILT_DEPLOYMENT_MARKER]: '1'
 	};
 };
 
-const deploymentIdentityIssue = (deployment, config, { prNumber, expectedSha, expectedRef } = {}) => {
+const deploymentIdentityIssue = (deployment, config, { prNumber, expectedSha, expectedRef, expectedAttempt, legacyAlias = false, allowPreviousPolicy = false } = {}) => {
 	if (!deployment || typeof deployment !== 'object') return 'missing-deployment';
 	if (!/^dpl_[A-Za-z0-9]+$/.test(deployment.id ?? '')) return 'invalid-deployment-id';
 	if (deployment.projectId !== config.projectId) return 'wrong-project';
-	if (deployment.customEnvironment?.id !== config.customEnvironmentId) return 'wrong-environment';
+	if (legacyAlias) {
+		if (deployment.target === 'production') return 'wrong-target';
+		if (deployment.customEnvironment?.id !== config.customEnvironmentId || deployment.customEnvironment?.slug !== 'develop') return 'wrong-environment';
+		if (deployment.meta?.thingtimePrPreviewPolicy != null || deployment.meta?.thingtimeBuildTarget != null) return 'legacy-policy-mismatch';
+		if (deployment.meta?.thingtimeCustomEnvironmentId !== config.customEnvironmentId) return 'metadata-environment-mismatch';
+		if (deployment.meta?.thingtimeGatewayPolicy != null && gatewayDeploymentIssue(deployment, gatewayPolicy({ branch: deployment.meta.githubCommitRef, target: { slug: 'develop' }, follower: true }))) return 'gateway-policy';
+	} else {
+		if (deployment.target === 'production') return 'wrong-target';
+		if (deployment.customEnvironment?.id !== config.customEnvironmentId || deployment.customEnvironment?.slug !== PR_VERCEL_TARGET ||
+			(deployment.customEnvironmentId && deployment.customEnvironmentId !== config.customEnvironmentId)) return 'wrong-environment';
+		if (deployment.meta?.thingtimePrPreviewPolicy !== PR_PREVIEW_POLICY_VERSION &&
+			!(allowPreviousPolicy && deployment.meta?.thingtimePrPreviewPolicy === PREVIOUS_PR_PREVIEW_POLICY_VERSION)) return 'output-policy';
+		if (!/^[1-9][0-9]*-[1-9][0-9]*$/.test(deployment.meta?.thingtimePrPreviewAttempt || '') || (expectedAttempt && deployment.meta.thingtimePrPreviewAttempt !== expectedAttempt)) return 'upload-attempt';
+		if (deployment.meta?.thingtimeBuildTarget !== PR_VERCEL_TARGET || deployment.meta?.thingtimeCustomEnvironmentId !== config.customEnvironmentId) return 'metadata-environment-mismatch';
+	}
 	if (deployment.meta?.[WORKFLOW_DEPLOYMENT_MARKER] !== '1') return 'missing-marker';
 	if (prNumber !== undefined && String(deployment.meta?.githubPrId ?? '') !== String(prNumber)) {
 		return 'wrong-pull-request';
@@ -393,9 +425,6 @@ const deploymentIdentityIssue = (deployment, config, { prNumber, expectedSha, ex
 	}
 	if (String(deployment.meta?.githubRepositoryId ?? deployment.meta?.githubRepoId ?? '') !== String(config.repositoryId)) {
 		return 'metadata-github-repository-mismatch';
-	}
-	if (deployment.meta?.thingtimeCustomEnvironmentId !== config.customEnvironmentId) {
-		return 'metadata-environment-mismatch';
 	}
 	const [repositoryOwner, repositoryName] = config.repository.split('/');
 	if (deployment.meta?.githubCommitOrg !== repositoryOwner || deployment.meta?.githubCommitRepo !== repositoryName) {
@@ -416,22 +445,34 @@ const deploymentIdentityIssue = (deployment, config, { prNumber, expectedSha, ex
 		if (deployment.meta.githubCommitSha !== deployment.gitSource.sha) return 'metadata-sha-mismatch';
 		if (deployment.meta.githubCommitRef !== deployment.gitSource.ref) return 'metadata-ref-mismatch';
 	}
+	if (!legacyAlias && gatewayDeploymentIssue(deployment, prGatewayPolicy(deployment.meta.githubCommitRef))) return 'gateway-policy';
 	if (expectedSha && workflowDeploymentCommitSha(deployment) !== expectedSha) return 'wrong-git-sha';
 	if (expectedRef && workflowDeploymentCommitRef(deployment) !== expectedRef) return 'wrong-git-ref';
 	return null;
 };
 
-const choosePreferredDeployment = (deployments, expectedSha) =>
+const choosePreferredDeployment = (deployments, config, expectedSha) =>
 	deployments
 		.filter(
 			(deployment) =>
 				workflowDeploymentCommitSha(deployment) === expectedSha &&
+				deployment.meta?.thingtimePrPreviewPolicy === PR_PREVIEW_POLICY_VERSION &&
+				deployment.meta?.thingtimeBuildTarget === PR_VERCEL_TARGET &&
+				deployment.meta?.thingtimeCustomEnvironmentId === config.customEnvironmentId &&
+				deployment.target !== 'production' && deployment.customEnvironment?.id === config.customEnvironmentId && deployment.customEnvironment?.slug === PR_VERCEL_TARGET &&
+				!gatewayDeploymentIssue(deployment, prGatewayPolicy(workflowDeploymentCommitRef(deployment))) &&
 				(deployment.readyState === 'READY' || ACTIVE_STATES.has(deployment.readyState))
 		)
 		.sort((left, right) => {
 			const readiness = Number(right.readyState === 'READY') - Number(left.readyState === 'READY');
 			return readiness || Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0);
 		})[0] ?? null;
+
+const retainPreviousPolicyAliasDuringRecovery = (binding, pullRequest) =>
+	binding && !binding.legacy && binding.deployment.readyState === 'READY' &&
+	binding.deployment.meta?.thingtimePrPreviewPolicy === PREVIOUS_PR_PREVIEW_POLICY_VERSION &&
+	workflowDeploymentCommitSha(binding.deployment) === pullRequest.head.sha &&
+	workflowDeploymentCommitRef(binding.deployment) === pullRequest.head.ref;
 
 const chooseStableDevelopDeployment = (deployments, config, expectedSha) =>
 	deployments
@@ -450,7 +491,12 @@ const deploymentListParams = (config, { prNumber = null, sha = null, until = nul
 		projectId: config.projectId,
 		limit: '100'
 	});
-	if (workflowOwned) params.set(`meta-${WORKFLOW_DEPLOYMENT_MARKER}`, '1');
+	if (workflowOwned) {
+		params.set(`meta-${WORKFLOW_DEPLOYMENT_MARKER}`, '1');
+		params.set('meta-thingtimePrPreviewPolicy', PR_PREVIEW_POLICY_VERSION);
+		params.set('meta-thingtimeBuildTarget', PR_VERCEL_TARGET);
+		params.set('meta-thingtimeCustomEnvironmentId', config.customEnvironmentId);
+	}
 	if (prNumber !== null && !workflowOwned) throw new Error('PR deployment filters require workflow ownership');
 	if (prNumber !== null) params.set('meta-githubPrId', String(boundedInteger(prNumber, 'PR number')));
 	if (sha) {
@@ -494,6 +540,8 @@ const runSelfTest = async () => {
 		repositoryId: 42,
 		projectId: 'prj_example',
 		projectName: 'thingtime',
+		teamSlug: 'team',
+		deploymentAttempt: '123-1',
 		gitRepoId: 4242,
 		customEnvironmentId: 'env_develop',
 		stableDevelopDomain: 'dev.thingtime.com',
@@ -587,17 +635,49 @@ const runSelfTest = async () => {
 	equal(metadata.githubDeployment, undefined);
 	equal(metadata[WORKFLOW_DEPLOYMENT_MARKER], '1');
 	equal(metadata[PREBUILT_DEPLOYMENT_MARKER], '1');
-	equal(Object.keys(metadata).length, 9);
-	const runtimeEnvironment = {
-		THINGTIME_BRANCH_NAME: base.head.ref,
-		THINGTIME_GIT_COMMIT_SHA: base.head.sha
-	};
+	equal(Object.keys(metadata).length, 17);
+	equal(metadata.thingtimeBuildTarget, 'develop');
+	equal(metadata.thingtimePrPreviewPolicy, '3');
+	equal(metadata.thingtimeCustomEnvironmentId, config.customEnvironmentId);
+	equal(metadata.thingtimeGatewayOrigin, 'https://master.previews.thingtime.com');
+	equal(metadata.thingtimeGatewayOwner, 'false');
+	const runtimeEnvironment = prPreviewRuntimeEnvironment(config, base);
 	const prebuiltArgs = prebuiltDeploymentArgs({ config, prebuiltDirectory: '/tmp/prebuilt', metadata, runtimeEnvironment });
 	truthy(prebuiltArgs.includes('--target=develop'));
-	truthy(!prebuiltArgs.includes('--skip-domain'));
+	truthy(!prebuiltArgs.includes('--target=preview'));
+	truthy(!prebuiltArgs.includes('--prod'));
+	truthy(!prebuiltArgs.some((arg) => String(arg).includes('THINGTIME_MONGODB_CONNECTION_MODE')));
+	equal(prGatewayPolicy('main').owner, false);
+	equal(prGatewayPolicy('develop').environment, 'preview');
+	equal(gatewayPolicy({ branch: 'develop', target: { slug: 'develop' } }).origin, 'https://dev.thingtime.com');
+	equal(gatewayPolicy({ branch: 'main', target: { slug: 'production' } }).origin, 'https://thingtime.com');
+	equal(previewGatewaySecretRow([{ id: 'env_preview', key: 'THINGTIME_GATEWAY_SECRET', type: 'encrypted', target: ['preview'] }]).id, 'env_preview');
+	checks += 1;
+	for (const rows of [[], [{ id: 'env_bad', key: 'THINGTIME_GATEWAY_SECRET', type: 'encrypted', target: ['production'] }], [{ id: 'env_bad', key: 'THINGTIME_GATEWAY_SECRET', type: 'encrypted', customEnvironmentIds: [config.customEnvironmentId] }], [{ id: 'env_bad', key: 'THINGTIME_GATEWAY_SECRET', type: 'plain', target: ['preview'] }], [{ id: 'env_a', key: 'THINGTIME_GATEWAY_SECRET', type: 'encrypted', target: ['preview'] }, { id: 'env_b', key: 'THINGTIME_GATEWAY_SECRET', type: 'encrypted', target: ['preview'] }]]) throws(() => previewGatewaySecretRow(rows));
+	truthy(!prebuiltArgs.includes('--skip-domain')); // CLI 59.10 permits this only for production.
 	truthy(prebuiltArgs.includes('--env'));
+	truthy(prebuiltArgs.includes('THINGTIME_GATEWAY_SECRET'));
+	truthy(!prebuiltArgs.some((arg) => String(arg).startsWith('THINGTIME_GATEWAY_SECRET=')));
 	truthy(prebuiltArgs.includes(`THINGTIME_BRANCH_NAME=${base.head.ref}`));
 	truthy(prebuiltArgs.includes(`THINGTIME_GIT_COMMIT_SHA=${base.head.sha}`));
+	equal(runtimeEnvironment.THINGTIME_GATEWAY_SOURCE_ORIGINS, 'https://pr-201.previews.dev.thingtime.com');
+	equal(prebuiltArgs.filter((arg) => String(arg).startsWith('THINGTIME_GATEWAY_SOURCE_ORIGINS=')),
+		['THINGTIME_GATEWAY_SOURCE_ORIGINS=https://pr-201.previews.dev.thingtime.com']);
+	const uploadEnvironment = prebuiltUploadEnvironment(config, base.head.ref, 's'.repeat(32), 'synthetic-token', {
+		THINGTIME_GATEWAY_SECRET: 'wrong-custom-develop-secret',
+		THINGTIME_GATEWAY_SOURCE_ORIGINS: 'https://*.example.test,https://unrelated.example.test',
+		THINGTIME_GATEWAY_ENVIRONMENT: 'develop',
+		THINGTIME_GATEWAY_ORIGIN: 'https://dev.thingtime.com',
+		THINGTIME_MONGODB_CONNECTION_MODE: 'proxy'
+	});
+	equal(uploadEnvironment.THINGTIME_GATEWAY_SECRET, 's'.repeat(32));
+	equal(uploadEnvironment.THINGTIME_GATEWAY_SOURCE_ORIGINS, undefined);
+	equal(uploadEnvironment.THINGTIME_GATEWAY_ENVIRONMENT, 'preview');
+	equal(uploadEnvironment.THINGTIME_GATEWAY_ORIGIN, 'https://master.previews.thingtime.com');
+	equal(uploadEnvironment.THINGTIME_MONGODB_CONNECTION_MODE, undefined);
+	equal(uploadEnvironment.VERCEL_TARGET_ENV, 'develop');
+	truthy(!prebuiltArgs.some((arg) => String(arg).includes('s'.repeat(32))));
+	checks += 1;
 	equal(customEnvironmentDomainNames(['dev.thingtime.com', { name: 'preview.example.com' }, { domain: 'legacy.example.com' }]), [
 		'dev.thingtime.com',
 		'preview.example.com',
@@ -673,8 +753,10 @@ const runSelfTest = async () => {
 		projectId: config.projectId,
 		createdAt: 2,
 		readyState: 'READY',
+		target: null,
 		customEnvironment: { id: config.customEnvironmentId, slug: 'develop' },
 		meta: {
+			...gatewayMetadata(prGatewayPolicy(base.head.ref)),
 			[WORKFLOW_DEPLOYMENT_MARKER]: '1',
 			githubPrId: '201',
 			githubRepoId: String(config.gitRepoId),
@@ -683,6 +765,9 @@ const runSelfTest = async () => {
 			githubCommitRepo: 'thingtime',
 			githubCommitSha: base.head.sha,
 			githubCommitRef: base.head.ref,
+			thingtimePrPreviewPolicy: PR_PREVIEW_POLICY_VERSION,
+			thingtimePrPreviewAttempt: config.deploymentAttempt,
+			thingtimeBuildTarget: PR_VERCEL_TARGET,
 			thingtimeCustomEnvironmentId: config.customEnvironmentId
 		},
 		gitSource: { type: 'github', repoId: config.gitRepoId, sha: base.head.sha, ref: base.head.ref }
@@ -697,7 +782,7 @@ const runSelfTest = async () => {
 	);
 	const prebuiltDeployment = {
 		...deployment,
-		meta: { ...deployment.meta, [PREBUILT_DEPLOYMENT_MARKER]: '1' },
+		meta: { ...deployment.meta, ...gatewayMetadata(prGatewayPolicy(base.head.ref)), [PREBUILT_DEPLOYMENT_MARKER]: '1' },
 		gitSource: null
 	};
 	equal(
@@ -708,6 +793,51 @@ const runSelfTest = async () => {
 		}),
 		null
 	);
+	const previousPolicyDeployment = { ...prebuiltDeployment, meta: { ...prebuiltDeployment.meta, thingtimePrPreviewPolicy: PREVIOUS_PR_PREVIEW_POLICY_VERSION } };
+	equal(deploymentIdentityIssue(previousPolicyDeployment, config, { prNumber: 201 }), 'output-policy');
+	equal(deploymentIdentityIssue(previousPolicyDeployment, config, { prNumber: 201, allowPreviousPolicy: true }), null);
+	equal(choosePreferredDeployment([previousPolicyDeployment], config, base.head.sha), null);
+	const previousPolicyBinding = await getAliasBinding(config, 201, {
+		readAlias: async () => ({ deploymentId: previousPolicyDeployment.id, uid: 'als_previous' }),
+		readDeployment: async () => previousPolicyDeployment
+	});
+	equal(previousPolicyBinding.legacy, false);
+	equal(retainPreviousPolicyAliasDuringRecovery(previousPolicyBinding, base), true);
+	equal(retainPreviousPolicyAliasDuringRecovery(previousPolicyBinding, { ...base, head: { ...base.head, sha: 'f'.repeat(40) } }), false);
+	for (const [changed, issue] of [
+		[{ target: 'production' }, 'wrong-target'],
+		[{ customEnvironment: null }, 'wrong-environment'],
+		[{ customEnvironmentId: 'env_wrong' }, 'wrong-environment'],
+		[{ meta: { ...prebuiltDeployment.meta, thingtimePrPreviewPolicy: '1' } }, 'output-policy'],
+		[{ meta: { ...prebuiltDeployment.meta, thingtimeBuildTarget: 'preview' } }, 'metadata-environment-mismatch'],
+		[{ meta: { ...prebuiltDeployment.meta, thingtimeCustomEnvironmentId: 'env_wrong' } }, 'metadata-environment-mismatch'],
+		[{ meta: { ...prebuiltDeployment.meta, thingtimeGatewayOrigin: 'https://dev.thingtime.com' } }, 'gateway-policy'],
+		[{ meta: { ...prebuiltDeployment.meta, thingtimeGatewayOwner: 'true' } }, 'gateway-policy']
+	]) {
+		equal(deploymentIdentityIssue({ ...prebuiltDeployment, ...changed }, config, { prNumber: 201 }), issue);
+	}
+	const legacyDeployment = { ...deployment, customEnvironment: { id: config.customEnvironmentId, slug: 'develop' }, meta: { ...deployment.meta, ...gatewayMetadata(gatewayPolicy({ branch: base.head.ref, target: { slug: 'develop' }, follower: true })), thingtimeCustomEnvironmentId: config.customEnvironmentId } };
+	delete legacyDeployment.meta.thingtimePrPreviewPolicy;
+	delete legacyDeployment.meta.thingtimePrPreviewAttempt;
+	delete legacyDeployment.meta.thingtimeBuildTarget;
+	equal(deploymentIdentityIssue(legacyDeployment, config, { prNumber: 201 }), 'output-policy');
+	equal(deploymentIdentityIssue(legacyDeployment, config, { prNumber: 201, legacyAlias: true }), null);
+	equal(choosePreferredDeployment([legacyDeployment], config, base.head.sha), null);
+	equal(deploymentIdentityIssue({ ...legacyDeployment, target: 'production' }, config, { prNumber: 201, legacyAlias: true }), 'wrong-target');
+	const legacyBinding = await getAliasBinding(config, 201, {
+		readAlias: async () => ({ deploymentId: legacyDeployment.id, uid: 'als_legacy' }),
+		readDeployment: async () => legacyDeployment
+	});
+	equal(legacyBinding.legacy, true);
+	await assert.rejects(getAliasBinding(config, 202, {
+		readAlias: async () => ({ deploymentId: legacyDeployment.id }), readDeployment: async () => legacyDeployment
+	}), /wrong-pull-request/);
+	checks += 1;
+	await assert.rejects(getAliasBinding(config, 201, {
+		readAlias: async () => ({ deploymentId: legacyDeployment.id }), readDeployment: async () => ({ ...legacyDeployment, id: 'dpl_other' })
+	}), /Alias deployment ID mismatch/);
+	checks += 1;
+	equal(deploymentIdentityIssue({ ...legacyDeployment, meta: { ...legacyDeployment.meta, thingtimeGatewayOrigin: 'https://master.previews.thingtime.com' } }, config, { prNumber: 201, legacyAlias: true }), 'gateway-policy');
 	equal(workflowDeploymentCommitSha(prebuiltDeployment), base.head.sha);
 	equal(workflowDeploymentCommitRef(prebuiltDeployment), base.head.ref);
 	equal(deploymentIdentityIssue({ ...deployment, projectId: 'prj_wrong' }, config, { prNumber: 201 }), 'wrong-project');
@@ -723,8 +853,9 @@ const runSelfTest = async () => {
 		deploymentIdentityIssue({ ...deployment, meta: { ...deployment.meta, githubRepositoryId: '99' } }, config, { prNumber: 201 }),
 		'metadata-github-repository-mismatch'
 	);
-	equal(choosePreferredDeployment([deployment], base.head.sha)?.id, deployment.id);
-	equal(choosePreferredDeployment([{ ...deployment, readyState: 'ERROR' }], base.head.sha), null);
+	equal(choosePreferredDeployment([{ ...deployment, meta: { ...deployment.meta, thingtimeGatewayOrigin: 'https://dev.thingtime.com' } }], config, base.head.sha), null);
+	equal(choosePreferredDeployment([prebuiltDeployment], config, base.head.sha)?.id, prebuiltDeployment.id);
+	equal(choosePreferredDeployment([{ ...deployment, readyState: 'ERROR' }], config, base.head.sha), null);
 	const developSha = 'd'.repeat(40);
 	const stableDeployment = {
 		id: 'dpl_stable',
@@ -771,6 +902,9 @@ const runSelfTest = async () => {
 		projectId: config.projectId,
 		limit: '100',
 		[`meta-${WORKFLOW_DEPLOYMENT_MARKER}`]: '1',
+		'meta-thingtimePrPreviewPolicy': PR_PREVIEW_POLICY_VERSION,
+		'meta-thingtimeBuildTarget': PR_VERCEL_TARGET,
+		'meta-thingtimeCustomEnvironmentId': config.customEnvironmentId,
 		'meta-githubPrId': '201',
 		'meta-githubCommitSha': base.head.sha,
 		until: '123'
@@ -940,6 +1074,203 @@ const runSelfTest = async () => {
 	);
 	checks += 1;
 
+	const master = { id: 'dpl_master', projectId: config.projectId, readyState: 'READY', target: null, customEnvironment: null,
+		meta: { ...gatewayMetadata(gatewayPolicy({ branch: 'main', target: PR_PREVIEW_TARGET, owner: true })), [stablePublisherMarker]: '1', thingtimePrebuiltPolicy: stablePublisherPolicyVersion, thingtimeBuildTarget: 'preview', githubCommitRef: 'main', githubCommitSha: base.head.sha } };
+	const masterDependencies = (candidate = master) => ({
+		readGithub: async (path) => { equal(path, `/repos/${config.repository}/git/ref/heads/main`); return { ref: 'refs/heads/main', object: { type: 'commit', sha: base.head.sha } }; },
+		readVercel: async (path) => {
+			if (path === `/v4/aliases/master.previews.thingtime.com?projectId=${encodeURIComponent(config.projectId)}`) {
+				return { alias: 'master.previews.thingtime.com', projectId: config.projectId, deploymentId: 'dpl_master' };
+			}
+			equal(path, '/v13/deployments/dpl_master?withGitRepoInfo=true');
+			return candidate;
+		},
+		verify: async (name, policy, id) => { equal(name, 'master.previews.thingtime.com'); equal(policy.environment, 'preview'); equal(id, 'dpl_master'); }
+	});
+	await assertPreviewMaster(config, masterDependencies());
+	checks += 1;
+	for (const candidate of [
+		{ ...master, target: 'production' },
+		{ ...master, customEnvironment: { id: config.customEnvironmentId } },
+		{ ...master, meta: { ...master.meta, githubCommitRef: 'develop' } },
+		{ ...master, meta: { ...master.meta, thingtimeGatewayOwner: 'false' } },
+		{ ...master, meta: { ...master.meta, githubCommitSha: 'b'.repeat(40) } }
+	]) {
+		await assert.rejects(assertPreviewMaster(config, masterDependencies(candidate)), /Controlled preview master/);
+		checks += 1;
+	}
+	const developEnvironment = { id: config.customEnvironmentId, slug: 'develop', branchMatcher: { type: 'equals', pattern: 'develop' }, domains: [] };
+	const developDomain = { projectId: config.projectId, verified: true, gitBranch: 'develop', customEnvironmentId: null };
+	const developPreflight = (environment = developEnvironment, domain = developDomain) =>
+		assertCustomDevelopEnvironment(config, async (path) => path.includes('/custom-environments/') ? environment : domain);
+	await developPreflight(); checks += 1;
+	let developPreflightPaths = [];
+	await assertCustomDevelopEnvironment(config, async (path) => {
+		developPreflightPaths.push(path);
+		return path.includes('/custom-environments/') ? developEnvironment : developDomain;
+	});
+	equal(developPreflightPaths, [
+		`/v9/projects/${config.projectId}/custom-environments/${config.customEnvironmentId}`,
+		`/v9/projects/${config.projectId}/domains/${config.stableDevelopDomain}`
+	]);
+	checks += 1;
+	for (const [environment, domain] of [
+		[{ ...developEnvironment, slug: 'preview' }, developDomain],
+		[{ ...developEnvironment, branchMatcher: { type: 'startsWith', pattern: 'develop' } }, developDomain],
+		[{ ...developEnvironment, domains: ['dev.thingtime.com'] }, developDomain],
+		[developEnvironment, { ...developDomain, gitBranch: base.head.ref }]
+	]) {
+		await assert.rejects(developPreflight(environment, domain)); checks += 1;
+	}
+	let masterApiRequests = 0;
+	const runtimeProbe = (status) => ({
+		verifyManifest: async (name, policy, id) => { equal(name, 'master.previews.thingtime.com'); equal(policy.environment, 'preview'); equal(id, 'dpl_master'); },
+		fetcher: async (url, options) => { equal(url, 'https://master.previews.thingtime.com/api/root-data'); equal(options.redirect, 'error'); masterApiRequests += 1; return new Response('{}', { status, headers: { 'content-type': 'application/json' } }); },
+		retry: (check) => check({ signal: AbortSignal.timeout(1000) })
+	});
+	await verifyPreviewMasterRuntime('master.previews.thingtime.com', { environment: 'preview' }, 'dpl_master', runtimeProbe(200));
+	await assert.rejects(verifyPreviewMasterRuntime('master.previews.thingtime.com', { environment: 'preview' }, 'dpl_master', runtimeProbe(503)), /Preview master API is not ready/);
+	equal(masterApiRequests, 2);
+	checks += 2;
+	for (const rows of [[], [{ id: 'env_bad', key: 'THINGTIME_GATEWAY_SECRET', type: 'encrypted', target: ['production'] }],
+		[{ id: 'env_bad', key: 'THINGTIME_GATEWAY_SECRET', type: 'encrypted', customEnvironmentIds: [config.customEnvironmentId] }],
+		[{ id: 'env_bad', key: 'THINGTIME_GATEWAY_SECRET', type: 'encrypted', target: ['preview'], gitBranch: 'another-branch' }]]) {
+		let uploaded = false;
+		await assert.rejects(deployPrebuiltOutput(config, base, {
+			directory: '/unused/secret-fence-test', prepare: async () => {},
+			readVariables: async (path) => { equal(path, `/v10/projects/${config.projectId}/env`); return { envs: rows }; },
+			execute: async () => { uploaded = true; throw new Error('unexpected upload'); }
+		}), /Exactly one unbranched, encrypted standard Preview gateway secret is required/);
+		equal(uploaded, false);
+		checks += 1;
+	}
+	const listedSecret = { id: 'env_preview', key: 'THINGTIME_GATEWAY_SECRET', type: 'encrypted', target: ['preview'] };
+	const previewSecret = 'a'.repeat(32);
+	equal(await readPreviewGatewaySecret(config, async (path) => path.endsWith('/env') ? { envs: [listedSecret] } : { ...listedSecret, decrypted: true, value: previewSecret }), previewSecret);
+	for (const changed of [{ id: 'env_other' }, { target: ['develop'] }, { decrypted: false }, { value: 'short' }]) {
+		await assert.rejects(readPreviewGatewaySecret(config, async (path) => path.endsWith('/env') ? { envs: [listedSecret] } : { ...listedSecret, decrypted: true, value: previewSecret, ...changed }), /could not be decrypted with its exact scope/);
+		checks += 1;
+	}
+	const domainInventory = async () => ({ domains: [{ name: 'thingtime.com' }, { name: config.stableDevelopDomain, gitBranch: 'develop' }, { name: '*.previews.thingtime.com' }] });
+	const protectedNames = await protectedPreviewAliasNames(config, base, domainInventory);
+	for (const name of ['thingtime.com', 'dev.thingtime.com', 'master.previews.thingtime.com', '*.previews.thingtime.com', 'thingtime-git-main-team.vercel.app', 'thingtime-git-develop-team.vercel.app']) truthy(protectedNames.includes(name));
+	for (const ref of ['main', 'develop']) {
+		await assert.rejects(protectedPreviewAliasNames(config, { ...base, head: { ...base.head, ref } }, domainInventory), /Protected source branch/);
+		checks += 1;
+	}
+	await assert.rejects(protectedPreviewAliasNames(config, base, async () => ({ domains: [{ name: 'stable.example.com', gitBranch: base.head.ref }] })), /bound to a protected project domain/);
+	checks += 1;
+	const guardedUploadFixture = () => {
+		const bindings = new Map([['thingtime.com', { deploymentId: 'dpl_production' }], ['dev.thingtime.com', { deploymentId: 'dpl_develop' }], ['master.previews.thingtime.com', { deploymentId: 'dpl_master' }]]);
+		const receipts = []; const assigned = []; const removed = [];
+		const options = {
+			names: (c, pr) => protectedPreviewAliasNames(c, pr, domainInventory),
+			read: async (name) => bindings.get(name) || null,
+			assign: async (name, id) => { assigned.push([name, id]); bindings.set(name, { deploymentId: id }); },
+			remove: async (name) => { removed.push(name); bindings.delete(name); },
+			inventory: async () => [prebuiltDeployment], receipt: async (record) => receipts.push(record)
+		};
+		return { bindings, receipts, assigned, removed, options };
+	};
+	// The CLI may assign before returning. Restore only our exact verified
+	// attempt, remove only new bindings, and keep a concurrent operator's move.
+	for (const uncertain of [false, true]) {
+		const fixture = guardedUploadFixture(); let calls = 0;
+		const result = await guardPreviewUpload(config, base, async () => {
+			calls += 1;
+			fixture.bindings.set('dev.thingtime.com', { deploymentId: prebuiltDeployment.id });
+			fixture.bindings.set('thingtime-git-main-team.vercel.app', { deploymentId: prebuiltDeployment.id });
+			fixture.bindings.set('master.previews.thingtime.com', { deploymentId: 'dpl_operator' });
+			if (uncertain) throw new Error('CLI transport failed after provider accepted upload');
+			return prebuiltDeployment;
+		}, fixture.options);
+		equal(calls, 1); equal(result.id, prebuiltDeployment.id);
+		equal(fixture.bindings.get('dev.thingtime.com')?.deploymentId, 'dpl_develop');
+		equal(fixture.bindings.get('thingtime.com')?.deploymentId, 'dpl_production');
+		equal(fixture.bindings.get('master.previews.thingtime.com')?.deploymentId, 'dpl_operator');
+		equal(fixture.bindings.has('thingtime-git-main-team.vercel.app'), false);
+		equal(fixture.receipts.at(-1).state, 'aliases-restored');
+	}
+	for (const change of [{ thingtimePrPreviewAttempt: '122-1' }, { githubCommitSha: 'b'.repeat(40) }, { thingtimeBuildTarget: 'preview' }]) {
+		const fixture = guardedUploadFixture();
+		fixture.options.inventory = async () => [{ ...prebuiltDeployment, meta: { ...prebuiltDeployment.meta, ...change } }];
+		await assert.rejects(guardPreviewUpload(config, base, async () => { throw new Error('uncertain upload'); }, fixture.options), (error) => /upload outcome is uncertain/.test(error.message) && error.preservePreviewAttempt === true);
+		equal(fixture.receipts.at(-1).state, 'upload-uncertain');
+		equal(fixture.assigned.length, 0); checks += 1;
+	}
+	const restorationFailure = guardedUploadFixture();
+	restorationFailure.options.assign = async () => { throw new Error('provider restore unavailable'); };
+	await assert.rejects(guardPreviewUpload(config, base, async () => {
+		restorationFailure.bindings.set('dev.thingtime.com', { deploymentId: prebuiltDeployment.id }); return prebuiltDeployment;
+	}, restorationFailure.options), (error) => /Protected alias restoration is uncertain/.test(error.message) && error.preservePreviewAttempt === true);
+	equal(restorationFailure.receipts.at(-1).state, 'restoration-uncertain'); checks += 1;
+	const heldAlias = new Map([['dev.thingtime.com', { deploymentId: prebuiltDeployment.id }]]);
+	const protectedGuard = (c, candidate) => assertNoProtectedAlias(c, candidate, {
+		names: async () => ['dev.thingtime.com', 'master.previews.thingtime.com'],
+		read: async (name) => heldAlias.get(name) || null
+	});
+	let laterMutations = 0;
+	await assert.rejects(prepareDeployment(config, base, {
+		list: async () => [prebuiltDeployment], guard: protectedGuard,
+		remove: async () => { laterMutations += 1; },
+		cleanup: async () => { laterMutations += 1; }
+	}), /still owns protected alias dev\.thingtime\.com/);
+	equal(laterMutations, 0); checks += 1;
+	heldAlias.set('dev.thingtime.com', { deploymentId: 'dpl_operator' });
+	heldAlias.set('master.previews.thingtime.com', { deploymentId: 'dpl_operator' });
+	await protectedGuard(config, prebuiltDeployment); checks += 1;
+	let cleanCandidateCleanup = null;
+	const cleanCandidate = await prepareDeployment(config, base, {
+		list: async () => [prebuiltDeployment], guard: async () => {},
+		remove: async () => {},
+		cleanup: async (_items, _config, _pr, keep) => { cleanCandidateCleanup = keep; }
+	});
+	equal(cleanCandidate.id, prebuiltDeployment.id);
+	truthy(cleanCandidateCleanup.has(prebuiltDeployment.id));
+	checks += 1;
+	let earlyUpload = false;
+	await assert.rejects(guardPreviewUpload(config, base, async () => { earlyUpload = true; return prebuiltDeployment; }, {
+		names: async () => [], receipt: async () => { throw new Error('receipt unavailable'); }
+	}), /receipt unavailable/);
+	equal(earlyUpload, false); checks += 1;
+	const receiptDirectory = await mkdtemp(join(tmpdir(), 'thingtime-pr-preview-receipt-'));
+	try {
+		const receiptPath = join(receiptDirectory, 'receipt.json');
+		await savePreviewUploadReceipt({ state: 'uploading', attempt: config.deploymentAttempt }, receiptPath);
+		equal(JSON.parse(await readFile(receiptPath, 'utf8')).attempt, config.deploymentAttempt);
+		equal((await readdir(receiptDirectory)).length, 1);
+		let attemptedDespiteAtomicReceiptFailure = false;
+		await assert.rejects(guardPreviewUpload(config, base, async () => {
+			attemptedDespiteAtomicReceiptFailure = true;
+			return prebuiltDeployment;
+		}, { names: async () => [], receipt: (record) => savePreviewUploadReceipt(record, receiptDirectory) }), /EISDIR|directory/i);
+		equal(attemptedDespiteAtomicReceiptFailure, false);
+		equal((await readdir(receiptDirectory)).length, 1);
+		checks += 1;
+	} finally { await rm(receiptDirectory, { recursive: true, force: true }); }
+	const workflow = await readFile(new URL('../workflows/develop-pr-preview.yml', import.meta.url), 'utf8');
+	const buildJob = workflow.split('\n  build:')[1].split('\n  controller:')[0];
+	truthy(buildJob.includes('VERCEL_ENV: preview'));
+	truthy(buildJob.includes('VERCEL_TARGET_ENV: develop'));
+	truthy(!/secrets\.|VERCEL_API_TOKEN|environment: vercel-/.test(buildJob));
+	truthy(buildJob.includes('VERCEL_GIT_COMMIT_REF: ${{ needs.prepare.outputs.head_ref }}'));
+	truthy(!buildJob.includes('THINGTIME_MONGODB_CONNECTION_MODE'));
+	// Missing preview secret is fenced before the upload subprocess; production
+	// and custom-develop rows cannot satisfy it. No secret values enter argv.
+	const source = await readFile(new URL(import.meta.url), 'utf8');
+	const upload = source.slice(source.lastIndexOf('const deployPrebuiltOutput = async')).split('const createVercelDeployment')[0];
+	truthy(upload.indexOf('readPreviewGatewaySecret(') < upload.indexOf('await execute('));
+	truthy(!source.slice(source.lastIndexOf('const main = async')).includes('reconcileStableDevelopAlias('));
+	const deployHandler = source.slice(source.lastIndexOf('const deploy = async')).split('const writePrepareOutputs')[0];
+	truthy(deployHandler.includes('if (!error.preservePreviewAttempt) await Promise.allSettled([cleanupPrResources('));
+	let inactiveClosed = 0;
+	const closedCleanup = { cleanup: async () => ({ disabled: false, removedIds: ['dpl_removed'], retainedIds: [] }), read: async () => ({ ...base, state: 'closed' }), inactive: async () => { inactiveClosed++; } };
+	equal(await cleanupClosedPrResources(config, base.number, base.head.ref, closedCleanup), { aliasRemoved: false, deleted: 1 });
+	equal(inactiveClosed, 1);
+	await cleanupClosedPrResources(config, base.number, base.head.ref, { ...closedCleanup, read: async () => base });
+	equal(inactiveClosed, 1);
+	equal(await cleanupClosedPrResources(config, base.number, base.head.ref, { ...closedCleanup, cleanup: async () => ({ disabled: true, removedIds: [], retainedIds: null }) }), { aliasRemoved: false, deleted: 0, retained: true });
+	equal(inactiveClosed, 1);
 	console.log(`develop PR preview self-test: ${checks}/${checks} passed`);
 };
 
@@ -1148,7 +1479,7 @@ const assertTrustedPullRequestStack = async (config, pullRequest, { actor = null
 // preview to build at all — no matter how trusted its author is. Control-plane
 // PRs (base `github-actions`) carry only `.github` and the root docs, so every
 // one of them was authorized, failed the build with
-// `ENOENT ... /product/remix`, and published a "Develop S3 preview failed"
+// `ENOENT ... /product/remix`, and published a "PR preview failed"
 // comment telling the operator to correct the deployment, DNS, or CORS
 // configuration. Probe the head instead and let the controller take its
 // ordinary skip/reconcile path.
@@ -1172,14 +1503,17 @@ const headHasPreviewBundle = async (repository, headSha, request = githubRequest
 };
 
 const assertPreviewBundle = async (config, pullRequest, { hasPreviewBundle = headHasPreviewBundle } = {}) => {
+	if (['main', 'develop', 'github-actions'].includes(pullRequest.head?.ref)) throw new EligibilityError('protected-source-branch');
 	if (!(await hasPreviewBundle(config.repository, pullRequest.head?.sha))) {
 		throw new EligibilityError('head-has-no-preview-bundle');
 	}
 };
 
 const assertCurrentPullRequest = async (config, snapshot, actor) => {
+	if (config.refreshRetentionPolicy) config.retentionPolicy = await config.refreshRetentionPolicy();
 	const current = await getPullRequest(config.repository, snapshot.number);
 	await assertTrustedPullRequestStack(config, current, { actor });
+	if (config.retentionPolicy && !pullRequestIsLive(current, config.retentionPolicy)) throw new EligibilityError('inactive');
 	if (!pullRequestMatchesSnapshot(current, snapshot)) throw new EligibilityError('stale-head');
 	return current;
 };
@@ -1220,7 +1554,7 @@ const createGithubDeployment = async (repository, pullRequest) => {
 	const body = {
 		ref: pullRequest.head.sha,
 		environment: `develop-pr-${pullRequest.number}`,
-		description: 'Thingtime develop Custom Environment PR preview',
+		description: 'Thingtime custom-develop PR deployment with Preview gateway',
 		auto_merge: false,
 		required_contexts: [],
 		transient_environment: true,
@@ -1282,16 +1616,16 @@ const dashboardUrl = (deploymentId, config) => `https://vercel.com/${config.team
 const deploymentComment = ({ state, pullRequest, alias, deploymentUrl, dashboard, note, expectedReady = null, builtAt = null }) => {
 	const sha = pullRequest.head.sha.slice(0, 8);
 	const title =
-		state === 'ready' ? '✅ Develop S3 preview ready' : state === 'failed' ? '❌ Develop S3 preview failed' : '🧪 Develop S3 preview deploying';
+		state === 'ready' ? '✅ PR preview ready' : state === 'failed' ? '❌ PR preview failed' : '🧪 PR preview deploying';
 	const previewLabel = state === 'ready' ? 'Preview' : 'Expected preview';
 	const previewLine = `- ${previewLabel}: [https://${alias}](https://${alias})`;
 	const expectedLine = state === 'deploying' && expectedReady ? `\n- Expected ready: ${expectedReady.replace('T', ' ').replace(':00.000Z', ' UTC')} (estimate)` : '';
 	const builtLine = builtAt ? `\n- Last successfully built: ${previewBuildTime(builtAt)} (Australia/Melbourne)` : '';
-	return `### ${title}\n\n- Commit: \`${sha}\`\n- Environment: Vercel Custom Environment \`develop\`\n${previewLine}${expectedLine}${builtLine}${
+	return `### ${title}\n\n- Commit: \`${sha}\`\n- Vercel credential target: custom \`develop\`\n- Gateway: shared \`preview\`\n${previewLine}${expectedLine}${builtLine}${
 		deploymentUrl ? `\n- Immutable deployment: [${deploymentUrl}](${deploymentUrl})` : ''
 	}${dashboard ? `\n- Vercel status: [open deployment](${dashboard})` : ''}${
 		note ? `\n\n${note}` : ''
-	}\n\nGeneric Vercel Preview deployments use the shared development runtime; this controller adds the stable exact-SHA alias and marker-scoped cleanup.`;
+	}\n\nThis PR deployment uses master.previews.thingtime.com and development data. The URL namespace is retained for compatibility; cleanup owns only current-policy PR deployments.`;
 };
 
 const verifyCors = async (origin, probeUrl) => {
@@ -1313,28 +1647,60 @@ const verifyCors = async (origin, probeUrl) => {
 	}
 };
 
-const assertVercelConfiguration = async (config) => {
-	const project = await vercelRequest(`/v9/projects/${encodeURIComponent(config.projectId)}`);
-	if (project?.id !== config.projectId || project?.name !== config.projectName) {
-		throw new Error('Vercel project identity did not match the configured exact project');
-	}
-	if (String(project.link?.repoId ?? '') !== String(config.gitRepoId)) {
-		throw new Error('Vercel project Git repository did not match the configured repository');
-	}
+// Only the protected stable publisher owns the preview master. This controller
+// reads its main-source/preview-target provenance and live runtime; it never
+// promotes develop or points arbitrary PR code at a stable gateway hostname.
+const verifyPreviewMasterRuntime = async (name, policy, deploymentId, { verifyManifest = verifyCanonicalGateway, fetcher = fetch, retry = verifyAlias } = {}) => retry(async ({ signal }) => {
+	await verifyManifest(name, policy, deploymentId, signal);
+	const response = await fetcher(`https://${name}/api/root-data`, { signal, cache: 'no-store', redirect: 'error' });
+	if (!response.ok || !(response.headers.get('content-type') || '').includes('json')) throw new Error('Preview master API is not ready');
+	await response.json();
+});
 
-	const customEnvironment = await vercelRequest(
+const assertPreviewMaster = async (config, { readGithub = githubRequest, readVercel = vercelRequest, verify = verifyPreviewMasterRuntime } = {}) => {
+	const reference = await readGithub(`/repos/${config.repository}/git/ref/heads/main`);
+	if (reference?.ref !== 'refs/heads/main' || reference.object?.type !== 'commit' || !/^[0-9a-f]{40}$/.test(reference.object?.sha || '')) throw new Error('Preview master main source ref was invalid');
+	const policy = gatewayPolicy({ branch: 'main', target: PR_PREVIEW_TARGET, owner: true });
+	const name = new URL(policy.origin).hostname;
+	const alias = await readVercel(`/v4/aliases/${encodeURIComponent(name)}?projectId=${encodeURIComponent(config.projectId)}`);
+	if (alias?.alias !== name || alias.projectId !== config.projectId || !/^dpl_[A-Za-z0-9]+$/.test(alias.deploymentId || '')) throw new Error('Preview master alias ownership mismatch');
+	const deployment = await readVercel(`/v13/deployments/${encodeURIComponent(alias.deploymentId)}?withGitRepoInfo=true`);
+	const issue = stablePublisherDeploymentIssue(deployment, { sha: reference.object.sha, branch: 'main', target: PR_PREVIEW_TARGET, projectId: config.projectId });
+	if (issue || deployment.id !== alias.deploymentId || deployment.readyState !== 'READY') throw new Error(`Controlled preview master is not ready (${issue || 'deployment-state'})`);
+	await verify(name, policy, deployment.id);
+};
+
+const assertCustomDevelopEnvironment = async (config, request = vercelRequest) => {
+	const customEnvironment = await request(
 		`/v9/projects/${encodeURIComponent(config.projectId)}/custom-environments/${encodeURIComponent(config.customEnvironmentId)}`
 	);
-	if (customEnvironment?.id !== config.customEnvironmentId || customEnvironment?.slug !== 'develop') {
+	if (customEnvironment?.id !== config.customEnvironmentId || customEnvironment?.slug !== PR_VERCEL_TARGET ||
+		customEnvironment.branchMatcher?.type !== 'equals' || customEnvironment.branchMatcher?.pattern !== 'develop') {
 		throw new Error('Vercel custom environment identity did not match develop');
 	}
-	const stableDomain = await vercelRequest(
+	const stableDomain = await request(
 		`/v9/projects/${encodeURIComponent(config.projectId)}/domains/${encodeURIComponent(config.stableDevelopDomain)}`
 	);
 	const stableDomainIssue = stableDevelopDomainBindingIssue(customEnvironment, stableDomain, config);
 	if (stableDomainIssue) {
 		throw new Error(`Stable develop domain must track only the develop Git branch (${stableDomainIssue})`);
 	}
+};
+
+const assertVercelConfiguration = async (config) => {
+	const project = await vercelRequest(`/v9/projects/${encodeURIComponent(config.projectId)}`);
+	if (project?.id !== config.projectId || project?.name !== config.projectName) {
+		throw new Error('Vercel project identity did not match the configured exact project');
+	}
+	// Prebuilt-only projects deliberately disconnect the native Git integration.
+	// An existing link must still match; project identity and team scope above
+	// remain mandatory when that optional source-build integration is absent.
+	if (project.link && String(project.link.repoId ?? '') !== String(config.gitRepoId)) {
+		throw new Error('Vercel project Git repository did not match the configured repository');
+	}
+	await assertCustomDevelopEnvironment(config);
+
+	await assertPreviewMaster(config);
 
 	const wildcardPolicies = [
 		{ label: 'Development preview', suffix: config.previewAliasSuffix, expectedGitBranch: 'develop', expectedRuntimeBranch: 'develop' },
@@ -1371,7 +1737,6 @@ const assertVercelConfiguration = async (config) => {
 			throw new Error(`${policy.label} wildcard DNS failed live CNAME verification (${wildcardDnsIssue})`);
 		}
 	}
-	await assertWildcardFallbackRuntimes(config);
 };
 
 const verifyWildcardFallbackRuntime = async ({ suffix, expectedBranch, missingBuildPage = false }) => {
@@ -1411,7 +1776,7 @@ const assertWildcardFallbackRuntimes = async (config) => {
 	await verifyWildcardFallbackRuntime({ suffix: config.productionPreviewAliasSuffix, expectedBranch: 'main', missingBuildPage: config.missingBuildPage });
 };
 
-const verifyPublishedAlias = (aliasUrl) => verifyPublishedPreview(aliasUrl);
+const verifyPublishedAlias = (aliasUrl) => verifyPublishedPreview(aliasUrl, { verifyApi: true });
 
 const deploymentDetail = async (deploymentId) => vercelRequest(`/v13/deployments/${encodeURIComponent(deploymentId)}?withGitRepoInfo=true`);
 
@@ -1443,7 +1808,7 @@ const listWorkflowDeployments = async (config, { prNumber = null, sha = null } =
 	const summaries = await listDeploymentSummaries(config, { prNumber, sha });
 	const owned = summaries.filter(
 		(candidate) =>
-			candidate.meta?.[WORKFLOW_DEPLOYMENT_MARKER] === '1' && (prNumber === null || String(candidate.meta?.githubPrId ?? '') === String(prNumber))
+			candidate.meta?.[WORKFLOW_DEPLOYMENT_MARKER] === '1' && candidate.meta?.thingtimePrPreviewPolicy === PR_PREVIEW_POLICY_VERSION && (prNumber === null || String(candidate.meta?.githubPrId ?? '') === String(prNumber))
 	);
 	if (owned.length > MAX_WORKFLOW_DEPLOYMENTS) {
 		throw new Error('Workflow deployment detail scan exceeded its safety bound');
@@ -1504,43 +1869,10 @@ const refreshOwnedDeployment = async (deploymentId, config, prNumber) => {
 	return detail;
 };
 
-const cancelAndDeleteDeployment = async (deployment, config, prNumber) => {
-	let current = await refreshOwnedDeployment(deployment.id, config, prNumber);
-	if (!current) return false;
-	if (ACTIVE_STATES.has(current.readyState)) {
-		try {
-			await vercelRequest(`/v12/deployments/${encodeURIComponent(current.id)}/cancel`, {
-				method: 'PATCH',
-				retries: 0,
-				accept: [200]
-			});
-		} catch (error) {
-			if (!(error instanceof HttpError && [400, 404, 409].includes(error.status))) throw error;
-		}
-		const timeoutAt = Date.now() + CANCEL_TIMEOUT_MS;
-		do {
-			await delay(5000);
-			current = await refreshOwnedDeployment(deployment.id, config, prNumber);
-			if (!current) return false;
-		} while (ACTIVE_STATES.has(current.readyState) && Date.now() < timeoutAt);
-		if (ACTIVE_STATES.has(current.readyState)) {
-			throw new Error('Canceled Vercel deployment did not become terminal within two minutes');
-		}
-	}
-	await vercelRequest(`/v13/deployments/${encodeURIComponent(current.id)}`, {
-		method: 'DELETE',
-		accept: [200, 204, 404]
-	});
-	return true;
-};
 
-const cleanupDeployments = async (deployments, config, prNumber, keepIds = new Set()) => {
-	let deleted = 0;
-	for (const deployment of deployments) {
-		if (keepIds.has(deployment.id)) continue;
-		if (await cancelAndDeleteDeployment(deployment, config, prNumber)) deleted += 1;
-	}
-	return deleted;
+const cleanupDeployments = async (_deployments, config, prNumber, _keepIds = new Set()) => {
+	const report = await reconcileOrphanPreviews(config, { github: githubRequest, vercel: vercelRequest, prNumber });
+	return report.removedIds.length;
 };
 
 const getOwnedAlias = async (config, alias) => {
@@ -1575,27 +1907,23 @@ const getStableDevelopAliasBinding = async (config) => {
 	return { alias: config.stableDevelopDomain, record: found, deployment };
 };
 
-const getAliasBinding = async (config, prNumber) => {
+const getAliasBinding = async (config, prNumber, { readAlias = getOwnedAlias, readDeployment = deploymentDetail } = {}) => {
 	const alias = previewAlias(prNumber, config.previewAliasSuffix);
-	const found = await getOwnedAlias(config, alias);
+	const found = await readAlias(config, alias);
 	if (!found) return null;
 	if (!/^dpl_[A-Za-z0-9]+$/.test(found.deploymentId ?? '')) {
 		throw new Error('Owned alias did not point to a deployment');
 	}
-	const deployment = await refreshOwnedDeployment(found.deploymentId, config, prNumber);
-	if (!deployment) throw new Error('Owned alias pointed to a missing deployment');
-	return { alias, record: found, deployment };
+	const deployment = await readDeployment(found.deploymentId);
+	if (deployment?.id !== found.deploymentId) throw new Error('Alias deployment ID mismatch');
+	const legacy = deployment.meta?.thingtimePrPreviewPolicy == null;
+	// A v2 alias remains identifiable for guarded replacement or alias removal.
+	// Only v3 deployments are eligible for reuse and managed backend cleanup.
+	const issue = deploymentIdentityIssue(deployment, config, { prNumber, legacyAlias: legacy, allowPreviousPolicy: true });
+	if (issue) throw new Error(`Alias deployment ownership check failed (${issue})`);
+	return { alias, record: found, deployment, legacy };
 };
 
-const removeAliasForPr = async (config, prNumber) => {
-	const binding = await getAliasBinding(config, prNumber);
-	if (!binding) return false;
-	await vercelRequest(`/v2/aliases/${encodeURIComponent(binding.record.uid)}`, {
-		method: 'DELETE',
-		accept: [200, 204, 404]
-	});
-	return true;
-};
 
 const assignAliasVerified = async (config, deployment, prNumber) => {
 	const alias = previewAlias(prNumber, config.previewAliasSuffix);
@@ -1603,6 +1931,7 @@ const assignAliasVerified = async (config, deployment, prNumber) => {
 	if (issue || deployment.readyState !== 'READY') {
 		throw new Error(`Refusing to alias an unverified deployment (${issue ?? deployment.readyState})`);
 	}
+	await assertNoProtectedAlias(config, deployment);
 	const existing = await getAliasBinding(config, prNumber);
 	if (existing?.deployment.id === deployment.id) return { alias, oldDeploymentId: null };
 
@@ -1625,75 +1954,23 @@ const assignAliasVerified = async (config, deployment, prNumber) => {
 	return { alias, oldDeploymentId: assignment.oldDeploymentId ?? null };
 };
 
-const assignStableDevelopAliasVerified = async (config, deployment, expectedSha) => {
-	const issue = stableDevelopDeploymentIssue(deployment, config, expectedSha);
-	if (issue || deployment.readyState !== 'READY') {
-		throw new Error(`Refusing to publish an unverified stable develop deployment (${issue ?? deployment.readyState})`);
-	}
-	if ((await getDevelopHeadSha(config)) !== expectedSha) return { headChanged: true, oldDeploymentId: null };
-
-	const existing = await getStableDevelopAliasBinding(config);
-	if (existing?.deployment.id === deployment.id) {
-		return { headChanged: false, oldDeploymentId: null };
-	}
-
-	let assignment = null;
-	try {
-		assignment = await vercelRequest(`/v2/deployments/${encodeURIComponent(deployment.id)}/aliases`, {
-			method: 'POST',
-			accept: [200],
-			retries: 0,
-			body: { alias: config.stableDevelopDomain }
-		});
-	} catch (error) {
-		const reconciled = await getStableDevelopAliasBinding(config);
-		if (reconciled?.deployment.id !== deployment.id) throw error;
-		assignment = reconciled.record;
-	}
-	if (assignment?.alias !== config.stableDevelopDomain) {
-		throw new Error('Vercel assigned an unexpected stable develop alias');
-	}
-	const verified = await getStableDevelopAliasBinding(config);
-	if (verified?.deployment.id !== deployment.id) {
-		throw new Error('Stable develop alias did not resolve to the expected deployment');
-	}
-	await assertVercelConfiguration(config);
-	await verifyPublishedAlias(`https://${config.stableDevelopDomain}`);
-	return {
-		headChanged: (await getDevelopHeadSha(config)) !== expectedSha,
-		oldDeploymentId: assignment.oldDeploymentId ?? null
-	};
-};
-
 const reconcileStableDevelopAlias = async (config, { waitForReady = false } = {}) => {
 	await assertVercelConfiguration(config);
 	const timeoutAt = Date.now() + STABLE_DEVELOP_TIMEOUT_MS;
 	for (;;) {
 		const expectedSha = await getDevelopHeadSha(config);
 		const binding = await getStableDevelopAliasBinding(config);
-		const bindingIssue = binding ? stableDevelopDeploymentIssue(binding.deployment, config, expectedSha) : 'missing-alias';
+		const bindingIssue = binding ? stablePublisherDeploymentIssue(binding.deployment, { sha: expectedSha, branch: 'develop', target: { slug: 'develop', kind: 'preview', id: config.customEnvironmentId }, projectId: config.projectId }) : 'missing-alias';
 		if (binding && bindingIssue === null && binding.deployment.readyState === 'READY') {
 			console.log(`Stable develop alias already current: ${config.stableDevelopDomain} -> ${expectedSha}`);
 			return { changed: false, deploymentId: binding.deployment.id, sha: expectedSha };
 		}
 
-		const deployments = await listStableDevelopDeployments(config, expectedSha);
-		const preferred = chooseStableDevelopDeployment(deployments, config, expectedSha);
-		if (preferred?.readyState === 'READY') {
-			const assigned = await assignStableDevelopAliasVerified(config, preferred, expectedSha);
-			if (assigned.headChanged) {
-				if (!waitForReady && Date.now() >= timeoutAt) {
-					console.log('Stable develop alias promotion deferred because develop advanced during assignment');
-					return { changed: true, deferred: true, deploymentId: preferred.id, sha: expectedSha };
-				}
-				continue;
-			}
-			console.log(`Stable develop alias promoted: ${config.stableDevelopDomain} -> ${preferred.id} (${expectedSha})`);
-			return { changed: true, deploymentId: preferred.id, sha: expectedSha };
-		}
+		// The protected prebuilt publisher exclusively owns stable gateway aliases.
+		// This PR controller waits for that owner; it never promotes a legacy build.
 
 		if (!waitForReady) {
-			console.log(`Stable develop alias promotion deferred: current=${expectedSha}; binding=${bindingIssue}; deployment=${preferred?.readyState ?? 'missing'}`);
+			console.log(`Stable develop alias promotion deferred: current=${expectedSha}; binding=${bindingIssue}; stable publisher owns promotion`);
 			return { changed: false, deferred: true, deploymentId: binding?.deployment.id ?? null, sha: expectedSha };
 		}
 		if (Date.now() >= timeoutAt) {
@@ -1703,18 +1980,14 @@ const reconcileStableDevelopAlias = async (config, { waitForReady = false } = {}
 	}
 };
 
-const prepareDeployment = async (config, pullRequest) => {
-	const deployments = await listWorkflowDeployments(config, { prNumber: pullRequest.number });
-	let aliasFailure = null;
-	try {
-		await removeAliasForPr(config, pullRequest.number);
-	} catch (error) {
-		aliasFailure = error;
-	}
-	const reusable = choosePreferredDeployment(deployments, pullRequest.head.sha);
+const prepareDeployment = async (config, pullRequest, {
+	list = listWorkflowDeployments, cleanup = cleanupDeployments, guard = assertNoProtectedAlias
+} = {}) => {
+	const deployments = await list(config, { prNumber: pullRequest.number });
+	const reusable = choosePreferredDeployment(deployments, config, pullRequest.head.sha);
+	if (reusable) await guard(config, reusable);
 	const keepIds = reusable ? new Set([reusable.id]) : new Set();
-	await cleanupDeployments(deployments, config, pullRequest.number, keepIds);
-	if (aliasFailure) throw aliasFailure;
+	await cleanup(deployments, config, pullRequest.number, keepIds);
 	return reusable;
 };
 
@@ -1742,6 +2015,8 @@ const prebuiltDeploymentArgs = ({ config, prebuiltDirectory, metadata, runtimeEn
 		'--cwd',
 		prebuiltDirectory
 	];
+	args.push(...gatewayRuntimeArgs(prGatewayPolicy(metadata.githubCommitRef)));
+	args.push('--env', 'THINGTIME_GATEWAY_SECRET');
 	for (const [key, value] of Object.entries(runtimeEnvironment).sort(([left], [right]) => left.localeCompare(right))) {
 		args.push('--env', `${key}=${value}`);
 	}
@@ -1751,8 +2026,50 @@ const prebuiltDeploymentArgs = ({ config, prebuiltDirectory, metadata, runtimeEn
 	return args;
 };
 
-const deployPrebuiltOutput = async (config, pullRequest) => {
-	const prebuiltDirectory = resolve(requiredEnv('VERCEL_PREBUILT_DIR'));
+const prPreviewRuntimeEnvironment = (config, pullRequest) => ({
+	THINGTIME_BRANCH_NAME: pullRequest.head.ref,
+	THINGTIME_GIT_COMMIT_SHA: pullRequest.head.sha,
+	// The runtime accepts the one alias this publisher assigns. The direct
+	// Vercel URL is admitted independently through VERCEL_URL.
+	THINGTIME_GATEWAY_SOURCE_ORIGINS: `https://${previewAlias(pullRequest.number, config.previewAliasSuffix)}`
+});
+
+const prebuiltUploadEnvironment = (config, branch, gatewaySecret, token, inherited = process.env) => ({
+	...gatewayPublisherEnvironment(prGatewayPolicy(branch), {
+		...inherited,
+		VERCEL_ORG_ID: config.teamId,
+		VERCEL_PROJECT_ID: config.projectId,
+		VERCEL_TARGET_ENV: PR_VERCEL_TARGET,
+		VERCEL_TOKEN: token
+	}),
+	THINGTIME_GATEWAY_SECRET: gatewaySecret
+});
+
+const previewGatewaySecretRow = (rows) => {
+	const matching = rows.filter((row) => row.key === 'THINGTIME_GATEWAY_SECRET' &&
+		row.type === 'encrypted' && row.gitBranch == null &&
+		Array.isArray(row.target) && row.target.length === 1 && row.target[0] === 'preview' &&
+		(!row.customEnvironmentIds || row.customEnvironmentIds.length === 0));
+	if (matching.length !== 1 || !matching[0].id || !/^[A-Za-z0-9_]+$/.test(matching[0].id)) {
+		throw new Error('Exactly one unbranched, encrypted standard Preview gateway secret is required');
+	}
+	return matching[0];
+};
+
+const readPreviewGatewaySecret = async (config, readVariables = vercelRequest) => {
+	const listed = await readVariables(`/v10/projects/${config.projectId}/env`);
+	const row = previewGatewaySecretRow(listed.envs || []);
+	const detail = await readVariables(`/v1/projects/${config.projectId}/env/${encodeURIComponent(row.id)}`);
+	if (detail?.id !== row.id || detail.key !== row.key || detail.type !== row.type ||
+		detail.gitBranch != null || !Array.isArray(detail.target) || detail.target.length !== 1 || detail.target[0] !== 'preview' ||
+		(detail.customEnvironmentIds && detail.customEnvironmentIds.length > 0) || detail.decrypted !== true ||
+		typeof detail.value !== 'string' || detail.value.length < 32) {
+		throw new Error('Preview gateway secret could not be decrypted with its exact scope');
+	}
+	return detail.value;
+};
+
+const preparePrebuiltDirectory = async (config, prebuiltDirectory) => {
 	await assertPrebuiltOutput(prebuiltDirectory);
 	await mkdir(resolve(prebuiltDirectory, '.vercel'), { recursive: true });
 	await writeFile(
@@ -1761,20 +2078,134 @@ const deployPrebuiltOutput = async (config, pullRequest) => {
 		{ mode: 0o600 }
 	);
 
+};
+
+const protectedPreviewAliasNames = async (config, pullRequest, request = vercelRequest) => {
+	if (['main', 'develop', 'github-actions'].includes(pullRequest.head.ref)) throw new Error('Protected source branch uses its canonical publisher; refusing ordinary PR upload');
+	const names = new Set(['thingtime.com', config.stableDevelopDomain, new URL(prGatewayPolicy(pullRequest.head.ref).origin).hostname]);
+	const seen = new Set();
+	let until = null;
+	for (let page = 0; page < MAX_DEPLOYMENT_PAGES; page += 1) {
+		const params = new URLSearchParams({ limit: '100' });
+		if (until !== null) params.set('until', String(until));
+		const result = await request(`/v9/projects/${config.projectId}/domains?${params}`);
+		if (!Array.isArray(result?.domains)) throw new Error('Protected domain inventory was invalid');
+		for (const domain of result.domains) {
+			if (domain.gitBranch === pullRequest.head.ref) throw new Error('PR source branch is bound to a protected project domain; refusing upload');
+			const wildcard = String(domain.name || '').startsWith('*.');
+			const name = `${wildcard ? '*.' : ''}${safeHostname(wildcard ? domain.name.slice(2) : domain.name, 'Protected domain')}`;
+			names.add(name);
+		}
+		const next = result.pagination?.next;
+		if (next == null) break;
+		if (seen.has(next) || page === MAX_DEPLOYMENT_PAGES - 1) throw new Error('Protected domain inventory exceeded its safety bound');
+		seen.add(next); until = boundedInteger(next, 'Domain cursor');
+	}
+	for (const branch of new Set(['main', 'develop', pullRequest.head.ref])) {
+		for (const name of compatibilityAliasCandidates({ branch, projectName: config.projectName, teamSlug: config.teamSlug, target: { slug: PR_VERCEL_TARGET } })) names.add(name);
+	}
+	return [...names];
+};
+
+const savePreviewUploadReceipt = async (receipt, destination = requiredEnv('VERCEL_PREVIEW_RECEIPT_PATH')) => {
+	const path = resolve(destination);
+	const directory = dirname(path);
+	const temporary = resolve(directory, `.${basename(path)}.${randomUUID()}.tmp`);
+	let staged = false;
+	try {
+		const file = await open(temporary, 'wx', 0o600);
+		staged = true;
+		try {
+			await file.writeFile(`${JSON.stringify(receipt)}\n`);
+			await file.sync();
+		} finally {
+			await file.close();
+		}
+		await rename(temporary, path);
+		staged = false;
+		const parent = await open(directory, 'r');
+		try { await parent.sync(); } finally { await parent.close(); }
+	} finally {
+		if (staged) await unlink(temporary).catch(() => undefined);
+	}
+};
+
+const assertNoProtectedAlias = async (config, deployment, {
+	names = protectedPreviewAliasNames,
+	read = (name) => getOwnedAlias(config, name)
+} = {}) => {
+	if (!/^dpl_[A-Za-z0-9]+$/.test(deployment?.id ?? '') || !isSafeHeadRef(deployment?.meta?.githubCommitRef)) {
+		throw new Error('Cannot inspect protected aliases for an invalid PR deployment');
+	}
+	for (const name of await names(config, { head: { ref: deployment.meta.githubCommitRef } })) {
+		if ((await read(name))?.deploymentId === deployment.id) {
+			throw new Error(`PR deployment ${deployment.id} still owns protected alias ${name}; preserve the upload receipt`);
+		}
+	}
+};
+
+const guardPreviewUpload = async (config, pullRequest, upload, {
+	names = protectedPreviewAliasNames, read = (name) => getOwnedAlias(config, name),
+	assign = (name, id) => vercelRequest(`/v2/deployments/${id}/aliases`, { method: 'POST', retries: 0, body: { alias: name } }),
+	remove = async (name) => { const alias = await getOwnedAlias(config, name); if (alias) await vercelRequest(`/v2/aliases/${encodeURIComponent(alias.uid)}`, { method: 'DELETE', accept: [200, 204, 404] }); },
+	inventory = () => listWorkflowDeployments(config, { prNumber: pullRequest.number, sha: pullRequest.head.sha }),
+	receipt = savePreviewUploadReceipt
+} = {}) => {
+	const expected = { prNumber: pullRequest.number, expectedSha: pullRequest.head.sha, expectedRef: pullRequest.head.ref, expectedAttempt: config.deploymentAttempt };
+	const before = new Map(await Promise.all((await names(config, pullRequest)).map(async (name) => [name, await read(name)])));
+	const record = { attempt: config.deploymentAttempt, prNumber: pullRequest.number, sha: pullRequest.head.sha, ref: pullRequest.head.ref,
+		aliases: [...before].map(([name, binding]) => ({ name, deploymentId: binding?.deploymentId || null })), state: 'uploading', deploymentId: null };
+	await receipt(record);
+	try {
+	let deployment;
+	try {
+		deployment = await upload();
+		const issue = deploymentIdentityIssue(deployment, config, expected);
+		if (issue) throw new Error(`Uploaded Preview attempt identity mismatch (${issue})`);
+	} catch (error) {
+		let candidates;
+		try { candidates = (await inventory()).filter((candidate) => candidate.meta?.thingtimePrPreviewAttempt === config.deploymentAttempt); }
+		catch (recoveryError) { await receipt({ ...record, state: 'upload-uncertain' }); throw recoveryError; }
+		if (candidates.length !== 1 || deploymentIdentityIssue(candidates[0], config, expected)) {
+			await receipt({ ...record, state: 'upload-uncertain' });
+			throw new Error(`Preview upload outcome is uncertain for attempt ${config.deploymentAttempt}; preserve the receipt and inspect before retrying`, { cause: error });
+		}
+		deployment = candidates[0];
+	}
+	await receipt({ ...record, deploymentId: deployment.id, state: 'restoring-aliases' });
+	try {
+		await restoreGatewayAliases({ before, deploymentId: deployment.id, read, assign, remove });
+		for (const name of before.keys()) {
+			if ((await read(name))?.deploymentId === deployment.id) throw new Error('PR attempt still owns a protected alias');
+		}
+	} catch (error) {
+		await receipt({ ...record, deploymentId: deployment.id, state: 'restoration-uncertain' });
+		throw new Error(`Protected alias restoration is uncertain for attempt ${config.deploymentAttempt}; preserve the receipt`, { cause: error });
+	}
+	await receipt({ ...record, deploymentId: deployment.id, state: 'aliases-restored' });
+	return deployment;
+	} catch (error) {
+		// An uncertain attempt or rollback must remain inspectable; the caller
+		// must not delete candidate deployments while aliases may still use them.
+		error.preservePreviewAttempt = true;
+		throw error;
+	}
+};
+
+const deployPrebuiltOutput = async (config, pullRequest, {
+	directory = requiredEnv('VERCEL_PREBUILT_DIR'), prepare = preparePrebuiltDirectory,
+	readVariables = vercelRequest, execute = execFileAsync
+} = {}) => {
+	const prebuiltDirectory = resolve(directory);
+	await prepare(config, prebuiltDirectory);
+	const gatewaySecret = await readPreviewGatewaySecret(config, readVariables);
 	const metadata = deploymentMetadata({ pullRequest, config });
-	const runtimeEnvironment = {
-		THINGTIME_BRANCH_NAME: pullRequest.head.ref,
-		THINGTIME_GIT_COMMIT_SHA: pullRequest.head.sha
-	};
+	const runtimeEnvironment = prPreviewRuntimeEnvironment(config, pullRequest);
 	const args = prebuiltDeploymentArgs({ config, prebuiltDirectory, metadata, runtimeEnvironment });
 
-	const { stdout } = await execFileAsync(resolve(requiredEnv('VERCEL_CLI_PATH')), args, {
-		env: {
-			...process.env,
-			VERCEL_ORG_ID: config.teamId,
-			VERCEL_PROJECT_ID: config.projectId,
-			VERCEL_TOKEN: requiredEnv('VERCEL_API_TOKEN')
-		},
+	return guardPreviewUpload(config, pullRequest, async () => {
+	const { stdout } = await execute(resolve(requiredEnv('VERCEL_CLI_PATH')), args, {
+		env: prebuiltUploadEnvironment(config, pullRequest.head.ref, gatewaySecret, requiredEnv('VERCEL_API_TOKEN')),
 		maxBuffer: 4 * 1024 * 1024,
 		timeout: 10 * 60 * 1000
 	});
@@ -1794,36 +2225,21 @@ const deployPrebuiltOutput = async (config, pullRequest) => {
 	}
 	if (!deploymentHostname.endsWith('.vercel.app')) throw new Error('Prebuilt deployment URL was outside vercel.app');
 	return deploymentDetail(deploymentHostname);
+	});
 };
 
 const createVercelDeployment = async (config, pullRequest, reusable = null) => {
-	if (reusable) return reusable;
-	let created;
-	try {
-		created = await deployPrebuiltOutput(config, pullRequest);
-	} catch (error) {
-		await delay(1500);
-		const reconciled = choosePreferredDeployment(
-			await listWorkflowDeployments(config, { prNumber: pullRequest.number, sha: pullRequest.head.sha }),
-			pullRequest.head.sha
-		);
-		if (reconciled) return reconciled;
-		throw error;
+	if (reusable) {
+		await assertNoProtectedAlias(config, reusable);
+		return reusable;
 	}
-	if (!/^dpl_[A-Za-z0-9]+$/.test(created?.id ?? '')) {
-		const reconciled = choosePreferredDeployment(
-			await listWorkflowDeployments(config, { prNumber: pullRequest.number, sha: pullRequest.head.sha }),
-			pullRequest.head.sha
-		);
-		if (reconciled) return reconciled;
-		throw new Error('Vercel create response did not identify a deployment');
-	}
+	const created = await deployPrebuiltOutput(config, pullRequest);
 	const issue = deploymentIdentityIssue(created, config, {
 		prNumber: pullRequest.number,
 		expectedSha: pullRequest.head.sha,
 		expectedRef: pullRequest.head.ref
 	});
-	if (issue) throw new Error(`Created Vercel deployment failed identity validation (${issue})`);
+	if (issue || gatewayDeploymentIssue(created, prGatewayPolicy(pullRequest.head.ref))) throw new Error(`Created Vercel deployment failed identity validation (${issue || 'gateway-policy'})`);
 	return created;
 };
 
@@ -1847,58 +2263,54 @@ const waitForDeployment = async (config, pullRequest, deployment) => {
 	throw new Error('Vercel deployment did not become ready within 30 minutes');
 };
 
-const cleanupPrResources = async (config, prNumber, deployments = null) => {
-	let aliasRemoved = false;
-	let deleted = 0;
-	const failures = [];
-	try {
-		aliasRemoved = await removeAliasForPr(config, prNumber);
-	} catch (error) {
-		failures.push(error);
+const cleanupPrResources = async (config, prNumber) => {
+	const current = await getPullRequest(config.repository, prNumber);
+	return cleanupClosedPrResources(config, prNumber, current.head.ref);
+};
+
+const cleanupClosedPrResources = async (config, prNumber, prBranch, {
+	cleanup = reconcileOrphanPreviews, read = getPullRequest, inactive = markGithubEnvironmentInactive
+} = {}) => {
+	const report = await cleanup(config, { github: githubRequest, vercel: vercelRequest, prNumber, prBranch });
+	if (report.disabled || report.retainedIds?.length) return { aliasRemoved: false, deleted: report.removedIds.length, retained: true };
+	const current = await read(config.repository, prNumber);
+	if ((current.state === 'closed' || config.retentionPolicy && !pullRequestIsLive(current, config.retentionPolicy)) && current.head?.ref === prBranch &&
+		current.head.repo?.full_name === config.repository && Number(current.head.repo.id) === config.repositoryId) {
+		await inactive(config.repository, prNumber);
 	}
-	try {
-		const owned = deployments ?? (await listWorkflowDeployments(config, { prNumber }));
-		deleted = await cleanupDeployments(owned, config, prNumber);
-	} catch (error) {
-		failures.push(error);
-	}
-	try {
-		await markGithubEnvironmentInactive(config.repository, prNumber);
-	} catch (error) {
-		failures.push(error);
-	}
-	if (failures.length > 0) {
-		throw new AggregateError(failures, 'Develop PR preview cleanup was incomplete');
-	}
-	return { aliasRemoved, deleted };
+	return { aliasRemoved: false, deleted: report.removedIds.length };
 };
 
 const cleanupComment = (reason) => {
 	if (reason === 'closed') {
-		return '### 🧹 Develop S3 preview removed\n\nThe PR-specific alias and every workflow-created develop deployment were removed when this PR closed.';
+		return '### 🧹 PR preview removed\n\nVerified orphan PR deployments and their aliases were removed when this PR closed. Production, gateway owners and protected aliases are preserved.';
 	}
 	if (reason === 'draft') {
-		return '### ⏭️ Develop S3 preview paused\n\nDraft PRs do not keep develop credentials. The preview will be rebuilt after an allowlisted maintainer marks the PR ready.';
+		return '### ⏭️ PR preview paused\n\nDraft PRs do not keep current-policy Preview resources. The preview will be rebuilt after an allowlisted maintainer marks the PR ready.';
 	}
 	if (reason === 'wrong-base') {
-		return '### 🧹 Develop S3 preview removed\n\nThis PR no longer targets `develop`, so its credentialed preview resources were removed.';
+		return '### 🧹 PR preview removed\n\nThis PR no longer targets `develop`, so its credentialed preview resources were removed.';
 	}
-	return '### ⏭️ Develop S3 preview skipped\n\nThis PR or triggering actor is not currently eligible for the credentialed develop preview.';
+	return '### ⏭️ PR preview skipped\n\nThis PR or triggering actor is not currently eligible for the credentialed develop preview.';
 };
 
 const handleIneligible = async (config, pullRequest, reason, { comment = true } = {}) => {
 	const prNumber = boundedInteger(pullRequest.number, 'PR number');
-	const cleaned = await cleanupPrResources(config, prNumber);
+	const cleaned = ['closed', 'inactive'].includes(reason) ? await cleanupClosedPrResources(config, prNumber, pullRequest.head.ref) : await cleanupPrResources(config, prNumber);
+	if (cleaned.retained || reason === 'inactive') {
+		console.log(`PR preview retained or expired without activity mutation for PR #${prNumber}; retained=${!!cleaned.retained}; removed=${cleaned.deleted}`);
+		return;
+	}
 	await syncPreviewLabels({ request: githubRequest, repository: config.repository,
 		number: prNumber, sha: pullRequest.head.sha, status: 'removed' });
 	if (comment && (cleaned.aliasRemoved || cleaned.deleted > 0)) {
 		await upsertComment(
 			config.repository,
 			prNumber,
-			`${cleanupComment(reason)}\n\nThe ordinary generated Vercel Preview remains available on the shared development runtime.`
+			reason === 'closed' ? cleanupComment(reason) : `${cleanupComment(reason)}\n\nThe ordinary generated Vercel Preview remains available on the shared development runtime.`
 		);
 	}
-	console.log(`Develop preview ineligible for PR #${prNumber}: ${reason}; alias=${cleaned.aliasRemoved}; deployments=${cleaned.deleted}`);
+	console.log(`PR preview ineligible for PR #${prNumber}: ${reason}; alias=${cleaned.aliasRemoved}; deployments=${cleaned.deleted}`);
 };
 
 const reconcile = async (config) => {
@@ -1912,12 +2324,8 @@ const reconcile = async (config) => {
 	}
 	// The old sweep only visited PRs with Vercel objects. A failed authorization
 	// or missed event creates no such object, so those PRs were never repaired.
-	const open = await githubRequest(`/repos/${config.repository}/pulls?state=open&per_page=100`);
-	if (!Array.isArray(open) || open.length >= 100) throw new Error('Open preview PR inventory exceeds its safety bound');
+	const open = await completeInventory(githubRequest, `/repos/${config.repository}/pulls?state=open`, null, { github: true });
 	for (const pr of open) if (!byPullRequest.has(pr.number)) byPullRequest.set(pr.number, []);
-	if (byPullRequest.size > MAX_RECONCILE_PULL_REQUESTS) {
-		throw new Error('Scheduled reconciliation exceeded its pull-request safety bound');
-	}
 
 	let removedAliases = 0;
 	let removedDeployments = 0;
@@ -1930,16 +2338,17 @@ const reconcile = async (config) => {
 			candidate = await getPullRequest(config.repository, prNumber);
 			await assertTrustedPullRequestStack(config, candidate);
 			await assertPreviewBundle(config, candidate);
+			if (!pullRequestIsLive(candidate, config.retentionPolicy)) throw new EligibilityError('inactive');
 			pullRequest = candidate;
 		} catch (error) {
 			if (!(error instanceof EligibilityError) && !(error instanceof HttpError && error.status === 404)) throw error;
 		}
 
 		if (!pullRequest) {
-			const cleaned = await cleanupPrResources(config, prNumber, owned);
+			const cleaned = candidate && (candidate.state === 'closed' || !pullRequestIsLive(candidate, config.retentionPolicy)) ? await cleanupClosedPrResources(config, prNumber, candidate.head.ref) : await cleanupPrResources(config, prNumber, owned);
 			if (cleaned.aliasRemoved) removedAliases += 1;
 			removedDeployments += cleaned.deleted;
-			if (candidate) await syncPreviewLabels({ request: githubRequest, repository: config.repository,
+			if (candidate?.state === 'closed' && !cleaned.retained) await syncPreviewLabels({ request: githubRequest, repository: config.repository,
 				number: prNumber, sha: candidate.head.sha, status: 'removed' });
 			return;
 		}
@@ -1949,21 +2358,17 @@ const reconcile = async (config) => {
 		const binding = await getAliasBinding(config, prNumber);
 		let keeper = null;
 		if (
-			binding &&
+			binding && !binding.legacy &&
+			binding.deployment.meta?.thingtimePrPreviewPolicy === PR_PREVIEW_POLICY_VERSION &&
 			binding.deployment.readyState === 'READY' &&
 			workflowDeploymentCommitSha(binding.deployment) === pullRequest.head.sha &&
 			workflowDeploymentCommitRef(binding.deployment) === pullRequest.head.ref
 		) {
 			keeper = binding.deployment;
-		} else if (binding) {
-			await vercelRequest(`/v2/aliases/${encodeURIComponent(binding.record.uid)}`, {
-				method: 'DELETE',
-				accept: [200, 204, 404]
-			});
-			removedAliases += 1;
 		}
-		keeper ??= choosePreferredDeployment(owned.filter((deployment) => workflowDeploymentCommitRef(deployment) === pullRequest.head.ref), pullRequest.head.sha);
+		keeper ??= choosePreferredDeployment(owned.filter((deployment) => workflowDeploymentCommitRef(deployment) === pullRequest.head.ref), config, pullRequest.head.sha);
 		if (keeper) {
+			await assertNoProtectedAlias(config, keeper);
 			const snapshot = pullRequestSnapshot(pullRequest);
 			await assertCurrentPullRequest(config, snapshot, null);
 			await assertVercelConfiguration(config);
@@ -1979,7 +2384,7 @@ const reconcile = async (config) => {
 			if (statuses[0]?.state !== 'success' || statuses[0]?.environment_url !== `https://${alias}`) {
 				await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'success', {
 					environmentUrl: `https://${alias}`, logUrl: dashboardUrl(keeper.id, config),
-					description: 'Develop S3 preview is ready at the exact current SHA'
+					description: 'PR preview is ready at the exact current SHA'
 				});
 			}
 			await publishDevelopStatus(config, pullRequest, { state: 'ready', alias, builtAt: deploymentBuiltAt(keeper),
@@ -1990,7 +2395,7 @@ const reconcile = async (config) => {
 		}
 		removedDeployments += await cleanupDeployments(owned, config, prNumber, keeper ? new Set([keeper.id]) : new Set());
 	} });
-	console.log(`Develop preview reconciliation complete: prs=${byPullRequest.size}; aliases=${removedAliases}; deployments=${removedDeployments}`);
+	console.log(`PR preview reconciliation complete: prs=${byPullRequest.size}; aliases=${removedAliases}; deployments=${removedDeployments}`);
 };
 
 const requestRecoveryBuild = async (config, pullRequest) => {
@@ -2045,7 +2450,7 @@ const reportFailure = async (config, pullRequest, githubDeployment, vercelDeploy
 			setGithubDeploymentStatus(config.repository, githubDeployment.id, 'failure', {
 				...(immutableUrl ? { environmentUrl: immutableUrl } : {}),
 				...(dashboard ? { logUrl: dashboard } : {}),
-				description: 'Develop S3 preview deployment failed'
+				description: 'PR preview deployment failed'
 			})
 		);
 	}
@@ -2067,6 +2472,9 @@ const reportFailure = async (config, pullRequest, githubDeployment, vercelDeploy
 };
 
 const deploy = async (config, pullRequest) => {
+	config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
+	if (!pullRequestIsLive(pullRequest, config.retentionPolicy)) { console.log('Inactive PR preview publication skipped'); return; }
+	await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
 	await assertTrustedPullRequestStack(config, pullRequest, { actor: config.actor });
 	const corsProbeUrl = safeCorsProbeUrl(requiredEnv('DEVELOP_S3_CORS_PROBE_URL'));
 	const snapshot = pullRequestSnapshot(pullRequest);
@@ -2091,7 +2499,7 @@ const deploy = async (config, pullRequest) => {
 		await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'in_progress', {
 			environmentUrl: immutableUrl,
 			logUrl: dashboard,
-			description: 'Deploying exact SHA to Vercel Custom Environment develop'
+				description: 'Deploying exact SHA with custom-develop credentials and Preview gateway'
 		});
 		await publishDevelopStatus(config, pullRequest, {
 				state: 'deploying',
@@ -2116,7 +2524,7 @@ const deploy = async (config, pullRequest) => {
 		await setGithubDeploymentStatus(config.repository, githubDeployment.id, 'success', {
 			environmentUrl: aliasUrl,
 			logUrl: dashboard,
-			description: 'Develop S3 preview is ready at the exact current SHA'
+			description: 'PR preview is ready at the exact current SHA'
 		});
 		await publishDevelopStatus(config, pullRequest, {
 				state: 'ready',
@@ -2129,10 +2537,10 @@ const deploy = async (config, pullRequest) => {
 		const owned = await listWorkflowDeployments(config, { prNumber: pullRequest.number });
 		await cleanupDeployments(owned, config, pullRequest.number, new Set([ready.id]));
 		await markGithubEnvironmentInactive(config.repository, pullRequest.number, githubDeployment.id);
-		console.log(`Develop preview ready for PR #${pullRequest.number}: ${aliasUrl}`);
+		console.log(`PR preview ready for PR #${pullRequest.number}: ${aliasUrl}`);
 	} catch (error) {
 		if (!published) {
-			await Promise.allSettled([cleanupPrResources(config, pullRequest.number)]);
+			if (!error.preservePreviewAttempt) await Promise.allSettled([cleanupPrResources(config, pullRequest.number)]);
 			await reportFailure(config, pullRequest, githubDeployment, vercelDeployment);
 		}
 		throw error;
@@ -2161,6 +2569,11 @@ const prepareBuildPlan = async () => {
 	}
 
 	const event = JSON.parse(await readFile(requiredEnv('GITHUB_EVENT_PATH'), 'utf8'));
+	if (eventName === 'workflow_dispatch' && String(event.inputs?.pr_number) === '0') {
+		await writePrepareOutputs({ shouldBuild: false });
+		console.log('Manual retention reconciliation needs no build');
+		return;
+	}
 	let dispatch = null;
 	try {
 		dispatch = eventName === 'repository_dispatch' ? await assertRepositoryDispatchSource(config, event) : null;
@@ -2194,6 +2607,9 @@ const prepareBuildPlan = async () => {
 		console.log(`GitHub prebuild not required for PR #${prNumber}: ${error.reason}`);
 		return;
 	}
+	config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
+	if (!pullRequestIsLive(pullRequest, config.retentionPolicy)) { await writePrepareOutputs({ shouldBuild: false }); return; }
+	await assertPreviewGatewaySource(config.repository, pullRequest.head.sha, githubRequest);
 	const expectedReady = expectedReadyAt();
 	await publishDevelopStatus(config, pullRequest, {
 			state: 'deploying',
@@ -2217,7 +2633,9 @@ const main = async () => {
 	let config = runtimeConfig();
 	const eventName = requiredEnv('GITHUB_EVENT_NAME');
 	if (eventName === 'schedule') {
-		const results = await Promise.allSettled([reconcileStableDevelopAlias(config), reconcile(config)]);
+		config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
+		const orphanResults = await Promise.allSettled([reconcileOrphanPreviews(config, { github: githubRequest, vercel: vercelRequest })]);
+		const results = [...orphanResults, ...await Promise.allSettled([reconcile(config)])];
 		const failures = results.filter((result) => result.status === 'rejected');
 		if (failures.length) throw new AggregateError(failures.map((result) => result.reason),
 			`Scheduled preview reconciliation failed: ${failures.map((result) => result.reason.message).join('; ')}`);
@@ -2225,6 +2643,12 @@ const main = async () => {
 	}
 
 	const event = JSON.parse(await readFile(requiredEnv('GITHUB_EVENT_PATH'), 'utf8'));
+	if (eventName === 'workflow_dispatch' && String(event.inputs?.pr_number) === '0') {
+		await assertTrustedPrincipal(config, normalizeLogin(process.env.GITHUB_TRIGGERING_ACTOR || requiredEnv('GITHUB_ACTOR')), 'retention-actor');
+		config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
+		await reconcileOrphanPreviews(config, { github: githubRequest, vercel: vercelRequest });
+		return;
+	}
 	const dispatch = eventName === 'repository_dispatch' ? await assertRepositoryDispatchSource(config, event) : null;
 	config = {
 		...config,
@@ -2241,13 +2665,7 @@ const main = async () => {
 		return;
 	}
 	const action = dispatch?.action ?? String(event.action ?? 'workflow_dispatch');
-	const mergedIntoDevelop =
-		action === 'closed' &&
-		pullRequest.state === 'closed' &&
-		pullRequest.merged === true &&
-		pullRequest.base?.ref === 'develop' &&
-		Number(pullRequest.base?.repo?.id) === config.repositoryId &&
-		pullRequest.base?.repo?.full_name === config.repository;
+	config = { ...config, retentionPolicy: await readPreviewRetentionPolicy(config), refreshRetentionPolicy: () => readPreviewRetentionPolicy(config) };
 
 	let stackEligibilityError = null;
 	try {
@@ -2270,14 +2688,8 @@ const main = async () => {
 		} else {
 			console.log(`Skipped unrelated PR #${prNumber}: ${stackEligibilityError.reason}`);
 		}
-		if (mergedIntoDevelop) {
-			await assertTrustedPrincipal(config, config.actor, 'actor');
-			await assertTrustedPrincipal(config, pullRequest.merged_by?.login, 'merger');
-			await reconcileStableDevelopAlias(config, { waitForReady: true });
-		}
 		return;
 	}
-	await reconcileStableDevelopAlias(config);
 	await deploy(config, pullRequest);
 };
 

@@ -101,3 +101,7 @@ ds-bundle/
 
 # Ephemeral validated admin model plan generated for one Lopu invocation.
 .lopu-waterfall-action/
+
+# This protected controller branch has no product app. Managed worktree bootstrap
+# may copy ignored app setup; keep that local scratch out of controller graphs.
+/remix/

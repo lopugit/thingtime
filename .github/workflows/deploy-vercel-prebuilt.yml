@@ -1,0 +1,198 @@
+name: Vercel prebuilt deployment implementation
+
+on:
+  workflow_call:
+    inputs:
+      source_ref:
+        type: string
+        default: ''
+      target_environment:
+        type: string
+        default: auto
+      build_only:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        type: string
+        default: main
+      target_environment:
+        type: string
+        default: production
+      build_only:
+        description: Build trusted target artifacts without uploading or changing aliases
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-prebuilt-${{ inputs.source_ref || github.event.workflow_run.head_branch || github.ref_name }}-${{ inputs.target_environment }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: vercel-prebuilt-control
+    outputs:
+      should_build: ${{ steps.plan.outputs.should_build }}
+      should_publish: ${{ steps.plan.outputs.should_publish }}
+      source_sha: ${{ steps.plan.outputs.source_sha }}
+      source_ref: ${{ steps.plan.outputs.source_ref }}
+      target_slug: ${{ steps.plan.outputs.target_slug }}
+      target_kind: ${{ steps.plan.outputs.target_kind }}
+      target_id: ${{ steps.plan.outputs.target_id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: github-actions
+          persist-credentials: false
+      - name: Authorize current branch and environment
+        id: plan
+        env:
+          GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEPLOY_TOKEN }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+          BUILD_ONLY: ${{ inputs.build_only }}
+        run: node .github/scripts/deploy-vercel-prebuilt.mjs --prepare
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - name: Install pinned package manager and locked dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.12.1 --activate
+          corepack pnpm --dir remix install --frozen-lockfile
+      - name: Build on GitHub without deployment credentials
+        env:
+          CI: 'true'
+          VERCEL: '1'
+          VERCEL_ENV: ${{ needs.prepare.outputs.target_kind }}
+          VERCEL_TARGET_ENV: ${{ needs.prepare.outputs.target_slug }}
+          VERCEL_GIT_COMMIT_REF: ${{ needs.prepare.outputs.source_ref }}
+          VERCEL_GIT_COMMIT_SHA: ${{ needs.prepare.outputs.source_sha }}
+          VERCEL_GIT_REPO_OWNER: ${{ github.repository_owner }}
+          VERCEL_GIT_REPO_SLUG: ${{ github.event.repository.name }}
+          VERCEL_GIT_REPO_ID: ${{ github.event.repository.id }}
+        run: node scripts/vercel-build.mjs
+      - name: Package symlink-preserving output
+        run: tar -czf "$RUNNER_TEMP/vercel-prebuilt.tgz" .vercel/output
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: vercel-prebuilt-${{ github.run_id }}
+          path: ${{ runner.temp }}/vercel-prebuilt.tgz
+          retention-days: 1
+          if-no-files-found: error
+      - name: Build controlled preview master without production build settings
+        if: needs.prepare.outputs.target_kind == 'production'
+        env:
+          CI: 'true'
+          VERCEL: '1'
+          VERCEL_ENV: preview
+          VERCEL_TARGET_ENV: preview
+          VERCEL_GIT_COMMIT_REF: ${{ needs.prepare.outputs.source_ref }}
+          VERCEL_GIT_COMMIT_SHA: ${{ needs.prepare.outputs.source_sha }}
+          VERCEL_GIT_REPO_OWNER: ${{ github.repository_owner }}
+          VERCEL_GIT_REPO_SLUG: ${{ github.event.repository.name }}
+          VERCEL_GIT_REPO_ID: ${{ github.event.repository.id }}
+        run: |
+          rm -rf .vercel/output remix/.vercel/output remix/dist remix/.nitro
+          node scripts/vercel-build.mjs
+          tar -czf "$RUNNER_TEMP/vercel-preview-master.tgz" .vercel/output
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: needs.prepare.outputs.target_kind == 'production'
+        with:
+          name: vercel-preview-master-${{ github.run_id }}
+          path: ${{ runner.temp }}/vercel-preview-master.tgz
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    needs: [prepare, build]
+    if: always() && needs.prepare.result == 'success' && needs.prepare.outputs.should_publish == 'true' && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: vercel-prebuilt-control
+    permissions:
+      contents: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: github-actions
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        if: needs.build.result == 'success'
+        with:
+          name: vercel-prebuilt-${{ github.run_id }}
+          path: ${{ runner.temp }}/artifact
+      - name: Validate and extract output without executing product code
+        if: needs.build.result == 'success'
+        run: python3 .github/scripts/extract-vercel-prebuilt.py "$RUNNER_TEMP/artifact/vercel-prebuilt.tgz" "$RUNNER_TEMP/prebuilt"
+      - name: Install pinned publisher without credentials
+        run: npm install --global --prefix "$RUNNER_TEMP/vercel-cli" vercel@59.10.0
+      - name: Publish verified prebuilt output
+        env:
+          GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEPLOY_TOKEN }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+          VERCEL_TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
+          SOURCE_REF: ${{ needs.prepare.outputs.source_ref }}
+          SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
+          TARGET_ENVIRONMENT: ${{ needs.prepare.outputs.target_slug }}
+          TARGET_ID: ${{ needs.prepare.outputs.target_id }}
+          VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
+          VERCEL_PREBUILT_DIR: ${{ runner.temp }}/prebuilt
+        run: node .github/scripts/deploy-vercel-prebuilt.mjs
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        if: needs.build.result == 'success' && needs.prepare.outputs.target_kind == 'production'
+        with:
+          name: vercel-preview-master-${{ github.run_id }}
+          path: ${{ runner.temp }}/preview-master-artifact
+      - name: Validate controlled preview master output
+        if: needs.build.result == 'success' && needs.prepare.outputs.target_kind == 'production'
+        run: python3 .github/scripts/extract-vercel-prebuilt.py "$RUNNER_TEMP/preview-master-artifact/vercel-preview-master.tgz" "$RUNNER_TEMP/preview-master"
+      - name: Publish controlled preview master from trusted main
+        if: needs.prepare.outputs.target_kind == 'production'
+        env:
+          GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+          THINGTIME_PREVIEW_POLICY_ORIGIN: ${{ vars.THINGTIME_PREVIEW_POLICY_ORIGIN || 'https://thingtime.com' }}
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_DEPLOY_TOKEN }}
+          VERCEL_TEAM_ID: ${{ vars.VERCEL_TEAM_ID }}
+          VERCEL_TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
+          SOURCE_REF: ${{ needs.prepare.outputs.source_ref }}
+          SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
+          TARGET_ENVIRONMENT: preview
+          TARGET_ID: ''
+          VERCEL_CLI_PATH: ${{ runner.temp }}/vercel-cli/bin/vercel
+          VERCEL_PREBUILT_DIR: ${{ runner.temp }}/preview-master
+        run: node .github/scripts/deploy-vercel-prebuilt.mjs
