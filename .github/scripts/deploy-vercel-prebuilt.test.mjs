@@ -334,3 +334,61 @@ test('alias acceptance aborts an in-flight read at its deadline', async () => {
   await assert.rejects(verifyAlias(({ signal: value }) => { signal = value; return new Promise(() => {}); }, async () => {}, { timeoutMs: 15, onFailure: () => {} }), /deadline expired/);
   assert.equal(signal.aborted, true);
 });
+
+test('failed late-upload cleanup preserves the original publication error', async () => {
+  const branch = 'feature/cleanup-error', sha = 'a'.repeat(40), repository = 'lopugit/thingtime';
+  const environment = { GITHUB_REPOSITORY: repository, GH_TOKEN: 'fixture-gh', VERCEL_TEAM_ID: 'team_test', VERCEL_TEAM_SLUG: 'team', VERCEL_API_TOKEN: 'fixture-vercel', VERCEL_PROJECT_ID: 'prj_test', VERCEL_PROJECT_NAME: 'thingtime', SOURCE_REF: branch, SOURCE_SHA: sha, TARGET_ENVIRONMENT: 'preview', TARGET_ID: '', GITHUB_RUN_ID: '123', THINGTIME_CI_ROUTER_SECRET: 'fixture-ci', THINGTIME_PREVIEW_POLICY_ORIGIN: 'https://policy.example.test' };
+  const previous = Object.fromEntries(Object.keys(environment).map(key => [key, process.env[key]]));
+  const originalFetch = globalThis.fetch, originalLog = console.log, logs = [];
+  const gateway = gatewayPolicy({ branch, target: { slug: 'preview' } });
+  const deployment = { id: 'dpl_ready', projectId: 'prj_test', url: 'feature-ready.vercel.app', readyState: 'READY', target: null, regions: ['syd1'], crons: [], meta: { ...gatewayMetadata(gateway), [marker]: '1', thingtimePrebuiltPolicy: policyVersion, thingtimeBuildTarget: 'preview', githubCommitSha: sha, githubCommitRef: branch, githubCommitOrg: 'lopugit', githubCommitRepo: 'thingtime' } };
+  const policy = { version: 1, enabled: true, noOpenPrGraceHours: 0, supersededGraceHours: 24, pruneSupersededOpenPr: false, inactivePullRequestDays: null };
+  const repo = { id: 42, full_name: repository, owner: { login: 'lopugit' }, name: 'thingtime', default_branch: 'main' };
+  const pr = { number: 12, state: 'open', head: { ref: branch, sha, repo }, base: { repo } };
+  const source = path => ({ type: 'file', encoding: 'base64', content: Buffer.from(
+    path.endsWith('/mongodb.ts') ? "import { requireGatewayDatabaseAccess } from '../deployment/environmentGateway'; class GatewayMongoClient extends mod.MongoClient { override async connect() { await requireGatewayDatabaseAccess(); await super.connect(); } }" :
+    path.endsWith('/environment-gateway.ts') ? "import { environmentGatewayIngress } from '../utils/environmentGateway'; await environmentGatewayIngress(event.req); runAdmittedGatewayWork(() => next());" :
+    path.endsWith('/mongoConnectionPolicy.ts') ? "export const mongoConnectionPolicy = 'proxy';" :
+    'export const requireGatewayDatabaseAccess = async () => { await gatewayAuthority.requireDatabase(); };'
+  ).toString('base64') });
+  let publicationFailed = false, cleanupReads = 0;
+  Object.assign(process.env, environment);
+  console.log = value => logs.push(String(value));
+  globalThis.fetch = async input => {
+    const url = new URL(String(input)), path = decodeURIComponent(url.pathname);
+    if (url.origin === environment.THINGTIME_PREVIEW_POLICY_ORIGIN) {
+      if (path.endsWith('thingtime-capabilities.json')) return Response.json({ schemaVersion: 1, origin: url.origin, features: { 'api.integration-ci-preview-retention': { version: '1.0.0' } }, operations: [{ feature: 'api.integration-ci-preview-retention', path: '/api/v1/integrations/ci/preview-retention', methods: ['POST'] }] });
+      return Response.json({ ok: true, repository, policy });
+    }
+    if (url.hostname === 'api.github.com') {
+      const route = path.replace(`/repos/${repository}`, '');
+      if (!route) return Response.json(repo);
+      if (route === `/git/ref/heads/${branch}`) return Response.json({ object: { sha } });
+      if (route === '/pulls') return Response.json([pr]);
+      if (route === '/contents/vercel.json') return Response.json({ content: Buffer.from(JSON.stringify({ regions: ['syd1'] })).toString('base64') });
+      if (route.startsWith('/contents/')) return Response.json(source(route));
+    }
+    if (url.hostname === 'api.vercel.com') {
+      if (path === '/v9/projects/prj_test') return Response.json({ id: 'prj_test', name: 'thingtime' });
+      if (path.endsWith('/custom-environments')) return Response.json({ environments: [] });
+      if (path.endsWith('/env')) return Response.json({ envs: [{ key: 'THINGTIME_GATEWAY_SECRET', type: 'encrypted', target: ['preview'] }] });
+      if (path.endsWith('/domains')) return Response.json({ domains: [] });
+      if (path === '/v7/deployments') return Response.json({ deployments: [{ uid: deployment.id }] });
+      if (path === '/v13/deployments/dpl_ready') {
+        if (publicationFailed) { cleanupReads++; return Response.json({}, { status: 503 }); }
+        return Response.json(deployment);
+      }
+    }
+    if (url.hostname === deployment.url) { publicationFailed = true; throw new Error('original-publish-failure'); }
+    throw new Error('Unexpected publication fixture request');
+  };
+  try {
+    await assert.rejects(publish(), { message: 'original-publish-failure' });
+    assert.equal(cleanupReads, 1);
+    assert.ok(logs.some(line => line.includes('Failed preview upload left for the next retention sweep')));
+    assert.ok(logs.every(line => !line.includes('fixture-ci') && !line.includes('fixture-gh') && !line.includes('fixture-vercel')));
+  } finally {
+    globalThis.fetch = originalFetch; console.log = originalLog;
+    for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
+});

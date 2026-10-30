@@ -218,6 +218,87 @@ valid preview. Projects without directory listings can stage with
 `PREVIEW_FALLBACK_ROOT_STATUS=404` for a true root 404. This tool never changes
 the project-wide directory-listing setting.
 
+### Orphan deployment cleanup (2026-10-30)
+
+The existing protected preview controller now scans the complete project deployment
+inventory before each six-hour recovery sweep and on PR close. It removes actual
+Vercel deployments (including their immutable URLs), rather than only removing
+PR aliases. Legacy source-build previews and ordinary prebuilt branch previews
+are included when exact source/project/repository ownership is established and
+no open same-repository PR uses the branch. Open drafts still protect their
+branch from this orphan sweep; the existing current-policy draft cleanup remains
+separate. Closed PR events also inspect branch previews without PR metadata.
+
+Production targets, untagged main/develop/staging/controller/fallback branches,
+gateway owners, production/custom stable target pointers, all bound project domains, arbitrary
+custom aliases, foreign identities and unknown metadata are preserved. Explicit PR-tagged snapshots of closed promotions may be cleaned
+even when their source branch is `develop`; current owners and bindings remain
+protected. The controller paginates before deletion and rechecks deployment, alias and PR state
+before canceling or deleting; the generic `targets.preview` last-deployment
+pointer does not protect an orphan; a reopened/new PR or changed alias stops the action.
+A still-canceling upload is left for the next sweep. Provider errors preserve
+unknown resources and fail the run. Separate API checks are not an atomic
+provider transaction: a subsequent sweep reconciles a concurrent late upload.
+
+Ordinary prebuilt feature previews now require an open same-repository PR before
+build planning, upload, immutable acceptance and alias publication. A PR closed
+during upload causes guarded removal of that exact deployment. Stable gateway
+publication is exempt. All three preview publishers additionally read the exact
+immutable source SHA and require Mongo's connect fence, gateway middleware,
+authority and explicit connection policy. Old source fails admission even if
+publisher metadata claims gateway support. This is a compatibility gate, not
+proof against hostile source or a measurement of live Mongo connections. The
+existing explicit `dedicated` branch opt-in remains supported; missing/old
+source never falls back to it. The PR publisher retains its exact-head fences.
+
+The saved admin policy is the only retention configuration. Protected jobs
+negotiate `api.integration-ci-preview-retention` 1.0.0 and its POST operation at
+`THINGTIME_PREVIEW_POLICY_ORIGIN` (default `https://thingtime.com`), then read
+`/api/v1/integrations/ci/preview-retention`. Requests use the existing
+`THINGTIME_CI_ROUTER_SECRET` and the CI HMAC header, with repository,
+`ref: "github-actions"` and a fresh ISO timestamp. That secret is supplied only
+to protected controller steps; untrusted builds receive none. No separate
+controller retention defaults or public settings fallback exist.
+
+The product admin settings own `enabled`, `noOpenPrGraceHours`,
+`pruneSupersededOpenPr`, `supersededGraceHours` and optional
+`inactivePullRequestDays`. No-open grace uses the later deployment creation or
+known PR close time; untagged branch snapshots use creation age. Superseded
+pruning waits for the replacement's grace and keeps the newest READY live-head
+preview plus active builds. Opt-in inactivity expiry uses fresh GitHub
+`updated_at` (including GitHub's normal automation activity), deletes previews
+without closing the PR, and prevents recovery/publication until new activity.
+Expired-open cleanup avoids comments/labels that would reset that clock.
+
+Disabled cleanup, grace-retained objects and protected owners are not marked
+removed or inactive. Missing/invalid/unreachable policy preserves resources and
+fails the run; there is no destructive fallback. Each cancel/delete fence reads
+fresh policy, so disabling it stops the next mutation. Stable
+production/develop/staging publication does not depend on policy API availability.
+Explicit admin removal of a selected environment remains a separately requested
+operation; retention policy does not grant permission to delete stable services.
+
+Rollout order: deploy the product settings endpoint/capability first and verify
+its signed read in CI, then merge this controller into `github-actions`. The
+existing default-branch listener already supplies close events and the six-hour
+schedule, so no new main listener or cron is needed. Existing old runs may still
+hold their earlier source snapshot. No live acceptance is established by local
+fixtures.
+
+For immediate acceptance, an allowlisted maintainer with current repository
+write/admin permission can use the existing listener's zero-PR reconciliation
+mode. It authorizes the triggering actor, builds no PR code, fetches saved policy
+and runs only retention reconciliation:
+
+```sh
+gh workflow run develop-pr-preview.yml --repo lopugit/thingtime --ref main -f pr_number=0
+```
+
+Inspect the resulting workflow's sanitized counts and exact provider readback;
+repeat for idempotence and verify unchanged production/develop/staging/master
+aliases. This dispatch uses GitHub's existing protected secret; do not retrieve
+CI secrets locally or bypass capability/actor checks to run acceptance.
+
 ### Discoverable preview status and recovery
 
 Both publishers post expected persistent URLs and a ready-time estimate before
