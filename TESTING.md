@@ -219,6 +219,10 @@ fixture boundary, coverage, stream recovery and Builder acceptance.
       decode outputs: compare dimensions, alpha, orientation, frames, delays and
       loops, including optimized delta rectangles. Duplicate two compressor instances; each native file label must target its own input. JPEG transparency requires an explicit background. APNG, layered or
       multi-page images, unsupported SVG and invalid files fail clearly.
+- [ ] Select a non-image file whose first 4096 bytes are `<!--` followed by many
+      repetitions of `--><!--`. The SVG header test must refuse it immediately
+      and the tab must stay responsive, never backtrack exponentially.
+      Regression coverage: `test:web-platform`.
 - [ ] Cancel while image codecs load and while encoding; stale jobs cannot
       publish a preview/download. Asset loading fetches public same-origin WASM
       only; selected bytes never enter a request. The worker still denies network.
@@ -8456,6 +8460,22 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       selections and switch accounts while saving. Requests wait for saves;
       a refusal cancels that send and stale responses cannot overwrite newer
       choices or another account. Regression coverage: `test:lopu-ui`.
+- [ ] Keep create, rename and delete requests pending while switching accounts,
+      including switching away and back. Late successes and failures must not
+      restore the previous account's chats, provider choice, messages, notices
+      or cache. The new account can load chats immediately; an old completion
+      cannot release its pending credential-save fence. Try a queued send whose
+      explicit credential has disappeared or become unavailable: it must stop
+      with an error before sending, even when the prior choice used credits.
+- [ ] While a rename or delete is pending, save a personal credential in another
+      chat, select it and load a new message. Refuse the earlier mutation; only
+      its own title or removed entry returns. The confirmed credential, later
+      selection, message and cached list survive. A successful rename response
+      containing older chat metadata must not restore a credit-backed choice.
+- [ ] Delete a selected chat with a different credential from the account's
+      new-chat default, then send a new message: the default handles it. Refuse
+      deletion and verify the prior chat/choice return only if no later draft
+      settings or selection have changed.
 - [ ] At desktop and 390px, scroll defaults and open chat settings top to bottom;
       select credentials/models, reopen and reload. Edit nested label/control
       blocks with Builder, save, reload and confirm credential actions still
