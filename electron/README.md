@@ -54,6 +54,39 @@ final signed, installed app after the canonical tests and `build` +
 `install:local` commands. The development app does not replace the installed
 copy or its service.
 
+For ongoing testing, retain a named development workspace instead of deleting
+the build and synthetic session on quit:
+
+```sh
+corepack pnpm@10.12.1 --dir electron dev:parallel --workspace=my-workspace --prepare-only
+open "$HOME/Applications/Thingtime Dev my-workspace.app"
+node electron/scripts/dev-parallel.mjs --workspace=my-workspace --stop-workspace
+```
+
+The named app has its own development bundle identifier, app name, encrypted
+profile, authenticated managed MongoDB replica and deterministic loopback API,
+database and inspection ports. `development.json` in that workspace records the
+source revision, paths and ports. It snapshots the canonical desktop source and
+web resources, installs its own production dependencies, and copies no ignored
+Remix environment files or account credentials. The source checkout can later be
+archived without removing those retained dependencies. The Node/XPC bridge stays
+disabled; this unsigned UI lane does not establish privacy-permission acceptance.
+Preparation refuses active launchers or detached child groups and retains the
+previous snapshot until its replacement verifies. It never replaces the stable
+`~/Applications/Thingtime.app` or its data/services.
+
+`--prepare-only --use-staged` reuses already verified web resources when only
+desktop tooling changed. To make a disposable account an admin, register it
+through the normal local API first, then put only its non-secret username in
+workspace `settings.json`, for example `{"adminUsernames":["synthetic-dev"]}`,
+and restart this development app. Do not put passwords or tokens in that file.
+Quit preserves the build and session; `--stop-workspace` stops only verified
+workspace processes. After stopping, remove only `~/Applications/Thingtime Dev
+my-workspace.app` and its exact Application Support workspace directory to clean
+up that generated development app and disposable data. A fresh encryption namespace that
+requires human consent remains a prerequisite; do not reuse another app's
+Keychain item or weaken encryption.
+
 Use the repository's exact Corepack pin for packaging. The build preflights
 that version and gives electron-builder's nested dependency collector an
 isolated temporary `pnpm` shim resolving to the same pin, so an unrelated

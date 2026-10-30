@@ -587,3 +587,15 @@ test('Builder provenance is negotiated independently of rendering and preserves 
     assert.equal(capabilitySatisfies(minimum, minimum), true);
   }
 });
+
+
+test('preview retention stored-policy failures publish a compatible correction in both manifests', () => {
+  const origin = 'https://retention.test';
+  const manifest = thingtimeCapabilityManifest(origin);
+  assert.equal(manifest.origin, origin);
+  assert.equal(manifest.features['api.admin-ci-preview-retention'].version, '1.0.1');
+  assert.equal(createApiCapabilitiesManifest().features['api.admin-ci-preview-retention'], '1.0.1');
+  assert.equal(manifest.features['api.integration-ci-preview-retention'].version, '1.0.0');
+  assert.equal(capabilitySatisfies('1.0.1', '1.0.0'), true);
+  assert.equal(capabilitySatisfies('2.0.0', '1.0.0'), false);
+});
