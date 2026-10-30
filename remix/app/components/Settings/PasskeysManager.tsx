@@ -324,10 +324,10 @@ const AccountPasskeysManager = ({ userId }: { userId: string }) => {
 			<Flex flexDirection={['column', 'row']} alignItems={['flex-start', 'center']} columnGap={4} rowGap={2}>
 				<Box>
 					<Text fontSize="sm" color="var(--tt-ink, #16161a)">
-						Passkeys 🔑
+						Thingtime sign-in passkeys 🔑
 					</Text>
 					<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
-						Sign in with Touch ID, Face ID, or your password manager (iCloud Keychain, 1Password…) — passkeys belong to the account environment where you add them. Production and development accounts may differ. No password, no 2FA code.
+						Sign in to Thingtime with Touch ID, Face ID, or your password manager (iCloud Keychain, 1Password…) — passkeys belong to the account environment where you add them. Production and development accounts may differ. No password, no 2FA code.
 					</Text>
 				</Box>
 				<Box marginLeft={[0, 'auto']} flexShrink={0}>

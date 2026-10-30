@@ -16,6 +16,12 @@ export type PatScopeDescriptor = {
 // the route that serves it.
 export const PAT_SCOPE_CATALOG: PatScopeDescriptor[] = [
   {
+    id: 'agents.report',
+    title: 'Private agent reporting',
+    description: 'Create a task Character, share selected private workspace items with it, and save task reports and coordination posts. General account and Things access stays separate.',
+    emoji: '📋'
+  },
+  {
     id: 'things',
     title: 'Full things access',
     description: 'Everything below — read, create, update, delete, comment, react, save, share.',

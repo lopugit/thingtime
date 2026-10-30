@@ -10,14 +10,22 @@ import type { UseWebpageDraft } from '../Builder/useWebpage';
 import { useBuilderChrome } from '../Builder/useBuilderChrome';
 import { BuilderDrawer } from '../Builder/BuilderDrawer';
 import { accountSettingsDocumentAdapter } from './settingsDocument.client';
-import { SETTINGS_BLOCK_TYPES, localSettingsDocumentAdapter, parseSettingsDocument, settingsDocumentBlocks, settingsDocumentKey, type SettingsDocument } from './settingsDocument';
+import { SETTINGS_BLOCK_TYPES, localSettingsDocumentAdapter, settingsDocumentSeed, settingsDocumentBlocks, settingsDocumentKey, type SettingsDocument } from './settingsDocument';
 
 export type SettingsDocumentHostProps = {
   documentKey: string;
   defaultDocument: WebpageBlock[];
   scopeKey: string;
   title?: string;
+  /** Keep a live commit's transient authority mounted until it settles. */
+  layoutEditingDisabled?: boolean;
+  /** View-only consumers render the saved document without layout management UI. */
+  showLayoutControls?: boolean;
+  /** Optional scoped legacy document, consulted only when no durable document exists. */
+  loadFallbackDocument?: () => SettingsDocument | null;
   persistence?: 'account' | 'device';
+  /** Upgrade loaded authored blocks before both rendering and Builder selection; never transforms live edits. */
+  migrateBlocks?: (blocks: WebpageBlock[]) => WebpageBlock[];
   /** Native hosts provide their selected authenticated API transport. */
   accountTransport?: { origin: string; fetch: typeof fetch; currentOrigin: () => string };
   children: (render: SettingsDocumentControls) => React.ReactNode;
@@ -61,17 +69,15 @@ function ScopedSettingsDocument(props: SettingsDocumentHostProps) {
     writable={props.persistence === 'device' || (!!user?.id && !!dataPlane && !user.temporary)} />;
 }
 
-function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', persistence = 'account', accountTransport, children, documentScope, writable }: SettingsDocumentHostProps & {
+function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', persistence = 'account', accountTransport, children, documentScope, writable, layoutEditingDisabled = false, showLayoutControls = true, loadFallbackDocument, migrateBlocks }: SettingsDocumentHostProps & {
   documentScope: Parameters<typeof settingsDocumentKey>[0]; writable: boolean;
 }) {
   const key = settingsDocumentKey(documentScope);
   const [defaults] = React.useState(() => settingsDocumentBlocks(defaultDocument));
   const cacheKey = `tt-settings-preview:${key}`;
-  const initial = (): SettingsDocument => {
-    try { const cached = readLocalCache<unknown>(persistence === 'device' ? key : cacheKey); if (cached) return parseSettingsDocument(cached); } catch { /* load reports invalid durable data */ }
-    return { blocks: defaults, name: title, revision: null };
-  };
-  const [document, setDocument] = React.useState<SettingsDocument>(initial);
+  const initial = (): SettingsDocument => settingsDocumentSeed(defaults, title,
+    readLocalCache<unknown>(persistence === 'device' ? key : cacheKey), loadFallbackDocument);
+  const [document, setDocument] = React.useState<SettingsDocument>(() => { const seed = initial(); return migrateBlocks ? { ...seed, blocks: settingsDocumentBlocks(migrateBlocks(seed.blocks)) } : seed; });
   const [saved, setSaved] = React.useState(document);
   const [editing, setEditing] = React.useState(false);
   const [ready, setReady] = React.useState(!writable);
@@ -100,12 +106,22 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
       if (!active || signal.aborted || load !== loadingRevision.current) return;
       setReady(true); setError('');
       if (revision.current !== edit || dirtyRef.current) return;
-      const next = value || { blocks: defaults, name: title, revision: null };
-      setDocument(next); setSaved(next);
+      const fallback = !value ? loadFallbackDocument?.() : null;
+      const next = value || (fallback ? { blocks: settingsDocumentBlocks(fallback.blocks), name: fallback.name, revision: null } : { blocks: defaults, name: title, revision: null });
+      setDocument(migrateBlocks ? { ...next, blocks: settingsDocumentBlocks(migrateBlocks(next.blocks)) } : next); setSaved(next);
       if (persistence === 'account' && value) writeLocalCache(cacheKey, value);
     }).catch(() => { if (active && !signal.aborted && load === loadingRevision.current) { setReady(false); setError('Could not load your layout. The current view is preserved; retry before saving.'); } });
     return () => { active = false; };
-  }, [adapter, reload, writable, cacheKey, defaults, persistence, title]);
+  }, [adapter, reload, writable, cacheKey, defaults, persistence, title, loadFallbackDocument, migrateBlocks]);
+  React.useEffect(() => {
+    const reconcile = (event: Event) => {
+      const changedKey = event instanceof CustomEvent ? event.detail?.key : (event as StorageEvent).key;
+      if ((changedKey === key || changedKey === cacheKey) && !dirtyRef.current && !saving.current) setReload(value => value + 1);
+    };
+    window.addEventListener('thingtime:settings-document-saved', reconcile);
+    window.addEventListener('storage', reconcile);
+    return () => { window.removeEventListener('thingtime:settings-document-saved', reconcile); window.removeEventListener('storage', reconcile); };
+  }, [key, cacheKey]);
   const update = (blocks: WebpageBlock[]) => {
     if (saving.current) return;
     try { const safe = settingsDocumentBlocks(blocks); revision.current++; setDocument(previous => ({ ...previous, blocks: safe })); }
@@ -128,6 +144,7 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
       setDocument(previous => revision.current === edit ? next : { ...previous, id: next.id, revision: next.revision });
       if (persistence === 'account') writeLocalCache(cacheKey, next);
       setError('');
+      window.dispatchEvent(new CustomEvent('thingtime:settings-document-saved', { detail: { key } }));
       return { ok: true, id: next.id };
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'The layout could not be saved.';
@@ -144,22 +161,23 @@ function SettingsDocumentSession({ defaultDocument, title = 'Settings layout', p
     discardDraft: () => { revision.current++; setDocument(saved); }, refresh: () => setReload(value => value + 1)
   };
   return <Box minW={0} data-settings-document={documentScope.documentKey}>
-    <Flex gap={2} mb={2} align="center" flexWrap="wrap">
-      <Button size="xs" variant="ghost" isDisabled={saveBusy} onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : 'Edit layout'}</Button>
+    {showLayoutControls && <Flex gap={2} mb={2} align="center" flexWrap="wrap">
+      <Button size="xs" variant="ghost" isDisabled={saveBusy || layoutEditingDisabled} onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : 'Edit layout'}</Button>
       {dirty && <Text fontSize="xs">Unsaved layout</Text>}
       {editing && <Button size="xs" isDisabled={!ready || !writable || !dirty || saveBusy} onClick={() => void save()}>Save layout</Button>}
       {!writable && <Text fontSize="xs">Sign in to save a personal layout.</Text>}
-    </Flex>
-    {error && <Flex gap={2} align="center"><Text role="alert" fontSize="xs">{error}</Text><Button size="xs" onClick={() => setReload(value => value + 1)}>Retry</Button></Flex>}
-    {editing ? <SettingsEditor key="edit" draft={draft} name={document.name} onName={name => { if (saving.current) return; revision.current++; setDocument(previous => ({ ...previous, name })); }}>
+    </Flex>}
+    {showLayoutControls && error && <Flex gap={2} align="center"><Text role="alert" fontSize="xs">{error}</Text><Button size="xs" onClick={() => setReload(value => value + 1)}>Retry</Button></Flex>}
+    {showLayoutControls && editing ? <SettingsEditor key="edit" draft={draft} name={document.name} onName={name => { if (saving.current) return; revision.current++; setDocument(previous => ({ ...previous, name })); }}>
       {chrome => children({ blocks: document.blocks, chrome, editing: true, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}
     </SettingsEditor> : <React.Fragment key="view">{children({ blocks: document.blocks, chrome: null, editing: false, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}</React.Fragment>}
   </Box>;
 }
 
 function SettingsEditor({ draft, name, onName, children }: { draft: UseWebpageDraft; name: string; onName: (name: string) => void; children: (chrome: BuilderChrome) => React.ReactNode }) {
-  const builder = useBuilderChrome(draft, { allowedBlockTypes: SETTINGS_BLOCK_TYPES });
   const [open, setOpen] = React.useState(false);
+  const inspectBlock = React.useCallback(() => setOpen(true), []);
+  const builder = useBuilderChrome(draft, { allowedBlockTypes: SETTINGS_BLOCK_TYPES, onInspect: inspectBlock });
   React.useEffect(() => { if (builder.selectedId) setOpen(true); }, [builder.selectedId]);
   return <>
     <Button size="xs" mb={2} onClick={() => setOpen(true)}>Open Builder inspector</Button>

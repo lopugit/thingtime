@@ -149,6 +149,10 @@ export async function compressImage(file: Blob, settings: ImageSettings, wasm: I
 	// libpng can expose only APNG's default still image. Never silently discard
 	// its animation when the bundled decoder lacks a native animation delegate.
 	if (pngAnimationFrames(bytes)) throw new Error('Animated PNG decoding is unavailable locally; use animated GIF or WebP to preserve every frame');
+	// The comment body spells out "anything that is not the `-->` terminator"
+	// rather than a lazy `[\s\S]*?`: a lazy body can also swallow `-->`, so an
+	// uploaded `<!--` followed by many `--><!--` made the leading-comment loop
+	// backtrack exponentially over this 4 KB window.
 	const svg =
 		file.type === 'image/svg+xml' ||
 		SVG_DOCUMENT_HEAD.test(new TextDecoder().decode(bytes.subarray(0, 4096)));

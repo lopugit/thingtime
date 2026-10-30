@@ -2,7 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { beginSsoRedirect, consumeSsoReturn, isFirstPartyPasskeyHost, ssoReturnUrl, SSO_RETURN_KEY } from './ssoNavigation';
 
-const storage = () => { const entries = new Map<string, string>(); return { getItem: (k: string) => entries.get(k) ?? null, setItem: (k: string, v: string) => entries.set(k, v), removeItem: (k: string) => entries.delete(k) } as Storage; };
+const storage = (): Storage => {
+ const entries = new Map<string, string>();
+ return {
+  get length() { return entries.size; },
+  clear: () => { entries.clear(); },
+  key: (index: number) => Array.from(entries.keys())[index] ?? null,
+  getItem: (key: string) => entries.get(key) ?? null,
+  setItem: (key: string, value: string) => { entries.set(key, value); },
+  removeItem: (key: string) => { entries.delete(key); }
+ };
+};
 test('same-tab sign-in returns only to the initiating origin and consumes state once', () => {
 	const store = storage(); let redirect = '';
 	beginSsoRedirect('https://dev.thingtime.com', { origin: 'https://preview.vercel.app', pathname: '/feed', search: '?sort=new', hash: '', assign: url => { redirect = String(url); } }, store);
