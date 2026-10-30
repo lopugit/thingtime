@@ -29,6 +29,9 @@ export default defineNitroConfig({
   ...(/^node[_-]middleware$/.test(process.env.NITRO_PRESET ?? '') ? { serveStatic: true } : {}),
   modules: ['workflow/nitro'],
   compatibilityDate: '2026-07-02',
+  // Browser image engines can be reached through shared schema imports. Do not
+  // instantiate their WASM while the API runner is starting.
+  wasm: { lazy: true },
   routes: {
     ...Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
     [THINGTIME_CAPABILITY_MANIFEST_PATH]: thingtimeCapabilitiesHandler,

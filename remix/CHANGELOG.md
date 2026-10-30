@@ -104,6 +104,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-30: Add retained, distinctly named Thingtime development app workspaces with independent dependencies, encrypted profiles, managed local replicas and process ownership. Development stays separate from the stable installed app; see [PR details](../PRs/codex-mongo-preview-cleanup-preview-retention.md#retained-development-app--30-october-2026). **Codex (AI)**
+
+- 2026-10-30: Add individually editable, private saved Builder blocks for shared Admin preview-retention and PR-liveliness sections with revision-guarded saves, explicit capability negotiation and signed fresh controller policy reads. Preserve deployments on unavailable policy; product gateway rollout precedes controller rollout. Shared Builder overlay chrome keeps floating launch buttons off inspector inputs and restores them on close. Native capability discovery targets the selected API and immediate remounts discard aborted negotiations without weakening origin checks. Preserve the review-bot stored-policy error correction with admin capability 1.0.1. Supported lazy WASM initialization restores Nitro startup while retaining real engine asset URLs. [Details](../PRs/codex-mongo-preview-cleanup-preview-retention.md). **Codex (AI)**
+
+
+- 2026-10-29: Restore Add for long custom emoji combinations, retain unfinished
+  reaction-picker input after dismissal, and append nine recent choices to the
+  quick reaction popup. Reuse shared validation and account-scoped reaction
+  history with responsive wrapping and real API/browser regression coverage.
+  [PR #1290 delivery notes](../PRs/1290-codex-emoji-picker-drafts-recents--fix-custom-emoji-add-drafts-and-recents.md).
+  **Codex (AI)**
+
+- 2026-10-29 — **Codex (AI)**: Add a transactional 100 MiB pending-accounting budget for trusted unlimited accounts, durable leased recovery, source-aware release health and structured storage incident logs. Add pre-merge, production alias and scheduled runtime checks through the protected controller. See [storage recovery](../docs/storage-recovery.md). Details: [PR #1289](../PRs/1289-storage-ledger-release-guard.md).
+
 - 2026-10-29: Add invitation previews and optional recipient profile suggestions. Discover app-route preview defaults automatically from the real router, support optional route-local overrides, and infer supported anonymous saved-page copy/photos without per-page metadata registration. Share those projections through `api.social-previews` 1.1.0 and branded PNGs through `api.social-card` 1.3.0, preserving canonical ACLs, managed-photo version checks and exact Thingtime brand assets. Deployment/live acceptance remains separate; [PR 1287 details](../PRs/1287-invite-previews-profile-choice-shared-branded-social-previews.md). **Codex (AI)**
 
 - 2026-10-29: Restore the original browser tab before explicit native passkey fallback starts WebAuthn; approval-page cancellation returns consistently while background opt-out/cancellation stays non-disruptive.
@@ -6808,6 +6822,9 @@ Detailed PR notes:
   — _Codex (AI), 2026-06-22_
 
 ---
+
+- 2026-10-30: Refresh Commander indexes in the background with responsive search and measured totals/age. Recover real-root watcher starvation, complete full indexing under the saved 512 MiB policy, and retain measured counts during pending updates. Signed installed count/freshness and health checks passed; physical Cmd+E remains unverified. [Details](../PRs/1282-codex-commander-background-index-keep-commander-indexes-fresh-without-interrupting-search.md). **Codex (AI)**
+
 
 <!--
 

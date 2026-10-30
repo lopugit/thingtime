@@ -6,11 +6,14 @@ import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/
 import type { AttachmentComposerSnapshot, PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MessengerEmojiPicker } from './MessengerEmojiPicker';
+import { useEmojiPickerDraft } from '../Emoji/useEmojiPickerDraft';
+import { DRAWER_POPUP_Z } from '../Nav/Drawer/useDrawer';
 import { AgentComposerControls, type AgentComposerControlState, type AgentSendMode } from './AgentComposerControls';
 import { CUSTOM_TOKEN_PREFIX, customTokenId, isCustomToken, type ChatMessage, type CustomEmoji } from './messengerTypes';
 import { getUserDisplayName } from '~/utils/userIdentity';
 
 export type ComposerProps = {
+  targetId: string;
   placeholder: string;
   pickerEmojis: CustomEmoji[];
   replyTo: ChatMessage | null;
@@ -48,6 +51,7 @@ export const Composer = (props: ComposerProps) => {
   const [text, setText] = React.useState('');
   const [sending, setSending] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
+  const pickerDraft = useEmojiPickerDraft(props.targetId);
 	const [attachmentOpen, setAttachmentOpen] = React.useState(false);
 	const [attachmentSession, setAttachmentSession] = React.useState(0);
 	const [attachmentSnapshot, setAttachmentSnapshot] = React.useState<AttachmentComposerSnapshot>(EMPTY_ATTACHMENTS);
@@ -165,7 +169,7 @@ export const Composer = (props: ComposerProps) => {
         padding="6px 8px"
         _focusWithin={{ borderColor: 'var(--tt-accent, #a855f7)' }}
       >
-				<Popover isOpen={pickerOpen} onClose={() => setPickerOpen(false)} placement="top-start" isLazy>
+				<Popover isOpen={pickerOpen} onClose={() => setPickerOpen(false)} placement="top-start" strategy="fixed" modifiers={[{ name: 'preventOverflow', options: { padding: 12 } }, { name: 'flip', options: { padding: 12 } }]} isLazy>
           <PopoverTrigger>
             <Button
               size="sm"
@@ -179,15 +183,18 @@ export const Composer = (props: ComposerProps) => {
                 setPickerOpen((open) => !open);
               }}
               title="Emoji"
+              aria-label="Insert emoji"
             >
               😊
             </Button>
           </PopoverTrigger>
-          <Portal>
-            <PopoverContent zIndex={10220} width="auto" boxShadow="var(--tt-shadow-popover, 0 8px 30px rgba(0,0,0,0.12))">
+          <Portal appendToParentPortal={false}>
+            <PopoverContent rootProps={{ zIndex: DRAWER_POPUP_Z }} zIndex={DRAWER_POPUP_Z} width="auto" boxShadow="var(--tt-shadow-popover, 0 8px 30px rgba(0,0,0,0.12))">
               <PopoverBody padding={2}>
                 <MessengerEmojiPicker
                   emojis={props.pickerEmojis}
+                  query={pickerDraft.query}
+                  onQueryChange={pickerDraft.setQuery}
                   onPick={(token) => insertToken(token)}
                   onUploadRequest={
                     props.onUploadEmoji

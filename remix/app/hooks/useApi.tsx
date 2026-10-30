@@ -29,7 +29,8 @@ import { createBrowserActionHost, finishBrowserAction } from '~/components/Actio
 import { withPostRequestDeadline } from './postRequest';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { THEME_CAPABILITY_REQUIREMENTS } from '~/theme/capabilities';
-import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { PREVIEW_RETENTION_REQUIREMENTS } from '~/api/utils/ciControl/previewRetentionCore';
+import { requireThingtimeCapability, type CapabilityTransport } from '~/api/utils/capabilities/requireCapability.client';
 import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
@@ -527,6 +528,16 @@ export function useApi() {
 				async (args?: { limit?: number }, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
         []
       ),
+      ciPreviewRetention: useCallback(async (scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.admin-ci-preview-retention', PREVIEW_RETENTION_REQUIREMENTS['api.admin-ci-preview-retention'], scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        const requestScope = { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal };
+        return getJson('/api/v1/admin/ci/preview-retention', requestScope);
+      }, []),
+      setCiPreviewRetention: useCallback(async (args: Record<string, unknown>, scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.admin-ci-preview-retention', PREVIEW_RETENTION_REQUIREMENTS['api.admin-ci-preview-retention'], scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        const requestScope = { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal };
+        return asyncFetcher.submit(args, { ...requestScope, action: '/api/v1/admin/ci/preview-retention', errorContext: 'save preview retention rules' });
+      }, [asyncFetcher]),
       ciCredentials: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/credentials', options), []),
       ciFeatureStacks: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/stacks', options), []),
       ciStackChat: useCallback(async (runId: string) => getJson(`/api/v1/admin/ci/stacks/chat${toQuery({ runId })}`), []),
@@ -1186,7 +1197,8 @@ export function useApi() {
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
-          if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', '1.15.0');
+          if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           if (args?.crystal?.configurationVersion !== undefined && args?.crystal?.localRootId !== undefined) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
@@ -1250,6 +1262,7 @@ export function useApi() {
       ),
       upsert: useCallback(
         async (args) => {
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           return asyncFetcher.submit(
@@ -1273,6 +1286,7 @@ export function useApi() {
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
           if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
           if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           if (args?.thingtime?.includes('file-sync')) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
@@ -1298,7 +1312,7 @@ export function useApi() {
       ),
       react: useCallback(
         async (args) => {
-          await requireThingtimeCapability('api.things-react', '1.2.0');
+          await requireThingtimeCapability('api.things-react', '1.2.1');
           return asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react', errorContext: 'save your reaction' });
         },
         [asyncFetcher]

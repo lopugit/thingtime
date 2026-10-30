@@ -527,6 +527,17 @@ The application CSP permits only the Mapbox service and events origins in
 remote Mapbox script or eval. The separate Library SDK demo keeps its own
 opaque-origin policy and CDN loader.
 
+## Storage readiness and recovery
+
+`api.storage-accounting` 1.0.0 publishes shared deferred-accounting semantics
+from the canonical shared-feature registry to both manifests.
+`api.health-nitro` 1.3.0 adds honest recovering state and source-stamp checks;
+`api.lopu-recordings-run` 1.6.0 adds aggregate storageRecovery outcomes on the
+existing protected scheduler. Both manifests derive versions from apiDocs.ts.
+The dispatcher records allowlisted storage failure codes without logging response
+bodies. See [storage recovery](../storage-recovery.md) for transactional queue,
+worker, controller gates and the scheduled production monitor.
+
 ## Environment gateway and index readiness
 
 The negotiated ingress contract and connection-mode policy are summarized at the

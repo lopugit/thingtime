@@ -32,7 +32,7 @@ import { isActionLookupProvider } from './actionLookups';
 // import-free, keeping the pure chain intact for the colocated
 // builtin-projection test.
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
-import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTokens.ts';
+import { sanitizeReactionToken } from '../utils/reactionTokens.ts';
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { blocksToText, isEditorJsDoc, isEditorJsDocSafeToEdit } from '../components/Editor/editorJsValue.ts';
 import { MAX_EXPRESSION_ARGS, catalogueSignature, isLambdaArg } from './actionExpressions.ts';
@@ -106,6 +106,8 @@ export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 
 // Protected operational Things created when an admin migration throws. The
 // prefix is reserved so generic callers cannot squat a future diagnostic URL.
+export const STORAGE_PENDING_THINGTIME = 'storage-pending';
+export const STORAGE_RECOVERY_THINGTIME = 'storage-recovery';
 export const ERROR_LOG_THINGTIME = 'error-log';
 export const ERROR_LOG_ID_PREFIX = 'error-log-';
 // One root expiry policy for disposable control Things; excludes content and
@@ -1176,7 +1178,7 @@ const reactionSchema: ThingtimeSchema = {
   summary: 'An emoji reaction to another thing — one thing per (user, target, token).',
   detail:
     'The emoji is an open-vocabulary token: a single emoji or a multi-emoji group typed as one ' +
-    `unit (up to ${MAX_REACTION_EMOJIS} emoji), validated emoji-only by the shared token helper. ` +
+    'unit, validated emoji-only by the shared token helper without an emoji-count limit. ' +
     'Users can hold several reaction things on one target; toggling a token they already have ' +
     'removes it. Reactions used to live embedded on post docs as an emoji → userIds map — the ' +
     'things v1→v2 migration explodes them into these.',
@@ -1186,11 +1188,7 @@ const reactionSchema: ThingtimeSchema = {
       name: 'emoji',
       type: 'string',
       required: true,
-      max: MAX_REACTION_EMOJIS,
-      // emoji count, NOT UTF-16 chars (every emoji is 2+ code units) — keeps
-      // the projection from publishing a maxLength that rejects legal tokens
-      maxUnit: 'emoji',
-      description: `The reaction token — one emoji or a multi-emoji group (max ${MAX_REACTION_EMOJIS} emoji, emoji-only).`
+      description: 'The complete emoji-only reaction token — one emoji or a multi-emoji group, without a character or emoji-count limit.'
     }
   ],
   example: { emoji: '🤣🤣🙌💀💦' }
@@ -4259,6 +4257,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
   'agent-reporting-binding', 'agent-reporting-operation',
   'file',
   'mail-account', 'mail-folder', 'mail-message', 'mail-inbox', 'mail-operation',

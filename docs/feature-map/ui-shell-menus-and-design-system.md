@@ -27,6 +27,7 @@ components; reuse them instead of adding parallel versions.
 | Design system docs page | `/docs/design-system` (`app/routes/docs/*`) |
 | Local cache tiers (first-paint) | `app/hooks/localCache.ts` (`tt-<domain>` keys) |
 | Nested Builder insertion and ancestry | `Builder/WebpageBlocksRenderer.tsx`, `blockChromePath.ts`, `useBuilderChrome.tsx`, `webpageBlocks.ts`; one ancestor toolbar, populated-parent append controls, and directional insertion that preserves neighboring layout |
+| Builder inspector chrome | `Builder/BuilderOverlayHost.tsx` exposes the shared launcher-suppression CSS used by `root.tsx`: floating Lopu/DevKit launch buttons step aside while a `.ttBuilderDrawer` exists and return on close, without changing panel state or preferences. Real viewport hit coverage: `scripts/preview-retention-overlay-acceptance.mjs`. |
 | Editable block structure dialog | `Builder/BlockContextMenu.tsx`, `BlockStructureModal.tsx`, `blockStructure.ts`; page/parent/block projections rendered through `SettingsDocumentHost` and `TransientBlockHost`, selecting the original page block in its inspector |
 
 ## Adding a menu action (any Thing surface)
