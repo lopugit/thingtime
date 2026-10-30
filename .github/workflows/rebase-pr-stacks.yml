@@ -252,6 +252,81 @@ jobs:
             exit 1
           fi
 
+          # This detector owns no state: it reads live PR topology and republishes
+          # `targets`/`any` on every push, dispatch and scheduled sweep. So an
+          # exhausted *account-wide* installation budget is never a defect in the
+          # pushed PR, and `any=false` is already this step's "nothing to rebase"
+          # answer. Duplicate GITHUB_OUTPUT keys resolve to the last value, so
+          # appending the empty answer only ever declines work, never invents it.
+          # Same sentinel + EXIT-trap shape as resolve-pr-conflicts.yml's two
+          # PR-facing detectors; a file, not a variable, because gh_read_retry
+          # runs inside command substitution and cannot export to this shell.
+          LOPU_GH_BUDGET_SENTINEL="$RUNNER_TEMP/lopu-gh-budget-exhausted"
+          rm -f "$LOPU_GH_BUDGET_SENTINEL"
+          defer_on_exhausted_budget() {
+            local code=$?
+            [ "$code" -ne 0 ] || return 0
+            [ -e "$LOPU_GH_BUDGET_SENTINEL" ] || return 0
+            echo "::notice::Deferring this rebase scan: GitHub's shared installation API budget was exhausted mid-scan. A later detector re-selects after the reset."
+            echo 'targets=[]' >>"$GITHUB_OUTPUT"
+            echo 'any=false' >>"$GITHUB_OUTPUT"
+            exit 0
+          }
+          trap defer_on_exhausted_budget EXIT
+
+          # Every read below is idempotent metadata, so a transient edge failure
+          # is safe to replay. Keep diagnostics off stdout so command
+          # substitution keeps returning parseable JSON.
+          gh_read_retry() {
+            local attempt delay output errors transport slow_diff
+            transport='stream error|http2: server sent GOAWAY|connection reset by peer|unexpected EOF|unexpected end of JSON input|TLS handshake timeout|i/o timeout|server closed idle connection|client connection force closed'
+            slow_diff='diff is taking too long to generate'
+            output="$RUNNER_TEMP/lopu-rebase-detect-gh-${BASHPID:-$$}.out"
+            errors="$RUNNER_TEMP/lopu-rebase-detect-gh-${BASHPID:-$$}.err"
+            for attempt in 1 2 3 4; do
+              : >"$output"
+              : >"$errors"
+              if gh "$@" >"$output" 2>"$errors"; then
+                cat "$output"
+                rm -f "$output" "$errors" "$LOPU_GH_BUDGET_SENTINEL"
+                return 0
+              fi
+              # An exhausted PRIMARY budget answers HTTP 403 carrying "API rate
+              # limit exceeded", not 429, so status-only matching left the most
+              # self-healing condition the API has fatal (run 40859189317 and
+              # run 40859332671 on 2026-10-29 both died here in 5s and reddened
+              # PR #832). The published reset can be most of an hour out, so the
+              # backoff below cannot clear it — defer instead. A bare 403 is a
+              # real permission failure and must still fail fast, hence status
+              # AND message together.
+              if grep -Eq 'HTTP (403|429)([^0-9]|$)' "$errors" \
+                 && grep -Fq 'API rate limit exceeded' "$errors"; then
+                : >"$LOPU_GH_BUDGET_SENTINEL"
+                echo "::notice::GitHub's shared installation API budget is exhausted; deferring this rebase scan to a later detector." >&2
+                sed -n '1,20p' "$errors" >&2
+                rm -f "$output" "$errors"
+                return 1
+              fi
+              # A transport reset never carries an HTTP status line; it is the
+              # same retryable edge failure as a 502/504 for an idempotent read.
+              # GitHub's diff-generation timeout does carry one, but 422 as a
+              # status is not retryable, so it is paired with its exact message.
+              if { grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
+                   || grep -Eq "$transport" "$errors" \
+                   || { grep -Eq 'HTTP 422([^0-9]|$)' "$errors" \
+                        && grep -Fq "$slow_diff" "$errors"; }; } \
+                 && [ "$attempt" -lt 4 ]; then
+                delay="$((1 << attempt))"
+                echo "::notice::GitHub metadata read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
+                sleep "$delay"
+                continue
+              fi
+              sed -n '1,20p' "$errors" >&2
+              rm -f "$output" "$errors"
+              return 1
+            done
+          }
+
           encode_ref() {
             jq -rn --arg value "$1" '$value | @uri'
           }
@@ -259,20 +334,20 @@ jobs:
           live_ref_sha() {
             local encoded
             encoded="$(encode_ref "$1")"
-            gh api "repos/$REPO/git/ref/heads/$encoded" --jq '.object.sha'
+            gh_read_retry api "repos/$REPO/git/ref/heads/$encoded" --jq '.object.sha'
           }
 
           branch_protected() {
             local encoded
             encoded="$(encode_ref "$1")"
-            gh api "repos/$REPO/branches/$encoded" --jq '.protected'
+            gh_read_retry api "repos/$REPO/branches/$encoded" --jq '.protected'
           }
 
           all="$(
-            gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" --slurp \
+            gh_read_retry api --paginate "repos/$REPO/pulls?state=open&per_page=100" --slurp \
               | jq -c 'add // []'
           )"
-          default_ref="$(gh api "repos/$REPO" --jq '.default_branch')"
+          default_ref="$(gh_read_retry api "repos/$REPO" --jq '.default_branch')"
 
           # A stack member either targets another open PR's head branch or is
           # itself the base of another open PR. Compare only same-repo PRs;
@@ -398,7 +473,10 @@ jobs:
             next_pending='[]'
             while IFS= read -r number; do
               [ -n "$number" ] || continue
-              detail="$(gh api "repos/$REPO/pulls/$number")"
+              # The highest-volume read in this step: a repository-wide sweep
+              # issues up to 8 rounds across every open candidate, so this is
+              # where a shared budget is most likely to run out mid-scan.
+              detail="$(gh_read_retry api "repos/$REPO/pulls/$number")"
               rebaseable="$(jq -r '.rebaseable' <<<"$detail")"
               mergeable="$(jq -r '.mergeable' <<<"$detail")"
               if [ "$rebaseable" != null ] && [ "$mergeable" != null ]; then
@@ -535,7 +613,7 @@ jobs:
             local token decoded payload topology
             topology="$1"
             token="$(
-              gh api --paginate "repos/$REPO/issues/$number/comments?per_page=100" --slurp 2>/dev/null \
+              gh_read_retry api --paginate "repos/$REPO/issues/$number/comments?per_page=100" --slurp 2>/dev/null \
                 | jq -r '
                     add // []
                     | [.[]
@@ -589,7 +667,7 @@ jobs:
                 echo "Manual run will recover the existing ai-rebase-in-progress lock on #$number."
               else
                 labelled_at="$(
-                  gh api --paginate "repos/$REPO/issues/$number/events?per_page=100" --slurp \
+                  gh_read_retry api --paginate "repos/$REPO/issues/$number/events?per_page=100" --slurp \
                     | jq -r 'add // []
                         | map(select(.event == "labeled"
                                      and .label.name == "ai-rebase-in-progress"))

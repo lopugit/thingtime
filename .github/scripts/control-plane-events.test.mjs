@@ -286,3 +286,108 @@ test('both PR-facing detectors defer an exhausted budget instead of reporting re
     }
   } finally { rmSync(temp, {recursive:true, force:true}); }
 });
+
+// The rebase-stack detector is the third PR-facing detector, and it was the
+// last one still converting a shared installation budget into a red check: on
+// 2026-10-29 runs 40859189317 and 40859332671 both died in 5s at its very first
+// read ("API rate limit exceeded for installation ... (HTTP 403)") and reddened
+// `Find stack members that need rebasing` on PR #832. It owns no state and
+// republishes targets from live topology on every push/dispatch/sweep, so the
+// correct answer to an account-wide budget reset is its existing "nothing to
+// rebase" answer, not a failure attributed to the pushed PR.
+const rebaseWorkflow = readFileSync(new URL('../workflows/rebase-pr-stacks.yml', import.meta.url), 'utf8');
+const rebaseReadRetry = (call) => {
+  const marker = '          gh_read_retry() {\n            local attempt delay output errors transport slow_diff\n            transport=';
+  const body = rebaseWorkflow.slice(rebaseWorkflow.indexOf(marker));
+  assert.ok(rebaseWorkflow.includes(marker), 'the rebase detector carries the shared read-retry helper');
+  return 'LOPU_GH_BUDGET_SENTINEL="$RUNNER_TEMP/lopu-gh-budget-exhausted"\n'
+    + body.slice(0, body.indexOf('\n          }\n') + 13).replace(/^          /gm, '')
+    + `\n${call}\n`;
+};
+
+test('the rebase detector routes every scan read through the retrying reader', () => {
+  // A single unrouted read re-arms the whole defect, because `set -euo pipefail`
+  // kills the step before the EXIT trap can reach its deferral branch.
+  const step = rebaseWorkflow.slice(
+    rebaseWorkflow.indexOf('      - name: Scan open same-repository PRs via the API'),
+  );
+  const scan = step.slice(0, step.indexOf('\n  ai_rebase:') + 1 || undefined);
+  for (const read of [
+    'repos/$REPO/pulls?state=open&per_page=100',
+    'repos/$REPO',
+    'repos/$REPO/git/ref/heads/$encoded',
+    'repos/$REPO/branches/$encoded',
+    'repos/$REPO/pulls/$number',
+    'repos/$REPO/issues/$number/comments?per_page=100',
+    'repos/$REPO/issues/$number/events?per_page=100',
+  ]) {
+    const line = scan.split('\n').find((candidate) => candidate.includes(read));
+    assert.ok(line, `the rebase scan still reads ${read}`);
+    assert.match(line, /gh_read_retry api /u, `${read} is read through gh_read_retry`);
+  }
+});
+
+test('the rebase detector defers an exhausted budget with its empty answer', () => {
+  const traps = [...rebaseWorkflow.matchAll(/defer_on_exhausted_budget\(\) \{\n([\s\S]*?)\n          \}\n          trap defer_on_exhausted_budget EXIT/gu)];
+  assert.equal(traps.length, 1, 'the rebase detector installs exactly one deferral trap');
+  const temp = mkdtempSync(join(tmpdir(), 'rebase-defer-'));
+  try {
+    const fn = `defer_on_exhausted_budget() {\n${traps[0][1].replace(/^          /gm, '')}\n}\n`;
+    const run = (seed) => spawnSync('bash', ['-c',
+      `set -euo pipefail\nLOPU_GH_BUDGET_SENTINEL="$RUNNER_TEMP/s"\n${seed}\n${fn}`
+      + 'trap defer_on_exhausted_budget EXIT\nfalse\n'],
+      {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp,GITHUB_OUTPUT:join(temp,'out')}});
+
+    rmSync(join(temp,'out'), {force:true});
+    const deferred = run(': >"$LOPU_GH_BUDGET_SENTINEL"');
+    assert.equal(deferred.status, 0, 'an exhausted budget defers with a green step');
+    assert.match(deferred.stdout, /::notice::Deferring this rebase scan/u);
+    // Both outputs, or the downstream `any == 'true'` gate reads an unset value
+    // while `targets` keeps a stale payload from a duplicate key.
+    const outputs = readFileSync(join(temp,'out'),'utf8');
+    assert.match(outputs, /targets=\[\]/u);
+    assert.match(outputs, /any=false/u);
+
+    rmSync(join(temp,'out'), {force:true});
+    rmSync(join(temp,'s'), {force:true});
+    const genuine = run(':');
+    assert.equal(genuine.status, 1, 'an unrelated failure still fails the step');
+    assert.doesNotMatch(genuine.stdout, /Deferring/u);
+  } finally { rmSync(temp, {recursive:true, force:true}); }
+});
+
+test('the rebase reader defers a primary budget 403 and keeps a bare 403 fatal', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'rebase-budget-'));
+  try {
+    const exhausted = spawnSync('bash', ['-c', 'set -euo pipefail\n'
+      + ghStub(403, 'gh: API rate limit exceeded for installation')
+      + rebaseReadRetry('gh_read_retry api "repos/o/r/pulls" || echo "status=$?"')],
+      {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(exhausted.status, 0, exhausted.stderr);
+    assert.match(exhausted.stdout, /status=1/u);
+    assert.equal(readFileSync(join(temp, 'lopu-gh-budget-exhausted'), 'utf8'), '');
+    assert.match(exhausted.stderr, /shared installation API budget is exhausted/u);
+    // The published reset is most of an hour out, so no retry is spent on it.
+    assert.doesNotMatch(exhausted.stderr, /hit a transient failure/u);
+
+    rmSync(join(temp, 'lopu-gh-budget-exhausted'), {force:true});
+    const denied = spawnSync('bash', ['-c', 'set -euo pipefail\n'
+      + ghStub(403, 'gh: Resource not accessible by integration')
+      + rebaseReadRetry('gh_read_retry api "repos/o/r/pulls" || echo "status=$?"')],
+      {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(denied.status, 0, denied.stderr);
+    assert.match(denied.stdout, /status=1/u);
+    assert.match(denied.stderr, /Resource not accessible by integration/u);
+    assert.doesNotMatch(denied.stderr, /budget is exhausted/u);
+    assert.throws(() => readFileSync(join(temp, 'lopu-gh-budget-exhausted')));
+
+    // A successful read clears a stale sentinel, so one tolerated budget
+    // failure cannot mask an unrelated failure later in the same step.
+    const cleared = spawnSync('bash', ['-c', 'set -euo pipefail\n'
+      + 'gh() { echo ok; }\n'
+      + rebaseReadRetry(': >"$RUNNER_TEMP/lopu-gh-budget-exhausted"\ngh_read_retry api "repos/o/r" >/dev/null')],
+      {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(cleared.status, 0, cleared.stderr);
+    assert.throws(() => readFileSync(join(temp, 'lopu-gh-budget-exhausted')));
+  } finally { rmSync(temp, {recursive:true, force:true}); }
+});
