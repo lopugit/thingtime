@@ -78,7 +78,7 @@ export function importPasswordCsv(text: string): PasswordImport {
 const cancelled = (signal?: AbortSignal) => { if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError'); };
 // Work chunks regulate memory/backpressure; they do not limit file or entry size.
 const CHUNK_BYTES = 64 * 1024;
-export type ImportedPasswordFile = { name: string; path: string; size: number; entryIndex?: number; original?: { name: string; archivePath?: string; role?: 'attachment' | 'source' | 'icon' | 'document' }; open: () => ReadableStream<Uint8Array> };
+export type ImportedPasswordFile = { name: string; path: string; size: number; entryIndex?: number; original?: { id?: string; name: string; archivePath?: string; role?: 'attachment' | 'source' | 'icon' | 'document' }; open: () => ReadableStream<Uint8Array> };
 type VisitOptions = { onFile?: (file: ImportedPasswordFile, index: number) => void | Promise<void>; signal?: AbortSignal; onEntry: (entry: PasswordEntry, index: number, sourceId?: string) => void | Promise<void>; onProgress?: (count: number) => void };
 export async function visitPasswordFile(file: Blob & { name: string }, options: VisitOptions) {
   const { signal } = options, warnings = new Set<string>();
@@ -141,7 +141,7 @@ export async function visitPasswordFile(file: Blob & { name: string }, options: 
             }
             if (vendor?.version === 1 && Array.isArray(vendor.files)) for (const file of vendor.files) {
               if (typeof file.path !== 'string' || typeof file.name !== 'string' || fileOwners.has(file.path)) throw new PasswordImportError('Invalid backup file references.');
-              fileOwners.set(file.path, { index: count, original: { name: file.name, ...(typeof file.archivePath === 'string' ? { archivePath: file.archivePath } : {}), ...(['attachment', 'source', 'icon', 'document'].includes(file.role) ? { role: file.role } : {}) } });
+              fileOwners.set(file.path, { index: count, original: { ...(typeof file.id === 'string' && /^att_[a-f0-9]{64}$/.test(file.id) ? { id: file.id } : {}), name: file.name, ...(typeof file.archivePath === 'string' ? { archivePath: file.archivePath } : {}), ...(['attachment', 'source', 'icon', 'document'].includes(file.role) ? { role: file.role } : {}) } });
             }
             await consume(entry, vendor?.version === 1 && typeof vendor.id === 'string' ? vendor.id : undefined);
           }

@@ -1,3 +1,5 @@
+import { isBuilderThing } from '~/schemas/builderThing';
+import { hasRenderComponent, THING_PRESENTATION_REQUIREMENTS } from '../components/Thingtime/renderComponentDeclaration';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { FILE_SYNC_REQUIREMENTS } from '~/fileSync/configuration';
 import { parseCloudFile, parseCloudFileCommit, type CloudFileCommit } from '~/fileSync/cloudFile';
@@ -26,7 +28,9 @@ import { rootIdentity } from '../utils/rootIdentity';
 import { createBrowserActionHost, finishBrowserAction } from '~/components/Actions/browserActionHost';
 import { withPostRequestDeadline } from './postRequest';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
-import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { THEME_CAPABILITY_REQUIREMENTS } from '~/theme/capabilities';
+import { PREVIEW_RETENTION_REQUIREMENTS } from '~/api/utils/ciControl/previewRetentionCore';
+import { requireThingtimeCapability, type CapabilityTransport } from '~/api/utils/capabilities/requireCapability.client';
 import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
@@ -524,6 +528,16 @@ export function useApi() {
 				async (args?: { limit?: number }, options?: { signal?: AbortSignal }) => getJson(`/api/v1/admin/ci${toQuery(args)}`, options),
         []
       ),
+      ciPreviewRetention: useCallback(async (scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.admin-ci-preview-retention', PREVIEW_RETENTION_REQUIREMENTS['api.admin-ci-preview-retention'], scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        const requestScope = { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal };
+        return getJson('/api/v1/admin/ci/preview-retention', requestScope);
+      }, []),
+      setCiPreviewRetention: useCallback(async (args: Record<string, unknown>, scope: { expectedActor: string; expectedApiOrigin: string; capabilityTransport: CapabilityTransport; signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.admin-ci-preview-retention', PREVIEW_RETENTION_REQUIREMENTS['api.admin-ci-preview-retention'], scope.expectedApiOrigin, { ...scope.capabilityTransport, signal: scope.signal });
+        const requestScope = { expectedActor: scope.expectedActor, expectedApiOrigin: scope.expectedApiOrigin, signal: scope.signal };
+        return asyncFetcher.submit(args, { ...requestScope, action: '/api/v1/admin/ci/preview-retention', errorContext: 'save preview retention rules' });
+      }, [asyncFetcher]),
       ciCredentials: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/credentials', options), []),
       ciFeatureStacks: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/stacks', options), []),
       ciStackChat: useCallback(async (runId: string) => getJson(`/api/v1/admin/ci/stacks/chat${toQuery({ runId })}`), []),
@@ -1150,14 +1164,14 @@ export function useApi() {
           await requireThingtimeCapability('api.attachment-content', '1.9.0');
           return getJson(`/api/v1/things${toQuery({ id: args?.id, commentProjection: args?.commentProjection ? true : undefined, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, { ...options, expectedDataPlane });
         },
-				[]
+				[getJson]
 			),
       list: useCallback(
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           if (expectedDataPlane) await requireThingtimeCapability('api.mongodb-endpoint', '1.1.0');
           if (options?.expectedActor) await requireThingtimeCapability('api.actions-run', '1.7.0');
-          await requireThingtimeCapability('api.things', args?.commentProjection ? '1.27.0' : args?.target ? '1.22.0' : args?.folder === 'root' ? '1.39.1' : '1.14.0');
+          await requireThingtimeCapability('api.things', args?.builderApp ? '1.45.0' : args?.commentProjection ? '1.27.0' : args?.target ? '1.22.0' : args?.folder === 'root' ? '1.39.1' : '1.14.0');
           return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
@@ -1168,7 +1182,8 @@ export function useApi() {
               cursor: args?.cursor,
               limit: args?.limit,
               // session-auth data browser: narrow own-things to ONE app's namespace
-              appId: args?.appId
+              appId: args?.appId,
+              builderApp: args?.builderApp
             })}`, { ...options, expectedDataPlane }
           );
         },
@@ -1182,6 +1197,10 @@ export function useApi() {
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (args?.thingtime !== undefined) await requireThingtimeCapability('api.things-update', args?.thingtime?.includes('reaction') ? '1.15.1' : '1.15.0');
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           if (args?.crystal?.configurationVersion !== undefined && args?.crystal?.localRootId !== undefined) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.crystal?.title !== undefined || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
           if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
@@ -1197,6 +1216,7 @@ export function useApi() {
           return asyncFetcher.submit(
             {
               id: args?.id,
+              ...(args?.thingtime !== undefined ? { thingtime: args.thingtime } : {}),
               geo: args?.geo,
               crystal: args?.crystal,
               ...(args?.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: args.expectedUpdatedAt } : {}),
@@ -1241,8 +1261,11 @@ export function useApi() {
         [asyncFetcher]
       ),
       upsert: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
+          return asyncFetcher.submit(
             {
               id: args?.id,
               thingtime: args?.thingtime,
@@ -1254,7 +1277,8 @@ export function useApi() {
               tokenAcl: args?.tokenAcl
             },
             { action: '/api/v1/things', method: 'PUT' }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
@@ -1262,6 +1286,9 @@ export function useApi() {
         async (args, options?: ThingRequestOptions) => {
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
+          if (args?.thingtime?.includes('reaction')) await requireThingtimeCapability('api.things', '1.46.2');
+          if (isBuilderThing(args)) await requireThingtimeCapability('api.things', '1.46.0');
+          if (hasRenderComponent(args?.crystal)) await requireThingtimeCapability('api.things', THING_PRESENTATION_REQUIREMENTS['api.things']);
           if (args?.thingtime?.includes('file-sync')) await requireThingtimeCapability('api.things', FILE_SYNC_REQUIREMENTS['api.things']);
           if (args?.thing?.kind === 'thing-collection' || args?.crystal?.thing?.kind === 'thing-collection') await requireThingtimeCapability('api.things', '1.27.0');
 					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
@@ -1285,7 +1312,7 @@ export function useApi() {
       ),
       react: useCallback(
         async (args) => {
-          await requireThingtimeCapability('api.things-react', '1.2.0');
+          await requireThingtimeCapability('api.things-react', '1.2.1');
           return asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react', errorContext: 'save your reaction' });
         },
         [asyncFetcher]
@@ -1618,6 +1645,7 @@ export function useApi() {
       save: useCallback(
         async (args) => {
           const { id, name, theme, visibility } = args;
+          await requireThingtimeCapability('api.themes', THEME_CAPABILITY_REQUIREMENTS['api.themes']);
           return asyncFetcher.submit({ id, name, theme, visibility }, { action: '/api/v1/themes' });
         },
         [asyncFetcher]

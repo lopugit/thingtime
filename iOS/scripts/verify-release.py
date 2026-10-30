@@ -15,6 +15,7 @@ def verify_bundle(app, expected_build, bundle_id, team_id, check_signatures=True
         (app, bundle_id),
         (app / 'Watch/ThingtimeWatch.app', bundle_id + '.watchkitapp'),
         (app / 'PlugIns/ThingtimeLopuWidget.appex', bundle_id + '.lopu-widget'),
+        (app / 'PlugIns/ThingtimeShare.appex', bundle_id + '.share'),
     ]
     group = phone.get('ThingtimeWidgetGroup')
     assert isinstance(group, str) and group.startswith('group.') and '$' not in group, 'Missing resolved widget App Group'
@@ -25,8 +26,16 @@ def verify_bundle(app, expected_build, bundle_id, team_id, check_signatures=True
         assert info['CFBundleShortVersionString'] == phone['CFBundleShortVersionString'], 'Mismatched marketing version'
         assert (target / info['CFBundleExecutable']).is_file(), 'Missing executable'
         if target.suffix == '.appex':
-            assert info['NSExtension']['NSExtensionPointIdentifier'] == 'com.apple.widgetkit-extension', 'Not a WidgetKit extension'
-            assert info.get('ThingtimeWidgetGroup') == group, 'Widget App Group differs from host'
+            expected_point = 'com.apple.share-services' if identifier.endswith('.share') else 'com.apple.widgetkit-extension'
+            assert info['NSExtension']['NSExtensionPointIdentifier'] == expected_point, 'Wrong extension point'
+            assert info.get('ThingtimeWidgetGroup') == group, 'Extension App Group differs from host'
+            if identifier.endswith('.share'):
+                assert info.get('CFBundleDisplayName') == 'Thingtime', 'Wrong share extension display name'
+                attributes = info['NSExtension'].get('NSExtensionAttributes', {})
+                rule = attributes.get('NSExtensionActivationRule')
+                assert isinstance(rule, str) and 'TRUEPREDICATE' not in rule and 'registeredTypeIdentifiers' not in rule, 'Invalid production share activation rule'
+                assert '$item.attachments.@count > 0' in rule and '$item.attributedContentText.length > 0' in rule, 'Missing broad file/text activation'
+                assert info['NSExtension'].get('NSExtensionPrincipalClass', '').endswith('.ShareViewController'), 'Missing share extension controller'
         if check_signatures:
             subprocess.run(['codesign', '--verify', '--deep', '--strict', str(target)], check=True, capture_output=True)
             signed = subprocess.run(['codesign', '-d', '--entitlements', ':-', str(target)], check=True, capture_output=True)
@@ -43,7 +52,7 @@ if __name__ == '__main__':
     import sys
     try:
         verify_bundle(Path(sys.argv[1]), os.environ['EXPECTED_BUILD_NUMBER'], os.environ['PRODUCT_BUNDLE_IDENTIFIER'], os.environ['DEVELOPMENT_TEAM'])
-        print('Verified phone, Watch and WidgetKit release bundles and signed App Groups.')
+        print('Verified phone, Watch, widget and share release bundles and signed App Groups.')
     except Exception:
         # Do not log subprocess errors or signing data.
         sys.exit('Release package verification failed; upload is blocked.')

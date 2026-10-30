@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createTransientLifetime, isTransientBlockTarget, parseTransientBinding, transientFieldValue, transientNamedField } from './transientBlockActions';
+import { createTransientLifetime, transientControlForTarget, isTransientBlockTarget, parseTransientBinding, transientFieldValue, transientNamedField } from './transientBlockActions';
 
 test('bindings contain only operation names and scalar arguments, not executable or nested payloads', () => {
 	const binding = parseTransientBinding('{"operation":"plan.select-model","id":"account-1","selected":true}');
@@ -48,4 +48,25 @@ test('a transient boundary refuses outer capture delegates even on plain and for
 		assert.equal(isTransientBlockTarget(element as any), true);
 	}
 	assert.equal(isTransientBlockTarget({ closest: () => null } as any), false);
+});
+
+
+test('capture leaves native Thing controls and nested adapters to their own handlers', () => {
+	const root = { contains: () => true };
+	const nestedBoundary = {};
+	const control = (action: string, boundary: unknown = root) => ({
+		getAttribute: () => action,
+		closest: () => boundary
+	});
+	const nativeToggle = { closest: () => null };
+	assert.equal(transientControlForTarget(root as any, nativeToggle as any), null,
+		'the Thing data/render toggle must reach its React onClick');
+	const owned = control('$transient');
+	assert.equal(transientControlForTarget(root as any, { closest: () => owned } as any), owned);
+	const foreign = control('saved-action');
+	assert.equal(transientControlForTarget(root as any, { closest: () => foreign } as any), null);
+	const nested = control('$transient', nestedBoundary);
+	assert.equal(transientControlForTarget(root as any, { closest: () => nested } as any), null,
+		'an outer adapter cannot capture a nested adapter control');
+	assert.equal(transientControlForTarget({ contains: () => false } as any, { closest: () => owned } as any), null);
 });

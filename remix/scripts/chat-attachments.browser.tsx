@@ -111,6 +111,7 @@ function App() {
 				Messenger
 			</Heading>
 			<Composer
+				targetId="synthetic-chat-attachments"
 				placeholder="Message a friend"
 				pickerEmojis={[]}
 				replyTo={null}

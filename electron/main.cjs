@@ -13,7 +13,9 @@ if (parallelDevMode) {
 	if (!profilePath || !path.isAbsolute(profilePath)) {
 		throw new Error('Parallel development requires an isolated absolute profile path.');
 	}
-	app.setName('Thingtime Dev');
+	const developmentName = process.env.THINGTIME_DESKTOP_DEV_NAME || 'Thingtime Dev';
+	if (developmentName !== 'Thingtime Dev' && !/^Thingtime Dev [a-z0-9][a-z0-9-]{0,63}$/.test(developmentName)) throw new Error('Choose a valid isolated development app name.');
+	app.setName(developmentName);
 	app.setPath('userData', profilePath);
 }
 const { checkEndpointCompatibility, compatibilityError, probeEndpointCapabilities } = require('./lib/endpoint-compatibility.cjs');
@@ -23,6 +25,7 @@ const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
 const { LocalRuntime, attachQuitSignals } = require('./lib/local-runtime.cjs');
 const { SessionAuthority, remoteOrigin, contentOrigin } = require('./lib/session-authority.cjs');
 const { ensureWindowVisible, loadWindow } = require('./lib/window-visibility.cjs');
+const { attachWindowZoom, windowZoomMenu } = require('./lib/window-zoom.cjs');
 const { AuthorityTransition } = require('./lib/authority-transition.cjs');
 const authorityTransition = new AuthorityTransition();
 const {
@@ -1075,7 +1078,7 @@ async function initializeDesktopSettings() {
   }
  });
  await localRuntime.initialize();
- if (localRuntime.snapshot().enabled) await passwordProvider.disconnect();
+ if (localRuntime.snapshot().enabled && !parallelDevMode) await passwordProvider.disconnect();
 	desktopSettings = new DesktopSettingsStore({
 		filePath: path.join(app.getPath('userData'), 'desktop-settings.json'),
 		metadata: readWebBuildMetadata()
@@ -1774,6 +1777,7 @@ function createApplicationMenu() {
       ]
     },
     { role: 'editMenu' },
+    windowZoomMenu(() => mainWindow),
     { role: 'windowMenu' }
   ];
 
@@ -1818,6 +1822,7 @@ function createWindow() {
     }
   });
 
+  attachWindowZoom(mainWindow);
   mainWindow.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
     if (isMainFrame && !isInPlace) { syncWindowLease.invalidate(); desktopSpeech.stop(); desktopFolderSync.invalidate(); desktopFileExport.invalidate(); }
   });
