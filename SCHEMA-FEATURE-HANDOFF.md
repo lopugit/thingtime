@@ -97,7 +97,7 @@ Match the `/search` page's look (it's the reference).
   Search API: `remix/app/api/utils/things/search.ts` +
   `remix/app/routes/api/v1/things/search/_search.tsx`. It already accepts
   `thingtime:['schema']` to list schema things.
-- **API conventions (IMPORTANT — see `AGENTS.md`):** every new `/api/v1/...`
+- **API conventions (IMPORTANT — see `AI_ALL.md`):** every new `/api/v1/...`
   endpoint must be registered in THREE places: the route file
   (`remix/app/routes/api/v1/.../_name.tsx` exporting `loader`/`action`), the
   import map in `remix/server/routes/api/[...].ts`, and an `apiEndpointDocs`
@@ -109,7 +109,7 @@ Match the `/search` page's look (it's the reference).
   `visibilityQueryFor`, `withMatch`, `asViewer`, `parseChronoCursor`,
   `chronoCursorClause`, `oldestCursorClause`, `viewerOf`, `Fail`/`fail`/`isFail`,
   `PROTECTED_THINGTIME`.
-- **Read FIRST:** `CLAUDE.md`, `AGENTS.md`, `FUNDAMENTALS.md`. Repo rule: run
+- **Read FIRST:** `AI_ALL.md`, `FUNDAMENTALS.md`. Repo rule: run
   `graphify query "<question>"` before grepping/reading source (there's a
   pre-tool hook enforcing it).
 
@@ -125,7 +125,7 @@ Match the `/search` page's look (it's the reference).
   BinData `secure` blob; if you hand-poke Mongo, use the app's API, not raw writes.
 - After code changes run `graphify update .` from the repo root to refresh the
   tracked graph. `remix/graphify-out` + root `graphify-out` are tracked; on merge
-  conflicts under `graphify-out/` take ONE side then regenerate (see CLAUDE.md).
+  conflicts under `graphify-out/` take ONE side then regenerate (see AI_ALL.md).
 
 ---
 

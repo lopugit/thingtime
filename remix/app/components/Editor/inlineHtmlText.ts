@@ -1,8 +1,9 @@
+import { sanitizeInlineStyle } from './styleTokens';
 const ENTITY_PATTERN = /&(?:amp|lt|gt|quot|apos|nbsp|#\d+|#x[\da-f]+);/gi;
 const UNKNOWN_ENTITY_PATTERN = /&(?:#|[a-z][a-z\d]+;)/i;
 const TAG_NAME_PATTERN = /^\s*(\/?)\s*([a-z][\w:-]*)/i;
 
-const ALLOWED_INLINE_TAGS = new Set(['b', 'strong', 'i', 'em', 'u', 's', 'a', 'mark', 'code', 'br']);
+const ALLOWED_INLINE_TAGS = new Set(['b', 'strong', 'i', 'em', 'u', 's', 'a', 'mark', 'code', 'br', 'span']);
 const DROPPED_CONTENT_TAGS = new Set(['script', 'style', 'template']);
 const SAFE_PROTOCOLS = new Set(['http:', 'https:', 'mailto:', 'tel:']);
 const SAFE_BASE = 'https://thingtime.invalid/';
@@ -196,6 +197,12 @@ const parseInlineHtml = (value: unknown): { html: string; text: string } => {
 			continue;
 		}
 
+		if (tagName === 'span') {
+			const style = sanitizeInlineStyle(decodeEntitiesOnce(readAttribute(token.contents, 'style')));
+			html += style ? `<span style="${escapeAttribute(style)}">` : '<span>';
+			openTags.push({ name: tagName, closingHtml: '</span>' });
+			continue;
+		}
 		html += `<${tagName}>`;
 		openTags.push({ name: tagName, closingHtml: `</${tagName}>` });
 	}

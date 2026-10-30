@@ -1,3 +1,6 @@
+import { PreviewRetentionSettings } from './PreviewRetentionSettings';
+import { SettingsSection } from '~/components/Settings/SettingsSection';
+import { LopuPromptSettings } from '~/components/Settings/LopuPromptSettings';
 import React from 'react';
 import { Box, Button, Flex, Input, Spinner, Switch, Text } from '@chakra-ui/react';
 
@@ -5,20 +8,37 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 
+import { AdminRowQueryControls, useAdminRowQuery } from './AdminRowQueryControls';
+import type { AdminRowField } from './adminRowQuery';
+import { LOPU_ACCOUNTS_ANCHOR_ID, LopuAccountsAdmin } from './LopuAccountsAdmin';
+import { LopuModelsEditor } from './LopuModelsEditor';
+import { PRConflictResolverModelWaterfallEditor } from './PRConflictResolverModelWaterfallEditor';
+
 // Admin-only control panel (rendered from SettingsPage when user.isAdmin).
-// Lets admins tune the global rate limits and grant/revoke admin on other
-// users. Every action re-checks admin server-side; this UI is just the surface.
+// Lets admins choose the conflict resolver model order, tune global rate
+// limits, and grant/revoke admin on other users. Every action re-checks admin
+// server-side; this UI is just the surface.
 
 type Rule = { limit: number; windowMs: number; enabled: boolean };
 type Config = Record<string, Rule>;
-type AdminRow = { id: string; username: string; displayName: string | null; email?: string; isAdmin: boolean; envAdmin: boolean };
+type AdminRow = {
+  id: string;
+  username: string;
+  displayName: string | null;
+  email?: string;
+  isAdmin: boolean;
+  envAdmin: boolean;
+  createdAt?: string | null;
+};
+type RateLimitRow = Rule & { endpoint: string; label: string };
 
 const eyebrow = {
+  fontFamily: 'var(--tt-font-mono, ui-monospace, Menlo, monospace)',
   fontSize: '10px',
   fontWeight: 600,
   letterSpacing: '0.08em',
   textTransform: 'uppercase' as const,
-  opacity: 0.45
+  color: 'var(--tt-muted, #9a9aa6)'
 };
 
 const ENDPOINT_LABELS: Record<string, string> = {
@@ -26,6 +46,27 @@ const ENDPOINT_LABELS: Record<string, string> = {
   'things.comment': 'Comments',
   'mongodb.query': 'MongoDB queries'
 };
+
+const RATE_LIMIT_QUERY_FIELDS: readonly AdminRowField<RateLimitRow>[] = [
+  { id: 'endpoint', label: 'Endpoint', kind: 'string' },
+  { id: 'label', label: 'Label', kind: 'string' },
+  { id: 'limit', label: 'Limit', kind: 'number' },
+  { id: 'windowMs', label: 'Window milliseconds', kind: 'number' },
+  { id: 'enabled', label: 'Enabled', kind: 'boolean' }
+];
+
+const ADMIN_QUERY_FIELDS: readonly AdminRowField<AdminRow>[] = [
+  { id: 'id', label: 'User ID', kind: 'string' },
+  { id: 'username', label: 'Username', kind: 'string' },
+  { id: 'displayName', label: 'Display name', kind: 'string' },
+  { id: 'email', label: 'Email', kind: 'string' },
+  { id: 'isAdmin', label: 'Admin', kind: 'boolean' },
+  { id: 'envAdmin', label: 'Environment admin', kind: 'boolean' },
+  { id: 'createdAt', label: 'Created time', kind: 'date' }
+];
+
+const rateLimitQueryRowId = (row: RateLimitRow) => row.endpoint;
+const adminQueryRowId = (row: AdminRow) => row.id;
 
 const RateLimitEditor = () => {
   const api = useApi();
@@ -36,6 +77,23 @@ const RateLimitEditor = () => {
 
   const apiRef = React.useRef(api);
   apiRef.current = api;
+
+  const rateLimitRows = React.useMemo<RateLimitRow[]>(
+    () =>
+      config
+        ? endpoints.flatMap((endpoint) => {
+            const rule = config[endpoint];
+            return rule ? [{ endpoint, label: ENDPOINT_LABELS[endpoint] || endpoint, ...rule }] : [];
+          })
+        : [],
+    [config, endpoints]
+  );
+  const rateLimitQuery = useAdminRowQuery({
+    rows: rateLimitRows,
+    fields: RATE_LIMIT_QUERY_FIELDS,
+    getRowId: rateLimitQueryRowId,
+    initialSort: { field: 'endpoint', direction: 'asc' }
+  });
 
   React.useEffect(() => {
     let cancelled = false;
@@ -52,8 +110,7 @@ const RateLimitEditor = () => {
     };
   }, []);
 
-  const patch = (name: string, next: Partial<Rule>) =>
-    setConfig((prev) => (prev ? { ...prev, [name]: { ...prev[name], ...next } } : prev));
+  const patch = (name: string, next: Partial<Rule>) => setConfig((prev) => (prev ? { ...prev, [name]: { ...prev[name], ...next } } : prev));
 
   const save = async () => {
     if (!config) return;
@@ -75,16 +132,28 @@ const RateLimitEditor = () => {
 
   if (!config) {
     return (
-      <Flex justifyContent="center" padding={3}>
+      <SettingsSection eyebrow="Rate limits" description="Per-endpoint request limits and time windows.">
         <Spinner size="sm" />
-      </Flex>
+      </SettingsSection>
     );
   }
 
   return (
-    <Flex flexDirection="column" rowGap={3}>
-      <Text sx={eyebrow}>Rate limits</Text>
-      {endpoints.map((name) => {
+    <SettingsSection
+      eyebrow="Rate limits"
+      description="Per-endpoint request limits and time windows."
+      summary={`${rateLimitRows.filter((row) => row.enabled).length} enabled · ${rateLimitRows.length} rules`}
+    >
+      <AdminRowQueryControls
+        ariaLabel="Query rate limit rules"
+        fields={RATE_LIMIT_QUERY_FIELDS}
+        onChange={rateLimitQuery.setQuery}
+        resultCount={rateLimitQuery.rows.length}
+        searchPlaceholder="Search endpoint, label, limit, window, or state…"
+        totalCount={rateLimitRows.length}
+        value={rateLimitQuery.query}
+      />
+      {rateLimitQuery.rows.map(({ endpoint: name }) => {
         const rule = config[name];
         if (!rule) return null;
         return (
@@ -98,7 +167,7 @@ const RateLimitEditor = () => {
             borderRadius="var(--tt-radius-sm, 9px)"
             background="var(--tt-surface-alt, #f5f5f7)"
           >
-            <Text fontSize="sm" fontWeight={600} minWidth="90px">
+            <Text fontSize="sm" fontWeight={600} minWidth={0} flex="1 1 220px" overflowWrap="anywhere" color="var(--tt-ink, #16161a)">
               {ENDPOINT_LABELS[name] || name}
             </Text>
             <Flex alignItems="center" columnGap={1}>
@@ -110,7 +179,7 @@ const RateLimitEditor = () => {
                 onChange={(e) => patch(name, { limit: Math.max(1, Math.floor(Number(e.target.value) || 0)) })}
                 aria-label={`${name} limit`}
               />
-              <Text fontSize="xs" opacity={0.7}>
+              <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
                 per
               </Text>
               <Input
@@ -121,12 +190,12 @@ const RateLimitEditor = () => {
                 onChange={(e) => patch(name, { windowMs: Math.max(1, Math.floor(Number(e.target.value) || 0)) * 1000 })}
                 aria-label={`${name} window seconds`}
               />
-              <Text fontSize="xs" opacity={0.7}>
+              <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
                 sec
               </Text>
             </Flex>
             <Flex alignItems="center" columnGap={1} marginLeft="auto">
-              <Text fontSize="xs" opacity={0.7}>
+              <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
                 {rule.enabled ? 'On' : 'Off'}
               </Text>
               <Switch
@@ -139,12 +208,17 @@ const RateLimitEditor = () => {
           </Flex>
         );
       })}
+      {rateLimitRows.length > 0 && rateLimitQuery.rows.length === 0 ? (
+        <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+          No rate-limit rules match this query.
+        </Text>
+      ) : null}
       <Flex>
         <Button size="xs" variant="outline" isLoading={saving} onClick={save}>
           Save rate limits 💾
         </Button>
       </Flex>
-    </Flex>
+    </SettingsSection>
   );
 };
 
@@ -153,6 +227,9 @@ const AdminManager = () => {
   const lopu = useLopu();
   const me = useCurrentUser();
   const [admins, setAdmins] = React.useState<AdminRow[]>([]);
+  const [adminsLoaded, setAdminsLoaded] = React.useState(false);
+  const [adminsLimit, setAdminsLimit] = React.useState(200);
+  const [adminsCapped, setAdminsCapped] = React.useState(false);
   const [query, setQuery] = React.useState('');
   const [results, setResults] = React.useState<AdminRow[]>([]);
   const [busyId, setBusyId] = React.useState<string | null>(null);
@@ -160,11 +237,21 @@ const AdminManager = () => {
   const apiRef = React.useRef(api);
   apiRef.current = api;
 
+  const adminQuery = useAdminRowQuery({
+    rows: admins,
+    fields: ADMIN_QUERY_FIELDS,
+    getRowId: adminQueryRowId,
+    initialSort: { field: 'username', direction: 'asc' }
+  });
+
   const refresh = React.useCallback(async (q?: string) => {
     try {
       const resp = await apiRef.current.v1.admin.users(q ? { q } : undefined);
       if (resp?.ok) {
         setAdmins(resp.admins || []);
+        setAdminsLoaded(true);
+        setAdminsLimit(Number(resp.limit) || 200);
+        setAdminsCapped(resp.totalCapped === true);
         if (q !== undefined) setResults(resp.results || []);
       }
     } catch {
@@ -202,17 +289,25 @@ const AdminManager = () => {
   };
 
   const row = (r: AdminRow) => (
-    <Flex key={r.id} alignItems="center" columnGap={2} padding={2} borderRadius="var(--tt-radius-sm, 9px)" _hover={{ background: 'var(--tt-surface-hover, #ececee)' }}>
+    <Flex
+      key={r.id}
+      alignItems="center"
+      columnGap={2}
+      padding={2}
+      borderRadius="var(--tt-radius-sm, 9px)"
+      _hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
+    >
       <Box minWidth={0} flex="1 1 auto">
-        <Text fontSize="sm" fontWeight={600} noOfLines={1}>
+        <Text fontSize="sm" fontWeight={600} noOfLines={1} color="var(--tt-ink, #16161a)">
           {r.displayName || r.username}
           {r.envAdmin && (
-            <Text as="span" fontSize="xs" opacity={0.6} fontWeight={400}>
-              {' '}· env admin
+            <Text as="span" fontSize="xs" color="var(--tt-muted, #9a9aa6)" fontWeight={400}>
+              {' '}
+              · env admin
             </Text>
           )}
         </Text>
-        <Text fontSize="xs" opacity={0.6} noOfLines={1}>
+        <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" noOfLines={1}>
           @{r.username}
         </Text>
       </Box>
@@ -236,9 +331,40 @@ const AdminManager = () => {
   );
 
   return (
-    <Flex flexDirection="column" rowGap={3}>
-      <Text sx={eyebrow}>Admins</Text>
-      <Flex flexDirection="column" rowGap={0}>{admins.length ? admins.map(row) : <Text fontSize="xs" opacity={0.6}>No DB-flagged admins yet.</Text>}</Flex>
+    <SettingsSection
+      eyebrow="Administrators"
+      description="Grant or revoke platform administration access."
+      summary={adminsLoaded ? `${admins.length}${adminsCapped ? '+' : ''} administrators` : 'Roster not yet loaded'}
+    >
+      {adminsCapped ? (
+        <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+          Showing the newest {adminsLimit} admins. Filters apply to this bounded roster snapshot.
+        </Text>
+      ) : null}
+      <AdminRowQueryControls
+        ariaLabel="Query current admins"
+        fields={ADMIN_QUERY_FIELDS}
+        onChange={adminQuery.setQuery}
+        resultCount={adminQuery.rows.length}
+        searchPlaceholder="Search every admin field…"
+        totalCount={admins.length}
+        value={adminQuery.query}
+      />
+      <Flex flexDirection="column" rowGap={0}>
+        {admins.length ? (
+          adminQuery.rows.length ? (
+            adminQuery.rows.map(row)
+          ) : (
+            <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+              No admins match this query.
+            </Text>
+          )
+        ) : (
+          <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
+            No DB-flagged admins yet.
+          </Text>
+        )}
+      </Flex>
 
       <Text sx={eyebrow}>Promote a user</Text>
       <Flex columnGap={2}>
@@ -259,14 +385,39 @@ const AdminManager = () => {
           Search
         </Button>
       </Flex>
-      {results.length > 0 && <Flex flexDirection="column" rowGap={0}>{results.map(row)}</Flex>}
+      {results.length > 0 && (
+        <Flex flexDirection="column" rowGap={0}>
+          {results.map(row)}
     </Flex>
+      )}
+    </SettingsSection>
   );
 };
 
-export const AdminPanel = () => (
-  <Flex flexDirection="column" rowGap={5}>
+export const AdminPanel = ({ category = 'all' }: { category?: 'all' | 'ai-providers' | 'lopu' | 'access' }) => (
+  <Flex flexDirection="column" gap={4} minW={0}>
+    {category === 'all' && <PreviewRetentionSettings />}
+    {(category === 'all' || category === 'ai-providers') && (
+      <>
+    <PRConflictResolverModelWaterfallEditor />
+    <LopuModelsEditor />
+      </>
+    )}
+    {(category === 'all' || category === 'lopu') && (
+      <>
+        <SettingsSection eyebrow="Base prompt" description="Shared guidance included with every AI-generated Lopu reply.">
+    <LopuPromptSettings admin />
+        </SettingsSection>
+    <Box id={LOPU_ACCOUNTS_ANCHOR_ID} scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
+      <LopuAccountsAdmin />
+    </Box>
+      </>
+    )}
+    {(category === 'all' || category === 'access') && (
+      <>
     <RateLimitEditor />
     <AdminManager />
+      </>
+    )}
   </Flex>
 );

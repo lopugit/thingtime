@@ -1,16 +1,25 @@
 import React from 'react';
-import { Box, Center, Flex, Text } from '@chakra-ui/react';
+import { Box, Center, Flex, Image, Text } from '@chakra-ui/react';
 import { useLocation, useMatches, useNavigate } from 'react-router';
+import { isPlainLinkClick } from '~/utils/linkNavigation';
 import { ChevronDown, Search } from 'lucide-react';
 
 import { Icon } from '../../Icon/Icon';
 import { RAINBOW } from '~/theme/rainbow';
 import { ROOT_THING_PATH, buildThingModeUrl, parseThingMode, parseThingPath } from '../../Thingtime/thingRoute';
+import { drawerAncestorPath, drawerParentOptions } from './drawerCustomItems';
+import { CustomDrawerItems, OPEN_CUSTOM_DRAWER_SECTION } from './CustomDrawerItems';
 import { EditorDrawerSection } from './EditorDrawerSection';
 import { ReorderableList } from './ReorderableList';
-import { applyDrawerOrdering, buildDrawerSubSections, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
+import { useMarketingPublications } from '~/components/Marketing/marketingPublicationsStore';
+import { isKeyPublished } from '~/marketing/publishingCore';
+
+import { applyDrawerOrdering, drawerBuiltinNodes, buildDrawerSubSections, drawerMenuItems, filterDrawerItemsByAuth, filterDrawerTopItems } from './drawerMenu';
 import { useDrawer, useIsMobileViewport } from './useDrawer';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { MessengerUnreadBadge } from '../../Messenger/MessengerNotifications';
+import { LopuActivityBadge } from '../../Lopu/LopuActivityBadge';
+import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName } from '~/utils/userIdentity';
 
 // Shared drawer inner content, used by both the pinned NavDrawer panel and
 // the desktop hover popup.
@@ -26,7 +35,23 @@ interface DrawerContentProps {
 export const UserAvatarCircle = (props: { size?: string; fontSize?: string }) => {
 	const user = useCurrentUser();
 
-	const initial = (user?.displayName || user?.username || '?').trim().charAt(0).toUpperCase();
+	// a set avatar always wins — the rainbow initial is only the fallback
+	if (user?.avatarUrl) {
+		return (
+			<Image
+				src={user.avatarUrl}
+				alt={getUserDisplayName(user)}
+				width={props?.size || '28px'}
+				height={props?.size || '28px'}
+				borderRadius="999px"
+				objectFit="cover"
+				flexShrink={0}
+				border="1px solid var(--tt-border, #ececef)"
+			/>
+		);
+	}
+
+	const initial = user ? getUserDisplayName(user).trim().charAt(0).toUpperCase() : '?';
 
 	return (
 		<Center
@@ -50,11 +75,14 @@ export const DrawerContent = (props: DrawerContentProps) => {
 	const {
 		loading,
 		open,
+		setOpen,
 		direction,
 		topLevelLimit,
 		topLevelLimitIsUnlimited,
+		customItems,
 		ordering,
 		setOrderingFor,
+		closesOnClick,
 		selectedItem,
 		setSelectedItem,
 		collapsedGroups,
@@ -86,12 +114,18 @@ export const DrawerContent = (props: DrawerContentProps) => {
 		}
 	}, [variant, open]);
 
+	// publication-gated sections (Marketing) read the shared publish state —
+	// catalog-free, one fetch per page load, cached for the first paint
+	const { publications } = useMarketingPublications();
+	const isPublished = React.useCallback((key: string) => isKeyPublished(publications, key), [publications]);
+
 	const orderedTopItems = React.useMemo(() => {
-		const defaultIds = drawerMenuItems.map((item) => item.id);
+		const visibleItems = filterDrawerTopItems(drawerMenuItems, !!user, !!user?.isAdmin, isPublished);
+		const defaultIds = visibleItems.map((item) => item.id);
 		const orderedIds = applyDrawerOrdering(defaultIds, ordering?.toplevel);
 
-		return orderedIds.map((id) => drawerMenuItems.find((item) => item.id === id)).filter(Boolean);
-	}, [ordering?.toplevel]);
+		return orderedIds.map((id) => visibleItems.find((item) => item.id === id)).filter(Boolean);
+	}, [ordering?.toplevel, user, isPublished]);
 
 	const visibleTopItems = React.useMemo(() => {
 		const finiteTopLevelLimit = typeof topLevelLimit === 'number' ? topLevelLimit : orderedTopItems.length;
@@ -108,9 +142,25 @@ export const DrawerContent = (props: DrawerContentProps) => {
 			? 0
 			: Math.max(0, orderedTopItems.length - topLevelLimit);
 
+ const parents = React.useMemo(() => drawerParentOptions(customItems, !!user, !!user?.isAdmin, isPublished), [customItems, user, isPublished]);
+ const identity = user?.id || 'anonymous';
+ const openChildren = React.useCallback((id: string) => {
+  if (!drawerAncestorPath(id, parents).length) return;
+  setSelectedItem(id); selectedItemRef.current = id;
+ }, [parents, setSelectedItem]);
+ React.useEffect(() => {
+  if (variant !== 'panel') return;
+  const select = (event: Event) => { const id = (event as CustomEvent<{ parentId?: string }>).detail?.parentId; if (id) openChildren(id); };
+  window.addEventListener(OPEN_CUSTOM_DRAWER_SECTION, select);
+  return () => window.removeEventListener(OPEN_CUSTOM_DRAWER_SECTION, select);
+ }, [variant, openChildren]);
 	const selectedTopItem = React.useMemo(() => {
-		return orderedTopItems.find((item) => item.id === selectedItem) || orderedTopItems[0];
-	}, [orderedTopItems, selectedItem]);
+		const root = drawerAncestorPath(selectedItem, parents)[0]?.id;
+  const custom = customItems.find(item => item.id === root && !item.parentId);
+  return orderedTopItems.find((item) => item.id === root) || (custom ? { id: custom.id, label: custom.title, icon: custom.emoji, to: custom.url, children: [] } : orderedTopItems[0]);
+	}, [orderedTopItems, selectedItem, customItems, parents]);
+ const currentParentId = parents.some(parent => parent.id === selectedItem) ? selectedItem : selectedTopItem?.id;
+ const breadcrumbs = drawerAncestorPath(currentParentId, parents);
 
 	// mirrors the selection ahead of the setThingtime queue: updated eagerly at
 	// click time so the pathname-sync effect never reverts a fresh manual pick
@@ -131,17 +181,20 @@ export const DrawerContent = (props: DrawerContentProps) => {
 			if (!item) {
 				return false;
 			}
-			if (item.to === pathname || item.children?.some((child) => child.to === pathname)) {
+			if (item.to === pathname || drawerBuiltinNodes([item]).some(({ item: child }) => child.to === pathname)) {
 				return true;
 			}
-			const prefixes = [item.to, ...(item.children?.map((child) => child.to) || [])].filter((to) => to && to !== '/');
+			const prefixes = [item.to, ...drawerBuiltinNodes([item]).map(({ item: child }) => child.to)].filter((to) => to && to !== '/');
 			return prefixes.some((prefix) => pathname.startsWith(prefix));
 		};
 
 		// routes can live under multiple top-level items (e.g. /branding under
 		// both home and branding) — if the intended selection already contains
 		// the route, don't fight the user's pick with a first-match scan
-		const current = orderedTopItems.find((item) => item.id === selectedItemRef.current);
+		const selectedRoot = drawerAncestorPath(selectedItemRef.current, parents)[0]?.id;
+  const customCurrent = customItems.find(item => item.id === selectedItemRef.current && parents.some(parent => parent.id === item.id));
+  if (customCurrent) return;
+  const current = orderedTopItems.find((item) => item.id === selectedRoot);
 		if (routeMatchesItem(current)) {
 			return;
 		}
@@ -152,7 +205,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 			if (matchId) {
 				return;
 			}
-			if (item.to === pathname || item.children?.some((child) => child.to === pathname)) {
+			if (item.to === pathname || drawerBuiltinNodes([item]).some(({ item: child }) => child.to === pathname)) {
 				matchId = item.id;
 			}
 		});
@@ -162,7 +215,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				if (matchId) {
 					return;
 				}
-				const prefixes = [item.to, ...(item.children?.map((child) => child.to) || [])].filter((to) => to && to !== '/');
+				const prefixes = [item.to, ...drawerBuiltinNodes([item]).map(({ item: child }) => child.to)].filter((to) => to && to !== '/');
 				if (prefixes.some((prefix) => pathname.startsWith(prefix))) {
 					matchId = item.id;
 				}
@@ -177,16 +230,25 @@ export const DrawerContent = (props: DrawerContentProps) => {
 	}, [pathname, loading, variant, open]);
 
 	const subItems = React.useMemo(() => {
-		const children = filterDrawerItemsByAuth(selectedTopItem?.children || [], !!user);
+		const children = filterDrawerItemsByAuth(drawerBuiltinNodes().find(({ item }) => item.id === currentParentId)?.item.children || [], !!user, !!user?.isAdmin, isPublished);
 		const defaultIds = children.map((item) => item.id);
-		const orderedIds = applyDrawerOrdering(defaultIds, ordering?.[selectedTopItem?.id]);
+		const orderedIds = applyDrawerOrdering(defaultIds, ordering?.[currentParentId]);
 
 		return orderedIds.map((id) => children.find((item) => item.id === id)).filter(Boolean);
-	}, [selectedTopItem, ordering, user]);
+	}, [currentParentId, ordering, user, isPublished]);
 
 	const subSections = React.useMemo(() => {
 		return buildDrawerSubSections(subItems);
 	}, [subItems]);
+
+	// A navigating menu click dismisses the containing surface on BOTH
+	// viewports: onNavigate covers the popup preview + mobile panel, and
+	// setOpen(false) closes the pinned desktop panel too. Search stays on its
+	// own path (openSearch honours the "Search closes drawer" setting).
+	const dismissAfterNavigate = React.useCallback(() => {
+		onNavigate?.();
+		setOpen(false);
+	}, [onNavigate, setOpen]);
 
 	const onTopItemClick = React.useCallback(
 		(item) => {
@@ -194,14 +256,18 @@ export const DrawerContent = (props: DrawerContentProps) => {
 			setSelectedItem(item.id);
 			if (item.to) {
 				navigate(item.to);
+				// unless the item's "close after click" setting is off — turning
+				// it off restores the old explore-the-submenu behaviour per item
+				if (closesOnClick(item.id)) {
+					dismissAfterNavigate();
+				}
 			}
-			// intentionally no onNavigate: keep the surface open so the
-			// second-level menu can be explored
+			// items without a destination only select — the surface stays open
 		},
-		[setSelectedItem, navigate]
+		[setSelectedItem, navigate, closesOnClick, dismissAfterNavigate]
 	);
 
-	const onSubItemClick = React.useCallback(
+	const subItemHref = React.useCallback(
 		(item) => {
 			if (item.mode) {
 				// mode items switch the mode for the thing path currently on
@@ -211,13 +277,20 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				const thingPath = onThingRoute ? parseThingPath(pathname) : ROOT_THING_PATH;
 				const nextMode = item.mode === currentMode && item.mode !== 'view' ? 'view' : item.mode;
 
-				navigate(buildThingModeUrl(nextMode, thingPath));
-			} else if (item.to) {
-				navigate(item.to);
+				return buildThingModeUrl(nextMode, thingPath);
 			}
-			onNavigate?.();
+			return item.to;
+		}, [onThingRoute, pathname]
+	);
+	const onSubItemClick = React.useCallback(
+		(item) => {
+			const href = subItemHref(item);
+			if (href) navigate(href);
+			if (closesOnClick(item.id)) {
+				dismissAfterNavigate();
+			}
 		},
-		[navigate, onNavigate, onThingRoute, pathname]
+		[navigate, dismissAfterNavigate, subItemHref, closesOnClick]
 	);
 
 	const onTopReorder = React.useCallback(
@@ -239,9 +312,23 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				return section.items.map((item) => item.id);
 			});
 
-			setOrderingFor(selectedTopItem?.id, flat);
+			setOrderingFor(currentParentId, flat);
 		},
-		[subSections, selectedTopItem, setOrderingFor]
+		[subSections, currentParentId, setOrderingFor]
+	);
+
+	// whole-section reorder: section order IS the flat item order (sections are
+	// grouped by first appearance), so persisting the sections' items
+	// concatenated in the new order reuses the existing per-top-item ordering
+	const sectionKeyOf = (group: string | null) => group ?? '__ungrouped__';
+	const onGroupSectionReorder = React.useCallback(
+		(newSectionKeys: string[]) => {
+			const byKey = new Map(subSections.map((section) => [sectionKeyOf(section.group), section]));
+			const flat = newSectionKeys.flatMap((key) => byKey.get(key)?.items.map((item) => item.id) || []);
+
+			setOrderingFor(currentParentId, flat);
+		},
+		[subSections, currentParentId, setOrderingFor]
 	);
 
 	const onSearchClick = React.useCallback(
@@ -260,15 +347,34 @@ export const DrawerContent = (props: DrawerContentProps) => {
 
 	const onBrandClick = React.useCallback(() => {
 		navigate('/');
-		onNavigate?.();
-	}, [navigate, onNavigate]);
+		dismissAfterNavigate();
+	}, [navigate, dismissAfterNavigate]);
 
-	const onAvatarClick = React.useCallback(() => {
+	const openSettingsModal = React.useCallback(() => {
 		setAccountModalOpen(true);
 		if (variant === 'popup') {
 			onNavigate?.();
 		}
 	}, [setAccountModalOpen, variant, onNavigate]);
+
+	// avatar + name go to the profile page; logged out there is no profile, so
+	// the row opens the settings modal (it hosts the account switcher / log in)
+	const onAccountRowClick = React.useCallback(() => {
+		if (user) {
+			navigate('/profile');
+			dismissAfterNavigate();
+			return;
+		}
+		openSettingsModal();
+	}, [user, navigate, dismissAfterNavigate, openSettingsModal]);
+
+	const onSettingsClick = React.useCallback(
+		(event: React.MouseEvent) => {
+			event.stopPropagation();
+			openSettingsModal();
+		},
+		[openSettingsModal]
+	);
 
 	const isActivePath = React.useCallback(
 		(to?: string) => {
@@ -282,21 +388,22 @@ export const DrawerContent = (props: DrawerContentProps) => {
 
 		return (
 			<Flex
-				alignItems="center"
-				columnGap={2}
-				marginX={2}
-				paddingX={3}
-				paddingY="7px"
-				borderRadius="var(--tt-radius-sm, 9px)"
-				background={selected ? 'var(--tt-surface-alt, #f5f5f7)' : 'transparent'}
-				_hover={{ background: selected ? 'var(--tt-surface-alt, #f5f5f7)' : 'var(--tt-surface-hover, #ececee)' }}
-				transition="background 0.15s ease"
-				cursor="pointer"
-				onClick={() => onTopItemClick(item)}
+				as={item.to ? 'a' : 'button'}
+				{...(item.to ? { href: item.to } : { type: 'button' as const })}
+				className="tt-drawer-row"
+				data-selected={selected}
+
+				onClick={(event) => {
+					if (!isPlainLinkClick(event)) return;
+					event.preventDefault();
+					onTopItemClick(item);
+				}}
 			>
-				<Icon name={item.icon} size="13px"></Icon>
-				<Text fontSize="sm" fontWeight={selected ? 600 : 400}>
+				<span className="tt-drawer-row-icon"><Icon name={item.icon} size="13px"></Icon></span>
+				<Text className="tt-drawer-row-label" fontSize="sm" fontWeight={selected ? 600 : 400}>
 					{item.label}
+					{item.id === 'messages' ? <MessengerUnreadBadge /> : null}
+					{item.id === 'lopu' ? <LopuActivityBadge /> : null}
 				</Text>
 			</Flex>
 		);
@@ -304,9 +411,14 @@ export const DrawerContent = (props: DrawerContentProps) => {
 
 	const subRow = (item) => {
 		const active = item.mode ? onThingRoute && parseThingMode(pathname) === item.mode : isActivePath(item.to);
+		const href = subItemHref(item);
 
 		return (
+   <Flex alignItems="center" minWidth={0}>
 			<Flex
+    flex="1" minWidth={0}
+				as={href ? 'a' : 'button'}
+				{...(href ? { href } : { type: 'button' as const })}
 				alignItems="center"
 				columnGap={2}
 				marginX={2}
@@ -318,13 +430,19 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				_hover={{ background: active ? 'var(--tt-surface-alt, #f5f5f7)' : 'var(--tt-surface-hover, #ececee)' }}
 				transition="background 0.15s ease"
 				cursor="pointer"
-				onClick={() => onSubItemClick(item)}
+				onClick={(event) => {
+					if (!isPlainLinkClick(event)) return;
+					event.preventDefault();
+					onSubItemClick(item);
+				}}
 			>
 				{item.icon && <Icon name={item.icon} size="11px" chakras={{ opacity: 0.85 }}></Icon>}
 				<Text fontSize="xs" fontWeight={active ? 600 : 400}>
 					{item.label}
 				</Text>
 			</Flex>
+   <Box as="button" type="button" aria-label={`Open submenu for ${item.label}`} title={`Open submenu for ${item.label}`} onClick={() => openChildren(item.id)} padding="6px 10px" marginRight="8px" borderRadius="var(--tt-radius-sm, 9px)" _hover={{ background: 'var(--tt-surface-hover, #ececee)' }}>›</Box>
+   </Flex>
 		);
 	};
 
@@ -334,7 +452,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 		variant === 'panel' && direction === 'left' ? 'calc(var(--thingtime-electron-titlebar-left-inset, 0px) + 52px)' : '16px';
 
 	return (
-		<Flex className="drawerContent" flexDirection="column" width="100%" height="100%" minHeight={0}>
+		<Flex className="drawerContent" flexDirection="column" width="100%" height={variant === 'popup' ? 'auto' : '100%'} flex={variant === 'popup' ? '1 1 auto' : undefined} minHeight={0}>
 			{/* header: brand + search (top right) */}
 			<Flex
 				className="drawerContentHeader"
@@ -346,8 +464,8 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				paddingBottom="8px"
 			>
 				<Flex
-					as="button"
-					type="button"
+					as="a"
+					href="/"
 					alignItems="center"
 					columnGap={2}
 					minWidth={0}
@@ -359,7 +477,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 					transition="background 0.15s ease"
 					cursor="pointer"
 					title="Home"
-					onClick={onBrandClick}
+					onClick={(event) => { if (isPlainLinkClick(event)) { event.preventDefault(); onBrandClick(); } }}
 				>
 					<Icon name="unicorn" size="13px"></Icon>
 					<Text fontSize="sm" fontWeight={600} whiteSpace="nowrap">
@@ -367,8 +485,8 @@ export const DrawerContent = (props: DrawerContentProps) => {
 					</Text>
 				</Flex>
 				<Center
-					as="button"
-					type="button"
+					as="a"
+					href="/search"
 					marginLeft="auto"
 					width="30px"
 					height="30px"
@@ -378,14 +496,14 @@ export const DrawerContent = (props: DrawerContentProps) => {
 					transition="background 0.15s ease, opacity 0.15s ease"
 					cursor="pointer"
 					title="Search"
-					onClick={onSearchClick}
+					onClick={(event) => { if (isPlainLinkClick(event)) onSearchClick(event); }}
 				>
 					<Search size={15} strokeWidth={2} />
 				</Center>
 			</Flex>
 
 			{/* scrollable menus */}
-			<Box className="drawerMenuScroll" flex={1} minHeight={0} overflowY="auto" paddingBottom={2}>
+			<Box className="drawerMenuScroll" flex={1} minHeight={0} overflowY="auto" overscrollBehaviorY="contain" paddingBottom={2}>
 				{/* top-level items (limited, with faint More) */}
 				<Flex flexDirection="column" rowGap="1px" paddingTop={1}>
 					<ReorderableList
@@ -419,8 +537,9 @@ export const DrawerContent = (props: DrawerContentProps) => {
 					)}
 				</Flex>
 
+    <CustomDrawerItems preview={variant === 'popup'} onNavigate={onNavigate} onOpenChildren={openChildren} />
 				{/* second-level menu for the selected top-level item */}
-				{!!subItems.length && (
+				{!!currentParentId && (
 					<>
 						<Text
 							paddingX={5}
@@ -433,81 +552,101 @@ export const DrawerContent = (props: DrawerContentProps) => {
 							textTransform="uppercase"
 							color="var(--tt-muted, #9a9aa6)"
 						>
-							{selectedTopItem?.label}
+							{breadcrumbs.map((crumb, index) => <React.Fragment key={crumb.id}>{index > 0 && ' / '}<Box as="button" type="button" onClick={() => openChildren(crumb.id)} textAlign="left" overflowWrap="anywhere" aria-current={index === breadcrumbs.length - 1 ? 'location' : undefined}>{crumb.title}</Box></React.Fragment>)}
+       {breadcrumbs.length > 1 && <Box as="button" type="button" display="block" marginTop="6px" onClick={() => openChildren(breadcrumbs[breadcrumbs.length - 2].id)} aria-label="Back to parent menu">← Back</Box>}
 						</Text>
 						<Flex flexDirection="column" rowGap="1px">
-							{subSections.map((section) => {
-								if (!section.group) {
-									return (
-										<ReorderableList
-											key={`${selectedTopItem?.id}-ungrouped`}
-											items={section.items.map((item) => ({
-												id: item.id,
-												node: subRow(item)
-											}))}
-											onReorder={(idsInSection) => onSubSectionReorder(null, idsInSection)}
-										/>
-									);
+							{/* sections are themselves reorderable — but only when the drag
+							starts from a group header (the handle), so the nested per-item
+							lists keep sole ownership of drags that start on their rows */}
+							<ReorderableList
+								key={`${selectedTopItem?.id}-sections`}
+								shouldStartDrag={(event) =>
+									Boolean((event.target as Element | null)?.closest?.('[data-drawer-group-handle]'))
 								}
+								onReorder={onGroupSectionReorder}
+								items={subSections.map((section) => {
+									if (!section.group) {
+										return {
+											id: '__ungrouped__',
+											node: (
+												<ReorderableList
+													items={section.items.map((item) => ({
+														id: item.id,
+														node: subRow(item)
+													}))}
+													onReorder={(idsInSection) => onSubSectionReorder(null, idsInSection)}
+												/>
+											)
+										};
+									}
 
-								const groupKey = `${selectedTopItem?.id}:${section.group}`;
-								const collapsed = !!collapsedGroups?.[groupKey];
+									const groupKey = `${selectedTopItem?.id}:${section.group}`;
+									const collapsed = !!collapsedGroups?.[groupKey];
 
-								return (
-									<React.Fragment key={groupKey}>
-										<Flex
-											alignItems="center"
-											columnGap={1}
-											marginX={2}
-											paddingX={3}
-											paddingY="5px"
-											borderRadius="var(--tt-radius-sm, 9px)"
-											opacity={0.7}
-											_hover={{ opacity: 1, background: 'var(--tt-surface-hover, #ececee)' }}
-											transition="background 0.15s ease, opacity 0.15s ease"
-											cursor="pointer"
-											onClick={() => toggleGroupCollapsed(groupKey)}
-										>
-											<Box
-												as="span"
-												display="inline-flex"
-												transform={collapsed ? 'rotate(-90deg)' : 'none'}
-												transition="transform 0.2s ease-out"
-											>
-												<ChevronDown size={12} strokeWidth={2} />
-											</Box>
-											<Text
-												fontFamily="mono"
-												fontSize="10px"
-												fontWeight={600}
-												letterSpacing="0.08em"
-												textTransform="uppercase"
-												color="var(--tt-muted, #9a9aa6)"
-											>
-												{section.group}
-											</Text>
-										</Flex>
-										{!collapsed && (
-											<ReorderableList
-												items={section.items.map((item) => ({
-													id: item.id,
-													node: subRow(item)
-												}))}
-												onReorder={(idsInSection) => onSubSectionReorder(section.group, idsInSection)}
-											/>
-										)}
-									</React.Fragment>
-								);
-							})}
+									return {
+										id: section.group,
+										node: (
+											<>
+												<Flex
+													data-drawer-group-handle
+													title="Click to collapse · hold to drag"
+													alignItems="center"
+													columnGap={1}
+													marginX={2}
+													paddingX={3}
+													paddingY="5px"
+													borderRadius="var(--tt-radius-sm, 9px)"
+													opacity={0.7}
+													_hover={{ opacity: 1, background: 'var(--tt-surface-hover, #ececee)' }}
+													transition="background 0.15s ease, opacity 0.15s ease"
+													cursor="pointer"
+													onClick={() => toggleGroupCollapsed(groupKey)}
+												>
+													<Box
+														as="span"
+														display="inline-flex"
+														transform={collapsed ? 'rotate(-90deg)' : 'none'}
+														transition="transform 0.2s ease-out"
+													>
+														<ChevronDown size={12} strokeWidth={2} />
+													</Box>
+													<Text
+														fontFamily="mono"
+														fontSize="10px"
+														fontWeight={600}
+														letterSpacing="0.08em"
+														textTransform="uppercase"
+														color="var(--tt-muted, #9a9aa6)"
+													>
+														{section.group}
+													</Text>
+												</Flex>
+												{!collapsed && (
+													<ReorderableList
+														items={section.items.map((item) => ({
+															id: item.id,
+															node: subRow(item)
+														}))}
+														onReorder={(idsInSection) => onSubSectionReorder(section.group, idsInSection)}
+													/>
+												)}
+											</>
+										)
+									};
+								})}
+							/>
 						</Flex>
+      <CustomDrawerItems key={`${identity}:${currentParentId}`} parentId={currentParentId} preview={variant === 'popup'} onNavigate={onNavigate} onOpenChildren={openChildren} />
 					</>
 				)}
 
 				{/* editor window/config management, shown with the Things menu */}
-				{selectedTopItem?.id === 'things' && <EditorDrawerSection onNavigate={onNavigate} />}
+				{selectedTopItem?.id === 'things' && <EditorDrawerSection onNavigate={dismissAfterNavigate} />}
 			</Box>
 
-			{/* sticky account footer */}
+			{/* sticky account footer: avatar + name open the profile page, the
+			gear keeps opening the settings modal */}
 			<Flex
 				className="drawerAccountFooter"
 				alignItems="center"
@@ -521,17 +660,34 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
 				transition="background 0.15s ease"
 				cursor="pointer"
-				onClick={onAvatarClick}
+				title={user ? 'Your profile' : 'Log in'}
 			>
+				<Flex as="a" href={user ? '/profile' : '/login'} align="center" gap={2} flex={1} minWidth={0}
+					onClick={(event) => { if (isPlainLinkClick(event)) { event.preventDefault(); onAccountRowClick(); } }}>
 				<UserAvatarCircle></UserAvatarCircle>
 				{!isMobile && (
 					<Text fontSize="xs" fontWeight={600} noOfLines={1}>
-						{user ? user.displayName || user.username : 'Log in'}
+						{user ? (user.temporary ? LOGIN_TO_CLAIM_LABEL : getUserDisplayName(user)) : 'Log in'}
 					</Text>
 				)}
-				<Box marginLeft="auto" opacity={0.4} display="inline-flex">
+				</Flex>
+				<Center
+					as="a"
+					href="/settings"
+					marginLeft="auto"
+					width="26px"
+					height="26px"
+					borderRadius="var(--tt-radius-sm, 9px)"
+					opacity={0.4}
+					_hover={{ opacity: 1, background: 'var(--tt-surface-alt, #f5f5f7)' }}
+					transition="background 0.15s ease, opacity 0.15s ease"
+					cursor="pointer"
+					aria-label="Settings"
+					title="Settings"
+					onClick={(event) => { if (isPlainLinkClick(event)) { event.preventDefault(); onSettingsClick(event); } }}
+				>
 					<Icon name="gear" size="11px"></Icon>
-				</Box>
+				</Center>
 			</Flex>
 		</Flex>
 	);

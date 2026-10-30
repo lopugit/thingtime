@@ -1,0 +1,207 @@
+// Right-click menu models for /things — built on the design-system Thing
+// Context Menu grammar (contextMenuModel.ts), so the Drive surface gets the
+// same drill-down window, keyboard handling, and presentation code as the
+// Thingtime tree instead of a second menu implementation.
+//
+// Two models: one for right-clicking a thing (acts on the selection when the
+// target is part of it), one for right-clicking the background (create /
+// paste / arrange / select). Every leaf fires a command the page dispatches.
+
+import type {
+  ThingContextMenuModel,
+  ThingContextSubmenu
+} from '~/components/Thingtime/ContextMenu/contextMenuModel';
+import { canOfferRecordingHandoff } from '../Lopu/recordingThingHandoff';
+import { archiveNounForKinds, buildArchiveMenuSection } from '../Attachments/attachmentArchiveActions';
+import { buildThingEntityMenu } from '../Thingtime/ContextMenu/thingEntityMenu';
+import { builderThingMenuSections } from '../Thingtime/ContextMenu/builderThingMenu';
+import { thingBrowseHref } from './thingsLocation';
+
+import {
+  THINGS_GROUP_OPTIONS,
+  THINGS_SORT_OPTIONS,
+  type ThingsDisplayMode,
+  type ThingsGroupBy,
+  type ThingsSort,
+  type ThingsThing,
+  type ThingsView,
+  isDuplicable,
+  isFolder,
+  primaryKindOf
+} from './thingsCore';
+
+// "Copy 4 things" when acting on a multi-selection, plain verb otherwise
+const countLabel = (verb: string, count: number) => (count > 1 ? `${verb} ${count} things` : verb);
+
+export type ThingsItemMenuArgs = {
+  thing: ThingsThing;
+  // how many things the action will touch (1 unless the target is inside a
+  // bigger selection)
+  actCount: number;
+  clipboardCount: number;
+  ownerId?: string;
+  locationSearch?: string;
+  builderMode?: boolean;
+};
+
+export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch, builderMode }: ThingsItemMenuArgs): ThingContextMenuModel => {
+  if (thing.id.startsWith('timeline-folder-')) return buildThingEntityMenu({ open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, 'copy-link': true });
+  const folder = isFolder(thing);
+  const archive = thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive';
+  const bulkHint = actCount > 1 ? `Applies to ${actCount} selected Things` : undefined;
+  // "Download all files" (one ZIP) + its share link: folders enumerate server-side,
+  // so the count is unknown here; the page probes the manifest before saving.
+  const archiveNoun = archive ? null : archiveNounForKinds(thing.thingtime);
+  const files = archiveNoun ? buildArchiveMenuSection({ fileCount: null, noun: archiveNoun, bulk: actCount > 1 }) : null;
+  return buildThingEntityMenu({
+    history: actCount === 1 && !!ownerId && thing.author?.id === ownerId,
+    open: { href: thingBrowseHref(thing, locationSearch, ownerId) }, inspect: !archive && { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true,
+    rename: actCount === 1 && (!ownerId || thing.author?.id === ownerId),
+    share: !archive && { hint: bulkHint || (folder ? 'Audience for the folder — optionally everything inside' : undefined) },
+    delete: !archive && { hint: bulkHint, kbd: '⌫' },
+    'send-to-lopu': actCount === 1 && canOfferRecordingHandoff(thing, ownerId)
+  }, [
+    ...builderThingMenuSections(thing, ownerId, actCount),
+    ...(builderMode && thing.thingtime.includes('component') && actCount === 1 && thing.author?.id === ownerId
+      ? [{ id: 'builder-definition', actions: [{ id: 'edit-definition', command: 'edit-definition', label: 'Edit definition…', icon: '✏️', lucide: 'pencil' }] }]
+      : []),
+    ...(!folder && !archive ? [{ id: 'preview', actions: [{ id: 'preview', command: 'preview', label: 'Preview', icon: '👀', lucide: 'eye' }] }] : []),
+    ...(files ? [files] : []),
+    { id: 'organise', label: 'Organise', actions: [
+      { id: 'move', command: 'move', label: `${countLabel('Move', actCount)} to…`, icon: '📁', lucide: 'folder-input' }
+    ] },
+    { id: 'clipboard', label: 'Clipboard', actions: [
+      { id: 'copy', command: 'copy', label: countLabel('Copy', actCount), icon: '📋', lucide: 'copy', kbd: '⌘C',
+        hint: folder ? 'Folders copy everything inside' : undefined },
+      ...(!archive && isDuplicable(thing) ? [{ id: 'duplicate', command: 'duplicate', label: countLabel('Duplicate', actCount), icon: '🐑', lucide: 'copy-plus',
+        hint: folder ? 'Duplicates the folder and everything inside' : undefined }] : []),
+      { id: 'cut', command: 'cut', label: countLabel('Cut', actCount), icon: '✂️', lucide: 'scissors', kbd: '⌘X' },
+      { id: 'download', command: 'download', label: `${countLabel('Download', actCount)}…`, icon: '📥', lucide: 'download' },
+      // portable paste: the OS clipboard may hold a Thingtime transfer even when
+      // this tab's clipboard is empty, so the entry stays enabled
+      ...(folder ? [{ id: 'paste-into', command: 'paste-into', label: `Paste ${clipboardCount || ''} into folder`.replace('  ', ' '),
+        icon: '📥', lucide: 'clipboard-paste', hint: 'Paste portable content from your clipboard' }] : [])
+    ] }
+  ]);
+};
+
+export type ThingsBackgroundMenuArgs = {
+  clipboardCount: number;
+  itemCount: number;
+  sort: ThingsSort;
+  groupBy: ThingsGroupBy;
+  view: ThingsView;
+  displayMode: ThingsDisplayMode;
+};
+
+const sortSubmenu = (sort: ThingsSort): ThingContextSubmenu => ({
+  title: 'Sort by',
+  sections: [
+    {
+      id: 'sort-options',
+      label: 'Order',
+      actions: THINGS_SORT_OPTIONS.map((option) => ({
+        id: `sort-${option.id}`,
+        command: 'set-sort',
+        payload: { sort: option.id },
+        label: option.label,
+        icon: option.icon,
+        lucide: option.lucide,
+        selected: sort === option.id
+      }))
+    }
+  ]
+});
+
+const groupSubmenu = (groupBy: ThingsGroupBy): ThingContextSubmenu => ({
+  title: 'Group by',
+  sections: [
+    {
+      id: 'group-options',
+      label: 'Grouping',
+      actions: THINGS_GROUP_OPTIONS.map((option) => ({
+        id: `group-${option.id}`,
+        command: 'set-group',
+        payload: { groupBy: option.id },
+        label: option.label,
+        icon: option.icon,
+        lucide: option.lucide,
+        selected: groupBy === option.id
+      }))
+    }
+  ]
+});
+
+const viewSubmenu = (view: ThingsView, displayMode: ThingsDisplayMode): ThingContextSubmenu => ({
+  title: 'View',
+  sections: [
+    {
+      id: 'view-options',
+      label: 'Layout',
+      actions: [
+        { id: 'view-grid', command: 'set-view', payload: { view: 'grid' }, label: 'Grid', icon: '🔲', lucide: 'layout-grid', selected: view === 'grid' },
+        { id: 'view-list', command: 'set-view', payload: { view: 'list' }, label: 'List', icon: '📃', lucide: 'rows-3', selected: view === 'list' },
+        { id: 'view-columns', command: 'set-view', payload: { view: 'columns' }, label: 'Columns', icon: '🪜', lucide: 'columns-3', selected: view === 'columns' }
+      ]
+    },
+    {
+      id: 'display-options',
+      label: 'Show',
+      actions: [
+        { id: 'display-name', command: 'set-display', payload: { displayMode: 'name' }, label: 'Names', icon: '🏷️', lucide: 'tag', selected: displayMode === 'name' },
+        { id: 'display-preview', command: 'set-display', payload: { displayMode: 'preview' }, label: 'Previews', icon: '👀', lucide: 'eye', selected: displayMode === 'preview' }
+      ]
+    }
+  ]
+});
+
+export const buildThingsBackgroundMenu = ({
+  clipboardCount,
+  itemCount,
+  sort,
+  groupBy,
+  view,
+  displayMode
+}: ThingsBackgroundMenuArgs): ThingContextMenuModel => ({
+  sections: [
+    {
+      id: 'create',
+      actions: [
+        { id: 'new-folder', command: 'new-folder', label: 'New folder…', icon: '📁', lucide: 'folder-plus' },
+        { id: 'import', command: 'import', label: 'Import…', icon: '📥', lucide: 'upload' },
+        {
+          id: 'paste',
+          command: 'paste',
+          label: clipboardCount ? `Paste ${clipboardCount} here` : 'Paste',
+          icon: '📥',
+          lucide: 'clipboard-paste',
+          kbd: '⌘V',
+          hint: 'Paste a Thingtime transfer from your clipboard'
+        }
+      ]
+    },
+    {
+      id: 'arrange',
+      label: 'Arrange',
+      actions: [
+        { id: 'sort-by', label: 'Sort by…', icon: '🔃', lucide: 'arrow-up-down', submenu: sortSubmenu(sort) },
+        { id: 'group-by', label: 'Group by…', icon: '🗂️', lucide: 'layers', submenu: groupSubmenu(groupBy) },
+        { id: 'view', label: 'View…', icon: '👁️', lucide: 'panels-top-left', submenu: viewSubmenu(view, displayMode) }
+      ]
+    },
+    {
+      id: 'select',
+      actions: [
+        {
+          id: 'select-all',
+          command: 'select-all',
+          label: 'Select all',
+          icon: '✅',
+          lucide: 'square-check-big',
+          kbd: '⌘A',
+          disabled: !itemCount
+        }
+      ]
+    }
+  ]
+});

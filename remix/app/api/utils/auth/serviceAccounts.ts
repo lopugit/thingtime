@@ -45,9 +45,7 @@ const slugifyUsername = (value: string) =>
 
 const generatedServicePassword = () => `${randomUUID()}-${randomUUID()}`;
 
-export const provisionServiceAccount = async (
-  input: ProvisionServiceAccountInput
-): Promise<ProvisionServiceAccountResult> => {
+export const provisionServiceAccount = async (input: ProvisionServiceAccountInput): Promise<ProvisionServiceAccountResult> => {
   const username = slugifyUsername(input.username || input.serviceName || '');
   if (!username) return { ok: false, status: 400, error: 'username or serviceName is required' };
 
@@ -72,7 +70,6 @@ export const provisionServiceAccount = async (
     accountKind: 'service',
     emailVerificationRequiredBy: verificationRequiredBy,
     storageAllowanceBytes: DEFAULT_SERVICE_STORAGE_ALLOWANCE_BYTES,
-    storageUsedBytes: 0,
     meta
   });
 
