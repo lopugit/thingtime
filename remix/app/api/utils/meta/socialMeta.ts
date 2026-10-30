@@ -2,23 +2,31 @@
 //
 // The client app is a static Vite shell served by the Nitro page catch-all
 // (server/routes/[...].ts), so link unfurlers — which never run JS — only see
-// whatever <head> the server sends. This module resolves the request path to
-// a set of meta tags (post permalinks and profiles get page-specific tags,
-// everything else keeps the site defaults) and swaps them into the shell's
-// `tt-social-meta` marker block.
+// whatever <head> the server sends. This module resolves each public URL to
+// page-specific tags plus a server-rendered 1200×630 PNG card, then swaps
+// them into the shell's `tt-social-meta` marker block.
 //
-// Fail closed: post tags are built from the same anonymous-viewer `getThing`
-// path the public API uses, so a private or missing post yields exactly the
-// generic site block (and the API's own 404 status) — rich meta never leaks
-// anything an anonymous GET /api/v1/things?id= would not already return.
+// Fail closed: data-backed cards are built from the same anonymous-viewer
+// `getThing` path the public API uses, so private or missing data yields the
+// generic site block — rich meta never leaks anything an anonymous request
+// could already read.
 
 import { getRequestOrigin } from '../health/statusTarget';
-import { attachmentContentPath } from '~/utils/attachmentContentUrl';
-import { absoluteThirdPartyProfileMediaUrl } from '~/utils/profileMediaUrl';
+import { organizationId, organizationStructuredData } from './brandIdentity';
+import { isIndexableStaticPath } from './indexablePaths';
+import {
+	DEFAULT_SOCIAL_IMAGE_PATH,
+	normaliseSocialPreviewPath,
+	resolveSocialPreview,
+	socialPreviewCardUrl,
+	staticSocialPreview,
+	type SocialPreview
+} from './socialPreview';
+import { pageTitle } from '../../../utils/pageTitle';
 
 export type SocialMetaTag = { attr: 'property' | 'name'; key: string; content: string };
 
-export type SocialMeta = { tags: SocialMetaTag[] };
+export type SocialMeta = { tags: SocialMetaTag[]; canonical: string; structuredData: Record<string, unknown> };
 
 export const SOCIAL_META_START = '<!-- tt-social-meta:start';
 export const SOCIAL_META_END = 'tt-social-meta:end -->';
@@ -27,39 +35,11 @@ export const GENERIC_SITE_DESCRIPTION =
 	'Thingtime is where everything is a thing — share posts, run polls, and build a home for the things you care about.';
 
 const SITE_NAME = 'Thingtime';
-const BRAND_IMAGE_PATH = '/android-icon-192x192.png';
-const TITLE_MAX = 70;
-const DESCRIPTION_MAX = 200;
-
-// Meta content is a single attribute value: strip control characters and
-// collapse author-entered newlines/runs of whitespace into single spaces.
-const cleanText = (value: unknown): string =>
-	typeof value === 'string' ? value.replace(/[\p{Cc}\u2028\u2029]+/gu, ' ').replace(/\s+/g, ' ').trim() : '';
-
-// Truncate by code points (mirrors things.ts canonicalTag): a UTF-16 slice
-// could bisect a surrogate pair at the cap and emit U+FFFD in the served bytes.
-const truncate = (value: string, max: number): string => {
-	const codePoints = Array.from(value);
-	return codePoints.length <= max ? value : `${codePoints.slice(0, max - 1).join('').trimEnd()}…`;
-};
 
 // Single choke point: every user-authored value passes through here when the
 // tag list is rendered to HTML, so nothing unescaped can enter the head.
 export const escapeHtml = (value: string): string =>
-	value
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/"/g, '&quot;')
-		.replace(/'/g, '&#39;');
-
-// Managed attachment paths become absolute against the request origin;
-// already-absolute http(s) links pass through; data:/control-char/credential
-// spellings are dropped (crawlers cannot fetch a data: og:image anyway).
-const absoluteMediaUrl = (origin: string, value: string | null | undefined): string | null => {
-	const resolved = absoluteThirdPartyProfileMediaUrl(value ?? null, origin);
-	return resolved && !resolved.startsWith('data:') ? resolved : null;
-};
+	value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 const property = (key: string, content: string): SocialMetaTag => ({ attr: 'property', key, content });
 const named = (key: string, content: string): SocialMetaTag => ({ attr: 'name', key, content });
@@ -69,149 +49,160 @@ type PageMeta = {
 	description: string;
 	type: 'website' | 'article' | 'profile';
 	image: string | null;
-	// summary_large_image only when the page carries real content imagery
+	imageAlt: string;
+	// all routes use a real 1200×630 PNG social card
 	largeImage: boolean;
 };
 
-const buildTags = (origin: string, path: string, page: Partial<PageMeta> = {}): SocialMetaTag[] => {
+export const buildSocialMetaTags = (origin: string, path: string, page: Partial<PageMeta> = {}): SocialMetaTag[] => {
 	const meta: PageMeta = {
-		title: SITE_NAME,
+		title: pageTitle(path),
 		description: GENERIC_SITE_DESCRIPTION,
 		type: 'website',
 		image: null,
-		largeImage: false,
+		imageAlt: 'Colourful Thingtime wordmark on a white background with a rainbow border',
+		largeImage: true,
 		...page
 	};
-	const image = meta.image || `${origin}${BRAND_IMAGE_PATH}`;
+	const image = meta.image || `${origin}${DEFAULT_SOCIAL_IMAGE_PATH}`;
 	return [
 		named('description', meta.description),
 		property('og:site_name', SITE_NAME),
 		property('og:type', meta.type),
 		property('og:title', meta.title),
 		property('og:description', meta.description),
-		property('og:url', `${origin}${path}`),
+		property('og:url', `${origin}${normaliseSocialPreviewPath(path)}`),
 		property('og:image', image),
+		...(image.startsWith('https://') ? [property('og:image:secure_url', image)] : []),
+		property('og:image:type', 'image/png'),
+		property('og:image:width', '1200'),
+		property('og:image:height', '630'),
+		property('og:image:alt', meta.imageAlt),
 		named('twitter:card', meta.largeImage ? 'summary_large_image' : 'summary'),
 		named('twitter:title', meta.title),
-		named('twitter:description', meta.description)
+		named('twitter:description', meta.description),
+		named('twitter:image', image),
+		named('twitter:image:alt', meta.imageAlt)
 	];
 };
 
-const pollOptionLabels = (thing: Record<string, any> | null): string[] => {
-	const options: unknown = thing?.options;
-	if (!Array.isArray(options)) return [];
-	return options
-		.map((option: unknown) =>
-			typeof option === 'string' ? cleanText(option) : cleanText((option as { text?: unknown } | null)?.text)
-		)
-		.filter(Boolean);
-};
+// Only intentional public discovery surfaces are indexable by default. A safe
+// generic card is still useful for sharing settings/invite/missing URLs, but
+// it must not advertise a private screen or a failed lookup as public content.
+export const socialPageIsIndexable = (path: string, preview: SocialPreview): boolean =>
+	(preview.indexable !== false && Boolean(preview.publicContent)) || isIndexableStaticPath(path);
 
-const postMeta = async (origin: string, path: string, id: string): Promise<SocialMeta> => {
-	// lazy: things.ts is the heaviest util in the tree — page shells that are
-	// not post permalinks must never pay its import cost
-	const { ACL_ALL, ACL_INHERIT } = await import('../../../schemas/registry');
-	const { getThing, viewerOf } = await import('../things/things');
-
-	const result = await getThing(viewerOf(null), id);
-	// missing and private are the same failure here (findViewableThingAs), so
-	// the generic-meta response never distinguishes them. Status stays 200: h3
-	// treats a 404 Response from this middleware position as "unhandled" and
-	// falls through to nitro's SPA renderer (the raw source index.html), so a
-	// 404 could never actually be delivered — and the pre-social-meta
-	// production behavior for these URLs was a 200 static shell anyway.
-	if (result.ok === false) return { tags: buildTags(origin, path) };
-
-	const post = result.post;
-	// belt-and-braces on top of the anonymous viewer walk: rich meta is for
-	// world-readable posts only. tt:all is directly world-readable; tt:inherit
-	// (every comment) counts too because the anonymous getThing success above
-	// already proved the inherited audience includes anonymous.
-	if (!post || !Array.isArray(post.acl) || !(post.acl.includes(ACL_ALL) || post.acl.includes(ACL_INHERIT))) {
-		return { tags: buildTags(origin, path) };
+export const socialMetaFromPreview = (origin: string, preview: SocialPreview): SocialMeta => {
+	const path = normaliseSocialPreviewPath(preview.path);
+	const canonical = `${origin}${path === '/index.html' ? '/' : path}`;
+	const image = preview.variant === 'app' ? `${origin}${DEFAULT_SOCIAL_IMAGE_PATH}` : socialPreviewCardUrl(origin, path, preview.revision);
+	const tags = buildSocialMetaTags(origin, path, {
+		title: preview.title,
+		description: preview.description,
+		type: preview.article ? 'article' : preview.publicContent && preview.kind === 'profile' ? 'profile' : 'website',
+		image,
+		...(preview.variant !== 'app' ? { imageAlt: `Thingtime preview card: ${preview.title}` } : {})
+	});
+	const ogUrl = tags.find((tag) => tag.key === 'og:url')!;
+	ogUrl.content = canonical;
+	tags.push(named('robots', socialPageIsIndexable(path, preview) ? 'index, follow, max-image-preview:large' : 'noindex, follow'));
+	const websiteId = `${origin}/#website`;
+	const publisherId = organizationId(origin);
+	const pageId = `${canonical}#webpage`;
+	const imageObject = { '@type': 'ImageObject', url: image, width: 1200, height: 630 };
+	const page: Record<string, unknown> = {
+		'@type':
+			preview.publicContent && preview.kind === 'profile'
+				? 'ProfilePage'
+				: ['collection', 'feed', 'explore'].includes(preview.kind)
+				? 'CollectionPage'
+				: 'WebPage',
+		'@id': pageId,
+		url: canonical,
+		name: preview.title,
+		description: preview.description,
+		isPartOf: { '@id': websiteId },
+		primaryImageOfPage: imageObject
+	};
+	// Only the already-whitelisted anonymous preview can supply structured
+	// content. Never serialize a raw Thing/crystal, arbitrary UGC schema, token,
+	// engagement count, price, or an invented rating into a search result.
+	if (preview.publicContent) {
+		const type =
+			preview.kind === 'profile'
+				? 'Person'
+				: ['comment', 'reply'].includes(preview.kind)
+				? 'Comment'
+				: ['text-post', 'image-post', 'gallery', 'poll', 'share', 'listing', 'thingtime'].includes(preview.kind)
+				? 'SocialMediaPosting'
+				: 'CreativeWork';
+		page.mainEntity = {
+			'@type': type,
+			'@id': `${canonical}#content`,
+			url: canonical,
+			name: type === 'Person' ? preview.author || preview.title : preview.title,
+			description: preview.description,
+			...(type !== 'Person' ? { mainEntityOfPage: { '@id': pageId }, image: imageObject } : {}),
+			...(type !== 'Person' && preview.author ? { author: { '@type': 'Person', name: preview.author } } : {})
+		};
 	}
-
-	const author = post.author;
-	const authorLabel = cleanText(author?.displayName) || (author?.username ? `@${cleanText(author.username)}` : 'Someone');
-	const question = cleanText(post.thing?.question);
-	const text = question || cleanText(post.text);
-	const options = question ? pollOptionLabels(post.thing) : [];
-
-	const firstImageAttachment = post.attachments.find((attachment) => attachment.mediaKind === 'image');
-	const postImage = firstImageAttachment
-		? absoluteMediaUrl(origin, attachmentContentPath(firstImageAttachment.id))
-		: absoluteMediaUrl(origin, post.images.find((imageUrl) => typeof imageUrl === 'string' && imageUrl.trim()));
-	const image = postImage || absoluteMediaUrl(origin, author?.avatarUrl);
-
-	const description = question
-		? truncate(['Poll:', text, options.length ? `· ${options.join(' / ')}` : ''].filter(Boolean).join(' '), DESCRIPTION_MAX)
-		: truncate(text, DESCRIPTION_MAX) || `A post by ${authorLabel} on ${SITE_NAME}.`;
-
 	return {
-		tags: buildTags(origin, path, {
-			title: text ? `${authorLabel}: ${truncate(text, TITLE_MAX)}` : `${authorLabel} on ${SITE_NAME}`,
-			description,
-			type: 'article',
-			image,
-			largeImage: Boolean(postImage)
-		})
+		tags,
+		canonical,
+		structuredData: {
+			'@context': 'https://schema.org',
+			// Order is a contract: [0] WebSite, [1] the page, [2] the publishing
+		// Organization (its `logo` is what search engines use for the brand
+		// mark in knowledge panels and brand results — brandIdentity.ts).
+		'@graph': [
+			{ '@type': 'WebSite', '@id': websiteId, url: `${origin}/`, name: SITE_NAME, publisher: { '@id': publisherId } },
+			page,
+			organizationStructuredData(origin)
+		]
+		}
 	};
 };
 
-const profileMeta = async (origin: string, path: string, username: string): Promise<SocialMeta> => {
-	const { findUserByUsername, toPublicProfile } = await import('../auth/users');
+// Path → meta. Any data-plane failure degrades to a safe, noindex page rather
+// than returning the static shell's wrong canonical/title on a deep URL.
+export const fallbackSocialMeta = (request: Request): SocialMeta =>
+	socialMetaFromPreview(getRequestOrigin(request), staticSocialPreview(new URL(request.url).pathname));
 
-	const user = await findUserByUsername(username);
-	// unknown profile: generic block, 200 (see the post-permalink status note)
-	if (!user) return { tags: buildTags(origin, path) };
-
-	// public projection only — never email/verification/storage fields
-	const profile = toPublicProfile(user);
-	const displayName = cleanText(profile.displayName) || cleanText(profile.username);
-	const handle = cleanText(profile.username);
-
-	return {
-		tags: buildTags(origin, path, {
-			title: `${displayName} (@${handle}) on ${SITE_NAME}`,
-			description: truncate(cleanText(profile.bio), DESCRIPTION_MAX) || `@${handle} is on ${SITE_NAME}.`,
-			type: 'profile',
-			image: absoluteMediaUrl(origin, profile.avatarUrl)
-		})
-	};
-};
-
-// Path → meta. Any data-plane failure degrades to the generic site block: the
-// shell must always serve, meta is best-effort garnish on top of it.
 export const resolveSocialMeta = async (request: Request): Promise<SocialMeta> => {
 	const origin = getRequestOrigin(request);
-	let path = '/';
+	const path = new URL(request.url).pathname;
 	try {
-		path = new URL(request.url, origin).pathname || '/';
+		return socialMetaFromPreview(origin, await resolveSocialPreview(origin, path));
 	} catch {
-		// keep '/' — og:url degrades to the origin
+		return fallbackSocialMeta(request);
 	}
-
-	try {
-		const postMatch = path.match(/^\/post\/([^/]+)\/?$/);
-		if (postMatch) return await postMeta(origin, path, decodeURIComponent(postMatch[1]));
-
-		const profileMatch = path.match(/^\/profile\/([^/]+)\/?$/);
-		if (profileMatch) return await profileMeta(origin, path, decodeURIComponent(profileMatch[1]));
-	} catch {
-		// fall through to the generic block
-	}
-
-	return { tags: buildTags(origin, path) };
 };
 
-export const renderSocialMetaHtml = (tags: SocialMetaTag[]): string => {
+// JSON encoding alone does not prevent </script> from closing a script element.
+export const serializeStructuredData = (value: Record<string, unknown>): string =>
+	JSON.stringify(value)
+		.replace(/</g, '\\u003c')
+		.replace(/>/g, '\\u003e')
+		.replace(/&/g, '\\u0026')
+		.replace(/\u2028/g, '\\u2028')
+		.replace(/\u2029/g, '\\u2029');
+
+export const renderSocialMetaHtml = (meta: SocialMeta | SocialMetaTag[]): string => {
+	const tags = Array.isArray(meta) ? meta : meta.tags;
 	const lines = tags.map((tag) => `<meta ${tag.attr}="${tag.key}" content="${escapeHtml(tag.content)}" />`);
+	if (!Array.isArray(meta)) {
+		lines.push(`<link rel="canonical" href="${escapeHtml(meta.canonical)}" />`);
+		lines.push(`<script type="application/ld+json">${serializeStructuredData(meta.structuredData)}</script>`);
+	}
 	return [`${SOCIAL_META_START} -->`, ...lines, `<!-- ${SOCIAL_META_END}`].join('\n    ');
 };
 
 // Swap the shell's marker block for the per-request one. A shell built before
 // the marker existed still gets tags via the </head> fallback.
 export const injectSocialMeta = (html: string, metaBlock: string): string => {
+	// Match the server HTML title to the escaped Open Graph title, before JS runs.
+	const title = metaBlock.match(/<meta property="og:title" content="([^"]*)"/);
+	if (title) html = html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${title[1]}</title>`);
 	const marker = /<!-- tt-social-meta:start[\s\S]*?tt-social-meta:end -->/;
 	// replacement function so `$`-sequences in user-authored meta text are
 	// never interpreted as String.replace substitution patterns

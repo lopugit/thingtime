@@ -1,16 +1,16 @@
 import React from 'react';
 import { Box, Center, Flex } from '@chakra-ui/react';
-import { Command, PanelLeft, Search } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Search } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router';
 
 import { CommanderV2 } from '../Commander/CommanderV2';
-import { toggleQuickSwitcher } from '../QuickSwitcher/QuickSwitcher';
 import { Icon } from '../Icon/Icon';
 import { NotificationsBell } from './NotificationsBell';
 import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } from './Drawer/useDrawer';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '../Lopu/useLopu';
+import { LopuNavButton } from '../Lopu/LopuNavButton';
 import { motionOK, partyConfetti } from '~/eggs/eggs';
 import { getUserDisplayName } from '~/utils/userIdentity';
 
@@ -46,13 +46,70 @@ const useUnicornGallop = () => {
 	return { onLogoClick, galloping };
 };
 
+const NavAccountLink = (props: { claimedUser: ReturnType<typeof useCurrentUser> | null; className: string }) => {
+	const { claimedUser, className } = props;
+
+	return (
+		<Center className={className} borderRadius="8px" cursor="pointer" display="flex" height="36px" paddingX={2} whiteSpace="nowrap">
+			{claimedUser ? (
+				<Link to="/profile">
+					<Flex flexDir="row" gap={2} alignItems="center">
+						<Box fontSize="xs" fontWeight="600" maxWidth={{ base: '5ch', md: '24ch' }} overflow="hidden" textOverflow="ellipsis" title={getUserDisplayName(claimedUser)}>
+							{getUserDisplayName(claimedUser)}
+						</Box>
+						<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
+					</Flex>
+				</Link>
+			) : (
+				<Link to="/login">
+					<Flex flexDir="row" gap={2} alignItems="center">
+						<Box fontSize="xs" opacity={0.5}>
+							Login
+						</Box>
+						<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
+					</Flex>
+				</Link>
+			)}
+		</Center>
+	);
+};
+
+const ElectronHistoryButton = (props: { direction: 'back' | 'forward'; onClick: () => void }) => {
+	const back = props.direction === 'back';
+	const label = back ? 'Back' : 'Forward';
+
+	return (
+		<Center
+			className="electron-titlebar-navigation-button"
+			as="button"
+			type="button"
+			display="none"
+			width="36px"
+			height="36px"
+			borderRadius="8px"
+			opacity={0.74}
+			cursor="pointer"
+			title={label}
+			aria-label={label}
+			_hover={{ opacity: 1, background: 'var(--tt-surface-hover, #ececee)' }}
+			sx={{
+				WebkitTapHighlightColor: 'transparent',
+				touchAction: 'manipulation'
+			}}
+			onClick={props.onClick}
+		>
+			{back ? <ArrowLeft size={16} strokeWidth={1.9} /> : <ArrowRight size={16} strokeWidth={1.9} />}
+		</Center>
+	);
+};
+
 export const Nav = (props) => {
 	const { thingtime } = useThingtime();
 
 	const user = useCurrentUser();
 	const claimedUser = user?.temporary ? null : user;
 
-	const { loading, open, toggleOpen, direction, openSearch } = useDrawer();
+	const { loading, open, direction, openSearch } = useDrawer();
 	const { width: drawerWidth, resizing } = useDrawerLiveWidth();
 	const isMobile = useIsMobileViewport();
 
@@ -86,19 +143,7 @@ export const Nav = (props) => {
 		return false;
 	}, [pathname]);
 
-	const editorToggleable = React.useMemo(() => {
-		if (pathname.slice(0, 7) === '/things') {
-			return true;
-		} else if (pathname.slice(0, 5) === '/edit') {
-			return true;
-		}
-
-		if (thingtime.get('thingtimeUrlPageVisible')) {
-			return true;
-		}
-
-		return false;
-	}, [pathname, thingtime]);
+	const editorToggleable = /^\/(things|edit|editor)\/.+/.test(pathname);
 
 	const toggleEdit = React.useCallback(
 		(e) => {
@@ -145,6 +190,14 @@ export const Nav = (props) => {
 		[openSearch]
 	);
 
+	const navigateBack = React.useCallback(() => {
+		navigate(-1);
+	}, [navigate]);
+
+	const navigateForward = React.useCallback(() => {
+		navigate(1);
+	}, [navigate]);
+
 	return (
 		<>
 			<Box
@@ -154,23 +207,21 @@ export const Nav = (props) => {
 				top="var(--thingtime-safe-area-top, 0px)"
 				right={direction === 'right' && desktopOpen ? drawerCssWidth : 0}
 				left={direction === 'left' && desktopOpen ? drawerCssWidth : 0}
-				transform={
-					mobileOpen ? (direction === 'left' ? `translateX(${drawerCssWidth})` : `translateX(calc(-1 * ${drawerCssWidth}))`) : 'none'
+				transform={mobileOpen ? (direction === 'left' ? `translateX(${drawerCssWidth})` : `translateX(calc(-1 * ${drawerCssWidth}))`) : 'none'}
+				transition={loading || resizing ? 'none' : 'left 0.28s ease-out, right 0.28s ease-out, transform 0.28s ease-out'}
+				background="color-mix(in srgb, var(--tt-card, #ffffff) 78%, transparent)"
+				borderBottom="1px solid var(--tt-border, #ececef)"
+				sx={{
+					backdropFilter: 'blur(14px)',
+					WebkitBackdropFilter: 'blur(14px)',
+					'html.thingtime-native-webview &': {
+						background: 'var(--tt-card, white)',
+						isolation: 'isolate',
+						position: 'fixed',
+						top: 'var(--thingtime-safe-area-top, 0px)'
 					}
-					transition={loading || resizing ? 'none' : 'left 0.28s ease-out, right 0.28s ease-out, transform 0.28s ease-out'}
-					background="color-mix(in srgb, var(--tt-card, #ffffff) 78%, transparent)"
-					borderBottom="1px solid var(--tt-border, #ececef)"
-					sx={{
-						backdropFilter: 'blur(14px)',
-						WebkitBackdropFilter: 'blur(14px)',
-						'html.thingtime-native-webview &': {
-							background: 'var(--tt-card, white)',
-							isolation: 'isolate',
-							position: 'fixed',
-							top: 'var(--thingtime-safe-area-top, 0px)'
-						}
-					}}
-				>
+				}}
+			>
 				<Flex
 					className="thingtimeTopNavInner"
 					as="nav"
@@ -180,42 +231,22 @@ export const Nav = (props) => {
 					flexDirection="row"
 					width="100%"
 					maxWidth="100%"
-					marginY={1}
+					height="52px"
+					minHeight="52px"
+					marginY={0}
 					paddingLeft="18px"
 					paddingRight="18px"
-					paddingY="14px"
+					paddingY={0}
 					// bg='white'
 					// boxShadow={'0px 0px 10px rgba(0,0,0,0.1)'}
 				>
 					<Center
-						className="nav-native-drawer-button"
-						as="button"
-						type="button"
-						position="absolute"
-						left={0}
-						top={0}
-						bottom={0}
-						width="56px"
-						display="none"
-						cursor="pointer"
-						opacity={0.75}
-						aria-label={open ? 'Close menu' : 'Open menu'}
-						title={open ? 'Close menu' : 'Open menu'}
-						sx={{
-							WebkitTapHighlightColor: 'transparent',
-							touchAction: 'manipulation',
-							'html.thingtime-native-webview &': {
-								display: 'flex'
-							}
-						}}
-						onClick={toggleOpen}
-					>
-						<PanelLeft size={16} strokeWidth={1.9} />
-					</Center>
-					<Center
 						className="nav-left-section"
-						display={['none', 'flex']}
-						height="100%"
+						position="relative"
+						zIndex={10000}
+						flexShrink={0}
+						display={{ base: 'none', md: 'flex' }}
+						height="36px"
 						marginRight="auto"
 						columnGap={2}
 						// leave room for the fixed drawer trigger button at the top
@@ -223,7 +254,18 @@ export const Nav = (props) => {
 						// on the left (then the nav starts right of the trigger)
 						paddingLeft={direction === 'left' && desktopOpen ? 0 : 'var(--thingtime-electron-titlebar-nav-start, 34px)'}
 					>
-						<Center className="electron-titlebar-home-button" transform="scaleX(-100%)" cursor="pointer" onClick={onLogoClick} sx={gallopSx}>
+						<ElectronHistoryButton direction="back" onClick={navigateBack} />
+						<ElectronHistoryButton direction="forward" onClick={navigateForward} />
+						<Center
+							className="electron-titlebar-home-button"
+							borderRadius="8px"
+							cursor="pointer"
+							height="36px"
+							onClick={onLogoClick}
+							sx={gallopSx}
+							transform="scaleX(-100%)"
+							width="36px"
+						>
 							<Link to="/">
 								<Icon size="12px" name="🦄"></Icon>
 							</Link>
@@ -232,62 +274,50 @@ export const Nav = (props) => {
 							className="electron-titlebar-search-button"
 							as="button"
 							type="button"
-							display="none"
-							width="34px"
-							height="34px"
+							display={['none', 'flex']}
+							width="36px"
+							height="36px"
 							borderRadius="8px"
 							opacity={0.74}
 							cursor="pointer"
-							title="Search"
-							aria-label="Search"
+							title="Open Commander search"
+							aria-label="Open Commander search"
 							_hover={{ opacity: 1, background: 'var(--tt-surface-hover, #ececee)' }}
 							sx={{
 								WebkitTapHighlightColor: 'transparent',
 								touchAction: 'manipulation',
-								'html.thingtime-electron-desktop &': {
-									display: 'flex'
-								}
+								'html.thingtime-electron-desktop &': { display: 'flex' }
 							}}
 							onClick={onElectronSearchClick}
 						>
 							<Search size={16} strokeWidth={1.9} />
 						</Center>
+						<NavAccountLink className="electron-titlebar-account-button" claimedUser={claimedUser} />
+						{claimedUser && !isMobile ? (
+							<Center className="electron-titlebar-notifications-button" height="36px">
+								<NotificationsBell />
+							</Center>
+						) : null}
 					</Center>
-					<CommanderV2 global id="nav" rainbow={false}></CommanderV2>
+					<CommanderV2 key={user?.id || "anonymous"} global id="nav" />
 					{/* relative + above the commander host (zIndex 9999): the centered
 				search pill is absolutely positioned, and long usernames (and now
 				the bell) can extend under it — these controls must stay tappable */}
 				<Center
 					className="nav-right-section"
-					columnGap={[3, 8]}
+					flexShrink={0}
+					columnGap={[2, 8]}
 					height="100%"
 					marginLeft="auto"
 					position="relative"
 					zIndex={10000}
 				>
-						{/* ⌘K quick switcher trigger — the touch/mobile way in (desktop
-						has the chord); sits by the search pill, styled like the other
-						nav icon buttons */}
-						<Center
-							className="nav-quick-switcher-button"
-							as="button"
-							type="button"
-							cursor="pointer"
-							opacity={0.55}
-							aria-label="Quick switcher (⌘K)"
-							title="Quick switcher (⌘K)"
-							_hover={{ opacity: 1 }}
-							sx={{
-								WebkitTapHighlightColor: 'transparent',
-								touchAction: 'manipulation'
-							}}
-							onClick={(event: React.MouseEvent) => {
-								event.preventDefault();
-								event.stopPropagation();
-								toggleQuickSwitcher();
-							}}
-						>
-							<Command size={14} strokeWidth={1.9} />
+						{/* 🦄 Lopu opener — toggles the floating chat window (hidden on
+						/lopu*, where the page is the chat); the same ring as the launcher */}
+						<LopuNavButton />
+						<Center as="button" type="button" display={{ base: 'flex', md: 'none' }} width="36px" height="36px"
+							aria-label="Open Commander search" title="Search" onClick={onElectronSearchClick}>
+							<Search size={18} />
 						</Center>
 						{inEditMode && (
 							<Center
@@ -315,32 +345,12 @@ export const Nav = (props) => {
 								></Icon>
 							</Center>
 						)}
-						{claimedUser && (
+						{isMobile ? <NavAccountLink className="nav-right-account-button" claimedUser={claimedUser} /> : null}
+						{claimedUser && isMobile ? (
 							<Center>
 								<NotificationsBell />
 							</Center>
-						)}
-						<Center cursor="pointer">
-							{claimedUser ? (
-								<Link to="/profile">
-									<Flex flexDir={'row'} gap={2} alignItems="center">
-										<Box fontSize="xs" fontWeight="600">
-											{getUserDisplayName(claimedUser)}
-										</Box>
-										<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
-									</Flex>
-								</Link>
-							) : (
-								<Link to="/login">
-									<Flex flexDir={'row'} gap={2}>
-										<Box fontSize="xs" opacity={0.5}>
-											Login
-										</Box>
-										<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
-									</Flex>
-								</Link>
-							)}
-						</Center>
+						) : null}
 						<Center display={['flex', 'none']} cursor="pointer" onClick={onLogoClick} sx={gallopSx}>
 							<Link to="/">
 								<Icon size="12px" name="🦄"></Icon>

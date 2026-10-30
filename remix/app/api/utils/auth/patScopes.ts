@@ -16,6 +16,12 @@ export type PatScopeDescriptor = {
 // the route that serves it.
 export const PAT_SCOPE_CATALOG: PatScopeDescriptor[] = [
   {
+    id: 'agents.report',
+    title: 'Private agent reporting',
+    description: 'Create a task Character, share selected private workspace items with it, and save task reports and coordination posts. General account and Things access stays separate.',
+    emoji: '📋'
+  },
+  {
     id: 'things',
     title: 'Full things access',
     description: 'Everything below — read, create, update, delete, comment, react, save, share.',
@@ -70,6 +76,12 @@ export const PAT_SCOPE_CATALOG: PatScopeDescriptor[] = [
     emoji: '🗳️'
   },
   {
+    id: 'things.updown',
+    title: 'Upvote / downvote',
+    description: 'Upvote, downvote, or clear your vote on visible posts and comments.',
+    emoji: '🔼'
+  },
+  {
     id: 'things.share',
     title: 'Share',
     description: 'Repost visible things as shares.',
@@ -80,6 +92,54 @@ export const PAT_SCOPE_CATALOG: PatScopeDescriptor[] = [
 const CATALOG_BY_ID = new Map(PAT_SCOPE_CATALOG.map((scope) => [scope.id, scope]));
 
 export const PAT_SCOPE_IDS = PAT_SCOPE_CATALOG.map((scope) => scope.id);
+
+// Visibility restriction — WHICH audience of things the token may see and
+// touch, orthogonal to the verb scopes above and to the onlyCreatedThings
+// sandbox. 'public' fences the token to things whose (inherit-resolved) acl
+// is world-visible (tt:all); 'private' fences it to everything that is NOT
+// public (owner-only, circles, specific grants — hidden included); 'hidden'
+// fences it to ONLY hidden link-key things (acl tt:hidden — its creates
+// default to hidden and mint their secret link); 'all' (the default, and
+// what legacy tokens without the field mean) is unrestricted.
+export type PatVisibilityMode = 'all' | 'public' | 'private' | 'hidden';
+
+export type PatVisibilityDescriptor = {
+  id: PatVisibilityMode;
+  title: string;
+  description: string;
+  emoji: string;
+};
+
+// Ordered as the settings visibility selector lists them.
+export const PAT_VISIBILITY_CATALOG: PatVisibilityDescriptor[] = [
+  {
+    id: 'all',
+    title: 'Public & private',
+    description: 'No audience fence — the token reaches everything its permissions allow.',
+    emoji: '🌗'
+  },
+  {
+    id: 'public',
+    title: 'Public only',
+    description: 'Only world-visible things — your private things stay invisible and untouchable to this token.',
+    emoji: '🌐'
+  },
+  {
+    id: 'private',
+    title: 'Private only',
+    description: 'Only non-public things — the token cannot see, create, or engage with anything public.',
+    emoji: '🔒'
+  },
+  {
+    id: 'hidden',
+    title: 'Hidden only',
+    description: 'Only hidden link-key things — everything it creates is born hidden with a secret link, and nothing else exists to it.',
+    emoji: '🕵️'
+  }
+];
+
+export const isKnownPatVisibility = (value: unknown): value is PatVisibilityMode =>
+  value === 'all' || value === 'public' || value === 'private' || value === 'hidden';
 
 export const isKnownPatScope = (value: unknown): value is string =>
   typeof value === 'string' && CATALOG_BY_ID.has(value);

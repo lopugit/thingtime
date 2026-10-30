@@ -1,12 +1,38 @@
+import { BUILDER_THING_KIND } from '~/schemas/builderThing';
+import { UnfiledAttachmentsPage } from './UnfiledAttachmentsPage';
+import { ActivityManagerPage } from '~/components/Activity/ActivityManagerPage';
+import { DeviceSyncPanel, DeviceSyncedFilesPage } from '~/components/Devices/DeviceSyncBrowser';
+import { deviceSyncedFilesHref } from '~/components/Devices/deviceSyncNavigation';
+import { openThingHistory, TimelineLibrary } from '~/components/Timeline/TimelineHost';
+import { isManagedLibraryThing, isTopLevelLibraryThing } from './thingsCore';
+import { FilesystemThingsPage } from './FilesystemThingsBrowser';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { transferIntent } from '~/utils/thingTransfer/intent';
+import { thingBrowseHref, readThingsLocation, writeThingsLocation, type ThingsLocationState } from './thingsLocation';
 
-import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
-import { ArrowUpDown, Columns3, Eye, LayoutGrid, Layers, Plus, Rows3, Search as SearchIcon, Tag, X } from 'lucide-react';
+import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, MenuDivider, MenuOptionGroup, MenuItemOption, Portal, Text } from '@chakra-ui/react';
+import { ArrowUpDown, Columns3, Eye, FolderDown, LayoutGrid, Layers, Plus, Rows3, Settings, Search as SearchIcon, Tag, X } from 'lucide-react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { archiveNounForKinds } from '~/components/Attachments/attachmentArchiveActions';
+import { archiveDownloadLabel } from '~/components/Attachments/attachmentUiCore';
+import { useAttachmentArchive } from '~/components/Attachments/useAttachmentArchive';
+import { sendRecordingThingToLopu } from '~/components/Lopu/recordingThingHandoff';
 import { useIsMobileViewport } from '~/components/Nav/Drawer/useDrawer';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
+import { BuilderAppDialog } from '~/components/Builder/BuilderAppDialog';
+import { ThingDefinitionEditor } from '~/components/Builder/DefinitionEditor/ThingDefinitionEditor';
+import { BuilderAssignDialog } from '~/components/Builder/BuilderAssignDialog';
+import { DeviceDetailsDrawer } from '~/components/Devices/DeviceDetailsDrawer';
+import { deviceThingsPageHref } from '~/components/Devices/deviceNavigation';
+import { MobileDeviceSetupCard } from '~/components/Devices/MobileDeviceSetupCard';
+import { LocalNodeSetupCard } from '~/components/Devices/LocalNodeSetupCard';
+import type { DeviceActionIntent, DeviceControlResolver } from '~/components/Devices/DeviceStateGrid';
+import type { DeviceActionKind, DeviceRuntimeState } from '~/components/Devices/deviceTypes';
+import { useDeviceStore } from '~/components/Devices/useDeviceStore';
+import { useLocalThingtimeNode } from '~/components/Devices/useLocalThingtimeNode';
+import { mayReadLocalBattery, useLocalDeviceBattery } from '~/components/Devices/useLocalDeviceBattery';
 import { ThingContextMenu } from '~/components/Thingtime/ContextMenu/ThingContextMenu';
 import type { ThingContextMenuAction } from '~/components/Thingtime/ContextMenu/ThingContextMenu';
 import { useThingContextMenu } from '~/components/Thingtime/ContextMenu/useThingContextMenu';
@@ -16,30 +42,45 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
 
 import { FolderTree } from './FolderTree';
+import { ThingImportDialog } from './ThingImportDialog';
+import { ThingExportDialog } from './ThingExportDialog';
+import { bundleFromPlan, readTransferClipboard, writeTransferClipboard, MAX_CLIPBOARD_BYTES } from '~/utils/thingTransfer/browser';
+import { transferChecksum, type TransferBundle } from '~/utils/thingTransfer/archive';
 import { DeleteConfirmDialog, MoveDialog, NewFolderDialog, PreviewModal, RenameDialog, ShareDialog } from './ThingsDialogs';
-import { ThingsColumnsView, ThingsGridView, ThingsItemAction, ThingsItemHandlers, ThingsListView } from './ThingsViews';
+import { ThingsColumnsView, ThingsGridView, ThingsListView } from './ThingsViews';
+import { browseMenuPosition } from './browseInteraction';
+import type { ThingsItemAction, ThingsItemHandlers } from './ThingsViews';
 import { buildThingsBackgroundMenu, buildThingsItemMenu } from './thingsMenuModel';
 import {
   THINGS_GROUP_OPTIONS,
   THINGS_KIND_FILTERS,
+  BUILDER_KIND_FILTERS,
   THINGS_SORT_OPTIONS,
-  ThingsCache,
-  ThingsClipboard,
-  ThingsDisplayMode,
-  ThingsGroupBy,
-  ThingsKindFilter,
-  ThingsSort,
-  ThingsThing,
-  ThingsView,
   folderKeyOf,
   groupThings,
   isFolder,
+  isBuilderApp,
   primaryKindOf,
   schemaIdOf,
+  schemaRenderOf,
   sortThings,
   thingDisplayName,
-  thingLink,
+  thingRenameCrystal,
+  thingShareLink,
+  thingOpenHref,
+  thingBuilderHref,
+  thingLiveHref,
   thingsCacheKey
+} from './thingsCore';
+import type {
+	ThingsCache,
+	ThingsClipboard,
+	ThingsDisplayMode,
+	ThingsGroupBy,
+	ThingsKindFilter,
+	ThingsSort,
+	ThingsThing,
+	ThingsView
 } from './thingsCore';
 
 const PAGE_SIZE = 50;
@@ -50,6 +91,16 @@ const HIDDEN_KINDS = new Set(['reaction', 'save', 'vote']);
 const MAX_ARRANGE_THINGS = 1000;
 // schema render templates cached for Previews (bounded localCache footprint)
 const MAX_CACHED_SCHEMA_RENDERS = 40;
+
+const LOCAL_DEVICE_ACTIONS = new Set<DeviceActionKind>([
+	'register-service',
+	'unregister-service',
+	'begin-pairing',
+	'complete-pairing',
+	'unpair',
+	'request-permission',
+	'open-permission-settings'
+]);
 
 const pillProps = (active: boolean) =>
   ({
@@ -68,7 +119,7 @@ const pillProps = (active: boolean) =>
     _hover: {
       background: active ? 'var(--tt-accent-soft, rgba(244, 114, 182, 0.18))' : 'var(--tt-surface-hover, #f5f5f7)'
     }
-  }) as const;
+	} as const);
 
 const monoLabel = {
   color: 'var(--tt-faint, #b6b6c0)',
@@ -93,8 +144,34 @@ const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
   });
 };
 
-export const ThingsPage = () => {
+export const ThingsPage = ({ builderMode = false }: { builderMode?: boolean }) => {
+  const [params] = useSearchParams();
+  if (!builderMode && params.get('activity') === '1') return <ActivityManagerPage />;
+  if (!builderMode && params.get('unfiled') === 'attachments') return <UnfiledAttachmentsPage />;
+  const folder = params.get('folder');
+  return !builderMode && folder?.startsWith('timeline-folder-') ? <TimelineLibrary folderId={folder} storage={params.get('historyStorage') === 'home' ? 'home' : 'selected'} /> : <ThingsPageContents builderMode={builderMode} key={builderMode ? `${folder || 'root'}:${params.get('kind') || 'apps'}` : undefined} />;
+};
+
+const ThingsPageContents = ({ builderMode = false }: { builderMode?: boolean }) => {
+  const [params] = useSearchParams();
+  return !builderMode && params.has("files") ? <FilesystemThingsPage /> : !builderMode && params.get("deviceFiles") && !params.get("folder") ? <DeviceSyncedFilesPage deviceId={params.get("deviceFiles")!} /> : <ThingsLibraryPage builderMode={builderMode} />;
+};
+
+const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) => {
   const user = useCurrentUser();
+  const [importOpen, setImportOpen] = useState(false);
+  const [importBundle, setImportBundle] = useState<TransferBundle | null>(null);
+  const [importDestination, setImportDestination] = useState<string | null>(null);
+  const [exportIds, setExportIds] = useState<string[]>([]);
+  const transferOperation = useRef<AbortController | null>(null);
+  const transferAccount = useRef(user?.id);
+  useEffect(() => {
+    if (transferAccount.current !== user?.id) {
+      transferAccount.current = user?.id;
+      setImportOpen(false); setImportBundle(null); setExportIds([]); setClipboard(null);
+    }
+    return () => { transferOperation.current?.abort(); };
+  }, [user?.id]);
   const api = useApi();
   const lopu = useLopu();
   const navigate = useNavigate();
@@ -105,34 +182,132 @@ export const ThingsPage = () => {
   apiRef.current = api;
   const lopuRef = useRef(lopu);
   lopuRef.current = lopu;
+  const recordingOwner = useRef(user?.id);
+  recordingOwner.current = user?.id;
+  const recordingHandoffBusy = useRef(false);
 
   const folderId = searchParams.get('folder') || null;
   const previewParam = searchParams.get('preview') || null;
+	const deviceParam = searchParams.get('device') || null;
+	const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
+	const devicePageMode = Boolean(deviceParam && searchParams.get('deviceView') === 'page');
+	const deviceSyncMode = Boolean(deviceParam && searchParams.get('deviceView') === 'sync');
   const currentKey = folderKeyOf(folderId);
 
-  const cacheKey = thingsCacheKey(user?.id);
+  const archive = useAttachmentArchive();
+
+	const devicesEnabled = !builderMode && Boolean(user && user.accountKind === 'user' && !user.temporary);
+	const deviceStore = useDeviceStore({
+		userId: user?.id,
+		selectedDeviceId: deviceParam,
+		enabled: devicesEnabled
+	});
+	const currentAccountDeviceIds = useMemo(
+		() => deviceStore.devices.flatMap((device) => (device.summary?.id ? [device.summary.id] : [])),
+		[deviceStore.devices]
+	);
+	const localNode = useLocalThingtimeNode(deviceParam, deviceStore.refreshList, deviceStore.loading ? undefined : currentAccountDeviceIds);
+	const localBattery = useLocalDeviceBattery(
+		user?.id,
+		deviceParam,
+		mayReadLocalBattery(deviceParam, currentAccountDeviceIds, localNode.pairedDeviceIds, devicesEnabled, deviceStore.loading)
+	);
+	const serverDeviceControlFor = deviceStore.controlFor;
+	const executeServerDeviceAction = deviceStore.executeAction;
+	const setDevicePermissionMode = deviceStore.setPermissionMode;
+	const localDeviceControlFor = localNode.controlFor;
+	const executeLocalDeviceAction = localNode.executeAction;
+
+  const cacheKey = builderMode ? `tt-builder-things-v1-${user?.id || 'anon'}-${folderId || 'root'}-${searchParams.get('kind') || 'apps'}` : thingsCacheKey(user?.id);
   const cached = useMemo(() => readLocalCache<ThingsCache>(cacheKey), [cacheKey]);
 
-  const [view, setView] = useState<ThingsView>(cached?.view || 'grid');
-  const [displayMode, setDisplayMode] = useState<ThingsDisplayMode>(cached?.displayMode || 'name');
-  const [sort, setSort] = useState<ThingsSort>(cached?.sort || 'newest');
-  const [groupBy, setGroupBy] = useState<ThingsGroupBy>(cached?.groupBy || 'none');
-  const [kindFilter, setKindFilter] = useState<ThingsKindFilter>('all');
+  const locationState = readThingsLocation(searchParams, cached);
+  const { q: urlQ, view, display: displayMode, sort, group: groupBy } = locationState;
+  const kindFilter = builderMode && !searchParams.has('kind') ? 'apps' : locationState.kind;
+  // Router navigation may transition asynchronously; the input itself must
+  // update synchronously so fast typing/paste cannot lose characters.
+  const [q, setQueryDraft] = useState(urlQ);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('q') || '') !== urlQ) return;
+    setQueryDraft(urlQ);
+  }, [urlQ]);
+  const updateLocation = useCallback((patch: Partial<ThingsLocationState>, replace = false) => {
+    setSearchParams(previous => {
+      // A second click can arrive before the first navigation commits React
+      // state. Merge against the latest browser URL, not that stale render.
+      const current = typeof window === 'undefined' ? previous : new URLSearchParams(window.location.search);
+      return writeThingsLocation(current, { ...readThingsLocation(current, cached), ...patch });
+    },
+      { replace, preventScrollReset: true });
+  }, [setSearchParams, cached]);
+  // Normalize missing preferences once per entry, not on every keystroke. The
+  // URL remains the source of truth on POP/back/forward and shared links.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).toString() !== searchParams.toString()) return;
+    const state = readThingsLocation(searchParams, cached);
+    if (builderMode && !searchParams.has('kind')) state.kind = 'apps';
+    const next = writeThingsLocation(searchParams, state);
+    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true, preventScrollReset: true });
+  }, [searchParams, setSearchParams, cached, builderMode]);
+  const setQ = useCallback((value: string) => { setQueryDraft(value); updateLocation({ q: value }, true); }, [updateLocation]);
+  const setView = useCallback((value: ThingsView) => updateLocation({ view: value }), [updateLocation]);
+  const setDisplayMode = useCallback((value: ThingsDisplayMode) => updateLocation({ display: value }), [updateLocation]);
+  const setSort = useCallback((value: ThingsSort) => updateLocation({ sort: value }), [updateLocation]);
+  const setGroupBy = useCallback((value: ThingsGroupBy) => updateLocation({ group: value }), [updateLocation]);
+  const setKindFilter = useCallback((value: ThingsKindFilter) => {
+    if (!builderMode || !folderId || value === 'all') { updateLocation({ kind: value }); return; }
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous);
+      next.delete('folder'); next.delete('q'); next.set('kind', value);
+      return next;
+    });
+  }, [builderMode, folderId, updateLocation, setSearchParams]);
   const [folderPages, setFolderPages] = useState<Record<string, ThingsThing[]>>(cached?.folders || {});
   const [cursors, setCursors] = useState<Record<string, string | null>>({});
   const [loadingKeys, setLoadingKeys] = useState<Set<string>>(new Set());
   const [folderMeta, setFolderMeta] = useState<NonNullable<ThingsCache['folderMeta']>>(cached?.folderMeta || {});
 
-  const [q, setQ] = useState('');
+  // "Download all files" for the folder being browsed: one small manifest read
+  // says whether a ZIP would hold anything (folders with no stored files show
+  // no button). The answer is cached per folder AND per listed contents, so
+  // walking back into an unchanged folder costs nothing, while adding, moving
+  // or deleting a Thing in it re-probes — a stale pill never survives a change.
+  // The probe waits for the folder's own listing so a never-loaded folder is
+  // not probed twice, and it draws on the manifest rate window, never the
+  // download one.
+  const [folderArchives, setFolderArchives] = useState<Record<string, { signature: string; archive: { fileCount: number; totalBytes: number } | null }>>({});
+  const folderSignature = folderId && folderPages[currentKey] ? folderPages[currentKey].map((item) => item.id).join('\n') : null;
+  useEffect(() => {
+    if (!user?.id || !folderId || folderSignature === null) return;
+    if (folderArchives[folderId]?.signature === folderSignature) return;
+    let cancelled = false;
+    const remember = (value: { fileCount: number; totalBytes: number } | null) => {
+      if (!cancelled) setFolderArchives((prev) => ({ ...prev, [folderId]: { signature: folderSignature, archive: value } }));
+    };
+    apiRef.current.v1.attachments.archive
+      .manifest({ id: folderId })
+      .then((manifest: any) => remember(manifest?.ok && manifest.fileCount > 0 ? { fileCount: manifest.fileCount, totalBytes: manifest.totalBytes || 0 } : null))
+      .catch(() => remember(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, folderId, folderSignature]); // eslint-disable-line react-hooks/exhaustive-deps
+  const folderArchive = folderId ? folderArchives[folderId]?.archive ?? null : null;
+
   const [searchResults, setSearchResults] = useState<ThingsThing[] | null>(null);
   const [searching, setSearching] = useState(false);
+  const [searchCursor, setSearchCursor] = useState<string | null>(null);
+  const [searchingMore, setSearchingMore] = useState(false);
   // bumped after mutations (duplicate) so an active search re-fetches and the
   // fresh copies appear in the results the user is actually looking at
   const [searchSeq, setSearchSeq] = useState(0);
 
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const anchorRef = useRef<string | null>(null);
-  const [clipboard, setClipboard] = useState<ThingsClipboard>(null);
+  const [clipboard, setClipboard] = useState<ThingsClipboard>(() => {
+    const cut = transferIntent.peek(user?.id);
+    return cut ? { mode: 'cut', ids: [...cut.ids] } : null;
+  });
 
   // drag-and-drop: the ids in flight + the folder currently hovered as a drop
   // target (null = the root row/breadcrumb, undefined = nothing hovered)
@@ -140,26 +315,44 @@ export const ThingsPage = () => {
   const [dropTarget, setDropTarget] = useState<string | null | undefined>(undefined);
 
   // schema shareId → its render template (null = fetched, none) for Previews
-  const [schemaRenders, setSchemaRenders] = useState<NonNullable<ThingsCache['schemaRenders']>>(
-    cached?.schemaRenders || {}
-  );
+	const [schemaRenders, setSchemaRenders] = useState<NonNullable<ThingsCache['schemaRenders']>>(cached?.schemaRenders || {});
   const schemaFetchRef = useRef<Set<string>>(new Set());
 
   // right-click menus (the design-system Thing Context Menu, 'context'
   // presentation) — one instance for items, one for the background
   const itemMenu = useThingContextMenu();
   const backgroundMenu = useThingContextMenu();
+  const deviceMenu = useThingContextMenu();
+  const closeItemMenu = itemMenu.closeMenu;
+  const closeBackgroundMenu = backgroundMenu.closeMenu;
+  const closeDeviceMenu = deviceMenu.closeMenu;
+  const openDeviceMenu = deviceMenu.openAtPointer;
+  const [menuDeviceId, setMenuDeviceId] = useState<string | null>(null);
   const [menuThing, setMenuThing] = useState<ThingsThing | null>(null);
 
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
+  const openNewFolder = useCallback((parent: string | null) => { setNewFolderParent(parent); setNewFolderOpen(true); }, []);
+  useEffect(() => {
+    const action = searchParams.get('widget');
+    if (!user || (action !== 'search' && action !== 'newFolder')) return;
+    if (action === 'newFolder') openNewFolder(folderId);
+    else requestAnimationFrame(() => document.getElementById('thingtime-things-search')?.focus());
+    const next = new URLSearchParams(searchParams);
+    next.delete('widget');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, user, folderId, openNewFolder]);
+
   const [renameThing, setRenameThing] = useState<ThingsThing | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
   const [shareThings, setShareThings] = useState<ThingsThing[]>([]);
   const [deleteThings, setDeleteThings] = useState<ThingsThing[]>([]);
   const [previewThing, setPreviewThing] = useState<ThingsThing | null>(null);
+  const [builderAppDialog, setBuilderAppDialog] = useState<ThingsThing | 'new' | null>(null);
+  const [definitionThingId, setDefinitionThingId] = useState<string | null>(null);
 
-  const dialogOpen =
-    newFolderOpen || !!renameThing || moveOpen || !!shareThings.length || !!deleteThings.length || !!previewThing;
+	const dialogOpen = importOpen || !!exportIds.length || newFolderOpen || !!renameThing || moveOpen || assignOpen || !!builderAppDialog || !!definitionThingId || !!shareThings.length || !!deleteThings.length || !!previewThing || !!deviceParam;
 
   // ------------------------------------------------------------------ data
 
@@ -188,7 +381,9 @@ export const ThingsPage = () => {
       setLoadingKeys((prev) => new Set(prev).add(key));
       try {
         const resp = await apiRef.current.v1.things.list({
-          folder: targetFolderId || 'root',
+          folder: targetFolderId || (builderMode && kindFilter !== 'apps' ? undefined : 'root'),
+          ...(!targetFolderId && kindFilter === 'apps' ? { builderApp: true } : {}),
+          ...(builderMode && !targetFolderId && kindFilter !== 'apps' && kindFilter !== 'all' ? { thingtime: kindFilter } : {}),
           cursor: cursor || undefined,
           limit: PAGE_SIZE
         });
@@ -214,7 +409,7 @@ export const ThingsPage = () => {
     },
     // searchParams identity changes per navigation; the guard only reads it
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rememberFolderMeta]
+    [rememberFolderMeta, builderMode, kindFilter]
   );
 
   const ensureLoaded = useCallback(
@@ -296,22 +491,30 @@ export const ThingsPage = () => {
     if (!user || !query) {
       setSearchResults(null);
       setSearching(false);
+      setSearchCursor(null);
       return;
     }
     let cancelled = false;
     setSearching(true);
+    setSearchCursor(null);
+    setSearchingMore(false);
     const timer = setTimeout(async () => {
       try {
         const resp = await apiRef.current.v1.things.search({
           q: query,
           author: user.username,
-          thingtime: kindFilter === 'all' ? undefined : kindFilter,
+          thingtime: kindFilter === 'apps' ? 'folder' : kindFilter === 'all' ? undefined : kindFilter,
+          ...(builderMode || kindFilter === 'apps' ? { conditions: [
+            ...(folderId ? [{ field: 'folderId', op: 'eq', value: folderId }] : []),
+            ...(kindFilter === 'apps' ? [{ field: 'builderApp', op: 'eq', value: true }, { field: 'folderId', op: 'eq', value: null }] : [])
+          ] } : {}),
           limit: PAGE_SIZE
         });
         if (cancelled) return;
         setSearchResults(resp?.things || []);
+        setSearchCursor(builderMode ? resp?.nextCursor || null : null);
       } catch {
-        if (!cancelled) setSearchResults([]);
+        if (!cancelled) { setSearchResults([]); setSearchCursor(null); }
       } finally {
         if (!cancelled) setSearching(false);
       }
@@ -320,7 +523,33 @@ export const ThingsPage = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [q, kindFilter, searchSeq, user?.id, user?.username]);
+  }, [q, kindFilter, searchSeq, user?.id, user?.username, builderMode, folderId]);
+
+  const searchIdentity = `${user?.id || ''}:${q}:${kindFilter}:${folderId || ''}:${searchSeq}`;
+  const searchIdentityRef = useRef(searchIdentity);
+  searchIdentityRef.current = searchIdentity;
+  const loadMoreBuilderSearch = async () => {
+    if (!builderMode || !searchCursor || searchingMore || !user) return;
+    const identity = searchIdentity;
+    setSearchingMore(true);
+    try {
+      const resp = await apiRef.current.v1.things.search({
+        q: q.trim(), author: user.username,
+        thingtime: kindFilter === 'apps' ? 'folder' : kindFilter === 'all' ? undefined : kindFilter,
+        conditions: [
+          ...(folderId ? [{ field: 'folderId', op: 'eq', value: folderId }] : []),
+          ...(kindFilter === 'apps' ? [{ field: 'builderApp', op: 'eq', value: true }, { field: 'folderId', op: 'eq', value: null }] : [])
+        ],
+        cursor: searchCursor, limit: PAGE_SIZE
+      });
+      if (searchIdentityRef.current !== identity) return;
+      if (!resp?.ok) throw new Error(resp?.error || 'Could not load more results.');
+      setSearchResults(previous => dedupeById([...(previous || []), ...(resp.things || [])]));
+      setSearchCursor(resp.nextCursor || null);
+    } catch (failure) {
+      if (searchIdentityRef.current === identity) lopuRef.current({ title: 'Could not load more results', description: failure instanceof Error ? failure.message : undefined, status: 'error' });
+    } finally { if (searchIdentityRef.current === identity) setSearchingMore(false); }
+  };
 
   // persist the optimistic seed (writeLocalCache swallows quota errors)
   useEffect(() => {
@@ -328,10 +557,7 @@ export const ThingsPage = () => {
     const folders: Record<string, ThingsThing[]> = {};
     for (const [key, things] of Object.entries(folderPages)) folders[key] = things.slice(0, PAGE_SIZE);
     const cachedRenders = Object.fromEntries(Object.entries(schemaRenders).slice(0, MAX_CACHED_SCHEMA_RENDERS));
-    writeLocalCache(
-      cacheKey,
-      { view, displayMode, sort, groupBy, folders, folderMeta, schemaRenders: cachedRenders } satisfies ThingsCache
-    );
+		writeLocalCache(cacheKey, { view, displayMode, sort, groupBy, folders, folderMeta, schemaRenders: cachedRenders } satisfies ThingsCache);
   }, [user?.id, cacheKey, view, displayMode, sort, groupBy, folderPages, folderMeta, schemaRenders]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // custom sort/group orders the WHOLE folder, so keep pulling pages until the
@@ -341,10 +567,10 @@ export const ThingsPage = () => {
     if (!arranged || !user || searchMode) return;
     const cursor = cursors[currentKey];
     if (!cursor || loadingKeys.has(currentKey)) return;
-    if ((folderPages[currentKey] || []).length >= MAX_ARRANGE_THINGS) return;
+    if (!builderMode && (folderPages[currentKey] || []).length >= MAX_ARRANGE_THINGS) return;
     fetchFolder(folderId, cursor);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [arranged, user?.id, currentKey, cursors, loadingKeys, folderId]);
+  }, [arranged, user?.id, currentKey, cursors, loadingKeys, folderId, builderMode]);
 
   // Previews: fetch the render template of every referenced community schema
   // once (data things stamp crystal.schemaId server-side). Missing/none caches
@@ -359,14 +585,7 @@ export const ThingsPage = () => {
       apiRef.current.v1.things
         .get({ id: schemaId })
         .then((resp: any) => {
-          const schemaThing = resp?.thing;
-          const render =
-            schemaThing?.thingtime?.includes?.('schema') &&
-            schemaThing?.crystal?.render &&
-            typeof schemaThing.crystal.render === 'object' &&
-            !Array.isArray(schemaThing.crystal.render)
-              ? (schemaThing.crystal.render as Record<string, unknown>)
-              : null;
+          const render = schemaRenderOf(resp?.thing);
           setSchemaRenders((prev) => ({ ...prev, [schemaId]: render }));
         })
         .catch(() => setSchemaRenders((prev) => ({ ...prev, [schemaId]: null })));
@@ -389,21 +608,43 @@ export const ThingsPage = () => {
       const page = folderPages[folderKeyOf(targetFolderId)];
       if (!page) return undefined;
       return sortThings(
-        page.filter((thing) => !HIDDEN_KINDS.has(primaryKindOf(thing))),
+        page.filter((thing) => !HIDDEN_KINDS.has(primaryKindOf(thing)) && (builderMode || targetFolderId !== null || isTopLevelLibraryThing(thing))),
         sort
       );
     },
-    [folderPages, sort]
+    [folderPages, sort, builderMode]
   );
 
   const browseItems = useMemo(() => {
     const page = itemsFor(folderId) || [];
     if (kindFilter === 'all') return page;
-    return page.filter((thing) => primaryKindOf(thing) === kindFilter);
+    return page.filter((thing) => kindFilter === 'apps' ? isBuilderApp(thing) : primaryKindOf(thing) === kindFilter);
   }, [itemsFor, folderId, kindFilter]);
 
   const searchMode = q.trim().length > 0;
   const displayItems = searchMode ? searchResults || [] : browseItems;
+	const visibleDevices = useMemo<DeviceRuntimeState[]>(() => {
+		if (!devicesEnabled || kindFilter !== 'all' || (!searchMode && folderId)) return [];
+		const query = q.trim().toLocaleLowerCase();
+		if (!query) return deviceStore.devices;
+		return deviceStore.devices.filter((state) => {
+			const summary = state.summary;
+			if (!summary) return false;
+			const searchable = [
+				summary.name,
+				summary.platform,
+				summary.system?.model,
+				summary.system?.osName,
+				summary.system?.osVersion,
+				...(state.snapshot?.observed.runningApps.flatMap((app) => [app.name, app.bundleId]) || []),
+				...(state.snapshot?.connectors.flatMap((connector) => [connector.label, connector.kind]) || [])
+			]
+				.filter((value): value is string => typeof value === 'string')
+				.join(' ')
+				.toLocaleLowerCase();
+			return searchable.includes(query);
+		});
+	}, [deviceStore.devices, devicesEnabled, folderId, kindFilter, q, searchMode]);
 
   const breadcrumbs = useMemo(() => {
     const trail: { id: string; name: string; icon?: string }[] = [];
@@ -427,10 +668,7 @@ export const ThingsPage = () => {
     for (const pathFolderId of columnsPath) ensureLoaded(pathFolderId);
   }, [view, columnsPath, ensureLoaded, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cutIds = useMemo(
-    () => new Set(clipboard?.mode === 'cut' ? clipboard.ids : []),
-    [clipboard]
-  );
+	const cutIds = useMemo(() => new Set(clipboard?.mode === 'cut' ? clipboard.ids : []), [clipboard]);
 
   const selectedThings = useMemo(() => {
     const all = searchMode ? searchResults || [] : Object.values(folderPages).flat();
@@ -440,23 +678,69 @@ export const ThingsPage = () => {
 
   // ------------------------------------------------------------------ actions
 
+	const openDevice = useCallback(
+		(deviceId: string) => {
+			setSelection(new Set());
+			anchorRef.current = null;
+			setPreviewThing(null);
+			setSearchParams(
+				(previous) => {
+					const next = new URLSearchParams(previous);
+					next.set('device', deviceId);
+					next.delete('deviceView');
+					next.delete('preview');
+					return next;
+				},
+				{ preventScrollReset: true }
+			);
+		},
+		[setSearchParams]
+	);
+
+	const closeDevice = useCallback(() => {
+		setSearchParams(
+			(previous) => {
+				const next = new URLSearchParams(previous);
+				next.delete('device');
+				next.delete('deviceView');
+				return next;
+			},
+			{ preventScrollReset: true, replace: true }
+		);
+	}, [setSearchParams]);
+
+	const deviceControlFor = useCallback<DeviceControlResolver>(
+		(action, targetKey) => (LOCAL_DEVICE_ACTIONS.has(action) ? localDeviceControlFor(action, targetKey) : serverDeviceControlFor(action, targetKey)),
+		[localDeviceControlFor, serverDeviceControlFor]
+	);
+
+	const onDeviceAction = useCallback(
+		(intent: DeviceActionIntent) => {
+			if (LOCAL_DEVICE_ACTIONS.has(intent.action)) executeLocalDeviceAction(intent);
+			else void executeServerDeviceAction(intent);
+		},
+		[executeLocalDeviceAction, executeServerDeviceAction]
+	);
+
   const navigateToFolder = useCallback(
     (targetFolderId: string | null) => {
       setSelection(new Set());
       anchorRef.current = null;
-      setQ('');
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
           if (targetFolderId) next.set('folder', targetFolderId);
           else next.delete('folder');
+          if (builderMode) next.set('kind', targetFolderId ? 'all' : 'apps');
+          next.delete('q');
           next.delete('preview');
+					next.delete('device');
           return next;
         },
         { preventScrollReset: true }
       );
     },
-    [setSearchParams]
+    [setSearchParams, builderMode]
   );
 
   const closePreview = useCallback(() => {
@@ -484,19 +768,20 @@ export const ThingsPage = () => {
     [currentKey, fetchFolder]
   );
 
+  // Owners open saved Builder content in its editor. Other Things retain
+  // their readable page; ordinary folders navigate within the current view.
+  // The PreviewModal stays the explicit quick-look ('preview' / ?preview=).
   const openThing = useCallback(
     (thing: ThingsThing) => {
+      const builderHref = thingBuilderHref(thing, user?.id);
+      if (builderHref) { navigate(builderHref); return; }
       if (isFolder(thing)) {
         navigateToFolder(thing.id);
         return;
       }
-      if (thing.thingtime.includes('post')) {
-        navigate(`/post/${thing.id}`);
-        return;
-      }
-      setPreviewThing(thing);
+      navigate(thingOpenHref(thing, 'things', user?.id));
     },
-    [navigate, navigateToFolder]
+    [navigate, navigateToFolder, user?.id]
   );
 
   const toggleSelect = useCallback((thing: ThingsThing) => {
@@ -511,10 +796,6 @@ export const ThingsPage = () => {
 
   const clickSelect = useCallback(
     (thing: ThingsThing, event: React.MouseEvent) => {
-      if (isMobile) {
-        openThing(thing);
-        return;
-      }
       if (event.metaKey || event.ctrlKey) {
         toggleSelect(thing);
         return;
@@ -529,34 +810,47 @@ export const ThingsPage = () => {
           return;
         }
       }
-      setSelection(new Set([thing.id]));
-      anchorRef.current = thing.id;
+      if (event.shiftKey) toggleSelect(thing);
+      else openThing(thing);
     },
-    [displayItems, isMobile, openThing, toggleSelect]
+    [displayItems, openThing, toggleSelect]
   );
 
   const selectAll = useCallback(() => {
-    setSelection((prev) =>
-      prev.size === displayItems.length ? new Set() : new Set(displayItems.map((thing) => thing.id))
-    );
+		setSelection((prev) => (prev.size === displayItems.length ? new Set() : new Set(displayItems.map((thing) => thing.id))));
   }, [displayItems]);
 
-  const copyToClipboard = useCallback(
-    (mode: 'copy' | 'cut', ids: string[]) => {
+	const copyToClipboard = useCallback((mode: 'copy' | 'cut', ids: string[]) => {
       if (!ids.length) return;
-      setClipboard({ mode, ids });
-      lopuRef.current({
-        title: mode === 'copy' ? `Copied ${ids.length} 📋` : `Cut ${ids.length} ✂️`,
-        description: 'Paste into any folder.',
-        status: 'info',
-        duration: 5000
+      transferOperation.current?.abort();
+      const controller = new AbortController();
+      transferOperation.current = controller;
+      const ownerId = recordingOwner.current;
+      const ticket = transferIntent.ticket(ownerId);
+      const bundle = apiRef.current.v1.things.export({ ids }, { signal: controller.signal }).then(async (result) => {
+        if (!result?.ok) throw new Error(result?.error || 'Export failed');
+        const value = await bundleFromPlan(result.plan, { signal: controller.signal });
+        controller.signal.throwIfAborted();
+        return value;
       });
-    },
-    []
-  );
+      // Invoke synchronously in the gesture, before the export promise resolves.
+      void writeTransferClipboard(bundle, controller.signal).then(async (text) => {
+        const digest = await transferChecksum(new TextEncoder().encode(text));
+        if (controller.signal.aborted || recordingOwner.current !== ownerId) return;
+        if (mode === 'cut') {
+          if (!transferIntent.record(ticket, digest, ids)) return;
+        } else transferIntent.clear();
+        setClipboard({ mode, ids });
+        lopuRef.current({ title: mode === 'copy' ? `Copied ${ids.length} 📋` : `Cut ${ids.length} ✂️`,
+          description: 'Copied portable content to your clipboard. Paste in Things to import; cut moves only within this account.', status: 'success' });
+      }).catch((error) => {
+        const cancelled = controller.signal.aborted;
+        controller.abort();
+        if (!cancelled && recordingOwner.current === ownerId) lopuRef.current({ title: 'Could not copy', description: error instanceof Error ? error.message : 'Use Download instead.', status: 'error' });
+      });
+	}, []);
 
-  const runBulk = useCallback(
-    async (op: 'move' | 'copy' | 'delete', ids: string[], destination?: string | null) => {
+	const runBulk = useCallback(async (op: 'move' | 'copy' | 'delete', ids: string[], destination?: string | null) => {
       try {
         const resp = await apiRef.current.v1.things.bulk({ op, ids, folderId: destination ?? null });
         const results: { id: string; ok: boolean; error?: string; newId?: string }[] = resp?.results || [];
@@ -566,9 +860,7 @@ export const ThingsPage = () => {
         lopuRef.current({ title: 'That didn’t work 😔', description: err?.error || undefined, status: 'error' });
         return { ok: false as const, succeeded: 0, failures: [], results: [] };
       }
-    },
-    []
-  );
+	}, []);
 
   const summarize = useCallback((verb: string, succeeded: number, failures: { error?: string }[]) => {
     if (!failures.length) {
@@ -595,18 +887,37 @@ export const ThingsPage = () => {
   );
 
   const pasteClipboardTo = useCallback(
-    async (destination: string | null) => {
-      if (!clipboard?.ids.length) return;
-      const { mode, ids } = clipboard;
-      const sources = sourceKeysOf(ids);
-      const result = await runBulk(mode === 'cut' ? 'move' : 'copy', ids, destination);
-      if (!result.ok) return;
-      summarize(mode === 'cut' ? 'Moved' : 'Pasted', result.succeeded, result.failures);
-      if (mode === 'cut') setClipboard(null);
-      setSelection(new Set());
-      refreshAfterMutation([...sources, destination]);
+    async (destination: string | null, pastedText?: string) => {
+      const ownerId = recordingOwner.current;
+      transferOperation.current?.abort();
+      const controller = new AbortController();
+      transferOperation.current = controller;
+      try {
+        const text = pastedText ?? await navigator.clipboard.readText();
+        if (text.length > MAX_CLIPBOARD_BYTES) throw new Error('Clipboard content is too large. Import the ZIP file instead.');
+        const digest = await transferChecksum(new TextEncoder().encode(text));
+        if (controller.signal.aborted || recordingOwner.current !== ownerId) return;
+        const cut = transferIntent.match(ownerId, digest);
+        if (cut) {
+          const ids = [...cut.ids];
+          const result = await runBulk('move', ids, destination);
+          if (!result.ok || recordingOwner.current !== ownerId) return;
+          summarize('Moved', result.succeeded, result.failures);
+          const succeeded = new Set(result.results.filter((entry) => entry.ok).map((entry) => entry.id));
+          const remaining = ids.filter((id) => !succeeded.has(id));
+          setClipboard(remaining.length ? { mode: 'cut', ids: remaining } : null);
+          transferIntent.settle(cut, [...succeeded]);
+          setSelection(new Set()); refreshAfterMutation([...sourceKeysOf(ids), destination]);
+        } else {
+          const bundle = await readTransferClipboard(text, controller.signal);
+          if (controller.signal.aborted || recordingOwner.current !== ownerId) return;
+          setImportBundle(bundle); setImportDestination(destination); setImportOpen(true);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted && recordingOwner.current === ownerId) lopuRef.current({ title: 'Could not paste', description: error instanceof Error ? error.message : 'Choose a Thingtime transfer file instead.', status: 'error' });
+      }
     },
-    [clipboard, refreshAfterMutation, runBulk, sourceKeysOf, summarize]
+    [refreshAfterMutation, runBulk, sourceKeysOf, summarize]
   );
 
   const pasteClipboard = useCallback(() => pasteClipboardTo(folderId), [folderId, pasteClipboardTo]);
@@ -735,9 +1046,7 @@ export const ThingsPage = () => {
         if (recursive && (inside || skippedInside)) {
           lopuRef.current({
             title: `Audience flowed to ${inside} thing${inside === 1 ? '' : 's'} inside 📂`,
-            description: skippedInside
-              ? `${skippedInside} skipped (attached things keep inheriting their target’s audience).`
-              : undefined,
+						description: skippedInside ? `${skippedInside} skipped (attached things keep inheriting their target’s audience).` : undefined,
             status: 'info',
             duration: 6000
           });
@@ -763,9 +1072,7 @@ export const ThingsPage = () => {
       setFolderPages((prev) => {
         const next: typeof prev = {};
         for (const [key, things] of Object.entries(prev)) {
-          next[key] = things.map((entry) =>
-            entry.id === thing.id ? { ...entry, crystal: { ...entry.crystal, name } } : entry
-          );
+					next[key] = things.map((entry) => (entry.id === thing.id ? { ...entry, crystal: { ...entry.crystal, ...thingRenameCrystal(entry, name) } } : entry));
         }
         return next;
       });
@@ -773,11 +1080,19 @@ export const ThingsPage = () => {
         setFolderMeta((prev) => ({ ...prev, [thing.id]: { ...(prev[thing.id] || { folderId: thing.folderId }), name } }));
       }
       try {
-        await apiRef.current.v1.things.update({ id: thing.id, crystal: { name } });
+        const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
+        await requireThingtimeCapability('api.things', '1.27.0');
+        const response = isManagedLibraryThing(thing)
+          ? await apiRef.current.v1.things.renameLibrary({ id: thing.id, displayTitle: name, expectedUpdatedAt: thing.updatedAt })
+          : thing.thingtime.includes('attachment')
+          ? await apiRef.current.v1.attachments.annotate({ id: thing.id, title: name })
+          : await apiRef.current.v1.things.update({ id: thing.id, crystal: thingRenameCrystal(thing, name) });
+        if (response?.ok === false) throw new Error(response.error || 'Rename failed');
+        setSearchResults(previous => previous?.map(entry => entry.id === thing.id ? { ...entry, crystal: { ...entry.crystal, ...thingRenameCrystal(entry, name) } } : entry) || null);
         lopuRef.current({ title: 'Renamed ✏️', status: 'success', duration: 4000 });
         return true;
       } catch (err: any) {
-        lopuRef.current({ title: 'Rename failed 😔', description: err?.error || undefined, status: 'error' });
+        lopuRef.current({ title: 'Rename failed 😔', description: err?.error || err?.message || undefined, status: 'error' });
         refreshAfterMutation(sourceKeysOf([thing.id]));
         return false;
       }
@@ -789,13 +1104,13 @@ export const ThingsPage = () => {
     async (name: string, icon: string) => {
       try {
         const resp = await apiRef.current.v1.things.create({
-          thingtime: ['folder'],
+          thingtime: builderMode ? ['folder', BUILDER_THING_KIND] : ['folder'],
           crystal: { name, ...(icon ? { icon } : {}) },
-          folderId
+          folderId: newFolderParent
         });
         const thing: ThingsThing | undefined = resp?.thing;
         if (thing) {
-          setFolderPages((prev) => ({ ...prev, [currentKey]: dedupeById([thing, ...(prev[currentKey] || [])]) }));
+          setFolderPages((prev) => ({ ...prev, [folderKeyOf(newFolderParent)]: dedupeById([thing, ...(prev[folderKeyOf(newFolderParent)] || [])]) }));
           rememberFolderMeta([thing]);
         }
         lopuRef.current({ title: `Folder “${name}” created 📁`, status: 'success', duration: 5000 });
@@ -805,45 +1120,126 @@ export const ThingsPage = () => {
         return false;
       }
     },
-    [currentKey, folderId, rememberFolderMeta]
+    [newFolderParent, rememberFolderMeta, builderMode]
   );
 
+  const saveBuilderApp = useCallback(async (draft: { name: string; description: string; icon: string; iconUrl: string; metadata: Record<string, unknown> }) => {
+    if (!builderMode) throw new Error('Builder apps are available in Builder.');
+    const existing = builderAppDialog && builderAppDialog !== 'new' ? builderAppDialog : null;
+    const crystal = { name: draft.name, description: draft.description, icon: draft.icon, iconUrl: draft.iconUrl, metadata: draft.metadata, builderApp: true };
+    const resp = existing
+      ? await apiRef.current.v1.things.update({ id: existing.id, crystal, expectedUpdatedAt: existing.updatedAt })
+      : await apiRef.current.v1.things.create({ thingtime: ['folder'], crystal, folderId: null, acl: ['tt:user'] });
+    if (!resp?.ok) throw new Error(resp?.error || 'Could not save the Builder app.');
+    const thing: ThingsThing | undefined = resp.thing;
+    if (thing) {
+      setFolderPages(previous => ({ ...previous, root: dedupeById([thing, ...(previous.root || []).filter(item => item.id !== thing.id)]) }));
+      rememberFolderMeta([thing]);
+    }
+    lopuRef.current({ title: existing ? 'App updated' : 'App created', status: 'success' });
+  }, [builderMode, builderAppDialog, rememberFolderMeta]);
+
+  const createBuilderPage = useCallback(async () => {
+    try {
+      const response = await apiRef.current.v1.things.create({ thingtime: ['webpage'], crystal: { name: 'Untitled page', version: 1, blocks: [] }, folderId, acl: ['tt:user'] });
+      if (!response?.ok || !response?.thing?.id) throw new Error(response?.error || 'Could not create the page.');
+      navigate(`/builder?page=${encodeURIComponent(response.thing.id)}`);
+    } catch (failure) {
+      lopuRef.current({ title: 'Could not create the page', description: failure instanceof Error ? failure.message : undefined, status: 'error' });
+    }
+  }, [folderId, navigate]);
+
   const copyLink = useCallback(async (thing: ThingsThing) => {
-    const url = `${window.location.origin}${thingLink(thing)}`;
+    const url = `${window.location.origin}${thingShareLink(thing)}`;
     try {
       await navigator.clipboard.writeText(url);
-      lopuRef.current({ title: 'Link copied 🔗', description: url, status: 'success', duration: 5000 });
+      lopuRef.current({
+        title: thing.acl.includes('tt:hidden') ? 'Secret link copied 🕵️' : 'Link copied 🔗',
+        description: url,
+        status: 'success',
+        duration: 5000
+      });
     } catch {
       lopuRef.current({ title: 'Couldn’t copy the link', description: url, status: 'error' });
     }
+  }, []);
+
+  const sendRecording = useCallback(async (thing: ThingsThing) => {
+    const ownerId = recordingOwner.current;
+    if (!ownerId || recordingHandoffBusy.current) return;
+    recordingHandoffBusy.current = true;
+    try {
+      const sent = await sendRecordingThingToLopu(thing, ownerId, {
+        origin: window.location.origin, activeOwner: () => recordingOwner.current,
+        confirm: (message) => window.confirm(message), fetch: window.fetch.bind(window)
+      });
+      if (sent && recordingOwner.current === ownerId) lopuRef.current({ title: 'Recording sent to Lopu 🦄',
+        description: 'Follow transcription and the linked conversation in Recording activity.', status: 'success', link: { label: 'Recording activity', href: '/lopu/recordings' } });
+    } catch (error) {
+      if (recordingOwner.current === ownerId) lopuRef.current({ title: 'Recording needs attention',
+        description: error instanceof Error ? error.message : 'Check Recording activity before retrying.', status: 'error', link: { label: 'Recording settings', href: '/lopu/recordings' } });
+    } finally { recordingHandoffBusy.current = false; }
   }, []);
 
   const onItemAction = useCallback(
     (thing: ThingsThing, action: ThingsItemAction) => {
       const group = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
       switch (action) {
+        case 'history': openThingHistory(thing.id, thing.thingtime); break;
+        case 'open-builder': { const href = thingBuilderHref(thing, user?.id); if (href) navigate(href); break; }
+        case 'open-live': { const href = thingLiveHref(thing); if (href) navigate(href); break; }
+        case 'edit-definition':
+          if (builderMode && thing.thingtime.includes('component') && thing.author?.id === user?.id) setDefinitionThingId(thing.id);
+          break;
+        case 'download':
+          setExportIds(group.map((entry) => entry.id));
+          break;
+        case 'download-archive':
+          void archive.download(thing.id, archiveNounForKinds(thing.thingtime) || 'post');
+          break;
+        case 'share-download-link':
+          void archive.shareLink(thing.id, archiveNounForKinds(thing.thingtime) || 'post');
+          break;
+        case 'send-to-lopu':
+          void sendRecording(thing);
+          break;
         case 'open':
           openThing(thing);
           break;
         case 'preview':
           setPreviewThing(thing);
           break;
+        case 'inspect':
+          navigate(`/thing/${encodeURIComponent(thing.id)}`);
+          break;
+        case 'paste-into':
+          pasteClipboardTo(thing.id);
+          break;
         case 'rename':
-          setRenameThing(thing);
+        case 'edit':
+          if (builderMode && isBuilderApp(thing)) setBuilderAppDialog(thing);
+          else setRenameThing(thing);
           break;
         case 'move':
           setSelection(new Set(group.map((entry) => entry.id)));
-          setMoveOpen(true);
+          if (builderMode) setAssignOpen(true);
+          else setMoveOpen(true);
           break;
         case 'share':
           setShareThings(group);
           break;
         case 'copy':
           // folders copy their whole subtree server-side (bounded, honest)
-          copyToClipboard('copy', group.map((entry) => entry.id));
+					copyToClipboard(
+						'copy',
+						group.map((entry) => entry.id)
+					);
           break;
         case 'cut':
-          copyToClipboard('cut', group.map((entry) => entry.id));
+					copyToClipboard(
+						'cut',
+						group.map((entry) => entry.id)
+					);
           break;
         case 'duplicate':
           // server-side per-item results skip uncopyable kinds honestly
@@ -857,7 +1253,7 @@ export const ThingsPage = () => {
           break;
       }
     },
-    [copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection]
+    [archive, copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo, builderMode, user?.id]
   );
 
   // ------------------------------------------------------------------ drag & drop
@@ -942,27 +1338,55 @@ export const ThingsPage = () => {
     [backgroundMenu.openAtPointer, itemMenu.closeMenu] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
+	const onDeviceContextMenu = useCallback((deviceId: string, event: React.MouseEvent) => {
+		closeItemMenu();
+		closeBackgroundMenu();
+		setMenuDeviceId(deviceId);
+		event.preventDefault();
+		event.stopPropagation();
+		openDeviceMenu(browseMenuPosition(event));
+	}, [closeItemMenu, closeBackgroundMenu, openDeviceMenu]);
+
   const menuActCount = menuThing && selection.has(menuThing.id) && selection.size > 1 ? selection.size : 1;
 
   const itemMenuModel = useMemo(
     () =>
-      menuThing
-        ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0 })
-        : { sections: [] },
-    [menuThing, menuActCount, clipboard?.ids.length]
+			menuThing ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode }) : { sections: [] },
+    [menuThing, menuActCount, clipboard?.ids.length, user?.id, searchParams, builderMode]
   );
 
   const onItemMenuAction = useCallback(
     ({ action }: ThingContextMenuAction) => {
       if (!menuThing) return;
       switch (action.command) {
+        case 'history': openThingHistory(menuThing.id, menuThing.thingtime); break;
+        case 'open-builder':
+        case 'open-live': onItemAction(menuThing, action.command); break;
+        case 'edit-definition': onItemAction(menuThing, 'edit-definition'); break;
+        case 'download':
+          onItemAction(menuThing, 'download');
+          break;
+        case 'download-archive':
+        case 'share-download-link':
+          onItemAction(menuThing, action.command);
+          break;
+        case 'send-to-lopu':
+          onItemAction(menuThing, 'send-to-lopu');
+          break;
         case 'open':
           openThing(menuThing);
+          break;
+        case 'preview':
+          setPreviewThing(menuThing);
+          break;
+        case 'inspect':
+          navigate(`/thing/${encodeURIComponent(menuThing.id)}`);
           break;
         case 'copy-link':
           copyLink(menuThing);
           break;
         case 'rename':
+        case 'edit':
           onItemAction(menuThing, 'rename');
           break;
         case 'move':
@@ -1003,6 +1427,11 @@ export const ThingsPage = () => {
       }),
     [clipboard?.ids.length, displayItems.length, sort, groupBy, view, displayMode]
   );
+	const deviceMenuModel = useMemo(() => ({ sections: [{ id: 'device-navigation', actions: [{
+		id: 'open-device-files', label: 'Open synced files', icon: '🗂️', lucide: 'folder', href: menuDeviceId ? deviceSyncedFilesHref(menuDeviceId) : '/things'
+	}, { id: 'open-device-page', label: 'Device settings page', icon: '⚙️', lucide: 'maximize', href: menuDeviceId ? deviceThingsPageHref(menuDeviceId) : '/things'
+	}, { id: 'open-device-settings', label: 'Quick device settings', icon: '⚙️', lucide: 'settings', command: 'inspect-device'
+	}] }] }), [menuDeviceId]);
 
   const onBackgroundMenuAction = useCallback(
     ({ action }: ThingContextMenuAction) => {
@@ -1013,8 +1442,11 @@ export const ThingsPage = () => {
         displayMode?: ThingsDisplayMode;
       };
       switch (action.command) {
+        case 'import':
+          setImportBundle(null); setImportDestination(folderId); setImportOpen(true);
+          break;
         case 'new-folder':
-          setNewFolderOpen(true);
+          openNewFolder(folderId);
           break;
         case 'paste':
           pasteClipboard();
@@ -1036,22 +1468,23 @@ export const ThingsPage = () => {
           break;
       }
     },
-    [pasteClipboard, selectAll]
+    [folderId, openNewFolder, pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
   );
 
   // context menus close on any outside press (their surfaces portal to <body>,
   // so this checks the class, not the React tree)
   useEffect(() => {
-    if (!itemMenu.open && !backgroundMenu.open) return;
+    if (!itemMenu.open && !backgroundMenu.open && !deviceMenu.open) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest?.('.thing-context-menu')) return;
-      itemMenu.closeMenu();
-      backgroundMenu.closeMenu();
+      closeItemMenu();
+      closeBackgroundMenu();
+      closeDeviceMenu();
     };
     window.addEventListener('pointerdown', onPointerDown);
     return () => window.removeEventListener('pointerdown', onPointerDown);
-  }, [itemMenu.open, backgroundMenu.open, itemMenu.closeMenu, backgroundMenu.closeMenu]);
+  }, [itemMenu.open, backgroundMenu.open, deviceMenu.open, closeItemMenu, closeBackgroundMenu, closeDeviceMenu]);
 
   // ------------------------------------------------------------------ keyboard
 
@@ -1065,11 +1498,11 @@ export const ThingsPage = () => {
         event.preventDefault();
         selectAll();
       } else if (meta && event.key.toLowerCase() === 'c' && selection.size) {
+        event.preventDefault();
         copyToClipboard('copy', [...selection]);
       } else if (meta && event.key.toLowerCase() === 'x' && selection.size) {
+        event.preventDefault();
         copyToClipboard('cut', [...selection]);
-      } else if (meta && event.key.toLowerCase() === 'v' && clipboard?.ids.length) {
-        pasteClipboard();
       } else if ((event.key === 'Delete' || event.key === 'Backspace') && selection.size) {
         event.preventDefault();
         setDeleteThings(selectedThings);
@@ -1077,9 +1510,23 @@ export const ThingsPage = () => {
         setSelection(new Set());
       }
     };
+    // Native paste supplies the text without requiring clipboard-read permission.
+    // Leave editable controls and other dialogs' clipboard handling untouched.
+    const onPaste = (event: ClipboardEvent) => {
+      if (event.defaultPrevented || dialogOpen || itemMenu.open || backgroundMenu.open) return;
+      const target = event.target as HTMLElement | null;
+      // Paste can target a non-Element node (the document) when nothing is
+      // focused; call closest() optionally so the listener cannot throw.
+      if (target?.closest?.('input, textarea, [contenteditable]:not([contenteditable="false"]), [role="dialog"]')) return;
+      const text = event.clipboardData?.getData('text/plain');
+      if (!text) return;
+      event.preventDefault();
+      void pasteClipboardTo(folderId, text);
+    };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [backgroundMenu.open, clipboard, copyToClipboard, dialogOpen, itemMenu.open, pasteClipboard, selectAll, selectedThings, selection]);
+    window.addEventListener('paste', onPaste);
+    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('paste', onPaste); };
+  }, [backgroundMenu.open, clipboard, copyToClipboard, dialogOpen, itemMenu.open, pasteClipboardTo, folderId, selectAll, selectedThings, selection]);
 
   // ------------------------------------------------------------------ render
 
@@ -1101,7 +1548,14 @@ export const ThingsPage = () => {
           <Text color="var(--tt-muted, #9a9aa6)" fontSize="14px" maxWidth="360px">
             Log in to collect, organise, and share everything you make on Thingtime.
           </Text>
-          <Button as={RouterLink} colorScheme="pink" size="sm" to="/login">
+          <Button
+            as={RouterLink}
+            size="sm"
+            to="/login"
+            background="var(--tt-accent, hotpink)"
+            color="var(--tt-accent-contrast, #ffffff)"
+            _hover={{ opacity: 0.9 }}
+          >
             Log in 🗝️
           </Button>
         </Flex>
@@ -1110,6 +1564,11 @@ export const ThingsPage = () => {
   }
 
   const itemHandlers: ThingsItemHandlers = {
+    ...(builderMode ? { itemMenuFor: (thing: ThingsThing) => buildThingsItemMenu({ thing, actCount: selection.has(thing.id) ? Math.max(1, selection.size) : 1, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString(), builderMode: true }) } : {}),
+    itemHref: (thing: ThingsThing) => thingBrowseHref(thing, searchParams.toString(), user?.id),
+    locationSearch: searchParams.toString(),
+    clipboardCount: clipboard?.ids.length || 0,
+    ownerId: user?.id,
     selected: selection,
     cutIds,
     isMobile,
@@ -1134,16 +1593,59 @@ export const ThingsPage = () => {
     onDragLeave: () => onFolderDragLeave(target),
     onDrop: (event: React.DragEvent) => onFolderDrop(target, event),
     ...(dropTarget === target
-      ? { background: 'var(--tt-accent-soft, rgba(244, 114, 182, 0.14))', borderRadius: '6px', boxShadow: 'inset 0 0 0 2px var(--tt-accent, #f472b6)' }
+			? {
+					background: 'var(--tt-accent-soft, rgba(244, 114, 182, 0.14))',
+					borderRadius: '6px',
+					boxShadow: 'inset 0 0 0 2px var(--tt-accent, #f472b6)'
+			  }
       : {})
   });
 
   const loading = loadingKeys.has(currentKey) && !folderPages[currentKey];
+	const deviceSurfaceLoading = devicesEnabled && kindFilter === 'all' && (searchMode || !folderId) && deviceStore.loading && !visibleDevices.length;
+	const canPaintContent = !loading || visibleDevices.length > 0;
   const allSelected = displayItems.length > 0 && displayItems.every((thing) => selection.has(thing.id));
   const moveDisabledIds = new Set(selectedThings.filter(isFolder).map((thing) => thing.id));
   // group-by renders one titled section per kind (grid/list; columns is
   // already hierarchical)
   const groupedSections = groupBy === 'kind' && view !== 'columns' ? groupThings(displayItems, groupBy) : null;
+	const devicePresentation = {
+		devices: visibleDevices,
+		deviceCounts: deviceStore.countsById,
+		selectedDeviceId: deviceParam || selectedDevice,
+		deviceMenuId: deviceMenu.open ? menuDeviceId : null,
+		onDeviceSelect: (id: string) => setSelectedDevice(current => current === id ? null : id),
+		onDeviceOpen: (id: string) => navigate(deviceSyncedFilesHref(id)),
+		onDeviceContextMenu
+	};
+	const searchResultCount = (searchResults || []).length + visibleDevices.length;
+	if (deviceSyncMode && deviceParam) return (
+    <Flex justify="center" background="var(--tt-surface, #fafafb)" minHeight="100vh" paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 24px)" paddingBottom={16} paddingX={{ base: 4, md: 6 }} width="100%">
+      <Flex direction="column" gap={6} width="100%" maxWidth="1100px" minWidth={0}>
+        <DeviceSyncPanel deviceId={deviceParam} ownerId={user?.id} pairedDeviceIds={localNode.pairedDeviceIds} ownedDeviceIds={currentAccountDeviceIds} />
+        {devicesEnabled && user?.id ? <MobileDeviceSetupCard ownerId={user.id} onPaired={deviceStore.refreshList} /> : null}
+        {devicesEnabled && localNode.available ? <LocalNodeSetupCard onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} /> : null}
+      </Flex>
+    </Flex>
+  );
+	if (devicePageMode) return (
+		<Flex background="var(--tt-surface, #fafafb)" minHeight="100vh" paddingBottom={16} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 20px)" paddingX={{ base: 3, md: 6 }} width="100%">
+			<DeviceDetailsDrawer
+				controlFor={deviceControlFor}
+				localBattery={localBattery}
+				ownerId={user?.id}
+				pairedDeviceIds={localNode.pairedDeviceIds}
+				ownedDeviceIds={currentAccountDeviceIds}
+				isOpen
+				onAction={onDeviceAction}
+				onClose={closeDevice}
+				onPermissionModeChange={setDevicePermissionMode}
+				presentation="page"
+				screenAvailability="not-installed"
+				state={deviceStore.selectedState}
+			/>
+		</Flex>
+	);
 
   return (
     <Flex
@@ -1154,9 +1656,12 @@ export const ThingsPage = () => {
       paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
       width="100%"
     >
-      <Flex direction="column" gap={4} maxWidth="100%" paddingTop={[4, 6]} paddingX={4} width={['100%', '100%', '1100px']}>
+      <Flex direction="column" gap={4} maxWidth="100%" paddingTop={[4, 6]} paddingX={4} width={['100%', '100%', '1100px']}
+        style={{ boxSizing: 'border-box', minWidth: 0, paddingInline: 16 }}>
         <Flex alignItems="baseline" gap={3} wrap="wrap">
-          <Text {...monoLabel}>Thingtime · Things</Text>
+          <Text {...monoLabel}>Thingtime · {builderMode ? 'Builder' : 'Things'}</Text>
+          {builderMode ? <Button as={RouterLink} to="/things" size="sm" variant="ghost">All Things</Button> : <Button as={RouterLink} to="/things?files=thingtime" size="sm" variant="ghost">Browse files</Button>}
+          {!builderMode && !folderId && !searchMode ? <Button as={RouterLink} to="/things?unfiled=attachments" size="sm" variant="outline" minHeight="44px">Unfiled files</Button> : null}
         </Flex>
         <Flex alignItems="center" gap={3} wrap="wrap">
           <Text
@@ -1171,19 +1676,41 @@ export const ThingsPage = () => {
               animation: 'moving-rainbow 12s linear infinite'
             }}
           >
-            Things
+            {builderMode ? 'Builder' : 'Things'}
           </Text>
           <Box flex={1} />
+          <Menu placement="bottom-end" closeOnSelect={false}>
+            <MenuButton as={Button} size="sm" variant="ghost" aria-label="Things settings" minW="36px" px={2}><Settings size={18} /></MenuButton>
+            <Portal><MenuList zIndex={10250} maxH="70vh" overflowY="auto" maxW="calc(100vw - 32px)">
+              <MenuOptionGroup title="Layout" type="radio" value={view} onChange={value => setView(value as ThingsView)}>
+                <MenuItemOption value="grid">Grid</MenuItemOption><MenuItemOption value="list">List</MenuItemOption><MenuItemOption value="columns">Folder columns</MenuItemOption>
+              </MenuOptionGroup>
+              <MenuOptionGroup title="Display" type="radio" value={displayMode} onChange={value => setDisplayMode(value as ThingsDisplayMode)}>
+                <MenuItemOption value="name">Names</MenuItemOption><MenuItemOption value="preview">Rendered previews</MenuItemOption>
+              </MenuOptionGroup>
+              <MenuOptionGroup title="Sort" type="radio" value={sort} onChange={value => setSort(value as ThingsSort)}>{THINGS_SORT_OPTIONS.map(option => <MenuItemOption key={option.id} value={option.id}>{option.label}</MenuItemOption>)}</MenuOptionGroup>
+              <MenuOptionGroup title="Group" type="radio" value={groupBy} onChange={value => setGroupBy(value as ThingsGroupBy)}>{THINGS_GROUP_OPTIONS.map(option => <MenuItemOption key={option.id} value={option.id}>{option.label}</MenuItemOption>)}</MenuOptionGroup>
+              <MenuDivider />
+              <MenuItem onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import Things…</MenuItem>
+              <MenuItem onClick={() => void fetchFolder(folderId)}>Refresh this folder</MenuItem>
+              <MenuItem onClick={selectAll}>{allSelected ? 'Clear selection' : 'Select all'}</MenuItem>
+              <MenuDivider /><MenuItem as={RouterLink} to="/things?logs=1">Error logs</MenuItem>
+            </MenuList></Portal>
+          </Menu>
           <Menu placement="bottom-end">
-            <MenuButton as={Button} colorScheme="pink" leftIcon={<Plus size={14} />} size="sm">
+            <MenuButton as={Button} bg="var(--tt-accent, hotpink)" color="var(--tt-accent-contrast, #ffffff)" leftIcon={<Plus size={14} />} size="sm" _hover={{ opacity: 0.9 }}>
               New
             </MenuButton>
             <Portal>
               <MenuList fontSize="13px" zIndex={10250}>
-                <MenuItem onClick={() => setNewFolderOpen(true)}>📁 New folder</MenuItem>
-                <MenuItem as={RouterLink} to="/feed">
+                {builderMode && !folderId ? <MenuItem onClick={() => setBuilderAppDialog('new')}>New app</MenuItem> : null}
+                {builderMode ? <MenuItem onClick={() => void createBuilderPage()}>New page</MenuItem> : null}
+                {builderMode ? <MenuItem as={RouterLink} to="/components">New component</MenuItem> : null}
+                {builderMode ? <MenuItem as={RouterLink} to="/actions">New action</MenuItem> : null}
+                {(!builderMode || folderId) && <MenuItem onClick={() => openNewFolder(folderId)}>📁 New folder</MenuItem>}
+              {!builderMode && <MenuItem as={RouterLink} to="/feed">
                   📝 New post
-                </MenuItem>
+                </MenuItem>}
                 <MenuItem as={RouterLink} to="/schemas">
                   💎 New data thing
                 </MenuItem>
@@ -1191,6 +1718,13 @@ export const ThingsPage = () => {
             </Portal>
           </Menu>
         </Flex>
+        {builderMode && <Flex alignItems="center" justifyContent="space-between" gap={3} wrap="wrap">
+          <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
+            {folderId ? 'This app contains independent Things. Moving one here changes its organization, not who can read it.' : 'Group pages, components, Actions, schemas and data into apps. Ungrouped Things remain in their type views.'}
+          </Text>
+          {folderId ? <Button size="sm" variant="outline" onClick={() => { void apiRef.current.v1.things.get({ id: folderId }).then((response: any) => { if (response?.thing && isBuilderApp(response.thing)) setBuilderAppDialog(response.thing); }); }}>Edit app</Button> :
+            <Button size="sm" variant="outline" onClick={() => setBuilderAppDialog('new')}>New app</Button>}
+        </Flex>}
 
         {/* search — the same rainbow-ringed input /search uses, page-sized */}
         <Box borderRadius="var(--tt-radius-sm, 9px)" height="48px" overflow="hidden" padding="2px" position="relative" width="100%">
@@ -1214,7 +1748,8 @@ export const ThingsPage = () => {
               height="100%"
               onChange={(event) => setQ(event.target.value)}
               padding={0}
-              placeholder="Search all your things…"
+							id="thingtime-things-search"
+                            placeholder={builderMode ? 'Search this Builder view…' : 'Search all your things and computers…'}
               value={q}
               variant="unstyled"
             />
@@ -1228,6 +1763,16 @@ export const ThingsPage = () => {
 
         {/* toolbar: browse controls stay available while contextual selection actions appear below */}
         <Flex alignItems="center" columnGap={4} rowGap={2} wrap="wrap">
+          {user?.id && <>
+            <Button {...pillProps(false)} onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import…</Button>
+            <Button {...pillProps(false)} onClick={pasteClipboard}>Paste</Button>
+            {!!selection.size && <Button {...pillProps(false)} onClick={() => setExportIds([...selection])}>Download…</Button>}
+            {folderId && folderArchive ? (
+              <Button {...pillProps(false)} leftIcon={<FolderDown size={13} />} title="Every stored file in this folder (and its sub-folders) as one ZIP" onClick={() => void archive.download(folderId, 'folder')}>
+                {archiveDownloadLabel(folderArchive.fileCount, folderArchive.totalBytes)}
+              </Button>
+            ) : null}
+          </>}
           <ToolbarGroup label="view">
             <Button {...pillProps(view === 'grid')} leftIcon={<LayoutGrid size={13} />} onClick={() => setView('grid')}>
               Grid
@@ -1243,11 +1788,7 @@ export const ThingsPage = () => {
             <Button {...pillProps(displayMode === 'name')} leftIcon={<Tag size={13} />} onClick={() => setDisplayMode('name')}>
               Names
             </Button>
-            <Button
-              {...pillProps(displayMode === 'preview')}
-              leftIcon={<Eye size={13} />}
-              onClick={() => setDisplayMode('preview')}
-            >
+						<Button {...pillProps(displayMode === 'preview')} leftIcon={<Eye size={13} />} onClick={() => setDisplayMode('preview')}>
               Previews
             </Button>
           </ToolbarGroup>
@@ -1259,11 +1800,7 @@ export const ThingsPage = () => {
               <Portal>
                 <MenuList fontSize="13px" zIndex={10250}>
                   {THINGS_SORT_OPTIONS.map((option) => (
-                    <MenuItem
-                      key={option.id}
-                      fontWeight={sort === option.id ? 600 : 400}
-                      onClick={() => setSort(option.id)}
-                    >
+										<MenuItem key={option.id} fontWeight={sort === option.id ? 600 : 400} onClick={() => setSort(option.id)}>
                       {option.icon} {option.label}
                     </MenuItem>
                   ))}
@@ -1277,11 +1814,7 @@ export const ThingsPage = () => {
               <Portal>
                 <MenuList fontSize="13px" zIndex={10250}>
                   {THINGS_GROUP_OPTIONS.map((option) => (
-                    <MenuItem
-                      key={option.id}
-                      fontWeight={groupBy === option.id ? 600 : 400}
-                      onClick={() => setGroupBy(option.id)}
-                    >
+										<MenuItem key={option.id} fontWeight={groupBy === option.id ? 600 : 400} onClick={() => setGroupBy(option.id)}>
                       {option.icon} {option.label}
                     </MenuItem>
                   ))}
@@ -1290,7 +1823,7 @@ export const ThingsPage = () => {
             </Menu>
           </ToolbarGroup>
           <ToolbarGroup label="kind" wrap>
-            {THINGS_KIND_FILTERS.map((entry) => (
+            {(builderMode ? BUILDER_KIND_FILTERS.filter(entry => folderId || entry.id !== 'all') : THINGS_KIND_FILTERS).map((entry) => (
               <Button key={entry.id} {...pillProps(kindFilter === entry.id)} onClick={() => setKindFilter(entry.id)}>
                 {entry.icon} {entry.label}
               </Button>
@@ -1302,7 +1835,7 @@ export const ThingsPage = () => {
               <Button {...pillProps(true)} onClick={pasteClipboard}>
                 📥 Paste {clipboard.ids.length} here
               </Button>
-              <Button {...pillProps(false)} onClick={() => setClipboard(null)}>
+              <Button {...pillProps(false)} onClick={() => { transferIntent.clear(); setClipboard(null); }}>
                 ✕
               </Button>
             </>
@@ -1332,18 +1865,20 @@ export const ThingsPage = () => {
             </Button>
             <Button
               {...pillProps(false)}
-              onClick={() => copyToClipboard('copy', selectedThings.filter((thing) => !isFolder(thing)).map((thing) => thing.id))}
+							onClick={() =>
+								copyToClipboard(
+									'copy',
+									selectedThings.filter((thing) => !isFolder(thing)).map((thing) => thing.id)
+								)
+							}
             >
               📋 Copy
             </Button>
+            {builderMode && <Button {...pillProps(false)} onClick={() => setAssignOpen(true)}>Assign to app</Button>}
             <Button {...pillProps(false)} onClick={() => copyToClipboard('cut', [...selection])}>
               ✂️ Cut
             </Button>
-            <Button
-              {...pillProps(false)}
-              color="var(--tt-danger, #e5484d)"
-              onClick={() => setDeleteThings(selectedThings)}
-            >
+						<Button {...pillProps(false)} color="var(--tt-danger, #e5484d)" onClick={() => setDeleteThings(selectedThings)}>
               🗑️ Delete
             </Button>
             <Button {...pillProps(false)} onClick={() => setSelection(new Set())}>
@@ -1363,7 +1898,7 @@ export const ThingsPage = () => {
               type="button"
               {...crumbDropProps(null)}
             >
-              🏠 All things
+              {builderMode ? 'All apps' : '🏠 All things'}
             </Box>
             {breadcrumbs.map((crumb, index) => (
               <React.Fragment key={crumb.id}>
@@ -1384,56 +1919,88 @@ export const ThingsPage = () => {
         )}
         {searchMode && (
           <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
-            {searching ? 'Searching all your folders…' : `${(searchResults || []).length} result${(searchResults || []).length === 1 ? '' : 's'} across all folders`}
+						{searching
+							? 'Searching all your folders…'
+							: `${searchResultCount} result${searchResultCount === 1 ? '' : 's'} across your things and computers`}
           </Text>
         )}
 
         <Flex alignItems="flex-start" gap={4}>
           {/* folder tree sidebar (desktop, browse mode) */}
-          {!isMobile && !searchMode && view !== 'columns' && (
+          {!isMobile && !searchMode && view !== 'columns' && (!builderMode || kindFilter === 'apps' || !!folderId) && (
             <Box flexShrink={0} paddingTop={1} width="220px">
-              <FolderTree
-                currentFolderId={folderId}
-                dnd={treeDnd}
-                ensureLoaded={ensureLoaded}
-                itemsFor={itemsFor}
-                onPick={navigateToFolder}
-              />
+							<FolderTree handlers={itemHandlers} currentFolderId={folderId} dnd={treeDnd} ensureLoaded={ensureLoaded} itemsFor={itemsFor} onPick={navigateToFolder} onNewFolder={builderMode ? undefined : openNewFolder} rootLabel={builderMode ? 'All apps' : undefined} />
             </Box>
           )}
 
           <Box flex={1} minHeight="45vh" minWidth={0} onContextMenu={onBackgroundContextMenu}>
-            {loading && (
+						{loading && !visibleDevices.length && (
               <Text color="var(--tt-faint, #b6b6c0)" fontSize="13px" paddingY={6} textAlign="center">
                 Loading your things… 🌀
               </Text>
             )}
-            {!loading && view === 'grid' &&
+						{!loading && deviceSurfaceLoading && !displayItems.length ? (
+							<Text color="var(--tt-faint, #b6b6c0)" fontSize="13px" paddingY={6} textAlign="center">
+								Finding your computers… 🖥️
+							</Text>
+						) : null}
+						{canPaintContent &&
+							view === 'grid' &&
               (groupedSections ? (
-                groupedSections.map((section) => (
-                  <Box key={section.key} marginBottom={4}>
+								<>
+									{visibleDevices.length ? (
+										<Box marginBottom={4}>
                     <Text {...monoLabel} marginBottom={2}>
-                      {section.icon} {section.label} · {section.items.length}
+												🖥️ Devices · {visibleDevices.length}
                     </Text>
                     <ThingsGridView
+												{...devicePresentation}
                       displayMode={displayMode}
                       handlers={itemHandlers}
-                      items={section.items}
+												items={[]}
                       schemaRenderFor={schemaRenderFor}
                     />
                   </Box>
-                ))
+									) : null}
+									{groupedSections.map((section) => (
+										<Box key={section.key} marginBottom={4}>
+											<Text {...monoLabel} marginBottom={2}>
+												{section.icon} {section.label} · {section.items.length}
+											</Text>
+											<ThingsGridView displayMode={displayMode} handlers={itemHandlers} items={section.items} schemaRenderFor={schemaRenderFor} />
+										</Box>
+									))}
+								</>
               ) : (
                 <ThingsGridView
+									{...devicePresentation}
                   displayMode={displayMode}
                   handlers={itemHandlers}
                   items={displayItems}
                   schemaRenderFor={schemaRenderFor}
                 />
               ))}
-            {!loading && view === 'list' &&
+						{canPaintContent &&
+							view === 'list' &&
               (groupedSections ? (
-                groupedSections.map((section) => (
+								<>
+									{visibleDevices.length ? (
+										<Box marginBottom={4}>
+											<Text {...monoLabel} marginBottom={2}>
+												🖥️ Devices · {visibleDevices.length}
+											</Text>
+											<ThingsListView
+												{...devicePresentation}
+												allSelected={false}
+												displayMode={displayMode}
+												handlers={itemHandlers}
+												items={[]}
+												onToggleAll={selectAll}
+												schemaRenderFor={schemaRenderFor}
+											/>
+										</Box>
+									) : null}
+									{groupedSections.map((section) => (
                   <Box key={section.key} marginBottom={4}>
                     <Text {...monoLabel} marginBottom={2}>
                       {section.icon} {section.label} · {section.items.length}
@@ -1447,9 +2014,11 @@ export const ThingsPage = () => {
                       schemaRenderFor={schemaRenderFor}
                     />
                   </Box>
-                ))
+									))}
+								</>
               ) : (
                 <ThingsListView
+									{...devicePresentation}
                   allSelected={allSelected}
                   displayMode={displayMode}
                   handlers={itemHandlers}
@@ -1458,8 +2027,10 @@ export const ThingsPage = () => {
                   schemaRenderFor={schemaRenderFor}
                 />
               ))}
-            {!loading && view === 'columns' && !searchMode && (
+						{canPaintContent && view === 'columns' && !searchMode && (
               <ThingsColumnsView
+                onNewFolder={openNewFolder}
+								{...devicePresentation}
                 activeFolderAt={(depth) => columnsPath[depth + 1] ?? null}
                 displayMode={displayMode}
                 handlers={itemHandlers}
@@ -1469,8 +2040,9 @@ export const ThingsPage = () => {
                 schemaRenderFor={schemaRenderFor}
               />
             )}
-            {!loading && view === 'columns' && searchMode && (
+						{canPaintContent && view === 'columns' && searchMode && (
               <ThingsGridView
+								{...devicePresentation}
                 displayMode={displayMode}
                 handlers={itemHandlers}
                 items={displayItems}
@@ -1478,7 +2050,7 @@ export const ThingsPage = () => {
               />
             )}
 
-            {!loading && !displayItems.length && !searching && (
+						{canPaintContent && !displayItems.length && !visibleDevices.length && !searching && !deviceSurfaceLoading && (
               <Flex
                 alignItems="center"
                 border="1px dashed var(--tt-border, #ececef)"
@@ -1488,10 +2060,8 @@ export const ThingsPage = () => {
                 gap={2}
                 paddingY={10}
               >
-                <Text fontSize="28px">{searchMode ? '🔍' : '🪺'}</Text>
-                <Text fontSize="13px">
-                  {searchMode ? 'Nothing matched that search.' : 'Nothing here yet — create something with New ✨'}
-                </Text>
+                <Text fontSize="28px">{searchMode ? '🔍' : builderMode ? '▦' : '🪺'}</Text>
+								<Text fontSize="13px">{searchMode ? 'Nothing matched that search.' : builderMode && kindFilter === 'apps' ? 'No Builder apps yet. Create one to group your Things.' : builderMode ? 'No Things in this Builder view yet.' : 'Nothing here yet — create something with New ✨'}</Text>
               </Flex>
             )}
 
@@ -1502,12 +2072,39 @@ export const ThingsPage = () => {
                 </Button>
               </Flex>
             )}
+            {builderMode && searchMode && searchCursor && (
+              <Flex justifyContent="center" paddingY={4}>
+                <Button onClick={() => void loadMoreBuilderSearch()} isLoading={searchingMore} size="sm" variant="outline">Load more results</Button>
+              </Flex>
+            )}
           </Box>
         </Flex>
       </Flex>
 
+			<DeviceDetailsDrawer
+				controlFor={deviceControlFor}
+				localBattery={localBattery}
+				ownerId={user?.id}
+				pairedDeviceIds={localNode.pairedDeviceIds}
+				ownedDeviceIds={currentAccountDeviceIds}
+				isOpen={Boolean(deviceParam) && !devicePageMode}
+				onAction={onDeviceAction}
+				onClose={closeDevice}
+				onPermissionModeChange={setDevicePermissionMode}
+				screenAvailability="not-installed"
+				state={deviceStore.selectedState}
+			/>
+
       {/* dialogs */}
+      {!!exportIds.length && transferAccount.current === user?.id && <ThingExportDialog key={user?.id || 'anonymous'} ids={exportIds} onClose={() => setExportIds([])} />}
+      {importOpen && user?.id && transferAccount.current === user.id && <ThingImportDialog key={user.id} ownerId={user.id} initialBundle={importBundle} folderId={importDestination} onClose={() => { setImportOpen(false); setImportBundle(null); }} onImported={(destination) => {
+        refreshAfterMutation([destination]);
+        lopu({ title: 'Things imported', description: 'Your new private copies are ready.', status: 'success' });
+      }} />}
       <NewFolderDialog isOpen={newFolderOpen} onClose={() => setNewFolderOpen(false)} onCreate={createFolder} />
+      {builderMode && <BuilderAssignDialog isOpen={assignOpen} onClose={() => setAssignOpen(false)} onAssign={moveConfirmed} />}
+      {builderMode && <BuilderAppDialog isOpen={builderAppDialog !== null} app={builderAppDialog === 'new' ? null : builderAppDialog} onClose={() => setBuilderAppDialog(null)} onSave={saveBuilderApp} />}
+      {builderMode && definitionThingId && <ThingDefinitionEditor id={definitionThingId} onClose={() => setDefinitionThingId(null)} onSaved={() => refreshAfterMutation([folderId])} />}
       <RenameDialog onClose={() => setRenameThing(null)} onRename={renameApplied} thing={renameThing} />
       <MoveDialog
         count={selectedThings.length || (previewThing ? 1 : 0)}
@@ -1547,6 +2144,12 @@ export const ThingsPage = () => {
         model={backgroundMenuModel}
         onAction={onBackgroundMenuAction}
       />
+		<ThingContextMenu
+			{...deviceMenu.menuProps}
+			meta={menuDeviceId ? { path: deviceStore.devices.find((device) => device.deviceId === menuDeviceId)?.summary?.name || 'Device', type: 'Device' } : undefined}
+			model={deviceMenuModel}
+			onAction={({ action }) => { if (action.command === 'inspect-device' && menuDeviceId) openDevice(menuDeviceId); }}
+		/>
     </Flex>
   );
 };
