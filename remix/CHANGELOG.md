@@ -35,6 +35,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   embedded Things retain their own access rules. Includes a retry-safe existing
   subspace migration and isolated acceptance harness. See [PR 1045](../PRs/1045-subspace-messages-views-and-moderated-embeds.md) for verification and rollout status. — Codex (AI)
 
+- 2026-10-20: Add editable Lopu AI defaults and per-chat credential settings, with saved connection endpoint/model labels and explicit Thingtime-credit selection. Preserve unavailable pins, isolate defaults from chat changes, persist AI choices immediately and fence cold-link/pending-save routing. See [PR 1070](../PRs/1070-lopu-credential-selection-add-lopu-defaults-and-per-chat-ai-credentials.md) for validation and remaining live acceptance. — Codex (AI)
+
 - 2026-10-19: Keep personal-plan chats on local management, make repeated verified provider selections idempotent, and align the floating header with plan eligibility. Added regressions for first sends, follow-ups, old-client background admission and revoked proofs. Reconcile completed Responses output items before executing tools; incomplete/conflicting output remains fail-closed (installed tool acceptance pending). — Codex (AI)
 
 - 2026-10-18: Admit full-session owners to Lopu text chat through their live ChatGPT plan without an admin grant, preserve provider ownership on chat writes, and discard cached eligibility across identity changes. Catalog/API-key/voice invitation policy is unchanged. Live consent/model discovery/restart passed; rebuilt inference acceptance remains pending. See [PR 1034](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md). — Codex (AI)
@@ -225,6 +227,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-10-26: Match custom drawer links and the final inline **➕ Add +** row to Thingtime navigation. Move menu layout editing into Settings and save the editable menu template as a private webpage Thing while retaining legacy device layouts. [Details](../PRs/1226-codex-drawer-renderable-row-match-the-final-add-drawer-row.md). **Codex (AI)**
 - 2026-10-26: Align shared native selects with Thingtime surfaces and radii; replace the black focus outline with a contrasting pink border and soft pink-to-violet glow. Theme Studio can customize both glow colours, softness and strength, including no glow. Add isolated desktop/mobile, light/dark and theme-editor save/reload coverage. **Codex (AI)**
+- 2026-10-26: Integrate the reviewed environment gateway and dedicated connection policy into develop while preserving newer develop changes. Built sandboxed API acceptance and contract tests pass; canonical-owner activation remains pending. [PR #1224 details](../PRs/1224-codex-gateway-develop-integration-environment-gateways-and-dedicated-policy.md). **Codex (AI)**
+
 - 2026-10-26: Add the server-only `THINGTIME_MONGODB_CONNECTION_MODE` override for `proxy` or opt-in `dedicated` MongoDB connections, with a branch-bundled default. Document the audited preview/develop database relationship, proposed gateway mapping and gradual pool draining; publisher implementation, gateway activation and live acceptance remain pending. [PR 1223 details](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
 - 2026-10-26: Eliminate existing TypeScript and ESLint errors, enforce a zero-error TypeScript baseline, and reject invalid compiler runs or baseline increases. Repair shared helper typing and behavior, complete unavailable MongoDB health responses, and emit parser-safe generated font data. [Static analysis audit](../docs/static-analysis-baselines.md); [validation and review boundary](../PRs/1228-codex-typescript-zero-baseline-fix-remaining-typescript-errors.md). **Codex (AI)**
 - 2026-10-26: Open Things, files and devices with one click; retain modifier/checkbox selection and add hover/focus action controls across browsing layouts and the folder tree. Added isolated real-API browser acceptance with file-byte verification. [Details](../PRs/1230-codex-things-single-click-open-things-and-files-with-one-click.md). — Codex (AI)
@@ -244,6 +248,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-10-23: Build Vercel production, custom environments and previews on GitHub
   Actions, upload only prebuilt output, and disable native source builds. Keep
   protected publisher credentials separate from product compilation.
+
+- 2026-10-23: Limit PR 1164 to reusable local-media and editable Builder primitives. Author compressor Pages/Components directly as saved Things; retain the legacy suite and fix capability-compatible file-sync assertions.
+
+### 2026-10-22 — General local compressor
+
+[PR 1164 validation and release notes](../PRs/1164-general-media-compressor-local-images-and-immediate-file-controls.md)
+
+- Add local image compression with bundled WASM codecs, transparency/animation safeguards and truthful size receipts alongside WebCodecs video compression.
+- Show file selection on load, keep the selected file while settings change, and support individually editable Builder elements authored directly as saved Things.
+- Version intrinsic media storage/resolve contracts and extend the isolated desktop/mobile browser regression; scope WebAssembly compilation permission to the network-disabled media worker.
+- 2026-10-23: Make the existing sync change-storm regression observe its trailing
+  read instead of racing a five-millisecond timer under CI load. **Codex (AI)**
+
+- 2026-10-23: Preserve the GitHub Actions prebuilt-only deployment migration on develop so future promotions keep native Vercel source builds disabled. See [PR #1206](https://github.com/lopugit/thingtime/pull/1206). **Codex (AI)**
 
 - 2026-10-22: Move device sync configuration off Things home into a dedicated
   device page; keep storage attachments and parent-linked records out of root,
