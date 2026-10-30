@@ -1133,6 +1133,30 @@ export function assertControlPlaneContract() {
     /!TRANSIENT_HTTP_STATUS\.test\(failure\)\) \{\n\s*throw new Error\(`CodeQL dispatch for PR/u,
     "the mutating CodeQL dispatch stays status-only and never replays on a transport reset",
   );
+  // An exhausted installation budget is an account-wide, self-healing
+  // condition, never a defect in any PR, but GitHub reports the primary limit
+  // as HTTP 403 rather than 429, so the classifiers above left it fatal and one
+  // outage reddened every open PR at once (run 40990132440; run 39789495402
+  // eight days earlier). Pin the deferral as a property: the condition is
+  // recognised, it is NOT retried into the backoff -- the published reset is
+  // most of an hour out -- and the process exits 0 so the next scheduled pass
+  // replans from live state. Pin the fail-fast half too, or the repair could
+  // regress into swallowing a real permission failure.
+  assert.match(
+    codeqlBackfill,
+    /const GH_BUDGET_EXHAUSTED\s*=\s*\/[^\n]*HTTP \(\?:403\|429\)[^\n]*API rate limit/u,
+    "the backfill recognises an exhausted installation budget by status and message together",
+  );
+  assert.match(
+    codeqlBackfill,
+    /if \(GH_BUDGET_EXHAUSTED\.test\(failure\)\) \{[\s\S]*?budgetExhausted: true/u,
+    "an exhausted budget is tagged for deferral rather than burned through the transient backoff",
+  );
+  assert.match(
+    codeqlBackfill,
+    /if \(error\?\.budgetExhausted\) \{[\s\S]*?return;\n\s*\}\n\s*process\.stderr\.write\(`\$\{error\.stack[\s\S]*?process\.exitCode = 1/u,
+    "a deferred pass exits 0 while every other failure still fails the job",
+  );
   assert.doesNotMatch(
     codeqlBackfill,
     /ANTHROPIC|OPENAI|actions\/checkout/u,
