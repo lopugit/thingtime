@@ -103,6 +103,13 @@ async function rasterizeSvg(bytes: Uint8Array, settings: ImageSettings, assets: 
 const formats = { webp: MagickFormat.WebP, jpeg: MagickFormat.Jpeg, png: MagickFormat.Png, avif: MagickFormat.Avif, gif: MagickFormat.Gif };
 const mime = { webp: 'image/webp', jpeg: 'image/jpeg', png: 'image/png', avif: 'image/avif', gif: 'image/gif' };
 const animationSources = new Set<string>(['GIF', 'GIF87', 'WEBP', 'PNG', 'APNG', 'MNG']);
+// Does this header open an SVG document (optional XML declaration, then any
+// number of comments)? A comment body that cannot itself contain `-->` keeps
+// this linear. With a lazy `[\s\S]*?` the engine can also end a comment past a
+// `-->`, so every `--><!--` in a header that never reaches `<svg` doubles the
+// partitions it must refuse: 24 repetitions already cost 160ms, and the
+// 4096-byte window below holds ~580 of them.
+export const SVG_DOCUMENT_HEAD = /^\s*(?:<\?xml[^>]*>\s*)?(?:<!--(?:[^-]|-(?!->))*-->\s*)*<svg[\s>]/i;
 
 export function pngAnimationFrames(bytes: Uint8Array): number | undefined {
 	if (bytes.length < 8 || bytes[0] !== 137 || String.fromCharCode(...bytes.subarray(1, 4)) !== 'PNG') return;
@@ -144,7 +151,7 @@ export async function compressImage(file: Blob, settings: ImageSettings, wasm: I
 	if (pngAnimationFrames(bytes)) throw new Error('Animated PNG decoding is unavailable locally; use animated GIF or WebP to preserve every frame');
 	const svg =
 		file.type === 'image/svg+xml' ||
-		/^\s*(?:<\?xml[^>]*>\s*)?(?:<!--[\s\S]*?-->\s*)*<svg[\s>]/i.test(new TextDecoder().decode(bytes.subarray(0, 4096)));
+		SVG_DOCUMENT_HEAD.test(new TextDecoder().decode(bytes.subarray(0, 4096)));
 	if (svg) bytes = await rasterizeSvg(bytes, settings, assets);
 	await initialize(assets);
 	const extension = (fileName ?? (file as Blob & { name?: string }).name ?? '').split('.').pop()?.toLowerCase();

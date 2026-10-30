@@ -105,6 +105,10 @@ fixture boundary, coverage, stream recovery and Builder acceptance.
       decode outputs: compare dimensions, alpha, orientation, frames, delays and
       loops, including optimized delta rectangles. Duplicate two compressor instances; each native file label must target its own input. JPEG transparency requires an explicit background. APNG, layered or
       multi-page images, unsupported SVG and invalid files fail clearly.
+- [ ] Select a non-image file whose first 4096 bytes are `<!--` followed by many
+      repetitions of `--><!--`. The SVG header test must refuse it immediately
+      and the tab must stay responsive, never backtrack exponentially.
+      Regression coverage: `test:web-platform`.
 - [ ] Cancel while image codecs load and while encoding; stale jobs cannot
       publish a preview/download. Asset loading fetches public same-origin WASM
       only; selected bytes never enter a request. The worker still denies network.
