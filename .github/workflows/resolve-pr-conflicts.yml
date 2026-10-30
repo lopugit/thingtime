@@ -1165,6 +1165,14 @@ jobs:
           # Total time budget for verdicts, and the pause between re-queries.
           MERGEABLE_POLL_SECONDS: "500"
           MERGEABLE_POLL_INTERVAL: "15"
+          # Point on this step's clock after which the optional changed-file
+          # hydration starts no further per-PR read. `timeout-minutes: 15`
+          # (900s) is the hard wall and a cancelled step publishes NO
+          # `prs`/`any`, so the advisory scan must never spend the
+          # authoritative one's budget. 600s leaves >=300s for classification,
+          # label sync and comments, and is ~2x the ~280s 140 open PRs need at
+          # the measured ~2s per single-attempt paginated read.
+          FILES_INVENTORY_DEADLINE_SECONDS: "600"
           STATUS_HELPER: .github/scripts/lopu-pr-status.mjs
         run: |
           set -euo pipefail
@@ -1330,6 +1338,15 @@ jobs:
           # fail on the first attempt), so the status and that exact message
           # are matched together. gh prints both on one line but in the
           # opposite order, which is why this stays two tests, not one regex.
+          # That replay horizon is minutes, not the 2-8s spanned here, and for
+          # a persistently oversize PR the refusal is indefinite (the promotion
+          # authorizer below records that too), so the retry pays only where
+          # failure would stop the step. `LOPU_SLOW_DIFF_RETRY=false` lets one
+          # caller whose failure path is an already-supported "inventory
+          # incomplete" degradation decline it: job 124090191975 spent 867s of
+          # a 900s timeout replaying 28 ungeneratable diffs, was cancelled
+          # before publishing any `prs`/`any`, and reddened the unrelated PR
+          # that started it. The default still retries.
           # Keep every notice on stderr so
           # command-substitution JSON stays clean, and surface
           # auth/schema/permission failures
@@ -1371,7 +1388,8 @@ jobs:
               if grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
                  || grep -Eq "$transport" "$errors" \
                  || { grep -Eq 'HTTP 422([^0-9]|$)' "$errors" \
-                      && grep -Fq "$slow_diff" "$errors"; }; then
+                      && grep -Fq "$slow_diff" "$errors" \
+                      && [ "${LOPU_SLOW_DIFF_RETRY:-true}" = true ]; }; then
                 if [ "$attempt" -lt 4 ]; then
                   delay="$((1 << attempt))"
                   echo "::notice::GitHub API read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
@@ -1844,12 +1862,32 @@ jobs:
           # Hydrate changed paths independently after mergeability settles.
           # Failure preserves explicit incomplete state and does not abort the
           # repository scan. Diagnostics must stay on stderr, never JSON stdout.
+          #
+          # Per-PR isolation stopped one ungeneratable diff from poisoning the
+          # shared inventory but left the AGGREGATE cost unbounded, taking the
+          # same scan down a second way: this loop is O(open PRs) and the
+          # slow-diff retry made each refusal cost ~26s instead of ~2s. Two
+          # bounds keep it out of the detector's timeout. LOPU_SLOW_DIFF_RETRY
+          # is `local`, so bash's dynamic scope declines that retry for this
+          # function only while load-bearing readers keep all four attempts;
+          # FILES_INVENTORY_DEADLINE_SECONDS then caps the loop on the step's
+          # clock. PRs past it keep the explicit incomplete state a single read
+          # failure already produces and the next sweep retries them, and the
+          # deferral names them: an un-hydrated PR is indistinguishable from a
+          # PR that changed no files.
           complete_large_pr_files() {
-            local inventory="$1" encoded pr number pages
+            local inventory="$1" encoded pr number pages deferred=0 deferred_numbers=''
+            local deadline="${FILES_INVENTORY_DEADLINE_SECONDS:-600}"
+            local LOPU_SLOW_DIFF_RETRY=false
             while IFS= read -r encoded; do
               [ -n "$encoded" ] || continue
               pr="$(base64 --decode <<<"$encoded")"
               number="$(jq -r '.number' <<<"$pr")"
+              if [ "$SECONDS" -ge "$deadline" ]; then
+                deferred="$(( deferred + 1 ))"
+                deferred_numbers="${deferred_numbers:+$deferred_numbers }#$number"
+                continue
+              fi
               pages="$RUNNER_TEMP/lopu-pr-files-$number.json"
               if ! gh_read_retry --paginate \
                   "repos/$REPO/pulls/$number/files?per_page=100" --slurp >"$pages"; then
@@ -1866,6 +1904,9 @@ jobs:
                        else . end)' <<<"$inventory")"
               rm -f "$pages"
             done < <(jq -r '.[] | select(.filesIncomplete == true or .filesTotal > (.files | length)) | @base64' <<<"$inventory")
+            if [ "$deferred" -gt 0 ]; then
+              echo "::warning::The changed-file inventory reached its ${deadline}s budget with $deferred PR(s) un-hydrated; their overlap labels use no changed paths and the next scan retries them (inventory incomplete): $deferred_numbers" >&2
+            fi
             printf '%s\n' "$inventory"
           }
 
@@ -3119,7 +3160,8 @@ jobs:
               if { grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
                    || grep -Eq "$transport" "$errors" \
                    || { grep -Eq 'HTTP 422([^0-9]|$)' "$errors" \
-                        && grep -Fq "$slow_diff" "$errors"; }; } \
+                        && grep -Fq "$slow_diff" "$errors" \
+                        && [ "${LOPU_SLOW_DIFF_RETRY:-true}" = true ]; }; } \
                  && [ "$attempt" -lt 4 ]; then
                 delay="$((1 << attempt))"
                 echo "::notice::GitHub metadata read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
@@ -4239,7 +4281,8 @@ jobs:
               if { grep -Eq 'HTTP (408|429|500|502|503|504)([^0-9]|$)' "$errors" \
                    || grep -Eq "$transport" "$errors" \
                    || { grep -Eq 'HTTP 422([^0-9]|$)' "$errors" \
-                        && grep -Fq "$slow_diff" "$errors"; }; } \
+                        && grep -Fq "$slow_diff" "$errors" \
+                        && [ "${LOPU_SLOW_DIFF_RETRY:-true}" = true ]; }; } \
                  && [ "$attempt" -lt 4 ]; then
                 delay="$((1 << attempt))"
                 echo "::notice::GitHub metadata read hit a transient failure (attempt $attempt/4); retrying in ${delay}s." >&2
