@@ -179,6 +179,42 @@ test('an unavailable diff preserves incomplete state while another PR hydrates',
   } finally { rmSync(temp,{recursive:true,force:true}); }
 });
 
+// Per-PR isolation made one ungeneratable diff non-fatal but left the
+// aggregate cost unbounded: job 124090191975 spent 867s of the detector's
+// 900s timeout in this O(open PRs) loop replaying 28 permanently refused
+// diffs, was cancelled before publishing any prs/any output, and reddened the
+// unrelated PR whose pull_request_target started it. An advisory enrichment
+// must yield the step's clock back, and must say which PRs it dropped.
+test('an exhausted changed-file budget defers the rest instead of the whole scan', () => {
+  const helper = workflow.slice(workflow.indexOf('          complete_large_pr_files() {'), workflow.indexOf('          query() {')).replace(/^          /gm, '');
+  const temp = mkdtempSync(join(tmpdir(), 'pr-inventory-'));
+  const inventory = '[{"number":1,"files":[],"filesTotal":0,"filesIncomplete":true},{"number":2,"files":[],"filesTotal":0,"filesIncomplete":true}]';
+  const run = (deadline) => spawnSync('bash', ['-c', `set -euo pipefail
+    gh_read_retry() { echo '[[{"filename":"app.ts"}]]'; }
+    ${helper}
+    complete_large_pr_files '${inventory}'`],
+    {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp,REPO:'owner/repo',FILES_INVENTORY_DEADLINE_SECONDS:deadline}});
+  try {
+    // A deadline already behind the step clock hydrates nothing, stays green,
+    // and leaves every row in the explicit state a read failure produces.
+    const exhausted = run('0');
+    assert.equal(exhausted.status,0,exhausted.stderr);
+    const deferredRows = JSON.parse(exhausted.stdout);
+    assert.equal(deferredRows.length,2);
+    assert.ok(deferredRows.every(({filesIncomplete}) => filesIncomplete === true));
+    assert.match(exhausted.stderr,/reached its 0s budget with 2 PR\(s\) un-hydrated/);
+    // No silent cap: the dropped PRs are named, because an un-hydrated PR is
+    // indistinguishable from a PR that changed no files.
+    assert.match(exhausted.stderr,/#1 #2/);
+
+    const within = run('600');
+    assert.equal(within.status,0,within.stderr);
+    assert.ok(JSON.parse(within.stdout).every(({files}) => files.length === 1));
+    assert.doesNotMatch(within.stderr,/un-hydrated/);
+  } finally { rmSync(temp,{recursive:true,force:true}); }
+});
+
+
 // GitHub answers an exhausted PRIMARY installation budget with HTTP 403 and
 // "API rate limit exceeded", never 429. Status-only matching therefore classed
 // the single most self-healing condition the API has as non-transient, and
@@ -250,6 +286,36 @@ test('a later successful read clears a stale budget sentinel', () => {
     const result = spawnSync('bash', ['-c', script], {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
     assert.equal(result.status, 0, result.stderr);
     assert.throws(() => readFileSync(join(temp, 'lopu-gh-budget-exhausted')));
+  } finally { rmSync(temp, {recursive:true, force:true}); }
+});
+
+test('only the advisory inventory declines the indefinite slow-diff retry', () => {
+  // GitHub repeats "diff is taking too long to generate" for as long as a PR
+  // stays oversize, so the 2-8s backoff buys nothing where the caller already
+  // degrades gracefully -- and everything where failure stops the step.
+  const temp = mkdtempSync(join(tmpdir(), 'gh-slow-diff-'));
+  const marker = '          gh_read_retry() {\n            local attempt delay output errors transport slow_diff\n            transport=';
+  const call = 'gh_read_retry api "repos/o/r/pulls/1/files" || echo "status=$?"';
+  const stub = ghStub(422, 'gh: Server Error: Sorry, this diff is taking too long to generate.');
+  try {
+    const retried = spawnSync('bash', ['-c', `set -euo pipefail\n${stub}${readRetry(marker, call)}`],
+      {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(retried.status, 0, retried.stderr);
+    assert.match(retried.stdout, /status=1/);
+    assert.match(retried.stderr, /hit a transient failure \(attempt 3\/4\)/);
+
+    const declined = spawnSync('bash', ['-c',
+      `set -euo pipefail\n${stub}${readRetry(marker, `LOPU_SLOW_DIFF_RETRY=false\n${call}`)}`],
+      {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(declined.status, 0, declined.stderr);
+    assert.match(declined.stdout, /status=1/);
+    assert.doesNotMatch(declined.stderr, /hit a transient failure/);
+    // A 422 that is NOT the generation timeout still fails on attempt one.
+    const invalid = spawnSync('bash', ['-c', 'set -euo pipefail\n'
+      + ghStub(422, 'gh: Validation Failed: No commits between main and topic')
+      + readRetry(marker, call)], {encoding:'utf8',env:{...process.env,RUNNER_TEMP:temp}});
+    assert.equal(invalid.status, 0, invalid.stderr);
+    assert.doesNotMatch(invalid.stderr, /hit a transient failure/);
   } finally { rmSync(temp, {recursive:true, force:true}); }
 });
 
