@@ -1,3 +1,5 @@
+import { PAT_SCOPE_CATALOG } from '../auth/patScopes';
+
 // Permission scopes for "Login with Thingtime" grants — path-based and
 // extensible. A scope is a dot path over the user's data ('profile',
 // 'profile.avatar', 'email', …); granting a path covers every descendant
@@ -22,12 +24,46 @@ export type AppScopeDescriptor = {
   // baseline scopes can't be deselected on the consent screen — the login
   // identity itself ('profile.username') is meaningless to withhold.
   baseline?: boolean;
+  // exact scopes are privacy-EXPANDING leaves: an ancestor grant never covers
+  // them ('app-data' does not imply 'app-data.shared') — the user must grant
+  // the literal path, so widening who can see data always shows its own
+  // consent line. The tree rule ("a path covers every descendant") holds for
+  // everything else.
+  exact?: boolean;
 };
 
 // The catalog — ordered as the consent screen lists them. Extending the
 // permission surface = adding an entry here plus (for fields) a gate where
 // the data is served; nothing else needs to change.
 export const APP_SCOPE_CATALOG: AppScopeDescriptor[] = [
+  // Account-wide access is a separate namespace from the legacy `things`
+  // picker. Existing grants never gain it through ancestor matching.
+  ...PAT_SCOPE_CATALOG.map((scope): AppScopeDescriptor => ({
+    id: `account.${scope.id}`,
+    title: scope.id === 'things' ? 'All Things — full access'
+      : scope.id === 'things.create' ? 'Create Things'
+        : `${scope.title} Things`,
+    description: scope.id === 'things'
+      ? 'Read, create, update, delete, comment, react, save, vote, and share Things in your account, including private Things.'
+      : scope.description + ' Applies to your account, beyond individually selected Things.',
+    kind: 'capability'
+  })),
+  {
+    id: 'actions.run', title: 'Run actions', kind: 'capability', exact: true,
+    description: 'Run actions as you, including their declared writes, external calls, and usage costs.'
+  },
+  {
+    id: 'lopu.chat', title: 'Chat with Lopu', kind: 'capability', exact: true,
+    description: 'Read, create, edit, and delete Lopu conversations and send messages using your account’s AI allowance.'
+  },
+  {
+    id: 'lopu.voice', title: 'Lopu voice and transcription', kind: 'capability', exact: true,
+    description: 'Start voice sessions and send speech for transcription or replies using your AI allowance.'
+  },
+  {
+    id: 'lopu.recordings', title: 'Save and process recordings', kind: 'capability', exact: true,
+    description: 'Read recordings, manage recording automation and todos, and request processing. Uploading audio also requires Create Things.'
+  },
   {
     id: 'profile',
     title: 'Full public profile',
@@ -66,6 +102,15 @@ export const APP_SCOPE_CATALOG: AppScopeDescriptor[] = [
     kind: 'field'
   },
   {
+    id: 'profile.birthday',
+    title: 'Birthday',
+    description: 'Your date of birth — private on Thingtime, shared only if you approve it here.',
+    kind: 'field',
+    // The birthday is NOT public profile data, so a plain `profile` grant
+    // (including every legacy token) must never silently include it.
+    exact: true
+  },
+  {
     id: 'email',
     title: 'Email address',
     description: 'The email address on your Thingtime account.',
@@ -76,6 +121,14 @@ export const APP_SCOPE_CATALOG: AppScopeDescriptor[] = [
     title: 'App storage',
     description: 'Store its own data for you in your Thingtime account — only its own, nothing else.',
     kind: 'capability'
+  },
+  {
+    id: 'app-data.shared',
+    title: 'Shared app storage',
+    description:
+      'Other people using this app can see entries the app marks as shared — you opt in per entry; never other apps, never the public web.',
+    kind: 'capability',
+    exact: true
   },
   {
     id: 'things',
@@ -106,10 +159,14 @@ export const isKnownScope = (value: unknown): value is string =>
 const coversPath = (scope: string, path: string): boolean =>
   scope === path || path.startsWith(`${scope}.`);
 
+const EXACT_APP_SCOPES = new Set(APP_SCOPE_CATALOG.filter((s) => s.exact).map((s) => s.id));
+
 // Does a granted set cover a path? Baseline scopes are always covered —
-// every grant carries the login identity.
+// every grant carries the login identity. Exact scopes (privacy-expanding
+// leaves) need the literal path in the grant — no ancestor coverage.
 export const scopeCovers = (granted: string[], path: string): boolean => {
   if (BASELINE_APP_SCOPES.includes(path)) return true;
+  if (EXACT_APP_SCOPES.has(path)) return granted.includes(path);
   return granted.some((scope) => coversPath(scope, path));
 };
 

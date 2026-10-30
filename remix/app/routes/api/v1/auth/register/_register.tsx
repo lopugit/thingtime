@@ -5,9 +5,11 @@ import { resolveTrustedOrigin } from '~/api/utils/auth/appOrigin';
 import { serializeAuthCookie } from '~/api/utils/auth/authCookie';
 import { shouldShowDevVerificationLink } from '~/api/utils/auth/devVerification';
 import { registerUser } from '~/api/utils/auth/registerUser';
+import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { prepareUnboundAttachmentCleanupForSessionReplacement } from '~/api/utils/attachments/attachments';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
-const MAX_BODY_BYTES = 16 * 1024;
+const MAX_BODY_BYTES = 128 * 1024;
 
 // POST /api/v1/auth/register — { username, password, email, displayName? }
 // On success: creates the user, logs them in (sets the httpOnly auth cookie),
@@ -21,19 +23,12 @@ const MAX_BODY_BYTES = 16 * 1024;
 // a caller could mass-assign themselves admin. Legit meta is set later via its
 // own authenticated endpoints.
 export const action = async ({ request }: { request: Request }) => {
-  // Each signup creates a user, burns a bcrypt hash, and queues a verification
-  // email — throttle by IP before any of that work so the endpoint can't be
-  // used for mass account creation or mailbox spam (mirrors the other auth
-  // routes). readJsonBody also caps the body so an oversized payload can't be
-  // buffered before validation.
+  // anonymous by definition — throttle by IP before the bcrypt + insert +
+  // verification-email work (and before the awaited ensureIndexes bootstrap)
   const limit = await enforceRateLimit(request, 'auth.register', null);
   if (!limit.allowed) {
-    return json(
-      { ok: false, error: 'Too many sign-up attempts — try again soon 🌸' },
-      rateLimitedResponseInit(limit)
-    );
+		return json({ ok: false, error: 'Too many sign-up attempts — take a breather 🌸' }, rateLimitedResponseInit(limit));
   }
-
   const body = await readJsonBody(request, MAX_BODY_BYTES);
   const origin = resolveTrustedOrigin(request);
 
@@ -44,7 +39,9 @@ export const action = async ({ request }: { request: Request }) => {
     password: body?.password,
     email: body?.email,
     displayName: body?.displayName,
-    origin
+    origin,
+    inviteToken: body?.inviteToken,
+    avatarUrl: body?.avatarUrl
   });
 
   if (result.ok === false) {
@@ -55,9 +52,14 @@ export const action = async ({ request }: { request: Request }) => {
   // raw verification tokens to the browser.
   const showLink = shouldShowDevVerificationLink();
 
+	const outgoingUser = await getCurrentUser(request).catch(() => null);
+	if (outgoingUser && outgoingUser.id !== result.user.id) {
+		await prepareUnboundAttachmentCleanupForSessionReplacement(outgoingUser.id).catch(() => null);
+	}
+
   const rosterCookies = await mergeAccountSession(request, { userId: result.user.id, jti: result.jti });
 
-  const headers = new Headers();
+  const headers = new Headers({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
   headers.append('Set-Cookie', await serializeAuthCookie(result.jwt));
   for (const cookie of rosterCookies) headers.append('Set-Cookie', cookie);
 
