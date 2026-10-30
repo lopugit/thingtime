@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Badge,
   Box,
   Button,
   Checkbox,
@@ -24,8 +23,9 @@ import {
   type ApiTestDefinition,
   type ApiTestResult
 } from '~/tests/api/apiTestRunner';
+import { CARD_STYLES } from '~/theme/card';
 
-const PAGE_MAX_WIDTH = '1120px';
+import { PageHeader, PageShell } from '../components/Layout/PageShell';
 
 type ResultMap = Record<string, ApiTestResult>;
 type RunOptions = {
@@ -34,12 +34,74 @@ type RunOptions = {
 
 const EMPTY_BODY_LABEL = 'No request body.';
 
+const MONO_FONT = 'var(--tt-font-mono, ui-monospace, Menlo, monospace)';
+
+const CHIP_TONES = {
+  neutral: {
+    bg: 'var(--tt-surface-alt, #f5f5f7)',
+    color: 'var(--tt-muted, #9a9aa6)'
+  },
+  positive: {
+    bg: 'var(--tt-positive-soft, rgba(88, 202, 112, 0.14))',
+    color: 'var(--tt-positive, #2f8f4f)'
+  },
+  danger: {
+    bg: 'rgba(214, 69, 90, 0.12)',
+    color: 'var(--tt-danger, #d6455a)'
+  },
+  accent: {
+    bg: 'var(--tt-accent-tint, #fff5fa)',
+    color: 'var(--tt-accent, hotpink)'
+  },
+  link: {
+    bg: 'rgba(47, 143, 214, 0.12)',
+    color: 'var(--tt-link, #2f8fd6)'
+  },
+  warning: {
+    bg: 'var(--tt-surface-alt, #f5f5f7)',
+    color: 'var(--tt-muted, #9a9aa6)',
+    dot: 'var(--tt-warning, #ffbc48)'
+  }
+} as const;
+
+type ChipTone = keyof typeof CHIP_TONES;
+
+const Chip = (props: { tone?: ChipTone; children: React.ReactNode }) => {
+  const tone = CHIP_TONES[props.tone ?? 'neutral'];
+  const dot = 'dot' in tone ? tone.dot : undefined;
+
+  return (
+    <Box
+      as="span"
+      display="inline-flex"
+      alignItems="center"
+      columnGap="6px"
+      bg={tone.bg}
+      color={tone.color}
+      borderRadius="var(--tt-radius-pill, 999px)"
+      px={2}
+      py="2px"
+      fontFamily={MONO_FONT}
+      fontSize="10px"
+      fontWeight={600}
+      letterSpacing="0.06em"
+      textTransform="uppercase"
+      whiteSpace="nowrap"
+    >
+      {dot ? (
+        <Box as="span" width="6px" height="6px" borderRadius="2px" bg={dot} flexShrink={0} />
+      ) : null}
+      {props.children}
+    </Box>
+  );
+};
+
 const groupLabel = (group: string) => group.charAt(0).toUpperCase() + group.slice(1);
 
 const statusColor = (status?: string) => {
-  if (status === 'pass') return 'var(--tt-positive, #0F766E)';
-  if (status === 'fail') return 'var(--tt-danger, #B91C1C)';
-  return 'var(--tt-muted, #52525B)';
+  if (status === 'pass') return 'var(--tt-positive, #2f8f4f)';
+  if (status === 'fail') return 'var(--tt-danger, #d6455a)';
+  return 'var(--tt-muted, #9a9aa6)';
 };
 
 const testMatches = (test: ApiTestDefinition, group: string, query: string, includeMutating: boolean) => {
@@ -55,12 +117,15 @@ const testMatches = (test: ApiTestDefinition, group: string, query: string, incl
     .includes(needle);
 };
 
-const createApiTestContext = (): ApiTestContext => ({
-  origin: typeof window === 'undefined' ? '' : window.location.origin
+type EmailTestConfig = ApiTestContext['email'];
+
+const createApiTestContext = (email?: EmailTestConfig): ApiTestContext => ({
+  origin: typeof window === 'undefined' ? '' : window.location.origin,
+  email
 });
 
-const createInitialPayloadTexts = () => {
-  const context = createApiTestContext();
+const createPayloadTexts = (email?: EmailTestConfig) => {
+  const context = createApiTestContext(email);
 
   return Object.fromEntries(
     apiTests.map((test) => [test.id, formatRequestPayload(resolveApiTestBody(test, context))])
@@ -82,10 +147,51 @@ export default function TestsPage() {
   const [includeMutating, setIncludeMutating] = React.useState(false);
   const [runningIds, setRunningIds] = React.useState<Set<string>>(new Set());
   const [results, setResults] = React.useState<ResultMap>({});
-  const [payloadTexts, setPayloadTexts] = React.useState<Record<string, string>>(() => createInitialPayloadTexts());
+  const [emailConfig, setEmailConfig] = React.useState<EmailTestConfig>();
+  const [payloadTexts, setPayloadTexts] = React.useState<Record<string, string>>(() => createPayloadTexts());
   const [editedPayloadIds, setEditedPayloadIds] = React.useState<Set<string>>(new Set());
   const [expandedPayloadIds, setExpandedPayloadIds] = React.useState<Set<string>>(new Set());
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+
+  // email test context — sanitized provider/sandbox/test-recipient config the
+  // email-group tests use for recipients and SES sandbox throttling
+  React.useEffect(() => {
+    let active = true;
+
+    fetch('/api/v1/email/config', {
+      credentials: 'include',
+      headers: { Accept: 'application/json' }
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => {
+        if (!active || !body?.email) return;
+        setEmailConfig(body.email);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Once the email config lands, refresh the generated payloads that reference
+  // it. Depend on emailConfig ALONE — depending on editedPayloadIds would
+  // re-run this on every keystroke and re-randomize every unedited payload
+  // (uniqueSuffix/Math.random churn); read the edited set inside the functional
+  // update instead so an edited payload is never clobbered.
+  const editedPayloadIdsRef = React.useRef(editedPayloadIds);
+  editedPayloadIdsRef.current = editedPayloadIds;
+  React.useEffect(() => {
+    if (!emailConfig) return;
+    const nextPayloadTexts = createPayloadTexts(emailConfig);
+    setPayloadTexts((current) => {
+      const next = { ...current };
+      for (const [testId, text] of Object.entries(nextPayloadTexts)) {
+        if (!editedPayloadIdsRef.current.has(testId)) next[testId] = text;
+      }
+      return next;
+    });
+  }, [emailConfig]);
 
   const visibleTests = React.useMemo(
     () => apiTests.filter((test) => testMatches(test, group, query, includeMutating)),
@@ -117,15 +223,18 @@ export default function TestsPage() {
     });
   }, []);
 
-  const resetPayload = React.useCallback((test: ApiTestDefinition) => {
-    const text = formatRequestPayload(resolveApiTestBody(test, createApiTestContext()));
-    setPayloadTexts((current) => ({ ...current, [test.id]: text }));
-    setEditedPayloadIds((current) => {
-      const next = new Set(current);
-      next.delete(test.id);
-      return next;
-    });
-  }, []);
+  const resetPayload = React.useCallback(
+    (test: ApiTestDefinition) => {
+      const text = formatRequestPayload(resolveApiTestBody(test, createApiTestContext(emailConfig)));
+      setPayloadTexts((current) => ({ ...current, [test.id]: text }));
+      setEditedPayloadIds((current) => {
+        const next = new Set(current);
+        next.delete(test.id);
+        return next;
+      });
+    },
+    [emailConfig]
+  );
 
   const updatePayloadText = React.useCallback((testId: string, value: string) => {
     setPayloadTexts((current) => ({ ...current, [testId]: value }));
@@ -162,7 +271,7 @@ export default function TestsPage() {
   const runTests = React.useCallback(async (tests: ApiTestDefinition[], options: RunOptions = {}) => {
     const allowMutating = options.allowMutating ?? includeMutating;
     const runnable = tests.filter((test) => allowMutating || !test.mutates);
-    const context = createApiTestContext();
+    const context = createApiTestContext(emailConfig);
 
     for (const test of runnable) {
       setRunningIds((current) => new Set([...current, test.id]));
@@ -183,7 +292,7 @@ export default function TestsPage() {
         });
       }
     }
-  }, [getRunBody, includeMutating]);
+  }, [emailConfig, getRunBody, includeMutating]);
 
   const runOne = React.useCallback((test: ApiTestDefinition) => runTests([test], { allowMutating: true }), [runTests]);
 
@@ -198,26 +307,18 @@ export default function TestsPage() {
   }, [runTests]);
 
   return (
-    <Box width="100%" px={{ base: 4, md: 8 }} pt={{ base: 20, md: 10 }} pb={{ base: 6, md: 10 }}>
-      <Stack spacing={6} width="100%" maxW={PAGE_MAX_WIDTH} mx="auto">
-        <Flex
-          direction={{ base: 'column', md: 'row' }}
-          justify="space-between"
-          align={{ base: 'flex-start', md: 'flex-end' }}
-          gap={4}
-        >
-          <Box>
-            <Heading size="lg" letterSpacing="0">API tests</Heading>
-            <Text mt={2} color="var(--tt-text, #4A5568)" fontSize="sm">
-              Run all safe API checks, selected tests, a filtered subset, a route group, or one test at a time.
-            </Text>
-          </Box>
-
+    <PageShell width={1180}>
+      <PageHeader
+        eyebrow="Thingtime · API suite"
+        title="API tests ✅"
+        variant="ink"
+        subtitle="Run all safe API checks, selected tests, a filtered subset, a route group, or one test at a time."
+        after={
           <Flex gap={2} wrap="wrap">
-            <Button leftIcon={<Play size={16} />} colorScheme="gray" onClick={() => runTests(visibleTests)} isDisabled={!visibleTests.length}>
+            <Button leftIcon={<Play size={16} />} onClick={() => runTests(visibleTests)} isDisabled={!visibleTests.length}>
               Run visible
             </Button>
-            <Button leftIcon={<Play size={16} />} colorScheme="blue" onClick={runSelected} isDisabled={!selectedIds.size}>
+            <Button leftIcon={<Play size={16} />} onClick={runSelected} isDisabled={!selectedIds.size}>
               Run selected
             </Button>
             <Button leftIcon={<Play size={16} />} variant="outline" onClick={() => runTests(apiTests, { allowMutating: false })}>
@@ -227,12 +328,32 @@ export default function TestsPage() {
               Clear
             </Button>
           </Flex>
-        </Flex>
+        }
+      />
+
+      <Stack spacing={6} width="100%">
+        {emailConfig ? (
+          <Flex gap={2} wrap="wrap">
+            <Chip tone={emailConfig.provider === 'ses' ? 'positive' : 'neutral'}>
+              email: {emailConfig.provider}
+            </Chip>
+            {emailConfig.sesSandbox ? (
+              <Chip tone="warning">SES sandbox throttle: {emailConfig.sandboxSendDelayMs || 1000}ms</Chip>
+            ) : null}
+            <Chip>test recipient: {emailConfig.testRecipient}</Chip>
+          </Flex>
+        ) : null}
 
         <SimpleGrid columns={{ base: 1, md: 4 }} spacing={3}>
           <Box>
-            <Text fontSize="11px" fontWeight="600" fontFamily="mono" letterSpacing="0.12em" textTransform="uppercase" color="var(--tt-muted, #718096)" mb={1}>Group</Text>
-            <Select value={group} onChange={(event) => setGroup(event.target.value)}>
+            <Text fontSize="11px" fontWeight="600" fontFamily={MONO_FONT} letterSpacing="0.12em" textTransform="uppercase" color="var(--tt-muted, #9a9aa6)" mb={1}>Group</Text>
+            <Select
+              value={group}
+              onChange={(event) => setGroup(event.target.value)}
+              border="1px solid"
+              borderColor="var(--tt-border, #ececef)"
+              borderRadius="var(--tt-radius-sm, 9px)"
+            >
               <option value="all">All groups</option>
               {apiTestGroups.map((testGroup) => (
                 <option key={testGroup} value={testGroup}>{groupLabel(testGroup)}</option>
@@ -240,8 +361,15 @@ export default function TestsPage() {
             </Select>
           </Box>
           <Box>
-            <Text fontSize="11px" fontWeight="600" fontFamily="mono" letterSpacing="0.12em" textTransform="uppercase" color="var(--tt-muted, #718096)" mb={1}>Search</Text>
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="route, group, or test" />
+            <Text fontSize="11px" fontWeight="600" fontFamily={MONO_FONT} letterSpacing="0.12em" textTransform="uppercase" color="var(--tt-muted, #9a9aa6)" mb={1}>Search</Text>
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="route, group, or test"
+              border="1px solid"
+              borderColor="var(--tt-border, #ececef)"
+              borderRadius="var(--tt-radius-sm, 9px)"
+            />
           </Box>
           <Flex align="end">
             <Checkbox isChecked={includeMutating} onChange={(event) => setIncludeMutating(event.target.checked)}>
@@ -249,10 +377,10 @@ export default function TestsPage() {
             </Checkbox>
           </Flex>
           <Flex align="end" gap={2} wrap="wrap">
-            <Badge colorScheme="green">{summary.passed} passed</Badge>
-            <Badge colorScheme={summary.failed ? 'red' : 'gray'}>{summary.failed} failed</Badge>
-            <Badge colorScheme="gray">{visibleTests.length} visible</Badge>
-            <Badge colorScheme={selectedIds.size ? 'blue' : 'gray'}>{selectedIds.size} selected</Badge>
+            <Chip tone="positive">{summary.passed} passed</Chip>
+            <Chip tone={summary.failed ? 'danger' : 'neutral'}>{summary.failed} failed</Chip>
+            <Chip>{visibleTests.length} visible</Chip>
+            <Chip tone={selectedIds.size ? 'accent' : 'neutral'}>{selectedIds.size} selected</Chip>
           </Flex>
         </SimpleGrid>
 
@@ -282,11 +410,7 @@ export default function TestsPage() {
             return (
               <Box
                 key={test.id}
-                border="1px solid"
-                borderColor="var(--tt-border, #E2E8F0)"
-                borderRadius="var(--tt-radius-sm, 9px)"
-                bg="var(--tt-card, #ffffff)"
-                boxShadow="var(--tt-shadow-card, 0 1px 2px rgba(0, 0, 0, 0.05))"
+                {...CARD_STYLES}
                 p={4}
               >
                 <Flex justify="space-between" align={{ base: 'flex-start', md: 'center' }} gap={3} direction={{ base: 'column', md: 'row' }}>
@@ -302,13 +426,13 @@ export default function TestsPage() {
                     </Box>
                     <Box>
                       <Flex gap={2} align="center" wrap="wrap">
-                        <Heading size="sm" letterSpacing="0">{test.name}</Heading>
-                        <Badge>{groupLabel(test.group)}</Badge>
-                        <Badge colorScheme={test.method === 'GET' ? 'blue' : 'purple'}>{test.method}</Badge>
-                        {test.mutates ? <Badge colorScheme="orange">mutates</Badge> : null}
+                        <Heading size="sm" letterSpacing="0" color="var(--tt-ink, #16161a)">{test.name}</Heading>
+                        <Chip>{groupLabel(test.group)}</Chip>
+                        <Chip tone={test.method === 'GET' ? 'link' : 'accent'}>{test.method}</Chip>
+                        {test.mutates ? <Chip tone="warning">mutates</Chip> : null}
                       </Flex>
-                      <Text mt={1} fontSize="sm" color="var(--tt-text, #4A5568)">{test.description}</Text>
-                      <Text mt={1} fontSize="xs" color="var(--tt-muted, #718096)" fontFamily="mono">{test.path}</Text>
+                      <Text mt={1} fontSize="sm" color="var(--tt-text, #5a5a66)">{test.description}</Text>
+                      <Text mt={1} fontSize="xs" color="var(--tt-muted, #9a9aa6)" fontFamily={MONO_FONT}>{test.path}</Text>
                     </Box>
                   </Flex>
 
@@ -332,7 +456,7 @@ export default function TestsPage() {
                         Reset
                       </Button>
                     ) : null}
-                    {editedPayloadIds.has(test.id) ? <Badge colorScheme="blue">edited</Badge> : null}
+                    {editedPayloadIds.has(test.id) ? <Chip tone="accent">edited</Chip> : null}
                   </Flex>
 
                   {payloadExpanded ? (
@@ -342,12 +466,13 @@ export default function TestsPage() {
                         value={payloadText}
                         onChange={(event) => updatePayloadText(test.id, event.target.value)}
                         spellCheck={false}
-                        fontFamily="mono"
+                        fontFamily={MONO_FONT}
                         fontSize="xs"
                         minH="128px"
                         resize="vertical"
-                        bg="var(--tt-surface-alt, #F7FAFC)"
-                        borderColor="var(--tt-border, #E2E8F0)"
+                        bg="var(--tt-surface-alt, #f5f5f7)"
+                        borderColor="var(--tt-border, #ececef)"
+                        borderRadius="var(--tt-radius-sm, 9px)"
                         whiteSpace="pre"
                         overflowX="auto"
                       />
@@ -357,8 +482,9 @@ export default function TestsPage() {
                         mt={2}
                         p={3}
                         borderRadius="var(--tt-radius-xs, 7px)"
-                        bg="var(--tt-surface-alt, #F7FAFC)"
-                        color="var(--tt-muted, #718096)"
+                        bg="var(--tt-surface-alt, #f5f5f7)"
+                        color="var(--tt-muted, #9a9aa6)"
+                        fontFamily={MONO_FONT}
                         fontSize="xs"
                         overflowX="auto"
                       >
@@ -371,19 +497,20 @@ export default function TestsPage() {
                 {result ? (
                   <Box mt={3} pl={{ base: 0, md: 14 }}>
                     <Flex gap={2} wrap="wrap" align="center">
-                      <Badge colorScheme={result.status === 'pass' ? 'green' : 'red'}>{result.status}</Badge>
-                      <Badge colorScheme="gray">HTTP {result.httpStatus ?? 'n/a'}</Badge>
-                      <Badge colorScheme="gray">{result.durationMs}ms</Badge>
+                      <Chip tone={result.status === 'pass' ? 'positive' : 'danger'}>{result.status}</Chip>
+                      <Chip>HTTP {result.httpStatus ?? 'n/a'}</Chip>
+                      <Chip>{result.durationMs}ms</Chip>
                     </Flex>
-                    <Text mt={2} fontSize="sm">{result.details}</Text>
+                    <Text mt={2} fontSize="sm" color="var(--tt-text, #5a5a66)">{result.details}</Text>
                     {result.preview ? (
                       <Box
                         as="pre"
                         mt={2}
                         p={3}
                         borderRadius="var(--tt-radius-xs, 7px)"
-                        bg="var(--tt-surface-alt, #F7FAFC)"
-                        color="var(--tt-text, #2D3748)"
+                        bg="var(--tt-surface-alt, #f5f5f7)"
+                        color="var(--tt-text, #5a5a66)"
+                        fontFamily={MONO_FONT}
                         fontSize="xs"
                         overflowX="auto"
                         overflowY="auto"
@@ -399,6 +526,6 @@ export default function TestsPage() {
           })}
         </Stack>
       </Stack>
-    </Box>
+    </PageShell>
   );
 }

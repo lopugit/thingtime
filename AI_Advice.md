@@ -4,9 +4,9 @@ This note describes a practical way to use Codex, Claude Desktop, and future
 agent-capable tools as a coordinated development system for Thingtime.
 
 It is intentionally tool-agnostic where app UIs change over time. Treat
-`AGENTS.md` and `CLAUDE.md` as the shared operating contract, then use this file
-to decide which agents should exist, how they should communicate, and what they
-should produce.
+`AI_ALL.md` as the shared operating contract (`AGENTS.md` and `CLAUDE.md` are
+compatibility symlinks to it), then use this file to decide which agents should
+exist, how they should communicate, and what they should produce.
 
 ## Core idea
 
@@ -25,12 +25,10 @@ useful parts, verifies the result, and keeps the final branch coherent.
 
 Use the same repo-level instruction stack in every agent app:
 
-1. Read `AGENTS.md`.
-2. Read `CLAUDE.md`.
-3. Read `CODEX.md` when running Codex in this workspace.
-4. Read `FUNDAMENTALS.md` before feature work.
-5. Read `DECISIONS.md` when product direction or architecture tradeoffs matter.
-6. Use Graphify first when `graphify-out/graph.json` exists and the task touches
+1. Read `AI_ALL.md` (or either root compatibility symlink).
+2. Read `FUNDAMENTALS.md` before feature work.
+3. Read `DECISIONS.md` when product direction or architecture tradeoffs matter.
+4. Use Graphify first when `graphify-out/graph.json` exists and the task touches
    repo structure, relationships, or implementation discovery.
 
 Useful baseline rules:
@@ -38,9 +36,9 @@ Useful baseline rules:
 - Use `.test-branches/` for PR review/fix work.
 - Copy parent `.env*` files into `.test-branches/` clones before install,
   build, dev, or smoke checks.
-- Use PM2-managed `tt-remix-9999` for local Remix dev. Do not restart it after
-  every source edit; rely on hot reload unless env/dependency/process state
-  changed.
+- Use `npm run web-pms` for the current checkout's PM2-managed Remix dev stack.
+  Do not restart it after every source edit; rely on hot reload unless
+  env/dependency/process state changed.
 - Verify layout and alignment changes in a live browser.
 - Keep secrets out of docs, prompts, screenshots, logs, and PR bodies.
 
@@ -215,9 +213,9 @@ Flow:
 Good handoff prompt:
 
 ```text
-You are the Test Engineer for this Thingtime feature. Read AGENTS.md,
-CLAUDE.md, FUNDAMENTALS.md, and the changed files. Return a focused validation
-plan with commands and browser checks. Do not modify files.
+You are the Test Engineer for this Thingtime feature. Read AI_ALL.md,
+FUNDAMENTALS.md, and the changed files. Return a focused validation plan with
+commands and browser checks. Do not modify files.
 ```
 
 ### PR Review Council
@@ -343,10 +341,10 @@ Recommended default:
 ### Implementer
 
 ```text
-You are an Implementer agent in the Thingtime repo. Read AGENTS.md,
-CLAUDE.md, FUNDAMENTALS.md, and relevant files. Implement only the scoped
-feature. Keep changes minimal, use existing patterns, and report verification
-commands. Do not commit unless asked.
+You are an Implementer agent in the Thingtime repo. Read AI_ALL.md,
+FUNDAMENTALS.md, and relevant files. Implement only the scoped feature. Keep
+changes minimal, use existing patterns, and report verification commands. Do
+not commit unless asked.
 ```
 
 ### Security Reviewer

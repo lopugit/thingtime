@@ -55,5 +55,3 @@ export const action = async ({ request }: { request: Request }) => {
   }
   return json(result, { headers: privateHeaders });
 };
-
-export const rawResultsAction = action;
