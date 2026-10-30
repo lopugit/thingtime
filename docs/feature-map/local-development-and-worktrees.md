@@ -133,7 +133,8 @@ return `503 LOCAL_API_NOT_CONFIGURED`; neither server selects production implici
 `remix/scripts/local-api-isolation-smoke.mjs` exercises built Nitro and Vite under
 a macOS OS network sandbox, including direct-IP and redirect denial. Fixture
 requests accept only a literal loopback HTTP origin and same-origin uploads.
-Keep backend/browser network isolation and dedicated test credentials in place.
+Keep dedicated test credentials in place. Backend/browser network isolation is
+optional and is not required for AI-agent work.
 
 
 ## Commander native background indexing
