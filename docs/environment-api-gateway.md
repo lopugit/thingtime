@@ -119,6 +119,14 @@ before reopening a pool if a rollback promotes it again. Multiple warm gateway
 instances still have separate pools and monitoring sockets. This selects one
 deployment, **not one process or socket**, and does not change the Atlas tier.
 
+## PR996 branch compatibility
+
+PR996 carries the merged `api.passwords` 1.4.0 contract. Every forwarded password
+operation requires that version, its exact registered path and HTTP method;
+compatible newer 1.x capabilities are accepted, while missing, older 1.x and
+breaking-major capabilities fail before body or credential forwarding. The branch retains the newer 1.1.0 gateway policy and
+its default proxy mode; dedicated mode is not an OAuth or acceptance workaround.
+
 ## Rollout and environment mapping
 
 The intended mapping separates the logical gateway environment from Vercel's
@@ -141,10 +149,13 @@ retain that same credential target and run their own handlers against its
 configured development database.
 
 The latest configuration audit confirmed that custom develop and previews use
-the same development cluster, separate from production. The
-`master.previews.thingtime.com` alias has not yet been created or verified, and
-gateway activation across these origins is pending. Do not treat the intended
-mapping as proof of live gateway operation.
+the same development cluster, separate from production. Earlier rollout notes
+predated provisioning of the master preview alias. Verify its current
+origin-scoped manifest and API behavior before treating the 1.1.0 policy as
+deployed; alias existence and local source integration do not establish
+acceptance of that contract, and gateway activation across these origins
+remains pending. Do not treat the intended mapping as proof of live gateway
+operation.
 Preserve existing data/authentication assignments unless an explicit data
 migration is authorized.
 
@@ -270,3 +281,14 @@ proof that an already submitted server operation stopped instantaneously.
 Fencing and bounded commands reduce overlap risk but are not an absolute
 distributed cancellation guarantee. Preserve failed/unknown readiness and
 reconcile server state before retrying.
+
+## PR996 merge verification — 26 October 2026
+
+The local reconciliation with develop `cd6f8b8abc94270980bac216da2412ffef8578b1`
+keeps proxy mode as this branch default and preserves password contract 1.2.1.
+The test runner supports `THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE` as a bounded
+integer selecting ten fixed loopback ports (default 19771–19780). It checks all
+ports before spawning any test process, and its OS policy restricts every
+backend to those local ports. Dedicated acceptance uses a separate disposable
+replica rather than a deployed opt-out. This override belongs only to the test
+runner and does not change product routing or network policy.

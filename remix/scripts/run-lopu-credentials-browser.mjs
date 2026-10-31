@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { build } from 'vite';
 const root = fileURLToPath(new URL('..', import.meta.url));
+const suite = process.env.TT_QA_SUITE || 'lopu-credentials';
+assert.ok(['lopu-credentials', 'service-catalog', 'password-manager'].includes(suite), 'Unknown credential browser suite');
 const artifactRoot = process.env.TT_QA_ARTIFACT_DIR || mkdtempSync(path.join(tmpdir(), 'tt-lopu-credential-qa-'));
 const image = process.env.TT_QA_IMAGE,
 	seccomp = process.env.TT_QA_SECCOMP;
@@ -16,7 +18,7 @@ assert.ok(
 	image && seccomp && path.isAbsolute(seccomp),
 	'Set TT_QA_IMAGE to an installed isolated runtime and TT_QA_SECCOMP to its Chromium sandbox profile.'
 );
-const name = `tt-lopu-credentials-${randomUUID()}`;
+const name = `tt-${suite}-${randomUUID()}`;
 const args = ['--context', process.env.TT_QA_DOCKER_CONTEXT || 'colima-thingtime-agents'];
 const docker = (more, options = {}) => {
 	const result = spawnSync('docker', [...args, ...more], { maxBuffer: 64 * 1024 * 1024, ...options });
@@ -33,7 +35,7 @@ await build({
 	envDir: false,
 	resolve: { alias: { '~': `${root}/app` } },
 	esbuild: { jsx: 'automatic' },
-	build: { outDir: dist, emptyOutDir: true, rollupOptions: { input: `${root}/scripts/lopu-credentials.browser.html` } }
+	build: { outDir: dist, emptyOutDir: true, rollupOptions: { input: `${root}/scripts/${suite}.browser.html` } }
 });
 let created = false,
 	child;
@@ -56,7 +58,7 @@ const copyResults = () => {
 			.at(-1);
 		writeFileSync(
 			path.join(results, 'viewer.html'),
-			`<meta http-equiv="refresh" content="3"><title>[QA] Lopu credentials</title><h1>Isolated Lopu credential QA</h1><pre>${report}</pre>${
+			`<meta http-equiv="refresh" content="3"><title>[QA] ${suite}</title><h1>Isolated ${suite} QA</h1><pre>${report}</pre>${
 				shot ? `<img style="max-width:100%" src="${shot}">` : ''
 			}`
 		);
@@ -70,7 +72,7 @@ try {
 		'--name',
 		name,
 		'--label',
-		'com.thingtime.qa=lopu-credentials',
+		`com.thingtime.qa=${suite}`,
 		'--network',
 		'none',
 		'--read-only',
@@ -131,7 +133,7 @@ try {
 	assert.equal(archive.status, 0);
 	docker(['exec', '-i', name, 'tar', '-xf', '-', '-C', '/home/pwuser/credential-qa/dist'], { input: archive.stdout });
 	docker(['exec', '-i', name, 'sh', '-c', 'cat > /home/pwuser/credential-qa/check.cjs'], {
-		input: readFileSync(`${root}/scripts/check-lopu-credentials-browser.cjs`)
+		input: readFileSync(`${root}/scripts/check-${suite}-browser.cjs`)
 	});
 	console.log(`Viewer: ${path.join(results, 'viewer.html')}`);
 	child = spawn('docker', [...args, 'exec', name, 'node', '/home/pwuser/credential-qa/check.cjs'], { stdio: 'inherit' });
