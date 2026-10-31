@@ -520,16 +520,17 @@ const UploadApprovalsControl = ({ row, onChanged }: { row: UserRow; onChanged: (
 
   const pending = row.publicUploadsPending || row.privateUploadsPending;
   const summary = pub && priv ? 'all' : pub ? 'public' : priv ? 'private' : pending ? 'pending' : 'off';
-  const summaryTone: ChipTone = pub && priv ? 'positive' : pub || priv ? 'info' : pending ? 'warning' : 'neutral';
+  const summaryColor = pub && priv ? 'green' : pub || priv ? 'teal' : pending ? 'orange' : 'gray';
 
   return (
     <Flex align="center" gap={2}>
-      <Chip
-        tone={summaryTone}
+      <Badge
+        colorScheme={summaryColor}
+        fontSize="0.6em"
         title={`Public uploads: ${pub ? 'enabled' : 'withheld'} · Private uploads: ${priv ? 'enabled' : 'withheld'}`}
       >
         {summary}
-      </Chip>
+      </Badge>
       {row.isAdmin ? (
         <Text fontSize="10px" opacity={0.55}>
           admin
@@ -578,9 +579,6 @@ const UsersTab = () => {
   });
   const [subscriptionFor, setSubscriptionFor] = React.useState<UserRow | null>(null);
   const [linksFor, setLinksFor] = React.useState<UserRow | null>(null);
-  // The per-scope Approve menu (UploadApprovalsControl) is the only control
-  // that changes what the upload gates enforce, so this banner counts rows
-  // still waiting on either scope.
   const pendingUploadCount = React.useMemo(
     () => (rows ?? []).filter((row) => row.publicUploadsPending || row.privateUploadsPending).length,
     [rows]
@@ -600,23 +598,11 @@ const UsersTab = () => {
         />
       </Box>
       {pendingUploadCount > 0 && (
-        <Flex
-          align="center"
-          bg="rgba(255, 188, 72, 0.14)"
-          borderLeft="3px solid var(--tt-warning, #ffbc48)"
-          borderRadius="var(--tt-radius-sm, 9px)"
-          color="var(--tt-text, #5a5a66)"
-          fontSize="sm"
-          mb={3}
-          px={3}
-          py={2}
-          role="status"
-        >
-          <Box flex="1">
-            {pendingUploadCount} new {pendingUploadCount === 1 ? 'account is' : 'accounts are'} awaiting file &amp; media upload
-            approval — use Approve on a row to enable public, private, or all uploads.
-          </Box>
-        </Flex>
+        <Alert status="warning" mb={3} borderRadius="md" fontSize="sm">
+          <AlertIcon />
+          {pendingUploadCount} new {pendingUploadCount === 1 ? 'account is' : 'accounts are'} awaiting file &amp; media upload
+          approval — use Approve on a row to enable public, private, or all uploads.
+        </Alert>
       )}
       {error ? <SnapshotErrorNotice hasPreviousRows={rows !== null} onRetry={refresh} /> : null}
       {loading && !rows ? (

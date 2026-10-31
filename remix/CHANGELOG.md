@@ -106,30 +106,31 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ### Added
 
-- **Thingtime Messenger** (`/messages`): a full chat platform inside the app —
-  Slack-style **Spaces** (communities with channels, sidebar sections, topics,
-  invites, threads) and FB-style **Chats** (DMs, groups, nicknames, message
-  requests bucketed follower/unknown) behind one mode toggle. Everything is a
-  thing: nine new dedicated-endpoint kinds (`chat`, `chat-member`,
-  `chat-message`, `chat-section`, `community`, `community-member`,
-  `community-invite`, `custom-emoji`, `follow`) with membership enforced in
-  `api/utils/messenger/` and the generic `/api/v1/things` paths refusing them.
-  Reactions reuse the post reaction store + unique index and add a
-  `custom:<emoji id>` token namespace for uploaded gif/webp emojis (≤512KB
-  data URIs, the avatar pattern). Read receipts are per-member forward-only
-  high-water marks with a parity privacy setting (off = neither share nor
-  see); unread counts skip system messages and muted chats; new-message Lopu
-  toasts + nav badge ride a visibility-aware poll (4s open chat / 15s list /
-  25s global). 23 new documented endpoints (docs registry = Nitro
-  registration), 6 new rate-limit buckets, 7 new partial/thread indexes, and
-  `scripts/verify-messenger.mjs` (100 live-API checks, including 14
-  regressions locked in from the pre-merge adversarial multi-agent review —
-  community-gated channel adds, a generic-DELETE wall for messenger kinds,
-  community-leave channel revocation, ex-owner role reset, sealed DM member
-  verbs, request-walled group invites, receipt-free pending reads, and
-  cursor/limit fixes). Detailed note:
-  [PR #174](../PRs/174-thingtime-messenger-platform-thingtime-messenger-spaces-chats.md).
-  — Claude (AI), 2026-08-03
+- **Upload approval now has public / private / all scopes**: the
+  signup-permissions gate is split into two independent tri-state flags —
+  `meta.publicUploads` (post/comment/custom-emoji attachments) and the new
+  `meta.privateUploads` (message attachments + own profile media) — both
+  stamped `false` at registration and both privileged meta keys. The upload
+  start gate is purpose-aware (`403 public_uploads_not_approved` /
+  `private_uploads_not_approved`), `POST /api/v1/admin/users/public-uploads`
+  accepts `scope: 'public' | 'private' | 'all'` (default `public`, wire-
+  compatible), and the /admin Users tab's control becomes an Approve menu with
+  per-scope and enable/withhold-all actions plus per-scope pending flags.
+  Grandfathering and the admin bypass are unchanged. — Claude (AI), 2026-08-18
+
+- **New signups no longer receive public upload permissions**: accounts created
+  from this change forward start with `meta.publicUploads: false`, and verifying
+  the email address no longer grants uploads. `POST /api/v1/attachments/uploads`
+  fails closed with `403 public_uploads_not_approved` until an administrator
+  enables the account, so no upload is reserved and no MPU is opened. Once a new
+  account verifies its email, an `admin.new_user` notification carrying the
+  account details goes to `THINGTIME_ADMIN_NOTIFICATION_EMAIL` (default
+  `admin@thingtime.com`), and the **/admin → Users** tab gained an Uploads
+  column, a pending-approval banner, and a per-user Enable/Withhold toggle
+  backed by `POST /api/v1/admin/users/public-uploads`. The flag is tri-state:
+  accounts predating the change have no flag and keep uploading, so no data
+  migration is required, and administrators bypass the gate entirely.
+  — Claude (AI), 2026-08-18
 
 ### Fixed
 
