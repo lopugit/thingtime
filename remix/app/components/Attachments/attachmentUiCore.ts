@@ -1,3 +1,5 @@
+import { ATTACHMENT_ARCHIVE_PATH, ATTACHMENT_ARCHIVE_REQUIREMENTS } from '~/api/utils/attachments/attachmentArchiveCore';
+import { isHeicImage } from './heicImage';
 import type {
 	AttachmentComposerSnapshot,
 	AttachmentMediaKind,
@@ -20,9 +22,29 @@ const INLINE_VIDEO_TYPES = new Set([
 	'video/x-m4v',
 	'video/x-matroska'
 ]);
-export const MAX_POST_ATTACHMENTS = 25;
+const isAudioContentType = (value: string) => value.startsWith('audio/');
+export { MAX_POST_ATTACHMENTS } from '~/schemas/attachmentLimits';
 const MAX_POST_TAGS = 12;
 const MAX_POST_TAG_CHARS = 40;
+
+type ClipboardFileData = {
+	files?: ArrayLike<File> | null;
+	items?: ArrayLike<Pick<DataTransferItem, 'kind' | 'getAsFile'>> | null;
+};
+
+// Clipboard implementations normally expose pasted files through `files`,
+// but WebKit and embedded webviews can leave that list empty while retaining
+// file-kind items. Prefer the canonical list so the same item is never queued
+// twice, then fall back to item extraction for those browsers.
+export const attachmentFilesFromClipboard = (clipboardData: ClipboardFileData | null | undefined): File[] => {
+	const files = Array.from(clipboardData?.files || []);
+	if (files.length) return files;
+	return Array.from(clipboardData?.items || []).flatMap((item) => {
+		if (item.kind !== 'file') return [];
+		const file = item.getAsFile();
+		return file ? [file] : [];
+	});
+};
 
 export type AttachmentUploadScope = 'public' | 'private';
 
@@ -31,11 +53,21 @@ export const attachmentUploadScopeForPurpose = (purpose: AttachmentUploadPurpose
 
 // Mirrors the createThing tag canonicalizer so ambiguous POST reconciliation
 // compares the exact committed payload rather than the raw composer text.
+// Like the server, tags are NFC-normalized (composed and decomposed spellings
+// of one visible tag share a bucket), the cap counts code points (never
+// bisecting a surrogate pair) and lone surrogates are dropped so a tag can
+// never make encodeURIComponent throw when rendered.
 export const canonicalPostTags = (values: readonly unknown[]): string[] => {
 	const tags: string[] = [];
 	for (const value of values) {
 		if (typeof value !== 'string') continue;
-		const tag = value.trim().toLowerCase().slice(0, MAX_POST_TAG_CHARS);
+		const tag = Array.from(value.trim().toLowerCase().normalize('NFC'))
+			.filter((char) => {
+				const codePoint = char.codePointAt(0) ?? 0;
+				return codePoint < 0xd800 || codePoint > 0xdfff;
+			})
+			.slice(0, MAX_POST_TAG_CHARS)
+			.join('');
 		if (tag && !tags.includes(tag)) tags.push(tag);
 		if (tags.length >= MAX_POST_TAGS) break;
 	}
@@ -46,6 +78,10 @@ export const safeAttachmentMediaKind = (contentType: unknown, requestedKind?: un
 	const type = typeof contentType === 'string' ? contentType.trim().toLowerCase() : '';
 	if (requestedKind === 'image' && INLINE_IMAGE_TYPES.has(type)) return 'image';
 	if (requestedKind === 'video' && INLINE_VIDEO_TYPES.has(type)) return 'video';
+	// Older server rows deliberately marked audio as `file`; unlike visual
+	// media, an audio element is a safe sink, so recover every declared audio
+	// MIME regardless of that legacy render hint.
+	if (isAudioContentType(type)) return 'audio';
 	return 'file';
 };
 
@@ -54,7 +90,7 @@ export const safeAttachmentMediaKind = (contentType: unknown, requestedKind?: un
 // the original site in safe sinks, so the server's declared render hint is
 // trusted as-is (clamped to the kinds the renderers know).
 const safeLinkedMediaKind = (requestedKind: unknown): AttachmentMediaKind =>
-	requestedKind === 'image' || requestedKind === 'video' ? requestedKind : 'file';
+	requestedKind === 'image' || requestedKind === 'video' || requestedKind === 'audio' ? requestedKind : 'file';
 
 // Mirrors the server's canonicalLinkedAttachmentUrl (attachmentCore) — plain
 // absolute http(s), no credentials, no control/format/space characters,
@@ -103,21 +139,36 @@ export const LINKED_MEDIA_EXTENSION_KINDS: Record<string, AttachmentMediaKind> =
 	mp4: 'video',
 	ogv: 'video',
 	webm: 'video',
+	'3ga': 'audio',
 	'7z': 'file',
+	aac: 'audio',
+	aif: 'audio',
+	aiff: 'audio',
+	amr: 'audio',
+	caf: 'audio',
 	csv: 'file',
 	doc: 'file',
 	docx: 'file',
 	gz: 'file',
+	flac: 'audio',
 	json: 'file',
 	md: 'file',
-	mp3: 'file',
+	m4a: 'audio',
+	mid: 'audio',
+	midi: 'audio',
+	mp2: 'audio',
+	mp3: 'audio',
+	oga: 'audio',
+	ogg: 'audio',
+	opus: 'audio',
 	pdf: 'file',
 	ppt: 'file',
 	pptx: 'file',
 	rar: 'file',
 	svg: 'file',
 	txt: 'file',
-	wav: 'file',
+	wav: 'audio',
+	weba: 'audio',
 	xls: 'file',
 	xlsx: 'file',
 	zip: 'file'
@@ -157,15 +208,17 @@ export const linkedMediaNameForUrl = (url: string): string => {
 	}
 };
 
-export const localFileMediaKind = (file: Pick<File, 'type'>): AttachmentMediaKind => {
+export const localFileMediaKind = (file: Pick<File, 'type'> & { name?: string }): AttachmentMediaKind => {
 	const type = file.type.trim().toLowerCase();
-	if (INLINE_IMAGE_TYPES.has(type)) return 'image';
+	if (INLINE_IMAGE_TYPES.has(type) || isHeicImage(file)) return 'image';
 	if (INLINE_VIDEO_TYPES.has(type)) return 'video';
+	if (isAudioContentType(type)) return 'audio';
 	return 'file';
 };
 
 const MAX_ATTACHMENT_TITLE_CHARS = 200;
 const MAX_ATTACHMENT_DESCRIPTION_CHARS = 2000;
+const MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS = 255;
 
 const normalizedOwnerText = (value: unknown, maxChars: number): string | undefined => {
 	if (typeof value !== 'string') return undefined;
@@ -183,6 +236,7 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 	if (!id || !name || !Number.isSafeInteger(size) || size < 0) return null;
 	const title = normalizedOwnerText(record.title, MAX_ATTACHMENT_TITLE_CHARS);
 	const description = normalizedOwnerText(record.description, MAX_ATTACHMENT_DESCRIPTION_CHARS);
+	const filenamePreview = normalizedOwnerText(record.filenamePreview, MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS);
 	const detectedRaw = typeof record.detectedContentType === 'string' ? record.detectedContentType.trim().toLowerCase() : '';
 	const detectedContentType =
 		detectedRaw && detectedRaw !== contentType && detectedRaw !== 'application/octet-stream' && detectedRaw.includes('/') ? detectedRaw : '';
@@ -193,11 +247,14 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 		size,
 		contentType,
 		...(detectedContentType ? { detectedContentType } : {}),
-		// Audio is valid canonical server metadata, but is intentionally treated as
-		// a generic download until Thingtime ships a vetted inline audio player.
 		// Linked attachments keep the server's declared render hint instead — their
-		// bytes render straight from the external URL in safe sinks.
-		mediaKind: linkedUrl ? safeLinkedMediaKind(record.mediaKind) : safeAttachmentMediaKind(contentType, record.mediaKind),
+		// bytes render straight from the external URL in safe sinks. Legacy opaque
+		// rows may still carry a detected audio container, which lets the player
+		// offer playback without trusting a caller-provided media kind.
+		mediaKind: linkedUrl
+			? safeLinkedMediaKind(record.mediaKind)
+			: safeAttachmentMediaKind(contentType === 'application/octet-stream' && detectedContentType ? detectedContentType : contentType, record.mediaKind),
+		...(filenamePreview ? { filenamePreview } : {}),
 		...(title ? { title } : {}),
 		...(description ? { description } : {}),
 		// only an explicit server true survives — nothing client-side can set it
@@ -207,8 +264,16 @@ export const normalizePublicAttachment = (value: unknown): PublicAttachment | nu
 	};
 };
 
+export const attachmentDisplayName = (attachment: Pick<PublicAttachment, 'name' | 'filenamePreview'>): string =>
+	attachment.filenamePreview || attachment.name;
+
 // The stable deeplink to a media attachment's own Thing page.
 export const mediaPageUrl = (id: string): string => `/media/${encodeURIComponent(id)}`;
+
+// Attachments are persisted Things too. Keep the generic Thing permalink
+// separate from the richer media page so callers can explicitly choose which
+// detail view they need.
+export const attachmentThingUrl = (id: string): string => `/thing/${encodeURIComponent(id)}`;
 
 // Display names for containers the server can sniff but never renders inline,
 // plus common claimed types; anything unmapped shows its raw MIME string.
@@ -220,6 +285,7 @@ const FRIENDLY_CONTENT_TYPE_LABELS: Record<string, string> = {
 	'application/zip': 'ZIP archive',
 	'audio/aac': 'AAC audio',
 	'audio/flac': 'FLAC audio',
+	'audio/mp4': 'M4A audio',
 	'audio/midi': 'MIDI audio',
 	'audio/mpeg': 'MP3 audio',
 	'audio/ogg': 'Ogg audio',
@@ -244,9 +310,7 @@ const FRIENDLY_CONTENT_TYPE_LABELS: Record<string, string> = {
 
 export const attachmentTypeLabel = (attachment: Pick<PublicAttachment, 'contentType' | 'detectedContentType'>): string => {
 	const shown =
-		attachment.contentType === 'application/octet-stream' && attachment.detectedContentType
-			? attachment.detectedContentType
-			: attachment.contentType;
+		attachment.contentType === 'application/octet-stream' && attachment.detectedContentType ? attachment.detectedContentType : attachment.contentType;
 	if (!shown || shown === 'application/octet-stream') return 'File';
 	return FRIENDLY_CONTENT_TYPE_LABELS[shown] || shown;
 };
@@ -257,11 +321,44 @@ export const attachmentContentUrl = (id: string, download = false): string => {
 	return `/api/v1/attachments/content?${params.toString()}`;
 };
 
+// "Download all" archives: one ZIP of a post's, folder's or media Thing's
+// stored files. The plain URL IS the share link — opening it in a browser,
+// wget or curl downloads the archive under the Thing's own audience rules.
+// The path and the client requirement live with the (dependency-free) server
+// core so the two sides can never disagree about either.
+export { ATTACHMENT_ARCHIVE_PATH, ATTACHMENT_ARCHIVE_REQUIREMENTS };
+
+export const attachmentArchiveUrl = (id: string, options: { key?: string; sharedRoot?: string; manifest?: boolean } = {}): string => {
+	const params = new URLSearchParams({ id });
+	if (options.manifest) params.set('manifest', '1');
+	// Only the exact first-party endpoint ever receives a legacy hidden key.
+	if (options.key) params.set('key', options.key);
+	if (options.sharedRoot) params.set('sharedRoot', options.sharedRoot);
+	return `${ATTACHMENT_ARCHIVE_PATH}?${params.toString()}`;
+};
+
+// The shareable form is canonical: no secret key (unlisted Things open by
+// exact id since PR #860), only the non-secret composition context survives.
+export const attachmentArchiveShareUrl = (id: string, origin: string, sharedRoot?: string): string =>
+	new URL(attachmentArchiveUrl(id, sharedRoot ? { sharedRoot } : {}), origin).href;
+
+// Stored files only — linked (external URL) media has no bytes to archive.
+export const downloadableAttachments = <T extends Pick<PublicAttachment, 'url'>>(attachments: readonly T[] | null | undefined): T[] =>
+	(attachments || []).filter((attachment) => !attachment.url);
+
+export const archiveDownloadLabel = (fileCount: number, totalBytes = 0): string =>
+	`Download all · ${fileCount} file${fileCount === 1 ? '' : 's'}${totalBytes > 0 ? ` · ${formatAttachmentBytes(totalBytes)}` : ''}`;
+
 // The src every renderer should use: linked attachments render straight from
 // their external URL; everything else goes through the authenticated content
 // endpoint.
-export const attachmentMediaSrc = (attachment: Pick<PublicAttachment, 'id' | 'url'>): string =>
-	attachment.url || attachmentContentUrl(attachment.id);
+export const attachmentMediaSrc = (attachment: Pick<PublicAttachment, 'id' | 'url'>): string => attachment.url || attachmentContentUrl(attachment.id);
+
+// Older opaque rows retain their sniffed container in metadata. Supplying it
+// to <source type> lets browsers attempt playback while the migration updates
+// their content response on the next maintenance pass.
+export const attachmentPlaybackContentType = (attachment: Pick<PublicAttachment, 'contentType' | 'detectedContentType'>): string =>
+	attachment.contentType === 'application/octet-stream' && attachment.detectedContentType ? attachment.detectedContentType : attachment.contentType;
 
 export const formatAttachmentBytes = (bytes: number): string => {
 	if (!Number.isFinite(bytes) || bytes < 0) return 'Unknown size';
@@ -309,7 +406,17 @@ export const attachmentUploadError = (
 	}
 	if (status === 403) return 'This account is not allowed to upload that file.';
 	if (status === 413) return 'This file is larger than Thingtime can accept.';
-	if (status === 429) return 'Uploads are moving too quickly. Wait a moment, then retry this file.';
+	if (status === 429) {
+		const seconds = (error as { retryAfterSeconds?: unknown } | null)?.retryAfterSeconds;
+		const wait = typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
+			? seconds < 60
+				? `${Math.ceil(seconds)} second${Math.ceil(seconds) === 1 ? '' : 's'}`
+				: `${Math.ceil(seconds / 60)} minute${Math.ceil(seconds / 60) === 1 ? '' : 's'}`
+			: null;
+		return wait
+			? `This account’s upload limit was reached. Retry this file in ${wait}. Your selection is kept.`
+			: 'This account’s upload limit was reached. Wait before retrying this file. Your selection is kept.';
+	}
 	if (status === 507 || code === 'quota_exceeded' || snapshotShowsQuota) return ATTACHMENT_QUOTA_ERROR;
 	if (code === 'storage_unconfigured') {
 		return 'Private uploads are unavailable in this environment. For images, use the public image URL option instead.';
@@ -396,7 +503,10 @@ export const attachmentCleanupAction = (upload: ComposerAttachmentUpload, commit
 };
 
 export const dedupeSelectedFiles = (current: ComposerAttachmentUpload[], incoming: File[]): File[] => {
-	const seen = new Set(current.map((upload) => `${upload.file.name}\u0000${upload.file.size}\u0000${upload.file.lastModified}`));
+	const seen = new Set(current.map((upload) => {
+		const file = upload.sourceFile || upload.file;
+		return `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+	}));
 	return incoming.filter((file) => {
 		const key = `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
 		if (seen.has(key)) return false;
@@ -436,6 +546,16 @@ const canonicalJson = (value: unknown): unknown => {
 
 const sameJson = (left: unknown, right: unknown) => JSON.stringify(canonicalJson(left)) === JSON.stringify(canonicalJson(right));
 
+// The post sanitizer omits an automatic media layout. Compare that one
+// optional field by its stored meaning, while keeping every content field
+// (including nested user data and rich-text formatting) exact.
+const committedPostCrystal = (value: unknown) => {
+	const crystal = recordOf(value);
+	if (!crystal) return value;
+	const { mediaLayout, ...content } = crystal;
+	return mediaLayout == null ? content : { ...content, mediaLayout };
+};
+
 const exactStringArray = (value: unknown, expected: readonly string[], unordered = false): boolean => {
 	if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) return false;
 	const actual = value as string[];
@@ -461,7 +581,7 @@ export const matchesCommittedPostCreate = (response: unknown, expected: Committe
 	if (thing.id !== expected.shareId || post.id !== expected.shareId) return false;
 	if (thingAuthor.id !== expected.ownerId || postAuthor.id !== expected.ownerId) return false;
 	if (!exactStringArray(thing.thingtime, ['post']) || thing.targetId !== null || post.isShare !== false) return false;
-	if (!sameJson(thing.crystal, expected.crystal)) return false;
+	if (!sameJson(committedPostCrystal(thing.crystal), committedPostCrystal(expected.crystal))) return false;
 	if (!exactStringArray(thing.tags, expected.tags) || !exactStringArray(post.tags, expected.tags)) return false;
 	if (post.visibility !== expected.visibility) return false;
 	const attachments = Array.isArray(post.attachments) ? post.attachments : null;

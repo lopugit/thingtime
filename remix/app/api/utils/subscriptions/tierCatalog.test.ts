@@ -11,8 +11,30 @@ import {
   isKnownSubscriptionTier,
   resolveTierQuotas,
   sanitizeQuotaOverrides,
-  subscriptionTierById
+  subscriptionTierById,
+  speedTestsPerHour,
+  speedTestAllowanceLabel,
+  sanitizeTierQuotas
 } from './tierCatalog.ts';
+
+test('speed-test comparison and enforcement agree for current and historical tiers', () => {
+  for (const [id, expected] of [
+    ['free', 4],
+    ['plus', 20],
+    ['pro', null],
+    ['payg', null],
+    ['custom', 4]
+  ] as const) {
+    assert.equal(speedTestsPerHour(id, {}), expected);
+    assert.equal(speedTestsPerHour(id, subscriptionTierById(id).quotas), expected);
+  }
+  assert.equal(speedTestAllowanceLabel(null), 'Unlimited');
+  assert.equal(speedTestAllowanceLabel(20), '20 tests / hour');
+  assert.equal(speedTestsPerHour('pro', { speedTestsPerHour: 0 }), 0);
+  assert.equal(speedTestsPerHour('free', { speedTestsPerHour: null }), null);
+  assert.equal(speedTestsPerHour('pro', { speedTestsPerHour: NaN }), 0);
+  assert.equal(sanitizeTierQuotas({ maxApps: 1, maxPats: 2, appStorageBytes: 3, userStorageBytes: 4 }).ok, true);
+});
 
 test('catalog: four tiers, free is the default and mirrors the legacy caps', () => {
   assert.deepEqual(

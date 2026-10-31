@@ -1,3 +1,4 @@
+import { characterEntitlementSource, characterEntitlementSources, withCharacterEntitlement } from '../auth/characterEntitlements';
 // Subscription/billing ledgers are identity-plane objects: they live on the
 // HOME deployment only, regardless of any data-plane endpoint override — the
 // same pinning as users/sessions (see endpoint.ts). Callers passing a session
@@ -266,6 +267,14 @@ export const getSubscription = async (subjectType: SubscriptionSubjectType, subj
 			: trustedUserDoc
 				? toInfo(subjectType, subjectId, trustedUserDoc)
       : defaultSubscription(subjectType, subjectId, pinnedSignup ?? undefined);
+  if (subjectType === 'user') {
+    const inherited = await characterEntitlementSource(subjectId);
+    if (inherited) {
+      // Re-project the Character's own ledger under the owner's live tier.
+      // Never copy owner notes, audit identity, usage, or account identifiers.
+      return toInfo('user', subjectId, withCharacterEntitlement(trustedUserDoc, inherited));
+    }
+  }
   return info;
 };
 
@@ -287,9 +296,10 @@ export const getSubscriptions = async (subjectType: SubscriptionSubjectType, sub
     }
     return result;
   }
-  const [docs, users] = await Promise.all([
+  const [docs, users, inheritances] = await Promise.all([
     things.find({ thingtime: SUBSCRIPTION_KIND, shareId: { $in: ids.map((id) => subscriptionShareId(subjectType, id)) } }).toArray(),
-    things.find({ thingtime: 'user', shareId: { $in: ids } }, { projection: { shareId: 1, initialSubscription: 1 } }).toArray()
+    things.find({ thingtime: 'user', shareId: { $in: ids } }, { projection: { shareId: 1, initialSubscription: 1 } }).toArray(),
+    characterEntitlementSources(ids)
   ]);
   const byShareId = new Map(docs.map((doc: any) => [doc.shareId, doc]));
   const seedByUserId = new Map<string, TierSnapshot | null>(
@@ -301,7 +311,7 @@ export const getSubscriptions = async (subjectType: SubscriptionSubjectType, sub
 		result.set(
 			id,
 			doc && userSubscriptionLedgerEnvelopeIsTrusted(doc, id)
-				? toInfo(subjectType, id, doc)
+				? toInfo(subjectType, id, withCharacterEntitlement(doc, inheritances.get(id)))
 				: defaultSubscription(subjectType, id, seedByUserId.get(id) ?? undefined)
 		);
   }

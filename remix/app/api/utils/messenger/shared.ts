@@ -1,13 +1,18 @@
+import { isActiveMember, membershipOfDoc } from '../subspaces/gate';
+import { thingUniqueKeysFilter } from '../mongodb/uniqueKeys';
+import { linkedSubspaceId, subspaceMessagingAccess } from './subspaceAccess';
 // Shared plumbing for the messenger family (chats, communities, emojis,
 // follows). Everything here is a thing in `things` (FUNDAMENTALS §3):
-// messenger docs are private plumbing (acl ["tt:user"]) whose real visibility
-// is chat/community MEMBERSHIP, enforced by these utils on every read and
-// write — the generic /api/v1/things paths refuse the kinds outright (no
-// crystal sanitizers), so nothing here is reachable or forgeable around us.
+// messenger docs are private, quota-accounted user content (acl ["tt:user"])
+// whose real visibility is chat/community MEMBERSHIP, enforced by these utils
+// on every read and write — the generic /api/v1/things paths refuse the kinds
+// outright (no crystal sanitizers), so nothing here is reachable or forgeable
+// around us.
 import { randomUUID } from 'node:crypto';
 import type { Binary } from 'mongodb';
 import { getThingsCollection } from '../mongodb/collections';
-import { toBin } from '../auth/users';
+import { thingUniqueKey } from '../mongodb/uniqueKeys';
+import { relationshipLookupFilter } from '../mongodb/relationshipLookup';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 export type Fail = { ok: false; status: number; error: string };
@@ -55,27 +60,38 @@ export const RELATIONSHIP_UNIQUE_CRYSTAL_KEYS: Readonly<Record<string, string>> 
 	'custom-emoji': 'emojiKey',
 	friend: 'friendKey',
 	vote: 'voteKey',
-	'passkey-app-link': 'linkKey'
+	'passkey-app-link': 'linkKey',
+	// connections: one membership row per (external post, sourcing account).
+	// Stamped directly by the sync writer (connections/connections.ts), which
+	// bulk-upserts rather than going through newThingDoc; listed here so the
+	// backfill migration and the census cover it like every other relationship.
+	'external-post-source': 'sourceKey'
 };
 
 export const relationshipUniqueKeys = (kind: string, crystal: Record<string, unknown> | null | undefined): Binary[] | undefined => {
 	const field = RELATIONSHIP_UNIQUE_CRYSTAL_KEYS[kind];
 	const value = field ? crystal?.[field] : undefined;
-	return typeof value === 'string' && value ? [toBin(`${field}:${value}`)] : undefined;
+	return typeof value === 'string' && value ? [thingUniqueKey(field, value)] : undefined;
 };
 
 export const newThingDoc = (
   kind: string,
-  fields: { ownerId: string; targetId?: string | null; crystal: Record<string, unknown>; shareId?: string }
+  fields: {
+		ownerId: string;
+		targetId?: string | null;
+		crystal: Record<string, unknown>;
+		shareId?: string;
+		uniqueKeys?: Binary[];
+	}
 ) => {
   const now = new Date();
-  const uniqueKeys = relationshipUniqueKeys(kind, fields.crystal);
+  const uniqueKeys = [...(relationshipUniqueKeys(kind, fields.crystal) || []), ...(fields.uniqueKeys || [])];
   return {
     shareId: fields.shareId || randomUUID(),
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
     thingtime: [kind],
     crystal: fields.crystal,
-    ...(uniqueKeys ? { uniqueKeys } : {}),
+    ...(uniqueKeys.length ? { uniqueKeys } : {}),
     extended: null,
     ownerId: fields.ownerId,
     acl: ['tt:user'],
@@ -92,22 +108,29 @@ export const findThingByKind = async (kind: string, shareId: string): Promise<an
   return things.findOne({ shareId: shareId.trim(), thingtime: kind } as any);
 };
 
-// ── membership lookups (all single indexed queries via crystal.memberKey) ──
+// Membership point/batch reads share protected uniqueKeys on the home plane.
 
 export const getChatMemberDoc = async (chatId: string, userId: string): Promise<any | null> => {
   const things = await getThingsCollection();
-  return things.findOne({ thingtime: 'chat-member', 'crystal.memberKey': chatMemberKey(chatId, userId) } as any);
+  return things.findOne({ thingtime: 'chat-member', ...await relationshipLookupFilter('memberKey', chatMemberKey(chatId, userId)) } as any);
 };
 
 export const getCommunityMemberDoc = async (communityId: string, userId: string): Promise<any | null> => {
   const things = await getThingsCollection();
   return things.findOne({
     thingtime: 'community-member',
-    'crystal.memberKey': communityMemberKey(communityId, userId)
+    ...await relationshipLookupFilter('memberKey', communityMemberKey(communityId, userId))
   } as any);
 };
 
 export const communityRoleOf = async (communityId: string, userId: string): Promise<ChatRole | null> => {
+  const things = await getThingsCollection();
+  const community = await findThingByKind('community', communityId);
+  if (!community) return null;
+  if (linkedSubspaceId(community)) {
+    const access = await subspaceMessagingAccess(things, community, userId);
+    return access?.allowed ? access.role : null;
+  }
   const doc = await getCommunityMemberDoc(communityId, userId);
   const role = doc?.crystal?.role;
   return role === 'owner' || role === 'admin' || role === 'member' ? role : null;
@@ -120,9 +143,20 @@ export const communityMembersAmong = async (communityId: string, userIds: string
   const ids = Array.from(new Set(userIds.filter(Boolean)));
   if (!ids.length) return new Set();
   const things = await getThingsCollection();
+  const community = await findThingByKind('community', communityId);
+  if (!community) return new Set();
+  if (linkedSubspaceId(community)) {
+    const id = linkedSubspaceId(community)!;
+    const [subspace, members] = await Promise.all([
+      things.findOne({ thingtime: 'subspace', shareId: id, subspaceMediaDeleting: { $ne: true } } as any),
+      things.find({ thingtime: 'subspace-member', targetId: id, ...thingUniqueKeysFilter('subspaceMemberKey', ids.map(userId => `${id}:${userId}`)) } as any).toArray()
+    ]);
+    if (!subspace) return new Set();
+    return new Set(members.filter((doc: any) => isActiveMember(membershipOfDoc(doc))).map((doc: any) => String(doc.ownerId)));
+  }
   const docs = await things
     .find(
-      { thingtime: 'community-member', 'crystal.memberKey': { $in: ids.map((id) => communityMemberKey(communityId, id)) } } as any,
+      { thingtime: 'community-member', ...await relationshipLookupFilter('memberKey', ids.map((id) => communityMemberKey(communityId, id))) } as any,
       { projection: { ownerId: 1 } }
     )
     .toArray();

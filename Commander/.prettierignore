@@ -1,0 +1,6 @@
+dist
+.build
+target
+design
+pnpm-lock.yaml
+extensions/raycast

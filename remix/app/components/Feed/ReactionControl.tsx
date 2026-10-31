@@ -1,5 +1,6 @@
 import React from 'react';
-import { Popover, PopoverContent, PopoverTrigger } from '@chakra-ui/react';
+import { Popover, PopoverContent, PopoverTrigger, Portal } from '@chakra-ui/react';
+import { DRAWER_POPUP_Z } from '~/components/Nav/Drawer/useDrawer';
 
 // The reaction button + picker opener shared by posts and comments. The picker
 // popover is CONTROLLED so every input works:
@@ -133,6 +134,17 @@ export const ReactionControl = (props: ReactionControlProps) => {
 
   const clonedTrigger = React.cloneElement(trigger, {
     onClick: handleClick,
+    // Hover/tap keeps focus on the trigger (autoFocus is false), so Chakra's
+    // content-only Escape listener cannot dismiss that keyboard state.
+    onKeyDown: (event: React.KeyboardEvent) => {
+      if (event.key === 'Escape' && isOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+      } else {
+        (trigger.props as { onKeyDown?: (event: React.KeyboardEvent) => void }).onKeyDown?.(event);
+      }
+    },
     onTouchStart: enabled ? handleTouchStart : undefined,
     onTouchEnd: enabled ? endTouch : undefined,
     onTouchMove: enabled ? endTouch : undefined,
@@ -153,20 +165,24 @@ export const ReactionControl = (props: ReactionControlProps) => {
   if (!enabled) return clonedTrigger;
 
   return (
-    <Popover isOpen={isOpen} onClose={close} placement="top" isLazy autoFocus={false}>
+    <Popover isOpen={isOpen} onClose={close} placement="top" strategy="fixed" isLazy autoFocus={false}
+      modifiers={[{ name: 'preventOverflow', options: { padding: 12 } }, { name: 'flip', options: { padding: 12 } }]}>
       <PopoverTrigger>{clonedTrigger}</PopoverTrigger>
+      <Portal appendToParentPortal={false}>
       <PopoverContent
+        rootProps={{ zIndex: DRAWER_POPUP_Z }}
         width="auto"
         border={BORDER}
-        borderRadius="999px"
+        borderRadius="var(--tt-radius-lg, 16px)"
         boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
-        zIndex={10}
+        zIndex={DRAWER_POPUP_Z}
         _focusVisible={{ outline: 'none' }}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
         {content(close)}
       </PopoverContent>
+      </Portal>
     </Popover>
   );
 };

@@ -7,7 +7,7 @@ export type AttachmentState = (typeof ATTACHMENT_STATES)[number];
 // A purpose is stamped before any upload URL is issued and never changes.
 // That keeps a private draft created for one surface from being replayed into
 // a different audience (for example, a DM attachment becoming a public post).
-export const ATTACHMENT_PURPOSES = ['post', 'comment', 'message', 'profile', 'emoji'] as const;
+export const ATTACHMENT_PURPOSES = ['post', 'comment', 'message', 'profile', 'emoji', 'recording', 'file', 'subspace-icon', 'subspace-banner', 'password'] as const;
 export type AttachmentPurpose = (typeof ATTACHMENT_PURPOSES)[number];
 export const ATTACHMENT_PROFILE_SLOTS = ['avatar', 'banner'] as const;
 export type ProfileAttachmentSlot = (typeof ATTACHMENT_PROFILE_SLOTS)[number];
@@ -16,6 +16,7 @@ export const ATTACHMENT_MEDIA_KINDS = ['image', 'video', 'audio', 'file'] as con
 export type AttachmentMediaKind = (typeof ATTACHMENT_MEDIA_KINDS)[number];
 
 export const MAX_ATTACHMENT_NAME_CHARS = 255;
+export const MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS = 255;
 export const MAX_ATTACHMENT_TITLE_CHARS = 200;
 export const MAX_ATTACHMENT_DESCRIPTION_CHARS = 2000;
 export const MAX_ATTACHMENT_CONTENT_TYPE_CHARS = 127;
@@ -37,6 +38,7 @@ export type AttachmentPublicMetadata = {
 	size: number;
 	contentType: string;
 	mediaKind: AttachmentMediaKind;
+	filenamePreview?: string;
 	// owner-authored presentation metadata for the media's own Thing page and
 	// lightbox — optional, absent on legacy attachments, never empty strings
 	title?: string;
@@ -62,6 +64,7 @@ export type AttachmentCrystal = Omit<AttachmentPublicMetadata, 'id' | 'pending' 
 
 export type AttachmentAnnotationPatch = {
 	// undefined = leave untouched, null/'' = clear, string = set (trimmed)
+	filenamePreview?: string | null;
 	title?: string | null;
 	description?: string | null;
 };
@@ -123,13 +126,24 @@ const SAFE_VIDEO_CONTENT_TYPES = new Set([
 	'video/x-matroska'
 ]);
 const SAFE_AUDIO_CONTENT_TYPES = new Set([
+	'audio/3gpp',
+	'audio/3gpp2',
 	'audio/aac',
+	'audio/aiff',
+	'audio/amr',
 	'audio/flac',
+	'audio/midi',
 	'audio/mp4',
 	'audio/mpeg',
 	'audio/ogg',
+	'audio/opus',
+	'audio/vnd.wave',
 	'audio/wav',
 	'audio/webm',
+	'audio/x-aiff',
+	'audio/x-caf',
+	'audio/x-flac',
+	'audio/x-m4a',
 	'audio/x-wav'
 ]);
 const ATTACHMENT_PART_ISSUING_STATES = new Set<unknown>(['pending', 'finalizing', 'deleting']);
@@ -165,17 +179,21 @@ export const isCanonicalAttachmentContentType = (value: string): boolean =>
 export const attachmentMediaKindForContentType = (contentType: string): AttachmentMediaKind => {
 	if (SAFE_IMAGE_CONTENT_TYPES.has(contentType)) return 'image';
 	if (SAFE_VIDEO_CONTENT_TYPES.has(contentType)) return 'video';
-	if (SAFE_AUDIO_CONTENT_TYPES.has(contentType)) return 'audio';
+	// Audio is only ever rendered in an <audio> sink. Unlike an image/video
+	// container, it cannot turn arbitrary uploaded bytes into an active
+	// document, so preserve any canonical audio MIME for the browser's decoder
+	// instead of losing uncommon recorders to an opaque download row.
+	if (SAFE_AUDIO_CONTENT_TYPES.has(contentType) || contentType.startsWith('audio/')) return 'audio';
 	return 'file';
 };
 
 // Linked media renders only in safe sinks (img/video elements, plain anchors)
 // and the client can override the render hint after probing, so linked kinds
-// collapse to the three the renderers know.
-export type LinkedAttachmentMediaKind = 'image' | 'video' | 'file';
+// collapse to the media kinds the safe renderers know.
+export type LinkedAttachmentMediaKind = 'image' | 'video' | 'audio' | 'file';
 
 export const isLinkedAttachmentMediaKind = (value: unknown): value is LinkedAttachmentMediaKind =>
-	value === 'image' || value === 'video' || value === 'file';
+	value === 'image' || value === 'video' || value === 'audio' || value === 'file';
 
 // The same hygiene the post-crystal image URL sanitizer applies
 // (schemas/registry isHttpUrl): plain absolute http(s), no credentials, no
@@ -224,21 +242,36 @@ export const LINKED_MEDIA_EXTENSION_TYPES: Record<string, { contentType: string;
 	mp4: { contentType: 'video/mp4', mediaKind: 'video' },
 	ogv: { contentType: 'video/ogg', mediaKind: 'video' },
 	webm: { contentType: 'video/webm', mediaKind: 'video' },
+	'3ga': { contentType: 'audio/3gpp', mediaKind: 'audio' },
 	'7z': { contentType: 'application/x-7z-compressed', mediaKind: 'file' },
+	aac: { contentType: 'audio/aac', mediaKind: 'audio' },
+	aif: { contentType: 'audio/aiff', mediaKind: 'audio' },
+	aiff: { contentType: 'audio/aiff', mediaKind: 'audio' },
+	amr: { contentType: 'audio/amr', mediaKind: 'audio' },
+	caf: { contentType: 'audio/x-caf', mediaKind: 'audio' },
 	csv: { contentType: 'text/csv', mediaKind: 'file' },
 	doc: { contentType: 'application/msword', mediaKind: 'file' },
 	docx: { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', mediaKind: 'file' },
 	gz: { contentType: 'application/gzip', mediaKind: 'file' },
+	flac: { contentType: 'audio/flac', mediaKind: 'audio' },
 	json: { contentType: 'application/json', mediaKind: 'file' },
 	md: { contentType: 'text/markdown', mediaKind: 'file' },
-	mp3: { contentType: 'audio/mpeg', mediaKind: 'file' },
+	m4a: { contentType: 'audio/mp4', mediaKind: 'audio' },
+	mid: { contentType: 'audio/midi', mediaKind: 'audio' },
+	midi: { contentType: 'audio/midi', mediaKind: 'audio' },
+	mp2: { contentType: 'audio/mpeg', mediaKind: 'audio' },
+	mp3: { contentType: 'audio/mpeg', mediaKind: 'audio' },
+	oga: { contentType: 'audio/ogg', mediaKind: 'audio' },
+	ogg: { contentType: 'audio/ogg', mediaKind: 'audio' },
+	opus: { contentType: 'audio/opus', mediaKind: 'audio' },
 	pdf: { contentType: 'application/pdf', mediaKind: 'file' },
 	ppt: { contentType: 'application/vnd.ms-powerpoint', mediaKind: 'file' },
 	pptx: { contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', mediaKind: 'file' },
 	rar: { contentType: 'application/vnd.rar', mediaKind: 'file' },
 	svg: { contentType: 'image/svg+xml', mediaKind: 'file' },
 	txt: { contentType: 'text/plain', mediaKind: 'file' },
-	wav: { contentType: 'audio/wav', mediaKind: 'file' },
+	wav: { contentType: 'audio/wav', mediaKind: 'audio' },
+	weba: { contentType: 'audio/webm', mediaKind: 'audio' },
 	xls: { contentType: 'application/vnd.ms-excel', mediaKind: 'file' },
 	xlsx: { contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', mediaKind: 'file' },
 	zip: { contentType: 'application/zip', mediaKind: 'file' }
@@ -293,11 +326,7 @@ export const linkedAttachmentNameForUrl = (url: string): string => {
 };
 
 // Single-line owner text (titles): the same hygiene as filenames.
-const sanitizeAttachmentLine = (
-	value: unknown,
-	maxChars: number,
-	label: string
-): { ok: true; value?: string } | { ok: false; error: string } => {
+const sanitizeAttachmentLine = (value: unknown, maxChars: number, label: string): { ok: true; value?: string } | { ok: false; error: string } => {
 	if (value === undefined || value === null) return { ok: true };
 	if (typeof value !== 'string') return { ok: false, error: `Attachment ${label} must be text` };
 	const trimmed = value.trim();
@@ -311,11 +340,7 @@ const sanitizeAttachmentLine = (
 // Multi-line owner text (descriptions): newlines allowed, every other control
 // or format character still rejected.
 const UNSAFE_MULTILINE_CHAR_RE = /[\p{Cf}\p{Cs}]/u;
-const sanitizeAttachmentBlock = (
-	value: unknown,
-	maxChars: number,
-	label: string
-): { ok: true; value?: string } | { ok: false; error: string } => {
+const sanitizeAttachmentBlock = (value: unknown, maxChars: number, label: string): { ok: true; value?: string } | { ok: false; error: string } => {
 	if (value === undefined || value === null) return { ok: true };
 	if (typeof value !== 'string') return { ok: false, error: `Attachment ${label} must be text` };
 	const trimmed = value.trim();
@@ -364,6 +389,8 @@ export const sanitizeAttachmentPublicMetadata = (input: unknown): AttachmentMeta
 	if (title.ok === false) return title;
 	const description = sanitizeAttachmentBlock(raw.description, MAX_ATTACHMENT_DESCRIPTION_CHARS, 'description');
 	if (description.ok === false) return description;
+	const filenamePreview = sanitizeAttachmentLine(raw.filenamePreview, MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS, 'filename preview');
+	if (filenamePreview.ok === false) return filenamePreview;
 
 	return {
 		ok: true,
@@ -374,6 +401,7 @@ export const sanitizeAttachmentPublicMetadata = (input: unknown): AttachmentMeta
 			// Always derive this from the normalized content type. A caller cannot
 			// label HTML/SVG/arbitrary bytes as inline-safe image or video content.
 			mediaKind: attachmentMediaKindForContentType(contentType),
+			...(filenamePreview.value ? { filenamePreview: filenamePreview.value } : {}),
 			// blank owner text is stored as ABSENT, never as an empty string
 			...(title.value ? { title: title.value } : {}),
 			...(description.value ? { description: description.value } : {})
@@ -405,10 +433,10 @@ export const isAttachmentFinalizationLeaseId = (value: unknown): value is string
 const REQUIRED_ATTACHMENT_CRYSTAL_KEYS = ['contentType', 'mediaKind', 'name', 'size'] as const;
 // Owner-authored presentation text plus the server-written sniffed container
 // type; each is validated below before a crystal counts as canonical.
-const OPTIONAL_ATTACHMENT_CRYSTAL_KEYS = new Set(['title', 'description', 'detectedContentType']);
+const OPTIONAL_ATTACHMENT_CRYSTAL_KEYS = new Set(['filenamePreview', 'title', 'description', 'detectedContentType']);
 // Linked crystals swap detectedContentType (a stored-bytes sniff) for the
 // external url; every other key keeps the base hygiene.
-const LINKED_ATTACHMENT_CRYSTAL_KEYS = new Set([...REQUIRED_ATTACHMENT_CRYSTAL_KEYS, 'url', 'title', 'description']);
+const LINKED_ATTACHMENT_CRYSTAL_KEYS = new Set([...REQUIRED_ATTACHMENT_CRYSTAL_KEYS, 'url', 'filenamePreview', 'title', 'description']);
 
 // Linked (external URL) crystal: size is always 0 (the bytes are not ours),
 // and mediaKind is a DECLARED render hint — the media renders in safe sinks
@@ -425,18 +453,20 @@ const canonicalLinkedAttachmentCrystal = (raw: Record<string, unknown>): Attachm
 		size: raw.size,
 		contentType: raw.contentType,
 		title: raw.title,
-		description: raw.description
+		description: raw.description,
+		filenamePreview: raw.filenamePreview
 	});
 	if (!sanitized.ok) return null;
 	return raw.name === sanitized.crystal.name &&
 		raw.contentType === sanitized.crystal.contentType &&
 		raw.title === sanitized.crystal.title &&
-		raw.description === sanitized.crystal.description
+		raw.description === sanitized.crystal.description &&
+		raw.filenamePreview === sanitized.crystal.filenamePreview
 		? { ...sanitized.crystal, mediaKind: raw.mediaKind, url }
 		: null;
 };
 
-const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null => {
+export const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null => {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
 	if ('url' in (value as Record<string, unknown>)) return canonicalLinkedAttachmentCrystal(value as Record<string, unknown>);
 	const sanitized = sanitizeAttachmentPublicMetadata(value);
@@ -467,7 +497,8 @@ const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null =>
 		raw.contentType === sanitized.crystal.contentType &&
 		raw.mediaKind === sanitized.crystal.mediaKind &&
 		raw.title === sanitized.crystal.title &&
-		raw.description === sanitized.crystal.description
+		raw.description === sanitized.crystal.description &&
+		raw.filenamePreview === sanitized.crystal.filenamePreview
 		? { ...sanitized.crystal, ...(hasDetected ? { detectedContentType: raw.detectedContentType as string } : {}) }
 		: null;
 };
@@ -476,10 +507,7 @@ const canonicalAttachmentCrystal = (value: unknown): AttachmentCrystal | null =>
 // crystal. The magic-byte detector's optional detectedContentType is
 // server-owned metadata: annotation must preserve it exactly, never accept it
 // from the patch and never silently erase it.
-export const applyAttachmentAnnotationPatch = (
-	value: unknown,
-	patch: AttachmentAnnotationPatch
-): AttachmentMetadataResult => {
+export const applyAttachmentAnnotationPatch = (value: unknown, patch: AttachmentAnnotationPatch): AttachmentMetadataResult => {
 	const before = canonicalAttachmentCrystal(value);
 	if (!before) return { ok: false, error: 'Attachment metadata is not canonical' };
 	const sanitized = sanitizeAttachmentPublicMetadata({
@@ -487,7 +515,8 @@ export const applyAttachmentAnnotationPatch = (
 		size: before.size,
 		contentType: before.contentType,
 		title: patch.title === undefined ? before.title : patch.title,
-		description: patch.description === undefined ? before.description : patch.description
+		description: patch.description === undefined ? before.description : patch.description,
+		filenamePreview: patch.filenamePreview === undefined ? before.filenamePreview : patch.filenamePreview
 	});
 	if (!sanitized.ok) return sanitized;
 	return {

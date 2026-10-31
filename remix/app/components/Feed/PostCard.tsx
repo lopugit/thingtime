@@ -1,3 +1,9 @@
+import { PostAsSelect } from '~/components/Characters/PostAsSelect';
+import { PostLinkedThings } from './PostLinkedThings';
+import { CollectionList } from '~/components/Collections/CollectionList';
+import { createDiscussionCommentPager, mergeDiscussionComments, discussionCommentSearchText } from './discussionCommentPages';
+import { SharedMediaProvider, useSharedThingPath, useSharedAccess } from '~/components/Sharing/SharedMedia';
+import { audienceDescription, audienceOfAcl, sharePathForThing, aclForAudience } from '~/components/Sharing/audienceCore';
 import React from 'react';
 import {
   Box,
@@ -10,7 +16,6 @@ import {
   Input,
   Menu,
   MenuButton,
-  MenuDivider,
   MenuItem,
   MenuItemOption,
   MenuList,
@@ -18,6 +23,7 @@ import {
   Popover,
   PopoverAnchor,
   PopoverContent,
+  Portal,
   Select,
   Skeleton,
   SkeletonCircle,
@@ -27,40 +33,59 @@ import {
 } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 import { Link } from 'react-router';
-import { ArrowLeft, Eye, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
+import { ArrowLeft, Bookmark, Eye, Flag, Heart, Maximize2, MessageCircle, Plus, Repeat2, Send, Share } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCommentDraft } from '~/hooks/useCommentDraft';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useOutsideTapClose } from '~/hooks/useOutsideTapClose';
+import { FeedShortcutsContext } from '~/hooks/useFeedShortcuts';
+import type { FeedPostShortcutActions } from '~/hooks/useFeedShortcuts';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
+import { DRAWER_POPUP_Z } from '~/components/Nav/Drawer/useDrawer';
+import { quickRecentReactions } from '~/components/Emoji/reactionPickerState';
+import { getEditorJsDoc } from '~/components/Editor/editorJsValue';
+import { RichTextBlocks } from '~/components/Kinds/kindRenderersMedia';
 import { PostAttachments } from '~/components/Attachments/PostAttachments';
-import { mediaPageUrl } from '~/components/Attachments/attachmentUiCore';
+import { downloadableAttachments } from '~/components/Attachments/attachmentUiCore';
+import { useAttachmentArchive } from '~/components/Attachments/useAttachmentArchive';
+import type { PostArchiveTarget } from './PostThingMenu';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
+import { PostThingMenu } from './PostThingMenu';
+import { CustomAudienceModal } from './CustomAudienceModal';
 import { ReactionControl } from './ReactionControl';
+import { UpdownControl } from './UpdownControl';
+import { useSubspacePrefs } from '~/components/Subspaces/useSubspacePrefs';
+import { RemoveModal, ReportModal, loadModerationSubspace, type RemoveChoice, type ReportChoice } from '~/components/Subspaces/ModerationModals';
+import { splashEmoji } from './emojiSplash';
 import { isUnknownReactionFailure, reactionFailureMessage, shouldReconcileReactionFailure } from './reactionFailure';
 import { mergeReactionOverlay, mergeReactionOverlays, noteLocalReactions } from './reactionOverlay';
 import { fetchThreadInto, getCachedThread, prefetchNextDepth, setCachedThread, warmAvatars } from './threadCache';
-import { CIRCLE_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, timeAgo } from './feedTypes';
-import type { EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicPost } from './feedTypes';
+import { canonicalPostTags } from '~/components/Attachments/attachmentUiCore';
+import { profileMentionHref, splitMentionSegments, type MentionSegment } from '~/utils/mentions';
+import { extractInlineHashtags, searchTagHref, splitHashtagSegments, type HashtagSegment } from './hashtags';
+import { CIRCLE_META, COMMENT_SORTS, COMMENT_SORT_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, applyUpdownVote, authorLinkTarget, isCommentSort, isPendingComment, mergeCommentPage, sortCommentPage, timeAgo, windowCommentPage } from './feedTypes';
+import type { CommentSort, EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicAuthorFlair, PublicPost, UpdownDirection } from './feedTypes';
+import type { PollRenderPollContext } from '~/components/Kinds';
 
 // Apply one token's toggle to a post, idempotently (a no-op if the post already
 // reflects it). Used for optimistic paint + revert against the FRESHEST post, so
 // a concurrent reaction on a different token is never clobbered.
 const applyReactionToggle = <T extends Pick<PublicPost, 'reactionCounts' | 'viewerReactions'>>(prev: T, token: string, adding: boolean): T => {
-  const has = prev.viewerReactions.includes(token);
+  const previousReactions = prev.viewerReactions || [];
+  const has = previousReactions.includes(token);
   if (adding === has) return prev;
   const reactionCounts = { ...prev.reactionCounts };
   reactionCounts[token] = (reactionCounts[token] || 0) + (adding ? 1 : -1);
   if (reactionCounts[token] <= 0) delete reactionCounts[token];
-	const viewerReactions = adding ? [...prev.viewerReactions, token] : prev.viewerReactions.filter((entry) => entry !== token);
-  return { ...prev, reactionCounts, viewerReactions };
+	const viewerReactions = adding ? [...previousReactions, token] : previousReactions.filter((entry) => entry !== token);
+  return { ...prev, reactionCounts: prev.reactionCounts === undefined ? undefined : reactionCounts, viewerReactions };
 };
 
 // Reconcile ONLY the toggled token against the server's authoritative view,
@@ -68,19 +93,45 @@ const applyReactionToggle = <T extends Pick<PublicPost, 'reactionCounts' | 'view
 const reconcileReactionToken = <T extends Pick<PublicPost, 'reactionCounts' | 'viewerReactions'>>(
   prev: T,
   token: string,
-  serverCounts: Record<string, number>,
-  serverViewer: string[]
+  serverCounts: Record<string, number> | undefined,
+  serverViewer: string[] | undefined
 ): T => {
+  if (!serverCounts) return { ...prev, reactionCounts: undefined, viewerReactions: serverViewer || [] };
   const reactionCounts = { ...prev.reactionCounts };
   const count = serverCounts[token] || 0;
   if (count > 0) reactionCounts[token] = count;
   else delete reactionCounts[token];
-  const serverHas = serverViewer.includes(token);
-  const prevHas = prev.viewerReactions.includes(token);
-  let viewerReactions = prev.viewerReactions;
-  if (serverHas && !prevHas) viewerReactions = [...prev.viewerReactions, token];
-  else if (!serverHas && prevHas) viewerReactions = prev.viewerReactions.filter((entry) => entry !== token);
+  const serverHas = (serverViewer || []).includes(token);
+  const prevHas = (prev.viewerReactions || []).includes(token);
+  let viewerReactions = prev.viewerReactions || [];
+  if (serverHas && !prevHas) viewerReactions = [...viewerReactions, token];
+  else if (!serverHas && prevHas) viewerReactions = viewerReactions.filter((entry) => entry !== token);
   return { ...prev, reactionCounts, viewerReactions };
+};
+
+// Apply one poll-vote tap optimistically, on the FRESHEST post: your same
+// option removes the vote, a different option moves it, no vote yet adds it —
+// the exact semantics the server applies, so reconcile is usually a no-op.
+const applyPollVoteToggle = <T extends Pick<PublicPost, 'pollVotes'>>(prev: T, optionIndex: number): T => {
+	const tally = prev.pollVotes;
+	if (!tally || optionIndex < 0 || optionIndex >= tally.counts.length) return prev;
+	const counts = [...tally.counts];
+	let totalVotes = tally.totalVotes;
+	let viewerVote: number | null;
+	if (tally.viewerVote === optionIndex) {
+		counts[optionIndex] = Math.max(0, counts[optionIndex] - 1);
+		totalVotes = Math.max(0, totalVotes - 1);
+		viewerVote = null;
+	} else if (tally.viewerVote !== null && tally.viewerVote >= 0 && tally.viewerVote < counts.length) {
+		counts[tally.viewerVote] = Math.max(0, counts[tally.viewerVote] - 1);
+		counts[optionIndex] += 1;
+		viewerVote = optionIndex;
+	} else {
+		counts[optionIndex] += 1;
+		totalVotes += 1;
+		viewerVote = optionIndex;
+	}
+	return { ...prev, pollVotes: { counts, totalVotes, viewerVote } };
 };
 
 type ReactionTruth = Pick<PublicPost, 'id' | 'reactionCounts' | 'viewerReactions'>;
@@ -166,19 +217,76 @@ ActionIcon.displayName = 'ActionIcon';
 export type PostCardProps = {
   post: PublicPost;
   // a value replaces the post (null = deleted); a function applies a delta to
-  // the freshest post (used by optimistic reactions)
-  onChanged?: (next: PostChange) => void;
+  // the freshest post (used by optimistic reactions). Takes the post id so the
+  // SAME handler identity can be passed to every card — a per-card closure
+  // would defeat React.memo below and repaint the whole column on any change.
+  onChanged?: (id: string, next: PostChange) => void;
   // card-level signals: expand/react/comment/share
   onEngagement?: (event: EngagementEvent) => void;
+  // Accepted comments/replies may refresh related media without changing the
+  // optimistic engagement signal or turning a refresh failure into a retry.
+  onCommentAdded?: () => void | Promise<unknown>;
   // the /post/:id page opens with the conversation expanded
   defaultCommentsOpen?: boolean;
+  // Reveals every loaded comment; deeper pagination remains user initiated.
+  expandAllComments?: boolean;
+  discussionOnly?: boolean;
+  // Only a standalone Thing discussion supplies cursor-backed collection state.
+  // Regular feed cards retain their existing sort and reveal behavior.
+  commentCollection?: {
+    controls: boolean;
+    hasMore: boolean;
+    loadMore: () => Promise<unknown>;
+    loading: boolean;
+    error: string;
+    resetKey: string;
+  };
 	// the /media/:id page projects a protected attachment Thing as this card:
 	// interactions stay live, but the owner menu drops edit/privacy/delete
 	// (title/description edit via annotate; lifecycle belongs to the parent post)
 	mediaThing?: boolean;
+	// media pages: the parent post's gallery this media belongs to, so the menu
+	// can offer "Download all" for the whole set instead of the single file
+	gallery?: { id: string; fileCount: number } | null;
+};
+
+const notifyCommentAdded = (callback?: () => void | Promise<unknown>) => {
+  void Promise.resolve().then(() => callback?.()).catch(() => {});
 };
 
 const authorName = (author: FeedAuthor | null) => (author ? getUserDisplayName(author) : 'Anonymous 👻');
+
+// The author's USER flair in the post's subspace (api/utils/subspaces — a
+// template they picked or custom text a mod allowed): a small pill right
+// after the name on cards and comment rows. `authorFlair` is null outside
+// subspaces, so nothing renders anywhere else.
+export const AuthorFlairChip = ({ flair, size = 'sm' }: { flair: PublicAuthorFlair | null | undefined; size?: 'sm' | 'xs' }) => {
+  if (!flair?.label) return null;
+  const label = `${flair.emoji ? `${flair.emoji} ` : ''}${flair.label}`;
+  return (
+    <Text
+      as="span"
+      display="inline-block"
+      verticalAlign="middle"
+      fontSize={size === 'xs' ? '9px' : '10px'}
+      fontWeight={600}
+      lineHeight="1.3"
+      paddingX={1.5}
+      borderRadius="999px"
+      border={`1px solid ${flair.color || 'var(--tt-border, #ececef)'}`}
+      color={flair.color || TEXT}
+      maxWidth="160px"
+      whiteSpace="nowrap"
+      overflow="hidden"
+      textOverflow="ellipsis"
+      title={label}
+      data-testid="author-flair"
+      data-flair-id={flair.id || '~custom'}
+    >
+      {label}
+    </Text>
+  );
+};
 
 // 1234 → "1.2k" — view counts stay one glyph-cluster wide however popular a
 // post gets (the other counters stay raw; they cap out far lower)
@@ -196,13 +304,16 @@ const formatDwell = (ms: number): string => {
 
 // Every post/comment timestamp is a permalink to its /post/:id page, the way
 // timestamps work on every major platform.
-const TimestampLink = ({ id, createdAt, fontSize = 'xs', to }: { id: string; createdAt: string; fontSize?: string; to?: string }) => (
-  <Link to={to || `/post/${id}`} title={new Date(createdAt).toLocaleString()}>
+const TimestampLink = ({ id, createdAt, fontSize = 'xs', to }: { id: string; createdAt: string; fontSize?: string; to?: string }) => {
+  const sharedPath = useSharedThingPath();
+  return (
+  <Link to={sharedPath(to || `/post/${id}`)} title={new Date(createdAt).toLocaleString()}>
     <Text as="span" fontSize={fontSize} color={MUTED} _hover={{ textDecoration: 'underline', color: INK }}>
       {timeAgo(createdAt)}
     </Text>
   </Link>
 );
+};
 
 export const AuthorAvatar = (props: { author: FeedAuthor | null; size?: string; fontSize?: string }) => {
   const { author, size = '36px', fontSize = 'sm' } = props;
@@ -236,9 +347,20 @@ export const AuthorAvatar = (props: { author: FeedAuthor | null; size?: string; 
     </Center>
   );
 
-  if (!author?.username) return circle;
+  // third-party authors (synced external posts) link to their real profile on
+  // the source platform — /profile/<handle> would be a dead native route, or
+  // someone else's. Unlinked when the provider gave us no url (authorLinkTarget).
+  const link = authorLinkTarget(author);
+  if (!link) return circle;
+  if (link.external) {
+    return (
+      <a href={link.href} target="_blank" rel="noreferrer noopener">
+        {circle}
+      </a>
+    );
+  }
 
-  return <Link to={`/profile/${author.username}`}>{circle}</Link>;
+  return <Link to={link.href}>{circle}</Link>;
 };
 
 const formatPrice = (price: number, currency: string) => {
@@ -366,16 +488,109 @@ const ListingBlock = ({ post, hideImage }: { post: Pick<PublicPost, 'images' | '
   );
 };
 
+// Post text with inline #hashtags rendered as links to /search pre-filtered
+// to that tag, and @mentions rendered as links to /profile/<username>. Text is
+// otherwise plain (no markdown layer), so the linkifier IS the rendering
+// layer. Sequential passes — hashtags first, then mentions inside the
+// remaining plain-text segments: the grammars are disjoint (`@`/`#` are not
+// name characters in either, and both require a word start), so the passes can
+// never double-linkify or nest anchors, and every emitted segment is exactly
+// one of text/tag/mention. Non-link segments pass through verbatim and
+// concatenate back to the exact original string. URL fragments, HTML entities,
+// emails and mid-word #/@ never match (word-start rules — hashtags.ts /
+// ~/utils/mentions.ts); a post-hashtag segment passes precededByWordChar so a
+// "#tag@name" seam stays plain. Mentions linkify on grammar alone — no
+// client-side existence check (the render must stay cheap; the profile page
+// handles names nobody holds).
+const HashtagText = ({ text }: { text: string }) => {
+	const segments = React.useMemo(
+		() =>
+			splitHashtagSegments(text).flatMap((segment, index): Array<HashtagSegment | MentionSegment> =>
+				segment.kind === 'tag' ? [segment] : splitMentionSegments(segment.text, index > 0)
+			),
+		[text]
+	);
+	return (
+		<>
+			{segments.map((segment, index) =>
+				segment.kind === 'tag' ? (
+					<Link key={`${segment.tag}-${index}`} to={searchTagHref(segment.tag)}>
+						<Text as="span" color={ACCENT} fontWeight={600} _hover={{ textDecoration: 'underline' }}>
+							{segment.text}
+						</Text>
+					</Link>
+				) : segment.kind === 'mention' ? (
+					<Link key={`${segment.username}-${index}`} to={profileMentionHref(segment.username)}>
+						<Text as="span" color={ACCENT} fontWeight={600} _hover={{ textDecoration: 'underline' }}>
+							{segment.text}
+						</Text>
+					</Link>
+				) : (
+					<React.Fragment key={index}>{segment.text}</React.Fragment>
+				)
+			)}
+		</>
+	);
+};
+
+// The post's tags as tappable pills (the composer-preview pill style) linking
+// to /search seeded to filter by that tag. Marketplace category tags are real
+// tags on the doc, so they show — and are tappable — too.
+const TagChipRow = ({ tags, compact }: { tags?: string[]; compact?: boolean }) => {
+	if (!tags?.length) return null;
+	return (
+		<Flex columnGap={1} rowGap={1} flexWrap="wrap">
+			{tags.map((tag) => (
+				<Box
+					key={tag}
+					as={Link}
+					to={searchTagHref(tag)}
+					fontSize={compact ? '11px' : 'xs'}
+					background="var(--tt-surface-alt, #f5f5f7)"
+					color={TEXT}
+					borderRadius="999px"
+					paddingX={2}
+					paddingY="2px"
+					_hover={{ background: 'var(--tt-surface-hover, #ececee)', color: INK }}
+				>
+					#{tag}
+				</Box>
+			))}
+		</Flex>
+	);
+};
+
 // Body by post type — shared between the main card, nested shares, and
 // comment rows (comments share the post schema, so PostComment fits too).
-type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'images' | 'listing' | 'thing' | 'mediaLayout'>;
-const PostBody = ({ post, compact, attachments }: { post: PostBodyShape; compact?: boolean; attachments?: PublicPost['attachments'] }) => (
+type PostBodyShape = Pick<PublicPost, 'id' | 'type' | 'text' | 'richText' | 'images' | 'listing' | 'thing' | 'tags' | 'mediaLayout' | 'linkKey' | 'thingtime' | 'linkedThings' | 'attachmentsTruncated'>;
+
+const PostTextBody = ({ post, compact }: { post: Pick<PostBodyShape, 'text' | 'richText'>; compact?: boolean }) => {
+  const richText = getEditorJsDoc(post.richText);
+  if (richText) return <RichTextBlocks blocks={richText.blocks} bodyFontSize={compact ? 'sm' : 'md'} />;
+  if (!post.text) return null;
+  return (
+    <Text fontSize={compact ? 'sm' : 'md'} color={TEXT} whiteSpace="pre-wrap" overflowWrap="anywhere">
+      <HashtagText text={post.text} />
+    </Text>
+  );
+};
+
+const PostBody = ({
+	post,
+	compact,
+	attachments,
+	poll
+}: {
+	post: PostBodyShape;
+	compact?: boolean;
+	attachments?: PublicPost['attachments'];
+	// live poll wiring for poll things (tally + optimistic vote handler) —
+	// supplied by the main card; nested/read-only surfaces pass a results-only
+	// context or nothing
+	poll?: PollRenderPollContext;
+}) => (
   <Flex flexDirection="column" rowGap={compact ? 2 : 3}>
-    {post.text && (
-      <Text fontSize={compact ? 'sm' : 'md'} color={TEXT} whiteSpace="normal">
-        {post.text}
-      </Text>
-    )}
+    <PostTextBody post={post} compact={compact} />
     {post.type === 'image' && <ImageGrid images={post.images} alt={post.text || 'Post photo'} />}
     {post.type === 'marketplace' && <ListingBlock post={post} />}
     {/* thingtime: the thing leads; opted-in photos and listing follow. The
@@ -383,21 +598,26 @@ const PostBody = ({ post, compact, attachments }: { post: PostBodyShape; compact
     repeat the first photo). The thing mounts as the NATIVE Thingtime tree
     (sandboxed — see ThingView), rendered through its kind renderer when one
     resolves, with a corner icon flipping between the two views. */}
-    {post.type === 'thingtime' && post.thing && <ThingView thing={post.thing} compact={compact} />}
+    {post.type === 'thingtime' && post.thing && <PostLinkedThings value={post.thing} linkedThings={post.linkedThings} compact={compact} poll={poll} />}
 		{post.type === 'thingtime' && !!post.images?.length && <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
-    <PostAttachments attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} />
+    <PostAttachments linkKey={post.linkKey} attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} postId={post.id} archiveNoun={post.thingtime?.includes('comment') ? 'comment' : 'post'} />
+    {post.attachmentsTruncated && <Link to={`/thing/${encodeURIComponent(post.id)}`} style={{ fontSize: '0.8rem' }}>View all attachments on the original Thing</Link>}
+    <TagChipRow tags={post.tags} compact={compact} />
   </Flex>
 );
 
 // Compact bordered sub-card for the original post inside a share (no actions).
+// A shared poll shows its live tally read-only — voting happens on the
+// original's own card/page.
 const SharedPostCard = ({ post }: { post: PublicPost }) => (
-  <Box border={BORDER} borderRadius={RADIUS_MD} padding={3}>
+  <SharedMediaProvider inheritContext={false} linkKey={post.audience?.linkKey || post.linkKey}><Box border={BORDER} borderRadius={RADIUS_MD} padding={3}>
     <Flex alignItems="center" columnGap={2} marginBottom={2}>
       <AuthorAvatar author={post.author} size="22px" fontSize="10px" />
       <Text fontSize="xs" fontWeight={700} color={INK} noOfLines={1}>
         {authorName(post.author)}
       </Text>
+      <AuthorFlairChip flair={post.authorFlair} size="xs" />
       <Text fontSize="xs" color={MUTED} flexShrink={0}>
         ·
       </Text>
@@ -405,54 +625,71 @@ const SharedPostCard = ({ post }: { post: PublicPost }) => (
         <TimestampLink id={post.id} createdAt={post.createdAt} />
       </Box>
     </Flex>
-    <PostBody post={post} compact attachments={post.attachments} />
-  </Box>
+    <PostBody
+      post={post}
+      compact
+      attachments={post.attachments}
+      poll={post.pollVotes ? { ...post.pollVotes, canVote: false } : undefined}
+    />
+  </Box></SharedMediaProvider>
 );
 
-// The quick-reaction strip inside the picker popover — the standard emojis
-// plus a ＋ opening the full custom picker (when the host provides one).
-const QuickReactionRow = (props: { viewerSet: Set<string>; onPick: (emoji: string) => void; onMore?: () => void }) => {
+// Defaults remain first; nine personal shortcuts share the existing MRU store.
+const QuickReactionRow = (props: { viewerSet: Set<string>; recent: string[]; onPick: (emoji: string) => void; onMore?: () => void }) => {
   const { viewerSet, onPick, onMore } = props;
+  const recent = quickRecentReactions(props.recent, REACTION_EMOJIS);
+  const reactionButton = (emoji: string, compact: boolean) => (
+    <Button
+      key={emoji}
+      type="button"
+      variant="ghost"
+      minWidth={compact ? '44px' : 0}
+      width={compact ? '44px' : '100%'}
+      height="auto"
+      minHeight="44px"
+      padding={1}
+      fontSize="lg"
+      borderRadius="var(--tt-radius-sm, 9px)"
+      background={viewerSet.has(emoji) ? 'var(--tt-surface-hover, #ececee)' : 'transparent'}
+      boxShadow={viewerSet.has(emoji) ? 'inset 0 0 0 1.5px var(--tt-accent, #7c5cff)' : 'none'}
+      _hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
+      aria-label={`React ${emoji}`}
+      aria-pressed={viewerSet.has(emoji)}
+      title={emoji}
+      onClick={() => onPick(emoji)}
+    >
+      <Text as="span" overflowWrap="anywhere" whiteSpace="normal">{emoji}</Text>
+    </Button>
+  );
   return (
-    <Flex columnGap={0.5} padding={1.5} alignItems="center">
-      {REACTION_EMOJIS.map((emoji) => (
-        <Center
-          key={emoji}
-          as="button"
-          type="button"
-          width="34px"
-          height="34px"
-          fontSize="lg"
-          borderRadius="999px"
-          background={viewerSet.has(emoji) ? 'var(--tt-surface-hover, #ececee)' : 'transparent'}
-          boxShadow={viewerSet.has(emoji) ? 'inset 0 0 0 1.5px var(--tt-accent, #7c5cff)' : 'none'}
-          _hover={{ background: 'var(--tt-surface-hover, #ececee)', transform: 'scale(1.2)' }}
-          transition="transform 0.12s ease-out"
-          aria-label={`React ${emoji}`}
-          onClick={() => onPick(emoji)}
-        >
-          {emoji}
-        </Center>
-      ))}
-      {onMore && (
-        <Center
-          as="button"
-          type="button"
-          width="34px"
-          height="34px"
-          borderRadius="999px"
-          color={MUTED}
-          background="var(--tt-surface-alt, #f5f5f7)"
-          _hover={{ background: 'var(--tt-surface-hover, #ececee)', color: INK, transform: 'scale(1.2)' }}
-          transition="transform 0.12s ease-out"
-          aria-label="Choose a custom emoji"
-          title="Choose a custom emoji"
-          onClick={onMore}
-        >
-          <Plus size={16} strokeWidth={2.4} />
-        </Center>
+    <Box width="340px" maxWidth="calc(100vw - 24px)" padding={1.5}>
+      <Flex gap={0.5} alignItems="center" flexWrap="wrap">
+        {REACTION_EMOJIS.map((emoji) => reactionButton(emoji, true))}
+        {onMore && (
+          <IconButton
+            type="button"
+            minWidth="44px"
+            height="44px"
+            borderRadius="var(--tt-radius-sm, 9px)"
+            color={MUTED}
+            background="var(--tt-surface-alt, #f5f5f7)"
+            _hover={{ background: 'var(--tt-surface-hover, #ececee)', color: INK }}
+            aria-label="Choose a custom emoji"
+            title="Choose a custom emoji"
+            onClick={onMore}
+            icon={<Plus size={16} strokeWidth={2.4} />}
+          />
+        )}
+      </Flex>
+      {recent.length > 0 && (
+        <Box role="group" aria-label="Recent reactions" borderTop={BORDER} marginTop={1} paddingTop={1}>
+          <Text fontSize="xs" color={MUTED} paddingX={1} paddingBottom={1}>Recently used</Text>
+          <Grid templateColumns="repeat(3, minmax(0, 1fr))" gap={1} maxHeight="40dvh" overflowY="auto">
+            {recent.map((emoji) => reactionButton(emoji, false))}
+          </Grid>
+        </Box>
       )}
-    </Flex>
+    </Box>
   );
 };
 
@@ -465,30 +702,49 @@ const AnchoredEmojiPicker = (props: {
   onPick: (emoji: string) => void;
   recent: string[];
   activeTokens: string[];
-}) => (
-  <Popover isOpen={props.isOpen} onClose={props.onClose} placement="top-end" isLazy closeOnBlur={false}>
+}) => {
+  // Keep the draft above Chakra's lazy content so dismissing it is lossless.
+  const [query, setQuery] = React.useState('');
+  return (
+  <Popover isOpen={props.isOpen} onClose={props.onClose} placement="top-end" strategy="fixed" isLazy closeOnBlur={false}
+    modifiers={[{ name: 'preventOverflow', options: { padding: 12 } }, { name: 'flip', options: { padding: 12 } }]}>
     <PopoverAnchor>
       <Box position="absolute" right={0} bottom="100%" width="1px" height="1px" pointerEvents="none" />
     </PopoverAnchor>
+    <Portal appendToParentPortal={false}>
     <PopoverContent
+      rootProps={{ zIndex: DRAWER_POPUP_Z }}
       ref={props.contentRef as any}
       width="auto"
       border={BORDER}
       borderRadius="var(--tt-radius-lg, 16px)"
       background="var(--tt-card, #fff)"
       boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
-      zIndex={20}
+      zIndex={DRAWER_POPUP_Z}
       _focusVisible={{ outline: 'none' }}
     >
-      <EmojiPicker onPick={props.onPick} recent={props.recent} activeTokens={props.activeTokens} autoFocus />
+      <EmojiPicker onPick={props.onPick} recent={props.recent} activeTokens={props.activeTokens} query={query} onQueryChange={setQuery} autoFocus />
     </PopoverContent>
+    </Portal>
   </Popover>
-);
+  );
+};
 
 // Only one EMPTY reply input is open at a time across a card's comment tree:
 // opening a reply announces itself here and rows whose draft is empty close
 // themselves. Rows with a typed draft stay open — never lose user text.
 const ReplyFocusContext = React.createContext<{ openId: string | null; requestOpen: (id: string) => void } | null>(null);
+
+// The subspace a card's comment tree hangs under, for the comment rows'
+// "Report to moderators 🚩": a comment report resolves to the ROOT post
+// server-side, so rows only need the subspace identity and whether this
+// viewer is one of its moderators (mods remove instead of reporting). null
+// outside subspaces — no 🚩 anywhere else.
+const SubspaceReportContext = React.createContext<{ subspaceId: string; subspaceSlug: string; viewerCanModerate: boolean } | null>(null);
+
+// "Reported — thanks" is painted the instant the modal closes (optimistic:
+// there is nothing on the card to revert); a refusal toasts on its own
+const REPORTED_TOAST = { title: 'Reported — thanks, the mods will look 🚩', status: 'success' as const, duration: 4000 };
 
 // Thread depth is UNBOUNDED, but only this many levels ever indent at once.
 // Opening replies at the cap REFOCUSES the panel on that comment: it slides in
@@ -545,7 +801,38 @@ const buildPendingComment = (user: any, targetId: string, text: string): PostCom
   createdAt: new Date().toISOString()
 });
 
-const isPendingComment = (comment: PostComment) => comment.id.startsWith('pending-');
+// The card's comment order (round 2 S7: Top / New / Old, null = the default
+// page) for every row in its tree: rows order their replies the same way,
+// window them top-down under a sort, and read a thread's own sorted page
+// (threadCache keys a sorted read apart from the default one).
+const CommentSortContext = React.createContext<CommentSort | null>(null);
+const ExpandCommentsContext = React.createContext(false);
+
+// The comments the viewer sent from one list (a post's level or a reply
+// thread): a pending id swaps to the server's on ack, a failed send drops out.
+// Under a sort these stay on screen (windowCommentPage pins them below the
+// window) and survive a sorted page landing (mergeCommentPage keeps them). The
+// ref mirrors the state so an async closure — a sort read resolving — always
+// reads the latest set, and every change goes through commit so the two never
+// drift.
+const useFreshCommentIds = () => {
+  const [ids, setIds] = React.useState<string[]>([]);
+  const ref = React.useRef(ids);
+  const commit = React.useCallback((next: string[]) => {
+    ref.current = next;
+    setIds(next);
+  }, []);
+  return React.useMemo(
+    () => ({
+      ids,
+      ref,
+      note: (id: string) => commit([...ref.current, id]),
+      swap: (from: string, to: string) => commit(ref.current.map((id) => (id === from ? to : id))),
+      drop: (id: string) => commit(ref.current.filter((entry) => entry !== id))
+    }),
+    [ids, commit]
+  );
+};
 
 // Left-to-right shimmer placeholder shaped like comment rows — the ONLY
 // loading state threads show, and only on a cold open with nothing cached.
@@ -578,6 +865,7 @@ const CommentRow = (props: {
   comment: PostComment;
   onChanged: (id: string, change: CommentChange) => void;
   onEngagement?: (event: EngagementEvent) => void;
+  onCommentAdded?: () => void | Promise<unknown>;
   // 1 = a post's direct comment; grows down the thread. Only depth-1 rows
   // auto-open their preloaded replies (the default two-level view) — deeper
   // rows reveal ONE more depth per tap, and rows AT the visual cap refocus
@@ -585,18 +873,42 @@ const CommentRow = (props: {
   depth?: number;
   // the focused root of a drilled-in thread panel opens its replies on mount
   defaultOpen?: boolean;
+  cursorReplies?: boolean;
 }) => {
-  const { comment, onChanged, onEngagement, depth = 1, defaultOpen } = props;
+  const { comment, onChanged, onEngagement, onCommentAdded, depth = 1, defaultOpen, cursorReplies = false } = props;
 
   const api = useApi();
+  const sharedAccess = useSharedAccess();
   const user = useCurrentUser();
   const lopu = useLopu();
-  const { recent, pushRecent } = useRecentReactions();
+  const { recent, pushRecent, beginRecent, scopeKey } = useRecentReactions();
   const inFlightReactionTokensRef = React.useRef(new Set<string>());
+  // emoji-splash origin: the comment's react button (chips/picker anchor here)
+  const reactAnchorRef = React.useRef<HTMLDivElement | null>(null);
   const replyFocus = React.useContext(ReplyFocusContext);
   const threadFocus = React.useContext(ThreadFocusContext);
+  // the card's Top / New / Old pick (null = default) — this row's replies
+  // follow it: same order, same top-down window, same sorted thread read
+  const commentSort = React.useContext(CommentSortContext);
+  const expandAllComments = React.useContext(ExpandCommentsContext);
   // at the cap, reveals hand over to the drill-down panel instead of nesting
   const atVisualCap = !!threadFocus && depth >= threadFocus.maxDepth;
+  // Report to moderators 🚩 — logged-in non-mods on someone else's comment
+  // under a subspace post (the report lands on the root post)
+  const subspaceReport = React.useContext(SubspaceReportContext);
+  const canReportComment = !!subspaceReport && !subspaceReport.viewerCanModerate && !!user && (!comment.author || comment.author.id !== user.id) && !isPendingComment(comment);
+  // a guest sees the same 🚩 and is nudged to log in (every subspace action
+  // nudges — join, vote, react, reply, report)
+  const guestReportComment = !!subspaceReport && !user && !isPendingComment(comment);
+  const [reportOpen, setReportOpen] = React.useState(false);
+  const handleReportComment = async (choice: ReportChoice) => {
+    lopu(REPORTED_TOAST);
+    try {
+      await api.v1.subspaces.report({ id: comment.id, reason: choice.reason, note: choice.note });
+    } catch (err: any) {
+      lopu({ title: err?.error || 'The report did not go through 😞', status: 'error' });
+    }
+  };
 
   // threads ship two levels deep — cached or preloaded replies render
   // immediately (the cache survives collapse/re-expand remounts and reloads)
@@ -604,17 +916,24 @@ const CommentRow = (props: {
     // both seeds are older than any tap this session: the cache merges its
     // own write-time through the reaction overlay, payload copies merge at
     // epoch 0 so a remount can't resurrect pre-tap reaction state
-    () => getCachedThread(comment.id) ?? (comment.comments?.length ? mergeReactionOverlays(0, comment.comments) : null)
+    // under a sort the thread's sorted read is preferred, but a default-order
+    // copy still seeds (the rows re-order client-side) rather than a skeleton
+    () => cursorReplies ? null : getCachedThread(comment.id, commentSort) ?? (commentSort ? getCachedThread(comment.id) : null) ?? (comment.comments?.length ? mergeReactionOverlays(0, comment.comments) : null)
   );
-  const [repliesOpen, setRepliesOpen] = React.useState((depth === 1 && !!comment.comments?.length) || !!defaultOpen);
+  const [repliesOpen, setRepliesOpen] = React.useState((expandAllComments && !atVisualCap) || (!cursorReplies && depth === 1 && !!comment.comments?.length) || !!defaultOpen);
   // the reply INPUT is separate from thread visibility: threads stay open,
   // but only one empty input exists at a time (ReplyFocusContext)
   const [replyInputOpen, setReplyInputOpen] = React.useState(false);
   const [visibleReplies, setVisibleReplies] = React.useState(5);
+  // the replies the viewer sent from this row — kept visible under a sort
+  const freshReplies = useFreshCommentIds();
   const [richReplyOpen, setRichReplyOpen] = React.useState(false);
   const [repliesLoading, setRepliesLoading] = React.useState(false);
   // reply text persists as a per-user draft — leave and pick it up later
-	const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated } = useCommentDraft(user?.id, comment.id);
+	const [replyAs, setReplyAs] = React.useState<typeof user>(null);
+	React.useEffect(() => setReplyAs(null), [user?.id]);
+	const replyActor = replyAs || user;
+	const { value: replyText, setValue: setReplyText, clear: clearReplyDraft, hydrated: draftHydrated, flush: flushReplyDraft, begin: beginReply, end: endReply } = useCommentDraft(replyActor?.id, comment.id, replyInputOpen);
   const pending = isPendingComment(comment);
 
   // ＋ in the quick row opens the full custom picker (same as posts)
@@ -663,6 +982,10 @@ const CommentRow = (props: {
     inFlightReactionTokensRef.current.add(token);
 
     const adding = !viewerSet.has(token);
+    const recentOrder = adding ? beginRecent() : undefined;
+    // pure delight: ADDING a reaction erupts it from the button (motion-gated
+    // inside splashEmoji; removals stay quiet)
+    if (adding) splashEmoji(token, reactAnchorRef.current);
     // note every local mutation so background fetches snapshotted BEFORE it
     // merge through instead of clobbering (reactionOverlay contract)
     onChanged(comment.id, (current) => {
@@ -683,12 +1006,12 @@ const CommentRow = (props: {
     try {
       const resp = await api.v1.things.react({ id: comment.id, emoji: token });
       reconcileLocalToken(resp.reactionCounts, resp.viewerReactions);
-      if (adding) pushRecent(token, resp.recentReactions);
+      if (adding) pushRecent(token, resp.recentReactions, recentOrder);
     } catch (err: any) {
       let reconciled = false;
       if (shouldReconcileReactionFailure(err)) {
         try {
-          const fresh = await fetchReactionTruth(api, comment.id);
+          const fresh = cursorReplies ? null : await fetchReactionTruth(api, comment.id);
           if (fresh) {
             reconcileLocalToken(fresh.reactionCounts, fresh.viewerReactions);
             reconciled = true;
@@ -719,22 +1042,53 @@ const CommentRow = (props: {
   repliesStateRef.current = replies;
   const fetchingRef = React.useRef(false);
 
+  const cursorThread = React.useRef<{ pager: ReturnType<typeof createDiscussionCommentPager>; controller: AbortController } | null>(null);
+  const [repliesHaveMore, setRepliesHaveMore] = React.useState(true);
+  const [replyLoadError, setReplyLoadError] = React.useState('');
+  React.useEffect(() => {
+    if (!cursorReplies) return;
+    const request = cursorThread.current || { pager: createDiscussionCommentPager(), controller: new AbortController() };
+    cursorThread.current = request;
+    return () => { request.controller.abort(); request.pager.dispose(); cursorThread.current = null; };
+  }, [cursorReplies, comment.id]);
+  const loadReplyPage = React.useCallback(async () => {
+    const request = cursorThread.current ||= { pager: createDiscussionCommentPager(), controller: new AbortController() };
+    if (fetchingRef.current || pending || !request.pager.hasMore) return;
+    fetchingRef.current = true;
+    const started = Date.now();
+    setRepliesLoading(true); setReplyLoadError('');
+    try {
+      const page = await request.pager.load(cursor => api.v1.things.list({ target: comment.id, thingtime: 'comment', commentProjection: true, cursor, limit: 20, ...sharedAccess }, { signal: request.controller.signal }));
+      if (request.controller.signal.aborted || !page) return;
+      setReplies(previous => mergeReactionOverlays(started, mergeDiscussionComments(previous || [], page.comments)));
+    } catch (failure: any) {
+      if (request.controller.signal.aborted) return;
+      if ([401, 403, 404].includes(Number(failure?.status))) { setReplies([]); request.pager.dispose(); }
+      setReplyLoadError(failure instanceof Error ? failure.message : 'Could not load replies.');
+    } finally {
+      if (!request.controller.signal.aborted) {
+        fetchingRef.current = false; setRepliesLoading(false); setRepliesHaveMore(request.pager.hasMore);
+      }
+    }
+  }, [api, comment.id, pending, sharedAccess]);
+
   const fetchThread = React.useCallback(
     (options?: { force?: boolean }) => {
+      if (cursorReplies) { if (options?.force) void loadReplyPage(); return; }
       if (fetchingRef.current || pending) return;
       const loaded = repliesStateRef.current?.length ?? 0;
       if (!options?.force && (comment.commentCount === 0 || loaded >= comment.commentCount)) return;
       fetchingRef.current = true;
       // skeleton only when there is truly nothing to paint
       if (repliesStateRef.current === null && comment.commentCount > 0) setRepliesLoading(true);
-      fetchThreadInto(api, comment.id)
+      fetchThreadInto(api, comment.id, commentSort)
         .then((fetched) => {
           if (fetched === null) {
             setReplies((prev) => prev ?? []);
             return;
           }
           // stay one depth ahead: pull the level BELOW what just arrived
-          prefetchNextDepth(api, fetched);
+          prefetchNextDepth(api, fetched, commentSort);
           setReplies((prev) => {
             // keep optimistic sends that raced the fetch, drop ones the
             // server copy now covers
@@ -749,7 +1103,7 @@ const CommentRow = (props: {
           setRepliesLoading(false);
         });
     },
-    [api, comment.id, comment.commentCount, pending]
+    [api, comment.id, comment.commentCount, pending, commentSort, cursorReplies, loadReplyPage]
   );
 
   // prefetch-ahead: fill this row's missing depth as soon as it renders —
@@ -757,6 +1111,16 @@ const CommentRow = (props: {
   // MOUNT with their thread open (the two-level ship, drill-panel roots)
   // force the refetch: a cache-complete thread would otherwise skip it and
   // freeze reply reactions/edits at the cached snapshot forever.
+  const previousExpansion = React.useRef(expandAllComments);
+  React.useEffect(() => {
+    if (previousExpansion.current === expandAllComments) return;
+    previousExpansion.current = expandAllComments;
+    setRepliesOpen(expandAllComments && !atVisualCap);
+    if (expandAllComments && !atVisualCap) fetchThread({ force: true });
+    // Only a preference transition changes manual thread expansion.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandAllComments, atVisualCap]);
+
   const prefetchedRef = React.useRef(false);
   React.useEffect(() => {
     if (prefetchedRef.current) return;
@@ -764,6 +1128,17 @@ const CommentRow = (props: {
     fetchThread({ force: repliesOpen });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchThread]);
+
+  // the card's sort changed while this thread is open: the rows re-order
+  // client-side at once (orderedReplies below), then the thread's own sorted
+  // read lands and reconciles — closed threads read it when they open
+  const seenSortRef = React.useRef(commentSort);
+  React.useEffect(() => {
+    if (seenSortRef.current === commentSort) return;
+    seenSortRef.current = commentSort;
+    if (repliesOpen && !pending) fetchThread({ force: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commentSort]);
 
   const openThread = () => {
     setRepliesOpen(true);
@@ -802,60 +1177,75 @@ const CommentRow = (props: {
   // background refetch reconciles any live comments added in the meantime
   const showMoreReplies = () => {
     setVisibleReplies((count) => count + 5);
-    fetchThread({ force: true });
+    if (!cursorReplies || (repliesStateRef.current?.length || 0) <= visibleReplies) fetchThread({ force: true });
   };
 
   // optimistic: the reply renders the moment you hit send; the server copy
   // swaps in when the write lands, and a failure restores your text
   const submitReply = async () => {
     const text = replyText.trim();
-    if (!text) return;
+    if (!text || !beginReply()) return;
 
-    const pendingReply = buildPendingComment(user, comment.id, text);
-    clearReplyDraft();
+    const pendingReply = buildPendingComment(replyActor, comment.id, text);
+    freshReplies.note(pendingReply.id);
     setReplies((prev) => [...(prev || []), pendingReply]);
-    onChanged(comment.id, (current) => ({ ...current, commentCount: current.commentCount + 1 }));
+    onChanged(comment.id, (current) => ({ ...current, ...(current.commentCount === undefined ? {} : { commentCount: current.commentCount + 1 }) }));
     onEngagement?.({ thingId: comment.id, signal: 'comment' });
 
     try {
-      const resp = await api.v1.things.comment({ id: comment.id, text });
+      void flushReplyDraft().catch(() => {});
+      const resp = await api.v1.things.comment({ id: comment.id, text, characterId: replyActor?.id });
+      await clearReplyDraft(text);
+      freshReplies.swap(pendingReply.id, resp.comment.id);
       setReplies((prev) => {
         const mapped = (prev || []).map((reply) => (reply.id === pendingReply.id ? resp.comment : reply));
         const deduped = mapped.filter((reply, index) => mapped.findIndex((entry) => entry.id === reply.id) === index);
-				setCachedThread(
-					comment.id,
-					deduped.filter((reply) => !isPendingComment(reply))
-				);
+        if (!cursorReplies) setCachedThread(
+          comment.id,
+          deduped.filter((reply) => !isPendingComment(reply)),
+          { sort: commentSort }
+        );
         return deduped;
       });
+      notifyCommentAdded(onCommentAdded);
     } catch (err: any) {
+      freshReplies.drop(pendingReply.id);
       setReplies((prev) => (prev || []).filter((reply) => reply.id !== pendingReply.id));
-      onChanged(comment.id, (current) => ({ ...current, commentCount: Math.max(0, current.commentCount - 1) }));
-      setReplyText(text); // give the draft back
+      onChanged(comment.id, (current) => ({ ...current, ...(current.commentCount === undefined ? {} : { commentCount: Math.max(0, current.commentCount - 1) }) }));
       lopu({ title: err?.error || 'Reply did not send 😞', status: 'error' });
-    }
+    } finally { endReply(); }
   };
 
   // the rich composer posts through api.v1.things.comment itself and hands
   // back the created reply (post-shaped)
   const handleRichReplied = (reply: PostComment) => {
+    freshReplies.note(reply.id);
     setReplies((prev) => {
       const next = [...(prev || []), reply];
-			setCachedThread(
-				comment.id,
-				next.filter((entry) => !isPendingComment(entry))
-			);
+      if (!cursorReplies) setCachedThread(
+        comment.id,
+        next.filter((entry) => !isPendingComment(entry)),
+        { sort: commentSort }
+      );
       return next;
     });
     setRepliesOpen(true);
-    onChanged(comment.id, (current) => ({ ...current, commentCount: current.commentCount + 1 }));
+    onChanged(comment.id, (current) => ({ ...current, ...(current.commentCount === undefined ? {} : { commentCount: current.commentCount + 1 }) }));
     onEngagement?.({ thingId: comment.id, signal: 'comment' });
     setRichReplyOpen(false);
+    notifyCommentAdded(onCommentAdded);
   };
 
   const handleReplyChanged = (id: string, change: CommentChange) => {
     setReplies((prev) => (prev || []).map((reply) => (reply.id === id ? applyCommentChange(reply, change) : reply)));
   };
+
+  // the replies in the card's order: the default page as the server shipped
+  // it (oldest → newest, revealed upwards), a sort re-ordered client-side
+  // (exact — a thread page is at most 20 wide) and windowed top-down with the
+  // viewer's own fresh replies kept on screen
+  const orderedReplies = cursorReplies ? sortCommentPage(replies || [], 'old') : commentSort ? sortCommentPage(replies || [], commentSort) : replies || [];
+  const shownReplies = expandAllComments ? orderedReplies : windowCommentPage(orderedReplies, commentSort, visibleReplies, freshReplies.ids);
 
   // parent comments carry the bigger avatar; replies step down (IG-style)
   const avatarSize = depth === 1 ? '28px' : '20px';
@@ -866,13 +1256,40 @@ const CommentRow = (props: {
   // bubble, mirroring the post's comments-then-react row. A single tap hearts
   // the comment (default ReactionControl mode — no tapOpens); hover or
   // touch-and-hold still opens the quick-react popup.
+  // up/down vote pill beside the react control (compact); same optimistic
+  // functional-update contract as the post-level pill
+  const [commentPrefs] = useSubspacePrefs();
+  const showVotesOnComments = commentPrefs.showVotes && commentPrefs.showVotesOnComments;
+  const commentUpdownInFlightRef = React.useRef(false);
+  const handleCommentUpdown = async (direction: UpdownDirection) => {
+    if (!user) {
+      lopu({ title: 'Log in to vote 🔼', status: 'info', duration: 6000 });
+      return;
+    }
+    if (pending || commentUpdownInFlightRef.current) return;
+    commentUpdownInFlightRef.current = true;
+    const before = comment.votes;
+    if (!cursorReplies || comment.votes) onChanged(comment.id, (current) => applyUpdownVote(current, direction));
+    try {
+      const resp = await api.v1.things.updown({ id: comment.id, direction });
+      onChanged(comment.id, (current) => ({ ...current, votes: resp.votes }));
+    } catch (err: any) {
+      onChanged(comment.id, (current) => ({ ...current, votes: before }));
+      lopu({ title: err?.error || 'Vote did not save 😞', status: 'error' });
+    } finally {
+      commentUpdownInFlightRef.current = false;
+    }
+  };
+  const commentUpdown = <UpdownControl size="sm" votes={comment.votes} hideUnknownScore={cursorReplies} onVote={handleCommentUpdown} enabled={!!user && !pending} />;
+
   const reactControl = (
-    <Box position="relative" display="flex" flexShrink={0}>
+    <Box ref={reactAnchorRef} position="relative" display="flex" minWidth={0} maxWidth="100%">
       <ReactionControl
         enabled={!!user && !pending}
         onQuickTap={() => handleReact('❤️')}
         content={(close) => (
           <QuickReactionRow
+            recent={recent}
             viewerSet={viewerSet}
             onPick={(emoji) => {
               close();
@@ -889,6 +1306,8 @@ const CommentRow = (props: {
             as="button"
             type="button"
             alignItems="center"
+            minWidth={0}
+            maxWidth="100%"
             columnGap={1}
             padding={1}
             borderRadius="999px"
@@ -898,14 +1317,14 @@ const CommentRow = (props: {
             title="React"
           >
             {reactionEntries.length ? (
-              <Text as="span" fontSize="13px" lineHeight="1" sx={{ whiteSpace: 'nowrap' }}>
+              <Text as="span" minWidth={0} fontSize="13px" lineHeight="1.4" whiteSpace="normal" overflowWrap="anywhere">
                 {reactionDisplayEmojis(reactionEntries, viewerSet, 2)}
               </Text>
             ) : (
               <Heart size={13} strokeWidth={2.2} />
             )}
             {reactionTotal > 0 && (
-              <Text as="span" fontSize="11px" lineHeight="1" fontWeight={viewerSet.size ? 700 : 600}>
+              <Text as="span" flexShrink={0} fontSize="11px" lineHeight="1" fontWeight={viewerSet.size ? 700 : 600}>
                 {reactionTotal}
               </Text>
             )}
@@ -914,6 +1333,7 @@ const CommentRow = (props: {
       />
       {/* the full custom picker (multi-select), anchored above the column */}
       <AnchoredEmojiPicker
+        key={JSON.stringify([scopeKey, comment.id])}
         isOpen={pickerOpen}
         onClose={() => setPickerOpen(false)}
         contentRef={pickerContentRef}
@@ -931,10 +1351,11 @@ const CommentRow = (props: {
         <Flex columnGap={1.5} alignItems="flex-start">
           <Box flex="1" minWidth={0}>
             <Box background="var(--tt-surface-alt, #f5f5f7)" borderRadius={RADIUS_MD} paddingX={3} paddingY={2}>
-              <Flex alignItems="baseline" columnGap={2}>
+              <Flex alignItems="center" columnGap={1.5} flexWrap="wrap">
                 <Text fontSize="xs" fontWeight={700} color={INK} noOfLines={1}>
                   {authorName(comment.author)}
                 </Text>
+                <AuthorFlairChip flair={comment.authorFlair} size="xs" />
                 <Box flexShrink={0}>
                   <TimestampLink id={comment.id} createdAt={comment.createdAt} fontSize="10px" />
                 </Box>
@@ -943,7 +1364,7 @@ const CommentRow = (props: {
             </Box>
             {/* icon-only actions (no labels): reply toggles the inline input,
             and the merged react control sits right beside it */}
-            <Flex alignItems="center" columnGap={1} paddingX={1} paddingTop={0.5}>
+            <Flex alignItems="center" columnGap={1} rowGap={1} flexWrap="wrap" minWidth={0} paddingX={1} paddingTop={0.5}>
               <Flex
                 as="button"
                 type="button"
@@ -960,10 +1381,31 @@ const CommentRow = (props: {
                 <MessageCircle size={13} strokeWidth={2.2} />
               </Flex>
               {reactControl}
+              {showVotesOnComments && commentUpdown}
+              {(canReportComment || guestReportComment) && (
+                <Flex
+                  as="button"
+                  type="button"
+                  alignItems="center"
+                  padding={1}
+                  borderRadius="999px"
+                  color={MUTED}
+                  _hover={{ color: 'var(--tt-danger, #e5484d)' }}
+                  aria-label="Report this comment to the moderators"
+                  title="Report to moderators 🚩"
+                  onClick={() => (user ? setReportOpen(true) : lopu({ title: 'Log in to report 🚩', status: 'info', duration: 6000 }))}
+                  data-testid={user ? 'comment-report' : 'comment-report-guest'}
+                >
+                  <Flag size={12} strokeWidth={2.2} />
+                </Flex>
+              )}
+              {canReportComment && reportOpen && subspaceReport && (
+                <ReportModal isOpen onClose={() => setReportOpen(false)} api={api} subspaceId={subspaceReport.subspaceId} subspaceSlug={subspaceReport.subspaceSlug} target="comment" onReport={handleReportComment} />
+              )}
             </Flex>
             {/* thread reveal lives BELOW the comment (FB/IG-style), left
             edge flush with the reply icon */}
-            {!pending && comment.commentCount > 0 && (
+            {!pending && (cursorReplies || comment.commentCount > 0) && (
               <Flex alignItems="center" paddingX={1} paddingTop={0.5}>
                 <Box
                   as="button"
@@ -976,7 +1418,7 @@ const CommentRow = (props: {
                   aria-expanded={repliesOpen}
                   onClick={toggleThread}
                 >
-                  {repliesOpen ? 'Hide replies' : `View ${comment.commentCount} repl${comment.commentCount === 1 ? 'y' : 'ies'}`}
+                  {repliesOpen ? 'Hide replies' : cursorReplies ? 'View replies' : `View ${comment.commentCount} repl${comment.commentCount === 1 ? 'y' : 'ies'}`}
                 </Box>
               </Flex>
             )}
@@ -988,14 +1430,12 @@ const CommentRow = (props: {
           <Flex flexDirection="column" rowGap={2} paddingTop={2}>
             {repliesLoading && replies === null && <ReplySkeleton />}
             {repliesOpen &&
-							(replies || [])
-								.slice(-visibleReplies)
-								.map((reply) => (
-									<CommentRow key={reply.id} comment={reply} onChanged={handleReplyChanged} onEngagement={onEngagement} depth={depth + 1} />
+              shownReplies.map((reply) => (
+                <CommentRow key={reply.id} comment={reply} onChanged={handleReplyChanged} onEngagement={onEngagement} onCommentAdded={onCommentAdded} cursorReplies={cursorReplies} depth={depth + 1} />
               ))}
             {repliesOpen &&
               !(repliesLoading && replies === null) &&
-              ((replies?.length || 0) > visibleReplies || comment.commentCount > (replies?.length || 0)) && (
+              (shownReplies.length < orderedReplies.length || (cursorReplies ? repliesHaveMore : comment.commentCount > orderedReplies.length)) && (
               <Box
                 as="button"
                 type="button"
@@ -1006,12 +1446,15 @@ const CommentRow = (props: {
                 _hover={{ color: INK }}
                 onClick={showMoreReplies}
               >
-                Show previous replies 💬
+                {commentSort ? 'Show more replies 💬' : 'Show previous replies 💬'}
               </Box>
             )}
+            {cursorReplies && replyLoadError && <Text role="alert" fontSize="xs" color="red.500">{replyLoadError}</Text>}
+            {cursorReplies && repliesOpen && !repliesLoading && !repliesHaveMore && !replies?.length && !replyLoadError && <Text fontSize="xs" color={MUTED}>No replies yet.</Text>}
             {replyInputOpen &&
               (user ? (
                 <Flex flexDirection="column" rowGap={2}>
+                  <PostAsSelect user={replyActor} onChange={setReplyAs} />
                   <Flex columnGap={2}>
                     <Input
                       size="xs"
@@ -1069,15 +1512,42 @@ const CommentRow = (props: {
 
 // memoised: engagement telemetry re-renders the feed page frequently, and an
 // unchanged post reference should never re-render its card
-export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
-  const { post, onChanged, onEngagement, defaultCommentsOpen, mediaThing } = props;
-	const permalinkPath = mediaThing ? mediaPageUrl(post.id) : `/post/${post.id}`;
+export const PostCard = React.memo(function PostCard(props: PostCardProps) {
+  return <ExpandCommentsContext.Provider value={!!props.expandAllComments}><SharedMediaProvider linkKey={props.post.audience?.linkKey || props.post.linkKey}><PostCardImpl {...props} /></SharedMediaProvider></ExpandCommentsContext.Provider>;
+});
+
+function PostCardImpl(props: PostCardProps) {
+  const { post, onChanged, onEngagement, onCommentAdded, defaultCommentsOpen, mediaThing, gallery, discussionOnly, commentCollection } = props;
+	const sharedPath = useSharedThingPath();
+  const sharedAccess = useSharedAccess();
+	const permalinkPath = sharedPath(sharePathForThing(post));
+
+  // "Download all" target: the parent gallery on media pages, this card's own
+  // stored gallery otherwise, or the lone media file itself (one-file ZIP) so
+  // "Share download link" still exists for a single media Thing.
+  const archive = useAttachmentArchive();
+  const storedFileCount = downloadableAttachments(post.attachments).length;
+  const archiveTarget: PostArchiveTarget | null = gallery && gallery.fileCount > 1
+    ? { id: gallery.id, fileCount: gallery.fileCount, noun: 'gallery' }
+    : mediaThing
+      ? (storedFileCount ? { id: post.id, fileCount: 1, noun: 'media' } : null)
+      : storedFileCount
+        ? { id: post.id, fileCount: storedFileCount, noun: post.thingtime?.includes('comment') ? 'comment' : 'post' }
+        : null;
 
   const api = useApi();
   const user = useCurrentUser();
   const lopu = useLopu();
 
-  const [commentsOpen, setCommentsOpen] = React.useState(!!defaultCommentsOpen);
+  const expandAllComments = React.useContext(ExpandCommentsContext);
+  const [commentsOpen, setCommentsOpen] = React.useState(!!defaultCommentsOpen || expandAllComments);
+  const previousExpansion = React.useRef(expandAllComments);
+  React.useEffect(() => {
+    if (previousExpansion.current !== expandAllComments) {
+      previousExpansion.current = expandAllComments;
+      setCommentsOpen(expandAllComments);
+    }
+  }, [expandAllComments]);
   // drill-down thread focus: the stack of comments the viewer zoomed into.
   // The top of the stack renders as the panel's top-level row (depth 1); the
   // back arrow pops one level. navDirRef picks the slide direction.
@@ -1086,19 +1556,32 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const navDirRef = React.useRef<'push' | 'pop'>('push');
   const focusedComment = focusStack.length ? focusStack[focusStack.length - 1] : null;
   // the comment text persists as a per-user draft — leave and pick it up later
-  const { value: commentText, setValue: setCommentText, clear: clearCommentDraft } = useCommentDraft(user?.id, post.id);
+  const [commentAs, setCommentAs] = React.useState<typeof user>(null);
+  React.useEffect(() => setCommentAs(null), [user?.id]);
+  const commentActor = commentAs || user;
+  const { value: commentText, setValue: setCommentText, clear: clearCommentDraft, flush: flushCommentDraft, begin: beginComment, end: endComment } = useCommentDraft(commentActor?.id, post.id, commentsOpen);
   const [richCommentOpen, setRichCommentOpen] = React.useState(false);
   // one EMPTY reply input at a time across this card's comment tree
   const [openReplyId, setOpenReplyId] = React.useState<string | null>(null);
   // comments page 5 at a time — "show more" reveals 5 older ones per click
   const [visibleComments, setVisibleComments] = React.useState(5);
+  // Comment sort (round 2 S7) — local to the card, offered on subspace posts:
+  // null is the server's default page (newest 20, oldest → newest, revealed
+  // upwards FB-style); top / new / old paint the SAME order over the comments
+  // already here at once, then the server page (the true top / newest /
+  // oldest 20 of the level) replaces them and the list reveals downwards.
+  const [commentSort, setCommentSort] = React.useState<CommentSort | null>(null);
+  const commentSortSeqRef = React.useRef(0);
+  // the comments the viewer sent from this card — always on screen under a
+  // sort, never dropped by a sorted page landing
+  const freshComments = useFreshCommentIds();
 
   // stay a depth ahead from the moment the post arrives: warm shipped
   // avatars and prefetch the first HIDDEN depth (short level-1 threads and
   // every shipped level-2 comment with replies) into the thread cache
   const prefetchedPostRef = React.useRef(false);
   React.useEffect(() => {
-    if (prefetchedPostRef.current) return;
+    if (prefetchedPostRef.current || commentCollection) return;
     prefetchedPostRef.current = true;
     warmAvatars(post.comments);
     for (const comment of post.comments) {
@@ -1123,13 +1606,161 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const quoteContentRef = useOutsideTapClose<HTMLElement>(quoteOpen, () => setQuoteOpen(false));
   const expandSentRef = React.useRef(false);
 
-  const { recent, pushRecent } = useRecentReactions();
+  const { recent, pushRecent, beginRecent, scopeKey } = useRecentReactions();
   const inFlightReactionTokensRef = React.useRef(new Set<string>());
+  // emoji-splash origin: the merged react button (picker + chips anchor here)
+  const reactAnchorRef = React.useRef<HTMLDivElement | null>(null);
 
   const isOwner = !!user && !!post.author && user.id === post.author.id;
-	const circle = mediaThing
-		? { emoji: '🔗', label: 'Inherited audience', hint: 'This media follows the privacy of the Thing it belongs to' }
-		: CIRCLE_META[post.visibility] || CIRCLE_META.public;
+  // subspace moderation rights ride the projection (viewerCanModerate); the
+  // vote pill is a per-browser preference (Settings → Subspaces)
+  const canModerate = !!post.subspaceMod?.viewerCanModerate;
+  // Report to moderators 🚩: logged-in viewers who are neither the author nor
+  // a moderator, on a subspace post (mods remove instead; media cards defer
+  // to their parent post). A post the mods already removed offers no 🚩 —
+  // the server answers 409 there (nothing left for the mods to do)
+  const canReport = !!user && !isOwner && !canModerate && !!post.subspace && !mediaThing && !post.subspaceMod?.removed;
+  // a guest gets the same menu entry and a login nudge instead of the modal
+  const guestReport = !user && !!post.subspace && !mediaThing && !post.subspaceMod?.removed;
+  const [reportOpen, setReportOpen] = React.useState(false);
+  const handleReport = async (choice: ReportChoice) => {
+    lopu(REPORTED_TOAST);
+    try {
+      await api.v1.subspaces.report({ id: post.id, reason: choice.reason, note: choice.note });
+    } catch (err: any) {
+      lopu({ title: err?.error || 'The report did not go through 😞', status: 'error' });
+    }
+  };
+  // the comment rows' 🚩 context (null outside subspaces, and under a post
+  // the mods already removed — a comment report lands on the root post)
+  const rootRemoved = post.subspaceMod?.removed === true;
+  const subspaceReportContext = React.useMemo(
+    () => (post.subspace && !rootRemoved ? { subspaceId: post.subspace.id, subspaceSlug: post.subspace.slug, viewerCanModerate: canModerate } : null),
+    [post.subspace, rootRemoved, canModerate]
+  );
+  const [subspacePrefs] = useSubspacePrefs();
+  const showVotes = !!post.subspace && subspacePrefs.showVotes;
+
+  // up/down vote — the separate focused reaction kind. Optimistic through the
+  // same functional PostChange path reactions use (idempotent against the
+  // freshest post), reconciled from the server tally, reverted on failure.
+  const updownInFlightRef = React.useRef(false);
+  const handleUpdown = async (direction: UpdownDirection) => {
+    if (!user) {
+      lopu({ title: 'Log in to vote 🔼', status: 'info', duration: 6000 });
+      return;
+    }
+    if (updownInFlightRef.current) return;
+    updownInFlightRef.current = true;
+    const before = post.votes;
+    if (!commentCollection || post.votes) onChanged?.(post.id, (current) => applyUpdownVote(current, direction));
+    onEngagement?.({ thingId: post.id, signal: 'react' });
+    try {
+      const resp = await api.v1.things.updown({ id: post.id, direction });
+      onChanged?.(post.id, (current) => ({ ...current, votes: resp.votes }));
+    } catch (err: any) {
+      onChanged?.(post.id, (current) => ({ ...current, votes: before }));
+      lopu({ title: err?.error || 'Vote did not save 😞', status: 'error' });
+    } finally {
+      updownInFlightRef.current = false;
+    }
+  };
+
+  // subspace moderation (mods only): each action round-trips through
+  // /api/v1/subspaces/moderate and swaps in the re-projected post; the flair
+  // list loads lazily when the menu opens (the embed stays lean) through the
+  // same cached subspace loader the Remove modal uses for rules + reasons
+  const [modFlairs, setModFlairs] = React.useState<{ id: string; label: string; emoji: string | null; modOnly: boolean }[] | null>(null);
+  const loadFlairs = () => {
+    if (modFlairs || !post.subspace) return;
+    loadModerationSubspace(api, post.subspace.id)
+      .then((detail) => setModFlairs(detail.flairs.map((flair) => ({ id: flair.id, label: flair.label, emoji: flair.emoji, modOnly: flair.modOnly }))))
+      .catch(() => setModFlairs([]));
+  };
+  const handleModerate = async (action: string, extra: Record<string, unknown> = {}) => {
+    try {
+      const resp: any = await api.v1.subspaces.moderate({ id: post.id, action, ...extra } as any);
+      if (resp?.post) onChanged?.(post.id, resp.post);
+      lopu({ title: `Done — ${action} 🎩`, status: 'success', duration: 4000 });
+    } catch (err: any) {
+      lopu({ title: err?.error || 'Moderation action failed 😞', status: 'error' });
+    }
+  };
+  // Remove 🧹 goes through the RemoveModal (rules / removal reasons / custom,
+  // note, also-lock, also-ban) and sequences moderate(remove) [+ lock]
+  // [+ members ban]. Optimistic: the card paints removed + the reason at
+  // once and reverts if the REMOVE is refused; a lock / ban that fails after
+  // a successful removal keeps the removal (already reconciled) and toasts.
+  const [removeOpen, setRemoveOpen] = React.useState(false);
+  const handleRemoveWithReason = async (choice: RemoveChoice) => {
+    const before = post.subspaceMod || null;
+    onChanged?.(post.id, (current) => ({
+      ...current,
+      subspaceMod: {
+        status: 'removed',
+        removed: true,
+        reason: choice.previewReason,
+        removedAt: new Date().toISOString(),
+        pinned: current.subspaceMod?.pinned === true,
+        locked: choice.lock || current.subspaceMod?.locked === true,
+        nsfw: current.subspaceMod?.nsfw === true,
+        spoiler: current.subspaceMod?.spoiler === true,
+        viewerCanModerate: true
+      }
+    }));
+    let latest: PublicPost | null = null;
+    try {
+      const resp: any = await api.v1.subspaces.moderate({
+        id: post.id,
+        action: 'remove',
+        ...(choice.reason ? { reason: choice.reason } : {}),
+        ...(choice.reasonId ? { reasonId: choice.reasonId } : {}),
+        ...(choice.ruleIndex !== null ? { ruleIndex: choice.ruleIndex } : {})
+      });
+      latest = resp?.post || null;
+    } catch (err: any) {
+      onChanged?.(post.id, (current) => ({ ...current, subspaceMod: before }));
+      lopu({ title: err?.error || 'Could not remove that post 😞', status: 'error' });
+      throw err;
+    }
+    const followUps: string[] = [];
+    if (choice.lock && !latest?.subspaceMod?.locked) {
+      try {
+        const resp: any = await api.v1.subspaces.moderate({ id: post.id, action: 'lock' });
+        latest = resp?.post || latest;
+        followUps.push('locked 🔒');
+      } catch (err: any) {
+        lopu({ title: err?.error || 'Removed, but the comments did not lock 😞', status: 'error' });
+      }
+    }
+    if (latest) onChanged?.(post.id, latest);
+    if (choice.ban && post.subspace && post.author) {
+      try {
+        // the ban reason is the SHORT form (the canned reason's title / the
+        // rule citation / the custom text) — the full composed removal text
+        // would be sliced at 300 in banReason and the user's ban bell
+        await api.v1.subspaces.mutateMember({ id: post.subspace.id, userId: post.author.id, action: 'ban', ...(choice.banReason ? { reason: choice.banReason } : {}), ...(choice.banDays ? { banDays: choice.banDays } : {}) });
+        followUps.push(`@${post.author.username} banned${choice.banDays ? ` for ${choice.banDays}d` : ''} 🚫`);
+      } catch (err: any) {
+        lopu({ title: err?.error || 'Removed, but the ban did not go through 😞', status: 'error' });
+      }
+    }
+    lopu({ title: `Removed 🧹${followUps.length ? ` · ${followUps.join(' · ')}` : ''}`, description: latest?.subspaceMod?.reason || undefined, status: 'success', duration: 5000 });
+  };
+  const handleOwnFlair = async (flairId: string | null) => {
+    try {
+      const resp: any = await api.v1.things.update({ id: post.id, crystal: { flairId } } as any);
+      if (resp?.post) onChanged?.(post.id, resp.post);
+    } catch (err: any) {
+      lopu({ title: err?.error || 'Could not change the flair 😞', status: 'error' });
+    }
+  };
+	const effectiveAcl = post.audience?.acl || post.acl;
+	const privateSubspace = post.subspace?.access === 'private';
+	const circle = privateSubspace ? { emoji: '🔒', label: 'Private subspace', hint: 'Subspace membership is required' } : CIRCLE_META[audienceOfAcl(effectiveAcl)];
+	const audienceText = privateSubspace && audienceOfAcl(effectiveAcl) === 'public'
+		? 'private subspace members only'
+		: `${privateSubspace ? 'private subspace · ' : ''}${audienceDescription(effectiveAcl, mediaThing ? 'media' : 'post', !!post.audience && post.audience.sourceId !== post.id)}`;
 
   // Every reaction token on the post, most-used first — feeds the merged
   // react button (top emojis + total count).
@@ -1144,7 +1775,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     try {
       await api.v1.things.remove({ id: post.id });
       lopu({ title: 'Post deleted 🗑️', status: 'success', duration: 6000 });
-      onChanged?.(null);
+      onChanged?.(post.id, null);
     } catch (err: any) {
       lopu({ title: err?.error || 'Could not delete that post 😞', status: 'error' });
     }
@@ -1174,16 +1805,46 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       setEditing(false);
       return;
     }
+    // Inline #hashtags render as live tag links, so an edit must keep the
+    // stored tags in step with the text (the composer harvests on publish —
+    // without this, an added '#newtag' would linkify but its own search would
+    // never find the post). Inline tags dropped from the text drop off; every
+    // other stored tag (explicit composer tags, the folded marketplace
+    // category) survives; canonicalPostTags dedupes the merge and caps it.
+    const prevTags = post.tags;
+    const nextInline = extractInlineHashtags(text);
+    const removedInline = new Set(extractInlineHashtags(prevText).filter((tag) => !nextInline.includes(tag)));
+    const tags = canonicalPostTags([...(prevTags || []).filter((tag) => !removedInline.has(tag)), ...nextInline]);
     setEditing(false);
-    onChanged?.((prev) => ({ ...prev, text }));
+    // a plain-text inline edit drops any rich-text doc the post carried, and
+    // re-syncs the tag set recomputed from the edited text above
+    onChanged?.(post.id, (prev) => ({ ...prev, text, richText: null, tags }));
     try {
-      await api.v1.things.update({ id: post.id, crystal: { text } });
+      await api.v1.things.update({ id: post.id, crystal: { text, richText: null }, tags });
       lopu({ title: 'Post updated ✏️', status: 'success', duration: 4000 });
     } catch (err: any) {
-      onChanged?.((prev) => ({ ...prev, text: prevText }));
+      onChanged?.(post.id, (prev) => ({ ...prev, text: prevText, richText: post.richText, tags: prevTags }));
       setEditText(text); // give the draft back
       setEditing(true);
       lopu({ title: err?.error || 'Could not save that edit 😞', status: 'error' });
+    }
+  };
+
+  // Custom audience 🎭: the picker composes the acl; applying PATCHes it
+  const [audienceOpen, setAudienceOpen] = React.useState(false);
+  const handleCustomApply = async (acl: string[]) => {
+    const prevVisibility = post.visibility;
+    const prevAcl = post.acl;
+    onChanged?.(post.id, (prev) => ({ ...prev, visibility: 'custom' as PostVisibility, acl }));
+    try {
+      const resp = await api.v1.things.update({ id: post.id, acl });
+      if (resp?.post) {
+        onChanged?.(post.id, (prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl, linkKey: resp.post.linkKey, audience: resp.post.audience }));
+      }
+      lopu({ title: 'Custom audience set 🎭', description: 'Exactly the people you picked, with the powers you gave them.', status: 'success', duration: 4000 });
+    } catch (err: any) {
+      onChanged?.(post.id, (prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl, audience: post.audience }));
+      lopu({ title: err?.error || 'Could not change the audience 😞', status: 'error' });
     }
   };
 
@@ -1191,34 +1852,38 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   // immediately; the server response reconciles the derived acl, and a
   // failure flips it back.
   const handleVisibilityChange = async (next: PostVisibility) => {
+    // custom routes through the picker (it needs the WHO before it can apply)
+    if (next === 'custom') {
+      setAudienceOpen(true);
+      return;
+    }
     if (next === post.visibility) return;
     const prevVisibility = post.visibility;
     const prevAcl = post.acl;
-    onChanged?.((prev) => ({ ...prev, visibility: next }));
+    onChanged?.(post.id, (prev) => ({ ...prev, visibility: next, acl: aclForAudience(next, prev.acl), audience: undefined }));
     try {
       const resp = await api.v1.things.update({ id: post.id, visibility: next });
       if (resp?.post) {
-        onChanged?.((prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl }));
+        // linkKey rides along: entering hidden mints a fresh secret, so the
+        // Copy hidden link item works the moment the switch lands
+        onChanged?.(post.id, (prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl, linkKey: resp.post.linkKey, audience: resp.post.audience }));
       }
       const meta = CIRCLE_META[next];
-      lopu({ title: `Privacy set to ${meta.label} ${meta.emoji}`, status: 'success', duration: 4000 });
+      lopu({
+        title: `Privacy set to ${meta.label} ${meta.emoji}`,
+        description: next === 'hidden' ? 'Unlisted everywhere — “Copy hidden link” in the post menu shares its secret URL.' : undefined,
+        status: 'success',
+        duration: 4000
+      });
     } catch (err: any) {
-      onChanged?.((prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl }));
+      onChanged?.(post.id, (prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl, audience: post.audience }));
       lopu({ title: err?.error || 'Could not change privacy 😞', status: 'error' });
     }
   };
 
-  // menu copy-link: always the clipboard (the share icon owns the native sheet)
-  const handleCopyLink = async () => {
-		const url = `${window.location.origin}${permalinkPath}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      lopu({ title: 'Link copied 🔗', status: 'success', duration: 4000 });
-    } catch {
-      // clipboard unavailable (http origin) — hand the link over anyway
-      lopu({ title: `Copy this link: ${url}`, status: 'info', duration: 10000 });
-    }
-  };
+  // menu copy-link: always the clipboard (the share icon owns the native
+  // sheet). Unlisted posts share their canonical permalink.
+  //
 
   // Toggle one reaction token (single emoji or a multi-emoji group). Optimistic:
   // we repaint the card immediately, then reconcile with the server's counts
@@ -1237,6 +1902,10 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     inFlightReactionTokensRef.current.add(token);
 
     const adding = !viewerSet.has(token);
+    const recentOrder = adding ? beginRecent() : undefined;
+    // pure delight: ADDING a reaction erupts it from the button (motion-gated
+    // inside splashEmoji; removals stay quiet)
+    if (adding) splashEmoji(token, reactAnchorRef.current);
 
     // Optimistic + reconcile + revert all touch ONLY this token, applied to the
     // freshest post — so a concurrent reaction on another token isn't clobbered
@@ -1244,7 +1913,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     // Each updater notes its applied result in the reaction overlay so
     // background fetches snapshotted before the tap merge instead of
     // clobbering (idempotent under strict-mode double-invoke).
-    onChanged?.((prev) => {
+    onChanged?.(post.id, (prev) => {
       const next = applyReactionToggle(prev, token, adding);
       noteLocalReactions(next.id, next.reactionCounts, next.viewerReactions);
       return next;
@@ -1252,7 +1921,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     if (adding) onEngagement?.({ thingId: post.id, signal: 'react' });
 
     const reconcileLocalToken = (reactionCounts: Record<string, number>, viewerReactions: string[]) => {
-      onChanged?.((current) => {
+      onChanged?.(post.id, (current) => {
         const next = reconcileReactionToken(current, token, reactionCounts, viewerReactions);
         noteLocalReactions(next.id, next.reactionCounts, next.viewerReactions);
         return next;
@@ -1263,12 +1932,12 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       const resp = await api.v1.things.react({ id: post.id, emoji: token });
       reconcileLocalToken(resp.reactionCounts, resp.viewerReactions);
       // record recents only on a successful ADD (server records the same)
-      if (adding) pushRecent(token, resp.recentReactions);
+      if (adding) pushRecent(token, resp.recentReactions, recentOrder);
     } catch (err: any) {
       let reconciled = false;
       if (shouldReconcileReactionFailure(err)) {
         try {
-          const fresh = await fetchReactionTruth(api, post.id);
+          const fresh = commentCollection ? null : await fetchReactionTruth(api, post.id);
           if (fresh) {
             reconcileLocalToken(fresh.reactionCounts, fresh.viewerReactions);
             reconciled = true;
@@ -1287,6 +1956,47 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     }
   };
 
+  // One-tap poll voting — optimistic like reactions: the bars fill
+  // immediately, the server's authoritative tally reconciles when the
+  // response lands, and a failure reverts to the pre-tap tally + toasts.
+  const inFlightVoteRef = React.useRef(false);
+  const handleVote = async (optionIndex: number, splash?: () => void) => {
+    if (!user) {
+      lopu({ title: 'Log in to vote 🗳️', status: 'info', duration: 6000 });
+      return;
+    }
+    // one vote slot per user — hold off further taps until the active request
+    // settles so response order can never invert the vote
+    if (inFlightVoteRef.current) return;
+    inFlightVoteRef.current = true;
+
+    const prevTally = post.pollVotes;
+    const adding = prevTally?.viewerVote === null;
+    // emoji-splash (thunk from PollRenderer) fires with the optimistic apply —
+    // past the guards above, and only when the vote LANDS on this option (new
+    // or moved); tapping your own option removes the vote — no burst
+    if (prevTally && prevTally.viewerVote !== optionIndex) splash?.();
+    onChanged?.(post.id, (prev) => applyPollVoteToggle(prev, optionIndex));
+    // a fresh vote is engagement of react strength for the feed algorithms
+    if (adding) onEngagement?.({ thingId: post.id, signal: 'react' });
+
+    try {
+      const resp = await api.v1.things.vote({ id: post.id, optionIndex });
+      onChanged?.(post.id, (prev) => ({ ...prev, pollVotes: resp.pollVotes }));
+    } catch (err: any) {
+      onChanged?.(post.id, (prev) => (prevTally ? { ...prev, pollVotes: prevTally } : prev));
+      lopu({ title: err?.error || 'Your vote did not go through 😞', status: 'error' });
+    } finally {
+      inFlightVoteRef.current = false;
+    }
+  };
+
+  // wired into the poll renderer through ThingView's context (only poll posts
+  // carry pollVotes) — logged-out viewers get results-only + a login toast
+  const pollContext: PollRenderPollContext | undefined = post.pollVotes
+    ? { ...post.pollVotes, canVote: !!user, onVote: handleVote }
+    : undefined;
+
   // Opening shows the first page of comments (5); "Show more" reveals 5 more
   // per click. The revealed count is REMEMBERED across close/reopen (it's
   // component state); closing exits any drilled-in thread so a reopen starts
@@ -1304,6 +2014,56 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       onEngagement?.({ thingId: post.id, signal: 'expand' });
     }
   };
+
+  // Top / New / Old: paint first (the client comparator mirrors the server's),
+  // then fetch the sorted page and MERGE it in — the page wins the order, a
+  // comment the viewer sent that the page does not carry (still pending, or
+  // saved after the read) is kept, so a sort swap never loses it and its ack
+  // still finds the pending row; a stale response (the viewer picked again
+  // meanwhile) is dropped; a refusal toasts and REVERTS the pick, so the menu
+  // never claims an order the server page never delivered. Offered on
+  // subspace posts only (media cards defer to their post).
+  const commentSortAvailable = (!!post.subspace || discussionOnly) && !mediaThing && !commentCollection;
+  const changeCommentSort = async (value: string | string[]) => {
+    const next = Array.isArray(value) ? value[0] : value;
+    if (!isCommentSort(next) || next === commentSort) return;
+    const previous = commentSort;
+    setCommentSort(next);
+    setVisibleComments(5);
+    const seq = ++commentSortSeqRef.current;
+    const startedAt = Date.now();
+    try {
+      const resp = await api.v1.things.get({ id: post.id, commentSort: next, ...sharedAccess });
+      if (seq !== commentSortSeqRef.current || !(resp?.post || resp?.discussion)) return;
+      const fresh = (resp.post || resp.discussion) as PublicPost;
+      onChanged?.(post.id, (prev) => {
+        const merged = mergeCommentPage(fresh.comments, prev.comments, freshComments.ref.current, startedAt);
+        return { ...prev, comments: merged.comments, commentCount: fresh.commentCount + merged.unseen, commentCounts: fresh.commentCounts };
+      });
+    } catch (err: any) {
+      if (seq !== commentSortSeqRef.current) return;
+      setCommentSort(previous);
+      lopu({ title: err?.error || 'Could not re-sort the comments 😞', status: 'error' });
+    }
+  };
+  const orderedComments = commentCollection ? sortCommentPage(post.comments, commentCollection.controls ? 'new' : 'old') : commentSort ? sortCommentPage(post.comments, commentSort) : post.comments;
+  // under a sort the viewer's own fresh comments stay on screen even when the
+  // order puts them below the window (a new comment scores 0 and is the
+  // newest — Top and Old would otherwise hide the comment they just posted)
+  const shownComments = expandAllComments ? orderedComments : windowCommentPage(orderedComments, commentSort, visibleComments, freshComments.ids);
+
+  // Feed keyboard shortcuts (useFeedShortcuts): inside a shortcuts-enabled
+  // page (feed/explore mount the provider) the card lends its OWN handlers —
+  // handleReact for `l`, toggleComments for `c` — through a ref, so the hook
+  // always calls the freshest closures without re-registering per render.
+  // Outside a provider this is a no-op and the card renders exactly as before.
+  const shortcutsRegistry = React.useContext(FeedShortcutsContext);
+  const shortcutActionsRef = React.useRef<FeedPostShortcutActions | null>(null);
+  shortcutActionsRef.current = { react: handleReact, toggleComments };
+  React.useEffect(() => {
+    if (!shortcutsRegistry) return;
+    return shortcutsRegistry.register(post.id, shortcutActionsRef);
+  }, [shortcutsRegistry, post.id]);
 
   // Drill into a deep comment: it slides in as the panel's new top level.
   const focusThread = React.useCallback((comment: PostComment) => {
@@ -1331,50 +2091,56 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   // swaps in when the write lands, and a failure restores your text
   const submitComment = async () => {
     const text = commentText.trim();
-    if (!text) return;
+    if (!text || !beginComment()) return;
 
-    const pendingComment = buildPendingComment(user, post.id, text);
-    clearCommentDraft();
-    onChanged?.((prev) => ({
+    const pendingComment = buildPendingComment(commentActor, post.id, text);
+    freshComments.note(pendingComment.id);
+    onChanged?.(post.id, (prev) => ({
       ...prev,
       comments: [...prev.comments, pendingComment],
-      commentCount: prev.commentCount + 1
+      ...(prev.commentCount === undefined ? {} : { commentCount: prev.commentCount + 1 })
     }));
     onEngagement?.({ thingId: post.id, signal: 'comment' });
 
     try {
-      const resp = await api.v1.things.comment({ id: post.id, text });
-      onChanged?.((prev) => ({
+      void flushCommentDraft().catch(() => {});
+      const resp = await api.v1.things.comment({ id: post.id, text, characterId: commentActor?.id });
+      await clearCommentDraft(text);
+      freshComments.swap(pendingComment.id, resp.comment.id);
+      onChanged?.(post.id, (prev) => ({
         ...prev,
         comments: prev.comments.map((comment) => (comment.id === pendingComment.id ? resp.comment : comment)),
         commentCount: resp.commentCount
       }));
+      notifyCommentAdded(onCommentAdded);
     } catch (err: any) {
-      onChanged?.((prev) => ({
+      freshComments.drop(pendingComment.id);
+      onChanged?.(post.id, (prev) => ({
         ...prev,
         comments: prev.comments.filter((comment) => comment.id !== pendingComment.id),
-        commentCount: Math.max(0, prev.commentCount - 1)
+        ...(prev.commentCount === undefined ? {} : { commentCount: Math.max(0, prev.commentCount - 1) })
       }));
-      setCommentText(text); // give the draft back
       lopu({ title: err?.error || 'Comment did not send 😞', status: 'error' });
-    }
+    } finally { endComment(); }
   };
 
   // the rich composer posts through api.v1.things.comment itself and hands
   // back the created comment (post-shaped — comments share the post schema)
   const handleRichCommented = (comment: PostComment) => {
-    onChanged?.((prev) => ({
+    freshComments.note(comment.id);
+    onChanged?.(post.id, (prev) => ({
       ...prev,
       comments: [...prev.comments, comment],
-      commentCount: prev.commentCount + 1
+      ...(prev.commentCount === undefined ? {} : { commentCount: prev.commentCount + 1 })
     }));
     onEngagement?.({ thingId: post.id, signal: 'comment' });
     setRichCommentOpen(false);
+    notifyCommentAdded(onCommentAdded);
   };
 
   // a comment changed (reaction toggled) — swap it inside the freshest post
   const handleCommentChanged = (id: string, change: CommentChange) => {
-    onChanged?.((prev) => ({
+    onChanged?.(post.id, (prev) => ({
       ...prev,
       comments: prev.comments.map((comment) => (comment.id === id ? applyCommentChange(comment, change) : comment))
     }));
@@ -1386,13 +2152,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const handleRepost = async () => {
     if (sharing) return;
     setSharing(true);
-    onChanged?.((prev) => ({ ...prev, shareCount: prev.shareCount + 1 }));
+    onChanged?.(post.id, (prev) => ({ ...prev, shareCount: prev.shareCount + 1 }));
     onEngagement?.({ thingId: post.id, signal: 'share' });
     lopu({ title: 'Reposted 🔁', status: 'success', duration: 6000 });
     try {
       await api.v1.things.share({ id: post.id, visibility: post.visibility });
     } catch (err: any) {
-      onChanged?.((prev) => ({ ...prev, shareCount: Math.max(0, prev.shareCount - 1) }));
+      onChanged?.(post.id, (prev) => ({ ...prev, shareCount: Math.max(0, prev.shareCount - 1) }));
       lopu({ title: err?.error || 'Repost failed 😞', status: 'error' });
     }
     setSharing(false);
@@ -1403,13 +2169,19 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     if (sharing) return;
     setSharing(true);
     try {
+      const caption = quoteText.trim();
       await api.v1.things.share({
         id: post.id,
-        text: quoteText.trim() || undefined,
+        text: caption || undefined,
+        // the caption linkifies #tags (HashtagText), so harvest them into real
+        // tags exactly like the composer — otherwise a tapped caption tag's
+        // own search would exclude the quote post itself. The server merges
+        // these with the tags carried from the original.
+        tags: extractInlineHashtags(caption),
         visibility: quoteVisibility
       });
       lopu({ title: 'Quoted ✨', status: 'success', duration: 6000 });
-      onChanged?.((prev) => ({ ...prev, shareCount: prev.shareCount + 1 }));
+      onChanged?.(post.id, (prev) => ({ ...prev, shareCount: prev.shareCount + 1 }));
       onEngagement?.({ thingId: post.id, signal: 'share' });
       setQuoteOpen(false);
       setQuoteText('');
@@ -1438,6 +2210,35 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     }
   };
 
+  // Bookmark toggle — save/unsave this post to the viewer's private library
+  // (/saved). Optimistic: the icon fills immediately, the server's saved
+  // boolean reconciles when the response lands, and a failure reverts + toasts.
+  // Same-button taps hold off while a toggle is in flight (the endpoint
+  // toggles rather than setting, so response order could invert the state).
+  const inFlightSaveRef = React.useRef(false);
+  const handleToggleSave = async () => {
+    if (!user) return; // the button is hidden logged-out; belt-and-braces
+    if (inFlightSaveRef.current) return;
+    inFlightSaveRef.current = true;
+
+    const prevSaved = post.viewerSaved === true;
+    onChanged?.(post.id, (prev) => ({ ...prev, viewerSaved: !prevSaved }));
+    try {
+      const resp = await api.v1.things.save({ id: post.id });
+      onChanged?.(post.id, (prev) => ({ ...prev, viewerSaved: resp.saved === true }));
+      lopu({
+        title: resp.saved ? 'Saved to your library 🔖' : 'Removed from Saved 🌫️',
+        status: 'success',
+        duration: 4000
+      });
+    } catch (err: any) {
+      onChanged?.(post.id, (prev) => ({ ...prev, viewerSaved: prevSaved }));
+      lopu({ title: err?.error || 'Could not update your Saved library 😞', status: 'error' });
+    } finally {
+      inFlightSaveRef.current = false;
+    }
+  };
+
   // The merged react button: everyone's reactions AT the button (top emojis +
   // total, heart outline when none); tap/hold/hover all open the picker.
   const reactButton = (
@@ -1447,7 +2248,10 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       alignItems="center"
       columnGap={1.5}
       paddingX={2}
-      height="32px"
+      paddingY={1}
+      minWidth={0}
+      maxWidth="100%"
+      minHeight="32px"
       borderRadius="999px"
       fontSize="sm"
       color={viewerReactions.length ? ACCENT : MUTED}
@@ -1456,18 +2260,30 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       title="React"
     >
       {reactionEntries.length ? (
-        <Text as="span" fontSize="md" lineHeight="1" sx={{ whiteSpace: 'nowrap' }}>
+        <Text as="span" minWidth={0} fontSize="md" lineHeight="1.4" whiteSpace="normal" overflowWrap="anywhere">
           {reactionDisplayEmojis(reactionEntries, viewerSet, 3)}
         </Text>
       ) : (
         <Heart size={18} strokeWidth={2.2} />
       )}
       {reactionTotal > 0 && (
-        <Text as="span" fontWeight={viewerReactions.length ? 700 : 600}>
+        <Text as="span" flexShrink={0} fontWeight={viewerReactions.length ? 700 : 600}>
           {reactionTotal}
         </Text>
       )}
     </Flex>
+  );
+
+  const renderComments = (comments: PostComment[]) => (
+    <CommentSortContext.Provider value={commentSort}>
+      <SubspaceReportContext.Provider value={subspaceReportContext}>
+        <Flex flexDirection="column" rowGap={3}>
+          {comments.map(comment => (
+            <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} onCommentAdded={onCommentAdded} cursorReplies={!!commentCollection} />
+          ))}
+        </Flex>
+      </SubspaceReportContext.Provider>
+    </CommentSortContext.Provider>
   );
 
   return (
@@ -1480,22 +2296,39 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       padding={[4, 5]}
     >
       <Flex flexDirection="column" rowGap={3}>
+        {discussionOnly && <Text as="h2" fontWeight={700}>Comments</Text>}
+        {!discussionOnly && <>
         {/* header */}
         <Flex alignItems="center" columnGap={3}>
           <AuthorAvatar author={post.author} />
           <Box minWidth={0} flex="1">
             <Flex alignItems="baseline" columnGap={1.5} flexWrap="wrap" whiteSpace="normal">
               {post.author?.username ? (
-                <Link to={`/profile/${post.author.username}`}>
-                  <Text as="span" fontSize="sm" fontWeight={700} color={INK} _hover={{ textDecoration: 'underline' }}>
-                    {authorName(post.author)}
-                  </Text>
-                </Link>
+                // named, and linked only where a link is honest — a third-party
+                // author the provider gave no url for stays plain text rather
+                // than borrowing a native /profile route (authorLinkTarget)
+                (() => {
+                  const link = authorLinkTarget(post.author);
+                  const name = (
+                    <Text as="span" fontSize="sm" fontWeight={700} color={INK} _hover={link ? { textDecoration: 'underline' } : undefined}>
+                      {authorName(post.author)}
+                    </Text>
+                  );
+                  if (!link) return name;
+                  return link.external ? (
+                    <a href={link.href} target="_blank" rel="noreferrer noopener">
+                      {name}
+                    </a>
+                  ) : (
+                    <Link to={link.href}>{name}</Link>
+                  );
+                })()
               ) : (
                 <Text as="span" fontSize="sm" fontWeight={700} color={MUTED}>
                   Anonymous 👻
                 </Text>
               )}
+              <AuthorFlairChip flair={post.authorFlair} />
               <Text as="span" fontSize="xs" color={MUTED}>
                 {post.author ? `${getUserIdentityDetail(post.author)} · ` : ''}
               </Text>
@@ -1505,53 +2338,135 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                   {circle.emoji}
                 </Text>
               </Tooltip>
+              <Text as="span" fontSize="xs" color={MUTED} minWidth={0} maxWidth="100%" noOfLines={1} title={audienceText} data-testid="post-audience">
+                {audienceText}
+              </Text>
             </Flex>
           </Box>
+          <PostThingMenu post={post} mediaThing={mediaThing} isOwner={isOwner} canModerate={canModerate}
+            canReport={canReport} guestReport={guestReport} flairs={modFlairs} openHref={permalinkPath}
+            archive={archiveTarget}
+            onOpen={() => { if (isOwner || canModerate) void loadFlairs(); }}
+            handlers={{
+                  rename: title => onChanged?.(post.id, prev => ({ ...prev, title })),
+              edit: handleEditStart, delete: handleDelete, privacy: handleVisibilityChange,
+              report: () => guestReport ? lopu({ title: 'Log in to report 🚩', status: 'info', duration: 6000 }) : setReportOpen(true),
+              remove: () => setRemoveOpen(true), moderate: handleModerate, flair: handleOwnFlair,
+              downloadArchive: () => { if (archiveTarget) void archive.download(archiveTarget.id, archiveTarget.noun); },
+              shareDownloadLink: () => { if (archiveTarget) void archive.shareLink(archiveTarget.id, archiveTarget.noun); }
+            }} />
+          {canModerate && post.subspace && !mediaThing && (
+            <RemoveModal
+              isOpen={removeOpen}
+              onClose={() => setRemoveOpen(false)}
+              api={api}
+              subspaceId={post.subspace.id}
+              subspaceSlug={post.subspace.slug}
+              authorName={post.author?.username || null}
+              canBanAuthor={!!post.author && !isOwner}
+              alreadyLocked={post.subspaceMod?.locked === true}
+              onRemove={handleRemoveWithReason}
+            />
+          )}
+          {canReport && post.subspace && reportOpen && (
+            <ReportModal isOpen onClose={() => setReportOpen(false)} api={api} subspaceId={post.subspace.id} subspaceSlug={post.subspace.slug} target="post" onReport={handleReport} />
+          )}
           {isOwner && (
-            <Menu placement="bottom-end" autoSelect={false}>
-              <MenuButton
-                as={IconButton}
-				aria-label={mediaThing ? 'Media options' : 'Post options'}
-                icon={<MoreHorizontal size={16} />}
-                size="xs"
-                variant="ghost"
-                color={MUTED}
-                borderRadius="8px"
-              />
-              <MenuList minWidth="190px" borderRadius={RADIUS_MD} zIndex={10}>
-                {!mediaThing && (
-                  <MenuItem fontSize="sm" onClick={handleEditStart}>
-                    Edit ✏️
-                  </MenuItem>
-                )}
-                <MenuItem fontSize="sm" onClick={handleCopyLink}>
-                  Copy link 🔗
-                </MenuItem>
-                {!mediaThing && (
-                  <>
-                    <MenuDivider />
-                    <MenuOptionGroup
-                      title="Privacy"
-                      type="radio"
-                      value={post.visibility}
-                      onChange={(value) => handleVisibilityChange(value as PostVisibility)}
-                    >
-                      {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
-                        <MenuItemOption key={key} value={key} fontSize="sm">
-                          {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
-                        </MenuItemOption>
-                      ))}
-                    </MenuOptionGroup>
-                    <MenuDivider />
-                    <MenuItem fontSize="sm" color="var(--tt-danger, #e5484d)" onClick={handleDelete}>
-                      Delete 🗑️
-                    </MenuItem>
-                  </>
-                )}
-              </MenuList>
-            </Menu>
+            <CustomAudienceModal
+              isOpen={audienceOpen}
+              onClose={() => setAudienceOpen(false)}
+              initialAcl={post.visibility === 'custom' ? post.acl : undefined}
+              onApply={handleCustomApply}
+            />
           )}
         </Flex>
+
+        {/* subspace context — where the post lives, its flair, mod badges */}
+        {(post.subspace || post.subspaceMod?.removed) && (
+          <Flex alignItems="center" columnGap={1.5} rowGap={1} flexWrap="wrap" fontSize="xs" data-testid="post-subspace-line">
+            {post.subspace && (
+              <Flex
+                as={Link}
+                to={`/s/${post.subspace.slug}`}
+                alignItems="center"
+                columnGap={1}
+                fontWeight={700}
+                color={INK}
+                border={BORDER}
+                borderRadius="999px"
+                paddingX={2}
+                paddingY="1px"
+                _hover={{ borderColor: post.subspace.accent || ACCENT }}
+                onClick={(event: React.MouseEvent) => event.stopPropagation()}
+                title={post.subspace.name}
+              >
+                <Text as="span">{post.subspace.icon || '🪐'}</Text>
+                <Text as="span" fontFamily="mono" fontWeight={600}>
+                  s/{post.subspace.slug}
+                </Text>
+              </Flex>
+            )}
+            {post.flair && (
+              <Text
+                as="span"
+                fontWeight={600}
+                paddingX={2}
+                paddingY="1px"
+                borderRadius="999px"
+                border={`1px solid ${post.flair.color || 'var(--tt-border, #ececef)'}`}
+                color={post.flair.color || TEXT}
+                data-testid="post-flair"
+              >
+                {post.flair.emoji ? `${post.flair.emoji} ` : ''}
+                {post.flair.label}
+              </Text>
+            )}
+            {post.subspaceMod?.pinned && (
+              <Text as="span" color={MUTED} title="Pinned by moderators">
+                📌 Pinned
+              </Text>
+            )}
+            {post.subspaceMod?.locked && (
+              <Text as="span" color={MUTED} title="Comments are locked">
+                🔒 Locked
+              </Text>
+            )}
+            {post.subspaceMod?.nsfw && (
+              <Text as="span" color="var(--tt-danger, #e5484d)" fontWeight={700}>
+                18+
+              </Text>
+            )}
+            {post.subspaceMod?.spoiler && (
+              <Text as="span" color={MUTED}>
+                ⚠️ Spoiler
+              </Text>
+            )}
+            {canModerate && post.subspace && (post.subspaceMod?.reportCount || 0) > 0 && (
+              <Text
+                as={Link}
+                to={`/s/${post.subspace.slug}/mod?tab=reports`}
+                fontWeight={700}
+                color="var(--tt-danger, #e5484d)"
+                title={`${post.subspaceMod!.reportCount} open report${post.subspaceMod!.reportCount === 1 ? '' : 's'} — open the Reports queue`}
+                onClick={(event: React.MouseEvent) => event.stopPropagation()}
+                data-testid="post-report-badge"
+                data-count={post.subspaceMod!.reportCount}
+              >
+                🚩 {post.subspaceMod!.reportCount}
+              </Text>
+            )}
+          </Flex>
+        )}
+        {post.title && !editing && (
+          <Text as="h2" fontFamily="heading" fontSize="lg" fontWeight={700} color={INK} lineHeight="1.25" whiteSpace="normal" data-testid="post-title">
+            {post.title}
+          </Text>
+        )}
+        {post.subspaceMod?.removed && (
+          <Flex alignItems="center" columnGap={2} fontSize="sm" color={MUTED} border="1px dashed var(--tt-border, #ececef)" borderRadius={RADIUS_MD} padding={3} data-testid="post-removed">
+            🧹 Removed by moderators{post.subspaceMod.reason ? ` — ${post.subspaceMod.reason}` : ''}
+          </Flex>
+        )}
 
         {/* body — shares render caption + nested original; the owner's edit
         mode mounts the FULL composer (type tabs, photos, listing, thing,
@@ -1561,7 +2476,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           <PostComposer
             editPost={post}
             onPosted={(updated) => {
-              onChanged?.(updated);
+              // the composer edits this exact post, so address the change to
+              // post.id — `updated` replaces it wholesale
+              onChanged?.(post.id, updated);
               setEditing(false);
             }}
             onClose={() => setEditing(false)}
@@ -1602,12 +2519,12 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           </Flex>
         ) : post.isShare ? (
           <Flex flexDirection="column" rowGap={3}>
-            {post.text && (
-              <Text fontSize="md" color={TEXT} whiteSpace="normal">
-                {post.text}
-              </Text>
-            )}
-            <PostAttachments attachments={post.attachments} mediaLayout={post.mediaLayout} />
+            {/* quote captions linkify #tags too — PostTextBody does that for
+            every surface now; the chip row stays on the nested original (a
+            share copies a public original's tags, so a second chip row here
+            would just duplicate it) */}
+            <PostTextBody post={post} />
+            <PostAttachments linkKey={post.linkKey} attachments={post.attachments} mediaLayout={post.mediaLayout} postId={post.id} archiveNoun={post.thingtime?.includes('comment') ? 'comment' : 'post'} />
             {post.shareOf ? (
               <SharedPostCard post={post.shareOf} />
             ) : (
@@ -1625,38 +2542,17 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             )}
           </Flex>
         ) : (
-          <PostBody post={post} attachments={post.attachments} />
+          <PostBody post={post} attachments={post.attachments} poll={pollContext} />
         )}
 
-        {/* tags — each chip links to that tag's public feed (claude-todo/10 ✨) */}
-        {post.tags?.length > 0 && (
-          <Flex columnGap={1} rowGap={1} flexWrap="wrap">
-            {post.tags.map((tag) => (
-              <Text
-                key={tag}
-                as={Link}
-                to={`/feed?tag=${encodeURIComponent(tag)}`}
-                fontFamily="mono"
-                fontSize="12px"
-                fontWeight={600}
-                color={MUTED}
-                paddingX={2}
-                paddingY="1px"
-                borderRadius="999px"
-                border={BORDER}
-                _hover={{ color: INK, background: 'var(--tt-surface-hover, #ececee)' }}
-                title={`See every post tagged #${tag}`}
-              >
-                #{tag}
-              </Text>
-            ))}
-          </Flex>
-        )}
-
+        </>}
         {/* action row — icons + counts only (X-style, no labels); the merged
         react control sits right beside the comments icon (comment rows keep
         their IG-style right-aligned react columns) */}
-        <Flex borderTop={BORDER} paddingTop={2} alignItems="center" columnGap={[1, 2]}>
+        {/* wraps at phone widths: the vote pill made the row wider than a
+        375px card, so the view counter (marginLeft auto) drops to its own
+        right-aligned line instead of being clipped by the card edge */}
+        <Flex borderTop={BORDER} paddingTop={2} alignItems="center" columnGap={[1, 2]} rowGap={1} flexWrap="wrap">
           <ActionIcon
             icon={<MessageCircle size={18} strokeWidth={2.2} />}
             count={post.commentCount}
@@ -1665,9 +2561,10 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             aria-expanded={commentsOpen}
             onClick={toggleComments}
           />
+          {showVotes && <UpdownControl votes={post.votes} hideUnknownScore={!!commentCollection} onVote={handleUpdown} enabled={!!user} accent={post.subspace?.accent} />}
 
           {user ? (
-            <Box position="relative" display="flex">
+            <Box ref={reactAnchorRef} position="relative" display="flex" minWidth={0} maxWidth="100%">
               {/* tap, touch-and-hold, or hover: quick reactions + a ＋ that
               opens the full picker */}
               <ReactionControl
@@ -1676,6 +2573,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 onQuickTap={() => handleReact('👍')}
                 content={(close) => (
                   <QuickReactionRow
+                    recent={recent}
                     viewerSet={viewerSet}
                     onPick={(emoji) => {
                       close();
@@ -1691,6 +2589,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
               {/* ＋: the full native-emoji picker (multi-select), anchored here */}
               <AnchoredEmojiPicker
+                key={JSON.stringify([scopeKey, post.id])}
                 isOpen={pickerOpen}
                 onClose={() => setPickerOpen(false)}
                 contentRef={pickerContentRef}
@@ -1704,7 +2603,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           )}
 
           {/* repost: instant repost OR quote (caption + circle) */}
-			{!mediaThing && (user ? (
+			{!mediaThing && !discussionOnly && (user ? (
             <Box position="relative" display="flex">
               <Menu placement="top" autoSelect={false}>
 									<MenuButton as={ActionIcon} icon={<Repeat2 size={18} strokeWidth={2.2} />} count={post.shareCount} label="Repost" />
@@ -1787,9 +2686,23 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           {/* outward share: native sheet / copy link */}
           <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />
 
+          {/* bookmark: save to the viewer's private library (/saved) —
+          filled/accent when saved, hidden logged-out (nothing to save into) */}
+          {user && (
+            <ActionIcon
+              icon={<Bookmark size={18} strokeWidth={2.2} fill={post.viewerSaved ? 'currentColor' : 'none'} />}
+              label={post.viewerSaved ? 'Remove from Saved' : 'Save to library'}
+              active={post.viewerSaved === true}
+              color={post.viewerSaved ? ACCENT : MUTED}
+              _hover={{ background: 'var(--tt-surface-hover, #ececee)', color: post.viewerSaved ? ACCENT : INK }}
+              aria-pressed={post.viewerSaved === true}
+              onClick={handleToggleSave}
+            />
+          )}
+
           {/* public view stats (X-style, right edge): count = unique viewers;
           the tooltip carries impressions + average time on screen */}
-          <Tooltip
+          {(!commentCollection || typeof post.viewCount === 'number') && <Tooltip
             label={`${post.viewCount || 0} unique ${(post.viewCount || 0) === 1 ? 'viewer' : 'viewers'} · ${
               post.viewStats?.impressions || 0
             } impressions · avg ${formatDwell(post.viewStats?.avgDwellMs || 0)} on screen`}
@@ -1813,7 +2726,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               <Eye size={18} strokeWidth={2.2} />
               <Text as="span">{formatCompactCount(post.viewCount || 0)}</Text>
             </Flex>
-          </Tooltip>
+          </Tooltip>}
         </Flex>
 
         {/* comments — the post's conversation, or a FOCUSED thread panel:
@@ -1847,20 +2760,66 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                   Thread 🧵
                 </Text>
               </Flex>
-								<CommentRow comment={focusedComment} onChanged={handleFocusedChanged} onEngagement={onEngagement} defaultOpen />
+              <CommentSortContext.Provider value={commentSort}>
+                <SubspaceReportContext.Provider value={subspaceReportContext}>
+                  <CommentRow key={focusedComment.id} comment={focusedComment} onChanged={handleFocusedChanged} onEngagement={onEngagement} onCommentAdded={onCommentAdded} cursorReplies={!!commentCollection} defaultOpen />
+                </SubspaceReportContext.Provider>
+              </CommentSortContext.Provider>
             </Flex>
           </ThreadFocusContext.Provider>
         )}
         {commentsOpen && !focusedComment && (
           <ThreadFocusContext.Provider value={threadFocusValue}>
 							<Flex flexDirection="column" rowGap={3} sx={threadNavCount > 0 ? { animation: `${SLIDE_IN_LEFT} 0.22s ease-out` } : undefined}>
-            {post.comments.slice(-visibleComments).map((comment) => (
-              <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} />
-            ))}
+            {commentSortAvailable && post.comments.length > 1 && (
+              <Flex alignItems="center" columnGap={2} data-testid="comment-sort" data-comment-sort={commentSort || 'default'}>
+                <Menu placement="bottom-start" autoSelect={false}>
+                  <MenuButton
+                    as={Button}
+                    size="xs"
+                    variant="ghost"
+                    borderRadius="999px"
+                    color={commentSort ? INK : MUTED}
+                    fontWeight={600}
+                    paddingX={2}
+                    aria-label="Sort comments"
+                    data-testid="comment-sort-button"
+                  >
+                    {commentSort ? `${COMMENT_SORT_META[commentSort].emoji} ${COMMENT_SORT_META[commentSort].label}` : 'Sort 💬'} ▾
+                  </MenuButton>
+                  <MenuList minWidth="150px" borderRadius={RADIUS_MD} zIndex={10}>
+                    <MenuOptionGroup title="Sort comments" type="radio" value={commentSort || ''} onChange={changeCommentSort}>
+                      {COMMENT_SORTS.map((sort) => (
+                        <MenuItemOption key={sort} value={sort} fontSize="sm" data-testid={`comment-sort-${sort}`} title={COMMENT_SORT_META[sort].hint}>
+                          {COMMENT_SORT_META[sort].emoji} {COMMENT_SORT_META[sort].label}
+                        </MenuItemOption>
+                      ))}
+                    </MenuOptionGroup>
+                  </MenuList>
+                </Menu>
+              </Flex>
+            )}
+            {commentCollection?.controls ? (
+              <CollectionList
+                label="Comments"
+                items={orderedComments}
+                searchText={discussionCommentSearchText}
+                filters={[{ key: 'author', label: 'Author', value: comment => comment.author?.username || '' }]}
+                hasMore={commentCollection.hasMore}
+                loadMore={commentCollection.loadMore}
+                loading={commentCollection.loading}
+                error={commentCollection.error}
+                resetKey={commentCollection.resetKey}
+                empty="No comments yet."
+              >
+                {renderComments}
+              </CollectionList>
+            ) : renderComments(shownComments)}
 
             {/* the reveal control sits BELOW the conversation (FB-style);
-            the OLDER comments it reveals render above the visible list */}
-            {post.comments.length > visibleComments && (
+            the OLDER comments it reveals render above the visible list — under
+            a sort the page reads top-down, so the reveal appends below */}
+            {!commentCollection?.controls && shownComments.length < orderedComments.length && (
               <Box
                 as="button"
                 type="button"
@@ -1870,13 +2829,21 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 color={MUTED}
                 _hover={{ color: INK }}
                 onClick={() => setVisibleComments((count) => count + 5)}
+                data-testid="comments-reveal"
               >
-                Show previous comments 💬
+                {commentSort ? 'Show more comments 💬' : 'Show previous comments 💬'}
               </Box>
+            )}
+
+            {commentCollection && !commentCollection.controls && commentCollection.hasMore && (
+              <Button size="sm" variant="ghost" alignSelf="flex-start" isDisabled={commentCollection.loading} onClick={async () => { await commentCollection.loadMore(); setVisibleComments(count => count + 20); }}>
+                {commentCollection.loading ? 'Loading older comments…' : 'Load older comments'}
+              </Button>
             )}
 
             {user ? (
               <Flex flexDirection="column" rowGap={2}>
+                <PostAsSelect user={commentActor} onChange={setCommentAs} />
                 <Flex columnGap={2}>
                   <Input
                     size="sm"
@@ -1932,4 +2899,4 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     </Box>
     </ReplyFocusContext.Provider>
   );
-});
+}

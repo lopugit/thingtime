@@ -18,7 +18,7 @@ export const action = ({ request }: { request: Request }) =>
   withAdminPrivateResponse(async () => {
     const gate = await requireAdmin(request);
     if ('error' in gate) return json({ ok: false, error: gate.error.message }, { status: gate.error.status });
-    const body = await readJsonBody(request, 32 * 1024);
+		const body = await readJsonBody(request, 512 * 1024);
     const workflow = typeof body?.workflow === 'string' ? (body.workflow as CiWorkflowKey) : null;
     if (!workflow || !WORKFLOWS.has(workflow)) {
       return json({ ok: false, error: 'Choose a supported workflow' }, { status: 400 });

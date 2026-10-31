@@ -64,6 +64,8 @@ test('attachment metadata is canonical, bounded, and derives a safe media kind',
 	assert.equal(attachmentMediaKindForContentType('video/x-matroska'), 'video');
 	assert.equal(attachmentMediaKindForContentType('video/x-msvideo'), 'file');
 	assert.equal(attachmentMediaKindForContentType('audio/mpeg'), 'audio');
+	assert.equal(attachmentMediaKindForContentType('audio/x-m4a'), 'audio');
+	assert.equal(attachmentMediaKindForContentType('audio/x-custom-recorder'), 'audio');
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'bad\0name', size: 1, contentType: 'text/plain' }).ok, false);
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'bad\ud800name', size: 1, contentType: 'text/plain' }).ok, false);
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'safe\u202Egnp.exe', size: 1, contentType: 'text/plain' }).ok, false);
@@ -305,11 +307,12 @@ test('moderation-hidden bound ids are exempt from the sync cover and re-stamp af
 	assert.equal(attachmentModerationHidesFromPublic(undefined), false);
 });
 
-test('owner title/description are optional, bounded, hygienic, and never stored empty', () => {
+test('owner display filename/title/description are optional, bounded, hygienic, and never stored empty', () => {
 	const annotated = sanitizeAttachmentPublicMetadata({
 		name: 'sunset.jpg',
 		size: 42,
 		contentType: 'image/jpeg',
+		filenamePreview: '  Bay sunset.jpg  ',
 		title: '  Sunset over the bay  ',
 		description: 'Line one\nline two 🍉'
 	});
@@ -320,16 +323,25 @@ test('owner title/description are optional, bounded, hygienic, and never stored 
 			size: 42,
 			contentType: 'image/jpeg',
 			mediaKind: 'image',
+			filenamePreview: 'Bay sunset.jpg',
 			title: 'Sunset over the bay',
 			description: 'Line one\nline two 🍉'
 		}
 	});
 	// blanks collapse to ABSENT keys
-	const blank = sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: '   ', description: '' });
+	const blank = sanitizeAttachmentPublicMetadata({
+		name: 'a.png',
+		size: 1,
+		contentType: 'image/png',
+		filenamePreview: '',
+		title: '   ',
+		description: ''
+	});
 	assert.equal(blank.ok, true);
 	if (blank.ok) {
 		assert.equal('title' in blank.crystal, false);
 		assert.equal('description' in blank.crystal, false);
+		assert.equal('filenamePreview' in blank.crystal, false);
 	}
 	// titles are single-line; descriptions allow newlines but no other controls
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 'two\nlines' }).ok, false);
@@ -338,6 +350,7 @@ test('owner title/description are optional, bounded, hygienic, and never stored 
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 'x'.repeat(201) }).ok, false);
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', description: 'x'.repeat(2001) }).ok, false);
 	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', title: 42 }).ok, false);
+	assert.equal(sanitizeAttachmentPublicMetadata({ name: 'a.png', size: 1, contentType: 'image/png', filenamePreview: 'x'.repeat(256) }).ok, false);
 });
 
 test('annotated crystals stay canonical for projection and accounting; foreign keys still fail closed', () => {
@@ -432,6 +445,8 @@ test('linked URLs are plain bounded http(s) with no credentials or control chara
 test('linked media types derive from the extension; unknown defaults to an image hint', () => {
 	assert.deepEqual(linkedMediaTypeForUrl('https://example.com/a.JPG'), { contentType: 'image/jpeg', mediaKind: 'image' });
 	assert.deepEqual(linkedMediaTypeForUrl('https://example.com/clip.mp4'), { contentType: 'video/mp4', mediaKind: 'video' });
+	assert.deepEqual(linkedMediaTypeForUrl('https://example.com/voice.m4a'), { contentType: 'audio/mp4', mediaKind: 'audio' });
+	assert.deepEqual(linkedMediaTypeForUrl('https://example.com/voice.flac'), { contentType: 'audio/flac', mediaKind: 'audio' });
 	assert.deepEqual(linkedMediaTypeForUrl('https://example.com/spec.pdf'), { contentType: 'application/pdf', mediaKind: 'file' });
 	// svg never gets a visual hint — it is a file row, not an inline image
 	assert.equal(linkedMediaTypeForUrl('https://example.com/art.svg').mediaKind, 'file');
@@ -482,7 +497,7 @@ test('a linked crystal is canonical only as the exact closed shape', () => {
 	assert.equal(toAttachmentPublicMetadata('attachment-1', linkedCrystal({ size: 12 })), null);
 	assert.equal(toAttachmentPublicMetadata('attachment-1', linkedCrystal({ url: 'ftp://x' })), null);
 	assert.equal(toAttachmentPublicMetadata('attachment-1', linkedCrystal({ url: ' https://example.com/a.jpg' })), null);
-	assert.equal(toAttachmentPublicMetadata('attachment-1', linkedCrystal({ mediaKind: 'audio' })), null);
+	assert.equal(toAttachmentPublicMetadata('attachment-1', linkedCrystal({ mediaKind: 'audio' }))?.mediaKind, 'audio');
 	assert.equal(toAttachmentPublicMetadata('attachment-1', linkedCrystal({ detectedContentType: 'image/png' })), null);
 	assert.equal(toAttachmentPublicMetadata('attachment-1', { ...linkedCrystal(), extra: true }), null);
 });

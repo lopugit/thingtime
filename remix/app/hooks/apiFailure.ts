@@ -12,6 +12,8 @@ type ApiFailureOptions = {
 	diagnosticThingId?: string;
 	attachmentCode?: AttachmentRetryCode;
 	attachmentRetryable?: boolean;
+	lopuGateCode?: LopuGateCode;
+	lopuBalanceMicros?: number;
 };
 
 export type AttachmentRetryCode =
@@ -26,6 +28,12 @@ export type AttachmentRetryCode =
 	| 'storage_invariant'
 	| 'storage_unconfigured'
 	| 'storage_unavailable';
+
+// The Lopu access gate (verified-credits design note §1): the reply / create
+// endpoints refuse a turn with a machine-readable code — unverified account,
+// exhausted credits (with the balance in micro-USD) or a guest session — and
+// the client keeps such a refusal as Lopu's own bubble instead of an error.
+export type LopuGateCode = 'LOPU_UNVERIFIED' | 'LOPU_NO_CREDITS' | 'LOPU_GUEST';
 
 type ApiFailureInput = ApiFailureOptions & {
   payload?: unknown;
@@ -46,8 +54,10 @@ export class ThingtimeApiError extends Error {
   readonly accounts: unknown[] | undefined;
 	readonly adminDetail: string | undefined;
 	readonly diagnosticThingId: string | undefined;
-	readonly code: AttachmentRetryCode | undefined;
+	readonly code: AttachmentRetryCode | LopuGateCode | undefined;
 	readonly retryable: boolean | undefined;
+	// the account balance a 402 LOPU_NO_CREDITS refusal reports (micro-USD)
+	readonly balanceMicros: number | undefined;
 
   constructor(message: string, options: ApiFailureOptions = {}) {
     super(message);
@@ -61,8 +71,9 @@ export class ThingtimeApiError extends Error {
     this.accounts = options.accounts;
 		this.adminDetail = options.adminDetail;
 		this.diagnosticThingId = options.diagnosticThingId;
-		this.code = options.attachmentCode;
+		this.code = options.attachmentCode ?? options.lopuGateCode;
 		this.retryable = options.attachmentRetryable;
+		this.balanceMicros = options.lopuBalanceMicros;
   }
 }
 
@@ -93,6 +104,18 @@ const attachmentRetryMetadata = (record: Record<string, unknown> | null) => {
 	return {
 		attachmentCode: code as AttachmentRetryCode,
 		attachmentRetryable: typeof record.retryable === 'boolean' ? record.retryable : undefined
+	};
+};
+
+const LOPU_GATE_CODES = new Set<LopuGateCode>(['LOPU_UNVERIFIED', 'LOPU_NO_CREDITS', 'LOPU_GUEST']);
+
+const lopuGateMetadata = (record: Record<string, unknown> | null) => {
+	const code = record?.code;
+	if (record?.ok !== false || typeof code !== 'string' || !LOPU_GATE_CODES.has(code as LopuGateCode)) return {};
+	const balance = record.balanceMicros;
+	return {
+		lopuGateCode: code as LopuGateCode,
+		lopuBalanceMicros: typeof balance === 'number' && Number.isFinite(balance) ? Math.round(balance) : undefined
 	};
 };
 
@@ -167,6 +190,7 @@ export const createApiFailure = (input: ApiFailureInput): ThingtimeApiError => {
   const record = payloadRecord(input.payload);
 	const diagnostic = diagnosticMetadata(record);
 	const attachmentRetry = attachmentRetryMetadata(record);
+	const lopuGate = lopuGateMetadata(record);
   const genericUnauthorized = status === 401 && authored?.toLowerCase() === 'unauthorized';
   const message = authored && !genericUnauthorized ? authored : fallbackMessage(status, action, retryAfterSeconds);
 
@@ -181,7 +205,9 @@ export const createApiFailure = (input: ApiFailureInput): ThingtimeApiError => {
 		adminDetail: diagnostic.adminDetail,
 		diagnosticThingId: diagnostic.diagnosticThingId,
 		attachmentCode: attachmentRetry.attachmentCode,
-		attachmentRetryable: attachmentRetry.attachmentRetryable
+		attachmentRetryable: attachmentRetry.attachmentRetryable,
+		lopuGateCode: lopuGate.lopuGateCode,
+		lopuBalanceMicros: lopuGate.lopuBalanceMicros
   });
 };
 

@@ -66,12 +66,12 @@ test('test provider keys verdicts off filename markers', async () => {
 
 test('provider resolution follows THINGTIME_MODERATION_PROVIDER and fails to off without a key', async () => {
 	assert.equal((await resolveModerationProvider({} as any)).kind, 'off');
-	assert.equal((await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'off', ANTHROPIC_API_KEY: 'k' } as any)).kind, 'off');
+	assert.equal((await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'off', CLAUDE_CODE_OAUTH_TOKEN: 'k' } as any)).kind, 'off');
 	const testChoice = await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'test' } as any);
 	assert.equal(testChoice.kind === 'provider' && testChoice.provider.name, 'test');
-	const claudeChoice = await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'claude', ANTHROPIC_API_KEY: 'test-key' } as any);
+	const claudeChoice = await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'claude', CLAUDE_CODE_OAUTH_TOKEN: 'test-key' } as any);
 	assert.equal(claudeChoice.kind === 'provider' && claudeChoice.provider.name, 'claude');
-	const implicit = await resolveModerationProvider({ ANTHROPIC_API_KEY: 'test-key' } as any);
+	const implicit = await resolveModerationProvider({ CLAUDE_CODE_OAUTH_TOKEN: 'test-key' } as any);
 	assert.equal(implicit.kind === 'provider' && implicit.provider.name, 'claude');
 });
 

@@ -119,3 +119,25 @@ Accepted (documented, owner can revisit):
   today's canonicalizer are dropped on edit-save — identical to the old
   composer, whose client-side filter silently dropped them on any edit-save
   as well.
+
+## Round 3 — visual Rows, unified edit media, and searchable attachments
+
+- Auto and Rows now have labelled final-view previews; Rows replaces the text
+  pattern with visual row cards, add/remove controls, and bounded image-count
+  steppers. Grid preview tiles expose the clickable 1×1 span badge alongside
+  the existing drag-resize handle.
+- Edit mode now embeds existing attachments inside the one Media & files panel.
+  New and bound attachments share reorder/annotation controls and explicit
+  trash buttons; bound deletion is fenced by the exact post target and rolls
+  the optimistic tile back on failure.
+- Attachment schema v2 adds `filenamePreview`, title, and description search
+  fields. The display override is used across composer/gallery/card/lightbox
+  surfaces without changing the immutable original download filename.
+- Attachments remain protected from generic mutation but are intentionally
+  included in generic/Commander search as level-one Things. Inherited Reaction
+  results are admitted to the ACL superset, checked through their parent, and
+  projected back to the matching post card. Human emoji-name filters such as
+  `heart` expand to the stored native tokens.
+- Focused attachment/schema/Thing/Commander suites and live local API probes
+  cover exact-target deletion, metadata canonicalization, Attachment filename
+  search, and Reaction `heart` → ❤️ parent-post results.
