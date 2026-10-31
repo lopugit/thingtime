@@ -3,6 +3,7 @@ import { json } from '~/api/http';
 import { listAccountLinksForUser } from '~/api/utils/accounts/accountLinks';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { findUserById } from '~/api/utils/auth/users';
+import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 
 // GET /api/v1/auth/accounts/owned — the accounts the current user OWNS via
 // 'account' account-links (admin-assigned). The switcher renders these under
@@ -19,7 +20,7 @@ export const loader = async ({ request }: { request: Request }) => {
 		id: String(doc._id),
 		username: doc.username,
 		displayName: typeof doc.displayName === 'string' ? doc.displayName : null,
-		avatarUrl: typeof doc.avatarUrl === 'string' ? doc.avatarUrl : null,
+		avatarUrl: effectiveProfileMediaUrl(doc, 'avatar'),
 		accountKind: doc.accountKind === 'service' ? ('service' as const) : ('user' as const)
     }));
 

@@ -40,14 +40,20 @@ export const action = async ({ request }: { request: Request }) => {
     viewerOf(user, actorPat(actor)),
     body?.id,
     {
+      thingtime: body?.thingtime,
       crystal: body?.crystal,
       extended: body?.extended,
       acl: body?.acl,
       visibility: body?.visibility,
       tags: body?.tags,
-      tokenAcl: body?.tokenAcl
+      tokenAcl: body?.tokenAcl,
+      // folderId only when present — undefined means "leave it filed where it is"
+      ...(body && typeof body === 'object' && 'folderId' in body ? { folderId: body.folderId } : {})
     },
-    {},
+    {
+      replaceCrystal: body?.replaceCrystal === true,
+      expectedUpdatedAt: body?.expectedUpdatedAt
+    },
     app
   );
 

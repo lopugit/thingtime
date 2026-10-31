@@ -1,0 +1,65 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+  EMAIL_DEFAULT_OFF_TYPES,
+  NOTIFICATION_CATEGORIES,
+  NOTIFICATION_CATEGORY_META,
+  NOTIFICATION_TYPES,
+  NOTIFICATION_TYPE_CATEGORY,
+  isNotificationCategory,
+  isNotificationType,
+  normalizeNotificationPrefs,
+  notificationCategoryOf,
+  notificationTypesInCategory
+} from './registry';
+
+test('every notification type belongs to exactly one known category', () => {
+  for (const type of NOTIFICATION_TYPES) {
+    const category = NOTIFICATION_TYPE_CATEGORY[type];
+    assert.ok(isNotificationCategory(category), `${type} needs a category`);
+    assert.equal(notificationCategoryOf(type), category);
+  }
+  const partitioned = NOTIFICATION_CATEGORIES.flatMap((category) => notificationTypesInCategory(category)).sort();
+  assert.deepEqual(partitioned, [...NOTIFICATION_TYPES].sort());
+  for (const category of NOTIFICATION_CATEGORIES) {
+    assert.ok(NOTIFICATION_CATEGORY_META[category].label.trim(), `${category} needs a label`);
+  }
+});
+
+test('unknown types read as social, unknown categories are rejected', () => {
+  assert.equal(notificationCategoryOf('not-a-type'), 'social');
+  assert.equal(notificationCategoryOf(undefined), 'social');
+  assert.equal(isNotificationType('action-run'), true);
+  assert.equal(isNotificationType('ACTION-RUN'), false);
+  assert.equal(isNotificationCategory('system'), true);
+  assert.equal(isNotificationCategory('all'), false);
+});
+
+test('merged recording and subspace families retain their independent preference defaults', () => {
+  const prefs = normalizeNotificationPrefs(null);
+  for (const type of ['recording-reminder', 'subspace-join-request', 'subspace-report'] as const) {
+    assert.ok(isNotificationType(type));
+    assert.equal(prefs.push[type], true);
+    assert.equal(prefs.email[type], false);
+  }
+  assert.equal(notificationCategoryOf('recording-reminder'), 'system');
+  assert.equal(notificationCategoryOf('subspace-join-request'), 'social');
+  assert.equal(notificationCategoryOf('subspace-report'), 'engagement');
+});
+
+test('action-run is the system family: all delivery channels opt-in', () => {
+  assert.equal(NOTIFICATION_TYPE_CATEGORY['action-run'], 'system');
+  assert.deepEqual(notificationTypesInCategory('system'), ['action-run', 'recording-reminder', 'lopu-reminder', 'lopu-message', 'login-success', 'system-message']);
+  assert.equal(normalizeNotificationPrefs(null).push['lopu-message'], true);
+  assert.equal(normalizeNotificationPrefs(null).email['lopu-message'], false);
+  assert.equal(normalizeNotificationPrefs(null).push['recording-reminder'], true);
+  assert.equal(normalizeNotificationPrefs(null).email['recording-reminder'], false);
+  assert.ok(EMAIL_DEFAULT_OFF_TYPES.includes('action-run'));
+  const prefs = normalizeNotificationPrefs(null);
+  assert.equal(prefs.push['action-run'], false);
+  assert.equal(normalizeNotificationPrefs({ 'action-run': true }).push['action-run'], true);
+  assert.equal(normalizeNotificationPrefs({ push: { 'action-run': true } }).push['action-run'], true);
+  assert.equal(prefs.email['action-run'], false);
+  assert.equal(normalizeNotificationPrefs({ email: { 'action-run': true } }).email['action-run'], true);
+});

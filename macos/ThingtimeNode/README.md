@@ -1,0 +1,285 @@
+# Thingtime Node for macOS
+
+`ThingtimeNode` is the signed native foundation for making a Mac appear as a
+Thingtime mesh node even when the Electron window is closed. It is intentionally
+small: a menu-bar/login-agent executable, a reusable Swift core, a bounded local
+XPC surface, and a supervised connector subprocess boundary.
+
+## Implemented boundaries
+
+- Device snapshots: name/model/OS/architecture, output volume, session state,
+  running applications, active displays, and Accessibility/Screen Recording
+  **preflight** state. Startup and status reads never prompt. A separate
+  journaled `permissions.request` method is available only through the signed,
+  presence-gated bridge after the user presses **Request access**.
+- Safe actions: telemetry refresh, output volume, activate a running app, and
+  launch an installed app. Remote mutations deny while locked and require an
+  explicit approval bit.
+- Pairing/key storage: a two-step Ed25519 prepare/complete exchange binds the
+  one-use server challenge, node nonce, server nonce, locally generated bearer
+  credential, normalized device descriptor, and sorted capabilities into one
+  length-prefixed signed claim. Pending key/proof material is saved in Keychain
+  before network transmission and can be resumed after a lost response or app
+  restart without exposing it to the renderer. This proves claim integrity,
+  key continuity, and replay identity; it is not hardware/app attestation.
+  Keychain items use `AfterFirstUnlockThisDeviceOnly` in the traditional macOS
+  login Keychain. The helper is manually Apple Development/Developer ID signed
+  outside Xcode, so it deliberately does not request the Data Protection
+  Keychain access group that requires a provisioning-authorized application
+  identifier and otherwise fails with `errSecMissingEntitlement` (`-34018`).
+- Local IPC: a one-megabyte, sorted-JSON `Data` request/reply protocol over the
+  `com.thingtime.desktop.node.xpc` Mach service. Connections must have the same
+  effective user and Apple signing team as the node, and match the allowlisted
+  client identifiers (`com.thingtime.desktop` and the node itself by default).
+- Connector runtime: one explicitly configured absolute executable, no shell,
+  explicit arguments/environment, bounded NDJSON frames, request timeouts,
+  streamed events, and no automatic restart loop.
+- Live desktop chats: the bundled Codex runtime uses `codex app-server` for
+  paged session reads, project-scoped creation, queue/steer/interrupt, visible
+  deltas, and opaque approvals. Documented semantic Accessibility adapters for
+  the allowlisted ChatGPT/Codex and Claude apps can list opaque visible chat
+  tokens, read only the already-selected visible transcript, and create/send
+  only when the Mac is unlocked and the command carries explicit approval.
+  They never read window titles, URLs, positions, private app databases,
+  cookies, hidden reasoning, tool payloads, or paths, and never use coordinates,
+  AppleScript, a shell, or private APIs.
+- HTTPS control plane: `ThingtimeAPIClient` claims a pairing with a locally
+  generated bearer credential, posts monotonic complete device/connector
+  snapshots, long-polls one leased command, renews its 30-second lease every
+  ten seconds during execution, and reports a journaled terminal outcome.
+  State-upload failure is isolated from command claim/report; a lease-renewal
+  failure reports an uncertain outcome for review rather than stale success. It
+  accepts HTTPS plus loopback HTTP for development, uses an ephemeral session,
+  rejects cross-origin redirects and oversized responses, and stores the
+  credential only in Keychain. Live AI session summaries, transcript pages,
+  and closed visible events are queued through a durable exact-retry sync
+  journal; completed visible chat text is persisted by the server while
+  transient deltas/control events expire separately.
+  Ambiguous pairing responses are replayed up to three times inside the one
+  locally approved operation. Each retry reuses the same key-bound prepare and
+  durable signed complete request; only after the bound is exhausted does the
+  node expose `recoverablePairing` for an explicit later resume.
+- Endpoint isolation: every canonical deployment origin gets a separate
+  Keychain account, command journal, and live-sync journal. Production alone
+  migrates the former unscoped credential and retains the legacy production
+  journal filenames, preserving in-flight idempotency and live cursors across
+  upgrade; selecting a preview cannot reuse or leak that pairing state.
+- Menu-bar identity: the status item is artwork-only (with an accessibility
+  label) and renders the selected Thingtime tree or full pixel wordmark in
+  colour, template, black, white, pink, or blue variants. A custom local image
+  is fitted to the status-item canvas without exposing its path remotely.
+- View-only capture foundation: ScreenCaptureKit selects a display
+  deterministically and emits bounded JPEG frames only after explicit approval,
+  unlocked-session validation, and a non-prompting Screen Recording preflight.
+  Audio and input injection are disabled; size, frame rate, queue depth, and
+  frame bytes are hard-capped with newest-frame backpressure.
+
+The package intentionally does **not** provide arbitrary computer control,
+input synthesis, shell execution, or a remote screen media transport. Until an
+authenticated peer transport is installed, the web UI must report screen view
+as unavailable and must not start capture or invent a stream. No startup or
+telemetry path calls a TCC prompting API; permission requests remain an
+explicit signed-app user gesture.
+
+## Idempotent command contract
+
+Every mutating node method requires the server's `commandId`. `CommandJournal`
+hashes the canonical method/parameters payload and persists its state before
+execution:
+
+- the same ID and payload replay the stored terminal outcome;
+- the same ID with another payload is rejected;
+- a concurrent retry reports `command_in_progress`;
+- a node/runtime crash during delivery becomes `command_outcome_uncertain` and
+  cannot silently execute again;
+- pairing claim/resume is the sole exception: its exact persisted proof and
+  credential are explicitly marked crash-retryable, so a committed response
+  loss can replay without creating a second device or changing input;
+- terminal entries are deterministically evicted from the bounded 4,096-entry
+  store, while running/uncertain entries are never evicted.
+
+The journal lives at
+`~/Library/Application Support/Thingtime Node/command-journal.json` with mode
+`0600`; its directory uses mode `0700`.
+
+## Build and test
+
+```bash
+swift test --package-path macos/ThingtimeNode \
+  --scratch-path "$HOME/Library/Caches/com.thingtime.desktop.node/swiftpm-tests"
+
+macos/ThingtimeNode/scripts/build-bundle.sh
+macos/ThingtimeNode/scripts/build-and-run.sh
+```
+
+The scripts build into
+`~/Library/Caches/com.thingtime.desktop.node/bundle-stage/Thingtime Node.app`,
+select a stable `Apple Development` identity (or the explicit
+`THINGTIME_NODE_SIGNING_IDENTITY`), enable hardened runtime, verify the bundle,
+and install the verified copy at `~/Applications/Thingtime Node.app`. They do
+not fall back to ad-hoc signing. `build-bundle.sh` also derives a complete ICNS
+set from the tracked 1024px RGBA `Resources/ThingtimeNodeIcon.png` master and
+the bundle declares it as `ThingtimeNode.icns`, giving native prompts a unified
+five-node identity: four smaller, widely separated green/brown Thingtime squares
+joined through pixel relays to a central pink/red square instead of the generic
+application icon. `Resources/ThingtimeNodeIcon.svg` is the deterministic
+editable source; only the rendered PNG/ICNS reaches the app, avoiding
+fractional SVG join seams at runtime.
+
+For direct distribution, use a `Developer ID Application` identity and notarize
+and staple the outer Thingtime bundle. Keep the bundle identifier, signing team,
+entitlements, and installed path stable so macOS privacy grants retain a stable
+designated requirement.
+
+## Electron embedding
+
+The final Electron bundle should contain:
+
+```text
+Thingtime.app/
+  Contents/
+    Helpers/Thingtime Node.app/
+```
+
+The Electron app is authoritative for login registration. After an explicit
+user action it writes a marked per-user LaunchAgent with absolute paths to the
+installed helper and bundled connector runtime, the canonical selected API
+origin, and the selected menu-icon identifier, then registers that file with
+`launchctl`. The agent is `RunAtLoad`/`KeepAlive`; the embedded bundle carries
+an Electron-managed marker and exits harmlessly when LaunchServices tries to
+start it without launchd's private Mach-service environment. This keeps Privacy
+& Security **Quit & Reopen** to one node and one menu item. Do not package a
+second static LaunchAgent in either application bundle. Sign nested code first,
+then sign the outer Electron app with the same leaf certificate. A production
+release must update the Electron packaging workflow to include this Swift
+build, Developer ID signing, hardened runtime, notarization, and staple
+verification.
+
+The standalone bundle includes the equivalent self-relative LaunchAgent plist
+so its menu can enable or disable login startup during native development.
+
+
+## Brightness and filesystem support
+
+Brightness uses the system DisplayServices functions when present (including
+Apple Silicon internal displays), with the matched IOKit service as fallback.
+Only valid reads and available setters advertise write support. Heartbeats
+refresh capabilities for an existing pairing. The hardware regression test is
+opt-in: `TT_BRIGHTNESS_HARDWARE_TEST=1 swift test --filter DisplayBrightnessTests`.
+It reads, changes, verifies and restores the original display level.
+
+`filesystem.v1` exposes bounded home-relative inode listing and transfers through
+journaled, approved commands. No-follow directory descriptors prevent path or
+symlink escape; existing destinations are never overwritten. Chunk writes verify
+SHA-256 before exclusive publication. Recursive native copies stage before
+publication, and source removal uses Trash. Interrupted chunks expire after
+24 hours when the directory is next accessed. The command journal limits recent
+read data to 512 KiB while keeping command identities and mutation receipts.
+See [the web/native contract](../../docs/remote-files.md) for all limits and
+capability requirements. Deploy the compatible web server before updating nodes.
+
+
+## Local folder sync adapter
+
+`MacFolderSync` wraps the shared `AppleFileSync` package behind the exact local
+XPC method `folder-sync.request`. The generic and remotely leased dispatch paths
+reject it. The signed helper owns folder selection and separate download consent;
+only opaque root IDs/names, bounded entries/chunks and publication receipts cross
+XPC. Configuration revision/hash and owner/origin/device scope bind write approval.
+Bookmarks stay in `com.thingtime.folder-grants.v1` Keychain items. Staging lives in
+an endpoint-specific `FolderSync-v1-<endpoint identifier>` directory beside the
+existing command journal; it must never be shared across endpoints.
+
+Build from the repository root with the local `apple/FileSync` package present:
+
+```sh
+swift test --package-path macos/ThingtimeNode --filter 'MacFolderSyncTests|ThingtimeAPIClientTests|WireCodecTests'
+swift build --package-path macos/ThingtimeNode -c release --product ThingtimeNode
+```
+
+Deploy both registered identity/disconnect routes with the normal server setup.
+The helper negotiates `api.devices-node-identity` 1.x and selects exactly one local
+credential for the requested device. It freshly verifies that credential's owner
+and device before/after every folder request, without browser cookies, and checks
+local unpairing again after the response. Missing support, offline/revoked identity
+or ambiguous credentials fail closed. Full-account disconnect revokes all matching
+device sessions; it retains the protected device history, sync Things and files.
+A mutation already authorized when revocation occurs may finish; revocation does
+not roll it back.
+
+Electron now verifies the active browser account using its own session, derives
+the configured server origin, negotiates public capabilities and exposes only the
+exact folder method to the bundled main frame. The shared web controls use this
+adapter in Things/Settings. The helper returns network class and charging/unknown,
+without SSIDs, interface addresses or raw power-source metadata.
+
+Parallel development still avoids the installed Node; establish an isolated
+native lane before installed picker/consent acceptance. Focused tests use injected
+grant persistence/dialogs and real temporary files; they do not prove signed
+Keychain, sandbox/TCC or actual AppKit interaction. The Electron host verification
+uses a real isolated Chromium session with synthetic native dispatch.
+
+Current 64 KiB bridge chunks and fresh identity reads are correctness scaffolding;
+the `devices.read` rate limit can stop sustained transfers. Native streaming and
+measured throughput, durable restart journals despite Desktop's ephemeral local
+origin, and real installed cloud transfers remain required before release.
+
+### Composite authorization and identity diagnostics
+
+Mac file-access 1.12.0 returns current conditions with the authorized context and
+roots. The same fresh paired identity checks surround that native request. Updated
+clients combine the former context/list/conditions reads and retain actual mutation
+configuration/device/network checks. Older clients and hosts keep the existing path.
+
+The `com.thingtime.desktop.node` / `actions` OSLog category records `File-sync
+identity:` only for slow (>1 second), non-200 or retried identity requests. Closed
+fields are HTTP status, elapsed milliseconds, attempt and validated cooldown seconds;
+no account/device/session identifiers, URLs, credentials or response text enter it.
+This distinguishes a slow response from a server-directed 429 wait on a later
+installed attempt. `Slow file-sync request:` continues to report bounded action,
+elapsed time and category for requests exceeding 10 seconds. Neither log changes
+retry, authentication or lease behavior.
+
+### Bounded streaming transport batches
+
+Mac `fileAccessVersion` 1.11.1 corrects the streaming response byte bound to count
+complete change rows, commas and a reserved 16 KiB envelope within 512 KiB.
+Compatible clients request up to 4096 changes per native RPC, then persist and
+wake the planner in independent 128-entry journal chunks. The first durable chunk
+can transfer while later chunks spool. The durable cursor resumes at the last
+committed chunk after interruption; 1.11.0 hosts keep 128-entry requests. Root
+execution remains serialized with existing authority, source and receipt checks.
+No new settings, secrets or service permissions are required. Installed throughput
+acceptance remains separate from the bounded synthetic and signature measurements.
+
+## Photo library backup
+
+The local folder adapter advertises `fileAccessVersion` 1.3.0. **Choose folder**
+now offers an existing folder or **Photo library (backup)**. Photos selection
+requires a native explanation and macOS permission; no pairing, startup, status,
+list or scan path prompts for access. Cancelling or changing identity before
+confirmation cannot save a grant. The shared account/origin-scoped grant stores
+an opaque read-only photo source; it cannot authorize staging, publication,
+Trash or restoration into Photos. Folder grants keep their existing behavior.
+
+`PhotoLibraryReader` exports local originals and embedded metadata to one private
+temporary file, then uses bounded reads and binary XPC ranges. The shared backup
+configuration retains saved cloud copies after device deletion. A missing original,
+changed resource or revoked permission refuses completion. The existing scan and
+XPC response bounds remain; large libraries fail explicitly, and background work,
+iCloud download policy and album/database reconstruction remain unfinished.
+
+Forks need `NSPhotoLibraryUsageDescription` in `Resources/Info.plist` and the
+outer Electron app's `build.mac.extendInfo`. Preserve the signed application and
+helper identities. No new server secret or environment variable is required.
+
+Run `swift test --package-path macos/ThingtimeNode --filter
+'MacPhotosSyncTests|MacFolderSyncTests|FolderStreamXPCTests'` from the repository
+root. Build the non-shipping `MacFolderSyncFixture` product, then from `remix/` run
+`corepack pnpm exec tsx scripts/mac-file-sync.integration.mts
+/private/disposable-account.json --photos` against the documented loopback API.
+The fixture replaces picker/Photos/Keychain adapters with synthetic originals;
+it verifies real native streaming, API authentication, cloud hashes, retained
+versions, local-deletion retention, restart and repeat convergence. It does not
+prove actual PhotoKit permission, installed signed-app selection or personal
+library behavior. Those require a separate explicit live acceptance session.
