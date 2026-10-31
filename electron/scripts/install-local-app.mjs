@@ -71,7 +71,7 @@ export function readBundleIdentifier(appPath) {
   return result.stdout.trim();
 }
 
-export function assertExpectedBundle(appPath, label, identifierReader = readBundleIdentifier) {
+export function assertExpectedBundle(appPath, label, identifierReader = readBundleIdentifier, expectedIdentifier = expectedBundleIdentifier) {
   let stat;
   try {
     stat = lstatSync(appPath);
@@ -82,8 +82,8 @@ export function assertExpectedBundle(appPath, label, identifierReader = readBund
   if (stat.isSymbolicLink()) throw new Error(`${label} must not be a symbolic link: ${appPath}`);
   if (!stat.isDirectory()) throw new Error(`${label} must be an application bundle directory: ${appPath}`);
   const identifier = identifierReader(appPath);
-  if (identifier !== expectedBundleIdentifier) {
-    throw new Error(`${label} has bundle identifier ${identifier || '(missing)'}; expected ${expectedBundleIdentifier}.`);
+  if (identifier !== expectedIdentifier) {
+    throw new Error(`${label} has bundle identifier ${identifier || '(missing)'}; expected ${expectedIdentifier}.`);
   }
 }
 
@@ -224,12 +224,23 @@ export function acquireInstallLock(targetDir) {
   };
 }
 
-function defaultVerifyApp(appPath) {
-  runRequired(process.execPath, [verifyScript, '--mode', 'local', appPath], `Stable signature verification for ${appPath}`);
+function defaultVerifyApp(appPath, signatureMode = 'local') {
+  runRequired(process.execPath, [verifyScript, '--mode', signatureMode, appPath], `Stable signature verification for ${appPath}`);
 }
 
 function defaultCopyApp(sourceApp, destinationApp) {
   runRequired('/usr/bin/ditto', ['--rsrc', '--extattr', sourceApp, destinationApp], 'Thingtime application copy');
+}
+
+export function rollbackAppReplacements(replacements, { remove = rmSync, rename = renameSync } = {}) {
+  const failures = [];
+  for (const { target, backup, installedMoved, backupMoved } of replacements) {
+    try {
+      if (installedMoved) remove(target, { force: true, recursive: true });
+      if (backupMoved) rename(backup, target);
+    } catch (error) { failures.push(error); }
+  }
+  return failures;
 }
 
 export function installLocalApp(options = {}) {
@@ -242,8 +253,23 @@ export function installLocalApp(options = {}) {
   const targetApp = join(targetDir, appName);
   const targetExecutable = join(targetApp, 'Contents', 'MacOS', 'Thingtime');
   const targetNodeExecutable = join(targetApp, 'Contents', 'Helpers', 'Thingtime Node.app', 'Contents', 'MacOS', 'ThingtimeNode');
-  const verifyApp = options.verifyApp || defaultVerifyApp;
+  const signatureMode = options.signatureMode || process.env.THINGTIME_ELECTRON_SIGNATURE_MODE || 'local';
+  if (!['local', 'production'].includes(signatureMode)) throw new Error('Thingtime installation signature mode is invalid.');
+  const verifyApp = options.verifyApp || ((appPath) => defaultVerifyApp(appPath, signatureMode));
   const copyApp = options.copyApp || defaultCopyApp;
+  const companionName = 'Thingtime Passwords.app';
+  const companionIdentifier = 'com.thingtime.passwords';
+  const sourceCompanion = join(sourceApp, 'Contents', 'Helpers', companionName);
+  const targetCompanion = join(targetDir, companionName);
+  // verifyApp validates the nested helper before it becomes the canonical
+  // standalone provider too. Older standalone copies otherwise keep winning
+  // LaunchServices discovery even after the Electron app has been updated.
+  const hasCompanion = existsSync(sourceCompanion);
+  const verifyCompanion = options.verifyCompanion || ((appPath) => {
+    runRequired('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath], 'Password AutoFill signature verification');
+    accessSync(join(appPath, 'Contents', 'MacOS', 'Thingtime Passwords'), constants.X_OK);
+  });
+  const companionRunningPids = options.companionRunningPids || ((executable) => exactRunningPids(executable, 'Thingtime Passwords', 'Thingtime Passwords'));
   const identifierReader = options.identifierReader || readBundleIdentifier;
   const runningPids = options.runningPids || exactRunningInstalledPids;
   const nodeRunningPids = options.nodeRunningPids || exactRunningNodePids;
@@ -256,9 +282,16 @@ export function installLocalApp(options = {}) {
   mkdirSync(targetDir, { recursive: true });
   const releaseLock = acquireInstallLock(targetDir);
   let stageRoot = null;
+  let preserveStage = false;
   try {
     assertExpectedBundle(sourceApp, 'Source Thingtime app', identifierReader);
     verifyApp(sourceApp);
+    const companionExists = lstatSync(targetCompanion, { throwIfNoEntry: false }) !== undefined;
+    if (hasCompanion) {
+      assertExpectedBundle(sourceCompanion, 'Source Password AutoFill companion', identifierReader, companionIdentifier);
+      verifyCompanion(sourceCompanion);
+      if (companionExists) assertExpectedBundle(targetCompanion, 'Installed Password AutoFill companion', identifierReader, companionIdentifier);
+    }
 
     const targetExists = lstatSync(targetApp, { throwIfNoEntry: false }) !== undefined;
     if (targetExists) {
@@ -276,6 +309,15 @@ export function installLocalApp(options = {}) {
     assertExpectedBundle(stagedApp, 'Staged Thingtime app', identifierReader);
     verifyApp(stagedApp);
 
+    const stagedCompanion = join(stageRoot, companionName);
+    const backupCompanion = join(stageRoot, 'Previous Thingtime Passwords.app');
+    if (hasCompanion) {
+      copyApp(sourceCompanion, stagedCompanion);
+      assertExpectedBundle(stagedCompanion, 'Staged Password AutoFill companion', identifierReader, companionIdentifier);
+      verifyCompanion(stagedCompanion);
+    }
+    let companionBackupMoved = false;
+    let companionInstalledMoved = false;
     let backupMoved = false;
     let installedMoved = false;
     let serviceStopped = false;
@@ -293,6 +335,9 @@ export function installLocalApp(options = {}) {
         const qualifier = serviceState.registered ? 'Thingtime Node did not stop cleanly' : 'Quit the unmanaged Thingtime Node process';
         throw new Error(`${qualifier} before replacing the app (running PID${nodePids.length === 1 ? '' : 's'}: ${nodePids.join(', ')}).`);
       }
+      if (hasCompanion && companionRunningPids(join(targetCompanion, 'Contents', 'MacOS', 'Thingtime Passwords')).length) {
+        throw new Error('Quit the Thingtime AutoFill companion before replacing it.');
+      }
       if (targetExists) {
         renameSync(targetApp, backupApp);
         backupMoved = true;
@@ -302,18 +347,21 @@ export function installLocalApp(options = {}) {
       assertExpectedBundle(targetApp, 'Installed Thingtime app', identifierReader);
       verifyApp(targetApp);
       accessSync(targetExecutable, constants.X_OK);
+      if (hasCompanion) {
+        if (companionExists) { renameSync(targetCompanion, backupCompanion); companionBackupMoved = true; }
+        renameSync(stagedCompanion, targetCompanion); companionInstalledMoved = true;
+        assertExpectedBundle(targetCompanion, 'Installed Password AutoFill companion', identifierReader, companionIdentifier);
+        verifyCompanion(targetCompanion);
+      }
       if (serviceState.registered) {
         serviceLifecycle.start(serviceState);
         serviceStopped = false;
       }
     } catch (error) {
-      const rollbackErrors = [];
-      try {
-        if (installedMoved) rmSync(targetApp, { force: true, recursive: true });
-        if (backupMoved) renameSync(backupApp, targetApp);
-      } catch (rollbackError) {
-        rollbackErrors.push(rollbackError);
-      }
+      const rollbackErrors = rollbackAppReplacements([
+        { target: targetCompanion, backup: backupCompanion, installedMoved: companionInstalledMoved, backupMoved: companionBackupMoved },
+        { target: targetApp, backup: backupApp, installedMoved, backupMoved }
+      ]);
       if (serviceStopped) {
         try {
           serviceLifecycle.start(serviceState);
@@ -322,7 +370,8 @@ export function installLocalApp(options = {}) {
         }
       }
       if (rollbackErrors.length) {
-        const failure = new AggregateError(rollbackErrors, 'Thingtime installation failed and the prior app or node service could not be fully restored.');
+        preserveStage = true;
+        const failure = new AggregateError(rollbackErrors, `Thingtime installation failed and the prior app or node service could not be fully restored. Recovery backups are preserved at ${stageRoot}.`);
         failure.cause = error;
         throw failure;
       }
@@ -330,9 +379,10 @@ export function installLocalApp(options = {}) {
     }
 
     registerMetadata(targetApp);
-    return { sourceApp, targetApp };
+    if (hasCompanion && existsSync(lsregister)) runOptional(lsregister, ['-f', targetCompanion]);
+    return { sourceApp, targetApp, ...(hasCompanion ? { targetCompanion } : {}) };
   } finally {
-    if (stageRoot) rmSync(stageRoot, { force: true, recursive: true });
+    if (stageRoot && !preserveStage) rmSync(stageRoot, { force: true, recursive: true });
     releaseLock();
   }
 }

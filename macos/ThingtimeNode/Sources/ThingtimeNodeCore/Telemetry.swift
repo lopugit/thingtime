@@ -3,6 +3,7 @@ import ApplicationServices
 import AudioToolbox
 import CoreAudio
 import CoreGraphics
+import CoreWLAN
 import Darwin
 import Foundation
 import IOKit
@@ -59,6 +60,17 @@ public struct DisplayTelemetry: Codable, Equatable, Sendable {
     public let isBuiltIn: Bool
     public let brightness: Double?
     public let brightnessControlSupported: Bool
+    /// A stable, non-secret identifier for the selected display mode. It is
+    /// deliberately derived from public CoreGraphics mode attributes rather
+    /// than accepting an arbitrary EDID or display profile from a caller.
+    public let currentMode: DisplayModeTelemetry?
+    public let availableModes: [DisplayModeTelemetry]
+    public let originX: Int
+    public let originY: Int
+    public let mirroredDisplayID: UInt32?
+    /// macOS exposes the active HDR colour space but does not provide a public
+    /// API to toggle system HDR. This is therefore read-only telemetry.
+    public let hdrActive: Bool
 
     public init(
         displayID: UInt32,
@@ -67,7 +79,13 @@ public struct DisplayTelemetry: Codable, Equatable, Sendable {
         isMain: Bool,
         isBuiltIn: Bool,
         brightness: Double? = nil,
-        brightnessControlSupported: Bool = false
+        brightnessControlSupported: Bool = false,
+        currentMode: DisplayModeTelemetry? = nil,
+        availableModes: [DisplayModeTelemetry] = [],
+        originX: Int = 0,
+        originY: Int = 0,
+        mirroredDisplayID: UInt32? = nil,
+        hdrActive: Bool = false
     ) {
         self.displayID = displayID
         self.width = width
@@ -76,6 +94,181 @@ public struct DisplayTelemetry: Codable, Equatable, Sendable {
         self.isBuiltIn = isBuiltIn
         self.brightness = brightness
         self.brightnessControlSupported = brightnessControlSupported
+        self.currentMode = currentMode
+        self.availableModes = availableModes
+        self.originX = originX
+        self.originY = originY
+        self.mirroredDisplayID = mirroredDisplayID
+        self.hdrActive = hdrActive
+    }
+}
+
+public struct DisplayModeTelemetry: Codable, Equatable, Sendable {
+    public let id: String
+    public let width: Int
+    public let height: Int
+    public let refreshRate: Double
+
+    public init(id: String, width: Int, height: Int, refreshRate: Double) {
+        self.id = id
+        self.width = width
+        self.height = height
+        self.refreshRate = refreshRate
+    }
+}
+
+public struct PrinterTelemetry: Codable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let isDefault: Bool
+
+    public init(id: String, name: String, isDefault: Bool) {
+        self.id = id
+        self.name = name
+        self.isDefault = isDefault
+    }
+}
+
+public struct CameraTelemetry: Codable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let isConnected: Bool
+    public let isPreferred: Bool
+    public let authorization: PermissionPreflightState
+
+    public init(id: String, name: String, isConnected: Bool, isPreferred: Bool, authorization: PermissionPreflightState) {
+        self.id = id
+        self.name = name
+        self.isConnected = isConnected
+        self.isPreferred = isPreferred
+        self.authorization = authorization
+    }
+}
+
+/// Bluetooth device identifiers are a one-way digest of the public address.
+/// This lets a paired node match a device without publishing its hardware
+/// address to the remote control plane.
+public struct BluetoothDeviceTelemetry: Codable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let isConnected: Bool
+
+    public init(id: String, name: String, isConnected: Bool) {
+        self.id = id
+        self.name = name
+        self.isConnected = isConnected
+    }
+}
+
+public struct VPNServiceTelemetry: Codable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let isConnected: Bool
+
+    public init(id: String, name: String, isConnected: Bool) {
+        self.id = id
+        self.name = name
+        self.isConnected = isConnected
+    }
+}
+
+public struct BatteryTelemetry: Codable, Equatable, Sendable {
+    public let level: Double?
+    public let isCharging: Bool?
+    public let isExternalPower: Bool?
+    public let isPreventingIdleSleep: Bool
+    public let isLowPowerModeEnabled: Bool
+    public let fullyCharged: Bool?
+    public let cycleCount: Int?
+    public let designCycleCount: Int?
+    public let designCapacityMAh: Int?
+    public let fullChargeCapacityMAh: Int?
+    public let remainingCapacityMAh: Int?
+    public let currentMA: Int?
+    public let voltageMV: Int?
+    public let temperatureC: Double?
+    public let timeToEmptyMinutes: Int?
+    public let timeToFullMinutes: Int?
+    public let adapterWatts: Int?
+    public let adapterVoltageMV: Int?
+    public let adapterCurrentMA: Int?
+
+    public init(level: Double?, isCharging: Bool?, isExternalPower: Bool?, isPreventingIdleSleep: Bool, isLowPowerModeEnabled: Bool = false,
+                fullyCharged: Bool? = nil, cycleCount: Int? = nil, designCycleCount: Int? = nil,
+                designCapacityMAh: Int? = nil, fullChargeCapacityMAh: Int? = nil, remainingCapacityMAh: Int? = nil,
+                currentMA: Int? = nil, voltageMV: Int? = nil, temperatureC: Double? = nil,
+                timeToEmptyMinutes: Int? = nil, timeToFullMinutes: Int? = nil,
+                adapterWatts: Int? = nil, adapterVoltageMV: Int? = nil, adapterCurrentMA: Int? = nil) {
+        self.level = level
+        self.isCharging = isCharging
+        self.isExternalPower = isExternalPower
+        self.isPreventingIdleSleep = isPreventingIdleSleep
+        self.isLowPowerModeEnabled = isLowPowerModeEnabled
+        self.fullyCharged = fullyCharged
+        self.cycleCount = cycleCount
+        self.designCycleCount = designCycleCount
+        self.designCapacityMAh = designCapacityMAh
+        self.fullChargeCapacityMAh = fullChargeCapacityMAh
+        self.remainingCapacityMAh = remainingCapacityMAh
+        self.currentMA = currentMA
+        self.voltageMV = voltageMV
+        self.temperatureC = temperatureC
+        self.timeToEmptyMinutes = timeToEmptyMinutes
+        self.timeToFullMinutes = timeToFullMinutes
+        self.adapterWatts = adapterWatts
+        self.adapterVoltageMV = adapterVoltageMV
+        self.adapterCurrentMA = adapterCurrentMA
+    }
+}
+
+/// The supported root-domain idle timers, measured in minutes. Zero means the
+/// corresponding timer is disabled. No energy profile names or opaque power
+/// preference dictionaries leave the node.
+public struct PowerTimerTelemetry: Codable, Equatable, Sendable {
+    public let displayIdleMinutes: Int?
+    public let systemSleepMinutes: Int?
+    public let diskIdleMinutes: Int?
+
+    public init(displayIdleMinutes: Int?, systemSleepMinutes: Int?, diskIdleMinutes: Int?) {
+        self.displayIdleMinutes = displayIdleMinutes
+        self.systemSleepMinutes = systemSleepMinutes
+        self.diskIdleMinutes = diskIdleMinutes
+    }
+}
+
+/// A deliberately minimal, privacy-preserving Apple Music presence signal.
+/// Playback title, library, queue, and listening history are never collected.
+public struct AppleMusicTelemetry: Codable, Equatable, Sendable {
+    public let isInstalled: Bool
+    public let isRunning: Bool
+
+    public init(isInstalled: Bool, isRunning: Bool) {
+        self.isInstalled = isInstalled
+        self.isRunning = isRunning
+    }
+}
+
+/// A deliberately minimal, privacy-preserving Spotify presence signal.
+/// Playback title, library, queue, and listening history are never collected.
+public struct SpotifyTelemetry: Codable, Equatable, Sendable {
+    public let isInstalled: Bool
+    public let isRunning: Bool
+
+    public init(isInstalled: Bool, isRunning: Bool) {
+        self.isInstalled = isInstalled
+        self.isRunning = isRunning
+    }
+}
+
+/// A deliberately minimal Chrome capability signal. The node never reports a
+/// tab URL, title, playback state, page contents, or browser history.
+public struct ChromeYouTubeTelemetry: Codable, Equatable, Sendable {
+    public let isInstalled: Bool
+    public let isRunning: Bool
+
+    public init(isInstalled: Bool, isRunning: Bool) {
+        self.isInstalled = isInstalled
+        self.isRunning = isRunning
     }
 }
 
@@ -89,6 +282,49 @@ public struct SessionTelemetry: Codable, Equatable, Sendable {
     }
 }
 
+/// A deliberately small, non-secret description of an audio route. Device UIDs
+/// let the node switch a route without accepting a filesystem path, shell
+/// fragment, or opaque driver object from a remote caller.
+public struct AudioDeviceTelemetry: Codable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let hasInput: Bool
+    public let hasOutput: Bool
+    public let isDefaultInput: Bool
+    public let isDefaultOutput: Bool
+    public let isDefaultSoundEffectsOutput: Bool
+
+    public init(
+        id: String,
+        name: String,
+        hasInput: Bool,
+        hasOutput: Bool,
+        isDefaultInput: Bool,
+        isDefaultOutput: Bool,
+        isDefaultSoundEffectsOutput: Bool
+    ) {
+        self.id = id
+        self.name = name
+        self.hasInput = hasInput
+        self.hasOutput = hasOutput
+        self.isDefaultInput = isDefaultInput
+        self.isDefaultOutput = isDefaultOutput
+        self.isDefaultSoundEffectsOutput = isDefaultSoundEffectsOutput
+    }
+}
+
+/// A bounded, credential-free Wi-Fi status projection. The node never sends
+/// saved passwords, BSSIDs, or scan history to the control plane.
+public struct WiFiTelemetry: Codable, Equatable, Sendable {
+    public let powerOn: Bool?
+    public let ssid: String?
+
+    public init(powerOn: Bool?, ssid: String?) {
+        self.powerOn = powerOn
+        self.ssid = ssid
+    }
+}
+
 public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let deviceName: String
     public let hostName: String
@@ -96,11 +332,28 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let operatingSystemVersion: String
     public let architecture: String
     public let outputVolume: Double?
+    public let outputMuted: Bool?
+    public let inputVolume: Double?
+    public let inputMuted: Bool?
+    public let soundEffectsOutputVolume: Double?
+    public let soundEffectsOutputMuted: Bool?
+    public let audioDevices: [AudioDeviceTelemetry]
+    public let wifi: WiFiTelemetry
     public let session: SessionTelemetry
     public let permissions: PermissionPreflight
     public let runningApplications: [RunningApplicationTelemetry]
     public let displays: [DisplayTelemetry]
+    public let printers: [PrinterTelemetry]
+    public let cameras: [CameraTelemetry]
+    public let bluetoothDevices: [BluetoothDeviceTelemetry]
+    public let vpnServices: [VPNServiceTelemetry]
+    public let battery: BatteryTelemetry
+    public let powerTimers: PowerTimerTelemetry
+    public let appleMusic: AppleMusicTelemetry
+    public let spotify: SpotifyTelemetry
+    public let chromeYouTube: ChromeYouTubeTelemetry
     public let collectedAt: Date
+    public let menuBar: MenuBarTelemetry?
 
     public init(
         deviceName: String,
@@ -109,11 +362,28 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         operatingSystemVersion: String,
         architecture: String,
         outputVolume: Double?,
+        outputMuted: Bool? = nil,
+        inputVolume: Double? = nil,
+        inputMuted: Bool? = nil,
+        soundEffectsOutputVolume: Double? = nil,
+        soundEffectsOutputMuted: Bool? = nil,
+        audioDevices: [AudioDeviceTelemetry] = [],
+        wifi: WiFiTelemetry = WiFiTelemetry(powerOn: nil, ssid: nil),
         session: SessionTelemetry,
         permissions: PermissionPreflight,
         runningApplications: [RunningApplicationTelemetry],
         displays: [DisplayTelemetry],
-        collectedAt: Date
+        collectedAt: Date,
+        menuBar: MenuBarTelemetry? = nil,
+        printers: [PrinterTelemetry] = [],
+        cameras: [CameraTelemetry] = [],
+        bluetoothDevices: [BluetoothDeviceTelemetry] = [],
+        vpnServices: [VPNServiceTelemetry] = [],
+        battery: BatteryTelemetry = BatteryTelemetry(level: nil, isCharging: nil, isExternalPower: nil, isPreventingIdleSleep: false),
+        powerTimers: PowerTimerTelemetry = PowerTimerTelemetry(displayIdleMinutes: nil, systemSleepMinutes: nil, diskIdleMinutes: nil),
+        appleMusic: AppleMusicTelemetry = AppleMusicTelemetry(isInstalled: false, isRunning: false),
+        spotify: SpotifyTelemetry = SpotifyTelemetry(isInstalled: false, isRunning: false),
+        chromeYouTube: ChromeYouTubeTelemetry = ChromeYouTubeTelemetry(isInstalled: false, isRunning: false)
     ) {
         self.deviceName = deviceName
         self.hostName = hostName
@@ -121,11 +391,28 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         self.operatingSystemVersion = operatingSystemVersion
         self.architecture = architecture
         self.outputVolume = outputVolume
+        self.outputMuted = outputMuted
+        self.inputVolume = inputVolume
+        self.inputMuted = inputMuted
+        self.soundEffectsOutputVolume = soundEffectsOutputVolume
+        self.soundEffectsOutputMuted = soundEffectsOutputMuted
+        self.audioDevices = audioDevices
+        self.wifi = wifi
         self.session = session
         self.permissions = permissions
         self.runningApplications = runningApplications
         self.displays = displays
         self.collectedAt = collectedAt
+        self.menuBar = menuBar
+        self.printers = printers
+        self.cameras = cameras
+        self.bluetoothDevices = bluetoothDevices
+        self.vpnServices = vpnServices
+        self.battery = battery
+        self.powerTimers = powerTimers
+        self.appleMusic = appleMusic
+        self.spotify = spotify
+        self.chromeYouTube = chromeYouTube
     }
 }
 
@@ -136,15 +423,39 @@ public enum ThingtimeNodeLog {
 }
 
 @MainActor
-public final class DeviceTelemetryCollector {
+public protocol DeviceTelemetryProviding: Sendable {
+    func snapshot(now: Date) -> DeviceTelemetry
+    func sessionSnapshot() -> SessionTelemetry
+    func batterySnapshot() -> BatteryTelemetry
+    func permissionPreflight() -> PermissionPreflight
+    func requestPermission(_ kind: ThingtimePermissionKind) -> PermissionPreflight
+    func setPreventIdleSleep(_ enabled: Bool) throws
+}
+
+public extension DeviceTelemetryProviding {
+    func snapshot() -> DeviceTelemetry { snapshot(now: Date()) }
+}
+
+@MainActor
+public final class DeviceTelemetryCollector: DeviceTelemetryProviding {
     private let sessionActivity: SessionActivityMonitor
+    private let powerAssertions: PowerAssertionController
+    private var menuBarSnapshot: MenuBarTelemetry?
+    private var menuBarRead: Task<Void, Never>?
+    private var menuBarGeneration = UUID()
 
     public init() {
         sessionActivity = SessionActivityMonitor()
+        powerAssertions = PowerAssertionController()
     }
 
-    init(sessionActivity: SessionActivityMonitor) {
+    init(sessionActivity: SessionActivityMonitor, powerAssertions: PowerAssertionController) {
         self.sessionActivity = sessionActivity
+        self.powerAssertions = powerAssertions
+    }
+
+    convenience init(sessionActivity: SessionActivityMonitor) {
+        self.init(sessionActivity: sessionActivity, powerAssertions: PowerAssertionController())
     }
 
     /// Call from applicationDidFinishLaunching after this collector was
@@ -176,14 +487,41 @@ public final class DeviceTelemetryCollector {
     }
 
     public func snapshot(now: Date = Date()) -> DeviceTelemetry {
-        DeviceTelemetry(
+        let session = sessionSnapshot()
+        if session.isLocked {
+            menuBarGeneration = UUID()
+            menuBarSnapshot = SystemMenuBar.snapshot(now: now, locked: true)
+        } else if menuBarRead == nil && (menuBarSnapshot == nil || now.timeIntervalSince(menuBarSnapshot!.collectedAt) >= 30 || menuBarSnapshot?.status == "locked") {
+            let generation = UUID()
+            menuBarGeneration = generation
+            if menuBarSnapshot == nil || menuBarSnapshot?.status == "locked" {
+                menuBarSnapshot = .init(status: "collecting", collectedAt: now, accessibility: AXIsProcessTrusted(), unreadableApplications: 0, items: [])
+            }
+            // AX calls can time out in another process. Keep them off the node's
+            // main actor so heartbeat, permission UI and commands stay responsive.
+            menuBarRead = Task { [weak self] in
+                let snapshot = await Task.detached(priority: .utility) { await SystemMenuBar.snapshotWithIcons() }.value
+                guard let self else { return }
+                self.menuBarRead = nil
+                guard self.menuBarGeneration == generation, !self.sessionSnapshot().isLocked else { return }
+                self.menuBarSnapshot = snapshot
+            }
+        }
+        return DeviceTelemetry(
             deviceName: Host.current().localizedName ?? ProcessInfo.processInfo.hostName,
             hostName: ProcessInfo.processInfo.hostName,
             modelIdentifier: Self.sysctlString("hw.model"),
             operatingSystemVersion: ProcessInfo.processInfo.operatingSystemVersionString,
             architecture: Self.sysctlString("hw.machine") ?? "unknown",
             outputVolume: SystemAudio.outputVolume(),
-            session: sessionTelemetry(),
+            outputMuted: SystemAudio.outputMuted(),
+            inputVolume: SystemAudio.inputVolume(),
+            inputMuted: SystemAudio.inputMuted(),
+            soundEffectsOutputVolume: SystemAudio.soundEffectsOutputVolume(),
+            soundEffectsOutputMuted: SystemAudio.soundEffectsOutputMuted(),
+            audioDevices: SystemAudio.devices(),
+            wifi: SystemWiFi.snapshot(),
+            session: sessionSnapshot(),
             permissions: permissionPreflight(),
             runningApplications: NSWorkspace.shared.runningApplications
                 .map {
@@ -198,32 +536,33 @@ public final class DeviceTelemetryCollector {
                 .sorted {
                     ($0.name ?? $0.bundleIdentifier ?? "") < ($1.name ?? $1.bundleIdentifier ?? "")
                 },
-            displays: Self.displays(),
-            collectedAt: now
+            displays: SystemDisplayConfiguration.displays(),
+            collectedAt: now,
+            menuBar: menuBarSnapshot,
+            printers: SystemPrinters.all(),
+            cameras: SystemCameras.all(),
+            bluetoothDevices: SystemBluetooth.pairedDevices(),
+            vpnServices: SystemVPN.services(),
+            battery: SystemBattery.snapshot(isPreventingIdleSleep: powerAssertions.isPreventingIdleSleep),
+            powerTimers: SystemPowerTimers.snapshot(),
+            appleMusic: SystemAppleMusic.telemetry(),
+            spotify: SystemSpotify.telemetry(),
+            chromeYouTube: SystemChromeYouTube.telemetry()
         )
     }
 
-    private static func displays() -> [DisplayTelemetry] {
-        var count: UInt32 = 0
-        guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
-        var identifiers = Array(repeating: CGDirectDisplayID(), count: Int(count))
-        guard CGGetActiveDisplayList(count, &identifiers, &count) == .success else { return [] }
-        return identifiers.prefix(Int(count)).map { identifier in
-            let bounds = CGDisplayBounds(identifier)
-            let brightness = SystemDisplayBrightness.snapshot(for: identifier)
-            return DisplayTelemetry(
-                displayID: identifier,
-                width: Int(bounds.width),
-                height: Int(bounds.height),
-                isMain: CGDisplayIsMain(identifier) != 0,
-                isBuiltIn: CGDisplayIsBuiltin(identifier) != 0,
-                brightness: brightness?.level,
-                brightnessControlSupported: brightness?.canSet ?? false
-            )
-        }
+    /// Narrow local bridge read. Do not collect or return the full device
+    /// snapshot just to render battery status in the desktop app.
+    public func batterySnapshot() -> BatteryTelemetry {
+        SystemBattery.snapshot(isPreventingIdleSleep: powerAssertions.isPreventingIdleSleep)
     }
 
-    private func sessionTelemetry() -> SessionTelemetry {
+    public func setPreventIdleSleep(_ enabled: Bool) throws {
+        try powerAssertions.setPreventingIdleSleep(enabled)
+    }
+
+    /// Policy checks must not enumerate hardware or request unrelated privacy access.
+    public func sessionSnapshot() -> SessionTelemetry {
         let dictionary = CGSessionCopyCurrentDictionary() as? [String: Any]
         return SessionTelemetry(
             // NSWorkspace notifications are the public authority. The extra
@@ -308,7 +647,46 @@ public struct DisplayBrightnessSnapshot: Equatable, Sendable {
 }
 
 public enum SystemDisplayBrightness {
+    // Apple Silicon built-in displays need DisplayServices: they do not always
+    // publish an IODisplayConnect service. Resolve the optional private framework
+    // at runtime so older macOS versions retain the IOKit implementation.
+    private typealias GetBrightness = @convention(c) (UInt32, UnsafeMutablePointer<Float>) -> Int32
+    private typealias SetBrightness = @convention(c) (UInt32, Float) -> Int32
+    private static let displayServices = dlopen(
+        "/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices", RTLD_LAZY | RTLD_LOCAL
+    )
+    private static let nativeGet: GetBrightness? = displayServices.flatMap { handle in
+        dlsym(handle, "DisplayServicesGetBrightness").map { unsafeBitCast($0, to: GetBrightness.self) }
+    }
+    private static let nativeSet: SetBrightness? = displayServices.flatMap { handle in
+        dlsym(handle, "DisplayServicesSetBrightness").map { unsafeBitCast($0, to: SetBrightness.self) }
+    }
+
+    static func readSnapshot(
+        displayID: UInt32,
+        nativeRead: (UInt32) -> Double?,
+        nativeWritable: Bool,
+        legacyRead: (UInt32) -> DisplayBrightnessSnapshot?
+    ) -> DisplayBrightnessSnapshot? {
+        if let value = nativeRead(displayID), let snapshot = normalizedSnapshot(level: value, canSet: nativeWritable) {
+            return snapshot
+        }
+        return legacyRead(displayID)
+    }
+
+    private static func nativeBrightness(_ displayID: UInt32) -> Double? {
+        guard let nativeGet else { return nil }
+        var value = Float.zero
+        guard nativeGet(displayID, &value) == kIOReturnSuccess else { return nil }
+        return Double(value)
+    }
+
     public static func snapshot(for displayID: CGDirectDisplayID) -> DisplayBrightnessSnapshot? {
+        guard CGDisplayIsActive(displayID) != 0 else { return nil }
+        return readSnapshot(displayID: displayID, nativeRead: nativeBrightness, nativeWritable: nativeSet != nil, legacyRead: legacySnapshot)
+    }
+
+    private static func legacySnapshot(for displayID: CGDirectDisplayID) -> DisplayBrightnessSnapshot? {
         withUniqueMatchingService(for: displayID) { service -> DisplayBrightnessSnapshot? in
             var value = Float.zero
             guard IODisplayGetFloatParameter(
@@ -322,10 +700,19 @@ public enum SystemDisplayBrightness {
     }
 
     public static func setMainDisplayBrightness(_ level: Double) throws {
+        try setDisplayBrightness(level, displayID: CGMainDisplayID())
+    }
+
+    public static func setDisplayBrightness(_ level: Double, displayID: CGDirectDisplayID) throws {
         guard level.isFinite, (0 ... 1).contains(level) else {
             throw ThingtimeNodeError.invalidRequest("Brightness must be between 0 and 1.")
         }
-        let displayID = CGMainDisplayID()
+        guard CGDisplayIsActive(displayID) != 0 else {
+            throw ThingtimeNodeError.policyDenied("The selected display is no longer connected.")
+        }
+        if let nativeSet, let current = nativeBrightness(displayID),
+           normalizedSnapshot(level: current, canSet: true) != nil,
+           nativeSet(displayID, Float(level)) == kIOReturnSuccess { return }
         let result = withUniqueMatchingService(for: displayID) { service in
             IODisplaySetFloatParameter(
                 service,
@@ -336,7 +723,7 @@ public enum SystemDisplayBrightness {
         }
         if result == kIOReturnSuccess { return }
         throw ThingtimeNodeError.policyDenied(
-            "The main display does not expose public IOKit brightness control."
+            "macOS does not expose brightness control for the selected display."
         )
     }
 
@@ -444,9 +831,256 @@ public enum SystemAudio {
         }
     }
 
-    private static func defaultOutputDevice() -> AudioDeviceID? {
+    public static func outputMuted() -> Bool? {
+        guard let device = defaultOutputDevice() else { return nil }
+        return muted(device: device, scope: kAudioDevicePropertyScopeOutput)
+    }
+
+    public static func setOutputMuted(_ muted: Bool) throws {
+        guard let device = defaultOutputDevice() else {
+            throw ThingtimeNodeError.policyDenied("No controllable default output device is available.")
+        }
+        try setMuted(muted, device: device, scope: kAudioDevicePropertyScopeOutput)
+    }
+
+    public static func inputVolume() -> Double? {
+        guard let device = defaultInputDevice() else { return nil }
+        return volume(device: device, scope: kAudioDevicePropertyScopeInput)
+    }
+
+    public static func setInputVolume(_ volume: Double) throws {
+        guard let device = defaultInputDevice() else {
+            throw ThingtimeNodeError.policyDenied("No controllable default input device is available.")
+        }
+        try setVolume(volume, device: device, scope: kAudioDevicePropertyScopeInput, route: "input")
+    }
+
+    public static func inputMuted() -> Bool? {
+        guard let device = defaultInputDevice() else { return nil }
+        return muted(device: device, scope: kAudioDevicePropertyScopeInput)
+    }
+
+    public static func setInputMuted(_ muted: Bool) throws {
+        guard let device = defaultInputDevice() else {
+            throw ThingtimeNodeError.policyDenied("No controllable default input device is available.")
+        }
+        try setMuted(muted, device: device, scope: kAudioDevicePropertyScopeInput, route: "input")
+    }
+
+    public static func soundEffectsOutputVolume() -> Double? {
+        guard let device = defaultSoundEffectsOutputDevice() else { return nil }
+        return volume(device: device, scope: kAudioDevicePropertyScopeOutput)
+    }
+
+    public static func setSoundEffectsOutputVolume(_ volume: Double) throws {
+        guard let device = defaultSoundEffectsOutputDevice() else {
+            throw ThingtimeNodeError.policyDenied("No controllable sound-effects output device is available.")
+        }
+        try setVolume(volume, device: device, scope: kAudioDevicePropertyScopeOutput, route: "sound-effects output")
+    }
+
+    public static func soundEffectsOutputMuted() -> Bool? {
+        guard let device = defaultSoundEffectsOutputDevice() else { return nil }
+        return muted(device: device, scope: kAudioDevicePropertyScopeOutput)
+    }
+
+    public static func setSoundEffectsOutputMuted(_ muted: Bool) throws {
+        guard let device = defaultSoundEffectsOutputDevice() else {
+            throw ThingtimeNodeError.policyDenied("No controllable sound-effects output device is available.")
+        }
+        try setMuted(muted, device: device, scope: kAudioDevicePropertyScopeOutput, route: "sound-effects output")
+    }
+
+    public static func devices() -> [AudioDeviceTelemetry] {
+        let defaultOutput = defaultOutputDevice()
+        let defaultInput = defaultInputDevice()
+        let defaultSoundEffects = defaultSoundEffectsOutputDevice()
+        return allDevices().compactMap { device in
+            guard let id = stringProperty(device, selector: kAudioDevicePropertyDeviceUID),
+                  let name = stringProperty(device, selector: kAudioObjectPropertyName) else {
+                return nil
+            }
+            let hasInput = hasStreams(device, scope: kAudioDevicePropertyScopeInput)
+            let hasOutput = hasStreams(device, scope: kAudioDevicePropertyScopeOutput)
+            guard hasInput || hasOutput else { return nil }
+            return AudioDeviceTelemetry(
+                id: id,
+                name: name,
+                hasInput: hasInput,
+                hasOutput: hasOutput,
+                isDefaultInput: device == defaultInput,
+                isDefaultOutput: device == defaultOutput,
+                isDefaultSoundEffectsOutput: device == defaultSoundEffects
+            )
+        }
+        .sorted { ($0.name, $0.id) < ($1.name, $1.id) }
+        .prefix(32)
+        .map { $0 }
+    }
+
+    public static func setDefaultOutputDevice(id: String) throws {
+        try setDefaultDevice(id: id, selector: kAudioHardwarePropertyDefaultOutputDevice, requiredScope: kAudioDevicePropertyScopeOutput)
+    }
+
+    public static func setDefaultInputDevice(id: String) throws {
+        try setDefaultDevice(id: id, selector: kAudioHardwarePropertyDefaultInputDevice, requiredScope: kAudioDevicePropertyScopeInput)
+    }
+
+    public static func setDefaultSoundEffectsOutputDevice(id: String) throws {
+        try setDefaultDevice(id: id, selector: kAudioHardwarePropertyDefaultSystemOutputDevice, requiredScope: kAudioDevicePropertyScopeOutput)
+    }
+
+    private static func setDefaultDevice(
+        id: String,
+        selector: AudioObjectPropertySelector,
+        requiredScope: AudioObjectPropertyScope
+    ) throws {
+        guard validDeviceID(id), let device = allDevices().first(where: { stringProperty($0, selector: kAudioDevicePropertyDeviceUID) == id }) else {
+            throw ThingtimeNodeError.invalidRequest("The audio device identifier is invalid or unavailable.")
+        }
+        guard hasStreams(device, scope: requiredScope) else {
+            throw ThingtimeNodeError.policyDenied("The requested audio device does not support that route.")
+        }
         var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mSelector: selector,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var value = device
+        let size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectSetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, size, &value) == noErr else {
+            throw ThingtimeNodeError.policyDenied("macOS could not change the selected audio device.")
+        }
+    }
+
+    private static func muted(device: AudioDeviceID, scope: AudioObjectPropertyScope) -> Bool? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyMute,
+            mScope: scope,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectHasProperty(device, &address) else { return nil }
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &value) == noErr else { return nil }
+        return value != 0
+    }
+
+    private static func volume(device: AudioDeviceID, scope: AudioObjectPropertyScope) -> Double? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
+            mScope: scope,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectHasProperty(device, &address) else { return nil }
+        var volume = Float32.zero
+        var size = UInt32(MemoryLayout<Float32>.size)
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &volume) == noErr else { return nil }
+        return Double(volume)
+    }
+
+    private static func setVolume(_ volume: Double, device: AudioDeviceID, scope: AudioObjectPropertyScope, route: String) throws {
+        guard (0 ... 1).contains(volume) else {
+            throw ThingtimeNodeError.invalidRequest("Volume must be between 0 and 1.")
+        }
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
+            mScope: scope,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectHasProperty(device, &address) else {
+            throw ThingtimeNodeError.policyDenied("The default \(route) device does not expose a main-volume control.")
+        }
+        var settable = DarwinBoolean(false)
+        guard AudioObjectIsPropertySettable(device, &address, &settable) == noErr, settable.boolValue else {
+            throw ThingtimeNodeError.policyDenied("The default \(route) volume is read-only.")
+        }
+        var scalar = Float32(volume)
+        let size = UInt32(MemoryLayout<Float32>.size)
+        guard AudioObjectSetPropertyData(device, &address, 0, nil, size, &scalar) == noErr else {
+            throw ThingtimeNodeError.policyDenied("macOS could not change the \(route) volume.")
+        }
+    }
+
+    private static func setMuted(_ muted: Bool, device: AudioDeviceID, scope: AudioObjectPropertyScope, route: String = "output") throws {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyMute,
+            mScope: scope,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectHasProperty(device, &address) else {
+            throw ThingtimeNodeError.policyDenied("The default \(route) device does not expose mute control.")
+        }
+        var settable = DarwinBoolean(false)
+        guard AudioObjectIsPropertySettable(device, &address, &settable) == noErr, settable.boolValue else {
+            throw ThingtimeNodeError.policyDenied("The default \(route) mute control is read-only.")
+        }
+        var value: UInt32 = muted ? 1 : 0
+        let size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectSetPropertyData(device, &address, 0, nil, size, &value) == noErr else {
+            throw ThingtimeNodeError.policyDenied("macOS could not change the \(route) mute state.")
+        }
+    }
+
+    private static func allDevices() -> [AudioDeviceID] {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr,
+              size > 0 else { return [] }
+        var values = Array(repeating: AudioDeviceID(kAudioObjectUnknown), count: Int(size) / MemoryLayout<AudioDeviceID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &values) == noErr else {
+            return []
+        }
+        return values.filter { $0 != kAudioObjectUnknown }
+    }
+
+    private static func hasStreams(_ device: AudioDeviceID, scope: AudioObjectPropertyScope) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreams,
+            mScope: scope,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        return AudioObjectHasProperty(device, &address)
+    }
+
+    private static func stringProperty(_ device: AudioDeviceID, selector: AudioObjectPropertySelector) -> String? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var value: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &value) == noErr,
+              let value else { return nil }
+        let string = value.takeUnretainedValue() as String
+        guard !string.isEmpty, string.utf8.count <= 512, string.rangeOfCharacter(from: .controlCharacters) == nil else { return nil }
+        return string
+    }
+
+    private static func validDeviceID(_ id: String) -> Bool {
+        !id.isEmpty && id == id.trimmingCharacters(in: .whitespacesAndNewlines) && id.utf8.count <= 512 && id.rangeOfCharacter(from: .controlCharacters) == nil
+    }
+
+    private static func defaultOutputDevice() -> AudioDeviceID? {
+        defaultDevice(selector: kAudioHardwarePropertyDefaultOutputDevice)
+    }
+
+    private static func defaultInputDevice() -> AudioDeviceID? {
+        defaultDevice(selector: kAudioHardwarePropertyDefaultInputDevice)
+    }
+
+    private static func defaultSoundEffectsOutputDevice() -> AudioDeviceID? {
+        defaultDevice(selector: kAudioHardwarePropertyDefaultSystemOutputDevice)
+    }
+
+    private static func defaultDevice(selector: AudioObjectPropertySelector) -> AudioDeviceID? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: selector,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
@@ -461,5 +1095,71 @@ public enum SystemAudio {
             &identifier
         ) == noErr, identifier != kAudioObjectUnknown else { return nil }
         return identifier
+    }
+}
+
+public enum SystemWiFi {
+    public static func snapshot() -> WiFiTelemetry {
+        guard let interface = CWWiFiClient.shared().interface() else {
+            return WiFiTelemetry(powerOn: nil, ssid: nil)
+        }
+        let ssid = interface.ssid().flatMap { try? validatedSSID($0) }
+        return WiFiTelemetry(powerOn: interface.powerOn(), ssid: ssid)
+    }
+
+    /// Joins an open network or a network whose credential is already in the
+    /// local keychain. Passwords are intentionally never accepted by a remote
+    /// command, journal, API request, or device event.
+    public static func connect(ssid: String) throws {
+        let ssid = try validatedSSID(ssid)
+        guard let interface = CWWiFiClient.shared().interface() else {
+            throw ThingtimeNodeError.policyDenied("No Wi-Fi interface is available on this Mac.")
+        }
+        let matches: Set<CWNetwork>
+        do {
+            matches = try interface.scanForNetworks(withName: ssid, includeHidden: false)
+        } catch {
+            throw ThingtimeNodeError.policyDenied("macOS could not scan for the requested Wi-Fi network.")
+        }
+        guard let network = matches.first(where: { $0.ssid == ssid }) else {
+            throw ThingtimeNodeError.policyDenied("The requested Wi-Fi network is not currently available.")
+        }
+        do {
+            try interface.associate(to: network, password: nil)
+        } catch {
+            throw ThingtimeNodeError.policyDenied("macOS could not join the requested Wi-Fi network using a saved credential.")
+        }
+        guard interface.ssid() == ssid else { throw ThingtimeNodeError.commandOutcomeUncertain }
+    }
+
+    public static func disconnect() throws {
+        guard let interface = CWWiFiClient.shared().interface() else {
+            throw ThingtimeNodeError.policyDenied("No Wi-Fi interface is available on this Mac.")
+        }
+        interface.disassociate()
+        if interface.ssid() != nil { throw ThingtimeNodeError.commandOutcomeUncertain }
+    }
+
+    public static func setPower(_ enabled: Bool) throws {
+        guard let interface = CWWiFiClient.shared().interface() else {
+            throw ThingtimeNodeError.policyDenied("No Wi-Fi interface is available on this Mac.")
+        }
+		do {
+			try interface.setPower(enabled)
+		} catch {
+			throw ThingtimeNodeError.policyDenied("macOS could not change the Wi-Fi power state.")
+		}
+		guard interface.powerOn() == enabled else { throw ThingtimeNodeError.commandOutcomeUncertain }
+	}
+
+    static func validatedSSID(_ value: String) throws -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed == value,
+              trimmed.utf8.count <= 32,
+              trimmed.rangeOfCharacter(from: .controlCharacters) == nil else {
+            throw ThingtimeNodeError.invalidRequest("The Wi-Fi network name is invalid.")
+        }
+        return trimmed
     }
 }

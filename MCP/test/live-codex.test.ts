@@ -248,6 +248,23 @@ test('discards JSON-RPC error messages before they leave the local transport', a
 	}
 });
 
+test('fails closed without an unhandled error when a child closes its stdin pipe', async () => {
+	const child = new JsonlRpcProcess(
+		process.execPath,
+		['-e', 'process.exit(0)'],
+		{ timeoutMs: 2_000 }
+	);
+	await child.start();
+	try {
+		await assert.rejects(
+			child.call('thread/list'),
+			(error) => error instanceof LocalConnectorError && error.code === 'connector_unavailable'
+		);
+	} finally {
+		await child.stop();
+	}
+});
+
 test('does not forward raw Codex error text into cloud-visible events', async () => {
 	const transport = new FakeTransport();
 	const connector = new CodexAppServerConnector(transport);

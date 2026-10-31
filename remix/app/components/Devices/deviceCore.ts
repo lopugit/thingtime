@@ -44,10 +44,49 @@ const LOCAL_ONLY_ACTIONS = new Set<DeviceActionKind>([
 
 const ACTION_CAPABILITY: Partial<Record<DeviceActionKind, string>> = {
 	'set-volume': 'system.volume.write',
+	'set-muted': 'system.audio.mute.write',
+	'set-input-volume': 'system.audio.input.volume.write',
+	'set-input-muted': 'system.audio.input.mute.write',
+	'set-audio-output': 'system.audio.output.write',
+	'set-audio-input': 'system.audio.input.write',
+	'set-sound-effects-volume': 'system.audio.sound-effects.volume.write',
+	'set-sound-effects-muted': 'system.audio.sound-effects.mute.write',
+	'set-sound-effects-output': 'system.audio.sound-effects-output.write',
 	'set-brightness': 'system.brightness.write',
+	'set-display-brightness': 'system.display.brightness.write',
+	'set-display-mode': 'system.display.mode.write',
+	'set-display-origin': 'system.display.layout.write',
+	'set-display-mirroring': 'system.display.mirroring.write',
+	'set-default-printer': 'system.printer.default.write',
+	'set-preferred-camera': 'system.camera.preferred.write',
+	'set-bluetooth-device-connected': 'system.bluetooth.device.connection.write',
+	'set-vpn-connected': 'system.vpn.connection.write',
+	'set-prevent-idle-sleep': 'system.power.idle-sleep-prevention.write',
+	'set-power-idle-timer': 'system.power.idle-timer.write',
+	'propose-airdrop-policy-profile': 'system.policy.airdrop.profile.write',
+	'propose-camera-policy-profile': 'system.policy.camera.profile.write',
+	'set-apple-music-playback': 'system.media.apple-music.playback.write',
+	'set-apple-music-volume': 'system.media.apple-music.volume.write',
+	'set-spotify-playback': 'system.media.spotify.playback.write',
+	'set-spotify-volume': 'system.media.spotify.volume.write',
+	'set-chrome-youtube-volume': 'system.media.chrome-youtube.volume.write',
+	'move-pointer': 'input.pointer.write',
+	'click-pointer': 'input.pointer.write',
+	'scroll-pointer': 'input.pointer.write',
+	'type-text': 'input.keyboard.write',
+	'send-shortcut': 'input.keyboard.write',
 	'launch-app': 'apps.launch',
 	'quit-app': 'apps.quit',
+	'hide-app': 'apps.visibility',
+	'unhide-app': 'apps.visibility',
 	lock: 'system.lock',
+	'sleep': 'system.power.sleep',
+	restart: 'system.power.restart',
+	shutdown: 'system.power.shutdown',
+	logout: 'system.session.logout',
+	'connect-wifi': 'system.wifi.connect',
+	'disconnect-wifi': 'system.wifi.disconnect',
+	'set-wifi-power': 'system.wifi.power.write',
 	'start-screen-session': 'screen.view',
 	'control-screen-session': 'screen.control',
 	'stop-screen-session': 'screen.view',
@@ -477,6 +516,7 @@ const cacheSummary = (summary: DeviceSummary | null): DeviceSummary | null => {
 
 const cacheSnapshot = (snapshot: DeviceSnapshot | null): DeviceSnapshot | null => {
 	if (!snapshot) return null;
+	const audioDevices = Array.isArray(snapshot.observed.audioDevices) ? snapshot.observed.audioDevices : [];
 	return {
 		deviceId: text(snapshot.deviceId, 160),
 		revision: boundedInteger(snapshot.revision),
@@ -484,6 +524,10 @@ const cacheSnapshot = (snapshot: DeviceSnapshot | null): DeviceSnapshot | null =
 		observed: {
 			volume: unitValue(snapshot.observed.volume),
 			muted: typeof snapshot.observed.muted === 'boolean' ? snapshot.observed.muted : null,
+			inputVolume: unitValue(snapshot.observed.inputVolume),
+			inputMuted: typeof snapshot.observed.inputMuted === 'boolean' ? snapshot.observed.inputMuted : null,
+			soundEffectsVolume: unitValue(snapshot.observed.soundEffectsVolume),
+			soundEffectsMuted: typeof snapshot.observed.soundEffectsMuted === 'boolean' ? snapshot.observed.soundEffectsMuted : null,
 			brightness: unitValue(snapshot.observed.brightness),
 			locked: typeof snapshot.observed.locked === 'boolean' ? snapshot.observed.locked : null,
 			sleeping: typeof snapshot.observed.sleeping === 'boolean' ? snapshot.observed.sleeping : null,
@@ -493,10 +537,28 @@ const cacheSnapshot = (snapshot: DeviceSnapshot | null): DeviceSnapshot | null =
 				bundleId: text(app.bundleId, 180),
 				name: text(app.name, 120),
 				isActive: app.isActive === true,
+				isHidden: app.isHidden === true,
 				windowCount: typeof app.windowCount === 'number' && Number.isSafeInteger(app.windowCount) ? Math.max(0, app.windowCount) : null
 				// pid, icon data, window titles and arbitrary metadata are intentionally
 				// not persisted in localStorage.
-			}))
+			})),
+			audioDevices: audioDevices.slice(0, 32).map((device) => ({
+				id: text(device.id, 512),
+				name: text(device.name, 120),
+				hasInput: device.hasInput === true,
+				hasOutput: device.hasOutput === true,
+				isDefaultInput: device.isDefaultInput === true,
+				isDefaultOutput: device.isDefaultOutput === true,
+				isDefaultSoundEffectsOutput: device.isDefaultSoundEffectsOutput === true
+			})),
+			wifi: snapshot.observed.wifi
+				? {
+					powerOn: typeof snapshot.observed.wifi.powerOn === 'boolean' ? snapshot.observed.wifi.powerOn : null,
+					// Network names can be location-sensitive; render live data but do not
+					// persist them in the browser's cache.
+					ssid: null
+				  }
+				: null
 		},
 		permissions: snapshot.permissions.slice(0, 24).map((permission) => ({
 			kind: text(permission.kind, 80) as DevicePermissionKind,

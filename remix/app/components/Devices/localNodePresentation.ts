@@ -6,6 +6,15 @@ export type LocalNodeBadgePresentation = {
 	showChecking: boolean;
 };
 
+// Do not rely on Chakra's semantic colour scheme here. The desktop shell can
+// load a user theme whose "green" badge token is warm/amber; a paired account
+// must remain recognisably pastel green in every shell and endpoint theme.
+export const PASTEL_PAIRED_ACCOUNT_BADGE_STYLE = {
+	backgroundColor: '#e2f8e8',
+	borderColor: '#b8e8c5',
+	color: '#23633c'
+} as const;
+
 export const localNodeActionKey = (action: DeviceActionKind, targetKey?: string | null): string => `local-${action}-${targetKey || 'node'}`;
 
 export const localNodeActionIsBusy = (pendingActionKeys: readonly string[], action: DeviceActionKind, targetKey?: string | null): boolean =>

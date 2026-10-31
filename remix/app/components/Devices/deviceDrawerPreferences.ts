@@ -4,9 +4,15 @@ export const DEVICE_DRAWER_SECTION_IDS = [
 	'node',
 	'permissions',
 	'observed-state',
+	'audio',
+	'network',
+	'system-controls',
+	'power',
 	'applications',
 	'connectors',
 	'screen',
+	'files',
+	'sync',
 	'approvals',
 	'command-activity'
 ] as const;
@@ -14,7 +20,7 @@ export const DEVICE_DRAWER_SECTION_IDS = [
 export type DeviceDrawerSectionId = (typeof DEVICE_DRAWER_SECTION_IDS)[number];
 
 export type DeviceDrawerPreferences = {
-	version: 1;
+	version: 2;
 	sections: Record<DeviceDrawerSectionId, boolean>;
 	drawerWidth: number | null;
 };
@@ -25,8 +31,9 @@ const preferenceKeyFor = (deviceId: string): string | null => {
 };
 
 export const defaultDeviceDrawerPreferences = (): DeviceDrawerPreferences => ({
-	version: 1,
-	sections: Object.fromEntries(DEVICE_DRAWER_SECTION_IDS.map((section) => [section, true])) as Record<DeviceDrawerSectionId, boolean>,
+	version: 2,
+	// Version 2 resets legacy expansion flags once; width and new explicit choices survive.
+	sections: Object.fromEntries(DEVICE_DRAWER_SECTION_IDS.map((section) => [section, false])) as Record<DeviceDrawerSectionId, boolean>,
 	drawerWidth: null
 });
 
@@ -34,8 +41,11 @@ export const normalizeDeviceDrawerPreferences = (value: unknown): DeviceDrawerPr
 	const defaults = defaultDeviceDrawerPreferences();
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return defaults;
 
-	const candidate = value as { sections?: unknown; drawerWidth?: unknown };
-	const sections = candidate.sections && typeof candidate.sections === 'object' && !Array.isArray(candidate.sections) ? candidate.sections : null;
+	const candidate = value as { version?: unknown; sections?: unknown; drawerWidth?: unknown };
+	const sections =
+		candidate.version === 2 && candidate.sections && typeof candidate.sections === 'object' && !Array.isArray(candidate.sections)
+			? candidate.sections
+			: null;
 	for (const section of DEVICE_DRAWER_SECTION_IDS) {
 		const expanded = sections ? (sections as Record<string, unknown>)[section] : undefined;
 		if (typeof expanded === 'boolean') defaults.sections[section] = expanded;

@@ -120,3 +120,15 @@ the same exact transactional account-storage ledger used by posts and native
 Messenger content. Attachment object bytes, when present through Thingtime's
 upload system, are separately charged on protected attachment Things. Replaying
 an identical batch changes neither row count nor storage usage.
+
+## No-login native draft rendering
+
+`thingtime_render_and_export` renders supplied editable Thing/transfer JSON with
+Thingtime's real HTML/component/page renderers in a fresh offline Chromium
+context. It returns canonical JSON, PNG images and embedded downloadable
+resources, viewport metadata, a content hash and diagnostics. No login,
+account persistence or publication occurs. Text/CSS only; Actions and network
+assets fail closed. Build the sibling draft bundle and install Chromium first.
+See [setup, host connection, examples and limits](../docs/no-login-draft-preview.md).
+Web-only hosts need a separately configured bridge; the existing hosted OAuth
+endpoint does not gain this tool automatically.

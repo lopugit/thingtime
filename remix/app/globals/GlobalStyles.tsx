@@ -15,6 +15,11 @@ export const GlobalStyles = () => {
 					// Height of the fixed global nav bar — pages that need to clear it
 					// (landing sub-nav, /themes) read this instead of a magic number.
 					'--tt-nav-clearance': '54px',
+					// Lopu toasts (Chakra's toast lists read this) sit above the drawer,
+					// its popups, and modals (useDrawer's z ladder tops out at 10250) so a
+					// note fired from an open drawer or dialog is never hidden behind it;
+					// DevKit (99999) stays above everything.
+					'--toast-z-index': '10260',
 					// Docs-suite accent (kept out of user themes deliberately).
 					'--tt-docs-accent': '#008060',
 					'--tt-docs-accent-hover': '#006e52',

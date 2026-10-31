@@ -1,3 +1,4 @@
+import { aiTaskFetch } from './aiTasks.client';
 import { useCallback } from 'react';
 import { Box, Flex, Text, useToast } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
@@ -5,26 +6,18 @@ import { Link as RouterLink } from 'react-router';
 
 import { RAINBOW, RAINBOW_PALETTE } from '~/theme/rainbow';
 import { normalizeLopuMessage } from './lopuMessage';
+import { lopuToastPlacement } from './lopuPosition';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { saveLopuHistory } from './notificationHistory.client';
 
 // 🦄 Lopu — the Thingtime AI. A minimal, modern toast: a rainbow gradient
 // "unicorn vomit" border around a clean white card, shown as a little message
-// from Lopu, below the fixed nav. `useLopu` shows a one-shot toast; the streaming
-// variant `useLopuStream` pops instantly and types the response in live.
-
-// A full-viewport flex container centers the card via flow (immune to the
-// ancestor-transform quirk that broke translateX(-50%) centering). translateY
-// offsets each toast below the nav *visually only* — it doesn't affect layout,
-// so Chakra's native tight stacking + slide/fade animation is preserved
-// (marginTop would compound into big gaps). pointerEvents:none keeps the wide
-// invisible container from eating clicks (the card re-enables them).
-const CONTAINER_STYLE = {
-  transform: 'translateY(70px)',
-  width: '100vw',
-  maxWidth: '100vw',
-  display: 'flex',
-  justifyContent: 'center',
-  pointerEvents: 'none'
-} as const;
+// from Lopu in the corner the user picked (Settings → Appearance → Lopu
+// messages; bottom-left by default). `useLopu` shows a one-shot toast; the
+// streaming variant `useLopuStream` pops instantly and types the response in
+// live. Placement (Chakra position + the per-toast flex container) comes from
+// lopuToastPlacement() in lopuPosition.ts, read at fire time from the
+// synchronous tt-lopu-position cache so no caller subscribes to settings state.
 
 // Blinking caret/ellipsis uses the shared global `tt-blink` keyframes
 // (defined once in GlobalStyles).
@@ -65,7 +58,7 @@ const CountdownRing = ({ ms }: { ms: number }) => (
   </Box>
 );
 
-type LopuStatus = 'success' | 'error' | 'info';
+type LopuStatus = 'success' | 'error' | 'info' | 'warning';
 
 type LopuLink = { label: string; href: string };
 
@@ -114,7 +107,7 @@ const LopuToast = ({
     background={RAINBOW}
     boxShadow="var(--tt-shadow-toast, 0 14px 38px rgba(20,20,40,0.18))"
     width="360px"
-    maxWidth="calc(100vw - 24px)"
+    maxWidth="min(100%, calc(100vw - 24px))"
   >
 		<Box bg="var(--tt-card, #ffffff)" borderRadius="calc(var(--tt-radius-xl, 20px) - 2px)" px={4} py={3} position="relative">
       <Flex align="center" gap={2} mb={title || description || loading ? 1.5 : 0}>
@@ -212,14 +205,15 @@ const LopuToast = ({
 
 export const useLopu = () => {
   const toast = useToast();
+  const user = useCurrentUser();
 
   return useCallback(
 		({ title, description, status, duration = 13000, link, announceDescription, descriptionLabel }: LopuArgs) => {
       const message = normalizeLopuMessage({ title, description, status });
+      void saveLopuHistory(user?.id, { ...message, status, link });
       return toast({
         duration,
-        position: 'top',
-        containerStyle: CONTAINER_STYLE,
+        ...lopuToastPlacement(),
         render: ({ onClose }) => (
           <LopuToast
             title={message.title}
@@ -234,7 +228,7 @@ export const useLopu = () => {
         )
       });
     },
-    [toast]
+    [toast, user?.id]
   );
 };
 
@@ -252,6 +246,7 @@ const sourceLabel = (source?: string) =>
 // response types in live (NDJSON from /api/v1/lopu/musing), à la modern AI chat.
 export const useLopuStream = () => {
   const toast = useToast();
+  const user = useCurrentUser();
 
   return useCallback(
     async (url: string) => {
@@ -261,28 +256,29 @@ export const useLopuStream = () => {
         (props: LopuArgs & { loading?: boolean; countdown?: number | null }) =>
         ({ onClose }: { onClose: () => void }) => {
           const close = () => {
-            controller.abort();
             onClose();
           };
           return <LopuToast {...props} onClose={close} />;
         };
 
-      // Pop instantly; duration:null keeps it open while streaming.
+      // Pop instantly; duration:null keeps it open while streaming. Placement is
+      // fixed for the toast's lifetime (Chakra can't move an open toast).
+      const placement = lopuToastPlacement();
       const id = toast({
         duration: null,
-        position: 'top',
-        containerStyle: CONTAINER_STYLE,
+        ...placement,
         render: render({ loading: true })
       });
 
       const update = (props: LopuArgs & { loading?: boolean; countdown?: number | null }, duration: number | null) =>
-        toast.update(id, { duration, containerStyle: CONTAINER_STYLE, render: render(props) });
+        toast.update(id, { duration, containerStyle: placement.containerStyle, render: render(props) });
 
       let text = '';
       let source: string | undefined;
+      let finalMessage: LopuArgs | undefined;
 
       try {
-        const resp = await fetch(url, { signal: controller.signal });
+        const resp = await aiTaskFetch(url, { signal: controller.signal });
         if (!resp.ok || !resp.body) throw new Error('no stream');
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
@@ -313,12 +309,19 @@ export const useLopuStream = () => {
 
         // The read-timer starts now (stream finished), not when the toast popped,
         // so you get the full window to read the finished musing.
-        update({ title: text.trim() || 'Lopu is daydreaming…', description: sourceLabel(source), countdown: 16000 }, 16000);
+        finalMessage = { title: text.trim() || 'Lopu is daydreaming…', description: sourceLabel(source) };
+        update({ ...finalMessage, countdown: 16000 }, 16000);
       } catch (err: any) {
-        if (err?.name === 'AbortError') return; // user closed it — leave closed
-        update({ title: 'Lopu is daydreaming… try again 🔮', status: 'error', countdown: 13000 }, 13000);
+        if (err?.name === 'AbortError') {
+          finalMessage = { title: 'Lopu message closed', description: text || 'Closed before a response arrived.', status: 'info' };
+          return;
+        }
+        finalMessage = { title: 'Lopu is daydreaming… try again 🔮', description: text || undefined, status: 'error' };
+        update({ ...finalMessage, countdown: 13000 }, 13000);
+      } finally {
+        if (finalMessage) void saveLopuHistory(user?.id, finalMessage);
       }
     },
-    [toast]
+    [toast, user?.id]
   );
 };

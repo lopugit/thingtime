@@ -41,7 +41,7 @@ test('preserves the development JSON request wire and rejects malformed native c
 	assert.throws(() => decodeRuntimeRequest('{"type":"command","id":"x","operation":"","payload":{}}'), /operation/);
 });
 
-test('connector list exposes only bounded opaque project references', async () => {
+test('connector list exposes only bounded opaque project references when its unavailable local connector exits early', async () => {
 	const runtime = fileURLToPath(new URL('../src/nodeRuntime.ts', import.meta.url));
 	const child = spawn(process.execPath, ['--import', 'tsx', runtime], {
 		cwd: fileURLToPath(new URL('..', import.meta.url)),

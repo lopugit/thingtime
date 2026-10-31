@@ -1,21 +1,60 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('thingtimeDesktop', {
-  discoverAiSources: () => ipcRenderer.invoke('thingtime-desktop:ai-discover'),
-  beginAiSync: (request) => ipcRenderer.invoke('thingtime-desktop:ai-begin-sync', request),
-  readAiSyncBatch: (request) => ipcRenderer.invoke('thingtime-desktop:ai-read-batch', request),
-  cancelAiSync: (request) => ipcRenderer.invoke('thingtime-desktop:ai-cancel-sync', request),
-  checkForUpdates: () => ipcRenderer.invoke('thingtime-desktop:check-for-updates'),
-  downloadUpdateBundle: () => ipcRenderer.invoke('thingtime-desktop:download-update-bundle'),
-  getInfo: () => ipcRenderer.invoke('thingtime-desktop:get-info'),
+	activityVersion: '1.0.0',
+	activityRequest: (request) => ipcRenderer.invoke('thingtime-desktop:activity', request),
+	passwordsVersion: process.platform === 'darwin' ? '1.2.0' : undefined,
+	passwordProvider: (request) => ipcRenderer.invoke('thingtime-desktop:password-provider', request),
+	fileExportVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	fileExportRequest: (request) => ipcRenderer.invoke('thingtime-desktop:file-export', request),
+	folderSyncRequest: (request) => ipcRenderer.invoke('thingtime-desktop:folder-sync', request),
+	folderSyncTaskVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	setFolderSyncActive: (request) => ipcRenderer.invoke('thingtime-desktop:folder-sync-active', request),
+	agentBrowserVersion: process.platform === 'darwin' ? '1.0.0' : undefined,
+	agentBrowsers: request => ipcRenderer.invoke('thingtime-desktop:agent-browsers', request),
+	mailSyncVersion: '1.0.0',
+	syncMail: (request) => ipcRenderer.invoke('thingtime-desktop:mail-sync', request),
+	cancelMailSync: (request) => ipcRenderer.invoke('thingtime-desktop:mail-cancel', request),
+	speechRecognitionVersion: process.platform === 'darwin' ? '1.1.0' : undefined,
+	startSpeechRecognition: (request) => ipcRenderer.invoke('thingtime-desktop:speech-start', request),
+	stopSpeechRecognition: (request) => ipcRenderer.invoke('thingtime-desktop:speech-stop', request),
+	onSpeechRecognition: (callback) => {
+		const listener = (_event, payload) => callback(payload);
+		ipcRenderer.on('thingtime-desktop:speech-event', listener);
+		return () => ipcRenderer.removeListener('thingtime-desktop:speech-event', listener);
+	},
+	discoverAiSources: () => ipcRenderer.invoke('thingtime-desktop:ai-discover'),
+	beginAiSync: (request) => ipcRenderer.invoke('thingtime-desktop:ai-begin-sync', request),
+	readAiSyncBatch: (request) => ipcRenderer.invoke('thingtime-desktop:ai-read-batch', request),
+	cancelAiSync: (request) => ipcRenderer.invoke('thingtime-desktop:ai-cancel-sync', request),
+	checkForUpdates: () => ipcRenderer.invoke('thingtime-desktop:check-for-updates'),
+	downloadUpdateBundle: () => ipcRenderer.invoke('thingtime-desktop:download-update-bundle'),
+	listUpdateCatalog: () => ipcRenderer.invoke('thingtime-desktop:list-update-catalog'),
+	cacheReleaseBundle: (request) => ipcRenderer.invoke('thingtime-desktop:cache-release-bundle', request),
+	installCachedRelease: (request) => ipcRenderer.invoke('thingtime-desktop:install-cached-release', request),
+	launchCachedRelease: (request) => ipcRenderer.invoke('thingtime-desktop:launch-cached-release', request),
+	removeCachedRelease: (request) => ipcRenderer.invoke('thingtime-desktop:remove-cached-release', request),
+	revealUpdateCache: () => ipcRenderer.invoke('thingtime-desktop:reveal-update-cache'),
+	getInfo: () => ipcRenderer.invoke('thingtime-desktop:get-info'),
+	getNodePanelPreference: (request) => ipcRenderer.invoke('thingtime-desktop:get-node-panel-preference', request),
+	setNodePanelPreference: (request) => ipcRenderer.invoke('thingtime-desktop:set-node-panel-preference', request),
+	configureLocalRuntime: (request) => ipcRenderer.invoke('thingtime-desktop:configure-local-runtime', request),
+	chooseLocalMongod: () => ipcRenderer.invoke('thingtime-desktop:choose-local-mongod'),
+	restartRuntime: () => ipcRenderer.invoke('thingtime-desktop:restart-runtime'),
+	recoverDesktopSession: request => ipcRenderer.invoke('thingtime-desktop:recover-session', request),
+	useCurrentDesktopSession: request => ipcRenderer.invoke('thingtime-desktop:use-current-session', request),
 	getDesktopSettings: () => ipcRenderer.invoke('thingtime-desktop:get-settings'),
 	addEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:add-endpoint', request),
 	removeEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:remove-endpoint', request),
 	selectEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:select-endpoint', request),
+	checkEndpointCompatibility: () => ipcRenderer.invoke('thingtime-desktop:check-endpoint-compatibility'),
 	selectMenuBarIcon: (request) => ipcRenderer.invoke('thingtime-desktop:select-menu-bar-icon', request),
 	uploadMenuBarIcon: () => ipcRenderer.invoke('thingtime-desktop:upload-menu-bar-icon'),
 	setNodeAutoStart: (request) => ipcRenderer.invoke('thingtime-desktop:set-node-auto-start', request),
-  loadUrl: (url) => ipcRenderer.invoke('thingtime-desktop:load-url', url),
+	loadUrl: (url) => ipcRenderer.invoke('thingtime-desktop:load-url', url),
+	openAppLocations: () => ipcRenderer.invoke('thingtime-desktop:open-app-locations'),
+	restartAfterPermissions: () => ipcRenderer.invoke('thingtime-desktop:permission-restart'),
+	nodeControl: (request) => ipcRenderer.invoke('thingtime-desktop:node-control', request),
 	nodeGetStatus: () => ipcRenderer.invoke('thingtime-desktop:node-status'),
 	nodeRegisterService: () => ipcRenderer.invoke('thingtime-desktop:node-register-service'),
 	nodeUnregisterService: () => ipcRenderer.invoke('thingtime-desktop:node-unregister-service'),
@@ -28,9 +67,9 @@ contextBridge.exposeInMainWorld('thingtimeDesktop', {
 	nodeAddProject: () => ipcRenderer.invoke('thingtime-desktop:node-add-project'),
 	nodeConnector: (request) => ipcRenderer.invoke('thingtime-desktop:node-connector', request),
 	nodeDevice: (request) => ipcRenderer.invoke('thingtime-desktop:node-device', request),
-  platform: process.platform,
-  versions: {
-    chrome: process.versions.chrome,
-    electron: process.versions.electron
-  }
+	platform: process.platform,
+	versions: {
+		chrome: process.versions.chrome,
+		electron: process.versions.electron
+	}
 });

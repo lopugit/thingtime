@@ -10,6 +10,7 @@ import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } fr
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '../Lopu/useLopu';
+import { LopuNavButton } from '../Lopu/LopuNavButton';
 import { motionOK, partyConfetti } from '~/eggs/eggs';
 import { getUserDisplayName } from '~/utils/userIdentity';
 
@@ -53,7 +54,7 @@ const NavAccountLink = (props: { claimedUser: ReturnType<typeof useCurrentUser> 
 			{claimedUser ? (
 				<Link to="/profile">
 					<Flex flexDir="row" gap={2} alignItems="center">
-						<Box fontSize="xs" fontWeight="600">
+						<Box fontSize="xs" fontWeight="600" maxWidth={{ base: '5ch', md: '24ch' }} overflow="hidden" textOverflow="ellipsis" title={getUserDisplayName(claimedUser)}>
 							{getUserDisplayName(claimedUser)}
 						</Box>
 						<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
@@ -142,19 +143,7 @@ export const Nav = (props) => {
 		return false;
 	}, [pathname]);
 
-	const editorToggleable = React.useMemo(() => {
-		if (pathname.slice(0, 7) === '/things') {
-			return true;
-		} else if (pathname.slice(0, 5) === '/edit') {
-			return true;
-		}
-
-		if (thingtime.get('thingtimeUrlPageVisible')) {
-			return true;
-		}
-
-		return false;
-	}, [pathname, thingtime]);
+	const editorToggleable = /^\/(things|edit|editor)\/.+/.test(pathname);
 
 	const toggleEdit = React.useCallback(
 		(e) => {
@@ -253,7 +242,10 @@ export const Nav = (props) => {
 				>
 					<Center
 						className="nav-left-section"
-						display={['none', 'flex']}
+						position="relative"
+						zIndex={10000}
+						flexShrink={0}
+						display={{ base: 'none', md: 'flex' }}
 						height="36px"
 						marginRight="auto"
 						columnGap={2}
@@ -302,16 +294,31 @@ export const Nav = (props) => {
 						</Center>
 						<NavAccountLink className="electron-titlebar-account-button" claimedUser={claimedUser} />
 						{claimedUser && !isMobile ? (
-							<Center className="electron-titlebar-notifications-button" height="36px" paddingX="8px">
+							<Center className="electron-titlebar-notifications-button" height="36px">
 								<NotificationsBell />
 							</Center>
 						) : null}
 					</Center>
-					<CommanderV2 global id="nav" rainbow={false}></CommanderV2>
+					<CommanderV2 key={user?.id || "anonymous"} global id="nav" />
 					{/* relative + above the commander host (zIndex 9999): the centered
 				search pill is absolutely positioned, and long usernames (and now
 				the bell) can extend under it — these controls must stay tappable */}
-					<Center className="nav-right-section" columnGap={[3, 8]} height="36px" marginLeft="auto" position="relative" zIndex={10000}>
+				<Center
+					className="nav-right-section"
+					flexShrink={0}
+					columnGap={[2, 8]}
+					height="100%"
+					marginLeft="auto"
+					position="relative"
+					zIndex={10000}
+				>
+						{/* 🦄 Lopu opener — toggles the floating chat window (hidden on
+						/lopu*, where the page is the chat); the same ring as the launcher */}
+						<LopuNavButton />
+						<Center as="button" type="button" display={{ base: 'flex', md: 'none' }} width="36px" height="36px"
+							aria-label="Open Commander search" title="Search" onClick={onElectronSearchClick}>
+							<Search size={18} />
+						</Center>
 						{inEditMode && (
 							<Center
 								// transform="scaleX(-100%)"

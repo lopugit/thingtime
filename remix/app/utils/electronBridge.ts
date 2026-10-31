@@ -21,12 +21,46 @@ export type ThingtimeDesktopSettings = {
 	selectedMenuBarIconId: string;
 };
 
+export type ThingtimeDesktopEndpointCompatibility = {
+	checkedAt?: string;
+	message?: string;
+	status: 'checking' | 'compatible' | 'incompatible' | 'unreachable';
+};
+
+export type ThingtimeLocalRuntime = {
+	enabled: boolean;
+	active: boolean;
+	restartRequired: boolean;
+	databaseMode: 'managed' | 'external';
+	apiPort: number;
+	databasePort: number;
+	mongodPath: string | null;
+	bundledMongoSelected?: boolean;
+	bundledMongoSupported?: boolean;
+	externalDatabaseConfigured: boolean;
+	encryptionAvailable: boolean;
+	origin: string;
+	error: string | null;
+	downloadUrl: string;
+};
+
 export type ThingtimeDesktopInfo = {
+ sessionStorage?: {
+  mode: 'partitioned' | 'legacy';
+  legacyApiOrigin: string | null;
+  legacyContentOrigin: string | null;
+  recoveryAvailable: boolean;
+  restartRequired?: boolean;
+ };
+	localRuntime?: ThingtimeLocalRuntime | null;
 	appVersion?: string;
+	buildIdentity?: { gitBranch?: string | null; gitCommit?: string | null };
 	contentOrigin?: string | null;
+	apiOrigin?: string | null;
 	currentUrl?: string | null;
 	desktopSettings?: ThingtimeDesktopSettings | null;
 	desktopSettingsLastError?: string | null;
+	endpointCompatibility?: ThingtimeDesktopEndpointCompatibility | null;
 	isPackaged?: boolean;
 	origin?: string | null;
 	platform?: string;
@@ -52,6 +86,7 @@ export type ThingtimeDesktopUpdateAsset = {
 
 export type ThingtimeDesktopUpdateInfo = {
 	asset?: ThingtimeDesktopUpdateAsset | null;
+	cachedBundle?: ThingtimeDesktopCachedBundle | null;
 	checkedAt?: string;
 	currentVersion?: string;
 	downloadedAt?: string;
@@ -63,6 +98,45 @@ export type ThingtimeDesktopUpdateInfo = {
 	releaseUrl?: string | null;
 	status?: 'available' | 'error' | 'unavailable' | 'up-to-date';
 	updateAvailable?: boolean;
+};
+
+export type ThingtimeDesktopRelease = {
+	asset?: ThingtimeDesktopUpdateAsset | null;
+	branch?: string | null;
+	commit?: string | null;
+	id: string;
+	isCurrent?: boolean;
+	isPrerelease?: boolean;
+	name?: string | null;
+	publishedAt?: string | null;
+	pullRequestNumber?: number | null;
+	releaseUrl?: string | null;
+	tag?: string | null;
+	version?: string | null;
+};
+
+export type ThingtimeDesktopCachedBundle = {
+	assetName?: string | null;
+	branch?: string | null;
+	cachedAt?: string | null;
+	cacheState?: 'ready';
+	commit?: string | null;
+	key: string;
+	name?: string | null;
+	pullRequestNumber?: number | null;
+	releaseUrl?: string | null;
+	tag?: string | null;
+	version?: string | null;
+};
+
+export type ThingtimeDesktopReleaseCatalog = {
+	cachedBundles: ThingtimeDesktopCachedBundle[];
+	catalogError?: string | null;
+	checkedAt?: string;
+	currentVersion?: string;
+	feedUrl?: string | null;
+	releases: ThingtimeDesktopRelease[];
+	truncated?: boolean;
 };
 
 export type ThingtimeAiDesktopSource = {
@@ -172,17 +246,68 @@ export type ThingtimeNodeConnectorRequest =
 	  };
 
 export type ThingtimeNodeDeviceRequest =
-	| { action: 'snapshot' | 'permissions' }
+	| { action: 'snapshot' | 'battery' | 'permissions' }
 	| {
 			action: 'evaluate' | 'execute';
 			commandId?: string;
 			request: {
-				kind: 'telemetry.refresh' | 'system.volume.set' | 'application.activate' | 'application.launch';
+				kind:
+					| 'telemetry.refresh'
+					| 'system.volume.set'
+					| 'system.audio.mute.set'
+					| 'system.audio.output.set'
+					| 'system.audio.input.set'
+					| 'system.audio.sound-effects-output.set'
+					| 'system.brightness.set'
+					| 'application.activate'
+					| 'application.launch'
+					| 'application.quit'
+					| 'application.force-quit'
+					| 'application.hide'
+					| 'application.unhide'
+					| 'application.hide-others'
+					| 'system.lock'
+					| 'system.sleep'
+					| 'system.wifi.connect'
+					| 'system.wifi.disconnect'
+					| 'system.wifi.power.set';
 				parameters?: Record<string, unknown>;
 			};
 	  };
 
+export type DesktopSpeechEvent = {
+	sessionId: string;
+	type: 'ready' | 'partial' | 'final' | 'error' | 'end';
+	text?: string;
+	error?: string;
+};
+
+export type ThingtimeNativeActivity = {
+ id: string; label: string; kind: string; scope: 'desktop' | 'native-node';
+ enabled: boolean; running: boolean | null; controllable: boolean; description: string;
+};
+export type ThingtimeNativeActivitySnapshot = {
+ version: '1.0.0'; collectedAt: string; activities: ThingtimeNativeActivity[];
+ metrics: { scope: 'electron-processes'; processCount: number; cpuPercent: number | null; rssBytes: number | null };
+ limitations: string[];
+};
+export type ThingtimeNativeActivityRequest = { version: '1.0.0'; action: 'list' } |
+ { version: '1.0.0'; action: 'set-enabled'; id: string; enabled: boolean };
+
 export type ThingtimeDesktopBridge = {
+	activityVersion?: string;
+	activityRequest?: (request: ThingtimeNativeActivityRequest) => Promise<ThingtimeNativeActivitySnapshot>;
+	fileExportVersion?: string;
+	fileExportRequest?: (request: Record<string, unknown>) => Promise<unknown>;
+	folderSyncRequest?: (request: Record<string, unknown>) => Promise<unknown>;
+	folderSyncTaskVersion?: string;
+	setFolderSyncActive?: (request: { active: boolean }) => Promise<{ ok: true; version: '1.0.0' }>;
+	agentBrowserVersion?: string;
+	agentBrowsers?: (request: { method: string; params?: Record<string, unknown> }) => Promise<unknown>;
+	speechRecognitionVersion?: string;
+	startSpeechRecognition?: (request: { sessionId: string; lang: string; continuous?: boolean }) => Promise<{ ok: true }>;
+	stopSpeechRecognition?: (request: { sessionId: string }) => Promise<{ ok: true }>;
+	onSpeechRecognition?: (callback: (event: DesktopSpeechEvent) => void) => () => void;
 	discoverAiSources?: () => Promise<{ sources: ThingtimeAiDesktopSource[] }>;
 	beginAiSync?: (request: {
 		sourceId: string;
@@ -192,11 +317,35 @@ export type ThingtimeDesktopBridge = {
 	cancelAiSync?: (request: { syncId: string }) => Promise<{ ok: true }>;
 	checkForUpdates?: () => Promise<ThingtimeDesktopUpdateInfo>;
 	downloadUpdateBundle?: () => Promise<ThingtimeDesktopUpdateInfo>;
+	listUpdateCatalog?: () => Promise<ThingtimeDesktopReleaseCatalog>;
+	cacheReleaseBundle?: (request: {
+		releaseId: string;
+	}) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; catalog: ThingtimeDesktopReleaseCatalog }>;
+	installCachedRelease?: (request: {
+		key: string;
+	}) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; message: string; status: 'relaunching' }>;
+	launchCachedRelease?: (request: { key: string }) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; message: string; status: 'relaunching' }>;
+	removeCachedRelease?: (request: { key: string }) => Promise<ThingtimeDesktopReleaseCatalog>;
+	revealUpdateCache?: () => Promise<{ cachePath: string }>;
 	getInfo?: () => Promise<ThingtimeDesktopInfo>;
+	getNodePanelPreference?: (request: { accountId: string }) => Promise<{ scope: string; dismissed: boolean }>;
+	setNodePanelPreference?: (request: { accountId: string; scope: string; dismissed: boolean }) => Promise<{ scope: string; dismissed: boolean }>;
+	configureLocalRuntime?: (request: {
+		enabled: boolean;
+		databaseMode: 'managed' | 'external';
+		apiPort: number;
+		databasePort: number;
+		mongoUri?: string;
+	}) => Promise<ThingtimeDesktopInfo>;
+	chooseLocalMongod?: () => Promise<ThingtimeDesktopInfo>;
+	restartRuntime?: () => Promise<void>;
+ recoverDesktopSession?: (request: { apiOrigin: string; contentOrigin: string }) => Promise<ThingtimeDesktopInfo>;
+ useCurrentDesktopSession?: (request: { apiOrigin: string }) => Promise<ThingtimeDesktopInfo>;
 	getDesktopSettings?: () => Promise<ThingtimeDesktopSettings>;
 	addEndpoint?: (request: { label: string; url: string }) => Promise<ThingtimeDesktopSettings>;
 	removeEndpoint?: (request: { endpointId: string }) => Promise<ThingtimeDesktopSettings>;
 	selectEndpoint?: (request: { endpointId: string }) => Promise<ThingtimeDesktopInfo>;
+	checkEndpointCompatibility?: () => Promise<ThingtimeDesktopInfo>;
 	selectMenuBarIcon?: (request: { iconId: string }) => Promise<ThingtimeDesktopSettings>;
 	uploadMenuBarIcon?: () => Promise<{ cancelled: true } | { cancelled: false; settings: ThingtimeDesktopSettings }>;
 	setNodeAutoStart?: (request: { enabled: boolean }) => Promise<ThingtimeDesktopSettings>;
@@ -205,6 +354,9 @@ export type ThingtimeDesktopBridge = {
 	// Narrow local-node setup and macOS privacy surface. Ordinary device
 	// commands deliberately do not travel through a loaded renderer page; they
 	// are authenticated server commands claimed by the local node.
+	openAppLocations?: () => Promise<{ opened: boolean; count: number }>;
+	restartAfterPermissions?: () => Promise<void>;
+	nodeControl?: (request: { action: 'start' | 'stop' | 'restart' }) => Promise<ThingtimeNodeStatus>;
 	nodeGetStatus?: () => Promise<ThingtimeNodeStatus>;
 	nodeRegisterService?: () => Promise<ThingtimeNodeStatus>;
 	nodeUnregisterService?: () => Promise<ThingtimeNodeStatus>;

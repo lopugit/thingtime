@@ -4,10 +4,16 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { createPinnedPnpmEnvironment } from './pinned-package-manager.mjs';
+import { productionSigningIdentity } from './production-signing-identity.mjs';
 
 const electronDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronBuilder = path.join(electronDir, 'node_modules', '.bin', 'electron-builder');
 const packageManager = JSON.parse(await readFile(path.join(electronDir, 'package.json'), 'utf8')).packageManager;
+const releaseVersion = String(process.env.THINGTIME_ELECTRON_RELEASE_VERSION || '').trim();
+
+if (releaseVersion && !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(releaseVersion)) {
+	throw new Error('THINGTIME_ELECTRON_RELEASE_VERSION must be a SemVer version.');
+}
 
 function run(command, args, options = {}) {
 	const result = spawnSync(command, args, {
@@ -28,15 +34,8 @@ function developerIdIdentity() {
 		encoding: 'utf8',
 		stdio: ['ignore', 'pipe', 'pipe']
 	});
-	const identities = [...result.stdout.matchAll(/"([^"]+)"/gu)].map((match) => match[1]);
 	const requested = process.env.THINGTIME_ELECTRON_SIGNING_IDENTITY || process.env.CSC_NAME || '';
-	const identity = requested || identities.find((value) => value.startsWith('Developer ID Application:'));
-	if (!identity || !identity.startsWith('Developer ID Application:') || !identities.includes(identity)) {
-		throw new Error(
-			'Production release is blocked: import a Developer ID Application identity into the build keychain and set THINGTIME_ELECTRON_SIGNING_IDENTITY.'
-		);
-	}
-	return identity;
+	return productionSigningIdentity(result.stdout, requested);
 }
 
 function requireNotarizationCredentials() {
@@ -65,14 +64,22 @@ async function findBuiltApp() {
 	return null;
 }
 
+async function findReleaseArchives() {
+	const releaseRoot = path.join(electronDir, 'release');
+	return (await readdir(releaseRoot, { withFileTypes: true }))
+		.filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.zip'))
+		.map((entry) => path.join(releaseRoot, entry.name))
+		.sort((left, right) => left.localeCompare(right));
+}
+
 if (process.platform !== 'darwin') throw new Error('Thingtime production artifacts can only be built on macOS.');
 
-const identity = developerIdIdentity();
+const { identity, qualifier } = developerIdIdentity();
 requireNotarizationCredentials();
 const releaseEnvironment = {
 	...process.env,
 	CSC_IDENTITY_AUTO_DISCOVERY: 'true',
-	CSC_NAME: identity,
+	CSC_NAME: qualifier,
 	THINGTIME_NODE_SIGNING_IDENTITY: identity
 };
 
@@ -82,7 +89,16 @@ try {
 	await rm(path.join(electronDir, 'release'), { force: true, recursive: true });
 	run(
 		electronBuilder,
-		['--mac', '--publish', 'never', '--config.forceCodeSigning=true', `--config.mac.identity=${identity}`, '--config.mac.notarize=true'],
+		[
+			'--mac',
+			'--publish',
+			'never',
+			'--config.forceCodeSigning=true',
+            ...(process.env.THINGTIME_ELECTRON_BUILD_NUMBER ? [`--config.buildVersion=${process.env.THINGTIME_ELECTRON_BUILD_NUMBER}`] : []),
+			`--config.mac.identity=${qualifier}`,
+			'--config.mac.notarize=true',
+			...(releaseVersion ? [`--config.extraMetadata.version=${releaseVersion}`] : [])
+		],
 		{ env: pinnedPnpm.environment }
 	);
 } finally {
@@ -91,7 +107,15 @@ try {
 
 const appPath = await findBuiltApp();
 if (!appPath) throw new Error('electron-builder did not retain an unpacked Thingtime.app for verification.');
-run(process.execPath, [path.join(electronDir, 'scripts', 'verify-signed-app.mjs'), '--mode', 'production', appPath], {
+run(process.execPath, [path.join(electronDir, 'scripts', 'verify-signed-app.mjs'), '--require-bundled-mongo', '--require-agent-browser', '--mode', 'production', appPath], {
 	env: releaseEnvironment
 });
+const archives = await findReleaseArchives();
+if (!archives.length) throw new Error('electron-builder did not produce an updater-compatible Thingtime ZIP for publication.');
+for (const archive of archives) {
+	run(process.execPath, [path.join(electronDir, 'scripts', 'verify-release-archive.mjs'), '--mode', 'production', archive], {
+		env: releaseEnvironment
+	});
+}
 console.log(`Developer ID signed and notarized app verified at ${appPath}`);
+console.log(`Developer ID signed and notarized updater ZIPs verified: ${archives.join(', ')}`);
