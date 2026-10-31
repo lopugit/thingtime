@@ -782,11 +782,25 @@ private environment variables in local development or on Vercel.
 The web app lives in `remix/` for historical path compatibility, but it now
 runs as a React Router non-framework Vite client with Nitro API/server routes.
 Vite serves the browser app on port `9999` and proxies `/api` to the Nitro dev
-server on port `10000` when local backend env is configured. If the local
-MongoDB/auth env is absent, the dev proxy sends `/api` requests to
-`https://thingtime.com` instead so a fresh clone can still log in, create
-service-account tokens, and use the production-backed API without copying any
-private `.env` files.
+server on port `10000`. Both Vite and built Nitro servers fail closed when
+MongoDB or JWT signing configuration is missing: API requests return `503`
+with `LOCAL_API_NOT_CONFIGURED`, without forwarding bodies or cookies.
+Configure a dedicated local Mongo replica set and an explicit local `JWT_SECRET`
+(or signing key); never reuse production database credentials for tests.
+`THINGTIME_API_FALLBACK_ORIGIN` has no default and is ignored by Vite and ordinary
+web servers. Only the installed desktop shell (`THINGTIME_DESKTOP=1`, loopback
+origin, explicit HTTPS endpoint) can deliberately bridge to its selected API;
+`NODE_ENV=test` disables that bridge as well. Public docs/capability discovery
+remain available without database configuration.
+
+The fixture runner accepts only literal loopback HTTP URLs, refuses redirects
+and requires attachment upload URLs on the same local origin. These application
+guards stand on their own; browser and backend network isolation is optional for
+acceptance tests and must not be required of AI-agent work. A local URL alone
+does not prove the configured DB is local.
+For the compiled-server regression, build with `NITRO_PRESET=node-server npm
+--prefix remix run build:server`, then run the isolated smoke described in
+`remix/scripts/local-api-isolation-smoke.mjs`.
 
 Local development URLs on Lopu's Mac:
 
