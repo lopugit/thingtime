@@ -1,5 +1,4 @@
 import { verifyPasswordProvider } from './verify-password-provider.mjs';
-import { existsSync } from 'node:fs';
 import { access, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { createRequire } from 'node:module';

@@ -22,8 +22,7 @@ export function ThingsSettings() {
 	return (
 		<>
 			<WorkspaceStorageSettings />
-			<SettingsSection eyebrow={mobile ? "This device" : "This Mac"} description="Your local connection and privacy access are always available here.">
-                {mobile && user?.id && !user.temporary && user.accountKind === 'user' ? <MobileDeviceSetupCard ownerId={user.id} onPaired={devices.refreshList} /> : null}
+			<SettingsSection eyebrow="This Mac" description="Your local connection and privacy access are always available here.">
 				{node.available ? (
 					<>
 						<LocalNodeSetupCard state={node} controlFor={node.controlFor} onAction={node.executeAction} onRefresh={node.refresh} />

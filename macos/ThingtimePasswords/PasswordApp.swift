@@ -14,18 +14,10 @@ import ThingtimePasswordCore
             let disconnect = CommandLine.arguments.contains("--disconnect")
             Task { @MainActor in
                 do {
-                    let automatic = CommandLine.arguments.contains("--automatic")
-                    let baseline = try PasswordSessionStore.loadIfPresent()
-                    if disconnect {
-                        if automatic {
-                            guard let data = try FileHandle.standardInput.read(upToCount: 65537), data.count <= 65536 else { throw PasswordProviderError.invalidSession }
-                            let retirement = try JSONDecoder().decode(Retirement.self, from: data)
-                            guard PasswordHostConnectionAuthority.canDisconnect(baseline, expectedOrigin: retirement.origin) else { exit(0) }
-                        }
-                        if !automatic, let baseline { UserDefaults.standard.set(true, forKey: optOutKey(baseline)) }
-                        try PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait()
-                    } else {
-                        // Only this app's first-party session travels through stdin.
+                    if disconnect { PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait() }
+                    else {
+                        // The Electron parent writes only its current first-party
+                        // session through stdin. No tokens in argv, files or logs.
                         guard let data = try FileHandle.standardInput.read(upToCount: 65537), data.count <= 65536 else { throw PasswordProviderError.invalidSession }
                         let decoded = try JSONDecoder().decode(ProviderSession.self, from: data)
                         let session = try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie)
@@ -34,8 +26,8 @@ import ThingtimePasswordCore
                             exit(0)
                         }
                         if CommandLine.arguments.contains("--sync") {
-                            let enabled = await PasswordIdentityIndex.isEnabled()
-                            guard PasswordHostConnectionAuthority.canSynchronize(baseline, incoming: session, providerEnabled: enabled, optedOut: UserDefaults.standard.bool(forKey: optOutKey(session))) else { exit(0) }
+                            guard let prior = try? PasswordSessionStore.load() else { exit(0) }
+                            guard prior.origin == session.origin, prior.ownerId == session.ownerId else { PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait(); exit(0) }
                         }
                         let catalog = try await PasswordClient(account: session).catalog()
                         // A companion link may have changed while the network ran.

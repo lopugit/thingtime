@@ -74,11 +74,24 @@ export const installSuiteForWorkspace = async (key: string, options: { onlyMissi
 	lease.assertCurrent();
 	const { accountWorkspaceWorker } = await import('~/local-workspace/accountApi.client');
 	lease.assertCurrent();
-	const worker = accountWorkspaceWorker(account);
-	const result = await worker.suites.install(key);
-	lease.assertCurrent();
-	announceLocalWorkspaceChange(); worker.wake();
-	return result;
+	const retired = new AbortController();
+	const unsubscribe = lease.onInvalidate(() => retired.abort());
+	try {
+		const response = await fetch('/api/v1/webpages/suites/install', {
+			method: 'POST',
+			credentials: 'same-origin',
+			redirect: 'error',
+			signal: AbortSignal.any([retired.signal, AbortSignal.timeout(60_000)]),
+			headers: { 'content-type': 'application/json', [EXPECTED_ACTOR_HEADER]: account.ownerId, [EXPECTED_DATA_PLANE_HEADER]: account.dataPlane },
+			body: JSON.stringify({ key, ...(options.onlyMissing ? { onlyMissing: true } : {}) })
+		});
+		const data = await response.json().catch(() => null);
+		lease.assertCurrent();
+		if (!response.ok || !data?.ok) throw data || { error: `Install failed (${response.status})` };
+		return data as ServerInstalledSuite;
+	} finally {
+		unsubscribe();
+	}
 };
 
 // A suite's own-mode actionKeys are `demo-<suite>-<key>`; recover the suite a

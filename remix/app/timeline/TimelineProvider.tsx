@@ -149,9 +149,9 @@ function useTimelineConnection(pool: TimelineConnectionPool, storage: TimelineSt
 		window.addEventListener('online', refresh); window.addEventListener('focus', refresh); window.addEventListener(TIMELINE_CHANGED_EVENT, edited);
 		const timer = setInterval(refresh, 15_000); void connect(true);
 		return () => { alive = false; generation++; lease?.release(); lease = null; active.current = null; clearInterval(timer); unlisten(); window.removeEventListener('online', refresh); window.removeEventListener('focus', refresh); window.removeEventListener(TIMELINE_CHANGED_EVENT, edited); retry.current = async () => {}; redact.current = async () => {}; };
-	}, [user?.id, pool, storage, onDenied, expectedPlane]);
-	const scoped = timelineConnectionForViewer(connection, user?.id, expectedPlane);
-	return { storage, identity: JSON.stringify([user?.id ?? null, storage, epoch]), ownerId: user?.id ?? null, connection: scoped, error, held, retry: () => retry.current(), redact: failure => redact.current(failure) };
+	}, [user?.id, user?.localOnly, workspace, pool, storage, onDenied, expectedPlane]);
+	const scoped = timelineConnectionForViewer(connection, workspace === 'pending' ? null : user?.id, expectedPlane);
+	return { storage, identity: JSON.stringify([user?.id ?? null, workspace, storage, epoch]), ownerId: user?.id ?? null, connection: scoped, error, retry: () => retry.current(), redact: failure => redact.current(failure) };
 }
 
 /** Home and the selected database use identical records and separate scope
