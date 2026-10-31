@@ -55,10 +55,18 @@ process can run a second foreground stack: `TT_WEB_PORT=… npm --prefix remix r
 | Headless API suite against a live stack | `npm --prefix remix run test:api -- --base http://127.0.0.1:<nitro>` |
 | Editable app composition fixture | `remix/scripts/test-builder-app-local.ts`, with explicit `TT_BUILDER_QA_ORIGIN` and private `TT_BUILDER_QA_SESSION`; loopback-only, real API, stable synthetic IDs. See README "Builder component SDK". |
 | Lint changed files | `corepack pnpm --dir remix run lint:files -- <files>` |
-| Types | `corepack pnpm --dir remix run typecheck` (raw) and `typecheck:ratchet` (warns above `scripts/typecheck-baseline.json`; lower the baseline with `--update-baseline` when the count drops) |
+| Types | `corepack pnpm --dir remix run typecheck` (raw) and `corepack pnpm --dir remix run typecheck:ratchet` (strict zero-error baseline; never raise it) |
+| Full lint | `corepack pnpm --dir remix run lint` (errors fail; warnings have no numeric budget) |
+| Gate and legacy-helper regressions | `npm --prefix remix run test:typecheck-ratchet`; `npm --prefix remix run test:smarts` |
 | Vercel output contract | `npm --prefix remix run verify:vercel-output` |
 | Graphify | `scripts/graphify update .` after code changes; `npm run test:graphify-cas` for the wrapper |
+| Electron restart storage | `corepack pnpm --dir electron run verify:renderer-restart` after `build:web` + `verify:web`; isolated multi-process Chromium acceptance of `electron/lib/renderer-server.cjs`, shared journal and drafts. Nitro uses `node_middleware`; the profile owns a stable, collision-checked origin. See `electron/README.md`. |
 | Local Electron bundle | `corepack pnpm --dir electron run build` runs `npm ci` for the separately locked `MCP/` helper before the web/native build and preserves an available installed app signing identity; a fresh worktree needs no manual MCP dependency install |
+| Retained development app | `corepack pnpm@10.12.1 --dir electron dev:parallel --workspace=<task> --prepare-only` snapshots the canonical runtime into a named development app with independent dependencies/profile/managed replica/ports. `dev-workspace.mjs` owns transactional preparation and process ownership; `--stop-workspace` stops its verified group while preserving state. Never install an unmerged candidate over stable. See `electron/README.md` and `electron/test/dev-workspace.test.cjs`. |
+
+See [static analysis baselines](../static-analysis-baselines.md) for the audit,
+workspace coverage and formatter/CI limitations. A compiler launch failure is
+not a clean run and cannot justify rewriting the baseline.
 
 ## Graphify snapshots and hooks
 
@@ -111,6 +119,13 @@ shared by Vite/Vercel headers and the offline MCP capture process. See
 [no-login draft setup](../no-login-draft-preview.md); its QA uses a uniquely
 named canonical PM2 app on ports 22460–22462 and a new disposable replica.
 
+
+`electron test/fixtures/folder-sync-host.cjs` is an isolated desktop folder-host
+check: new temporary profile, real Chromium session/IPC, synthetic native dispatch.
+It never registers or reconfigures the installed Node. The shared browser fixture
+`/scripts/mobile-sync-editor.browser.html?platform=desktop` exercises the actual
+editor with synthetic native/API replies. Neither proves signed installed Mac
+transfers, restart journal recovery or native streaming throughput.
 ## Local API isolation
 
 Vite always forwards to this checkout’s Nitro port. Missing Mongo/signing settings
@@ -119,3 +134,13 @@ return `503 LOCAL_API_NOT_CONFIGURED`; neither server selects production implici
 a macOS OS network sandbox, including direct-IP and redirect denial. Fixture
 requests accept only a literal loopback HTTP origin and same-origin uploads.
 Keep backend/browser network isolation and dedicated test credentials in place.
+
+
+## Commander native background indexing
+
+`Commander/apps/daemon/src/services/indexing.ts` schedules coalesced subtree updates and periodic full reconciliation;
+`Commander/crates/commander-indexer` owns transactional SQLite/WAL snapshots, ignore traversal and unique counters.
+`Commander/script/dev-parallel.sh` runs an isolated native development bundle beside the installed app;
+`Commander/script/verify-background-index.mjs` verifies its real bundled daemon against disposable filesystem events.
+Run Commander typecheck/tests, both Rust crates and the native checks in `Commander/docs/TESTING.md`. Index status
+changes negotiate the daemon's `commander.index-status` capability; no Thingtime data API is added by this lane.

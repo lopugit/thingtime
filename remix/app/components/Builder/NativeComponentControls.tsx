@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { ComponentStyle } from './ComponentStyle';
@@ -7,6 +8,9 @@ import { countdownDuration, countdownRemaining } from './nativeControlClock';
 import { formCompletionMatches } from './nativeControlForm';
 
 export const NativeControlsEnabled = React.createContext(false);
+// Static Thing render Components may display sanitized markup but never mount
+// programs or inherit a surrounding page's delegated Action controls.
+export const ComponentDisplayOnly = React.createContext(false);
 export const ComponentLocalControl = React.createContext<((input: Record<string, unknown>) => void) | null>(null);
 // Menu dialogs live beside the hidden popover, within the same authored scope.
 export const ComponentDialogHost = React.createContext<{ element: HTMLElement; restoreFocus: () => void } | null>(null);
@@ -151,8 +155,8 @@ function Countdown({ duration, enabled }: { duration: number; enabled: boolean }
 			if (!next) setDeadline(null);
 		};
 		tick();
-		const timer = window.setInterval(tick, 200);
-		return () => window.clearInterval(timer);
+		const timer = activityInterval('timer:components/Builder/NativeComponentControls:1', 'Native Component Controls', tick, 200);
+		return () => clearActivityInterval(timer);
 	}, [deadline, enabled]);
 	const pause = () => {
 		if (deadline !== null) setRemaining(countdownRemaining(deadline, performance.now()));

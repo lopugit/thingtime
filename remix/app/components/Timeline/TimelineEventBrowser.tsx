@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import React from 'react';
 import { Box, Button, Flex, FormControl, FormLabel, Input, Select, Text } from '@chakra-ui/react';
 import type { TimelineEvent } from '../../timeline/contract';
@@ -153,7 +154,7 @@ export function TimelineEventBrowser({
 	}, [filters.look, filters.thingId, filters.query, filters.day]);
 	React.useEffect(() => {
 		if (!playing) return;
-		const timer = window.setInterval(() => {
+		const timer = activityInterval('timer:components/Timeline/TimelineEventBrowser:1', 'Timeline Event Browser', () => {
 			const next = currentRef.current + 1;
 			if (next >= positionsRef.current.length || document.visibilityState === 'hidden') {
 				setPlaying(false);
@@ -161,7 +162,7 @@ export function TimelineEventBrowser({
 			}
 			selectRef.current(positionsRef.current[next].card.row.event);
 		}, 1800);
-		return () => window.clearInterval(timer);
+		return () => clearActivityInterval(timer);
 	}, [playing]);
 	const measure = React.useCallback(() => {
 		const element = strip.current;

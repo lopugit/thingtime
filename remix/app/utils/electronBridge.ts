@@ -282,7 +282,26 @@ export type DesktopSpeechEvent = {
 	error?: string;
 };
 
+export type ThingtimeNativeActivity = {
+ id: string; label: string; kind: string; scope: 'desktop' | 'native-node';
+ enabled: boolean; running: boolean | null; controllable: boolean; description: string;
+};
+export type ThingtimeNativeActivitySnapshot = {
+ version: '1.0.0'; collectedAt: string; activities: ThingtimeNativeActivity[];
+ metrics: { scope: 'electron-processes'; processCount: number; cpuPercent: number | null; rssBytes: number | null };
+ limitations: string[];
+};
+export type ThingtimeNativeActivityRequest = { version: '1.0.0'; action: 'list' } |
+ { version: '1.0.0'; action: 'set-enabled'; id: string; enabled: boolean };
+
 export type ThingtimeDesktopBridge = {
+	activityVersion?: string;
+	activityRequest?: (request: ThingtimeNativeActivityRequest) => Promise<ThingtimeNativeActivitySnapshot>;
+	fileExportVersion?: string;
+	fileExportRequest?: (request: Record<string, unknown>) => Promise<unknown>;
+	folderSyncRequest?: (request: Record<string, unknown>) => Promise<unknown>;
+	folderSyncTaskVersion?: string;
+	setFolderSyncActive?: (request: { active: boolean }) => Promise<{ ok: true; version: '1.0.0' }>;
 	agentBrowserVersion?: string;
 	agentBrowsers?: (request: { method: string; params?: Record<string, unknown> }) => Promise<unknown>;
 	speechRecognitionVersion?: string;

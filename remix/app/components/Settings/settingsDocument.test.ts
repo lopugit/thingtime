@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createDesktopOperationGate } from './desktopOperationGate';
-import { localSettingsDocumentAdapter, settingsDocumentBlocks, settingsDocumentKey } from './settingsDocument';
+import { legacyDeviceSettingsDocument, localSettingsDocumentAdapter, settingsDocumentBlocks, settingsDocumentKey, settingsDocumentSeed } from './settingsDocument';
+import { createFolderHostFetch } from '~/fileSync/folderHostFetch.client';
 import { accountSettingsDocumentAdapter } from './settingsDocument.client';
 import { DESKTOP_CONNECTION_BLOCKS, DESKTOP_RECOVERY_BLOCKS } from './desktopSettingsDocuments';
+import { syncConflictReviewBlocks } from '../Devices/syncConflictReviewBlocks';
 
 const scope = { origin: 'https://settings.example.test', ownerId: 'owner', dataPlane: 'home', documentKey: 'desktop-connection' };
 const document = { name: 'Layout', blocks: [{ id: 'title', type: 'element' as const, tag: 'p', text: 'Private settings' }], revision: null };
 const signal = () => new AbortController().signal;
-const features = { 'api.things': { version: '1.35.0' }, 'api.webpages-resolve': { version: '1.6.0' }, 'api.actions-run': { version: '1.7.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } };
+const features = { 'api.things': { version: '1.36.0' }, 'api.webpages-resolve': { version: '1.6.0' }, 'api.actions-run': { version: '1.7.0' }, 'api.mongodb-endpoint': { version: '1.1.0' } };
 const page = (id = 'settings-layout-1', overrides = {}) => ({ id, author: { id: scope.ownerId }, updatedAt: '2026-10-19T00:00:00Z', crystal: { name: document.name, blocks: document.blocks, pageKey: `settings-${scope.documentKey}` }, ...overrides });
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
 function localFixture() {
@@ -23,10 +25,10 @@ function localFixture() {
 }
 
 test('authored desktop and recovery documents survive canonical sanitization without private values', () => {
-  for (const blocks of [DESKTOP_CONNECTION_BLOCKS, DESKTOP_RECOVERY_BLOCKS]) {
+  for (const blocks of [DESKTOP_CONNECTION_BLOCKS, DESKTOP_RECOVERY_BLOCKS, syncConflictReviewBlocks]) {
     const saved = settingsDocumentBlocks(blocks);
     assert.deepEqual(settingsDocumentBlocks(saved), saved);
-    assert.ok(JSON.stringify(saved).includes('runtime.save'));
+    assert.ok(JSON.stringify(saved).includes(blocks === syncConflictReviewBlocks ? '$transient' : 'runtime.save'));
     assert.ok(!JSON.stringify(saved).includes('mongodb://user:password'));
   }
 });
@@ -142,4 +144,60 @@ test('changing native authority releases old busy state without allowing stale c
   const current = gate.begin('second')!;
   assert.equal(gate.finish(old), false); assert.equal(gate.busy, true);
   assert.equal(gate.finish(current), true); assert.equal(gate.busy, false);
+});
+
+test('legacy device menu import preserves authored blocks but never imports identity or another authority', () => {
+ const menuScope = { ...scope, documentKey: 'custom-drawer-menu' };
+ const legacyScope = { ...menuScope, ownerId: 'device', dataPlane: `${scope.origin}:${scope.ownerId}:${scope.dataPlane}` };
+ const values = new Map([[settingsDocumentKey(legacyScope), JSON.stringify({ ...document, id: 'device-only', revision: 'local-revision' })]]);
+ const storage = { getItem: (key: string) => values.get(key) ?? null };
+ assert.deepEqual(legacyDeviceSettingsDocument(menuScope, storage), document);
+ for (const change of [{ ownerId: 'other' }, { origin: 'https://other.example.test' }, { dataPlane: 'other' }, { ownerId: 'anonymous' }])
+  assert.equal(legacyDeviceSettingsDocument({ ...menuScope, ...change }, storage), null);
+ assert.equal(values.size, 1);
+ assert.equal(JSON.parse(values.get(settingsDocumentKey(legacyScope))!).revision, 'local-revision');
+});
+
+test('first paint seeds scoped authored legacy blocks without borrowing local write authority', () => {
+ const legacy = { ...document, name: 'Authored menu', revision: 'local-revision', id: 'local-only' };
+ const defaults = [{ id: 'default', type: 'element' as const, tag: 'span', text: 'Default' }];
+ assert.deepEqual(settingsDocumentSeed(defaults, 'Default menu', null, () => legacy), { ...document, name: 'Authored menu' });
+ const cached = { ...document, id: 'account-thing', revision: 'account-revision' };
+ assert.deepEqual(settingsDocumentSeed(defaults, 'Default menu', cached, () => legacy), cached);
+ assert.deepEqual(settingsDocumentSeed(defaults, 'Default menu', { invalid: true }, () => { throw new Error('invalid legacy'); }), { blocks: defaults, name: 'Default menu', revision: null });
+});
+
+test('different UI/API origins use the existing authenticated same-origin proxy for private layout load/save', async () => {
+  const uiOrigin = 'https://desktop.example.test';
+  const selected = { ...scope, dataPlane: `custom-${'a'.repeat(64)}` };
+  let current = true;
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const controller = new AbortController();
+  const transport = createFolderHostFetch({ origin: selected.origin, localOrigin: uiOrigin, ownerId: selected.ownerId,
+    expectedDataPlane: selected.dataPlane, signal: controller.signal,
+    check: () => { if (!current) throw new Error('Changed selected origin'); },
+    fetch: async (target, init) => {
+      calls.push({ url: String(target), init });
+      if (String(target).includes('.well-known')) return response({ schemaVersion: 1, origin: selected.origin, features });
+      const result = Response.json(init?.method === 'PATCH' ? { ok: true, thing: page('settings-layout-1', { updatedAt: 'after' }) } : { ok: true, source: 'user', page: page() });
+      result.headers.set('x-thingtime-api-fallback', selected.origin); return result;
+    }
+  });
+  const adapter = accountSettingsDocumentAdapter(selected, { fetch: transport, currentOrigin: () => selected.origin });
+  const loaded = await adapter.load(signal());
+  await adapter.save(loaded!, signal());
+  const privateCalls = calls.filter(call => !call.url.includes('.well-known'));
+  assert.equal(privateCalls.length, 2);
+  assert.ok(privateCalls.every(call => call.url.startsWith(uiOrigin + '/api/v1/')));
+  assert.ok(privateCalls.every(call => call.init?.credentials === 'same-origin'));
+  for (const call of privateCalls) {
+    const headers = new Headers(call.init?.headers);
+    assert.equal(headers.get('x-thingtime-expected-actor'), selected.ownerId);
+    assert.equal(headers.get('x-thingtime-expected-data-plane'), selected.dataPlane);
+    assert.equal(headers.get('x-thingtime-expected-api-origin'), selected.origin);
+  }
+  await assert.rejects(transport(selected.origin + '/api/v1/things', { credentials: 'same-origin', cache: 'no-store', redirect: 'error', headers: { 'X-Thingtime-Expected-Actor': selected.ownerId, 'X-Thingtime-Expected-Data-Plane': 'wrong-plane' } }));
+  current = false;
+  await assert.rejects(adapter.save(loaded!, signal()), /Changed selected origin/);
+  assert.equal(privateCalls.length, 2);
 });

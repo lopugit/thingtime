@@ -23,6 +23,7 @@ import {
   Popover,
   PopoverAnchor,
   PopoverContent,
+  Portal,
   Select,
   Skeleton,
   SkeletonCircle,
@@ -44,6 +45,8 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
+import { DRAWER_POPUP_Z } from '~/components/Nav/Drawer/useDrawer';
+import { quickRecentReactions } from '~/components/Emoji/reactionPickerState';
 import { getEditorJsDoc } from '~/components/Editor/editorJsValue';
 import { RichTextBlocks } from '~/components/Kinds/kindRenderersMedia';
 import { PostAttachments } from '~/components/Attachments/PostAttachments';
@@ -225,6 +228,8 @@ export type PostCardProps = {
   onCommentAdded?: () => void | Promise<unknown>;
   // the /post/:id page opens with the conversation expanded
   defaultCommentsOpen?: boolean;
+  // Reveals every loaded comment; deeper pagination remains user initiated.
+  expandAllComments?: boolean;
   discussionOnly?: boolean;
   // Only a standalone Thing discussion supplies cursor-backed collection state.
   // Regular feed cards retain their existing sort and reveal behavior.
@@ -629,50 +634,62 @@ const SharedPostCard = ({ post }: { post: PublicPost }) => (
   </Box></SharedMediaProvider>
 );
 
-// The quick-reaction strip inside the picker popover — the standard emojis
-// plus a ＋ opening the full custom picker (when the host provides one).
-const QuickReactionRow = (props: { viewerSet: Set<string>; onPick: (emoji: string) => void; onMore?: () => void }) => {
+// Defaults remain first; nine personal shortcuts share the existing MRU store.
+const QuickReactionRow = (props: { viewerSet: Set<string>; recent: string[]; onPick: (emoji: string) => void; onMore?: () => void }) => {
   const { viewerSet, onPick, onMore } = props;
+  const recent = quickRecentReactions(props.recent, REACTION_EMOJIS);
+  const reactionButton = (emoji: string, compact: boolean) => (
+    <Button
+      key={emoji}
+      type="button"
+      variant="ghost"
+      minWidth={compact ? '44px' : 0}
+      width={compact ? '44px' : '100%'}
+      height="auto"
+      minHeight="44px"
+      padding={1}
+      fontSize="lg"
+      borderRadius="var(--tt-radius-sm, 9px)"
+      background={viewerSet.has(emoji) ? 'var(--tt-surface-hover, #ececee)' : 'transparent'}
+      boxShadow={viewerSet.has(emoji) ? 'inset 0 0 0 1.5px var(--tt-accent, #7c5cff)' : 'none'}
+      _hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
+      aria-label={`React ${emoji}`}
+      aria-pressed={viewerSet.has(emoji)}
+      title={emoji}
+      onClick={() => onPick(emoji)}
+    >
+      <Text as="span" overflowWrap="anywhere" whiteSpace="normal">{emoji}</Text>
+    </Button>
+  );
   return (
-    <Flex columnGap={0.5} padding={1.5} alignItems="center">
-      {REACTION_EMOJIS.map((emoji) => (
-        <Center
-          key={emoji}
-          as="button"
-          type="button"
-          width="34px"
-          height="34px"
-          fontSize="lg"
-          borderRadius="999px"
-          background={viewerSet.has(emoji) ? 'var(--tt-surface-hover, #ececee)' : 'transparent'}
-          boxShadow={viewerSet.has(emoji) ? 'inset 0 0 0 1.5px var(--tt-accent, #7c5cff)' : 'none'}
-          _hover={{ background: 'var(--tt-surface-hover, #ececee)', transform: 'scale(1.2)' }}
-          transition="transform 0.12s ease-out"
-          aria-label={`React ${emoji}`}
-          onClick={() => onPick(emoji)}
-        >
-          {emoji}
-        </Center>
-      ))}
-      {onMore && (
-        <Center
-          as="button"
-          type="button"
-          width="34px"
-          height="34px"
-          borderRadius="999px"
-          color={MUTED}
-          background="var(--tt-surface-alt, #f5f5f7)"
-          _hover={{ background: 'var(--tt-surface-hover, #ececee)', color: INK, transform: 'scale(1.2)' }}
-          transition="transform 0.12s ease-out"
-          aria-label="Choose a custom emoji"
-          title="Choose a custom emoji"
-          onClick={onMore}
-        >
-          <Plus size={16} strokeWidth={2.4} />
-        </Center>
+    <Box width="340px" maxWidth="calc(100vw - 24px)" padding={1.5}>
+      <Flex gap={0.5} alignItems="center" flexWrap="wrap">
+        {REACTION_EMOJIS.map((emoji) => reactionButton(emoji, true))}
+        {onMore && (
+          <IconButton
+            type="button"
+            minWidth="44px"
+            height="44px"
+            borderRadius="var(--tt-radius-sm, 9px)"
+            color={MUTED}
+            background="var(--tt-surface-alt, #f5f5f7)"
+            _hover={{ background: 'var(--tt-surface-hover, #ececee)', color: INK }}
+            aria-label="Choose a custom emoji"
+            title="Choose a custom emoji"
+            onClick={onMore}
+            icon={<Plus size={16} strokeWidth={2.4} />}
+          />
+        )}
+      </Flex>
+      {recent.length > 0 && (
+        <Box role="group" aria-label="Recent reactions" borderTop={BORDER} marginTop={1} paddingTop={1}>
+          <Text fontSize="xs" color={MUTED} paddingX={1} paddingBottom={1}>Recently used</Text>
+          <Grid templateColumns="repeat(3, minmax(0, 1fr))" gap={1} maxHeight="40dvh" overflowY="auto">
+            {recent.map((emoji) => reactionButton(emoji, false))}
+          </Grid>
+        </Box>
       )}
-    </Flex>
+    </Box>
   );
 };
 
@@ -685,25 +702,33 @@ const AnchoredEmojiPicker = (props: {
   onPick: (emoji: string) => void;
   recent: string[];
   activeTokens: string[];
-}) => (
-  <Popover isOpen={props.isOpen} onClose={props.onClose} placement="top-end" isLazy closeOnBlur={false}>
+}) => {
+  // Keep the draft above Chakra's lazy content so dismissing it is lossless.
+  const [query, setQuery] = React.useState('');
+  return (
+  <Popover isOpen={props.isOpen} onClose={props.onClose} placement="top-end" strategy="fixed" isLazy closeOnBlur={false}
+    modifiers={[{ name: 'preventOverflow', options: { padding: 12 } }, { name: 'flip', options: { padding: 12 } }]}>
     <PopoverAnchor>
       <Box position="absolute" right={0} bottom="100%" width="1px" height="1px" pointerEvents="none" />
     </PopoverAnchor>
+    <Portal appendToParentPortal={false}>
     <PopoverContent
+      rootProps={{ zIndex: DRAWER_POPUP_Z }}
       ref={props.contentRef as any}
       width="auto"
       border={BORDER}
       borderRadius="var(--tt-radius-lg, 16px)"
       background="var(--tt-card, #fff)"
       boxShadow="var(--tt-shadow-panel, 0px 18px 60px rgba(0, 0, 0, 0.22))"
-      zIndex={20}
+      zIndex={DRAWER_POPUP_Z}
       _focusVisible={{ outline: 'none' }}
     >
-      <EmojiPicker onPick={props.onPick} recent={props.recent} activeTokens={props.activeTokens} autoFocus />
+      <EmojiPicker onPick={props.onPick} recent={props.recent} activeTokens={props.activeTokens} query={query} onQueryChange={setQuery} autoFocus />
     </PopoverContent>
+    </Portal>
   </Popover>
-);
+  );
+};
 
 // Only one EMPTY reply input is open at a time across a card's comment tree:
 // opening a reply announces itself here and rows whose draft is empty close
@@ -781,6 +806,7 @@ const buildPendingComment = (user: any, targetId: string, text: string): PostCom
 // window them top-down under a sort, and read a thread's own sorted page
 // (threadCache keys a sorted read apart from the default one).
 const CommentSortContext = React.createContext<CommentSort | null>(null);
+const ExpandCommentsContext = React.createContext(false);
 
 // The comments the viewer sent from one list (a post's level or a reply
 // thread): a pending id swaps to the server's on ack, a failed send drops out.
@@ -855,7 +881,7 @@ const CommentRow = (props: {
   const sharedAccess = useSharedAccess();
   const user = useCurrentUser();
   const lopu = useLopu();
-  const { recent, pushRecent } = useRecentReactions();
+  const { recent, pushRecent, beginRecent, scopeKey } = useRecentReactions();
   const inFlightReactionTokensRef = React.useRef(new Set<string>());
   // emoji-splash origin: the comment's react button (chips/picker anchor here)
   const reactAnchorRef = React.useRef<HTMLDivElement | null>(null);
@@ -864,6 +890,7 @@ const CommentRow = (props: {
   // the card's Top / New / Old pick (null = default) — this row's replies
   // follow it: same order, same top-down window, same sorted thread read
   const commentSort = React.useContext(CommentSortContext);
+  const expandAllComments = React.useContext(ExpandCommentsContext);
   // at the cap, reveals hand over to the drill-down panel instead of nesting
   const atVisualCap = !!threadFocus && depth >= threadFocus.maxDepth;
   // Report to moderators 🚩 — logged-in non-mods on someone else's comment
@@ -893,7 +920,7 @@ const CommentRow = (props: {
     // copy still seeds (the rows re-order client-side) rather than a skeleton
     () => cursorReplies ? null : getCachedThread(comment.id, commentSort) ?? (commentSort ? getCachedThread(comment.id) : null) ?? (comment.comments?.length ? mergeReactionOverlays(0, comment.comments) : null)
   );
-  const [repliesOpen, setRepliesOpen] = React.useState((!cursorReplies && depth === 1 && !!comment.comments?.length) || !!defaultOpen);
+  const [repliesOpen, setRepliesOpen] = React.useState((expandAllComments && !atVisualCap) || (!cursorReplies && depth === 1 && !!comment.comments?.length) || !!defaultOpen);
   // the reply INPUT is separate from thread visibility: threads stay open,
   // but only one empty input exists at a time (ReplyFocusContext)
   const [replyInputOpen, setReplyInputOpen] = React.useState(false);
@@ -955,6 +982,7 @@ const CommentRow = (props: {
     inFlightReactionTokensRef.current.add(token);
 
     const adding = !viewerSet.has(token);
+    const recentOrder = adding ? beginRecent() : undefined;
     // pure delight: ADDING a reaction erupts it from the button (motion-gated
     // inside splashEmoji; removals stay quiet)
     if (adding) splashEmoji(token, reactAnchorRef.current);
@@ -978,7 +1006,7 @@ const CommentRow = (props: {
     try {
       const resp = await api.v1.things.react({ id: comment.id, emoji: token });
       reconcileLocalToken(resp.reactionCounts, resp.viewerReactions);
-      if (adding) pushRecent(token, resp.recentReactions);
+      if (adding) pushRecent(token, resp.recentReactions, recentOrder);
     } catch (err: any) {
       let reconciled = false;
       if (shouldReconcileReactionFailure(err)) {
@@ -1083,6 +1111,16 @@ const CommentRow = (props: {
   // MOUNT with their thread open (the two-level ship, drill-panel roots)
   // force the refetch: a cache-complete thread would otherwise skip it and
   // freeze reply reactions/edits at the cached snapshot forever.
+  const previousExpansion = React.useRef(expandAllComments);
+  React.useEffect(() => {
+    if (previousExpansion.current === expandAllComments) return;
+    previousExpansion.current = expandAllComments;
+    setRepliesOpen(expandAllComments && !atVisualCap);
+    if (expandAllComments && !atVisualCap) fetchThread({ force: true });
+    // Only a preference transition changes manual thread expansion.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandAllComments, atVisualCap]);
+
   const prefetchedRef = React.useRef(false);
   React.useEffect(() => {
     if (prefetchedRef.current) return;
@@ -1207,7 +1245,7 @@ const CommentRow = (props: {
   // (exact — a thread page is at most 20 wide) and windowed top-down with the
   // viewer's own fresh replies kept on screen
   const orderedReplies = cursorReplies ? sortCommentPage(replies || [], 'old') : commentSort ? sortCommentPage(replies || [], commentSort) : replies || [];
-  const shownReplies = windowCommentPage(orderedReplies, commentSort, visibleReplies, freshReplies.ids);
+  const shownReplies = expandAllComments ? orderedReplies : windowCommentPage(orderedReplies, commentSort, visibleReplies, freshReplies.ids);
 
   // parent comments carry the bigger avatar; replies step down (IG-style)
   const avatarSize = depth === 1 ? '28px' : '20px';
@@ -1245,12 +1283,13 @@ const CommentRow = (props: {
   const commentUpdown = <UpdownControl size="sm" votes={comment.votes} hideUnknownScore={cursorReplies} onVote={handleCommentUpdown} enabled={!!user && !pending} />;
 
   const reactControl = (
-    <Box ref={reactAnchorRef} position="relative" display="flex" flexShrink={0}>
+    <Box ref={reactAnchorRef} position="relative" display="flex" minWidth={0} maxWidth="100%">
       <ReactionControl
         enabled={!!user && !pending}
         onQuickTap={() => handleReact('❤️')}
         content={(close) => (
           <QuickReactionRow
+            recent={recent}
             viewerSet={viewerSet}
             onPick={(emoji) => {
               close();
@@ -1267,6 +1306,8 @@ const CommentRow = (props: {
             as="button"
             type="button"
             alignItems="center"
+            minWidth={0}
+            maxWidth="100%"
             columnGap={1}
             padding={1}
             borderRadius="999px"
@@ -1276,14 +1317,14 @@ const CommentRow = (props: {
             title="React"
           >
             {reactionEntries.length ? (
-              <Text as="span" fontSize="13px" lineHeight="1" sx={{ whiteSpace: 'nowrap' }}>
+              <Text as="span" minWidth={0} fontSize="13px" lineHeight="1.4" whiteSpace="normal" overflowWrap="anywhere">
                 {reactionDisplayEmojis(reactionEntries, viewerSet, 2)}
               </Text>
             ) : (
               <Heart size={13} strokeWidth={2.2} />
             )}
             {reactionTotal > 0 && (
-              <Text as="span" fontSize="11px" lineHeight="1" fontWeight={viewerSet.size ? 700 : 600}>
+              <Text as="span" flexShrink={0} fontSize="11px" lineHeight="1" fontWeight={viewerSet.size ? 700 : 600}>
                 {reactionTotal}
               </Text>
             )}
@@ -1292,6 +1333,7 @@ const CommentRow = (props: {
       />
       {/* the full custom picker (multi-select), anchored above the column */}
       <AnchoredEmojiPicker
+        key={JSON.stringify([scopeKey, comment.id])}
         isOpen={pickerOpen}
         onClose={() => setPickerOpen(false)}
         contentRef={pickerContentRef}
@@ -1322,7 +1364,7 @@ const CommentRow = (props: {
             </Box>
             {/* icon-only actions (no labels): reply toggles the inline input,
             and the merged react control sits right beside it */}
-            <Flex alignItems="center" columnGap={1} paddingX={1} paddingTop={0.5}>
+            <Flex alignItems="center" columnGap={1} rowGap={1} flexWrap="wrap" minWidth={0} paddingX={1} paddingTop={0.5}>
               <Flex
                 as="button"
                 type="button"
@@ -1471,7 +1513,7 @@ const CommentRow = (props: {
 // memoised: engagement telemetry re-renders the feed page frequently, and an
 // unchanged post reference should never re-render its card
 export const PostCard = React.memo(function PostCard(props: PostCardProps) {
-  return <SharedMediaProvider linkKey={props.post.audience?.linkKey || props.post.linkKey}><PostCardImpl {...props} /></SharedMediaProvider>;
+  return <ExpandCommentsContext.Provider value={!!props.expandAllComments}><SharedMediaProvider linkKey={props.post.audience?.linkKey || props.post.linkKey}><PostCardImpl {...props} /></SharedMediaProvider></ExpandCommentsContext.Provider>;
 });
 
 function PostCardImpl(props: PostCardProps) {
@@ -1497,7 +1539,15 @@ function PostCardImpl(props: PostCardProps) {
   const user = useCurrentUser();
   const lopu = useLopu();
 
-  const [commentsOpen, setCommentsOpen] = React.useState(!!defaultCommentsOpen);
+  const expandAllComments = React.useContext(ExpandCommentsContext);
+  const [commentsOpen, setCommentsOpen] = React.useState(!!defaultCommentsOpen || expandAllComments);
+  const previousExpansion = React.useRef(expandAllComments);
+  React.useEffect(() => {
+    if (previousExpansion.current !== expandAllComments) {
+      previousExpansion.current = expandAllComments;
+      setCommentsOpen(expandAllComments);
+    }
+  }, [expandAllComments]);
   // drill-down thread focus: the stack of comments the viewer zoomed into.
   // The top of the stack renders as the panel's top-level row (depth 1); the
   // back arrow pops one level. navDirRef picks the slide direction.
@@ -1556,7 +1606,7 @@ function PostCardImpl(props: PostCardProps) {
   const quoteContentRef = useOutsideTapClose<HTMLElement>(quoteOpen, () => setQuoteOpen(false));
   const expandSentRef = React.useRef(false);
 
-  const { recent, pushRecent } = useRecentReactions();
+  const { recent, pushRecent, beginRecent, scopeKey } = useRecentReactions();
   const inFlightReactionTokensRef = React.useRef(new Set<string>());
   // emoji-splash origin: the merged react button (picker + chips anchor here)
   const reactAnchorRef = React.useRef<HTMLDivElement | null>(null);
@@ -1852,6 +1902,7 @@ function PostCardImpl(props: PostCardProps) {
     inFlightReactionTokensRef.current.add(token);
 
     const adding = !viewerSet.has(token);
+    const recentOrder = adding ? beginRecent() : undefined;
     // pure delight: ADDING a reaction erupts it from the button (motion-gated
     // inside splashEmoji; removals stay quiet)
     if (adding) splashEmoji(token, reactAnchorRef.current);
@@ -1881,7 +1932,7 @@ function PostCardImpl(props: PostCardProps) {
       const resp = await api.v1.things.react({ id: post.id, emoji: token });
       reconcileLocalToken(resp.reactionCounts, resp.viewerReactions);
       // record recents only on a successful ADD (server records the same)
-      if (adding) pushRecent(token, resp.recentReactions);
+      if (adding) pushRecent(token, resp.recentReactions, recentOrder);
     } catch (err: any) {
       let reconciled = false;
       if (shouldReconcileReactionFailure(err)) {
@@ -1999,7 +2050,7 @@ function PostCardImpl(props: PostCardProps) {
   // under a sort the viewer's own fresh comments stay on screen even when the
   // order puts them below the window (a new comment scores 0 and is the
   // newest — Top and Old would otherwise hide the comment they just posted)
-  const shownComments = windowCommentPage(orderedComments, commentSort, visibleComments, freshComments.ids);
+  const shownComments = expandAllComments ? orderedComments : windowCommentPage(orderedComments, commentSort, visibleComments, freshComments.ids);
 
   // Feed keyboard shortcuts (useFeedShortcuts): inside a shortcuts-enabled
   // page (feed/explore mount the provider) the card lends its OWN handlers —
@@ -2197,7 +2248,10 @@ function PostCardImpl(props: PostCardProps) {
       alignItems="center"
       columnGap={1.5}
       paddingX={2}
-      height="32px"
+      paddingY={1}
+      minWidth={0}
+      maxWidth="100%"
+      minHeight="32px"
       borderRadius="999px"
       fontSize="sm"
       color={viewerReactions.length ? ACCENT : MUTED}
@@ -2206,14 +2260,14 @@ function PostCardImpl(props: PostCardProps) {
       title="React"
     >
       {reactionEntries.length ? (
-        <Text as="span" fontSize="md" lineHeight="1" sx={{ whiteSpace: 'nowrap' }}>
+        <Text as="span" minWidth={0} fontSize="md" lineHeight="1.4" whiteSpace="normal" overflowWrap="anywhere">
           {reactionDisplayEmojis(reactionEntries, viewerSet, 3)}
         </Text>
       ) : (
         <Heart size={18} strokeWidth={2.2} />
       )}
       {reactionTotal > 0 && (
-        <Text as="span" fontWeight={viewerReactions.length ? 700 : 600}>
+        <Text as="span" flexShrink={0} fontWeight={viewerReactions.length ? 700 : 600}>
           {reactionTotal}
         </Text>
       )}
@@ -2510,7 +2564,7 @@ function PostCardImpl(props: PostCardProps) {
           {showVotes && <UpdownControl votes={post.votes} hideUnknownScore={!!commentCollection} onVote={handleUpdown} enabled={!!user} accent={post.subspace?.accent} />}
 
           {user ? (
-            <Box ref={reactAnchorRef} position="relative" display="flex">
+            <Box ref={reactAnchorRef} position="relative" display="flex" minWidth={0} maxWidth="100%">
               {/* tap, touch-and-hold, or hover: quick reactions + a ＋ that
               opens the full picker */}
               <ReactionControl
@@ -2519,6 +2573,7 @@ function PostCardImpl(props: PostCardProps) {
                 onQuickTap={() => handleReact('👍')}
                 content={(close) => (
                   <QuickReactionRow
+                    recent={recent}
                     viewerSet={viewerSet}
                     onPick={(emoji) => {
                       close();
@@ -2534,6 +2589,7 @@ function PostCardImpl(props: PostCardProps) {
 
               {/* ＋: the full native-emoji picker (multi-select), anchored here */}
               <AnchoredEmojiPicker
+                key={JSON.stringify([scopeKey, post.id])}
                 isOpen={pickerOpen}
                 onClose={() => setPickerOpen(false)}
                 contentRef={pickerContentRef}

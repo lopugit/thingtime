@@ -1,3 +1,4 @@
+import { verifyPasswordProvider } from './verify-password-provider.mjs';
 import { existsSync } from 'node:fs';
 import { access, readdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -79,6 +80,8 @@ const signature = await verifySignedArtifacts({
 	outerApp: appPath,
 	runtimePath
 }, undefined, { mode });
+
+await verifyPasswordProvider(path.join(appPath, 'Contents/Helpers/Thingtime Passwords.app'), { teamIdentifier: signature.teamIdentifier });
 
 const desktopDisplay = run('/usr/bin/codesign', ['--display', '--verbose=4', appPath], 'Thingtime signing detail check');
 const desktop = parseCodeSignatureDetails(desktopDisplay);

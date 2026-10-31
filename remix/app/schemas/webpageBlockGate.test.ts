@@ -176,3 +176,13 @@ test('a component block keeps a well-formed source binding and refuses malformed
 	assert.equal(suiteKey.ok, true);
 	if (suiteKey.ok) assert.equal(suiteKey.crystal.suiteKey, 'pokeworld');
 });
+
+
+test('live sources preserve registered adapter contracts and reject arbitrary authenticated destinations', () => {
+  const stream = { path: '/api/v1/agent-overview', feature: 'api.agent-overview', minimumVersion: '2.0.0' };
+  const make = (candidate: unknown) => page([{ id: 'live', type: 'container', source: { action: 'read-overview', refresh: 'live', stream: candidate }, children: [] }]);
+  const valid = okBlocks(make(stream));
+  assert.deepEqual(valid[0].source.stream, stream);
+  assert.equal(valid[0].source.refresh, 'live');
+  for (const candidate of [undefined, {}, { ...stream, path: '/api/v1/auth/me' }, { ...stream, path: 'https://example.invalid/' }, { ...stream, feature: 'api.things' }, { ...stream, minimumVersion: '3.0.0' }]) assert.equal(make(candidate).ok, false);
+});

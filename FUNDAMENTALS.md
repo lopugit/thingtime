@@ -67,6 +67,13 @@ edge cases live in `api/utils/migrations/migrations.ts`.
 
 System-kind rules (never bypass):
 
+- `agent-reporting-binding` and `agent-reporting-operation` are protected,
+  home-pinned `storageClass: "control"` Things. The reporting gateway alone
+  writes their task bindings and relational retry receipts, using existing
+  root `uniqueKeys` indexes. Generic CRUD, search and inherited reads refuse
+  them; the gateway returns only its authorized task projection. The
+  `agent-reporting-*` shareId namespace is reserved for this control state.
+
 - **Protected** kinds — `user`, `theme`, `feed-algorithm`, `waitlist`, `app`,
   `subscription-tier`, `subscription`, `app-storage`, `service-quota`,
   `account-link`, `migration-diagnostic`, `attachment`, `ai-model`,
@@ -210,6 +217,21 @@ How (see `api/utils/things/things.ts`):
   Mongo row and quota reservation can disappear; the parent remains a retry
   anchor until no comments/replies/reactions/saves/attachment bytes can survive
   it.
+
+### Stable file identities and retained byte versions
+
+The protected `file` kind lives in `things` alongside its separately accounted
+`attachment` Things. `api/utils/files/files.ts` is the canonical writer: a
+revision-fenced transaction binds an owned durable `file` upload, updates the
+current metadata and storage delta, and appends a `file-content` revision to
+Timeline. Attachments retain immutable bytes; `targetId` and `parentId` identify
+the owning file. No version array or alternate history collection is created.
+The current attachment reference is bounded metadata in `file.crystal.content`.
+Trash retains every version and its storage charge. Direct generic deletion of
+file Things or deletion of their bound attachments is refused; retention/purge
+must eventually use the canonical external-object cleanup before refunding.
+Current access is owner-only on the home data plane. See
+[mobile file sync](docs/mobile-file-sync.md) for remaining sharing/UI/workers.
 
 ### Account storage is one exact, transactional ledger
 

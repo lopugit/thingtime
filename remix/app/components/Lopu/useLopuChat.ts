@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import { selectedPlanChatEligible } from './lopuProviderCore';
 import { isRunningLopuChatTask } from '~/api/utils/lopu/backgroundTaskCore';
 import { syncNativeLopuChatActivity } from '~/utils/lopuChatActivity';
@@ -222,8 +223,8 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
    for (const chatId of snapshot.recoveryChatIds) if (!active.has(chatId)) active.set(chatId, { chatId, status: 'retrying', management: 'client' });
    syncNativeLopuChatActivity({ ownerId: userId, contextKey: getAiTaskContextKey(), chats: [...active.values()] });
   };
-  sync(); window.addEventListener('thingtime:native-bridge-ready', sync); document.addEventListener('visibilitychange', sync);
-  return () => { window.removeEventListener('thingtime:native-bridge-ready', sync); document.removeEventListener('visibilitychange', sync); };
+  sync(); activityEvents(window, 'events:components/Lopu/useLopuChat', 'useLopuChat').addEventListener('thingtime:native-bridge-ready', sync); activityEvents(document, 'events:components/Lopu/useLopuChat', 'useLopuChat').addEventListener('visibilitychange', sync);
+  return () => { activityEvents(window, 'events:components/Lopu/useLopuChat', 'useLopuChat').removeEventListener('thingtime:native-bridge-ready', sync); activityEvents(document, 'events:components/Lopu/useLopuChat', 'useLopuChat').removeEventListener('visibilitychange', sync); };
  }, [tasks, userId, snapshot.recoveryChatIds]);
 
 	// the viewer's account / access rules ride along with every surface; a
@@ -321,8 +322,8 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
     }
    } catch { /* Preserve queue while task status is unavailable. */ }
   };
-  void tick(); const timer = setInterval(() => void tick(), 2000);
-  return () => { cancelled = true; clearInterval(timer); };
+  void tick(); const timer = activityInterval('timer:components/Lopu/useLopuChat:1', 'use Lopu Chat', () => tick(), 2000);
+  return () => { cancelled = true; clearActivityInterval(timer); };
  }, [queue, snapshot.sending]);
 
 	const confirmTool = React.useCallback(

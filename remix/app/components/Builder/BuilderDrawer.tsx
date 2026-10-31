@@ -1,4 +1,5 @@
-import { templateToBlocks } from './templateBlocks';
+import { LIVE_SOURCES } from '~/schemas/liveSources';
+import { expandedComponentBlock, templateToBlocks } from './templateBlocks';
 import { collectBlockIds, newBlockId } from './webpageBlocks';
 import { HEIC_IMAGE_ACCEPT } from '../Attachments/heicImage';
 import React from 'react';
@@ -11,7 +12,7 @@ import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl'
 import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
 import { sharePathForThing } from '~/components/Sharing/audienceCore';
 import { DRAWER_Z } from '../Nav/Drawer/useDrawer';
-import { defaultsFromArgs, sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
+import { sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
 import { BorderControl, CornersControl, SegmentedControl, ShadowControl, SidesControl } from './FigmaControls';
 import { cssLinesToRecord, cssRecordToLines } from './figmaControlValues';
 import {
@@ -489,7 +490,7 @@ const BlockInspector = ({
    </> : null}
    {allowDataSources ? block.source ? <>
     <FieldRow label="Data Action"><Input {...inputStyles} value={block.source.action} onChange={e=>patch({source:{...block.source!,action:e.target.value}})} /></FieldRow>
-    <FieldRow label="Refresh"><Select {...inputStyles} value={block.source.refresh || 'load'} onChange={e=>patch({source:{...block.source!,refresh:e.target.value as 'load'|'manual'|'interval'}})}><option value="load">After actions</option><option value="manual">On page load</option><option value="interval">Timed refresh</option></Select></FieldRow>
+    <FieldRow label="Refresh"><Select {...inputStyles} value={block.source.refresh || 'load'} onChange={e=>patch({source:{...block.source!,refresh:e.target.value as 'load'|'manual'|'interval'|'live',...(e.target.value==='live'&&!block.source!.stream?{stream:LIVE_SOURCES[0]}:{})}})}><option value="load">After actions</option><option value="manual">On page load</option><option value="interval">Timed refresh</option><option value="live">Live updates</option></Select></FieldRow>
     {block.source.refresh === 'interval' ? <FieldRow label="Refresh interval (ms)"><Input {...inputStyles} type="number" value={block.source.intervalMs || 15000} onChange={e=>patch({source:{...block.source!,intervalMs:Number(e.target.value)}})} /></FieldRow> : null}
    </> : <Button size="sm" onClick={()=>patch({source:{action:'',refresh:'load'}})}>Bind data Action</Button> : null}
 			{block.type === 'text' ? (
@@ -500,7 +501,7 @@ const BlockInspector = ({
 						</Text>
 					) : (
 						<FieldRow label="Text">
-							<Textarea {...inputStyles} rows={4} value={block.text || ''} onChange={(event) => patch({ text: event.target.value })} />
+							<Textarea {...inputStyles} aria-label="Block text" rows={4} value={block.text || ''} onChange={(event) => patch({ text: event.target.value })} />
 						</FieldRow>
 					)}
 					<RichTextEditorButton block={block} patch={patch} />
@@ -654,7 +655,7 @@ const BlockInspector = ({
        const ids = collectBlockIds(draft.blocks);
        const children = templateToBlocks(component?.crystal?.render, kind => { const id = newBlockId(kind, ids); ids.add(id); return id; });
        const replace = (blocks: WebpageBlock[]): WebpageBlock[] => blocks.map(entry => entry.id === block.id
-        ? { id: entry.id, type: 'container', direction: 'column', gap: 0, css: entry.css, source: entry.source || component?.crystal?.source, args: { ...defaultsFromArgs(sanitizeArgSpecs(component?.crystal?.args)), ...component?.crystal?.savedArgs, ...entry.args }, children }
+        ? expandedComponentBlock(entry, component?.crystal, children)
         : { ...entry, ...(entry.children ? { children: replace(entry.children) } : {}) });
        draft.setBlocks(replace(draft.blocks)); setExpandError('');
       } catch (error) { setExpandError(error instanceof Error ? error.message : 'Could not expand this component'); }

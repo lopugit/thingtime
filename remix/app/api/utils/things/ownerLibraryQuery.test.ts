@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { isDeepStrictEqual } from 'node:util';
 import { PROTECTED_THINGTIME, isProtectedThingtime } from '../../../schemas/registry';
-import { ownerLibraryMatch } from './ownerLibraryQuery';
+import { ownerLibraryMatch, ownerLibraryRootMatch } from './ownerLibraryQuery';
 
 // Evaluate the small Mongo query vocabulary against fixtures, so these tests
 // assert which rows are returned rather than duplicating the query structure.
@@ -10,7 +10,7 @@ const matches = (doc: Record<string, any>, query: Record<string, any>): boolean 
   if (key === '$or') return value.some((part: any) => matches(doc, part));
   if (key === '$and') return value.every((part: any) => matches(doc, part));
   if (key === '$expr') return doc[value.$eq[0].slice(1)] === doc[value.$eq[1].slice(1)];
-  const actual = doc[key];
+  const actual = key.split('.').reduce((value, part) => value?.[part], doc);
   if (value === null) return actual == null;
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return Object.entries(value).every(([op, operand]) => {
@@ -87,4 +87,31 @@ test('recording library query composes with root/folder, kind and token visibili
   assert.equal(matches(recording, { $and: [own, { folderId: 'folder-a' }] }), false);
   assert.equal(matches(recording, { $and: [own, { thingtime: { $in: ['post'] } }] }), false);
   assert.equal(matches({ ...recording, acl: ['tt:user'] }, { $and: [own, { acl: { $in: ['tt:all'] } }] }), false);
+});
+
+
+test('stable files appear once in the owner library; Trash and retained attachments stay out', () => {
+ const query = ownerLibraryMatch('alice', PROTECTED_THINGTIME);
+ const file = { ownerId: 'alice', thingtime: ['file'], crystal: { trashed: false } };
+ assert.equal(matches(file, query), true);
+ assert.equal(matches({ ...file, crystal: { trashed: true } }, query), false);
+ assert.equal(matches({ ...file, ownerId: 'bob' }, query), false);
+ assert.equal(matches({ ...recording, attachmentPurpose: 'file', targetId: 'stable-file' }, query), false);
+});
+
+
+test('root excludes children, sync settings and storage blobs while recovery/search preserve durable files', () => {
+  const library = ownerLibraryMatch('alice', PROTECTED_THINGTIME);
+  const root = { $and: [library, ownerLibraryRootMatch()] };
+  const data = { ownerId: 'alice', thingtime: ['data'], crystal: {} };
+  for (const row of [data]) assert.equal(matches(row, root), true);
+  for (const row of [recording, { ...recording, attachmentPurpose: 'file', crystal: { name: 'search.svg', contentType: 'application/octet-stream', mediaKind: 'file', size: 494 }, folderId: null }, { ...data, parentId: 'parent' }, { ...data, crystal: { parentId: 'parent', body: 'Progress report' } }, { ...data, targetId: 'parent' },
+    { ...data, folderId: 'nested' }, { ...data, thingtime: ['file-sync'] },
+    { ...recording, attachmentPurpose: 'file', attachmentExpiresAt: new Date() }]) assert.equal(matches(row, root), false);
+  const file = { ownerId: 'alice', thingtime: ['file'], folderId: 'nested', crystal: { trashed: false } };
+  assert.equal(matches(file, root), false);
+  assert.equal(matches(file, { $and: [library, { folderId: 'nested' }] }), true);
+  assert.equal(matches(file, library), true);
+  assert.equal(matches({ ...recording, attachmentPurpose: 'file', crystal: { name: 'search.svg', size: 494 } }, library), true);
+  assert.equal(matches({ ...data, parentId: 'parent' }, library), true);
 });

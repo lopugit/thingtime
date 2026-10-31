@@ -14,6 +14,7 @@ import { LinkedDeployments } from './LinkedDeployments';
 import { NotificationSettingsSection } from './NotificationSettings';
 import { SubspacePreferencesSection } from '~/components/Subspaces/SubspacePreferencesSection';
 import { PasskeysManager } from './PasskeysManager';
+import { PasswordManagerSettings } from './PasswordManagerSettings';
 import { TokenMinter } from './TokenMinter';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
 import { SecureVault } from './SecureVault';
@@ -33,6 +34,7 @@ import { useApi } from '~/hooks/useApi';
 import { useTtTheme } from '~/hooks/useTtTheme';
 import { SETTINGS_TABS, settingsTabHref, type SettingsTab } from './settingsTabs';
 import { DesktopSettings } from './DesktopSettings';
+import { CustomDrawerItems } from '~/components/Nav/Drawer/CustomDrawerItems';
 import { DrawerItemSettings } from './DrawerItemSettings';
 import { ThingsSettings } from './ThingsSettings';
 import { ProfileMediaField, type ProfileMediaFieldHandle } from '~/components/Profile/ProfileMediaField';
@@ -770,6 +772,9 @@ export const SettingsContent = ({
 								</SettingRow>
 							</Flex>
 						</SettingsSection>
+						<SettingsSection eyebrow="Custom drawer items" description="Add links and Things to your drawer.">
+							<CustomDrawerItems settings />
+						</SettingsSection>
 						<SettingsSection eyebrow="Close menu after click" description="Choose which navigation items close the drawer on desktop and mobile.">
 							<DrawerItemSettings />
 						</SettingsSection>
@@ -789,6 +794,7 @@ export const SettingsContent = ({
 						)}
 					</Flex>
 				)}
+				{tab === 'passwords' && user && !user.temporary && <PasswordManagerSettings key={user.id} ownerId={user.id} onNavigate={onNavigate} />}
 				{tab === 'security' && (
 					<Flex direction="column" gap={4} minW={0}>
 						{/* security (auth only) — email 2FA + the reset flow's home */}
@@ -816,8 +822,8 @@ export const SettingsContent = ({
 											Reset 🔑
 										</Button>
 									</SettingRow>
-									<Box paddingY={2}>
-										<PasskeysManager />
+									<Box id="account-passkeys" paddingY={2} scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
+										<PasskeysManager key={user.id} />
 									</Box>
 								</Flex>
 							</SettingsSection>
@@ -912,12 +918,12 @@ export const SettingsContent = ({
 						{/* admin (admins only) */}
 						{user?.isAdmin && (
 							<SettingsSection eyebrow="Admin" description="Global controls — AI conflict resolution, rate limits, and admin access.">
-								<AdminPanel />
+								<AdminPanel key={user.id} />
 							</SettingsSection>
 						)}
 					</Flex>
 				)}
-				{!user && ['profile', 'notifications', 'security', 'connections'].includes(tab) && (
+				{(!user || (tab === 'passwords' && user.temporary)) && ['profile', 'notifications', 'security', 'passwords', 'connections'].includes(tab) && (
 					<SettingsSection eyebrow={tab} description="Sign in to manage these account settings.">
 						<Button onClick={() => navigate('/login')}>Log in</Button>
 					</SettingsSection>

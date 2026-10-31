@@ -1,9 +1,12 @@
+import { subspaceMessagingMigration } from './subspaceMessaging';
 import { accidentalCatalogAccountMigration } from './accidentalCatalogAccount';
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
 import {
   ensureHomeThingsIndexPlan,
+  withHomeIndexMaintenance,
+  isHomeIndexRecoveryActive,
   ensureIndexes,
   getAdoptionIssues,
   getCiControlCollection,
@@ -194,8 +197,11 @@ type MigrationLease = {
 };
 
 const acquireMigrationLease = async (migrationId: string): Promise<MigrationLease | null> => {
-	await ensureIndexes();
+	if (!isHomeIndexRecoveryActive()) await ensureIndexes();
 	const settings = await getSettingsCollection();
+	// Authenticated repair must remain reachable when an unrelated unique index
+	// cannot build, but the existing migration lease still needs its own constraint.
+	if (isHomeIndexRecoveryActive()) await settings.createIndex({ key: 1 }, { unique: true, maxTimeMS: 15_000 });
 	const token = randomUUID();
 	const now = new Date();
 	try {
@@ -2967,21 +2973,23 @@ const rebuildThingsIndexes: Migration = {
   },
   run: async ({ dryRun, assertLease }) => {
     const db = await getHomeThingtimeDb();
-    const collection = db.collection(physicalCollectionName('things'));
     const notes = makeNotes();
     const before = await collectionStorage(db, physicalCollectionName('things'));
-    const report = await rebuildPlanIndexes({
-      collection,
+    const runRebuild = async (targetDb: any, assertIndexLease?: () => Promise<void>) => rebuildPlanIndexes({
+      collection: targetDb.collection(physicalCollectionName('things')),
       planNames: await thingsIndexPlanNames(),
-      ensurePlan: () => ensureHomeThingsIndexPlan(db),
+      ensurePlan: () => ensureHomeThingsIndexPlan(targetDb, { underLease: true }),
       dryRun,
-      assertLease
+      assertLease: async () => { await assertLease?.(); await assertIndexLease?.(); }
     });
+    // Startup cannot prune a live rebuild's twin or race its create/drop phase.
+    // Preserve the independent admin migration lease as well as the DDL lease.
+    const report = dryRun ? await runRebuild(db) : await withHomeIndexMaintenance(runRebuild);
     notes.push(
       `${report.rebuilt.length} plan-owned index(es) ${dryRun ? 'would be' : 'were'} rebuilt one at a time; ${report.twins.length} unique constraint(s) ${dryRun ? 'would be' : 'were'} held by a twin throughout`
     );
     if (report.recovered.length) notes.push(`Recovered an interrupted rebuild first: dropped ${report.recovered.join(', ')}`);
-    for (const name of report.unprotected) notes.push(`${name}: rebuilt WITHOUT a twin — the collection sits at MongoDB's 64-index cap, so its uniqueness lapsed for the rebuild window`);
+    // Unique rebuilds now require a protective slot and fail closed at the cap.
     for (const name of report.skipped) notes.push(`${name}: not in the current plan — left untouched`);
     if (!dryRun) {
       const after = await collectionStorage(db, physicalCollectionName('things'));
@@ -3247,6 +3255,7 @@ const retireLegacyThingIndexes: Migration = {
 	run: migrateLegacyThingIndexLayout
 };
 export const migrations: Migration[] = [
+  subspaceMessagingMigration,
 	accidentalCatalogAccountMigration,
 	// Physical residue must land in the current generation before any logical
 	// shape or byte-ledger migration can declare its source universe complete.

@@ -148,6 +148,8 @@ const cloneProxyRequestHeaders = (request: Request, fallbackUrl: URL) => {
   return headers;
 };
 
+export const EXPECTED_API_ORIGIN_HEADER = 'X-Thingtime-Expected-Api-Origin';
+
 const endpointChangedResponse = () => Response.json({
   ok: false, code: 'API_ENDPOINT_CHANGED', error: 'The selected API changed. Retry on the current endpoint.'
 }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
@@ -156,6 +158,10 @@ export const proxyApiRequestToFallback = async (request: Request, options: { str
   if (process.env.THINGTIME_AGENT_TEST_MODE === '1') return Response.json({ ok: false, error: 'Isolated tests cannot use an API fallback.' }, { status: 503 });
   const expectedOrigin = options.expectedOrigin === undefined ? getApiFallbackOrigin() : options.expectedOrigin;
   const requestUrl = new URL(request.url);
+  const syncOrigin = request.headers.get(EXPECTED_API_ORIGIN_HEADER);
+  if (syncOrigin !== null && syncOrigin !== expectedOrigin) return Response.json({
+    ok: false, code: 'API_ORIGIN_CHANGED', error: 'The selected sync server changed.'
+  }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
   // Pin authority before any async work. A completed negotiation for a previous
   // endpoint never authorizes sending credentials or a body to its replacement.
   if (expectedOrigin !== getApiFallbackOrigin()) return endpointChangedResponse();

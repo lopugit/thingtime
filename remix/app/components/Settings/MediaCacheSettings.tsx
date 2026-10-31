@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import React from 'react';
 import { Button, Switch, Text } from '@chakra-ui/react';
 import { SettingRow, SettingsSection } from './SettingsSection';
@@ -8,10 +9,10 @@ export function MediaCacheSettings() {
 	const [status, setStatus] = React.useState<MediaCacheStatus | null>(null);
 	const [clearing, setClearing] = React.useState(false);
 	React.useEffect(() => {
-		const refresh = () => void mediaCacheMessage('tt-media-status').then(setStatus);
+		const refresh = () => mediaCacheMessage('tt-media-status').then(setStatus);
 		refresh();
-		const timer = setInterval(refresh, 3000);
-		return () => clearInterval(timer);
+		const timer = activityInterval('timer:components/Settings/MediaCacheSettings:1', 'Media Cache Settings', refresh, 3000);
+		return () => clearActivityInterval(timer);
 	}, []);
 	const update = (key: 'cache' | 'previews', value: boolean) => {
 		const next = { ...preferences, [key]: value };

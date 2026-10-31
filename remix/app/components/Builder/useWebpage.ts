@@ -1,4 +1,5 @@
-import { requiresEditableBlockContract } from './webpageBlocks';
+import { hasLiveSourceBinding } from '~/schemas/liveSources';
+import { requiresEditableBlockContract, requiresEditableIntrinsicContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
 import React from 'react';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
@@ -61,7 +62,7 @@ export const loadWebpageClient = async (target: WebpageTarget): Promise<WebpageL
 	// behaviour, one less request per navigation.
 	if (target.kind === 'path' && (target.path.length > MAX_WEBPAGE_ROUTE_CHARS || !WEBPAGE_ROUTE_PATTERN.test(target.path))) return { status: 'missing' };
 	try {
-		await requireThingtimeCapability('api.webpages-resolve', '1.3.0');
+		await requireThingtimeCapability('api.webpages-resolve', '1.8.1');
 		const response = await fetch(`/api/v1/webpages/resolve?${targetQuery(target)}`, { credentials: 'include' });
 		if ([400, 401, 403, 404].includes(response.status)) return { status: 'missing' };
 		if (!response.ok) return { status: 'error' };
@@ -390,7 +391,12 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
-				if (requiresEditableBlockContract(blocks)) await requireThingtimeCapability('api.things', '1.35.0');
+				if (requiresEditableIntrinsicContract(blocks)) {
+					await requireThingtimeCapability('api.things', '1.44.0');
+					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.14.0');
+				}
+				else if (hasLiveSourceBinding(blocks)) await requireThingtimeCapability('api.things', '1.37.0');
+				else if (requiresEditableBlockContract(blocks)) await requireThingtimeCapability('api.things', '1.36.0');
 				const draftEventId = page && user?.id && historyEditable ? await draftHistory.flush() : null;
 				if (generation !== generationRef.current) return { ok: false, error: 'Page or account changed while preparing the save.' };
 				if (resolved?.source === 'user' && page) {
