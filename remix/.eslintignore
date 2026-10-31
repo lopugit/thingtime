@@ -5,3 +5,4 @@ build/
 .output/
 .cache/
 coverage/
+public/vendor/mapbox-gl/
