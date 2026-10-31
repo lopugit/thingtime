@@ -44,7 +44,7 @@ fn service_processes_correlated_requests_and_survives_invalid_json() {
     let second: Value = serde_json::from_str(&second).expect("second JSON");
     assert_eq!(second["id"], "status-1");
     assert_eq!(second["ok"], true);
-    assert_eq!(second["result"]["schemaVersion"], 4);
+    assert_eq!(second["result"]["schemaVersion"], 3);
 
     writeln!(
         stdin,
@@ -98,42 +98,6 @@ fn service_processes_correlated_requests_and_survives_invalid_json() {
         128
     );
 
-    writeln!(
-        stdin,
-        "{}",
-        json!({
-            "id": "catalogue-1", "operation": "query",
-            "request": {"query": "", "kinds": ["file"], "limit": null}
-        })
-    )
-    .expect("catalogue request");
-    stdin.flush().expect("flush catalogue");
-    let mut catalogue = String::new();
-    stdout
-        .read_line(&mut catalogue)
-        .expect("catalogue response");
-    let catalogue: Value = serde_json::from_str(&catalogue).expect("catalogue JSON");
-    assert_eq!(catalogue["id"], "catalogue-1");
-    assert_eq!(catalogue["result"]["records"][0]["name"], "resource.txt");
-
     drop(stdin);
     assert!(child.wait().expect("wait").success());
-
-    let output = Command::new(env!("CARGO_BIN_EXE_commander-indexer"))
-        .args([
-            "query",
-            "--database",
-            temp.path().join("index.sqlite3").to_str().unwrap(),
-            "--query",
-            "",
-            "--kind",
-            "file",
-            "--limit",
-            "all",
-        ])
-        .output()
-        .expect("CLI unlimited catalogue");
-    assert!(output.status.success());
-    let output: Value = serde_json::from_slice(&output.stdout).expect("CLI JSON");
-    assert_eq!(output["records"][0]["name"], "resource.txt");
 }

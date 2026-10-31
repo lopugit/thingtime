@@ -4,7 +4,6 @@ import {
   AppWindow,
   ArrowRight,
   Calculator,
-  Check,
   Command,
   CornerDownLeft,
   Files,
@@ -14,7 +13,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Settings2,
   Terminal,
 } from 'lucide-react';
 import type {
@@ -126,20 +124,17 @@ function displayTitle(hit: SearchHit): string {
   return hit.kind === 'application' ? hit.title.replace(/\.app$/i, '') : hit.title;
 }
 
-export function indexSummary(status: IndexingStatus | null, now = Date.now()): string {
-  if (status?.searchableRecords === undefined) return 'Ready to search';
-  const count = `${status.searchableRecords.toLocaleString()} searchable items`;
-  if (status.lastIndexedAtMs === undefined) return count;
-  const seconds = Math.max(0, Math.floor((now - status.lastIndexedAtMs) / 1_000));
-  const age =
-    seconds < 60
-      ? 'just now'
-      : seconds < 3_600
-        ? `${Math.floor(seconds / 60)}m ago`
-        : seconds < 86_400
-          ? `${Math.floor(seconds / 3_600)}h ago`
-          : `${Math.floor(seconds / 86_400)}d ago`;
-  return `${count} · indexed ${age}`;
+function indexActivity(status: IndexingStatus | null): string | null {
+  const progress = status?.progress;
+  if (progress) {
+    const count = progress.processed.toLocaleString();
+    const total = progress.total?.toLocaleString();
+    return `${progress.label} · ${count}${total ? ` / ${total}` : ''}`;
+  }
+  const scope = status?.running[0];
+  if (!scope) return null;
+  const label = scope === 'all' ? 'Everything' : scope[0]!.toUpperCase() + scope.slice(1);
+  return `Indexing ${label}…`;
 }
 
 export function Launcher({ state }: { state: CommanderState }) {
@@ -177,7 +172,7 @@ export function Launcher({ state }: { state: CommanderState }) {
   const selected = selectedHistoryRow
     ? undefined
     : searchGroups.flattened[state.selectedIndex - historyCount];
-  const summary = indexSummary(state.indexingStatus);
+  const activity = indexActivity(state.indexingStatus);
 
   const selectFromPointer = useCallback(
     (index: number, event: ReactPointerEvent<HTMLElement>) => {
@@ -325,7 +320,7 @@ export function Launcher({ state }: { state: CommanderState }) {
         else
           void state
             .rememberRecentSearch(state.query)
-            .then(() => hideLauncher(true))
+            .then(hideLauncher)
             .catch((error: unknown) =>
               state.reportError(error instanceof Error ? error.message : 'Could not close Commander'),
             );
@@ -406,13 +401,7 @@ export function Launcher({ state }: { state: CommanderState }) {
         }}
         onDoubleClick={() => void runHitAction(hit, hit.actions[0]?.id ?? 'open')}
       >
-        <ResultIcon
-          icon={hit.icon}
-          kind={hit.kind}
-          path={hit.path}
-          shouldLoadNativeIcon={!historyVisible && !state.resultsStale}
-          nativeIconPriority={rowSelected ? 0 : 1 + Math.abs(rowIndex - state.selectedIndex)}
-        />
+        <ResultIcon icon={hit.icon} kind={hit.kind} path={hit.path} />
         <span className="result-copy">
           <span className="result-title">{displayTitle(hit)}</span>
           {hit.subtitle ? <span className="result-subtitle">{hit.subtitle}</span> : null}
@@ -462,24 +451,6 @@ export function Launcher({ state }: { state: CommanderState }) {
           />
           <span className="search-hint">Actions</span>
           <kbd>⌘ K</kbd>
-          <button
-            type="button"
-            className="launcher-settings-button"
-            title="Open Commander Settings"
-            aria-label="Open Commander Settings"
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
-            }}
-            onClick={() => {
-              void state
-                .executeCommand('builtin:settings', 'open-settings', '')
-                .catch((error: unknown) =>
-                  state.reportError(error instanceof Error ? error.message : 'Could not open Settings'),
-                );
-            }}
-          >
-            <Settings2 aria-hidden="true" />
-          </button>
         </header>
 
         <div className="result-region">
@@ -508,10 +479,8 @@ export function Launcher({ state }: { state: CommanderState }) {
                 ) : null}
               </span>
             ) : (
-              <span className="result-count">
-                {state.searchPending ? (
-                  <RefreshCw className="search-spinner" aria-label="Updating results" />
-                ) : null}
+              <span className={state.searchPending ? 'result-count updating' : 'result-count'}>
+                {state.searchPending ? <RefreshCw aria-label="Updating results" /> : null}
                 {state.hits.length}
               </span>
             )}
@@ -620,7 +589,7 @@ export function Launcher({ state }: { state: CommanderState }) {
             ))}
             {!totalRows ? (
               <div className="empty-state">
-                <Command />
+                {state.searchPending ? <RefreshCw className="search-spinner" /> : <Command />}
                 <strong>{state.searchPending ? 'Searching…' : 'No results found'}</strong>
                 <span>
                   {state.searchPending
@@ -633,14 +602,14 @@ export function Launcher({ state }: { state: CommanderState }) {
         </div>
 
         <footer className="launcher-footer">
-          <span className="connection-dot" />
+          <span className={activity ? 'connection-dot indexing' : 'connection-dot'} />
           <span>{state.bootstrap?.platform ?? 'desktop'}</span>
           {state.error ? (
             <span className="footer-error">{state.error}</span>
+          ) : activity ? (
+            <span className="footer-index-progress">{activity}</span>
           ) : (
-            <span className="footer-index-progress" title={summary}>
-              {state.notice ?? summary}
-            </span>
+            <span>{state.notice ?? 'Commander is ready'}</span>
           )}
           <span className="footer-spacer" />
           <span>Navigate</span>
@@ -683,34 +652,6 @@ export function Launcher({ state }: { state: CommanderState }) {
                 >
                   <Plus />
                   <span>Open New Window</span>
-                </button>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={state.bootstrap?.settings.windowPinning.defaultPinned ?? false}
-                  disabled={!state.bootstrap?.settings.windowPinning.enabled}
-                  onClick={() => {
-                    const settings = state.bootstrap?.settings;
-                    if (!settings) return;
-                    setPinMenuOpen(false);
-                    void state.saveSettings({
-                      ...settings,
-                      windowPinning: {
-                        ...settings.windowPinning,
-                        defaultPinned: !settings.windowPinning.defaultPinned,
-                      },
-                    });
-                  }}
-                >
-                  <Check
-                    aria-hidden="true"
-                    style={{
-                      visibility: state.bootstrap?.settings.windowPinning.defaultPinned
-                        ? 'visible'
-                        : 'hidden',
-                    }}
-                  />
-                  <span>Open New Windows Pinned</span>
                 </button>
               </aside>
             ) : null}

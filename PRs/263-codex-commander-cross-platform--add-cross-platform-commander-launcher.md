@@ -312,20 +312,6 @@ environment.
   settings surface for future meaningful features whenever user customization
   is safe and coherent, together with defaults, migration, and tests.
 
-## Commander responsiveness hardening
-
-- Every visible result row can now receive its real Finder icon. Renderer-side
-  icon work is coalesced by canonical path, cancellation-aware, and constrained
-  by a 512-entry/24 MiB LRU plus two in-flight bridge requests; the selected
-  row is prioritized while background rows are briefly debounced.
-- The native bridge applies matching path coalescing and cache limits, then
-  yields between individual AppKit icon renders. Broad searches therefore keep
-  the launcher responsive instead of submitting a main-thread icon burst.
-- Application launches are submitted to the native opener rather than executed
-  inline in the WebKit message handler. The build verifier covers both a
-  healthy launch and a deliberately hanging `/usr/bin/open` helper so a
-  blocked Launch Services request cannot beachball Commander.
-
 ## Verification
 
 - Commander TypeScript: 134 tests passed across protocol (12), filesystem client
@@ -451,13 +437,6 @@ environment.
   the app reporting `0.1.0 (42)` and passing strict deep code-signature
   verification. The GitHub build intentionally uses ad-hoc signing until
   notarization credentials are configured, and its release notes say so.
-
-## CodeQL follow-up
-
-- Replaced the Raycast regex replacement converter's ordered replacement chain
-  with a single-pass escape decoder. Each original supported escape is decoded
-  exactly once, unknown escapes remain intact, and focused Vitest coverage now
-  guards against backslash double-unescaping.
 
 ## Follow-up coverage
 

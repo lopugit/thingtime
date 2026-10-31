@@ -17,34 +17,6 @@ interface Pending {
 }
 
 const SEARCH_TIMEOUT_MS = 5_000;
-// Just below an exact title: the existing category preference can lift a
-// complete app-name word above an exact file, while learned/file-first
-// preferences still win. Keep in sync with commander-core.
-const APPLICATION_NAME_WORD_SCORE = 99_300;
-
-function matchesApplicationNameWords(query: string, title: string): boolean {
-  const needle = Array.from(query.trim())
-    .slice(0, 128)
-    .join('')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]/gu, '');
-  if (Array.from(needle).length < 3) return false;
-  const words = Array.from(title)
-    .slice(0, 512)
-    .join('')
-    .replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2')
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter(Boolean);
-  for (let start = 0; start < words.length; start += 1) {
-    let phrase = '';
-    for (let end = start; end < words.length && phrase.length < needle.length; end += 1) {
-      phrase += words[end];
-      if (phrase === needle) return true;
-    }
-  }
-  return false;
-}
 
 export class SearchService {
   #items: SearchItem[] = [];
@@ -62,16 +34,6 @@ export class SearchService {
     return this.#items;
   }
 
-  /**
-   * Returns the immutable-in-practice catalog a search should use for its
-   * entire lifetime. A catalog refresh swaps `#items` atomically, so taking a
-   * shallow copy here keeps an in-flight streamed search coherent while the
-   * next search sees the newer catalog immediately.
-   */
-  snapshot(): SearchItem[] {
-    return [...this.#items];
-  }
-
   async search(
     query: string,
     limit = 30,
@@ -79,30 +41,10 @@ export class SearchService {
     preferenceScores: Readonly<Record<string, number>> = {},
     categoryOrder: readonly SearchCategory[] = ['applications', 'commands', 'files'],
   ): Promise<SearchHit[]> {
-    return this.searchSnapshot(
-      query,
-      this.snapshot(),
-      limit,
-      additionalItems,
-      preferenceScores,
-      categoryOrder,
-    );
-  }
-
-  async searchSnapshot(
-    query: string,
-    catalog: readonly SearchItem[],
-    limit = 30,
-    additionalItems: SearchItem[] = [],
-    preferenceScores: Readonly<Record<string, number>> = {},
-    categoryOrder: readonly SearchCategory[] = ['applications', 'commands', 'files'],
-  ): Promise<SearchHit[]> {
-    const items = mergeItems(catalog, additionalItems).map((item) => {
+    const items = mergeItems(this.#items, additionalItems).map((item) => {
       const preferenceScore = Math.min(
         100_000,
-        Math.max(0, item.preferenceScore ?? 0) +
-          Math.max(0, preferenceScores[item.id] ?? 0) +
-          categoryPreferenceScore(item, categoryOrder),
+        Math.max(0, preferenceScores[item.id] ?? 0) + categoryPreferenceScore(item, categoryOrder),
       );
       return preferenceScore ? { ...item, preferenceScore } : item;
     });
@@ -195,8 +137,8 @@ function categoryPreferenceScore(item: SearchItem, order: readonly SearchCategor
   return Math.max(0, order.length - index - 1) * 600;
 }
 
-function mergeItems(catalog: readonly SearchItem[], additional: SearchItem[]): SearchItem[] {
-  if (!additional.length) return [...catalog];
+function mergeItems(catalog: SearchItem[], additional: SearchItem[]): SearchItem[] {
+  if (!additional.length) return catalog;
   const seen = new Set<string>();
   return [...catalog, ...additional].filter((item) =>
     seen.has(item.id) ? false : (seen.add(item.id), true),
@@ -210,10 +152,7 @@ function score(query: string, item: SearchItem): number {
   const title = item.title.toLowerCase();
   const subtitle = item.subtitle?.toLowerCase() ?? '';
   const keyword = item.keywords.join(' ').toLowerCase();
-  let titleScore = fuzzyTextScore(needle, title);
-  if (titleScore >= 0 && item.kind === 'application' && matchesApplicationNameWords(query, item.title)) {
-    titleScore = Math.max(titleScore, APPLICATION_NAME_WORD_SCORE);
-  }
+  const titleScore = fuzzyTextScore(needle, title);
   const subtitleScore = fuzzyTextScore(needle, subtitle);
   const keywordScore = fuzzyTextScore(needle, keyword);
   const textScore = Math.max(

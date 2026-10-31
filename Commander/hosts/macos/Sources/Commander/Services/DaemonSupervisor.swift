@@ -13,7 +13,6 @@ struct DaemonReady: Decodable, Sendable {
 
 enum DaemonError: LocalizedError, Sendable {
   case alreadyRunning
-  case portInUse(port: Int, details: String?)
   case missingResource(String)
   case invalidHandshake(String)
   case timedOut(seconds: TimeInterval, details: String?)
@@ -23,8 +22,6 @@ enum DaemonError: LocalizedError, Sendable {
     switch self {
     case .alreadyRunning:
       "The Commander service is already starting or running."
-    case .portInUse(let port, let details):
-      Self.withDetails("Commander’s local port \(port) is already in use.", details)
     case .missingResource(let name):
       "The Commander app is missing \(name). Rebuild the app bundle."
     case .invalidHandshake(let line):
@@ -43,7 +40,6 @@ enum DaemonError: LocalizedError, Sendable {
 }
 
 final class DaemonSupervisor: @unchecked Sendable {
-  static var defaultPort: Int { CommanderDevelopmentEnvironment.port ?? 47820 }
   typealias ReadyCompletion = @MainActor @Sendable (Result<DaemonReady, Error>) -> Void
   typealias UnexpectedExitHandler = @MainActor @Sendable (DaemonError) -> Void
 
@@ -62,7 +58,6 @@ final class DaemonSupervisor: @unchecked Sendable {
 
   @MainActor
   func start(
-    port: Int = defaultPort,
     timeout: TimeInterval = 12,
     onUnexpectedExit: @escaping UnexpectedExitHandler,
     completion: @escaping ReadyCompletion
@@ -98,7 +93,7 @@ final class DaemonSupervisor: @unchecked Sendable {
     var arguments = [
       daemonURL.path,
       "--ui", uiURL.path,
-      "--port", String(port),
+      "--port", "47820",
       "--parent-pid", String(getpid())
     ]
     if FileManager.default.isExecutableFile(atPath: rustCore.path) {
@@ -114,16 +109,6 @@ final class DaemonSupervisor: @unchecked Sendable {
       arguments.insert("node", at: 0)
     }
     process.arguments = arguments
-    if CommanderDevelopmentEnvironment.enabled {
-      var environment = ProcessInfo.processInfo.environment
-      environment["COMMANDER_DATA_DIR"] = CommanderDevelopmentEnvironment.root.appendingPathComponent("data").path
-      environment["COMMANDER_CACHE_DIR"] = CommanderDevelopmentEnvironment.root.appendingPathComponent("cache").path
-      environment["COMMANDER_APPLICATION_ROOTS"] = try? String(
-        data: JSONSerialization.data(withJSONObject: [CommanderDevelopmentEnvironment.root.appendingPathComponent("fixtures").path]),
-        encoding: .utf8
-      )
-      process.environment = environment
-    }
     process.currentDirectoryURL = resources
 
     let output = Pipe()
@@ -145,7 +130,7 @@ final class DaemonSupervisor: @unchecked Sendable {
     output.fileHandleForReading.readabilityHandler = { [weak self] handle in
       guard let self else { return }
       let data = handle.availableData
-      if !data.isEmpty { self.consumeStandardOutput(data, expectedPort: port, completion: completion) }
+      if !data.isEmpty { self.consumeStandardOutput(data, completion: completion) }
     }
     errors.fileHandleForReading.readabilityHandler = { [weak self] handle in
       guard let self else { return }
@@ -155,7 +140,6 @@ final class DaemonSupervisor: @unchecked Sendable {
     process.terminationHandler = { [weak self] terminatedProcess in
       self?.processDidTerminate(
         terminatedProcess,
-        port: port,
         completion: completion,
         onUnexpectedExit: onUnexpectedExit
       )
@@ -193,11 +177,7 @@ final class DaemonSupervisor: @unchecked Sendable {
     terminateAndWait(running)
   }
 
-  private func consumeStandardOutput(
-    _ data: Data,
-    expectedPort: Int,
-    completion: @escaping ReadyCompletion
-  ) {
+  private func consumeStandardOutput(_ data: Data, completion: @escaping ReadyCompletion) {
     lock.lock()
     guard !startupResolved else {
       lock.unlock()
@@ -226,7 +206,7 @@ final class DaemonSupervisor: @unchecked Sendable {
       let ready = try JSONDecoder().decode(DaemonReady.self, from: lineData)
       guard ready.type == "ready", ready.protocolVersion == 1,
             ready.pid == process?.processIdentifier,
-            ready.port == expectedPort,
+            ready.port == 47820,
             let readyURL = URL(string: ready.url),
             readyURL.scheme == "http", readyURL.host == "127.0.0.1", readyURL.port == ready.port,
             !ready.sessionToken.isEmpty, !ready.nativeToken.isEmpty else {
@@ -308,7 +288,6 @@ final class DaemonSupervisor: @unchecked Sendable {
 
   private func processDidTerminate(
     _ terminatedProcess: Process,
-    port: Int,
     completion: @escaping ReadyCompletion,
     onUnexpectedExit: @escaping UnexpectedExitHandler
   ) {
@@ -334,16 +313,7 @@ final class DaemonSupervisor: @unchecked Sendable {
     clearPipeHandlers(output: output, errors: errors)
 
     guard !expected else { return }
-    let error: DaemonError
-    // Pipe delivery can race process termination. Confirm the listener as well
-    // as reading Node's EADDRINUSE diagnostic, so this stays actionable even
-    // when stderr is drained just after the child exits.
-    if !ready, !startupHadResolved,
-       (Self.isPortInUse(details) || LoopbackPortInspector().listener(on: port) != nil) {
-      error = .portInUse(port: port, details: details)
-    } else {
-      error = .stopped(status: terminatedProcess.terminationStatus, details: details)
-    }
+    let error = DaemonError.stopped(status: terminatedProcess.terminationStatus, details: details)
     if ready {
       Task { @MainActor in onUnexpectedExit(error) }
     } else if !startupHadResolved {
@@ -396,9 +366,5 @@ final class DaemonSupervisor: @unchecked Sendable {
     let text = String(decoding: diagnosticBuffer, as: UTF8.self)
       .trimmingCharacters(in: .whitespacesAndNewlines)
     return text.isEmpty ? nil : text
-  }
-
-  private static func isPortInUse(_ details: String?) -> Bool {
-    details?.localizedCaseInsensitiveContains("EADDRINUSE") == true
   }
 }

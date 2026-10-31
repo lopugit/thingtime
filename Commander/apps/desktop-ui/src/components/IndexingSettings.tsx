@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type {
   CommanderSettings,
   IndexIgnoreRule,
@@ -47,21 +47,19 @@ export function IndexingSettings({
 
   useEffect(() => {
     let cancelled = false;
-    let timer: number | undefined;
     const refresh = async () => {
       try {
         const next = await api.indexingStatus();
         if (!cancelled) setStatus(next);
       } catch (error) {
         if (!cancelled) onError(error instanceof Error ? error.message : 'Could not load index status');
-      } finally {
-        if (!cancelled) timer = window.setTimeout(() => void refresh(), 5_000);
       }
     };
     void refresh();
+    const timer = window.setInterval(() => void refresh(), 2_000);
     return () => {
       cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
+      window.clearInterval(timer);
     };
   }, [onError]);
 
@@ -157,23 +155,44 @@ export function IndexingSettings({
 
       <div className="index-refresh-copy">
         <span>
-          App bundle changes are watched live; every mounted volume is also reconciled every{' '}
-          {formatInterval(status?.automaticRefresh.applicationsMinutes ?? 360)}. Files and folders reconcile
-          every {formatInterval(draft.refreshIntervalMinutes)} and whenever their settings change.
+          Applications refresh every {status?.automaticRefresh.applicationsMinutes ?? 5} minutes; files and
+          folders reconcile every {formatInterval(draft.refreshIntervalMinutes)} and whenever their settings
+          change.
         </span>
         <strong aria-label="Search index database size">
           Database {status ? formatBytes(status.databaseSizeBytes) : '—'}
         </strong>
       </div>
 
+      <div className="index-privacy-note">
+        <ShieldCheck />
+        <span>
+          <strong>macOS whole-home access</strong>
+          <small>
+            Grant Commander Full Disk Access for a complete ~ index. Without it, use explicitly allowed
+            folders as roots.
+          </small>
+        </span>
+        <button
+          type="button"
+          className="secondary-button compact"
+          onClick={() =>
+            void nativeRequest('application.open', {
+              path: 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles',
+            }).catch((error) =>
+              onError(error instanceof Error ? error.message : 'Could not open System Settings'),
+            )
+          }
+        >
+          Open Full Disk Access
+        </button>
+      </div>
+
       <div className="index-settings-section">
         <div className="index-section-heading">
           <div>
             <strong>Filesystem roots</strong>
-            <span>
-              / indexes this Mac and every currently mounted volume. Use ~ for only your home directory;
-              nested duplicate roots are de-duplicated by path.
-            </span>
+            <span>Use ~ for your home directory. Nested duplicate roots are de-duplicated by path.</span>
           </div>
           <button
             type="button"
@@ -237,46 +256,6 @@ export function IndexingSettings({
             <small>On by default so dotfiles and hidden folders remain searchable.</small>
           </span>
         </div>
-      </div>
-
-      <div className="index-settings-section">
-        <div className="index-section-heading">
-          <div>
-            <strong>Index reliability</strong>
-            <span>
-              Set a custom timeout only when a healthy scan needs more time than Commander’s automatic limit.
-            </span>
-          </div>
-        </div>
-        <div className="index-resource-grid single">
-          <TimeoutInput
-            value={draft.customTimeoutMs}
-            onCommit={(customTimeoutMs) => commit({ ...draft, customTimeoutMs })}
-          />
-        </div>
-        {status?.timing.samples ? (
-          <div className="index-resource-summary" aria-label="Recent index timing">
-            This Commander session: {formatDuration(status.timing.averageDurationMs ?? 0)} average across{' '}
-            {status.timing.samples} successful {status.timing.samples === 1 ? 'run' : 'runs'}; last{' '}
-            {formatDuration(status.timing.lastDurationMs ?? 0)}, longest{' '}
-            {formatDuration(status.timing.longestDurationMs ?? 0)}.
-          </div>
-        ) : (
-          <div className="index-resource-summary">
-            Timing will appear after the next successful index run.
-          </div>
-        )}
-        {status?.timeoutAttempts.length ? (
-          <div className="index-timeout-history" aria-label="Timed out index attempts">
-            <strong>Timed out attempts this session</strong>
-            {status.timeoutAttempts.map((attempt) => (
-              <div key={attempt.id} className="index-status-message">
-                <span>{attempt.message}</span>
-                <time>{formatIndexedAt(attempt.occurredAtMs)}</time>
-              </div>
-            ))}
-          </div>
-        ) : null}
       </div>
 
       <div className="index-settings-section">
@@ -420,76 +399,6 @@ export function IndexingSettings({
   );
 }
 
-/**
- * Kept at the very top of Search settings instead of inside the lengthy index
- * configuration form. Permission state is important enough to be visible
- * without scrolling, even before the first index has completed.
- */
-export function FullDiskAccessCard({ onError }: { onError(value: string | null): void }) {
-  const [fullDiskAccess, setFullDiskAccess] = useState<
-    'checking' | 'granted' | 'not-granted' | 'unavailable'
-  >('checking');
-
-  const refreshFullDiskAccess = useCallback(async () => {
-    setFullDiskAccess('checking');
-    try {
-      const result = await nativeRequest<{ granted?: unknown }>('permission.fullDiskAccess');
-      setFullDiskAccess(
-        result === undefined ? 'unavailable' : result.granted === true ? 'granted' : 'not-granted',
-      );
-    } catch (error) {
-      setFullDiskAccess('unavailable');
-      onError(error instanceof Error ? error.message : 'Could not check Full Disk Access');
-    }
-  }, [onError]);
-
-  useEffect(() => {
-    void refreshFullDiskAccess();
-  }, [refreshFullDiskAccess]);
-
-  return (
-    <section className="full-disk-access-card" aria-labelledby="full-disk-access-title">
-      <ShieldCheck aria-hidden="true" />
-      <div>
-        <div className="full-disk-access-title-row">
-          <strong id="full-disk-access-title">macOS whole-volume access</strong>
-          <span className={`full-disk-access-status is-${fullDiskAccess}`} aria-live="polite">
-            {fullDiskAccessLabel(fullDiskAccess)}
-          </span>
-        </div>
-        <small>
-          {fullDiskAccess === 'granted'
-            ? 'Commander can scan protected locations. The check only opens macOS’s protected TCC database and never reads its contents.'
-            : 'Grant Commander Full Disk Access for a complete whole-volume index. Without it, use explicitly allowed folders as roots.'}
-        </small>
-      </div>
-      <div className="full-disk-access-actions">
-        <button
-          type="button"
-          className="secondary-button compact"
-          disabled={fullDiskAccess === 'checking'}
-          onClick={() => void refreshFullDiskAccess()}
-        >
-          {fullDiskAccess === 'checking' ? 'Checking…' : 'Recheck'}
-        </button>
-        <button
-          type="button"
-          className="secondary-button compact"
-          onClick={() =>
-            void nativeRequest('application.open', {
-              path: 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles',
-            }).catch((error) =>
-              onError(error instanceof Error ? error.message : 'Could not open System Settings'),
-            )
-          }
-        >
-          Open Full Disk Access
-        </button>
-      </div>
-    </section>
-  );
-}
-
 function ResourceLimitInput({
   label,
   description,
@@ -588,51 +497,6 @@ function OptionalEntryLimitInput({
   );
 }
 
-function TimeoutInput({ value, onCommit }: { value: number | null; onCommit(value: number | null): void }) {
-  const [draftValue, setDraftValue] = useState(value === null ? '' : String(value));
-  useEffect(() => setDraftValue(value === null ? '' : String(value)), [value]);
-  const commitValue = () => {
-    const normalized = draftValue.trim();
-    if (!normalized) {
-      setDraftValue('');
-      if (value !== null) onCommit(null);
-      return;
-    }
-    const parsed = Number(normalized);
-    const next = Number.isSafeInteger(parsed) && parsed > 0 ? parsed : value;
-    setDraftValue(next === null ? '' : String(next));
-    if (next !== value) onCommit(next);
-  };
-  return (
-    <label className="index-resource-field">
-      <span>
-        <strong>Custom index timeout</strong>
-        <small>
-          Milliseconds. Blank uses Commander’s automatic timeout; enter digits only, with no configured cap.
-        </small>
-      </span>
-      <span className="index-resource-input wide">
-        <input
-          aria-label="Custom index timeout in milliseconds"
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          value={draftValue}
-          placeholder="Automatic"
-          spellCheck={false}
-          onChange={(event) => {
-            const next = event.currentTarget.value;
-            if (/^\d*$/.test(next)) setDraftValue(next);
-          }}
-          onBlur={commitValue}
-          onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
-        />
-        <small>ms</small>
-      </span>
-    </label>
-  );
-}
-
 function formatBytes(value: number): string {
   if (value < 1024) return `${Math.max(0, Math.round(value))} B`;
   if (value < 1024 * 1024) return `${Math.max(0, Math.round(value / 1024))} KB`;
@@ -653,13 +517,6 @@ function formatInterval(minutes: number): string {
   if (minutes % 60 !== 0) return `${minutes} minutes`;
   const hours = minutes / 60;
   return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
-}
-
-function fullDiskAccessLabel(status: 'checking' | 'granted' | 'not-granted' | 'unavailable'): string {
-  if (status === 'granted') return 'Full Disk Access granted';
-  if (status === 'not-granted') return 'Full Disk Access not granted';
-  if (status === 'unavailable') return 'Full Disk Access status unavailable';
-  return 'Checking Full Disk Access…';
 }
 
 function IgnoreRuleRow({
@@ -749,21 +606,20 @@ function statusCards(status: IndexingStatus | null) {
       id: 'files',
       title: 'Files',
       Icon: File,
-      count: status?.countsCurrent === false ? undefined : (byKind.get('file')?.count ?? 0),
+      count: byKind.get('file')?.count ?? 0,
       indexed: formatIndexedAt(byKind.get('file')?.lastIndexedAtMs),
     },
     {
       id: 'directories',
       title: 'Folders',
       Icon: Folder,
-      count: status?.countsCurrent === false ? undefined : (byKind.get('directory')?.count ?? 0),
+      count: byKind.get('directory')?.count ?? 0,
       indexed: formatIndexedAt(byKind.get('directory')?.lastIndexedAtMs),
     },
   ];
 }
 
-function formatCount(value: number | undefined): string {
-  if (value === undefined) return 'Not measured yet';
+function formatCount(value: number): string {
   return `${new Intl.NumberFormat().format(value)} indexed`;
 }
 

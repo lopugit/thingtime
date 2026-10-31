@@ -1,13 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { CommanderAccount, CommanderSettings, ThingtimeNetworkProbe } from '@commander/protocol';
-import {
-  assertNetworkProbeCapabilities,
-  fetchNetworkProbeCapabilities,
-  NETWORK_PROBE_PACKET_BYTES,
-  networkProbeUploadChunks,
-} from './networkProbe.js';
-import { registeredLoginRedirect } from './loginRegistration.js';
-const NETWORK_PROBE_TIMEOUT_MS = 90_000;
+import type { CommanderAccount, CommanderSettings } from '@commander/protocol';
 
 interface LoginStart {
   authorizeUrl: string;
@@ -16,47 +8,7 @@ interface LoginStart {
 }
 
 export class ThingtimeService {
-  #pending = new Map<
-    string,
-    { verifier: string; createdAt: number; origin: string; clientId: string; redirectUri: string }
-  >();
-
-  async beginRegisteredLogin(
-    settings: CommanderSettings,
-    nativeRedirect: string,
-    loopbackRedirect: string,
-  ): Promise<LoginStart> {
-    // Capture settings before awaiting discovery; callers may change servers
-    // while the registration requests are in flight.
-    const snapshot = { ...settings };
-    if (!snapshot.thingtimeClientId)
-      throw new Error('Set a Thingtime client ID in Commander before signing in');
-    const baseUrl = validatedThingtimeBaseUrl(snapshot.thingtimeBaseUrl);
-    const redirectUri = await registeredLoginRedirect(
-      baseUrl,
-      snapshot.thingtimeClientId,
-      nativeRedirect,
-      loopbackRedirect,
-    );
-    return this.beginLogin(snapshot, redirectUri);
-  }
-
-  #matchingPending(settings: CommanderSettings, state: string, redirectUri: string) {
-    const pending = this.#pending.get(state);
-    if (!pending || Date.now() - pending.createdAt > 10 * 60_000) {
-      this.#pending.delete(state);
-      throw new Error('Thingtime login expired; start again');
-    }
-    if (
-      pending.origin !== validatedThingtimeBaseUrl(settings.thingtimeBaseUrl).origin ||
-      pending.clientId !== settings.thingtimeClientId ||
-      pending.redirectUri !== redirectUri
-    )
-      throw new Error('Thingtime sign-in environment or callback changed; start again');
-    return pending;
-  }
-  #networkCapabilities: { origin: string; expiresAt: number; manifest: unknown } | undefined;
-  #speedProbe: { origin: string; identity: string; result: Promise<ThingtimeNetworkProbe> } | undefined;
+  #pending = new Map<string, { verifier: string; createdAt: number }>();
 
   beginLogin(settings: CommanderSettings, redirectUri: string): LoginStart {
     if (!settings.thingtimeClientId)
@@ -65,16 +17,7 @@ export class ThingtimeService {
     const state = randomBytes(24).toString('base64url');
     const verifier = randomBytes(48).toString('base64url');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
-    for (const [key, pending] of this.#pending) {
-      if (Date.now() - pending.createdAt > 10 * 60_000) this.#pending.delete(key);
-    }
-    this.#pending.set(state, {
-      verifier,
-      createdAt: Date.now(),
-      origin: baseUrl.origin,
-      clientId: settings.thingtimeClientId,
-      redirectUri,
-    });
+    this.#pending.set(state, { verifier, createdAt: Date.now() });
     const url = new URL('/authorize', baseUrl);
     url.searchParams.set('client_id', settings.thingtimeClientId);
     url.searchParams.set('redirect_uri', redirectUri);
@@ -91,13 +34,13 @@ export class ThingtimeService {
     code: string,
     redirectUri: string,
   ): Promise<{ account: CommanderAccount; token: string }> {
-    const pending = this.#matchingPending(settings, state, redirectUri);
+    const pending = this.#pending.get(state);
     this.#pending.delete(state);
+    if (!pending || Date.now() - pending.createdAt > 10 * 60_000)
+      throw new Error('Thingtime login expired; start again');
     const baseUrl = validatedThingtimeBaseUrl(settings.thingtimeBaseUrl);
     const response = await fetch(new URL('/api/v1/oauth/token', baseUrl), {
       method: 'POST',
-      redirect: 'error',
-      signal: AbortSignal.timeout(15_000),
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         grantType: 'authorization_code',
@@ -117,8 +60,6 @@ export class ThingtimeService {
     if (!response.ok || !session.accessToken)
       throw new Error(session.error ?? 'Thingtime token exchange failed');
     const profileResponse = await fetch(new URL('/api/v1/oauth/userinfo', baseUrl), {
-      redirect: 'error',
-      signal: AbortSignal.timeout(15_000),
       headers: { authorization: `Bearer ${session.accessToken}` },
     });
     const profile = (await profileResponse.json()) as {
@@ -145,48 +86,21 @@ export class ThingtimeService {
         ...(typeof user.profileUrl === 'string' ? { profileUrl: user.profileUrl } : {}),
         scopes: profile.scopes ?? session.scopes ?? [],
         expiresAt: session.expiresAt ?? new Date(Date.now() + 30 * 86_400_000).toISOString(),
-        environment: {
-          baseUrl: baseUrl.origin,
-          clientId: settings.thingtimeClientId,
-        },
       },
     };
   }
 
-  cancel(settings: CommanderSettings, state: string, redirectUri: string): boolean {
-    this.#matchingPending(settings, state, redirectUri);
+  cancel(state: string): boolean {
+    const pending = this.#pending.get(state);
     this.#pending.delete(state);
-    return true;
-  }
-
-  async syncAccount(
-    token: string,
-    settings: CommanderSettings,
-    account: CommanderAccount | undefined,
-  ): Promise<CommanderSettings> {
-    if (!account?.environment || account.id !== settings.activeAccountId)
-      throw new Error('Restore the saved account environment before syncing');
-    const synced = await this.sync(token, {
-      ...settings,
-      thingtimeBaseUrl: account.environment.baseUrl,
-      thingtimeClientId: account.environment.clientId,
-    });
-    // The next-login profile is independent of the account currently syncing.
-    return {
-      ...synced,
-      thingtimeBaseUrl: settings.thingtimeBaseUrl,
-      thingtimeClientId: settings.thingtimeClientId,
-    };
+    return Boolean(pending && Date.now() - pending.createdAt <= 10 * 60_000);
   }
 
   async sync(token: string, settings: CommanderSettings): Promise<CommanderSettings> {
     const baseUrl = validatedThingtimeBaseUrl(settings.thingtimeBaseUrl);
     const endpoint = new URL('/api/v1/app-data', baseUrl);
     endpoint.searchParams.set('key', 'commander.settings.v1');
-    const response = await fetch(endpoint, {
-      redirect: 'error',
-      headers: { authorization: `Bearer ${token}` },
-    });
+    const response = await fetch(endpoint, { headers: { authorization: `Bearer ${token}` } });
     if (!response.ok) throw new Error(`Thingtime settings read failed (${response.status})`);
     const body = (await response.json()) as { entry?: { value?: CloudSettings } | null };
     const remote = body.entry?.value;
@@ -229,7 +143,6 @@ export class ThingtimeService {
       },
     };
     const write = await fetch(new URL('/api/v1/app-data', baseUrl), {
-      redirect: 'error',
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: JSON.stringify({ key: 'commander.settings.v1', value, visibility: 'private' }),
@@ -237,181 +150,6 @@ export class ThingtimeService {
     if (!write.ok) throw new Error(`Thingtime settings write failed (${write.status})`);
     return { ...settings, syncRevision: nextRevision, syncUpdatedAt: updatedAt, syncDirty: false };
   }
-
-  async networkProbe(
-    settings: CommanderSettings,
-    includeSpeed = false,
-    token?: string,
-  ): Promise<ThingtimeNetworkProbe> {
-    const baseUrl = validatedThingtimeBaseUrl(settings.thingtimeBaseUrl);
-    if (!includeSpeed) return this.#runNetworkProbe(baseUrl, false);
-    if (settings.activeAccountId && !token)
-      throw new Error('Unlock or sign in to the active Thingtime account before running a speed test');
-    const identity = token ? createHash('sha256').update(token).digest('hex') : 'guest';
-    // All windows share this service: overlapping clicks join one run instead
-    // of multiplying traffic, consuming the quota, and skewing measurements.
-    if (this.#speedProbe) {
-      if (this.#speedProbe.origin !== baseUrl.origin || this.#speedProbe.identity !== identity)
-        throw new Error('A speed test is already running for another Thingtime server or account');
-      return this.#speedProbe.result;
-    }
-    const result = this.#runNetworkProbe(baseUrl, true, token);
-    this.#speedProbe = { origin: baseUrl.origin, identity, result };
-    try {
-      return await result;
-    } finally {
-      this.#speedProbe = undefined;
-    }
-  }
-
-  async #runNetworkProbe(
-    baseUrl: URL,
-    includeSpeed: boolean,
-    token?: string,
-  ): Promise<ThingtimeNetworkProbe> {
-    let cached = this.#networkCapabilities;
-    if (!cached || cached.origin !== baseUrl.origin || cached.expiresAt <= Date.now()) {
-      cached = {
-        origin: baseUrl.origin,
-        expiresAt: Date.now() + 5 * 60_000,
-        manifest: await fetchNetworkProbeCapabilities(baseUrl),
-      };
-    }
-    try {
-      assertNetworkProbeCapabilities(cached.manifest, baseUrl.origin, includeSpeed);
-    } catch (error) {
-      this.#networkCapabilities = undefined;
-      throw error;
-    }
-    this.#networkCapabilities = cached;
-    const ping = await this.#ping(baseUrl, token);
-    if (!includeSpeed) return { sampledAtMs: Date.now(), ping };
-
-    const downloads: NonNullable<ThingtimeNetworkProbe['speed']>['downloads'] = [];
-    const uploads: NonNullable<ThingtimeNetworkProbe['speed']>['uploads'] = [];
-    const errors: NonNullable<ThingtimeNetworkProbe['speed']>['errors'] = [];
-    // Keep each transfer serial and bounded: one full run is exactly the
-    // documented five-packet ladder in each direction (17.6 MiB each way).
-    for (const direction of ['download', 'upload'] as const) {
-      const samples = direction === 'download' ? downloads : uploads;
-      try {
-        for (const bytes of NETWORK_PROBE_PACKET_BYTES) {
-          samples.push(
-            await (direction === 'download'
-              ? this.#download(baseUrl, bytes, token)
-              : this.#uploadSample(baseUrl, bytes, token)),
-          );
-        }
-      } catch (error) {
-        // Stop this direction on its first failure, including 429. Keep its
-        // completed samples and still measure the independently limited other direction.
-        errors.push({ direction, message: error instanceof Error ? error.message : 'Transfer failed' });
-      }
-    }
-    const sampledAtMs = Date.now();
-    return {
-      sampledAtMs,
-      ping,
-      speed: { sampledAtMs, packetBytes: [...NETWORK_PROBE_PACKET_BYTES], downloads, uploads, errors },
-    };
-  }
-
-  async #ping(baseUrl: URL, token?: string): Promise<ThingtimeNetworkProbe['ping']> {
-    const startedAt = performance.now();
-    const response = await fetch(new URL('/api/v1/network-probe/ping', baseUrl), {
-      headers: { 'accept-encoding': 'identity', ...(token ? { authorization: `Bearer ${token}` } : {}) },
-      redirect: 'error',
-      signal: AbortSignal.timeout(NETWORK_PROBE_TIMEOUT_MS),
-    });
-    const headersAt = performance.now();
-    if (!response.ok) throw await networkProbeError(response, 'Thingtime ping failed');
-    await response.arrayBuffer();
-    const completedAt = performance.now();
-    return {
-      requestMs: headersAt - startedAt,
-      responseMs: completedAt - headersAt,
-      roundTripMs: completedAt - startedAt,
-    };
-  }
-
-  async #download(
-    baseUrl: URL,
-    bytes: number,
-    token?: string,
-  ): Promise<{ bytes: number; durationMs: number; megabitsPerSecond: number }> {
-    const startedAt = performance.now();
-    const response = await fetch(new URL(`/api/v1/network-probe/download?bytes=${bytes}`, baseUrl), {
-      headers: { 'accept-encoding': 'identity', ...(token ? { authorization: `Bearer ${token}` } : {}) },
-      redirect: 'error',
-      signal: AbortSignal.timeout(NETWORK_PROBE_TIMEOUT_MS),
-    });
-    if (!response.ok)
-      throw await networkProbeError(response, `Thingtime download probe failed for ${bytes} bytes`);
-    const body = await response.arrayBuffer();
-    const durationMs = Math.max(1, performance.now() - startedAt);
-    if (body.byteLength !== bytes)
-      throw new Error(`Thingtime download probe returned ${body.byteLength} bytes, expected ${bytes}`);
-    return { bytes, durationMs, megabitsPerSecond: megabitsPerSecond(bytes, durationMs) };
-  }
-
-  async #upload(
-    baseUrl: URL,
-    bytes: number,
-    token?: string,
-  ): Promise<{ bytes: number; durationMs: number; megabitsPerSecond: number }> {
-    const payload = new Uint8Array(bytes);
-    const startedAt = performance.now();
-    const response = await fetch(new URL(`/api/v1/network-probe/upload?bytes=${bytes}`, baseUrl), {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/octet-stream',
-        'content-length': String(bytes),
-        'accept-encoding': 'identity',
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-      },
-      body: payload,
-      redirect: 'error',
-      signal: AbortSignal.timeout(NETWORK_PROBE_TIMEOUT_MS),
-    });
-    const durationMs = Math.max(1, performance.now() - startedAt);
-    if (!response.ok)
-      throw await networkProbeError(response, `Thingtime upload probe failed for ${bytes} bytes`);
-    const result = (await response.json()) as { ok?: boolean; bytes?: unknown };
-    if (result.ok !== true || result.bytes !== bytes)
-      throw new Error(`Thingtime upload probe did not acknowledge ${bytes} bytes`);
-    return { bytes, durationMs, megabitsPerSecond: megabitsPerSecond(bytes, durationMs) };
-  }
-
-  async #uploadSample(
-    baseUrl: URL,
-    bytes: number,
-    token?: string,
-  ): Promise<{ bytes: number; durationMs: number; megabitsPerSecond: number }> {
-    const started = performance.now();
-    for (const chunkBytes of networkProbeUploadChunks(bytes)) await this.#upload(baseUrl, chunkBytes, token);
-    const durationMs = Math.max(1, performance.now() - started);
-    return { bytes, durationMs, megabitsPerSecond: megabitsPerSecond(bytes, durationMs) };
-  }
-}
-
-function megabitsPerSecond(bytes: number, durationMs: number): number {
-  return (bytes * 8) / (durationMs * 1_000);
-}
-
-async function networkProbeError(response: Response, fallback: string): Promise<Error> {
-  const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
-  if (response.status === 404)
-    return new Error('This Thingtime deployment has not enabled Commander network probes yet (404)');
-  if (response.status === 429) {
-    const seconds = Number(response.headers.get('retry-after'));
-    return new Error(
-      Number.isFinite(seconds) && seconds > 0
-        ? `Speed-test cooldown; retry in ${Math.ceil(seconds / 60)} minute(s) (429)`
-        : 'Speed-test cooldown; please retry later (429)',
-    );
-  }
-  const detail = typeof body?.error === 'string' ? body.error : fallback;
-  return new Error(`${detail} (${response.status})`);
 }
 
 interface CloudSettings {
