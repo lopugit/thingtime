@@ -153,11 +153,6 @@ export type PostComposerProps = {
   // (type tabs, photos, listing, thing, tags, circle all editable — the same
   // suite as a new post) and saves through api.v1.things.update
   editPost?: PublicPost;
-  // post INTO a subspace: the /s/<slug> page passes its context (id, flairs,
-  // rights) so the composer locks the destination, shows the title + flair
-  // row, and stamps crystal.subspaceId. Without it the feed composer offers
-  // the viewer's joined subspaces as an optional destination.
-  subspace?: SubspaceComposerContext | null;
 };
 
 const Eyebrow = ({ children }: { children: React.ReactNode }) => (
@@ -167,20 +162,10 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const PostComposer = (props: PostComposerProps) => {
-  const user = useWorkspaceUser();
-  const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
-  const composer = <AccountPostComposer key={`${identity}:${user?.id || 'guest'}:${props.editPost?.id || props.parentId || 'new'}:${props.subspace?.id || ''}`} {...props} />;
-  return props.editPost ? composer : <CharacterComposer key={`${identity}:${user?.id || 'guest'}`}>{composer}</CharacterComposer>;
-};
-const AccountPostComposer = (props: PostComposerProps) => {
-  const { onPosted, parentId, onClose, editPost, subspace } = props;
+  const { onPosted, parentId, onClose, editPost } = props;
 
   const isComment = !!parentId;
   const isEdit = !!editPost;
-	// New uploads must mint the purpose their target's bound set carries: the
-	// PATCH attachment sync binds purpose 'comment' drafts when editing a rich
-	// comment (comments-are-posts), and purpose 'post' everywhere else.
-	const attachmentPurpose = isComment || (isEdit && (editPost?.thingtime || []).includes('comment')) ? 'comment' : 'post';
 
   const api = useApi();
 	const user = useWorkspaceUser();
@@ -190,74 +175,26 @@ const AccountPostComposer = (props: PostComposerProps) => {
   const { getThingtime, setThingtime, loading: thingtimeLoading, events } = useThingtime();
 
   const [expanded, setExpanded] = React.useState(isComment || isEdit);
-  const [draftAttachments, setDraftAttachments] = React.useState<PublicAttachment[]>([]);
-  const [legacyImages, setLegacyImages] = React.useState<string[]>(editPost?.images || []);
-	// Post-type badges are additive TOGGLES, not exclusive tabs: Text is the
-	// always-on base and each toggle switches its field group on top. Edit mode
-	// seeds them from whatever the post already carries.
-	const [photosOn, setPhotosOn] = React.useState(
-		isEdit && (editPost!.type === 'image' || (editPost!.images?.length ?? 0) > 0 || (editPost!.attachments?.length ?? 0) > 0)
-  );
-  const [marketOn, setMarketOn] = React.useState(isEdit && (editPost!.type === 'marketplace' || !!editPost!.listing));
-  const [pickedThings, setPickedThings] = React.useState<PostThingReference[]>(() => postThingReferences(editPost?.thing));
-  const [thingOn, setThingOn] = React.useState(isEdit && editPost!.type === 'thingtime');
-  // Poll is the one EXCLUSIVE badge: a poll post's thing IS the poll, so it
-  // owns the thing slot the other groups build into. Compose-only — an
-  // existing poll edits through the Things badge, as its thing.
-  const [pollOn, setPollOn] = React.useState(false);
-  // poll mode: the main text box is the question; these are the option rows
-  const [pollOptions, setPollOptions] = React.useState<string[]>(['', '']);
-  const [postEditorValue, setPostEditorValue] = React.useState<EditorJsDoc>(() =>
-    isEditorJsDoc(editPost?.richText)
-      ? editPost.richText
-      : { kind: 'rich-text', blocks: textToBlocks(editPost?.text || '') }
-  );
-  const text = blocksToText(postEditorValue.blocks);
+  const [type, setType] = React.useState<PostType>(editPost?.type || 'text');
+  const [text, setText] = React.useState(editPost?.text || '');
+  const [images, setImages] = React.useState<string[]>(editPost?.images || []);
   const [title, setTitle] = React.useState(editPost?.listing?.title || '');
   const [price, setPrice] = React.useState(editPost?.listing ? String(editPost.listing.price) : '');
   const [currency, setCurrency] = React.useState(editPost?.listing?.currency || 'AUD');
   const [category, setCategory] = React.useState<MarketplaceCategory>(editPost?.listing?.category || 'other');
-  const [condition, setCondition] = React.useState<string>(editPost?.listing?.condition || '');
+  const [condition, setCondition] = React.useState(editPost?.listing?.condition || '');
   const [listingLocation, setListingLocation] = React.useState(editPost?.listing?.location || '');
   const [tagsInput, setTagsInput] = React.useState(editPost?.tags?.join(', ') || '');
-  const [visibility, setVisibility] = React.useState<PostVisibility>(editPost?.visibility || (user?.localOnly ? 'private' : 'public'));
-  // subspace vocabulary: headline + destination + flair. Locked to the page's
-  // subspace when one is passed; otherwise the feed composer offers the
-  // viewer's joined subspaces (lazy-loaded on first expand).
-  const [postTitle, setPostTitle] = React.useState(editPost?.title || '');
-  const [subspaceId, setSubspaceId] = React.useState<string | null>(editPost?.subspace?.id || subspace?.id || null);
-  const [flairId, setFlairId] = React.useState<string | null>(editPost?.flair?.id || null);
-  const [mySubspaces, setMySubspaces] = React.useState<SubspaceComposerContext[] | null>(null);
-  // custom audience 🎭 — the picker composes a full tt:custom acl; while
-  // visibility is 'custom' the payloads carry it (acl wins over the name)
-  const [customAcl, setCustomAcl] = React.useState<string[] | null>(
-    editPost?.visibility === 'custom' && Array.isArray(editPost?.acl) ? editPost.acl : null
-  );
-  const [audienceOpen, setAudienceOpen] = React.useState(false);
-  // onClose fires right after onApply and would read this render's (stale)
-  // customAcl — the ref is the truth for "has an audience ever been composed"
-  const audienceAppliedRef = React.useRef<boolean>(!!(editPost?.visibility === 'custom' && editPost?.acl));
-  // …and the circle to come back to when the picker is abandoned. Seeded like
-  // `visibility` above so a brand-new post still falls back to 🌐 Public,
-  // while an edit falls back to whatever the post actually was.
-  const audiencePreviousVisibilityRef = React.useRef<PostVisibility>(editPost?.visibility || (user?.localOnly ? 'private' : 'public'));
-	// gallery layout (crystal.mediaLayout): auto = masonry default, stored null
-	const [layoutMode, setLayoutMode] = React.useState<ComposerLayoutMode>(
-		editPost?.mediaLayout?.mode === 'rows' ? 'rows' : editPost?.mediaLayout?.mode === 'grid' ? 'grid' : 'auto'
-	);
-	const [layoutPattern, setLayoutPattern] = React.useState<number[]>(
-		editPost?.mediaLayout?.mode === 'rows' && editPost.mediaLayout.pattern?.length ? [...editPost.mediaLayout.pattern] : [1, 2]
-	);
-	const [layoutColumns, setLayoutColumns] = React.useState(
-		editPost?.mediaLayout?.mode === 'grid' && editPost.mediaLayout.columns ? editPost.mediaLayout.columns : 3
-	);
-	const [layoutSpans, setLayoutSpans] = React.useState<Record<string, MediaLayoutSpan>>(
-		editPost?.mediaLayout?.mode === 'grid' && editPost.mediaLayout.spans ? { ...editPost.mediaLayout.spans } : {}
-	);
+  const [visibility, setVisibility] = React.useState<PostVisibility>(editPost?.visibility || 'public');
   const [posting, setPosting] = React.useState(false);
 	const [submissionUncertain, setSubmissionUncertain] = React.useState(false);
 	const [attachmentSnapshot, setAttachmentSnapshot] = React.useState<AttachmentComposerSnapshot>(EMPTY_ATTACHMENT_SNAPSHOT);
 
+  // thingtime-tab extras: toggleable photos/marketplace field groups, the
+  // in-post editor's draggable height, and its imperative API (the pop-out
+  // button duplicates the window into one of the editor's own floating frames)
+  const [thingPhotos, setThingPhotos] = React.useState(isEdit && editPost?.type === 'thingtime' && !!editPost.images?.length);
+  const [thingListing, setThingListing] = React.useState(isEdit && editPost?.type === 'thingtime' && !!editPost.listing);
   // the thing edits in a bottom-sheet modal (nested comment composers can't
   // host a full editor inline, and mobile needs the room)
   const [thingModalOpen, setThingModalOpen] = React.useState(false);
@@ -286,128 +223,18 @@ const AccountPostComposer = (props: PostComposerProps) => {
   const editorGeneration = composerGeneration.current;
   const advanceComposerSession = () => { composerGeneration.current += 1; setComposerSession(session => session + 1); };
 
-	// File-bearing pastes anywhere inside the expanded composer belong to the
-	// post's one media panel. When Photos is still off, retain the File objects
-	// for the next render, turn the panel on, then queue them through the same
-	// secure uploader used by file-picking and drag/drop. Text-only paste keeps
-	// its native Editor.js/input behavior.
-	const handleComposerPaste = React.useCallback(
-		(event: React.ClipboardEvent<HTMLDivElement>) => {
-			if (event.defaultPrevented || posting || submissionUncertain || !user) return;
-			// React portal events bubble through the component tree. Do not turn a
-			// file pasted into the separate Thing editor modal into post media.
-			if (!event.currentTarget.contains(event.target as Node)) return;
-			const files = attachmentFilesFromClipboard(event.clipboardData);
-			if (!files.length) return;
-			event.preventDefault();
-			event.stopPropagation();
-			setPollOn(false);
-			if (attachmentComposerRef.current) {
-				attachmentComposerRef.current.addFiles(files);
-				return;
-			}
-			pendingMediaFilesRef.current = [...pendingMediaFilesRef.current, ...files];
-			setPhotosOn(true);
-		},
-		[posting, submissionUncertain, user]
-	);
-
-	// Capture external files before the body editor can consume the drop. The
-	// mounted attachment drop zone owns its own events (including drag styling
-	// and tile reordering), so a file is never queued by both handlers.
-	const handleComposerDragOver = React.useCallback((event: React.DragEvent<HTMLDivElement>) => {
-		if (!event.currentTarget.contains(event.target as Node)) return;
-		if (!Array.from(event.dataTransfer.types).includes('Files')) return;
-		event.preventDefault();
-		event.dataTransfer.dropEffect = posting || submissionUncertain || !user ? 'none' : 'copy';
-	}, [posting, submissionUncertain, user]);
-
-	const handleComposerDrop = React.useCallback((event: React.DragEvent<HTMLDivElement>) => {
-		if (event.defaultPrevented || !event.currentTarget.contains(event.target as Node)) return;
-		const target = event.target instanceof Element ? event.target : null;
-		if (target?.closest('[data-attachment-drop-zone]')) return;
-		const files = attachmentFilesFromClipboard(event.dataTransfer);
-		if (!files.length) return;
-		event.preventDefault();
-		event.stopPropagation();
-		if (posting || submissionUncertain || !user) return;
-		// Enable only Photos: keep every selected mode and its draft intact,
-		// including Poll, whose question/options can coexist with attachments.
-		setExpanded(true);
-		setPhotosOn(true);
-		if (attachmentComposerRef.current) {
-			attachmentComposerRef.current.addFiles(files);
-			return;
-		}
-		pendingMediaFilesRef.current = [...pendingMediaFilesRef.current, ...files];
-	}, [posting, submissionUncertain, user]);
-
-	React.useEffect(() => {
-		if (!expanded || !photosOn || pendingMediaFilesRef.current.length === 0) return;
-		let cancelled = false;
-		// A newly mounted uploader replays its effects in React StrictMode.
-		// Queue after that replay so its cleanup cannot abort the first drop.
-		queueMicrotask(() => {
-			if (cancelled || !attachmentComposerRef.current) return;
-			const files = pendingMediaFilesRef.current;
-			pendingMediaFilesRef.current = [];
-			attachmentComposerRef.current.addFiles(files);
-		});
-		return () => { cancelled = true; };
-	}, [composerSession, expanded, photosOn, user?.id]);
-
   // edit mode: the thing to seed the draft branch with, captured at mount so
   // the seed effect's deps stay constant
-  const editSeedRef = React.useRef(postThingDraft(editPost?.thing));
+  const editSeedRef = React.useRef(editPost?.thing || null);
 
-	// edit mode: the post's existing attachments, reorderable in place. Saving
-	// sends the full desired id list (this ordered set plus any new uploads)
-	// whenever the order changed or new media joined — the PATCH attachment
-	// sync re-stamps order and binds the additions.
-	const editAttachmentsSeedRef = React.useRef<PublicAttachment[]>(
-		(editPost?.attachments || []).flatMap((attachment) => {
-			const normalized = normalizePublicAttachment(attachment);
-			return normalized ? [normalized] : [];
-		})
-	);
-	const [editAttachments, setEditAttachments] = React.useState<PublicAttachment[]>(editAttachmentsSeedRef.current);
-	const removeExistingAttachment = React.useCallback(
-		(attachment: PublicAttachment) => {
-			const originalIndex = editAttachments.findIndex((entry) => entry.id === attachment.id);
-			const originalSpan = layoutSpans[attachment.id];
-			setEditAttachments((current) => current.filter((entry) => entry.id !== attachment.id));
-			setLayoutSpans(
-				(current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== attachment.id)) as Record<string, MediaLayoutSpan>
-			);
-			api.v1.attachments.remove({ id: attachment.id, targetId: editPost?.id }).catch((error: any) => {
-				setEditAttachments((current) => {
-					if (current.some((entry) => entry.id === attachment.id)) return current;
-					const restored = [...current];
-					restored.splice(Math.max(0, Math.min(originalIndex, restored.length)), 0, attachment);
-					return restored;
-				});
-				if (originalSpan) setLayoutSpans((current) => ({ ...current, [attachment.id]: originalSpan }));
-				lopu({ title: error?.error || `Could not delete ${attachment.filenamePreview || attachment.name} 😞`, status: 'error' });
-			});
-		},
-		[api, editAttachments, editPost?.id, layoutSpans, lopu]
-	);
-	const remainingSeedAttachments = editAttachmentsSeedRef.current.filter((seed) =>
-		editAttachments.some((attachment) => attachment.id === seed.id)
-	);
-	const editAttachmentOrderChanged =
-		isEdit &&
-		editAttachments.length === remainingSeedAttachments.length &&
-		editAttachments.some((attachment, index) => attachment.id !== remainingSeedAttachments[index].id);
-
-	// explicit comma-separated tags first, then #hashtags typed inline in the
-	// body (the literal #text stays in the post — PostCard linkifies it);
-	// canonicalPostTags dedupes the merge and enforces the 12-tag/40-char caps.
-	// Poll questions keep their hashtags too — the question renders on the card.
-	const parsedTags = canonicalPostTags([...tagsInput.split(','), ...extractInlineHashtags(text)]);
-
-	// poll mode: trimmed, bounded, non-empty option labels in row order
-	const parsedPollOptions = pollOptions.map((option) => option.trim().slice(0, MAX_POLL_OPTION_CHARS)).filter(Boolean);
+  const parsedTags = Array.from(
+    new Set(
+      tagsInput
+        .split(',')
+        .map((tag) => tag.trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
 
 
   // this composer's session-scoped draft home (fresh per mount — see
@@ -441,14 +268,22 @@ const AccountPostComposer = (props: PostComposerProps) => {
   React.useEffect(() => {
     if (seededRef.current || thingtimeLoading || !thingOn || !expanded) return;
     seededRef.current = true;
-    // A composer owns only its session; another open composer may still be
-    // using a sibling branch.
-    setThingtime(`${DRAFT_TMP_KEY}.${draftSessionId}`, editSeedRef.current ? { [DRAFT_ROOT_KEY]: editSeedRef.current } : {},
-      { namespace: 'default', tabLocal: true });
-    // `thingOn` (not `type`): this branch's guard above reads `thingOn`, and the
-    // derived `type` const is declared further down, so naming it here would be
-    // a TDZ ReferenceError during render.
-  }, [thingOn, expanded, thingtimeLoading, getThingtime, setThingtime, draftSessionId]);
+    const currentTmp = getThingtime(DRAFT_TMP_KEY);
+    const preserved: Record<string, unknown> = {};
+    if (currentTmp && typeof currentTmp === 'object' && !Array.isArray(currentTmp)) {
+      for (const [key, value] of Object.entries(currentTmp as Record<string, unknown>)) {
+        if (!COMPOSER_SESSION_KEY.test(key)) preserved[key] = value;
+      }
+    }
+    // seed the session BRANCH only — the draft value itself starts undefined,
+    // so the editor opens on a truly blank "Imagine.." slate instead of an
+    // empty object rendering as {} chrome. Editing an existing thingtime post
+    // seeds the draft with the post's thing as of mount (editSeedRef).
+    setThingtime(DRAFT_TMP_KEY, {
+      ...preserved,
+      [draftSessionId]: editSeedRef.current ? { [DRAFT_ROOT_KEY]: editSeedRef.current } : {}
+    });
+  }, [type, expanded, thingtimeLoading, getThingtime, setThingtime, draftSessionId]);
 
   // which optional field groups are in play — exactly the live toggles
   const showPhotos = photosOn;
@@ -751,130 +586,41 @@ const AccountPostComposer = (props: PostComposerProps) => {
 		const attachmentIds = pendingSubmission?.attachmentIds ?? currentAttachmentIds;
 		const submittedPostType = pendingSubmission?.postType ?? type;
 
-		const finishPost = async (created: PublicPost) => {
-      void accountDraft.retire().catch(() => lopu({ title: 'Posted successfully; draft cleanup will retry separately', status: 'info' }));
-			if (attachmentIds.length > 0) {
-				// A successful or exactly reconciled save means the server claimed
-				// these drafts (create binds in the insert transaction; an edit binds
-				// through the PATCH attachment sync). Mark them before reset/close
-				// unmounts the uploader so cleanup never deletes now-bound media.
-				attachmentComposerRef.current?.markCommitted(attachmentIds);
-			}
+      let resp: any;
+      if (isEdit) {
+        // full-crystal replace: the server sanitizer rebuilds { type, text,
+        // images, listing, thing } per type, so switching type clears the
+        // fields that no longer apply
+        resp = await api.v1.things.update({
+          id: editPost!.id,
+          crystal: {
+            type,
+            text: text.trim(),
+            images: showPhotos ? validImages : [],
+            listing: payload.listing ?? null,
+            thing: type === 'thingtime' ? draftThing : null
+          },
+          tags: parsedTags,
+          visibility
+        });
+      } else {
+        resp = isComment
+          ? await api.v1.things.comment({ id: parentId, ...payload })
+          : await api.v1.things.create(payload);
+      }
       lopu({
-        title: user?.localOnly ? 'Saved on this device' : (created as any).syncState && (created as any).syncState !== 'synced' ? 'Saved on this device; account sync pending' : isEdit ? 'Post updated ✏️' : isComment ? 'Commented 💬' : 'Posted ✨',
+        title: isEdit ? 'Post updated ✏️' : isComment ? 'Commented 💬' : 'Posted ✨',
         status: 'success',
         duration: 6000
       });
       // the posted thing draft is spent — next thingtime tab starts fresh
       // (reset the whole session branch so the draft value is undefined again,
       // not an empty {} that would render as an object)
-      //
-      // tabLocal for the same reason the seed above is: `draftSessionId` is
-      // minted per mount, so this key names THIS composer's session and no peer
-      // has one. Broadcast, it lands in every other tab as a foreign `s<hex>`
-      // branch — inert, but persisted into that tab's next full-tree autosave
-      // and visible under `tt.tmp` in its tree editor until its own next
-      // composer mount happens to prune it. Local clear and persistence are
-      // unchanged; only the broadcast is suppressed. Passing options replaces
-      // setThingtime's default object, so restate the namespace this write has
-      // always used.
-			if (submittedPostType === 'thingtime') setThingtime(`${DRAFT_TMP_KEY}.${draftSessionId}`, {}, { namespace: 'default', tabLocal: true });
-      // an edit keeps its pre-filled draft — the parent closes the composer
+      if (type === 'thingtime') setThingtime(`${DRAFT_TMP_KEY}.${draftSessionId}`, {});
       if (!isEdit) reset();
-			onPosted(created);
-      // Keep the actor in a reloadable content link after this composer unmounts.
-      // The destination resolves only this principal's retained Character roster.
-      if (character && !isComment && !isEdit && (created as any).syncState)
-        navigate(characterContentPath(`/post/${encodeURIComponent(created.id)}`, character.id));
-		};
-
-		try {
-      if (!pendingSubmission?.unknownOutcome) {
-        // Capture the immutable publish identity on this device before sending.
-        // Account draft sync runs independently and cannot block the post.
-        try {
-          accountDraft.capture({ ...draftContent, snapshot: JSON.stringify({ ...JSON.parse(draftSnapshot),
-            postEditorValue: submittedEditorValue, pendingSubmission: { ...pendingSubmission, unknownOutcome: true } }) }, true, true);
-          void accountDraft.flush().catch(() => {}); // DraftSaveStatus reports sync errors.
-        } catch {
-          lopu({ title: 'Draft recovery is unavailable', description: 'Posting will continue. Keep this page open until the result is confirmed.', status: 'info' });
-        }
-      }
-			if (pendingSubmission?.unknownOutcome && !isComment && !isEdit && postShareId && committedExpectation) {
-				try {
-					const saved = await withPostRequestDeadline(signal => api.v1.things.get({ id: postShareId }, { signal }), 5_000);
-					if (matchesCommittedPostCreate(saved, committedExpectation)) { await finishPost(saved.post); return; }
-				} catch { /* Retry only the already-frozen identity and payload. */ }
-			}
-			if (isEdit) {
-				// full-crystal replace: the server sanitizer rebuilds { type, text,
-				// images, listing, thing } per type, so switching type clears the
-				// fields that no longer apply. Attachment changes ride along as the
-				// full desired id list — the reordered bound set plus the media
-				// panel's entries — which the PATCH attachment sync binds/orders.
-				// Legacy crystal.images URLs sat in the panel as LOCAL seed entries;
-				// mint them into real linked attachments now, in panel order (a
-				// failed PATCH afterwards just leaves 24h-TTL drafts behind).
-				const resolvedPanelIds = await Promise.all(
-					[...draftAttachments, ...attachmentSnapshot.attachments].map(async (attachment) => {
-						if (!isLegacyLinkedSeedId(attachment.id)) return attachment.id;
-						if (!attachment.url) throw new Error('linked media url missing');
-						const minted = await api.v1.attachments.link({
-							url: attachment.url,
-							...(attachmentPurpose === 'comment' ? { purpose: 'comment' as const } : {})
-						});
-						const mintedId = typeof minted?.attachment?.id === 'string' ? minted.attachment.id : '';
-						if (!mintedId) throw new Error('linked media mint failed');
-						return mintedId;
-					})
-				);
-				const editAttachmentsChanged = resolvedPanelIds.length > 0 || editAttachmentOrderChanged;
-				const updated = await api.v1.things.update({
-					id: editPost!.id,
-					crystal: {
-						type,
-						text: canonicalText,
-						richText: canonicalRichText,
-						images: canonicalImages,
-						listing: canonicalListing,
-						thing: canonicalThing,
-						mediaLayout: canonicalMediaLayout,
-						// empty/null clear — the sanitizer drops the keys, so a post can
-						// lose its title or leave its subspace from here
-						title: postTitle.trim(),
-						subspaceId: subspaceId || null,
-						flairId: subspaceId ? flairId || null : null
-					},
-					tags: parsedTags,
-					visibility,
-					...(visibility === 'custom' && customAcl ? { acl: customAcl } : {}),
-					...(editAttachmentsChanged ? { attachmentIds: [...editAttachments.map((attachment) => attachment.id), ...resolvedPanelIds] } : {})
-				});
-				await finishPost(updated.post);
-			} else {
-				const resp = isComment ? await api.v1.things.comment({ id: parentId, ...payload }) : await api.v1.things.create(payload);
-				await finishPost(isComment ? resp.comment : resp.post);
-			}
-		} catch (error) {
-			let reconciled: PublicPost | null = null;
-			const status = Number((error as { status?: unknown } | null)?.status);
-			// only a create can be reconciled by shareId read-back; an edit is a
-			// full-crystal replace, so retrying it is already safe
-			if (!isComment && !isEdit && postShareId && committedExpectation && (hasUnknownMutationOutcome(error) || status === 409)) {
-				// The first GET may race a still-committing request. Keep this bounded;
-				// if it remains absent, the next click resubmits the SAME shareId and
-				// can reconcile the resulting duplicate safely.
-				for (const delay of [0, 150, 400]) {
-					if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
-					try {
-						const readBack = await withPostRequestDeadline(signal => api.v1.things.get({ id: postShareId }, { signal }), 5_000);
-						if (matchesCommittedPostCreate(readBack, committedExpectation)) {
-							reconciled = readBack.post as PublicPost;
-						}
-						break;
-					} catch {
-						// A not-yet-visible or unavailable read is retried only within the
-						// short bounded window above; no server/proxy text reaches the UI.
+      onPosted(isComment ? resp.comment : resp.post);
+    } catch (err: any) {
+      lopu({ title: err?.error || 'Post did not go through 😞', status: 'error' });
     }
 				}
 			}
@@ -1076,16 +822,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
           color={MUTED}
           marginLeft="auto"
           borderRadius="8px"
-						isDisabled={posting}
-						onClick={() => {
-							pendingMediaFilesRef.current = [];
-							if (isComment || isEdit) onClose?.();
-							else {
-                setDraftAttachments(files => [...files, ...attachmentSnapshot.attachments]);
-                setExpanded(false);
-                setAttachmentSnapshot(EMPTY_ATTACHMENT_SNAPSHOT);
-							}
-						}}
+          onClick={() => (isComment || isEdit ? onClose?.() : setExpanded(false))}
         />
       </Flex>
 
@@ -1557,7 +1294,7 @@ const AccountPostComposer = (props: PostComposerProps) => {
           isLoading={posting}
           onClick={handlePost}
         >
-          {user?.localOnly ? 'Save on this device' : isEdit ? 'Save ✨' : isComment ? 'Comment 💬' : 'Post ✨'}
+          {isEdit ? 'Save ✨' : isComment ? 'Comment 💬' : 'Post ✨'}
         </Button>
       </Flex>
 			</Box>
