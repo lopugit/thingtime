@@ -1,6 +1,4 @@
 import { Heading } from '@chakra-ui/react';
-import { userCheckExists } from '~/api/utils/userCheckExists';
-import { userValidatePassword } from '~/api/utils/userValidatePassword';
 import { TestAPI } from '~/components/API/Test';
 import { TopSpacing } from '~/components/Layout/TopSpacing';
 
