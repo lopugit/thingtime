@@ -20,6 +20,7 @@ import { getNativeSection, NativeSectionView } from './nativeSections';
 import { BuilderViewport, type BuilderViewportSize } from './BuilderViewport';
 import { type SeamlessMode, isSeamlessMode, usesPageRuntime } from './seamlessMode';
 import { useCopyPage } from './useCopyPage';
+import { PageActionSurface } from './PageActionSurface';
 
 const SeamlessPageEditor = React.lazy(() => import('./SeamlessPageEditor'));
 
@@ -321,8 +322,10 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 						</Flex>
 					)}
 					<BuilderViewport size={editorMode ? viewport : null}>
-						<Box
-							ref={setSurface}
+						<PageActionSurface
+							surfaceRef={setSurface}
+							actionEnabled={!draft.branch && interactive && usesPageRuntime(editorMode) && (!editorMode || editorMode === 'view')}
+							onUnowned={!draft.branch && isSeeded ? onUnowned : undefined}
 							background={previewBg}
 							width="100%"
 							minHeight={standalone ? 'calc(100dvh - 22px)' : 'calc(100dvh - var(--tt-nav-clearance, 54px))'}
@@ -340,7 +343,7 @@ export function LiveWebpageView({ builderPageId, draft }: { builderPageId?: stri
 								interactive={!draft.branch && interactive && usesPageRuntime(editorMode)}
 								onTtActionUnowned={!draft.branch && isSeeded ? onUnowned : undefined}
 							/>
-						</Box>
+						</PageActionSurface>
 					</BuilderViewport>
 					{editorMode && (
 						<React.Suspense fallback={null}>

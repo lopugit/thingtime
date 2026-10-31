@@ -38,6 +38,14 @@ pub struct Request {
     pub ignore_rules: Option<String>,
     #[serde(default)]
     pub resource_limits: IndexResourceLimits,
+    #[serde(default)]
+    pub resource_feedback: bool,
+    #[serde(default = "default_cpu_shares")]
+    pub cpu_budget_shares: usize,
+}
+
+fn default_cpu_shares() -> usize {
+    1
 }
 
 #[derive(Debug, Serialize)]
@@ -84,6 +92,9 @@ pub enum Event {
     },
     Ignored,
     Indexed,
+    Resources {
+        usage: crate::resources::IndexResourceUsage,
+    },
     Complete,
 }
 
@@ -303,7 +314,13 @@ fn capture_inner(
     ));
     let exclusions: Vec<String> = request.excluded_paths.iter().map(|p| key(p)).collect();
     let invalid = Arc::new(regex::Regex::new(r"[\p{Cc}\p{Cf}]").expect("constant unicode classes"));
-    let governor = Arc::new(ResourceGovernor::new(&request.resource_limits)?);
+    if ![1, 3].contains(&request.cpu_budget_shares) {
+        return Err(failure("invalid_configuration"));
+    }
+    let governor = Arc::new(ResourceGovernor::new_with_cpu_share(
+        &request.resource_limits,
+        request.cpu_budget_shares,
+    )?);
     let source = IndexSource {
         id: "backup".into(),
         root: request.root.clone(),
@@ -379,6 +396,13 @@ fn capture_inner(
                     if cancelled.load(Ordering::Relaxed) {
                         return WalkState::Quit;
                     }
+                    let _permit = match governor.admit() {
+                        Ok(permit) => permit,
+                        Err(_) => {
+                            cancelled.store(true, Ordering::Relaxed);
+                            return WalkState::Quit;
+                        }
+                    };
                     if governor.checkpoint().is_err() {
                         cancelled.store(true, Ordering::Relaxed);
                         return WalkState::Quit;
@@ -496,7 +520,20 @@ fn capture_inner(
         });
         // Drain even after a sink failure so blocked workers can exit/join.
         let mut failure = None;
+        let mut resource_at = std::time::Instant::now();
         for event in receiver {
+            if request.resource_feedback
+                && resource_at.elapsed() >= Duration::from_millis(250)
+                && failure.is_none()
+            {
+                if let Err(error) = emit(Event::Resources {
+                    usage: governor.snapshot(),
+                }) {
+                    cancelled.store(true, Ordering::Relaxed);
+                    failure = Some(error);
+                }
+                resource_at = std::time::Instant::now();
+            }
             if failure.is_none() {
                 if let Err(error) = emit(event) {
                     cancelled.store(true, Ordering::Relaxed);
@@ -533,6 +570,11 @@ fn capture_inner(
         && stamp(&root.metadata().map_err(|_| failure("source_changed"))?) != root_stamp
     {
         emit(gap(None, "changed", "root"))?;
+    }
+    if request.resource_feedback {
+        emit(Event::Resources {
+            usage: governor.finish(),
+        })?;
     }
     emit(Event::Complete)
 }

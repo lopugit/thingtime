@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
@@ -11,8 +12,8 @@ export function MobileDeviceSetupCard({ ownerId, onPaired }: { ownerId: string; 
 	const [available, setAvailable] = useState(() => supportsMobileDevice());
 	useEffect(() => {
 		const ready = () => setAvailable(supportsMobileDevice());
-		window.addEventListener(nativeBridgeReadyEvent, ready);
-		return () => window.removeEventListener(nativeBridgeReadyEvent, ready);
+		activityEvents(window, 'events:components/Devices/MobileDeviceSetupCard', 'MobileDeviceSetupCard').addEventListener(nativeBridgeReadyEvent, ready);
+		return () => activityEvents(window, 'events:components/Devices/MobileDeviceSetupCard', 'MobileDeviceSetupCard').removeEventListener(nativeBridgeReadyEvent, ready);
 	}, []);
 	if (!available) return null;
 	return <MobileDeviceConnection key={`${window.location.origin}:${ownerId}`} ownerId={ownerId} onPaired={onPaired} />;
@@ -44,13 +45,13 @@ function MobileDeviceConnection({ ownerId, onPaired }: { ownerId: string; onPair
 	}, [ownerId, scope]);
 	useEffect(() => {
 		const refresh = () => {
-            if (document.visibilityState === 'visible') void run('status');
+            if (document.visibilityState === 'visible') return run('status');
             else { pending.current?.abort(); pending.current = null; setBusy(false); }
         };
 		refresh();
-		const interval = window.setInterval(refresh, 30_000);
-		window.addEventListener('focus', refresh); document.addEventListener('visibilitychange', refresh);
-		return () => { clearInterval(interval); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); pending.current?.abort(); };
+		const interval = activityInterval('timer:components/Devices/MobileDeviceSetupCard:1', 'Mobile Device Setup Card', refresh, 30_000);
+		activityEvents(window, 'events:components/Devices/MobileDeviceSetupCard', 'MobileDeviceSetupCard').addEventListener('focus', refresh); activityEvents(document, 'events:components/Devices/MobileDeviceSetupCard', 'MobileDeviceSetupCard').addEventListener('visibilitychange', refresh);
+		return () => { clearActivityInterval(interval); activityEvents(window, 'events:components/Devices/MobileDeviceSetupCard', 'MobileDeviceSetupCard').removeEventListener('focus', refresh); activityEvents(document, 'events:components/Devices/MobileDeviceSetupCard', 'MobileDeviceSetupCard').removeEventListener('visibilitychange', refresh); pending.current?.abort(); };
 	}, [run]);
 	const isPaired = status?.state === 'paired';
 	return (

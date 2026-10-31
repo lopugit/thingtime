@@ -1,3 +1,4 @@
+import { syncRequestHasPacing, parseSyncResourceStatus, type SyncResourceStatus } from './resourceGovernor';
 import { parseNativeFolderBatchResult } from './folderBatch';
 import { parseNativeIndexChangesPage, type NativeIndexChangesPage } from './streamingIndex';
 import { parseNativeUploadBatchResult } from './uploadBatch';
@@ -45,7 +46,7 @@ export type MobileFolder = {
 export type MobileStageRequest = { scope: SyncScope; rootId: string; operation: SyncOperation };
 export type MobileTrashRequest = MobileStageRequest & LocalTrashContext;
 export type MobileWriteApproval = { scope: SyncScope; configurationRevision: string; configurationHash: string; allowTrash?: boolean };
-export type FolderRequest =
+export type FolderRequest = { resourceLimits?: import('./configuration').FileSyncResourceLimits; resourceScope?: string } & (
 	| { action: 'validate-folder-batch'; rootId: string; batch: Omit<import('./folderBatch').NativeFolderBatchInput, 'remainingMs'>; remainingMs: number }
 	| { action: 'upload-batch'; rootId: string; batch: import('./uploadBatch').NativeUploadBatchInput }
 	| { action: 'upload-file'; rootId: string; upload: NativeFileUpload & { source: SyncEntry } }
@@ -69,7 +70,7 @@ export type FolderRequest =
 	| { action: 'trash-restore-reviewed'; rootId: string; trash: MobileTrashRequest; restore: NativeRestore }
 	| { action: 'read' | 'read-range'; rootId: string; path: string; version: string; offset: number; length: number; verifiedChunks?: true }
 	| { action: 'stage-begin' | 'stage-finish'; rootId: string; transfer: MobileStageRequest }
-	| { action: 'stage-download'; rootId: string; transfer: MobileStageRequest; offset: number; length: number; cloudFile: CloudFile }
+	| { action: 'stage-download'; rootId: string; transfer: MobileStageRequest; offset: number; length: number; cloudFile: CloudFile; target?: import('./signedDownloadTarget').SignedDownloadTarget }
 	| { action: 'stage-range'; rootId: string; transfer: MobileStageRequest; offset: number; bytes: Uint8Array<ArrayBuffer> }
 	| { action: 'stage-append'; rootId: string; transfer: MobileStageRequest; offset: number; data: string }
 	| { action: 'write-approve' | 'write-check'; rootId: string; approval: MobileWriteApproval }
@@ -83,8 +84,10 @@ export type FolderRequest =
 			trash: MobileTrashRequest;
 			restore: { path: string; expected: SyncEntry };
 			approval: MobileWriteApproval;
-	  };
+	  }
+);
 export type FolderResult = {
+	resources?: SyncResourceStatus;
 	uploadedBatch?: import('./uploadBatch').NativeUploadBatchResult;
 	validatedFolderBatch?: import('./folderBatch').NativeFolderBatchResult;
 	uploadedFile?: { fingerprint: ContentFingerprint };
@@ -116,6 +119,8 @@ export type FolderResult = {
 export type FolderCapabilities = Pick<
 	ThingtimeNativeBridge,
 	| 'platform'
+	| 'fileResourceLimitsVersion'
+	| 'fileDownloadVersion'
 	| 'fileUploadVersion'
 	| 'fileUploadBatchVersion'
 	| 'fileFolderBatchVersion'
@@ -125,6 +130,7 @@ export type FolderCapabilities = Pick<
 	| 'fileTrashVersion'
 	| 'fileVersionsVersion'
 >;
+export const supportsNativeResourceLimits = (bridge: FolderCapabilities | undefined) => /^1\.\d+\.\d+$/.test(bridge?.fileResourceLimitsVersion ?? '');
 export const supportsNativePartUploads = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	(bridge?.platform === 'ios' || bridge?.platform === 'android' || bridge?.platform === 'macos') && /^1\.\d+\.\d+$/.test(bridge.fileUploadVersion ?? '');
 /** Additive Mac 1.1 receipt telemetry; mobile whole-file versions are independent. */
@@ -325,6 +331,7 @@ export function parseMobileFolderResult(
 			...(r.sourceKind === 'photos' ? { sourceKind: r.sourceKind, photoAccess: r.photoAccess } : {})
 		}))
 	};
+	if (payload.resources !== undefined) result.resources = parseSyncResourceStatus(payload.resources);
 	if (request.action === 'validate-folder-batch') {
 		if (payload.rootId !== request.rootId || request.rootId !== request.batch.descriptor.configuration.configuration.localRootId) throw Error('Folder batch source root changed.');
 		result.validatedFolderBatch = parseNativeFolderBatchResult(payload.validatedFolderBatch, { ...request.batch, remainingMs: request.remainingMs });
@@ -666,7 +673,8 @@ export const supportsMobileSyncConditions = (bridge: FolderCapabilities | undefi
 export const supportsMobileStaging = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsFolderAccess(bridge) && /^1\.\d+\.\d+$/.test(bridge?.fileStagingVersion ?? '');
 export const supportsNativeCloudStaging = (bridge: FolderCapabilities | undefined) =>
-	bridge?.platform === 'ios' && supportsMobileStaging(bridge) && Number(bridge.fileStagingVersion!.split('.')[1]) >= 2;
+	(bridge?.platform === 'ios' && supportsMobileStaging(bridge) && Number(bridge.fileStagingVersion!.split('.')[1]) >= 2) ||
+	(bridge?.platform === 'macos' && supportsMobileStaging(bridge) && supportsNativeResourceLimits(bridge) && /^1\.\d+\.\d+$/.test(bridge.fileDownloadVersion ?? ''));
 export const supportsMobilePublication = (bridge: FolderCapabilities | undefined = getNativeBridge()) =>
 	supportsMobileStaging(bridge) && /^1\.\d+\.\d+$/.test(bridge?.filePublicationVersion ?? '');
 /** Publication 1.2 can verify saved consent without displaying a native dialog. */
@@ -858,7 +866,8 @@ export function requestMobileFolders(
 			stop();
 			reject(Error('Folder access timed out. Your saved selections are preserved.'));
 		};
-		let timer = setTimeout(
+		const pacedPayload = syncRequestHasPacing(input.action, input.resourceLimits ?? (input.action === 'upload-batch' ? input.batch.descriptor.configuration.configuration.resourceLimits : undefined));
+		let timer = pacedPayload ? undefined : setTimeout(
 			expire,
 			input.action === 'upload-part' || input.action === 'upload-file'
 				? 900_000
@@ -895,7 +904,7 @@ export function requestMobileFolders(
 		);
 		const renewUploadDeadline = () => {
 			clearTimeout(timer);
-			if (!(background === true && typeof document !== 'undefined' && document.visibilityState === 'hidden')) timer = setTimeout(expire, 900_000);
+			if (!pacedPayload && !(background === true && typeof document !== 'undefined' && document.visibilityState === 'hidden')) timer = setTimeout(expire, 900_000);
 		};
 		const visibility = () => {
 			if (background === true) renewUploadDeadline();

@@ -8,6 +8,7 @@ dist
 
 build/*
 public/build/*
+public/vendor/mapbox-gl/
 api/index.js
 api/index.js.map
 

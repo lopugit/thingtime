@@ -142,3 +142,51 @@ Neither personal access tokens nor bridge credentials are placed in chat.
 
 See the root README and `/api/v1/integrations/chatgpt/mcp-docs` for the full
 security and API contract.
+
+## Private agent task lifecycle reporting
+
+The dedicated `prepare_thingtime_agent_task`, `get_thingtime_agent_task` and
+`report_thingtime_agent_task` tools use the selected connected account's exact
+HTTPS origin. They negotiate `api.agent-reporting` 1.0.0,
+`api.auth-characters` 1.0.0 and `api.agent-overview` 2.0.0 before use.
+They reuse a stable task identity, distinct task Character and the existing
+private saved workspace; they do not provide a generic Action runner or API proxy.
+
+These tools require an independently authorized `agents.report` token scope.
+Existing read/write-all `things` connections do not include it and are never
+upgraded automatically. Use Advanced connection settings to authorize the grant
+once and reconnect through the host's existing OAuth flow. No token should be
+pasted into chat. If a connection lacks scope, compatible server capabilities,
+private membership or required saved Things, reporting fails closed while
+independent task work can continue.
+
+Standing authorization for private lifecycle reporting allows these bounded
+updates without repeat confirmation. Generic mutation preview/apply and other
+security boundaries remain unchanged. Deploy the server change to the configured
+MCP origin, refresh the host's discovered tool catalog through its supported
+controls, and reload the updated plugin/skill where required. Verify the three
+tools appear and exercise real private prepare/read/report before claiming
+live reporting works.
+
+`coordinate_thingtime_agent_task` maintains one stable task post in the bound
+private Thingtime Agents subspace under the task Character. Supply a stable
+UUID-v4 `requestId`, `title`, `text`, and explicit `renderComponent` object.
+Keep content editable and reuse the existing post after restarts; verify its
+readback. This bounded operation uses standing private coordination authorization
+and retains the same scope, capability, membership and privacy checks.
+
+Coordination uses the existing private-subspace audience rules. It never changes
+the subspace visibility. If its owner deliberately changes that visibility,
+the ordinary product sharing rules apply and further reporting is refused.
+A successful coordinate receipt includes the stable `coordinationPostId`; use
+`get_thingtime_agent_task` to read the saved post back independently.
+
+Before delegation, prepare the child with its own stable `externalTaskId` and
+`parentExternalTaskId` set to the existing parent's stable task identity. The
+parent must already have a prepared live binding, project and task in the same
+owner, origin and exact saved workspace. The server derives `parentTaskId`,
+`sharedTaskId` and the inherited project, and grants the child's distinct
+Character read access only to the exact parent roots. Child records retain
+their own task parent while sharing the root task; the child cannot update
+parent roots. Preserve returned IDs and pass them to the delegate. Never invent
+parent IDs or silently create a replacement project.

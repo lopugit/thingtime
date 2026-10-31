@@ -50,6 +50,10 @@ test('download source reads bounded pinned ranges, verifies content and refuses 
 	const source = createCloudDownloadSource(runtime, scope, file);
 	assert.deepEqual(await source.read(0, bytes.length), bytes);
 	assert.deepEqual(ranges, [2 * 1024 * 1024, 2 * 1024 * 1024, 2 * 1024 * 1024, 2 * 1024 * 1024, 17]);
+	const { SyncResourceGovernor } = await import('./resourceGovernor');
+	let elapsed = 0;
+	const paced = createCloudDownloadSource({ ...runtime, resources: new SyncResourceGovernor({ downloadBytesPerSecond: bytes.length }, () => elapsed, async ms => { elapsed += ms; }) }, scope, file);
+	assert.deepEqual(await paced.read(0, bytes.length), bytes); assert.ok(elapsed >= 1000);
 	assert.deepEqual(await fingerprintSource(source), fingerprint);
 	await source.verify!();
 	changed = true;

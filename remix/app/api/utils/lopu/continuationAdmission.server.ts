@@ -6,6 +6,7 @@ import { verifyJwt } from '../auth/jwt';
 import { getRequestMongoEndpoint } from '../mongodb/endpoint';
 import { getHomeThingsCollection } from '../mongodb/collections';
 import { AI_TASK_KIND } from './backgroundTaskCore';
+import { getGatewaySettings } from '../deployment/environmentGateway';
 import { runLopuContinuation } from './continuationWorkflow.server';
 
 type WorkflowGrant = { input: Record<string, any>; url: string; sessionId: string };
@@ -21,7 +22,8 @@ export const admitLopuWorkflow = async (request: Request, row: any, input: any, 
 	const grant: WorkflowGrant = { input, url: request.url, sessionId: claims.jti };
 	const stored = await things.updateOne(
 		{ shareId: row.shareId, ownerId: user.id, thingtime: AI_TASK_KIND, cancelRequested: { $ne: true }, 'crystal.workflowStatus': 'running' },
-		{ $set: { workflowInput: new Binary(Buffer.from(JSON.stringify(grant))) } }
+		{ $set: { workflowInput: new Binary(Buffer.from(JSON.stringify(grant))),
+      ...(getGatewaySettings() ? { workflowGatewayDeploymentId: getGatewaySettings()!.deploymentId } : {}) } }
 	);
 	if (!stored.matchedCount) return { ok: false as const, error: 'This task was stopped before it started.' };
 	try {

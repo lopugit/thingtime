@@ -1,5 +1,9 @@
 # Things and folders
 
+`validateThingtimeCrystal` preserves explicit `renderComponent` metadata across
+typed and data Thing writes. See [the presentation contract](api-endpoints-and-capabilities.md)
+for saved/embedded definitions, PATCH/replacement semantics and tests.
+
 Server Action admission/outcomes use `api/utils/timeline/actionOutcome.ts` and
 shared `timeline/actionOutcome.ts`, called from the canonical server executor.
 They retain safe effect receipts in the existing Timeline, never a new history
@@ -22,6 +26,7 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 
 | Concern | Path |
 | --- | --- |
+| Builder identity, legacy detection and additive marker updates | `app/schemas/builderThing.ts`, `registry.ts`; `builder-thing` composes with the original content schema. Generic Things writes persist it for canonical Builder kinds; Builder-created data and app folders explicitly retain it. The marker grants no access and never chooses a renderer. |
 | Canonical Thing utilities: `createThing`, `updateThing`, `deleteThing`, `listThings`, `getThing`, `findViewableThing`, projections (`toPublicThings`, posts) | `app/api/utils/things/things.ts` (large; grep the export you need) |
 | Folder rules (`resolveFolderAssignment`, `FOLDER_UNFILEABLE`, cycle checks) | `app/api/utils/things/things.ts` (`folderId` handling) |
 | Bulk move/copy/delete/share | `app/routes/api/v1/things/bulk` |
@@ -36,7 +41,21 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Trusted Action/AI attribution and relational operation grouping | `app/api/utils/timeline/mutationContext.ts`, established by `actions/execute.ts`, `actions/firstPartyActionHost.ts` and `lopu/chatTools.ts`; not request-controlled |
 | Shared History modal and managed Timeline folder | `app/components/Timeline/TimelineHost.tsx` |
 | Account/database-qualified History links and Thing caches | `app/utils/dataPlane.ts`, `app/hooks/useDataPlane.ts`, `app/routes/thing.tsx`; root identity invalidation also handles database selection across tabs |
+| Explicit data-Thing presentation | `app/components/Thingtime/ThingView.tsx`, `ThingRenderComponent.tsx`; `renderComponent` points to an independently readable saved Component or embeds its canonical render definition. See [the authoring and access contract](posts-comments-and-feed.md#subspace-messages-and-embedded-things). |
 | Approved saved-theme content history, home transaction and retained deletion accounting | `app/timeline/themeContent.ts`, `app/api/utils/timeline/themeContent.ts`, dedicated `app/api/utils/themes/themes.ts` writer |
+
+## Builder provenance
+
+`app/schemas/builderThing.ts` defines the composable `builder-thing` schema id
+and legacy recognition for Webpages, Components, Actions, Schemas and explicit
+`builderApp` folders. Canonical validation adds the marker on writes; ordinary
+data/folders opt in explicitly. PATCH/PUT and the update alias may add the marker
+without changing stored content schemas. Marker metadata grants no access and
+does not select a renderer. The contracts are `api.things` 1.46.0 and
+`api.things-update` 1.15.0. Draft export/reopen and archive folder destinations
+ignore the marker when enforcing content-kind exclusivity. Coverage lives in
+`schemas/builderThing.test.ts`, `draftPreview/prepare.test.ts`,
+`api/utils/things/chatArchiveTransfer.test.ts` and both capability test suites.
 
 ## Authorization helper
 
@@ -47,6 +66,22 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
   `thingsScope`.
 - Folder listing (`listThings({ folder })`) is owner-only; `FOLDER_UNFILEABLE`
   kinds (reactions, saves, votes, updowns) live under their target.
+- Builder apps are top-level owner `folder` Things with `crystal.builderApp=true`.
+  `GET /api/v1/things?folder=root&builderApp=true` filters them before cursor
+  pagination (`api.things` 1.45.0). A child's existing `folderId` organizes it
+  into the app; it never grants access or changes protected OAuth `appId`.
+- Optional `GET /api/v1/things?thingtime=data&schemaId=<saved Schema Thing ID>&parentId=<related Thing ID>`
+  narrows exact `crystal.schemaId` and `crystal.parentId` before canonical cursor pagination. Owner, app
+  namespace, PAT visibility and per-Thing ACL checks still apply; exact-ID and
+  discussion projection reads do not accept this list filter (`api.things` 1.43.0).
+- Saved Webpage create/update accepts guarded `tt-form`, `tt-select`, `tt-style`,
+  `tt-change` and `tt-mapbox` element blocks with nested editable children.
+  Builder conversion keeps repeated-card templates, source bindings and child
+  selection IDs (`api.things` 1.44.0, `api.things-update` 1.14.0).
+  The map viewport's reusable favourites/route Action sources drain cursor
+  pages through `useThingSource` and `Maps/mapboxSource.ts`; numbered route
+  overlays preserve favourite pins and scope transient geometry to the selected
+  route. See [editable maps](../maps.md) and `pnpm --dir remix run test:maps`.
 - Deleting a folder drains direct children to its parent in bounded transactions
   before removing the folder. Each child move and its Timeline event commit
   together; subfolder descendants stay nested. `things/folderPlacement.ts` writes
@@ -60,6 +95,7 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Piece | Path |
 | --- | --- |
 | Page state, fetching, DnD, dialogs, action dispatch (`onItemAction`, `onItemMenuAction`) | `app/components/Things/ThingsPage.tsx` |
+| Builder app/type browsing reusing the same page, app metadata and assignment dialogs | `app/components/Builder/BuilderPage.tsx`, `BuilderAppDialog.tsx`, `BuilderAssignDialog.tsx` |
 | Grid/list/columns views, tile menu button, `ThingsItemAction` union | `app/components/Things/ThingsViews.tsx` |
 | Item and background context-menu models | `app/components/Things/thingsMenuModel.ts` (built on `buildThingEntityMenu`) |
 | Pure helpers/types (`ThingsThing`, `isFolder`, sort/group options, cache keys) | `app/components/Things/thingsCore.ts`, `thingsLocation.ts` |
@@ -67,6 +103,16 @@ pointing at a folder owned by the same account (`FUNDAMENTALS.md` §3).
 | Export/import dialogs | `ThingExportDialog.tsx`, `ThingImportDialog.tsx` |
 | Universal Thing page `/thing/:id` | `app/routes/thing.tsx` |
 | Device page `/things?device=<id>&deviceView=page` | `app/components/Things/ThingsPage.tsx` selects the same `DeviceDetailsDrawer.tsx` content used in the drawer; device cards/rows have a navigation-only right-click menu |
+
+Shared item activation is defined in `browseInteraction.ts`: ordinary clicks
+open once; Cmd/Ctrl/Shift clicks select, and title links retain native
+middle-click navigation. `ThingsViews.tsx` supplies labelled hover/focus
+checkboxes and action menus for Things, files and devices in every layout;
+coarse-pointer controls remain visible. Device controls are siblings of their
+primary button to preserve independent keyboard and pointer actions.
+`FolderTree.tsx` reuses those controls only when browsing handlers are supplied;
+Move dialog pickers remain independent. Its folder button expands children in
+place, while modifier clicks select and context controls preserve location.
 
 Adding an item action: extend `ThingsItemAction` in `ThingsViews.tsx`, add the
 action to `buildThingsItemMenu`, handle it in both `onItemAction` and
@@ -91,6 +137,9 @@ go into `PROTECTED_THINGTIME` and get dedicated endpoints.
 
 ## Tests
 
+- `scripts/things-single-click-acceptance.mjs` exercises the real isolated API
+  and browser click, selection, context-menu and file-download paths; prerequisites
+  and invocation are in the "Things page" section of `TESTING.md`.
 - `npm --prefix remix run test:things` (menu models, page cores, transfer),
   `test:acl`, `test:collections` (index registry), `test:transfer-binary` /
   `test:transfer-archives` (opt-in integration on a disposable replica set).
@@ -304,7 +353,15 @@ cover this boundary; existing account drafts and import permissions are unchange
 
 ## Password manager
 
-See [password-manager.md](../password-manager.md). `api.passwords` 1.1.0 is a
+`PasswordGenerator.tsx`, `PasswordIcon.tsx` and `PasswordPasskeySetup.tsx` compose
+editable settings blocks; secret output stays in the controlled entry draft.
+`passwords/generator.ts` owns WebCrypto/preset validation. `passwords/icons.ts`,
+`icons.client.ts` and `api/utils/passwords/icons.ts` own descriptors, anonymous
+image loading and the separately sealed list projection. `test:passwords` covers
+these boundaries; `scripts/password-tools.browser.html` is an isolated synthetic
+UI fixture, not native-provider acceptance.
+
+See [password-manager.md](../password-manager.md). `api.passwords` 1.3.0 is a
 private, session-bound home-plane API over protected `password-manager-entry`
 Things. `api/utils/passwords/passwords.ts` owns accounted mutations, revision
 fences and secret-free native catalog projections; `auth/vaultEnvelope.ts` and
@@ -549,3 +606,71 @@ controls in `SyncProgressViewer`. Preferences are device-local scheduling hints,
 not API grants or deletion permission. `syncPriorityJournal.test.ts`,
 `uploadPriorityEditor.test.ts` and the editable sync progress browser check cover
 recovery, parent ordering, scope, persistence and nested Builder controls.
+
+### Device sync and file locations (2026-10-22)
+
+The device details sync section opens `/things?device=<id>&deviceView=sync`,
+which owns configuration, resource controls and transfer progress. The root
+library contains Things, not setup/sync panels. `api.things` 1.39.1 corrects
+root containment before pagination: parent/target children, storage attachment blobs and file-sync
+configuration records are excluded; explicit folders and search retain their
+scopes. Expiring unbound uploads are drafts, while legacy durable standalone
+files remain content in `/things?unfiled=attachments` and search. This virtual
+recovery collection explicitly records that no original folder location is
+known; it never fabricates a device path. No migration or deletion is performed.
+
+`ThingFileLocation.tsx` renders editable breadcrumb blocks on file/attachment
+details. `fileLocationCore.ts` follows an attachment's recorded canonical file
+target and that file's actual folder ancestry through authorized generic reads.
+Unbound blobs have no recorded location; inaccessible or cyclic ancestry is
+reported as unavailable. Names and MIME types never establish a path.
+
+
+### Device activity ownership
+
+`/things?activity=1` is a dedicated editable Builder surface linked from device
+sync. `app/activity/activityManager.ts` owns registered view polling, listeners,
+sync discovery and transfer execution, with persistent origin/device preferences
+and real teardown. Register new background producers with a stable semantic ID;
+return cleanup and honor the supplied abort signal for active asynchronous work.
+A disabled view timer cannot cancel an already-issued read unless its owner
+supports cancellation. The manager does not monkey-patch browser globals.
+
+The desktop preload exposes versioned `activityRequest` 1.0.0. Only the trusted
+main renderer at its configured node origin may invoke it. The native Node
+service is one separately controlled owner; disabling it persists intent before
+stopping launchd, while retaining pairing, grants and transfer journals. Browser
+lease/deadline cleanup guards remain required. Measurements cover Electron
+processes only; native Node children, MongoDB and API runtimes are explicitly
+outside that resource total. This is a registered-owner inventory, not a claim
+that arbitrary third-party listeners or all operating-system processes are
+instrumented. Native inventory refresh is manual and does not add a poll.
+
+Verification commands: `npm --prefix remix run test:activity`,
+`npm --prefix remix run test:activity-ui`, and
+`node --test electron/test/activity-manager.test.cjs`.
+
+### Referenced-by parent paths
+
+`ThingParentPaths.tsx` on Thing data offers an explicit reference scan, never an
+automatic home-library sweep. Each action reads up to ten ordinary owner-list
+pages of 50 rows and retains its cursor plus a compact inverse reference map.
+Continue scan discovers more rows; More parent paths resumes the traversal
+frontier (20 paths / at most 200 ACL reads per action). Cancel, account/data-plane
+changes and unmount abort requests.
+
+`thingParentPathsCore.ts` indexes canonical file content identities, existing
+post Thing collection references and the shared authored webpage media scanner
+(`Builder/webpageAttachmentRefs.ts`, also used by the server binder). Actual
+folder/target/parent lineage comes from exact current reads. Every incoming typed
+reference is revalidated through the source's ACL-checked read; stale matches,
+missing ancestors and cycles do not create invented complete paths. Each segment
+is clickable and separately editable through Builder. Original sync upload
+provenance remains a separate display, never a current-parent edge.
+
+Coverage is the user's accessible owner library plus viewable direct ancestors.
+Other accounts' reverse references, arbitrary text, unknown reference kinds and
+private managed content excluded by the ordinary library API are not covered.
+Incomplete scan/traversal status remains explicit. No new API contract or
+background indexing service is introduced. Unfiled files independently loads
+one page at a time and requires Load more for each subsequent page.

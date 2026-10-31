@@ -15,7 +15,7 @@ const origin = 'http://127.0.0.1:' + BUILT_BATCH_SMOKE_PORT;
 const manifest = () => ({
 	schemaVersion: 1,
 	origin,
-	features: { 'api.file-sync-batches': { version: '1.1.0' } },
+	features: { 'api.file-sync-batches': { version: '1.2.0' }, 'api.attachment-content': { version: '1.17.0' } },
 	operations: [
 		{ feature: 'api.file-sync-batches', path: '/api/v1/files/batches', methods: ['POST'] },
 		{ feature: 'api.file-sync-batches', path: '/api/v1/files/batches-docs', methods: ['GET'] }

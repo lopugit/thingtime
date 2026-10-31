@@ -570,3 +570,16 @@ test('real upload-part path sums every repeated authorization and child native c
     assert.equal(row.capabilityMs, 5); assert.equal(row.replyMs, 2); assert.equal(row.totalMs, 78);
     assert.equal(rows.filter(row => row.phase === 'folder-timing').length, 1);
 });
+
+test('resource policy preserves connection binding and scoped native CPU feedback; malformed policy never dispatches', async () => {
+ const f = fixture(), rootId = randomUUID();
+ const input = f.input({ action: 'scan-status', rootId, resourceScope: 'connection', resourceLimits: { cpuPercent: 20, transferConcurrency: 2 } });
+ f.run(async (_method, request) => ({ ...request, roots: [], resources: { version: 1, cpuPercent: 60, cpuStatus: 'measured', indexingCpuPercent: 60, sourceCpuPercent: null } }));
+ const result = await f.host.request(f.event, input);
+ assert.deepEqual(f.calls[0].resourceLimits, input.resourceLimits); assert.equal(f.calls[0].resourceScope, 'connection');
+ assert.equal(result.resources.cpuStatus, 'measured'); assert.equal(result.resources.cpuPercent, 60);
+ assert.ok(result.resources.effectiveTransferConcurrency <= 2);
+ const before = f.calls.length;
+ await assert.rejects(f.host.request(f.event, f.input({ ...input, requestId: randomUUID(), resourceLimits: { transferConcurrency: 0 } })));
+ assert.equal(f.calls.length, before);
+});

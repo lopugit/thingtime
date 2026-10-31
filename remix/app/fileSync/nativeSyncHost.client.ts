@@ -2,7 +2,7 @@ import { getElectronBridge } from '../utils/electronBridge';
 import { getNativeBridge } from '../utils/nativeBridge';
 import { requestMobileDevice, supportsMobileDevice } from '../components/Devices/mobileDeviceBridge';
 import { createThingtimeCapabilityChecker } from '../api/utils/capabilities/requireCapability.client';
-import { requestMobileFolders, supportsNativeWriteApprovalCheck } from './mobileFolders.client';
+import { requestMobileFolders, supportsNativeWriteApprovalCheck, supportsNativeResourceLimits } from './mobileFolders.client';
 import { createDesktopFolderHost, type FolderHost } from './desktopFolders.client';
 import { createFolderHostFetch } from './folderHostFetch.client';
 
@@ -24,6 +24,7 @@ export function isNativeSyncAdapterCurrent(adapter: NativeSyncAdapter) {
 /** Uses the current native session, never a copied credential or a UI lifetime.
  * iOS is pinned to its WebView origin; the Mac adapter verifies its selected API. */
 export async function createNativeSyncHost(input: {
+	resourcePolicy?: { resourceLimits: import('./configuration').FileSyncResourceLimits; resourceScope: string; observe(value: import('./resourceGovernor').SyncResourceStatus): void };
 	adapter: NativeSyncAdapter; ownerId: string; deviceId: string; signal: AbortSignal; assertCurrent(): void;
 }): Promise<FolderHost> {
 	const origin = window.location.origin;
@@ -35,6 +36,7 @@ export async function createNativeSyncHost(input: {
 	check();
 	if (input.adapter.platform === 'macos') return createDesktopFolderHost({ ...input, bridge: input.adapter.bridge,
 		rendererOrigin: () => window.location.origin, assertCurrent: check });
+	if (input.resourcePolicy && !supportsNativeResourceLimits(input.adapter.bridge)) throw Error('Update Thingtime before using sync resource limits.');
 	const authorizeDevice: FolderHost['authorizeDevice'] = async (ownerId, deviceId, signal) => {
 		check();
 		if (ownerId !== input.ownerId || deviceId !== input.deviceId) throw Error('The sync device changed.');
@@ -57,7 +59,9 @@ export async function createNativeSyncHost(input: {
 			check();
 			if (ownerId !== input.ownerId) throw Error('The sync account changed.');
 			const combined = AbortSignal.any([input.signal, signal]); combined.throwIfAborted();
-			const result = await requestMobileFolders(ownerId, request, combined, progress, background);
+			const governed = 'rootId' in request && input.resourcePolicy ? { ...request, resourceLimits: input.resourcePolicy.resourceLimits, resourceScope: input.resourcePolicy.resourceScope } : request;
+			const result = await requestMobileFolders(ownerId, governed, combined, progress, background);
+			if (result.resources) input.resourcePolicy?.observe(result.resources);
 			check(); combined.throwIfAborted(); return result;
 		}
 	};

@@ -1,5 +1,18 @@
 # Attachments and media
 
+## iOS incoming shares
+
+`iOS/ShareExtension` supplies the system Share target. `iOS/ShareSupport` owns
+provider representations and the atomic local App Group inbox; the containing
+app drains complete batches into Documents/Shared on launch/foreground. The
+extension accepts arbitrary offered types and batches, preserves provider files
+and Live Photo resources, and never uploads under an implicit account. Normal
+Thingtime upload authorization/accounting applies when users explicitly upload
+the saved files. XcodeGen and the Fastlane archive verifier own embedding,
+signing and App Group validation. Run native importer/inbox tests and
+`iOS/scripts/share-acceptance.sh`; see TESTING's incoming-share checklist and
+[the iOS runbook](../../iOS/README.md#receive-content-from-the-ios-share-sheet).
+
 Cloud JSON sync requests classify HTTP 408/429/5xx as temporary transport waits.
 `syncJobJournal.ts` persists an optional, revision-guarded `retryAt`; automatic
 discovery respects it across restart and repeated wake events. Retry-After is
@@ -75,6 +88,14 @@ recovers durable receipts without touching later edits. This is not an inode-CAS
 primitive: a racing uncoordinated writer is retained and leaves a pending conflict.
 Unsupported providers/volumes refuse. Process-kill, provider and authenticated
 installed-app acceptance remain tracked in the full sync ledger.
+
+`NativeFileDestination.rename` validates both descriptor-relative paths and
+directory anchors, retaining no-follow and exclusive/swap semantics. An older
+host kernel may reject `RENAME_RESOLVE_BENEATH` with `EINVAL`; only that error
+permits retry without the unsupported bit. Validated components and
+`RENAME_NOFOLLOW_ANY` still prevent path escape. Identity, content and recovery
+checks remain mandatory. `NativeFileDestinationTests` cover the compatibility
+path, symlinks, occupied destinations and mutation between attempts.
 
 
 `apple/FileSync/MobileSyncTrash.swift` (under `Sources/AppleFileSync`) provides
@@ -631,3 +652,31 @@ Things, with the existing save-draft Action preserving settings as data.
 Canonical docs and Lopu discovery guidance live in `docs/builderGuide.ts`.
 Run `test:web-platform`, `test:api-capabilities`, `test:vercel-config` and the
 isolated real-browser flow in README; see TESTING's local video checklist.
+
+### Sync upload provenance (2026-10-22)
+
+`fileSync/uploadOrigin.ts` defines closed private original-source metadata.
+Attachment upload-start 1.7.0 persists the approved client-supplied relative path,
+device/root IDs and intended file/folder identity before multipart authority,
+including exact queued retries of older reservations. It never grants native
+access. Private batch preparation 1.2.1 supplies the same metadata from its
+authorized immutable descriptor, including ready/finalizing recovery.
+`api.files` 1.8.1 checks initial publication against that destination. Current
+moves/restores never rewrite the original source. `api.things` 1.40.0 exposes
+provenance only on full owner-session individual detail reads; public, PAT, app
+and list projections omit it. Legacy unbound uploads without an explicit saved
+retry cannot acquire an inferred path. Standalone upload semantics stay intact.
+
+### General local compressor (2026-10-22)
+
+`webPlatform/LocalMediaPipeline.tsx` binds the same media worker to ordinary
+editable child elements through `tt-media-pipeline`. Author the controls directly
+as saved Things; `templateToBlocks` preserves individual Builder identity.
+No new compressor Page/Component definition ships in the application.
+Legacy Web Platform media surfaces mount automatically and read current settings
+on Start. `imageFiles.ts` classifies images without loading codec code into the
+main bundle; `imageAssets.ts` fetches pinned same-origin WASM only;
+`imagePipeline.ts` decodes, auto-orients, resizes, encodes and verifies output
+frames, alpha and timing inside the network-disabled worker. See README for
+format/animation/SVG limits. Run the media/image tests, template-block tests,
+capability coverage and the isolated Chrome acceptance runner.

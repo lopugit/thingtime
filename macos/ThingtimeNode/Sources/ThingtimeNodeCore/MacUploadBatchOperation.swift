@@ -11,19 +11,41 @@ enum MacUploadBatchOperation {
                  "code": .string(code), "retryable": .bool(["temporarily-unavailable", "deadline"].contains(code))])
     }
     private static func read(_ bookmark: Data, _ member: MacUploadBatchDescriptor.Member, _ sha: String? = nil) async throws -> MobileFolderBulkReader.Payload {
-        let task = Task.detached { try MobileFolderBulkReader.read(bookmark: bookmark, expected: member.source, sha256: sha) }
+        let resources = MacSyncResources.current
+        let task = Task.detached {
+            try resources?.source.checkpoint()
+            let value: MobileFolderBulkReader.Payload
+            if let resources { value = try SyncResourceCpuContext.$current.withValue(resources.source) { try resources.source.measure { try MobileFolderBulkReader.read(bookmark: bookmark, expected: member.source, sha256: sha) } } }
+            else { value = try MobileFolderBulkReader.read(bookmark: bookmark, expected: member.source, sha256: sha) }
+            try resources?.source.checkpoint(); return value
+        }
         return try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { task.cancel() })
     }
 
     static func run(_ batch: MacUploadBatchDescriptor, started: TimeInterval, bookmark: Data,
                     check: @escaping @Sendable () async throws -> Void, callback: @escaping Callback) async throws -> JSONValue {
+        let governedPayload = batch.resourceLimits?.uploadBytesPerSecond != nil || batch.resourceLimits?.cpuPercent != nil
         func remaining() throws -> TimeInterval {
             try Task.checkCancellation()
-            let left = 180 - (ProcessInfo.processInfo.systemUptime - started)
+            let left = governedPayload ? TimeInterval.infinity : 180 - (ProcessInfo.processInfo.systemUptime - started)
             guard left > 0 else { throw CancellationError() }; return left
         }
         func call(_ value: JSONValue, seconds: TimeInterval) async throws -> JSONValue {
-            try await check(); let reply = try await callback(value, min(seconds, remaining()))
+            try await check()
+            let reply: JSONValue
+            if seconds == .infinity {
+                let payload = Task { try await callback(value, remaining()) }
+                // A long paced body retains the same short local grant/device/
+                // source-policy checks. Only this payload task can be cancelled.
+                let authority = Task {
+                    while !Task.isCancelled {
+                        do { try await Task.sleep(for: .seconds(1)); try await check() }
+                        catch { payload.cancel(); return }
+                    }
+                }
+                defer { authority.cancel() }
+                reply = try await withTaskCancellationHandler(operation: { try await payload.value }, onCancel: { payload.cancel() })
+            } else { reply = try await callback(value, min(seconds, remaining())) }
             try await check(); _ = try remaining(); return reply
         }
         var digests: [Int: String] = [:], results: [Int: JSONValue] = [:]
@@ -85,7 +107,7 @@ enum MacUploadBatchOperation {
             func add(_ member: MacUploadBatchDescriptor.Member) {
                 group.addTask {
                     try await check(); _ = try remaining()
-                    guard ProcessInfo.processInfo.systemUptime - started < 30 else {
+                    guard governedPayload || ProcessInfo.processInfo.systemUptime - started < 30 else {
                         return Outcome(ordinal: member.ordinal, result: failure(member.ordinal, "deadline"), uploadId: nil, payload: nil)
                     }
                     let ordinal = member.ordinal, sha = expectedDigests[ordinal]!
@@ -100,7 +122,7 @@ enum MacUploadBatchOperation {
                         guard ack == .object(["accepted": .bool(true)]) else { throw MobileFolderStore.Failure.invalid }
                     }
                     try await check()
-                    guard ProcessInfo.processInfo.systemUptime - started < 30 else {
+                    guard governedPayload || ProcessInfo.processInfo.systemUptime - started < 30 else {
                         return Outcome(ordinal: ordinal, result: failure(ordinal, "deadline"), uploadId: nil, payload: nil)
                     }
                     // Reopen and strongly verify AFTER emitting bytes, immediately
@@ -109,10 +131,10 @@ enum MacUploadBatchOperation {
                     catch is CancellationError { throw CancellationError() }
                     catch { return Outcome(ordinal: ordinal, result: failure(ordinal, "source-changed"), uploadId: nil, payload: nil) }
                     try await check()
-                    guard ProcessInfo.processInfo.systemUptime - started < 30 else {
+                    guard governedPayload || ProcessInfo.processInfo.systemUptime - started < 30 else {
                         return Outcome(ordinal: ordinal, result: failure(ordinal, "deadline"), uploadId: nil, payload: nil)
                     }
-                    let ack = try BatchJSON.object(await call(.object(["kind": .string("put-ready"), "ordinal": .number(Double(ordinal)), "sha256": .string(sha)]), seconds: 60), keys: ["status", "code", "payloadBytes"])
+                    let ack = try BatchJSON.object(await call(.object(["kind": .string("put-ready"), "ordinal": .number(Double(ordinal)), "sha256": .string(sha)]), seconds: governedPayload ? .infinity : 60), keys: ["status", "code", "payloadBytes"])
                     let status = try BatchJSON.string(ack, "status")
                     guard ["accepted", "unknown", "failed"].contains(status) else { throw MobileFolderStore.Failure.invalid }
                     if status == "failed" {
@@ -128,7 +150,7 @@ enum MacUploadBatchOperation {
                     return Outcome(ordinal: ordinal, result: .null, uploadId: uploadIDs[ordinal], payload: payload)
                 }
             }
-            while next < min(16, selected.count) { add(selected[next]); next += 1 }
+            while next < min(batch.resourceLimits?.transferConcurrency ?? 16, 16, selected.count) { add(selected[next]); next += 1 }
             for try await outcome in group {
                 results[outcome.ordinal] = outcome.result
                 if let id = outcome.uploadId { verifyUploads[outcome.ordinal] = id }

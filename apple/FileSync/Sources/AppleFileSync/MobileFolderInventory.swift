@@ -102,6 +102,7 @@ public struct MobileFolderInventory: Sendable {
     private typealias Failure = MobileFolderStore.Failure
     private let directory: URL
     private let commanderIndexer: URL?
+    public var supportsResourceGovernance: Bool { commanderIndexer != nil }
     public init(directory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("ThingtimeFolderInventories", isDirectory: true), commanderIndexer: URL? = nil) {
         self.directory = directory
@@ -203,7 +204,8 @@ public struct MobileFolderInventory: Sendable {
     /// Private provisional rows are committed before the host's final live
     /// authorization check. Only sealBackup makes them readable.
     public func prepareBackup(_ scope: Scope, id: String, generation: String, bookmark: Data, excludedPaths: [String] = [], ignoreRules: String? = nil,
-                              ignored: @Sendable (Int) -> Void = { _ in }, progress: @Sendable (Int, Int) -> Void = { _, _ in }) throws -> Capture {
+                              resourceLimits: SyncResourceLimits? = nil, resourceUsage: @Sendable (CommanderResourceUsage) -> Void = { _ in }, sourceCpuMeter: SyncSourceCpuMeter? = nil, ignored: @Sendable (Int) -> Void = { _ in }, progress: @Sendable (Int, Int) -> Void = { _, _ in }) throws -> Capture {
+        if resourceLimits != nil && commanderIndexer == nil { throw Failure.unavailable }
         guard UUID(uuidString: generation) != nil else { throw Failure.invalid }
         let exclusions = try MobileFolderReader.canonicalExclusions(excludedPaths), rules = try MobileFolderIgnoreRules(ignoreRules).text
         try MobileFolderReader.checkAccess(bookmark: bookmark)
@@ -233,7 +235,7 @@ public struct MobileFolderInventory: Sendable {
                 #if os(macOS)
                 if let helper = commanderIndexer {
                     try MobileFolderReader.captureBackupWithCommander(helper: helper, bookmark: bookmark, excludedPaths: exclusions,
-                        ignoreRules: rules, ignored: ignored, append: append, skip: skip)
+                        ignoreRules: rules, resourceLimits: resourceLimits, resourceUsage: resourceUsage, sourceCpuMeter: sourceCpuMeter, ignored: ignored, append: append, skip: skip)
                     return
                 }
                 #endif
@@ -390,7 +392,7 @@ public struct MobileFolderInventory: Sendable {
     }
     /// The helper validates each directory namespace before emitting eligible
     /// entries. It remains the only scanner, with host path/version revalidation.
-    public func runStream(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String], ignoreRules: String?, control: StreamControl? = nil, wake: @Sendable () -> Void, authorize: @Sendable () throws -> Void = {}) throws {
+    public func runStream(_ scope: Scope, id: String, bookmark: Data, excludedPaths: [String], ignoreRules: String?, resourceLimits: SyncResourceLimits? = nil, resourceUsage: @Sendable (CommanderResourceUsage) -> Void = { _ in }, sourceCpuMeter: SyncSourceCpuMeter? = nil, control: StreamControl? = nil, wake: @Sendable () -> Void, authorize: @Sendable () throws -> Void = {}) throws {
         #if os(macOS)
         _ = try streamChanges(scope, id: id, bookmark: bookmark, excludedPaths: excludedPaths, ignoreRules: ignoreRules, afterSequence: 0)
         // Keep one writer open for the scan. Closing the final WAL connection
@@ -423,7 +425,7 @@ public struct MobileFolderInventory: Sendable {
         guard let helper = commanderIndexer else { throw Failure.unavailable }
         let internalExclusions = try streamInternalExclusions(bookmark: bookmark)
         try MobileFolderReader.captureBackupWithCommander(helper: helper, bookmark: bookmark, excludedPaths: excludedPaths,
-            ignoreRules: ignoreRules, streaming: true, internalExclusions: internalExclusions, ignored: {}, append: { entry in
+            ignoreRules: ignoreRules, streaming: true, resourceLimits: resourceLimits, resourceUsage: resourceUsage, sourceCpuMeter: sourceCpuMeter, internalExclusions: internalExclusions, ignored: {}, append: { entry in
                 pending.append(entry)
                 // A WAL commit makes each ready result visible without waiting for
                 // the next file hash; SQLite checkpoints bound its journal.

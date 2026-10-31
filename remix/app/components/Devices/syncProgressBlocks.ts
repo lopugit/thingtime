@@ -1,3 +1,4 @@
+import { parseSyncResourceStatus } from '~/fileSync/resourceGovernor';
 import { parsePriorityReadiness } from '~/fileSync/priorityReadiness';
 import type { WebpageBlock } from '../Builder/webpageBlocks';
 import type { ForegroundSyncProgress } from '~/fileSync/foregroundSync';
@@ -157,4 +158,30 @@ export function priorityReadinessDisplay(progress: ForegroundSyncProgress | unde
 		priorityCandidate: readiness ? `Last checked candidate: ${readiness.candidateOrdinal === null ? 'not measured' : `saved priority ${readiness.candidateOrdinal.toLocaleString()}`}${readiness.candidateSequence === null ? '' : ` · input observation ${readiness.candidateSequence.toLocaleString()}`}.${readiness.reserved ? ' An operation is reserved or in flight.' : ''}` : '',
 		priorityStatus: savedObservation + readinessStatus + queueStatus,
  };
+}
+
+/** Separate saved document so adding resource diagnostics preserves existing
+ * customized progress layouts. Each effective field is selectable in Builder. */
+export const syncResourceStatusBlocks: WebpageBlock[] = [{ id: 'sync-resource-status', type: 'element', tag: 'section', props: { 'aria-label': 'Effective sync resources' }, css: { 'min-width': '0', 'overflow-wrap': 'anywhere', padding: '12px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '12px' }, children: [
+ element('sync-resource-status-title', 'h4', 'Effective sync resources'),
+ element('sync-resource-status-cpu', 'p', '{syncResources.cpu}'),
+ element('sync-resource-status-transfers', 'p', '{syncResources.transfers}'),
+ element('sync-resource-status-indexing', 'p', '{syncResources.indexing}'),
+ element('sync-resource-status-upload', 'p', '{syncResources.upload}'),
+ element('sync-resource-status-download', 'p', '{syncResources.download}'),
+ element('sync-resource-status-help', 'p', '{syncResources.help}')
+]}];
+export function syncResourceStatusDisplay(progress: ForegroundSyncProgress | undefined, state: SyncProgressState) {
+ let resources: ReturnType<typeof parseSyncResourceStatus> | undefined;
+ try { if (progress?.resources) resources = parseSyncResourceStatus(progress.resources); } catch { /* Invalid saved data stays unknown. */ }
+ const saved = state !== 'running', prefix = saved ? 'Last reported ' : '';
+ const pace = (value?: number) => value === undefined ? 'No reported rate cap' : `${value.toLocaleString(undefined, { maximumSignificantDigits: 6 })} bytes/s cap`;
+ return { syncResources: {
+  cpu: resources?.cpuStatus === 'measured' ? `${prefix}sync CPU: ${resources.cpuPercent!.toLocaleString(undefined, { maximumFractionDigits: 2 })}% of total CPU capacity.` : 'Sync CPU measurement unavailable; unrelated app or device CPU is not substituted.',
+  transfers: resources ? `${prefix}effective simultaneous file/folder transfers: ${resources.effectiveTransferConcurrency.toLocaleString()}.` : 'Effective transfer concurrency unavailable.',
+  indexing: resources ? `${prefix}effective indexing workers: ${resources.effectiveIndexingConcurrency.toLocaleString()}.` : 'Effective indexing concurrency unavailable.',
+  upload: `${prefix}upload pace: ${pace(resources?.uploadBytesPerSecond)}.`,
+  download: `${prefix}download pace: ${pace(resources?.downloadBytesPerSecond)}.`,
+  help: resources ? `${saved ? 'Saved observation; this is not a current CPU measurement. ' : ''}Effective ceilings may be lower than your settings because of hardware, safety or CPU backpressure. Pace caps are ceilings, not measured throughput.` : 'No effective resource observation has been reported for this run.'
+ } };
 }

@@ -315,8 +315,7 @@ public final class MobileSyncTrash: @unchecked Sendable {
                 try Task.checkCancellation(); try exact(source, expected: expected)
                 if let parentExpected { guard try parentStamp(parent, expected: parentExpected) == parentExpected else { throw Failure.changed } }
                 try beforeMove?()
-                let flags = UInt32(RENAME_EXCL | RENAME_NOFOLLOW_ANY | RENAME_RESOLVE_BENEATH)
-                guard renameatx_np(root, request.operation.mutation.path, fd, "retained", flags) == 0 else { throw Failure.changed }
+                try NativeFileDestination.rename(root, request.operation.mutation.path, fd, "retained", flags: UInt32(RENAME_EXCL))
                 try afterMove?()
                 let result = try recover(fd, root: root, parent: parent, row: &row, captureParent: true)
                 guard let receipt = result.receipt else { throw Failure.changed }; return receipt
@@ -384,8 +383,7 @@ public final class MobileSyncTrash: @unchecked Sendable {
                         row.restoration = RestoreState(request: restore, receipt: nil); try NativeFileJournal.save(row, fd)
                     }
                     try Task.checkCancellation(); try exact(file, expected: restore.expected, restoring: true)
-                    let flags = UInt32(RENAME_EXCL | RENAME_NOFOLLOW_ANY | RENAME_RESOLVE_BENEATH)
-                    guard renameatx_np(fd, "retained", root, restore.path, flags) == 0 else { throw Failure.changed }
+                    try NativeFileDestination.rename(fd, "retained", root, restore.path, flags: UInt32(RENAME_EXCL))
                     try afterRestore?()
                 } else { guard row.restoration != nil else { throw Failure.changed } }
                 guard let target = try NativeFileDestination.openDestination(root, path: restore.path) else { throw Failure.changed }

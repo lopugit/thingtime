@@ -2,6 +2,7 @@
 import Foundation
 import Darwin
 
+
 extension MobileFolderReader {
     private struct CommanderRequest: Encodable {
         let version = 1
@@ -10,10 +11,16 @@ extension MobileFolderReader {
         let rootIdentity: String
         let excludedPaths: [String]
         let ignoreRules: String?
-        let resourceLimits = Limits()
+        let resourceLimits: Limits
+        let resourceFeedback: Bool
+        let cpuBudgetShares: Int
         struct Limits: Encodable {
-            let maxThreads = 4, maxParallelism = 4, maxOpenDirectories = 16
-            let maxCpuPercent = 60, maxMemoryMiB = 512
+            let maxThreads: Int, maxParallelism: Int, maxOpenDirectories: Int
+            let maxCpuPercent: Int, maxMemoryMiB = 512
+            init(_ policy: SyncResourceLimits?) {
+                maxThreads = min(64, policy?.indexingConcurrency ?? 4); maxParallelism = maxThreads
+                maxOpenDirectories = max(16, min(256, maxThreads)); maxCpuPercent = policy?.cpuPercent ?? 60
+            }
         }
     }
     private struct CommanderEvent: Decodable {
@@ -22,6 +29,7 @@ extension MobileFolderReader {
         let streaming: Bool?
         let entry: Entry?
         let gap: Gap?
+        let usage: CommanderResourceUsage?
         struct Gap: Decodable { let path: String?; let reason: ScanFailure.Reason; let scope: BackupGap.Scope }
     }
 
@@ -29,7 +37,8 @@ extension MobileFolderReader {
     /// database. Private pipes provide backpressure; the host keeps the bookmark
     /// scoped and revalidates returned paths before retaining provisional rows.
     static func captureBackupWithCommander(helper: URL, bookmark: Data, excludedPaths: [String], ignoreRules: String?,
-                                          streaming: Bool = false, internalExclusions: [String] = [], ignored: () throws -> Void, append: (Entry) throws -> Bool, skip: (BackupGap) throws -> Void, indexed: () throws -> Void = {}, tick: () throws -> Bool = { false }) throws {
+                                          streaming: Bool = false, resourceLimits: SyncResourceLimits? = nil, resourceUsage: (CommanderResourceUsage) -> Void = { _ in }, sourceCpuMeter: SyncSourceCpuMeter? = nil, internalExclusions: [String] = [], ignored: () throws -> Void, append: (Entry) throws -> Bool, skip: (BackupGap) throws -> Void, indexed: () throws -> Void = {}, tick: () throws -> Bool = { false }) throws {
+        try resourceLimits?.validate()
         let supplied = try canonicalExclusions(excludedPaths), internalPaths = try internalExclusions.flatMap { try canonicalExclusions([$0]) }
         let exclusions = Array(Set(supplied + internalPaths)).sorted(), rules = try MobileFolderIgnoreRules(ignoreRules)
         try access(bookmark) { root in
@@ -53,7 +62,7 @@ extension MobileFolderReader {
                 }
             }
             let request = CommanderRequest(streaming: streaming ? true : nil, root: String(cString: path), rootIdentity: "\(rootInfo.st_dev):\(rootInfo.st_ino)",
-                excludedPaths: exclusions, ignoreRules: rules.text)
+                excludedPaths: exclusions, ignoreRules: rules.text, resourceLimits: .init(resourceLimits), resourceFeedback: resourceLimits != nil, cpuBudgetShares: resourceLimits?.cpuPercent == nil ? 1 : 3)
             var requestData = try JSONEncoder().encode(request); requestData.append(10)
             try input.fileHandleForWriting.write(contentsOf: requestData)
             if !streaming { try input.fileHandleForWriting.close() }
@@ -91,6 +100,8 @@ extension MobileFolderReader {
                     let value = BackupGap(path: gap.path, reason: gap.reason, scope: gap.scope)
                     guard value.path == gap.path, value.reason == gap.reason, value.scope == gap.scope else { throw Failure.storage }
                     try skip(value)
+                case "resources":
+                    guard resourceLimits != nil, let usage = event.usage else { throw Failure.storage }; resourceUsage(usage)
                 case "ignored": try ignored()
                 case "indexed":
                     guard streaming else { throw Failure.storage }; try indexed()
@@ -113,7 +124,11 @@ extension MobileFolderReader {
                 if count < 0 { if errno == EAGAIN || errno == EINTR { continue }; throw Failure.storage }
                 bytes.append(contentsOf: buffer.prefix(count))
                 while let newline = bytes.firstIndex(of: 10) {
-                    try consume(bytes.subdata(in: bytes.startIndex..<newline)); bytes.removeSubrange(bytes.startIndex...newline)
+                    let data = bytes.subdata(in: bytes.startIndex..<newline)
+                    if let sourceCpuMeter {
+                        try sourceCpuMeter.measure({ try consume(data) }, admit: false); try sourceCpuMeter.checkpoint()
+                    } else { try consume(data) }
+                    bytes.removeSubrange(bytes.startIndex...newline)
                 }
                 guard bytes.count <= 65_536 else { throw Failure.storage }
             }

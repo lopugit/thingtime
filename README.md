@@ -4,6 +4,14 @@ https://thingtime.com
 
 ### Agent browsers and tasks
 
+ChatGPT/Codex private lifecycle reporting uses the existing saved workspace
+through the [MCP reporting gateway](docs/agent-reporting.md). Authorize the
+independent `agents.report` permission once; routine calls then reuse a distinct
+task Character, saved Actions and stable request receipts. Existing Things
+permissions are not upgraded automatically. Forks supply their own private
+workspace references and external test fixtures, with no account-specific
+definitions or credentials committed.
+
 Thingtime for Mac includes task-owned browser installs, claims and a live
 viewer, with isolated, IP-restricted and unrestricted network settings. The
 Agent work records, dashboards, schemas, components and Actions are ordinary saved
@@ -26,6 +34,15 @@ storage accounting. No new provider keys or environment secrets are required.
 Subspace membership remains authoritative for message access. Moderators can
 place accessible Things above posts or in the sidebar; each visitor still needs
 the referenced Thing's own permission.
+
+Human-facing Thing data declares `renderComponent` at its displayed data level:
+either `{ "id": "<accessible-component-id>" }` or a Component definition such as
+`{ "render": { "tag": "p", "children": ["{text}"] } }`.
+The shared `ThingView` binds editable fields directly and through the `thing`
+alias. References retain their own access checks, and display does not execute
+Component sources or Actions. Data inspection is an explicit choice. Saved
+Component and Webpage Things keep their canonical definitions. See the
+[embed rendering contract](docs/feature-map/posts-comments-and-feed.md#subspace-messages-and-embedded-things).
 
 Run `npm --prefix remix run test:subspace-messages-acceptance` for the disposable
 local API acceptance harness. Browser acceptance uses its `--ui` option and a
@@ -56,12 +73,35 @@ and `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://localhost:<web port>`.
 This local adapter refuses deployed/Vercel environments. No new provider secrets
 are needed beyond the existing vault and private object storage configuration.
 
-Native system AutoFill and passkey creation are being delivered separately in
-[PR #996](https://github.com/lopugit/thingtime/pull/996). They require signed Apple
-credential-provider bundles, provisioning and device verification. This web
-release does not change the existing desktop/iOS packaging or claim OS AutoFill
-availability. TOTP QR imports, generated codes and password transfers work here
-without native installation.
+Password generation needs browser WebCrypto and no external provider account.
+Generator settings are account/origin scoped; generated values remain in the
+masked draft until saved. URL icons require anonymous HTTPS CORS from the image
+host; uploads use the existing encrypted attachment configuration above. No icon
+proxy credentials or third-party favicon service are required.
+
+The drawer now has **Password manager** and a dedicated `/settings/passwords`
+category. Thingtime sign-in passkeys remain under Security. The web vault works
+on supported secure browser origins; arbitrary-site passkey creation/sign-in also
+needs an installed provider. For Chromium, run
+`npm --prefix remix run build:password-extension`, extract
+`remix/public/downloads/thingtime-passwords-extension.zip`, and use **Load unpacked**
+in an isolated Chrome/Chromium profile. Enable the extension in its popup and select
+your trusted Thingtime/fork HTTPS origin; explicit localhost/127.0.0.1 origins are
+supported for isolated local development. Reload existing relying-party tabs.
+The extension is off by default, needs no extension-specific secret, and is not a
+store release. Firefox, Safari and mobile browser integration are unverified;
+unsupported WebAuthn options and native-object requirements may require the
+browser's other provider. See [extension setup and limits](browser-extension/README.md).
+A working web vault alone does not prove passkey registration on another website.
+
+Native system AutoFill and passkey registration are implemented in the Apple
+credential provider. Install a properly signed/provisioned provider and enable
+Thingtime in the operating system's Password AutoFill settings. Registration
+starts from the destination website and may require device authentication. The
+web Passkeys guide connects through the existing native bridge when available;
+this change does not modify native packaging. Verify an actual registration and
+sign-in on the installed device before claiming provider availability. See the
+[password manager contract](docs/password-manager.md#native-password-autofill).
 
 ### Unified Timeline (implementation in progress)
 
@@ -1492,15 +1532,27 @@ on the same document. Docs: `/docs/api` → things.
 
 ## MongoDB
 
-MongoDB powers the app status checks and database-backed API routes. Local
-development does not require MongoDB env by default: when
-`MONGODB_CONNECTION_STRING` is missing, Vite and Nitro forward same-origin API
-requests to `https://thingtime.com` with the same method, path, query, headers,
-cookies, and payload. Upstream auth cookies are rewritten for local HTTP so
-zero-env localhost login can persist through the proxy.
+MongoDB powers database-backed API routes. Incomplete local or deployed servers
+return a configuration error; they do not silently forward to production. The
+installed desktop shell has its own explicit selected-API bridge. For one active
+database/API deployment per environment, see the
+[environment gateway configuration and rollout](docs/environment-api-gateway.md).
+That runbook covers stable aliases, separate environment secrets, capability
+negotiation, `proxy` and opt-in `dedicated` connection modes, promotion/rollback
+and gradual pool draining. Vercel defaults to proxy mode; local and self-hosted
+servers without gateway settings retain direct connections. Dedicated mode
+owns its MongoDB pools but uses the configured environment database, so it does
+not imply database isolation or an Atlas tier change. The intended mapping is
+`thingtime.com`/production to production data, `dev.thingtime.com`/develop to
+development data, and ordinary PR previews to `master.previews.thingtime.com` /
+preview on development data. PR builds keep their existing custom develop
+credential scope; the publisher explicitly selects the logical preview gateway
+without exposing unrelated standard-preview settings to branch code. A recent
+configuration audit found previews and
+custom develop already share the development cluster, separate from production;
+the master preview alias and gateway activation are still pending.
 
-Set these variables only when you want this checkout or deployment to serve API
-requests from its own MongoDB instead of falling back to Thingtime production:
+Configure a self-hosted API or the environment gateway owner with:
 
 ```sh
 MONGODB_CONNECTION_STRING="mongodb+srv://<user>:<db_password>@<cluster>/<database>?retryWrites=true&w=majority"
@@ -3542,6 +3594,15 @@ API tokens unprefixed and server-only.
 
 ## Native iOS TestFlight web URL
 
+The iOS app includes a **Thingtime** system Share extension for incoming text,
+links, media and files. Shares are saved locally; opening Thingtime makes them
+available in **Files → On My iPhone → Thingtime → Shared**, where the normal
+upload picker can select them. For forks, register `<iPhone bundle ID>.share`
+with the same App Group as the containing app and its own provisioning profile.
+See [incoming shares and native verification](iOS/README.md#receive-content-from-the-ios-share-sheet).
+An older installed native build needs an app update to gain this share target;
+changing the embedded website cannot install an extension.
+
 Lopu voice requires build 27 or later; build 25's general native bridge did not
 include its recorder or Live Activity widget. Voice support is negotiated with
 `lopuVoiceVersion`, separately from the shell version. For a fork's signed build,
@@ -4490,36 +4551,52 @@ configured. Local development without a configured secret uses an ephemeral
 key, so refreshing comments after a server restart starts a new cursor chain.
 
 
-### Reusable local video tools
+### Reusable local image and video tools
 
-Install **Local video tools** (`media-tools`) from Builder's app suites on an
-origin advertising `api.webpages-suites-install >= 1.4.0`. The normal installation
-creates private, owned Page, Component and Action Things. Its `tt-web-platform`
-program stores the document, CSS, selectors and editable encoding settings;
-**Save edited component** persists the edited program and current defaults for
-reuse. Neither the selected file nor the output bytes are saved by this Action.
-See `/docs/builder#local-media` for the declarative contract and capability
-inspection guidance shared with Lopu.
+Author image/video tools directly as saved Thingtime Pages and Components, using
+ordinary editable child elements inside the reusable `tt-media-pipeline` adapter.
+This framework release does not author or install a compressor page. The legacy
+`media-tools` suite keeps its existing video definitions. New intrinsic blocks
+require `api.things >= 1.41.0`, `api.things-update >= 1.12.0` and
+`api.webpages-resolve >= 1.8.0` on the selected origin. Save through ordinary
+Builder controls. Selected files and encoded output stay transient on device.
+Existing saved `tt-web-platform` media programs mount controls automatically and
+retain their save Action.
 
-Encoding runs on the selected device through WebCodecs and the pinned
-[Mediabunny 1.61.6 source](https://github.com/Vanilagy/mediabunny/tree/v1.61.6).
-Its unmodified source is MPL-2.0; the shipped notice is at
-`/platform/mediabunny-LICENSE.txt`. No FFmpeg service, provider key, upload,
-external request or additional secret is required. Existing account/database
-configuration is only needed to install or save reusable Things. HTTPS (or
-localhost) and browser codec support are required. MP4 uses H.264/AAC; WebM uses
-VP9/Opus. Unsupported sources or codecs produce an error, including unsupported
-audio rather than silently dropping it. Only primary video/audio are retained;
-extra tracks, subtitles and metadata are omitted. Output can be larger than input;
-the receipt reports actual byte counts. Large files depend on available memory.
+Images use pinned [ImageMagick WASM](https://github.com/dlemstra/magick-wasm)
+and [resvg WASM](https://github.com/yisibl/resvg-js), shipped as same-origin build
+assets. Actual tested inputs include JPEG, PNG, WebP, GIF, BMP, TIFF, ICO, HEIC and
+static SVG paths. Other bundled raster decoders may work; unsupported inputs fail
+explicitly. Output choices are WebP (Automatic), JPEG, PNG, AVIF and GIF; quality
+controls lossy formats and PNG stays lossless. Aspect ratio and orientation are
+preserved, without upscaling. Metadata is stripped. Transparent JPEG conversion
+requires choosing a background explicitly. Animation keeps frames/timing/loops
+in supported WebP/GIF outputs; APNG, multi-page/layered images and incompatible
+animation outputs are refused rather than flattened. SVG is rasterized and only
+the supported static subset is accepted: no text requiring fonts, embedded or
+external images, scripts or animation. Transparent GIF output is refused in favor
+of WebP. WASM and available device memory constrain very large jobs; cancellation
+terminates the worker and leaves the original unchanged. Output can be larger;
+actual before/after byte counts are always reported.
 
-The fixed encoding worker runs on the secure host because opaque iframes cannot
-access WebCodecs. The editable document remains in its opaque sandbox. The host
-validates file messages against that frame and run, resolves settings from its
-validated saved program, and terminates work on cancel, replacement or unmount.
-Custom hosts must serve `/assets/mediaWorker-*.js` with `mediaWorkerCsp` from
-`remix/scripts/csp.mjs` (no network or child workers). Vite and Vercel configure
-this automatically; `verify:vercel-output` asserts the worker and scoped header.
+Videos continue through the pinned
+[Mediabunny 1.61.6 source](https://github.com/Vanilagy/mediabunny/tree/v1.61.6)
+and browser WebCodecs, using MP4 H.264/AAC or WebM VP9/Opus when supported.
+Only primary video/audio tracks are retained; extra tracks, subtitles and
+metadata are omitted. Audio is never silently removed. The MPL-2.0 Mediabunny
+source notice remains at `/platform/mediabunny-LICENSE.txt`; image-engine notices
+are in `remix/THIRD_PARTY_NOTICES.md`.
+
+No upload, server encoder, external codec CDN, provider key or new secret is
+required. Existing account/database configuration is needed only to install or
+save Things. Selected and output bytes remain local. The host fetches only the
+public bundled WASM engines, then passes their bytes to a fixed terminable worker
+whose CSP denies network and child workers. `wasm-unsafe-eval` is scoped to that
+worker's policy, not the application shell; it enables WebAssembly compilation,
+not authored JavaScript. ImageMagick denies external delegates and coders; its
+virtual filesystem has only codec-internal temporary memory paths. Custom hosts
+must serve `/assets/mediaWorker-*.js` with `mediaWorkerCsp` from
+`remix/scripts/csp.mjs`. Legacy editable documents remain opaque sandboxed frames.
 
 Browser regression on macOS: install FFmpeg/ffprobe, a task-owned Chrome for
 Testing binary and Playwright outside the repository. Set `PLAYWRIGHT_MODULE`
@@ -4851,6 +4928,39 @@ now edits connections through this API. For a browser-only regression, open
 production editor with synthetic API/native responses and never accesses files.
 Native approval persistence and transfer workers remain in the
 [full sync acceptance ledger](docs/mobile-file-sync.md).
+
+Optional per-connection resource limits use configuration version 3. Negotiate
+`api.things` 1.39.0 and `api.file-sync-batches` 1.2.0 against the selected origin
+before saving/activating them, and require the native `fileResourceLimitsVersion`
+1.0.0 capability before execution. Upload/download ceilings are decimal bit rates
+in the editor (Kbps/Mbps/Gbps), stored as bytes per second and shared across that
+connection's transfers. Transfer and index concurrency are maximums, not promises
+of parallelism; host safety and CPU backpressure can lower the effective values.
+Blank controls preserve existing defaults. CPU percent is an averaged upper
+budget normalized to total available machine CPU, attributed to this connection's
+indexer, source IO and transport; it does not change other apps' priorities.
+The initial implementation conservatively allocates one third of that CPU budget
+to each scope and does not borrow unused shares. Unsupported native clients fail
+closed rather than silently ignoring limits. CPU-limited downloads and two-way
+sync additionally negotiate `api.attachment-content` 1.17.0 and native
+`fileDownloadVersion` 1.0.0 before admission. The authenticated content endpoint
+returns a private, no-store, 60-second signed target for the exact stored object
+version and signed byte range. The host resolves that target independently and
+the task-owned transport downloads directly without copying account cookies or
+processing payload bytes in the renderer. Targets are ephemeral and never saved
+in progress or journals. Custom storage providers must implement the optional
+`signDownloadRange` adapter; unsupported providers fail closed. The S3 adapter
+reuses the configured credentials and existing versioned GetObject permission.
+No new secret or provider setting is
+needed. Direct object transfers retain existing scoped upload authorization.
+
+Pause cancels current work immediately and saves a per-connection stop independently
+of progress refreshes. Resume is explicit. A failed pause save is reported; the
+current process blocks automatic restart, but reopening may recover the old saved
+job. Keep the device folder selected to resume its journaled progress. Intentional
+rate/CPU waits do not consume network-stall deadlines; actual stalled IO remains
+bounded, and cancelling releases unused pacing reservations before Resume.
+
 
 
 ### Running a foreground mobile folder upload
@@ -6260,6 +6370,34 @@ and provisioning contracts. `CODE_SIGNING_ALLOWED=NO` is for isolated compilatio
 only and does not establish installed AutoFill or Keychain acceptance. Never
 install an unsigned helper over a working signed app.
 
+For an isolated native helper compilation, set all five overrides together:
+`THINGTIME_PASSWORD_HOST_BUNDLE_ID`, `THINGTIME_PASSWORD_PROVIDER_BUNDLE_ID`,
+`THINGTIME_PASSWORD_KEYCHAIN_GROUP`, `THINGTIME_PASSWORD_STAGING_APP` and
+`THINGTIME_PASSWORD_BUILD_DIR`. Use a distinct host ID such as
+`com.example.thingtime.passwords.dev`, provider ID `<host-id>.provider`, and a
+private Keychain group ending in `.<host-id>`. Staging/build paths must be absolute,
+distinct from the canonical outputs, and outside every `Applications` directory.
+For unsigned compilation set `THINGTIME_NODE_SIGNING_MODE=unsigned`; a signed
+development run still needs its own provisioned identity and independent test
+session. Do not install or register an unsigned fixture as the user's provider.
+The visible host/provider name is Thingtime; existing production bundle IDs,
+Keychain group and `Thingtime Passwords.app` packaging path remain unchanged.
+Packaged verification requires resolved Thingtime display/short names and matching
+host/provider versions. The host uses bundled name localization so its physical
+`Thingtime Passwords.app` filename and identity remain stable. On macOS prefer the native provider in Chrome; the
+Thingtime browser adapter remains optional and does not talk to the native host.
+An enabled provider needs a saved matching RP passkey before a site sign-in entry
+can appear. Other browser extensions' passkey offers can intercept this flow;
+macOS and the browser control provider order. See [provider setup and discovery](docs/password-manager.md#native-progress-recovery-and-naming).
+
+The desktop bridge reports `passwordsVersion` 1.1.0 when the bundled host supports
+read-only connection status. Password manager and Passwords settings then show one
+Connect/Disconnect control based on saved owner/origin linkage. Older installed
+bridges show an update instruction. An extension-only upgrade does not provide
+this host/Electron capability. Status reads do not contact the server or establish
+that macOS AutoFill is enabled; verify those requirements separately. Keep an
+existing custom host's OAuth/login behavior when updating native components.
+
 ### Commander-backed Mac backup indexing
 
 The signed macOS node bundles the repository's `commander-indexer` Rust binary.
@@ -6494,3 +6632,107 @@ No source watermark or baseline is advanced by this recovery decision.
 These changes target folder-constrained file frontiers. Controlled tests and
 isolated native/Mongo fixtures are distinct evidence; installed same-job
 throughput and byte-identical recovery remain release acceptance requirements.
+# GitHub-built Vercel deployments
+
+Thingtime builds production, custom environments and previews on standard
+GitHub-hosted Ubuntu runners. Vercel hosts the resulting Build Output API
+artifact; it does not compile application source. The protected implementation
+lives on `github-actions` in `.github/workflows/deploy-vercel-prebuilt.yml`.
+Product branches carry a thin listener only. Existing PR preview controllers
+already use the same separate build/publish pattern.
+
+`main` maps to production, branches matching Vercel's custom-environment
+matchers map to that environment (`develop` today), and other product branches
+map to Preview. The default-branch listener also observes requested push runs
+of Web CI and Lopu CodeQL so older branches need not contain the new listener.
+Duplicate ready SHAs are skipped. Deleted, stale and fork PR events never
+authorize a deployment. Use **Actions → Vercel prebuilt deployments → Run
+workflow**, on `main`, to deploy a branch manually; `auto` selects its target.
+Production always requires the current `main` head. Use `preview` explicitly
+to test the production branch without moving production.
+
+Fork setup: create a GitHub environment named `vercel-prebuilt-control`, restrict
+it to the default branch, add `VERCEL_DEPLOY_TOKEN` as an environment secret,
+and set non-secret environment variables `VERCEL_PROJECT_ID`,
+`VERCEL_PROJECT_NAME`, `VERCEL_TEAM_ID` and `VERCEL_TEAM_SLUG` for your own project.
+Keep deployment credentials out of repository-level secrets and build jobs.
+Point reusable workflow references at your protected controller branch.
+Disconnect Vercel's native Git integration and remove its source deploy hooks
+after proving a GitHub-built deployment. Keep `git.deploymentEnabled: false`
+and the always-skip ignore command as repository safeguards. Existing runtime
+variables, vault selection, regions, domains and production cron definitions
+remain managed by their normal contracts. The publisher copies only regions,
+Fluid settings and production cron definitions from the immutable source
+configuration; it never executes source in its credential-bearing job.
+
+See [Vercel deployment references](VERCEL_DEPLOYMENTS.md) for the project and
+verification receipts. Standard Actions usage for this public repository is
+subject to GitHub's current plan terms; Vercel hosting/runtime charges remain.
+
+### Saved Mapbox map applications
+
+A saved Builder app can use the `tt-mapbox` viewport and the origin-scoped
+`api.maps` 1.0.0 operations. Save your own Mapbox token in the private Thingtime
+Vault and configure its entry ID (`<owned-vault-entry-id>`) in the saved app.
+The browser map requires a public `pk` token; never put secret tokens in page
+definitions. The map SDK and CSS are staged from the pinned npm package as same-origin app assets; browser
+tile/style requests still go directly to Mapbox service origins. Configure a
+style URL from your own Mapbox Studio account.
+Autocomplete and live optimization require the corresponding provider access;
+saving selected geocodes additionally requires Mapbox Permanent Geocoding
+entitlement and its storage conditions. No new Vercel provider-key variable is
+needed. Standard Mapbox navigation output cannot be cached. See
+[editable maps and routing](docs/maps.md) for operation contracts and verification.
+
+### Storage recovery and production checks
+
+See [account storage recovery](docs/storage-recovery.md) for the 100 MiB pending
+accounting budget, the existing cron/admin recovery entry point, private
+controller setup and pre-merge/deployment/runtime verification. It reuses the
+existing home MongoDB replica set, scheduler secret and protected Vercel
+controller environment; no additional application secret is required.
+
+### Preview cleanup policy
+
+Administrators use **Admin → Preview retention** (`/admin/preview-retention`) or
+Settings → Admin to save Vercel cleanup and PR liveliness rules. **Edit layout**
+opens the existing Builder: labels, controls, descriptions, buttons and containers
+are individual editable blocks. **Save layout** persists the intended account's
+private settings webpage through the Things API, independently of **Save retention
+rules**, which updates the admin policy. Both placements reuse that same saved
+layout; live operations pause while editing. The native bundled UI negotiates
+the selected API's public manifest through the existing scoped transport; private
+policy/layout operations retain the authenticated local proxy and actor, data-plane
+and selected-origin fences. Defaults enable
+cleanup for deployments with no open PR, with zero grace; superseded active-PR
+cleanup and inactivity expiry are off. Grace periods are whole hours. Tagged
+previews count closed-PR grace from the later of creation and PR closure;
+untagged branch snapshots use creation age because historical closure time may
+be unknown. Optional open-PR inactivity uses GitHub `updated_at`, expires that
+PR's previews and suspends publishing until activity resumes; it never closes
+or edits the PR. Active builds and the newest READY current-head preview of
+each active PR remain protected when pruning superseded snapshots.
+
+The policy is a revision-guarded home settings singleton
+`Thingtime.CiPreviewRetention`. It contains no provider credentials. The
+protected controller reads it through an origin-negotiated, signed
+`/api/v1/integrations/ci/preview-retention` request using the existing
+`THINGTIME_CI_ROUTER_SECRET` bootstrap secret. For a fork, configure the same
+secret securely in its server vault/bootstrap and protected GitHub workflow;
+set `THINGTIME_GITHUB_REPOSITORY=owner/repository` and the controller's selected
+Thingtime origin. Never copy production credentials into a preview or test.
+Production, stable/gateway deployments, protected aliases and unrelated project
+resources are protected independently of these settings. Invalid or unavailable
+policy preserves deployments instead of using a stale enabled value.
+
+Roll out the product API to the selected gateway first, verify admin capability
+1.0.1, controller capability 1.0.0 and admin save/readback
+there, then roll out the protected controller
+policy consumer. An ordinary gateway-backed UI preview does not contain a new
+API; leave cleanup fail-closed until its selected origin exposes the contract.
+This changes deployed policy only after that rollout.
+
+Local acceptance for this change used the task-owned dev stack at
+`http://127.0.0.1:18210` with a disposable replica at `127.0.0.1:17343`.
+A public Funnel was intentionally not provisioned for this disposable admin
+fixture; the isolated local acceptance environment is stopped after testing.

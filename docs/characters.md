@@ -34,6 +34,12 @@ the Character. Re-enabling never resurrects revoked credentials.
 
 ## Agent coordination
 
+Connected ChatGPT/Codex clients can use the [private reporting gateway](agent-reporting.md)
+with an explicitly granted `agents.report` permission. This delegates a
+switch-only task Character within an exact private workspace without exposing a
+password or granting a general Character session. Ordinary Things PATs still
+cannot use `X-Thingtime-Character` or manage the owner account.
+
 First run the supported, read-only discovery command (Node 20+ and the normal
 `remix` dependencies):
 

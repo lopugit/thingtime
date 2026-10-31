@@ -13,11 +13,13 @@ import { nativeSyncTasks } from '~/fileSync/nativeSyncTasks.client';
 export function DesktopFolderAccess({
 	ownerId,
 	pairedDeviceIds,
-	ownedDeviceIds
+	ownedDeviceIds,
+	deviceId: selectedDeviceId
 }: {
 	ownerId: string;
 	pairedDeviceIds: readonly string[];
 	ownedDeviceIds: readonly string[];
+	deviceId?: string;
 }) {
 	const user = useCurrentUser(),
 		dataPlane = useDataPlane();
@@ -33,7 +35,7 @@ export function DesktopFolderAccess({
 		identity.pending
 	)
 		return null;
-	const candidates = [...new Set(pairedDeviceIds.filter((id) => ownedDeviceIds.includes(id)))].sort();
+	const candidates = [...new Set(pairedDeviceIds.filter((id) => ownedDeviceIds.includes(id) && (!selectedDeviceId || selectedDeviceId === id)))].sort();
 	if (!candidates.length) return null;
 	return (
 		<DeviceFolders

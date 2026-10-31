@@ -78,11 +78,11 @@ const WORDMARK_SWATCHES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'x']
   .map((key) => LOGO_DEFAULT_COLOURS[key])
   .concat(['hotpink']);
 
-const USAGE_RULES = [
-  { emoji: '🟩', text: 'Keep the voxels square — scale the logo, never stretch or squash it.' },
-  { emoji: '🌬️', text: 'Give it room to breathe. The exporter’s padding options bake in clear space for you.' },
-  { emoji: '🌗', text: 'Any calm background works — pick the surface that keeps contrast comfy.' },
-  { emoji: '🚫', text: 'Please don’t recolour, rearrange or add effects to the voxels. The pink cut is the only remix.' }
+const USAGE_IDEAS = [
+  { emoji: '🎨', text: 'Go ahead and change, modify and create any variations you want! 🎨' },
+  { emoji: '🟩', text: 'Scale, stretch, squash or rearrange the voxels to make a version that feels like yours.' },
+  { emoji: '🌬️', text: 'Try the exporter’s padding options when you want a little extra room around your design.' },
+  { emoji: '🌗', text: 'Play with colours, effects and backgrounds; choose the contrast that feels right for your space.' }
 ];
 
 const Inner = (props: React.ComponentProps<typeof Box>) => <Box maxW="1240px" mx="auto" px={{ base: '20px', md: '40px' }} {...props} />;
@@ -136,8 +136,8 @@ export default function Branding() {
           .
         </Heading>
         <Text mt="20px" maxW="640px" fontSize={{ base: '16px', md: '18px' }} lineHeight={1.7} color="var(--tt-text, #5a5a66)">
-          Logos, colours and ready-to-post imagery — everything on this page is free to use when you talk about
-          Thingtime. Grab a ready-made size, or export any variant at any resolution with your own padding. Every asset
+          Logos, colours and ready-to-post imagery — everything on this page is yours to play with.
+          Grab a ready-made size, or export any variant at any resolution with your own padding. Every asset
           is trimmed to the pixel.
         </Text>
         <Flex mt="28px" gap="8px" flexWrap="wrap">
@@ -223,10 +223,10 @@ export default function Branding() {
         <Box as="section" id="usage" pt={{ base: '72px', md: '112px' }} pb={{ base: '80px', md: '128px' }}>
           <Eyebrow>07 · Usage</Eyebrow>
           <Heading as="h2" fontFamily={HEAD} fontWeight={700} letterSpacing="-0.025em" fontSize="clamp(28px, 3.4vw, 42px)" color="var(--tt-ink, #16161a)" mt="10px">
-            Use it kindly
+            Make it your own
           </Heading>
           <SimpleGrid columns={{ base: 1, md: 2 }} spacingX="40px" spacingY="20px" mt="24px" maxW="880px">
-            {USAGE_RULES.map((rule) => (
+            {USAGE_IDEAS.map((rule) => (
               <Flex key={rule.text} gap="14px" alignItems="flex-start">
                 <Text fontSize="20px" lineHeight="28px" aria-hidden>
                   {rule.emoji}

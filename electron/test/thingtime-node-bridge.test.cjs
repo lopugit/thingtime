@@ -723,3 +723,30 @@ test('batch child failure cancels callbacks and suppresses late acknowledgements
         resolveCallback({ results: [] }); await new Promise(setImmediate); assert.equal(writes, 0);
     } finally { await rm(fixture.root, { recursive: true, force: true }); }
 });
+
+test('Activity disable persists launchd disable before bootout and preserves registration data', async () => {
+ const fixture = await makeSignedNodeFixture();
+ try {
+  await fixture.integration.controlService('start');
+  const plist = await readFile(fixture.paths.launchAgentPath, 'utf8');
+  fixture.state.launchctlCalls.length = 0;
+  await fixture.integration.controlService('disable');
+  const disableIndex = fixture.state.launchctlCalls.findIndex(([operation]) => operation === 'disable');
+  const bootoutIndex = fixture.state.launchctlCalls.findIndex(([operation]) => operation === 'bootout');
+  assert.ok(disableIndex >= 0 && disableIndex < bootoutIndex);
+  assert.equal(fixture.state.launchctlCalls[disableIndex][1], `gui/${process.getuid()}/com.thingtime.desktop.node`);
+  assert.equal(await readFile(fixture.paths.launchAgentPath, 'utf8'), plist);
+  await fixture.integration.controlService('start');
+  assert.ok(fixture.state.launchctlCalls.some(([operation]) => operation === 'enable'));
+ } finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('Activity disable cannot change a foreign login item', async () => {
+ const fixture = await makeSignedNodeFixture();
+ try {
+  await mkdir(path.dirname(fixture.paths.launchAgentPath), { recursive: true });
+  await writeFile(fixture.paths.launchAgentPath, '<plist><dict><key>Label</key><string>com.thingtime.desktop.node</string></dict></plist>');
+  await assert.rejects(fixture.integration.controlService('disable'), { code: 'login_item_conflict' });
+  assert.ok(!fixture.state.launchctlCalls.some(([operation]) => operation === 'disable' || operation === 'bootout'));
+ } finally { await rm(fixture.root, { recursive: true, force: true }); }
+});

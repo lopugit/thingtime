@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import { subscribeBackgroundRefresh } from '~/hooks/backgroundRefresh';
 import React from 'react';
 import { Box, Button, Flex, Input, Spinner } from '@chakra-ui/react';
@@ -539,6 +540,7 @@ export const ChatView = (props: ChatViewProps) => {
 						/>
 					) : null}
           <Composer
+            targetId={chatId}
 						placeholder={
 							isLopuAiSource(chatSummary.externalSource)
 								? 'Ask Lopu anything 🦄'
@@ -663,10 +665,10 @@ const ThreadPanel = ({
   React.useEffect(() => {
     if (!active) return;
     void load();
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void load();
+    const interval = activityInterval('timer:components/Messenger/ChatView:1', 'Chat View', () => {
+      if (document.visibilityState === 'visible') return load();
     }, ACTIVE_POLL_MS);
-    return () => window.clearInterval(interval);
+    return () => clearActivityInterval(interval);
   }, [active, load]);
 
   const reactInThread = async (message: ChatMessage, token: string) => {
@@ -777,6 +779,7 @@ const ThreadPanel = ({
         />
       )}
       <Composer
+        targetId={root.id}
         placeholder="Reply in thread"
         pickerEmojis={pickerEmojis}
         replyTo={null}

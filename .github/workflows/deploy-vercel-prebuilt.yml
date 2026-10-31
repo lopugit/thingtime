@@ -1,0 +1,35 @@
+name: Vercel prebuilt deployments
+
+# Default-branch listener and manual deployment entry point. workflow_run
+# observes push workflows even on older branches lacking this new listener.
+# It runs in the default branch's trusted context, never a fork's context.
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: [Web CI, Lopu CodeQL all branches]
+    types: [requested]
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Product branch to build (production requires main)
+        required: true
+        default: main
+        type: string
+      target_environment:
+        description: auto, preview, production, or an existing matching custom environment
+        required: true
+        default: auto
+        type: string
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  control-plane:
+    uses: lopugit/thingtime/.github/workflows/deploy-vercel-prebuilt.yml@github-actions
+    with:
+      source_ref: ${{ inputs.source_ref || '' }}
+      target_environment: ${{ inputs.target_environment || 'auto' }}
+    secrets: inherit

@@ -21,6 +21,7 @@ export interface DrawerSubItem extends DrawerItemVisibility {
 	// mode items switch the thing mode for the current thing path instead of
 	// navigating to `to` (`to` stays as the selection-sync/highlight fallback)
 	mode?: ThingMode;
+	children?: DrawerSubItem[];
 	// optional group name; grouped items render under an expand/collapse header
 	group?: string;
 }
@@ -69,6 +70,17 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		children: [
 			{ id: 'mail-inboxes', label: 'All inboxes', to: '/mail', authOnly: true },
 			{ id: 'mail-settings', label: 'Email settings', to: '/settings/email', authOnly: true }
+		]
+	},
+	{
+		id: 'passwords',
+		label: 'Password manager',
+		icon: '🔑',
+		to: '/passwords',
+		authOnly: true,
+		children: [
+			{ id: 'passwords-vault', label: 'Passwords and passkeys', to: '/passwords', authOnly: true },
+			{ id: 'passwords-settings', label: 'Password manager settings', to: '/settings/passwords', authOnly: true }
 		]
 	},
 	{
@@ -381,3 +393,15 @@ export const buildDrawerSubSections = (items: DrawerSubItem[]): DrawerSubSection
 
 	return sections;
 };
+
+/** Iterative traversal supports built-in branches at arbitrary depth as well as custom ones. */
+export function drawerBuiltinNodes(items: DrawerTopItem[] = drawerMenuItems): { item: DrawerTopItem | DrawerSubItem; parentId?: string }[] {
+ const pending: { item: DrawerTopItem | DrawerSubItem; parentId?: string }[] = items.map(item => ({ item }));
+ const result: typeof pending = []; const seen = new Set<string>();
+ while (pending.length) {
+  const next = pending.shift()!; if (seen.has(next.item.id)) continue;
+  seen.add(next.item.id); result.push(next);
+  pending.unshift(...(next.item.children || []).map(item => ({ item, parentId: next.item.id })));
+ }
+ return result;
+}

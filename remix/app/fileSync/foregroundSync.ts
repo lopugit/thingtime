@@ -25,6 +25,7 @@ import type { TransferActivity } from './transferActivity';
 export type SyncInventoryDescriptor = { scope: SyncScope; inventory: InventoryIdentity };
 
 export type ForegroundSyncProgress = {
+	resources?: import('./resourceGovernor').SyncResourceStatus;
 	stage: 'checking' | 'scanning' | 'reviewing' | 'transferring' | 'verifying' | 'complete' | 'retaining' | 'retained';
 	confirmed: number;
 	total: number;

@@ -14,6 +14,12 @@ export const ownerLibraryMatch = (ownerId: string, excludedKinds: readonly strin
     ...(includeArchives ? [{ thingtime: ['chat-archive'], archiveVersion: 1, archiveDeleting: { $in: [null, false] },
       targetId: null, appId: null, sandbox: null, sandboxSpace: null,
       $expr: { $eq: ['$archiveRootId', '$shareId'] } }] : []),
-    { thingtime: [ATTACHMENT_THINGTIME], attachmentPurpose: { $in: ['recording', 'file'] }, attachmentState: 'ready', attachmentImportDraft: { $ne: true }, targetId: { $exists: false } }
+    { thingtime: [ATTACHMENT_THINGTIME], attachmentPurpose: { $in: ['recording', 'file'] }, attachmentState: 'ready', attachmentExpiresAt: null, attachmentImportDraft: { $ne: true }, targetId: { $exists: false } }
   ]
+});
+
+/** Root containment is structural; explicit folders and searches retain scope. */
+export const ownerLibraryRootMatch = () => ({
+  folderId: { $in: [null] }, parentId: { $in: [null] }, targetId: { $in: [null] }, 'crystal.parentId': { $in: [null] },
+  thingtime: { $nin: ['file-sync', ATTACHMENT_THINGTIME] }
 });

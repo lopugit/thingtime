@@ -1,3 +1,4 @@
+import { thingBuilderHref } from '../Things/thingsCore';
 import React from 'react';
 import {
   Badge,
@@ -251,6 +252,7 @@ type ComponentCardProps = {
 const stop = (event: React.SyntheticEvent) => event.stopPropagation();
 
 const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersion, loadFamily }: ComponentCardProps) => {
+  const user = useCurrentUser();
   // `active` is the design currently on the card — the family's representative
   // until the designs click-through swaps in a sibling rendition. The rest of
   // the card body reads it through the `source` alias.
@@ -310,6 +312,8 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
   // id when the family holds two renditions of one library — the same rule
   // the page's own design switcher writes).
   const pageHref = (suffix = '') => {
+    const editor = !suffix && thingBuilderHref(source.entry, user?.id);
+    if (editor) return editor;
     const base = `/components/${encodeURIComponent(deepLinkKeyFor(family))}${suffix}`;
     if (active.id === family.id) return base;
     const sameLibrary = family.designs.filter((design) => design.library === active.library).length;

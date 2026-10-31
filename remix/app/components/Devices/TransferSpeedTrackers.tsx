@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import React from 'react';
 import type { ForegroundSyncProgress } from '~/fileSync/foregroundSync';
 import type { SyncProgressState } from '~/fileSync/progressProjection';
@@ -39,7 +40,7 @@ export function observedSeconds(reading: SpeedReading | undefined, windowMs: num
 }
 function TrackerDocument({ scopeKey, series, state, stage, document }: TransferSpeedTrackersProps & { document: SettingsDocumentControls }) {
  const [, tick] = React.useReducer(value => value + 1, 0);
- React.useEffect(() => { const timer = setInterval(tick, 1000); return () => clearInterval(timer); }, []);
+ React.useEffect(() => { if (state !== 'running' || !series) return; const timer = activityInterval('timer:components/Devices/TransferSpeedTrackers:1', 'Transfer speed display', tick, 1000); return () => clearActivityInterval(timer); }, [state, series]);
  const [error, setError] = React.useState('');
  const trackers = readSpeedTrackers(document.blocks);
  const readings: Record<string, Record<string, string>> = {};

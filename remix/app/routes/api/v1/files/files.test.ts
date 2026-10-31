@@ -57,8 +57,8 @@ test('file routes use private full-account access, bounded same-origin JSON and 
 
 test('file capability registers the real read and commit route', () => {
 	const manifest = thingtimeCapabilityManifest('https://example.test');
-	assert.equal(manifest.features['api.files'].version, '1.8.0');
-	assert.equal(createApiCapabilitiesManifest().features['api.files'], '1.8.0');
+	assert.equal(manifest.features['api.files'].version, '1.8.1');
+	assert.equal(createApiCapabilitiesManifest().features['api.files'], '1.8.1');
 	assert.ok(manifest.operations.some((op) => op.path === '/api/v1/files' && op.methods.includes('GET') && op.methods.includes('POST')));
 });
 

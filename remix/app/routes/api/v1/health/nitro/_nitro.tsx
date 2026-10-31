@@ -21,7 +21,7 @@ const getLocalNitroStatus = async (origin: string): Promise<BasicServiceHealthSt
       ok: ready,
       service: 'nitro',
       state: ready ? 'ready' : 'degraded',
-      label: ready ? 'Nitro API: ready' : 'Nitro API: storage migration required',
+      label: ready ? 'Nitro API: ready' : storageAccounting.state === 'recovering' ? 'Nitro API: storage recovery pending' : 'Nitro API: storage migration required',
       checkedAt: new Date().toISOString(),
       origin,
       targetOrigin: origin,

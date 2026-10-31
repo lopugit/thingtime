@@ -34,6 +34,8 @@ export const equalContentFingerprints = (a: ContentFingerprint, b: ContentFinger
 export type NativeFileUpload = { uploadId: string; requestId: string; authorization: FileSyncApproval };
 export type NativePartUpload = { uploadId: string; requestId: string; partNumber: number; offset: number; length: number };
 export type FingerprintSource = {
+	/** Fresh owner-authorized authority for one native range; never persist it. */
+	downloadTarget?(offset: number, length: number, signal?: AbortSignal): Promise<import('./signedDownloadTarget').SignedDownloadTarget>;
 	/** Native multipart loop and attachment completion. The caller still verifies
 	 * stored bytes and publishes the canonical file/Timeline operation. */
 	uploadFile?(request: NativeFileUpload, signal?: AbortSignal, progress?: (bytes: number, total: number) => void): Promise<{ fingerprint: ContentFingerprint }>;

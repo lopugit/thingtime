@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import React from 'react';
 import { componentScopeValue } from '../ComponentsLibrary/componentTemplate';
 import { elapsedClockActive } from '../ComponentsLibrary/elapsedTime';
@@ -12,8 +13,8 @@ export function useFormatClock(format: Record<string, unknown> | undefined, scop
 	React.useEffect(() => {
 		if (!running) return;
 		setNow(Date.now());
-		const timer = window.setInterval(() => setNow(Date.now()), 1000);
-		return () => window.clearInterval(timer);
+		const timer = activityInterval('timer:components/Builder/useFormatClock:1', 'Running elapsed clocks', () => setNow(Date.now()), 1000);
+		return () => clearActivityInterval(timer);
 	}, [running, start, end]);
 	return now;
 }

@@ -2,7 +2,7 @@ name: Develop S3 PR preview
 
 # Stable event listener only. The secret-bearing implementation and controller
 # script are versioned on the protected github-actions branch. The reusable
-# workflow still executes in this caller's event context, and Vercel builds only
+# workflow still executes in this caller's event context, and GitHub builds only
 # the exact allowlisted SHA.
 
 on:

@@ -4053,3 +4053,25 @@ shortcut, authority cache, baseline publication or hidden ID rewrite is used.
 The existing saved priority-readiness status includes the last negotiated folder-batch gate and journal reservation kind/remaining original-operation count. This is a read-only header observation, not authority, upload progress or completion proof. Recovery takes precedence over new batches; older saved observations show UNKNOWN. Existing customized blocks are preserved; the status binding remains editable.
 
 After a fully validated upload-batch response, existing rotated local diagnostic timing rows may include fixed numeric failure-code counts for conflict, temporarily-unavailable, authority-changed, invalid-member, source-changed, cancelled and deadline. Their sum equals the returned failed-member count. Whole-request authority rejection/cancellation emits no accepted-member histogram. Missing legacy fields or missing/rotated rows mean unknown, not zero. Counts cannot recover historical member codes or establish canonical cloud acceptance; no member paths, IDs, URLs, bodies or arbitrary errors are logged.
+
+### Resource ceilings and Pause — 2026-10-21
+
+Connections can save optional aggregate upload/download byte-rate ceilings,
+maximum simultaneous file/folder transfers, indexing worker concurrency, and a
+whole-percent CPU budget for this sync workload. Visible rate selectors use
+decimal Kbps/Mbps/Gbps; blank values preserve existing unlimited/default behavior.
+Native safety or adaptive CPU backpressure may lower the effective ceiling.
+Limits belong to ordinary editable connection data (`configurationVersion: 3`),
+with individually editable Builder controls. They grant no filesystem or account
+access. Saving/executing them requires the matching server and native resource
+control capabilities; unsupported clients must refuse the policy.
+
+**Pause sync** immediately fences new work and aborts this connection's active
+waits. **Pausing…** stays visible while its admitted job is durably paused and
+its exact native scan is cancelled; counters and original receipts remain for
+recovery. Automatic discovery cannot restart that connection during this window.
+A successfully saved pause survives reopening; **Resume** is an explicit action.
+If pause persistence fails, current work still stops and automatic restart stays
+blocked in this process until explicit Resume. The error states that reopening
+may resume work when the pause could not be saved. Other connections and accounts
+retain their own state.

@@ -65,8 +65,9 @@ export const action = async ({ request }: { request: Request }) => {
   if (granted.ok === false) return json({ ok: false, error: granted.error }, { status: 400, headers: cors });
   const scopes = body?.scopes === undefined || body?.scopes === null ? requested.scopes : granted.scopes;
 
-  const space = sanitizeSandboxSpace(body?.space);
-  if (space && typeof space === 'object') return json({ ok: false, error: space.error }, { status: 400, headers: cors });
+  const spaceResult = sanitizeSandboxSpace(body?.space);
+  if (spaceResult !== null && typeof spaceResult === 'object') return json({ ok: false, error: spaceResult.error }, { status: 400, headers: cors });
+  const space = typeof spaceResult === 'string' ? spaceResult : null;
   const username = sanitizeSandboxUsername(body?.username);
 
   const grant = await mintSandboxToken(clientId, origin, scopes, { space, username });

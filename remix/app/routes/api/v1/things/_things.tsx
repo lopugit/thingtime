@@ -87,7 +87,7 @@ const csv = (value: string | null): string[] =>
 // shipped comment page — default: the newest comments, oldest → newest).
 // GET /api/v1/things?target=<shareId>&thingtime=comment&cursor=&limit= — list
 // things attached to a viewable thing (its comments/reactions).
-// GET /api/v1/things?thingtime=&folder=&cursor=&limit= — list your own things
+// GET /api/v1/things?thingtime=&schemaId=&parentId=&folder=&cursor=&limit= — list your own things
 // (folder=root for unfiled things, folder=<folder shareId> for its children;
 // session auth may add appId=<clientId> to browse ONE app's namespace).
 //
@@ -112,7 +112,7 @@ export const loader = async ({ request }: { request: Request }) => {
   if (commentProjection) {
     const id = (params.get('id') || '').trim(), target = (params.get('target') || '').trim();
     const invalid = ['commentProjection', 'id', 'target', 'thingtime', 'cursor', 'limit'].some(key => params.getAll(key).length > 1) || params.get('commentProjection') !== 'true' || actor.kind === 'app' || isCustomMongoEndpointActive() ||
-      ['archive', 'sharedRoot', 'appId', 'folder', 'commentSort'].some(key => params.has(key)) ||
+      ['archive', 'sharedRoot', 'appId', 'folder', 'commentSort', 'schemaId', 'parentId'].some(key => params.has(key)) ||
       (id ? params.has('target') || ['thingtime', 'cursor', 'limit'].some(key => params.has(key))
           : params.has('id') || !target || csv(params.get('thingtime')).length !== 1 || csv(params.get('thingtime'))[0] !== 'comment') ||
       (params.has('limit') && !/^(?:[1-9]|1[0-9]|20)$/.test(params.get('limit') || ''));
@@ -152,7 +152,10 @@ export const loader = async ({ request }: { request: Request }) => {
   }
 
   const id = (params.get('id') || '').trim();
+  if (['schemaId', 'parentId', 'builderApp'].some(key => params.getAll(key).length > 1)) return json({ ok: false, error: 'Crystal filters must be supplied once' }, { status: 400, headers: cors });
+  if (params.has('builderApp') && params.get('builderApp') !== 'true') return json({ ok: false, error: 'builderApp must be true' }, { status: 400, headers: cors });
   if (id) {
+    if (params.has('schemaId') || params.has('parentId') || params.has('builderApp')) return json({ ok: false, error: 'Crystal filters apply to Thing lists only' }, { status: 400, headers: cors });
     // commentSort=top|new|old re-orders the shipped comment page of the post
     // projection (round 2 S7); absent keeps the default page, a typo is a 400
     // (never a silently re-ordered thread)
@@ -180,11 +183,14 @@ export const loader = async ({ request }: { request: Request }) => {
     {
       commentProjection,
       thingtime: csv(params.get('thingtime')),
+      schemaId: params.get('schemaId'),
+      parentId: params.get('parentId'),
       targetId: (params.get('target') || '').trim() || null,
       folder: (params.get('folder') || '').trim() || null,
       cursor: params.get('cursor'),
       limit: Number(params.get('limit')) || undefined,
-      appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null
+      appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null,
+      builderAppOnly: params.get('builderApp') === 'true'
     },
     app,
     { archiveOwnerId: actor.kind === 'user' && user?.accountKind === 'user' ? user.id : undefined }

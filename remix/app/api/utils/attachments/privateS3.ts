@@ -64,6 +64,7 @@ export type AttachmentS3 = {
 		contentDisposition: string;
 		contentType: string;
 	}): Promise<{ url: string; expiresAt: string }>;
+	signDownloadRange?(input: { objectKey: string; versionId: string; offset: number; length: number }): Promise<{ url: string; expiresAt: string }>;
 	isNoSuchUpload(error: unknown): boolean;
 	isNotFound(error: unknown): boolean;
 };
@@ -290,6 +291,11 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 			};
 		},
 
+		async signDownloadRange({ objectKey, versionId, offset, length }) {
+			if (!objectKey.startsWith('objects/') || !versionId || !Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 1 || length > 2 * 1024 * 1024 || !Number.isSafeInteger(offset + length)) throw Error('Invalid signed download range.');
+			const command = new GetObjectCommand({ ...common, Key: objectKey, VersionId: versionId, Range: `bytes=${offset}-${offset + length - 1}`, ResponseCacheControl: 'private, no-store', ResponseContentType: 'application/octet-stream' });
+			return { url: await presign(client, command, { expiresIn: 60, signableHeaders: new Set(['range']) }), expiresAt: expiresAt(60) };
+		},
 		isNoSuchUpload(error) {
 			return errorName(error) === 'NoSuchUpload' || (errorStatus(error) === 404 && errorName(error).includes('Upload'));
 		},

@@ -35,7 +35,9 @@ final class NativeFileUploadJobTests: XCTestCase {
             XCTAssertEqual(part.length, part.partNumber == 3 ? 1 : 8 * 1024 * 1024)
             XCTAssertEqual(part.source, request.source); return digest
         }, progress: { progress.append($0) })
-        XCTAssertEqual(parts, [1,2,3]); XCTAssertEqual(progress, [8 * 1024 * 1024,16 * 1024 * 1024,request.source.size])
+        let partSize = Int64(8 * 1024 * 1024)
+        let expectedProgress: [Int64] = [partSize, 2 * partSize, request.source.size]
+        XCTAssertEqual(parts, [1,2,3]); XCTAssertEqual(progress, expectedProgress)
         XCTAssertEqual(paths, ["/api/v1/attachments/uploads", "/api/v1/attachments/uploads/complete"])
         XCTAssertEqual(authorizations,5)
     }

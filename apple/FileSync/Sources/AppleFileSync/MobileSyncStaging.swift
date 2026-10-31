@@ -285,14 +285,16 @@ public final class MobileSyncStaging: @unchecked Sendable {
             var bytes = [UInt8](repeating: 0, count: MobileFolderReader.maximumReadBytes), offset: Int64 = 0
             while offset < source.size {
                 try Task.checkCancellation()
-                let n = pread(file, &bytes, Int(min(Int64(bytes.count), source.size - offset)), off_t(offset))
-                guard n > 0 else { throw Failure.changed }
-                var written = 0
-                while written < n {
-                    let count = bytes.withUnsafeBytes { pwrite(candidate, $0.baseAddress!.advanced(by: written), n - written, off_t(offset) + off_t(written)) }
-                    guard count > 0 else { throw Failure.storage }; written += count
+                try SyncResourceCpuContext.chunk {
+                    let n = pread(file, &bytes, Int(min(Int64(bytes.count), source.size - offset)), off_t(offset))
+                    guard n > 0 else { throw Failure.changed }
+                    var written = 0
+                    while written < n {
+                        let count = bytes.withUnsafeBytes { pwrite(candidate, $0.baseAddress!.advanced(by: written), n - written, off_t(offset) + off_t(written)) }
+                        guard count > 0 else { throw Failure.storage }; written += count
+                    }
+                    offset += Int64(n)
                 }
-                offset += Int64(n)
             }
         }
         try verifyContent(candidate, source: source)
@@ -381,13 +383,13 @@ public final class MobileSyncStaging: @unchecked Sendable {
                     try save(row, fd)
                 }
                 try Task.checkCancellation(); try checkExpected(root, request: request)
-                // Both flags are required: unsupported kernels/providers refuse.
+                // Descriptor-relative validated paths and no-follow stay mandatory.
                 // SWAP retains the old inode in private storage. A non-cooperating
                 // writer racing the precondition is detected during recovery; its
                 // displaced bytes are preserved and no blind rollback is attempted.
                 try beforePublication?()
-                let flags = UInt32(RENAME_NOFOLLOW_ANY | RENAME_RESOLVE_BENEATH | (request.operation.mutation.expectedTarget == nil ? RENAME_EXCL : RENAME_SWAP))
-                guard renameatx_np(fd, "publication", root, request.operation.mutation.path, flags) == 0 else { throw Failure.changed }
+                let flags = UInt32(request.operation.mutation.expectedTarget == nil ? RENAME_EXCL : RENAME_SWAP)
+                try NativeFileDestination.rename(fd, "publication", root, request.operation.mutation.path, flags: flags)
                 try afterPublication?()
                 let recovered = try recoverPublication(fd, root: root, parent: parent, row: &row)
                 guard let receipt = recovered.receipt else { throw Failure.changed }; return receipt

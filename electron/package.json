@@ -1,6 +1,6 @@
 {
 	"name": "thingtime-electron",
-	"version": "0.1.0",
+	"version": "0.1.2",
 	"private": true,
 	"description": "Thingtime desktop app shell for the Remix/Nitro web app.",
 	"main": "main.cjs",
@@ -22,6 +22,7 @@
 		"install:local": "node scripts/install-local-app.mjs",
 		"start": "electron .",
 		"test": "node --test test/**/*.test.cjs",
+		"verify:window-zoom": "node scripts/test-window-zoom.mjs",
 		"verify:folder-sync-host": "node scripts/test-folder-sync-host.mjs",
 		"verify:folder-upload-native": "node scripts/test-folder-upload-native.mjs",
 		"verify:native": "node scripts/verify-native-node.mjs",
