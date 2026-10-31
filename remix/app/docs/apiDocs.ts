@@ -1707,6 +1707,46 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-secure-fields',
+    group: 'admin',
+    title: 'Secure-field storage',
+    endpoint: '/api/v1/admin/secure-fields',
+    summary: 'Read or toggle secure blobbing for allowlisted user fields (admin only).',
+    detail:
+      'Allowlisted private user fields (currently only email) normally live ONLY inside the BinData secure blob on user things, invisible to the wildcard text index. An admin can toggle a field to plaintext mode, which maintains a root plaintext mirror on every user thing for direct-DB debugging (the blob stays the source of truth). Every POST also runs the users-email-mirror-sync migration so existing user things immediately match the config, and returns that reconcile report. Defaults are secure; production should stay secure.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to load the current config, the togglable field list, and defaults.',
+      'POST fields with { email: { secure: false } } to maintain plaintext mirrors, or { secure: true } to strip them.',
+      'The response includes the mirror-sync migration report (matched/migrated counts).',
+      'Non-admins receive 403; anonymous callers 401.'
+    ],
+    requestExamples: [
+      { name: 'Read config', description: 'Load the current secure-field config.', method: 'GET' },
+      {
+        name: 'Enable plaintext email mirrors',
+        description: 'Mirror blob emails to a root field for direct-DB debugging.',
+        method: 'POST',
+        body: { fields: { email: { secure: false } } }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Updated config + reconcile report.',
+        body: {
+          ok: true,
+          config: { email: { secure: false } },
+          fields: ['email'],
+          defaults: { email: { secure: true } },
+          report: { dryRun: false, matched: 3, migrated: 3, created: 0, skipped: 0, notes: [] }
+        }
+      },
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-users',
     group: 'admin',
     title: 'Admin user lookup',

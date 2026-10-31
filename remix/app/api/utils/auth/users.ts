@@ -5,6 +5,8 @@ import { LopuPromptConflictError, validateLopuInstructions, type LopuInstruction
 import { createHash } from 'node:crypto';
 import { Binary, ObjectId, type Collection } from 'mongodb';
 
+import { getThingsCollection, getUsersCollection } from '../mongodb/collections';
+import { getSecureFieldsConfig } from '../secureFields/config';
 import {
 	ADMIN_SNAPSHOT_LOOKAHEAD_LIMIT,
 	ADMIN_SNAPSHOT_MAX_LIMIT,
@@ -273,6 +275,17 @@ export const toPublicProfile = (user: any): PublicProfile => ({
 //                      emoji tokens — same guarantee `secure` relies on). A
 //                      plain string array here WOULD be enumerable via
 //                      q=<emoji>, which is exactly why it is not one.
+//
+// ADMIN EXCEPTION — the secure-fields toggle (api/utils/secureFields/config.ts):
+// an admin can flip an allowlisted blob field (currently only `email`) to
+// plaintext mode, which maintains a root plaintext MIRROR of the blob value
+// (root `email`) for direct-DB debugging. The blob stays the single source of
+// truth; the mirror is derived data written by insertUser, self-healed by every
+// mutateUserThingSecure write, and bulk-reconciled by the
+// users-email-mirror-sync migration when the toggle flips. In plaintext mode
+// the wildcard text index DOES tokenize the mirror — search results still
+// exclude user things via the PROTECTED_THINGTIME $nin, but the index entries
+// exist, which is why the default is secure and prod should stay secure.
 // Legacy-era user docs keep their plaintext subdocument shape (the `users`
 // collection has no text index, so nothing there is searchable).
 type SecurePayload = {
@@ -641,59 +654,56 @@ export const getEmailNotificationTargets = async (userIds: string[]): Promise<Em
 // String(user._id) / ObjectId.isValid assumption in the auth web holds for
 // both eras; users own themselves (ownerId = shareId) and the crystal profile
 // is public (acl tt:all) like the profile endpoint always was.
-export const insertUser = async (
-	doc: UserDoc & { schemaVersion?: number },
-	options: {
-		initialSubscription?: {
-			tierId: string;
-			versionId: string;
-			version: number;
-			title: string;
-			metered: boolean;
-			quotas: Record<string, number | null>;
-		};
-		session?: any;
-	} = {}
-) => {
-	const shareId = new ObjectId().toHexString();
-	const now = doc.createdAt instanceof Date ? doc.createdAt : new Date();
-	const { secure, admin, recentReactions } = buildUserSecure(doc);
+export const insertUser = async (doc: UserDoc & { schemaVersion?: number }) => {
+  const shareId = new ObjectId().toHexString();
+  const now = doc.createdAt instanceof Date ? doc.createdAt : new Date();
+  const { secure, admin, recentReactions } = buildUserSecure(doc);
+  const secureFields = await getSecureFieldsConfig();
 
-	const thing = {
-		shareId,
-		schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
-		thingtime: ['user'],
-		crystal: {
-			username: doc.username,
-			ttid: doc.ttid || doc.username,
-			displayName: doc.displayName ?? null,
-			bio: doc.bio ?? null,
-			avatarUrl: doc.avatarUrl ?? null,
-			bannerUrl: doc.bannerUrl ?? null
-		},
-		ownerId: shareId,
-		acl: [ACL_ALL],
-		targetId: null,
-		tags: [],
-		...profileAttachmentRefsForUserRoot(doc),
-		uniqueKeys: [userUsernameKey(doc.username), ...(doc.email ? [userEmailKey(doc.email)] : [])],
-		secure,
-		secureVersion: 0, // optimistic-concurrency token for blob mutations
-		// Durable signup fallback: if the relational subscription insert is ever
-		// interrupted, quota reads still recover the exact revision that was live
-		// when this account was created. Unknown root fields are not projected by
-		// the public profile adapters.
-		...(options.initialSubscription ? { initialSubscription: { ...options.initialSubscription } } : {}),
-		// sparse boolean, queryable by listAdmins (booleans aren't text-indexed)
-		...(admin ? { secureAdmin: true } : {}),
-		// reaction MRU as a BinData array (text-index-invisible, atomically mutable);
-		// only present when a migrated account arrives with prior recents
-		...(recentReactions.length ? { secureRecentReactions: packRecentReactions(recentReactions) } : {}),
-		createdAt: now,
-		updatedAt: now
-	};
-	await (await getThingsCollection()).insertOne(thing as any, options.session ? { session: options.session } : undefined);
-	return userThingToDoc(thing);
+  const thing = {
+    shareId,
+    schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+    thingtime: ['user'],
+    crystal: {
+      username: doc.username,
+      ttid: doc.ttid || doc.username,
+      displayName: doc.displayName ?? null,
+      bio: doc.bio ?? null,
+      avatarUrl: doc.avatarUrl ?? null,
+      bannerUrl: doc.bannerUrl ?? null
+    },
+    ownerId: shareId,
+    acl: [ACL_ALL],
+    targetId: null,
+    tags: [],
+    uniqueKeys: [userUsernameKey(doc.username), userEmailKey(doc.email)],
+    secure,
+    secureVersion: 0, // optimistic-concurrency token for blob mutations
+    // sparse boolean, queryable by listAdmins (booleans aren't text-indexed)
+    ...(admin ? { secureAdmin: true } : {}),
+    // reaction MRU as a BinData array (text-index-invisible, atomically mutable);
+    // only present when a migrated account arrives with prior recents
+    ...(recentReactions.length ? { secureRecentReactions: packRecentReactions(recentReactions) } : {}),
+    // plaintext debugging mirror of the blob email (admin secure-fields toggle,
+    // see the ADMIN EXCEPTION block above) — derived, only when toggled off
+    ...(secureFields.email?.secure === false && doc.email ? { email: doc.email } : {}),
+    createdAt: now,
+    updatedAt: now
+  };
+  await (await getThingsCollection()).insertOne(thing as any);
+  return userThingToDoc(thing);
+};
+
+// Update whichever store holds the user: things first, legacy fallback. For
+// NON-secure fields only (crystal, root booleans) — secure content goes through
+// mutateUserThingSecure so the blob is re-serialized, never dotted-$set.
+const updateUserStore = async (userId: string, thingUpdate: any, legacyUpdate: any): Promise<boolean> => {
+  const things = await getThingsCollection();
+  const res = await things.updateOne({ shareId: String(userId), thingtime: 'user' } as any, thingUpdate);
+  if (res.matchedCount) return true;
+  if (!ObjectId.isValid(userId)) return false;
+  await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId) }, legacyUpdate);
+  return true;
 };
 
 // Read-modify-write a things-era user's secure blob (the whole subdocument is
@@ -717,104 +727,46 @@ export const insertUser = async (
 // exceed realistic burst width
 const SECURE_CAS_ATTEMPTS = 20;
 type SecureMutateResult = 'mutated' | 'missing' | 'contended';
-// The CAS loop against an explicit collection handle: injectable stores (the
-// history prefs store below, tests) pass their own; the wrapper keeps every
-// existing caller on the module's home-pinned things alias.
-export const mutateUserThingSecureIn = async (things: Collection, userId: string, mutate: (secure: SecurePayload) => void): Promise<SecureMutateResult> => {
-	const base = { shareId: String(userId), thingtime: 'user' } as any;
-	for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
-		const thing = await things.findOne(base, { projection: { secure: 1, secureVersion: 1 }, ...(session ? { session } : {}) });
-		if (!thing) return 'missing';
-		const version = (thing as any).secureVersion; // number | undefined (pre-versioned docs)
-		const secure = strict ? strictVaultPayload((thing as any).secure) : unpackSecure((thing as any).secure);
-		if (!secure.meta) secure.meta = {};
-		await mutate(secure, thing);
-		// guard on the exact version we read — a missing field guards on its absence
-		const guard = version === undefined ? { secureVersion: { $exists: false } } : { secureVersion: version };
-		const res = await things.updateOne(
-			{ ...base, ...guard },
-			{ $set: { secure: packSecure(secure), secureVersion: (version ?? 0) + 1, updatedAt: new Date() } },
-			{ ...(session ? { session } : {}) }
-		);
-		if (res.modifiedCount) return 'mutated';
-		// lost the CAS — another writer won; small jittered backoff so a burst of
-		// writers doesn't keep colliding on the same round, then re-read and re-apply
-		if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 3 * attempt + Math.floor(Math.random() * 5)));
-	}
-	return 'contended';
-};
-const mutateUserThingSecure = async (userId: string, mutate: (secure: SecurePayload) => void): Promise<SecureMutateResult> =>
-	mutateUserThingSecureIn(await getThingsCollection(), userId, mutate);
-
-const strictVaultPayload = (value: unknown): SecurePayload => {
- try {
-  const payload = JSON.parse(fromBin(value));
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload) ||
-   ('vaultKey' in payload && (!payload.vaultKey || typeof payload.vaultKey !== 'object' || Array.isArray(payload.vaultKey)))) throw new Error();
-  return payload;
- } catch { throw new Error('The account vault could not be unlocked.'); }
-};
-
-// Key material never enters UserDoc/public projections. This bounded registry
-// lives in the home user secure blob; session wrappers live on session rows.
-export const readUserVaultKey = async (userId: string): Promise<UserVaultKeyRegistry | null> => {
- const thing = await (await getThingsCollection()).findOne({ shareId: userId, thingtime: 'user' } as any, { projection: { secure: 1 } });
- if (thing) return strictVaultPayload(thing.secure).vaultKey ?? null;
- if (!ObjectId.isValid(userId)) throw new Error('Vault owner was not found.');
- const legacy = await (await getUsersCollection()).findOne({ _id: new ObjectId(userId) }, { projection: { vaultKey: 1 } });
- if (!legacy) throw new Error('Vault owner was not found.');
- return strictVaultPayload(toBin(JSON.stringify(legacy))).vaultKey ?? null;
-};
-
-export const mutateUserVaultKey = async (
- userId: string,
- mutate: (current: UserVaultKeyRegistry | null, passwordHash: string) => Promise<{ registry: UserVaultKeyRegistry; passwordHash?: string }>
-): Promise<UserVaultKeyRegistry> => {
- let saved!: UserVaultKeyRegistry;
- const apply = async (secure: SecurePayload) => {
-  const next = await mutate(secure.vaultKey ?? null, secure.passwordHash || '');
-  secure.vaultKey = saved = next.registry;
-  if (next.passwordHash !== undefined) secure.passwordHash = next.passwordHash;
- };
- const result = await mutateUserThingSecure(userId, apply, true);
- if (result === 'mutated') return saved;
- if (result === 'contended') throw new SecureWriteContendedError(userId);
- if (!ObjectId.isValid(userId)) throw new Error('Vault owner was not found.');
- const users = await getUsersCollection();
- for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
-  const doc: any = await users.findOne({ _id: new ObjectId(userId) });
-  if (!doc) throw new Error('Vault owner was not found.');
-  const current = strictVaultPayload(toBin(JSON.stringify(doc))).vaultKey;
-  const next = await mutate(current ?? null, doc.passwordHash || '');
-  const updated = await users.updateOne({ _id: doc._id, passwordHash: doc.passwordHash,
-   vaultKey: doc.vaultKey ?? { $exists: false } } as any,
-   { $set: { vaultKey: next.registry, ...(next.passwordHash !== undefined ? { passwordHash: next.passwordHash } : {}), updatedAt: new Date() } } as any);
-  if (updated.matchedCount) return next.registry;
- }
- throw new SecureWriteContendedError(userId);
-};
-
-// Finalize the storage-field handoff after the canonical subscription
-// override has been persisted. This uses the same CAS retry as every secure
-// mutation, so a racing password/profile write cannot resurrect or lose
-// fields. The legacy collection fallback is retained only for recovery from a
-// partially-completed users-to-things migration.
-export const removeLegacyUserStorageFields = async (userId: string): Promise<void> => {
-	const result = await mutateUserThingSecure(userId, (secure) => {
-		stripLegacyStorageFromSecurePayload(secure);
-	});
-	if (result === 'mutated') return;
-	if (result === 'contended') throw new SecureWriteContendedError(userId);
-	if (!ObjectId.isValid(userId)) return;
-	await (
-		await getUsersCollection()
-	).updateOne(
-		{ _id: new ObjectId(userId) },
-		{
-			$unset: { storageAllowanceBytes: '', storageUsedBytes: '' },
-			$set: { updatedAt: new Date() }
-		}
-	);
+const mutateUserThingSecure = async (
+  userId: string,
+  mutate: (secure: SecurePayload) => void
+): Promise<SecureMutateResult> => {
+  const things = await getThingsCollection();
+  const base = { shareId: String(userId), thingtime: 'user' } as any;
+  // read the secure-fields toggle once per mutation (15s-cached) so every blob
+  // write also reconciles the plaintext email mirror — mirrors self-heal on the
+  // hot write paths instead of waiting for the next bulk sync migration
+  const secureFields = await getSecureFieldsConfig();
+  for (let attempt = 0; attempt < SECURE_CAS_ATTEMPTS; attempt++) {
+    const thing = await things.findOne(base, { projection: { secure: 1, secureVersion: 1 } });
+    if (!thing) return 'missing';
+    const version = (thing as any).secureVersion; // number | undefined (pre-versioned docs)
+    const secure = unpackSecure((thing as any).secure);
+    if (!secure.meta) secure.meta = {};
+    mutate(secure);
+    // guard on the exact version we read — a missing field guards on its absence
+    const guard = version === undefined ? { secureVersion: { $exists: false } } : { secureVersion: version };
+    const mirrorEmail = secureFields.email?.secure === false ? secure.email || '' : '';
+    const res = await things.updateOne(
+      { ...base, ...guard },
+      {
+        $set: {
+          secure: packSecure(secure),
+          secureVersion: (version ?? 0) + 1,
+          updatedAt: new Date(),
+          ...(mirrorEmail ? { email: mirrorEmail } : {})
+        },
+        // secure mode (or blob email empty): remove any stale mirror in the same
+        // guarded write — a no-op when the field is already absent
+        ...(mirrorEmail ? {} : { $unset: { email: '' } })
+      }
+    );
+    if (res.modifiedCount) return 'mutated';
+    // lost the CAS — another writer won; small jittered backoff so a burst of
+    // writers doesn't keep colliding on the same round, then re-read and re-apply
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 3 * attempt + Math.floor(Math.random() * 5)));
+  }
+  return 'contended';
 };
 
 // Thrown by the secure-blob setters when a things-era write loses every CAS
