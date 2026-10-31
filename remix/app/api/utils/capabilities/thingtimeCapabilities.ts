@@ -1,6 +1,7 @@
 import { apiEndpointDocs, apiSharedFeatureVersions } from '../../../docs/apiDocs';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from './capabilityContract';
-import { gatewayDescriptor } from '../deployment/environmentGateway';
+import { gatewayAuthority, gatewayDescriptor, GatewayUnavailable } from '../deployment/environmentGateway';
+import { gatewaySupportsOperation, isGatewayDataPath } from '../deployment/gatewayOperations';
 
 export { THINGTIME_CAPABILITY_MANIFEST_PATH } from './capabilityContract';
 
@@ -43,3 +44,33 @@ export const thingtimeCapabilityManifest = (origin: string) => {
 };
 
 export { capabilitySatisfies };
+
+/** A proxy origin promises only whole semantic contracts its current owner can execute. */
+export const effectiveThingtimeCapabilityManifest = async (
+  origin: string,
+  resolveAuthority = gatewayAuthority.current
+) => {
+  const local = thingtimeCapabilityManifest(origin);
+  // The canonical alias is the authority's bootstrap discovery endpoint. Fetching
+  // it from itself would recurse. Standalone/dedicated builds execute locally.
+  if (!local.gateway || local.origin === local.gateway.origin) return local;
+  const authority = await resolveAuthority();
+  if (!authority || authority.settings.origin !== local.gateway.origin ||
+      authority.settings.environment !== local.gateway.environment ||
+      authority.settings.deploymentId !== local.gateway.deploymentId) throw new GatewayUnavailable();
+  if (authority.owner) return local;
+  const unavailable = new Set<string>();
+  for (const operation of local.operations) {
+    if (isGatewayDataPath(operation.path) && !operation.methods.every(method =>
+      gatewaySupportsOperation(authority.manifest, operation.feature, local.features[operation.feature].version, operation.path, method))) {
+      unavailable.add(operation.feature);
+    }
+  }
+  // Do not downgrade a feature to the owner's older contract: this branch's
+  // runtime requires its local version and would refuse the same operation.
+  return {
+    ...local,
+    features: Object.fromEntries(Object.entries(local.features).filter(([feature]) => !unavailable.has(feature))),
+    operations: local.operations.filter(operation => !unavailable.has(operation.feature))
+  };
+};

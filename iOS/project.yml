@@ -14,6 +14,8 @@ options:
 packages:
   ThingtimePasswordCore:
     path: ../apple/Passwords
+  AppleFileSync:
+    path: ../apple/FileSync
 
 settings:
   base:
@@ -34,16 +36,13 @@ configFiles:
   Debug: config/Debug.xcconfig
   Release: config/Release.xcconfig
 
-packages:
-  AppleFileSync:
-    path: ../apple/FileSync
-
 targets:
   Thingtime:
     type: application
     platform: iOS
     sources:
       - path: Thingtime
+      - path: ../apple/Passwords/Host/AuthenticatorSetupBridge.swift
       - path: ../apple/Shared
       - path: ../apple/Widgets
       - path: Shared
@@ -56,6 +55,9 @@ targets:
         ThingtimeWidgetGroup: $(THINGTIME_WIDGET_GROUP)
         CFBundleURLTypes:
           - CFBundleURLSchemes: [thingtime]
+          - CFBundleURLName: com.thingtime.authenticator
+            CFBundleTypeRole: Editor
+            CFBundleURLSchemes: [otpauth]
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
         ThingtimePasswordKeychainGroup: $(THINGTIME_PASSWORD_KEYCHAIN_GROUP)
         NSFaceIDUsageDescription: Thingtime verifies you before filling saved passwords or using a passkey.
@@ -101,6 +103,7 @@ targets:
     dependencies:
       - package: ThingtimePasswordCore
       - target: ThingtimePasswordProvider
+      - package: AppleFileSync
       - target: ThingtimeWatch
         embed: true
         codeSign: true
@@ -221,6 +224,7 @@ targets:
       - path: ../apple/FileSync/Tests/RecoverySupport
     dependencies:
       - target: Thingtime
+      - package: AppleFileSync
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(PRODUCT_BUNDLE_IDENTIFIER).tests

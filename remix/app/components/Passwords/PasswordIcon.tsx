@@ -9,6 +9,32 @@ import { PASSWORD_ICON_MIME_TYPES, passwordIconUrl, passwordWebsiteIcon, type Pa
 import { uploadPasswordFile } from '~/passwords/files.client';
 import { newPasswordFile } from '~/passwords/fileCrypto';
 
+/** Loads only the sealed icon projection, never the credential fields. Object
+ * URLs stay transient and are revoked on owner, entry or icon changes. */
+export function usePasswordIconImages(ownerId: string, records: ReadonlyArray<{ id: string; icon?: PasswordIcon }>): Record<string, string> {
+  const identity = JSON.stringify([ownerId, records.map(({ id, icon }) => [id, icon])]);
+  const [images, setImages] = React.useState<{ identity: string; urls: Record<string, string> } | null>(null);
+  React.useEffect(() => {
+    const controller = new AbortController(), urls: Record<string, string> = {}, allocated = new Set<string>();
+    for (const record of records) {
+      if (!record.icon) continue;
+      void openPasswordIconBlob(ownerId, record.id, record.icon, controller.signal).then(async blob => {
+        if (controller.signal.aborted) return;
+        const url = URL.createObjectURL(blob); allocated.add(url);
+        const image = new Image(); image.src = url;
+        try { await image.decode(); } catch { URL.revokeObjectURL(url); allocated.delete(url); return; }
+        if (controller.signal.aborted) return;
+        urls[record.id] = url;
+        setImages({ identity, urls: { ...urls } });
+      }).catch(() => { /* A missing/revoked icon retains the generic fallback. */ });
+    }
+    return () => { controller.abort(); allocated.forEach(url => URL.revokeObjectURL(url)); };
+  // identity captures every read input while avoiding reloads on array rerenders.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identity]);
+  return images?.identity === identity ? images.urls : {};
+}
+
 export function PasswordEntryIcon({ ownerId, entryId, icon, size = 32 }: { ownerId: string; entryId: string; icon?: PasswordIcon; size?: number }) {
   const scope = `${ownerId}:${entryId}:${JSON.stringify(icon)}`;
   const [image, setImage] = React.useState<{ scope: string; url: string } | null>(null);

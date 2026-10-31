@@ -515,7 +515,7 @@ const guardedFetch = async (url: string, init: RequestInit & { method?: string }
 };
 
 // Response-size caps. FEED covers feed/data bodies, TOKEN the much smaller
-// OAuth token responses.
+// OAuth token responses. Fixed registered operations preserve complete results.
 const MAX_FEED_RESPONSE_BYTES = 3_000_000;
 const MAX_TOKEN_RESPONSE_BYTES = 1_000_000;
 

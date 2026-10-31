@@ -16,14 +16,15 @@ public struct PasswordCatalogItem: Codable, Identifiable, Sendable {
 public final class PasswordClient: @unchecked Sendable {
     public let account: ProviderSession
     private let transport: URLSession
-    public convenience init(account: ProviderSession) {
-        self.init(account: account, configuration: .ephemeral)
-    }
-    init(account: ProviderSession, configuration: URLSessionConfiguration) {
-        self.account = account
+    static func makeTransport() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil; configuration.urlCache = nil; configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest = 25; configuration.timeoutIntervalForResource = 40
-        transport = URLSession(configuration: configuration, delegate: NoRedirect(), delegateQueue: nil)
+        return URLSession(configuration: configuration, delegate: NoRedirect(), delegateQueue: nil)
+    }
+    public convenience init(account: ProviderSession) { self.init(account: account, transport: Self.makeTransport()) }
+    init(account: ProviderSession, transport: URLSession) {
+        self.account = account; self.transport = transport
     }
     deinit { transport.invalidateAndCancel() }
     private func receive(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
@@ -63,20 +64,65 @@ public final class PasswordClient: @unchecked Sendable {
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         var content = body; content["expectedOwnerId"] = account.ownerId
         request.httpBody = try JSONSerialization.data(withJSONObject: content)
-        let (data, response) = try await transport.data(for: request)
-        guard let response = response as? HTTPURLResponse, response.statusCode == 200, data.count <= 2 * 1024 * 1024 else { throw PasswordProviderError.unavailable }
-        let reply = try JSONDecoder().decode(Reply.self, from: data)
-        guard reply.ok, reply.ownerId == account.ownerId else { throw PasswordProviderError.invalidSession }
+        let data = try await Self.response(request, transport: transport)
+        guard let reply = try? JSONDecoder().decode(Reply.self, from: data), reply.ok else { throw PasswordProviderError.invalidResponse }
+        guard reply.ownerId == account.ownerId else { throw PasswordProviderError.accountMismatch }
         return reply
+    }
+    static func response(_ request: URLRequest, transport: URLSession) async throws -> Data {
+        let data: Data, response: URLResponse
+        do { (data, response) = try await transport.data(for: request) }
+        catch let error as URLError {
+            if error.code == .cancelled { throw PasswordProviderError.cancelled }
+            throw PasswordProviderError.network
+        }
+        guard let response = response as? HTTPURLResponse, response.url == request.url else { throw PasswordProviderError.invalidResponse }
+        if response.statusCode == 401 { throw PasswordProviderError.invalidSession }
+        if response.statusCode == 403 { throw PasswordProviderError.accountMismatch }
+        guard response.statusCode == 200 else { throw PasswordProviderError.unavailable }
+        return data
+    }
+    /// A native Connect button may adopt only its own WebView session. The API
+    /// supplies the owner; a cookie/JWT claim never grants an owner identity.
+    public static func webSession(origin: URL, cookie: String, expectedOwner: String?) async throws -> ProviderSession {
+        let transport = makeTransport(); defer { transport.invalidateAndCancel() }
+        return try await webSession(origin: origin, cookie: cookie, expectedOwner: expectedOwner, transport: transport)
+    }
+    static func webSession(origin: URL, cookie: String, expectedOwner: String?, transport: URLSession) async throws -> ProviderSession {
+        // Validate destination and header syntax before sending anything.
+        _ = try ProviderSession(origin: origin, ownerId: "pending-verification", cookie: cookie)
+        var request = URLRequest(url: origin.appendingPathComponent(".well-known/thingtime-capabilities.json"))
+        let manifest = try await response(request, transport: transport)
+        guard compatibleCapabilities(manifest, origin: origin) else { throw PasswordProviderError.capabilityUnavailable }
+        request = URLRequest(url: origin.appendingPathComponent("api/v1/passwords"))
+        request.setValue(cookie, forHTTPHeaderField: "Cookie")
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        let data = try await response(request, transport: transport)
+        return try PasswordWebConnectionAuthority.session(data, origin: origin, cookie: cookie, expectedOwner: expectedOwner)
+    }
+    // The provider uses only these semantic operations. Origin and schema are
+    // part of negotiation; a manifest from another account endpoint is invalid.
+    static let capabilityRequirements = ["api.passwords": [1, 0, 0]]
+    static func compatibleCapabilities(_ data: Data, origin: URL) -> Bool {
+        guard data.count < 512 * 1024,
+              let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              manifest["schemaVersion"] as? Int == 1,
+              manifest["origin"] as? String == origin.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+              let features = manifest["features"] as? [String: [String: Any]] else { return false }
+        for (feature, minimum) in capabilityRequirements {
+            guard let version = features[feature]?["version"] as? String,
+                  version.range(of: "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$", options: .regularExpression) != nil else { return false }
+            let parts = version.split(separator: ".").compactMap { Int($0) }
+            guard parts.count == 3, parts[0] == minimum[0],
+                  parts[1] > minimum[1] || parts[1] == minimum[1] && parts[2] >= minimum[2] else { return false }
+        }
+        return true
     }
     public func requireCapability() async throws {
         var request = URLRequest(url: account.origin.appendingPathComponent(".well-known/thingtime-capabilities.json"))
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        let (data, response) = try await transport.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200, data.count < 512 * 1024,
-              let manifest = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let features = manifest["features"] as? [String: [String: String]],
-              let version = features["api.passwords"]?["version"], version.range(of: "^1\\.[0-9]+\\.[0-9]+$", options: .regularExpression) != nil else { throw PasswordProviderError.unavailable }
+        let data = try await Self.response(request, transport: transport)
+        guard Self.compatibleCapabilities(data, origin: account.origin) else { throw PasswordProviderError.capabilityUnavailable }
     }
     public func catalog() async throws -> [PasswordCatalogItem] {
         try await requireCapability()

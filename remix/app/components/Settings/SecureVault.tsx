@@ -39,9 +39,8 @@ const fieldStyles = {
 
 const emptyVault: VaultPayload = { vaultConfigured: false, groups: [], entries: [], providerTemplates: [] };
 
-const postVault = async (body: Record<string, unknown>, signal: AbortSignal) => {
-	await requireThingtimeCapability('api.lopu-vault', '1.2.1');
-	if (signal.aborted) throw new DOMException('Cancelled', 'AbortError');
+const postVault = async (body: Record<string, unknown>) => {
+	await requireThingtimeCapability('api.lopu-vault', ['save-provider', 'save-secret', 'create-group'].includes(String(body.action)) ? '1.4.0' : body.action === 'move-entry' ? '1.2.0' : '1.1.0');
 	const response = await fetch('/api/v1/lopu/vault', {
 		signal,
 		method: 'POST',
@@ -189,7 +188,7 @@ export const SecureVaultScope = ({ localVault }: { localVault?: LocalProviderVau
 					<Button isLoading={busy} onClick={() => run({ action: 'create-group', name: groupName }, 'Environment created', () => setGroupName(''))}>Add environment</Button>
 				</Flex>
 				<Flex gap={2} mt={2} flexWrap="wrap">
-					{vault.groups.map((group) => <Badge key={group.id} px={2} py={1} maxWidth="100%" whiteSpace="normal" overflowWrap="anywhere">{group.name} <Box as="button" ml={1} aria-label={`Delete ${group.name}`} disabled={busy} onClick={() => deleteEntry(group)}>×</Box></Badge>)}
+					{vault.groups.map((group) => <Badge key={group.id} px={2} py={1} maxWidth="100%" whiteSpace="normal" overflowWrap="anywhere">{group.name} <Box as="button" ml={1} aria-label={`Delete ${group.name}`} onClick={() => deleteEntry(group)}>×</Box></Badge>)}
 				</Flex>
 			</Box>
 
@@ -261,9 +260,8 @@ export const SecureVaultScope = ({ localVault }: { localVault?: LocalProviderVau
          </Select>
          <Button size="sm" isLoading={busy} onClick={() => run({ action: 'move-entry', id: entry.id, groupId: editingEnvironment.groupId }, 'Environment updated', () => setEditingEnvironment(null))}>Save environment</Button>
          <Button size="sm" variant="ghost" isDisabled={busy} onClick={() => setEditingEnvironment(null)}>Cancel</Button>
-        </Flex> : <Button size="sm" variant="outline" isDisabled={busy} aria-label={`Change environment for ${entry.name}`} onClick={() => setEditingEnvironment({ id: entry.id, groupId: entry.groupId || '' })}>{vault.groups.find((group) => group.id === entry.groupId)?.name || 'Ungrouped'} · Change</Button>}
-							{localVault && entry.valueAvailableOffline !== false ? <DeviceProviderReveal key={`${entry.id}:${entry.revision}`} vault={localVault} id={entry.id} label={entry.name} /> : <VaultReveal key={`${entry.id}:${entry.revision}`} vault="personal" id={entry.id} label={entry.name} deviceVault={localVault} deviceRevision={entry.revision} />}
-        {localVault?.scope.kind === 'account' && entry.valueAvailableOffline === false && <Text fontSize="xs">Value available from account after verification</Text>}
+        </Flex> : <Button size="sm" variant="outline" maxWidth="100%" height="auto" minHeight={8} whiteSpace="normal" overflowWrap="anywhere" isDisabled={busy} aria-label={`Change environment for ${entry.name}`} onClick={() => setEditingEnvironment({ id: entry.id, groupId: entry.groupId || '' })}>{vault.groups.find((group) => group.id === entry.groupId)?.name || 'Ungrouped'} · Change</Button>}
+							<VaultReveal vault="personal" id={entry.id} label={entry.name} />
 							<Button size="xs" variant="ghost" isDisabled={busy} onClick={() => deleteEntry(entry)}>Delete</Button>
 						</Flex>
 					))}

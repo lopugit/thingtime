@@ -106,7 +106,29 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-27: Install merged PR 1216 source `48925abc`; strict/deep signature and unchanged designated requirement passed. DJ DODA resumed across the update and window reopen; Home remained paused with its source grant absent. Full synthetic acceptance still awaits fresh native pairing confirmation. Exact-commit preview returned HTTP 200; CI remains mixed, not green. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+- 2026-10-28: Add standalone Password AutoFill connection and scoped recovery,
+  retain the same pending passkey on retries, and protect independent companion
+  links from automatic Electron lifecycle changes. Restore complete saved-provider
+  responses and opaque pagination bodies without arbitrary size ceilings
+  (`api.connections-request` 2.0.1). Correct provider setup to the encrypted Admin
+  Integrations vault; signed installed-device and real-provider acceptance remain
+  pending. [Details](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**
+
+- 2026-10-27: Add opt-in canonical Password AutoFill preparation under unchanged network denial and a separate manifest-bound Developer ID signing stage; preserve the default build, require fixed artifacts/manual profiles/secure timestamps, and reject mutation or extension-signing failure before host signing. Reviewed source preparation and staged Developer ID/secure-timestamp verification passed; the new requirements are stable across two rebuilds and satisfy the installed old requirements despite different text. Verified standalone installation/launch and updated-extension AutoFill registration passed; authenticated fill/passkey and main-app bridge acceptance remain pending. [PR #1240 notes](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**
+
+- 2026-10-27: Restore macOS-only Git-oracle guards and the explicit iOS skip in shared FileSync tests, preserving three portable cases; declare the test target's direct AppleFileSync package dependency. The real macOS suite passes 4/4 and the full unsigned iOS snapshot-adapter build-for-testing passes; signed installed-provider acceptance remains separate. [Details](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**
+
+- 2026-10-27: Correct proxy-preview capability discovery to advertise only whole contracts executable through the current gateway; unavailable ownership fails closed, while local/owner discovery remains intact. Share the feature/path/method gate with request admission and advertise `api.environment-gateway`1.2. Connections2 backend rollout and live feature acceptance remain separate. [PR1240](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**
+
+- 2026-10-27: Distinguish native Password AutoFill account linkage from OS suggestion-index synchronization, retain disabled-provider links with explicit retry feedback, and fence stale account/index completion. Installed-device acceptance remains pending. [Contract](../docs/password-manager.md#connection-and-suggestion-index-status). **Codex (AI)**
+
+- 2026-10-27: Integrate Connections2 service accounts and editable password-manager
+  fields onto current main while retaining password 1.3 icons/generation/passkey
+  tools, explicit render components, drawer customization and the zero-error
+  TypeScript gate. Preserve private transient controls, exact-origin vault binding
+  and all six Connections2 gateway requirements. Provider, scanner and installed
+  device acceptance remain separate release gates. [Integration and verification](../PRs/1240-codex-oauth-production-integration-integrate-multi-account-oauth-and-editable-password-tools.md). **Codex (AI)**
+- 2026-10-27: Admit the reviewed Darwin kernel-group verification fix and bounded trusted failure diagnostics for the native compile runner. Preserve default inert preflight, immutable pinning, network denial, and separate hosted/native acceptance gates. **Codex (AI)**
 
 - 2026-10-26: Add an explicit isolated installed-sync fixture bootstrap: canonical admin registration, one supervised API restart preserving its private database/session, and private-only upload approval for an exact UI-registered non-admin account. Ordinary launches retain existing behavior; real installed transfer acceptance remains separate. **Codex (AI)**
 
@@ -123,10 +145,84 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Native pairing, folder permissions and paused-state recovery passed; actual
   transfers remain unverified. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
 
-- 2026-10-26: Align the native Mac pairing capability limit with the server's
-  128-entry contract. Macs advertising 65 capabilities previously failed after
-  native approval and server preparation. Add signed-claim and rejection
-  regressions; installed acceptance remains in progress. [PR 1216 details](../PRs/1216-codex-browser-device-folder-sync-make-device-folder-sync-manageable-from-any-signed-in-browser.md). **Codex (AI)**
+- 2026-10-26: Add a contextual **➕ Add +** row to both drawer lists and support arbitrary-depth nested menus in the existing lower section. Preserve ancestor navigation, editable saved templates and existing links; expose parent selection and sibling ordering in drawer settings. **Codex (AI)**
+- 2026-10-26: Let initial and foreground resource refreshes reach a local API
+  even when the browser reports offline. Subspace embeds now get their first
+  request without weakening network isolation; offline background polling stays
+  paused. Regression and related suites pass 779 tests. [Verification](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
+- 2026-10-26: Configure production, develop and shared preview gateway targets;
+  verify their origin-scoped manifests and root-data routes while preserving
+  existing aliases and credentials. Integrate the canonical Thing renderer
+  from main for subspace embeds. Verify dedicated branch reads and rejection of
+  incoming gateway relays; identify the exact-origin allowlist correction needed
+  for ordinary PR aliases. [Rollout and verification](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
+
+- 2026-10-26: Reconcile PR996 with develop `cd6f8b8abc94270980bac216da2412ffef8578b1`: preserve gateway 1.1.0 fail-closed deployment policy, password 1.2.1 compatibility, deterministic lease renewal and isolated proxy/dedicated acceptance. [PR996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md). **Codex (AI)**
+
+- 2026-10-26: Integrate the canonical environment gateway into PR996: signed per-operation forwarding, fail-closed Mongo admission, promotion/rollback draining, guarded warmup and durable index readiness/recovery. Preserve password contract 1.2.1 and reject incompatible gateway operations. [Runbook](../docs/environment-api-gateway.md). Deployed/native acceptance remains separate. — Codex (AI)
+
+- 2026-10-26: Add independently editable nested properties for imported
+  structured password fields, transient private labels and preserved custom
+  Builder layouts. Keep unsupported or unsafe JSON intact and reject stale
+  property bindings. [PR #996 details](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+  **Codex (AI)**
+
+- 2026-10-26: Recover exact-head PR #996 and #992 develop previews by adding an
+  encrypted bootstrap scoped only to custom develop; preserve all 74 existing
+  environment-variable metadata records and production settings. Verify live
+  page/root-data/manifests without a shared gateway rollout or real-account
+  credential creation. [Audit](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md#develop-preview-publication-recovery--26-october-2026).
+  **Codex (AI)**
+
+- 2026-10-26: Make native passkey interoperability a network-denied macOS gate
+  for password tests and provider builds, with private temporary cleanup and real
+  verifier tamper regressions. OS/provider ceremonies remain separate.
+  [PR #996 details](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+  **Codex (AI)**
+
+- 2026-10-26: Remove QR upload byte/pixel rejection caps; scan large images in
+  cancellable overlapping sections and stop screen sharing before decoding.
+  See [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+  **Codex (AI)**
+
+- 2026-10-26: Add native TOTP setup intake and a separate authenticated,
+  memory-only editor handoff. The macOS password companion uses normal sign-in
+  in an ephemeral web view; editable create/attach/cancel controls preserve
+  drafts and require Save. The signed macOS companion appears in Set Up Codes
+  In; live setup, fill and physical iPhone acceptance remain pending.
+  [PR #996 details](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md). **Codex (AI)**
+
+- 2026-10-26 — **Codex (AI)**: Add individually editable password-field Copy
+  controls with masked copying, current-code TOTP handling, fixed feedback and
+  scope cancellation. Passkey signing fields exclude Copy. Password suite:
+  56 passes, zero skips; all 11 isolated browser groups passed at desktop/mobile
+  sizes. Real clipboard, native and production acceptance remain open. [PR #996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+
+- 2026-10-25 — **Codex (AI)**: Restore iOS test-target compilation by gating the
+  shared live Git oracle to macOS. Verify native password-core checks,
+  destination-failure regression logic and the full simulator test build;
+  signed-device acceptance remains open. [PR #996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+
+- 2026-10-23 — **Codex (AI)**: Make password-manager controls, repeated fields, transfer dialogs, attachments and imported source/history individually editable through saved block templates. Keep decrypted values in transient controls, cancel operations on Builder mode changes, and provide native unlock/retry feedback for failed destination changes. Cloud checks use synthetic data; installed Apple credential acceptance remains pending. [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+
+- 2026-10-18: Restore installed desktop password/mail requests by preserving Nitro request interfaces during the selected-origin handoff; add Passwords to sidebar and Commander navigation. See [PR #996 notes](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+
+- **2026-10-18 · Native password provider:** repair Developer ID archive/export, verify the exact signer and bundle-specific AutoFill profiles, and wrap the setup instructions. Signed macOS installation now succeeds; the provider is enabled and connected; OS credential ceremonies require user verification. [PR #996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md). — **Codex (AI)**
+- 2026-10-26: Integrate the reviewed environment gateway and dedicated connection policy into develop while preserving newer develop changes. Built sandboxed API acceptance and contract tests pass; canonical-owner activation remains pending. [PR #1224 details](../PRs/1224-codex-gateway-develop-integration-environment-gateways-and-dedicated-policy.md). **Codex (AI)**
+
+- 2026-10-26: Replace the legacy UUID hook's insecure random source with Web Crypto while preserving its mount-time lifecycle. The main delivery includes only the owned zero-baseline changes from PR 1228. **Codex (AI)**
+- 2026-10-26: Render data Things through an explicit saved Component pointer or
+  embedded Component definition, with an opt-in data inspector and independent
+  Component access checks. Keep type aliases out of explicit renderer selection
+  and document the authoring contract in global and repository AI guidance.
+  Preserve native child controls inside transient Action layouts and prevent
+  hidden content containers retaining horizontal scroll after data inspection.
+  [Verification and limits](../PRs/1227-thing-render-components.md). **Codex (AI)**
+- 2026-10-26 — **Codex (AI)**: Add editable password generation with configurable
+  rules and source-linked presets, encrypted entry-icon metadata with upload/URL
+  controls, and a native passkey setup guide. Password capability is 1.3.0;
+  isolated generator, icon and HTTP checks cover the new boundaries.
+  [PR #1231 details](../PRs/1231-codex-password-generator-passkeys-add-editable-password-generation-entry-icons-and-passkey-setup.md).
 
 - 2026-10-26: Add an opt-in native test viewer for the existing private sync
   acceptance browser, with masked transient credential entry and fixed
@@ -154,6 +250,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-10-26: Integrate the reviewed environment gateway and dedicated connection policy into develop while preserving newer develop changes. Built sandboxed API acceptance and contract tests pass; canonical-owner activation remains pending. [PR #1224 details](../PRs/1224-codex-gateway-develop-integration-environment-gateways-and-dedicated-policy.md). **Codex (AI)**
 
 - 2026-10-26: Add the server-only `THINGTIME_MONGODB_CONNECTION_MODE` override for `proxy` or opt-in `dedicated` MongoDB connections, with a branch-bundled default. Document the audited preview/develop database relationship, proposed gateway mapping and gradual pool draining; gateway activation remains pending. **Codex (AI)**
+
+- 2026-10-26: Reconcile PR992 with develop `cd6f8b8ab`: retain Connections2, gateway1.1's proxy default, explicit dedicated policy and Vercel fail-closed admission. Preserve signed OAuth fixtures and a bounded ten-port compiled acceptance runner. Canonical gateway/Connections rollout remains separate. [PR992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI)
+
+- 2026-10-26: Integrate canonical gateway ownership, signed origin-preserving relays, Mongo admission/draining and durable index readiness into PR992. Keep all six Connections contracts at major2; test restored frontend callbacks, exact data-environment vault selection and rotating refresh isolation. Roll out a compatible canonical backend before follower-dependent actions; current major1 refusal is expected. [Details](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md#environment-gateway-integration--26-october-2026). — Codex (AI)
+
+- 2026-10-26: Resolve Connections OAuth clients and callbacks from the encrypted server vault by exact origin and explicit data environment, bind pending/saved grants, and reject ambiguous configuration and refresh races. Old unbound grants require reconnect; real provider acceptance remains pending. [PR 992 details](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). **Codex (AI)**
+
+- 2026-10-23: Make service/account cards, credential forms and Connections tools individually editable in Builder; keep secrets in transient form state and out of request logs. Reconcile current develop, assign distinct capability versions for uncapped writes, and preserve saved-service pagination. Current provider configuration and validation evidence are recorded in [PR 992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md); real-account acceptance remains open. **Codex (AI)**
+
 
 - 2026-10-26: Forward public social cards and generated docs through the local Vite proxy; verify root docs GET/POST through the actual Vite server as well as built Nitro. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
 
@@ -416,6 +521,67 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   cannot publish checkpoints. Added isolated real-handler and browser checks;
   installed acceptance and the live 10,000-path cap remain open. Details:
   [PR #1002](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-18 — **Codex (AI)**: Reconcile the OAuth library with develop's
+  create-only admin OpenAI import. Correct its mismatched capability manifests
+  to 3.1.1 and require that version before import; add a regression for both
+  discovery endpoints and compatibility boundaries. Keep the floating Lopu
+  launcher clear of open credential forms while retaining navbar access. Focused
+  tests and builds pass.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-18 — **Codex (AI)**: Remove arbitrary saved-credential field,
+  envelope, request-body and shared data-string caps; wrap long Secure Vault
+  metadata on mobile and keep credential verification above navigation/floating
+  controls. All 24 isolated browser/API checks pass. Negotiate `api.lopu-vault`
+  1.4.0 and the affected data
+  contracts before writes. Physical hosting/database capacity still applies.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-18 — **Codex (AI)**: Reject invalid provider-token replacements
+  before any metadata or credential changes, preserving intentional blank-field
+  retention. Publish and negotiate `api.lopu-vault` 1.3.1. All 253 focused tests
+  and 20 isolated browser/API check records pass; remaining storage-size limits
+  and real-provider acceptance stay open.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-18 — **Codex (AI)**: Keep saved AI account names full-width on
+  mobile, with account controls on the next row. Validate independent account
+  removal, logout and owner isolation with disposable vault-backed browser
+  fixtures. Meta profile/logo and production callback validation are verified;
+  real multi-provider acceptance remains separate.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-18 — **Codex (AI)**: Fix saved-account response redaction so opaque
+  credentials cannot corrupt JSON syntax or leave suffixes of overlapping
+  tokens visible. Preserve typed data; publish `api.connections-request` 1.1.1
+  on both manifests. Regression coverage and acceptance boundaries:
+  [PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-18 — **Codex (AI)**: Preserve complete saved-account API results and
+  support opaque Google pagination cursors. Separate credential redaction from
+  bounded log summaries, retain ordinary key/value data, and reject cross-origin
+  redirects for complete responses. Publish `api.connections-request` 1.1.0
+  with cancellation and regression coverage.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-18 — **Codex (AI)**: Integrate the OAuth account library with the
+  released 1PUX importer and encrypted attachments. Revalidate shared vault
+  recovery, local callback persistence and real Google profile reuse; retain
+  explicit second-account, Meta and hosted OpenAI acceptance gates.
+  Document persistent private QA database storage and the dev-worker readiness
+  gate after rebuilding a disposable replica with missing data files.
+  [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-16 — **Codex (AI)**: Reject malformed successful provider JSON instead
+  of reporting an empty connection result; retain safe reconnect errors for
+  non-JSON authorization refusals. [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
+
+- 2026-10-16 — **Codex (AI)**: Reconcile the OAuth account library with the
+  released password vault and preserve shared encryption/session boundaries.
+  Verify refresh of a genuinely expired Google grant and successful subsequent
+  profile API reuse. Keep the existing local callback while adopting isolated
+  worktree PM2 names. [PR #992 evidence](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md).
 
 - 2026-10-18 — **Codex (AI)**: Mac/iOS foreground sync imports sealed native
   folder observations in bounded pages, retaining source/device/grant checks
@@ -1044,8 +1210,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   account with draft requests blocked; no production account data changed.
   Details: [PR #999](../PRs/999-codex-independent-post-draft-saving--fix-posting-blocked-by-draft-saving-failures.md).
 
+- 2026-10-15 — **Codex (AI)**: Native Password AutoFill explicitly uses the
+  data-protection Keychain so macOS enforces the shared access group and
+  device-only accessibility. Missing signing-group configuration fails closed.
+  See [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+
 - 2026-10-15 — **Codex (AI)**: Add isolated no-login native draft previews and the stdio MCP `thingtime_render_and_export` tool, reusing canonical transfers, schema validation and native renderers. Return bounded JSON/PNG artifacts with diagnostics, rejecting transparent CSS Color 4 text and zero-size fonts; keep Actions, account data, assets and publishing unavailable. Local clean-browser and disposable importer verification: [PR #998 evidence](../PRs/998-codex-anonymous-render-export--no-login-native-draft-rendering.md).
 
+- 2026-10-15 — **Codex (AI)**: Deliver the web password vault separately from native Apple provisioning; reject internal Action principals at the vault boundary even with a bearer header. [Web release #997](../PRs/997-codex-password-manager-web--encrypted-web-password-manager.md); native providers remain in #996.
+
+- 2026-10-15 — **Codex (AI)**: Password-manager preview QA confirms encrypted HTTPS/native persistence and responsive layout; cancel pending QR scans on editor closure and refresh native credential catalogs after edits. Native identity updates are ordered through logout; iOS background sync preserves active connections for the same owner. Native signing remains gated by the Apple agreement/profiles. [PR #996 details](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
 
 - 2026-10-15 — **Codex (AI)**: Add a private password library using reusable
   Thing field mods, account/session encryption and server-assisted recovery,
@@ -1056,6 +1230,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   block the web vault or existing native packaging. Correct managed worktree
   port identity and prune non-target image binaries from Vercel functions.
   [Setup and security model](../docs/password-manager.md); [PR #997 validation](../PRs/997-codex-password-manager-web--encrypted-web-password-manager.md).
+
+- **Account credential encryption**: integrated stable per-user keys, exact-password and live-session wrappers, server-assisted background/recovery access, guarded legacy migration and password-reset preservation. Local API acceptance verifies two saved accounts survive recovery while old sessions and reset replay fail. Google client creation and a real account API request are verified; remaining provider acceptance is tracked in [PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI), 2026-10-14
+
+- **Third-party account library**: grouped service/subservice cards, multiple owner-private encrypted OAuth accounts, Google readonly subservices, new-tab sign-in with env-pinned callbacks, one-use session-bound state, safe server-side reuse, refresh serialization, and owner-scoped caches. Facebook identity and posts have separate grants; ChatGPT hosted identity is gated by an approved OpenAI client. OpenAI API and Claude Code OAuth cards reuse Secure Vault. Fork setup and manual QA are documented in README/TESTING. Password/session encryption and real-provider acceptance remain pending; see [draft PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI), 2026-10-13
+
+- **Credential encryption preparation**: tested password/session key-wrapping primitives now preserve a stable data key across rotations and reject altered owner, record, purpose, session and expiry metadata. Runtime credentials still use the existing server-key vault; login/recovery and migration remain open in [PR #992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI), 2026-10-13
+
+- 2026-10-15 — **Codex (AI)**: Add a private password library using Thing field
+  mods, account/session encryption with approved server-assisted recovery,
+  TOTP QR imports, 1Password/Chrome/Apple transfer and shared Apple credential
+  provider targets. Restrict desktop credential forwarding to the selected
+  HTTPS account endpoint; distinguish managed worktree names to prevent PM2
+  collisions. Prune non-target image binaries from server packages so local
+  cross-platform installs fit Vercel function limits. Setup: [password manager](../docs/password-manager.md).
+  Validation and remaining native gates: [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
 
 - 2026-10-13 — **Claude (AI)**: Unified Timeline named versions, undo this
   change, compare with now and version export (`api.timeline` 1.18.0): new

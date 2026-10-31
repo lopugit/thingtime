@@ -1,12 +1,86 @@
 # Password manager
 
-`/passwords` provides an account-private credential library and, when anonymous,
-an independently encrypted device library. Each library can hold many independent
-entries for the same service. Entries use the protected
-`password-manager-entry` Thing schema and the reusable Thing `mods.layout=fields`
-editor, with ordered fields, masked secrets and extensible custom fields. The
-ordinary Thing tree is unchanged; controlled field mods do not persist values
-through global Thing state, local caches, editor history or request diagnostics.
+`/passwords` is an account-private credential library. Each account can own many
+independent entries for the same service. Entries use the protected
+`password-manager-entry` Thing schema with ordered fields, masked secrets and
+extensible custom fields. The password page uses ordinary editable block
+templates for its header, repeated cards/fields, transfer dialogs, QR and native
+controls, attachments and source/history panels. The Settings document host
+saves only layout templates. An explicit transient adapter hydrates allowlisted
+named inputs/textareas from live closure values; decrypted values never enter
+ComponentDataScope, saved block props, global Thing state, local caches, generic
+Action history or request diagnostics. Enter submits the enclosing entry after
+required-field validation. Hide/owner/origin changes revoke private controls;
+backgrounding masks them without discarding unsaved drafts. Entering Builder
+mode clears control values and cancels the adapter lifetime.
+
+## Copy field values
+
+Each ordinary field has an individually editable **Copy** button. Concealed
+values stay masked while copying. TOTP fields use **Copy verification code**
+to copy the current code only, without its countdown or setup seed. Passkey
+entries do not expose Copy controls for signing fields.
+
+The transient `field.copy` binding contains only the field ID; its adapter reads
+the current value from component memory and writes directly to the clipboard.
+Values never enter Builder scope, saved layouts or Action history. Success and
+failure use fixed, non-secret status text. Editing a value, changing entries,
+masking, closing, changing account/data plane or entering Builder invalidates
+pending work and feedback. A clipboard write already submitted to the browser
+cannot be revoked; its late completion cannot restore stale feedback.
+
+Verification on 26 October 2026: the focused password suite passed 56 tests with
+zero skips. All 11 isolated Chromium acceptance groups passed, covering masked
+copying, TOTP codes, clipboard rejection, stale feedback, independent Copy-label
+editing and desktop/mobile page scrolling. The clipboard device boundary was
+synthetic; real clipboard delivery, installed/native and production acceptance
+remain separate gates.
+
+## Native verification-code setup
+
+The iOS host and the separate macOS Thingtime Passwords companion register
+`otpauth` for TOTP setup. AutoFill's `ProvidesOneTimeCodes` capability fills saved
+codes; URL registration and an actual intake handler provide the separate
+system **Set Up Codes In** path. Migration and HOTP schemes are not registered.
+Apple describes scheme registration in its [default-app updates](https://developer.apple.com/documentation/updates/defaultapps).
+
+The shared parser rejects duplicate/unknown query options, invalid Base32
+padding/residual bits, unsupported parameters and non-TOTP payloads. A native
+memory-only inbox retains one setup for at most ten minutes. Another incoming
+setup cannot replace it, and warm delivery does not reload an existing editor.
+Unbound input survives normal login navigation; navigation after owner/document
+binding cancels it. No setup value enters a navigation URL, generic bridge log,
+clipboard, persisted layout, Timeline or restoration state.
+
+The companion uses `WKWebsiteDataStore.nonPersistent()` and normal sign-in.
+The configured linked origin and owner constrain that sign-in, but its stored
+native credential is never injected into the new browser. Missing native
+metadata uses the build's explicit HTTPS origin; locked/unreadable metadata
+never silently selects a different origin. Pending input remains in memory while
+the destination is unavailable and is retried when the app becomes active.
+
+The separate `window.thingtimeAuthenticatorSetup` version 1.0.0 surface supports
+`ready`, `consume` and `cancel`; native events are `available`, `setup`, `status`
+and `unavailable` (plus request-scoped `expired`). This narrow companion does not advertise the unrelated
+connect/sync bridge. Intake requires the exact configured HTTPS origin,
+main-frame `/passwords` without query/fragment, a fresh immutable document nonce,
+an editor nonce, the home data plane and a server-verified current owner. The
+host reads the existing paginated metadata GET using only that WK session's
+HttpOnly cookie, rejects redirects and negotiates `api.passwords` >=1.2.0 in
+major 1. It rechecks the cookie after verification. The setup URI is delivered
+only after an explicit create/attach choice, using WebKit arguments targeted at
+the captured frame. Execution-time origin/path/document/editor-scope guards
+prevent delayed delivery into a new page or account.
+
+The separate `password-authenticator-setup` settings document exposes the notice
+for accounts that already customized their password layout, without replacing
+those saved blocks. The existing individually editable PasswordManager notice, buttons and masked
+field controls hold the resulting draft in component memory. Existing drafts
+remain unchanged until explicitly selected; Save uses the existing owner and
+revision guards. Account/data-plane changes, logout, cancellation, expiry and
+navigation retire pending native authority. Full signed macOS/iOS menu, Safari
+QR handoff, sign-in and real saved-code acceptance remain separate from unit,
+JavaScript-model and unsigned build checks.
 
 ## Anonymous device vault
 
@@ -110,10 +184,9 @@ and keeps prior matches visible while a new search is pending. POST requires a f
 50 entries using one bounded query and one account-key load. Scoped tokens, service accounts,
 temporary accounts and internal Action identities are not vault sessions.
 `catalog` returns names, usernames, exact HTTPS domains and public passkey
-identifiers for native and browser-provider selection; passwords, TOTP seeds and signing keys are
-excluded. Responses are private/no-store. The browser provider and optional native bridge reuse this catalog without exposing signing keys.
-The native picker checks the same account again before filling and requires
-device-owner verification.
+identifiers for native selection; passwords, TOTP seeds and signing keys are
+excluded. Responses are private/no-store. The native picker checks the same
+account again before filling and requires device-owner verification.
 
 Field contents are AES-256-GCM encrypted with a random account data key, using
 owner, key ID, record ID and purpose as authenticated data. The key is wrapped
@@ -336,92 +409,34 @@ OS enablement and a real registration followed by sign-in are separate acceptanc
 requirements; build or package verification alone does not prove them. Thingtime's
 own account-login passkeys are a separate feature from this credential provider.
 
-### Device connection control
+### Connection and suggestion-index status
 
-Password manager and Passwords settings share one editable native AutoFill control.
-The desktop bridge's `passwordsVersion` 1.1.0 adds a read-only `--status` helper:
-`connected` means the saved device connection matches the selected owner and
-origin; `disconnected` means no saved connection; `differentSession` means another
-owner or origin is linked; `unavailable` means that protected status could not be
-read. Cookie rotation alone does not change this linkage.
+The native connection result distinguishes `index-synchronized`,
+`linked-index-pending`, `disconnected` and unknown legacy status. A linked account
+remains linked when OS indexing is unavailable (including disabled AutoFill),
+but the UI says suggestions are not synchronized and offers the existing Connect
+retry. It never substitutes generic “Connected” for an unverified index result.
+The existing `passwordsVersion` 1.0.0 remains unchanged because deployed legacy
+web clients require that exact value. New clients accept major-1 bridges but
+require coherent explicit status fields before reporting synchronized; missing
+fields remain unknown. No HTTP API operation or capability version changes.
 
-Desktop bridge 1.2.0 automatically establishes the initial link only when the
-OS provider is enabled and its own signed-in HTTPS account passes the live
-origin/capability/owner catalog checks. It renews an existing matching desktop
-link. Explicit Disconnect saves an account/origin opt-out until Connect; automatic
-work never replaces a foreign or independently linked companion session. A local
-runtime returns `unsupportedOrigin` and directs macOS users to **Thingtime →
-API Endpoint → Production** in the menu bar, then account sign-in. It leaves an
-existing provider untouched. Canonical installation updates both the
-nested and standalone signed companion from the same verified source.
+New Electron opts into `--connection-status-v1`; the macOS helper then uses
+fixed exit codes 20/21/22 for the three explicit states. Without that flag the
+new helper preserves legacy exit 0 for older consumers. An older helper ignores
+the flag; its exit 0 on connect/sync is unknown to new Electron, not synchronized. No usernames, catalog
+entries, raw system errors or session values are returned. Both native platforms
+serialize replacement and stale-index cleanup, rechecking current session (and
+iOS document/generation) before and after the OS callback. Failed/stale replace
+attempts clear suggestions best-effort before a newer queued replacement; a
+failed clear never becomes a successful synchronization claim. The provider
+still reauthorizes the selected record against the current owner before fill.
+The Electron bridge rejects a changed account session after helper completion
+and clears old native authority before a later queued connection.
 
-Only a matching connection shows Disconnect; disconnected or different-session
-states show Connect. Unavailable status shows Retry, and older app bridges show
-an update instruction. Refresh after actions, focus and native bridge changes;
-fence late results when account or origin changes. Do not persist connection
-status or credentials in editable layouts. This check neither probes the remote
-service nor proves the operating system has enabled the provider: OS AutoFill
-settings, vault access and an actual relying-party ceremony remain separate checks.
-The updated Electron bridge/helper must be installed before claiming this control
-works on the user's device; upgrading only the provider extension is insufficient.
-
-### Native progress, recovery and naming
-
-The macOS provider and host display **Thingtime** in the operating-system flow.
-The existing bundle identifiers, shared Keychain group and packaged
-`Thingtime Passwords.app` path remain stable so this label change does not create
-a new credential store or require migration. Packaged verification checks both
-the resolved **Thingtime** display/short names and matching host/provider versions.
-The host deliberately keeps raw `CFBundleDisplayName` equal to its unchanged
-`Thingtime Passwords.app` basename; bundled `en.lproj/InfoPlist.strings` localizes
-both visible name keys to Thingtime. macOS otherwise falls back to the filesystem
-name when the raw display name differs from the basename. Verification requires this localization
-rather than mistaking the intentional raw fallback for visible branding. Check
-`FileManager.displayName`, URL localized name and the actual native picker on the
-installed copy; raw plist values alone do not establish the visible result. The optional browser adapter's manifest,
-action tooltip and popup also display Thingtime.
-
-For sign-in, an enabled provider has a site/account entry only when its catalog
-contains a passkey with the requested relying-party identifier and an allowed
-credential ID (when the site supplies an allowlist). A password record with the
-same website URL is not a passkey. Passkey identity indexing uses the relying-party
-identifier even when no password-URL field exists. Registration and assertion
-requests use the native provider; registration creates that site's credential.
-
-Another password-manager browser extension can intercept WebAuthn before the
-native provider picker. For example, disable 1Password's **Offer to sign in with
-passkeys** and **Offer to save passkeys** browser-extension preferences to use the
-native flow while retaining its OS provider setting. Some browser extensions can
-still block another provider's initial WebAuthn hooks after their own passkey
-offers are off. If Thingtime's toolbar diagnostics show failed hook installation,
-disable the conflicting browser extension and reload the website. For example,
-1Password's Chrome extension can be off while its macOS AutoFill provider and
-vault remain available; its browser UI/autofill will no longer run. This gives
-Thingtime's enabled adapter first chance at supported explicit browser requests,
-while conditional and unsupported requests still use the native flow.
-Provider ordering belongs
-to macOS and the browser; Thingtime does not programmatically set itself first.
-The optional Thingtime browser adapter intercepts supported explicit `create`/`get`
-requests when enabled and opens the existing `/passwords/provider` approval page.
-Conditional and unsupported requests retain the browser's native flow. It does
-not communicate with the native host or migrate credentials.
-
-The provider shows the current connection, device verification, vault, save,
-readback, AutoFill indexing or browser-return step. Failures use closed error
-categories with actionable recovery text; diagnostics contain only the phase and
-category, never server bodies, underlying error descriptions, account identifiers
-or credential material. A missing/expired connection calls for reconnecting from
-Thingtime; a protected-store access failure calls for unlocking the device.
-
-Retry within the same registration request retains the original key, credential,
-record and write identity, including uncertain save/readback outcomes. Cancellation,
-a replacement OS request, or account/session changes fence late work. A changed
-session after registration begins requires Cancel and a new request from the
-website; the old ceremony cannot retry against a different connection. Saved-entry
-pagination follows cursors without an arbitrary entry cap and rejects a repeated
-cursor rather than looping forever. These guards do not establish that the active
-installed provider completed a relying-party registration: verify a signed build,
-the active extension and a real create-and-sign-in flow independently.
+Actual disabled/enabled OS indexing and account switching still require signed
+installed acceptance; source/mocked statuses are not proof that Chrome requests
+or fills a matching Google credential.
 
 ## Validation and setup
 
@@ -451,33 +466,7 @@ so small codes remain readable in large screenshots. Browser image-decoding and
 device resources still determine which files can be opened. Closing the editor
 aborts scanning and releases its bitmap.
 
-Anonymous validation: `npm --prefix remix run test:local-workspace` includes the
-storage, scope, concurrency, idle-lock and cancellation tests. Build the client,
-serve its production output on loopback, then enable the actual offline browser
-fixture with `TT_LOCAL_PASSWORDS_URL=http://127.0.0.1:<port>` and
-`TT_LOCAL_PASSWORDS_ARTIFACTS=<local-output-directory>` when running
-`app/local-workspace/passwordVault.browser.test.ts` with the workspace test
-runner. The fixture uses synthetic credentials and a clean browser context;
-its downloaded CSV is plaintext test data and must remain untracked. It checks
-1440/390/320px layout, independent tab unlock, stale edits, normal transfer,
-zero account records/commands and zero password API or mutation requests.
-
-Account verification uses `app/local-workspace/passwordSync.test.ts` and
-`passwordTransport.test.ts` for ordering, ambiguous receipts, claims, scope
-fences, reviewed conflicts, cancellation, idle locking and atomic quota rollback.
-Automatic title/list/export reads preserve the idle deadline; explicit user
-activity renews it for anonymous and account vaults.
-The adapter shares key lifetime through `deviceVaultSession.ts`: its password
-namespace and authenticated encryption context remain compatible with saved
-device records. A fixed synthetic legacy fixture verifies that compatibility.
-Provider credentials have a separate key namespace; their authoring/sync surface
-is still pending and is not enabled by this extraction.
-Enable `accountPasswords.browser.test.ts` with `TT_ACCOUNT_PASSWORDS_URL` set to a
-disposable loopback production-client server and `TT_ACCOUNT_PASSWORDS_ARTIFACTS`
-set to an ignored output directory. Supply the same Playwright/Chromium paths as
-the anonymous fixture. It creates disposable accounts, edits and exports offline,
-reopens at 1440/390/320px, exercises real server conflicts/copies and proves a second
-account cannot read the first vault. Never point this fixture at existing accounts.
+Screen-capture QA can use a synthetic canvas video stream in a disposable test page to exercise the real decoder and cleanup paths without sharing a desktop. This verifies video processing, cancellation, and stopped tracks, but does not substitute for OS picker/permission validation. Sharing stops as soon as one immutable frame is captured, before decoding. Closing the editor aborts its pending scan; a stream or bitmap returned by a late browser operation is immediately released.
 
 For file lifecycle QA, register three disposable accounts through `/api/v1/register`
 in an isolated localhost deployment, then configure the first username in

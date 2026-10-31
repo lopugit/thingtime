@@ -903,9 +903,9 @@ export const LopuHost = () => {
 				<Box
 					ref={launcherSlotRef}
 					className="lopuLauncher"
-					visibility={launcherCovered ? 'hidden' : 'visible'}
-					pointerEvents={launcherCovered ? 'none' : undefined}
-					aria-hidden={launcherCovered || undefined}
+					// Keep credential fields unobscured without changing the user's
+					// launcher preference; the navbar opener remains available.
+					sx={{ 'body:has([data-tt-credential-form]) &': { display: 'none' } }}
 					position="fixed"
 					zIndex={LOPU_LAUNCHER_Z}
 					left={launcherPos ? `${launcherPos.x}px` : undefined}

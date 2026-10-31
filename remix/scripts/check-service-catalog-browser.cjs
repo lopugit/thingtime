@@ -284,7 +284,7 @@ let browser, server;
     await editText(`${catalog} ${block('account-name')}`, 'Saved {item.displayName}');
     await editText(`${catalog} ${block('provider-icon')}`, 'Service {item.icon}');
     const deletedAccountLabel = await structurallyEditLabel(page, `${catalog} ${block('account-name')}`, catalog, `${results}/builder-structural-duplicate.png`);
-    await page.click(`${appPassword} ${block('provider-field-input')}`);
+    await page.click(`${catalog} ${block('provider-field-input')}`);
     await page.waitForSelector('input[aria-label="Element title"]');
     await page.type('input[aria-label="Element title"]', 'Saved credential field');
     await page.type('input[aria-label="Element defaultValue"]', 'synthetic-forbidden-default');

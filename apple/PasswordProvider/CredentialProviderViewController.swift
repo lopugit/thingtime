@@ -62,19 +62,8 @@ private struct ProviderView: View {
     private let model = ProviderViewModel()
     private var task: Task<Void, Never>?
     private var authentication: LAContext?
-    private var requests = PasswordProviderRequests()
-    private let logger = Logger(subsystem: "com.thingtime.passwords.provider", category: "requests")
-    private var phase = PasswordProviderPhase.connection
-    private var registrationAttempt: PasskeyRegistrationAttempt?
-    private var registrationSession: ProviderSession?
-    private var registrationAcknowledged = false
-    private var registrationStart = PasswordProviderRegistrationStart()
-    private var registrationRequest: ASPasskeyCredentialRequest?
-
-    private func show(_ phase: PasswordProviderPhase) {
-        self.phase = phase; model.status = phase.message
-        logger.info("Request progress: phase=\(phase.rawValue, privacy: .public) code=started")
-    }
+    private var epoch = UUID()
+    private var pendingRegistration: PendingPasskeyRegistration?
     override func loadView() {
         let root = ProviderView(model: model)
 #if os(macOS)
@@ -117,8 +106,8 @@ private struct ProviderView: View {
         model.requestedSite = ""; model.selectionSummary = nil; model.requestDetailsExpanded = false
     }
     private func cancel(_ code: ASExtensionError.Code = .userCanceled) {
-        beginRequest()
-        extensionContext.cancelRequest(withError: NSError(domain: ASExtensionErrorDomain, code: code.rawValue))
+        epoch = UUID(); task?.cancel(); authentication?.invalidate(); authentication = nil; pendingRegistration = nil
+        model.choices = []; extensionContext.cancelRequest(withError: NSError(domain: ASExtensionErrorDomain, code: code.rawValue))
     }
     private func perform(_ work: @escaping (UUID) async throws -> Void) {
         // Button disabling is visual feedback; this guard also fences queued clicks.
@@ -130,28 +119,27 @@ private struct ProviderView: View {
             guard let self else { return }
             do { try await work(current) }
             catch {
-                if self.requests.isCurrent(current) && !Task.isCancelled {
+                if current == self.epoch && !Task.isCancelled {
+                    if Self.isCancellation(error) { self.cancel(); return }
                     let failure = error as? PasswordProviderError ?? .unavailable
-                    // Only closed phase/error categories are logged. Never log
-                    // underlying errors, server responses or credential values.
-                    self.logger.error("Request failed: phase=\(self.phase.rawValue, privacy: .public) code=\(String(describing: failure), privacy: .public)")
-                    self.model.message = self.phase.failure(failure)
-                    if failure.allowsRetryInCurrentRequest {
-                        self.model.retry = { [weak self] in self?.perform(work) }
-                    } else {
-                        // Keep pending material fenced to its original session
-                        // until cancellation; a new ceremony must start afresh.
-                        self.model.retry = nil; self.model.choices = []
-                    }
-                    self.model.status = ""
+                    self.model.message = failure.recoveryMessage
+#if os(macOS)
+                    self.model.choices.removeAll { $0.id == "reconnect" }
+                    self.model.choices.append(.init(id: "reconnect", title: "Open Thingtime Passwords", detail: "Sign in there, then choose Connect Password AutoFill", select: {
+                        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.thingtime.passwords") else { return }
+                        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+                    }))
+#endif
                 }
             }
-            if self.requests.finish(current) {
-                self.model.busy = false
-                if self.model.status == self.phase.message { self.model.status = "" }
-                self.authentication = nil
-            }
+            if current == self.epoch { self.model.busy = false }
         }
+    }
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let provider = error as? PasswordProviderError, case .cancelled = provider { return true }
+        if let local = error as? LAError { return [.userCancel, .appCancel, .systemCancel, .userFallback].contains(local.code) }
+        return false
     }
     private func verify(_ current: UUID, session: ProviderSession) throws {
         try Task.checkCancellation()
@@ -252,18 +240,14 @@ private struct ProviderView: View {
         select(id, hosts: domains([credentialRequest.credentialIdentity.serviceIdentifier]), passkeyRequest: credentialRequest as? ASPasskeyCredentialRequest, otp: otp)
     }
     override func prepareInterfaceForExtensionConfiguration() {
-        _ = view; beginRequest()
-        model.message = "Open Thingtime → Passwords → Connect Password AutoFill to use your signed-in account."
+        _ = view
+        model.message = "Open Thingtime Passwords, sign in there, then choose Connect Password AutoFill. You can also connect from Thingtime → Passwords."
         model.choices = [.init(id: "done", title: "Done", detail: "", select: { [weak self] in self?.extensionContext.completeExtensionConfigurationRequest() })]
     }
     override func prepareInterface(forPasskeyRegistration registrationRequest: any ASCredentialRequest) {
         guard let request = registrationRequest as? ASPasskeyCredentialRequest, let identity = request.credentialIdentity as? ASPasskeyCredentialIdentity else { cancel(.failed); return }
-        // The system can deliver preparation/presentation in either order.
-        // Repeated preparation of the same request must not cancel active work
-        // or re-arm device verification after a failure.
-        if self.registrationRequest === request { startRegistrationIfReady(); return }
-        _ = view; beginRequest()
-        self.registrationRequest = request
+        epoch = UUID(); task?.cancel(); authentication?.invalidate(); authentication = nil; pendingRegistration = nil
+        model.busy = false
         model.title = "Save a passkey in Thingtime"
         model.message = "\(identity.userName) · \(identity.relyingPartyIdentifier)"
         registrationStart.prepare()
@@ -289,34 +273,20 @@ private struct ProviderView: View {
             if #available(iOS 18, macOS 15, *), let excluded = request.excludedCredentials {
                 guard !catalog.contains(where: { item in item.relyingParty == identity.relyingPartyIdentifier && item.credentialId.flatMap({ Data(base64URL: $0) }).map({ id in excluded.contains { $0.credentialID == id } }) == true }) else { throw PasswordProviderError.invalidCredential }
             }
-            // Retain the immutable payload and idempotency identity until this
-            // system request ends, including a timeout after the server commits.
-            if self.registrationAttempt == nil {
-                self.registrationAttempt = try PasskeyRegistrationAttempt(relyingParty: identity.relyingPartyIdentifier, userHandle: identity.userHandle, username: identity.userName)
-                self.registrationSession = session
+            if self.pendingRegistration == nil {
+                self.pendingRegistration = PendingPasskeyRegistration(key: try PasskeyMaterial(relyingParty: identity.relyingPartyIdentifier, userHandle: identity.userHandle, username: identity.userName), session: session)
             }
-            guard let attempt = self.registrationAttempt else { throw PasswordProviderError.unavailable }
-            let key = attempt.key, id = attempt.recordID
-            if !self.registrationAcknowledged {
-                self.show(.saving)
-                _ = try await client.save(key.entry, id: id, writeId: attempt.writeID)
-                try self.verify(current, session: session)
-                self.registrationAcknowledged = true
-            }
-            // Never report a usable passkey until encrypted server persistence is
-            // acknowledged and the same local Thingtime session is still active.
-            try self.verify(current, session: session)
-            self.show(.confirming)
-            let stored = try await client.read(id)
-            guard try attempt.matches(stored) else { throw PasswordProviderError.unavailable }
-            try self.verify(current, session: session)
-            self.show(.indexing)
-            try await PasswordIdentityIndex.savePasskey(key, recordID: id)
-            try self.verify(current, session: session)
-            self.show(.filling)
+            guard let pending = self.pendingRegistration else { throw PasswordProviderError.unavailable }
+            try await pending.persist(session: session, verify: { try self.verify(current, session: session) },
+                save: { entry, id, write in _ = try await client.save(entry, id: id, writeId: write) },
+                read: { try await client.read($0) },
+                index: { key, id in
+                    do { try await PasswordIdentityIndex.savePasskey(key, recordID: id) }
+                    catch { throw PasswordProviderError.identityIndexUnavailable }
+                })
+            let key = pending.key
             self.extensionContext.completeRegistrationRequest(using: ASPasskeyRegistrationCredential(relyingParty: key.relyingParty, clientDataHash: request.clientDataHash, credentialID: key.credentialID, attestationObject: try key.registration()), completionHandler: nil)
-            self.model.choices = []
-            self.registrationAttempt = nil; self.registrationSession = nil
+            self.pendingRegistration = nil; self.model.choices = []
         }
     }
 }

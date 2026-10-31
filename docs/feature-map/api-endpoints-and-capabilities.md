@@ -1,15 +1,31 @@
 # API endpoints and capabilities
 
-`api.devices-sync-control` 1.1.0 adds `/api/v1/devices/sync-control` for the
-account browser and installed sync worker. `deviceSyncControl.ts` authenticates
-the owner and current device pairing, delivers an immutable request once, and
-accepts a result only from its claiming lease. Protected `device-sync-control`
-Things reuse the device queue/unique-key indexes, secure BinData payloads and
-shared control TTL; no new collection or index is introduced. File bytes and
-native grants remain on the device. Optional owner-private `roots[].sourcePath`
-location metadata survives the encrypted status result; it grants no ancestor
-access and never appears in a public manifest. Run `test:devices`, `test:api-capabilities`
-and `test:schemas`; see [browser device sync](../browser-device-sync.md).
+Explicit Thing presentation is shared crystal metadata: `registry.ts`
+`validateThingtimeCrystal` retains `renderComponent` after each typed content
+allowlist and validates embedded definitions through the canonical Component
+sanitizer. `api.things` 1.42.0 and `api.things-update` 1.13.0 advertise it through
+both generated manifests. The first-party create/PATCH/PUT client negotiates
+1.42.0 when it sends a declaration. Omitted PATCH metadata survives content
+edits; `null` remains an explicit unavailable renderer; replacement omission
+removes the declaration. Malformed declarations fail validation. Saved pointers
+never grant Component/dependency access. `renderComponentDeclaration.ts` shares
+the declaration grammar and root-over-nested post precedence with rendering.
+Run `test:schemas`, `test:feed`, `test:api-capabilities` and the isolated
+`subspace-messages-acceptance.mjs` typed-post/comment persistence checks.
+
+Environment API gateway ingress is negotiated through `api.environment-gateway`
+1.2.0 and `/.well-known/thingtime-capabilities.json`. Proxy follower discovery
+filters whole features/operations against the existing gateway authority through
+`gatewayOperations.ts`, shared with request admission; no downgrade to an owner
+version that the local runtime refuses. Missing or incompatible ownership fails
+closed. The canonical alias bootstraps local discovery; standalone/dedicated and
+verified immutable owners retain their registry. Run `test:environment-gateway`
+for the actual Nitro handler, ownership and public operation contract checks. Server deployments use
+the build-bundled `mongoConnectionPolicy` (`proxy` by default, `dedicated` by
+opt-in) with the `THINGTIME_MONGODB_CONNECTION_MODE` runtime override. Dedicated
+mode executes its own backend, advertises `gateway: null`, and refuses relay
+traffic; it does not imply an isolated database. See [the gateway runbook](../environment-api-gateway.md)
+for the audited environment mapping and pending activation evidence.
 
 Mobile device descriptors use `app/devices/platform.ts` across validation,
 projection, schemas and client types. `api.devices` 1.10.0 and
@@ -578,20 +594,29 @@ the upgraded media-tools definitions. Both manifest generators consume the
 canonical endpoint registry; media suite clients require the new minor before
 installation. No image-byte HTTP endpoint is introduced.
 
-## Environment gateway and index readiness
+Connections gateway clients retain all six major2 requirements. The synthetic
+`connections/gatewayOAuthFlow.test.mts` uses the signed H3 relay and actual
+OAuth/request handlers to check frontend callback, actual data-environment vault
+selection, live-session/one-use state and refresh ownership. A Connections1
+canonical backend is intentionally refused; upgrade/promote the backend before
+dependent follower actions. See the gateway runbook's Connections rollout.
 
-The negotiated ingress contract and connection-mode policy are summarized at the
-top of this map. `app/api/utils/deployment/environmentGateway.ts` owns bounded discovery,
-admission and pool draining; `server/utils/environmentGateway.ts` validates
-origin-preserving signed relays before the normal route authorization path.
-`server/middleware/environment-gateway.ts`, the SPA fallback and capability
-handler retain local discovery/static serving while routing data operations.
-`mongodb/indexLifecycle.ts` and `indexMaintenance.mts` coordinate durable index
-readiness without blocking read-only authentication. Existing admin migration
-status/run contracts and Lopu background-task contracts carry their deliberate
-compatible patch versions in both generated manifests.
+`test:environment-gateway:connections` additionally verifies the compiled Nitro
+OAuth/request path with a synthetic generated adapter preload and real temporary
+replica API data. It preserves the OS network boundary and normal authentication.
+Use `THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE` for a free separate test port range.
 
-Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
-the built `test:environment-gateway:acceptance` runner. See
-[the gateway runbook](../environment-api-gateway.md) for server settings,
-environment partitioning and outstanding live rollout acceptance.
+
+The combined OAuth/password production integration adds uncapped data strings at
+`api.things` 1.43.0 and `api.things-update` 1.14.0, preserving main's independently
+shipped explicit renderer contracts at 1.42.0/1.13.0. Writers negotiate only the
+capability they use. Bundled desktop fallback validates the actual selected
+origin before forwarding every password operation (1.3.0) and all six
+Connections operations (2.0.0), in both ordinary and forwarded-origin paths.
+
+Saved service requests (`connections/request`) advertise `api.connections-request`
+2.0.1 in both manifest generators. Complete fixed-operation results and opaque
+pagination bodies preserve valid data without arbitrary byte ceilings; owner/rate,
+scope, DNS/redirect and cancellation checks remain required. Focused regressions:
+`connections/outboundTarget.test.ts`, `accountLibrary.test.mts` and
+`requestRoute.test.mts`, plus both capability-generator suites.

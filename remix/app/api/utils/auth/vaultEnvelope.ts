@@ -41,13 +41,20 @@ const open = (key: Buffer, aad: string[], value: Sealed, maxBytes = MAX_VALUE_BY
   finally { partial?.fill(0); }
 };
 export const createVaultDataKey = (): VaultDataKey => ({ id: `vault-key-${randomUUID()}`, bytes: randomBytes(32) });
-export const sealVaultValue = (ownerId: string, key: VaultDataKey, recordId: string, purpose: 'oauth' | 'secret', value: string, maxBytes = MAX_VALUE_BYTES): VaultEnvelope => {
+const valueContext = (ownerId: string, keyId: string, recordId: string, purpose: 'oauth' | 'secret' | 'password-icon') => {
+  identity({ ownerId, keyId });
+  if (typeof recordId !== 'string' || !recordId || recordId.length > 200 || !['oauth', 'secret', 'password-icon'].includes(purpose)) throw failure();
+  return ['thingtime-vault-value:v2', ownerId, keyId, recordId, purpose];
+};
+// User/provider values have no product size cap. A storage adapter may pass
+// its actual physical capacity; key wrappers retain their small protocol bound.
+export const sealVaultValue = (ownerId: string, key: VaultDataKey, recordId: string, purpose: 'oauth' | 'secret' | 'password-icon', value: string, maxBytes = Infinity): VaultEnvelope => {
   if (typeof value !== 'string' || Buffer.byteLength(value) > maxBytes) throw failure();
   const plain = Buffer.from(value);
   try { return { version: 2, keyId: key.id, ...seal(key.bytes, valueContext(ownerId, key.id, recordId, purpose), plain, maxBytes) }; }
   finally { plain.fill(0); }
 };
-export const openVaultValue = (ownerId: string, key: VaultDataKey, recordId: string, purpose: 'oauth' | 'secret', value: VaultEnvelope, maxBytes = Infinity): string => {
+export const openVaultValue = (ownerId: string, key: VaultDataKey, recordId: string, purpose: 'oauth' | 'secret' | 'password-icon', value: VaultEnvelope, maxBytes = Infinity): string => {
   if (value?.version !== 2 || value.keyId !== key.id) throw failure();
   const plain = open(key.bytes, valueContext(ownerId, key.id, recordId, purpose), value, maxBytes);
   try { return plain.toString('utf8'); } finally { plain.fill(0); }

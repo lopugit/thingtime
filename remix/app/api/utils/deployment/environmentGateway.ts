@@ -9,7 +9,7 @@ export const ENVIRONMENT_GATEWAY_VERSION = '1.0.0';
 export const GATEWAY_OWNERSHIP_TTL_MS = 5_000;
 export type GatewaySettings = { environment: string; origin: string; deploymentId: string; secret: string };
 export type GatewayDescriptor = Omit<GatewaySettings, 'secret'>;
-type GatewayManifest = {
+export type GatewayManifest = {
   schemaVersion: number; origin: string; gateway?: GatewayDescriptor | null;
   features: Record<string, { version: string }>;
   operations: { feature: string; path: string; methods: string[] }[];

@@ -1,3 +1,4 @@
+import { withVaultRequest } from '../../../app/api/utils/auth/vaultRequest';
 import { agentTestRefusal } from '../../../app/api/utils/agentTesting';
 import { actionDataRoutes } from '../../utils/actionDataRoutes';
 import { defineHandler } from 'nitro/h3';
@@ -161,7 +162,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/communities/members': () => import('../../../app/routes/api/v1/communities/members/_members'),
   'v1/communities/sections': () => import('../../../app/routes/api/v1/communities/sections/_sections'),
   'v1/communities/update': () => import('../../../app/routes/api/v1/communities/update/_update'),
-  'v1/connections': () => import('../../../app/routes/api/v1/connections/_connections'),
+  'v1/connections/request': () => import('../../../app/routes/api/v1/connections/request/_request'),
+	'v1/connections': () => import('../../../app/routes/api/v1/connections/_connections'),
   'v1/connections/feed': () => import('../../../app/routes/api/v1/connections/feed/_feed'),
   'v1/connections/filters': () => import('../../../app/routes/api/v1/connections/filters/_filters'),
   'v1/connections/oauth/begin': () => import('../../../app/routes/api/v1/connections/oauth/begin/_begin'),
@@ -359,7 +361,17 @@ export default defineHandler(async (event) => {
   }
 
   try {
-    return normalizeResponse(await handler({ request: event.req }));
+		const response = await withVaultRequest(event.req, () => runWithMongoEndpoint(mongoEndpoint, async () => {
+      const identityFailure = await enforceExpectedActor(event.req, getCurrentUser);
+      if (identityFailure) return identityFailure;
+      if (event.req.headers.has('X-Thingtime-Background-Id')) {
+        const { startBackgroundTask } = await import('../../../app/api/utils/lopu/backgroundTasks');
+        return startBackgroundTask(event.req, async request => normalizeResponse(await handler({ request })));
+      }
+      return normalizeResponse(await handler({ request: event.req }));
+    }));
+    if (response.status >= 500 && path !== 'v1/admin/error-logs') await recordErrorLog(new Error('HTTP request returned a server error'), { source: 'http-response', status: response.status });
+    return response;
   } catch (err) {
     if (err instanceof Response) {
       return err;

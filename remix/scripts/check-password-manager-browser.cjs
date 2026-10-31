@@ -44,8 +44,16 @@ let browser, server;
       await page.evaluate((scope, text) => [...document.querySelectorAll(`${scope} button`)].find(button => button.textContent.trim() === text && !button.disabled).click(), scope, text);
       await delay();
     };
-    const replace = async (selector, value) => { await page.click(selector); await page.keyboard.down('Control'); await page.keyboard.press('KeyA'); await page.keyboard.up('Control'); await page.type(selector, value); };
+    const replace = async (selector, value) => { await page.click(selector); await page.keyboard.down('Control'); await page.keyboard.press('KeyA'); await page.keyboard.up('Control'); await page.keyboard.sendCharacter(value); };
     const editText = async (selector, value) => { await page.click(selector); await page.waitForSelector('textarea[aria-label="Block text"]'); await replace('textarea[aria-label="Block text"]', value); await page.keyboard.press('Escape'); };
+    const editTextFromBlockPicker = async (blockId, value) => {
+      const picker = 'select[aria-label="Select block"]';
+      await page.waitForFunction((selector, id) => [...document.querySelector(selector).options].some(option => option.value === id), {}, picker, blockId);
+      await page.select(picker, blockId);
+      await page.waitForSelector('textarea[aria-label="Block text"]');
+      await replace('textarea[aria-label="Block text"]', value);
+      await page.keyboard.press('Escape');
+    };
     const editTitle = async (selector, value) => { await page.click(selector); await page.waitForSelector('input[aria-label="Element title"]'); await replace('input[aria-label="Element title"]', value); await page.keyboard.press('Escape'); };
     const saveLayout = async scope => { await clickText(scope, 'Save layout'); await page.waitForFunction(scope => !document.querySelector(scope).textContent.includes('Unsaved layout'), {}, scope); await clickText(scope, 'Done editing layout'); };
     const openEntry = async () => { await page.waitForSelector(block('password-record')); await page.click(block('password-record')); await page.waitForSelector('input[name="field-password"]'); await page.waitForSelector(`${attachments} ${block('attachment-name')}`); };
@@ -69,6 +77,13 @@ let browser, server;
           node.contains(document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)) &&
           (parseFloat(style.outlineWidth) > 0 || style.boxShadow !== 'none');
       }), 'focused Builder control must be visible, unobscured and visibly indicated');
+    };
+    const physicalClick = async selector => {
+      await page.waitForSelector(selector, { visible: true });
+      await page.$eval(selector, node => node.scrollIntoView({ block: 'center' }));
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.ok(await page.$eval(selector, node => { const bounds = node.getBoundingClientRect(); return node.contains(document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)); }), 'physical click target must be unobscured');
+      await page.click(selector);
     };
     for (const width of [1440, 390]) {
       await page.setViewport({ width, height: 1000 });
@@ -157,8 +172,10 @@ let browser, server;
         await record('Switching JSON modes revokes stale leaf bindings even when same-type array order leaves the shape unchanged');
         const staleBinding = await page.$eval(city, input => input.getAttribute('data-tt-action-inputs'));
         await page.$eval(city, input => input.closest('[data-block-id="password-field"]').querySelector('[data-block-id="password-field-mode"]').click());
+        await record('Before property-key reorder check');
         const reordered = await page.$eval('textarea[name="field-import-1"]', input => { const value = JSON.parse(input.value); return JSON.stringify({ unknown: value.unknown, city: value.city }); });
         await replace('textarea[name="field-import-1"]', reordered);
+        await record('Property-key replacement typed');
         await page.$eval('textarea[name="field-import-1"]', input => input.closest('[data-block-id="password-field"]').querySelector('[data-block-id="password-field-mode"]').click());
         const reorderedCity = 'input[name="property-import-1-1"]';
         const currentBinding = await page.$eval(reorderedCity, input => input.getAttribute('data-tt-action-inputs'));
@@ -177,6 +194,7 @@ let browser, server;
         await page.waitForFunction(() => !document.querySelector('[data-block-id="password-save"]').disabled);
         await record('Opaque property generation rejects a stale position binding after JSON keys reorder; no sibling was overwritten');
       }
+      await record('Structured field reorder checks finished');
       await page.waitForFunction(() => /^\d{6} · \d+s$/.test(document.querySelector('[data-block-id="password-totp-code"]')?.value || ''));
       if (width === 1440) {
         await page.focus(block('password-totp-code'));
@@ -186,17 +204,68 @@ let browser, server;
         assert.ok(await page.$eval(block('password-totp-code'), input => document.activeElement === input && /^\d{6} · \d+s$/.test(input.value)));
         await page.evaluate(() => { Date.now = window.fixtureClock; delete window.fixtureClock; });
       }
+      const field = 'input[name="field-password"]';
+      await physicalClick('[data-block-id="generator-generate"]');
+      await page.waitForFunction(() => document.querySelector('input[name="field-password"]').value !== 'fixture-password-value');
+      assert.equal(await page.$eval(field, input => input.type), 'password');
+      assert.ok((await page.$eval(field, input => input.value)).length >= 12);
+      await physicalClick('[data-block-id="icon-url-toggle"]');
+      await page.waitForSelector('input[name="icon-url"]', { visible: true });
+      await replace('input[name="icon-url"]', 'https://icon.fixture.test/good.png');
+      await physicalClick('[data-block-id="icon-use-url"]');
+      await page.click(block('password-save'));
+      await page.waitForSelector('[data-block-id="password-record-icon"]');
+      assert.ok(await page.$eval('[data-block-id="password-record-icon"]', image => image.complete && image.naturalWidth > 0));
+      const passkeyOpen = '[data-settings-document="password-passkey-setup"] [data-block-id="password-passkey-open"]';
+      await page.$eval(passkeyOpen, node => node.scrollIntoView({ block: 'center' }));
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const passkeyTarget = await page.$eval(passkeyOpen, node => { const bounds = node.getBoundingClientRect(); return { count: document.querySelectorAll('[data-settings-document="password-passkey-setup"] [data-block-id="password-passkey-open"]').length, hit: node.contains(document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)), before: node.getAttribute('aria-expanded') }; });
+      assert.deepEqual(passkeyTarget, { count: 1, hit: true, before: 'false' });
+      await page.click(passkeyOpen);
+      await record('Passkey physical click state: ' + await page.$eval(passkeyOpen, node => node.getAttribute('aria-expanded')));
+      await page.waitForSelector('[data-block-id="password-passkey-instructions"]');
+      await assertWidth();
+      await physicalClick('[data-settings-document="password-passkey-setup"] [data-block-id="password-passkey-close"]');
+      await page.waitForSelector('[data-block-id="password-passkey-instructions"]', { hidden: true });
+      await replace(field, 'fixture-password-value');
+      await page.click(block('password-save'));
+      await record(`${width}px: combined editable generator fills masked draft; icon URL saves/displays; passkey guide opens/closes without replacing structured edits`);
       await assertWidth();
       await page.screenshot({ path: `${results}/${width}-passwords.png`, fullPage: true });
       await record(`${width}px: real private inputs type/save once for rapid click/Enter, focused blur/focus restores masked value, synthetic TOTP updates; layout fits`);
       await record(`${width}px: independently editable address/array/SSH properties save and reopen with types/unknown siblings intact; labels and values clear on blur; whole-field Copy retains JSON`);
     }
-    await page.setViewport({ width: 1440, height: 1000 });
-    await page.click(block('password-native-connect'));
-    await page.waitForFunction(() => window.passwordFixture.nativeOperations().includes('connect'));
-    await page.waitForFunction(() => document.querySelector('[data-block-id="password-native-message"]')?.textContent.includes('Synthetic AutoFill connect completed'));
+    const guideOpen = '[data-settings-document="password-passkey-setup"] [data-block-id="password-passkey-open"]';
+    for (const width of [390, 1440]) {
+      await page.setViewport({ width, height: 1000 });
+      for (const [state, expected] of [['linked-index-pending', 'not synchronized'], ['unknown', 'could not be verified'], ['index-synchronized', 'suggestions synchronized']]) {
+        await page.evaluate(value => window.passwordFixture.setNativeConnectionState(value), state);
+        await page.$eval(block('password-native-connect'), node => node.scrollIntoView({ block: 'center' }));
+        await page.click(block('password-native-connect'));
+        await page.waitForFunction(text => document.querySelector('[data-block-id="password-native-message"]')?.textContent.includes(text), {}, expected);
+        const nativeNotice = await page.$eval(block('password-native-message'), node => node.textContent);
+        assert.ok(!nativeNotice.includes('private diagnostic'));
+        await page.$eval(guideOpen, node => node.scrollIntoView({ block: 'center' }));
+        await physicalClick(guideOpen);
+        await page.waitForSelector('[data-block-id="password-passkey-instructions"]');
+        await physicalClick('[data-settings-document="password-passkey-setup"] [data-block-id="password-passkey-connect"]');
+        await page.waitForFunction(text => document.querySelector('[data-block-id="password-passkey-notice-message"]')?.textContent.includes(text), {}, expected);
+        const guideNotice = await page.$eval('[data-block-id="password-passkey-notice-message"]', node => node.textContent);
+        if (state !== 'index-synchronized') {
+          assert.ok(!guideNotice.includes('Password AutoFill connected'));
+          assert.ok(!guideNotice.includes('Create the passkey on the website or app'));
+        } else assert.ok(guideNotice.includes('Create the passkey on the website or app'));
+        assert.ok(!guideNotice.includes('private diagnostic'));
+        await assertWidth();
+        await page.screenshot({ path: `${results}/${width}-native-${state}.png`, fullPage: true });
+        await physicalClick('[data-settings-document="password-passkey-setup"] [data-block-id="password-passkey-close"]');
+        await page.waitForSelector('[data-block-id="password-passkey-instructions"]', { hidden: true });
+      }
+    }
+    await page.$eval(block('password-native-disconnect'), node => node.scrollIntoView({ block: 'center' }));
     await page.click(block('password-native-disconnect'));
-    await page.waitForFunction(() => window.passwordFixture.nativeOperations().includes('disconnect'));
+    await page.waitForFunction(() => document.querySelector('[data-block-id="password-native-message"]')?.textContent.includes('disconnected'));
+    await record('Native connection notices distinguish linked-pending, legacy-unknown and synchronized in manager/passkey guide; pending/unknown never claim connected or tell the user to create a passkey');
     await page.click(block('password-qr-screen'));
     await page.waitForFunction(() => document.querySelector('[data-block-id="password-error"]')?.textContent.length > 0);
     assert.equal(await page.$eval('input[name="field-password"]', input => input.type), 'password');
@@ -253,7 +322,7 @@ let browser, server;
     await record('Source history and original data reveal only through private controls; hide-vault event closes private panels and reopened history is masked');
 
     await clickText(main, 'Edit layout');
-    assert.equal(await page.$eval('input[name="field-password"]', input => input.value), '');
+    assert.equal(await page.$eval(`${main} ${block('password-field-input')}`, input => input.value), '');
     await editText(`${main} ${block('password-heading')}`, 'My passwords');
     await editText(`${main} ${block('password-record-title')}`, 'Saved {item.title}');
     await editText(`${main} ${block('password-field-caption')}`, 'Field {item.label}');
@@ -297,7 +366,7 @@ let browser, server;
     await saveLayout(source);
     await clickText(attachments, 'Edit layout');
     await editText(`${attachments} ${block('attachment-heading')}`, 'My {files.heading}');
-    await editText(`${attachments} ${block('attachment-name')}`, 'File {item.name}');
+    await editTextFromBlockPicker('attachment-name', 'File {item.name}');
     await saveLayout(attachments);
     await clickText(sourceFiles, 'Edit layout');
     await editText(`${sourceFiles} ${block('attachment-name')}`, 'Source {item.name}');
@@ -381,7 +450,7 @@ let browser, server;
     await clickText(main, 'Done editing layout');
     assert.ok(!(await page.$eval(block('password-editor'), node => node.textContent)).includes('Copied.'));
     await page.click(block('password-editor-close'));
-    await record('Copy keeps concealed passwords masked, copies TOTP codes only, sanitizes rejection and drops stale feedback after Builder entry');
+    await record('Copy masks passwords, copies TOTP codes only, sanitizes failure, and cancels stale feedback when Builder entry interrupts a pending clipboard write');
 
 
     await page.click(block('password-import'));
@@ -406,6 +475,75 @@ let browser, server;
     await page.waitForSelector(block('password-transfer'), { hidden: true });
     assert.equal(await page.evaluate(() => window.passwordFixture.hasPrivateLayoutValues()), false);
     await record('Real CSV parser previews synthetic import before explicit save; synthetic CSV export requires acknowledgement; authored layouts remain private-data-free');
+
+    // Exercise the same edited structured item through the actual Thingtime
+    // 1PUX export and import UI. Keep the comparison inside the synthetic page
+    // so private fixture values never enter the browser report.
+    await page.evaluate(() => {
+      const record = [...document.querySelectorAll('[data-block-id="password-record"]')].find(node => node.querySelector('[data-block-id="password-record-title"]')?.textContent.trim() === 'Saved Synthetic login');
+      if (!record) throw new Error('Synthetic login entry is required for the structured round trip');
+      record.click();
+    });
+    await page.waitForSelector('input[name="property-import-1-0"]');
+    await replace('input[name="property-import-1-0"]', 'roundtrip-edited-city');
+    await replace('input[name="property-import-1-1.0.0"]', 'roundtrip-edited-nested');
+    await replace('input[name="property-import-1-1.0.1"]', 'false');
+    await replace('input[name="property-import-1-1.0.2"]', '73.25');
+    await page.click('button[aria-label="Show SSH key"]');
+    await page.waitForSelector('textarea[name="property-import-2-0"]');
+    await replace('textarea[name="property-import-2-0"]', 'roundtrip-edited-ssh-key');
+    await page.click(block('password-save'));
+    await page.waitForFunction(() => {
+      const entry = window.passwordFixture.savedEntry();
+      const address = JSON.parse(entry.fields.find(field => field.id === 'import-1').value);
+      const ssh = JSON.parse(entry.fields.find(field => field.id === 'import-2').value);
+      return address.city === 'roundtrip-edited-city' && address.unknown['fixture-private-property-name'][0] === 'roundtrip-edited-nested' &&
+        address.unknown['fixture-private-property-name'][1] === false && address.unknown['fixture-private-property-name'][2] === 73.25 && ssh.privateKey === 'roundtrip-edited-ssh-key';
+    });
+    assert.deepEqual(await page.evaluate(() => JSON.parse(window.passwordFixture.savedEntry().fields.find(field => field.id === 'import-1').value)), {
+      city: 'roundtrip-edited-city', unknown: { 'fixture-private-property-name': ['roundtrip-edited-nested', false, 73.25, null], empty: {}, sameType: ['fixture-array-first', 'fixture-array-second'] }
+    });
+    assert.deepEqual(await page.evaluate(() => JSON.parse(window.passwordFixture.savedEntry().fields.find(field => field.id === 'import-2').value)), {
+      privateKey: 'roundtrip-edited-ssh-key', metadata: { publicKey: 'fixture-ssh-public-key' }
+    });
+    await page.click(block('password-editor-close'));
+    await page.evaluate(() => {
+      const record = [...document.querySelectorAll('[data-block-id="password-record"]')].find(node => node.querySelector('[data-block-id="password-record-title"]')?.textContent.trim() === 'Saved Synthetic login');
+      if (!record) throw new Error('Synthetic login entry must remain available after save');
+      record.click();
+    });
+    await page.waitForFunction(() => document.querySelector('input[name="property-import-1-0"]')?.value === 'roundtrip-edited-city' && document.querySelector('input[name="property-import-1-1.0.0"]')?.value === 'roundtrip-edited-nested');
+    await page.click('button[aria-label="Show SSH key"]');
+    await page.waitForFunction(() => document.querySelector('textarea[name="property-import-2-0"]')?.value === 'roundtrip-edited-ssh-key');
+    assert.equal(await page.$eval('input[name="property-import-1-1.0.1"]', input => input.value), 'false');
+    assert.equal(await page.$eval('input[name="property-import-1-1.0.2"]', input => input.value), '73.25');
+    await page.click(block('password-editor-close'));
+    assert.equal(await page.evaluate(() => window.passwordFixture.prepareStructuredRoundTrip()), true);
+    await page.click(block('password-export'));
+    await page.waitForSelector(block('password-export-format'), { visible: true });
+    await page.select(block('password-export-format'), '1pux');
+    await page.click(block('password-export-acknowledgement'));
+    await page.click(block('password-transfer-confirm'));
+    await page.waitForFunction(() => !!window.passwordFixture.downloadedFile());
+    await page.waitForSelector(block('password-transfer'), { hidden: true });
+
+    await page.click(block('password-import'));
+    await page.waitForSelector(block('password-import-file'), { visible: true });
+    await page.$eval(block('password-import-file'), input => {
+      const file = window.passwordFixture.downloadedFile();
+      if (!file) throw new Error('Thingtime 1PUX export should be available to re-import');
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await page.waitForSelector(block('password-import-entry'));
+    assert.equal(await page.evaluate(() => window.passwordFixture.structuredRoundTripPreserved()), false);
+    await page.click(block('password-transfer-confirm'));
+    await page.waitForFunction(() => window.passwordFixture.structuredRoundTripPreserved());
+    await page.waitForSelector(block('password-transfer'), { hidden: true });
+    await record('Edited structured item retains value types and unknown siblings through same-item Thingtime 1PUX export and re-import');
+
     await page.goto(origin + '/?pauseCapability=1', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.passwordFixture?.pending());
     await page.click(block('password-add'));

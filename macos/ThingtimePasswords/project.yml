@@ -25,9 +25,6 @@ targets:
       - path: PasswordApp.swift
       - path: PasswordSetupEditor.swift
       - path: ../../apple/Passwords/Host/AuthenticatorSetupBridge.swift
-      - path: Resources
-        excludes: ["*.plist", "*.entitlements"]
-        buildPhase: resources
     dependencies:
       - package: ThingtimePasswordCore
       - target: ThingtimePasswordProvider

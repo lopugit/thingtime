@@ -29,8 +29,24 @@ export function PasswordPasskeySetup({ ownerId, nativeAvailable }: PasswordPassk
   const scopeKey = `${ownerId}:passkey-setup:${nativeAvailable}`;
   const actions: TransientBlockActions = {
     'passkey.open': () => setOpen(value => !value),
-    'passkey.extension': () => { document.dispatchEvent(new CustomEvent('thingtime:password-extension-configure', { detail: JSON.stringify({ version: 1 }) })); },
-    'passkey.close': () => setOpen(false),
+    'passkey.close': () => { if (!pending.current) setOpen(false); },
+    'passkey.connect': async invocation => {
+      if (pending.current || invocation.signal.aborted || !nativeAvailable || !hasNativePasswordProvider()) return;
+      const selectedOwner = ownerId;
+      const active = () => mounted.current && !invocation.signal.aborted && current.current.ownerId === selectedOwner && current.current.nativeAvailable;
+      pending.current = true; setBusy(true); setNotice('');
+      try {
+        const result = await nativePasswordProvider('connect', selectedOwner);
+        if (active()) setNotice(result.ok
+          ? result.message + (result.state === 'index-synchronized' ? ' Create the passkey on the website or app.' : '')
+          : 'Password AutoFill could not connect. Check your Thingtime sign-in and native provider installation, then try again.');
+      } catch {
+        if (active()) setNotice('Password AutoFill could not connect. Check your Thingtime sign-in and native provider installation, then try again.');
+      } finally {
+        pending.current = false;
+        if (mounted.current) setBusy(false);
+      }
+    },
   };
   return <>{nativeAvailable && <NativePasswordConnection key={ownerId} ownerId={ownerId} />}<SettingsDocumentHost documentKey="password-passkey-setup" title="Passkey setup layout" defaultDocument={PASSWORD_PASSKEY_BLOCKS}
     scopeKey={ownerId} migrateBlocks={migratePasswordPasskeyBlocks}>

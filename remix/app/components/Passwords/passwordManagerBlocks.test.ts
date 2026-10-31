@@ -109,3 +109,24 @@ test('older customised password layouts gain property controls once without over
   assert.equal(original[0].children.length, 1);
   assert.doesNotThrow(() => settingsDocumentBlocks(upgraded));
 });
+
+
+test('icon migration retains authored cards and adds one independently editable image', () => {
+  const legacy: WebpageBlock[] = [{ id: 'password-record', type: 'element', tag: 'button', children: [{ id: 'custom-title', type: 'element', tag: 'strong', text: 'My label' }] }];
+  const migrated = upgradePasswordManagerBlocks(legacy);
+  assert.deepEqual(upgradePasswordManagerBlocks(migrated), migrated);
+  assert.equal(migrated[0].children?.[1].text, 'My label');
+  const icon = walk(settingsDocumentBlocks(migrated)).find(block => block.id === 'password-record-icon');
+  assert.equal(icon?.props?.src, undefined);
+  assert.equal(icon?.props?.['data-tt-private-image'], 'entry-icon-{item.id}');
+  assert.equal(icon?.props?.referrerPolicy, 'no-referrer');
+  assert.equal(JSON.stringify(migrated).includes('blob:'), false);
+});
+
+
+test('private icon slots cannot persist URLs or mount a different element', () => {
+  for (const patch of [{ src: 'blob:https://owner.test/private' }, { src: 'https://external.test/icon.png' }, { srcSet: 'https://external.test/icon.png 1x' }]) {
+    assert.throws(() => settingsDocumentBlocks([{ id: 'icon', type: 'element', tag: 'img', props: { 'data-tt-private-image': 'entry-icon-id', ...patch } }]), /Private image/);
+  }
+  assert.throws(() => settingsDocumentBlocks([{ id: 'icon', type: 'element', tag: 'iframe', props: { 'data-tt-private-image': 'entry-icon-id' } }]), /Private image/);
+});

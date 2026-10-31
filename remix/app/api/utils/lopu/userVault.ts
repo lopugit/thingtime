@@ -11,6 +11,7 @@ import { userVaultSnapshotVersion, type VaultSnapshotDocument } from './userVaul
 import { createThing, deletePost, isFail, updateThing } from '../things/things';
 import { ACL_OWNER } from '~/schemas/registry';
 import {
+	vaultText,
 	LOPU_PROVIDER_TEMPLATES,
 	LOPU_USER_VAULT_SCHEMA_VERSION,
 	LOPU_USER_VAULT_SYSTEM_TYPE,
@@ -44,48 +45,20 @@ export type { PublicVaultGroup, PublicVaultEntry } from './userVaultModel';
 
 type StoredVaultDoc = { updatedAt?: Date; shareId: string; ownerId: string; crystal: StoredVaultCrystal };
 
-export const userVaultSourceKey = (): Buffer | null => {
-	const source = (process.env.THINGTIME_USER_VAULT_KEY || process.env.THINGTIME_ADMIN_VAULT_KEY || '').trim();
-	if (!source) return null;
-	try {
-		const decoded = Buffer.from(source, 'base64url');
-		if (decoded.byteLength !== 32) return null;
-		return createHmac('sha256', decoded).update(VAULT_AAD_PREFIX).digest();
-	} catch {
-		return null;
-	}
-};
-
-export const userVaultConfigured = () => userVaultSourceKey() !== null;
-
-const vaultAad = (ownerId: string, id: string) => Buffer.from(`${VAULT_AAD_PREFIX}${ownerId}:${id}`);
-
-export const encryptUserVaultValue = (ownerId: string, id: string, value: string): EncryptedValue => {
-	const key = userVaultSourceKey();
-	if (!key) throw new Error('Secure Vault is unavailable. Configure THINGTIME_USER_VAULT_KEY or THINGTIME_ADMIN_VAULT_KEY.');
-	const iv = randomBytes(12);
-	const cipher = createCipheriv('aes-256-gcm', key, iv);
-	cipher.setAAD(vaultAad(ownerId, id));
-	const cipherText = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
-	return {
-		cipherText: cipherText.toString('base64url'),
-		iv: iv.toString('base64url'),
-		tag: cipher.getAuthTag().toString('base64url')
-	};
-};
-
-const decryptValue = (doc: StoredVaultDoc): string => {
-	const key = userVaultSourceKey();
-	const encrypted = doc.crystal.encryptedValue;
-	if (!key || !encrypted) throw new Error('Stored provider credential is unavailable.');
-	try {
-		const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(encrypted.iv, 'base64url'));
-		decipher.setAAD(vaultAad(doc.ownerId, doc.shareId));
-		decipher.setAuthTag(Buffer.from(encrypted.tag, 'base64url'));
-		return Buffer.concat([decipher.update(Buffer.from(encrypted.cipherText, 'base64url')), decipher.final()]).toString('utf8');
-	} catch {
-		throw new Error('Stored provider credential cannot be decrypted with the configured vault key.');
-	}
+export const userVaultConfigured = ownerVaultConfigured;
+const encryptValue = (ownerId: string, id: string, value: string) =>
+  encryptUserVaultValue(ownerId, id, 'secret', value);
+const decryptValue = async (doc: StoredVaultDoc): Promise<string> => {
+  const encrypted = doc.crystal.encryptedValue;
+  if (!encrypted) throw new Error('Stored provider credential is unavailable.');
+  if ('version' in encrypted) return decryptUserVaultValue(doc.ownerId, doc.shareId, 'secret', encrypted);
+  const value = decryptOwnerValue(VAULT_AAD_PREFIX, doc.ownerId, doc.shareId, encrypted);
+  if (!doc.updatedAt) throw new Error('Stored credential requires a new save before use.');
+  const encryptedValue = await encryptValue(doc.ownerId, doc.shareId, value);
+  const updated = await updateThing({ id: doc.ownerId }, doc.shareId, { crystal: { encryptedValue } },
+    { expectedUpdatedAt: new Date(doc.updatedAt).toISOString() });
+  if (isFail(updated)) throw new Error('Saved credential changed. Retry the request.');
+  return value;
 };
 
 const publicEntry = (doc: StoredVaultDoc): PublicVaultEntry => ({
@@ -183,7 +156,8 @@ const createVaultThing = async (ownerId: string, shareId: string, crystal: Store
 };
 
 export const createUserVaultGroup = async (ownerId: string, input: { name?: unknown }): Promise<PublicVaultGroup> => {
-	const { name } = normalizeUserVaultGroup(input);
+	const name = vaultText(input.name);
+	if (!name) throw new Error('Environment name is required.');
 	const now = new Date().toISOString();
 	const shareId = randomUUID();
 	await createVaultThing(ownerId, shareId, {
@@ -197,11 +171,19 @@ export const createUserVaultGroup = async (ownerId: string, input: { name?: unkn
 	return { id: shareId, name, createdAt: now, updatedAt: now };
 };
 
+const validSecretValue = (value: unknown): string | null => {
+	if (typeof value !== 'string' || !value) return null;
+	return value;
+};
+
 export const saveUserVaultSecret = async (
 	ownerId: string,
 	input: { id?: unknown; name?: unknown; key?: unknown; value?: unknown; groupId?: unknown }
 ): Promise<PublicVaultEntry> => {
-	const { name, key, value } = normalizeUserVaultSecret(input);
+	const name = vaultText(input.name);
+	const key = vaultText(input.key);
+	const value = validSecretValue(input.value);
+	if (!name || !key || !value) throw new Error('Secret name, key, and a non-empty value are required.');
 	const groupId = await assertGroup(ownerId, input.groupId);
 	const existing = input.id ? await ownVaultDoc(ownerId, input.id) : null;
 	if (input.id && (!existing || existing.crystal.recordKind !== 'secret')) throw new Error('Vault secret was not found.');
@@ -214,7 +196,7 @@ export const saveUserVaultSecret = async (
 		name,
 		key,
 		groupId,
-		encryptedValue: encryptUserVaultValue(ownerId, shareId, value),
+		encryptedValue: await encryptValue(ownerId, shareId, value),
 		createdAt: existing?.crystal.createdAt || now,
 		updatedAt: now
 	};
@@ -231,14 +213,28 @@ export const saveUserVaultProvider = async (
 	ownerId: string,
 	input: { id?: unknown; name?: unknown; provider?: unknown; endpoint?: unknown; model?: unknown; token?: unknown; groupId?: unknown }
 ): Promise<PublicVaultEntry> => {
-	const { name, provider, endpoint, token, model } = normalizeUserVaultProvider(input, normalizeLopuProviderEndpoint);
+	const name = vaultText(input.name);
+	const provider = normalizeLopuProviderKind(input.provider);
+	const endpoint = normalizeLopuProviderEndpoint(input.endpoint);
+	const token = validSecretValue(input.token);
+	// Only an omitted or intentionally blank field means "keep the saved token".
+	// A rejected supplied value must not silently become a metadata-only update.
+	if (input.token !== undefined && input.token !== '' && token === null) {
+		throw new Error('Provider token is invalid. No changes were saved.');
+	}
+	if (!name || !provider || !endpoint) throw new Error('Provider name, type, and HTTPS endpoint are required.');
+	// the model is optional (a template kind falls back to its first catalog
+	// model), but when given it must be a sane provider-native id
+	const modelGiven = typeof input.model === 'string' && input.model.trim() !== '';
+	const model = modelGiven ? safeVaultModelId(input.model) : null;
+	if (modelGiven && !model) throw new Error('Model id must contain letters, digits, . _ : / @ or -.');
 	const groupId = await assertGroup(ownerId, input.groupId);
 	const existing = input.id ? await ownVaultDoc(ownerId, input.id) : null;
 	if (input.id && (!existing || existing.crystal.recordKind !== 'provider')) throw new Error('AI provider was not found.');
 	if (!existing && !token) throw new Error('A provider token is required when creating a connection.');
 	const shareId = existing?.shareId || randomUUID();
 	const now = new Date().toISOString();
-	const encryptedValue = token ? encryptUserVaultValue(ownerId, shareId, token) : existing?.crystal.encryptedValue;
+	const encryptedValue = token ? await encryptValue(ownerId, shareId, token) : existing?.crystal.encryptedValue;
 	if (!encryptedValue) throw new Error('Provider token is required.');
 	const patch: StoredVaultCrystal = {
 		systemType: LOPU_USER_VAULT_SYSTEM_TYPE,

@@ -12,33 +12,43 @@ import ThingtimePasswordCore
     @MainActor static func main() {
         if CommandLine.arguments.contains("--connect") || CommandLine.arguments.contains("--disconnect") || CommandLine.arguments.contains("--sync") || CommandLine.arguments.contains("--status") {
             let disconnect = CommandLine.arguments.contains("--disconnect")
+            let detailedStatus = CommandLine.arguments.contains("--connection-status-v1")
             Task { @MainActor in
                 do {
-                    if disconnect { PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait() }
+                    var status = PasswordConnectionStatus.disconnected
+                    if disconnect {
+                        // This CLI is the Electron lifecycle adapter. Only the
+                        // companion's own explicit Disconnect may clear its link.
+                        guard PasswordHostConnectionAuthority.canDisconnect(try PasswordSessionStore.loadIfPresent()) else {
+                            exit(PasswordConnectionStatus.disconnected.exitCode(detailed: detailedStatus))
+                        }
+                        try PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait()
+                    }
                     else {
                         // The Electron parent writes only its current first-party
                         // session through stdin. No tokens in argv, files or logs.
                         guard let data = try FileHandle.standardInput.read(upToCount: 65537), data.count <= 65536 else { throw PasswordProviderError.invalidSession }
                         let decoded = try JSONDecoder().decode(ProviderSession.self, from: data)
                         let session = try ProviderSession(origin: decoded.origin, ownerId: decoded.ownerId, cookie: decoded.cookie)
-                        if CommandLine.arguments.contains("--status") {
-                            FileHandle.standardOutput.write(try JSONEncoder().encode(PasswordConnectionStatus.current(for: session)))
-                            exit(0)
-                        }
+                        let baseline = try PasswordSessionStore.loadIfPresent()
                         if CommandLine.arguments.contains("--sync") {
-                            guard let prior = try? PasswordSessionStore.load() else { exit(0) }
-                            guard prior.origin == session.origin, prior.ownerId == session.ownerId else { PasswordSessionStore.clear(); await PasswordIdentityIndex.clearAndWait(); exit(0) }
+                            guard PasswordHostConnectionAuthority.canSynchronize(baseline, incoming: session) else {
+                                // An automatic sync has no authority over another
+                                // app/account connection. Leave it untouched.
+                                exit(PasswordConnectionStatus.disconnected.exitCode(detailed: detailedStatus))
+                            }
                         }
                         let catalog = try await PasswordClient(account: session).catalog()
-                        // A companion link may have changed while the network ran.
-                        guard try PasswordSessionStore.loadIfPresent() == baseline else { throw PasswordProviderError.sessionChanged }
+                        guard try PasswordSessionStore.loadIfPresent() == baseline else { throw PasswordProviderError.invalidSession }
                         try PasswordSessionStore.save(session)
                         UserDefaults.standard.removeObject(forKey: optOutKey(session))
                         LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
-                        try? await PasswordIdentityIndex.synchronize(catalog)
+                        status = try await PasswordIdentityIndex.synchronizeConnection(catalog) {
+                            guard try PasswordSessionStore.load() == session else { throw PasswordProviderError.invalidSession }
+                        }
                     }
                     DistributedNotificationCenter.default().postNotificationName(.init("com.thingtime.passwords.destination-changed"), object: nil, userInfo: nil, deliverImmediately: true)
-                    exit(0)
+                    exit(status.exitCode(detailed: detailedStatus))
                 } catch { exit(1) }
             }
             RunLoop.main.run()

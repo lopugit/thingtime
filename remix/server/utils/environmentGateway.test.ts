@@ -115,7 +115,32 @@ test('real H3 middleware restores owner request before same-origin checks and st
 }));
 
 
-for (const version of [undefined, '1.2.0', '2.0.0', '1.2.1', '1.3.0']) test(`password forwarding requires branch contract 1.2.1: ${version}`, async t => fixture(async () => {
+const connectionOperations = [
+  ['connections', '/api/v1/connections', 'GET'],
+  ['connections-providers', '/api/v1/connections/providers', 'GET'],
+  ['connections-feed', '/api/v1/connections/feed', 'GET'],
+  ['connections-oauth-begin', '/api/v1/connections/oauth/begin', 'POST'],
+  ['connections-oauth-callback', '/api/v1/connections/oauth/callback', 'GET'],
+  ['connections-request', '/api/v1/connections/request', 'POST']
+] as const;
+for (const [operation, path, method] of connectionOperations) for (const version of [undefined, '1.0.0', '3.0.0', '2.0.0', '2.1.0'])
+ test(`Connections ${operation} requires major2 before forwarding: ${version}`, async t => fixture(async () => {
+  const manifest = aliasManifest();
+  if (version) manifest.features[`api.${operation}`].version = version;
+  else delete manifest.features[`api.${operation}`];
+  const settings = getGatewaySettings()!;
+  const authority = await createGatewayAuthority({ settings: () => settings, fetch: async () => Response.json(manifest) }).current();
+  const mock = t.mock.method(globalThis, 'fetch', async () => Response.json({ ok: true }));
+  const request = new Request(follower + path, { method, ...(method === 'POST' ? { body: 'synthetic' } : {}),
+    headers: { authorization: 'Bearer synthetic' } });
+  const response = await proxyEnvironmentRequest(request, authority!);
+  const supported = version === '2.0.0' || version === '2.1.0';
+  assert.equal(response.status, supported ? 200 : 409);
+  assert.equal(mock.mock.callCount(), supported ? 1 : 0);
+  if (!supported) assert.equal(request.bodyUsed, false);
+}));
+
+for (const version of [undefined, '1.2.0', '2.0.0', '1.3.0', '1.3.0']) test(`password forwarding requires branch contract 1.3.0: ${version}`, async t => fixture(async () => {
   const manifest = aliasManifest();
   if (version) manifest.features['api.passwords'].version = version;
   else delete manifest.features['api.passwords'];
@@ -125,7 +150,7 @@ for (const version of [undefined, '1.2.0', '2.0.0', '1.2.1', '1.3.0']) test(`pas
   const request = new Request(follower + '/api/v1/passwords', { method: 'POST', body: 'synthetic',
     headers: { authorization: 'Bearer synthetic' } });
   const response = await proxyEnvironmentRequest(request, authority!);
-  const supported = version === '1.2.1' || version === '1.3.0';
+  const supported = version === '1.3.0' || version === '1.3.0';
   assert.equal(response.status, supported ? 200 : 409);
   assert.equal(mock.mock.callCount(), supported ? 1 : 0);
   if (!supported) assert.equal(request.bodyUsed, false);
@@ -133,14 +158,14 @@ for (const version of [undefined, '1.2.0', '2.0.0', '1.2.1', '1.3.0']) test(`pas
 
 for (const mismatch of ['path', 'method', 'unknown', 'source-origin'] as const) test(`relay refuses ${mismatch} mismatch before forwarding`, async t => fixture(async () => {
   const manifest = aliasManifest();
-  const operation = manifest.operations.find(operation => operation.feature === 'api.passwords' && operation.path === '/api/v1/passwords')!;
+  const operation = manifest.operations.find(operation => operation.feature === 'api.connections-request' && operation.path === '/api/v1/connections/request')!;
   if (mismatch === 'path') operation.path += '/other';
   if (mismatch === 'method') operation.methods = ['GET'];
   const settings = getGatewaySettings()!;
   const authority = await createGatewayAuthority({ settings: () => settings, fetch: async () => Response.json(manifest) }).current();
   const mock = t.mock.method(globalThis, 'fetch', async () => { throw new Error('must not forward'); });
   const source = mismatch === 'source-origin' ? 'https://unassigned.test' : follower;
-  const path = mismatch === 'unknown' ? '/api/v1/not-registered' : '/api/v1/passwords';
+  const path = mismatch === 'unknown' ? '/api/v1/not-registered' : '/api/v1/connections/request';
   const request = new Request(source + path, { method: 'POST', body: 'synthetic', headers: { authorization: 'Bearer synthetic' } });
   assert.equal((await proxyEnvironmentRequest(request, authority!)).status, mismatch === 'source-origin' ? 421 : 409);
   assert.equal(mock.mock.callCount(), 0);
@@ -187,6 +212,8 @@ test('unconfigured local runtime retains direct admission but refuses forged rel
     assert.ok(response instanceof Response); assert.equal(response.status, 403);
   } finally { keys.forEach((key, i) => { if (before[i] === undefined) delete process.env[key]; else process.env[key] = before[i]; }); }
 });
+
+
 test('explicit dedicated build executes its own handler, allows its Mongo client, and refuses relays', async t => fixture(async () => {
   const manifest = aliasManifest();
   process.env.THINGTIME_MONGODB_CONNECTION_MODE = 'dedicated';

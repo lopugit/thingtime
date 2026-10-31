@@ -4,7 +4,7 @@ import Foundation
 // In particular, logout's clear must finish after an already submitted sync.
 @MainActor final class PasswordIdentityOperations {
     private var pending: Task<Void, Never>?
-    func submit(_ work: @escaping () async throws -> Void) -> Task<Void, Error> {
+    func submit(_ work: @escaping @MainActor () async throws -> Void) -> Task<Void, Error> {
         let previous = pending
         let next = Task { await previous?.value; try await work() }
         pending = Task { _ = try? await next.value }
@@ -33,13 +33,22 @@ import Foundation
         return result
     }
     public static func synchronize(_ catalog: [PasswordCatalogItem]) async throws {
-        try await operations.submit {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                ASCredentialIdentityStore.shared.replaceCredentialIdentities(identities(catalog)) { success, _ in
-                    if success { continuation.resume() } else { continuation.resume(throwing: PasswordProviderError.unavailable) }
-                }
+        try await operations.submit { try await replace(catalog) }.value
+    }
+    private static func replace(_ catalog: [PasswordCatalogItem]) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            ASCredentialIdentityStore.shared.replaceCredentialIdentities(identities(catalog)) { success, _ in
+                if success { continuation.resume() } else { continuation.resume(throwing: PasswordProviderError.unavailable) }
             }
+        }
+    }
+    public static func synchronizeConnection(_ catalog: [PasswordCatalogItem], isCurrent: @escaping @MainActor () async throws -> Void) async throws -> PasswordConnectionStatus {
+        var status = PasswordConnectionStatus.indexPending
+        try await operations.submit {
+            status = try await PasswordConnectionSynchronization.perform(isCurrent: isCurrent,
+                replace: { try await replace(catalog) }, clear: { try await removeAll() })
         }.value
+        return status
     }
     public static func savePasskey(_ key: PasskeyMaterial, recordID: String) async throws {
         let identity = ASPasskeyCredentialIdentity(relyingPartyIdentifier: key.relyingParty, userName: key.username, credentialID: key.credentialID, userHandle: key.userHandle, recordIdentifier: recordID)
@@ -52,12 +61,14 @@ import Foundation
         }.value
     }
     public static func clearAndWait() async {
-        _ = try? await operations.submit { await removeAll() }.value
+        _ = try? await operations.submit { try await removeAll() }.value
     }
-    private static func removeAll() async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            ASCredentialIdentityStore.shared.removeAllCredentialIdentities { _, _ in continuation.resume() }
+    private static func removeAll() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            ASCredentialIdentityStore.shared.removeAllCredentialIdentities { success, _ in
+                if success { continuation.resume() } else { continuation.resume(throwing: PasswordProviderError.unavailable) }
+            }
         }
     }
-    public static func clear() { _ = operations.submit { await removeAll() } }
+    public static func clear() { _ = operations.submit { try await removeAll() } }
 }
