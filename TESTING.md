@@ -5524,6 +5524,10 @@ halves.
       cookie/Bearer, Character, expected actor and custom data-plane selection,
       refuse forged hops and cross-site writes, and preserve OAuth redirects,
       cookies and stream cancellation.
+- [ ] When running built acceptance beside other tasks, choose an unused ten-port
+      loopback range with `THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE`. Invalid,
+      privileged or overflowing ranges must fail before the runner starts any
+      process. Keep the OS-denied external-network boundary in place.
 - [ ] In dedicated mode, confirm the deployment executes its own backend,
       advertises `gateway: null`, owns its pools, and refuses relayed traffic.
       Point a proxy worker at that dedicated alias and verify it fails closed.
@@ -5563,6 +5567,11 @@ halves.
 - [ ] Promote an accepted Connections2 backend before testing follower-dependent
   actions. Current preview Connections1 refusal is a compatibility safety gate;
   separately verify real provider consent/callback/refresh and native acceptance.
+
+- [ ] For PR996 password requests, refuse absent/1.2.0/breaking-major contracts,
+  missing paths and unsupported methods before forwarding; accept 1.2.1 and
+  compatible 1.3.0 without downgrading the branch requirement. Exercise proxy
+  admission separately from deployment-only dedicated behavior.
 
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
@@ -10689,6 +10698,63 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 
 ## Password manager and native AutoFill
 
+- [ ] Edit imported structured address, SSH and nested array properties separately.
+  Save/reopen and export/reimport must preserve unknown siblings and original
+  scalar types. Unknown property names and values must stay out of saved layouts
+  and display scope, clear on blur/account changes, and respect masking. Reject
+  stale property bindings after JSON keys reorder; unsafe trees retain their raw
+  JSON without changing large/overflowing numeric literals. In Builder, edit a
+  nested caption and input independently, save/reload, then confirm edits still
+  reach the intended property. Check desktop/mobile scrolling and opened states.
+
+- [ ] In the normal Builder inspector/context menu, style and reorder a repeated
+  field caption, duplicate it, then delete only the duplicate. Save/reload and
+  confirm the original field's input, Copy and Save still target that field;
+  authored layouts contain no private values. At desktop/mobile sizes, scroll
+  the page and opened inspector, keeping focus visible and controls unobscured.
+  Close the inspector before targeting canvas content underneath it. The
+  synthetic `test:passwords-browser` harness covers this structural edit path;
+  real installed/deployed acceptance remains separate.
+
+- `npm --prefix remix run test:passwords` and the native `build:passwords`
+  preflight automatically verify native ES256 registration/assertion against the
+  independent WebAuthn server on macOS. The gate selects only the public fixture
+  test, requires UV and backed-up multi-device credentials, rejects a wrong RP,
+  and removes its private temporary fixture/build directory. Both subprocesses
+  run under a network-denying sandbox; SwiftPM's nested sandbox alone is disabled.
+  Missing Xcode, failed/skipped fixture output or verifier failure must fail the
+  macOS gate. Other operating systems report an explicit unsupported-platform
+  skip. Run `node --test remix/scripts/native-password-passkey.test.mjs` for
+  failure/cleanup and real verifier tampering regressions. This does not verify
+  AuthenticationServices, user presence, Keychain, live persistence or service login.
+
+- [ ] In both signed native hosts, confirm Thingtime is selectable under **Set Up
+  Codes In**, then open a disposable TOTP QR/link cold and warm. Normal sign-in
+  returns to Passwords, create/attach requires a choice, and only Save persists.
+- [ ] An existing draft survives a second incoming setup; pending native setup
+  is not replaced. Cancel and reopen work without restarting the editor. Check
+  independently editable setup heading, helper, account caption and each button
+  in Builder, then save/reload without storing a setup value in the layout.
+- [ ] Reject HOTP, migration, malformed/duplicate options and noncanonical Base32
+  padding/residual bits. Exercise wrong owner, iframe, wrong origin/port/path,
+  local/custom/unknown data planes, logout and destination/account changes.
+  Delay delivery across navigation and a same-document account switch; no raw
+  setup event reaches the new document or account, even without a UI listener.
+- [ ] A locked native destination retains input in memory and fails closed;
+  unlock/reactivate retries the same destination. A new companion uses normal
+  sign-in in a nonpersistent store and never imports provider credentials.
+  Verify cancellation/ten-minute expiry, no secret logs/URLs/clipboard/history,
+  no automatic save, and that stored layouts contain no private control values.
+- [ ] Scroll the incoming notice, entry list and opened editor top to bottom at
+  desktop and mobile widths. Long destination/account labels wrap; focus and
+  create/attach/cancel states remain usable with keyboard and touch.
+
+- [x] Native test-target compilation (2026-10-25): regenerate with XcodeGen and
+  run `build-for-testing` for the iOS Simulator, including password provider,
+  Watch and widget targets. Shared tests must not compile macOS-only `Process`
+  APIs on iOS. The live Git oracle remains exercised on macOS (4/4 ignore-rule
+  tests pass); its unsupported iOS case explicitly skips while fixture tests remain.
+
 - [ ] Browser approval return: after successful verification, close only the
   owned approval tab and focus the exact requesting tab/window before response
   delivery. The site's resulting success redirect must keep focus. Closed/moved
@@ -10883,13 +10949,32 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
 - [ ] Check a configured desktop endpoint against a signed native app. Ordinary
   unconfigured web servers must not forward passwords to production; desktop
   forwarding is restricted to its loopback UI and selected HTTPS endpoint.
+- [ ] Build both XcodeGen targets and the shared Swift tests. Verify signatures,
+  provisioning profiles, Keychain groups and AutoFill entitlements in the
+  installed app and embedded extension. Confirm Thingtime appears in OS settings.
+- [ ] With disposable credentials, connect AutoFill, fill an exact website login
+  and OTP, create a new passkey, sign out, then sign in with that saved passkey.
+  Test another account at the same site, cancel biometric prompts, wrong RP,
+  excluded/allowed credential IDs, offline/unavailable storage, revoked session,
+  account/endpoint switches and disconnect. Never complete registration before
+  encrypted storage acknowledgement. Record actual OS/device and service results.
 - [ ] Managed worktrees sharing a repository basename must have distinct PM2
   names/ports; starting this checkout must not remove another checkout's stack.
 
+- Password-provider package verification must reject missing AutoFill entitlements,
+  mismatched host/extension Keychain groups or teams, and expired profiles.
 - Vercel functions retain image binaries for their target CPU/OS and stay below
   the function size limit even when local dependencies include other platforms.
 
 - Password QR capture: close/hide the editor while the picker or video is pending. The scan cancels immediately; any later stream stops before pixels are read. Blank-frame errors and playback timeouts must also stop every track.
+
+- Native Password AutoFill: while connecting, focus the app to trigger background sync; the connection must finish. Switching accounts/logout cancels it, settles the request, and queues identity removal after any outstanding catalog update.
+- Native provider signing: build with a Developer ID Application identity and no manual profile overrides. The archive/export path must produce a timestamped Developer ID host and extension with matching AutoFill profiles and shared Keychain group. Reject a partial profile pair or a different signer; preserve the previous verified helper if export/verification fails. Development signing is intermediate evidence only, not distribution acceptance.
+- Native Keychain: session save/read/delete must use the data-protection store,
+  the same explicit access group and no synchronization. Missing or unexpanded
+  group configuration must fail closed. On a signed macOS build, connect in the
+  host, read from its extension, disconnect, and confirm the extension cannot
+  read the removed session; no legacy Keychain access prompt should appear.
 
 - Password vault routes reject request-scoped internal Action actors for every operation, even if the internal request carries an Authorization header. A full browser session is required directly; internal account authority cannot substitute for it.
 
@@ -13001,6 +13086,7 @@ separate from deterministic discovery/lease tests.
 
 - OpenAI vault import: anonymous/non-admin and cross-origin requests must fail; missing server key must create nothing. Import from AI Providers, verify the redacted OpenAI entry named `OPENAI_THINGTIME_API_KEY`, reload, retry and confirm one unchanged entry. No secret may appear in browser responses. Existing chat and credential order must remain intact.
 
+- Password AutoFill desktop regression (2026-10-18): from a signed installed app, open Passwords via the sidebar and Commander search, connect AutoFill, and confirm real vault metadata loads. Exercise GET and POST private-service proxy routes through a real Nitro HTTP server; preserve query/body and reject cross-origin writes without cloning the server request as a native Request. A selected server older than api.passwords 1.2.0 must reject q search clearly before forwarding credentials/body; matching-major compatible patches must pass.
 ## Mac menu bar and reusable device scripts
 
 - Editable-block regression: expand a saved HTML-template Component into blocks; select the title, input, button, image and a nested repeated-card field separately. Change text/style, duplicate/reorder/delete a child, save and reload. Verify Action references and source refresh still work. Exact boolean props must preserve false; details/dialog are open in edit mode and respect their binding in view mode. Restricted editor hosts must hide disallowed block types and data sources.
@@ -13695,6 +13781,57 @@ separate from deterministic discovery/lease tests.
   link or source deploy hook remains. A repeated unchanged request must skip
   compilation. Keep production runtime charges distinct from build charges.
 
+
+- Password integration (2026-10-23): run the Electron provider race/error tests
+  on every host using their isolated synthetic-helper VM. Reject non-macOS
+  production connections. During a delayed private-password capability lookup,
+  switch the selected API and verify the original body/cookie is never sent to
+  either replacement authority. On iOS, a failed protected-Keychain clear must
+  report failure, preserve the old authority, and allow retry after unlock;
+  verify the picker continues to identify the actual active destination.
+
+- Password Copy regression (2026-10-26): copy a concealed field without revealing
+  it, and compare the clipboard result with the synthetic source value. TOTP Copy
+  must contain only the current code, never the setup seed/countdown. Check fixed,
+  non-secret rejection feedback and no Copy controls for passkey signing fields.
+  While work is pending, edit/switch/close the entry, change account/data plane,
+  or enter Builder; no late TOTP write or stale status may appear in the new
+  scope. A clipboard write already submitted cannot be revoked. Edit the Copy
+  label independently, save/reload, and verify no private value entered layouts
+  or Action history. The password unit suite passed 56 tests, zero skips, on
+  26 October. All 11 isolated Chromium acceptance groups passed at desktop/mobile
+  sizes; real clipboard, installed/native and production acceptance remain pending.
+
+- Password Builder regression: run `npm --prefix remix run test:passwords` inside
+  a loopback-only namespace, then the isolated password-manager browser fixture.
+  Edit nested title/field/reveal labels and repeated entry/file/history templates;
+  save and reload. Decrypted password, TOTP seed, source JSON, attachment key/nonce
+  and typed replacements must never occur in saved layouts or Action history.
+  Verify focused typing survives blur/focus with masking, required-title Enter
+  submission, delayed read/save cancellation on entering Builder, and hide/owner
+  changes. Native/QR fixture callbacks are synthetic, not OS/device acceptance.
+
+  Reproduce the synthetic browser checks with `npm --prefix remix run
+  test:passwords-browser`, supplying `TT_QA_IMAGE` and `TT_QA_SECCOMP` as for the
+  existing isolated credential runner. The generated QR fixture contains only
+  the public test seed `JBSWY3DPEHPK3PXP`. The runner uses a task-owned clean
+  Chromium profile, retains its sandbox, and proves network isolation before
+  testing. Real Apple provider/chooser acceptance remains separate.
+
+- QR image capacity regression (2026-10-26): upload a valid PNG larger than
+  12 MiB with more than 20 megapixels and a small off-centre synthetic TOTP code.
+  The image must decode without a file/pixel rejection; overlapping scans must
+  reach original resolution while keeping each working canvas bounded. Close
+  the editor during scanning and during a pending bitmap creation: release late
+  bitmaps, clear pixels, preserve the existing draft and stop a captured screen
+  stream before decoding its immutable frame. Repeat the real OS chooser check
+  separately; a synthetic stream is not permission/picker acceptance.
+  Queue cancellation between an immediately resolved resource and the caller's
+  continuation: upload/screen bitmaps must close exactly once, and immediate or
+  late chooser streams must stop exactly once. A video-construction failure
+  after acquiring a stream must also stop sharing.
+
+## Editable Mapbox maps and route planning
 
 ### Connections OAuth vault configuration (26 October 2026)
 

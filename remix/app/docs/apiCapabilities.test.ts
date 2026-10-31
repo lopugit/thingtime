@@ -762,8 +762,10 @@ test('backup retention advertises owner-only holds and deferred cleanup together
 test('Gmail OAuth and its one-use callback are advertised on both manifests and registered', () => {
 	const legacy = createApiCapabilitiesManifest().features;
 	const manifest = thingtimeCapabilityManifest('https://thingtime.test').features;
-	assert.equal(legacy['api.mail'], '1.2.0');
-	assert.equal(manifest['api.mail'].version, '1.2.0');
+	assert.equal(legacy['api.mail'], '1.2.1');
+	assert.equal(manifest['api.mail'].version, '1.2.1');
+	assert.equal(legacy['api.mail-sync'], '1.0.1');
+	assert.equal(manifest['api.mail-sync'].version, '1.0.1');
 	assert.equal(legacy['api.mail-google-callback'], '1.0.0');
 	assert.equal(manifest['api.mail-google-callback'].version, '1.0.0');
 	assert.equal(typeof routeModules['v1/mail/google/callback'], 'function');
@@ -837,7 +839,23 @@ test('resource limits and CPU downloads negotiate only their semantic dependenci
 });
 
 
-test('gateway discovery and every Connections major2 operation retain their exact requirements', () => {
+test('environment gateway registers both manifests without changing branch password requirements', () => {
+  const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
+  const discovery = thingtimeCapabilityManifest('https://gateway-contract.test');
+  for (const [feature, version] of [['api.environment-gateway', '1.1.0'], ['api.social-card', '1.0.1'], ['api.passwords', '1.4.0']]) {
+    assert.equal(legacy.features[feature], version);
+    assert.equal(discovery.features[feature].version, version);
+  }
+  assert.equal(discovery.gateway, null);
+  for (const [feature, path, methods] of [
+    ['api.environment-gateway', '/.well-known/thingtime-capabilities.json', ['GET']],
+    ['api.environment-gateway', '/.well-known/thingtime-capabilities.json-docs', ['GET', 'POST']],
+    ['api.social-card', '/social-card', ['GET']],
+    ['api.social-card', '/social-card-docs', ['GET', 'POST']]
+  ] as const) assert.deepEqual(discovery.operations.find(operation => operation.feature === feature && operation.path === path)?.methods, methods);
+});
+
+ test('preview retention routes and both manifests share explicit independent contracts', () => {
   const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
   const discovery = thingtimeCapabilityManifest('https://gateway-contract.test');
   for (const [feature, version] of [

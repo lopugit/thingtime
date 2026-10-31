@@ -45,6 +45,7 @@ import ThingtimePasswordCore
                         LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
                         try? await PasswordIdentityIndex.synchronize(catalog)
                     }
+                    DistributedNotificationCenter.default().postNotificationName(.init("com.thingtime.passwords.destination-changed"), object: nil, userInfo: nil, deliverImmediately: true)
                     exit(0)
                 } catch { exit(1) }
             }
@@ -58,17 +59,21 @@ import ThingtimePasswordCore
 }
 @MainActor final class PasswordAppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        let content = VStack(alignment: .leading, spacing: 16) {
-            Text("Thingtime").font(.title).bold()
-            Text("Open Passwords in the Thingtime desktop app and select Connect Password AutoFill. Then enable Thingtime in System Settings → General → AutoFill & Passwords.")
-                .fixedSize(horizontal: false, vertical: true)
-            Button("Open Thingtime") {
-                if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.thingtime.desktop") { NSWorkspace.shared.openApplication(at: appURL, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil) }
-            }
-            Button("Open Password AutoFill settings") { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Passwords-Settings.extension")!) }
-        }.padding(24).frame(width: 420)
-        let window = NSWindow(contentViewController: NSHostingController(rootView: content)); window.title = "Thingtime"; window.center(); window.makeKeyAndOrderFront(nil); self.window = window
-        NSApp.activate(ignoringOtherApps: true)
+    private var editor: PasswordSetupEditor?
+    private func showEditor() -> PasswordSetupEditor {
+        if let editor { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return editor }
+        let editor = PasswordSetupEditor()
+        let window = NSWindow(contentViewController: editor)
+        window.title = "Thingtime Passwords"; window.setContentSize(NSSize(width: 1000, height: 760)); window.minSize = NSSize(width: 360, height: 520)
+        window.styleMask.insert([.resizable, .miniaturizable]); window.center(); window.makeKeyAndOrderFront(nil)
+        self.editor = editor; self.window = window; NSApp.activate(ignoringOtherApps: true)
+        return editor
     }
+    func applicationDidFinishLaunching(_ notification: Notification) { LSRegisterURL(Bundle.main.bundleURL as CFURL, true); _ = showEditor() }
+    func application(_ application: NSApplication, open urls: [URL]) {
+        let editor = showEditor()
+        for url in urls { editor.receive(url) }
+    }
+    func applicationDidBecomeActive(_ notification: Notification) { editor?.retryDestination() }
+    func applicationWillTerminate(_ notification: Notification) { editor?.cancelSetup() }
 }
