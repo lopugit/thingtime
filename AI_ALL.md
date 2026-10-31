@@ -841,42 +841,38 @@ Rules:
 - For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- Use the repository wrapper, `scripts/graphify`, for queries and mutations. It
-  routes Graphify through immutable content-addressed snapshots under
-  `graphify-out/snapshots/v1/`, hydrates a private semantic cache from immutable
-  variants under `graphify-out/cache/semantic-cas/v1/`, and
-  refreshes ignored root aliases so ordinary `graphify query` remains
-  compatible. It retains one active portable snapshot by default and prunes
-  superseded snapshots after successful activation; use
-  `GRAPHIFY_SNAPSHOT_RETENTION=<positive integer>` only for an explicit bounded
-  local need. Do not invoke mutating commands through the bare binary in this
-  repository.
-- After modifying code, run `scripts/graphify update .` to keep the graph
-  current (AST-only, no API cost). When Markdown, docs, PDFs, images, or another
-  non-code corpus changes, use the semantic extraction path through the local
-  Codex LLM proxy and then let the wrapper cluster/export the result.
-- Never commit mutable `graphify-out/graph.json`, `manifest.json`,
-  `GRAPH_REPORT.md`, or `cost.json` root files. They are ignored symlink aliases
-  selected by the wrapper. Commit the selected immutable snapshot directory,
-  the wrapper's removal of superseded snapshots, and any new
-  `graphify-out/cache/semantic-cas/` variants instead; the upstream mutable
-  `graphify-out/cache/semantic/` directory stays ignored.
-- A commit SHA cannot name generated output included in that same commit.
-  Thingtime therefore keys snapshots first by a source-only Git-tree
-  fingerprint that excludes `graphify-out`, then by the Graphify version and
-  portable output bytes. Identical builders deduplicate; divergent valid
-  outputs coexist and merge additively instead of line-merging an atomic JSON
-  pair.
-- On an old branch that still carries legacy root artifacts, take either side
-  for the entire legacy generated set, remove those root files from tracking,
-  and run `scripts/graphify update .`. Do not hand-merge graph JSON or combine
-  a graph from one run with a manifest from another.
-- `graphify-out/graph.html` and snapshot-local HTML are untracked derived viz.
-  The wrapper regenerates them with a high node limit. Immutable semantic-cache
-  variants and portable snapshots are tracked; hydrated semantic data, AST
-  caches, stat indexes, locks, work directories, and mutable aliases stay local.
-- The design, migration procedure, integrity rules, and research references
-  live in `docs/graphify-content-addressed-snapshots.md`.
+- Use the repository-aware Graphify router for queries and mutations. On this
+  control-plane branch it lives at `.github/scripts/graphify`; product branches
+  use `scripts/graphify`. Both route Graphify through immutable snapshots under
+  `graphify-out/snapshots/v1/`, promote semantic responses into immutable
+  `graphify-out/cache/semantic-cas/v1/<input-key>/<content-hash>.json`
+  variants, and refresh ignored root compatibility aliases.
+- The router retains one active portable snapshot by default and prunes older
+  snapshot trees only after activating a valid replacement. Set
+  `GRAPHIFY_SNAPSHOT_RETENTION` to a positive integer when a branch deliberately
+  needs more retained snapshots; invalid, zero, or unbounded values fail closed.
+- Run `.github/scripts/graphify prune` to enforce the configured retention
+  without rebuilding. The active snapshot is always retained, and removed
+  snapshots remain recoverable from Git history.
+- After modifying code, run `.github/scripts/graphify update .` here. Use the
+  configured semantic backend for Markdown/docs/non-code corpus changes, then
+  let the router cluster and export the result.
+- Never commit mutable root graph, manifest, report, or cost files. Commit the
+  immutable source-fingerprint/artifact-hash snapshot and additive semantic
+  cache variants. Graphify's input-keyed `cache/semantic/` directory is private
+  work state and remains ignored. A matching hash path must contain matching bytes; the router
+  fails closed on an invariant violation or an unexplained 50% node collapse.
+- A commit SHA cannot name generated output included in itself, so the first
+  key is a source-only Git-tree fingerprint excluding `graphify-out`; the
+  second key covers Graphify's version and portable bytes. Identical output
+  deduplicates and divergent valid output coexists without generated-file
+  line merges.
+- On a legacy branch, resolve the whole old generated set to one side and let
+  the trusted router publish a new snapshot. Never combine a graph from one
+  run with a manifest from another.
+- Snapshot HTML, mutable aliases, hydrated semantic data, AST caches, stat
+  indexes, locks, and work directories remain local. Portable snapshots and
+  immutable semantic-cache variants are tracked.
 
 ## Delivery messaging
 

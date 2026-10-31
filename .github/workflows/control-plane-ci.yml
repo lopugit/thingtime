@@ -20,8 +20,14 @@ on:
 permissions:
   contents: read
 
+# Supersede only runs that share a subject. A constant group made every new
+# control-plane run cancel the in-flight run of an unrelated PR: the older run
+# finished every step successfully and was still reported `cancelled`, which
+# `gh pr checks` renders as `fail`. PRs then showed a red control-plane check
+# for work they had not broken. Keep `cancel-in-progress` — superseding an
+# earlier push on the same PR or branch is the intended behavior.
 concurrency:
-  group: workflow-control-plane-ci
+  group: workflow-control-plane-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -55,14 +61,48 @@ jobs:
       - name: Verify patch hygiene
         run: git diff --check
 
+      - name: Validate content-addressed Graphify snapshots
+        run: |
+          node --test .github/scripts/graphify-cas.test.mjs
+          node .github/scripts/stage-graphify-snapshots.mjs --self-test
+
+      - name: Validate rebase index integrity fingerprint
+        run: |
+          node --test .github/scripts/rebase-index-fingerprint.test.mjs
+          node --test .github/scripts/rebase-related-edits.test.mjs
+          node --test .github/scripts/resolve-canonical-instruction-type-conflicts.test.mjs
+
+      - name: Validate Lopu PR status rendering and classification
+        run: node --test .github/scripts/lopu-pr-status.test.mjs
+
+      - name: Validate Lopu review queue coalescing
+        run: node --test .github/scripts/lopu-review-queue.test.mjs .github/scripts/lopu-cooperative-review.test.mjs
+
+      # The routing contract itself runs in the advisory lane, but the step
+      # window its credential-probe exemption is scoped to is pure and cheap to
+      # pin, and a wrong window there misreports rather than under-reports.
+      - name: Validate the conflict-resolver routing step window
+        run: node --test .github/scripts/resolve-pr-conflicts-routing-contract.test.mjs
+
+      - name: Validate event admission, CI isolation, and preview writes
+        run: node --test .github/scripts/control-plane-events.test.mjs .github/scripts/preview-comments.test.mjs .github/scripts/preview-labels.test.mjs .github/scripts/preview-recovery.test.mjs
+
       - name: Validate all-branch event and doctor contracts
         run: node .github/scripts/build-all-branch.mjs --self-test
+
+      - name: Validate main/develop sync merger
+        run: node .github/scripts/merge-main-develop-sync-pr.mjs --self-test
 
       - name: Validate Claude credential failover classification
         run: node .github/scripts/classify-claude-credential-failure.mjs --self-test
 
       - name: Validate signed Electron PR release contract
-        run: node .github/scripts/electron-pr-release-contract.mjs
+        run: |
+          node .github/scripts/electron-pr-release-contract.mjs
+          node --test .github/scripts/electron-release-gates.test.mjs
+
+      - name: Validate signed Commander release gates
+        run: node --test .github/scripts/commander-release.test.mjs
 
   contract-advisories:
     name: Contract advisories (non-blocking)
@@ -129,6 +169,10 @@ jobs:
           else
             run_contract 'Develop-preview controller examples' \
               node .github/scripts/deploy-develop-pr-preview.mjs --self-test
+            run_contract 'Admin multi-environment preview controller examples' \
+              node .github/scripts/deploy-admin-pr-previews.mjs --self-test
+            run_contract 'Vercel prebuilt archive safety examples' \
+              python3 .github/scripts/extract-vercel-prebuilt.py --self-test
             run_contract 'Workflow control-plane examples' \
               node .github/scripts/workflow-control-plane-contract.mjs --self-test
             run_contract 'Signed Electron PR release examples' \

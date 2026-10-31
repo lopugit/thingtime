@@ -18,11 +18,17 @@ const WORKFLOW_URL = new URL("../workflows/resolve-pr-conflicts.yml", import.met
 const REBASE_WORKFLOW_URL = new URL("../workflows/rebase-pr-stacks.yml", import.meta.url);
 const REBASE_ACTION_URL = new URL("../actions/rebase-conflict-round/action.yml", import.meta.url);
 const LOPU_ACTION_URL = new URL("../actions/lopu-agent/action.yml", import.meta.url);
+const LOPU_STATUS_URL = new URL("./lopu-pr-status.mjs", import.meta.url);
+const LOPU_STATUS_TEST_URL = new URL("./lopu-pr-status.test.mjs", import.meta.url);
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 const positiveDecimal = (value) => /^[1-9][0-9]*$/.test(value);
 const validDepth = (value) => /^[0-9]+$/.test(value) && Number(value) <= 3;
 const MAX_BATCH = 200;
+// GitHub does not create a run graph for oversized workflow revisions: the run
+// remains generically titled and pre-queued forever, with no jobs or logs. Keep
+// below the observed boundary (a 510,325-byte revision ran; 514,886 did not).
+const MAX_WORKFLOW_BYTES = 510_000;
 const standardBase64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 export function encodeBatch(items) {
@@ -116,6 +122,7 @@ export function route(input) {
   const conversationEvent =
     event === "issue_comment" || event === "pull_request_review_comment";
   const failedCheckEvent = event === "check_run";
+  const failedWorkflowEvent = event === "workflow_run";
   const scanAll =
     event === "schedule" ||
     (humanDispatch && prNumber === "" && branch === "");
@@ -129,7 +136,7 @@ export function route(input) {
     ? `pr:${prNumber}`
     : batch
       ? `batch:${batch.length}`
-      : (conversationEvent || failedCheckEvent) && eventPrNumber
+      : (conversationEvent || failedCheckEvent || failedWorkflowEvent) && eventPrNumber
         ? `pr:${eventPrNumber}`
         : scanAll
           ? "all"
@@ -146,6 +153,8 @@ export function route(input) {
     concurrency = `resolve-detect-selector-${branch}`;
   } else if (failedCheckEvent && eventPrNumber) {
     concurrency = `lopu-check-fix-pr${eventPrNumber}`;
+  } else if (failedWorkflowEvent && eventPrNumber) {
+    concurrency = `lopu-workflow-fix-pr${eventPrNumber}`;
   } else if (conversationEvent && eventPrNumber) {
     concurrency = `lopu-conversation-pr${eventPrNumber}`;
   } else if (event === "workflow_dispatch" || event === "schedule") {
@@ -184,11 +193,191 @@ function assertRoute(name, input, expected) {
   }
 }
 
+// A shell function whose stdout is captured by command substitution owns that
+// stream. An annotation echoed on stdout is spliced into the caller's document
+// instead of the log, and the next `jq` over that variable dies on it.
+// `gh_read_retry` already documents the rule -- "Keep every notice on stderr so
+// command-substitution JSON stays clean" -- but `complete_large_pr_files` and
+// `read_jobs` each drifted from it independently, so the rule needs a guard
+// rather than a comment. The first drift was not cosmetic: one PR whose diff
+// GitHub refuses to generate (HTTP 422) poisoned the shared open-PR inventory
+// and took the repository-wide conflict scan down for *every* open PR, on every
+// push and every scheduled sweep, for as long as that PR stayed open.
+// The rule has to survive one indirection, because the annotation does not have
+// to be written by the captured function itself. `make_attestation()` -- read as
+// `attestation="$(make_attestation "$final_head")"` -- carried no annotation of
+// its own, but its oversize-payload branch called the one-line `fail()` helper,
+// which echoed `::error::` on stdout. That message went into `$attestation`
+// instead of the log, and `fail`'s `exit 1` only left the substitution's
+// subshell, so the promotion worker aborted under `set -e` with *both* streams
+// empty. So one-line definitions are scanned too: they are exactly where the
+// terse `fail`/`die` helpers live, and a helper that is nothing but a diagnostic
+// branch is the likeliest one to be reached from inside a capture.
+// A helper is "loud" if any line of its definition annotates without `>&2`.
+// That is fine at top level and only becomes a fault under capture, so loudness
+// alone is not asserted on -- only calling a loud helper from a captured body
+// is. The loud set is collected per file rather than per `run:` block, which can
+// only over-approximate: it may flag a clean same-named helper, never miss a
+// loud one, and a guard that fails loudly beats one that misses silently.
+const ANNOTATION = /::(?:warning|notice|error)::/u;
+
+// Where a call to a loud helper can start. A diagnostic helper is one that
+// *returns nonzero*, so the shapes that matter are the conditional ones, and
+// they were the gap: `if`/`elif`/`while`/`until` and a leading `!` are how this
+// control plane actually reads such a helper 28 times over. The most pointed
+// miss was `resolve-pr-conflicts.yml`'s own `if ! gh_read_retry --paginate` --
+// the exact line inside `complete_large_pr_files()` whose stream discipline this
+// guard exists to hold. A detector that cannot see the call site it was written
+// for is the silent miss the note above rules out, so the conditional keywords
+// join `then`/`else`/`do` rather than being left to a future drift.
+// A backtick is deliberately NOT a starter. Legacy `` `cmd` `` substitution
+// appears nowhere in the scanned surfaces -- every backtick here opens a
+// markdown code span in a comment, prompt, or annotation string, 147 lines of
+// them -- so accepting one would buy no real call site and would fail the suite
+// on prose like the `fail()` note in resolve-pr-conflicts.yml. `$(helper` is
+// already covered by the `(` in the class, which is the substitution form this
+// control plane uses.
+const CALLS_HELPER = (helper) =>
+  new RegExp(
+    `(?:^|\\|\\||&&|[;(|!]|\\b(?:then|else|elif|do|if|while|until)\\b)\\s*${helper}\\b`,
+    "u",
+  );
+
+// A heredoc body is data, not shell, so a `}` inside it does not close anything.
+// `classify_output()` is the live proof: it wraps a `node - <<'NODE'` program
+// whose `catch {` block closes on a line that is byte-identical to the function's
+// own closing sentinel, nineteen lines before the real `}`. Matching the sentinel
+// blindly truncated that body and silently dropped every later line from the
+// scan -- the one outcome this guard must not have, since the whole point is to
+// fail loudly rather than miss. Skipping heredoc payloads keeps the sentinel
+// unambiguous; an unterminated one runs to EOF and leaves `end` at -1, which the
+// captured-function assertion below reports rather than swallows.
+// Only a real heredoc opener counts. The three near-misses in this control plane
+// are all `<<` that redirect nothing: `$((1 << attempt))` (arithmetic shift, so
+// the tag may not be separated by space), `<<<<<<< HEAD` (a conflict marker in a
+// fixture, so `<` may neither precede nor follow the pair), and
+// `echo "unresolved_paths<<TT_UNRESOLVED_EOF"` (a GITHUB_OUTPUT delimiter, so a
+// word character may not precede it). Treating any of them as a heredoc would
+// swallow the rest of the enclosing function and reintroduce the silent miss
+// from the other direction.
+const HEREDOC_OPEN =
+  /(?<![\w<])<<-?(?!<)(?:(['"])([A-Za-z_][A-Za-z0-9_]*)\1|([A-Za-z_][A-Za-z0-9_]*))/u;
+
+function shellFunctions(lines) {
+  const found = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const multi = /^(\s*)([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{\s*$/u.exec(lines[index]);
+    if (multi) {
+      const closing = `${multi[1]}}`;
+      let end = -1;
+      let heredoc = null;
+      for (let scan = index + 1; scan < lines.length; scan += 1) {
+        if (heredoc !== null) {
+          if (lines[scan].trim() === heredoc) heredoc = null;
+          continue;
+        }
+        if (lines[scan] === closing) {
+          end = scan;
+          break;
+        }
+        const opener = HEREDOC_OPEN.exec(lines[scan]);
+        if (opener) heredoc = opener[2] ?? opener[3];
+      }
+      found.push({ name: multi[2], start: index, end, multiLine: true });
+      continue;
+    }
+    const single = /^\s*([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{\s*\S.*\}\s*$/u.exec(lines[index]);
+    if (single) {
+      found.push({ name: single[1], start: index, end: index, multiLine: false });
+    }
+  }
+  return found;
+}
+
+function assertCapturedStdoutStaysClean(source, label) {
+  const lines = source.split("\n");
+  const definitions = shellFunctions(lines);
+  const loud = new Set(
+    definitions
+      .filter(
+        ({ start, end }) =>
+          end >= 0 &&
+          lines.slice(start, end + 1).some((line) => ANNOTATION.test(line) && !/>&2/u.test(line)),
+      )
+      .map(({ name }) => name),
+  );
+  for (const { name, start, end, multiLine } of definitions) {
+    if (!new RegExp(`\\$\\(\\s*${name}\\b`, "u").test(source)) {
+      continue;
+    }
+    // A one-line definition is checked under capture too, not merely collected
+    // into `loud`. The indirect case is the one that actually shipped, but the
+    // direct one -- `emit() { echo "::warning::.."; }` read as `v="$(emit)"` --
+    // is the same defect with one less hop, and skipping it would leave the
+    // guard blind to exactly the terse helper shape the note above says is the
+    // likeliest to end up inside a capture.
+    if (multiLine) {
+      assert.notStrictEqual(
+        end,
+        -1,
+        `${label}:${start + 1}: ${name}() must close at its own indentation`,
+      );
+    }
+    for (let line = start; line <= end; line += 1) {
+      if (ANNOTATION.test(lines[line])) {
+        assert.match(
+          lines[line],
+          />&2/u,
+          `${label}:${line + 1}: ${name}() stdout is captured by command substitution, so this annotation must be redirected to stderr`,
+        );
+      }
+      for (const helper of loud) {
+        if (helper === name || new RegExp(`^\\s*${helper}\\(\\)`, "u").test(lines[line])) {
+          continue;
+        }
+        assert.doesNotMatch(
+          lines[line],
+          CALLS_HELPER(helper),
+          `${label}:${line + 1}: ${name}() stdout is captured by command substitution, so it must not call ${helper}(), which annotates on stdout`,
+        );
+      }
+    }
+  }
+}
+
 function assertWorkflowSource() {
   const source = readFileSync(WORKFLOW_URL, "utf8");
+  assert.ok(
+    Buffer.byteLength(source, "utf8") <= MAX_WORKFLOW_BYTES,
+    `resolve-pr-conflicts.yml must stay at or below ${MAX_WORKFLOW_BYTES} bytes so GitHub can create its run graph`,
+  );
   const rebaseSource = readFileSync(REBASE_WORKFLOW_URL, "utf8");
   const rebaseActionSource = readFileSync(REBASE_ACTION_URL, "utf8");
   const lopuActionSource = readFileSync(LOPU_ACTION_URL, "utf8");
+  const lopuStatusSource = readFileSync(LOPU_STATUS_URL, "utf8");
+  const lopuStatusTestSource = readFileSync(LOPU_STATUS_TEST_URL, "utf8");
+  // Every shell surface of this control plane, enumerated rather than listed.
+  // The hazard is a helper that becomes captured, or a captured helper added to
+  // a file nobody remembered to add here -- so a hand-kept list is the one shape
+  // guaranteed to miss it. Naming the four sources read above left twelve
+  // captured helpers unscanned, including `hash_index_entries` and
+  // `hash_rebase_state`, which exist in *both* the listed
+  // rebase-conflict-round/action.yml and the unlisted
+  // .github/scripts/rebase-stack/prepare-round.sh. One guarded copy and one
+  // unguarded copy of the same helper is precisely the drift the `fail()` note
+  // in resolve-pr-conflicts.yml warns about, so the walk is the guard, not the
+  // list. Files with no shell function are a no-op, which is why this can safely
+  // cover every workflow, action, and script instead of the resolver's own.
+  for (const shellSurface of [
+    ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "workflows")),
+    ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "actions")),
+    ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "scripts")),
+  ]) {
+    assertCapturedStdoutStaysClean(
+      readFileSync(shellSurface, "utf8"),
+      relative(REPO_ROOT, shellSurface),
+    );
+  }
   const modelBlock = source.slice(
     source.indexOf("\n  model_config:"),
     source.indexOf("\n  resolve_promotion:"),
@@ -213,6 +402,10 @@ function assertWorkflowSource() {
     source.indexOf("\n  detect:"),
     source.indexOf("\n  handoff:"),
   );
+  const progressBlock = source.slice(
+    source.indexOf("\n  progress:"),
+    source.indexOf("\n  resolve:"),
+  );
   const reviewDetectBlock = source.slice(
     source.indexOf("\n  review_detect:"),
     source.indexOf("\n  review_handoff:"),
@@ -229,6 +422,14 @@ function assertWorkflowSource() {
   const rebasePushBlock = rebaseSource.slice(
     rebaseSource.indexOf("      - name: Force-push the fully verified rewritten history once"),
     rebaseSource.indexOf("      - name: Requeue after a moving-ref rebase race"),
+  );
+  const rebaseProvenanceBlock = rebaseSource.slice(
+    rebaseSource.indexOf("      - name: Stamp exact Lopu rebase provenance on the rewritten tip"),
+    rebaseSource.indexOf("      - name: Revalidate live refs and final local state"),
+  );
+  const rebaseMaintenanceBlock = rebaseSource.slice(
+    rebaseSource.indexOf("      - name: Queue repository maintenance after the rebase fleet settles"),
+    rebaseSource.indexOf("      - name: Clean up after a pre-push failure"),
   );
   const rebaseHandoffBlock = rebaseSource.slice(
     rebaseSource.indexOf("\n  handoff:"),
@@ -265,6 +466,10 @@ function assertWorkflowSource() {
     source.indexOf("      - name: Rebuild Graphify structure, then LLM semantics"),
     source.indexOf("      - name: Push merge commit"),
   );
+  const targetPushSelectionBlock = source.slice(
+    source.indexOf('          conflicting="$(jq -c \\'),
+    source.indexOf("          # Snapshot the exact live refs"),
+  );
 
   assert.match(source, /description: "PR base or head branch to scan;/);
   assert.doesNotMatch(source, /unique head|exact PR snapshot/);
@@ -273,17 +478,170 @@ function assertWorkflowSource() {
   assert.match(source, /format\('resolve-detect-pr\{0\}'/);
   assert.match(source, /format\('resolve-worker-\{0\}', github\.run_id\)/);
   assert.match(resolveBlock, /queue: max/);
-  // A batch handoff can select up to 200 PRs, so the matrix must stay bounded
-  // rather than flooding the durable fleet queue's pending-job limit.
-  assert.match(resolveBlock, /max-parallel: 3/);
+  // The detector bounds the fully materialized matrix below the durable fleet
+  // limit. `max-parallel` would hide latent jobs from exact-owner deduplication.
+  assert.doesNotMatch(resolveBlock, /max-parallel:/);
   assert.match(resolveBlock, /fail-fast: false/);
+  assert.equal(
+    source.match(/chore: refresh graphify outputs after PR branch merge/g)?.length,
+    3,
+    "the terminal commit and both per-event deferrals share one exact marker",
+  );
+  assert.match(
+    resolveBlock,
+    /RESOLUTION_TRAILER: "Lopu-Conflict-Resolution: run=\$\{\{ github\.run_id \}\} pr=\$\{\{ matrix\.pr\.number \}\}"/,
+    "every resolver commit carries a controller-run and PR-bound trailer",
+  );
+  assert.equal(
+    resolveBlock.match(/-m "\$RESOLUTION_TRAILER"/g)?.length,
+    2,
+    "AI-resolved and terminal Graphify commits preserve the resolver trailer",
+  );
+  assert.match(
+    resolveBlock,
+    /git merge --no-edit[\s\S]*?printf "Merge branch '%s' into %s\\n\\n%s"[\s\S]*?\$RESOLUTION_TRAILER/u,
+    "clean and marker-free merge commits preserve the resolver trailer",
+  );
+  const allBranchDeferralBlock = source.slice(
+    source.indexOf("  handoff_all_branch_event:"),
+    source.indexOf("  maintain_all_branch:"),
+  );
+  const reviewDeferralBlock = source.slice(
+    source.indexOf("  review_detect:"),
+    source.indexOf("  review_dispatch:"),
+  );
+  for (const [name, block] of [
+    ["all-branch", allBranchDeferralBlock],
+    ["review", reviewDeferralBlock],
+  ]) {
+    assert.match(block, /REPOSITORY_OWNER: \$\{\{ github\.repository_owner \}\}/);
+    assert.match(block, /'github-actions\[bot\]'\|"\$REPOSITORY_OWNER"/);
+    assert.match(block, /actions\/runs\/\$run_id/);
+    assert.match(block, /\.event == "workflow_dispatch"/);
+    assert.match(block, /\.head_branch == "github-actions"/);
+    assert.match(block, /\.actor\.login == "github-actions\[bot\]"/);
+    assert.match(block, /\.path == "\.github\/workflows\/resolve-pr-conflicts\.yml"/);
+    assert.match(block, /\[ "\$pr_number" = "\$EVENT_PR_NUMBER" \]/);
+    assert.match(
+      block,
+      /Lopu-Conflict-Resolution: run=\(\[1-9\]\[0-9\]\*\) pr=\(\[1-9\]\[0-9\]\*\)/,
+      `${name} deferral requires an exact run/PR trailer`,
+    );
+    assert.match(
+      block,
+      /Lopu-Rebase-Completion: run=\(\[1-9\]\[0-9\]\*\) pr=\(\[1-9\]\[0-9\]\*\)/,
+      `${name} deferral recognizes the exact rebase run/PR trailer`,
+    );
+    assert.match(block, /\.event == "repository_dispatch"/);
+    assert.match(block, /actions\/runs\/\$run_id\/jobs\?per_page=100/);
+    assert.match(block, /expected_job=" \/ Rebase PR #\$pr_number"/);
+    assert.match(block, /endswith\(\$expected_job\)/);
+  }
+  assert.match(source, /Deferring the all-branch rebuild to the conflict-batch finalizer/);
+  assert.match(source, /Deferring the all-branch rebuild to the rebase-fleet finalizer/);
+  assert.match(source, /Verified Lopu conflict resolution is reviewed once by the batch finalizer/);
+  assert.match(source, /Verified Lopu rebase is reviewed once by the rebase-fleet finalizer/);
+  assert.match(
+    rebaseProvenanceBlock,
+    /trailer="Lopu-Rebase-Completion: run=\$GITHUB_RUN_ID pr=\$PR_NUMBER"/,
+  );
+  assert.match(
+    rebaseProvenanceBlock,
+    /Lopu-\(Conflict-Resolution\|Rebase-Completion\): run=\[1-9\]\[0-9\]\* pr=\[1-9\]\[0-9\]\*\$\/d/,
+    "a new rebase replaces stale Lopu publication provenance on the rewritten tip",
+  );
+  assert.match(rebaseProvenanceBlock, /git interpret-trailers/);
+  assert.match(rebaseProvenanceBlock, /--if-exists replace/);
+  assert.match(rebaseProvenanceBlock, /--if-missing add/);
+  assert.match(rebaseProvenanceBlock, /git commit --amend --no-verify -q -F "\$message"/);
+  assert.match(rebaseMaintenanceBlock, /labels=ai-rebase-in-progress/);
+  assert.match(
+    rebaseMaintenanceBlock,
+    /\.display_title == "Lopu resolves a PR batch from the control plane"/,
+  );
+  assert.match(rebaseMaintenanceBlock, /\.event == "workflow_dispatch"/);
+  assert.match(rebaseMaintenanceBlock, /\.head_branch == "github-actions"/);
+  assert.match(rebaseMaintenanceBlock, /\.actor\.login == "github-actions\[bot\]"/);
+  assert.match(rebaseMaintenanceBlock, /lopu-internal-all-branch/);
+  assert.match(rebaseMaintenanceBlock, /lopu-review:rebase-fleet:\$GITHUB_RUN_ID/);
+  assert.equal(
+    rebaseMaintenanceBlock.match(/resolve-pr-conflicts\.yml\/dispatches/g)?.length,
+    2,
+    "the last rebase worker dispatches exactly one repository maintenance pair",
+  );
+  const batchFinalizerBlock = source.slice(
+    source.indexOf("  finalize_conflict_batch_maintenance:"),
+  );
+  assert.match(batchFinalizerBlock, /needs: \[route, detect, resolve\]/);
+  assert.match(batchFinalizerBlock, /needs\.resolve\.result == 'success'/);
+  assert.match(batchFinalizerBlock, /lopu-internal-all-branch/);
+  assert.match(batchFinalizerBlock, /lopu-review:conflict-batch:\$BATCH_RUN_ID/);
+  assert.equal(
+    batchFinalizerBlock.match(/resolve-pr-conflicts\.yml\/dispatches/g)?.length,
+    2,
+    "one completed conflict batch dispatches exactly one maintenance pair",
+  );
+  const handoffBlock = source.slice(
+    source.indexOf("  handoff:"),
+    source.indexOf("  review_detect:"),
+  );
+  assert.match(handoffBlock, /status=queued/);
+  assert.match(source, /Lopu resolves a fully materialized PR batch from the control plane/);
+  assert.match(
+    handoffBlock,
+    /\.display_title == "Lopu resolves a PR batch from the control plane"[\s\S]*?Legacy Lopu batch run\(s\) \$legacy_label still own latent conflict selections/u,
+    "pre-migration generic batch runs drain without receiving unknowable duplicate replacements",
+  );
+  assert.match(handoffBlock, /\.actor\.login == "github-actions\[bot\]"/);
+  assert.doesNotMatch(
+    handoffBlock,
+    /status=\$pending_status|status=pending/,
+    "a pending workflow can contain active matrix work and must never be coalesced",
+  );
+  assert.match(handoffBlock, /case "\$live_status" in[\s\S]*?queued\)/u);
+  assert.match(handoffBlock, /actions\/runs\/\$queued_run_id\/cancel/);
+  assert.match(handoffBlock, /changed state before cancellation; preserving it/);
+  assert.match(handoffBlock, /did not release queue capacity within 60 seconds/);
+  assert.match(
+    handoffBlock,
+    /actions\/concurrency_groups\/\$fleet_group_encoded[\s\S]*?\.group_members\[\]\?[\s\S]*?Resolve\|Rebase[\s\S]*?owned_numbers/u,
+    "new conflict detectors read pending and in-progress exact PR owners from the durable Lopu fleet queue",
+  );
+  assert.match(
+    handoffBlock,
+    /\[\.\[\] \| select\(\.number as \$number \| \$owned \| index\(\$number\) == null\)\]/u,
+    "already-owned merge and rebase PRs are removed before replacement batch dispatch",
+  );
+  assert.match(
+    handoffBlock,
+    /Every detected conflict already has a durable Lopu merge\/rebase owner; no replacement batch was dispatched/u,
+    "an entirely owned detector result exits successfully without creating an empty or duplicate worker batch",
+  );
+  assert.match(
+    handoffBlock,
+    /Could not read the durable Lopu fleet queue; deferring conflict dispatch to a later repository scan/u,
+    "a transient queue-inventory failure defers rather than risking an over-capacity matrix",
+  );
+  assert.match(handoffBlock, /fleet_capacity=90/);
+  assert.match(handoffBlock, /\.total_count \/\/ \(\.group_members \| length\)/);
+  assert.match(handoffBlock, /\.'\?\[0:\$available_slots\]|'\.\[0:\$available_slots\]'/);
+  assert.match(
+    handoffBlock,
+    /deferring \$deferred_count conflict\(s\) to the next scan/u,
+    "only capacity-bounded conflict matrices are dispatched; overflow remains discoverable",
+  );
+  assert.ok(
+    handoffBlock.indexOf("Coalescing obsolete queued Lopu worker run") <
+      handoffBlock.indexOf("for priority_sync in true false"),
+    "never-started queued workers are coalesced before replacement batches dispatch",
+  );
   assert.match(resolveBlock, /Revalidate queued PR snapshot/);
   assert.match(admissionBlock, /\.state/);
   assert.match(admissionBlock, /no-ai-merge/);
   assert.match(admissionBlock, /ai-rebase-in-progress/);
   assert.equal(
     resolveBlock.match(/steps\.admission\.outputs\.current == 'true'/g)?.length,
-    18,
+    20,
     "every post-admission resolution step is gated",
   );
   assert.match(source, /github\.actor == 'github-actions\[bot\]'/);
@@ -302,10 +660,93 @@ function assertWorkflowSource() {
     /gh_read_retry\(\) \{[\s\S]*for attempt in 1 2 3 4[\s\S]*HTTP \(408\|429\|500\|502\|503\|504\)[\s\S]*1 << attempt/u,
     "read-only GitHub API calls retry a bounded set of transient failures with backoff",
   );
+  // A mid-response HTTP/2 reset carries no status line, so status-only
+  // classification made a retryable edge blip fatal (run 33262097171).
+  // Count the helper definitions instead of hard-coding today's three: an
+  // absolute count is exactly inverted for a fourth copy. It stays green when
+  // that copy ships the status-only predicate (the outage shape, silently
+  // reintroduced) and goes red when the copy is correct. The floor keeps the
+  // pair from passing vacuously if the helper is ever renamed away.
+  const readRetryCopies =
+    source.match(/^[ \t]*gh_read_retry\(\) \{[ \t]*$/gmu)?.length ?? 0;
+  assert.ok(
+    readRetryCopies >= 1,
+    "the control plane still defines its read-only GitHub API retry helper",
+  );
+  assert.equal(
+    source.match(/^\s*transport='stream error\|/gmu)?.length,
+    readRetryCopies,
+    "every gh_read_retry copy also treats transport-level resets as retryable",
+  );
+  // A body truncated after a clean status line surfaces as gh's encoding/json
+  // decode error, not as a transport string, so the status-and-reset predicate
+  // still classified it as fatal (run 33316907281 reported red on #92 for an
+  // upstream blip). Pin the decode message per copy for the same reason the
+  // reset pattern is pinned: a copy that drops it silently restores the outage.
+  assert.equal(
+    source.match(/\|unexpected end of JSON input\|/gu)?.length,
+    readRetryCopies,
+    "every gh_read_retry copy retries a response body that ended mid-document",
+  );
+  // Declaring the pattern is not the same as branching on it: a copy that
+  // keeps `transport=` but drops the predicate reintroduces the exact
+  // outage. Assert the predicate is actually wired into every retry branch,
+  // independent of how each copy formats its condition.
+  assert.equal(
+    source.match(/\|\| grep -Eq "\$transport" "\$errors"/gu)?.length,
+    readRetryCopies,
+    "every gh_read_retry copy branches on the transport predicate, not just declares it",
+  );
+  assert.doesNotMatch(
+    source,
+    /if grep -Eq 'HTTP \(408\|429\|500\|502\|503\|504\)\(\[\^0-9\]\|\$\)' "\$errors"; then/u,
+    "no gh_read_retry copy classifies transience by HTTP status alone",
+  );
+  // GitHub answers a diff it could not finish generating with HTTP 422 and
+  // "Sorry, this diff is taking too long to generate." That is a server-side
+  // generation timeout on an idempotent read, not a client error: the
+  // paginated `pulls/291/files` read that took the repository-wide scan down
+  // in run 33565995120 replayed cleanly minutes later, all 29 pages. Pin the
+  // declaration and the branch separately, exactly like the transport
+  // predicate, because a copy that keeps one without the other is silently
+  // back to the outage shape.
+  assert.equal(
+    source.match(/^\s*slow_diff='diff is taking too long to generate'$/gmu)?.length,
+    readRetryCopies,
+    "every gh_read_retry copy declares GitHub's diff-generation timeout",
+  );
+  assert.equal(
+    source.match(/&& grep -Fq "\$slow_diff" "\$errors"/gu)?.length,
+    readRetryCopies,
+    "every gh_read_retry copy branches on the diff-generation timeout, not just declares it",
+  );
+  // The status alone must never become retryable: an invalid ref, "No commits
+  // between", and a failed validation are all 422 and all have to stay fatal
+  // on the first attempt. The message is only honoured paired with its status.
+  assert.equal(
+    source.match(/grep -Eq 'HTTP 422\(\[\^0-9\]\|\$\)' "\$errors"/gu)?.length,
+    readRetryCopies,
+    "every gh_read_retry copy scopes that retry to a 422 carrying that exact message",
+  );
   assert.match(
     source,
-    /gh_read_retry graphql --paginate --slurp[\s\S]*successful but malformed PR inventory response/u,
+    /if ! gh_read_retry graphql --paginate --slurp[\s\S]*Could not read the open PR inventory from GitHub[\s\S]*successful but malformed PR inventory response/u,
     "the GraphQL PR inventory is parsed only after transport success and response-shape validation",
+  );
+  assert.match(
+    source,
+    /PRIORITY_SYNC_EVENT:[\s\S]*pull_request_target[\s\S]*github\.event\.action != 'closed'[\s\S]*sync\/main-into-develop[\s\S]*develop[\s\S]*'true'[\s\S]*'false'/u,
+    "the exact standing synchronizer event is identified from trusted open pull-request context",
+  );
+  assert.match(
+    source,
+    /exact_sync_open_pr\(\) \{[\s\S]*gh_read_retry "repos\/\$REPO\/pulls\/\$ONLY_PR"[\s\S]*stale or malformed exact standing sync PR response[\s\S]*mergeStateStatus:\(\(\.mergeable_state \/\/ "unknown"\) \| ascii_upcase\)/u,
+    "the priority synchronizer hydrates and validates one exact REST PR snapshot",
+  );
+  assert.match(
+    source,
+    /all_open_prs\(\) \{[\s\S]*if \[ "\$PRIORITY_SYNC_EVENT" = true \]; then\s+exact_sync_open_pr\s+return\s+fi[\s\S]*gh_read_retry graphql --paginate --slurp/u,
+    "the priority synchronizer bypasses the repository-wide GraphQL inventory without changing ordinary sweeps",
   );
   assert.match(
     source,
@@ -322,10 +763,45 @@ function assertWorkflowSource() {
   assert.doesNotMatch(source, /ref:"develop"/);
   assert.match(source, /detector_handoff:true/);
   assert.match(source, /manual_retry:false/);
+  assert.match(
+    source,
+    /for priority_sync in true false; do[\s\S]*\.head == "sync\/main-into-develop" and \.base == "develop"[\s\S]*== \$priority_sync/u,
+    "the standing main-to-develop synchronizer is partitioned into the first conflict handoff",
+  );
+  assert.match(
+    source,
+    /priority main-to-develop synchronizer batch/u,
+    "priority synchronizer dispatches remain observable in the run log",
+  );
+  assert.match(
+    handoffBlock,
+    /priority_fleet_group="lopu-priority-main-develop-\$REPO"[\s\S]*?priority_owned_numbers[\s\S]*?\$ordinary \+ \$priority \| sort \| unique/u,
+    "detectors deduplicate exact synchronizer owners from the independent priority queue",
+  );
+  assert.match(
+    handoffBlock,
+    /grep -q 'HTTP 404'[\s\S]*?Could not read the priority synchronizer queue; deferring conflict dispatch/u,
+    "a missing priority group starts empty while other queue-read failures defer safely",
+  );
+  assert.match(
+    handoffBlock,
+    /priority_candidates="\$\(jq -c '[\s\S]*?sync\/main-into-develop[\s\S]*?ordinary_candidates="\$\(jq -c '[\s\S]*?available_slots[\s\S]*?\$priority \+ \$ordinary/u,
+    "priority synchronizers remain dispatchable when the ordinary Lopu fleet is full",
+  );
+  assert.match(
+    source,
+    /for priority_sync in true false; do[\s\S]*sort_by\(\.number\)[\s\S]*unique_by\(\.number\)[\s\S]*range\(0; length; 200\)/u,
+    "each priority partition remains a canonical, bounded, number-sorted batch",
+  );
   assert.equal(
     source.match(/pr_batch_b64:\$pr_batch_b64/g)?.length,
     2,
     "detector handoff and cascade both carry canonical PR batches",
+  );
+  assert.match(
+    resolveBlock,
+    /group: >-[\s\S]*?matrix\.pr\.head == 'sync\/main-into-develop'[\s\S]*?matrix\.pr\.base == 'develop'[\s\S]*?lopu-priority-main-develop-\{0\}[\s\S]*?lopu-agent-fleet-\{0\}[\s\S]*?queue: max[\s\S]*?cancel-in-progress: false/u,
+    "only the standing synchronizer bypasses the ordinary serialized model backlog",
   );
   // Per-PR retry intent lives INSIDE the canonical batch, so both dispatch
   // payloads pin the top-level flag to the literal false. Binding the lowercase
@@ -343,7 +819,57 @@ function assertWorkflowSource() {
     /pull_request_review_comment:\n    types: \[created, edited\]/u,
     "human inline review comments wake Lopu",
   );
+  assert.match(source, /route:\n    needs: conversation_gate\n    if: >-\n      !cancelled\(\)/u, "route evaluates after skipped non-comment admission jobs");
+  assert.match(source, /needs\.conversation_gate\.result == 'success' && needs\.conversation_gate\.outputs\.eligible == 'true'/u, "comments require successful deterministic admission before routing");
+  assert.match(source, /run: node \.github\/scripts\/lopu-conversation-gate\.mjs/u, "comment classification executes trusted code");
+  // Inventory production markers. Keep the canonical spelling for runner-free
+  // suppression; the classifier also handles legacy standalone markers while
+  // preserving quoted replies. PR-body lineage markers are not comments.
+  {
+    const bodyMarkers = new Set(["promotion-of", "promotion-group", "promotion-changelog"]);
+    const controlPlane = join(REPO_ROOT, ".github");
+    const markers = new Map();
+    let scanned = 0;
+    for (const name of readdirSync(controlPlane, { recursive: true })) {
+      if (!/\.(?:ya?ml|mjs|cjs|js|sh)$/u.test(name) || /\.test\./u.test(name)) continue;
+      scanned += 1;
+      for (const [, spacing, marker] of readFileSync(join(controlPlane, name), "utf8").matchAll(/<!--(\s*)([\w:.-]+)/gu)) {
+        if (!markers.has(marker)) markers.set(marker, new Set());
+        markers.get(marker).add(spacing);
+      }
+    }
+    assert.ok(scanned > 20, `expected to scan the control plane for comment markers, saw ${scanned} files`);
+    assert.ok(markers.size > 10, `expected the control-plane comment markers, found ${markers.size}`);
+    let commentMarkers = 0;
+    for (const [marker, spacings] of markers) {
+      // `promotion-changelog:start` / `:end` / `-prs:` are all that one body marker.
+      if ([...bodyMarkers].some((body) => marker === body || marker.startsWith(`${body}:`) || marker.startsWith(`${body}-`))) continue;
+      assert.ok(
+        marker.startsWith("thingtime-"),
+        `control-plane marker '${marker}' must either keep the 'thingtime-' prefix the conversation gate filters on, or be classified as a PR-body marker`,
+      );
+      for (const spacing of spacings) {
+        assert.equal(
+          spacing,
+          " ",
+          `control-plane marker '${marker}' must be written as '<!-- ${marker}', with exactly one space: the conversation gate matches that literal, so any other spacing passes this contract and still wakes a Lopu session`,
+        );
+      }
+      commentMarkers += 1;
+    }
+    assert.ok(commentMarkers > 10, `expected the thingtime- comment markers, found ${commentMarkers}`);
+  }
   assert.match(source, /check_run:\n    types: \[completed\]/u, "failed PR checks wake Lopu");
+  assert.match(
+    source,
+    /workflow_run:\n    workflows:[\s\S]*?- Web CI[\s\S]*?- Build all branch\n    types: \[completed\]/u,
+    "GitHub Actions-produced PR workflow failures wake Lopu",
+  );
+  assert.doesNotMatch(
+    source.slice(source.indexOf("\n  workflow_run:"), source.indexOf("\n  schedule:")),
+    /- Lopu PR manager\s*$/mu,
+    "the workflow-run bridge cannot recursively review Lopu's own runs",
+  );
   assert.match(
     source,
     /github\.event\.issue\.pull_request[\s\S]*?github\.event\.comment\.user\.type == 'User'/u,
@@ -358,6 +884,11 @@ function assertWorkflowSource() {
     source,
     /manage_rebases:[\s\S]*?github\.event_name != 'issue_comment'/u,
     "conversation events do not launch unrelated rebases",
+  );
+  assert.match(
+    manageRebasesBlock,
+    /github\.event_name != 'workflow_run'/u,
+    "CI workflow completions do not launch unrelated rebases",
   );
   assert.match(
     source,
@@ -385,14 +916,39 @@ function assertWorkflowSource() {
     "automatic rebase race retries cannot also enter the merge detector",
   );
   assert.match(
+    detectBlock,
+    /github\.event_name != 'workflow_run'/u,
+    "CI workflow completions do not launch unrelated conflict scans",
+  );
+  assert.match(
     reviewDetectBlock,
     /github\.event_name != 'repository_dispatch'[\s\S]*inputs\.ref_race_handoff != true/u,
     "internal events and automatic rebase retries never launch a duplicate whole-PR review",
   );
+  for (const [name, block] of [
+    ["review selector", reviewDetectBlock],
+    ["review worktree preparation", reviewBlock],
+  ]) {
+    assert.match(
+      block,
+      /gh_read_retry\(\) \{[\s\S]*for attempt in 1 2 3 4[\s\S]*HTTP \(408\|429\|500\|502\|503\|504\)/u,
+      `${name} retries bounded transient GitHub metadata failures`,
+    );
+    assert.match(
+      block,
+      /open="\$\(gh_read_retry pr list[\s\S]*default_ref="\$\(gh_read_retry api/u,
+      `${name} routes both initial metadata reads through the retry helper`,
+    );
+  }
   assert.match(
     source,
     /github\.event\.check_run\.pull_requests\[0\]\.number[\s\S]*?github\.event\.check_run\.conclusion == 'failure'/u,
     "only PR-associated failing checks enter the Lopu route",
+  );
+  assert.match(
+    source,
+    /github\.event\.workflow_run\.pull_requests\[0\]\.number[\s\S]*?github\.event\.workflow_run\.conclusion == 'failure'/u,
+    "only PR-associated failing Actions workflows enter the Lopu route",
   );
   assert.match(source, /actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g);
   assert.doesNotMatch(source, /gh api "repos\/\$REPO\/dispatches"/);
@@ -402,6 +958,26 @@ function assertWorkflowSource() {
     source,
     /select\(\.mergeable == "CONFLICTING" or \.mergeStateStatus == "BEHIND"\)/u,
     "conflicting and clean-but-behind PRs both enter Lopu's base-merge lane",
+  );
+  assert.match(
+    source,
+    /TARGET_PUSH:[\s\S]*github\.event_name == 'push'[\s\S]*github\.event\.deleted == false/u,
+    "a non-deleted push carries an authoritative target-update signal",
+  );
+  assert.match(
+    targetPushSelectionBlock,
+    /or \(\$target_push and \.baseRefName == \$event_ref\)/u,
+    "a pushed PR target enters the merge lane without waiting for stale GitHub mergeability",
+  );
+  assert.match(
+    source,
+    /git merge-base --is-ancestor "\$base" "\$pre_merge"[\s\S]*already_current=true/u,
+    "an already-current exact snapshot is a successful no-op",
+  );
+  assert.match(
+    source,
+    /steps\.merge\.outputs\.already_current != 'true'/u,
+    "an already-current worker cannot create a graph-only branch update",
   );
   assert.match(
     source,
@@ -424,8 +1000,29 @@ function assertWorkflowSource() {
     "Graphify refresh is not limited to graph-tree conflicts",
   );
   assert.ok(
-    graphifyBlock.indexOf("graphify update .") < graphifyBlock.indexOf("graphify extract ."),
+    graphifyBlock.indexOf('node "$graphify_router" update .') <
+      graphifyBlock.indexOf('node "$graphify_router" extract .'),
     "structural Graphify extraction runs before LLM semantic extraction",
+  );
+  assert.match(
+    graphifyBlock,
+    /trusted\/\.github\/scripts\/graphify-cas\.mjs/u,
+    "privileged Graphify publication executes only the trusted router",
+  );
+  assert.match(
+    graphifyBlock,
+    /git clean -qffdx -e trusted\//u,
+    "Graphify cleanup preserves the local Lopu action until runner post steps finish",
+  );
+  assert.doesNotMatch(
+    graphifyBlock,
+    /git clean -qffdx\s*\n/u,
+    "Graphify cleanup cannot delete the protected local-action checkout",
+  );
+  assert.match(
+    graphifyBlock,
+    /node "\$graphify_stager"/u,
+    "only immutable portable snapshots and additive cache entries are staged",
   );
   assert.match(
     graphifyBlock,
@@ -438,6 +1035,184 @@ function assertWorkflowSource() {
     /RUN_STATUS_MARKER: '<!-- thingtime-ai-resolve-status:v2 run_id=\$\{\{ github\.run_id \}\} -->'/u,
     "resolver status marker is scoped to the workflow run",
   );
+  assert.match(
+    detectBlock,
+    /thingtime-lopu-progress:v1 pr=\$number head=\$head_sha base=\$base_sha/u,
+    "detected work has an immutable PR/head/base progress marker",
+  );
+  assert.match(
+    detectBlock,
+    /conflicting="\$snapshots"[\s\S]*?ensure_progress_comment[\s\S]*?echo "prs=\$conflicting"/u,
+    "the detector comments before handing actionable snapshots to the worker queue",
+  );
+  assert.match(
+    detectBlock,
+    /Next automatic check-in: within \*\*10 minutes\*\*/u,
+    "the first detection comment promises the human heartbeat cadence",
+  );
+  assert.match(
+    detectBlock,
+    /Check out the trusted Lopu PR-status helper[\s\S]*ref: github-actions[\s\S]*sparse-checkout: \.github\/scripts\/lopu-pr-status\.mjs/u,
+    "detector classification executes only the fixed controller helper",
+  );
+  assert.match(
+    detectBlock,
+    /files\(first: 100\)[\s\S]*totalCount[\s\S]*nodes \{ path \}/u,
+    "one open-PR inventory includes changed paths for overlap classification",
+  );
+  assert.match(
+    detectBlock,
+    /complete_large_pr_files[\s\S]*pulls\/\$number\/files\?per_page=100[\s\S]*--slurpfile response "\$pages"/u,
+    "large PRs receive an exact file-backed paginated changed-file inventory",
+  );
+  assert.doesNotMatch(
+    detectBlock,
+    /--argjson (?:files|classification|all|prs)\b/u,
+    "large changed-path, classification, PR, and repository arrays never cross the process argument-size boundary",
+  );
+  assert.match(
+    detectBlock,
+    /--slurpfile classifications "\$classification_file"/u,
+    "relationship metadata is joined from a file instead of a process argument",
+  );
+  assert.match(
+    detectBlock,
+    /lopu-all-open-prs\.json[\s\S]*--slurpfile all_open_inventory "\$all_open_file"/u,
+    "stack ownership joins use the same file-backed repository inventory",
+  );
+  assert.match(
+    detectBlock,
+    /classify --default-ref "\$default_ref"[\s\S]*sync_lopu_fact_labels/u,
+    "every open PR receives reconciled Lopu fact labels from repository topology",
+  );
+  assert.match(
+    detectBlock,
+    /permissions:\n\s+actions: read[\s\S]*issues: write/u,
+    "the detector can read the durable Lopu fleet before reconciling lane labels",
+  );
+  assert.match(
+    detectBlock,
+    /actions\/concurrency_groups\/\$fleet_group_encoded[\s\S]*lane-plan/u,
+    "queue and resolving labels are projected from the live durable fleet",
+  );
+  assert.match(
+    detectBlock,
+    /sync_lopu_lane_labels[\s\S]*--slurpfile classification "\$classification_file"[\s\S]*lane-plan/u,
+    "the full PR classification reaches lane planning through a file-backed join",
+  );
+  assert.match(
+    detectBlock,
+    /EVENT_ACTION: \$\{\{ github\.event\.action \}\}[\s\S]*EVENT_ACTION" = closed[\s\S]*managed_all[\s\S]*'\[\]'/u,
+    "closed PRs lose every dynamic Lopu label while unrelated labels remain untouched",
+  );
+  assert.match(
+    detectBlock,
+    /--method PATCH "repos\/\$REPO\/labels\/[\s\S]*new_name="\$name"[\s\S]*description="\$description"/u,
+    "managed label colors and descriptions are updated when their definitions change",
+  );
+  assert.match(
+    detectBlock,
+    /repo_stats:\$classification\.stats[\s\S]*overlapPrNumbers:\$metadata\.overlapPrNumbers/u,
+    "immutable resolver snapshots carry queue and file-overlap context",
+  );
+  assert.match(
+    detectBlock,
+    /render-context/u,
+    "the immediate comment renders UTC conversions and queue context",
+  );
+  assert.match(
+    detectBlock,
+    /upsert_legacy_status_context[\s\S]*?thingtime-lopu-status-context:v1/u,
+    "legacy exact-snapshot work receives one separately marked status dashboard",
+  );
+  assert.match(
+    detectBlock,
+    /original timeline remains untouched[\s\S]*?render-context/u,
+    "the companion dashboard cannot erase the pre-existing progress history",
+  );
+  assert.match(
+    detectBlock,
+    /context_comment_id[\s\S]*?upsert_legacy_status_context "\$item" "\$context_comment_id"/u,
+    "repeat detector passes update the same legacy companion instead of adding duplicates",
+  );
+  assert.match(
+    detectBlock,
+    /thingtime-lopu-status-native:v1/u,
+    "new progress comments identify themselves as dashboard-native singletons",
+  );
+  assert.match(
+    progressBlock,
+    /name: Keep PR reviewers updated every 10 minutes/u,
+    "one dedicated human progress monitor accompanies a resolver batch",
+  );
+  assert.doesNotMatch(
+    progressBlock,
+    /\n\s+strategy:/u,
+    "the progress monitor is one batch job, never one idle runner per PR",
+  );
+  assert.match(progressBlock, /continue-on-error: true/u, "comment telemetry cannot fail valid resolution work");
+  assert.match(progressBlock, /actions: read[\s\S]*contents: read[\s\S]*pull-requests: read[\s\S]*issues: write/u);
+  assert.match(progressBlock, /HEARTBEAT_SECONDS: "600"/u, "active work checks in every ten minutes");
+  assert.match(progressBlock, /POLL_SECONDS: "60"/u, "phase transitions are detected promptly");
+  assert.match(
+    progressBlock,
+    /actions\/runs\/\$RUN_ID\/jobs\?filter=all&per_page=100/u,
+    "the monitor reads live sibling resolver phases instead of inventing status",
+  );
+  assert.match(progressBlock, /job_name="Resolve PR #\$number"/u, "each update follows its exact matrix worker");
+  assert.match(progressBlock, /10-minute check-in: still working/u, "unchanged long phases append a heartbeat");
+  assert.match(progressBlock, /thingtime-lopu-progress-timeline:start/u, "progress history is retained in place");
+  assert.match(progressBlock, /Rebuilding Graphify structure and semantic context/u, "Graphify has a visible phase");
+  assert.match(progressBlock, /repos\/\$REPO\/pulls\/\$number/u, "completion reads the live PR verdict");
+  assert.match(progressBlock, /this PR is mergeable/u, "the human status confirms GitHub's final mergeability verdict");
+  assert.match(progressBlock, /wait_elapsed[\s\S]*-lt 180/u, "a completed worker gives GitHub a bounded verdict-refresh window");
+  assert.match(progressBlock, /there is no need to find the Actions run/u, "the PR comment is the human control surface");
+  assert.match(
+    progressBlock,
+    /batch_counts[\s\S]*batch-counts/u,
+    "the monitor derives live resolving, waiting, and finished batch counts",
+  );
+  assert.match(progressBlock, /read_live_stats/u, "repository PR counts refresh while a batch is active");
+  assert.match(progressBlock, /sync_progress_labels/u, "queue and resolving labels follow the real worker phase");
+  assert.match(progressBlock, /render-context/u, "every progress update includes time, queue, and relationship tables");
+  assert.match(progressBlock, /thingtime-lopu-status-native:v1/u, "new monitors retain the native dashboard marker");
+  assert.doesNotMatch(progressBlock, /secrets\./u, "the comment monitor never receives AI or push credentials");
+
+  const featureStackProgressBlock = source.slice(
+    source.indexOf("\n  feature_stack_progress:"),
+    source.indexOf("\n  # Clean PRs still need a principal-engineering review."),
+  );
+  assert.match(featureStackProgressBlock, /name: Stream Feature Stack progress to Thingtime every 10 minutes/u);
+  assert.match(featureStackProgressBlock, /continue-on-error: true/u, 'stack telemetry cannot fail a valid merge');
+  assert.match(featureStackProgressBlock, /actions: read[\s\S]*contents: read/u);
+  assert.match(featureStackProgressBlock, /HEARTBEAT_SECONDS: "600"/u);
+  assert.match(featureStackProgressBlock, /POLL_SECONDS: "60"/u);
+  assert.match(featureStackProgressBlock, /THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}/u);
+  assert.match(featureStackProgressBlock, /feature-stack-progress\.mjs/u);
+
+  for (const label of [
+    "lopu: conflicting",
+    "lopu: out-of-date",
+    "lopu: mergeable",
+    "lopu: queued",
+    "lopu: resolving",
+    "lopu: part of stack",
+    "lopu: target PR not open",
+    "lopu: overlapping files",
+    "lopu: needs attention",
+  ]) {
+    assert.match(lopuStatusSource, new RegExp(label, "u"), `managed status helper defines ${label}`);
+  }
+  assert.match(lopuStatusSource, /America\/Los_Angeles/u, "time guide uses Los Angeles' IANA zone");
+  assert.match(lopuStatusSource, /Australia\/Melbourne/u, "time guide uses Melbourne's IANA zone");
+  assert.match(lopuStatusSource, /Time conversion \(UTC source\)/u, "UTC remains the canonical displayed time");
+  assert.match(lopuStatusSource, /Currently resolving/u, "queue table exposes active resolver count");
+  assert.match(lopuStatusSource, /Changed-file overlap/u, "related PRs disclose overlapping changed paths");
+  assert.match(lopuStatusSource, /export function labelDelta/u, "label mutation is a tested managed-subset diff");
+  assert.match(lopuStatusSource, /export function summarizeBatch/u, "worker queue counts use one tested classifier");
+  assert.match(lopuStatusTestSource, /daylight-saving aware/u, "timezone offsets have deterministic DST fixtures");
+  assert.match(lopuStatusTestSource, /missing parents, file overlap/u, "relationship labels have deterministic fixtures");
+  assert.match(lopuStatusTestSource, /exact matrix worker names/u, "queue counts reject unrelated jobs");
   assert.match(admissionBlock, /id: admission/u, "queued workers have an admission gate");
   assert.match(
     admissionBlock,
@@ -506,8 +1281,8 @@ function assertWorkflowSource() {
     source.match(/actions\/workflows\/resolve-pr-conflicts\.yml\/dispatches/g)?.length || 0;
   assert.equal(
     dispatchCount,
-    7,
-    "conflict detector, Lopu review batch, all-branch push normalization, stacked cascade, moving-ref retry, and both promotion continuations (stack resume, recoverable retry) use fixed workflow dispatch",
+    9,
+    "conflict detector, Lopu review batch, all-branch push normalization, stacked cascade, moving-ref retry, both promotion continuations, and the post-conflict maintenance pair use fixed workflow dispatch",
   );
   assert.match(
     rebaseSource,
@@ -598,6 +1373,41 @@ function assertWorkflowSource() {
     /lopu-review:check-run:\{0\}:\{1\}/u,
     "failing-check handoffs preserve the triggering check-run id",
   );
+  assert.match(
+    reviewHandoffBlock,
+    /lopu-review:workflow-run:\{0\}:\{1\}/u,
+    "failing-workflow handoffs preserve the triggering workflow-run id",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /concurrency:[\s\S]*?group: lopu-review-handoff-\$\{\{ needs\.review_detect\.outputs\.pr_number \|\| needs\.review_detect\.outputs\.branch \|\| 'all' \}\}[\s\S]*?cancel-in-progress: false/u,
+    "review-event handoffs serialize by PR or branch without interrupting an admitted handoff",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /pending_review_url="\$\(node \.github\/scripts\/lopu-review-queue\.mjs\)"[\s\S]*?Skipping duplicate Lopu review handoff/u,
+    "review handoffs use the age-independent native queue and verify the worker has not started",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /name: Check out the trusted review queue helper[\s\S]*?ref: github-actions[\s\S]*?persist-credentials: false/u,
+    "the queue helper comes only from the protected control plane without persisted credentials",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /An already-running review is deliberately not suppressed/u,
+    "a head move during an active review retains one newest follow-up waiter",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /EVENT_NAME: \$\{\{ github\.event_name \}\}/u,
+    "the review handoff knows which event it is coalescing",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /case "\$EVENT_NAME" in\n\s+issue_comment \| pull_request_review_comment\) coalescible=false ;;[\s\S]*?if \[ "\$coalescible" = true \]; then[\s\S]*?Skipping duplicate Lopu review handoff/u,
+    "human conversation always gets its own session because no queued review carries its comment id",
+  );
   assert.match(source, /review:\n\s+name: Lopu reviews selected PRs/, "Lopu has a repository review worker");
   assert.match(source, /group: lopu-agent-fleet-\$\{\{ github\.repository \}\}/, "review shares the single Lopu fleet lock");
   assert.match(source, /lopu-review-\{0\}/, "review batches have a stable concurrency scope");
@@ -633,6 +1443,51 @@ function assertWorkflowSource() {
   assert.doesNotMatch(rebaseSource, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "rebase workflows never bypass the protected Lopu action");
   assert.doesNotMatch(rebaseActionSource, /uses:\s*(?:anthropics\/claude-code-action|openai\/codex-action)@/u, "rebase conflict rounds never bypass the protected Lopu action");
   assert.match(reviewBlock, /Publish Lopu's controller\/workflow fix as a PR/u, "controller failures have a dedicated Lopu PR publisher");
+  assert.match(
+    reviewBlock,
+    /gh pr list --repo "\$REPO" --state open --base github-actions --limit 500[\s\S]*headRefName,headRefOid,isCrossRepository,title,body,author/u,
+    "controller repair publication inventories every open managed repair before creating a run-id branch",
+  );
+  assert.match(
+    reviewBlock,
+    /\.author\.login == \$owner or \.author\.login == "github-actions\[bot\]"/u,
+    "only the repository owner or GitHub Actions bot can supply a reusable same-repository repair head",
+  );
+  assert.match(
+    reviewBlock,
+    /Could not verify existing Lopu controller-repair PRs; refusing to create a potentially duplicate PR/u,
+    "a failed deduplication read fails closed instead of opening another repair PR",
+  );
+  assert.match(
+    reviewBlock,
+    /pulls\/\$number\/files\?per_page=100[\s\S]*comm -12 "\$current_paths" "\$candidate_paths"/u,
+    "controller repairs compare complete changed-file inventories and prefer an overlapping open PR",
+  );
+  assert.match(
+    reviewBlock,
+    /git -C "\$trusted" apply --index --3way "\$patch"/u,
+    "an overlapping repair is combined only when its patch applies cleanly",
+  );
+  assert.match(
+    reviewBlock,
+    /--force-with-lease="refs\/heads\/\$branch:\$candidate_sha"/u,
+    "updates to an existing controller repair are fenced to its inspected head",
+  );
+  assert.match(
+    reviewBlock,
+    /outcome=updated-existing/u,
+    "a successfully reused controller repair is reported separately from a newly opened PR",
+  );
+  assert.match(
+    reviewBlock,
+    /report_title=.*sed -n 's\/\^# \/\/p'[\s\S]*title="fix\(actions\):/u,
+    "new controller repairs use the diagnosis heading instead of one indistinguishable generic title",
+  );
+  assert.match(
+    reviewBlock,
+    /gh api repos\/\$REPO\/actions\/runs\/<WORKFLOW_RUN_ID>/u,
+    "Lopu retrieves the exact first-party workflow run before diagnosing it",
+  );
   assert.match(reviewBlock, /--base github-actions/u, "controller fixes target the protected controller branch");
   assert.match(reviewBlock, /Never push `github-actions`, `main`, or\s+another target\/default branch directly/u, "model may not directly publish protected branches");
   assert.match(reviewBlock, /security-events: read/u, "the model receives read-only CodeQL evidence access");
@@ -669,23 +1524,89 @@ function assertWorkflowSource() {
   assert.match(reviewBlock, /refs\/pull\/\$number\/merge/u, "snapshot accepts advanced-setup PR-merge analyses");
   assert.match(reviewBlock, /\.reviewed_base_sha == \$reviewed_base_sha/u, "authority binds the reviewed base revision");
   assert.match(reviewBlock, /\.merge_sha' <<<"\$record"/u, "merge-ref alerts bind the captured merge SHA");
+  // `gh api` prints GitHub's JSON error body on stdout, so capturing the merge
+  // ref through `|| true` stored that body and the SHA shape check then failed
+  // the whole review batch. GitHub drops `refs/pull/N/merge` while it
+  // recomputes after a base advance, so that 404 is a normal race on a
+  // candidate the snapshot saw as mergeable.
+  assert.doesNotMatch(
+    reviewBlock,
+    /git\/ref\/pull\/\$number\/merge"[^\n]*\|\| true/u,
+    "the merge-ref read never captures gh's error body through `|| true`",
+  );
+  assert.match(
+    reviewBlock,
+    /if candidate_merge_sha="\$\(\s*\n\s*gh_read_retry api "repos\/\$REPO\/git\/ref\/pull\/\$number\/merge"/u,
+    "the merge-ref read keeps gh's exit status so a missing merge ref stays empty",
+  );
+  // Once the empty outcome is soft, an unretried read degrades silently: a
+  // 502 or transport reset would drop every merge-ref alert from the snapshot
+  // and from the disposition authority derived from it, indistinguishably
+  // from a PR that genuinely has no merge ref. So this read must use the same
+  // helper as the two above it, and the empty result must reach the log.
+  assert.match(
+    reviewBlock,
+    /if \[ -z "\$merge_sha" \]; then\s*\n\s*echo "::notice::PR #\$number has no readable merge ref/u,
+    "a merge ref that could not be read narrows the alert snapshot visibly, not silently",
+  );
   assert.match(
     reviewBlock,
     /"false positive" \| "used in tests"/u,
     "model proposals use the two evidence-backed disposition reasons",
   );
+  assert.match(
+    reviewBlock,
+    /40 through 280 characters \(GitHub's CodeQL API limit\)/u,
+    "the model receives GitHub's live dismissal-comment size boundary",
+  );
+  assert.equal(
+    (source.match(/length >= 40 and length <= 280/g) || []).length,
+    2,
+    "both trusted CodeQL disposition validators enforce GitHub's 280-character comment limit",
+  );
+  assert.doesNotMatch(
+    reviewBlock,
+    /length >= 40 and length <= 1000/u,
+    "CodeQL disposition validation cannot accept comments GitHub will reject",
+  );
   assert.match(codeqlDispositionBlock, /security-events: write/u, "only the isolated writer can dismiss CodeQL alerts");
+  assert.match(
+    codeqlDispositionBlock,
+    /pull-requests: write/u,
+    "the isolated writer can publish its evidence-backed disposition report on the PR timeline",
+  );
   assert.doesNotMatch(
     codeqlDispositionBlock,
     /ANTHROPIC_API_KEY|OPENAI_API_KEY|claude-code-action|codex-action/u,
     "the CodeQL writer is credential-free apart from GitHub's scoped token",
   );
   assert.match(codeqlDispositionBlock, /\.head\.sha/u, "writer revalidates the live PR head");
-  assert.match(codeqlDispositionBlock, /\.base\.sha/u, "writer revalidates the live PR base");
-  assert.match(codeqlDispositionBlock, /\$alert_ref" != "\$analysis_ref/u, "writer revalidates the exact head-or-merge analysis ref");
-  assert.match(codeqlDispositionBlock, /\$alert_sha" != "\$analysis_sha/u, "writer revalidates the exact analysis SHA");
-  assert.match(codeqlDispositionBlock, /most_recent_instance\.commit_sha/u, "writer revalidates the alert's reviewed commit");
-  assert.match(codeqlDispositionBlock, /\.state' <<<"\$alert"\)" != open/u, "writer only changes open alerts");
+  assert.match(codeqlDispositionBlock, /live_base_ref=.*\.base\.ref/u, "writer reads the live PR base ref name");
+  assert.match(codeqlDispositionBlock, /live_base_ref_encoded=.*@uri/u, "writer safely encodes the live base ref");
+  assert.match(
+    codeqlDispositionBlock,
+    /git\/ref\/heads\/\$live_base_ref_encoded/u,
+    "writer resolves the live target branch tip rather than trusting a historical PR base snapshot",
+  );
+  assert.doesNotMatch(
+    codeqlDispositionBlock,
+    /live_base=.*\.base\.sha/u,
+    "writer never confuses the PR's historical base snapshot with the live target branch tip",
+  );
+  assert.match(
+    codeqlDispositionBlock,
+    /code-scanning\/alerts\/\$alert_number\/instances\?pr=\$pr_number&per_page=100/u,
+    "writer asks GitHub for the alert instances attached to the reviewed PR",
+  );
+  assert.match(codeqlDispositionBlock, /\.ref == \$analysis_ref/u, "writer revalidates the exact head-or-merge analysis ref");
+  assert.match(codeqlDispositionBlock, /\.commit_sha == \$analysis_sha/u, "writer revalidates the exact analysis SHA");
+  assert.match(codeqlDispositionBlock, /\.state == "open"/u, "writer requires the exact reviewed alert instance to remain open");
+  assert.match(codeqlDispositionBlock, /alert_state=.*\.state \/\/ empty/u, "writer reads GitHub's nullable repository-level alert state");
+  assert.match(
+    codeqlDispositionBlock,
+    /\[ -z "\$alert_state" \][\s\S]*?\.dismissed_at == null[\s\S]*?\.fixed_at == null[\s\S]*?\.most_recent_instance\.state == "open"[\s\S]*?\.most_recent_instance\.ref == \$analysis_ref[\s\S]*?\.most_recent_instance\.commit_sha == \$analysis_sha/u,
+    "a transient null alert state is accepted only with the same open immutable instance and no terminal metadata",
+  );
   assert.match(
     codeqlDispositionBlock,
     /\.reason == "false positive" or \.reason == "used in tests"/u,
@@ -725,6 +1646,67 @@ function assertWorkflowSource() {
   );
 }
 
+// Blank lines and `#` comments are not structure. YAML allows both anywhere,
+// at any column, and neither one ends a step -- but a boundary scan that reads
+// indentation alone treats them as the end, and the window then answers for
+// the wrong lines in both directions: backwards it opens below the step's own
+// `id:`, forwards it closes above keys the step still owns.
+const isStructuralYamlLine = (line) => line.trim() !== "" && !/^\s*#/u.test(line);
+const yamlIndent = (line) => /^ */u.exec(line)[0].length;
+
+// Ordinary YAML quoting and spacing are not semantic here, so match the scalar
+// rather than one exact spelling of it. `id: 'live_probe'` is the same step as
+// `id: live_probe`, and reading it as a different one is not a harmless miss:
+// it costs the credential probe its exemption and reports the generic
+// slot message against it instead, which is the misdirection
+// `assertAdminModelRouting` goes to some length elsewhere to head off.
+const yamlScalarPattern = (key, value) =>
+  new RegExp(`^[ \\t]*(?:- )?${key}:[ \\t]*(['"]?)${value}\\1[ \\t]*$`, "mu");
+
+// The whole step that owns `lines[index]`: the `- ` marker that opens it,
+// every key under that marker, and nothing of the step or job that follows.
+// Both bounds come from the step's own indentation, so this does not assume
+// the six-space step depth of a workflow job over a composite action's.
+//
+// The end is keyed to the marker rather than to the matched line, because
+// those differ for a step written `- uses:` first: there the matched line *is*
+// the marker, every sibling step starts at that same column, and a strictly
+// less-indented bound would run the window past them to the end of the job.
+export function yamlStepAt(lines, index) {
+  const lineIndent = yamlIndent(lines[index]);
+  // Not every `- ` line opens a step. One opens *this* step only if it sits
+  // shallower than the matched line -- or is that line itself, for a step
+  // written `- uses:` first. A sequence nested inside the step is deeper: an
+  // `env:` list, an `allowedTools` list, a `- ` bullet inside one of the
+  // prompt block scalars these calls all carry. Reading one of those as the
+  // marker collapses the window onto that single item, which drops the step's
+  // own `id:` out of view -- so the probe falls through to the generic rule
+  // and the suite reports "every Lopu call receives the secondary API-key
+  // slot" against it. That is exactly the misdirection this window exists to
+  // prevent, and a maintainer who applies that message literally hands the
+  // vault probe the static slot the exemption is there to keep off it.
+  // Verified: adding an `env:` list above the probe's `uses:` reproduces that
+  // message on the probe line; the fixtures pin it.
+  const opensStep = (cursor) =>
+    /^ *- /u.test(lines[cursor]) && (cursor === index || yamlIndent(lines[cursor]) < lineIndent);
+  let start = index;
+  while (
+    start > 0 &&
+    !opensStep(start) &&
+    (!isStructuralYamlLine(lines[start - 1]) || yamlIndent(lines[start - 1]) >= lineIndent)
+  ) {
+    start -= 1;
+  }
+  if (start > 0 && opensStep(start - 1)) start -= 1;
+  // Without a marker the step's extent is unknown, so fall back to the matched
+  // line's own indentation instead of guessing a wider one.
+  const bound = opensStep(start) ? yamlIndent(lines[start]) : lineIndent - 1;
+  const offset = lines
+    .slice(start + 1)
+    .findIndex((line) => isStructuralYamlLine(line) && yamlIndent(line) <= bound);
+  return lines.slice(start, offset === -1 ? lines.length : start + 1 + offset).join("\n");
+}
+
 function aiRuntimeSourceFiles(directory) {
   const files = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -738,9 +1720,14 @@ function aiRuntimeSourceFiles(directory) {
 function assertAdminLoader(block, label) {
   assert.match(block, /https:\/\/thingtime\.com\/api\/v1\/settings\/pr-conflict-auto-resolver-model-waterfall/, `${label}: endpoint`);
   assert.match(block, /Thingtime\.PRConflictAutoResolverModelWaterfall/, `${label}: singleton key`);
-  for (const model of ["default", "claude-fable-5", "claude-opus-5"]) {
-    assert.ok(block.includes(model), `${label}: closed model ${model}`);
-  }
+  // Composed option ids (`<model>[:<effort>][:fast]`): the loader keeps a
+  // closed grammar — id charset, effort segment set, and the Claude base
+  // pattern the CLI chain is rebuilt from — instead of a closed id list.
+  assert.ok(block.includes("[a-z0-9][a-z0-9.:-]{0,63}"), `${label}: closed composed-id charset`);
+  assert.ok(block.includes("none|minimal|low|medium|high|xhigh|max|ultra"), `${label}: closed effort segments`);
+  assert.ok(block.includes("^claude-[a-z0-9-]{1,48}$"), `${label}: closed Claude base pattern`);
+  assert.ok(block.includes('. + ["default"]'), `${label}: default hard fallback`);
+  assert.match(block, /--effort \$claude_effort/, `${label}: session effort in model args`);
   assert.match(block, /model_args=.*GITHUB_OUTPUT/, `${label}: full waterfall output`);
   assert.match(block, /primary_model=.*GITHUB_OUTPUT/, `${label}: primary model output`);
 }
@@ -784,6 +1771,16 @@ function assertAdminModelRouting(
   );
   assert.match(
     rebaseSource,
+    /name: Check out the exact PR head[\s\S]*?fetch-depth: 0[\s\S]*?filter: blob:none[\s\S]*?persist-credentials: false/u,
+    "rebase workers keep complete ancestry while lazily fetching historical blobs",
+  );
+  assert.match(
+    rebaseSource,
+    /name: Configure and begin the rebase[\s\S]*?promisor_fetch_failed\(\)[\s\S]*?could not fetch \[0-9a-f\]\{40\} from promisor remote[\s\S]*?--refetch --no-filter origin[\s\S]*?refs\/heads\/\$HEAD_REF:refs\/remotes\/origin\/\$HEAD_REF[\s\S]*?refs\/heads\/\$BASE_REF:refs\/remotes\/origin\/\$BASE_REF[\s\S]*?attempt_start \|\| status=\$\?[\s\S]*?complete-history retry still could not materialize/u,
+    "rebase workers retry a refused lazy promisor fetch once from complete exact branch histories",
+  );
+  assert.match(
+    rebaseSource,
     /uses: \*thingtime_rebase_conflict_round_action/,
     "rebase retry step reuses the trusted local action anchor",
   );
@@ -815,8 +1812,53 @@ function assertAdminModelRouting(
   );
   assert.match(
     rebaseActionSource,
-    /prepare-round\.sh[\s\S]*?cp -pR "\$SAFE_TRUSTED_PATH\/\.github\/actions\/lopu-agent\/\."[\s\S]*?"\$WORKSPACE_PATH\/trusted\/\.github\/actions\/lopu-agent\/"/u,
-    "the protected nested Lopu action is rematerialized after scratch preparation wipes the workspace",
+    /prepare-round\.sh[\s\S]*?cp -pR "\$SAFE_TRUSTED_PATH\/\.github\/actions\/lopu-agent\/\."[\s\S]*?"\$WORKSPACE_PATH\/trusted\/\.github\/actions\/lopu-agent\/"[\s\S]*?classify-claude-credential-failure\.mjs[\s\S]*?lopu-credential-vault\.mjs[\s\S]*?"\$WORKSPACE_PATH\/trusted\/\.github\/scripts\/"[\s\S]*?git init -q -- "\$WORKSPACE_PATH"[\s\S]*?git -C "\$WORKSPACE_PATH" remote add origin[\s\S]*?https:\/\/github\.invalid\/thingtime-conflict-scratch\.git/u,
+    "the protected nested Lopu action and credential helpers are rematerialized with a disposable scratch repository and placeholder origin",
+  );
+  assert.match(
+    rebaseActionSource,
+    /Discard the temporary nested action before scratch verification[\s\S]*?\[\[ "\$scratch_abs" == "\$workspace_abs" \]\][\s\S]*?rm -rf -- "\$scratch_abs\/trusted" "\$scratch_abs\/\.git"[\s\S]*?Scratch omitted one or more required conflict files/u,
+    "the temporary nested action and disposable repository are discarded before every required-conflict scratch comparison",
+  );
+  assert.match(
+    rebaseActionSource,
+    /comm -23 "\$expected_ai_files" "\$actual_files"[\s\S]*?comm -13 "\$expected_ai_files" "\$actual_files"[\s\S]*?additional_file_count > 32 \|\| additional_path_bytes > 8192/u,
+    "the round requires every conflict while tightly bounding related scratch edits",
+  );
+  assert.match(
+    rebaseActionSource,
+    /strictly\s+read-only inspection context:[\s\S]*?Your only writable\s+submission surface is the current conflict-scratch workspace/u,
+    "the model is told that the real rebase checkout is inspection-only",
+  );
+  assert.match(
+    rebaseActionSource,
+    /first copy\s+the exact tracked file from the read-only inspection checkout to the\s+same relative path in the current scratch, then edit only that scratch\s+copy/u,
+    "related edits are explicitly submitted through verified scratch copies",
+  );
+  assert.match(
+    rebaseActionSource,
+    /Creating this scratch submission copy is permitted and does not\s+create a new repository path/u,
+    "the related-edit contract does not contradict the no-new-repository-path rule",
+  );
+  assert.match(
+    rebaseActionSource,
+    /git ls-files --stage -- ":\(literal\)\$path"[\s\S]*?"\$extra_mode" == 100644[\s\S]*?"\$extra_stage" == 0[\s\S]*?"\$extra_path" == "\$path"/u,
+    "related scratch edits are admitted only for exact existing stage-0 regular files",
+  );
+  assert.match(
+    rebaseActionSource,
+    /sort -u -- "\$expected_conflicts_full" "\$additional_files" >"\$allowed_staged_paths"[\s\S]*?is_listed "\$path" "\$allowed_staged_paths"/u,
+    "the final staged-tree guard includes only conflicts and validated related edits",
+  );
+  assert.match(
+    rebaseActionSource,
+    /hash_index_entries\(\)[\s\S]*?git ls-files --stage -z \| sha256_stdin[\s\S]*?EXPECTED_INDEX_ENTRIES_SHA256/u,
+    "the rebase verifier fingerprints semantic index entries instead of volatile index-file bytes",
+  );
+  assert.doesNotMatch(
+    rebaseActionSource,
+    /sha256_file "\$index_path"/u,
+    "the rebase verifier must not compare the volatile on-disk index encoding",
   );
   assert.match(
     rebaseActionSource,
@@ -824,28 +1866,75 @@ function assertAdminModelRouting(
     "round cleanup restores the protected nested Lopu action for the next bounded conflict round",
   );
   assert.match(
-    lopuActionSource,
-    /anthropic-api-key-fallback:[\s\S]*claude-code-oauth-token-fallback:/u,
-    "the protected Lopu action exposes an ordered secondary Anthropic account slot",
-  );
-  assert.match(
-    lopuActionSource,
-    /classify-claude-credential-failure\.mjs[\s\S]*claude_primary_failure\.outputs\.retryable == 'true'/u,
-    "the protected Lopu action falls back only after classified account-capacity or credential failures",
+    rebaseActionSource,
+    /cp -p[\s\S]*?"\$source_trusted\/\.github\/scripts\/classify-claude-credential-failure\.mjs"[\s\S]*?"\$source_trusted\/\.github\/scripts\/graphify-cas\.mjs"[\s\S]*?"\$source_trusted\/\.github\/scripts\/lopu-credential-vault\.mjs"[\s\S]*?"\$source_trusted\/\.github\/scripts\/stage-graphify-snapshots\.mjs"[\s\S]*?"\$safe_trusted\/\.github\/scripts\/"/u,
+    "the safe round copy preserves the trusted credential and Graphify helpers outside the model workspace",
   );
   assert.match(
     rebaseActionSource,
-    /lopu-claude-credential-slot/u,
-    "rebase continuations stay on the Claude credential slot that owns the exact session",
+    /cp -p[\s\S]*?"\$safe_trusted_abs\/\.github\/scripts\/classify-claude-credential-failure\.mjs"[\s\S]*?"\$safe_trusted_abs\/\.github\/scripts\/graphify-cas\.mjs"[\s\S]*?"\$safe_trusted_abs\/\.github\/scripts\/lopu-credential-vault\.mjs"[\s\S]*?"\$safe_trusted_abs\/\.github\/scripts\/stage-graphify-snapshots\.mjs"[\s\S]*?"\$restored\/\.github\/scripts\/"/u,
+    "round cleanup restores the trusted credential and Graphify helpers needed after conflict replay",
+  );
+  const roundCleanupBlock = rebaseActionSource.slice(
+    rebaseActionSource.indexOf("    - name: Wipe scratch and restore the local action for the next round"),
+  );
+  assert.match(
+    roundCleanupBlock,
+    /hash_trusted_tree\(\)[\s\S]*?find \.github\/scripts\/rebase-stack -type f -print0[\s\S]*?\.github\/scripts\/classify-claude-credential-failure\.mjs[\s\S]*?\.github\/scripts\/graphify-cas\.mjs[\s\S]*?\.github\/scripts\/lopu-credential-vault\.mjs[\s\S]*?\.github\/scripts\/stage-graphify-snapshots\.mjs/u,
+    "round cleanup fingerprints the same trusted credential and Graphify helpers as bootstrap and verification",
+  );
+  const verifySafeCopyAt = roundCleanupBlock.indexOf(
+    '[[ "$safe_hash" == "$EXPECTED_TRUSTED_SHA256" ]]',
+  );
+  const clearWorkspaceAt = roundCleanupBlock.indexOf('clear_workspace "$workspace_abs"');
+  assert.ok(verifySafeCopyAt >= 0, "round cleanup verifies its immutable safe copy");
+  assert.ok(clearWorkspaceAt >= 0, "round cleanup clears model scratch after verification");
+  assert.ok(
+    verifySafeCopyAt < clearWorkspaceAt,
+    "round cleanup must verify the safe copy before clearing the parsed local action",
+  );
+  assert.match(
+    lopuActionSource,
+    /thingtime-ci-router-secret:[\s\S]*lopu-credential-vault\.mjs[\s\S]*LOPU_CLAUDE_TOKEN_8/u,
+    "the protected Lopu action fetches and exposes the bounded ordered Thingtime credential waterfall",
+  );
+  assert.match(
+    rebaseActionSource,
+    /HAS_CLAUDE_CREDENTIAL:\s*\$\{\{\s*inputs\.thingtime-ci-router-secret != '' \|\|/u,
+    "the rebase conflict gate accepts the Thingtime credential waterfall before invoking Lopu",
+  );
+  assert.match(
+    lopuActionSource,
+    /classify-claude-credential-failure\.mjs[\s\S]*claude_1_failure\.outputs\.retryable == 'true'[\s\S]*claude_7_failure\.outputs\.retryable == 'true'/u,
+    "the protected Lopu action advances slots only after classified account-capacity or credential failures",
+  );
+  assert.match(
+    rebaseActionSource,
+    /lopu-claude-credential-token/u,
+    "rebase continuations stay on the selected vault credential that owns the exact session",
   );
   assert.match(
     resolveBlock,
     /name: Check out the fixed trusted github-actions control plane[\s\S]*ref: github-actions[\s\S]*path: trusted/u,
     "the conflict worker materializes the protected Lopu action after checking out the PR head",
   );
+  assert.match(
+    source,
+    /  review:\n[\s\S]*?name: Check out the fixed trusted github-actions control plane[\s\S]*?fetch-depth: 0[\s\S]*?filter: blob:none[\s\S]*?persist-credentials: false[\s\S]*?path: trusted/u,
+    "repository review keeps complete ancestry while lazily materializing selected PR blobs",
+  );
 
-  const aiRuntimePattern =
-    /(?:anthropics\/claude-code-action|openai\/codex-action)@|uses:\s*\.\/(?:trusted\/|control-plane\/)?\.github\/actions\/lopu-agent|\bbackend=(?:"|')?(?:claude|openai)(?:"|')?\b/;
+  // One definition of a Lopu call, used both to select the files this contract
+  // scans and to pick the calls it enforces credential slots on below. Those
+  // were two copies, and they drifted: selection accepted `control-plane/` and
+  // enforcement did not, so `all-branch.yml` was pulled into the scanned set by
+  // its three lopu-agent calls and then every one of them was skipped. Deriving
+  // the wide pattern from the narrow one makes "enforce on every call you
+  // selected" a property of the code instead of a comment asking for it.
+  const lopuAgentCallPattern = /uses:\s*\.\/(?:trusted\/|control-plane\/)?\.github\/actions\/lopu-agent/u;
+  const aiRuntimePattern = new RegExp(
+    `(?:anthropics/claude-code-action|openai/codex-action)@|${lopuAgentCallPattern.source}|\\bbackend=(?:"|')?(?:claude|openai)(?:"|')?\\b`,
+  );
   const actualRuntimeFiles = [
     ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "workflows")),
     ...aiRuntimeSourceFiles(join(REPO_ROOT, ".github", "actions")),
@@ -872,7 +1961,7 @@ function assertAdminModelRouting(
   assert.match(promotionGraphify, /LOPU_OPENAI_MODEL/u, "promotion Graphify receives Lopu's Terra or Sol model");
   assert.match(
     promotionGraphify,
-    /for secret in "\$\{OPENAI_API_KEY:-\}" "\$primary_anthropic_api_key"[\s\S]*"\$primary_claude_code_oauth_token" "\$\{ANTHROPIC_API_KEY_FALLBACK:-\}"[\s\S]*"\$\{CLAUDE_CODE_OAUTH_TOKEN_FALLBACK:-\}"/u,
+    /lopu-credential-vault\.mjs" needles "\$needles"[\s\S]*for secret in "\$\{OPENAI_API_KEY:-\}"/u,
     "promotion Graphify scans every provider credential before committing derived output",
   );
   assert.match(promotionGraphify, /--api-timeout 7200/u, "promotion semantic extraction has the repository timeout budget");
@@ -900,11 +1989,127 @@ function assertAdminModelRouting(
     );
 
     const lines = runtime.split("\n");
+    // Nearest enclosing job for a step line. Inside `jobs:` the only
+    // two-space-indented bare key is a job name (a job's own `env:`/`steps:`
+    // sit at four, its steps at six), so walking back to the first one names
+    // the job that owns this call. Outside `jobs:` it returns whatever
+    // two-space key happens to precede -- `steps` in a composite `action.yml`,
+    // whose `runs:` sits at zero -- so treat the result as a name to compare,
+    // never as proof that a job was found. Only the exact string below is
+    // exempt, so every other answer, right or meaningless, denies the
+    // exemption and applies the generic rule.
+    const enclosingJob = (line) => {
+      for (let cursor = line; cursor >= 0; cursor -= 1) {
+        const header = /^ {2}([A-Za-z0-9_-]+):\s*$/u.exec(lines[cursor]);
+        if (header) return header[1];
+      }
+      return null;
+    };
+    // The probe exemption below keys on this job name, so losing the name
+    // retires the exemption without retiring the probe. That direction is
+    // fail-closed, but its message is not: the probe falls through to the
+    // generic rule and reports "every Lopu call receives the secondary
+    // API-key slot", and a maintainer who acts on that message literally
+    // hands the vault probe a static slot -- the masking regression the
+    // exemption exists to prevent -- whereupon the contract goes green on it.
+    // Verified: rename the job and the suite reports exactly that line, and
+    // adding the two slots it asks for turns the suite green. Name the real
+    // cause here so that misdirecting message is never the one that gets read.
+    if (path === ".github/workflows/resolve-pr-conflicts.yml") {
+      assert.ok(
+        lines.some((line) => /^ {2}verify_credential_vault:\s*$/u.test(line)),
+        `${path}: the credential-probe exemption keys on the verify_credential_vault job, which is missing`,
+      );
+    }
     for (let index = 0; index < lines.length; index += 1) {
-      if (!/uses:\s*\.\/(?:trusted\/)?\.github\/actions\/lopu-agent/u.test(lines[index])) {
+      // The same pattern `aiRuntimePattern` is built from, so this rule cannot
+      // cover fewer call sites than the scan that selected the file. Widening
+      // it to `control-plane/` is what brings `all-branch.yml`'s three calls
+      // under the slot assertions below; they all pass both slots today, so
+      // this closed a latent hole rather than a live one.
+      if (!lopuAgentCallPattern.test(lines[index])) {
         continue;
       }
       const call = lines.slice(index, index + 32).join("\n");
+      // The live credential-vault probe is the one deliberate exception. Its
+      // whole job is to prove Thingtime's ordered waterfall still authenticates
+      // on its own, so it passes only `thingtime-ci-router-secret` and none of
+      // the legacy static slots. Handing it a fallback would let it pass on the
+      // fallback while the vault is down -- masking exactly the outage the probe
+      // exists to catch. Exempt it, but require it to still be vault-driven, so
+      // this stays a checked exception rather than an unconditional skip.
+      //
+      // The exemption is keyed on the JOB as well as the step id, because a
+      // bare `id: live_probe` is not an identity: any step in any job may
+      // adopt that id, and a real secret-bearing worker that did would
+      // silently shed both fallback-slot assertions below while this contract
+      // stayed green. A job boundary cannot be adopted that way. Rename or
+      // drop `verify_credential_vault` and the probe simply stops being
+      // exempt -- it then fails the generic rule, which is the fail-closed
+      // direction for a credential contract.
+      const inVaultProbeJob = enclosingJob(index) === "verify_credential_vault";
+      // This call's whole step, used both to find its `id:` and to scope the
+      // probe assertions below: the `- ` marker that opens the step, every key
+      // under it, and nothing of the step or job that follows. `call` is a
+      // fixed 32-line window that here runs past this step and into the next
+      // job, so a negative assertion over it would answer for lines the step
+      // does not own. Both bounds come from the `uses:` line's own
+      // indentation, so this does not assume the six-space step depth of a
+      // workflow job over a composite action's.
+      //
+      // The id is taken from the step rather than from a fixed count of lines
+      // above the `uses:`, because that window is what decides whether the
+      // exemption applies and a fixed one ties it to the probe's current
+      // shape. Give the probe a `continue-on-error:` and a small `env:` and
+      // the `id:` slides out of view: the probe falls through to the generic
+      // rule, and the suite reports "every Lopu call receives the secondary
+      // API-key slot" against the probe line. A maintainer who applies that
+      // message literally hands the vault probe a static slot -- the masking
+      // regression this exemption exists to prevent -- and the suite goes
+      // green on it. That is the same misdirection the missing-job assertion
+      // above is there to head off, reached by ordinary step maintenance
+      // instead of a rename, so bound it by the step and it cannot happen.
+      // `yamlStepAt` is what makes that bound hold for ordinary YAML: a blank
+      // line or a `#` note inside the probe, or an `id:` someone quoted, each
+      // used to drop the step's `id:` out of the window and produce exactly
+      // that message. Its fixtures pin all three.
+      const step = yamlStepAt(lines, index);
+      if (inVaultProbeJob && yamlScalarPattern("id", "live_probe").test(step)) {
+        // Assert both halves of the exemption, not just the positive one.
+        // Requiring the router secret proves the probe can reach the
+        // waterfall; it does not stop the probe from *also* being handed a
+        // static slot, and a probe carrying one authenticates on that slot and
+        // reports green while the vault is down -- the exact outage it exists
+        // to catch, and the exact reason the paragraph above gives for
+        // exempting it. Left unasserted, the exemption rests on a property
+        // nothing checks, which is how it silently becomes an unconditional
+        // skip for the one call site allowed to carry no slots.
+        // Carrying the router secret is not the same as using it. The action
+        // fetches the ordered bundle in a step gated on
+        // `inputs.backend == 'claude'` (lopu-agent/action.yml), so on any other
+        // backend the secret is inert and the waterfall is never touched.
+        // Verified: flip this step to `backend: codex` and every one of the
+        // eleven advisory contracts stays green while the live vault check the
+        // job is named for silently stops running -- the exemption would go on
+        // paying out for a probe that no longer probes anything, which is the
+        // unconditional skip the paragraph above refuses to grant.
+        assert.match(
+          step,
+          yamlScalarPattern("backend", "claude"),
+          `${path}:${index + 1}: the credential probe must run the Claude backend that fetches the Thingtime waterfall`,
+        );
+        assert.match(
+          step,
+          /^\s+thingtime-ci-router-secret:/mu,
+          `${path}:${index + 1}: the credential probe must authenticate through the Thingtime waterfall`,
+        );
+        assert.doesNotMatch(
+          step,
+          /^\s+(?:anthropic-api-key|claude-code-oauth-token)(?:-preferred|-fallback)?:/mu,
+          `${path}:${index + 1}: the credential probe must exercise only the Thingtime waterfall, never a static slot`,
+        );
+        continue;
+      }
       assert.match(
         call,
         /anthropic-api-key-fallback:/u,
@@ -1010,6 +2215,17 @@ export function selfTest() {
     handoffEligible: true,
     selector: "pr:190",
     concurrency: "lopu-check-fix-pr190",
+    modelAndResolve: false,
+  });
+
+  assertRoute("failing PR workflow", {
+    event: "workflow_run", ref: "main", actor: "github-actions[bot]", eventPrNumber: "190",
+  }, {
+    valid: true,
+    detectorOnly: true,
+    handoffEligible: true,
+    selector: "pr:190",
+    concurrency: "lopu-workflow-fix-pr190",
     modelAndResolve: false,
   });
 

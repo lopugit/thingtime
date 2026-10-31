@@ -1,16 +1,9 @@
 name: Electron App Release
 
-# GitHub requires trigger entrypoints on the branch that receives the event.
-# All executable release behavior lives on the protected github-actions ref.
+# The main and PR entrypoints share one tested packaging/signing pipeline.
+# Reusable workflows retain the caller event; source validation pins main.
 on:
   workflow_call:
-  push:
-    branches: [main]
-    paths:
-      - electron/**
-      - MCP/**
-      - macos/**
-      - .github/workflows/electron-release.yml
   workflow_dispatch:
 
 permissions:
@@ -18,6 +11,9 @@ permissions:
   pull-requests: read
 
 jobs:
-  control-plane:
-    uses: lopugit/thingtime/.github/workflows/electron-release.yml@github-actions
+  release:
+    uses: ./.github/workflows/electron-pr-release.yml
+    with:
+      release_kind: main
+      triggering_event: ${{ github.event_name }}
     secrets: inherit
