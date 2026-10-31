@@ -1,3 +1,4 @@
+import { useWorkspaceRefresh } from '~/local-workspace/useWorkspaceRefresh';
 import React from 'react';
 import {
   Badge,
@@ -25,7 +26,9 @@ import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
 import { timeAgo } from '~/components/Feed/feedTypes';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { workspaceStorageBinding, workspaceStorageIdentity, subscribeWorkspaceStorage } from '~/local-workspace/storageStatus.client';
+import { workspaceScopeKey } from '~/local-workspace/storage';
 import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { getThingtimeSchema, thingtimeSchemas } from '~/schemas/registry';
 import type { SchemaThingField } from '~/schemas/registry';
@@ -263,7 +266,7 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
           paddingX={2}
           textTransform="none"
         >
-          {source.origin === 'builtin' ? '🏛 Platform' : '🌱 Community'}
+          {source.origin === 'builtin' ? '🏛 Platform' : '🌱 Custom'}
         </Badge>
         {entry && entry.usageCount > 0 && (
           <Badge background="transparent" color="var(--tt-faint, #b6b6c0)" fontSize="10px" textTransform="none">
@@ -537,20 +540,30 @@ SchemaCard.displayName = 'SchemaCard';
 // ---------------------------------------------------------------------------
 
 export const SchemasBrowsePage = () => {
+  const location = useLocation();
+  const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+  const source = new URLSearchParams(location.search).get('source');
+  const device = source !== 'online';
+  return <SchemasWorkspace key={`${identity}:${device}`} device={device} />;
+};
+
+const SchemasWorkspace = ({ device }: { device: boolean }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const api = useApi();
   const lopu = useLopu();
-  const user = useCurrentUser();
+  const user = useWorkspaceUser();
+  const binding = workspaceStorageBinding();
+  const cacheScope = binding ? JSON.stringify([workspaceScopeKey(binding.scope), device ? 'device' : 'online']) : undefined;
 
-  const cacheKey = schemasCacheKeyFor(user?.id);
+  const cacheKey = schemasCacheKeyFor(cacheScope);
   // Purge any pre-scoping global 'tt-schemas' blob (it may hold another
   // account's private/viewer-scoped schemas) once, so it can never paint for
   // the wrong principal.
   React.useEffect(() => {
     clearLocalCache(SCHEMAS_LEGACY_CACHE_KEY);
   }, []);
-  const cached = React.useMemo(() => readCachedSchemas(user?.id), [user?.id]);
+  const cached = React.useMemo(() => readCachedSchemas(cacheScope), [cacheScope]);
 
   const [q, setQ] = React.useState(cached?.q || '');
   const [sort, setSort] = React.useState<SortMode>(cached?.sort || 'newest');
@@ -564,6 +577,7 @@ export const SchemasBrowsePage = () => {
   const [builderOpen, setBuilderOpen] = React.useState(false);
   const [builderPrefill, setBuilderPrefill] = React.useState<BuilderPrefill | null>(null);
   const [createFor, setCreateFor] = React.useState<SchemaCardSource | null>(null);
+  const createAfterCopy = React.useRef(false);
 
   const apiRef = React.useRef(api);
   apiRef.current = api;
@@ -593,8 +607,9 @@ export const SchemasBrowsePage = () => {
       setLoading(true);
       try {
         const resp = (await apiRef.current.v1.schemas.browse({
-          q: scopeMode === 'all' ? query.trim() || undefined : undefined,
-          sort: scopeMode === 'all' ? sortMode : sortMode === 'oldest' ? 'oldest' : undefined,
+          q: device || scopeMode === 'all' ? query.trim() || undefined : undefined,
+          device: device || undefined,
+          sort: device || scopeMode === 'all' ? sortMode : sortMode === 'oldest' ? 'oldest' : undefined,
           cursor,
           limit: PAGE_SIZE,
           library: scopeMode === 'library' ? 1 : undefined,
@@ -602,6 +617,7 @@ export const SchemasBrowsePage = () => {
         })) as BrowseSchemasResponse;
         if (seq !== requestSeqRef.current) return;
         if (!resp?.ok) throw resp;
+        if (resp.localCacheError) lopuRef.current({ title: resp.localCacheError, status: 'warning' });
 
         setEntries((prev) => {
           if (!cursor) return resp.schemas;
@@ -633,12 +649,15 @@ export const SchemasBrowsePage = () => {
         if (seq === requestSeqRef.current) setLoading(false);
       }
     },
-    [view]
+    [view, device]
   );
+
+  useWorkspaceRefresh(() => { void runBrowse(); }, device);
 
   // reconcile cached paint with fresh data
   React.useEffect(() => {
     runBrowse();
+    return () => { requestSeqRef.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -752,6 +771,7 @@ export const SchemasBrowsePage = () => {
         lopuRef.current({ title: 'Sign in to fork schemas 🍴', status: 'info', duration: 6000 });
         return;
       }
+      createAfterCopy.current = false;
       setBuilderPrefill(schemaCopyPrefill(source));
       setBuilderOpen(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -765,6 +785,9 @@ export const SchemasBrowsePage = () => {
         lopuRef.current({ title: 'Sign in to create things ✨', status: 'info', duration: 6000 });
         return;
       }
+      if (source.origin === 'community' && source.entry?.author?.id !== user.id) {
+        createAfterCopy.current = true; setBuilderPrefill(schemaCopyPrefill(source)); setBuilderOpen(true); return;
+      }
       setCreateFor(source);
     },
     [user]
@@ -772,9 +795,9 @@ export const SchemasBrowsePage = () => {
 
   const handleSearchThings = React.useCallback(
     (source: SchemaCardSource) => {
-      navigate(schemaSearchPath(source));
+      navigate(`${schemaSearchPath(source)}&source=${device ? 'device' : 'online'}`);
     },
-    [navigate]
+    [navigate, device]
   );
 
   const handleCreated = React.useCallback((thing: any) => {
@@ -789,6 +812,7 @@ export const SchemasBrowsePage = () => {
     setTotal((prev) => (typeof prev === 'number' ? prev + 1 : prev));
     setBuilderOpen(false);
     setBuilderPrefill(null);
+    if (createAfterCopy.current) { createAfterCopy.current = false; setCreateFor(entryToCardSource(entry)); }
   }, []);
 
   // ---- infinite scroll ----------------------------------------------------
@@ -857,6 +881,11 @@ export const SchemasBrowsePage = () => {
           </Button>
         </Flex>
 
+        <Flex gap={2} wrap="wrap">
+          <Button size="sm" aria-pressed={device} variant={device ? 'solid' : 'outline'} onClick={() => navigate('/schemas?source=device')}>This device</Button>
+          <Button size="sm" aria-pressed={!device} variant={device ? 'outline' : 'solid'} onClick={() => navigate('/schemas?source=online')}>Online catalogue</Button>
+        </Flex>
+        {device && <Text fontSize="sm">Platform shapes and schemas saved in this workspace. Account content may include more schemas online.</Text>}
         {/* same rainbow-ringed input as /search — 2px ring, clipped */}
         <form onSubmit={submit}>
           <Center position="relative" width="100%">
@@ -917,13 +946,13 @@ export const SchemasBrowsePage = () => {
           <Button {...pillProps(sort === 'newest')} onClick={() => setAndRun({ sort: 'newest' })}>
             Newest
           </Button>
-          <Button {...pillProps(sort === 'popular')} onClick={() => setAndRun({ sort: 'popular' })}>
+          {!device && <Button {...pillProps(sort === 'popular')} onClick={() => setAndRun({ sort: 'popular' })}>
             Popular
-          </Button>
+          </Button>}
           <Button {...pillProps(sort === 'oldest')} onClick={() => setAndRun({ sort: 'oldest' })}>
             Oldest
           </Button>
-          {user && (
+          {user && (device || !user.localOnly) && (
             <>
               <Box width={2} />
               <Text {...monoLabel}>show</Text>
@@ -944,6 +973,7 @@ export const SchemasBrowsePage = () => {
             leftIcon={<Plus size={14} />}
             onClick={() => {
               setBuilderPrefill(null);
+              createAfterCopy.current = false;
               setBuilderOpen((open) => !open);
             }}
             size="sm"
@@ -956,6 +986,7 @@ export const SchemasBrowsePage = () => {
           <SchemaBuilder
             onClose={() => {
               setBuilderOpen(false);
+              createAfterCopy.current = false;
               setBuilderPrefill(null);
             }}
             onCreated={handleCreated}
@@ -965,7 +996,7 @@ export const SchemasBrowsePage = () => {
 
         <Text color="var(--tt-faint, #b6b6c0)" fontSize="12px">
           {scope === 'all'
-            ? `${builtinSources.length} platform · ${communityCount} community`
+            ? `${builtinSources.length} platform · ${communityCount} ${device ? 'saved here' : 'community'}`
             : scope === 'mine'
               ? `${communityCount} of yours`
               : `${entries.length} in your library`}
@@ -994,7 +1025,7 @@ export const SchemasBrowsePage = () => {
             {scope === 'library'
               ? 'Nothing saved yet — browse All and tap “Add to library” 📚'
               : scope === 'mine'
-                ? 'You haven’t published a schema yet — Create a Schema above ✨'
+                ? 'You haven’t saved a schema here yet — Create a Schema above ✨'
                 : 'No schemas match — try a different search 🌈'}
           </Box>
         )}

@@ -1,3 +1,9 @@
+import { useWorkspaceDraft } from '~/drafts/useWorkspaceDraft';
+import { DraftSaveStatus } from '~/drafts/DraftPicker';
+import { createWithDraft } from '~/drafts/createWithDraft';
+import { restoreSitePageDraft } from '~/drafts/sitePageDraft';
+import { sitePageSeed, sitePageCrystal } from '~/schemas/sitePages';
+import { workspaceStorageIdentity, subscribeWorkspaceStorage } from '~/local-workspace/storageStatus.client';
 import { BranchWebpage } from './BranchWebpage';
 import React from 'react';
 import { Box, Flex, Text } from '@chakra-ui/react';
@@ -20,11 +26,11 @@ import { ThingsPage } from '~/components/Things/ThingsPage';
 // boundaries, inline + add block menus, drag/drop) with the right-side
 // drawer for page settings and the selected block's inspector.
 
-const BuilderCanvas = ({ pageId }: { pageId: string }) => {
+const BuilderCanvas = ({ pageId, sitePath }: { pageId: string; sitePath?: string }) => {
 	const navigate = useNavigate();
 	const isGlobal = pageId === '__global__';
 	const draft = useWebpageDraft(
-		React.useMemo(() => (isGlobal ? { kind: 'global' as const } : { kind: 'id' as const, id: pageId }), [isGlobal, pageId])
+		React.useMemo(() => (sitePath ? { kind: 'path' as const, path: sitePath } : isGlobal ? { kind: 'global' as const } : { kind: 'id' as const, id: pageId }), [isGlobal, pageId, sitePath])
 	);
 	const [drawerOpen, setDrawerOpen] = React.useState(
 		() => typeof window === 'undefined' || window.innerWidth >= 768
@@ -93,7 +99,48 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- pageName guard reads current value only
 	}, [draft.resolved, draft.loading, isGlobal]);
 
-	const isSiteDoc = isGlobal || !!draft.resolved?.page?.crystal?.siteRoute;
+	const seed = sitePath ? sitePageSeed(sitePath) : undefined;
+ const initialized = React.useRef(false);
+ React.useEffect(() => {
+  if (initialized.current || draft.loading || draft.error || !seed) return;
+  initialized.current = true;
+  if (!draft.resolved?.page) { setPageName(seed.name); draft.setBlocks(sitePageCrystal(seed).blocks); }
+ }, [draft, seed]);
+ const isSiteDoc = isGlobal || !!sitePath || !!draft.resolved?.page?.crystal?.siteRoute;
+ const baseUpdatedAt = draft.resolved?.page?.updatedAt || null;
+ const snapshot = JSON.stringify({ name: pageName, acl: audienceAcl, blocks: draft.blocks, baseUpdatedAt });
+ const recovery = useWorkspaceDraft({ context: `site-editor:${sitePath || pageId}:${draft.loading ? 'loading' : 'ready'}`, surface: 'definition', resumeRemote: !draft.loading,
+  validateSnapshot: raw => restoreSitePageDraft(raw, baseUpdatedAt),
+  onRestore: saved => { const value = restoreSitePageDraft(saved.snapshot, baseUpdatedAt); draft.setBlocks(value.blocks); setPageName(value.name); setAudienceAcl(value.acl); }
+ });
+ const capture = recovery.capture;
+ const saving = React.useRef(false);
+ React.useEffect(() => {
+  const nameChanged = !!pageName && pageName !== (draft.resolved?.page?.crystal?.name || seed?.name || 'Global blocks');
+  if (!saving.current && !draft.loading && !draft.error && (draft.dirty || nameChanged)) capture({ name: (pageName || 'Page draft').slice(0, 160), context: recovery.context, surface: 'definition', snapshot, attachmentIds: [] }, true, true);
+ }, [capture, draft.loading, draft.error, draft.dirty, draft.resolved?.page?.crystal?.name, seed?.name, pageName, recovery.context, snapshot]);
+ const canvasDraft = { ...draft, discardDraft: () => {
+  draft.discardDraft();
+  setPageName(draft.resolved?.page?.crystal?.name || seed?.name || 'Global blocks');
+  void recovery.retire().catch(() => {});
+ }, resetToDefault: async () => {
+  if (saving.current) return { ok: false, error: 'This page is already saving.' };
+  saving.current = true;
+  try {
+   const result = await createWithDraft(recovery, draft.resetToDefault);
+   initialized.current = false; namedForRef.current = null;
+   setPageName(seed?.name || 'Global blocks');
+   return result;
+  } catch (error: any) { return { ok: false, error: error?.error || error?.message || 'Could not reset this page.' }; }
+  finally { saving.current = false; }
+ }, save: async (options: Parameters<typeof draft.save>[0]) => {
+  if (saving.current) return { ok: false, error: 'This page is already saving.' };
+  saving.current = true;
+  try { return await createWithDraft(recovery, () => draft.save(options)); }
+  catch (error: any) { return { ok: false, error: error?.error || error?.message || 'Could not save this page.' }; }
+  finally { saving.current = false; }
+ } };
+
 
 	return (
 		<>
@@ -130,6 +177,7 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 							← my pages
 						</Box>
 					</Flex>
+					<DraftSaveStatus paused={!!recovery.recoveryError} status={recovery.status} error={recovery.error} retry={recovery.retry} />
 					<Box
 						background={canvasBg}
 						border="1px solid"
@@ -152,9 +200,11 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 			{!drawerOpen ? <InspectorReopenPill onClick={() => setDrawerOpen(true)} /> : null}
 			{drawerOpen ? (
 			<BuilderDrawer
-				title={isGlobal ? 'Global blocks 🌐' : isSiteDoc ? `Site page · ${draft.resolved?.page?.crystal?.siteRoute}` : 'Page builder 🧱'}
-				draft={draft}
+				title={isGlobal ? 'Global blocks 🌐' : isSiteDoc ? `Site page · ${sitePath || draft.resolved?.page?.crystal?.siteRoute}` : 'Page builder 🧱'}
+				draft={canvasDraft}
 				selectedId={selectedId}
+				onSelectBlock={(id) => id ? chrome.onSelect(id) : deselect()}
+				footerSpace="var(--tt-builder-toolbar-clearance, 160px)"
 				onDeselect={deselect}
 				onClose={() => setDrawerOpen(false)}
 				mode={isSiteDoc ? 'site' : 'page'}
@@ -163,7 +213,7 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 				audienceAcl={audienceAcl}
 				onAudienceAcl={setAudienceAcl}
 				onSaved={(id) => {
-					if (!isGlobal && id !== pageId) navigate(`/builder?page=${encodeURIComponent(id)}`, { replace: true });
+					if (!isGlobal && !sitePath && id !== pageId) navigate(`/builder?page=${encodeURIComponent(id)}`, { replace: true });
 				}}
 				onUploadToBlock={uploadToBlock}
 			/>
@@ -176,11 +226,12 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 export const BuilderPage = () => {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const pageId = searchParams.get('page');
-	const thingId = searchParams.get('thing');
-	if (thingId) return <><ThingsPage builderMode /><ThingDefinitionEditor id={thingId} requireBuilder onClose={() => { const next = new URLSearchParams(searchParams); next.delete('thing'); setSearchParams(next); }} /></>;
+ const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+ const sitePath = searchParams.get('site');
+ if (sitePath) return sitePageSeed(sitePath) ? <BuilderCanvas key={`${identity}:${sitePath}`} pageId="" sitePath={sitePath} /> : <Text role="alert">Choose a site page from Builder.</Text>;
 	if (searchParams.has('branchId')) return <BranchWebpage pageId={pageId || ''} />;
-	if (!pageId) return <ThingsPage builderMode />;
-	if (pageId === '__global__') return <BuilderCanvas pageId={pageId} />;
+	if (!pageId) return <BuilderPagesList />;
+	if (pageId === '__global__') return <BuilderCanvas key={`${identity}:${pageId}`} pageId={pageId} />;
 	return <LiveWebpage builderPageId={pageId} />;
 };
 

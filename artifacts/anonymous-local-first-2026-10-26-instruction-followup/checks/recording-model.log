@@ -1,0 +1,21 @@
+application AI model routing contract: self-test OK
+(node:95644) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:95644) DeprecationWarning: mock.module(): options.namedExports is deprecated. Use options.exports instead.
+✔ recording instructions and the provider request use the same explicitly selected model (47.862708ms)
+✔ real SDK transcription falls through 429 to the next selected key without duplicate attempts (11.834875ms)
+✔ analysis can fall through to the Claude OAuth runtime without sending audio or enabling tools (2.452917ms)
+✔ changing the provider selection after a failure stops before resolving another key (2.228ms)
+✔ turning off both analysis outputs prevents fallback from sending another transcript (4.886417ms)
+✔ recording download uses the authorized attachment and requires its exact byte length (95.611625ms)
+✔ storage HTTP and network failures expose only the download category (25.302959ms)
+✔ truncated or oversized storage responses never reach transcription (2.463917ms)
+✔ unavailable sources and unsupported formats are distinguished without a storage fetch (0.497958ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1774.151834

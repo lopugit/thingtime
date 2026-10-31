@@ -367,7 +367,12 @@ function snapshotRecord(snapshotPath) {
     return null
   }
   if (
-    readdirSync(snapshotPath).some((name) => !SNAPSHOT_FILES.has(name))
+    readdirSync(snapshotPath).some((name) => {
+      if (SNAPSHOT_FILES.has(name)) return false
+      // Queries write an ignored local cache beside the immutable artifacts.
+      // Accept only a real directory; keep it outside the portable file set.
+      return name !== "cache" || !lstatSync(path.join(snapshotPath, name)).isDirectory()
+    })
   ) {
     return null
   }

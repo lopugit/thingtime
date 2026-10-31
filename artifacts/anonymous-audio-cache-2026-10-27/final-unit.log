@@ -1,0 +1,24 @@
+✔ cache identity includes origin, selected plane, principal, Character and exact attachment bytes metadata (1.506ms)
+✔ saved bytes are partitioned, accounted, removed atomically and invalid metadata cannot seed playback (52.995459ms)
+✔ untrusted v1 or mismatched records and orphan binary data never seed playback (4.468167ms)
+✔ late downloads cannot persist after workspace, confirmation or selected-track cancellation (5.984667ms)
+✔ downloads carry exact actor/plane fences and reject borrowed shared or device grants before fetching (4.790541ms)
+✔ exact-size reads refuse oversized/incomplete bytes; known refusal removes a copy but transient failure preserves it (19.081584ms)
+✔ context capture follows only the current root workspace and keeps delegation distinct (1.03825ms)
+✔ exact-version preconditions and a final receipt prevent admission of changed content (4.320917ms)
+✔ identity invalidation during Blob persistence aborts metadata, bytes and usage together (3.293959ms)
+✔ public anonymous downloads use ordinary authorization; missing capability never starts a byte request (2.411958ms)
+✔ stale MIME and anonymous-plane readers preserve the newer exact saved copy (4.890458ms)
+✔ corruption cleanup requires an exact matching descriptor rather than a foreign cache key (4.50875ms)
+✔ audio queues advance in attachment order and stop after the final track (0.531375ms)
+✔ offline account content remains editable but cannot authorize remote requests (1.708875ms)
+✔ authoritative root refusal permanently retires local editors and remote operations (17.805166ms)
+✔ cross-tab changes are scoped invalidations without data or message echoes (1.501417ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 791.446584

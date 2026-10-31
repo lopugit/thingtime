@@ -1,17 +1,26 @@
 # Attachments and media
 
-## iOS incoming shares
+`api.attachment-link` 1.1.0 accepts optional owner-scoped request IDs for
+metadata-only post/comment links. Exact canonical URL/purpose/media-kind retries
+return the same attachment and current version after binding, without renewing
+draft expiry; changed requests conflict. `api.attachment-delete` 1.8.0 adds exact
+request-ID/version/target cleanup for these links, retaining the existing small
+accounted cancellation receipt on every cleanup path. The store transaction
+keeps quota and identity together; URLs are never fetched by the server. See
+`linkedAttachmentRequest.test.ts`, route/capability tests and the disposable
+`scripts/linked-attachment-requests.integration.mts` real-API fixture.
 
-`iOS/ShareExtension` supplies the system Share target. `iOS/ShareSupport` owns
-provider representations and the atomic local App Group inbox; the containing
-app drains complete batches into Documents/Shared on launch/foreground. The
-extension accepts arbitrary offered types and batches, preserves provider files
-and Live Photo resources, and never uploads under an implicit account. Normal
-Thingtime upload authorization/accounting applies when users explicitly upload
-the saved files. XcodeGen and the Fastlane archive verifier own embedding,
-signing and App Group validation. Run native importer/inbox tests and
-`iOS/scripts/share-acceptance.sh`; see TESTING's incoming-share checklist and
-[the iOS runbook](../../iOS/README.md#receive-content-from-the-ios-share-sheet).
+Local post/comment linked galleries and normal Attach-by-URL selections now use
+`local-workspace/attachments.ts` metadata markers and the ordinary importer,
+composer and draft pipeline. URL rows never claim stored bytes. Mixed transfer
+preserves annotations/order; copies get fresh identities. Account registration
+reuses `AccountFileSync` claims and stable request IDs, verifies canonical receipts,
+and waits before parent binding; conditional metadata edits and durable deletion
+retain owner/target/content identity. Bound byte annotations use the same checks.
+Known registered URL drafts/posts refresh without fetching external bytes;
+unfamiliar server-only links and other managed targets retain their dedicated
+online boundaries. Local API/draft/receipt tests pass; final-package native
+acceptance is tracked in [linked-media evidence](../../artifacts/anonymous-local-first-2026-10-23/linked-media/README.md).
 
 Cloud JSON sync requests classify HTTP 408/429/5xx as temporary transport waits.
 `syncJobJournal.ts` persists an optional, revision-guarded `retryAt`; automatic
@@ -185,12 +194,121 @@ storage and verifies content despite unreliable provider timestamps. Mac/iOS nat
 destination writes are integrated; persistent schedulers remain pending and
 unfinished Android work is explicitly deferred.
 
+Anonymous large-file acceptance now covers native 70 MiB save/copy/offline reload,
+exact download, canonical ZIP export, normal import and re-export with fresh IDs
+at 1440/390/320px. Invalid input and cancelled parsing are covered, with zero
+account writes. `archive.ts` coalesces small inflater results into bounded 256 KiB
+Blob parts; `transferBlobs.test.ts` checks handle count and exact bytes. See the
+[native checkpoint](../local-workspaces.md#native-large-file-and-zip-checkpoint--2026-10-19).
+The account file browser now obtains canonical export plans independently of
+paired-device capability negotiation. Native 70 MiB offline save, private upload,
+clean-context download and owned-original retention/cold offline reuse pass,
+including guest/foreign-owner refusal. Paired-device and broader transfer capacity
+remain separate work. See the [account checkpoint](../local-workspaces.md#account-large-file-download-and-retention--2026-10-19).
+
+Owned-original retention negotiates `api.attachment-content` 1.16.0 and streams
+`cache=retain-bytes&download=1` through the existing full-user/owned-file gates.
+`accountTransport.client.ts` and `accountFiles.ts` carry Blobs with chunk hashing
+and atomic quota/refusal checks. Run account retention/transport, attachment route
+and both manifest suites; `accountLargeFiles.browser.test.ts` now supplies native
+ordinary-account acceptance at 1440/390/320px. See the
+[streaming checkpoint](../local-workspaces.md#owned-originals-stream-into-blob-storage--2026-10-18).
+
+Native transfer export carries Blob handles through `collectTransfer`,
+`exportLocalThingSnapshot`, `accountExport.ts` and `bundleFromPlan`. Downloads use
+the chunked Blob ZIP encoder; byte/clipboard compatibility callers materialize only
+their final serialized output. Prepared anonymous bundles preserve identity and
+cancellation fences; account file availability remains scoped. Regressions:
+`transferBlobs.test.ts`, `accountFileExport.test.ts`, `api.client.test.ts` and
+`thingTransfer/{browser,collect}.test.ts`. See the
+[export checkpoint](../local-workspaces.md#blob-export-collection--2026-10-18) for
+native acceptance and remaining retention/transport work.
+
+
+## Device Blob storage
+
+`local-workspace/binary.ts` supplies bounded checksum reads and immutable binary
+snapshot comparisons. `WorkspaceDatabase` keeps Blobs in the existing scoped
+binary collection, with storage revisions for atomic post/draft rechecks; legacy
+byte arrays remain readable. `LocalThings.readFileBlob`, `AccountFileSync` and the
+in-process `readLocalFile` Blob option feed the normal picker, file browser,
+draft copies and scoped media registry. Account permission checks still apply
+before and after reads; native download/upload paths do not buffer a whole file.
+`filesystemTransfer.ts` applies paired-device byte limits only to those transports.
+
+Run `fileBlobs.test.ts`, `media.test.ts`, `filesystemTransfer.test.ts` and
+`test:local-workspace`; opt-in `fileBlobs.browser.test.ts` requires enforced browser
+and backend isolation. See the [Blob checkpoint](../local-workspaces.md#native-blob-file-storage--2026-10-18)
+for historical results; the native checkpoint above supersedes the anonymous
+browser blocker. Remaining account and buffered adapters stay open.
+
+
+Account password-file sync groundwork reuses `passwords/fileTransfer.ts` and the
+local encrypted chunk writer through `local-workspace/passwordFileSync.ts`,
+`passwordFileReconcile.ts` and `passwordFileTransport.client.ts`. Local file
+completion queues encrypted intents; remote parent admission is a worker concern.
+The account UI is not switched yet. Delete replay, attachment-preserving entry
+conflicts and native acceptance remain gates. Run `test:local-workspace` and
+`test:passwords`; see the latest [local workspace checkpoint](../local-workspaces.md#account-password-file-sync-groundwork--2026-10-18).
+
+`localThingProjection` derives standalone file edit eligibility from scoped
+storage; `thingAttachmentDetailCore.canEditLocalFileDetails` applies current
+viewer/link checks. Never infer edit rights from an ID prefix. The normal
+anonymous import/edit/export browser regression lives in
+`accountRecordingImport.browser.test.ts`; see the [metadata checkpoint](../local-workspaces.md#anonymous-imported-file-metadata--2026-10-17).
+
+Normal account ZIP import uses `local-workspace/accountImport.ts` for shared
+UI/facade routing, and `AccountThingSync` plus `AccountFileSync.contentHooks`
+for atomic local admission and receipt-dependent media remapping. Regressions:
+`accountFileImport.test.ts` and opt-in production-client
+`accountFileImport.browser.test.ts`. Standalone files, recordings, post/comment files and ordinary content use this path;
+linked and managed imports remain separate acceptance work. Recording
+regression: `accountRecordingImport.browser.test.ts`; retention negotiates content
+1.14.0 and deletion 1.5.0. Offline rename/delete compares complete known metadata
+snapshots so deletion does not wait for annotation sync; unknown account changes
+still require review. Native device audio skips the legacy audio cache.
+See [local workspaces](../local-workspaces.md#account-file-transfer-imports--2026-10-17).
+
+Conditional file sync prerequisites reuse `attachmentStore.annotateOwnedAttachment`
+and `managedPlacement.moveManagedContent`. Annotation 1.2.0 accepts optional
+`expectedUpdatedAt` and returns the committed timestamp; bulk 1.6.0 accepts it
+only for single-item moves and reports stale per-item status 409. Both manifests
+must carry these versions. `accountTransport.client.ts` negotiates them;
+`accountFiles.browser.test.ts` covers real concurrent edits, moves, private bytes
+and canonical attachment cleanup. Durable metadata reconciliation now lives in `accountFileMetadata.ts`;
+completed-file deletion now uses the durable queue described below; ordinary standalone file UI now uses the adapter below; existing owned-file byte retention now uses the checkpoint below; see [local workspaces](../local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+
+Conditional deletion uses the same cleanup claims: delete 1.2.0 accepts
+`expectedUpdatedAt` and fences both ordinary and objectless initial claims.
+Retries of already-deleting rows retain owner/target/expiry checks but omit the
+pre-claim timestamp. `attachments.test.ts` covers racing/skipped claims and
+multipart deferral; the real account file browser test races annotation/deletion.
+Legacy missing-row success is not a durable late-start cancellation receipt;
+the request-id mode in delete 1.3.0 and the local queue below supply that fence.
+
+Durable cancellation now uses abort 1.2.0 `{requestId}` and the existing unique
+attachment identity. `reserveCancellation`, the retained deleting claim and
+`cancelledAttachmentReceipt` keep a private accounted zero-object tombstone after
+cleanup. The closed envelope is validated in `attachmentCore.ts`; never expire or
+purge it through ordinary cleanup. Legacy abort stays separate; full-user auth
+is required for this new mode. `accountFiles.ts` persists start/cancel intent,
+fences tab claims and retains bytes until confirmation. `AccountSyncStatus`
+provides offline Cancel upload and completed-file deletion review.
+
 Stored files are `attachment` Things (`thingtime: ['attachment']`) whose bytes
 live in a private, versioned S3 bucket (or the local filesystem stand-in).
 Every attachment is bound to exactly one target (post, comment, page, message,
 profile slot, emoji, subspace branding) or is an owner-only draft/recording.
 Canonical rules: [`FUNDAMENTALS.md`](../../FUNDAMENTALS.md) §3 (appended data
 is relational; attachments target their parent via `targetId`).
+
+Parent deletion uses the canonical version check before bound-file cleanup.
+`AccountThingSync` and `AccountFileSync.contentHooks` retain recovery while the
+parent is refused/conflicting and restore files with the reviewed account version.
+Same-origin owner DELETE opts into durable cascade receipts through `api.things`
+1.34.0; `attachments.beforeCascade` reuses cancellation claims. See the
+[parent conflict checkpoint](../local-workspaces.md#parent-deletion-conflicts-preserve-media--2026-10-17).
+`offlinePostTemplate.browser.test.ts` now covers both accepted and refused deletes.
 
 ## Where the code lives
 
@@ -280,7 +398,7 @@ until an admin enables them (`POST /api/v1/admin/users/public-uploads`).
 Purpose `file` uses the existing private upload, quota, moderation and exact-owner
 content gates. Completion makes it durable in the owner library; `file-import`
 remains an expiring draft until the protected transfer writer commits it.
-`useAttachmentUploads` supplies the filesystem browser's upload path, preserving
+`AccountFileSync` now supplies the filesystem browser's local save and upload queue, preserving
 original bytes; portable exports/imports retain the immutable file purpose.
 `test:attachments` covers file lifecycle and access alongside recordings.
 The minimum origin contracts are listed in [remote-files.md](../remote-files.md).
@@ -295,7 +413,6 @@ private draft API, editor recovery, account isolation and independent media copi
 `ComponentUpload.tsx` commits selected bytes through `componentUploadCommit.ts`: a valid private text Post and a non-reserved retry ID hold the upload. `copyStoredAttachment.ts` also supports owner-private `file` copies for Lopu's `save_attachment` in `chatTools.ts`. It reads an authorized pinned source version, reserves quota, copies bytes and uses normal moderation/finalization. The returned file ID and content URL can be used as Thing properties; `managedPlacement.ts` files it in an owned folder. Request replay returns the existing file. Rollback only claims unfinished private uploads, so concurrent retries cannot delete a committed file. Shared/public copy revocation still removes its draft.
 
 Run `test:attachments`, `test:components`, `test:lopu` and the isolated real-byte `scripts/verify-schema-files.ts` acceptance flow. See the public-schema/upload/Lopu checklist in `TESTING.md`.
-
 
 ## Mac native/cloud acceptance and throttling
 
@@ -630,6 +747,226 @@ that service; the normal retry sweep and storage refund remain canonical. Run
 `test:attachments:retention` for real isolated Mongo concurrency/accounting plus
 `test:attachments`, `test:backups` and `test:api-capabilities`. See
 [the retention rollout boundary](../portable-backups.md#source-version-retention--2026-10-19).
+
+## Anonymous workspace bytes and transfer
+
+`app/local-workspace/attachments.ts` is the dedicated local metadata adapter;
+`storage.ts` stores immutable Blobs, legacy byte arrays and JSON atomically under
+the same scope and storage ledger. `things.ts` imports/exports/copies/deletes canonical ZIP content
+using the existing transfer validators and composition-media rewriter. The normal
+`ThingImportDialog` bypasses uploading only for local-only workspaces, while
+`thingTransfer/browser.ts` accepts an identity-scoped in-process byte reader.
+No server storage key, approval, ownership or moderation verdict is synthesized.
+
+Device admission uses browser capacity and atomic quota failure, rather than
+fixed aggregate/record ceilings. Canonical transfer budgets and transport-specific
+limits still apply. Missing bytes or checksum failures reject the operation.
+Account imports use the separately authorized account adapter described above.
+Run `test:local-workspace` and `test:things`; see
+[the coverage matrix](../local-workspaces.md) for local browser evidence.
+
+
+## Anonymous normal file UI and media URLs
+
+`FilesystemThingsBrowser` uses the existing workspace API for anonymous file-picker
+saves, downloads, folders and copy/move. `LocalThings.saveFile/readFile` atomically
+store canonical metadata with bytes and validate checksums. `media.ts` owns bounded,
+reference-counted object URLs; `media.client.tsx` connects them to `SharedMedia` and
+root diagnostics. Local media routes reuse `ThingPage` and its native attachment
+renderer. Pending src/href values are omitted. Server media access is unchanged; account device previews use the scoped adapter below.
+`apiIdentity.ts` keeps workspace API callbacks stable without retargeting retired
+account closures. Run `test:local-workspace`, `test:attachments`, `test:things` and
+`test:webpages`; see the local-workspace manual checklist for offline browser and
+identity-retirement checks. The normal composer queue now supports local post/comment files; restored edit
+previews use `SharedMedia` as well. `LocalDrafts` owns atomic independent media
+copies and draft binding; unbound post/comment files expire after 24 hours and
+are reaped on later file/draft writes. Annotation, linked galleries, audio/video
+acceptance and account byte synchronization still need their adapters/checks.
+
+
+## Durable account upload foundation
+
+`app/local-workspace/accountFiles.ts` supplies scoped atomic file/byte/intent
+admission and durable multipart recovery. `accountTransport.client.ts` negotiates
+the existing upload capabilities and fences account/data-plane requests and
+credentialless signed PUTs. `accountApi.client.ts` drains it alongside content and
+interaction queues; `AccountSyncStatus.tsx` renders its retry panel. The ordinary standalone account picker/list/media now uses this adapter; see the checkpoint below. Run `test:local-workspace`
+and the opt-in `accountFiles.browser.test.ts` (README local workspace setup),
+plus the attachment suite. Preserve start identity and completion phase on lost
+responses; never restart uncertain completion as a fresh upload.
+
+
+## Account file metadata queue
+
+`accountFileMetadata.ts` retains independent annotation/placement intent inside
+the local file write transaction, negotiates the existing conditional APIs via
+`accountTransport.client.ts`, and uses upload receipts plus ordinary folder-sync
+state as dependencies. `AccountSyncStatus.tsx` provides comparison and reviewed
+choices. Run `accountFileMetadata.test.ts`, the local workspace suite and the
+file browser fixture. Preserve immutable pending operations on lost replies;
+newer device edits and unrelated account edits must survive reconciliation.
+The ordinary standalone account picker/list/media path now uses this queue (checkpoint below).
+
+## Durable completed-file deletion
+
+Delete 1.3.0 accepts a canonical id, its original requestId and expectedUpdatedAt
+for full-user standalone-file deletion. It reuses retained cancellation receipts
+and version-fenced cleanup; legacy deletion behavior remains compatible.
+`AccountFileSync.remove` moves the local snapshot into recovery with queued intent;
+`inspectDeletion`/`resolveDeletion` drive the native review and protect both sides.
+Metadata sync skips deleting files. Only a durable `deleted:true` acknowledgement
+releases bytes. The worker coalesces wake-ups arriving during a drain, and the
+moderation stamper only updates ready files. Run workspace, attachment, capability
+and moderation suites plus the real file browser fixture, including full quota,
+lost replies, stale reviews and the concurrent edit/delete race. Existing owned-file retention is implemented in the checkpoint below.
+
+
+## Normal account file browser and scoped media
+
+`FilesystemThingsBrowser` now uses `saveLocalFile`, local folder writers and the
+file metadata move adapter for account files. `AccountFileSync.library/views`
+project standalone device files and their owned server aliases; `readFile`
+excludes cancellation/deletion recovery data. `accountApi.client.ts` exposes them
+through normal get/list, and the Files browser combines bounded device pages
+with authorized account discovery without blocking local completion.
+`media.client.tsx` scopes URL registries to `workspaceIdentityKey` plus the
+validated principal/Character partition. Last-view cleanup revokes object URLs;
+the existing file lease checks both reads and returned URLs. Shared media
+contexts remain on their server authorization path. Tests: workspace, Things,
+attachments, `accountFileUi.browser.test.ts` and `accountFiles.browser.test.ts`.
+Existing owned-file retention is implemented below; managed imports/exports remain completion gates.
+
+
+## Existing account file deletion receipts
+
+Delete 1.4.0 adds `retainReceipt:true` with an existing owned standalone file's
+canonical ID and observed version, without its original upload request ID. The
+service reuses exact-version cleanup and private accounted cancellation receipts.
+`attachmentDeleteClaimFence` keeps standalone eligibility atomic. Unlike the
+request-ID mode, missing IDs return 404 and are never reserved. Full-user and
+same-origin gates remain; uncertain legacy cleanup never acknowledges a fence.
+Run the attachment/capability suites and `accountExistingFile.browser.test.ts`
+with the same disposable loopback/admin setup as `accountFiles.browser.test.ts`.
+Existing-account byte retention is now covered by the later retention checkpoint; see the
+[local workspace checkpoint](../local-workspaces.md#existing-saved-file-deletion-receipts--2026-10-16).
+
+
+## Retaining existing owned originals
+
+Content 1.13.0 adds `cache=retain&download=1`: the same-origin full-user route
+returns an opaque version key and canonical owned-file metadata without storage
+URLs. `attachments.download(..., true)` additionally restricts retention to
+standalone, non-expiring, unblocked originals owned by the caller.
+`AccountFileSync.retain` double-checks the descriptor and atomically stores
+versioned bytes, metadata and a device alias; no upload request ID is invented.
+The normal Thing/media page reads the alias, edits through `AccountFileMetadata`
+and deletes through receipt mode 1.4.0. Retention failure preserves the online
+view with a warning. Keyed/shared media stays on the existing authorization path.
+
+Run `accountFileRetention.test.ts`, attachment/capability/workspace/Things suites
+and `accountFileRetention.browser.test.ts` with explicit local fixture settings.
+Set `TT_LOCAL_FILE_RETENTION_COLD=1` against a production client build to prove
+true offline reload, edit/download and reconnect. See the
+[dated scope and evidence](../local-workspaces.md#retained-account-files--2026-10-17);
+parent-folder discovery, managed transfers and bound media are still open.
+
+
+`local-workspace/accountExport.ts` now feeds live standalone account file records
+into the shared `exportLocalThingSnapshot` collector and supplies a scoped
+in-process byte reader to the normal Download dialog. Canonical account aliases
+and retained portable byte bindings are rewritten with `rewriteTransferMedia`;
+old snapshots do not grant file access. Run `accountFileExport.test.ts`, the
+opt-in `accountFileExport.browser.test.ts` and the extended cold-retention browser
+fixture. Account file import and complete remote-folder/managed transfer coverage
+remain pending; see [the transfer checkpoint](../local-workspaces.md#account-file-transfer-exports--2026-10-17).
+
+
+## Account post file binding
+
+`AccountFileSync` stages unsubmitted post/comment files without network work;
+`AccountThingSync` and `contentHooks.prepare` bind local content to confirmed upload
+receipts. `accountThingTransport` pairs PublicThing with the same-ID post companion
+for authoritative attachment receipts. `accountExport` includes live bound bytes.
+`attachments.remove` discards only unsubmitted device selections. The native
+composer saves locally even when the account upload scope has not been approved;
+remote upload still requires approval.
+
+PATCH `/things` passes validated attachment IDs to `updateThing`, which inspects
+purpose and applies `syncBoundTargetAttachments` inside the content transaction.
+Negotiate `api.things-update` 1.11.0 for this atomic behavior; the two manifests use
+the same docs entry. Tests: `accountBoundMedia.test.ts`, opt-in
+`accountBoundMedia.browser.test.ts`, workspace/attachments/Things/capability suites.
+See the [binding checkpoint](../local-workspaces.md#account-post-file-admission-and-binding--2026-10-17)
+for explicit remaining coverage.
+
+
+## Offline removal of authored post/comment files
+
+`AccountFileSync.removeBound` atomically hides device media and preserves deletion
+intent/recovery bytes. `accountApi.client.ts` routes the normal editor removal and
+idempotent retries directly to that operation; it never waits for draft saving.
+`contentHooks.prepare` and the file worker order deletion against immutable parent
+writes. Delete 1.6.0 negotiates request-ID + target + version cleanup through the
+existing attachment service/store, retaining a private cancellation receipt.
+Run workspace, attachment, Things and capability suites plus the enabled
+`accountBoundMedia.browser.test.ts`. Cover lost upload/delete responses, wrong
+target/purpose, concurrent edits, full quota and cold offline reload; existing
+remote bound-file retention/import remain separate gates. See the
+[checkpoint](../local-workspaces.md#account-post-and-comment-file-removal--2026-10-17).
+
+
+Existing owned post/comment originals use `AccountFileSync.retainPost` and the
+parent's conditional `AccountThingSync.remember` transaction. Content 1.15.0
+returns a whitelisted target/purpose descriptor; delete 1.7.0 supports an observed
+bound ID/version/target with `retainReceipt:true`. No upload identity is invented.
+`accountBoundRetention.test.ts` covers atomic admission, stale/read-refusal and
+quota races; `accountBoundRetention.browser.test.ts` uses a second clean context
+for native offline edits/removals and actual private reconnect. Comment update
+transport omits the inherited audience snapshot while preserving server policy.
+See the [fresh-device checkpoint](../local-workspaces.md#existing-account-post-and-comment-originals--2026-10-17)
+and README for the opt-in loopback fixture.
+
+
+## Offline account post/comment ZIP import
+
+`accountImportSupported` and `LocalThings.import` admit validated bound post/comment
+files through the existing `AccountFileSync.contentHooks` transaction. All content,
+bytes and queue intents commit locally; upload approval and exact account/plane
+verification remain remote requirements. The normal Import dialog does not wait
+for uploads. Regressions: `accountBoundImport.test.ts` and the expanded
+`accountFileImport.browser.test.ts` using README's existing loopback fixture.
+Complete exports of previously remote bound content still require the separate
+complete-snapshot acceptance work; partial read caches never prove completeness.
+
+
+Complete owned post/comment retention now records the original account file IDs
+inside the existing `thing-sync` record, atomically with content and bytes.
+`accountExport.ts` recognizes this proof for native offline Downloads without a
+prior online export. Missing file records still fail; intentional device removals
+and pending edits are included. The proof is internal and never portable.
+`accountBoundRetention.test.ts` and its opt-in browser fixture cover exact-byte
+round trips, retained order, conflict recovery and fresh anonymous import.
+
+
+`AccountFileSync` checks canonical read-refusal watermarks before exposing retained
+account bytes. Only definitive owned-descriptor refusals write those watermarks;
+transient failures keep offline access. Reauthorization rechecks descriptors and
+atomically fences older responses. `accountApi.client.ts` announces affected
+local aliases so active blob previews recheck access; unsynced metadata/recovery
+bytes remain in their original scope. `accountExport.ts` also fences dedicated
+and keyed remote plans through the existing in-process `assertCurrent` hook.
+Run file-retention/export, account read-refusal and workspace suites, plus
+`accountFileRetention.browser.test.ts` with the existing cold production-client
+fixture. See the [lifetime checkpoint](../local-workspaces.md#retained-file-access-and-remote-export-lifetimes--2026-10-17).
+
+
+`AccountThingSync.remove` now delegates selected post/comment file children to
+`AccountFileSync.contentHooks.removeBound` in its own transaction. Generic protected
+children still refuse and roll back; dedicated upload/deletion records retain
+recovery bytes and immutable operations. `prepareRemove` holds remote parent
+deletion until file cleanup completes, after any uncertain parent write settles.
+Tests: `accountBoundMedia.test.ts` and enabled `offlinePostTemplate.browser.test.ts`;
+see the [deletion checkpoint](../local-workspaces.md#offline-post-templates-and-bound-parent-deletion--2026-10-17).
 ## Password-vault attachments
 
 `api/utils/passwords/files.ts` uses an internal `passwordVault` adapter to the
@@ -638,6 +975,24 @@ attachment routes. Content is browser-encrypted; the per-file key and real name
 are wrapped by the account vault on the protected attachment root. Only a saved,
 owned password entry may bind the file; deletion and expiry keep existing
 exact-version cleanup and accounting. Ciphertext skips external moderation.
+
+Anonymous password attachments use the device password vault rather than the
+ordinary attachment store. Their shared UI/archive backend and scoped encrypted
+chunk lifecycle are documented in [auth and accounts](auth-accounts-and-admin.md#anonymous-password-files-and-shared-archive-storage).
+
+
+Password cleanup retains a minimal parent relation in canonical cancellation
+receipts (`api.passwords` 1.2.0); the dedicated adapter can acknowledge retries
+without retaining names or keys. Ordinary request-ID cancellation refuses that
+purpose. Run `passwords/fileLifecycle.test.ts`, attachment tests and the opt-in
+`passwordFileLifecycle.api.test.ts`; README documents disposable loopback setup.
+
+Account password files now use `local-workspace/passwordFiles.ts` in the native
+UI. `passwordFileReconcile.ts` retains encrypted metadata separately from bytes;
+missing objects cannot produce a successful incomplete archive. Independent file
+workers and retry review live in `AccountPasswordWorkspace.tsx`. Tests and the
+new opt-in `accountPasswordFiles.browser.test.ts` are documented in the
+[native account-file checkpoint](../local-workspaces.md#native-account-password-files--2026-10-18).
 
 ## Local media processing in reusable Components
 

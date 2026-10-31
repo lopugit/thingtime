@@ -1,0 +1,101 @@
+{
+  "ok": true,
+  "transport": "built-nitro",
+  "draftPreviewExactAssets": true,
+  "draftPreviewCsp": true,
+  "socialCardPngAndHead": true,
+  "viteRootDocs": true,
+  "registration": true,
+  "authCookies": true,
+  "crossSiteRefused": true,
+  "writes": true,
+  "dedicatedOwnHandler": true,
+  "dedicatedShellMetadata": true,
+  "independentDedicatedDatabase": true,
+  "dedicatedIndexCommands": {
+    "creates": 138,
+    "drops": 51,
+    "peak": 2
+  },
+  "promotion": true,
+  "rollback": true,
+  "followerMongoDials": 0,
+  "initializedIndexCommands": {
+    "creates": 138,
+    "drops": 51,
+    "peak": 2
+  },
+  "unchangedColdIndexCommands": {
+    "creates": 0,
+    "drops": 0,
+    "peak": 0
+  },
+  "catalogue": {
+    "themes": {
+      "owner": {
+        "entries": 65,
+        "authenticated": true,
+        "anonymousRefused": true,
+        "crossSiteRefused": true,
+        "wrongOwnerRefused": true,
+        "sortedExactIds": true,
+        "exactPersistedVersion": true
+      },
+      "follower": {
+        "entries": 65,
+        "authenticated": true,
+        "anonymousRefused": true,
+        "crossSiteRefused": true,
+        "wrongOwnerRefused": true,
+        "sortedExactIds": true,
+        "exactPersistedVersion": true
+      }
+    },
+    "algorithms": {
+      "owner": {
+        "entries": 2,
+        "authenticated": true,
+        "anonymousRefused": true,
+        "crossSiteRefused": true,
+        "wrongOwnerRefused": true,
+        "sortedExactIds": true,
+        "exactPersistedVersion": true
+      },
+      "follower": {
+        "entries": 2,
+        "authenticated": true,
+        "anonymousRefused": true,
+        "crossSiteRefused": true,
+        "wrongOwnerRefused": true,
+        "sortedExactIds": true,
+        "exactPersistedVersion": true
+      }
+    },
+    "realReplica": true,
+    "canonicalReaderIntegrity": true,
+    "themeRowsCrossPageBoundary": true,
+    "legacyPrecedenceLive": false,
+    "concurrentMutationPinningLive": false
+  },
+  "exitCode": 0,
+  "command": "/Users/lopu/.nvm/versions/node/v24.18.0/bin/node remix/scripts/environment-gateway-acceptance.mjs",
+  "environment": "Sanitized fresh temporary HOME/TMPDIR; child sandbox-exec fixture loopback policy unchanged",
+  "observedAt": "2026-10-26T11:13:06.324084+00:00",
+  "log": "/tmp/tt-catalogue-built-acceptance-final.log",
+  "priorAttemptArtifact": "built-gateway-catalogue.json",
+  "cleanup": {
+    "fixturePortsWithRemainingListeners": [],
+    "checkedPorts": [
+      19771,
+      19772,
+      19773,
+      19774,
+      19775,
+      19776,
+      19777,
+      19778,
+      19779,
+      19780
+    ]
+  }
+}

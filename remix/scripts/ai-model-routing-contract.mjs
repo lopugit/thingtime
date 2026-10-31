@@ -61,7 +61,9 @@ const recordings = readFileSync(join(remixRoot, 'app/api/utils/lopu/recordingsPr
 assert.match(recordings, /const preferences = await getAiPreferredModelWaterfall\(\)/);
 assert.match(recordings, /resolveAiPreferredOpenAiChoice\(preferences\)/);
 assert.match(recordings, /resolveAiPreferredAnthropicChoice\(preferences, process\.env\.LOPU_CLAUDE_MODEL/);
-assert.match(recordings, /model: connection\?\.model \|\| choice\?\.model \|\| process\.env\.LOPU_OPENAI_MODEL/);
+assert.match(recordings, /const modelId = connection\?\.model \|\| choice\?\.model \|\| process\.env\.LOPU_OPENAI_MODEL/);
+assert.match(recordings, /getLopuPromptSettings\(ownerId, \{ modelId \}\)/);
+assert.match(recordings, /model: modelId/);
 assert.match(recordings, /model: connection\.model \|\| choice\.model/);
 assert.match(recordings, /const usePreferredTuning = !connection\?\.model \|\| connection\.model === choice\?\.model/);
 assert.match(recordings, /model: 'gpt-4o-mini-transcribe'/);

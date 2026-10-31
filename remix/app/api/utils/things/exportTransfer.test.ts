@@ -141,3 +141,20 @@ test('live file denial fails, while authorized linked galleries retain URL metad
   assert.deepEqual(linked.plan.links, [{ id: 'file', targetId: 'note', url: 'https://example.com', mediaKind: 'file' }]);
   assert.deepEqual(linked.plan.files, []);
 });
+
+
+test('export descriptors above 512 MiB retain exact byte totals without reading bodies', async () => {
+  const deps = { read: async () => doc('note'), project,
+    bound: async () => [{ id: 'first', targetId: 'note' }, { id: 'second', targetId: 'note' }],
+    describe: async (_viewer: unknown, id: string) => ({ ok: true as const, linked: false as const,
+      attachment: { id, name: `${id}.bin`, contentType: 'application/octet-stream', size: 300 * 1024 * 1024, mediaKind: 'file' as const } }) };
+  const result = await exportTransferPlan({ id: 'owner' }, { ids: ['note'] }, undefined, deps);
+  assert.equal(result.ok, true); if (result.ok) assert.equal(result.plan.files.reduce((sum, file) => sum + file.bytes, 0), 600 * 1024 * 1024);
+  for (const size of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, Number.MAX_SAFE_INTEGER]) {
+    const invalid = await exportTransferPlan({ id: 'owner' }, { ids: ['note'] }, undefined, {
+      ...deps, describe: async (_viewer, id) => ({ ok: true, linked: false,
+        attachment: { id: String(id), name: 'invalid.bin', contentType: 'application/octet-stream', size, mediaKind: 'file' } })
+    });
+    assert.equal(invalid.ok, false); if (!invalid.ok) assert.match(invalid.error, /size|precision/);
+  }
+});

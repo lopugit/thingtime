@@ -64,10 +64,10 @@ test('legacy emoji bytes round-trip plan, clipboard ZIP and manifest without a n
   });
   assert.ok(result.ok); if (!result.ok) return;
   const bundle = await bundleFromPlan(result.plan, { fetch: async () => { throw new Error('Legacy bytes must not fetch a URL'); } });
-  assert.deepEqual([...bundle.files.values()][0], new Uint8Array([1, 2, 3]));
+  assert.deepEqual(new Uint8Array(await [...bundle.files.values()][0].arrayBuffer()), new Uint8Array([1, 2, 3]));
   assert.equal('inlineBase64' in bundle.manifest.files[0], false);
   const roundTrip = await readTransferClipboard(await transferClipboardText(bundle));
-  assert.deepEqual(roundTrip.manifest, bundle.manifest); assert.deepEqual(roundTrip.files, bundle.files);
+  assert.deepEqual(roundTrip.manifest, bundle.manifest); assert.deepEqual(new Uint8Array(await [...roundTrip.files.values()][0].arrayBuffer()), new Uint8Array([1, 2, 3]));
   const excluded = await exportTransferPlan({ id: 'owner' }, { ids: ['original'], includeFiles: false }, undefined, {
     read: async () => ({ thingtime: ['custom-emoji'] }) as any, readEmoji: async () => structuredClone(source)
   });

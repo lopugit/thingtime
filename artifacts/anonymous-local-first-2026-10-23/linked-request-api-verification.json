@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "fixture": "isolated-agent-test replica",
+  "session": "9dc16fad-1aca-4f3d-9bd7-7ef2445a2560",
+  "builtManifests": true,
+  "concurrentFirstCreates": 4,
+  "concurrentExactReplays": 4,
+  "replayQuotaStable": true,
+  "concurrentDuplicateQuotaRolledBack": true,
+  "immutableTupleConflicts": true,
+  "privateAcl": true,
+  "guestAndForeignReadsDenied": true,
+  "replayAfterBindAndAnnotation": true,
+  "exactVersionAndTargetDeletion": true,
+  "cancelledBeforeCreation": true,
+  "ordinaryDeleteReplayFenced": true,
+  "parentCascadeReplayFenced": true,
+  "externalUrl": "https://example.invalid/image.png",
+  "cleanupVerified": true,
+  "retainedCancellationReceipts": "private accounted records in disposable database"
+}

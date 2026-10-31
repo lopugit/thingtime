@@ -1,0 +1,7 @@
+{
+  "before": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n",
+  "after": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\n",
+  "beforeCpu": "usage_usec 23483072\nuser_usec 17760227\nsystem_usec 5722844\ncore_sched.force_idle_usec 0\nnr_periods 249\nnr_throttled 181\nthrottled_usec 10461413\nnr_bursts 0\nburst_usec 0\n",
+  "afterCpu": "usage_usec 84715885\nuser_usec 70966004\nsystem_usec 13749880\ncore_sched.force_idle_usec 0\nnr_periods 1097\nnr_throttled 653\nthrottled_usec 47752598\nnr_bursts 0\nburst_usec 0\n",
+  "memoryCurrent": "1411923968\n"
+}

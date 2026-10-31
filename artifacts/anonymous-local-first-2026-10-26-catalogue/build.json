@@ -1,0 +1,9 @@
+{
+  "command": "node tmp/continuation/clean-build.cjs",
+  "exitCode": 0,
+  "phases": ["build:client", "sync:nitro-template", "build:server"],
+  "preset": "node-server",
+  "environment": "Sanitized disposable HOME with account configuration excluded",
+  "scope": "Local client and Node-server build of the catalogue implementation; no deployment or installed-app acceptance",
+  "warnings": "Existing optional WASM module warnings"
+}

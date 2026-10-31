@@ -743,7 +743,7 @@ const rootThingSchema: ThingtimeSchema = {
 			required: false,
 			system: true,
 			description:
-				'Exact logical bytes billed to the owner: UTF-8 JSON crystal/extended/tags bytes plus verified objectSizeBytes for protected attachment Things; absent on platform control-plane Things.'
+				'Exact logical bytes billed to the owner: UTF-8 JSON crystal/extended/tags bytes plus verified attachment object bytes and retained private Timeline/instruction payload bytes; absent on platform control-plane Things.'
 		},
 		{
 			name: 'storageClass',
@@ -774,7 +774,7 @@ const rootThingSchema: ThingtimeSchema = {
 			values: [...ATTACHMENT_STATES],
 			system: true,
 			description:
-				'Private upload lifecycle state. Pending, finalizing, ready, and deleting objects all remain billable until their source Thing is removed.'
+				'Private upload lifecycle state. Pending, finalizing, ready, and deleting objects remain billable until cleanup. Cancelled receipts retain only their small JSON allocation and permanently fence delayed upload starts.'
 		},
 		{
 			name: 'objectSizeBytes',
@@ -797,6 +797,11 @@ const rootThingSchema: ThingtimeSchema = {
 			required: false,
 			system: true,
 			description: 'Private immutable S3 version id used for exact reads and permanent deletion before quota is refunded.'
+		},
+		{
+			name: 'attachmentCancellationRequested',
+			type: 'boolean', required: false, system: true,
+			description: 'Server-only durable cancellation intent on deleting uploads and their zero-object cancelled receipts. Never accepted from generic input.'
 		},
 		{
 			name: 'attachmentRequestFingerprint',
@@ -4257,8 +4262,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
-  STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
-  'agent-reporting-binding', 'agent-reporting-operation',
+  'lopu-instruction-transfer', 'lopu-instruction-part',
   'file',
   'mail-account', 'mail-folder', 'mail-message', 'mail-inbox', 'mail-operation',
   'password-manager-entry',
@@ -4515,6 +4519,10 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
 		summary: 'A private pinned display name for one saved Timeline version.',
 		detail: 'One protected relational Thing per named event: the identical local/server name record (1–80 characters, at most 4096 bytes) lives in secure BinData, targetId points to its event Thing, hashed crystal.targetId plus crystal.linkKind support reverse lookup through the existing shared index, and a root nameRevision fences concurrent renames. The crystal label is constant, so the name text never reaches crystal projections, search or root data. Events stay immutable and exact-keyed; names never accumulate on the event, the Thing or the Timeline folder and invent no version numbers. The record is unbilled control metadata, but every name, rename and clear appends a metered timeline-version-name effect event beside the named version. Only the dedicated name-version Timeline command writes names; generic Things reads, search and sharing never expose them.',
 		createdVia: 'Timeline name-version command', fields: [{ name: 'name', type: 'string', required: true, system: true, description: 'Value-free display label.' }], example: { name: 'Version name' } },
+  { id: 'lopu-instruction-transfer', version: 1, kind: 'crystal', collection: null, title: 'Private instruction transfer',
+    summary: 'A resumable private account instruction manifest and durable receipt.', detail: 'Home-plane protected state. Secure BinData retains immutable attempt identity, scope, revision fence, bounded sequential digest checkpoint and terminal receipt. Committed generations remain immutable for history and backups; only abandoned staging may be cleaned. All payload bytes use canonical account storage accounting.', createdVia: 'Private Lopu instruction transport', fields: [], example: {} },
+  { id: 'lopu-instruction-part', version: 1, kind: 'crystal', collection: null, title: 'Private instruction part',
+    summary: 'An immutable verified fragment of one private account instruction.', detail: 'Home-plane protected relational content, never generic search, sharing, reads or CRUD. Owner and manifest identity fence every read; secure BinData stores text outside wildcard text indexing. Root Binary uniqueKeys on first fragments enforce instruction id uniqueness using the existing shared sparse unique index. Canonical accounting meters retained UTF-8 bytes; no account content size cap.', createdVia: 'Private Lopu instruction transport', fields: [], example: {} },
 	{ id: TIMELINE_LINK_KIND, version: 1, kind: 'crystal', collection: null, title: 'Timeline relationship',
 		summary: 'One immutable private link between an event and a version, Thing, branch or operation.',
 		detail: 'Each relationship is its own protected Thing in Timeline. The identical local/server link record lives in secure BinData; targetId points to its event Thing. Hashed crystal.targetId and crystal.linkKind support reverse lookup through the existing shared index. Links commit with the event, never accumulate in document arrays, and cannot be edited through generic Things APIs.',

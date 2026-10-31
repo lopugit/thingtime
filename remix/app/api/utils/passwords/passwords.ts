@@ -1,5 +1,6 @@
 import { openPasswordIcon, sealPasswordIcon } from './icons';
 import { deletePasswordFiles } from './files';
+import { PASSWORD_STORAGE_DOCUMENT_BYTES } from '../../../passwords/capacity';
 import { BSON } from 'mongodb';
 import { createHmac } from 'node:crypto';
 import { ensureIndexes, getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
@@ -9,11 +10,11 @@ import { openVaultValue, sealVaultValue } from '../auth/vaultEnvelope';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { PASSWORD_ENTRY_KIND, validatePasswordEntry, validPasswordId, type PasswordMetadata } from '~/passwords/model';
 
+export { PASSWORD_STORAGE_DOCUMENT_BYTES } from '../../../passwords/capacity';
+
 export class PasswordManagerError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
-// MongoDB's actual BSON document maximum, not a password-manager product cap.
-export const PASSWORD_STORAGE_DOCUMENT_BYTES = 16 * 1024 * 1024;
 const storageSizeError = () => new PasswordManagerError(413, 'This entry exceeds the database document capacity after encryption. Your source data has not been truncated.');
 const match = (ownerId: string, id?: string) => ({ ownerId, thingtime: PASSWORD_ENTRY_KIND, ...(id ? { shareId: id } : {}) });
 const project = (doc: any): PasswordMetadata => ({ id: doc.shareId, title: doc.crystal.title, passwordType: doc.crystal.passwordType, revision: doc.passwordRevision, updatedAt: new Date(doc.updatedAt).toISOString() });

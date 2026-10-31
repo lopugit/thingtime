@@ -1,3 +1,5 @@
+import type { LopuInstruction, LopuInstructionSettings } from '../lopu/promptSettingsCore';
+import { openBackupInstructionGeneration, verifyInstructionBackupReference } from './instructionRecords';
 import { createHash } from 'node:crypto';
 import { binaryBytes } from '../auth/binary';
 import { accountContentSnapshot, accountContentValue, ACCOUNT_CONTENT_BYTES } from '../../../timeline/accountContent';
@@ -169,12 +171,20 @@ export async function retainBackupAccountContent(
 /** Read-only offline recovery. Identity, active selections and preferences are
  * historical content, never authority to sign in, grant access or overwrite a
  * live account. A live restore must use the currently authorized writers. */
-export async function openBackupAccountSnapshot(
+async function readBackupAccountSnapshot(
 	store: BackupObjectStore,
 	snapshotId: string,
 	thingId: string,
 	access: BackupAccess
-): Promise<TimelineSnapshot> {
+): Promise<{ snapshot: TimelineSnapshot; instructionRecords?: Map<string, any> }> {
+	const scopeKey = timelineScopeKey(access.scope);
+	const guard = async () => {
+		access.signal?.throwIfAborted();
+		if (timelineScopeKey(access.scope) !== scopeKey) throw Error('Retained account scope changed');
+		await access.authorize();
+		access.signal?.throwIfAborted();
+		if (timelineScopeKey(access.scope) !== scopeKey) throw Error('Retained account scope changed');
+	};
 	const { item, ranges } = await openBackupItem(store, snapshotId, thingId, access),
 		descriptor = item.snapshot.value as any;
 	if (
@@ -201,5 +211,49 @@ export async function openBackupAccountSnapshot(
 		value = accountContentValue(snapshot);
 	if (json(accountContentSnapshot(value)) !== text || value.ownerId !== thingId || thingId !== access.scope.ownerId)
 		throw Error('Retained account identity changed');
-	return snapshot;
+	const personal = value.preferences.lopuInstructions as any;
+	let instructionRecords: Map<string, any> | undefined;
+	if (personal?.reference) {
+		instructionRecords = await openBackupInstructionGeneration(store, snapshotId, value.ownerId, personal.reference, access);
+		await verifyInstructionBackupReference(value.ownerId, personal.reference,
+			ids => Promise.resolve(ids.map(id => instructionRecords!.get(id)).filter(Boolean)), guard, personal.revision);
+	}
+	await guard();
+	return { snapshot, instructionRecords };
+}
+
+export async function openBackupAccountSnapshot(store: BackupObjectStore, snapshotId: string, thingId: string, access: BackupAccess): Promise<TimelineSnapshot> {
+	return (await readBackupAccountSnapshot(store, snapshotId, thingId, access)).snapshot;
+}
+
+/** Recover the complete editable checklist from a sealed private backup. This
+ * is explicit offline content recovery, not live account mutation or inference.
+ * Validation of the entire immutable generation finishes before any settings
+ * are returned. No live source or existing account session content is needed. */
+export async function recoverBackupInstructionSettings(
+  store: BackupObjectStore,
+  snapshotId: string,
+  access: BackupAccess
+): Promise<LopuInstructionSettings> {
+  const scopeKey = timelineScopeKey(access.scope), ownerId = access.scope.ownerId;
+  const { snapshot, instructionRecords } = await readBackupAccountSnapshot(store, snapshotId, ownerId, access);
+  const personal = accountContentValue(snapshot).preferences.lopuInstructions as any;
+  if (!personal) return { revision: null, instructions: [] };
+  if (!personal.reference) return personal;
+  const { instructionPartThingId } = await import('../settings/lopuInstructionStore');
+  const instructions: LopuInstruction[] = [];
+  let pieces: string[] = [];
+  for (let ordinal = 0; ordinal < personal.reference.partCount; ordinal++) {
+    const id = instructionPartThingId(ownerId, personal.reference.attemptId, ordinal), record = instructionRecords?.get(id);
+    if (!record) throw Error('Instruction generation is incomplete');
+    instructionRecords?.delete(id);
+    const part = record.payload.part;
+    if (part.start) { instructions.push({ id: part.id, enabled: part.enabled, text: '' }); pieces = []; }
+    pieces.push(part.text);
+    if (part.end) instructions[instructions.length - 1].text = pieces.join('');
+  }
+  await access.authorize();
+  access.signal?.throwIfAborted();
+  if (timelineScopeKey(access.scope) !== scopeKey) throw Error('Instruction recovery account changed');
+  return { revision: personal.revision, instructions };
 }

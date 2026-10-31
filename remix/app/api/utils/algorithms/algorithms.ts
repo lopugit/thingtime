@@ -1,6 +1,10 @@
+import { ownedListPage, OWNED_LIST_QUERY_TIMEOUT_MS } from '../ownedListPage';
+import { lockFolderDestination } from '../things/folderPlacement';
+import { prepareManagedPlacement } from '../things/managedPlacementCore';
+import { normalizeAlgorithmName, sanitizeAlgorithmEmoji as sanitizeEmoji, sanitizeAlgorithmEvents as sanitizeEvents } from './algorithmContent';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { randomUUID } from 'node:crypto';
-import { ObjectId } from 'mongodb';
+import { ObjectId, type ClientSession } from 'mongodb';
 
 // feed-algorithm is a PROTECTED system kind: algorithm things stay on the home
 // deployment DB even while a data-plane endpoint override is active.
@@ -32,6 +36,7 @@ export type FeedAlgorithmDoc = {
   _id?: any;
   shareId: string;
   ownerId: string;
+  title?: string | null;
   name: string;
   emoji: string;
   parentId: string | null;
@@ -79,9 +84,8 @@ export type SharedAlgorithmPreview = {
   ownerUsername: string | null;
 };
 
-const MAX_ALGORITHMS_PER_USER = 50;
-const MAX_NAME_CHARS = 60;
-const MAX_EVENTS_PER_BATCH = 100;
+// Explicit compatibility window for clients that do not request pagination.
+const LEGACY_OWNED_LIST_LIMIT = 50;
 const DEFAULT_EMOJI = '🧠';
 
 type Fail = { ok: false; status: number; error: string };
@@ -122,6 +126,7 @@ const algorithmThingToDoc = (thing: any): FeedAlgorithmDoc => ({
   shareId: thing.shareId,
   ownerId: thing.ownerId,
   name: thing.crystal?.name || '',
+  ...(Object.prototype.hasOwnProperty.call(thing.crystal || {}, 'title') ? { title: thing.crystal.title } : {}),
   emoji: thing.crystal?.emoji || DEFAULT_EMOJI,
   parentId: thing.crystal?.parentId ?? null,
   weights: thing.crystal?.weights || emptyWeights(),
@@ -139,16 +144,20 @@ const algorithmThingToDoc = (thing: any): FeedAlgorithmDoc => ({
 // number of algorithms) so the UI can show "@rick" instead of a Mongo id.
 // Dual-era like resolveProfiles in things/things.ts: user things first
 // (shareId = the id weight keys carry), legacy users collection for the rest.
-const resolveAuthorUsernames = async (ids: string[]): Promise<Map<string, string>> => {
+const resolveAuthorUsernames = async (ids: string[], signal?: AbortSignal, maxTimeMS?: number): Promise<Map<string, string>> => {
+  signal?.throwIfAborted();
+  const queryOptions = { ...(maxTimeMS === undefined ? {} : { maxTimeMS }), ...(signal ? { signal } : {}) };
   const wanted = [...new Set(ids)].filter((id) => typeof id === 'string' && id.trim());
   if (!wanted.length) return new Map();
   const usernames = new Map<string, string>();
 
   const things = await getThingsCollection();
+  signal?.throwIfAborted();
   const userThings = await things
-    .find({ thingtime: 'user', shareId: { $in: wanted } } as any)
+    .find({ thingtime: 'user', shareId: { $in: wanted } } as any, queryOptions)
     .project({ shareId: 1, 'crystal.username': 1 })
     .toArray();
+  signal?.throwIfAborted();
   for (const doc of userThings as any[]) {
     if (doc.crystal?.username) usernames.set(String(doc.shareId), doc.crystal.username);
   }
@@ -156,10 +165,12 @@ const resolveAuthorUsernames = async (ids: string[]): Promise<Map<string, string
   const remaining = wanted.filter((id) => !usernames.has(id) && ObjectId.isValid(id));
   if (remaining.length) {
     const users = await getUsersCollection();
+    signal?.throwIfAborted();
     const docs = await users
-      .find({ _id: { $in: remaining.map((id) => new ObjectId(id)) } })
+      .find({ _id: { $in: remaining.map((id) => new ObjectId(id)) } }, queryOptions)
       .project({ username: 1 })
       .toArray();
+    signal?.throwIfAborted();
     for (const doc of docs as any[]) usernames.set(String(doc._id), doc.username);
   }
   return usernames;
@@ -188,47 +199,25 @@ export const toPublicAlgorithm = async (doc: FeedAlgorithmDoc): Promise<PublicAl
   return projectAlgorithm(doc, usernames);
 };
 
-// Client-supplied event batches: keep only well-formed entries so a [null]
-// payload can never throw past the { ok, error } envelope.
-const sanitizeEvents = (value: unknown): EngagementEvent[] => {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter(
-      (entry): entry is EngagementEvent =>
-        !!entry &&
-        typeof entry === 'object' &&
-        typeof (entry as { thingId?: unknown }).thingId === 'string' &&
-        typeof (entry as { signal?: unknown }).signal === 'string'
-    )
-    .slice(0, MAX_EVENTS_PER_BATCH);
-};
-
-const sanitizeEmoji = (value: unknown): string => {
-  if (typeof value !== 'string') return DEFAULT_EMOJI;
-  const trimmed = value.trim();
-  // an emoji (or short grapheme cluster), not arbitrary text
-  return trimmed && [...trimmed].length <= 3 ? trimmed : DEFAULT_EMOJI;
-};
-
 // Ownership-scoped lookup, dual-era with the era kept so writes can target the
 // store the doc actually lives in. HOT PATH: getOwnedAlgorithmWeights rides
 // this on every ranked feed load — at most two indexed findOnes (things via
 // the unique shareId index first, legacy feedAlgorithms shareId index second).
 type OwnedAlgorithm = { doc: FeedAlgorithmDoc; era: 'things' | 'legacy' };
 
-const findOwnedAlgorithmWithEra = async (ownerId: string, shareId: unknown): Promise<OwnedAlgorithm | null> => {
+const findOwnedAlgorithmWithEra = async (ownerId: string, shareId: unknown, session?: ClientSession): Promise<OwnedAlgorithm | null> => {
   if (typeof shareId !== 'string' || !shareId.trim()) return null;
   const id = shareId.trim();
   const things = await getThingsCollection();
-  const thing = await things.findOne({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any);
+  const thing = await things.findOne({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any, { session });
   if (thing) return { doc: algorithmThingToDoc(thing), era: 'things' };
   const algorithms = await getFeedAlgorithmsCollection();
-  const legacy = (await algorithms.findOne({ shareId: id, ownerId } as any)) as any as FeedAlgorithmDoc | null;
+  const legacy = (await algorithms.findOne({ shareId: id, ownerId } as any, { session })) as any as FeedAlgorithmDoc | null;
   return legacy ? { doc: legacy, era: 'legacy' } : null;
 };
 
-const findOwnedAlgorithm = async (ownerId: string, shareId: unknown): Promise<FeedAlgorithmDoc | null> =>
-  (await findOwnedAlgorithmWithEra(ownerId, shareId))?.doc ?? null;
+const findOwnedAlgorithm = async (ownerId: string, shareId: unknown, session?: ClientSession): Promise<FeedAlgorithmDoc | null> =>
+  (await findOwnedAlgorithmWithEra(ownerId, shareId, session))?.doc ?? null;
 
 // Any-owner lookup honoured ONLY for algorithms whose owner flipped shared:true
 // — the branch-invitation gate. shareId is an unguessable UUID, so possession
@@ -267,7 +256,7 @@ export const listAlgorithmsForUser = async (ownerId: string): Promise<PublicAlgo
     await things
       .find({ thingtime: 'feed-algorithm', ownerId } as any)
       .sort({ createdAt: 1 })
-      .limit(MAX_ALGORITHMS_PER_USER)
+      .limit(LEGACY_OWNED_LIST_LIMIT)
       .toArray()
   ).map(algorithmThingToDoc);
 
@@ -275,7 +264,7 @@ export const listAlgorithmsForUser = async (ownerId: string): Promise<PublicAlgo
   const legacyDocs = (await algorithms
     .find({ ownerId })
     .sort({ createdAt: 1 })
-    .limit(MAX_ALGORITHMS_PER_USER)
+    .limit(LEGACY_OWNED_LIST_LIMIT)
     .toArray()) as any as FeedAlgorithmDoc[];
 
   const seen = new Set<string>();
@@ -286,7 +275,7 @@ export const listAlgorithmsForUser = async (ownerId: string): Promise<PublicAlgo
     docs.push(doc);
   }
   docs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  const page = docs.slice(0, MAX_ALGORITHMS_PER_USER);
+  const page = docs.slice(0, LEGACY_OWNED_LIST_LIMIT);
 
   const interestsByDoc = page.map((doc) => topInterests(doc.weights || emptyWeights()));
   const usernames = await resolveAuthorUsernames(
@@ -298,6 +287,17 @@ export const listAlgorithmsForUser = async (ownerId: string): Promise<PublicAlgo
   return page.map((doc) => projectAlgorithm(doc, usernames));
 };
 
+export const listAlgorithmsPageForUser = async (ownerId: string, cursor?: string | null, signal?: AbortSignal): Promise<{ algorithms: PublicAlgorithm[]; nextCursor: string | null }> => {
+  signal?.throwIfAborted();
+  const page = await ownedListPage<FeedAlgorithmDoc>({ ownerId, purpose: 'algorithms', things: await getThingsCollection(), legacy: await getFeedAlgorithmsCollection(),
+    kind: 'feed-algorithm', field: 'createdAt', direction: 1, cursor, signal, fromThing: algorithmThingToDoc });
+  const usernames = await resolveAuthorUsernames(page.items.flatMap(doc => topInterests(doc.weights || emptyWeights()))
+    .filter(entry => entry.kind === 'author').map(entry => entry.key), signal, OWNED_LIST_QUERY_TIMEOUT_MS);
+  const algorithms = page.items.map(doc => projectAlgorithm(doc, usernames));
+  signal?.throwIfAborted();
+  return { algorithms, nextCursor: page.nextCursor };
+};
+
 export const getOwnedAlgorithmWeights = async (ownerId: string, shareId: string): Promise<AlgorithmWeights | null> => {
   const doc = await findOwnedAlgorithm(ownerId, shareId);
   return doc ? doc.weights || emptyWeights() : null;
@@ -307,12 +307,12 @@ export const getOwnedAlgorithmWeights = async (ownerId: string, shareId: string)
  * possessing a preview URL is not authority for this export path. */
 export const getOwnedAlgorithmTransfer = async (ownerId: string, shareId: string): Promise<AlgorithmTransferContent | null> => {
   const doc = await findOwnedAlgorithm(ownerId, shareId);
-  return doc ? parseAlgorithmTransfer({ name: doc.name, emoji: doc.emoji, weights: doc.weights || emptyWeights(),
+  return doc ? parseAlgorithmTransfer({ ...(Object.prototype.hasOwnProperty.call(doc, 'title') ? { title: doc.title } : {}), name: doc.name, emoji: doc.emoji, weights: doc.weights || emptyWeights(),
     eventCount: doc.eventCount, lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt).toISOString() : null }) : null;
 };
 
 /** Server-only entry point. Normal algorithm HTTP input cannot supply a seed.
- * The canonical writer still owns caps, storage admission, private ACL and IDs. */
+ * The canonical writer still owns storage admission, private ACL and IDs. */
 export const importAlgorithmTransfer = async (ownerId: string, content: unknown) => {
   const parsed = parseAlgorithmTransfer(content);
   return createAlgorithm(ownerId, { name: parsed.name, emoji: parsed.emoji }, parsed);
@@ -326,27 +326,28 @@ export type CreateAlgorithmInput = {
   description?: unknown;
 };
 
+/** Trusted in-process boundary for conditional device synchronization. Public
+ * request bodies are never spread into these transaction callbacks. */
+export type AlgorithmMutationBoundary = {
+  createId?: string;
+  folderId?: string | null;
+  parentId?: string | null;
+  content?: AlgorithmTransferContent;
+  beforeWrite?(before: any | null, legacy: any | null, session: any): Promise<void>;
+  afterWrite?(after: any | null, session: any): Promise<void>;
+};
+
 // Create a fresh algorithm, optionally branched from an existing one (weights
 // copied, lineage kept in parentId) and optionally seed-trained from a batch
 // of session events ("save this doomscroll session as an algorithm").
-export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInput, transferSeed?: AlgorithmTransferContent): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
+export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInput, transferSeed?: AlgorithmTransferContent, boundary: AlgorithmMutationBoundary = {}): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
   // Validate again at the writer boundary, even for an in-process caller.
   const imported = transferSeed === undefined ? undefined : parseAlgorithmTransfer(transferSeed);
   if (imported && (input.branchFrom != null || input.events !== undefined)) return fail(400, 'An imported profile cannot also branch or train');
-  const name = typeof input.name === 'string' ? input.name.trim().slice(0, MAX_NAME_CHARS) : '';
+  const name = normalizeAlgorithmName(input.name);
   if (!name) return fail(400, 'Algorithm name is required');
 
   const things = await getThingsCollection();
-  const algorithms = await getFeedAlgorithmsCollection();
-  // the per-user cap spans both eras, or it would silently double mid-migration
-  const [thingCount, legacyCount] = await Promise.all([
-    things.countDocuments({ thingtime: 'feed-algorithm', ownerId } as any),
-    algorithms.countDocuments({ ownerId })
-  ]);
-  if (thingCount + legacyCount >= MAX_ALGORITHMS_PER_USER) {
-    return fail(400, `Algorithm limit reached (${MAX_ALGORITHMS_PER_USER})`);
-  }
-
   let weights = imported?.weights || emptyWeights();
   let parentId: string | null = null;
   if (input.branchFrom !== undefined && input.branchFrom !== null) {
@@ -383,13 +384,14 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
   }
 
   const doc: FeedAlgorithmDoc = {
-    shareId: randomUUID(),
+    shareId: boundary.createId ?? randomUUID(),
     ownerId,
+    ...(imported && Object.prototype.hasOwnProperty.call(imported, 'title') ? { title: imported.title } : {}),
     name,
     description: typeof input.description === 'string' ? input.description.trim().slice(0, 300) : '',
     listed: false,
     emoji: sanitizeEmoji(input.emoji),
-    parentId,
+    parentId: boundary.parentId === undefined ? parentId : boundary.parentId,
     weights,
     eventCount,
     lastTrainedAt,
@@ -410,6 +412,7 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
     thingtime: ['feed-algorithm'],
     crystal: {
       name: doc.name,
+      ...(Object.prototype.hasOwnProperty.call(doc, 'title') ? { title: doc.title } : {}),
       emoji: doc.emoji,
       parentId: doc.parentId,
       weights: doc.weights,
@@ -435,8 +438,11 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
 	});
 	try {
 		await withHomeMongoTransaction(async (session) => {
+      await boundary.beforeWrite?.(null, null, session);
+      if (boundary.folderId !== undefined) Object.assign(thing, prepareManagedPlacement(thing, ownerId, await lockFolderDestination(things, ownerId, boundary.folderId, session), now));
 			await applyUserStorageDelta(ownerId, sizeBytes, session);
 			await things.insertOne(thing as any, { session });
+      await boundary.afterWrite?.(thing, session);
 		});
 	} catch (error) {
 		const projected = storageFail(error);
@@ -445,20 +451,24 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
 	}
   // Import must return the minted ID without a fallible username lookup after
   // commit; its caller needs that ID to compensate a later mixed-import failure.
+  doc.updatedAt = thing.updatedAt;
   return { ok: true, algorithm: imported ? projectAlgorithm(doc, new Map()) : await toPublicAlgorithm(doc) };
 };
 
 export const updateAlgorithm = async (
   ownerId: string,
-  input: { id?: unknown; name?: unknown; emoji?: unknown; shared?: unknown; listed?: unknown; description?: unknown }
+  input: { id?: unknown; name?: unknown; emoji?: unknown; shared?: unknown; listed?: unknown; description?: unknown },
+  boundary: AlgorithmMutationBoundary = {}
 ): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
   const found = await findOwnedAlgorithmWithEra(ownerId, input.id);
   if (!found) return fail(404, 'Algorithm not found');
   const { doc, era } = found;
+  const content = boundary.content === undefined ? undefined : parseAlgorithmTransfer(boundary.content);
+  if (content && era === 'legacy') return fail(409, 'Migrate this algorithm before synchronizing its content');
 
   const set: Record<string, any> = { updatedAt: new Date() };
   if (input.name !== undefined) {
-    const name = typeof input.name === 'string' ? input.name.trim().slice(0, MAX_NAME_CHARS) : '';
+    const name = normalizeAlgorithmName(input.name);
     if (!name) return fail(400, 'Algorithm name is required');
     set.name = name;
   }
@@ -496,7 +506,10 @@ export const updateAlgorithm = async (
 				if (!before) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
 				}
+				await boundary.beforeWrite?.(before, null, session);
+				const placement: Partial<ReturnType<typeof prepareManagedPlacement>> = boundary.folderId === undefined ? {} : prepareManagedPlacement(before as any, ownerId, await lockFolderDestination(things, ownerId, boundary.folderId, session), set.updatedAt!);
 				const crystal = { ...(before.crystal || {}) };
+        if (content) Object.assign(crystal, content, { lastTrainedAt: content.lastTrainedAt ? new Date(content.lastTrainedAt) : null });
 				if (set.name !== undefined) crystal.name = set.name;
 				if (set.emoji !== undefined) crystal.emoji = set.emoji;
 				if (set.shared !== undefined) crystal.shared = set.shared;
@@ -516,6 +529,7 @@ export const updateAlgorithm = async (
 					} as any,
 					{
 						$set: {
+							...placement,
 							crystal,
 							extended,
 							tags,
@@ -523,7 +537,7 @@ export const updateAlgorithm = async (
 							storageClass: 'content',
 							sizeBytes,
 							storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
-							updatedAt: set.updatedAt
+							updatedAt: placement.updatedAt ?? set.updatedAt
 						}
 					},
 					{ session }
@@ -533,6 +547,7 @@ export const updateAlgorithm = async (
 				}
 				updatedDoc = algorithmThingToDoc({
 					...before,
+					...placement,
 					crystal,
 					extended,
 					tags,
@@ -540,8 +555,9 @@ export const updateAlgorithm = async (
 					storageClass: 'content',
 					sizeBytes,
 					storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
-					updatedAt: set.updatedAt
+					updatedAt: placement.updatedAt ?? set.updatedAt
 				});
+        await boundary.afterWrite?.(await things.findOne({ _id: before._id, ownerId } as any, { session }), session);
 			});
   } else {
 			const things = await getThingsCollection();
@@ -552,11 +568,14 @@ export const updateAlgorithm = async (
 				if (!before) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
 				}
+				await boundary.beforeWrite?.(null, before, session);
+				if (boundary.folderId !== undefined) throw new StorageMutationError(409, 'storage_conflict', 'Legacy algorithms must be migrated before library placement can change');
 				const write = await algorithms.updateOne({ _id: before._id, ownerId, updatedAt: before.updatedAt } as any, { $set: set }, { session });
 				if (write.matchedCount === 0) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
 				}
 				updatedDoc = { ...before, ...set };
+        await boundary.afterWrite?.(updatedDoc, session);
 			});
 		}
 	} catch (error) {
@@ -567,7 +586,7 @@ export const updateAlgorithm = async (
 	return { ok: true, algorithm: await toPublicAlgorithm(updatedDoc || { ...doc, ...set }) };
 };
 
-export const deleteAlgorithm = async (ownerId: string, shareId: unknown): Promise<Fail | { ok: true }> => {
+export const deleteAlgorithm = async (ownerId: string, shareId: unknown, boundary: AlgorithmMutationBoundary = {}): Promise<Fail | { ok: true }> => {
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Algorithm id is required');
   const id = shareId.trim();
 
@@ -580,7 +599,10 @@ export const deleteAlgorithm = async (ownerId: string, shareId: unknown): Promis
 	let deletedLegacy = false;
 	try {
 		await withHomeMongoTransaction(async (session) => {
-			const legacy = await algorithms.findOne({ shareId: id, ownerId } as any, { projection: { _id: 1 }, session });
+			const legacy = await algorithms.findOne({ shareId: id, ownerId } as any, { ...(!boundary.beforeWrite ? { projection: { _id: 1 } } : {}), session });
+      if (boundary.beforeWrite) await boundary.beforeWrite(
+        await things.findOne({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any, { session }), legacy, session
+      );
 			if (legacy) await assertLegacyAlgorithmMutationAllowed(ownerId, things, session);
 			const before = await things.findOneAndDelete({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any, { session });
 			const legacyRes = await algorithms.deleteOne({ shareId: id, ownerId } as any, { session });
@@ -589,6 +611,10 @@ export const deleteAlgorithm = async (ownerId: string, shareId: unknown): Promis
 				if (exactBytes === null) await markUserStorageNeedsReconcile(ownerId, session);
 				else await applyUserStorageDelta(ownerId, -exactBytes, session);
 			}
+      if (before || legacyRes.deletedCount > 0) {
+        await clearUserActiveFeedAlgorithm(String(ownerId), id, session);
+        await boundary.afterWrite?.(null, session);
+      }
 			deletedThing = !!before;
 			deletedLegacy = legacyRes.deletedCount > 0;
 		});
@@ -599,25 +625,24 @@ export const deleteAlgorithm = async (ownerId: string, shareId: unknown): Promis
 	}
 	if (!deletedThing && !deletedLegacy) return fail(404, 'Algorithm not found');
 
-  // don't leave the owner's active algorithm dangling at a deleted id — the
-  // users-store layout (secure blob, either era) is owned by auth/users
-  await clearUserActiveFeedAlgorithm(String(ownerId), id);
+  // Active selection was cleared by auth/users in the same transaction.
+  // The secure users-store layout stays owned by that module.
   // orphaned branches keep working — parentId is lineage metadata, not a live link
   return { ok: true };
 };
 
-export const setActiveAlgorithm = async (ownerId: string, algorithmId: unknown): Promise<Fail | { ok: true; activeAlgorithmId: string | null }> => {
+export const setActiveAlgorithm = async (ownerId: string, algorithmId: unknown, options: { session?: ClientSession; expectedVersion?: string } = {}): Promise<Fail | { ok: true; activeAlgorithmId: string | null }> => {
   if (algorithmId === null || algorithmId === undefined || algorithmId === '') {
-    await setUserActiveFeedAlgorithm(ownerId, null);
+    await setUserActiveFeedAlgorithm(ownerId, null, options);
     return { ok: true, activeAlgorithmId: null };
   }
   if (isDefaultAlgorithm(algorithmId)) {
-    await setUserActiveFeedAlgorithm(ownerId, algorithmId);
+    await setUserActiveFeedAlgorithm(ownerId, algorithmId, options);
     return { ok: true, activeAlgorithmId: algorithmId };
   }
-  const doc = await findOwnedAlgorithm(ownerId, algorithmId);
+  const doc = await findOwnedAlgorithm(ownerId, algorithmId, options.session);
   if (!doc) return fail(404, 'Algorithm not found');
-  await setUserActiveFeedAlgorithm(ownerId, doc.shareId);
+  await setUserActiveFeedAlgorithm(ownerId, doc.shareId, options);
   return { ok: true, activeAlgorithmId: doc.shareId };
 };
 

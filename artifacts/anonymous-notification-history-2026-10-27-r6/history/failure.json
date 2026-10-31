@@ -1,0 +1,125 @@
+{
+  "message": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByText(/Showing previously downloaded account history/) to be visible\n",
+  "url": "http://127.0.0.1:18724/notifications?source=account&q=History+retained+item",
+  "input": "History retained item",
+  "body": "👨‍💻\n🦄\nLogin\n🌈\n🦄\n\nOffline account workspace. Local edits are available; account sync is paused until your session is verified.\n\nReconnect\nReview sync\n\nTHINGTIME · EVERYTHING THAT REACHED YOU 🔔\n\nNotifications 🔔\nSettings ⚙️\n\nLopu messages saved in this workspace on this device. Search them even when you are offline.\n\nOn this device\n\nAccount messages sync after your login is verified.\n\nAll\n🤝 Social\n💬 Engagement\n📰 Feed\n⚙️ System\nAll types\n🤝 Friend requests\n💚 Request accepted\n👀 New followers\n👥 Groups\n🙋 Join requests (mods)\n🎉 Join requests accepted\n🎩 Subspace roles\n🚫 Subspace bans\n💬 Comments\n↩️ Replies\n🤣 Reactions\n🔁 Shares\n📣 Mentions\n🧹 Posts removed by mods\n🚩 Reports (mods)\n📰 Posts from people you follow\n🫶 Posts from friends\n⚡ Action runs\n🦄 Recording reminders\n⏰ Lopu reminders\n🦄 New Lopu messages\n🗝️ Successful sign-ins\n🦄 Lopu messages\nUnread only\n\nFrom\n\nTo\n\nReset filters ✕\n\n0 notifications match · 0 unread\n\nMark all read ✓\n\n🔍\n\nNothing matches these filters\n\nLoosen a filter or clear them all.\n\nClear filters\n\nDevice history uses browser storage. Clearing site data removes these local copies.\n\n✉️\nCONTACT\n\nconnect@thingtime.com\n\nSupport Thingtime\n\n© 2026 Thingtime\n\n🌱 git/unknown\nCurrent Tab\n\nNitro API: status unavailable\n\nFrontend: status unavailable\n\nMongoDB: status unavailable\n\n🌈\n🦄\n🧙‍♂️\n📖\nDOCS\n\nLegal policies & terms\n\nDocs home\n\nDesign mockups\n\nDesign system\n\n🌈\nACCOUNT\n\nLog in\n\nRegister\n\n🦄",
+  "errors": [],
+  "historyRequests": [
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?history=1&types=system-message",
+      "status": 200
+    },
+    {
+      "query": "?history=1&limit=30&withTotal=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?history=1&limit=30&withTotal=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=30&history=1&cursor=eyJjcmVhdGVkQXQiOiIyMDI2LTEwLTI2VDIzOjMwOjQ5LjY3M1oiLCJzaGFyZUlkIjoibm90aWZpY2F0aW9uLW1lc3NhZ2UtYTNlZmMwNjJjMGNjZmZhOWE4NmFjYzk1ZmQwMTk3MDhiZTAyNzgyYzIzY2UyYzJlNTVhMjIwZjRhODRkZmEzMCJ9&withTotal=1",
+      "status": 200
+    },
+    {
+      "query": "?limit=30&history=1&cursor=eyJjcmVhdGVkQXQiOiIyMDI2LTEwLTI2VDIzOjMwOjQ5LjY3M1oiLCJzaGFyZUlkIjoibm90aWZpY2F0aW9uLW1lc3NhZ2UtYTNlZmMwNjJjMGNjZmZhOWE4NmFjYzk1ZmQwMTk3MDhiZTAyNzgyYzIzY2UyYzJlNTVhMjIwZjRhODRkZmEzMCJ9&withTotal=1",
+      "status": 200
+    },
+    {
+      "query": "?history=1&limit=30&withTotal=1&q=History+retained+item+29",
+      "status": 200
+    },
+    {
+      "query": "?history=1&limit=30&withTotal=1&q=History+retained+item+30",
+      "status": 200
+    },
+    {
+      "query": "?limit=1",
+      "status": 200
+    },
+    {
+      "query": "?history=1&limit=30&withTotal=1&q=History+retained+item+27",
+      "status": 200
+    },
+    {
+      "query": "?history=1&limit=30&withTotal=1&q=History+retained+item+28",
+      "status": 403
+    },
+    {
+      "query": "?history=1&limit=30&withTotal=1&q=History+retained+item",
+      "status": 200
+    },
+    {
+      "query": "?limit=30&history=1&cursor=eyJjcmVhdGVkQXQiOiIyMDI2LTEwLTI2VDIzOjMwOjQ5LjY1NloiLCJzaGFyZUlkIjoibm90aWZpY2F0aW9uLW1lc3NhZ2UtYTE2ODRmZjI0MTUyMWE1ZWM0YzlkMTkxZGE5ZWY3MzJjNzRjMDJlMTM3ZjVmNGMyM2EwNjZlZWE3NmQ4NDNiNyJ9&withTotal=1&q=History+retained+item",
+      "status": 200
+    }
+  ],
+  "sentEventIds": [
+    "27bf0efe-c6a7-4430-a644-7886faf4cf5c",
+    "27bf0efe-c6a7-4430-a644-7886faf4cf5c"
+  ]
+}

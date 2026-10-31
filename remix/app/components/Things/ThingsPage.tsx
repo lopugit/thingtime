@@ -1,4 +1,9 @@
-import { BUILDER_THING_KIND } from '~/schemas/builderThing';
+import { CharacterWorkspacePicker } from '../Characters/CharacterContentScope';
+import { useCharacterContentPath } from '../Characters/CharacterScope';
+import { useDataPlane } from '~/hooks/useDataPlane';
+import { LocalApiView, useLocalApiView } from '~/local-workspace/LocalApiView';
+import { useWorkspaceScope } from '~/hooks/useWorkspaceScope';
+import { LOCAL_WORKSPACE_CHANGED } from '~/local-workspace/runtime.client';
 import { UnfiledAttachmentsPage } from './UnfiledAttachmentsPage';
 import { ActivityManagerPage } from '~/components/Activity/ActivityManagerPage';
 import { DeviceSyncPanel, DeviceSyncedFilesPage } from '~/components/Devices/DeviceSyncBrowser';
@@ -8,7 +13,7 @@ import { isManagedLibraryThing, isTopLevelLibraryThing } from './thingsCore';
 import { FilesystemThingsPage } from './FilesystemThingsBrowser';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { transferIntent } from '~/utils/thingTransfer/intent';
-import { thingBrowseHref, readThingsLocation, writeThingsLocation, type ThingsLocationState } from './thingsLocation';
+import { readThingsLocation, writeThingsLocation, thingBrowseHref, thingInspectHref, readLibraryDestination, homeLibraryHref, type ThingsLocationState } from './thingsLocation';
 
 import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, MenuDivider, MenuOptionGroup, MenuItemOption, Portal, Text } from '@chakra-ui/react';
 import { ArrowUpDown, Columns3, Eye, FolderDown, LayoutGrid, Layers, Plus, Rows3, Settings, Search as SearchIcon, Tag, X } from 'lucide-react';
@@ -38,6 +43,7 @@ import type { ThingContextMenuAction } from '~/components/Thingtime/ContextMenu/
 import { useThingContextMenu } from '~/components/Thingtime/ContextMenu/useThingContextMenu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
 
@@ -67,10 +73,7 @@ import {
   thingDisplayName,
   thingRenameCrystal,
   thingShareLink,
-  thingOpenHref,
-  thingBuilderHref,
-  thingLiveHref,
-  thingsCacheKey
+  thingsWorkspaceCacheKey,
 } from './thingsCore';
 import type {
 	ThingsCache,
@@ -146,21 +149,35 @@ const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
 
 export const ThingsPage = ({ builderMode = false }: { builderMode?: boolean }) => {
   const [params] = useSearchParams();
-  if (!builderMode && params.get('activity') === '1') return <ActivityManagerPage />;
-  if (!builderMode && params.get('unfiled') === 'attachments') return <UnfiledAttachmentsPage />;
+  const user = useWorkspaceUser();
+  const destination = readLibraryDestination(params, user);
+  if (params.get('activity') === '1') return <ActivityManagerPage />;
+  if (params.get('unfiled') === 'attachments') return <UnfiledAttachmentsPage />;
   const folder = params.get('folder');
-  return !builderMode && folder?.startsWith('timeline-folder-') ? <TimelineLibrary folderId={folder} storage={params.get('historyStorage') === 'home' ? 'home' : 'selected'} /> : <ThingsPageContents builderMode={builderMode} key={builderMode ? `${folder || 'root'}:${params.get('kind') || 'apps'}` : undefined} />;
+  if (destination === 'invalid') return <Box p={6} pt="100px"><Text role="alert">This library link does not match the current account workspace.</Text><Button as={RouterLink} to="/things" mt={3}>Open current library</Button></Box>;
+  return <LocalApiView.Provider value={destination === 'home' ? { localPlane: 'home' } : {}}>{folder?.startsWith('timeline-folder-') ? <TimelineLibrary folderId={folder} storage={destination === 'home' || params.get('historyStorage') === 'home' ? 'home' : 'selected'} /> : <ThingsPageContents />}</LocalApiView.Provider>;
 };
 
 const ThingsPageContents = ({ builderMode = false }: { builderMode?: boolean }) => {
   const [params] = useSearchParams();
-  return !builderMode && params.has("files") ? <FilesystemThingsPage /> : !builderMode && params.get("deviceFiles") && !params.get("folder") ? <DeviceSyncedFilesPage deviceId={params.get("deviceFiles")!} /> : <ThingsLibraryPage builderMode={builderMode} />;
+  const scope = useWorkspaceScope();
+  const view = useLocalApiView();
+  // Device surfaces read the account plane, so the local-first home view falls
+  // through to the library instead of opening the synced-file browser.
+  return params.has("files") && !view.localPlane ? <FilesystemThingsPage /> : params.get("deviceFiles") && !params.get("folder") && !view.localPlane ? <DeviceSyncedFilesPage deviceId={params.get("deviceFiles")!} /> : <ThingsLibraryPage key={`${scope}:${view.localPlane || "selected"}`} />;
 };
 
-const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) => {
-  const user = useCurrentUser();
+const ThingsLibraryPage = () => {
+  const contentPath = useCharacterContentPath();
+  const scope = useWorkspaceScope();
+  const localView = useLocalApiView();
+  const homeView = localView.localPlane === "home";
+  const selectedPlane = useDataPlane();
+  const destinationKey = JSON.stringify([scope, localView.localPlane || "selected"]);
+  const user = useWorkspaceUser();
+  const authenticatedUser = useCurrentUser();
   const [importOpen, setImportOpen] = useState(false);
-  const [importBundle, setImportBundle] = useState<TransferBundle | null>(null);
+  const [importBundle, setImportBundle] = useState<TransferBundle<Uint8Array | Blob> | null>(null);
   const [importDestination, setImportDestination] = useState<string | null>(null);
   const [exportIds, setExportIds] = useState<string[]>([]);
   const transferOperation = useRef<AbortController | null>(null);
@@ -188,7 +205,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
 
   const folderId = searchParams.get('folder') || null;
   const previewParam = searchParams.get('preview') || null;
-	const deviceParam = searchParams.get('device') || null;
+	const deviceParam = homeView ? null : searchParams.get('device') || null;
 	const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
 	const devicePageMode = Boolean(deviceParam && searchParams.get('deviceView') === 'page');
 	const deviceSyncMode = Boolean(deviceParam && searchParams.get('deviceView') === 'sync');
@@ -196,7 +213,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
 
   const archive = useAttachmentArchive();
 
-	const devicesEnabled = !builderMode && Boolean(user && user.accountKind === 'user' && !user.temporary);
+	const devicesEnabled = Boolean(!homeView && authenticatedUser && authenticatedUser.id === user?.id && authenticatedUser.accountKind === 'user' && !authenticatedUser.temporary);
 	const deviceStore = useDeviceStore({
 		userId: user?.id,
 		selectedDeviceId: deviceParam,
@@ -218,7 +235,8 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
 	const localDeviceControlFor = localNode.controlFor;
 	const executeLocalDeviceAction = localNode.executeAction;
 
-  const cacheKey = builderMode ? `tt-builder-things-v1-${user?.id || 'anon'}-${folderId || 'root'}-${searchParams.get('kind') || 'apps'}` : thingsCacheKey(user?.id);
+  // Never seed a destination with the ambiguous legacy account-only cache.
+  const cacheKey = thingsWorkspaceCacheKey(scope, localView.localPlane);
   const cached = useMemo(() => readLocalCache<ThingsCache>(cacheKey), [cacheKey]);
 
   const locationState = readThingsLocation(searchParams, cached);
@@ -297,7 +315,10 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
   const [searchResults, setSearchResults] = useState<ThingsThing[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [searchCursor, setSearchCursor] = useState<string | null>(null);
-  const [searchingMore, setSearchingMore] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchIncomplete, setSearchIncomplete] = useState(false);
+  const searchRequest = useRef(0);
+  const searchAbort = useRef<AbortController | null>(null);
   // bumped after mutations (duplicate) so an active search re-fetches and the
   // fresh copies appear in the results the user is actually looking at
   const [searchSeq, setSearchSeq] = useState(0);
@@ -305,7 +326,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const anchorRef = useRef<string | null>(null);
   const [clipboard, setClipboard] = useState<ThingsClipboard>(() => {
-    const cut = transferIntent.peek(user?.id);
+    const cut = transferIntent.peek(user?.id, destinationKey);
     return cut ? { mode: 'cut', ids: [...cut.ids] } : null;
   });
 
@@ -429,6 +450,22 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     if (currentKey !== 'root') ensureLoaded(null);
   }, [user?.id, folderId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sync conflict choices and other tabs mutate the same local workspace.
+  // Refresh visible folders as well as search, retaining their current paint.
+  useEffect(() => {
+    if (!user?.id) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        void fetchFolder(folderId);
+        if (folderId) void fetchFolder(null);
+      }, 0);
+    };
+    window.addEventListener(LOCAL_WORKSPACE_CHANGED, refresh);
+    return () => { clearTimeout(timer); window.removeEventListener(LOCAL_WORKSPACE_CHANGED, refresh); };
+  }, [user?.id, folderId, fetchFolder]);
+
   // deep-linked folder (?folder=) whose ancestry we haven't met yet — resolve
   // folder names upward so breadcrumbs/columns stay honest, cycle-safe
   useEffect(() => {
@@ -485,71 +522,59 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewParam]);
 
-  // deep search across every folder (server-side, own things)
-  useEffect(() => {
+  // Search the current workspace first; a confirmed account can refresh its
+  // owned remote results without replacing the local view with a blank screen.
+  const fetchSearch = useCallback(async (cursor?: string) => {
     const query = q.trim();
-    if (!user || !query) {
-      setSearchResults(null);
+    if (!user?.id || !query) return;
+    const seq = ++searchRequest.current;
+    searchAbort.current?.abort();
+    const controller = new AbortController(); searchAbort.current = controller;
+    setSearching(true); setSearchError(null);
+    let refreshed = false, refreshFailed = false;
+    const accept = (resp: any) => {
+      if (seq !== searchRequest.current || controller.signal.aborted) return;
+      if (resp?.ok === false) throw new Error(resp.error || 'Could not search your Things.');
+      setSearchResults(previous => cursor ? dedupeById([...(previous || []), ...(resp.things || [])]) : resp.things || []);
+      setSearchCursor(resp.nextCursor || null); setSearchIncomplete(!!resp.incomplete);
+      setSearching(!!resp.refreshing);
+    };
+    const failed = (error: any) => {
+      if (seq !== searchRequest.current || controller.signal.aborted) return;
+      setSearchError(error?.message || error?.error || 'Could not search your Things. Please retry.');
       setSearching(false);
-      setSearchCursor(null);
+    };
+    try {
+      // A signed-in account without a resolved data plane gets the plain remote
+      // facade, which has no owner to pin — keep sending the account scope so
+      // the library never widens into other authors' public Things. Local-only
+      // and offline workspaces are already single-owner and refuse the filter.
+      const result = await apiRef.current.v1.things.search({ q: query, workspace: true,
+        author: user.localOnly || user.offline ? undefined : user.username,
+        thingtime: kindFilter === 'all' ? undefined : kindFilter, limit: PAGE_SIZE, cursor },
+        { signal: controller.signal, onRefresh: (resp: any) => { refreshed = true; accept(resp); }, onError: (error: unknown) => { refreshFailed = true; failed(error); } });
+      if (!refreshed) accept(refreshFailed ? { ...result, refreshing: false } : result);
+    } catch (error) { failed(error); }
+  }, [q, kindFilter, user?.id, user?.username, user?.offline, user?.localOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!q.trim() || !user?.id) {
+      setSearchResults(null); setSearchCursor(null); setSearchError(null); setSearchIncomplete(false); setSearching(false);
       return;
     }
-    let cancelled = false;
-    setSearching(true);
-    setSearchCursor(null);
-    setSearchingMore(false);
-    const timer = setTimeout(async () => {
-      try {
-        const resp = await apiRef.current.v1.things.search({
-          q: query,
-          author: user.username,
-          thingtime: kindFilter === 'apps' ? 'folder' : kindFilter === 'all' ? undefined : kindFilter,
-          ...(builderMode || kindFilter === 'apps' ? { conditions: [
-            ...(folderId ? [{ field: 'folderId', op: 'eq', value: folderId }] : []),
-            ...(kindFilter === 'apps' ? [{ field: 'builderApp', op: 'eq', value: true }, { field: 'folderId', op: 'eq', value: null }] : [])
-          ] } : {}),
-          limit: PAGE_SIZE
-        });
-        if (cancelled) return;
-        setSearchResults(resp?.things || []);
-        setSearchCursor(builderMode ? resp?.nextCursor || null : null);
-      } catch {
-        if (!cancelled) { setSearchResults([]); setSearchCursor(null); }
-      } finally {
-        if (!cancelled) setSearching(false);
-      }
-    }, 350);
+    const requests = searchRequest, abort = searchAbort;
+    const timer = setTimeout(() => void fetchSearch(), 350);
+    return () => { clearTimeout(timer); requests.current++; abort.current?.abort(); };
+  }, [fetchSearch, searchSeq, q, user?.id]);
+  useEffect(() => {
+    const refresh = () => setSearchSeq(seq => seq + 1);
+    window.addEventListener(LOCAL_WORKSPACE_CHANGED, refresh);
+    window.addEventListener('online', refresh); window.addEventListener('offline', refresh);
     return () => {
-      cancelled = true;
-      clearTimeout(timer);
+      window.removeEventListener(LOCAL_WORKSPACE_CHANGED, refresh);
+      window.removeEventListener('online', refresh); window.removeEventListener('offline', refresh);
     };
-  }, [q, kindFilter, searchSeq, user?.id, user?.username, builderMode, folderId]);
-
-  const searchIdentity = `${user?.id || ''}:${q}:${kindFilter}:${folderId || ''}:${searchSeq}`;
-  const searchIdentityRef = useRef(searchIdentity);
-  searchIdentityRef.current = searchIdentity;
-  const loadMoreBuilderSearch = async () => {
-    if (!builderMode || !searchCursor || searchingMore || !user) return;
-    const identity = searchIdentity;
-    setSearchingMore(true);
-    try {
-      const resp = await apiRef.current.v1.things.search({
-        q: q.trim(), author: user.username,
-        thingtime: kindFilter === 'apps' ? 'folder' : kindFilter === 'all' ? undefined : kindFilter,
-        conditions: [
-          ...(folderId ? [{ field: 'folderId', op: 'eq', value: folderId }] : []),
-          ...(kindFilter === 'apps' ? [{ field: 'builderApp', op: 'eq', value: true }, { field: 'folderId', op: 'eq', value: null }] : [])
-        ],
-        cursor: searchCursor, limit: PAGE_SIZE
-      });
-      if (searchIdentityRef.current !== identity) return;
-      if (!resp?.ok) throw new Error(resp?.error || 'Could not load more results.');
-      setSearchResults(previous => dedupeById([...(previous || []), ...(resp.things || [])]));
-      setSearchCursor(resp.nextCursor || null);
-    } catch (failure) {
-      if (searchIdentityRef.current === identity) lopuRef.current({ title: 'Could not load more results', description: failure instanceof Error ? failure.message : undefined, status: 'error' });
-    } finally { if (searchIdentityRef.current === identity) setSearchingMore(false); }
-  };
+  }, []);
 
   // persist the optimistic seed (writeLocalCache swallows quota errors)
   useEffect(() => {
@@ -779,9 +804,9 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
         navigateToFolder(thing.id);
         return;
       }
-      navigate(thingOpenHref(thing, 'things', user?.id));
+      navigate(thingBrowseHref(thing, searchParams.toString()));
     },
-    [navigate, navigateToFolder, user?.id]
+    [navigate, navigateToFolder, searchParams]
   );
 
   const toggleSelect = useCallback((thing: ThingsThing) => {
@@ -826,10 +851,10 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
       const controller = new AbortController();
       transferOperation.current = controller;
       const ownerId = recordingOwner.current;
-      const ticket = transferIntent.ticket(ownerId);
+      const ticket = transferIntent.ticket(ownerId, destinationKey);
       const bundle = apiRef.current.v1.things.export({ ids }, { signal: controller.signal }).then(async (result) => {
         if (!result?.ok) throw new Error(result?.error || 'Export failed');
-        const value = await bundleFromPlan(result.plan, { signal: controller.signal });
+        const value = await bundleFromPlan(result.plan, { originalStream: true, signal: controller.signal });
         controller.signal.throwIfAborted();
         return value;
       });
@@ -842,13 +867,13 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
         } else transferIntent.clear();
         setClipboard({ mode, ids });
         lopuRef.current({ title: mode === 'copy' ? `Copied ${ids.length} 📋` : `Cut ${ids.length} ✂️`,
-          description: 'Copied portable content to your clipboard. Paste in Things to import; cut moves only within this account.', status: 'success' });
+          description: 'Copied portable content to your clipboard. Paste in Things to import; cut moves only within this workspace.', status: 'success' });
       }).catch((error) => {
         const cancelled = controller.signal.aborted;
         controller.abort();
         if (!cancelled && recordingOwner.current === ownerId) lopuRef.current({ title: 'Could not copy', description: error instanceof Error ? error.message : 'Use Download instead.', status: 'error' });
       });
-	}, []);
+	}, [destinationKey]);
 
 	const runBulk = useCallback(async (op: 'move' | 'copy' | 'delete', ids: string[], destination?: string | null) => {
       try {
@@ -897,7 +922,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
         if (text.length > MAX_CLIPBOARD_BYTES) throw new Error('Clipboard content is too large. Import the ZIP file instead.');
         const digest = await transferChecksum(new TextEncoder().encode(text));
         if (controller.signal.aborted || recordingOwner.current !== ownerId) return;
-        const cut = transferIntent.match(ownerId, digest);
+        const cut = transferIntent.match(ownerId, digest, destinationKey);
         if (cut) {
           const ids = [...cut.ids];
           const result = await runBulk('move', ids, destination);
@@ -917,7 +942,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
         if (!controller.signal.aborted && recordingOwner.current === ownerId) lopuRef.current({ title: 'Could not paste', description: error instanceof Error ? error.message : 'Choose a Thingtime transfer file instead.', status: 'error' });
       }
     },
-    [refreshAfterMutation, runBulk, sourceKeysOf, summarize]
+    [destinationKey, refreshAfterMutation, runBulk, sourceKeysOf, summarize]
   );
 
   const pasteClipboard = useCallback(() => pasteClipboardTo(folderId), [folderId, pasteClipboardTo]);
@@ -1080,8 +1105,8 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
         setFolderMeta((prev) => ({ ...prev, [thing.id]: { ...(prev[thing.id] || { folderId: thing.folderId }), name } }));
       }
       try {
-        const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-        await requireThingtimeCapability('api.things', '1.27.0');
+        // The selected adapter validates local writes and negotiates remote
+        // capabilities only when it actually sends an account request.
         const response = isManagedLibraryThing(thing)
           ? await apiRef.current.v1.things.renameLibrary({ id: thing.id, displayTitle: name, expectedUpdatedAt: thing.updatedAt })
           : thing.thingtime.includes('attachment')
@@ -1150,7 +1175,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
   }, [folderId, navigate]);
 
   const copyLink = useCallback(async (thing: ThingsThing) => {
-    const url = `${window.location.origin}${thingShareLink(thing)}`;
+    const url = `${window.location.origin}${homeView ? thingBrowseHref(thing, searchParams.toString()) : thingShareLink(thing)}`;
     try {
       await navigator.clipboard.writeText(url);
       lopuRef.current({
@@ -1162,11 +1187,15 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     } catch {
       lopuRef.current({ title: 'Couldn’t copy the link', description: url, status: 'error' });
     }
-  }, []);
+  }, [homeView, searchParams]);
 
   const sendRecording = useCallback(async (thing: ThingsThing) => {
     const ownerId = recordingOwner.current;
     if (!ownerId || recordingHandoffBusy.current) return;
+    if (homeView && selectedPlane !== 'home') {
+      lopuRef.current({ title: 'Select home before sending this recording', description: 'Local home browsing does not change the connected database.', status: 'error' });
+      return;
+    }
     recordingHandoffBusy.current = true;
     try {
       const sent = await sendRecordingThingToLopu(thing, ownerId, {
@@ -1179,18 +1208,17 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
       if (recordingOwner.current === ownerId) lopuRef.current({ title: 'Recording needs attention',
         description: error instanceof Error ? error.message : 'Check Recording activity before retrying.', status: 'error', link: { label: 'Recording settings', href: '/lopu/recordings' } });
     } finally { recordingHandoffBusy.current = false; }
-  }, []);
+  }, [homeView, selectedPlane]);
 
   const onItemAction = useCallback(
     (thing: ThingsThing, action: ThingsItemAction) => {
+      if (homeView && selectedPlane !== 'home' && ['download-archive', 'share-download-link'].includes(action)) {
+        lopuRef.current({ title: 'Select home for account download links', description: 'Use Download for a portable device copy.', status: 'error' });
+        return;
+      }
       const group = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
       switch (action) {
-        case 'history': openThingHistory(thing.id, thing.thingtime); break;
-        case 'open-builder': { const href = thingBuilderHref(thing, user?.id); if (href) navigate(href); break; }
-        case 'open-live': { const href = thingLiveHref(thing); if (href) navigate(href); break; }
-        case 'edit-definition':
-          if (builderMode && thing.thingtime.includes('component') && thing.author?.id === user?.id) setDefinitionThingId(thing.id);
-          break;
+        case 'history': openThingHistory(thing.id, thing.thingtime, homeView ? 'home' : undefined); break;
         case 'download':
           setExportIds(group.map((entry) => entry.id));
           break;
@@ -1210,7 +1238,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
           setPreviewThing(thing);
           break;
         case 'inspect':
-          navigate(`/thing/${encodeURIComponent(thing.id)}`);
+          navigate(thingInspectHref(thing.id, searchParams.toString()));
           break;
         case 'paste-into':
           pasteClipboardTo(thing.id);
@@ -1253,7 +1281,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
           break;
       }
     },
-    [archive, copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo, builderMode, user?.id]
+    [archive, copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo, homeView, selectedPlane, searchParams]
   );
 
   // ------------------------------------------------------------------ drag & drop
@@ -1359,10 +1387,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     ({ action }: ThingContextMenuAction) => {
       if (!menuThing) return;
       switch (action.command) {
-        case 'history': openThingHistory(menuThing.id, menuThing.thingtime); break;
-        case 'open-builder':
-        case 'open-live': onItemAction(menuThing, action.command); break;
-        case 'edit-definition': onItemAction(menuThing, 'edit-definition'); break;
+        case 'history': openThingHistory(menuThing.id, menuThing.thingtime, homeView ? 'home' : undefined); break;
         case 'download':
           onItemAction(menuThing, 'download');
           break;
@@ -1380,7 +1405,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
           setPreviewThing(menuThing);
           break;
         case 'inspect':
-          navigate(`/thing/${encodeURIComponent(menuThing.id)}`);
+          onItemAction(menuThing, 'inspect');
           break;
         case 'copy-link':
           copyLink(menuThing);
@@ -1412,7 +1437,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
           break;
       }
     },
-    [copyLink, menuThing, onItemAction, openThing, pasteClipboardTo]
+    [copyLink, menuThing, onItemAction, openThing, pasteClipboardTo, homeView]
   );
 
   const backgroundMenuModel = useMemo(
@@ -1658,11 +1683,17 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
     >
       <Flex direction="column" gap={4} maxWidth="100%" paddingTop={[4, 6]} paddingX={4} width={['100%', '100%', '1100px']}
         style={{ boxSizing: 'border-box', minWidth: 0, paddingInline: 16 }}>
+        <CharacterWorkspacePicker />
         <Flex alignItems="baseline" gap={3} wrap="wrap">
-          <Text {...monoLabel}>Thingtime · {builderMode ? 'Builder' : 'Things'}</Text>
-          {builderMode ? <Button as={RouterLink} to="/things" size="sm" variant="ghost">All Things</Button> : <Button as={RouterLink} to="/things?files=thingtime" size="sm" variant="ghost">Browse files</Button>}
-          {!builderMode && !folderId && !searchMode ? <Button as={RouterLink} to="/things?unfiled=attachments" size="sm" variant="outline" minHeight="44px">Unfiled files</Button> : null}
+          <Text {...monoLabel}>Thingtime · Things</Text>
+          <Button as={RouterLink} to={contentPath("/things?files=thingtime")} size="sm" variant="ghost">Browse files</Button>
+          {!folderId && !searchMode ? <Button as={RouterLink} to={contentPath("/things?unfiled=attachments")} size="sm" variant="outline" minHeight="44px">Unfiled files</Button> : null}
+          {user && !user.localOnly ? <Flex gap={2} wrap="wrap" aria-label="Library storage">
+            <Button as={RouterLink} to={contentPath("/things")} size="sm" variant={homeView ? 'outline' : 'solid'} aria-pressed={!homeView}>Selected library</Button>
+            <Button as={RouterLink} to={contentPath(homeLibraryHref(user.id))} size="sm" variant={homeView ? 'solid' : 'outline'} aria-pressed={homeView}>Home library</Button>
+          </Flex> : null}
         </Flex>
+        {homeView ? <Text fontSize="sm">Home library on this device. Local edits and imports finish here; account sync runs separately when its matching connection is available.</Text> : null}
         <Flex alignItems="center" gap={3} wrap="wrap">
           <Text
             as="h1"
@@ -1703,16 +1734,12 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
             </MenuButton>
             <Portal>
               <MenuList fontSize="13px" zIndex={10250}>
-                {builderMode && !folderId ? <MenuItem onClick={() => setBuilderAppDialog('new')}>New app</MenuItem> : null}
-                {builderMode ? <MenuItem onClick={() => void createBuilderPage()}>New page</MenuItem> : null}
-                {builderMode ? <MenuItem as={RouterLink} to="/components">New component</MenuItem> : null}
-                {builderMode ? <MenuItem as={RouterLink} to="/actions">New action</MenuItem> : null}
-                {(!builderMode || folderId) && <MenuItem onClick={() => openNewFolder(folderId)}>📁 New folder</MenuItem>}
-              {!builderMode && <MenuItem as={RouterLink} to="/feed">
-                  📝 New post
-                </MenuItem>}
-                <MenuItem as={RouterLink} to="/schemas">
-                  💎 New data thing
+                <MenuItem onClick={() => openNewFolder(folderId)}>📁 New folder</MenuItem>
+                <MenuItem as={RouterLink} to="/feed">
+                  📝 {homeView && selectedPlane !== 'home' ? 'New post in selected library' : 'New post'}
+                </MenuItem>
+                <MenuItem as={RouterLink} to={contentPath("/schemas")}>
+                  💎 {homeView && selectedPlane !== 'home' ? 'New data in selected library' : 'New data thing'}
                 </MenuItem>
               </MenuList>
             </Portal>
@@ -1918,11 +1945,15 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
           </Flex>
         )}
         {searchMode && (
+          <Box>
           <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
 						{searching
 							? 'Searching all your folders…'
 							: `${searchResultCount} result${searchResultCount === 1 ? '' : 's'} across your things and computers`}
           </Text>
+          {searchIncomplete && <Text fontSize="sm">Showing Things saved on this device. Your account may contain more results.</Text>}
+          {searchError && <Box role="alert"><Text color="var(--tt-danger, #e5484d)" fontSize="sm">{searchError}</Text><Button size="sm" onClick={() => void fetchSearch()}>Retry search</Button></Box>}
+          </Box>
         )}
 
         <Flex alignItems="flex-start" gap={4}>
@@ -2050,7 +2081,7 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
               />
             )}
 
-						{canPaintContent && !displayItems.length && !visibleDevices.length && !searching && !deviceSurfaceLoading && (
+						{canPaintContent && !displayItems.length && !visibleDevices.length && !searching && !searchError && !deviceSurfaceLoading && (
               <Flex
                 alignItems="center"
                 border="1px dashed var(--tt-border, #ececef)"
@@ -2065,6 +2096,9 @@ const ThingsLibraryPage = ({ builderMode = false }: { builderMode?: boolean }) =
               </Flex>
             )}
 
+            {searchMode && searchCursor && <Flex justifyContent="center" paddingY={4}>
+              <Button isDisabled={searching} onClick={() => void fetchSearch(searchCursor)} size="sm" variant="outline">Load more search results</Button>
+            </Flex>}
             {!searchMode && cursors[currentKey] && view !== 'columns' && (
               <Flex justifyContent="center" paddingY={4}>
                 <Button onClick={() => fetchFolder(folderId, cursors[currentKey])} size="sm" variant="outline">

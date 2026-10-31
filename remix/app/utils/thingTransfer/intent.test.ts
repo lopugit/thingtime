@@ -59,3 +59,16 @@ test('binding a stale account during a pending identity refresh never grants cut
   assert.equal(intent.ticket('old-owner'), null);
   identity.confirm(1); assert.equal(intent.ticket('old-owner'), null); unbind();
 });
+
+
+test('cut intent cannot move a same-ID Thing in a different local destination', () => {
+  const session = createTransferIntent(); session.account('owner');
+  session.record(session.ticket('owner', 'custom-library'), 'digest', ['same-id']);
+  assert.equal(session.peek('owner', 'home-library'), null);
+  assert.equal(session.match('owner', 'digest', 'home-library'), null);
+  assert.equal(session.match('owner', 'digest'), null);
+  assert.deepEqual(session.match('owner', 'digest', 'custom-library')?.ids, ['same-id']);
+  session.record(session.ticket('owner', 'home-library'), 'digest', ['same-id']);
+  assert.equal(session.match('owner', 'digest', 'custom-library'), null);
+  assert.deepEqual(session.match('owner', 'digest', 'home-library')?.ids, ['same-id']);
+});

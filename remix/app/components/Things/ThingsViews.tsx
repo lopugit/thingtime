@@ -382,8 +382,17 @@ export const ThingsGridView = ({
           transition="box-shadow 120ms ease, background 120ms ease"
           userSelect="none"
         >
-          <Box position="absolute" left={2} top={2}>
-            <ItemSelection handlers={handlers} thing={thing} />
+          <Box
+            _groupHover={{ opacity: 1 }}
+            left={2}
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+            opacity={selected || handlers.isMobile ? 1 : 0}
+            position="absolute"
+            top={2}
+            transition="opacity 120ms ease"
+          >
+            <Checkbox aria-label={`Select ${thingDisplayName(thing)}`} colorScheme="pink" isChecked={selected} onChange={() => handlers.onItemToggle(thing)} size="sm" />
           </Box>
           <Box position="absolute" right={1} top={1}>
             <ItemMenu handlers={handlers} thing={thing} />
@@ -471,6 +480,7 @@ export const ThingsListView = ({
       textTransform="uppercase"
     >
       <Checkbox
+        aria-label="Select all visible Things"
         colorScheme="pink"
         isChecked={allSelected && items.length > 0}
         isIndeterminate={!allSelected && handlers.selected.size > 0}
@@ -514,7 +524,9 @@ export const ThingsListView = ({
           userSelect="none"
         >
         <Flex alignItems="center" gap={3}>
-          <ItemSelection handlers={handlers} thing={thing} />
+          <Box onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
+            <Checkbox aria-label={`Select ${thingDisplayName(thing)}`} colorScheme="pink" isChecked={selected} onChange={() => handlers.onItemToggle(thing)} size="sm" />
+          </Box>
           <Flex alignItems="center" flex="1" gap={2} minWidth={0}>
             <ThingIconDisplay thing={thing} size={16} />
             <TitleLink fontSize="13px" fontWeight={500} handlers={handlers} noOfLines={1} thing={thing} wordBreak="break-all" />

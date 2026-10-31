@@ -1,0 +1,24 @@
+{
+  "executedFinalPackageSha256": "8068fac5dbf671c1f08811025271d19ca2619573410a9e75d41d6385a85b7d64",
+  "executedFinalSourceSha256": {
+    "remix/app/local-workspace/passwordCapacity.browser.test.ts": "05c144e976877122ca20829a3e340e655cf82bff874c682d7760d709b747e42b",
+    "remix/app/local-workspace/passwordCapacity.browser.fixture.ts": "e7f7efc6da31790e63a646f4cf529dd16900ca9d26de3e4855699694c626b4e5"
+  },
+  "executedFinalSourceReconstruction": "Current sources with exactly the two documented handling-only changes reversed. Executed bundles below are extracted directly from preserved final package.",
+  "executedFinalBundleSha256": {
+    "check/vault.test.mjs": "c029a262e171824a090b15ba1927bd5d2b7af6ae240a4b46cdde80f132af1f48",
+    "check/vault.fixture.js": "56ff898b27df5dd04f4569a8f175244222d2a0386c60cdf1aed67a5be2c96d5d"
+  },
+  "currentSourceSha256": {
+    "remix/app/local-workspace/passwordCapacity.browser.test.ts": "0cdf21f0e33349b6dd501a3b102449d3dc1a73d61ea0bfe4661ac1b9c297559f",
+    "remix/app/local-workspace/passwordCapacity.browser.fixture.ts": "3d40f6e7a2b8bfa92266ce8ea02f62f27fed18d25889b9bf6cefd36a4716a7b7"
+  },
+  "currentSourceValidation": "Scoped ESLint exit0 and bundle checks passed. Handling-only changes after final execution were not browser-rerun.",
+  "cleanPrimitiveRunPackage": {
+    "applicationTarSha256": "27644506325196f966d4b3e29b9271fda8ab5afcef6e64a8038f5ad4f986b5cf",
+    "session": "65ed75c7-bdb0-4caa-9076-364f0b166e90",
+    "origin": "http://127.0.0.1:18724",
+    "source": "current sanitized package in task tmpfs"
+  },
+  "limits": "Initial/clean-primitive package archives were overwritten by subsequent packaging; their package digest receipts are retained. Do not equate current source hashes with earlier executed package hashes."
+}

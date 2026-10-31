@@ -1,0 +1,17 @@
+{
+  "archiveSha256": "aea7f888d84c7976add09f1d1c5dff646677f086ff2d499ac39e3b466f7a4217",
+  "modulePath": "/assets/ThingTransferControls-DT4WMVmm.js",
+  "sourcemapSha256": "aefbf58e5e860f182d514e5cc852a910ae6ccc0ef63bef5c0112aef6630772a5",
+  "checks": [
+    {
+      "source": "../../app/components/Attachments/AudioAttachmentPlayer.tsx",
+      "sha256": "9a8f50ad91efe8c594f97c4d55ac1847e8a754d81b0807520eaf837d5c57b1cf",
+      "exactSourceContent": true
+    },
+    {
+      "source": "../../app/components/Attachments/audioPlaybackCache.ts",
+      "sha256": "b19b7f41f537839987d48d8d8b3a3e8f321197c409c8b0e972affc96cb866f8f",
+      "exactSourceContent": true
+    }
+  ]
+}

@@ -3,14 +3,16 @@ import { PersistedThingMenu } from '../Thingtime/ContextMenu/PersistedThingMenu'
 import React from 'react';
 import { Badge, Box, Button, Flex, Text } from '@chakra-ui/react';
 import { ArrowLeft, BookOpen, ExternalLink, Link as LinkIcon, Search } from 'lucide-react';
-import { Link, useParams } from 'react-router';
+import { Link, useParams, useNavigate } from 'react-router';
 
 import { timeAgo } from '~/components/Feed/feedTypes';
 import { RenderThing } from '~/components/Kinds';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { SchemaTemplateRender } from '~/components/Things/ThingsViews';
 import { useApi } from '~/hooks/useApi';
-import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
+import { workspaceStorageBinding, workspaceStorageIdentity, subscribeWorkspaceStorage } from '~/local-workspace/storageStatus.client';
+import { workspaceScopeKey } from '~/local-workspace/storage';
 import { clearLocalCache, pruneCacheNamespace, readStampedCache, writeStampedCache } from '~/hooks/localCache';
 import { getThingtimeSchema } from '~/schemas/registry';
 import { describeSchemaField, flattenSchemaFieldsForDisplay } from '~/schemas/tools';
@@ -39,7 +41,7 @@ import {
 // /schemas/:key — one schema on its own page. PREVIEW: the header, the full
 // field tree, the on-create shape, and the schema's render preview. LIVE: the
 // create-a-thing form inline (the same SchemaThingFormBody the browse modal
-// wraps) and "Your things with this shape" — the viewer's OWN data things of
+// wraps) and "Things on this device with this shape" — the viewer's OWN data things of
 // this schema, newest first.
 //
 // Trust: nothing on this page arms a control. A schema is a shape, not a
@@ -48,7 +50,7 @@ import {
 // sanitising-renderer path /things and /thing/:id draw a data thing with, and
 // never a click wrapper — so a stranger's render markup can never run
 // anything as the viewer. The only writes are the viewer creating their own
-// thing, sign-in gated.
+// thing in the active workspace.
 //
 // :key resolves builtin-first (builtin:<id>, the bare registry id, or the
 // seeded mirror's shareId schema-<id> all show the registry entry), then a
@@ -188,11 +190,18 @@ const OwnThingCard = ({ thing, source }: { thing: OwnThing; source: SchemaCardSo
 };
 
 export const SchemaDetailPage = () => {
+  const params = useParams();
+  const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
+  return <SchemaDetailWorkspace key={`${identity}:${params.key}`} />;
+};
+const SchemaDetailWorkspace = () => {
   const { key: rawKey } = useParams();
   const api = useApi();
   const [copyPrefill, setCopyPrefill] = React.useState<BuilderPrefill | null>(null);
   const lopu = useLopu();
-  const user = useCurrentUser();
+  const user = useWorkspaceUser(), navigate = useNavigate();
+  const binding = workspaceStorageBinding();
+  const cacheScope = binding ? JSON.stringify([workspaceScopeKey(binding.scope), 'device']) : undefined;
   const apiRef = React.useRef(api);
   apiRef.current = api;
   const lopuRef = React.useRef(lopu);
@@ -211,10 +220,10 @@ export const SchemaDetailPage = () => {
 
   // community: last-known browse entry first (viewer's own snapshot), then
   // the fetched thing reconciles it
-  const [entry, setEntry] = React.useState<BrowseSchemaEntry | null>(() => (communityId ? cachedSchemaEntry(user?.id, communityId) : null));
+  const [entry, setEntry] = React.useState<BrowseSchemaEntry | null>(() => (communityId ? cachedSchemaEntry(cacheScope, communityId) : null));
   // usage count only when the browse API told us (the thing read has none)
   const [usageCount, setUsageCount] = React.useState<number | null>(() =>
-    communityId ? (cachedSchemaEntry(user?.id, communityId)?.usageCount ?? null) : null
+    communityId ? (cachedSchemaEntry(cacheScope, communityId)?.usageCount ?? null) : null
   );
   const [notFound, setNotFound] = React.useState(!key || (!builtin && !communityId));
 
@@ -229,7 +238,7 @@ export const SchemaDetailPage = () => {
       setNotFound(!key || !builtin);
       return;
     }
-    const cached = cachedSchemaEntry(user?.id, communityId);
+    const cached = cachedSchemaEntry(cacheScope, communityId);
     setEntry(cached);
     setUsageCount(cached?.usageCount ?? null);
     setNotFound(false);
@@ -263,7 +272,7 @@ export const SchemaDetailPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [communityId, key, builtin, user?.id]);
+  }, [communityId, key, builtin, user?.id, cacheScope]);
 
   const source = React.useMemo<SchemaCardSource | null>(() => {
     if (builtin) return registryToCardSource(builtin);
@@ -290,7 +299,7 @@ export const SchemaDetailPage = () => {
 
   // ---- your things with this shape -----------------------------------------
 
-  const ownCacheKey = user?.id && source ? ownThingsCacheKey(user.id, schemaKey) : null;
+  const ownCacheKey = user?.id && source ? ownThingsCacheKey(cacheScope || user.id, schemaKey) : null;
   const [ownThings, setOwnThings] = React.useState<OwnThing[] | null>(() =>
     ownCacheKey ? readStampedCache<OwnThing[]>(ownCacheKey) : null
   );
@@ -316,10 +325,10 @@ export const SchemaDetailPage = () => {
         // crystal.schemaId (the schema thing's id), scoped to the viewer's
         // own data things, newest first
         const resp: any = await apiRef.current.v1.things.search({
-          thingtime: 'data',
-          author: user.username,
+          workspace: true, device: true,
+          thingtime: source.origin === 'builtin' ? source.id : 'data',
           mode: 'any',
-          conditions: [
+          conditions: source.origin === 'builtin' ? undefined : [
             { field: 'schema', op: 'eq', value: source.name },
             ...(source.origin === 'community' ? [{ field: 'schemaId', op: 'eq', value: source.id }] : [])
           ],
@@ -406,6 +415,7 @@ export const SchemaDetailPage = () => {
         )}
         {copyPrefill && <SchemaBuilder key={`${user?.id}:${source?.key}`} prefill={copyPrefill} onClose={() => setCopyPrefill(null)} onCreated={(thing) => {
           setCopyPrefill(null);
+          navigate(`/schemas/${encodeURIComponent(thing.id)}`);
           lopu({ title: 'Your schema copy is ready', status: 'success', link: { label: 'Open your schema', href: `/schemas/${encodeURIComponent(thing.id)}` } });
         }} />}
         {!source && !notFound && (
@@ -443,7 +453,7 @@ export const SchemaDetailPage = () => {
                 paddingX={2}
                 textTransform="none"
               >
-                {source.origin === 'builtin' ? '🏛 Platform' : '🌱 Community'}
+                {source.origin === 'builtin' ? '🏛 Platform' : '🌱 Custom'}
               </Badge>
               {usageCount !== null && usageCount > 0 && (
                 <Badge background="transparent" color="var(--tt-faint, #b6b6c0)" fontSize="10px" textTransform="none">
@@ -484,7 +494,7 @@ export const SchemaDetailPage = () => {
 
             <Flex gap={2} wrap="wrap">
               {searchable && (
-                <Button as={Link} leftIcon={<Search size={14} />} size="xs" to={schemaSearchPath(source)} variant="outline">
+                <Button as={Link} leftIcon={<Search size={14} />} size="xs" to={`${schemaSearchPath(source)}&source=device`} variant="outline">
                   Search things
                 </Button>
               )}
@@ -611,7 +621,9 @@ export const SchemaDetailPage = () => {
                 <Text color="var(--tt-ink, #16161a)" fontSize="md" fontWeight={700}>
                   New {source.name} ✨
                 </Text>
-                {user ? (
+                {source.origin === 'community' && source.entry?.author?.id !== user?.id ? (
+                  <Button onClick={() => setCopyPrefill(schemaCopyPrefill(source))}>Copy schema to create Things</Button>
+                ) : user ? (
                   <SchemaThingFormBody onCreated={handleCreated} resetOnCreate source={source} />
                 ) : (
                   <Flex align="center" gap={3} wrap="wrap">
@@ -631,7 +643,7 @@ export const SchemaDetailPage = () => {
               <Flex direction="column" gap={3} data-testid="schema-detail-own-things">
                 <Flex align="baseline" gap={2} wrap="wrap">
                   <Text color="var(--tt-ink, #16161a)" fontSize="lg" fontWeight={700}>
-                    Your things with this shape
+                    Things on this device with this shape
                   </Text>
                   {ownThings && ownThings.length > 0 && (
                     <Text color="var(--tt-faint, #b6b6c0)" fontSize="12px">

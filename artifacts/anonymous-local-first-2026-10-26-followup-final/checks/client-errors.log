@@ -1,0 +1,79 @@
+
+> @1.0.0 test:client-errors /Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix
+> node --import tsx --test app/hooks/apiFailure.test.ts app/hooks/thingsRequestPayload.test.ts app/components/Lopu/lopuMessage.test.ts app/components/Lopu/lopuPosition.test.ts app/components/Lopu/lopuToastDelivery.test.ts app/components/Feed/reactionFailure.test.ts app/components/Things/sensitiveRevealError.test.ts app/api/utils/errors/adminDiagnostic.test.ts app/api/utils/migrations/migrationFailure.test.ts app/api/utils/migrations/migrationDiagnostics.test.ts
+
+✔ admin diagnostics keep useful error context while scrubbing common secrets (7.367125ms)
+✔ admin diagnostics retain only explicitly approved ObjectIds behind stable reveal references (2.221292ms)
+✔ admin diagnostic reveal tables stay bounded while overflow values remain redacted (2.306208ms)
+✔ credential headers, hashes, and structured values are irreversible (0.488875ms)
+✔ multiline credential and cookie structures make every continuation irreversible (0.375ms)
+✔ credential assignment labels normalize camelCase, plural, spaced, and CLI forms (1.9995ms)
+✔ native Error stacks are retained without invoking a substituted stack accessor (0.215709ms)
+✔ credential-bearing native errors keep safe callsite frames (0.1405ms)
+✔ identifier values containing extra text cannot inherit reveal eligibility from a placeholder (3.625083ms)
+✔ raw truncation redacts across the real fresh and stored output boundaries (22.448834ms)
+✔ ObjectIds use hexadecimal rather than word boundaries everywhere (0.417917ms)
+✔ an irreversible credential occurrence vetoes the same approved ObjectId everywhere (0.147125ms)
+✔ stored JSON diagnostics are rebuilt from the bounded error field allowlist (0.30725ms)
+✔ stored diagnostics redact canonical secure and sensitive assignment labels (0.173708ms)
+✔ admin diagnostics are bounded across deep, wide, and oversized thrown values (1.570334ms)
+✔ migration diagnostics are private, expiring, non-billable control Things (3.784958ms)
+✔ stored diagnostic detail is re-scrubbed before ordinary projection (0.446583ms)
+✔ already-scrubbed diagnostic redaction counts stay stable through write and read (2.966959ms)
+✔ stored JSON outside the closed error snapshot cannot become diagnostic detail (0.151959ms)
+✔ legacy v1 diagnostics remain readable while unknown and mismatched envelopes fail closed (0.212625ms)
+✔ migration diagnostic ids and inline fallback detail are bounded and normalized (0.2175ms)
+[error-log] persistence unavailable
+[error-log] persistence unavailable
+[error-log] persistence unavailable
+[error-log] persistence unavailable
+✔ migration failures preserve explicitly authored operator guidance (0.832667ms)
+✔ migration failures expose only safe exception class and code (11.187375ms)
+✔ unsafe exception names and codes cannot become public migration copy (1.272708ms)
+✔ migration failure diagnostics are captured lazily from a closed field set (0.9715ms)
+✔ operator failures keep identifiers in logs and return only authored repair guidance (0.52625ms)
+✔ only an authored operator context can retain a MongoDB ObjectId for reveal (2.373ms)
+✔ invalid attachment envelopes fail closed with a revealable source id (1.12225ms)
+✔ operator taxonomy validates dynamic prerequisite context (0.133208ms)
+✔ dry-run failures are rejected rather than commit-unknown (0.079333ms)
+✔ known reaction rejections preserve authored context and roll back safely (0.9185ms)
+✔ authored 503 reaction rejections are not treated as ambiguous commits (0.081292ms)
+✔ ambiguous reaction failures explain reconciliation and safe retry behavior (0.13825ms)
+✔ transport failures keep optimistic state instead of trusting a GET that could overtake the write (0.072292ms)
+✔ an invalid API value can never leave an error toast decoration-only (0.664459ms)
+✔ authored toast text is trimmed and preserved (0.076625ms)
+✔ bottom-left is the default and every unknown value falls back to it (0.397334ms)
+✔ every Chakra corner is accepted verbatim and has a dropdown label (0.412958ms)
+✔ only the top row clears the fixed nav, all positions fit the available content width (0.2775ms)
+✔ a toast placement pairs the Chakra position with its container style (0.15725ms)
+✔ repeated editor saves replace their visible feedback while unrelated messages stay intact (0.450083ms)
+✔ editor and account boundaries stay distinct and a dismissed message can be shown again (0.090375ms)
+✔ unkeyed messages remain separate events even when their content is identical (0.072125ms)
+✔ sensitive reveal distinguishes a password mismatch from an expired session (0.7395ms)
+✔ sensitive reveal classifies fixed non-password recovery paths (0.411167ms)
+✔ sensitive reveal never reflects unexpected authored error text (0.096334ms)
+✔ Nitro unhandled errors become contextual, nonblank API failures (0.639958ms)
+✔ authored API errors survive while non-string payload errors never become UI copy (0.095125ms)
+✔ structured auth and account-switcher failure fields survive normalization (0.174375ms)
+✔ only allowlisted attachment retry metadata survives normalization (0.099583ms)
+✔ the Lopu access gate codes and the 402 balance survive normalization; other codes do not (0.115166ms)
+✔ migration diagnostics accept only bounded authored detail and fixed-format ids (0.167792ms)
+✔ Nitro unhandled payloads cannot smuggle migration diagnostic metadata (0.113708ms)
+✔ an explicit reaction rejection overrides the generic 5xx ambiguity rule (0.058916ms)
+✔ Nitro development details and network causes are not exposed (0.118084ms)
+✔ unreadable successful mutation responses remain commit-unknown (11.395459ms)
+✔ legacy post creation transports the complete native Editor.js document (0.52225ms)
+✔ subspace post creation preserves the destination, headline and flair through JSON transport (0.102292ms)
+✔ ordinary posts do not acquire a subspace destination (0.06275ms)
+✔ unified posts keep subspace fields in the canonical crystal (0.232083ms)
+✔ rich comments transport the complete native Editor.js document (0.111416ms)
+✔ unified creation keeps rich text inside its crystal without a second top-level copy (0.28125ms)
+✔ geo is opt-in and retained by both post transport forms (0.107167ms)
+ℹ tests 63
+ℹ suites 0
+ℹ pass 63
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 419.474333

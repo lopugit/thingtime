@@ -1,0 +1,25 @@
+{
+  "packageSha256": "e5ca5891e959085e7add481841f21f662bdce8da8dfa9649d11aba227a88ba12",
+  "phases": [
+    "account",
+    "pending"
+  ],
+  "widths": [
+    320,
+    390,
+    1440
+  ],
+  "settledQuoteOpenChecks": 12,
+  "allControlCentersHit": true,
+  "minOpenOpacity": 1,
+  "maximumMainHorizontalOffset": 0,
+  "maximumMainHiddenOverflow": 0,
+  "mutationAndLocalIdentityInvariance": "asserted per quote interaction at all widths",
+  "checks": [
+    "account: offline delete and cold reload",
+    "account: live Feed masks pending tombstone while DELETE is held and unrelated post renders",
+    "account: lost DELETE reply and exact parent/child server absence",
+    "pending: offline delete and cold reload",
+    "pending: local post/media cancelled without server create"
+  ]
+}

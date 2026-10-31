@@ -11,11 +11,13 @@ components; reuse them instead of adding parallel versions.
 | Native desktop View menu and Command/Control zoom input | `electron/main.cjs`, `electron/lib/window-zoom.cjs`; regression: `electron/test/window-zoom.test.cjs`, `pnpm --dir electron verify:window-zoom` (real Electron fixture) |
 | Thing context menu model (sections, actions, submenus, drill paths) | `app/components/Thingtime/ContextMenu/contextMenuModel.ts` |
 | Menu renderer, trigger, hover/right-click/pinned behaviour | `app/components/Thingtime/ContextMenu/ThingContextMenu.tsx`, `ThingContextMenuTrigger.tsx`, `useThingContextMenu.tsx` |
-| Base verbs every persisted Thing inherits (`open`, `inspect`, `copy-link`, `edit`, `share`, `delete`, `send-to-lopu`) | `app/schemas/thingActions.ts` (`THING_ACTIONS`), `ContextMenu/thingEntityMenu.ts` (`buildThingEntityMenu(capabilities, extensions)`) |
-| Persisted-Thing menu button used by cards and pages | `ContextMenu/PersistedThingMenu.tsx` (fetches the Thing on open, handles copy-link/open/inspect/send-to-lopu; adapters pass `extensions` + `capabilities` + `onAction`) |
+| Base verbs every persisted Thing inherits (`open`, `inspect`, `copy-link`, `download`, `edit`, `share`, `delete`, `send-to-lopu`) | `app/schemas/thingActions.ts` (`THING_ACTIONS`), `ContextMenu/thingEntityMenu.ts` (`buildThingEntityMenu(capabilities, extensions)`) |
+| Persisted-Thing menu button used by cards and pages | `ContextMenu/PersistedThingMenu.tsx` (fetches the Thing on open, handles copy-link/open/inspect/download/send-to-lopu; adapters pass `extensions` + `capabilities` + `onAction`) |
 | Canonical link copying | `ContextMenu/thingEntityLink.ts` |
 | Icons: emoji ↔ lucide registry (`LUCIDE_ICONS`, `LUCIDE_FOR_EMOJI`) | `app/theme/icons.tsx`; renderer `app/components/Icon/Icon.tsx` |
 | Toasts / notifications | `app/components/Lopu/useLopu.tsx` (`useLopu()`, `useLopuStream()`) — never raw Chakra `useToast` or `alert()` |
+| Device notification history | `app/local-workspace/notifications.ts`, `notifications.client.ts`; `NotificationsPage.tsx` reuses the normal rows/filters. Anonymous messages never sync; account messages use the existing home-pinned recorder after verified login. |
+| Retained account history | `app/local-workspace/notificationPages.ts`, `notificationHistoryAccess.ts`; exact query/cursor snapshots and scoped refusal guards. `app/hooks/useDebouncedSearchDraft.ts` preserves newer typing across delayed URL updates. Native tests cover offline/retry, pagination invalidation and refused cached projections. History filters use the existing launcher-clearance marker, shared by the mobile Lopu and DevKit shortcuts. |
 | Layering (z-index) | `app/components/Things/transferLayers.ts` and the shared layer constants; never ad-hoc z-index escalation |
 | Page shell, nav clearance, drawers | `app/components/Layout/Main.tsx`, `app/components/Nav/*` (`--tt-nav-clearance`, safe-area vars) |
 | Password surfaces | `app/root.tsx` keeps `/passwords/provider` in the focused authorization shell; `/passwords` and `/settings/passwords` retain navigation while hiding floating assistant/developer launchers that can cover narrow credential controls. |
@@ -29,6 +31,13 @@ components; reuse them instead of adding parallel versions.
 | Nested Builder insertion and ancestry | `Builder/WebpageBlocksRenderer.tsx`, `blockChromePath.ts`, `useBuilderChrome.tsx`, `webpageBlocks.ts`; one ancestor toolbar, populated-parent append controls, and directional insertion that preserves neighboring layout |
 | Builder inspector chrome | `Builder/BuilderOverlayHost.tsx` exposes the shared launcher-suppression CSS used by `root.tsx`: floating Lopu/DevKit launch buttons step aside while a `.ttBuilderDrawer` exists and return on close, without changing panel state or preferences. Real viewport hit coverage: `scripts/preview-retention-overlay-acceptance.mjs`. |
 | Editable block structure dialog | `Builder/BlockContextMenu.tsx`, `BlockStructureModal.tsx`, `blockStructure.ts`; page/parent/block projections rendered through `SettingsDocumentHost` and `TransientBlockHost`, selecting the original page block in its inspector |
+
+
+Repeated feedback from one editor can pass a stable `id` to `useLopu`;
+`lopuToastDelivery.ts` replaces only an active notification with the same account
+and caller key. Unkeyed notifications and every-event history stay separate.
+`lopuToastDelivery.test.ts` runs in `test:client-errors`; the native instruction
+Settings test checks repeated saves and unobscured 1440/390/320px guidance.
 
 ## Adding a menu action (any Thing surface)
 
@@ -110,6 +119,14 @@ browser acceptance also checks reload and repeated search through the renderer.
   + "Use URL instead").
 - Lopu has no gender; use **it**.
 
+`Lopu/useLopuLauncherClearance.ts` observes shared post/comment composers, including
+the collapsed post trigger, and
+temporarily hides the phone launcher while its saved position intersects a
+composer. Scroll, resize and newly mounted composers restore or hide it without
+changing saved placement; navigation still opens Lopu. The native
+`Sharing/inheritedAudience.browser.test.ts` checks submit and collapsed-trigger hit targets and bounds
+at 1440, 390 and 320 px.
+
 ## Tests
 
 - `pnpm --dir remix run test:webpages` covers block mutations and structure
@@ -162,6 +179,80 @@ expanded transfer dialog without changing the ordinary library defaults.
 Popup menus use the shared transfer layer constants; keyboard copy/cut/paste
 only intercepts events inside the browser and leaves editable inputs alone.
 
+`app/local-workspace/AccountSyncStatus.tsx` sits in normal page flow with the
+shared nav clearance. It distinguishes device saves, retries, refusals and
+conflicts. Comparison uses bounded scrollable content and explicit keep-device /
+keep-account choices; stale review must fail instead of overwriting new edits.
+Verify at 1440, 390 and 320 CSS pixels, including expanded comparison and long IDs.
+
+## Anonymous theme library
+
+`ThemeSettings/ThemeStudio.tsx` uses content identity from `useWorkspaceUser`.
+Anonymous saves show device-only wording and use the dedicated `local-workspace/themes.ts`
+writer; account routes retain their authentication and publication rules.
+`theme/savedTheme.ts` is the shared token sanitizer. Normal Transfer controls
+reuse `utils/thingTransfer/theme.ts` validation and the local import transaction.
+Verify offline save/reload/apply/delete and transfer at desktop/390/320px with
+`test:local-workspace`, `test:things` and `test:theme`. Account theme sync and
+local history remain tracked in [the local coverage matrix](../local-workspaces.md).
+
+
+## Device workspace storage
+
+`Settings/ThingsSettings.tsx` includes `WorkspaceStorageSettings`, shared by the
+Settings page and drawer. `local-workspace/storageStatus.client.ts` binds only
+the active anonymous or account/origin/data-plane lease; identity invalidation
+clears old values before a new workspace renders. `WorkspaceTransaction.usage`
+reads the existing ledger and counts exact-scope keys without file-body reads.
+`storagePersistence.ts` separates passive browser protection checks from an
+explicit, bounded `StorageManager.persist()` request. No origin-wide usage
+estimate, account HTTP request or anonymous synchronization is introduced.
+Run `test:local-workspace`; `storage.browser.test.ts` uses `TT_LOCAL_STORAGE_URL`,
+`TT_SHARED_PLAYWRIGHT_PATH`, optional `TT_SHARED_CHROME_PATH` and
+`TT_LOCAL_STORAGE_ARTIFACTS` with the built local client. It verifies offline
+reload, other-tab writes, ledger failure/recovery, protection outcome and
+1440/390/320px layout. See the device-storage checkpoint in
+[local workspaces](../local-workspaces.md).
+
+
+## Local global/site composition
+
+`BuilderPagesList` links global editing and canonical site routes to `BuilderPage`.
+`schemas/sitePages.ts` supplies the same native-section definitions to offline
+Builder and server seeding. `SiteBlocksHost` resolves the workspace's pages with
+`useWebpage` and a bounded identity-owned `siteBlocksCache`; failed refreshes
+retain paint and offer Retry. Each global/route composition uses the existing
+webpage runtime, with native permission and Action trust checks intact.
+`drafts/sitePageDraft.ts` validates recoverable editor snapshots against the saved
+page revision. Cross-tab refresh is a scope-only local-workspace invalidation.
+Run `test:webpages`, `test:drafts`, `test:local-workspace` and the opt-in
+`local-workspace/siteBlocks.browser.test.ts` described in `docs/local-workspaces.md`.
+
+
+Persisted Thing menus share `ThingExportDialog` with the Things library. The
+`download` verb preserves the shared-link context and closes/cancels across
+workspace/Thing identity changes. Account and anonymous posts/replies use the
+same portable JSON/ZIP flow; file-only archive actions remain distinct. The
+opt-in `accountBoundRetention.browser.test.ts` exercises keyboard menu opening,
+touch selection, responsive dialogs and real offline export/import. Managed
+Timeline folders continue to use their dedicated History workflow.
+`ThingTransferControls` keeps document menus in document coordinates and fixed
+inspector menus in their container layer. Shared viewport overflow constraints
+and a scrollable menu keep import/export reachable on long pages and phones.
+
+
+Owned anonymous and offline account Things expose History through
+`PersistedThingMenu` using workspace content identity. Its menu callbacks and
+`TimelineHost` targets include the root generation; identity changes retire the old
+modal and callbacks. Server handoff and account History authorization stay separate.
+Mobile version details use a bounded inner scrollport with safe-area content
+and scroll padding, so keyboard focus and revealed restore controls clear the
+viewport edge and floating launchers. `themeVersions.browser.test.ts` checks
+the real restore button at 1440/390/320 px.
+Run the enabled `details.browser.test.ts` and `historyMenu.browser.test.ts` alongside
+Things, Timeline, navigation and local-workspace suites. See the
+[History checkpoint](../local-workspaces.md#native-anonymousoffline-history-menu--2026-10-17)
+for cached-account versus authoritative anonymous coverage and remaining sync work.
 
 ## Native mobile device setup
 
@@ -200,6 +291,25 @@ native bridge applies Keep above only to the requesting utility window. Checks:
 Commander TypeScript/Vitest and Swift tests, plus TESTING.md's native launcher
 checklist on the installed signed app.
 
+
+The local storage browser regression explicitly opens the shared collapsed card
+with keyboard and pointer, checks cold offline reload, and compares unchanged
+authored records plus refreshed byte accounting while native editor-tree
+preferences initialize. See `storage.browser.test.ts` and the PR #1000 upstream
+integration note for 1440/390/320px coverage.
+
+Account Theme Studio now uses the same local theme writer with independent
+content/selection queues in `accountApi.client.ts`. `AccountThemeSyncStatus`
+provides retries and exact conflict comparisons. ThemeStudio keys its state by
+workspace identity; ThemeHost uses retained content before network refresh.
+See [account theme coverage](../account-theme-workspace.md) for native browser
+fixtures, unresolved transfer/History integration and verification boundaries.
+
+Theme Studio Save/Apply flushes the existing native editor persistence before
+reporting local completion; account queues still run independently. The mobile
+History detail sheet retains bottom clearance so floating developer controls
+cannot cover its last export action. Native regressions:
+`anonymousThemeHistory.browser.test.ts`, `accountThemeConflict.browser.test.ts`.
 ## Editable private settings
 
 `Settings/SettingsDocumentHost.tsx` composes the ordinary Builder drawer/chrome

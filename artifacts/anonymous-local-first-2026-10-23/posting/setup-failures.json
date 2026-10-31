@@ -1,0 +1,14 @@
+{
+  "passed": false,
+  "failures": [
+    {
+      "run": "drafts-diagnostic",
+      "cause": "Playwright APIRequestContext omitted the Secure session cookie on HTTP loopback; direct read returned401. Fixture now uses normal browserfetch."
+    },
+    {
+      "run": "drafts-browser-session",
+      "cause": "Shared disposable backend normal sign-up limiter returned429 before scenario began."
+    }
+  ],
+  "productAcceptance": "Pending corrected fixture on fresh isolated final build; no auth/cookie/rate policy relaxed."
+}

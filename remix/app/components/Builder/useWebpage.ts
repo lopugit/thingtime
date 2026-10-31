@@ -1,3 +1,10 @@
+import { sitePageSeed } from '~/schemas/sitePages';
+import { useWorkspaceUser } from '../../hooks/useWorkspaceUser';
+import { useDataPlane } from '../../hooks/useDataPlane';
+import { rootIdentity } from '../../utils/rootIdentity';
+import { resolveAccountWebpage } from '../../local-workspace/accountApi.client';
+import { currentAccountWorkspace, isAnonymousWorkspace } from '../../local-workspace/runtime.client';
+import { resolveLocalWebpage } from '../../local-workspace/api.client';
 import { hasLiveSourceBinding } from '~/schemas/liveSources';
 import { requiresEditableBlockContract, requiresEditableIntrinsicContract } from './webpageBlocks';
 import { bindingsForBlocks } from '../../timeline/componentBindings';
@@ -62,7 +69,16 @@ export const loadWebpageClient = async (target: WebpageTarget): Promise<WebpageL
 	// behaviour, one less request per navigation.
 	if (target.kind === 'path' && (target.path.length > MAX_WEBPAGE_ROUTE_CHARS || !WEBPAGE_ROUTE_PATTERN.test(target.path))) return { status: 'missing' };
 	try {
-		await requireThingtimeCapability('api.webpages-resolve', '1.8.1');
+		if (isAnonymousWorkspace()) {
+			const data = await resolveLocalWebpage(target);
+			return { status: 'ready', data: { page: data.page as unknown as ResolvedWebpage['page'], source: data.source, componentsByRef: buildComponentsByRef(data) } };
+		}
+		const account = currentAccountWorkspace();
+		if (account) {
+			const data = await resolveAccountWebpage(account, target);
+			return { status: 'ready', data: { page: data.page, source: data.source, componentsByRef: buildComponentsByRef(data) } };
+		}
+		await requireThingtimeCapability('api.webpages-resolve', '1.3.0');
 		const response = await fetch(`/api/v1/webpages/resolve?${targetQuery(target)}`, { credentials: 'include' });
 		if ([400, 401, 403, 404].includes(response.status)) return { status: 'missing' };
 		if (!response.ok) return { status: 'error' };
@@ -188,12 +204,14 @@ export type UseWebpageDraft = {
 
 export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpageDraftOptions): UseWebpageDraft => {
 	const api = useApi();
-	const user = useCurrentUser();
+	const authenticatedUser = useCurrentUser();
+	const user = useWorkspaceUser();
+	const dataPlane = useDataPlane();
 	const timelineSession = useTimelineSession();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
 	const editableOption = options?.editable;
-	const historyEditable = editableOption ?? !(typeof window !== 'undefined' && isReadOnlyWebpageViewerRoute(window.location.pathname));
+	const historyEditable = !!authenticatedUser?.id && (editableOption ?? !(typeof window !== 'undefined' && isReadOnlyWebpageViewerRoute(window.location.pathname)));
 
 	const [resolved, setResolved] = React.useState<ResolvedWebpage | null>(null);
 	const [loading, setLoading] = React.useState(!!target);
@@ -209,7 +227,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 	const draftSnapshot = (value: WebpageBlock[]) => ({ crystal: { ...(resolvedRef.current?.page?.crystal ?? {}), blocks: value }, baseUpdatedAt: resolvedRef.current?.page?.updatedAt ?? null });
 
 	const targetKey = target ? JSON.stringify(target) : null;
-	const scopeKey = JSON.stringify([targetKey, user?.id || null, timelineSession.identity]);
+	const scopeKey = JSON.stringify([targetKey, user?.id || null, dataPlane, timelineSession.storage, rootIdentity.read().generation]);
 	const scopeRef = React.useRef(scopeKey);
 	scopeRef.current = scopeKey;
 	const [stateScope, setStateScope] = React.useState(scopeKey);
@@ -373,7 +391,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 			// site/global targets must stamp their binding even when no seed doc
 			// existed to inherit it from (fresh deployments before the admin seed)
 			const siteRoute = crystalBase.siteRoute || (target.kind === 'path' ? target.path : undefined);
-			const pageKey = crystalBase.pageKey || (target.kind === 'global' ? 'site-global' : undefined);
+			const pageKey = crystalBase.pageKey || (target.kind === 'global' ? 'site-global' : target.kind === 'path' && sitePageSeed(target.path) ? `route-${sitePageSeed(target.path)!.key}` : undefined);
 			const crystal: WebpageCrystal = {
 				name: options?.name || crystalBase.name || 'Untitled page',
 				...(crystalBase.description ? { description: crystalBase.description } : {}),
@@ -391,12 +409,11 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				blocks
 			};
 			try {
-				if (requiresEditableIntrinsicContract(blocks)) {
-					await requireThingtimeCapability('api.things', '1.44.0');
-					if (resolved?.source === 'user' && page) await requireThingtimeCapability('api.things-update', '1.14.0');
+				// Device saves use the bundled validator; negotiate only at remote transport.
+				if (!isAnonymousWorkspace() && !currentAccountWorkspace()) {
+					if (hasLiveSourceBinding(blocks)) await requireThingtimeCapability('api.things', '1.37.0');
+					else if (requiresEditableBlockContract(blocks)) await requireThingtimeCapability('api.things', '1.36.0');
 				}
-				else if (hasLiveSourceBinding(blocks)) await requireThingtimeCapability('api.things', '1.37.0');
-				else if (requiresEditableBlockContract(blocks)) await requireThingtimeCapability('api.things', '1.36.0');
 				const draftEventId = page && user?.id && historyEditable ? await draftHistory.flush() : null;
 				if (generation !== generationRef.current) return { ok: false, error: 'Page or account changed while preparing the save.' };
 				if (resolved?.source === 'user' && page) {

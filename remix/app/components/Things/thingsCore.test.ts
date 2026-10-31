@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { isBuilderApp, isTopLevelLibraryThing, groupThings, parseThingsReferrer, schemaRenderOf, thingLink, thingOpenHref, thingBuilderHref, thingLiveHref, type ThingsThing } from './thingsCore';
+import { isTopLevelLibraryThing, groupThings, thingsWorkspaceCacheKey, parseThingsReferrer, schemaRenderOf, thingLink, thingOpenHref, type ThingsThing } from './thingsCore';
 
 const makeThing = (id: string, kind: string): ThingsThing => ({
   id,
@@ -114,6 +114,14 @@ test('explicit legacy Lopu folder markers use canonical browse links and sort be
   assert.equal(isFolder({ ...folder, thingtime: ['post', 'data'] }), false);
 });
 
+
+test('preview caches isolate full workspace identity and local destination', () => {
+ const home = JSON.stringify(['account', 'https://one.test', 'owner', 'home']);
+ const scopes = [home, JSON.stringify(['account', 'https://one.test', 'owner', 'custom']), JSON.stringify(['account', 'https://two.test', 'owner', 'home']), JSON.stringify(['account', 'https://one.test', 'other', 'home']), JSON.stringify(['anonymous', 1])];
+ const keys = scopes.flatMap(scope => [thingsWorkspaceCacheKey(scope), thingsWorkspaceCacheKey(scope, 'home')]);
+ assert.equal(new Set(keys).size, keys.length);
+ assert.equal(thingsWorkspaceCacheKey(home), `tt-things-workspace-${JSON.stringify([home, 'selected'])}`);
+});
 
 test('cached root uses the same structural placement contract without removing search access', () => {
   assert.equal(isTopLevelLibraryThing(makeThing('top', 'data')), true);

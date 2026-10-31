@@ -1,0 +1,41 @@
+{
+  "isolatedAccount": true,
+  "ownerId": "6adfe5a65f05697a46d94cba",
+  "offlineSave": true,
+  "reconnectRefusal": true,
+  "explicitRetry": true,
+  "keyboardRetry": true,
+  "stableEventIdentity": true,
+  "crossTabHistory": true,
+  "coldOfflineAccountHistory": true,
+  "remoteSystemHistory": true,
+  "exactFilterRetention": true,
+  "lateQueryResponseIgnored": true,
+  "newerSearchInputPreserved": true,
+  "lateSameTabRefusalRetirement": true,
+  "cachedPagination": true,
+  "heldPaginationInvalidationRecovery": true,
+  "accountSwitchRetirement": true,
+  "paginationPermissionRefusal": true,
+  "purgeFailureRefusalGuard": true,
+  "crossTabRefusalRetirement": true,
+  "realSocialActivityAcceptance": false,
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1000,
+      "traversal": 4
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "traversal": 6
+    },
+    {
+      "width": 320,
+      "height": 844,
+      "traversal": 6
+    }
+  ],
+  "errors": []
+}

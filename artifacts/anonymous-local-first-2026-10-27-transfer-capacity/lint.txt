@@ -1,0 +1,11 @@
+
+> @1.0.0 lint:files /Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix
+> node scripts/ensure-dependencies.js --tool=eslint && eslint -- app/utils/thingTransfer/archive.ts app/utils/thingTransfer/browser.ts app/utils/thingTransfer/collect.ts app/utils/thingTransfer/format.ts app/utils/thingTransfer/readFile.ts app/utils/thingTransfer/archive.test.ts app/utils/thingTransfer/browser.test.ts app/utils/thingTransfer/collect.test.ts app/utils/thingTransfer/format.test.ts app/utils/thingTransfer/readFile.test.ts app/utils/thingTransfer/capacity.test.ts
+
+⚠️ REMIX FUTURE CHANGE: The `@remix-run/eslint-config` package is deprecated and will not be included in React Router v7.  We recommend moving towards a streamlined ESLint config such as the ones included in the Remix templates. See https://github.com/remix-run/remix/blob/v2/templates/remix/.eslintrc.cjs.
+
+/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/remix/app/utils/thingTransfer/format.test.ts
+  21:22  warning  Script URL is a form of eval  no-script-url
+
+✖ 1 problem (0 errors, 1 warning)
+

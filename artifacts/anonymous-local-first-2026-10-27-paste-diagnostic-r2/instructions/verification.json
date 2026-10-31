@@ -1,0 +1,335 @@
+{
+  "capability": {
+    "origin": "http://127.0.0.1:18724",
+    "feature": "api.settings-lopu-prompt",
+    "version": "2.0.0"
+  },
+  "phaseMarks": [
+    {
+      "phase": "oversized Settings input readiness",
+      "elapsedMs": 227904
+    },
+    {
+      "phase": "oversized paragraph Settings save",
+      "elapsedMs": 228363
+    },
+    {
+      "phase": "12000-hard-line native paste and undo",
+      "elapsedMs": 228820
+    },
+    {
+      "phase": "12000-hard-line local Settings save",
+      "elapsedMs": 232136
+    },
+    {
+      "phase": "oversized status responsive layout",
+      "elapsedMs": 232318
+    },
+    {
+      "phase": "oversized offline reload",
+      "elapsedMs": 233758
+    },
+    {
+      "phase": "resumable account upload and independent readback",
+      "elapsedMs": 235896
+    },
+    {
+      "phase": "anonymous ACL regression",
+      "elapsedMs": 288328
+    }
+  ],
+  "checks": [
+    "offline normal settings save and cold reload retain exact Unicode and disabled rows",
+    "server commits before a lost reply; newer local save completes while reply is held; read acknowledgement avoids duplicate replay",
+    "explicit device conflict choice preserves the reviewed revision and exact content",
+    "explicit account conflict choice preserves the reviewed revision and exact content",
+    "oversized normal Settings save completes locally with pending-sync status at desktop and both phone widths; offline cold reload retains exact Unicode and disabled rows",
+    "large exact Unicode and hard-line instructions sync through bounded requests after offline cold reload; independent account readback matches all content and disabled rows",
+    "built v2 manifest, base-only public read, legacy reference refusal, anonymous transfer refusal and oversized malformed-body refusal"
+  ],
+  "viewports": [
+    {
+      "left": 325,
+      "right": 1115,
+      "scrollWidth": 1440,
+      "viewport": 1440
+    },
+    {
+      "left": 29,
+      "right": 361,
+      "scrollWidth": 390,
+      "viewport": 390
+    },
+    {
+      "left": 29,
+      "right": 291,
+      "scrollWidth": 320,
+      "viewport": 320
+    },
+    {
+      "label": "capacity guidance",
+      "width": 1440,
+      "left": 325,
+      "right": 1115,
+      "top": 489.375,
+      "bottom": 510.375,
+      "headerBottom": 53,
+      "hitPoints": [
+        {
+          "line": "first",
+          "y": 499.875,
+          "x": 327,
+          "unobscured": true
+        },
+        {
+          "line": "first",
+          "y": 499.875,
+          "x": 720,
+          "unobscured": true
+        },
+        {
+          "line": "first",
+          "y": 499.875,
+          "x": 1113,
+          "unobscured": true
+        },
+        {
+          "line": "middle",
+          "y": 499.875,
+          "x": 327,
+          "unobscured": true
+        },
+        {
+          "line": "middle",
+          "y": 499.875,
+          "x": 720,
+          "unobscured": true
+        },
+        {
+          "line": "middle",
+          "y": 499.875,
+          "x": 1113,
+          "unobscured": true
+        },
+        {
+          "line": "last",
+          "y": 499.875,
+          "x": 327,
+          "unobscured": true
+        },
+        {
+          "line": "last",
+          "y": 499.875,
+          "x": 720,
+          "unobscured": true
+        },
+        {
+          "line": "last",
+          "y": 499.875,
+          "x": 1113,
+          "unobscured": true
+        }
+      ],
+      "unobscured": true,
+      "viewportHeight": 1000,
+      "contentWidth": 790,
+      "clientWidth": 790,
+      "height": 21,
+      "lineHeight": 21
+    },
+    {
+      "label": "capacity guidance",
+      "width": 390,
+      "left": 29,
+      "right": 361,
+      "top": 411.65625,
+      "bottom": 432.65625,
+      "headerBottom": 53,
+      "hitPoints": [
+        {
+          "line": "first",
+          "y": 422.15625,
+          "x": 31,
+          "unobscured": true
+        },
+        {
+          "line": "first",
+          "y": 422.15625,
+          "x": 195,
+          "unobscured": true
+        },
+        {
+          "line": "first",
+          "y": 422.15625,
+          "x": 359,
+          "unobscured": true
+        },
+        {
+          "line": "middle",
+          "y": 422.15625,
+          "x": 31,
+          "unobscured": true
+        },
+        {
+          "line": "middle",
+          "y": 422.15625,
+          "x": 195,
+          "unobscured": true
+        },
+        {
+          "line": "middle",
+          "y": 422.15625,
+          "x": 359,
+          "unobscured": true
+        },
+        {
+          "line": "last",
+          "y": 422.15625,
+          "x": 31,
+          "unobscured": true
+        },
+        {
+          "line": "last",
+          "y": 422.15625,
+          "x": 195,
+          "unobscured": true
+        },
+        {
+          "line": "last",
+          "y": 422.15625,
+          "x": 359,
+          "unobscured": true
+        }
+      ],
+      "unobscured": true,
+      "viewportHeight": 844,
+      "contentWidth": 332,
+      "clientWidth": 332,
+      "height": 21,
+      "lineHeight": 21
+    },
+    {
+      "label": "capacity guidance",
+      "width": 320,
+      "left": 29,
+      "right": 291,
+      "top": 401.03125,
+      "bottom": 443.03125,
+      "headerBottom": 53,
+      "hitPoints": [
+        {
+          "line": "first",
+          "y": 411.53125,
+          "x": 31,
+          "unobscured": true
+        },
+        {
+          "line": "first",
+          "y": 411.53125,
+          "x": 160,
+          "unobscured": true
+        },
+        {
+          "line": "first",
+          "y": 411.53125,
+          "x": 289,
+          "unobscured": true
+        },
+        {
+          "line": "middle",
+          "y": 422.03125,
+          "x": 31,
+          "unobscured": true
+        },
+        {
+          "line": "middle",
+          "y": 422.03125,
+          "x": 160,
+          "unobscured": true
+        },
+        {
+          "line": "middle",
+          "y": 422.03125,
+          "x": 289,
+          "unobscured": true
+        },
+        {
+          "line": "last",
+          "y": 432.53125,
+          "x": 31,
+          "unobscured": true
+        },
+        {
+          "line": "last",
+          "y": 432.53125,
+          "x": 160,
+          "unobscured": true
+        },
+        {
+          "line": "last",
+          "y": 432.53125,
+          "x": 289,
+          "unobscured": true
+        }
+      ],
+      "unobscured": true,
+      "viewportHeight": 844,
+      "contentWidth": 262,
+      "clientWidth": 262,
+      "height": 42,
+      "lineHeight": 21
+    }
+  ],
+  "writes": 20,
+  "lostReplyAcknowledgedWithoutReplay": true,
+  "capacityProof": {
+    "oversizedUtf8Bytes": 120068,
+    "hardLines": 12002,
+    "pasteMs": 2194,
+    "localSaveMs": 114,
+    "nativeUndoRedoExact": true,
+    "postPasteTypingExact": true,
+    "paragraphSavedExactly": true,
+    "offlineReloadRetained": true,
+    "exactResumableAccountReadback": true,
+    "postByteLengths": [
+      113,
+      113,
+      113,
+      276,
+      48966,
+      48958,
+      113,
+      276,
+      13879,
+      162,
+      113,
+      113,
+      310,
+      48966,
+      48958,
+      113,
+      310,
+      13925,
+      162,
+      113,
+      113,
+      300,
+      113,
+      113,
+      113,
+      310,
+      39445,
+      39473,
+      113,
+      310,
+      39473,
+      39791,
+      162
+    ]
+  },
+  "anonymousPrivateRows": 0,
+  "anonymousWrite": 401,
+  "errors": [],
+  "offlineWrites": []
+}

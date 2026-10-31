@@ -1,7 +1,9 @@
+// @ts-ignore Node's direct TypeScript tests require the explicit extension.
+import { validPasswordId } from '../../../passwords/model.ts';
 export const ATTACHMENT_THINGTIME = 'attachment' as const;
 export const ATTACHMENT_ENVELOPE_VERSION = 1 as const;
 
-export const ATTACHMENT_STATES = ['pending', 'finalizing', 'ready', 'deleting'] as const;
+export const ATTACHMENT_STATES = ['pending', 'finalizing', 'ready', 'deleting', 'cancelled'] as const;
 export type AttachmentState = (typeof ATTACHMENT_STATES)[number];
 
 // A purpose is stamped before any upload URL is issued and never changes.
@@ -84,6 +86,7 @@ export type AttachmentPrivateObjectFields = {
 	attachmentFinalizationLeaseId?: string;
 	attachmentPartsIssuedAt?: Date;
 	attachmentObjectlessDelete?: true;
+	attachmentCancellationRequested?: true;
 	attachmentMpuEmptyVerifiedAt?: Date;
 	uploadId?: string;
 	attachmentExpiresAt?: Date;
@@ -102,10 +105,14 @@ export type AttachmentStorageCandidate = {
 	objectVersionId?: unknown;
 	attachmentRequestFingerprint?: unknown;
 	attachmentPurpose?: unknown;
+	passwordFileParent?: unknown;
+	passwordFileEnvelope?: unknown;
 	attachmentProfileSlot?: unknown;
 	attachmentFinalizationLeaseId?: unknown;
 	attachmentPartsIssuedAt?: unknown;
 	attachmentObjectlessDelete?: unknown;
+	attachmentCancellationRequested?: unknown;
+	targetId?: unknown;
 	attachmentMpuEmptyVerifiedAt?: unknown;
 	uploadId?: unknown;
 	attachmentExpiresAt?: unknown;
@@ -679,6 +686,7 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 	// combinations fail closed so they cannot participate in binding or quota
 	// mutation as a canonical row.
 	if (doc.attachmentPurpose !== undefined && !isAttachmentPurpose(doc.attachmentPurpose)) return null;
+	if (doc.passwordFileParent !== undefined && (doc.attachmentPurpose !== 'password' || !validPasswordId(doc.passwordFileParent))) return null;
 	if (doc.attachmentProfileSlot !== undefined && !isAttachmentProfileSlot(doc.attachmentProfileSlot)) return null;
 	if (doc.attachmentPurpose === 'profile') {
 		if (!isAttachmentProfileSlot(doc.attachmentProfileSlot)) return null;
@@ -711,6 +719,18 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 	// synthetic key, the zero object size, the url-bearing crystal, and the
 	// absence of every S3 upload field all imply each other. Any partial
 	// combination is a forged or corrupt claim and fails closed.
+	if (doc.attachmentCancellationRequested !== undefined &&
+		(doc.attachmentCancellationRequested !== true || !['deleting', 'cancelled'].includes(String(doc.attachmentState)))) return null;
+	if (doc.attachmentState === 'cancelled') {
+		// The durable receipt has no object, target, expiry or upload authority.
+		// Password receipts retain only their protected parent relation so the
+		// dedicated API can authenticate retries after encrypted metadata is gone.
+		const passwordReceipt = doc.attachmentPurpose === 'password' && validPasswordId(doc.passwordFileParent);
+		if (doc.attachmentCancellationRequested !== true || doc.objectSizeBytes !== 0 ||
+			doc.uploadId !== undefined || doc.objectVersionId !== undefined || doc.targetId !== undefined ||
+			doc.attachmentExpiresAt !== undefined || (doc.attachmentPurpose !== undefined && !passwordReceipt) || doc.passwordFileEnvelope !== undefined || doc.attachmentLinked !== undefined ||
+			doc.attachmentRequestFingerprint !== undefined || doc.attachmentMpuEmptyVerifiedAt !== undefined) return null;
+	}
 	if (doc.attachmentLinked !== undefined && doc.attachmentLinked !== true) return null;
 	const looksLinked =
 		doc.attachmentLinked === true ||
@@ -749,3 +769,6 @@ export const attachmentObjectSizeBytesForAccounting = (doc: AttachmentStorageCan
 	if (!crystal || crystal.size !== Number(doc.objectSizeBytes)) return null;
 	return Number(doc.objectSizeBytes);
 };
+
+/** Durable owner-private originals; editor-bound upload purposes stay separate. */
+export const isStandaloneAttachmentPurpose = (value: unknown): value is 'file' | 'recording' => value === 'file' || value === 'recording';

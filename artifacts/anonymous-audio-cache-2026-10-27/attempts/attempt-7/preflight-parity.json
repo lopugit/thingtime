@@ -1,0 +1,18 @@
+{
+  "archivePath": "/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/tmp/continuation/audio-search-app.tar.gz",
+  "archiveSha256": "aea7f888d84c7976add09f1d1c5dff646677f086ff2d499ac39e3b466f7a4217",
+  "sources": {
+    "remix/app/components/Attachments/AudioAttachmentPlayer.tsx": "9a8f50ad91efe8c594f97c4d55ac1847e8a754d81b0807520eaf837d5c57b1cf",
+    "remix/app/components/Attachments/audioPlaybackCache.ts": "b19b7f41f537839987d48d8d8b3a3e8f321197c409c8b0e972affc96cb866f8f"
+  },
+  "modules": [
+    {
+      "path": "/assets/ThingTransferControls-DT4WMVmm.js",
+      "sha256": "daf42ef622c484918617f1abd06cb752cd4d952761c2e41868ca76f40471a330",
+      "v2": true,
+      "originalStream118": true
+    }
+  ],
+  "sourcemaps": 258,
+  "scope": "Source hashes match reviewed build; audio module bytes match canonical output and carry v2/pinned-stream contract. Served-module parity is checked by the real UI test."
+}

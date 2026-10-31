@@ -52,7 +52,20 @@ and creates synthetic accounts in its own database, without production secrets.
 
 ### Password manager setup
 
-The private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).
+Anonymous `/passwords` uses an encrypted device vault with a separate passphrase;
+it needs no server secret or database. Use HTTPS or loopback for WebCrypto, and
+load the production offline shell once before testing offline reload. Entries
+stay on that device and never sync on login. Account workspaces also use an encrypted device copy with a separate passphrase;
+edits complete locally and sync only after matching account/origin/plane confirmation.
+The broader local-first rollout remains in progress. See [device vault behavior and verification](docs/password-manager.md#anonymous-device-vault).
+
+Anonymous Settings → Security → Secure Vault also works offline. It has its own
+provider-vault passphrase and stores environment names, key values and provider
+connections encrypted on the device. It needs no server vault key; saving a
+connection never calls that provider. Account provider-vault synchronization is
+still being implemented. See [local provider vault setup and tests](docs/local-workspaces.md#anonymous-provider-vault).
+
+The account-private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).
 Use a Mongo replica set for canonical storage transactions and configure the
 usual Thingtime JWT signing keys. Set `THINGTIME_USER_VAULT_KEY=<32 random bytes
 encoded as base64url>` in ignored local env files and your deployment secret
@@ -63,64 +76,16 @@ wrappers unreadable; do not generate a new key on each deploy. The server-assist
 recovery model is documented above. No provider developer accounts are required
 for storing passwords or importing TOTP setup codes.
 
-Native verification-code setup uses the `otpauth` scheme declared in the iOS and
-macOS password-host XcodeGen specs. Regenerate each project after changing the
-spec; keep the generated Info.plist scheme declarations with that change. Forks
-must configure `ThingtimeWebURL` to their own canonical HTTPS origin, provision
-the host's Keychain group and deploy the matching web editor. The companion
-opens `/passwords` in a nonpersistent WKWebView and requires normal sign-in. It
-reads only the existing native connection's destination/owner metadata; it never
-imports that connection's credential into the browser. A locked or malformed
-native destination fails closed rather than switching to the build's default.
-When there is no native connection, the explicit build origin is used.
-
-The web editor and host negotiate a separate `authenticatorSetupVersion` 1.0.0
-contract and existing `api.passwords` 1.2.0 or later in major 1. Setup is restricted
-to the home data plane. No new server endpoints, developer-service credentials
-or additional device-token grants are required. Incoming codes stay in memory
-for up to ten minutes, including during normal login, and require a deliberate
-entry choice and Save. Only TOTP `otpauth` links are registered; HOTP, authenticator
-migration and passkey pairing QR payloads are unsupported. Real OS menu/QR and
-signed-device acceptance must be checked after installing a verified release.
-
-For native AutoFill, register your app and credential-provider extension bundle
-identifiers in your Apple Developer team, enable **AutoFill Credential Provider**
-for the containing app and extension, and provision the same Keychain access
-group on both. iOS uses `iOS/project.yml`, `THINGTIME_IOS_BUNDLE_IDENTIFIER` and
-`<your-ios-bundle-id>.password-provider`; macOS uses
-`macos/ThingtimePasswords/project.yml` and `com.thingtime.passwords{,.provider}`
-(change those identifiers for your fork). Both use
-`$(AppIdentifierPrefix)com.thingtime.passwords` by default; change the suffix
-consistently when forking. Accept pending Apple Developer agreements before
-requesting profiles. Keep all real signing values out of git.
-The shared session uses the data-protection Keychain on both platforms, with
-device-only accessibility and synchronization disabled. A missing or unresolved
-Keychain group fails closed; it must not fall back to the macOS legacy Keychain.
-
-`npm --prefix electron run build:resources` embeds the macOS provider. The build
-requires `THINGTIME_PASSWORD_SIGNING_IDENTITY=<Apple signing identity>` (or the
-existing `THINGTIME_NODE_SIGNING_IDENTITY`) and `APPLE_TEAM_ID=<team>`; local
-Apple Development signing can request profiles through the signed-in Xcode
-account. With a Developer ID Application identity and no profile overrides,
-the build creates an intermediate development archive and exports it through
-Xcode's Developer ID workflow; the final host and extension must match the
-requested distribution identity, timestamp, team and bundle-specific profiles.
-If Xcode reports an unregistered development Mac, deliberately opt into device
-registration with `THINGTIME_PASSWORD_REGISTER_DEVICE=1` for that build.
-For manual distribution signing, set both
-`THINGTIME_PASSWORD_HOST_PROFILE=<host profile>` and
-`THINGTIME_PASSWORD_PROVIDER_PROFILE=<extension profile>`; a partial pair fails
-before building. Unsigned builds
-compile the feature but cannot provide the system's signed credential-provider
-access. iOS Fastlane syncs a separate provider profile; its override is
-`PASSWORD_PROVIDER_PROVISIONING_PROFILE_SPECIFIER=<profile name>`. Follow
-`iOS/AGENTS.md` for API-key-based TestFlight setup, use `xcodegen generate`
-before native builds, and pass preview URLs explicitly as the
-`THINGTIME_WEB_URL=https://<your-deployment>` Xcode build setting.
-
-Users connect their current native session from Passwords and enable Thingtime
-in **Settings → General → AutoFill & Passwords**. New passkeys are created through
-that system picker; uploaded passkey handoff QR images are not imported as keys.
+For account offline QA, keep a stable vault key in the disposable local server's
+ignored environment, restart that checkout through `npm run web-pms`, and build
+and serve the production client offline shell. Run the enabled
+`accountPasswords.browser.test.ts` with `TT_ACCOUNT_PASSWORDS_URL=http://127.0.0.1:<port>`,
+`TT_ACCOUNT_PASSWORDS_ARTIFACTS=<ignored-output-directory>`,
+`TT_SHARED_PLAYWRIGHT_PATH=<playwright-module>` and
+`TT_SHARED_CHROME_PATH=<chromium-executable>`. From `remix/`, use
+`node --import tsx --test app/local-workspace/accountPasswords.browser.test.ts`.
+The fixture creates disposable accounts and plaintext synthetic CSV evidence;
+keep those outputs untracked. No production account or deployment is required.
 
 Password attachments also require the existing private, versioned S3 setup
 (`THINGTIME_PRIVATE_S3_BUCKET=<bucket>`, `THINGTIME_PRIVATE_S3_REGION=<region>`,
@@ -132,38 +97,47 @@ and `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://localhost:<web port>`.
 This local adapter refuses deployed/Vercel environments. No new provider secrets
 are needed beyond the existing vault and private object storage configuration.
 
-Password generation needs browser WebCrypto and no external provider account.
-Generator settings are account/origin scoped; generated values remain in the
-masked draft until saved. URL icons require anonymous HTTPS CORS from the image
-host; uploads use the existing encrypted attachment configuration above. No icon
-proxy credentials or third-party favicon service are required.
+The opt-in [Linux browser/backend acceptance harness](TESTING.md#linux-isolated-anonymousoffline-acceptance)
+packages a complete local build into a disposable namespace. Its
+`start <absolute-state-directory> <verified-absolute-mongod-path>` command accepts
+`--admin-fixture` for private-upload tests and `--vault-fixture` for encrypted
+account-settings tests. The former creates a fresh ordinary account through the
+normal API, restarts only the disposable server with that generated username in
+its admin allowlist, and stores its fixture credentials mode 0600 inside the
+temporary home. The latter generates a new server-only vault key. Both are
+explicit test options; neither copies existing accounts, keys or configuration.
+Use the harness's `stop` command and verify its cleanup record. See `TESTING.md`
+for build, isolation verification and required browser/runtime prerequisites.
 
-The drawer now has **Password manager** and a dedicated `/settings/passwords`
-category. Thingtime sign-in passkeys remain under Security. The web vault works
-on supported secure browser origins; arbitrary-site passkey creation/sign-in also
-needs an installed provider. For Chromium, run
-`npm --prefix remix run build:password-extension`, extract
-`remix/public/downloads/thingtime-passwords-extension.zip`, and use **Load unpacked**
-in an isolated Chrome/Chromium profile. Enable the extension in its popup and select
-your trusted Thingtime/fork HTTPS origin; explicit localhost/127.0.0.1 origins are
-supported for isolated local development. Reload existing relying-party tabs.
-The extension is off by default, needs no extension-specific secret, and is not a
-store release. Firefox, Safari and mobile browser integration are unverified;
-unsupported WebAuthn options and native-object requirements may require the
-browser's other provider. See [extension setup and limits](browser-extension/README.md).
-A working web vault alone does not prove passkey registration on another website.
+For the opt-in password-file replay API fixture, use a loopback-only disposable
+server and replica set, a stable `THINGTIME_USER_VAULT_KEY`, and the local object
+adapter above. Register a new synthetic account named `passwordfiles-<8 hex digits>`
+through `/api/v1/auth/register` while `ADMIN_USERNAMES` is empty, then restart only
+that disposable server with the new name in `ADMIN_USERNAMES` to grant its existing
+private-upload test permission. Do not add an existing user or mutate Mongo
+directly. Keep a mode-0600 ignored JSON file with `fixtureKind` set to
+`password-file-sync-qa`, `base` set to `http://127.0.0.1:<port>`, and the new
+account's `username`, `password`, and returned `ownerId`. From `remix/`, run:
 
-Native system AutoFill and passkey registration are implemented in the Apple
-credential provider. Install a properly signed/provisioned provider and enable
-Thingtime in the operating system's Password AutoFill settings. Registration
-starts from the destination website and may require device authentication. The
-web Passkeys guide connects through the existing native bridge when available;
-this change does not modify native packaging. Verify an actual registration and
-sign-in on the installed device before claiming provider availability. See the
-[password manager contract](docs/password-manager.md#native-password-autofill).
+```sh
+TT_PASSWORD_FILE_API_FIXTURE=<ignored-fixture.json> \
+TT_PASSWORD_FILE_API_ARTIFACTS=<ignored-output-directory> \
+node --import tsx --test app/local-workspace/passwordFileLifecycle.api.test.ts
+```
 
-TOTP QR imports, generated codes and password transfers work in the web vault
-without any native installation.
+The fixture uses the real canonical encrypted upload/download/delete APIs,
+creates a second synthetic account for isolation checks, and cleans up its entry
+content through normal APIs. It retains minimal cancellation receipts and the
+new account rows because no account deletion API exists. Failed multipart runs
+may need the ordinary settlement/cleanup interval; never bypass that fence.
+This is local API evidence, not account file UI or deployed acceptance.
+
+Native system AutoFill and passkey creation are being delivered separately in
+[PR #996](https://github.com/lopugit/thingtime/pull/996). They require signed Apple
+credential-provider bundles, provisioning and device verification. This web
+release does not change the existing desktop/iOS packaging or claim OS AutoFill
+availability. TOTP QR imports, generated codes and password transfers work here
+without native installation.
 
 ### Unified Timeline (implementation in progress)
 
@@ -392,6 +366,17 @@ custom instructions with individual enable switches. **Settings → Admin → Lo
 base prompt** edits the shared public guidance. Set the normal server
 `ADMIN_USERNAMES=<your-admin-username>` on your fork, and use its normal MongoDB
 configuration. The base prompt is public: keep credentials in Secure Vault.
+Personal account synchronization negotiates `api.settings-lopu-prompt` 2.0.0
+and uploads immutable parts with resumable checkpoints. Device saves still
+complete independently. Each request retains the 96 KiB boundary and normal
+rate limit; account storage uses the existing home MongoDB transaction and
+quota machinery. No additional secret or environment setting is required.
+`GET ?scope=base` avoids reading private instructions for the base editor.
+Large instruction storage and model context capacity are separate: ordinary
+saved preferences work, while larger enabled content currently reports an
+explicit inference-capacity error until a verified provider checker exists.
+Nothing is silently truncated. See [the transfer contract and remaining
+acceptance](docs/local-workspaces.md#resumable-account-instructions--26-october-2026).
 Changes apply to the next AI reply and newly started direct voice sessions.
 Chat, voice, musings and recording analysis share this guidance; surface rules
 and server-enforced permissions remain in effect. Simultaneous edits report a
@@ -698,13 +683,20 @@ Claude, and other compatible tools read the same instructions. Update
 ## Thingtime MCP
 
 The [`MCP/`](MCP/) package contains Thingtime's consent-first AI conversation
-normalizers. As a standalone MCP server it supports explicit current-chat
-handoff, private local staging, ChatGPT/Claude exports, and a portable connector
-manifest. The Electron app also bundles its read-only desktop connector: it can
-discover local ChatGPT Work/Codex history plus Claude sessions from the main and
-Thingtime desktop profiles, then import projects, chats, and visible messages
-through the authenticated Messenger API. See [`MCP/README.md`](MCP/README.md)
-for both workflows and their privacy boundaries.
+normalizers. Its regular local stdio entry supports explicit current-chat
+handoff and private local staging for ChatGPT/Claude exports and portable
+connector manifests. With an exact cached Docker image and Unix socket
+configured, the same `thingtime` server adds isolated no-login native draft
+rendering; missing renderer settings disable only that tool. Rendering runs in
+a network-none container and returns canonical JSON and embedded PNG artifacts
+only after owned-resource cleanup is verified. The MCP still has its local
+import `SnapshotStore`; it does not scan host application data automatically or
+upload staged records to ThingtimeDB. The Electron app's read-only desktop
+connector remains a separate authenticated workflow. See [`MCP/README.md`](MCP/README.md),
+[no-login draft preview and export](docs/no-login-draft-preview.md) and the
+[MCP design](docs/ai-chat-import-mcp.md). Desktop acceptance of the unified
+render tool is pending; earlier success through `thingtime-drafts` does not
+establish it.
 
 ## Lopu voice + personal Secure Vault
 
@@ -4935,6 +4927,338 @@ PNGs and JSON as inline resources without an account or HTTP access from the
 agent host. No private environment variables are needed. See the
 [fork-safe setup, actual tool connection, bounds and disposable importer QA](docs/no-login-draft-preview.md).
 
+### Local workspace development (in progress)
+
+Bundled signed-in suites use a durable local install and a canonical account
+receipt before provisional definitions can upload. See the [suite sync contract
+and isolated acceptance requirements](docs/account-suite-sync.md). Native vault
+[file-only evidence](artifacts/anonymous-local-first-2026-10-27-vault-file/README.md)
+now covers 66 MiB upload, offline reload and exact download; it does not establish
+the unresolved large-note or full native-provider matrix.
+
+The account discussion browser check runs from `remix/` with
+`node --import tsx --test app/local-workspace/accountDiscussions.browser.test.ts`.
+Set `TT_LOCAL_DISCUSSIONS_URL` to your loopback production-client preview,
+`TT_SHARED_PLAYWRIGHT_PATH` to an installed Playwright module, and optionally
+`TT_SHARED_CHROME_PATH` to its Chromium executable and
+`TT_LOCAL_DISCUSSIONS_ARTIFACTS` to an output directory. Build the client first.
+Use an isolated local API/database: this creates and cleans up private fixture
+Things using a newly registered disposable account and the normal rate limits.
+It requires no production account, admin token or alternate auth configuration.
+See the [read-side limits](docs/local-workspaces.md#account-discussion-reads-and-refusal-cleanup--2026-10-17).
+
+The ordinary Builder now has a browser workspace adapter under
+`remix/app/local-workspace/`. See [coverage and limits](docs/local-workspaces.md)
+before treating the rollout as complete. IndexedDB requires a stable origin and
+available site storage. Clearing site data removes unsynced device content.
+Anonymous work never enters an account queue. Account sync uses the existing
+same-origin API and session; there is no new secret or alternate authentication
+setup. Unsupported dedicated features retain their current adapters.
+Device storage admission uses the browser's actual capacity; there is no
+Thingtime-wide 64 MiB or 10,000-record quota. Failed native storage writes report
+`LOCAL_QUOTA` and roll back atomically. Some buffered file/import/preview paths
+retain separate limits while their streaming migration is unfinished; consult
+the coverage matrix before assuming every feature handles large files.
+Retained account partition discovery walks only the current account/origin's
+storage keys, without a partition-count cutoff. Password refresh follows all
+canonical pages with cancellation and stale-pull protection; failed traversals
+preserve previously retained entries until a complete retry.
+
+
+For offline shell checks, run `npm --prefix remix run build:client`; this generates
+an integrity-checked static asset manifest. Use the repository PM2 lifecycle for
+development, and an isolated local database/account fixture for mutation tests.
+Do not point a fixture preview at production API fallback URLs. Saved account pages now reopen and remain editable after a fully offline cold
+start; the server must verify the account before sync resumes. The remaining
+feature matrix is not yet complete.
+
+
+The offline Web Platform renderer uses the same compiled runtime as the standalone
+sandbox. `build:client` runs `build:platform` first, then includes that static code
+in a sandboxed document and authorizes its exact hash in production CSP. Use the
+normal build command; if running main Vite directly in a clean checkout, first run
+`npm --prefix remix run build:platform`. The managed dev stack already builds and
+watches the platform runtime; the app reloads its virtual document when that output
+changes. No additional environment values or secrets are needed. Embed and inert
+draft bundles retain the standalone runtime URL and their existing policies. Keep
+`patch:vercel-output` and `verify:vercel-output` in deployment builds so runtime
+bytes and CSP remain paired. See [the offline execution checks](docs/local-workspaces.md#offline-web-platform-execution--2026-10-16).
+
+### Disposable Timeline restore and related-history regressions
+
+The `remix/scripts/timeline-versions.integration.mts`,
+`timeline-published-components.integration.mts` and
+`timeline-related.integration.mts` scripts require a loopback
+`TIMELINE_TEST_BASE` and verify the server's database status before registering
+new fixture accounts. Their default replica is `timeline-rs` at
+`127.0.0.1:20337`. For a different explicitly disposable local replica, set
+`TIMELINE_TEST_MONGO_HOST=127.0.0.1:<disposable-mongo-port>` and
+`TIMELINE_TEST_REPLICA_SET=<disposable-replica-name>` as well. Never point the app
+at an existing account database for these checks. All three scripts clean up their own
+created Things, including restored component copies, in `finally`; synthetic
+accounts and immutable audit remain in the disposable database. Run each from
+`remix` with `node --import tsx scripts/<script-name>.integration.mts`.
+
+
+### Durable account file adapter regression
+
+From `remix`, run `node --import tsx --test
+app/local-workspace/accountFiles.browser.test.ts` with
+`TT_LOCAL_FILE_SYNC_URL=http://127.0.0.1:<vite-port>`,
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=/path/to/ignored-fixture-admin.json`, and optional
+`TT_LOCAL_FILE_SYNC_ARTIFACTS=/path/to/local-evidence`. Set
+`TT_SHARED_PLAYWRIGHT_PATH` and `TT_SHARED_CHROME_PATH` to installed Playwright and
+its matching Chromium executable. Use the PM2-managed Vite dev origin: this
+adapter-focused test loads actual source modules and does not assert offline
+cold reload. It captures the exact workspace module URLs requested by the app;
+Vite HMR timestamps must be retained to avoid creating a second unbound runtime.
+The fixture also checks offline metadata/folder edits, reviewed conflicts, and
+lost annotation receipts. The account file picker is not switched to this adapter yet.
+
+Use only an explicitly disposable local Mongo replica. Register a disposable
+administrator through the normal API, add its username to ignored
+`remix/.env` as `ADMIN_USERNAMES=<fixture-admin>`, then store its username/password
+in the ignored JSON fixture (restrict it to mode 0600). Enable the existing
+filesystem object-store stand-in with
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=<ignored-directory>`. If setting
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN`, use the **same browser origin** the
+browser opens (including a production-client preview port); a different Nitro port is a different origin and is correctly
+blocked by the normal CSP. The default root-relative signed URLs also work.
+Restart this checkout using `npm run web-pms` after environment changes.
+
+The test creates its own ordinary account, proves private upload refusal, then
+uses the disposable admin's normal API to approve only that new account. It
+cleans up its completed file and sessions; fixture accounts remain only in the
+disposable database. Never substitute an existing account or production database,
+weaken CSP, alter rate limits, or commit credentials/evidence storage.
+
+
+The ordinary account Files picker/native-preview acceptance uses the same
+loopback setup: run `node --import tsx --test
+app/local-workspace/accountFileUi.browser.test.ts` from `remix/`, with
+`TT_LOCAL_FILE_SYNC_URL`, `TT_SHARED_PLAYWRIGHT_PATH`, `TT_SHARED_CHROME_PATH`
+and optional `TT_LOCAL_FILE_SYNC_ARTIFACTS` as above. It creates only a disposable
+local account and needs no administrator approval because its saves finish
+offline. The separate lifecycle fixture tests protected upload approval and sync.
+
+
+### Offline account ZIP import regression
+
+`accountFileImport.browser.test.ts` runs the normal Import and Download dialogs,
+native preview and verified private sync against a production client. From
+`remix`, run `node --import tsx --test app/local-workspace/accountFileImport.browser.test.ts`.
+Set `TT_LOCAL_FILE_IMPORT_URL=http://127.0.0.1:<production-preview-port>`,
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=/path/to/ignored-fixture-admin.json`, optional
+`TT_LOCAL_FILE_IMPORT_ARTIFACTS=/path/to/local-evidence`, and the shared
+Playwright/Chrome paths described above. Use the disposable replica/admin setup
+above and normal rate-limited registration. Fixture accounts remain disposable;
+created files/Things and browser contexts are cleaned up.
+
+When the dev and production-client preview use different ports, leave
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN` unset so the stand-in emits
+root-relative signed URLs. An absolute URL for the other port is correctly
+blocked by CSP. Restart only this checkout's managed stack after changing the
+environment. Do not weaken CSP, signing, upload approval or rate limits.
+
+
+### Offline recording import regression
+
+The same local ZIP path accepts standalone recordings (canonical transfer
+`recordingFileId`, with no `filePurpose: "file"`). The recording retains its
+purpose through local storage, export and verified private upload. Original
+account recording retention requires `api.attachment-content` 1.14.0; durable
+deletion requires `api.attachment-delete` 1.5.0. Account approval and all normal
+server authorization remain required for sync; anonymous work never syncs.
+
+Run `node --import tsx --test app/local-workspace/accountRecordingImport.browser.test.ts`
+from `remix` using the disposable local setup above. Set
+`TT_LOCAL_RECORDING_IMPORT_URL=http://127.0.0.1:<production-preview-port>`,
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=/path/to/ignored-fixture-admin.json`, optional
+`TT_LOCAL_RECORDING_IMPORT_ARTIFACTS=/path/to/local-evidence`, and the shared
+Playwright/Chrome paths. It generates a WAV without using a microphone, checks
+native offline playback, exact-byte export, clean-context private retention,
+unsynced edit/delete and lost-response retry, plus anonymous offline playback.
+This fixture does not prove microphone capture or bound post/draft media.
+
+
+The opt-in native account post authoring check uses the same disposable loopback
+stack and clean Playwright/Chrome configuration as discussion QA. Run from
+`remix/` with `TT_LOCAL_AUTHORING_URL=http://127.0.0.1:<client-port>`, optional
+`TT_LOCAL_AUTHORING_ARTIFACTS=<local-output-directory>`, and the shared
+`TT_SHARED_PLAYWRIGHT_PATH` / `TT_SHARED_CHROME_PATH` values, then execute
+`node --import tsx --test app/local-workspace/accountAuthoring.browser.test.ts`.
+It creates a disposable account and private post, verifies cold offline creation
+and subsequent account sync, and deletes the post during cleanup. Never point
+these fixtures at production or an existing account. Account draft sync and bound
+post media remain outside this checkpoint's acceptance.
+
+
+Account post media can be saved on the device before upload approval or a network
+connection. A submitted local post queues private file uploads and uses the normal
+account binding API after session verification. Unsubmitted selections remain
+local. To run the isolated native regression against a production client preview,
+set `TT_LOCAL_BOUND_MEDIA_URL=http://127.0.0.1:<preview-port>`,
+`TT_LOCAL_BOUND_MEDIA_ARTIFACTS=<output-directory>` and the same disposable admin
+fixture, Playwright and Chrome variables used by the local file-sync tests, then
+run `node --import tsx --test app/local-workspace/accountBoundMedia.browser.test.ts`
+from `remix/`. The test accepts loopback origins only and grants upload scope only
+to its newly registered test user. It also removes post/comment images offline,
+reloads, and deliberately loses a real deletion response to verify identical
+retry, private receipt retention and refusal of a delayed upload replay.
+Follow the local attachment-storage setup above;
+never point this fixture at production or provide an existing user account.
+See [remaining local-workspace acceptance](docs/local-workspaces.md).
+
+
+### Existing private post/comment media on a fresh device
+
+Run `node --import tsx --test app/local-workspace/accountBoundRetention.browser.test.ts`
+from `remix/` using the same disposable loopback setup and `TT_LOCAL_BOUND_MEDIA_URL`,
+`TT_LOCAL_BOUND_MEDIA_ARTIFACTS`, `TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE`,
+`TT_SHARED_PLAYWRIGHT_PATH` and `TT_SHARED_CHROME_PATH` placeholders described above.
+The fixture creates its own private post/comment files with the normal API, then
+opens them in a second clean context, edits/removes offline and checks reconnect.
+Only its newly registered user receives upload scope. It deletes its created
+content and closes its contexts; never supply an existing user or production URL.
+Owned bound retention needs content 1.15.0, existing-ID deletion needs delete 1.7.0;
+older servers fail explicitly while device edits remain saved.
+
+
+### Offline post template and deletion regression
+
+Using the isolated local stack and disposable upload-admin fixture above, run
+`node --import tsx --test app/drafts/offlinePostTemplate.browser.test.ts` from
+`remix/`. Set `TT_LOCAL_POST_TEMPLATE_URL=http://127.0.0.1:<client-port>`,
+`TT_LOCAL_POST_TEMPLATE_ARTIFACTS=/path/to/ignored-evidence`, the shared
+`TT_SHARED_PLAYWRIGHT_PATH`/optional `TT_SHARED_CHROME_PATH`, and
+`TT_LOCAL_FILE_SYNC_ADMIN_FIXTURE=/path/to/ignored-fixture-admin.json` for the
+account case. Without that fixture only the anonymous case runs. Never use
+production accounts or commit credentials. Both cases verify cold offline copying,
+independent media after source deletion, and responsive native previews; account
+verification includes private sync and deletion after reconnect. See
+[coverage and boundaries](docs/local-workspaces.md#offline-post-templates-and-bound-parent-deletion--2026-10-17).
+
+
+### Native offline History menu regression
+
+From `remix/`, enable `app/local-workspace/details.browser.test.ts` with
+`TT_LOCAL_DETAILS_URL=http://127.0.0.1:<client-port>` and optional
+`TT_LOCAL_DETAILS_ARTIFACTS=/path/to/ignored-evidence` for anonymous History.
+Enable `app/local-workspace/historyMenu.browser.test.ts` with
+`TT_LOCAL_HISTORY_MENU_URL=http://127.0.0.1:<client-port>` and optional
+`TT_LOCAL_HISTORY_MENU_ARTIFACTS=/path/to/ignored-evidence` for cached account
+History. Both use the shared Playwright/Chrome setup above and the production
+client's complete offline shell. The latter creates two disposable local accounts;
+it needs no admin fixture or production credentials. Normal signup rate limits
+remain in force. See [coverage](docs/local-workspaces.md#native-anonymousoffline-history-menu--2026-10-17)
+for the boundary between cached account reads and unfinished account history sync.
+
+
+Offline account parent deletion requires the selected origin to advertise
+`api.things` 1.34.0. The existing same-origin DELETE and attachment cleanup retain
+durable private upload receipts; no additional environment variables or secrets
+are required. Older origins leave work on-device for retry. The loopback template
+fixture now also tests a newer remote edit, native conflict recovery and retained
+media after offline reload. See [the deletion checkpoint](docs/local-workspaces.md#parent-deletion-conflicts-preserve-media--2026-10-17).
+
+
+### Account device History regression
+
+No new secret or service is required. Use a disposable loopback replica and the
+production-client offline shell described above. Enable
+`app/local-workspace/accountTimeline.browser.test.ts` with
+`TT_LOCAL_ACCOUNT_HISTORY_URL=http://127.0.0.1:<client-port>` and optionally
+`TT_LOCAL_ACCOUNT_HISTORY_ARTIFACTS=/path/to/ignored-evidence`, plus the shared
+Playwright/Chrome paths above. It creates one private test account, edits through
+the native menu offline, reloads at desktop/phone sizes, reconnects through normal
+Timeline sync, checks exact canonical events/receipts and guest refusals, and
+removes its test Thing. Normal signup rate limits apply; no admin fixture is used.
+Run `test:local-workspace` and `test:timeline` for protocol/quota regressions.
+See [coverage](docs/local-workspaces.md#account-device-history-capture-and-sync--2026-10-17)
+for remaining account History controls.
+
+
+The account History fixture also exercises the normal Export button after cold
+offline reload. Its artifact directory receives actual downloaded History JSON
+and screenshots at 1440/390/320px. No additional environment variables, services
+or credentials are needed. These are version archives, not portable Thing import
+bundles; device exports explicitly mark note/name context as partial. See
+[offline History export](docs/local-workspaces.md#offline-account-history-export--2026-10-17).
+
+
+### Account offline History restore regression
+
+Use the same disposable loopback replica and production-client shell as the
+History capture/export checks. Enable `accountTimelineRestore.browser.test.ts`
+with `TT_LOCAL_ACCOUNT_RESTORE_URL=http://127.0.0.1:<client-port>` and optional
+`TT_LOCAL_ACCOUNT_RESTORE_ARTIFACTS=/path/to/ignored-evidence`, plus the shared
+Playwright/Chrome paths above. No new secret or service is required. The fixture
+creates a private account and Thing, restores/undoes offline through native
+controls, verifies exact receipts after reconnect and removes its test Thing.
+Normal signup limits apply. See [coverage and remaining recovery work](docs/local-workspaces.md#offline-account-history-restore-and-undo--2026-10-17).
+
+
+### Account offline deleted-Thing recovery regression
+
+Use the same disposable loopback replica and production-client shell above.
+Enable `accountTimelineRecovery.browser.test.ts` with
+`TT_LOCAL_ACCOUNT_RECOVERY_URL=http://127.0.0.1:<client-port>`, optional
+`TT_LOCAL_ACCOUNT_RECOVERY_ARTIFACTS=/path/to/ignored-evidence`, and the shared
+Playwright/Chrome paths. No additional service or secret is required. The fixture
+creates its own private account and Thing, deletes through the UI, recovers from
+History offline, verifies private recreation after reconnect, and removes its
+test Thing. Normal signup limits apply. See [coverage and remaining work](docs/local-workspaces.md#offline-recovery-of-ordinary-account-things--2026-10-17).
+
+
+### Account offline History names and notes regression
+
+Run `node --import tsx --test app/local-workspace/accountTimelineNames.browser.test.ts`
+from `remix/`, with `TT_LOCAL_ACCOUNT_NAMES_URL=http://127.0.0.1:<client-port>`,
+optional `TT_LOCAL_ACCOUNT_NAMES_ARTIFACTS=/path/to/ignored-evidence`, and the
+shared Playwright/Chromium variables described above. Use the built production
+client/offline shell and disposable loopback replica API. The fixture registers
+its own account through the normal API, creates a private Thing, queues names
+and notes offline, reconnects normally, and deletes that test Thing in cleanup.
+Normal signup limits apply. It never uses an existing account or service token.
+See [History naming coverage](docs/local-workspaces.md#offline-account-history-names-and-notes--2026-10-17).
+
+
+### Pending History note removal regression
+
+The same native names/notes fixture now removes a note before its first account
+acknowledgement, cold-reloads at desktop and phone widths, reconnects and retries
+the original add request. Run the real transaction fixture separately:
+
+```sh
+TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> \
+TIMELINE_TEST_MONGO_HOST=127.0.0.1:<disposable-mongo-port> \
+TIMELINE_TEST_REPLICA_SET=<disposable-replica-name> \
+npm --prefix remix run test:timeline:notes
+```
+
+The database guard defaults to `127.0.0.1:20337` / `timeline-rs`; explicit values
+must identify the disposable loopback fixture. The script validates the actual
+server database status before creating its own accounts. Do not point it at an
+existing account database. Normal permissions, signup limits and storage quotas
+apply. No tokens or account credentials are needed. `api.timeline` 1.19.0 is
+required for remote note writes with durable removal identities.
+
+
+### Device draft naming and local History exports
+
+The existing `accountTimeline.browser.test.ts` fixture now names a device
+version while offline, cold-reloads at 1440/390/320px, exports its canonical
+content, and verifies the unchanged draft plus accepted name after reconnect.
+Use `TT_LOCAL_ACCOUNT_HISTORY_URL`, `TT_LOCAL_ACCOUNT_HISTORY_ARTIFACTS` and the
+shared Playwright/Chromium variables from the account History setup above.
+`timeline.browser.test.ts` uses `TT_LOCAL_TIMELINE_URL` and
+`TT_LOCAL_TIMELINE_ARTIFACTS` to test clean anonymous offline Builder draft
+names and downloads at the same widths, with no account Timeline requests or
+mutations. Both need the built production client/offline shell; account checks
+use only the guarded disposable loopback API and their own fresh fixture.
+Remote draft naming requires `api.timeline` 1.20.0. Anonymous work needs no
+account, credentials or remote capability discovery. See
+[coverage and limits](docs/local-workspaces.md#device-draft-names-and-anonymous-version-export--2026-10-17).
 
 ### Native mobile device pairing development
 
@@ -6179,7 +6503,19 @@ creating another copy. **Apply waterfall** still stages the order for the separa
 ### Incoming mail (Gmail, IMAP, POP3 and offline inboxes)
 
 Open `/settings/email` to connect email accounts, then `/mail` (`/email` is an
-alias). Each account can independently enable **Cloud** and **Local** sync.
+alias). Anonymous workspaces can save device-only mail settings and read their
+retained mail without a Thingtime login. They use explicit direct native sync
+or a paired connector for mailbox access. Cloud storage, Gmail authorization and
+Thingtime API relay require a remotely confirmed Thingtime account; signing in
+does not adopt anonymous mail or credentials. Offline account reads remain local.
+Each account can independently enable **Cloud** and **Local** sync.
+Saved account/proxy settings can be edited or removed offline. Their encrypted
+device changes commit first; account synchronization runs separately while Mail
+or Email settings is open and the matching account is remotely confirmed. Pending
+requests survive reload, retry with the same operation identity, and display
+conflicts for review. A failed account save does not discard a device edit.
+Mail fetching, Gmail sending and mailbox actions still require explicit actions;
+this settings queue never sends mail. Anonymous settings never enter account sync.
 IMAP discovers selectable folders; POP3 exposes its single inbox. **All inboxes**
 combines inbox folders. A proxy inbox is a saved selection of folders from any
 connected accounts: it changes only the view and never copies, moves or deletes
@@ -6227,8 +6563,10 @@ server deletion/mark-read/move commands are issued.
 
 Sync is explicit through **Sync inbox** / **Sync folders**, with **Load older
 mail** for bounded ten-message provider pages. It is not a background cron or
-push service. A device caches up to 2,000 messages, with up to 12,000 text
-characters per message, and marks truncated/oversized messages. HTML is rendered
+push service. A device retains synced messages until removed or browser storage becomes
+unavailable; new saves fail atomically when storage is full. The provider reader
+currently retains up to 12,000 text characters per message and marks partial
+bodies. The provider-size limits are not full-message archival support. HTML is rendered
 as text; remote images and scripts are never loaded. Attachments remain at the
 provider and are counted, not downloaded by this version. Cloud-only proxy
 inboxes sync across your devices; views including device-only accounts stay on
@@ -6396,6 +6734,184 @@ created by `test:mail:integration`, then run
 `MAIL_TEST_BASE=http://127.0.0.1:<worktree-port> npm --prefix remix run test:mail:relay`.
 It checks the real session, endpoint, explicit mode and absence of cloud writes
 using DNS-only POP3 discovery; it never attempts a provider login.
+
+### Local theme import acceptance
+
+Use a disposable loopback app backed by the isolated replica fixture
+(127.0.0.1:22463, replica set draftPreview). Never point these tests at an existing
+account or production. Reuse the shared Playwright runtime variables described
+above; no token or account credentials are needed in files.
+
+```sh
+TT_THEME_IMPORT_API_URL=http://127.0.0.1:<qa-port> \
+TT_THEME_IMPORT_API_ARTIFACTS=/path/to/private-test-artifacts \
+node --import tsx --test app/api/utils/themes/themeImport.api.test.ts
+
+TT_ACCOUNT_THEME_IMPORT_URL=http://127.0.0.1:<qa-port> \
+TT_ACCOUNT_THEME_IMPORT_ARTIFACTS=/path/to/private-test-artifacts \
+node --import tsx --test app/local-workspace/accountThemeImport.browser.test.ts
+```
+
+Run from remix/. The native test needs the built offline shell and optional
+TT_SHARED_CHROME_PATH. Tests register disposable private accounts through normal
+APIs, and output actual imported/exported JSON, PNGs and verification summaries.
+
+
+The native theme organization fixture uses the same isolated loopback replica set
+and built offline shell as theme import. Run from remix/ with the shared browser
+runtime configured above; it creates only disposable private account content and
+also opens a separate anonymous browser context:
+
+```sh
+TT_ACCOUNT_THEME_ORGANIZATION_URL=http://127.0.0.1:<qa-port> \
+TT_ACCOUNT_THEME_ORGANIZATION_ARTIFACTS=/path/to/private-test-artifacts \
+node --import tsx --test app/local-workspace/accountThemeOrganization.browser.test.ts
+```
+
+
+The same theme organization browser fixture now exercises anonymous and account
+library display-title renaming. Its account reconnect checks require
+`api.themes-sync` 1.4.0 and transfer import/export 1.12.0 / 1.16.0 on the isolated
+API. The `themeImport.api.test.ts` fixture checks conditional title metadata and a
+normal importer round-trip. Use the disposable loopback configuration above; no
+existing account or public content is needed.
+
+### Isolated account theme History acceptance
+
+Run the built application and this browser fixture inside a task-owned isolated
+browser-manager runtime, with its disposable replica database and enforced
+browser/backend network boundary. No real account or credentials are required.
+The fixture validates the runtime session and direct-IP egress denial before
+creating private disposable accounts. The offline shell must be built.
+
+```sh
+TT_ACCOUNT_THEME_HISTORY_URL=http://127.0.0.1:<isolated-app-port> \
+TT_ACCOUNT_THEME_HISTORY_ARTIFACTS=/path/to/private-test-artifacts \
+TT_RENDER_SESSION=<manager-session-id> \
+TT_SHARED_PLAYWRIGHT_PATH=/path/to/playwright/index.mjs \
+node --import tsx --test app/local-workspace/accountThemeHistory.browser.test.ts
+```
+
+Run from `remix/`; optional `TT_SHARED_CHROME_PATH` selects the isolated binary.
+The test emits native desktop/mobile/narrow PNGs, canonical History-version JSON
+and diagnostics. It verifies offline saves/reload, private read refusals and both
+sync failure directions without changing Secure-cookie or authorization rules.
+This is account History acceptance; protected restore/undo/merge is still open.
+
+### Isolated inherited-audience acceptance
+
+With the same disposable browser/backend runtime above, run
+`app/components/Sharing/inheritedAudience.browser.test.ts` from `remix/` with
+`TT_INHERITED_AUDIENCE_URL`, `TT_INHERITED_AUDIENCE_ARTIFACTS`,
+`TT_RENDER_SESSION` and `TT_SHARED_PLAYWRIGHT_PATH`. Optional
+`TT_SHARED_CHROME_PATH` selects the isolated browser binary. It creates only
+disposable private-subspace and public control fixtures inside that runtime.
+The test compares the real API's guest/foreign refusals with native parent,
+comment and nested-reply badges, including repeated navigation at three widths.
+Build the client, run `npm run sync:nitro-template`, then build the server before
+packaging, so the served HTML references the current assets.
+Set `TT_INHERITED_AUDIENCE_REPETITIONS=3` for the bounded 36-navigation check
+(default one cycle; maximum three). Chromium keeps its sandbox and uses a
+256 MiB V8 old-space limit so normal collection happens within the runtime's
+memory budget. The fixture records per-navigation responses, lifecycle events,
+renderer/namespace memory and OOM counters. Failure JSON and any successfully
+captured PNG share a unique run ID and image hash; a failed capture is reported
+explicitly and cannot be mistaken for an older PNG. It also injects resolver 503s
+to check notice clearance, failed Retry and real recovery at all three widths.
+The repeated-navigation stress phase can encounter genuine 429 responses; these
+are recorded without disabling rate limits. Do not treat the diagnostic
+forced-GC probe as native acceptance or discard a failed runtime's evidence.
+
+### Disposable offline Action verification
+
+The opt-in `remix/app/local-workspace/accountActions.browser.test.ts` uses a fresh
+account on an isolated replica at `127.0.0.1:22463`, verifies its API status before
+registration, then imports/runs/exports offline and reconnects to sync content.
+Set `TT_LOCAL_ACTIONS_URL` to the built-client preview,
+`TT_LOCAL_ACTIONS_ARTIFACTS` to a local output directory, and the existing
+`TT_SHARED_PLAYWRIGHT_PATH` / `TT_SHARED_CHROME_PATH` harness paths. Never point
+this fixture at a real account database. When a test-owned Vite preview has no
+local API environment, explicitly set
+`THINGTIME_API_FALLBACK_ORIGIN=http://127.0.0.1:<isolated-api-port>` so its normal
+proxy targets the disposable API. Use the repository dev lifecycle instructions
+for server ownership and cleanup. No production credentials are required.
+
+
+### Disposable algorithm synchronization verification
+
+Run `remix/app/api/utils/algorithms/algorithmSync.api.test.ts` against a disposable
+loopback app using the isolated replica at `127.0.0.1:22463` (`draftPreview`). The
+fixture refuses another database host or replica before registering accounts.
+Use the existing shared Playwright runtime; no browser profile, account token or
+production credentials are needed. From `remix/`:
+
+```sh
+TT_ALGORITHM_SYNC_API_URL=http://127.0.0.1:<isolated-api-port> \
+TT_ALGORITHM_SYNC_API_ARTIFACTS=/path/to/private-test-artifacts \
+TT_SHARED_PLAYWRIGHT_PATH=/path/to/playwright/index.mjs \
+node --import tsx --test app/api/utils/algorithms/algorithmSync.api.test.ts
+```
+
+It discovers `api.algorithms-sync` 1.0.0 and `api.algorithms-delete` 1.0.1 on both
+live manifests, registers fresh private accounts through the normal API and
+checks conditional profile writes, retries, access boundaries, concurrency,
+active-pointer deletion and a normal export/import round-trip. It deletes only
+its own created profiles and writes a portable JSON artifact plus verification
+results locally. This server contract is a prerequisite for account offline
+algorithm editing; it does not yet connect that editor or a background queue.
+Anonymous profiles continue to stay entirely on the device.
+
+
+### Local production-shell verification
+
+For cold offline checks, run `npm --prefix remix run build:client` followed by
+`npm --prefix remix run sync:nitro-template`, then use this checkout's Nitro
+origin. Vite's HMR origin intentionally does not cache development modules.
+Vercel Analytics is mounted only when the server supplies Vercel deployment
+metadata (`VERCEL_URL` and a non-development environment); ordinary local and
+self-hosted forks need no Vercel credentials or Analytics setup. Do not copy
+production environment values merely to enable local verification.
+
+### Account password-file UI acceptance fixture
+
+Reuse the isolated `password-file-sync-qa` account file described in Password
+manager setup, with the same stable server vault key, local object adapter and
+production client shell. From `remix/`, the opt-in fixture is:
+
+```sh
+TT_ACCOUNT_PASSWORD_FILES_FIXTURE=<ignored-fixture.json> \
+TT_ACCOUNT_PASSWORD_FILES_URL=http://127.0.0.1:<port> \
+TT_ACCOUNT_PASSWORD_FILES_ARTIFACTS=<ignored-output-directory> \
+TT_SHARED_PLAYWRIGHT_PATH=<playwright-module> \
+node --import tsx --test app/local-workspace/accountPasswordFiles.browser.test.ts
+```
+
+It creates synthetic entries/files through the native UI and normal API, checks
+cold offline retention and normal 1PUX transfer, and removes its own new entries
+through the normal API. Its PNGs, plaintext synthetic exports and credentials
+must stay untracked. No additional secret or production account is required.
+This harness launches isolated automation browsers; use it only in environments
+where that browser workflow is authorized. For connected-Chrome-only sessions,
+exercise the same checklist in connected Chrome instead of silently running it.
+See the [native file checkpoint](docs/local-workspaces.md#native-account-password-files--2026-10-18).
+
+
+Large-password API parity can also be checked without launching a browser. Use
+only the disposable loopback password-file fixture described above; the test
+creates and deletes one new entry through normal authenticated APIs and never
+reads other entries. It preserves exact Unicode values above the former device
+codec/record limits and verifies anonymous read refusal. From `remix/`:
+
+```bash
+TT_PASSWORD_CAPACITY_URL=http://127.0.0.1:<isolated-api-port> \
+TT_PASSWORD_CAPACITY_FIXTURE=/absolute/path/to/disposable-fixture.json \
+TT_PASSWORD_CAPACITY_EVIDENCE=/absolute/path/to/verification.json \
+node --import tsx --test app/local-workspace/passwordCapacity.integration.test.ts
+```
+
+This test uses fake IndexedDB for device storage plus the real running account
+API; it is not native browser acceptance. Fixture credentials stay in the ignored
+fixture file and must never be copied into documentation or output.
 
 ### Import an existing OpenAI deployment key
 
@@ -6843,70 +7359,17 @@ See [Vercel deployment references](VERCEL_DEPLOYMENTS.md) for the project and
 verification receipts. Standard Actions usage for this public repository is
 subject to GitHub's current plan terms; Vercel hosting/runtime charges remain.
 
-### Saved Mapbox map applications
+### Isolated large transfer acceptance
 
-A saved Builder app can use the `tt-mapbox` viewport and the origin-scoped
-`api.maps` 1.0.0 operations. Save your own Mapbox token in the private Thingtime
-Vault and configure its entry ID (`<owned-vault-entry-id>`) in the saved app.
-The browser map requires a public `pk` token; never put secret tokens in page
-definitions. The map SDK and CSS are staged from the pinned npm package as same-origin app assets; browser
-tile/style requests still go directly to Mapbox service origins. Configure a
-style URL from your own Mapbox Studio account.
-Autocomplete and live optimization require the corresponding provider access;
-saving selected geocodes additionally requires Mapbox Permanent Geocoding
-entitlement and its storage conditions. No new Vercel provider-key variable is
-needed. Standard Mapbox navigation output cannot be cached. See
-[editable maps and routing](docs/maps.md) for operation contracts and verification.
-
-### Storage recovery and production checks
-
-See [account storage recovery](docs/storage-recovery.md) for the 100 MiB pending
-accounting budget, the existing cron/admin recovery entry point, private
-controller setup and pre-merge/deployment/runtime verification. It reuses the
-existing home MongoDB replica set, scheduler secret and protected Vercel
-controller environment; no additional application secret is required.
-
-### Preview cleanup policy
-
-Administrators use **Admin → Preview retention** (`/admin/preview-retention`) or
-Settings → Admin to save Vercel cleanup and PR liveliness rules. **Edit layout**
-opens the existing Builder: labels, controls, descriptions, buttons and containers
-are individual editable blocks. **Save layout** persists the intended account's
-private settings webpage through the Things API, independently of **Save retention
-rules**, which updates the admin policy. Both placements reuse that same saved
-layout; live operations pause while editing. The native bundled UI negotiates
-the selected API's public manifest through the existing scoped transport; private
-policy/layout operations retain the authenticated local proxy and actor, data-plane
-and selected-origin fences. Defaults enable
-cleanup for deployments with no open PR, with zero grace; superseded active-PR
-cleanup and inactivity expiry are off. Grace periods are whole hours. Tagged
-previews count closed-PR grace from the later of creation and PR closure;
-untagged branch snapshots use creation age because historical closure time may
-be unknown. Optional open-PR inactivity uses GitHub `updated_at`, expires that
-PR's previews and suspends publishing until activity resumes; it never closes
-or edits the PR. Active builds and the newest READY current-head preview of
-each active PR remain protected when pruning superseded snapshots.
-
-The policy is a revision-guarded home settings singleton
-`Thingtime.CiPreviewRetention`. It contains no provider credentials. The
-protected controller reads it through an origin-negotiated, signed
-`/api/v1/integrations/ci/preview-retention` request using the existing
-`THINGTIME_CI_ROUTER_SECRET` bootstrap secret. For a fork, configure the same
-secret securely in its server vault/bootstrap and protected GitHub workflow;
-set `THINGTIME_GITHUB_REPOSITORY=owner/repository` and the controller's selected
-Thingtime origin. Never copy production credentials into a preview or test.
-Production, stable/gateway deployments, protected aliases and unrelated project
-resources are protected independently of these settings. Invalid or unavailable
-policy preserves deployments instead of using a stale enabled value.
-
-Roll out the product API to the selected gateway first, verify admin capability
-1.0.1, controller capability 1.0.0 and admin save/readback
-there, then roll out the protected controller
-policy consumer. An ordinary gateway-backed UI preview does not contain a new
-API; leave cleanup fail-closed until its selected origin exposes the contract.
-This changes deployed policy only after that rollout.
-
-Local acceptance for this change used the task-owned dev stack at
-`http://127.0.0.1:18210` with a disposable replica at `127.0.0.1:17343`.
-A public Funnel was intentionally not provisioned for this disposable admin
-fixture; the isolated local acceptance environment is stopped after testing.
+After building the web client and Nitro server, run
+`node remix/scripts/transfer-capacity-acceptance.mjs` on macOS with Node and
+MongoDB installed. The fixture requires `sandbox-exec`, reserves loopback ports
+19861/19862, and fails if either is occupied. It creates its own replica set,
+disk object store and disposable accounts, using the documented administrator
+bootstrap, upload approval and account-scoped quota APIs. It first proves quota
+refusal, then grants only its disposable account 4 GiB. It never loads local environment files or
+uses an existing account or object bucket. Run it separately from ordinary unit
+tests: it moves more than 512 MiB of actual bytes, has a bounded deadline, and
+verifies process, port and temporary-directory cleanup. See the
+[remote transfer checkpoint](artifacts/anonymous-local-first-2026-10-27-remote-transfer/README.md)
+for results and verification limits.

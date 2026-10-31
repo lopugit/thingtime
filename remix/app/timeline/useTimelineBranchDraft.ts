@@ -11,19 +11,19 @@ import { TIMELINE_CHANGED_EVENT } from './clientEvents';
 type Connection = NonNullable<ReturnType<typeof useTimelineSession>['connection']>;
 const announce = () => window.dispatchEvent(new Event(TIMELINE_CHANGED_EVENT));
 const message = (failure: any) => failure?.error || failure?.message || 'Could not save this branch. Your local edits are preserved.';
-const noticeFor = (state: BranchSaveState, name: string) =>
+const noticeFor = (state: BranchSaveState, name: string, localOnly: boolean) =>
 	state === 'saved'
-		? `Saved to ${name} in your account.`
+		? localOnly ? `Saved to ${name} on this device.` : `Saved to ${name} in your account.`
 		: state === 'pending'
-		? 'Branch edit saved on this device. Waiting to sync to your account.'
+		? localOnly ? 'Branch edit is on this device. Retry saving to complete it.' : 'Branch edit saved on this device. Waiting to sync to your account.'
 		: 'The branch changed. Your edit is preserved in History; review a merge before continuing.';
 
 /** Caller mounts by account, source, branch and initial head identity. Reads
  * may fill a cold session but never replace an existing working copy. */
 export function useTimelineBranchDraft(target: TimelineBranchEntry, connection: Connection) {
 	const api = useApi();
+	// A later account cannot replace this working copy's read authority.
 	const apiRef = React.useRef(api);
-	apiRef.current = api;
 	const copy = React.useRef<TimelineBranchWorkingCopy | null>(null);
 	const [, redraw] = React.useReducer((value) => value + 1, 0);
 	const [recovery, setRecovery] = React.useState<TimelineEvent[]>([]);
@@ -103,7 +103,7 @@ export function useTimelineBranchDraft(target: TimelineBranchEntry, connection: 
 				.reconcile()
 				.then((state) => {
 					if (alive.current) {
-						setNotice(noticeFor(state, target.branch.name));
+						setNotice(noticeFor(state, target.branch.name, connection.scope.dataPlane === 'local-workspace'));
 						redraw();
 					}
 				})
@@ -157,13 +157,13 @@ export function useTimelineBranchDraft(target: TimelineBranchEntry, connection: 
 		try {
 			const state = await copy.current.save();
 			if (alive.current) {
-				setNotice(noticeFor(state, target.branch.name));
+				setNotice(noticeFor(state, target.branch.name, connection.scope.dataPlane === 'local-workspace'));
 				redraw();
 			}
 			announce();
 			return {
 				ok: state === 'saved' || state === 'pending',
-				error: state === 'refused' || state === 'advanced' ? noticeFor(state, target.branch.name) : undefined
+				error: state === 'refused' || state === 'advanced' ? noticeFor(state, target.branch.name, connection.scope.dataPlane === 'local-workspace') : undefined
 			};
 		} catch (failure) {
 			const error = message(failure);

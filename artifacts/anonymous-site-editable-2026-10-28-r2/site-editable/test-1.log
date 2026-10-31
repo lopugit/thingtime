@@ -1,0 +1,23 @@
+✖ global and site nested blocks remain individually editable after offline save and reload (26756.821593ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 26911.171574
+
+✖ failing tests:
+
+test at ../site-editable.test.mjs:7:1
+✖ global and site nested blocks remain individually editable after offline save and reload (26756.821593ms)
+  locator.click: Timeout 20000ms exceeded.
+  Call log:
+    - waiting for getByRole('button', { name: 'Open the builder inspector', exact: true })
+  
+      at open (/tmp/check/site-editable.test.mjs:39:162)
+      at async TestContext.<anonymous> (/tmp/check/site-editable.test.mjs:95:5) {
+    name: 'TimeoutError',
+    log: [ "  - waiting for getByRole('button', { name: 'Open the builder inspector', exact: true })" ]
+  }

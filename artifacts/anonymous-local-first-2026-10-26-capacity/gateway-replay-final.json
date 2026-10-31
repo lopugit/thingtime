@@ -1,0 +1,116 @@
+{
+  "ok": true,
+  "transport": "built-nitro",
+  "draftPreviewExactAssets": true,
+  "draftPreviewCsp": true,
+  "socialCardPngAndHead": true,
+  "viteRootDocs": true,
+  "registration": true,
+  "authCookies": true,
+  "crossSiteRefused": true,
+  "writes": true,
+  "dedicatedOwnHandler": true,
+  "dedicatedShellMetadata": true,
+  "independentDedicatedDatabase": true,
+  "dedicatedIndexCommands": {
+    "creates": 138,
+    "drops": 51,
+    "peak": 2
+  },
+  "promotion": true,
+  "rollback": true,
+  "followerMongoDials": 0,
+  "initializedIndexCommands": {
+    "creates": 138,
+    "drops": 51,
+    "peak": 2
+  },
+  "unchangedColdIndexCommands": {
+    "creates": 0,
+    "drops": 0,
+    "peak": 0
+  },
+  "catalogue": {
+    "themes": {
+      "owner": {
+        "entries": 105,
+        "authenticated": true,
+        "anonymousRefused": true,
+        "crossSiteRefused": true,
+        "wrongOwnerRefused": true,
+        "sortedExactIds": true,
+        "exactPersistedVersion": true
+      },
+      "follower": {
+        "entries": 105,
+        "authenticated": true,
+        "anonymousRefused": true,
+        "crossSiteRefused": true,
+        "wrongOwnerRefused": true,
+        "sortedExactIds": true,
+        "exactPersistedVersion": true
+      }
+    },
+    "algorithms": {
+      "owner": {
+        "entries": 65,
+        "authenticated": true,
+        "anonymousRefused": true,
+        "crossSiteRefused": true,
+        "wrongOwnerRefused": true,
+        "sortedExactIds": true,
+        "exactPersistedVersion": true
+      },
+      "follower": {
+        "entries": 65,
+        "authenticated": true,
+        "anonymousRefused": true,
+        "crossSiteRefused": true,
+        "wrongOwnerRefused": true,
+        "sortedExactIds": true,
+        "exactPersistedVersion": true
+      }
+    },
+    "realReplica": true,
+    "canonicalReaderIntegrity": true,
+    "themeRowsCrossPageBoundary": true,
+    "legacyPrecedenceLive": false,
+    "concurrentMutationPinningLive": false,
+    "ownedPagination": {
+      "themes:owner": {
+        "entries": 106,
+        "pages": 2,
+        "exactIds": true,
+        "legacyBoundRetained": true,
+        "malformedCursorRefused": true,
+        "anonymousRefused": true
+      },
+      "algorithms:owner": {
+        "entries": 66,
+        "pages": 2,
+        "exactIds": true,
+        "legacyBoundRetained": true,
+        "malformedCursorRefused": true,
+        "anonymousRefused": true
+      },
+      "themes:follower": {
+        "entries": 106,
+        "pages": 2,
+        "exactIds": true,
+        "legacyBoundRetained": true,
+        "malformedCursorRefused": true,
+        "anonymousRefused": true
+      },
+      "algorithms:follower": {
+        "entries": 66,
+        "pages": 2,
+        "exactIds": true,
+        "legacyBoundRetained": true,
+        "malformedCursorRefused": true,
+        "anonymousRefused": true
+      }
+    },
+    "canonicalCreatesBeyondOldCeilings": true,
+    "exactSyncRetriesBeyondOldCeilings": true
+  }
+}

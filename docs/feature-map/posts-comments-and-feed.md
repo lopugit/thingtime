@@ -1,13 +1,13 @@
 # Posts, comments and feed
 
-Typed Posts and comments retain explicit `crystal.renderComponent` metadata.
-The root declaration takes precedence over legacy nested `crystal.thing` in
-`PostInteractiveThing`; the linked embed still reads its Component through its
-own ACL. See [the presentation contract](api-endpoints-and-capabilities.md)
-for validation, versions and regression checks.
+Anonymous `api.client.ts` resolves `local-*` algorithm previews from the leased
+`LocalAlgorithms` store before public discovery. Missing local IDs stay local
+404s and retired facades refuse; they never trigger public capability/HTTP reads.
+Regression: `local-workspace/api.client.test.ts` and `algorithms.test.ts`.
 
 Posts are `post` Things; comments share the post schema
-(`thingtime: ['post', 'comment']`, `targetId` = parent) so every comment is
+(`thingtime` includes `comment`, including canonical comment-only records;
+`targetId` = parent) so every comment is
 reactable and has a `/post/:id` permalink. Reactions, saves, votes and views are
 relational children aggregated on read (`FUNDAMENTALS.md` §3).
 
@@ -16,6 +16,8 @@ relational children aggregated on read (`FUNDAMENTALS.md` §3).
 | Concern | Path |
 | --- | --- |
 | Public projections (`PublicPost`, attachments, counts, audiences) | `app/api/utils/things/things.ts` (`resolvePostAttachments`, post projection block) |
+| Anonymous local algorithm profiles | `app/local-workspace/algorithms.ts`, `api.client.ts`; canonical `api/utils/algorithms/algorithmContent.ts`, `algorithmTransferCore.ts` and `utils/thingTransfer/algorithm.ts` |
+| Conditional account algorithm profile sync | `app/api/utils/algorithms/algorithmSync*.ts`, `app/routes/api/v1/algorithms/sync/`; extends the canonical protected writer, home storage and Timeline receipts |
 | Feed ranking / algorithms | `app/api/utils/things/feedRanking.ts`, `app/components/Feed/defaultAlgorithms.ts`, `AlgorithmMenu.tsx` |
 | Engagement | `app/api/utils/things/updown.ts`, `vote.ts`, `saved.ts`, `views.ts`; routes under `app/routes/api/v1/things/{react,save,vote,updown,views,comment,share}` |
 | Client types | `app/components/Feed/feedTypes.ts` (`PublicPost`, `PublicComment`, `CIRCLE_META`) |
@@ -24,6 +26,8 @@ relational children aggregated on read (`FUNDAMENTALS.md` §3).
 | Post ⋯ menu (privacy submenu, moderation, flair, Files section) | `app/components/Feed/PostThingMenu.tsx` |
 | Composer (Editor.js rich text, attachments, tags, audience) | `app/components/Feed/PostComposer.tsx`, `app/components/Editor/*` |
 | Lists and pages | `app/components/Feed/PostList.tsx`, `Feed.tsx`, `app/routes/feed.tsx`, `post.tsx`, `media.tsx`, `explore.tsx` |
+| Account offline read snapshots and conditional bookmarks/reactions | `app/local-workspace/accountPosts.ts`, `accountInteractions.ts`, `accountApi.client.ts`; native Saved and post permalink consumers |
+| Device feed and scoped pagination | `app/local-workspace/feed.ts`, anonymous/account API facades, `components/Feed/Feed.tsx`; owned roots and retained account projections, Latest/New or local profile page ranking, type/audience/tag/date filters |
 | Reaction overlays and thread cache (optimistic rendering) | `app/components/Feed/reactionOverlay.ts`, `threadCache.ts`, `useFeedEngagement.ts` |
 | Emoji picker, retained input and personal quick reactions | `app/components/Emoji/EmojiPicker.tsx`, `useRecentReactions.tsx`, `reactionPickerState.ts`; `PostCard.tsx` shares them across posts/comments |
 | Messenger reaction chips and retained emoji input | `app/components/Messenger/MessageRow.tsx`, `MessengerEmojiPicker.tsx`, `Composer.tsx`; shared `Emoji/useEmojiPickerDraft.ts` scopes drafts to identity and message/chat/thread |
@@ -147,6 +151,191 @@ Run `test:subspaces`, `test:messenger`, `test:feed`, `test:api-capabilities`, th
 `test:subspace-messages-acceptance` against the built server. The latter creates
 its own OS-fenced disposable replica and real API fixtures; `--ui` additionally
 checks desktop/mobile rendering and saved controls.
-The feed suite includes `thingRenderComponent.test.ts`; the acceptance harness
-covers saved/embedded render declarations, exact saved content and both embed
-placements with rendered/data views and reload.
+
+## Device-only algorithms (rollout in progress)
+
+The workspace adapter stores protected algorithm Things locally, trains only on
+bounded credential-free public-feed features and ranks each returned page on the
+device. Settings and the feed menu use content identity without changing account
+authentication. Training flushes, including page-hide, use the captured workspace
+facade; identity changes discard queued/session events. Canonical exports omit
+lineage and authority and imports do not change active selection. Account profile
+sync and full multi-tab acceptance remain outstanding in
+[the coverage matrix](../local-workspaces.md).
+
+
+## Anonymous post authoring
+
+The feed's **On this device** control and offline first-page fallback display
+only the selected workspace's owned or retained posts, with explicit partial
+coverage. Device cursors bind account, origin, data plane, filters and profile;
+they cannot extend an online page. Current subspace membership, community sorts
+and nearby discovery remain online operations. Retained posts do not acquire
+ownership or write authority; known refusals and local deletion remove cached
+copies. `AccountPostCache.fenceRead` rechecks late refusals after feed ranking;
+authored deletion and retained-copy cleanup commit together.
+`local-workspace/feed*.test.ts` covers these boundaries and local profile
+training. The native inherited-audience fixture also checks the device feed.
+
+`local-workspace/posts.ts` and `LocalThings.savePost` map and validate native
+composer inputs, bind local attachments atomically and project native PostCards.
+`anonymousApi` supplies local post GET, comment/reply list and mutation adapters.
+Feed creation navigates to the local permalink without injecting it into public
+feed results. Local identity and audience never grant server access. Run
+`test:local-workspace`, `test:feed`, `test:drafts` and `test:hooks`; verify cold
+reload of images and relational comments with the network disabled. `local-workspace/interactions.ts` supplies scoped relational saves, reactions,
+polls and up/down votes through the same facade, validators and tally helpers.
+The normal Saved page is discoverable without login and isolates caches by full
+workspace scope. Content export excludes these managed activity rows; deletion
+cascades them. Account interaction sync and full acceptance remain tracked in the
+coverage matrix.
+
+
+Anonymous post/reply controls derive local identity from the adapter's local
+author projection matching the active workspace, including restored components'
+discussions. `PersistedThingMenu` uses workspace content identity and separately
+checks the resolved author for Rename. `restoredRouting.test.ts` plus the clean
+offline History/detail browser regressions cover this path; public discussions
+and remote recipient operations keep their account requirements.
+
+Account post snapshots are read-only, scoped by account/origin/data plane and
+bounded by the existing workspace quota. They never enter owned Things or
+content sync. Retain only normal authorized projections, strip bearer-link and
+server-only envelopes, and keep attachment bytes behind their existing resolver.
+A known 403/404/410 removes the snapshot and nested retained references; refusal
+watermarks fence older in-flight reads. The Saved page's first-paint cache is
+cleared only for the affected scope. Anonymous workspaces never adopt these
+snapshots or account interaction intents.
+
+`accountPosts.browser.test.ts` uses `TT_LOCAL_ACCOUNT_POSTS_URL` and optional
+`TT_LOCAL_ACCOUNT_POSTS_ARTIFACTS` with the shared Playwright/Chrome paths. It
+creates two disposable local accounts and a username-granted private post,
+then exercises offline Save/react, Saved/permalink reload, two tabs, reconnect,
+logout isolation and permission revocation. `test:local-workspace` includes its
+unit tests; enable the browser test separately against the disposable stack.
+
+
+Account generic discussions use `local-workspace/accountDiscussions.ts` through
+`accountApi.client.ts`. `accountDiscussionProjection` shares the post cache's
+allowlisted serializer while retaining the separate discussion shape. Native
+`ThingComments` and its pager carry partial-coverage/retention diagnostics.
+`accountReadRevocation.ts` atomically clears both read projections, descendants
+and embedded references; watermarks fence older responses. Read snapshots never
+create owned Things or authorize writes. Run `test:local-workspace`, `test:feed`,
+`test:things`, and the opt-in `accountDiscussions.browser.test.ts`; see the
+[discussion checkpoint](../local-workspaces.md#account-discussion-reads-and-refusal-cleanup--2026-10-17).
+
+
+Account post/comment authorship reuses `LocalThings.savePost`, `AccountThingSync`
+and the normal `accountThingTransport` comment endpoint. Retained foreign
+projections authorize only device storage; server access is checked on sync.
+`accountAuthoring.browser.test.ts` exercises the native private post composer;
+`accountDiscussions.browser.test.ts` also creates offline comments and replies.
+Known refusal prunes synced owned read copies while preserving pending work.
+Bound media and remaining native mutation coverage stay open in the matrix.
+
+
+Offline permalink parent/root navigation uses `posts.postThreadContext` and
+`AccountDiscussionCache.threadContext`. Account context reads owned content,
+read-only snapshots and refusal/deletion fences in one scoped transaction.
+`AccountPostCache` retains the canonical response's root reference without
+fabricating intervening targets. `accountReadRevocation` clears those references
+with descendants; generic parents remain discussion snapshots. Regressions:
+`threadContext.test.ts`, plus enabled `details.browser.test.ts`,
+`accountDiscussions.browser.test.ts` and `accountBoundRetention.browser.test.ts`.
+See the [context checkpoint](../local-workspaces.md#offline-conversation-context--2026-10-17).
+
+
+Plain comments and replies use the same scoped draft adapter as other workspace
+editors. `PlainCommentDraftTools` provides reviewed earlier-device recovery;
+`plainCommentDraft.ts` preserves current text and refuses changed/unsupported
+sources. PostCard's compact textareas retain line breaks and guard IME Enter.
+`plainCommentDraft.browser.test.ts` covers actual local draft-write failure,
+independent submission and verified private reconnect; the anonymous discussion
+fixture awaits real submission completion before asserting rendered comments.
+See [draft recovery](../local-workspaces.md#plain-comment-draft-recovery--2026-10-17).
+
+
+Older account-only plain comment/reply drafts are discoverable through the existing
+recovery dialog. Explicit read-only review uses the exact target context; copying
+rechecks the source and appends text to an independent workspace draft. Original
+IDs/templates remain unchanged, rich/media state is refused, and anonymous fields
+never query account drafts. See [account draft recovery](account-drafts-and-templates.md#read-only-account-legacy-review)
+for native offline and account-switch acceptance.
+
+
+Rich composer recovery now uses the canonical scoped workspace context for new
+posts, edits and rich comments. Automatic resume and working-draft selection cannot
+choose another database's context; reusable templates create independent scoped
+copies. Shared draft identity is available before editing, with unchanged SHA-256
+keys. See [draft scope acceptance](../local-workspaces.md#rich-composer-workspace-scope--2026-10-17)
+for native fixtures and the remaining legacy rich/media and identity-transition gates.
+
+
+The native post template menu supports owned offline account posts through the
+same scoped draft adapter. Parent deletion includes bound media through the
+existing file cleanup service; reusable templates and their independent bytes
+survive. See [offline template acceptance](../local-workspaces.md#offline-post-templates-and-bound-parent-deletion--2026-10-17)
+for cold browser, private reconnect and uncertain-operation coverage.
+
+
+The conditional algorithm sync contract is available independently of editor
+integration. It transfers canonical profile state with exact stored versions and
+immutable receipts; it never replays training events or changes publication.
+Normal deletion now clears only its matching active selection in the same home
+transaction. `test:feed` covers command/receipt validation and route admission;
+`test:api-capabilities` pins both manifests. The opt-in
+`algorithmSync.api.test.ts` proves real storage, concurrency and normal transfer
+round-trip using disposable API-created accounts. Account local editing,
+selection sync and native reconnect remain outstanding in the coverage matrix.
+
+
+Account algorithm queue preparation now lives in
+`local-workspace/accountAlgorithms.ts`, reusing `LocalAlgorithms` transaction
+hooks and home-scoped Things. `algorithmTransport.client.ts` verifies current
+selected authority independently of storage destination. Frozen retries,
+catalogue epochs, tombstones and conflict review use the same workspace/lease
+infrastructure as other account queues. Native facade/feed/editor activation,
+selection sync and transfer/library hooks remain pending. Run
+`test:local-workspace`; dedicated cases cover two tabs, deletion during creation,
+training after lost responses, stale review, large profiles and branch ordering.
+
+### Independent account algorithm selection
+
+`algorithmSelectionContract.ts` and `algorithmSelection.ts` under
+`api/utils/algorithms` add bounded conditional pointer synchronization to
+`algorithms/sync` 1.1.0. The normal secure account writer owns selection CAS;
+its receipt commits in the same home transaction. The matching local-workspace
+selection queue records local choices atomically, preserves uncertain retries,
+and protects referenced profiles during catalogue refresh. Account native
+facade/feed/transfer and review integration remains outstanding.
+
+### Account algorithm library transfer
+
+`AccountAlgorithmSync` supplies protected import, move, delete, projection and
+portable export hooks to `LocalThings`, `AccountThingSync` and
+`exportAccountThings`. The normal importer owns validation and ID remapping.
+`algorithms/sync` 1.2.0 accepts explicit folder placement through the existing
+canonical writer and home-folder transaction locks. Account content and
+placement retries remain separate from active-selection synchronization.
+`accountAlgorithmLibrary.test.ts` covers offline round trips, folder prerequisites,
+uncertain writes, conflict copies and export revocation. Native facade/editor/feed
+activation remains pending.
+
+
+Native account algorithms use `local-workspace/accountAlgorithmWorker.client.ts`
+and `accountApi.client.ts` to bind home profile/selection pumps to selected
+account authority. `AlgorithmSyncStatus.tsx` exposes fresh conflict review.
+`accountAlgorithmFacade.test.ts` covers source-plane observations, offline
+normal transfers and independent pumps; `accountAlgorithms.browser.test.ts`
+covers the native manager round-trip on the built Nitro app. The broader feed
+and account/plane browser gates remain in the coverage matrix.
+
+
+Character delegation and device scopes: `useRootUser` reads the root-loader
+identity; `CharacterScope` changes only the composer actor. `characterRequest.client.ts`
+fences delegated requests with the current root workspace, while `draftClient.ts`
+uses server-checked Character drafts and separate recovery keys. Matching owner
+selectors keep the ordinary offline comment path. `characterDelegation.test.ts`
+covers offline refusal, queue isolation and stale responses; native acceptance
+and full delegated offline workspace coverage remain open.

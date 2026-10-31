@@ -1,0 +1,69 @@
+{
+  "formatVersion": 1,
+  "exportedAt": "2026-10-23T07:02:31.120Z",
+  "event": {
+    "actorId": "local-workspace",
+    "after": {
+      "adapter": "algorithm-content",
+      "value": {
+        "crystal": {
+          "description": "",
+          "emoji": "🧠",
+          "eventCount": 0,
+          "lastTrainedAt": null,
+          "name": "History profile 1c24d7",
+          "weights": {
+            "authors": {},
+            "tags": {},
+            "types": {}
+          }
+        },
+        "folderId": null
+      },
+      "version": 1
+    },
+    "before": null,
+    "branchId": "main",
+    "clientId": "local-workspace",
+    "dependencies": [],
+    "formatVersion": 1,
+    "id": "local-event-f972332a-4f30-4ebe-ac6c-813e8f1ab9c1",
+    "label": "Created Thing",
+    "mode": "revision",
+    "occurredAt": "2026-10-23T07:02:20.959Z",
+    "operation": "create",
+    "operationId": "60f68f3f-b274-44fa-b36c-50c1ba30e40d",
+    "ownerId": "local-workspace",
+    "parentIds": [],
+    "source": "client",
+    "thingId": "local-6b7343eb-f92d-48f5-a6eb-81b158a961e6"
+  },
+  "receipt": {
+    "acceptedAt": "2026-10-23T07:02:20.959Z",
+    "eventId": "local-event-f972332a-4f30-4ebe-ac6c-813e8f1ab9c1",
+    "formatVersion": 1,
+    "ownerId": "local-workspace",
+    "position": 1
+  },
+  "content": {
+    "adapter": "algorithm-content",
+    "value": {
+      "crystal": {
+        "description": "",
+        "emoji": "🧠",
+        "eventCount": 0,
+        "lastTrainedAt": null,
+        "name": "History profile 1c24d7",
+        "weights": {
+          "authors": {},
+          "tags": {},
+          "types": {}
+        }
+      },
+      "folderId": null
+    },
+    "version": 1
+  },
+  "notes": [],
+  "name": null
+}

@@ -1,0 +1,29 @@
+✔ native anonymous theme History reviews restore, undo and merge offline (42965.341841ms)
+✖ native account theme History reviews restore, undo and merge offline (49895.765043ms)
+✖ native custom-plane account theme History reviews restore, undo and merge offline (53402.440557ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 147059.446305
+
+✖ failing tests:
+
+test at app/local-workspace/themeVersions.browser.test.ts:2:1675
+✖ native account theme History reviews restore, undo and merge offline (49895.765043ms)
+  Error: This export needs an authority receipt or an explicit device draft.
+      at parseTimelineVersionExport (/workspace/thingtime/remix/app/timeline/exportVersion.ts:143:9)
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:309:22)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+
+test at app/local-workspace/themeVersions.browser.test.ts:2:1675
+✖ native custom-plane account theme History reviews restore, undo and merge offline (53402.440557ms)
+  Error: This export needs an authority receipt or an explicit device draft.
+      at parseTimelineVersionExport (/workspace/thingtime/remix/app/timeline/exportVersion.ts:143:9)
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/themeVersions.browser.test.ts:309:22)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7)

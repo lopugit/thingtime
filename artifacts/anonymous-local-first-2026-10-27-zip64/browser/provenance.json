@@ -1,0 +1,12 @@
+{
+  "capturedAt": "2026-10-26T14:38:19.221Z",
+  "sourceHashes": {
+    "archive.ts": "6c852e130babb72e7b6c0ec9ea15272c276916d0d4fa98122ff2382e9980c56e",
+    "binary.ts": "e95188710385dc5444e180d11d7081a9d9fcb0fe12224c32578db6c46a327fa8",
+    "storedZip.ts": "6bf81723b4de74f59a8d75cacaa6ac51599a26b25610cf74a32a6abe396efd0e",
+    "format.ts": "9dd3975c6e6dfb41e891a765071b17df060aecee56c1276d234476c06f7e35ae"
+  },
+  "bundleSha256": "0a48f93c928627f621f7b6ff489234464d4c1451e41a42c681bee55dbbd0daf6",
+  "testSha256": "e9ceb7d2cac15d65d3fa677a051a0bce76ee37218f3794b3f0886b768111fa4c",
+  "scope": "Canonical ZIP64 codec in genuine sandboxed Chromium File/Blob; not full UI acceptance"
+}

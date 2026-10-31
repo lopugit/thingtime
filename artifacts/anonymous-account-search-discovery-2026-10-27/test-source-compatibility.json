@@ -1,0 +1,11 @@
+{
+  "scope": "Test-only synthetic username construction; no product or executed bundle changes",
+  "executedSource": "native-6.executed-source.ts",
+  "executedSourceSha256": "54b477a234a3e831ec3c628e0e422cc2d038e53bb1216701c9b548f0a670c18f",
+  "currentSource": "remix/app/local-workspace/accountSearchDiscovery.browser.test.ts",
+  "currentSourceSha256": "a8a8104c721d5e3ef2de3b784b9c841883f03ab85d95537ddb938134f7bed693",
+  "change": "String.replaceAll('-', '') to String.replace(/-/g, '') for repository TypeScript target",
+  "equivalence": "Both remove every literal hyphen from the same UUID prefix; reverse replacement reproduces executed source byte-for-byte",
+  "reverseTransformMatchesExecutedBytes": true,
+  "nativeRerun": false
+}

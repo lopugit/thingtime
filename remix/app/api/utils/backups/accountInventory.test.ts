@@ -37,6 +37,8 @@ function fixture(count = 300) {
 	const objects = new Map<string, Uint8Array>();
 	const store: BackupObjectStore = {
 		read: async (key, max) => {
+			state.reads.set(key, (state.reads.get(key) ?? 0) + 1);
+			await state.beforeRead(key);
 			const value = objects.get(key);
 			if (value) assert.ok(value.length <= max);
 			return value ?? null;
@@ -52,6 +54,8 @@ function fixture(count = 300) {
 	const state = {
 		beforeHead: async () => {},
 		beforePut: (_key: string) => {},
+		beforeRead: async (_key: string) => {},
+		reads: new Map<string, number>(),
 		ordinaryYields: [] as string[],
 		queries: 0,
 		closed: 0,
@@ -986,3 +990,108 @@ for (const mode of ['missing', 'foreign', 'target', 'purpose', 'profile', 'delet
 		assert.equal(f.state.closed, f.state.queries);
 	});
 }
+
+test('large instruction generations are paged private records and recover independently of live content', async () => {
+  const { instructionBackupFixture } = await import('./instructionRecords.fixtures');
+  const { openBackupInstructionRecord } = await import('./instructionRecords');
+  const { recoverBackupInstructionSettings } = await import('./accountSnapshots');
+  const f = fixture(0), generation = instructionBackupFixture('owner', 160, 'committed', 70_000), staging = instructionBackupFixture('owner', 1, 'staging'), doc = accountFixture();
+  const ordinalIds = generation.docs.slice(1).map((record: any) => record.shareId);
+  assert.notDeepEqual([...ordinalIds].sort(), ordinalIds, 'hashed Thing IDs are not instruction ordinal order');
+  assert.ok(Buffer.byteLength(JSON.stringify(generation.instructions)) > 1024 * 1024);
+  doc.secure = Buffer.from(JSON.stringify({ meta: { lopuInstructions: { revision: generation.revision, reference: generation.reference } }, passwordHash: 'NEVER_EXPORT' }));
+  f.source.push(doc, ...generation.docs, ...staging.docs);
+  await f.run();
+  await captureBackup(f.store, f.id, { read: async () => { throw Error('Instruction bytes are already retained'); } }, f.access);
+  await sealBackup(f.store, f.id, f.access);
+  f.source.splice(0);
+  const snapshot = await openBackupAccountSnapshot(f.store, f.id, 'owner', f.access);
+  assert.equal(snapshot.version, 2);
+  assert.deepEqual(accountContentValue(snapshot).preferences.lopuInstructions, { revision: generation.revision, reference: generation.reference });
+  for (const record of [generation.docs[0], generation.docs.at(-1)!, staging.docs[0]]) {
+    const recovered = await openBackupInstructionRecord(f.store, f.id, record.shareId, f.access);
+    assert.equal(recovered.id, record.shareId);
+    assert.equal(recovered.ownerId, 'owner');
+  }
+  const staged = await openBackupInstructionRecord(f.store, f.id, staging.docs[0].shareId, f.access);
+  assert.equal(staged.payload.status, 'staging', 'staging content never becomes active during backup recovery');
+  f.state.reads.clear();
+  const recoveredSettings = await recoverBackupInstructionSettings(f.store, f.id, f.access);
+  assert.equal(JSON.stringify(recoveredSettings.instructions), JSON.stringify(generation.instructions), 'all rows, disabled flags and Unicode bytes recover exactly');
+  assert.equal(recoveredSettings.revision, generation.revision);
+  const plan = f.json('plan.json'), metadataPageReads = [...f.state.reads].filter(([key]) => /\/plan\/\d+\.json$/.test(key)).reduce((sum, [, count]) => sum + count, 0);
+  const chunkReads = [...f.state.reads].filter(([key]) => key.startsWith('chunks/')).reduce((sum, [, count]) => sum + count, 0);
+  assert.ok(plan.pages > 1, 'the sealed inventory spans multiple pages');
+  assert.equal(metadataPageReads, plan.pages * 4, 'recovery verifies and traverses the inventory once per account and selected generation');
+  assert.equal(chunkReads, generation.docs.length + 1, 'each selected immutable record is read once across validation and reconstruction');
+  assert.ok(f.state.queries < 40, 'batching must not query each part individually');
+});
+
+test('selected instruction recovery rejects retained bytes changed after sealed-manifest verification', async () => {
+  const { instructionBackupFixture } = await import('./instructionRecords.fixtures');
+  const { openBackupInstructionGeneration } = await import('./instructionRecords');
+  const f = fixture(0), generation = instructionBackupFixture('owner', 3), doc = accountFixture();
+  f.source.push(doc, ...generation.docs);
+  await f.run();
+  await captureBackup(f.store, f.id, { read: async () => { throw Error('Instruction bytes are already retained'); } }, f.access);
+  await sealBackup(f.store, f.id, f.access);
+  const selectedId = generation.docs[1].shareId, pages = Array.from({ length: f.json('plan.json').pages }, (_, i) => f.json(`plan/${i}.json`));
+  const item = pages.flatMap((page: any) => page.items).find((entry: any) => entry.thingId === selectedId);
+  assert.ok(item);
+  const rangePage = f.json(`ranges/${item.ordinal}/0.json`), chunkKey = `chunks/${rangePage.ranges[0].sha256}`;
+  const originalRead = f.store.read.bind(f.store);
+  let corrupted = false;
+  f.store.read = async (key, maxBytes) => {
+    const bytes = await originalRead(key, maxBytes);
+    if (key === chunkKey && bytes && !corrupted) {
+      corrupted = true;
+      const damaged = bytes.slice(); damaged[0] ^= 1; return damaged;
+    }
+    return bytes;
+  };
+  await assert.rejects(openBackupInstructionGeneration(f.store, f.id, 'owner', generation.reference, f.access), /corrupt|match/i);
+  assert.equal(corrupted, true, 'the mutation occurred after sealed metadata verification, during selected-record reads');
+});
+
+test('instruction recovery rejects an inflated declared part count at the first absent descriptor', async () => {
+  const { instructionBackupFixture } = await import('./instructionRecords.fixtures');
+  const { openBackupInstructionGeneration } = await import('./instructionRecords');
+  const f = fixture(0), generation = instructionBackupFixture('owner', 3), doc = accountFixture();
+  f.source.push(doc, ...generation.docs);
+  await f.run();
+  await captureBackup(f.store, f.id, { read: async () => { throw Error('Instruction bytes are already retained'); } }, f.access);
+  await sealBackup(f.store, f.id, f.access);
+  f.state.reads.clear();
+  await assert.rejects(openBackupInstructionGeneration(f.store, f.id, 'owner', {
+    ...generation.reference, partCount: Number.MAX_SAFE_INTEGER
+  }, f.access), /incomplete/i);
+  const chunkReads = [...f.state.reads].filter(([key]) => key.startsWith('chunks/')).reduce((sum, [, count]) => sum + count, 0);
+  assert.equal(chunkReads, 1, 'only the small manifest is decoded before ordinal three is found missing');
+});
+
+test('instruction generation recovery refuses a different owner before reading backup objects', async () => {
+  const { instructionBackupFixture } = await import('./instructionRecords.fixtures');
+  const { openBackupInstructionGeneration } = await import('./instructionRecords');
+  const f = fixture(0), generation = instructionBackupFixture('foreign-owner', 3);
+  await assert.rejects(openBackupInstructionGeneration(f.store, f.id, 'foreign-owner', generation.reference, f.access), /owner identity/);
+  assert.equal(f.state.reads.size, 0);
+});
+
+test('account instruction references refuse missing, corrupt or uncommitted generations', async () => {
+  const { instructionBackupFixture } = await import('./instructionRecords.fixtures');
+  const { fromBin } = await import('../auth/binary');
+  for (const mode of ['missing', 'corrupt', 'uncommitted', 'wrong-digest', 'wrong-revision'] as const) {
+    const f = fixture(0), generation = instructionBackupFixture('owner', 3), doc = accountFixture();
+    if (mode === 'missing') generation.docs.pop();
+    if (mode === 'corrupt') generation.docs[1].secure = Buffer.from('{}') as any;
+    if (mode === 'uncommitted') {
+      const payload = JSON.parse(fromBin(generation.docs[0].secure));
+      payload.status = 'staging'; generation.docs[0].secure = Buffer.from(JSON.stringify(payload)) as any;
+    }
+    const reference = { ...generation.reference, ...(mode === 'wrong-digest' ? { digest: 'f'.repeat(64) } : {}) };
+    doc.secure = Buffer.from(JSON.stringify({ meta: { lopuInstructions: { revision: mode === 'wrong-revision' ? 'different_revision' : generation.revision, reference } } }));
+    f.source.push(doc, ...generation.docs);
+    await assert.rejects(f.run());
+    assert.equal(f.objects.has(`snapshots/${f.id}/plan.json`), false);
+  }
+});

@@ -10,6 +10,7 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
@@ -228,6 +229,81 @@ test("byte-identical output deduplicates to one snapshot", () => {
   }
 })
 
+test("query cache preserves snapshot reuse, portable copying, and pruning", () => {
+  const root = fixture()
+  try {
+    writeFileSync(path.join(root, ".gitignore"), "graphify-out/snapshots/**/cache/\n")
+    const bin = path.join(root, "graphify-out", "test-bin")
+    mkdirSync(bin)
+    writeFileSync(path.join(bin, "graphify"), `#!${process.execPath}\n
+      const fs = require("node:fs"), path = require("node:path");
+      if (process.argv[2] !== "query") throw new Error("unexpected rebuild");
+      const cache = path.join(process.env.GRAPHIFY_OUT, "cache");
+      fs.mkdirSync(cache, { recursive: true });
+      fs.writeFileSync(path.join(cache, "last_query_stamp"), "local query");
+    `, { mode: 0o755 })
+    const invoke = (...args) => execFileSync(process.execPath, [
+      new URL("./graphify-cas.mjs", import.meta.url).pathname, ...args,
+    ], {
+      cwd: root,
+      env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}` },
+      encoding: "utf8",
+    }).trim()
+    const fingerprint = computeSourceFingerprint(root)
+    const snapshot = finalizeSnapshot(root, writeOutput(root, "queried", 2), {
+      ...fingerprint, version: "graphify test",
+    })
+    invoke("query", "source")
+    assert.equal(existsSync(path.join(snapshot.path, "cache", "last_query_stamp")), true)
+    assert.equal(selectSnapshot(root, fingerprint.sourceFingerprint)?.path, snapshot.path)
+    assert.equal(invoke("ensure"), snapshot.path, "a query must not trigger a rebuild")
+    assert.equal(finalizeSnapshot(root, writeOutput(root, "queried", 2), {
+      ...fingerprint, version: "graphify test",
+    }).path, snapshot.path, "local query cache does not change artifact identity")
+
+    const copy = path.join(root, "graphify-out", "portable-copy")
+    copyPortableFiles(snapshot.path, copy)
+    assert.equal(existsSync(path.join(copy, "graph.json")), true)
+    assert.equal(existsSync(path.join(copy, "cache")), false)
+
+    writeFileSync(path.join(root, "source.txt"), "two\n")
+    const nextFingerprint = computeSourceFingerprint(root)
+    const next = finalizeSnapshot(root, writeOutput(root, "next", 3), {
+      ...nextFingerprint, version: "graphify test",
+    })
+    assert.equal(invoke("ensure"), next.path)
+    assert.equal(existsSync(snapshot.path), false, "pruning includes queried snapshots")
+    assert.equal(listSnapshots(root).length, 1)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("snapshot validation rejects unknown entries and non-directory query caches", () => {
+  const root = fixture()
+  try {
+    const fingerprint = computeSourceFingerprint(root)
+    const snapshot = finalizeSnapshot(root, writeOutput(root, "strict", 2), {
+      ...fingerprint, version: "graphify test",
+    })
+    const unknown = path.join(snapshot.path, "unknown")
+    const cache = path.join(snapshot.path, "cache")
+    for (const [entry, create] of [
+      [unknown, () => writeFileSync(unknown, "unexpected")],
+      [unknown, () => mkdirSync(unknown)],
+      [cache, () => writeFileSync(cache, "not a directory")],
+      [cache, () => symlinkSync(root, cache, "dir")],
+    ]) {
+      create()
+      assert.equal(selectSnapshot(root, fingerprint.sourceFingerprint), null)
+      rmSync(entry, { recursive: true, force: true })
+    }
+    assert.equal(selectSnapshot(root, fingerprint.sourceFingerprint)?.path, snapshot.path)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test("an existing artifact path rejects changed portable bytes", () => {
   const root = fixture()
   try {
@@ -319,6 +395,12 @@ test("repository ignore policy publishes semantic CAS but not mutable cache", ()
 
   assert.equal(checkIgnore(semanticCas), 1)
   assert.equal(checkIgnore(mutableSemantic), 0)
+  const snapshot = `graphify-out/snapshots/v1/${inputKey}/${contentHash}`
+  assert.equal(checkIgnore(`${snapshot}/cache/last_query_stamp`), 0)
+  assert.equal(checkIgnore(`${snapshot}/graph.html`), 0)
+  for (const name of ["graph.json", "manifest.json", "GRAPH_REPORT.md", "snapshot.json"]) {
+    assert.equal(checkIgnore(`${snapshot}/${name}`), 1)
+  }
 })
 
 test("activation replaces a dangling compatibility alias", () => {

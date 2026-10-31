@@ -49,7 +49,10 @@ canonical link), `tt:custom` + `tt:user/<name>[/comment|/write]` and
 
 - Post menu privacy submenu and hidden-link toast: `app/components/Feed/PostThingMenu.tsx`, `PostCard.tsx` (`handleVisibilityChange`).
 - `/things` share dialog (folder audience, optional recursive apply): `app/components/Things/ThingsDialogs.tsx` `ShareDialog`.
-- Audience chip text: `audienceDescription` in `audienceCore.ts`.
+- Audience chip text: `thingAudienceDisplay` and `audienceDescription` in
+  `audienceCore.ts`. Generic Thing headers use only the exact Thing/subspace's
+  companion projection; missing context stays explicit. An inherited resolved
+  public ACL alone never overrides a private subspace or parent description.
 
 ## Tests
 
@@ -58,6 +61,9 @@ canonical link), `tt:custom` + `tt:user/<name>[/comment|/write]` and
   (shared compositions), `test:things`.
 - `TESTING.md`: "Post interactions & inherit chains", "Things page" (share
   dialog), sharing sections under the attachments and webpages checklists.
+- Opt-in `Sharing/inheritedAudience.browser.test.ts`: generic/post inherited
+  audience labels, real guest/foreign refusals, responsive composer hit targets
+  and cold-offline scoped feed at 1440/390/320 px.
 
 
 Branch visual previews use `webpages/componentPreview.ts`: caller-authored

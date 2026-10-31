@@ -1,33 +1,17 @@
 import { passwordRequest } from './client';
-import { encryptPasswordFile, decryptPasswordFile, iterableStream, passwordFileParts, type PasswordFile } from './fileCrypto';
-export type SavedPasswordFile = { id: string; entryId?: string; metadata: PasswordFile };
-export async function uploadPasswordFile(ownerId: string, entryId: string, metadata: PasswordFile, open: () => ReadableStream<Uint8Array>, signal?: AbortSignal) {
-  const call = (operation: string, rest: Record<string, unknown> = {}) => passwordRequest(ownerId, { operation, entryId, ...rest }, signal);
-  const { upload } = await call('file-start', { metadata });
-  if (upload.state !== 'ready') {
-    let partNumber = 0;
-    const encrypted = iterableStream(encryptPasswordFile(open(), metadata, signal));
-    for await (const bytes of passwordFileParts(encrypted, upload.partSizeBytes, signal)) {
-      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as BufferSource));
-      const checksumSha256 = btoa(String.fromCharCode(...digest));
-      const { parts } = await call('file-parts', { fileId: upload.id, parts: [{ partNumber: ++partNumber, checksumSha256 }] });
-      const response = await fetch(parts[0].url, { method: 'PUT', headers: parts[0].headers, body: bytes as BodyInit, credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', signal });
-      if (!response.ok) throw new Error('Encrypted file upload failed. Retry to resume.');
-    }
-  }
-  return (await call('file-complete', { fileId: upload.id })).file as SavedPasswordFile;
+import { remotePasswordStorage } from './fileTransfer';
+import type { PasswordFile } from './fileCrypto';
+export type { SavedPasswordFile } from './storage';
+
+/** Legacy online account UI; device workspaces supply their own storage. */
+export function accountPasswordStorage(ownerId: string) {
+  return remotePasswordStorage((body, signal) => passwordRequest(ownerId, body, signal), (url, init) => fetch(url, init));
 }
-export async function listPasswordFiles(ownerId: string, entryId: string, signal?: AbortSignal) {
-  return listPasswordFilesForEntries(ownerId, [entryId], signal);
-}
-export async function listPasswordFilesForEntries(ownerId: string, entryIds: string[], signal?: AbortSignal, sourceIds?: string[]) {
-  const files: SavedPasswordFile[] = []; let cursor: string | undefined;
-  do { const result = await passwordRequest(ownerId, { operation: 'file-list', entryIds, sourceIds, ...(cursor ? { cursor } : {}) }, signal); files.push(...result.files); cursor = result.nextCursor || undefined; } while (cursor);
-  return files;
-}
-export async function openPasswordFile(ownerId: string, entryId: string, fileId: string, signal?: AbortSignal) {
-  const result = await passwordRequest(ownerId, { operation: 'file-download', entryId, fileId }, signal);
-  const response = await fetch(result.url, { credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer', redirect: 'error', signal });
-  if (!response.ok || !response.body) throw new Error('Encrypted file could not be downloaded.');
-  return { metadata: result.metadata as PasswordFile, stream: iterableStream(decryptPasswordFile(response.body, result.metadata, signal)) };
-}
+export const uploadPasswordFile = (ownerId: string, entryId: string, metadata: PasswordFile, open: () => ReadableStream<Uint8Array>, signal?: AbortSignal) =>
+  accountPasswordStorage(ownerId).uploadFile(entryId, metadata, open, signal);
+export const listPasswordFiles = (ownerId: string, entryId: string, signal?: AbortSignal) =>
+  accountPasswordStorage(ownerId).listFiles([entryId], signal);
+export const listPasswordFilesForEntries = (ownerId: string, entryIds: string[], signal?: AbortSignal, sourceIds?: string[]) =>
+  accountPasswordStorage(ownerId).listFiles(entryIds, signal, sourceIds);
+export const openPasswordFile = (ownerId: string, entryId: string, fileId: string, signal?: AbortSignal) =>
+  accountPasswordStorage(ownerId).openFile(entryId, fileId, signal);

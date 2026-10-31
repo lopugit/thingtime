@@ -1,0 +1,28 @@
+✖ native post and Thing permalinks preserve audience context and reachable composer controls (202322.087165ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 203138.835186
+
+✖ failing tests:
+
+test at app/components/Sharing/inheritedAudience.browser.test.ts:2:1406
+✖ native post and Thing permalinks preserve audience context and reachable composer controls (202322.087165ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /(?:^|\n)oom_kill 0(?:\n|$)/. Input:
+  
+  ''
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/components/Sharing/inheritedAudience.browser.test.ts:232:14)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: /(?:^|\n)oom_kill 0(?:\n|$)/,
+    operator: 'match',
+    diff: 'simple'
+  }

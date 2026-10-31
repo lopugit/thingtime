@@ -1,0 +1,22 @@
+✖ native account history retains an offline message through reconnect refusal, explicit retry, two tabs and cold reload (61747.706191ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 61856.037532
+
+✖ failing tests:
+
+test at ../account.test.mjs:10:1
+✖ native account history retains an offline message through reconnect refusal, explicit retry, two tabs and cold reload (61747.706191ms)
+  locator.waitFor: Timeout 30000ms exceeded.
+  Call log:
+    - waiting for getByText(/Showing previously downloaded account history/) to be visible
+  
+      at TestContext.<anonymous> (/tmp/check/account.test.mjs:214:75) {
+    name: 'TimeoutError',
+    log: [ '  - waiting for getByText(/Showing previously downloaded account history/) to be visible' ]
+  }

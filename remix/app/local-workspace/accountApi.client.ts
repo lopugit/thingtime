@@ -1,0 +1,1200 @@
+import { pruneAccountConversation } from './accountReadRevocation';
+import { themeVersionWriter } from './themeVersions';
+import { algorithmVersionWriter } from './algorithmVersions';
+import { createAccountAlgorithmWorker } from './accountAlgorithmWorker.client';
+import { isTransferAlgorithm } from '../utils/thingTransfer/algorithm';
+import { isDefaultAlgorithm } from '../components/Feed/defaultAlgorithms';
+import { LocalActions } from './actions';
+import { AccountThemeSync } from './accountThemes';
+import { isTransferTheme } from '../utils/thingTransfer/theme';
+import { accountThemeTransport } from './themeTransport.client';
+import { TimelineNameQueue } from '../timeline/nameQueue';
+import { AccountTimelineVersions } from './accountTimelineVersions';
+import type { VersionRequest } from '../timeline/publishedVersion';
+import { exportAccountTimelineVersion } from './accountTimelineExport';
+import { AccountTimeline, AccountTimelineStore, accountTimelineScope } from './accountTimeline';
+import { IndexedDbTimelineBackend } from '../timeline/indexedDb';
+import { TimelineNoteStore } from '../timeline/noteStore';
+import { AccountDraftSync } from './accountDrafts';
+import { AccountDraftCatalog } from './accountDraftCatalog';
+import { AccountDraftClient } from './accountDraftClient.client';
+import { createSyncPump } from './syncPump';
+import { isLocalMediaAttachment, localMediaInfo } from './attachments';
+import { AccountDiscussionCache } from './accountDiscussions';
+import { accountPostInput, localPostProjection, localTargetIndex, localThingReadProjection } from './posts';
+import { accountImportSupported } from './accountImport';
+import { AccountFileSync } from './accountFiles';
+import { localThingProjection } from './things';
+import { clearLocalCache } from '../hooks/localCache';
+import { AccountPostCache, accountPostAudienceContext, overlayAccountPost } from './accountPosts';
+import { AccountInteractionSync } from './accountInteractions';
+import { withExportDeadline } from '../utils/thingTransfer/exportDeadline';
+import { exportAccountThings, snapshotAccountExportInput } from './accountExport';
+import { browseLocalDefinitions } from './definitionCatalog';
+import { searchLocalThings } from './structuredSearch';
+import { deviceFeedPage, deviceFeedRequested, transientFeedFailure } from './feed';
+import { readWorkspaceSearchCursor, workspaceSearchCursor } from './searchCursor';
+import { searchLocalLibrary } from './librarySearch';
+import { MAX_ACTION_RUN_HISTORY, validateThingtimeCrystal } from '../schemas/registry';
+import { snapshotTransferValue } from '../utils/thingTransfer/value';
+import { parseTransfer, serializeTransfer, validateTransfer } from '../utils/thingTransfer/format';
+import { resolveWorkspacePage, type LocalWebpageTarget } from './webpageResolution';
+import { accountWriteSupported, accountThingCanCache, AccountThingSync, type AccountThingWrite } from './accountSync';
+import { accountThingTransport } from './accountTransport.client';
+import { AccountSuiteSync } from './accountSuites';
+import { accountSuiteTransport } from './suiteTransport.client';
+import { assertAccountSyncAllowed, canSyncAccountWorkspace, subscribeWorkspaceBinding, accountWorkspaceLease, accountRemoteWorkspaceLease, announceLocalWorkspaceChange, announceAccountHomeThemeChange, workspaceDatabase } from './runtime.client';
+import { rootIdentity } from '../utils/rootIdentity';
+import { WorkspaceError, workspaceScopeKey, type WorkspaceScope, type WorkspaceTransaction } from './storage';
+import { bundleFromPlan } from '../utils/thingTransfer/browser';
+
+export { accountThingCanCache } from './accountSync';
+
+type AccountScope = Extract<WorkspaceScope, { kind: 'account' }>;
+type Owner = { id: string; username?: string; displayName?: string; avatarUrl?: string | null };
+const workers = new Map<string, ReturnType<typeof createWorker>>();
+/** Matches the sync claim window: the longest a blocked pass must wait before
+ * a crashed tab's lease expires and this tab can replay the frozen write. */
+const BLOCKED_RETRY_MS = 60_000;
+const snapshotOptionalInput = <T extends object>(input: T): T => {
+ if (!input || ![Object.prototype, null].includes(Object.getPrototypeOf(input)) || Object.getOwnPropertySymbols(input).length)
+  throw new WorkspaceError('INVALID_INPUT', 'Choose a plain request object.');
+ const entries = Object.entries(Object.getOwnPropertyDescriptors(input)).flatMap(([key, property]) => {
+  if (!property.enumerable || !('value' in property)) throw new WorkspaceError('INVALID_INPUT', 'Request accessors are not supported.');
+  return property.value === undefined ? [] : [[key, property.value]];
+ });
+ return snapshotTransferValue(Object.fromEntries(entries)) as T;
+};
+function createWorker(scope: AccountScope, dispose: () => void, authorityScope: AccountScope = scope) {
+	const lease = accountWorkspaceLease(authorityScope), db = workspaceDatabase();
+	const announce = () => scope.dataPlane === 'home' ? announceAccountHomeThemeChange() : announceLocalWorkspaceChange();
+	const files = new AccountFileSync(db, scope, lease);
+ const algorithmWorker = scope.dataPlane === 'home' ? createAccountAlgorithmWorker(db, authorityScope, lease, announce, () => wake()) : undefined;
+ const algorithms = algorithmWorker?.algorithms;
+	const themes = new AccountThemeSync(db,scope,lease), themeTransport = accountThemeTransport(authorityScope,lease);
+	const sync = new AccountThingSync(db, scope, lease, undefined, undefined, files.contentHooks, themes, algorithms), transport = accountThingTransport(scope, lease), interactions = new AccountInteractionSync(db, scope, lease), posts = new AccountPostCache(db, scope, lease);
+	const suites = new AccountSuiteSync(db, scope, lease, sync, (tx, intent, remote) => sync.reconcileSuiteIn(tx, intent, remote)), suiteTransport = accountSuiteTransport(scope, lease);
+	const drafts = new AccountDraftSync(db, scope, lease, files.draftHooks), catalog = new AccountDraftCatalog(db, scope, lease);
+	const discussions = new AccountDiscussionCache(db, scope, lease);
+ const themeErrors = {catalog: '', selection: ''};
+	const controller = new AbortController();
+	const fileRetentionErrors = new Map<string, string>();
+ let historyBackend: IndexedDbTimelineBackend | null = null;
+ const historyStore = () => {
+  lease.assertCurrent();
+  historyBackend ??= new IndexedDbTimelineBackend(globalThis.indexedDB);
+  return new AccountTimelineStore(accountTimelineScope(scope), historyBackend, new AccountTimeline(db, scope, lease));
+ };
+ const historyVersion = (request: VersionRequest, signal?: AbortSignal) => new AccountTimelineVersions(db,scope,lease,sync.things,historyStore(),[themeVersionWriter(themes.themes,themes),...(algorithms ? [algorithmVersionWriter(algorithms.algorithms,true)] : [])]).request(request,signal);
+ const historyExport = (eventId: string, signal?: AbortSignal) => {
+  lease.assertCurrent();
+  historyBackend ??= new IndexedDbTimelineBackend(globalThis.indexedDB);
+  const timelineScope = accountTimelineScope(scope);
+  return exportAccountTimelineVersion(eventId, {
+   store: new AccountTimelineStore(timelineScope, historyBackend, new AccountTimeline(db, scope, lease)),
+   notes: new TimelineNoteStore(timelineScope, historyBackend), names: new TimelineNameQueue(timelineScope, historyBackend), lease
+  }, signal);
+ };
+	let running = false, wakeRequested = false, timer: ReturnType<typeof setTimeout> | null = null, stopped = false;
+	const suitePump = createSyncPump(() => !stopped && navigator.onLine !== false && canSyncAccountWorkspace(scope), async () => {
+		lease.assertCurrent();
+		const before = JSON.stringify(await suites.status());
+		const result = await suites.sync(suiteTransport, controller.signal), status = await suites.status();
+		if (JSON.stringify(status) !== before) announceLocalWorkspaceChange();
+		if (result.completed) wake();
+		const pending = status.filter(row => row.state === 'pending' || row.state === 'syncing');
+		if (!pending.length) return null;
+		const waits = pending.map(row => row.retryAt - Date.now()).filter(wait => wait > 0);
+		return result.completed ? 0 : waits.length ? Math.min(...waits) : BLOCKED_RETRY_MS;
+	});
+	const draftPump = createSyncPump(() => !stopped && navigator.onLine !== false && canSyncAccountWorkspace(scope), async () => {
+		lease.assertCurrent(); const before = JSON.stringify(await drafts.status());
+		const result = await drafts.sync(transport.drafts, controller.signal), status = await drafts.status();
+		if (JSON.stringify(status) !== before) announceLocalWorkspaceChange();
+		const pending = status.filter(row => row.state === 'pending' || row.state === 'syncing');
+		if (!pending.length) return null;
+		const waits = pending.map(row => row.retryAt - Date.now()).filter(wait => wait > 0);
+		return result.completed ? 0 : waits.length ? Math.min(...waits) : BLOCKED_RETRY_MS;
+	});
+ let themeRead:Promise<void>|null=null,selectionRead:Promise<void>|null=null,themeReadAt=0,selectionReadAt=0;
+ const refreshThemes=(force=false):Promise<void>=>{
+  if(stopped||navigator.onLine===false||!canSyncAccountWorkspace(authorityScope))return Promise.resolve();
+  if(themeRead)return themeRead;if(!force&&Date.now()-themeReadAt<30_000)return Promise.resolve();themeReadAt=Date.now();
+  themeRead=themes.refresh(themeTransport,controller.signal).then(changed=>{lease.assertCurrent();const error=themeErrors.catalog;themeErrors.catalog='';if(changed||error)announce();}).catch(()=>{lease.assertCurrent();const error='Account themes could not be refreshed. Device saves are still available.';if(themeErrors.catalog!==error){themeErrors.catalog=error;announce();}}).finally(()=>{themeRead=null;});return themeRead;
+ };
+ const refreshThemeSelection=(force=false):Promise<void>=>{
+  if(stopped||navigator.onLine===false||!canSyncAccountWorkspace(authorityScope))return Promise.resolve();
+  if(selectionRead)return selectionRead;if(!force&&Date.now()-selectionReadAt<30_000)return Promise.resolve();selectionReadAt=Date.now();
+  selectionRead=themes.selection.refresh(themeTransport,controller.signal).then(changed=>{lease.assertCurrent();const error=themeErrors.selection;themeErrors.selection='';if(changed||error)announce();}).catch(()=>{lease.assertCurrent();const error='Account theme selection could not be refreshed. This device keeps its choice.';if(themeErrors.selection!==error){themeErrors.selection=error;announce();}}).finally(()=>{selectionRead=null;});return selectionRead;
+ };
+ const themeSelectionPump=createSyncPump(()=>!stopped&&navigator.onLine!==false&&canSyncAccountWorkspace(authorityScope),async()=>{
+  const before=JSON.stringify(await themes.selection.status());
+  let result;
+  try { result=await themes.selection.sync(themeTransport,async id=>!!(await themes.status()).find(row=>row.id===id)?.baseVersion,controller.signal); }
+  catch { lease.assertCurrent(); return BLOCKED_RETRY_MS; }
+  const row=await themes.selection.status();
+  if(JSON.stringify(row)!==before)announce();
+  return row&&['pending','syncing'].includes(row.state)?result.completed?0:Math.max(1000,row.retryAt>Date.now()?row.retryAt-Date.now():BLOCKED_RETRY_MS):null;
+ });
+ const themePump=createSyncPump(()=>!stopped&&navigator.onLine!==false&&canSyncAccountWorkspace(authorityScope),async()=>{
+  const before=JSON.stringify(await themes.status()),result=await themes.sync(themeTransport,controller.signal),rows=await themes.status();
+  if(JSON.stringify(rows)!==before)announce();if(result.completed){themeSelectionPump.wake();wake();}
+  const pending=rows.filter(row=>['pending','syncing'].includes(row.state)),waits=pending.map(row=>row.retryAt-Date.now()).filter(wait=>wait>0);
+  return pending.length?result.completed?0:waits.length?Math.min(...waits):BLOCKED_RETRY_MS:null;
+ });
+	const wake = () => {
+		if (stopped || navigator.onLine === false || !canSyncAccountWorkspace(authorityScope)) return;
+		algorithmWorker?.wake();themePump.wake();themeSelectionPump.wake();void refreshThemes().catch(()=>{});void refreshThemeSelection().catch(()=>{});
+		// A home view grants local access only. Generic queues wait for home to be selected.
+		if (!canSyncAccountWorkspace(scope)) return;
+		draftPump.wake(); suitePump.wake();
+		if (running) { wakeRequested = true; return; }
+		if (timer) clearTimeout(timer);
+		timer = setTimeout(() => { timer = null; void drain(); }, 0);
+	};
+	const drain = async () => {
+		if (stopped || running || navigator.onLine === false || !canSyncAccountWorkspace(scope)) return;
+		running = true;
+		try {
+			lease.assertCurrent();
+			const before = JSON.stringify([await sync.status(), await interactions.status(), await files.status(), await themes.status()]);
+			const targets = new Map((await sync.exportSnapshot()).records.map(row => [row.id, row]));
+			const outcomes = await Promise.all([sync.sync(transport, controller.signal), interactions.sync(transport.interactions, controller.signal, async id => {
+				const record = targets.get(id);
+				if (record?.deleted) { await interactions.discard([id]); return false; }
+				return !record || record.remote;
+			}), files.sync(transport.files, controller.signal, 3, async id => { const record = (await sync.exportSnapshot()).records.find(row => row.id === id); return !!record?.remote && !record.deleted; })]);
+			const completed = outcomes.reduce((sum, result) => sum + result.completed, 0);
+			const contentStatus = await sync.status(), interactionStatus = await interactions.status(), fileStatus = await files.status(), status = [...contentStatus, ...interactionStatus, ...fileStatus];
+			if (JSON.stringify([contentStatus, interactionStatus, fileStatus, await themes.status()]) !== before) announceLocalWorkspaceChange();
+			algorithmWorker?.wake();themePump.wake(); if (completed) { draftPump.wake(); } // Uploaded originals/folders unblock dependent senders only.
+			const pending = status.filter(row => row.state === 'pending' || row.state === 'syncing');
+			if (pending.length && !stopped) {
+				// A row whose retryAt has already passed is not schedulable work: the
+				// pass that just ran either claimed it or skipped it because another
+				// tab holds the lease, or because its parent has no server version
+				// yet. Re-polling those every second cannot unblock them, so only
+				// keep the fast cadence while writes are actually completing and
+				// otherwise wait out the claim window or an online/focus/bind event.
+				const waits = pending.map(row => row.retryAt - Date.now()).filter(wait => wait > 0);
+				const soonest = completed ? 0 : waits.length ? Math.min(...waits) : BLOCKED_RETRY_MS;
+				timer = setTimeout(wake, Math.max(1000, Math.min(60_000, soonest)));
+			}
+		} catch { /* Identity changes retire this worker; durable writes stay scoped. */ }
+		finally {
+			running = false;
+			// A local write or reconnect can arrive after the final status read.
+			// Preserve that wake instead of leaving its new work indefinitely idle.
+			if (wakeRequested) { wakeRequested = false; wake(); }
+		}
+	};
+	const unsubscribe = lease.onInvalidate(() => stop());
+	const reconnect = () => {
+		algorithmWorker?.wake(true);
+		// A brief disconnect must retry failed reads even inside the normal
+		// refresh throttle. Each read still uses its own account/plane fence.
+		void refreshThemes(true).catch(() => {});
+		void refreshThemeSelection(true).catch(() => {});
+		wake();
+	};
+	const unbind = subscribeWorkspaceBinding(wake);
+	const stop = () => {
+		if (stopped) return;
+		stopped = true; controller.abort(); void historyBackend?.close().catch(() => {}); draftPump.stop(); suitePump.stop(); algorithmWorker?.stop(); themePump.stop(); themeSelectionPump.stop(); if (timer) clearTimeout(timer);
+		window.removeEventListener('online', reconnect); window.removeEventListener('focus', wake); unsubscribe(); unbind(); dispose();
+	};
+	window.addEventListener('online', reconnect); window.addEventListener('focus', wake);
+	const draftClient = new AccountDraftClient({ drafts, catalog, files, transport, db, lease, wake }, scope, () => navigator.onLine !== false && canSyncAccountWorkspace(scope), () => announceLocalWorkspaceChange());
+	return { sync, suites, interactions, posts, discussions, files, drafts, catalog, draftClient, historyExport, historyVersion, fileRetentionErrors, transport, db, lease, wake, stop, themes, themeTransport, themeErrors, refreshThemes, refreshThemeSelection, algorithms, algorithmWorker };
+}
+export type AccountLocalView = { localPlane?: 'home' };
+export const accountWorkspaceWorker = (authorityScope: AccountScope, view: AccountLocalView = {}) => {
+	if (view.localPlane !== undefined && view.localPlane !== 'home') throw new WorkspaceError('INVALID_WORKSPACE', 'Choose the selected workspace or home.');
+	const scope = view.localPlane === 'home' ? { ...authorityScope, dataPlane: 'home' } : authorityScope;
+	const key = `${workspaceScopeKey(scope)}:${workspaceScopeKey(authorityScope)}:${rootIdentity.read().generation}`;
+	let worker = workers.get(key);
+	if (!worker) { worker = createWorker(scope, () => workers.delete(key), authorityScope); workers.set(key, worker); }
+	return worker;
+};
+/** Root-bound bootstrap, invoked in an effect, never during React rendering. */
+export const startAccountWorkspaceSync = (scope: AccountScope, view: AccountLocalView = {}) => { accountWorkspaceWorker(scope, view).wake(); if (scope.dataPlane !== 'home' && view.localPlane !== 'home') accountWorkspaceWorker(scope, { localPlane: 'home' }).wake(); };
+
+export function accountApi<T extends Record<string, any>>(remote: T, owner: Owner, dataPlane: string, view: AccountLocalView = {}, delegatedBy?: string): T {
+	// Keep retained callbacks bound to the destination chosen at construction.
+	view = { localPlane: view.localPlane };
+	if (view.localPlane !== undefined && view.localPlane !== 'home') throw new WorkspaceError('INVALID_WORKSPACE', 'Choose the selected workspace or home.');
+	const authorityScope: AccountScope = { kind: 'account', origin: window.location.origin, ownerId: owner.id, dataPlane, ...(delegatedBy === undefined ? {} : { delegatedBy }) };
+	const scope: AccountScope = view.localPlane === 'home' ? { ...authorityScope, dataPlane: 'home' } : authorityScope;
+	// Capture this facade's generation so a retained callback cannot adopt a
+	// later account, even when a worker for that new session already exists.
+	const facadeLease = accountWorkspaceLease(authorityScope);
+	const worker = () => { facadeLease.assertCurrent(); return accountWorkspaceWorker(authorityScope, view); };
+ const algorithmService = () => { facadeLease.assertCurrent(); return accountWorkspaceWorker(authorityScope, { localPlane: 'home' }).algorithmWorker!; };
+ const algorithmChanged = () => { facadeLease.assertCurrent(); announceAccountHomeThemeChange(); algorithmService().wake(); };
+ const algorithmOnline = async (method: string, input?: unknown) => {
+  const lease = accountRemoteWorkspaceLease(authorityScope); lease.assertCurrent();
+  const controller = new AbortController(), off = lease.onInvalidate(() => controller.abort());
+  try {
+   const result = await remote.algorithms[method](input, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]), expectedActor: authorityScope.ownerId, expectedDataPlane: authorityScope.dataPlane });
+   facadeLease.assertCurrent(); lease.assertCurrent(); return result;
+  } finally { off(); }
+ };
+ // Home is the local destination for themes, while shared reads retain the
+ // selected account authority. This exception never enables generic Home sync.
+ const sharedThemeRead = async (method: 'getShared' | 'listShared', input?: unknown) => {
+  facadeLease.assertCurrent();
+  const lease = accountRemoteWorkspaceLease(authorityScope); lease.assertCurrent();
+  const controller = new AbortController(), off = lease.onInvalidate(() => controller.abort());
+  const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]);
+  try {
+   const result = await remote.themes[method](input, { signal, expectedActor: authorityScope.ownerId,
+    expectedDataPlane: authorityScope.dataPlane, expectedApiOrigin: authorityScope.origin });
+   facadeLease.assertCurrent(); lease.assertCurrent(); signal.throwIfAborted(); return result;
+  } finally { off(); }
+ };
+	const guard = (value: any): any => {
+		// API methods are promise-based. Refusals must reject that promise so an
+		// optional remote probe's .catch() can handle offline/unconfirmed identity
+		// without throwing out of a React effect and unmounting the local screen.
+		if (typeof value === 'function') return async (...args: any[]) => { facadeLease.assertCurrent(); assertAccountSyncAllowed(scope); return value(...args); };
+		if (!value || typeof value !== 'object') return value;
+		const wrapped = new Map<PropertyKey, unknown>();
+		return new Proxy(value, { get(target, key) { if (!wrapped.has(key)) wrapped.set(key, guard(Reflect.get(target, key))); return wrapped.get(key); } });
+	};
+	const online = guard(remote) as T;
+
+	const project = (thing: any) => thing ? { ...thing, author: owner } : thing;
+	const projectFile = (thing: any) => project({ ...localThingProjection(thing, owner.id), ...(thing.localAttachment?.accountFileId ? { accountFileId: thing.localAttachment.accountFileId } : {}), crystal: { ...thing.crystal,
+		...(thing.localAttachment?.nsfw ? { nsfw: true } : {}), ...(thing.localAttachment?.pending ? { pending: true } : {}) } });
+	const retainFile = async (id: string, signal?: AbortSignal) => {
+		const service = worker(), beforeError = service.fileRetentionErrors.get(id);
+		try {
+			const result = await service.files.retain(service.transport.files, id, signal);
+			facadeLease.assertCurrent(); service.fileRetentionErrors.delete(id);
+			if (result.changed || beforeError) announceLocalWorkspaceChange([id, result.row.id]);
+			return result.row;
+		} catch (error) {
+			facadeLease.assertCurrent(); signal?.throwIfAborted();
+			const refused = error instanceof WorkspaceError && error.code === 'FILE_ACCESS_REFUSED';
+			const message = refused ? error.message : 'This account file could not be refreshed on this device. Any existing device copy is preserved. Retry online before relying on the latest version offline.';
+			if (service.fileRetentionErrors.size >= 200 && !service.fileRetentionErrors.has(id)) service.fileRetentionErrors.delete(service.fileRetentionErrors.keys().next().value!);
+			service.fileRetentionErrors.set(id, message);
+			if (beforeError !== message) {
+				const alias = (await service.files.library(true)).aliases.get(id);
+				announceLocalWorkspaceChange([id, ...(alias ? [alias] : [])]);
+			}
+			throw error;
+		}
+	};
+	const fileAlias = async (id: string): Promise<string | null | undefined> => typeof id === 'string' && (id.startsWith('local-file-') || id.startsWith('local-link-')) ? id : (await worker().files.library(true)).aliases.get(id);
+	const localViews = async (ids: string[]) => {
+		const { sync, files } = worker();
+		const library = new Map((await files.views(ids)).map(row => [row.id, row]));
+		const content = new Map((await sync.views(ids)).map(row => [row.id, row]));
+		const canonical = new Map(await Promise.all(ids.map(async id => [id, await sync.canonicalId(id)] as const)));
+		return ids.flatMap(id => library.has(id) ? [projectFile(library.get(id))] : content.has(canonical.get(id)!) ? [project(content.get(canonical.get(id)!))] : []);
+	};
+	const retainInteractionProjection = async (row: any, startedAt: number) => {
+		if (!row || typeof row.id !== 'string' || !Array.isArray(row.viewerReactions) || !row.reactionCounts) return;
+		const service = worker();
+		await service.interactions.remember([{ id: row.id, revision: null, saved: !!(row.saved ?? row.viewerSaved), reactions: row.viewerReactions, reactionCounts: row.reactionCounts }], false, startedAt);
+		const state = (await service.interactions.states()).find(state => state.id === row.id);
+		if (state) Object.assign(row, { saved: state.saved, viewerSaved: state.saved, viewerReactions: state.reactions, reactionCounts: state.reactionCounts || {} });
+	};
+	const localDiscussion = async (id: string) => {
+		const service = worker(), alias = await fileAlias(id);
+		if (alias === null || await service.sync.isDeleted(id)) throw new WorkspaceError('NOT_FOUND', 'This Thing was deleted in this workspace.', 404);
+		const row = alias ? (await service.files.views([alias]))[0] : await service.sync.view(id);
+		if (!row) return null;
+		const result = localThingReadProjection(row, await service.sync.things.snapshot(), owner.id, true), post = result.discussion || result.post;
+		if (post) { post.author = owner as any; post.id = id; }
+		const remoteId = alias ? await service.files.remoteId(alias) : (await service.sync.exportSnapshot()).records.find(record => record.id === id)?.remote ? id : null;
+		return { post, remoteId };
+	};
+	const ownedPost = async (id: string, includeComments = false) => {
+		const service = worker(), row = await service.sync.view(id);
+		if (!row || !row.thingtime.some(kind => ['post','comment'].includes(kind))) return null;
+		const all = await service.sync.things.snapshot();
+		const post = localPostProjection(row, all, owner.id, includeComments);
+		const captured = await service.posts.get(id) || await service.discussions.get(id);
+		const author = owner.username ? owner : captured?.author?.id === owner.id ? captured.author : owner;
+		const cached = includeComments ? captured : null;
+		const authoredComments = post.comments.map(comment => ({ ...comment, author, localOnly: false, localWorkspace: true }));
+		const comments = new Map((cached?.comments || []).map(comment => [comment.id,comment]));
+		for (const comment of authoredComments) comments.set(comment.id,comment as any);
+		return { ...post, ...accountPostAudienceContext(row.crystal, captured), author, localOnly: false, localWorkspace: true, acl: row.acl, visibility: row.visibility, syncState: row.syncState,
+			commentCount: Math.max(post.commentCount || 0,cached?.commentCount || 0,comments.size), comments: [...comments.values()] };
+	};
+	const postContext = async (post: {id:string;thingtime:string[]}) => post.thingtime.includes('comment') ? worker().discussions.threadContext(post.id,owner as any) : {parent:null,root:null};
+	const mapPostInput = async (input: Record<string, unknown>, update = false) => {
+		const mapped = accountPostInput(input, update);
+		if (!mapped || !Array.isArray(mapped.attachmentIds) || !mapped.attachmentIds.length) return mapped;
+		const files = worker().files, rows = await files.things.snapshot();
+		const known = new Set(rows.filter(row => row.thingtime.includes('attachment')).map(row => row.id));
+		const aliases = (await files.library(true)).aliases;
+		const ids = mapped.attachmentIds.map(id => aliases.get(id as string) || id as string);
+		if (ids.every(id => known.has(id))) return { ...mapped, attachmentIds: ids };
+		if (ids.some(id => known.has(id) || id.startsWith('local-file-'))) throw new WorkspaceError('MISSING_LOCAL_FILE', 'Some selected files are not saved in this workspace. Keep device files and account-only files in separate submissions until they are retained.', 409);
+		return null;
+	};
+	const writePost = async (input: ReturnType<typeof accountPostInput>, update = false) => {
+		if (!input) throw new WorkspaceError('UNSUPPORTED_LOCAL_POST', 'This post needs its complete media or account adapter.', 409);
+		const service = worker();
+		const row = await service.sync.things.savePost(input, update); changed();
+		return { ok: true, id: row.id, thing: project(await service.sync.view(row.id)), post: await ownedPost(row.id, true), savedLocally: true };
+	};
+	// Remote projections can lag a locally committed deletion (including a lost
+	// DELETE reply). Recheck the scoped intent after every asynchronous read,
+	// rather than letting a fresh server response resurrect authored content.
+	const maskDeletedConversations = async (result: any) => {
+		facadeLease.assertCurrent();
+		const visited = new WeakSet<object>(), ids = new Set<string>(), pending = [result.thing, result.post, result.parent, result.root, result.discussion, ...(result.posts || []), ...(result.comments || []), ...(result.things || [])];
+		while (pending.length) {
+			const row = pending.pop(); if (!row || typeof row !== 'object' || typeof row.id !== 'string' || visited.has(row)) continue;
+			// Different projections of one Thing can carry different descendants.
+			visited.add(row); ids.add(row.id); pending.push(...(row.comments || []), row.shareOf, ...(row.linkedThings || []).map((link: any) => link.thing || link));
+		}
+		if (!ids.size) return result;
+		const { deleted } = await worker().sync.viewSnapshot([...ids]);
+		facadeLease.assertCurrent();
+		const hidden = (id: string) => deleted.has(id);
+		const project = (row: any) => !row || hidden(row.id) ? null : pruneAccountConversation(row, hidden);
+		for (const key of ['post', 'parent', 'root', 'discussion']) if (result[key]) result[key] = project(result[key]);
+		if (result.thing && hidden(result.thing.id)) result.thing = null;
+		if (Array.isArray(result.things)) result.things = result.things.filter((row: any) => !hidden(row.id));
+		for (const key of ['posts', 'comments']) if (Array.isArray(result[key])) result[key] = result[key].map(project).filter(Boolean);
+		return result;
+	};
+	const discussionOffline = () => navigator.onLine === false || !canSyncAccountWorkspace(scope);
+	const discussionRefusal = async (id: string, error: any) => {
+		if ([401,403,404,410].includes(Number(error?.status))) {
+			await worker().discussions.forget(id); announceLocalWorkspaceChange([id]); throw error;
+		}
+	};
+	const readDiscussion = async (args: any, options?: { signal?: AbortSignal }) => {
+		const service = worker(), local = await localDiscussion(args.id), target = local?.remoteId || args.id; let failure: unknown;
+		if (!discussionOffline() && (!local || local.remoteId)) {
+			const startedAt = Date.now();
+			try {
+				const result = await online.things.get({ ...args, id: target }, options); facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+				if (!result?.ok) throw new WorkspaceError('DISCUSSION_READ_FAILED', result?.error || 'Could not read discussion.', result?.status || 503);
+				const post = result.discussion || result.post;
+				if (post) {
+					try { await service.discussions.remember({ ...post, targetId: result.thing?.targetId || post.targetId }, startedAt); }
+					catch { facadeLease.assertCurrent(); result.localCacheError = 'This discussion could not be retained. Retry online before going offline.'; }
+				}
+				await retainInteractionProjection(post, startedAt); return maskDeletedConversations(result);
+			} catch (error) { facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); await discussionRefusal(target, error); failure = error; }
+		}
+		const post = await ownedPost(target) || await service.discussions.get(target) || local?.post;
+		facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+		if (!post) throw failure || new WorkspaceError('LOCAL_DISCUSSION_MISSING', 'This discussion is not saved on this device. Open it online to retain it.', 409);
+		const states = new Map((await service.interactions.states()).map(state => [state.id,state]));
+		return { ok: true, thing: null, discussion: overlayAccountPost(post as any, states), post: null, parent: null, root: null, localWorkspace: true, incomplete: true };
+	};
+	const readDiscussionComments = async (args: any, options?: { signal?: AbortSignal }) => {
+		const service = worker(), local = await localDiscussion(args.target), target = local?.remoteId || args.target;
+		const all = await service.sync.things.snapshot(), byTarget = localTargetIndex(all);
+		const authored = (await service.sync.views((byTarget.get(target) || []).filter(row => row.thingtime.includes('comment')).map(row => row.id))).map(row => ({ ...localPostProjection(row, all, owner.id, false, byTarget), author: owner, localOnly: false, localWorkspace: true, syncState: row.syncState }));
+		const deviceCursor = typeof args.cursor === 'string' && args.cursor.startsWith('device-search:');
+		if (!discussionOffline() && !deviceCursor && (!local || local.remoteId)) {
+			const startedAt = Date.now();
+			try {
+				const result = await online.things.list({ ...args, target }, options); facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+				if (!result?.ok) throw new WorkspaceError('DISCUSSION_READ_FAILED', result?.error || 'Could not read comments.', result?.status || 503);
+				try { await service.discussions.rememberPage(target, result.comments, startedAt); }
+				catch { facadeLease.assertCurrent(); result.localCacheError = 'These comments could not be retained. Retry online before going offline.'; }
+				if (authored.some(row => row!.syncState !== 'synced')) return maskDeletedConversations(await service.discussions.comments(target, { limit: args.limit }, !!local, authored as any));
+				return maskDeletedConversations(result);
+			} catch (error) { facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); await discussionRefusal(target, error); if (args.cursor) throw error; }
+		}
+		const result = await service.discussions.comments(target, { cursor: args.cursor, limit: args.limit }, !!local, authored as any);
+		facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); return result;
+	};
+	const retainPosts = async (result: any, startedAt: number) => {
+		facadeLease.assertCurrent();
+		if (result.post && result.thing?.id === result.post.id && typeof result.thing.targetId === 'string') result.post = { ...result.post, targetId: result.thing.targetId };
+		const rows = [result.post, result.parent, result.root, ...(Array.isArray(result.posts) ? result.posts : [])].filter(Boolean);
+		if (!rows.length) return result;
+		// A generic Thing parent is not a post. It must not make retention of
+		// the actual comment fail, nor become a post/owned Thing in this cache.
+		try { await worker().posts.remember(rows.filter(row => Array.isArray(row.thingtime) && (row.thingtime.includes('post') || row.thingtime.includes('comment'))), startedAt, result.post ? {id:result.post.id,parent:result.parent?.id || null,root:result.root?.id || null} : undefined); }
+		catch (error) { facadeLease.assertCurrent(); result.localCacheError = 'These posts could not be retained on this device. Retry online before going offline.'; }
+		try { for (const row of rows.filter(row => Array.isArray(row.thingtime) && !row.thingtime.includes('post') && !row.thingtime.includes('comment'))) await worker().discussions.remember({ ...row, comments: [], repliesLoaded: false }, startedAt); }
+		catch { facadeLease.assertCurrent(); result.localCacheError = 'The conversation context could not be retained on this device. Retry online before going offline.'; }
+		const pending = [...rows], seen = new Set<string>(), observed = [];
+		while (pending.length && seen.size < 250) {
+			const row = pending.shift(); if (!row || seen.has(row.id)) continue; seen.add(row.id);
+			if (typeof row.id === 'string' && Array.isArray(row.viewerReactions) && row.reactionCounts) observed.push({id:row.id,revision:null,saved:!!row.viewerSaved,reactions:row.viewerReactions,reactionCounts:row.reactionCounts});
+			pending.push(...(Array.isArray(row.comments) ? row.comments : []), ...(row.shareOf ? [row.shareOf] : []));
+		}
+		try { for (let offset=0;offset<observed.length;offset+=50) await worker().interactions.remember(observed.slice(offset,offset+50),false,startedAt); }
+		catch { facadeLease.assertCurrent(); result.localCacheError = 'Post interactions could not be retained on this device. Retry online before going offline.'; }
+		const states = new Map((await worker().interactions.states()).map(state => [state.id, state]));
+		for (const key of ['post', 'parent', 'root']) if (result[key]) result[key] = overlayAccountPost(result[key], states);
+		if (Array.isArray(result.posts)) result.posts = result.posts.map((post: any) => overlayAccountPost(post as any, states));
+		return maskDeletedConversations(result);
+	};
+	const refresh = async (args: Record<string, unknown>, signal?: AbortSignal, retainPage?: (page: { ids: string[]; nextCursor: string | null }) => Promise<void>) => {
+		const { sync, files, transport, lease } = worker();
+		const startedAt = Date.now();
+		try {
+			const result = await transport.read(args, signal);
+			lease.assertCurrent();
+			// Page membership belongs to the authorized server snapshot. Keep deleted
+			// IDs here; views hide tombstones and explicit conflict restoration can
+			// reveal them again without losing membership in the cached page.
+			const membership = Array.isArray(result.things) && result.things.every((thing: any) => (accountThingCanCache(thing) || isTransferTheme(thing) || (scope.dataPlane === 'home' && isTransferAlgorithm(thing))) && thing.author?.id === owner.id)
+				? { ids: result.things.map((thing: any) => thing.id), nextCursor: result.nextCursor || null } : null;
+			const retain = async (thing: any) => {
+				if (thing.author?.id !== owner.id) return thing;
+				if (thing.thingtime?.some((kind: string) => ['post','comment'].includes(kind)) && Array.isArray(thing.attachments)) {
+					const existing = await sync.view(thing.id);
+					if (existing && existing.syncState !== 'synced') return project(existing);
+					try {
+						if (result.post?.attachmentsTruncated) throw new WorkspaceError('INCOMPLETE_POST_FILES', 'Load the complete post files before using them offline.', 409);
+						await files.retainPost(transport.files, thing, async admit => {
+							// Parent membership can change while original bytes are in flight.
+							const fresh = (await transport.read({ id: thing.id }, signal)).thing;
+							if (!fresh || fresh.updatedAt !== thing.updatedAt || JSON.stringify(fresh.attachments?.map((file: any) => file.id)) !== JSON.stringify(thing.attachments.map((file: any) => file.id))) throw new WorkspaceError('POST_CHANGED', 'The account post changed while retaining its files. Retry online.', 409);
+							await sync.remember(thing, startedAt, admit);
+						}, signal);
+						return project(await sync.view(thing.id));
+					} catch (error) {
+						lease.assertCurrent(); signal?.throwIfAborted();
+						if ([401,403,404,410].includes(Number((error as any)?.status))) throw error;
+						result.localCacheError = 'This post and its complete files could not be refreshed on this device. Retry online before relying on it offline.';
+						return thing;
+					}
+				}
+				if (isTransferAlgorithm(thing) && scope.dataPlane === 'home') {
+     await worker().algorithmWorker!.refresh();
+     const local = await sync.view(thing.id);
+     return await sync.isDeleted(thing.id) ? null : local ? project(local) : thing;
+    }
+				if (isTransferTheme(thing)) {
+					await worker().refreshThemes();
+					const local=await sync.view(thing.id);
+					return await sync.isDeleted(thing.id) ? null : local ? project(local) : thing;
+				}
+				if (!accountThingCanCache(thing)) return thing;
+				await sync.remember(thing, startedAt);
+				return project(await sync.view(thing.id));
+			};
+			if (result.thing) result.thing = await retain(result.thing);
+			if (result.things) result.things = (await Promise.all(result.things.map(retain))).filter(Boolean);
+			await retainInteractionProjection(result.discussion, startedAt);
+			if (membership && retainPage) await retainPage(membership);
+			await retainPosts(result, startedAt);
+			if (result.post && !result.localCacheError) result.post = await ownedPost(result.post.id, true) || result.post;
+			return result;
+		} catch (error) {
+			lease.assertCurrent();
+			// Definitive single-Thing refusals retire every retained projection,
+			// including ordinary Components and prepared export closures. Session
+			// expiry and transient failures do not revoke offline content.
+			if (typeof args.id === 'string' && !args.key && [403,404,410].includes(Number((error as any)?.status)) && await worker().posts.forget(args.id)) {
+				clearLocalCache(`tt-saved-${workspaceScopeKey(scope)}`); announceLocalWorkspaceChange([args.id]);
+			}
+			throw error;
+		}
+	};
+	const changed = () => { if (scope.dataPlane === 'home') announceAccountHomeThemeChange(); else announceLocalWorkspaceChange(); worker().wake(); };
+	const removeFile = async (id: string, localFileId: string | null, expectedUpdatedAt?: string) => {
+		if (expectedUpdatedAt !== undefined) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Review account file deletion through File sync.', 409);
+		const { files } = worker();
+		if (localFileId) { if (await files.remoteId(localFileId)) await files.remove(localFileId); else await files.cancel(localFileId); }
+		announceLocalWorkspaceChange([id]); worker().wake();
+		return { ok: true, savedLocally: true };
+	};
+	const remove = async (ids: string[], expectedUpdatedAt: string | undefined, fallback: () => Promise<any>) => {
+		facadeLease.assertCurrent();
+		if (!Array.isArray(ids) || !ids.length || ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(ids).size !== ids.length)
+			throw new WorkspaceError('INVALID_IDS', 'Choose distinct Things.');
+		const { sync } = worker();
+		let dedicated = false; const cached: string[] = [];
+		for (const id of ids) {
+			if (await sync.isDeleted(id)) continue;
+			if (!await sync.view(id)) {
+				if (navigator.onLine === false || !canSyncAccountWorkspace(scope)) throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'Open these Things online once before deleting them offline.', 409);
+				const result = await refresh({ id });
+				if (!result.thing || (!accountThingCanCache(result.thing) && !isTransferTheme(result.thing) && !(scope.dataPlane === 'home' && isTransferAlgorithm(result.thing))) || result.thing.author?.id !== owner.id) { dedicated = true; continue; }
+			}
+			cached.push(id);
+		}
+		if (dedicated) {
+			// A mixed batch must never delete a cached device copy through the remote
+			// adapter. Unlike a move, nothing later re-reads a Thing the server no
+			// longer returns, so that copy would stay readable and editable here.
+			if (cached.length) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Delete saved device Things separately from items that require their dedicated online adapter.', 409);
+			return fallback();
+		}
+		const remaining = [];
+		for (const id of ids) if (!await sync.isDeleted(id)) remaining.push(id);
+		const removed = remaining.length ? (await sync.remove(remaining, expectedUpdatedAt)).deleted : ids;
+		await worker().interactions.discard(removed);
+		announceLocalWorkspaceChange(removed); worker().wake();
+		return { ok: true, savedLocally: true, succeeded: ids.length, failed: 0, results: ids.map(id => ({ id, ok: true })) };
+	};
+	// Explicit login/logout establish or revoke identity; other remote features require confirmation.
+	const browse = (kind: 'schema' | 'component') => async (args: Record<string, unknown> = {}) => {
+		facadeLease.assertCurrent();
+		const { sync, transport } = worker();
+		// Component URLs can retain a provisional suite identity after canonical
+		// adoption. Resolve only scoped recorded aliases; ordinary family keys
+		// stay unchanged, and never mutate the caller's frozen read arguments.
+		if (kind === 'component' && typeof args.family === 'string') {
+			args = { ...args, family: await sync.canonicalId(args.family) };
+			facadeLease.assertCurrent();
+		}
+		if (args.device !== true) {
+			const result = await transport.browse(kind, args);
+			const key = kind === 'schema' ? 'schemas' : 'components';
+			if (!Array.isArray(result[key]) || result[key].length > 50) throw new WorkspaceError('INVALID_CATALOG', 'Invalid catalogue response.', 502);
+			// Only authenticated owned content enters the editable device store.
+			// Shared/system entries remain read-only response projections. Pending
+			// edits and deletion tombstones retain priority over catalogue snapshots.
+			const owned = result[key].filter((row: any) => accountThingCanCache(row) && row.thingtime.includes(kind) && row.author?.id === owner.id);
+			const before = new Map((await sync.views(owned.map((row: any) => row.id))).map(row => [row.id, row.revision]));
+			let changed = false;
+			try {
+				const retained = await sync.rememberMany(owned);
+				changed = retained.some(row => row && row.revision !== before.get(row.id));
+			} catch (error) {
+				facadeLease.assertCurrent();
+				result.localCacheError = `These account definitions could not be saved on this device: ${error instanceof Error ? error.message : 'Device storage failed'}. Retry the catalogue before going offline.`;
+			}
+			if (owned.length) {
+				try { const retained = await worker().interactions.remember(await transport.interactions.read(owned.map((row: any) => row.id))); changed ||= retained; }
+				catch {
+					result.localCacheError = result.localCacheError || 'Account bookmarks and reactions could not be refreshed. Device choices are preserved; retry online to reconcile.';
+					await worker().interactions.remember(owned.map((row: any) => ({ id: row.id, revision: null, saved: !!row.saved, reactions: row.viewerReactions || [], reactionCounts: row.reactionCounts || {} })), false).catch(() => {});
+				}
+			}
+			const snapshot = await sync.viewSnapshot(owned.map((row: any) => row.id));
+			const views = new Map(snapshot.rows.map(row => [row.id, project(row)])), deleted = snapshot.deleted;
+			result[key] = result[key].filter((row: any) => !deleted.has(row.id)).map((row: any) => views.has(row.id) ? { ...row, ...views.get(row.id) } : row);
+			const membership = new Map((await worker().interactions.states()).map(row => [row.id, row]));
+			result[key] = result[key].map((row: any) => { const state = membership.get(row.id); return state ? { ...row, saved: state.saved, viewerReactions: state.reactions, reactionCounts: state.reactionCounts || {} } : row; });
+			facadeLease.assertCurrent(); if (changed) announceLocalWorkspaceChange();
+			return result;
+		}
+		const bundled = kind === 'component' ? (await import('../components/ComponentsLibrary/bundledComponentCatalog')).bundledComponentEntries() : [];
+		facadeLease.assertCurrent();
+		const result = await browseLocalDefinitions([...await sync.things.snapshot(), ...await worker().interactions.rows()], kind, args, workspaceScopeKey(scope), row => ({ id: row.id }), bundled);
+		const key = kind === 'schema' ? 'schemas' : 'components', entries = result[key];
+		const views = new Map((await sync.views(entries.map(row => row.id))).map(row => [row.id, project(row)]));
+		const bundledIds = new Set(bundled.map(row => row.id));
+		result[key] = entries.filter(row => views.has(row.id) || bundledIds.has(row.id)).map(row => views.has(row.id) ? { ...row, ...views.get(row.id) } : row);
+		const membership = new Map((await worker().interactions.states()).map(row => [row.id, row]));
+		result[key] = result[key].map((row: any) => { const state = membership.get(row.id); return state ? { ...row, saved: state.saved, viewerReactions: state.reactions, reactionCounts: state.reactionCounts || {} } : row; });
+		facadeLease.assertCurrent(); return { ...result, incomplete: true };
+	};
+	const interact = async (kind: 'save' | 'reaction', args: { id: string; emoji?: unknown }) => {
+		facadeLease.assertCurrent();
+		const service = worker();
+		const state = await service.interactions.toggle(kind, args.id, args.emoji); changed();
+		return { ok: true, saved: state.saved, viewerReactions: state.reactions, reactionCounts: state.reactionCounts || {}, savedLocally: true };
+	};
+	const exportThings = async (input: Parameters<typeof exportAccountThings>[0], options?: { signal?: AbortSignal }) => {
+			input = snapshotAccountExportInput(input);
+			return withExportDeadline(async signal => {
+				options = { ...options, signal };
+				facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+				const current = worker(), canRefresh = () => navigator.onLine !== false && canSyncAccountWorkspace(scope);
+				if (!input.key) {
+					const library = await current.files.library(), fileIds = new Set(library.things.map(row => row.id)), themeIds=new Set((await current.themes.status()).map(row=>row.id));
+					for (const id of input.ids) if (!themeIds.has(id) && !fileIds.has(id) && !library.aliases.has(id) && !await current.sync.view(id) && !await current.sync.isDeleted(id)) {
+						if (!canRefresh()) throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'This Thing is not saved on this device. Open it online before downloading offline.', 409);
+						await refresh({ id }, options?.signal);
+						if (!await current.sync.view(id)) {
+							if ((await current.sync.status()).some(row => row.state !== 'synced') || (await current.themes.status()).some(row => row.state !== 'synced') || input.ids.some(root => themeIds.has(root) || fileIds.has(root) || library.aliases.has(root))) throw new WorkspaceError('DEDICATED_EXPORT_REQUIRED', 'Download device edits separately from content requiring its dedicated online adapter.', 409);
+							return current.transport.export(input, options?.signal);
+						}
+					}
+				}
+				return exportAccountThings(input, { ...current, canRefresh, remote: (args, request) => current.transport.export(args, request?.signal) }, options?.signal);
+			}, options?.signal);
+		};
+	const importThings = async (input: { manifest: unknown; folderId?: string | null; files?: Record<string, string>; localFiles?: Map<string, Uint8Array | Blob> }, options?: { signal?: AbortSignal }, beforeCommit?: (tx: WorkspaceTransaction) => Promise<void>) => {
+			facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+			if (Object.keys(input || {}).some(key => !['manifest', 'folderId', 'files', 'localFiles'].includes(key))) throw new WorkspaceError('INVALID_IMPORT', 'Unsupported import options.');
+			const manifest = parseTransfer(serializeTransfer(validateTransfer(input.manifest))), folderId = input.folderId;
+			if (input.localFiles !== undefined && input.files !== undefined) throw new WorkspaceError('INVALID_IMPORT', 'Choose device bytes or uploaded files, not both.');
+			if (!accountImportSupported(manifest) || (input.files && Object.keys(input.files).length)) return online.things.import(input, options);
+			if ((input.files !== undefined && (!input.files || typeof input.files !== 'object' || Array.isArray(input.files) || Object.keys(input.files).length)) ||
+				(input.localFiles !== undefined && !(input.localFiles instanceof Map))) throw new WorkspaceError('INVALID_IMPORT', 'Provide a valid transfer file map.');
+			if (folderId != null && (typeof folderId !== 'string' || !folderId.trim())) throw new WorkspaceError('INVALID_FOLDER', 'Choose an import destination.');
+			const { sync } = worker();
+			if (folderId && !await sync.view(folderId)) {
+				if (navigator.onLine === false || !canSyncAccountWorkspace(scope)) throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'Open the destination folder online once before importing offline.', 409);
+				await refresh({ id: folderId }, options?.signal);
+			}
+			const result = await sync.things.import(manifest, folderId, input.localFiles, options?.signal, beforeCommit);
+			changed();
+			return { ok: true, roots: result.roots, ids: result.idMap, imported: result.things.length, filesImported: manifest.files.length, linksImported: manifest.links?.length || 0, savedLocally: true };
+		};
+	const copyPreparedThings = async (plan: any, folderId?: string | null) => {
+		// Only complete in-process device plans can supply local bytes and a
+		// transaction fence. Remote uploads/links keep their dedicated adapter.
+		if ((plan.files?.length && typeof plan.readLocalFile !== 'function') || ((plan.files?.length || plan.links?.length) && typeof plan.assertCurrentInTransaction !== 'function') ||
+			!accountImportSupported({ format: 'thingtime.transfer', version: 1, roots: plan.roots, things: plan.things, files: plan.files, ...(plan.links?.length ? {links:plan.links,attachmentOrder:plan.attachmentOrder} : {}) })) return null;
+		const bundle = await bundleFromPlan(plan);
+		facadeLease.assertCurrent(); await plan.assertCurrent?.();
+		return importThings({ manifest: bundle.manifest, folderId, localFiles: bundle.files }, undefined, plan.assertCurrentInTransaction);
+	};
+	const localHistoryScope = (requested: {apiOrigin?: string; ownerId: string; dataPlane: string; delegatedBy?: string}, includeHome = false) =>
+  requested.ownerId === scope.ownerId && requested.delegatedBy === scope.delegatedBy && (requested.dataPlane === scope.dataPlane || (includeHome && requested.dataPlane === 'home')) && (requested.apiOrigin === undefined || requested.apiOrigin === scope.origin);
+ return { ...online, auth: remote.auth, login: remote.login,
+  actions: { ...online.actions,
+   run: async (args: {action?: unknown; inputs?: unknown; source?: string} = {}) => {
+    const service = worker(), actions = new LocalActions(service.db, scope, service.lease, service.sync);
+    if (typeof args.action !== 'string' || !await actions.canRunLocally(args.action)) return online.actions.run(args);
+    try { return await actions.run({...args,action:args.action}); }
+    finally { changed(); } // Partial local effects also have independent queued sync.
+   },
+   runs: async (args: {action?:string;limit?:number} = {}) => {
+    const service = worker(), local = await new LocalActions(service.db,scope,service.lease,service.sync).runs(args);
+    if (navigator.onLine === false || !canSyncAccountWorkspace(scope)) return {...local,incomplete:true};
+    try {
+     const remote = await online.actions.runs(args); facadeLease.assertCurrent();
+     const runs = [...local.runs,...(remote.runs || [])].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||a.id.localeCompare(b.id));
+     return {...remote,runs:runs.slice(0,Math.max(1,Math.min(Number(args.limit)||20,MAX_ACTION_RUN_HISTORY)))};
+    } catch { facadeLease.assertCurrent(); return {...local,incomplete:true}; }
+   }
+  },
+  algorithms: { ...online.algorithms,
+   list: async () => {
+    const service = algorithmService();
+    void service.refresh().catch(() => {}); void service.refreshSelection().catch(() => {});
+    return { ...await service.algorithms.list(), syncError: service.errors.catalog, selectionSyncError: service.errors.selection };
+   },
+   create: async (input: Parameters<ReturnType<typeof algorithmService>['algorithms']['algorithms']['create']>[0]) => {
+    input = snapshotOptionalInput(input);
+    const service = algorithmService();
+    if (input.branchFrom && !(await service.algorithms.list()).algorithms.some(row => row.id === input.branchFrom)) {
+     // Only the canonical online branch operation can copy a shared stranger's
+     // profile. A public preview is never authority to invent its private weights.
+     const result = await algorithmOnline('create', input);
+     try { await service.algorithms.refresh(service.transport); } catch { facadeLease.assertCurrent(); result.localCacheError = 'The account copy was created, but could not be retained for offline editing. Reopen it online.'; }
+     algorithmChanged(); return result;
+    }
+    const result = await service.algorithms.algorithms.create(input); algorithmChanged(); return result;
+   },
+   update: async (input: Parameters<ReturnType<typeof algorithmService>['algorithms']['algorithms']['update']>[0]) => {
+    input = snapshotOptionalInput(input);
+    const service = algorithmService();
+    if (input.shared !== undefined || input.listed !== undefined) {
+     const state = (await service.algorithms.status()).find(row => row.id === input.id);
+     if (state && (state.state !== 'synced' || state.deleted)) throw new WorkspaceError('ALGORITHM_SYNC_REQUIRED', 'Your edits are saved on this device. Synchronize or review this profile before changing its account sharing.', 409);
+     const result = await algorithmOnline('update', input);
+     try { await service.algorithms.refresh(service.transport); } catch { facadeLease.assertCurrent(); result.localCacheError = 'Account sharing changed, but its device copy could not be refreshed.'; }
+     algorithmChanged(); return result;
+    }
+    const result = await service.algorithms.algorithms.update(input); algorithmChanged(); return { ...result, algorithm: (await service.algorithms.list()).algorithms.find(row => row.id === input.id) || result.algorithm };
+   },
+   remove: async ({ id }: { id: string }) => { const result = await algorithmService().algorithms.algorithms.remove(id); algorithmChanged(); return result; },
+   setActive: async ({ algorithmId }: { algorithmId: string | null }) => { const result = await algorithmService().algorithms.algorithms.setActive(algorithmId); algorithmChanged(); return result; },
+   track: async (input: { algorithmId: string; events?: unknown }) => { const result = await algorithmService().algorithms.algorithms.track(input); if (result.trained) algorithmChanged(); return result; },
+   getShared: async ({ id }: { id: string }) => {
+    const local = (await algorithmService().algorithms.list()).algorithms.find(row => row.id === id);
+    return local ? { ok: true, algorithm: local } : algorithmOnline('getShared', { id });
+   },
+   search: (input: unknown) => algorithmOnline('search', input)
+  },
+  themes: {...online.themes,
+   list: async()=>{const service=worker();void service.refreshThemes().catch(()=>{});void service.refreshThemeSelection().catch(()=>{});return {...await service.themes.list(),syncError:service.themeErrors.catalog};},
+   save: async(input:Parameters<AccountThemeSync['save']>[0])=>{const result=await worker().themes.save(input);changed();return result;},
+   remove: async({id}:{id:string})=>{const result=await worker().themes.remove(id);changed();return result;},
+   setActive: async({themeId}:{themeId:string|null})=>{const result=await worker().themes.setActive(themeId);changed();return result;},
+   getShared: async(args:{id:string})=>{const local=(await worker().themes.list()).themes.find(row=>row.id===args.id);return local?{ok:true,theme:local}:sharedThemeRead('getShared',args);},
+   listShared: (args?:{limit?:number})=>sharedThemeRead('listShared',args)
+  },
+  timeline: { ...online.timeline,
+   canChangeLocally: (requested: {apiOrigin?:string;ownerId:string;dataPlane:string}) => {
+    try { facadeLease.assertCurrent();return localHistoryScope(requested, true); } catch { return false; }
+   },
+   version: async (requested: {apiOrigin?:string;ownerId:string;dataPlane:string}, request: VersionRequest, options?:{signal?:AbortSignal}) => {
+    facadeLease.assertCurrent();
+    if(!localHistoryScope(requested,true))return online.timeline.version(requested,request,options);
+    const result=await withExportDeadline(async signal=>{
+     try{const service=requested.dataPlane==='home'?accountWorkspaceWorker(authorityScope,{localPlane:'home'}):worker();return await service.historyVersion(request,signal);}
+     catch(error){
+      facadeLease.assertCurrent();signal.throwIfAborted();
+      if(!(error instanceof WorkspaceError)||error.code!=='ACCOUNT_HISTORY_REMOTE_REQUIRED'||navigator.onLine===false||!canSyncAccountWorkspace(scope))throw error;
+      return online.timeline.version(requested,request,{signal});
+     }
+    },options?.signal);
+    facadeLease.assertCurrent();if(request.command==='apply-version'){if(requested.dataPlane==='home'&&scope.dataPlane!=='home'){announceAccountHomeThemeChange();accountWorkspaceWorker(authorityScope,{localPlane:'home'}).wake();}else changed();}return result;
+   },
+   canExportLocally: (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}) => {
+    try { facadeLease.assertCurrent(); return localHistoryScope(requested, true); } catch { return false; }
+   },
+   exportVersion: async (requested: {apiOrigin?: string; ownerId: string; dataPlane: string}, eventId: string, options?: {signal?: AbortSignal; adapter?: string}) => {
+    facadeLease.assertCurrent();
+    if (!localHistoryScope(requested, true)) return online.timeline.exportVersion(requested, eventId, options);
+    const result = await withExportDeadline(async signal => {
+     try {
+      const service = requested.dataPlane === 'home' ? accountWorkspaceWorker(authorityScope, { localPlane: 'home' }) : worker();
+      return await service.historyExport(eventId, signal);
+     }
+     catch (error) {
+      facadeLease.assertCurrent(); signal.throwIfAborted();
+      if (!(error instanceof WorkspaceError) || error.code !== 'HISTORY_NOT_RETAINED' || navigator.onLine === false || !canSyncAccountWorkspace(scope)) throw error;
+      return online.timeline.exportVersion(requested, eventId, {...options,signal});
+     }
+    }, options?.signal);
+    return {ok:true,export:result.export ?? result,assertAvailable:()=>{facadeLease.assertCurrent();options?.signal?.throwIfAborted();result.assertAvailable?.();}};
+   }
+  },
+		attachments: { ...online.attachments,
+			link: async (input: {url:string;purpose?:'post'|'comment';mediaKind?:'image'|'video'|'audio'|'file'}, options?:{signal?:AbortSignal}) => {
+				facadeLease.assertCurrent(); const row = await worker().files.things.saveLinkedFile({...input,requestId:crypto.randomUUID()},options?.signal); changed();
+				return {ok:true,attachment:{id:row.id,...row.crystal},savedLocally:true};
+			},
+			annotate: async (input: { id: string; title?: string | null; description?: string | null; filenamePreview?: string | null }) => {
+				const id = await fileAlias(input.id);
+				if (id === undefined) return online.attachments.annotate(input);
+				if (!id) throw new WorkspaceError('NOT_FOUND', 'File was deleted in this workspace.', 404);
+				const row = await worker().files.things.annotateFile({ ...input, id }); changed();
+				return { ok: true, attachment: { id: row.id, ...row.crystal }, savedLocally: true };
+			},
+			remove: async (input: { id: string; targetId?: string }) => {
+				const id = await fileAlias(input.id);
+				if (id === undefined) return online.attachments.remove(input);
+				if (Object.keys(input).some(key => !['id','targetId'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Invalid file removal request.');
+				if (id) {
+					if (input.targetId !== undefined) { await worker().files.removeBound(id, input.targetId); changed(); return { ok: true, savedLocally: true }; }
+					const file = await worker().files.things.get(id);
+					if (file && isLocalMediaAttachment(file) && ['post','comment'].includes(localMediaInfo(file).purpose)) {
+						if (localMediaInfo(file).draftId) return {ok:true,deferred:true,savedLocally:true};
+						await worker().files.discardSelection(id); changed(); return { ok: true, savedLocally: true };
+					}
+					if (await worker().files.remoteId(id)) await worker().files.remove(id); else await worker().files.cancel(id); changed(); }
+				return { ok: true, savedLocally: true };
+			},
+			deleteLocalFile: async ({ id }: { id: string }) => { await worker().files.remove(id); changed(); return { ok: true, savedLocally: true }; },
+			cancelLocalFileUpload: async ({ id }: { id: string }) => { await worker().files.cancel(id); changed(); return { ok: true, savedLocally: true }; },
+			moveLocalFile: async ({ id, folderId }: { id: string; folderId: string | null }) => {
+				const current = worker();
+				if (!await current.files.remoteId(id) && !(await current.files.status()).some(row => row.id === id)) throw new WorkspaceError('MISSING_LOCAL_FILE', 'File is not stored in this workspace', 404);
+				const result = await current.files.things.move([id], folderId); changed(); return { ...result, savedLocally: true };
+			},
+			saveLocalFile: async (input: Parameters<AccountFileSync['things']['saveFile']>[0], options?: { signal?: AbortSignal }) => {
+				const row = await worker().files.things.saveFile(input, options?.signal); changed();
+				return { ok: true, attachment: { id: row.id, ...row.crystal }, savedLocally: true };
+			},
+			readLocalFile: async ({ id }: { id: string }, options?: { signal?: AbortSignal; format?: 'blob' }) => {
+			if (options?.format === 'blob') { const { row, blob } = await worker().files.readFileBlob(id, options.signal); return { ok: true, attachment: { id: row.id, ...row.crystal }, blob }; }
+				const { row, bytes } = await worker().files.readFile(id, options?.signal);
+				return { ok: true, attachment: { id: row.id, ...row.crystal }, bytes };
+			}
+		},
+		schemas: { ...online.schemas, browse: browse('schema') }, components: { ...online.components, browse: browse('component') }, things: { ...online.things,
+		save: (args: any) => interact('save', args), react: (args: any) => interact('reaction', args),
+		feed: async (args: Record<string, unknown> = {}, ...rest: any[]) => {
+   args = snapshotOptionalInput(args);
+   const startedAt = Date.now(), service = algorithmService();
+   const id = typeof args.algorithm === 'string' && !isDefaultAlgorithm(args.algorithm) && (await service.algorithms.list()).algorithms.some(row => row.id === args.algorithm) ? args.algorithm : null;
+   const device = async () => {
+    const selected = worker(), all = await selected.sync.things.snapshot(), retained = await selected.posts.snapshot();
+    const byId = new Map(retained.map(post => [post.id, post])), index = localTargetIndex(all);
+    const owned = await selected.sync.viewSnapshot([...new Set([...all.filter(row => row.thingtime.includes('post')).map(row => row.id), ...byId.keys()])]);
+    for (const key of owned.deleted) byId.delete(key);
+    for (const row of owned.rows) {
+     if (!row.thingtime.includes('post') || row.thingtime.includes('comment')) continue;
+     const captured = byId.get(row.id), author = owner.username ? owner : captured?.author?.id === owner.id ? captured.author : owner;
+     byId.set(row.id, { ...localPostProjection(row, all, owner.id, false, index), ...accountPostAudienceContext(row.crystal, captured), author,
+      localOnly: false, localWorkspace: true, acl: row.acl, visibility: row.visibility, syncState: row.syncState } as any);
+    }
+    const states = new Map((await selected.interactions.states()).map(state => [state.id, state]));
+    const page = await deviceFeedPage([...byId.values()].map(post => overlayAccountPost(post, states)), args, workspaceScopeKey(scope), id);
+    facadeLease.assertCurrent();
+    let localTrainingError: string | undefined;
+    try { await service.algorithms.algorithms.observePosts(page.posts); } catch (error) { facadeLease.assertCurrent(); localTrainingError = error instanceof Error ? error.message : 'Device training storage is unavailable.'; }
+    const ranked = id ? await service.algorithms.algorithms.rankPage(id, page.posts) : page.posts;
+    const posts = await selected.posts.fenceRead(ranked, startedAt);
+    facadeLease.assertCurrent();
+    return { ...page, posts, ...(id ? { ranked: true, localRanking: true } : {}), ...(localTrainingError ? { localTrainingError } : {}) };
+   };
+   if (deviceFeedRequested(args) || discussionOffline()) return device();
+   const { device: _device, ...onlineArgs } = args;
+   let response;
+   try { response = await online.things.feed({ ...onlineArgs, ...(id ? { algorithm: 'latest' } : {}) }, ...rest); }
+   catch (error) { facadeLease.assertCurrent(); if (!args.cursor && transientFeedFailure(error)) return device(); throw error; }
+   const result = await retainPosts(response, startedAt);
+   try { await service.algorithms.algorithms.observePosts(result.posts || []); }
+   catch (error) { facadeLease.assertCurrent(); result.localTrainingError = error instanceof Error ? error.message : 'Device training storage is unavailable.'; }
+   return maskDeletedConversations(id ? { ...result, posts: await service.algorithms.algorithms.rankPage(id, result.posts || []), ranked: true, localRanking: true } : result);
+  },
+		trending: async (...args: any[]) => { const startedAt = Date.now(); return retainPosts(await online.things.trending(...args), startedAt); },
+		saved: async (args: {cursor?:string;limit?:number} = {}) => {
+			const service = worker();
+			if (navigator.onLine === false || !canSyncAccountWorkspace(scope) || args.cursor?.startsWith('device:')) {
+				if (args.cursor && !args.cursor.startsWith('device:')) throw new WorkspaceError('LOCAL_CURSOR_REQUIRED','Reload Saved to browse device snapshots offline.');
+				const result = await service.posts.saved(await service.interactions.states(), {...args,cursor:args.cursor?.slice(7)});
+				return {...result,nextCursor:result.nextCursor?`device:${result.nextCursor}`:null};
+			}
+			const startedAt = Date.now(), result = await retainPosts(await online.things.saved(args), startedAt);
+			const ids = [...new Set<string>((result.posts || []).map((post: any) => post.id))].slice(0,50);
+			if (ids.length) {
+				const readAt = Date.now();
+				try { await service.interactions.remember(await service.transport.interactions.read(ids), true, readAt); }
+				catch { facadeLease.assertCurrent(); result.localCacheError = 'Saved post details could not be refreshed. Your device choices are preserved.'; }
+			}
+			const states = new Map((await service.interactions.states()).map(state => [state.id,state]));
+			result.posts = (result.posts||[]).filter((post:any)=>states.get(post.id)?.saved!==false).map((post:any)=>overlayAccountPost(post,states));
+			if (!args.cursor) {
+				const local = await service.posts.saved([...states.values()],{limit:50});
+				const pending = new Set((await service.interactions.status()).filter(row=>row.state!=='synced').map(row=>row.id));
+				result.posts = [...local.posts.filter(post=>pending.has(post.id)&&!result.posts.some((row:any)=>row.id===post.id)),...result.posts];
+			}
+			return maskDeletedConversations(result);
+		},
+		fork: async (input: { id: string; key?: string }) => {
+			facadeLease.assertCurrent();
+			if (!input || Object.keys(input).some(key => !['id', 'key'].includes(key))) throw new WorkspaceError('INVALID_COPY', 'Unsupported copy options.');
+			const request = { id: input.id, key: input.key }, { plan } = await exportThings({ ids: [request.id], key: request.key });
+			const sourceId = await fileAlias(request.id) || request.id;
+			const result = await copyPreparedThings(plan);
+			if (!result) {
+				if ((await worker().sync.status()).some(row => row.state !== 'synced')) throw new WorkspaceError('DEDICATED_COPY_REQUIRED', 'Copy device edits separately from items requiring their dedicated online adapter.', 409);
+				return worker().transport.fork(request);
+			}
+			return { ...result, id: result.ids[sourceId] };
+		},
+		export: exportThings, import: (input: Parameters<typeof importThings>[0], options?: Parameters<typeof importThings>[1]) => importThings(input, options),
+		remove: async (input: { id: string; expectedUpdatedAt?: string }) => {
+			if (Object.keys(input || {}).some(key => !['id', 'expectedUpdatedAt'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Unsupported deletion options.');
+			const localFileId = await fileAlias(input?.id);
+			if (localFileId !== undefined) return removeFile(input.id, localFileId, input.expectedUpdatedAt);
+			return remove([input?.id], input?.expectedUpdatedAt, () => online.things.remove(input));
+		},
+		bulk: async (input: { op: string; ids: string[]; folderId?: string | null }) => {
+			facadeLease.assertCurrent();
+			if (input?.op === 'copy') {
+				if (Object.keys(input).some(key => !['op', 'ids', 'folderId'].includes(key)) || !Array.isArray(input.ids) || !input.ids.length ||
+					input.ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(input.ids).size !== input.ids.length ||
+					(input.folderId != null && (typeof input.folderId !== 'string' || !input.folderId.trim()))) throw new WorkspaceError('INVALID_COPY', 'Choose distinct Things and a copy destination.');
+				const request = { ids: [...input.ids], folderId: input.folderId };
+				const { plan } = await exportThings({ ids: request.ids });
+				const sourceIds = await Promise.all(request.ids.map(async id => await fileAlias(id) || id));
+				const result = await copyPreparedThings(plan, request.folderId);
+				if (!result) {
+					if ((await worker().sync.status()).some(row => row.state !== 'synced')) throw new WorkspaceError('DEDICATED_COPY_REQUIRED', 'Copy device edits separately from items requiring their dedicated online adapter.', 409);
+					return online.things.bulk({ op: 'copy', ...request });
+				}
+				return { ...result, succeeded: request.ids.length, failed: 0, results: request.ids.map((id, index) => ({ id, ok: true, newId: result.ids[sourceIds[index]] })) };
+			}
+			if (input?.op === 'delete') {
+				if (Object.keys(input).some(key => !['op', 'ids', 'folderId'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_DELETE', 'Unsupported deletion options.');
+				if (!Array.isArray(input.ids) || !input.ids.length || input.ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(input.ids).size !== input.ids.length)
+					throw new WorkspaceError('INVALID_IDS', 'Choose distinct Things.');
+				const ids = [...input.ids], aliases = await Promise.all(ids.map(fileAlias));
+				if (aliases.some(id => id !== undefined)) {
+					// The native library uses bulk deletion even for one file. Route
+					// each file through its byte/receipt queue and report partial batch
+					// failures explicitly, as the ordinary bulk API does.
+					const results = [];
+					for (const [index, id] of ids.entries()) {
+						try {
+							const alias = aliases[index];
+							if (alias !== undefined) { await removeFile(id, alias); results.push({ id, ok: true }); }
+							else {
+								const result = await remove([id], undefined, () => online.things.bulk({ op: 'delete', ids: [id] }));
+								results.push(result.results?.[0] || { id, ok: false, error: 'Deletion was not acknowledged.' });
+							}
+						} catch (error) {
+							facadeLease.assertCurrent();
+							results.push({ id, ok: false, error: error instanceof Error ? error.message : 'Deletion failed.', status: (error as any)?.status || 500 });
+						}
+					}
+					const succeeded = results.filter(result => result.ok).length;
+					return { ok: true, savedLocally: true, succeeded, failed: results.length - succeeded, results };
+				}
+				return remove(input.ids, undefined, () => online.things.bulk(input));
+			}
+			if (input?.op !== 'move') return online.things.bulk(input);
+			if (Object.keys(input).some(key => !['op', 'ids', 'folderId'].includes(key)) ||
+				!Array.isArray(input.ids) || !input.ids.length ||
+				input.ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(input.ids).size !== input.ids.length ||
+				(input.folderId != null && (typeof input.folderId !== 'string' || !input.folderId.trim())))
+				throw new WorkspaceError('INVALID_MOVE', 'Choose distinct Things and a destination folder.');
+			const { sync } = worker();
+			const requireLocal = async (id: string) => {
+				let row = await sync.view(id);
+				if (!row) {
+					if (navigator.onLine === false || !canSyncAccountWorkspace(scope))
+						throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'Open these Things and their destination folder online once before moving them offline.', 409);
+					await refresh({ id }); row = await sync.view(id);
+				}
+				return row;
+			};
+			const rows = [];
+			for (const id of input.ids) rows.push(await requireLocal(id));
+			if (rows.some(row => !row)) {
+				// A mixed batch must never remotely move an unsynced local Thing.
+				if (rows.some(row => row && row.syncState !== 'synced'))
+					throw new WorkspaceError('UNSUPPORTED_LOCAL_MOVE', 'Move saved device Things separately from items that require their dedicated online adapter.', 409);
+				return online.things.bulk(input);
+			}
+			let parent = input.folderId || null; const seen = new Set<string>();
+			while (parent) {
+				if (seen.has(parent)) throw new WorkspaceError('INVALID_FOLDER', 'The destination folder chain is cyclic.');
+				seen.add(parent); const folder = await requireLocal(parent);
+				if (!folder?.thingtime.includes('folder')) throw new WorkspaceError('INVALID_FOLDER', 'Destination folder is not owned by this workspace.');
+				parent = folder.folderId || null;
+			}
+			await sync.things.move(input.ids, input.folderId || null); changed();
+			return { ok: true, savedLocally: true, succeeded: input.ids.length, failed: 0, results: input.ids.map(id => ({ id, ok: true })) };
+		},
+		search: async (args: Record<string, any> = {}, options?: { signal?: AbortSignal; onRefresh?: (result: any) => void; onError?: (error: unknown) => void }) => {
+			facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+			if (args.workspace !== true) return online.things.search(args, options);
+			if (args.device === true) {
+				const { sync } = worker(), page = await searchLocalThings(await sync.things.snapshot(), args, workspaceScopeKey(scope));
+				const things = (await sync.views(page.things.map(row => row.id))).map(project);
+				facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+				return { ...page, things, posts: {}, incomplete: true };
+			}
+			// `author` is accepted but never trusted: the remote read below pins it
+			// to this workspace's own owner, so a caller cannot widen or redirect it.
+			if (Object.entries(args).some(([key, value]) => value !== undefined && !['q', 'thingtime', 'cursor', 'limit', 'workspace', 'author'].includes(key))) throw new WorkspaceError('UNSUPPORTED_LOCAL_SEARCH', 'These filters require the structured search adapter.');
+			const { sync } = worker();
+			const localCursor = typeof args.cursor === 'string' && args.cursor.startsWith('local-search:');
+			const canReadRemote = navigator.onLine !== false && canSyncAccountWorkspace(scope) && !!owner.username && !localCursor;
+			if (!canReadRemote && args.cursor && !localCursor) throw new WorkspaceError('LOCAL_CURSOR_REQUIRED', 'Reload this search to browse saved device content while offline.');
+			const continuation = readWorkspaceSearchCursor(args.cursor, workspaceScopeKey(scope), args);
+			const page = searchLocalLibrary(await sync.things.snapshot(), { ...args, cursor: canReadRemote ? undefined : args.cursor });
+			const local = { ...page, things: continuation ? [] : (await sync.views(page.things.map(row => row.id))).map(project), incomplete: true };
+			facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+			if (!canReadRemote) return local;
+			const readRemote = async () => {
+				const remoteLease = accountRemoteWorkspaceLease(scope); remoteLease.assertCurrent();
+				const { workspace: _workspace, ...query } = args;
+				const result = continuation && continuation.remote === null ? { ok: true, things: [], nextCursor: null, total: null } : await online.things.search({ ...query, cursor: continuation?.remote || undefined, author: owner.username }, { signal: options?.signal });
+				remoteLease.assertCurrent(); options?.signal?.throwIfAborted();
+				if (result?.ok === false) throw new WorkspaceError('SEARCH_FAILED', result.error || 'Could not refresh search results.', result.status || 503);
+				const pending = new Set((await sync.status()).filter(row => row.state !== 'synced').map(row => row.id));
+				const fresh = [];
+				for (const row of result.things || []) {
+					if (accountThingCanCache(row) && row.author?.id === owner.id) {
+						await sync.remember(row);
+						const current = await sync.view(row.id);
+						if (current && (!pending.has(row.id) || searchLocalLibrary([current], { ...args, cursor: undefined }).things.length)) fresh.push(project(current));
+					} else fresh.push(row);
+				}
+				let pendingCursor: string | null = null;
+				if (!continuation || continuation.pending !== null) {
+					const latest = searchLocalLibrary((await sync.things.snapshot()).filter(row => pending.has(row.id)), { ...args, cursor: continuation?.pending || undefined });
+					pendingCursor = latest.nextCursor;
+					for (const row of await sync.views(latest.things.map(item => item.id))) if (!fresh.some(item => item.id === row.id)) fresh.unshift(project(row));
+				}
+				facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+				remoteLease.assertCurrent();
+				return { ...result, things: fresh, nextCursor: workspaceSearchCursor(workspaceScopeKey(scope), args, result.nextCursor || null, pendingCursor), total: pending.size ? null : result.total, localWorkspace: true, incomplete: false };
+			};
+			if (!options?.onRefresh) return readRemote();
+			void readRemote().then(result => options.onRefresh?.(result)).catch(error => {
+				try { facadeLease.assertCurrent(); options.signal?.throwIfAborted(); options.onError?.(error); } catch { /* retired view */ }
+			});
+			return { ...local, refreshing: true };
+		},
+		comment: async ({ id, characterId, ...input }: { id: string } & Record<string, unknown>) => {
+			facadeLease.assertCurrent();
+			// A delegated actor must use server authorization, never the principal's
+			// local queue. Selecting the principal preserves ordinary offline replies.
+			if (characterId && characterId !== owner.id) {
+				assertAccountSyncAllowed(scope);
+				if (navigator.onLine === false) throw new WorkspaceError('CHARACTER_OFFLINE', 'Reconnect to post as this Character.', 503);
+				return online.things.comment({ id, ...input, characterId });
+			}
+			const mapped = await mapPostInput({ type: 'text', ...input, thingtime: undefined });
+			if (!mapped || scope.dataPlane !== 'home') return online.things.comment({ id, ...input });
+			const service = worker();
+			let target = await ownedPost(id) || await service.discussions.get(id) || await service.posts.get(id) || (await localDiscussion(id))?.post;
+			if (!target) { const read = await readDiscussion({ id, commentProjection: true }); target = read.discussion || read.post; }
+			const result = await writePost({ ...mapped, thingtime: ['post','comment'], targetId: id });
+			return { ...result, comment: result.post, commentCount: (target?.commentCount || 0) + 1 };
+		},
+		create: async (input: AccountThingWrite) => {
+			facadeLease.assertCurrent();
+			const mapped = await mapPostInput(input as Record<string, unknown>);
+			if (mapped) return writePost(mapped);
+			if (!accountThingCanCache(input) || !accountWriteSupported(input)) return online.things.create(input);
+			const { sync } = worker();
+			const row = await sync.things.create(input); changed();
+			return { ok: true, id: row.id, thing: project(await sync.view(row.id)), savedLocally: true };
+		},
+		renameLibrary: async (input: { id: string; displayTitle: string; expectedUpdatedAt?: string }) => {
+			facadeLease.assertCurrent();
+			const { sync } = worker();
+			if (await sync.isDeleted(input.id)) throw new WorkspaceError('LOCAL_THING_DELETED', 'This Thing was deleted.', 409);
+			let cached = await sync.view(input.id);
+			if (!cached && navigator.onLine !== false && canSyncAccountWorkspace(scope)) {
+				await refresh({ id: input.id });
+				cached = await sync.view(input.id);
+			}
+			if (!cached || (!isTransferTheme(cached) && !(scope.dataPlane === 'home' && isTransferAlgorithm(cached)))) return online.things.renameLibrary(input);
+			const row = await sync.things.renameLibrary(input);
+			changed();
+			return { ok: true, id: row.id, title: row.crystal.title, updatedAt: row.updatedAt, thing: project(await sync.view(row.id)), savedLocally: true };
+		},
+		update: async (input: AccountThingWrite & { id: string }) => {
+			const { sync } = worker();
+			if (await sync.isDeleted(input.id)) throw new WorkspaceError('LOCAL_THING_DELETED', 'This Thing was deleted. Restore it before editing.', 409);
+			let cached = await sync.view(input.id);
+			if (cached?.thingtime.includes('post')) {
+				const mapped = await mapPostInput({ ...input, thingtime: cached.thingtime }, true);
+				if (mapped) return writePost(mapped, true);
+			}
+			if (!accountWriteSupported(input, true)) {
+				if (cached && cached.syncState !== 'synced') throw new WorkspaceError('UNSUPPORTED_LOCAL_WRITE', 'Sync this Thing before changing fields that require its online adapter.', 409);
+				return online.things.update(input);
+			}
+			if (!cached) {
+				const result = await refresh({ id: input.id });
+				if ((!accountThingCanCache(result.thing) && !isTransferTheme(result.thing)) || result.thing.author?.id !== owner.id) return online.things.update(input);
+				cached = await sync.view(input.id);
+			}
+			if (!cached) throw new WorkspaceError('LOCAL_CONTENT_MISSING', 'Load this Thing before editing offline', 409);
+			await sync.things.update(input); changed();
+			return { ok: true, thing: project(await sync.view(input.id)), savedLocally: true };
+		},
+		get: async (args: any, options?: { signal?: AbortSignal }) => {
+			facadeLease.assertCurrent();
+			if (scope.dataPlane === 'home' && args?.commentProjection === true && !args.key && Object.entries(args).every(([key,value]) => value === undefined || ['id','key','commentProjection'].includes(key))) return readDiscussion(args, options);
+			if (Object.entries(args || {}).some(([key, value]) => value !== undefined && key !== 'id')) {
+				const startedAt = Date.now();
+				const result = await online.things.get(args, options); await retainInteractionProjection(result.discussion || result.post, startedAt); return maskDeletedConversations(result);
+			}
+			const service = worker(), { sync } = service;
+			const localFile = typeof args?.id === 'string' && args.id.startsWith('local-file-');
+			const alias = localFile ? args.id : (await service.files.library()).aliases.get(args?.id);
+			if (localFile || alias !== undefined) {
+				const [row] = alias ? await service.files.views([alias]) : [];
+				facadeLease.assertCurrent(); options?.signal?.throwIfAborted();
+				if (!row) throw new WorkspaceError('NOT_FOUND', 'File is not in this workspace.', 404);
+				const remoteId = await service.files.remoteId(row.id);
+				if (remoteId && navigator.onLine !== false && canSyncAccountWorkspace(scope)) void retainFile(remoteId, options?.signal).catch(() => {});
+				return { ok: true, thing: { ...projectFile(row), ...(remoteId && service.fileRetentionErrors.has(remoteId) ? { localRetentionError: service.fileRetentionErrors.get(remoteId) } : {}) }, savedLocally: true };
+			}
+			const authoredPost = await ownedPost(args.id, true);
+			if (authoredPost) {
+				const context = await postContext(authoredPost);
+				if (authoredPost.syncState === 'synced' && navigator.onLine !== false && canSyncAccountWorkspace(scope)) void refresh(args, options?.signal).then(async () => { if (JSON.stringify([await ownedPost(args.id,true),await postContext(authoredPost)]) !== JSON.stringify([authoredPost,context])) announceLocalWorkspaceChange([args.id]); }).catch(() => {});
+				return { ok: true, thing: project(await sync.view(args.id)), post: authoredPost, ...context, localWorkspace: true };
+			}
+			const cachedPost = await service.posts.get(args.id);
+			const offline = navigator.onLine === false || !canSyncAccountWorkspace(scope);
+			if (cachedPost && (offline || !cachedPost.thingtime.includes('comment'))) {
+				const context = await postContext(cachedPost);
+				if (!offline) void refresh(args, options?.signal).then(async () => {
+					if (JSON.stringify([await service.posts.get(args.id),await postContext(cachedPost)]) !== JSON.stringify([cachedPost,context])) announceLocalWorkspaceChange([args.id]);
+				}).catch(() => {});
+				return {ok:true,thing:null,post:overlayAccountPost(cachedPost,new Map((await service.interactions.states()).map(state=>[state.id,state]))),...context,localWorkspace:true,incomplete:offline};
+			}
+			if (await sync.isDeleted(args.id)) throw new WorkspaceError('NOT_FOUND', 'This Thing was deleted in this workspace.', 404);
+			const cached = await sync.view(args.id);
+			if (cached) {
+				if (navigator.onLine !== false && canSyncAccountWorkspace(scope)) void refresh(args, options?.signal).then(() => {}).catch(() => {});
+				return { ok: true, thing: project(cached), savedLocally: cached.syncState !== 'synced' };
+			}
+			const result = await refresh(args, options?.signal);
+			if (result.thing?.author?.id === owner.id && result.thing.thingtime?.length === 1 && result.thing.thingtime[0] === 'attachment' && !result.thing.targetId) {
+				try { result.thing = projectFile(await retainFile(args.id, options?.signal)); result.savedLocally = true; }
+				catch { facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); result.thing.localRetentionError = service.fileRetentionErrors.get(args.id); }
+			}
+			return result;
+		},
+		list: async (args: any = {}, options?: { signal?: AbortSignal }) => {
+			facadeLease.assertCurrent();
+			if (scope.dataPlane === 'home' && args?.commentProjection === true && args.thingtime === 'comment' && !args.key && Object.entries(args).every(([key,value]) => value === undefined || ['target','thingtime','key','commentProjection','cursor','limit'].includes(key))) return readDiscussionComments(args, options);
+			if (Object.keys(args).some(key => !['thingtime', 'folder', 'cursor', 'limit', 'device'].includes(key))) return maskDeletedConversations(await online.things.list(args, options));
+			const { db, lease, sync } = worker();
+			// A cold offline route may never have fetched this exact server page.
+			// List the known local library with its own cursor and explicit partial
+			// coverage instead of making cached content inaccessible.
+			const localCursor = typeof args.cursor === 'string' && args.cursor.startsWith('device:');
+			if (args.device === true || navigator.onLine === false || !canSyncAccountWorkspace(scope) || localCursor) {
+				if (args.cursor && !localCursor) throw new WorkspaceError('LOCAL_CURSOR_REQUIRED', 'Reload this list to browse saved device content while offline.');
+				const page = await sync.things.list({ ...args, cursor: localCursor ? args.cursor.slice(7) : undefined });
+				return { ok: true, things: await localViews(page.things.map(row => row.id)), nextCursor: page.nextCursor ? `device:${page.nextCursor}` : null, localWorkspace: true, incomplete: true };
+			}
+			const query = Object.fromEntries(Object.entries(args).sort(([a], [b]) => a.localeCompare(b)));
+			const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(query)));
+			const key = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+			const kinds = typeof args.thingtime === 'string' ? args.thingtime.split(',') : args.thingtime || [];
+			const matches = (row: any) => row && kinds.every((kind: string) => row.thingtime?.includes(kind)) &&
+				(!args.folder || (args.folder === 'root' ? !row.folderId : row.folderId === args.folder));
+			const overlay = async (rows: any[]) => {
+				const library = await worker().files.library(), localFiles = new Map(library.things.map(row => [row.id, row]));
+				const things = rows.flatMap(row => {
+					if (row.author?.id !== owner.id || !library.aliases.has(row.id)) return [row];
+					const id = library.aliases.get(row.id), local = id && localFiles.get(id);
+					return local ? [projectFile(local)] : [];
+				}).filter(matches);
+				if (!args.cursor) {
+					const pending = new Set([...(await sync.status()).filter(row => row.state !== 'synced').map(row => row.id), ...localFiles.keys(), ...(await worker().themes.status()).filter(row=>row.state!=='synced').map(row=>row.id)]);
+					for (const row of (await sync.things.list(args)).things) if (pending.has(row.id) && !things.some(thing => thing.id === row.id)) {
+						const current = localFiles.has(row.id) ? projectFile(localFiles.get(row.id)) : project(await sync.view(row.id)); if (matches(current)) things.unshift(current);
+					}
+				}
+				facadeLease.assertCurrent(); options?.signal?.throwIfAborted(); return things;
+			};
+			const readPage = async () => {
+				const result = await refresh(args, options?.signal, page => db.transaction(scope, 'readwrite', lease, tx => tx.put('thing-pages', key, page)));
+				return { ...result, things: await overlay(result.things || []) };
+			};
+			const page = await db.transaction(scope, 'readonly', lease, tx => tx.get<{ ids: string[]; nextCursor: string | null }>('thing-pages', key));
+			if (!page) return readPage();
+			if (navigator.onLine) void readPage().catch(() => {});
+			const things = await overlay((await sync.views(page.ids)).map(project));
+			return { ok: true, things, nextCursor: page.nextCursor, localWorkspace: true };
+		}
+	} } as T;
+}
+
+/** Native renderer data path for account-owned local pages. Dependencies owned
+ * by this account come from the same workspace snapshot. Existing remote
+ * resolution remains responsible for shared/system dependencies. */
+export async function resolveAccountWebpage(scope: AccountScope, target: LocalWebpageTarget) {
+ const { sync, transport, db, lease } = accountWorkspaceWorker(scope);
+ if (target.kind === 'id') target = { ...target, id: await sync.canonicalId(target.id) };
+ const args = target.kind === 'id' ? { id: target.id, ...(target.key ? { key: target.key } : {}) } : target.kind === 'path' ? { path: target.path } : { global: '1' };
+ if (target.kind === 'id' && target.key) return transport.resolve(args);
+ const refresh = async () => {
+  const result = await transport.resolve(args);
+  if (result.page?.id && await sync.isDeleted(result.page.id)) return { ok: true, page: null, source: null, components: [], refs: {} };
+  if (result.page?.author?.id === scope.ownerId && accountThingCanCache(result.page)) {
+   await sync.remember(result.page);
+   for (const component of result.components || []) if (component.author?.id === scope.ownerId && accountThingCanCache(component)) await sync.remember(component);
+   // Retain only validated component content from this authorized resolution,
+   // scoped to this account and page. It confers no ownership or write access.
+   const components = (result.components || []).map((component: any) => {
+    const check = validateThingtimeCrystal(['component'], snapshotTransferValue(component.crystal));
+    if (!check.ok || typeof component.id !== 'string') throw new WorkspaceError('INVALID_COMPONENT', 'Invalid resolved component');
+    return { id: component.id, thingtime: ['component'], crystal: check.crystal };
+   });
+   await db.transaction(scope, 'readwrite', lease, tx => tx.put('page-components', result.page.id, { components, refs: result.refs || {} }));
+  }
+  return result;
+ };
+ const local = resolveWorkspacePage(await sync.things.snapshot(), target, scope.ownerId);
+ const canRefresh = navigator.onLine !== false && canSyncAccountWorkspace(scope);
+ if (!local.page && target.kind !== 'id' && !canRefresh) return { ok: true, page: null, source: null, components: [], refs: {} };
+ if (!local.page) {
+  if (target.kind === 'id' && await sync.isDeleted(target.id)) return { ok: true, page: null, source: null, components: [], refs: {} };
+  return refresh();
+ }
+ if (canRefresh) void refresh().catch(() => {});
+ const dependencies = await db.transaction(scope, 'readonly', lease, tx => tx.get<{ components: any[]; refs: Record<string, string | null> }>('page-components', local.page!.id));
+ const components = new Map(local.components.map(row => [row.id, row]));
+ for (const [ref, id] of Object.entries(local.refs)) if (!id) {
+  const savedId = dependencies?.refs[ref], saved = dependencies?.components.find(row => row.id === savedId);
+  if (saved && !await sync.isDeleted(saved.id)) { components.set(saved.id, saved); local.refs[ref] = saved.id; }
+ }
+ const missing = Object.entries(local.refs).filter(([, id]) => !id).map(([ref]) => ref);
+ if (missing.length) throw new WorkspaceError('MISSING_DEPENDENCY', `This page needs components that are not saved on this device: ${missing.join(', ')}`);
+ return { ok: true, page: await sync.view(local.page.id), source: 'user' as const, components: [...components.values()], refs: local.refs };
+}

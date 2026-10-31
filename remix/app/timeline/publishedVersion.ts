@@ -1,3 +1,5 @@
+import { themeContentValue, THEME_CONTENT_ADAPTER } from './themeContent';
+import { algorithmContentValue, ALGORITHM_CONTENT_ADAPTER } from './algorithmContent';
 import { copyBoundedJson } from '../utils/boundedJson.ts';
 import { componentBindingSnapshot, webpageComponentRefs } from './componentBindings.ts';
 import { componentBlocks } from './componentMerge.ts';
@@ -160,18 +162,23 @@ export function parsePublishedVersionPreview(input: unknown, eventId: string, th
 			value.conflicts?.length)
 	)
 		throw new Error('Invalid deleted Thing preview.');
+	const contentAdapter = value.result?.adapter;
+	const protectedContent = contentAdapter === THEME_CONTENT_ADAPTER || contentAdapter === ALGORITHM_CONTENT_ADAPTER;
+	if (protectedContent && value.current === null && !request.componentMode) throw new Error('Protected recovery requires a complete dedicated design preview.');
 	for (const side of ['current', 'incoming', 'result']) {
 		if (side === 'current' && value.current === null) continue;
-		if (
-			!keys(value[side], ['adapter', 'version', 'value']) ||
-			value[side].adapter !== 'thing-content' ||
-			value[side].version !== 1 ||
-			!keys(value[side].value, ['crystal', 'extended', 'tags', 'geo', 'acl', 'folderId'])
-		)
+		if (!keys(value[side], ['adapter', 'version', 'value']) || value[side].adapter !== contentAdapter)
 			throw new Error('Invalid version content.');
-		versionContent(value[side]);
+		if (contentAdapter === THEME_CONTENT_ADAPTER) themeContentValue(value[side]);
+		else if (contentAdapter === ALGORITHM_CONTENT_ADAPTER) algorithmContentValue(value[side]);
+		else {
+			if (contentAdapter !== 'thing-content' || !keys(value[side].value, ['crystal', 'extended', 'tags', 'geo', 'acl', 'folderId']))
+				throw new Error('Invalid version content.');
+			versionContent(value[side]);
+		}
 	}
-	if (value.recovery && JSON.stringify(value.result.value.acl) !== JSON.stringify(['tt:user'])) throw new Error('Recovered Things must be private.');
+	if (value.recovery && (contentAdapter === THEME_CONTENT_ADAPTER ? value.result.value.visibility !== 'private' : !protectedContent && JSON.stringify(value.result.value.acl) !== JSON.stringify(['tt:user']))) throw new Error('Recovered Things must be private.');
+	if (value.recovery && protectedContent && (value.thingtime?.length !== 1 || value.thingtime[0] !== (contentAdapter === THEME_CONTENT_ADAPTER ? 'theme' : 'feed-algorithm'))) throw new Error('Protected recovery requires its exact dedicated schema.');
 	checkConflicts(value.conflicts);
 	if (request.componentMode) {
 		if (
@@ -220,3 +227,21 @@ export function parsePublishedVersionPreview(input: unknown, eventId: string, th
 	}
 	return value;
 }
+
+/** Immutable request identity shared by account and anonymous version writers. */
+export const versionRequestIdentity = (request: VersionRequest) =>
+	JSON.stringify({
+		mode: request.mode,
+		eventId: request.eventId,
+		expectedHeadId: request.expectedHeadId ?? null,
+		...(request.recover ? { recover: true } : {}),
+		...(request.expectedRecovery ? { expectedRecovery: request.expectedRecovery } : {}),
+		choices: request.choices ?? {},
+		...(request.componentMode
+			? {
+					componentMode: request.componentMode,
+					componentChoices: request.componentChoices ?? {},
+					expectedComponents: request.expectedComponents ?? null
+			  }
+			: {})
+	});

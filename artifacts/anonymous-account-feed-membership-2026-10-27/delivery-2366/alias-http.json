@@ -1,0 +1,55 @@
+{
+  "source": "2366c08860dbe3a7a77a7234d34aed6b9dbbff69",
+  "origin": "https://pr-1000.previews.dev.thingtime.com",
+  "observedAt": "2026-10-26T20:02:34.910391+00:00",
+  "scope": "Public HTTP only; source association comes from current GitHub PR deployment metadata, not an in-page source marker",
+  "index": {
+    "status": 200,
+    "bytes": 16258,
+    "sha256": "bcef0f43b606157a40ea0aaafe940d8021ab4f1a96af4e92b5546687beef2d99",
+    "cacheControl": "private, no-store",
+    "appShell": true,
+    "commitMarkerPresent": false
+  },
+  "capabilities": {
+    "status": 200,
+    "bytes": 74254,
+    "sha256": "fe1fd48487fc42a2bd6d6789f59850497de0301d34b0475a8448fcf0adef6b63",
+    "cacheControl": "private, no-store",
+    "origin": "https://pr-1000.previews.dev.thingtime.com",
+    "features": {
+      "api.webpages-suites-install": {
+        "version": "1.7.0"
+      },
+      "api.things-export": {
+        "version": "1.18.0"
+      },
+      "api.things-import": {
+        "version": "1.15.0"
+      },
+      "api.attachment-content": {
+        "version": "1.18.0"
+      }
+    }
+  },
+  "scripts": [
+    {
+      "path": "/tt-boot.js",
+      "status": 200,
+      "bytes": 3822,
+      "sha256": "39a5dfeca672ecb732a7a67facc4553a86993b026b361dd1709446380dbe8c83",
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "exactSourcePresent": false,
+      "shortSourcePresent": false
+    },
+    {
+      "path": "/assets/index-Bc2MY_2n.js",
+      "status": 200,
+      "bytes": 974423,
+      "sha256": "fd3510ccb2f9397752c5b3e8f0fee81428ddf4b467d18b9a7e02857ff1ad91b2",
+      "cacheControl": "public, max-age=31536000, immutable",
+      "exactSourcePresent": false,
+      "shortSourcePresent": false
+    }
+  ]
+}

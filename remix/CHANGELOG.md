@@ -104,177 +104,80 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-26: Reconcile PR992 with develop `cd6f8b8ab`: retain Connections2, gateway1.1's proxy default, explicit dedicated policy and Vercel fail-closed admission. Preserve signed OAuth fixtures and a bounded ten-port compiled acceptance runner. Canonical gateway/Connections rollout remains separate. [PR992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). — Codex (AI)
+- 2026-10-28 — **Codex (AI):** Correct the global/site Builder acceptance fixture readiness race and strengthen page-observed API and composed-control hit checks. Lint/compilation pass; native acceptance remains incomplete, with the failed run and capacity refusals retained. [Evidence](../artifacts/anonymous-site-editable-2026-10-28/README.md).
 
-- 2026-10-26: Integrate canonical gateway ownership, signed origin-preserving relays, Mongo admission/draining and durable index readiness into PR992. Keep all six Connections contracts at major2; test restored frontend callbacks, exact data-environment vault selection and rotating refresh isolation. Roll out a compatible canonical backend before follower-dependent actions; current major1 refusal is expected. [Details](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md#environment-gateway-integration--26-october-2026). — Codex (AI)
+- 2026-10-27 — **Codex (AI):** Prepared the opt-in native regression for individually editable nested global/site Builder blocks and documented its isolated run path. Lint and skipped discovery pass; native execution remains pending after a ten-minute headroom wait launched zero browsers. Recorded completed CI/preview checks for the preceding post-delete checkpoint. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
-- 2026-10-26: Resolve Connections OAuth clients and callbacks from the encrypted server vault by exact origin and explicit data environment, bind pending/saved grants, and reject ambiguous configuration and refresh races. Old unbound grants require reconnect; real provider acceptance remains pending. [PR 992 details](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md). **Codex (AI)**
+- 2026-10-27: Keep pending local post deletions hidden from stale online conversation projections, preserving raw Thing shapes and account retirement. Portal the quote popup so its closed content cannot widen a hidden phone container, and keep the Repost menu positioned against the viewport through scrolling. Final native account/anonymous deletion, queue recovery and settled quote/control checks pass at 1440/390/320px. [PR 1000 detail](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
 
-- 2026-10-23: Make service/account cards, credential forms and Connections tools individually editable in Builder; keep secrets in transient form state and out of request logs. Reconcile current develop, assign distinct capability versions for uncapped writes, and preserve saved-service pagination. Current provider configuration and validation evidence are recorded in [PR 992](../PRs/992-service-account-library-add-multi-account-third-party-service-library.md); real-account acceptance remains open. **Codex (AI)**
+- 2026-10-27: Retain exact offline notification queries/pages, add explicit event-preserving retries and scoped cross-tab refresh, and fence cached projections after access refusal or failed cache cleanup. Fix superseded pagination remaining busy, delayed URL updates replacing newer search input, and cold offline account history selecting the wrong source. Mobile floating shortcuts yield to filter controls. Native synthetic-account acceptance, full scrolling and control hit tests pass at 1440/390/320px; hosted head checks remain separate. [PR 1000 detail](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
 
-- 2026-10-29 — **Codex (AI)**: Add a transactional 100 MiB pending-accounting budget for trusted unlimited accounts, durable leased recovery, source-aware release health and structured storage incident logs. Add pre-merge, production alias and scheduled runtime checks through the protected controller. See [storage recovery](../docs/storage-recovery.md). Details: [PR #1289](../PRs/1289-storage-ledger-release-guard.md).
 
-- 2026-10-29: Restore the original browser tab before explicit native passkey fallback starts WebAuthn; approval-page cancellation returns consistently while background opt-out/cancellation stays non-disruptive.
+- 2026-10-27: Password queue status now distinguishes unread/failed queues from empty queues, preserves known rows through refresh errors, and retires prior account presentation. Fresh isolated API/native and actual-component fault checks pass; [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
-- 2026-10-29: Restore successful browser passkey approvals to the exact requesting tab/window before the site handles its response.
-
-- 2026-10-29: Add privacy-safe browser passkey hook diagnostics and native empty-request site/count details to identify missed Thingtime routing without changing permissions or credential matching.
-
-- 2026-10-29: Restore repeated child insertion in populated Builder parents,
-  add above/below/left/right insertion, and replace overlapping nested title
-  chips with a shared ancestor breadcrumb. Add an editable block-structure
-  dialog whose page/parent/block views select the real inspector target.
-  [Implementation and acceptance](../PRs/1284-codex-builder-nested-blocks-fix-nested-builder-insertion-and-add-block-structure-navigation.md).
+- 2026-10-27: Record instrumented native instruction paste, undo/redo and
+  offline/reconnect acceptance through the normal Settings editor. Exact
+  12,002-line paste passed in 2,194 ms without changing source or the performance
+  gate; previous slow runs and installed-app acceptance remain separate.
+  [PR #1000 evidence](../artifacts/anonymous-local-first-2026-10-27-paste-diagnostic-r2/README.md).
   **Codex (AI)**
 
-- 2026-10-29: Identify Builder-authored Things through the existing schema array, open owned Builder Things in their editors, and add shared Open in Builder / Open live page menu actions while preserving view/share links and ordinary Thing navigation. [PR 1280 details](../PRs/1280-codex-builder-thing-navigation-open-builder-things-in-their-editors.md). — Codex (AI)
-- 2026-10-29: Localize the native AutoFill host name as Thingtime while preserving its installed filename and identity; verify bundled localization rather than raw plist branding alone.
-
-- 2026-10-29: Unify native and optional browser-provider display naming as Thingtime, verify matching branded bundles, and present native macOS passkey setup and discovery before optional browser interception.
-
-- 2026-10-29: Recover native Password AutoFill linking for an enabled provider, preserve explicit disconnect and independent account links, explain local HTTPS requirements, and install matching standalone/nested companions.
-
-- 2026-10-29: Restore shared Apple file publication and recovery on older host
-  kernels while retaining path, symlink, identity and content protections.
-  Cover the unsupported rename-flag retry and include FileSync changes in
-  automatic iOS releases. [Release evidence](../PRs/1272-codex-ios-all-share-types-add-ios-share-destination.md).
-  **Codex (AI)**
-
-- 2026-10-29: Split the historical-file export test fixture into typed JSON
-  sections so Xcode 26.2 can check it without exhausting expression inference.
-  Preserve the fingerprint bytes and all five export regressions. **Codex (AI)**
-
-- 2026-10-29: Type native upload progress expectations explicitly as 64-bit byte
-  counts so the Xcode 26.2 TestFlight regression build compiles. The existing
-  ordered-progress assertion remains intact. **Codex (AI)**
-
-- 2026-10-29: Add the native iOS Thingtime share destination for source-provided
-  text, links, media, documents, folders and custom types, with local atomic
-  batches, cancellation and retry. Include the extension in TestFlight signing
-  and archive verification, and add real system-sheet byte checks. Native
-  installation is required; a web deployment cannot add the destination.
-  [Verification and delivery boundaries](../PRs/1272-codex-ios-all-share-types-add-ios-share-destination.md).
-  **Codex (AI)**
-
-- 2026-10-28: Add private MCP task reporting with an independent delegation
-  permission, distinct task Characters, saved workspace Actions, guarded retries
-  and exact record readback. Existing Things connections require explicit
-  reporting authorization. See [setup and acceptance](../docs/agent-reporting.md).
-  [Validation and delivery boundaries](../PRs/1270-codex-mcp-private-reporting-private-agent-task-reporting.md).
-  **Codex (AI)**
-
-- 2026-10-28: Extend editable Mapbox viewports with cursor-paged favourite and route sources, numbered route stops, query selection and route-scoped transient geometry. Expose current runtime fields to ordinary page blocks so persistent maps can sit outside draft-resetting source panels. Saved app definitions remain private Things. **Codex (AI)**
-
-- 2026-10-28: Restore saved Action buttons and row form submissions in expanded editable Builder collections. The live page uses the canonical delegated Action handler once per gesture; Builder edit mode remains inert. **Codex (AI)**
-
-- 2026-10-28: Restore saved Action data in live collections after expanding Components into editable Builder blocks; collection controls remain inert while editing. **Codex (AI)**
-
-- 2026-10-28: Resize saved Mapbox maps when their containing Builder layout changes, including the Thingtime drawer opening and closing. The canvas now follows the map region without reloading tiles or persisting route results. **Codex (AI)**
-
-- 2026-10-28: Serve the saved Builder map's official Mapbox GL JS npm distribution and CSS as same-origin assets, and permit only Mapbox service and events connections in the strict application CSP. Add production CSP regression checks after live SDK loading was blocked. Provider-backed map rendering still needs deployed-origin acceptance. **Codex (AI)**
-
-- 2026-10-28: Add owner-scoped Mapbox address lookup and route optimization plus an editable map viewport for saved Builder apps. Credentials stay in Vault; navigation results remain transient under provider terms. Live app acceptance pending. [Details](../PRs/1260-codex-thingtime-route-planner-support-editable-mapbox-route-planner-apps.md). **Codex (AI)**
-
-- 2026-10-27: Native Password AutoFill now reports safe progress and recovery categories, retains registration identity across retries, fences stale requests and reads complete paginated catalogs. Display the macOS provider as Thingtime without changing credential-store identities; add isolated native build overrides, a shared editable Connect/Disconnect control backed by read-only device status, and automatic device verification after OS-picker selection. Real GitHub creation was user-confirmed; installed status controls and the final automatic-start provider remain separate acceptance. [Details](../PRs/1258-codex-native-passkey-repair-20261027-fix-native-passkey-recovery-and-thingtime-provider-naming.md). **Codex (AI)**
-
-- 2026-10-27: Add Password manager navigation/settings and an opt-in Chromium
-  passkey extension with editable website approval, fresh password verification,
-  origin/RP fences and durable vault readback. Document fork-safe ZIP setup and
-  real-data regression checks; Firefox, Safari, mobile and native-provider
-  acceptance remain separate. **Codex (AI)**
-
-- 2026-10-27: Add native desktop View menu zoom and focused-window Command/Control `+`/`=`/`-`/`0` shortcuts, sharing one zoom path while preserving text editing and preventing duplicate menu/renderer handling. Add focused and real Electron host regressions. [Validation and delivery](../PRs/1253-mac-dev-production-policy.md). **Codex (AI)**
-
-- 2026-10-27: Update Mac development delivery guidance to retain a separate development app for testing and usage, and gate stable Thingtime installation on a newer version containing a Mac feature merged into `main`. **Codex (AI)**
-
-- 2026-10-27: Admit the reviewed Darwin kernel-group verification fix and bounded trusted failure diagnostics for the native compile runner. Preserve default inert preflight, immutable pinning, network denial, and separate hosted/native acceptance gates. **Codex (AI)**
-
-- 2026-10-27: Pin the native compile listener to the independently reviewed process-lifecycle repair: verified numeric identity drops, bounded watchdog readiness, separate denial-probe deadlines, and readable failure evidence. Hosted preflight and full native acceptance remain open. **Codex (AI)**
-
-- 2026-10-27: Default the owner-gated native compile listener to an inert isolation preflight and require an explicit mode choice for candidate compilation. Keep immutable controller pinning and record hosted transport/denial/cleanup gates separately from native and installed-device acceptance. **Codex (AI)**
-
-- 2026-10-26: Preserve explicit saved or embedded render Components when typed Posts and comments are created or edited. Honor the outer declaration in nested Post embeds, negotiate the additive write contracts, and cover real typed-Post repair/readback in feed and sidebar acceptance. Existing saved content still needs an explicit renderer assigned. **Codex (AI)**
-
-- 2026-10-26: Add a contextual **➕ Add +** row to both drawer lists and support arbitrary-depth nested menus in the existing lower section. Preserve ancestor navigation, editable saved templates and existing links; expose parent selection and sibling ordering in drawer settings. **Codex (AI)**
-- 2026-10-26: Let initial and foreground resource refreshes reach a local API
-  even when the browser reports offline. Subspace embeds now get their first
-  request without weakening network isolation; offline background polling stays
-  paused. Regression and related suites pass 779 tests. [Verification](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
-- 2026-10-26: Configure production, develop and shared preview gateway targets;
-  verify their origin-scoped manifests and root-data routes while preserving
-  existing aliases and credentials. Integrate the canonical Thing renderer
-  from main for subspace embeds. Verify dedicated branch reads and rejection of
-  incoming gateway relays; identify the exact-origin allowlist correction needed
-  for ordinary PR aliases. [Rollout and verification](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
-- 2026-10-26: Replace the legacy UUID hook's insecure random source with Web Crypto while preserving its mount-time lifecycle. The main delivery includes only the owned zero-baseline changes from PR 1228. **Codex (AI)**
-- 2026-10-26: Render data Things through an explicit saved Component pointer or
-  embedded Component definition, with an opt-in data inspector and independent
-  Component access checks. Keep type aliases out of explicit renderer selection
-  and document the authoring contract in global and repository AI guidance.
-  Preserve native child controls inside transient Action layouts and prevent
-  hidden content containers retaining horizontal scroll after data inspection.
-  [Verification and limits](../PRs/1227-thing-render-components.md). **Codex (AI)**
-- 2026-10-26 — **Codex (AI)**: Add editable password generation with configurable
-  rules and source-linked presets, encrypted entry-icon metadata with upload/URL
-  controls, and a native passkey setup guide. Password capability is 1.3.0;
-  isolated generator, icon and HTTP checks cover the new boundaries.
-  [PR #1231 details](../PRs/1231-codex-password-generator-passkeys-add-editable-password-generation-entry-icons-and-passkey-setup.md).
+- 2026-10-27: Scope explicit offline audio originals to the workspace identity,
+  validate canonical bytes and fence playback/downloads across track and account
+  transitions. Native correct-package playback, cold reload and removal pass;
+  preserve exact archive/source evidence and prior failed fixture attempts.
+  See the [PR 1000 checkpoint note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
 
-- 2026-10-26: Match custom drawer links and the final inline **➕ Add +** row to Thingtime navigation. Move menu layout editing into Settings and save the editable menu template as a private webpage Thing while retaining legacy device layouts. [Details](../PRs/1226-codex-drawer-renderable-row-match-the-final-add-drawer-row.md). **Codex (AI)**
-- 2026-10-26: Align shared native selects with Thingtime surfaces and radii; replace the black focus outline with a contrasting pink border and soft pink-to-violet glow. Theme Studio can customize both glow colours, softness and strength, including no glow. Add isolated desktop/mobile, light/dark and theme-editor save/reload coverage. **Codex (AI)**
+- 2026-10-27: Label retained account Search results as partial snapshots and keep
+  previous-query provenance after failed refresh. Native People/Subspace/Thing
+  offline, logout and desktop/mobile status checks pass. Separate normal post
+  privacy/body editing passes completed-save reload and private reconnect without
+  a product change. [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
 
-- 2026-10-26: Reconcile PR996 with develop `cd6f8b8abc94270980bac216da2412ffef8578b1`: preserve gateway 1.1.0 fail-closed deployment policy, password 1.2.1 compatibility, deterministic lease renewal and isolated proxy/dedicated acceptance. [PR996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md). **Codex (AI)**
+- 2026-10-27: Add durable account suite receipts and canonical identity adoption,
+  with atomic server installation, frozen retries and explicit conflict recovery.
+  Real isolated API and normal offline/reconnect/recovery UI acceptance pass,
+  including old-ID lookup and reviewed settled-write recovery regressions.
+  Mobile conflict rows and vault controls remain usable at 320px; sandboxed
+  66 MiB vault cold reload/download passes. Large-note memory diagnosis remains
+  separate. Capability tests distinguish the published suite-install version
+  from existing clients' minimum requirements after the 1.7.0 addition.
+  Native Component queue acceptance now verifies dependency ordering, unchanged
+  lost-response retries and revision-checked updates through the normal worker.
+  [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
 
-- 2026-10-26: Integrate the canonical environment gateway into PR996: signed per-operation forwarding, fail-closed Mongo admission, promotion/rollback draining, guarded warmup and durable index readiness/recovery. Preserve password contract 1.2.1 and reject incompatible gateway operations. [Runbook](../docs/environment-api-gateway.md). Deployed/native acceptance remains separate. — Codex (AI)
+- 2026-10-27: Offline account suites reconcile canonical identities; saved Component dependencies and lost-response recovery pass native queue acceptance. Normal-composer posting/draft independence now also verifies the immediate editor snapshot, exact rich text and duplicate prevention. Isolated native checks additionally verify mail account-retirement privacy and offline account Home theme/algorithm recovery with private reconnect. Account-feed acceptance now covers partial visited-page membership, cold offline reload, cursor reconnect and logout isolation. Instruction/vault evidence distinguishes passing checks from unresolved performance and wider device/provider acceptance. [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
 
-- 2026-10-26: Add independently editable nested properties for imported
-  structured password fields, transient private labels and preserved custom
-  Builder layouts. Keep unsupported or unsafe JSON intact and reject stale
-  property bindings. [PR #996 details](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
-  **Codex (AI)**
+- **Codex (AI), 2026-10-27:** Add known-length ZIP64 Blob export and refuse the
+  observed Node Blob 4 GiB crash boundary before reads or inflation. Preserve
+  canonical validation, checksums, cancellation and consumer limits. Record
+  isolated large-file evidence and the still-open native paste diagnosis in
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
-- 2026-10-26: Recover exact-head PR #996 and #992 develop previews by adding an
-  encrypted bootstrap scoped only to custom develop; preserve all 74 existing
-  environment-variable metadata records and production settings. Verify live
-  page/root-data/manifests without a shared gateway rollout or real-account
-  credential creation. [Audit](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md#develop-preview-publication-recovery--26-october-2026).
-  **Codex (AI)**
+- 2026-10-27 — Negotiate larger remote Thing bundles through metadata-only
+  import/export and pinned original streams, preserving upload quotas, ownership,
+  atomic binding and anonymous renderer limits. Add an isolated real-byte
+  multipart/ZIP/copy fixture. Verification and remaining limits are in the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 
-- 2026-10-26: Make native passkey interoperability a network-denied macOS gate
-  for password tests and provider builds, with private temporary cleanup and real
-  verifier tamper regressions. OS/provider ceremonies remain separate.
-  [PR #996 details](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
-  **Codex (AI)**
+- **Codex (AI), 2026-10-27:** Separate local Blob archive capacity from existing buffered/account transfer budgets, with safe integer validation, real ZIP32 boundary checks and bounded manifest discovery. See [PR #1000 transfer notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#local-blob-archive-capacity--27-october-2026) for verification and remaining acceptance.
 
-- 2026-10-26: Remove QR upload byte/pixel rejection caps; scan large images in
-  cancellable overlapping sections and stop screen sharing before decoding.
-  See [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
-  **Codex (AI)**
+- **Codex (AI), 2026-10-26:** Replace account theme/algorithm creation count ceilings with canonical byte-quota admission and negotiated bounded owned-list pagination. Preserve empty cursor pages, identity fencing, legacy lists and versioned focus-token History. Extend isolated gateway acceptance beyond the old counts. See [PR #1000 capacity notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#owned-profile-creation-and-paged-lists--26-october-2026).
 
-- 2026-10-26: Add native TOTP setup intake and a separate authenticated,
-  memory-only editor handoff. The macOS password companion uses normal sign-in
-  in an ephemeral web view; editable create/attach/cancel controls preserve
-  drafts and require Save. The signed macOS companion appears in Set Up Codes
-  In; live setup, fill and physical iPhone acceptance remain pending.
-  [PR #996 details](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md). **Codex (AI)**
+- 2026-10-26: Add negotiated theme/algorithm catalogue streams with one home
+  snapshot, validated completion and atomic scoped device admission. Isolated
+  Chromium and built owner/gateway HTTP checks pass; creation/write capacity,
+  live snapshot races and full native UI remain open.
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
 
-- 2026-10-26 — **Codex (AI)**: Add individually editable password-field Copy
-  controls with masked copying, current-code TOTP handling, fixed feedback and
-  scope cancellation. Passkey signing fields exclude Copy. Password suite:
-  56 passes, zero skips; all 11 isolated browser groups passed at desktop/mobile
-  sizes. Real clipboard, native and production acceptance remain open. [PR #996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
 
-- 2026-10-25 — **Codex (AI)**: Restore iOS test-target compilation by gating the
-  shared live Git oracle to macOS. Verify native password-core checks,
-  destination-failure regression logic and the full simulator test build;
-  signed-device acceptance remains open. [PR #996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
+- 2026-10-26: Reconcile PR 1000 with develop's environment gateway while retaining
+  offline test coverage and safe notification links. Built acceptance verifies
+  branch-local draft-preview bytes/CSP, social-card GET/HEAD, authenticated
+  forwarding and independent disposable databases.
+  [Integration evidence](../artifacts/anonymous-local-first-2026-10-26-develop-integration/README.md). — Codex (AI)
 
-- 2026-10-23 — **Codex (AI)**: Make password-manager controls, repeated fields, transfer dialogs, attachments and imported source/history individually editable through saved block templates. Keep decrypted values in transient controls, cancel operations on Builder mode changes, and provide native unlock/retry feedback for failed destination changes. Cloud checks use synthetic data; installed Apple credential acceptance remains pending. [PR #996](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
-
-- 2026-10-18: Restore installed desktop password/mail requests by preserving Nitro request interfaces during the selected-origin handoff; add Passwords to sidebar and Commander navigation. See [PR #996 notes](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md).
-
-- **2026-10-18 · Native password provider:** repair Developer ID archive/export, verify the exact signer and bundle-specific AutoFill profiles, and wrap the setup instructions. Signed macOS installation now succeeds; the provider is enabled and connected; OS credential ceremonies require user verification. [PR #996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md). — **Codex (AI)**
 - 2026-10-26: Integrate the reviewed environment gateway and dedicated connection policy into develop while preserving newer develop changes. Built sandboxed API acceptance and contract tests pass; canonical-owner activation remains pending. [PR #1224 details](../PRs/1224-codex-gateway-develop-integration-environment-gateways-and-dedicated-policy.md). **Codex (AI)**
 
 - 2026-10-26: Add the server-only `THINGTIME_MONGODB_CONNECTION_MODE` override for `proxy` or opt-in `dedicated` MongoDB connections, with a branch-bundled default. Document the audited preview/develop database relationship, proposed gateway mapping and gradual pool draining; publisher implementation, gateway activation and live acceptance remain pending. [PR 1223 details](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
@@ -284,6 +187,63 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-10-26: Forward public social cards and generated docs through the local Vite proxy; verify root docs GET/POST through the actual Vite server as well as built Nitro. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
 
 - 2026-10-26: Add explicit per-environment API gateway ownership, signed origin-preserving forwarding, safe pool draining and bounded shared index-plan readiness. Branch frontends use the selected environment backend; live alias acceptance remains pending, and older preview deployments may age out naturally. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
+- 2026-10-26: Pin the two private instruction-transfer schemas to empty public
+  projections and assert their protected CRUD classification. Repair the three
+  schema assertions found by Web CI; all 277 schema checks pass locally.
+  Verify private instruction legacy refusal through the authenticated browser
+  path; the isolated protocol check passes without changing cookie security.
+  [PR 1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+- 2026-10-26: Make sealed instruction recovery linear in inventory and selected
+  content instead of rescanning for every part; preserve exact-byte, owner and
+  generation validation and refuse inflated counts before large allocations.
+  Update the recording model-routing contract and verify instruction validation
+  uses the provider's selected model. [PR 1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+- 2026-10-26: Add resumable owner-fenced account instruction storage and versioned sealed backup recovery with bounded immutable transfers, transactional revision commit, retention cleanup and 96 KiB ordinary-inference working set. Inference metering boundary checks pass 9/9; isolated packaged-app instruction acceptance failed at 12,000-line paste/undo, with installed macOS acceptance still open. See [PR 1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#resumable-account-instruction-transfer--26-october-2026). — Codex (AI)
+
+- 2026-10-26: Make disabled MCP card crops extractable with explicit result metadata, reject duplicate viewport dimensions before launch, and withhold artifacts after truncated worker output. Artifact extractor regressions now run in the default MCP suite. [PR 1000 evidence](../artifacts/anonymous-local-first-2026-10-26-mcp-options/README.md). **Codex (AI)**
+
+- 2026-10-26: Prevent repeated instruction saves from stacking the same editor’s success notifications. Native clipboard/undo/save/reload now covers 12,002 hard lines; saved profile Actions pass through the normal offline Run button with retained history and responsive checks. [PR 1000 follow-up evidence](../artifacts/anonymous-local-first-2026-10-26-followup-final/README.md). **Codex (AI)**
+
+- 2026-10-26: Integrate isolated native rendering into the existing Thingtime MCP, verify real agent artifacts and owned cleanup, correct read-only discovery metadata and the stale Nav acceptance assertion. The unified render tool passes from this Codex desktop chat; exported JSON round-trips through current transfer validation and PNG metadata/hashes match. Invalid JSON and a missing crop return zero artifacts. Cleanup inventory found no resources created by these calls since the source commit; three older volumes were preserved. Installed macOS-app, exact-head CI/preview, native-paste and broader local-first acceptance remain open. [Desktop-host evidence](../artifacts/anonymous-local-first-2026-10-26-desktop-mcp/README.md) and [PR 1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). **Codex (AI)**
+
+- **2026-10-25 — Comment acceptance CI:** repair the harness to use selected-Character clients and cover independent draft/content failures. No production handler changed. Feed checks pass 96 with one existing skip; exact-head CI is separate. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+- Shared Copy negotiates original-byte streaming for larger files, with exact receipts, final access checks, bounded progress/cancellation and atomic local import.
+
+- **2026-10-25 — Anonymous/offline continuation:** connect shared copies and
+  dedicated theme/algorithm browser Actions to device completion; add private
+  deleted-design History recovery and a restricted render-only MCP launcher.
+  Standalone file annotation/deletion Actions retain canonical responses and
+  transactional library guards. Oversized account instructions stay local without
+  repeated guaranteed refusals. Reconcile develop contracts and isolate workflow
+  discovery from generated preview bundles. Update compatible MCP dependencies;
+  the production dependency audit now reports zero findings. Local, host, CI and preview evidence remain separate in the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+- 2026-10-25: Reconcile local-first and media storage contracts as Things 1.42.0
+  and update 1.13.0. Preserve transfer title contracts and negotiate the combined
+  versions before durable deletion receipts or atomic attachment edits. — Codex (AI)
+
+- 2026-10-23: Keep account file annotation and folder placement syncing when upload
+  completion safely normalizes the file MIME. Reconciliation uses the verified
+  same-file receipt, preserves the original local MIME and retry identity, and
+  still refuses later content or ownership changes. — Codex (AI)
+
+- 2026-10-23: Add dedicated local theme/algorithm History restore, undo and merge;
+  scoped device feeds; accurate inherited audience labels; and composer clearance
+  for the floating assistant. Remove obsolete local editor/provider/import caps,
+  retry theme reads on reconnect, and support local bulk Action copy/move/delete.
+  Copy complete account files offline through the normal importer and recheck
+  source availability in the commit transaction. Separate transfer files no longer
+  share one aggregate admission budget. Support offline URL gallery attachments,
+  drafts/templates and mixed transfers through the existing media journal, with
+  idempotent link registration/deletion and bound-file annotations. Negotiate
+  link 1.1.0 and deletion 1.8.0 contracts. Preserve protected writers and independent
+  account queues. Fresh native JSON/PNG,
+  isolated-browser evidence and remaining gates are in [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+  — Codex (AI)
 
 - 2026-10-26: Add custom drawer links and attached Things, an Add + popup with
   emoji/title/tooltip fields, and drawer settings management. Compose the new
@@ -1117,6 +1077,74 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   workers and product integration remain in progress; see the
   [acceptance ledger](../docs/mobile-file-sync.md) and
   [PR #1002 verification note](../PRs/1002-codex-mobile-file-sync-add-native-mobile-pairing-and-recoverable-file-sync-core.md).
+
+- 2026-10-19: Keep page-block failure notices and Retry below the fixed navigation, without duplicating content clearance. Native forced-failure/recovery at 1440/390/320px and 36 repeated views pass; narrow composer/floating-assistant overlap remains tracked. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+
+- 2026-10-19: Bound the repeated-navigation native fixture's V8 heap after two renderer OOM reproductions; 36 views now pass through normal GC with zero crashes/OOM. Record per-navigation memory and uniquely paired failure artifacts. Product code and security boundaries are unchanged. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+
+- 2026-10-19: Describe inherited audiences honestly and retain matching subspace context in owned offline projections. Native parent/comment/nested-reply and guest/foreign refusal checks pass at 1440/390/320px; intermittent earlier blank navigation remains tracked. See the [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-19: Verify native account-theme offline History, canonical version downloads and independent content/History retry in both failure directions on the isolated packaged app. Protected version changes remain open. See [PR 1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+- 2026-10-19: Account file downloads use canonical export plans independently of paired-device capabilities and their 32 MiB cap. Native 70 MiB offline save, private reconnect, clean-context download and retained offline reuse pass with exact hashes; existing authorization and transfer bounds remain. See [PR 1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+- 2026-10-19: Bound native ZIP Blob-handle creation and verify the anonymous 70 MiB file/copy/offline/import/export flow in isolated Chromium, including cancellation and invalid input. Update the progress plan and distinguish remaining account/transport coverage. See [PR 1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+- 2026-10-19: Preserve Character workspace selection through Things, nested posts and History; use the selected actor for quick comments and scoped local image previews. Anonymous comments remain local. Native desktop/mobile checks, isolation and draft-failure coverage are recorded in [PR 1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+- 2026-10-19: Route delegated Character content through the existing local worker, preserve post/History context across reload, and keep draft completion independent. Fence remote profile requests after an offline transition and tighten sync-notice spacing. Validation and remaining work: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+- 2026-10-19: Separate delegated Character History caches and command queues by principal while preserving canonical records and direct-account keys. Keep older authored versions in their proven workspace; full Character UI integration remains open. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+- 2026-10-19: Resolve delegated/session-selected Characters in private theme and
+  algorithm sync, with repeated authorization and negotiated actor contracts.
+  Native isolated account/API checks pass; full offline Character work remains
+  open. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+- 2026-10-19: Include delegated Character drafts/files in the selected account's
+  device-storage total, with one validated readonly snapshot and unchanged
+  owner/origin/database isolation. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+- 2026-10-19: Save delegated Character drafts in separate device partitions, retain minimal offline selector labels, and reuse canonical draft sync/review independently of posting. Native acceptance and the remaining local-first matrix are tracked in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+
+- **2026-10-19 — Character callback isolation:** bind delegated API and explicit
+  Character submission callbacks to their originating workspace. Retired
+  callbacks now refuse before HTTP instead of acquiring the next session.
+  Offline delegated workspaces remain pending; see [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+- **2026-10-19 — No-login draft host:** preserve the canonical sandbox/no-store
+  headers in packaged Nitro builds and visibly disable unavailable JSON export.
+  Fresh isolated MCP/native captures and normal private importer round-trip are
+  recorded in [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-19: Agent Tasks reads locally created tasks, todos and progress offline through explicit owner-scoped structured search. Search 1.4.0 preserves server access fences; account device results remain explicitly partial. Native no-login create/edit/cold-reload/export and real isolated API scope checks pass. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md). — Codex (AI)
+
+
+- 2026-10-19: Enable anonymous/offline Builder media uploads through workspace ownership, expose global/site block selection, preserve text while the editor loads, and fix narrow inspector controls/toolbar clearance. Native offline upload/export/cross-tab/reset checks pass in the bounded isolated fixture. See [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#native-globalsite-builder-and-local-media--2026-10-19). — Codex (AI)
+
+
+- 2026-10-19: Integrate editable Builder blocks with offline local saves, negotiate their contract only at remote transmission, and defer anonymous Timeline storage until use. Native individual-block edit/style/reorder/duplicate/delete, offline reload and canonical export pass in the isolated full app. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#editable-builder-integration-and-offline-native-acceptance--2026-10-19).
+
+- 2026-10-19 — **Codex (AI)**: Retry initial personal-instruction account reads
+  independently of local edits. Added isolated native acceptance for anonymous
+  Mail settings, saved readers and competing-tab proxy edits, with offline
+  desktop/mobile evidence. Provider and signed-in sync checks remain open; see
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-19 — **Codex (AI)**: Personal Lopu instructions save in anonymous and
+  offline device workspaces. Account synchronization runs independently with
+  reviewed conflicts and lost-reply recovery; admin base edits remain protected.
+  Capability 1.1.0 removes personal checklist product caps while retaining the
+  current HTTP boundary. Verification and remaining native account checks are in
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-19 — **Codex (AI)**: Forward the explicitly configured Chromium cache path through the MCP example/test client. Verified current native draft screenshots and canonical private import/re-export in a network-isolated runtime; target-host and wider offline acceptance remain open. See [PR #1000 checkpoints](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18: Reconcile Characters and browser tasks with local workspaces; fence delegated requests and media, preserve offline owner comments and independent drafts. Local regression/build checks pass; native and individual-block acceptance remain open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
 - 2026-10-19: Give the editable Mac menu inventory Action an explicit 8 MiB browser response budget so real icon-bearing device snapshots load instead of failing at the 64 KiB default.
 
 - 2026-10-19 — **Codex (AI)**: Installed ChatGPT-plan acceptance passed fresh text, same-chat follow-up, a read-only Things tool roundtrip and saved model/conversation/Builder layout persistence; retain local execution placement and idempotent settings updates. [PR #1034 evidence](../PRs/1034-chatgpt-plan-usage-local-runtime-and-encrypted-connection-moves.md).
@@ -1164,6 +1192,772 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   full inline search/pagination. Add isolated desktop/mobile acceptance tooling.
   [Details and verification](../PRs/1031-mac-menu-bar-paired-device-builder-tools.md).
 - 2026-10-18 — **Codex (AI)**: Commander launcher Settings gear, stable process ordering, typed filters and sampled averaging windows, a resizable Processes pop-out with Keep above, and Settings maximize/restore. [PR #1030](../PRs/1030-commander-window-controls-settings-and-process-monitor.md).
+
+- **Codex (AI), 2026-10-18:** Remove device-only theme and algorithm item counts from saves, imports, hydration, reviewed copies and home migration. Preserve canonical validation, private sync intent and browser-quota rollback. Remote capacity and native acceptance remain open. See the [capacity checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#device-catalogue-capacity-checkpoint--2026-10-18).
+
+- **Codex (AI), 2026-10-18:** Verify the installed browser-manager connection and isolated default through its supported app controls and CLI. Update the local-first progress plan; native claim and artifact acceptance remain open. See the [recovery checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#installed-manager-connection-recovery--2026-10-18).
+
+- **Codex (AI), 2026-10-18:** Retain account theme edits, imports, moves, titles
+  and deletions in canonical device History atomically with local content and
+  sync intent. Home History can read/export these versions with a custom database
+  selected. Reuse independent History sync/export; native/API acceptance remains open. See the [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-theme-device-history--2026-10-18).
+
+- **Codex (AI), 2026-10-18:** Save/remove cloud-backed mail settings locally with
+  encrypted, independently retried account sync; preserve newer edits and show
+  reviewed conflicts. Native/API acceptance stays open. See the
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#independent-mail-settings-saves--2026-10-18).
+
+- 2026-10-18 — **Codex (AI)**: Open anonymous/offline Mail through the existing
+  encrypted store, separate device work from cloud refresh, and fence account
+  mail by API origin, verified authority and operation lifetime. Remove silent
+  device message truncation. Native browser/provider acceptance remains open;
+  see the [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18 — **Codex (AI)**: Integrate current main into the local-workspace
+  branch, preserving device-only password search, media sandbox/offline assets
+  and fail-closed local APIs. Combine password search and durable file receipts
+  under capability 1.3.0. Local regressions, builds and isolated server checks
+  pass; native acceptance remains pending. [PR #1000 integration](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#current-main-integration-and-local-password-search--2026-10-18).
+
+
+- 2026-10-18 — **Codex (AI)**: Stream authorized owned originals into scoped Blob storage and export with capability 1.16.0, removing retention preparation caps while preserving private authorization, atomic quota/refusal handling and cancellation. Large-file fixtures, manifest smoke and builds pass; native acceptance remains pending. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#owned-original-streaming-retention--2026-10-18).
+
+- 2026-10-18 — **Codex (AI)**: Keep local/account export files as native Blobs
+  through canonical collection and ZIP downloads; preserve prepared anonymous
+  scope fences and cancel stalled file streams. A 66 MiB import/export/import
+  fixture verifies exact bytes with bounded reads. Native browser acceptance and
+  remaining retention/capacity work stay open. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#blob-export-collectors--2026-10-18).
+
+
+- 2026-10-18 — **Codex (AI)**: Read selected ZIP transfers as Blob chunks, remove
+  the smaller local import buffer ceilings, and assemble ZIP downloads without a
+  whole-archive JS buffer. Preserve checksum/entry validation and atomic account
+  upload intent. Native browser acceptance remains pending.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#blob-zip-transfer-checkpoint--2026-10-18).
+
+- 2026-10-18 — **Codex (AI)**: Keep native local files as Blob handles with bounded
+  hashing, atomic post/draft snapshot checks and independent account multipart
+  upload. Remove local-only copy and preview buffer ceilings while preserving
+  paired-device limits. Unit/build checks pass; isolated Chrome sandbox startup
+  blocks current native acceptance. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#native-file-blob-checkpoint--2026-10-18).
+
+- 2026-10-18 — **Codex (AI)**: Remove total password-refresh and retained-workspace
+  discovery cutoffs. Fence older password pulls across tabs, preserve partial
+  refreshes and cancel key traversal on identity change. Local regression evidence
+  and remaining native checks are tracked in [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18 — **Codex (AI)**: Remove fixed IndexedDB workspace/record budgets;
+  use browser quota errors with atomic rollback, preserve refusal-marker cleanup
+  and show stored usage without a fixed quota meter. Larger encrypted streams and
+  failure paths have local tests; buffered adapters and connected-Chrome acceptance
+  remain open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18: Align device password entry/file-metadata codec and encrypted-record capacity with the canonical account writer; preserve exact large values through export, sync and conflict copies. Aggregate workspace policy and connected-Chrome acceptance remain open. See [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18 — **Codex (AI)**: Activate encrypted device-backed account password
+  attachments with independent sync, visible unavailable files, complete-backup
+  checks and stale-pull fencing. Native offline/reconnect/retention and regression
+  tests passed locally; connected-Chrome recheck, full-suite coverage and
+  current-head CI/deployment remain open. Added the HTML progress tracker. Details:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18 — **Codex (AI)**: Preserve canonical password-file deletion receipts
+  and independent encrypted files/source archives through entry conflict review.
+  Local API checks cover real upload/download, replay and owner isolation;
+  account file UI activation and native acceptance remain open. Details:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18 — **Codex (AI)**: Added encrypted account password-file queue and
+  retention groundwork with parent ordering, renewable cross-tab claims and
+  whole-transfer identity fences. Account UI activation, delete replay and native
+  acceptance remain pending; see [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18 — **Codex (AI)**: Integrate main's complete password imports and Gmail
+  changes into the local-first branch. Anonymous password attachments and normal
+  1PUX backups now use encrypted device storage through a shared archive backend;
+  clean offline browser round-trip verifies identical bytes at desktop/390/320px
+  without account API calls. Account attachment sync and full-suite acceptance
+  remain open. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18 — **Codex (AI):** Preserve algorithm library display titles through
+  local Rename, canonical transfer and conditional account sync; negotiate
+  `api.algorithms-sync` 1.3.0 and retain protected profile boundaries. Verification
+  is tracked in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18 — **Codex (AI):** Route native account algorithm editing, selection
+  and transfers through independent local queues; isolate training features and
+  sessions by source workspace, add conflict review, and keep Vercel Analytics
+  out of local/offline shells. Browser acceptance and wider coverage remain
+  tracked in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18 — **Codex (AI)**: Added protected account algorithm import/export
+  and library placement adapters, immutable folder retries and owned-home-folder
+  validation (`api.algorithms-sync` 1.2.0). Native account editor/feed activation
+  remains pending. Details: [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-algorithm-library-transfer--2026-10-18).
+
+- 2026-10-18 — **Codex (AI)**: Added independent conditional account algorithm selection and exact home receipts, with atomic device intent and pending-profile retention. Verified 67 isolated real API checks; native account editor/feed activation remains pending. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18 — **Codex (AI)**: Prepared account algorithm device storage and
+  conditional sync queues using the shared local writer, current authority
+  checks, immutable retries and reviewed conflicts. Native facade, selection
+  and editor activation remain pending. Details:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-algorithm-device-queue--2026-10-18).
+
+
+- 2026-10-18 — **Codex (AI)**: Added conditional private algorithm profile
+  synchronization through the existing protected writer, canonical Timeline
+  receipts and atomic deletion/active-selection cleanup. Disposable real-API
+  checks cover retries, conflicts and exact canonical transfer round-trip.
+  Account offline editor and queue integration remain pending. Details:
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#conditional-algorithm-profile-synchronization--2026-10-18).
+
+
+- 2026-10-18 — **Codex (AI)**: Retained owned account Actions can execute
+  offline through the native interpreters and queue their ordinary content
+  changes for independent sync. Preserve operation leases, distinguish device
+  run history from server receipts, and remove it with its owning Action.
+  See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18 — **Codex (AI)**: Native schema-backed Thing details now resolve
+  locally for anonymous/offline workspaces, with scoped preview caches and
+  recoverable dependency errors. Shared-schema authorization is preserved.
+  See the [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#local-schema-detail-checkpoint--2026-10-18).
+
+
+- 2026-10-18 — **Codex (AI)**: Add native local Home library browsing, mixed
+  import/export and scoped caches/cut intent. Keep account-bound links and
+  selected-plane remote authority separate. Cross-plane detail/editor routing
+  and automatic consolidation remain pending. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18 — **Codex (AI)**: Theme Studio can review retained device variants
+  offline, preserve their original sync requests and recover one private home
+  copy with canonical download. Native home library routing and automatic
+  consolidation remain pending. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-18 — **Codex (AI)**: Add atomic local home storage, lossless theme
+  migration primitives and an explicit home destination in the normal local API.
+  Selected-database remote admission remains independent; native migration UI
+  activation is still pending. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-18 — **Codex (AI)**: Preserve immutable home theme/selection receipt
+  identity across selected-plane changes. The additive themes-sync 1.5.0 context
+  retains current session/origin/plane checks and canonical home ownership.
+  Legacy retries keep their original context while later edits finish locally.
+  Real isolated API replay/refusal checks pass; home-cache migration remains open.
+  Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-18 — **Codex (AI)**: Theme library display titles now rename offline
+  for anonymous and retained account workspaces, sync independently, and survive
+  canonical import/export. Removed the duplicate network preflight from the
+  Rename UI while retaining remote adapter negotiation. Native desktop/mobile
+  and isolated API round-trip checks pass locally; full rollout remains open.
+  [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Theme library moves/deletes now finish offline
+  through the dedicated theme adapter, with independent receipt-ordered folder
+  sync. Anonymous folder deletion preserves children; active selection clears on
+  deletion. Device discovery pauses offline and requires authenticated identity.
+  Verified locally with workspace, device and native browser checks; broader
+  rollout remains open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Account theme import and private copies now finish
+  offline through the canonical importer, with independent conditional folder
+  and theme synchronization. Native offline/reconnect and atomic placement API
+  fixtures pass locally; see [PR #1000 evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Account themes download canonical portable JSON offline, including pending edits and retained folder placement. Catalogue capability 1.2.0 keeps placement explicit without weakening protected writers. Real local browser/API evidence and the unfinished import/History work are recorded in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Theme saves flush native device persistence before completion; anonymous themes retain and export canonical History. Phone History exports stay reachable above floating controls. Local browser evidence and remaining scope are in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17: Account Theme Studio saves and selection now finish on-device with
+  independent remote sync, exact conflict review and private copies. Local native
+  offline/reconnect checks passed at desktop/390/320px; wider rollout remains
+  incomplete. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-17: Add conditional home-plane theme sync prerequisites, durable retry receipts, transactional theme quota and selected-theme deletion cleanup. Extend provider account-switch acceptance. Local API checks only; full local-first rollout remains gated by [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Account provider Settings now saves in the
+  encrypted device workspace independently of account sync, with atomic
+  environment conflict review and explicit fresh selected-value retention.
+  Scoped reveal 1.3.0 binds retention to the current account and data plane.
+  This is a local-first rollout increment; the full matrix remains open. See
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add conditional account-provider writes and
+  encrypted device retry queues using canonical Thing mutations and retained
+  Timeline receipts. Local API verification covers retries after deletion,
+  concurrent writes and identity fences. Account Settings integration remains
+  unfinished. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#conditional-account-provider-writes--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Vault environment membership is now checked in
+  shared content transactions, preventing generic edits/deletes from leaving
+  orphaned entries that stop metadata sync. The disposable API regression passes;
+  account write sync remains in progress. Integrated latest main into the feature
+  branch and retained both test inventories. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Account Vault groundwork adds bounded, value-free metadata snapshots and exact-version selected reveals with encrypted device retention and stale-response protection. The loopback API fixture verifies existing authorization boundaries; account Settings/write sync remains in progress. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Secure Vault environments, secrets and provider
+  connections can be authored anonymously and offline through the existing
+  Settings forms and an encrypted device vault. Fix deletion notifications
+  leaking entry names and reject malformed replacement provider tokens.
+  Account provider sync remains unfinished. [PR #1000 evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#anonymous-provider-and-environment-authoring--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Account passwords now save to encrypted device
+  storage before independent, identity-bound sync, using a shared device-key
+  lifecycle with backward-compatible envelopes. Offline unlock/export,
+  immutable retries and reviewed conflict copies pass local browser checks;
+  anonymous credentials remain isolated. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-encrypted-device-passwords-and-independent-sync--2026-10-17).
+
+
+- 2026-10-17 — **Codex (AI)**: Anonymous encrypted device passwords reuse the
+  canonical vault envelopes and normal editor/transfer UI, with independent
+  passphrase unlock, idle locking and transactional conflict/cancellation guards.
+  Local offline desktop/phone, two-tab and transfer checks pass; account Vault
+  sync remains unfinished. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#encrypted-anonymous-password-manager--2026-10-17).
+
+
+- 2026-10-17 — **Codex (AI)**: Integrate current main into the local-first
+  feature branch; preserve Settings cards and upstream AI/Lopu changes. Verify
+  offline storage/card access and anonymous/account History at desktop and phone
+  widths, with 1,287 automated checks passing. Full rollout remains open.
+  [PR #1000 integration evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#upstream-integration-and-offline-settings-acceptance--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Name device-authored History drafts offline and
+  export anonymous draft content through the normal version reader. Shared
+  naming keeps draft provenance and waits for account admission before syncing
+  (`api.timeline` 1.20.0). Fixed anonymous capability checks returning rejected
+  promises; native anonymous/account desktop and phone flows pass locally.
+  [PR #1000 evidence and limits](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#device-draft-names-and-anonymous-version-export--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: History notes can be removed before their first
+  sync; durable private removal identities and scoped cache revisions stop late
+  retries and reads from restoring deleted notes (`api.timeline` 1.19.0).
+  Verified locally through real replica races and offline native desktop/phone
+  flows. Disposable integration database guards are configurable; full local
+  feature acceptance remains open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#pending-history-note-removal--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Saved account History version names queue durably offline; note controls complete after local saving and sync independently. Preserve exact retries, conflict review, accepted export metadata and offline transport gating. Native desktop/mobile checks and remaining scope are in the [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#offline-account-history-names-and-notes--2026-10-17).
+
+
+- 2026-10-17 — **Codex (AI)**: Ordinary account Things recover from retained History offline. Reconcile deletion intent without losing recovered content to delayed sync replies; verify native private recovery and reconnect at desktop/mobile widths. Attachment-bound/protected recovery and full-suite acceptance remain open. See the [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#offline-recovery-of-ordinary-account-things--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Restore and undo retained ordinary account Things
+  offline through native History using shared comparison and atomic writers.
+  Preserve conflict review, independent component copies, retry identity and
+  genuine server receipts. Native cold-reload/restore/undo/reconnect checks pass
+  at desktop/390/320px. Deleted-account recovery and broader rollout gates remain
+  open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Export retained account History through the normal
+  button while offline, including unacknowledged device versions with null
+  receipts and explicit partial note/name context. Shared archive validation,
+  cancellation and identity fences protect downloads. Native cold-reload exports
+  pass at 1440/390/320px; remaining offline History controls and full rollout gates
+  stay open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Retain each ordinary account edit and its canonical
+  device History atomically, including local deletion and reviewed replacement.
+  Reuse Timeline sync for private client drafts and preserve authoritative device
+  versions through cache clearing. 640 focused checks and two native offline/
+  reconnect/account-switch cases pass locally; broader acceptance remains open.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-device-history-capture-and-sync--2026-10-17).
+
+
+- 2026-10-17 — **Codex (AI)**: Offline parent deletion now holds bound-media
+  cleanup until the canonical parent version check accepts deletion. Reviewed
+  account restoration preserves local image bytes; same-origin opt-in cascade
+  receipts negotiate `api.things` 1.34.0. Three disposable native cases verify
+  normal deletion, a newer remote edit, and cold-offline recovery. Full-rollout,
+  current-head CI and deployed acceptance remain open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Open existing History from owned anonymous and
+  offline account Thing menus; retire old menu callbacks and History modals when
+  workspace identity changes. Cold-browser checks cover anonymous recorded data,
+  private account cache reads, native account switches and 1440/390/320px version
+  interaction. 969 focused checks pass; account-local Timeline capture/sync remains
+  unfinished. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Restore Save as template for owned offline account
+  posts with scoped retry/retirement guards. Delete bound post/comment media through
+  the existing local file cleanup transaction and settle uncertain writes before
+  remote parent deletion. Two clean-browser cases verify independent template bytes,
+  offline deletion, private reconnect and 1440/390/320px rendering; 521 focused
+  checks pass. Full local-first acceptance remains open. Details:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Scope rich composer recovery to the current workspace,
+  keep template copies independent, and prepare canonical draft identities before
+  editing. Added native account/anonymous offline and pending-operation checks.
+  Full rollout gates remain open. [PR #1000 detail](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Added explicit read-only recovery of account-only
+  older plain comment drafts/templates. Fresh review and changed-source checks
+  preserve originals while independent copies survive offline reload; anonymous
+  editing makes no account-draft requests. Local phone and account-switch acceptance
+  passes. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Added native cross-tab account-switch regression
+  coverage for delayed draft recovery reads/copies and an uncertain private-comment
+  response, including original-queue acknowledgment and exactly-once server readback.
+  Local acceptance only; broader workspace gates remain open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Scope plain comment/reply drafts and offer reviewed
+  earlier-device recovery without replacing current text or removing the source.
+  Compact multiline fields preserve recovered line breaks and IME behavior.
+  Local native checks verify posting through device draft-write failure and
+  exactly-once verified reconnect. Full rollout gates stay open. Details:
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Scope the legacy native editor tree through the
+  shared workspace storage boundary, retain old device bytes and offer reviewed
+  account recovery into an independent item. Offline browser checks cover native
+  recovery, draft-independent persistence and reachable narrow-phone controls.
+  Full-suite and identity-transition gates remain open. Details:
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Generic Thing drafts now retain their captured
+  workspace identity and recover the latest scoped device copy after a cold
+  offline reload. Corrupt recovery stays intact with a visible error. Native
+  anonymous editing/picker checks cover desktop and narrow phones; the held-draft
+  posting regression still passes. Full-suite acceptance remains open. Details:
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Wire native account drafts to scoped local storage
+  and independent private sync, bounded summary discovery and reviewed conflicts.
+  Real local browser checks cover offline recovery, responsive picker, posting
+  through draft 503s, private media reconnect and retirement. Legacy recovery and
+  remaining full-suite gates stay open. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Add the account-local draft queue foundation over
+  existing canonical local drafts, with immutable retries, separate editor/server
+  revisions and atomic private media handling. Fence copying after account read
+  refusals. Native client/worker activation remains pending; no account draft
+  completion or deployment is claimed. [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Retained account files now fence known access
+  refusals before fresh offline reads/exports and reject stale reauthorization,
+  while preserving device edits. Dedicated/keyed export plans retain identity
+  and refusal checks through final encoding. Cold native acceptance covers a
+  real fixture 404, withdrawn preview and failed offline Download. Details:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Complete retained account post/reply bindings now
+  export offline through native Download menus, including pending text edits and
+  deliberate file removals. Reuse the shared portable dialog across persisted
+  Thing menus; verify fresh anonymous import, exact originals and responsive
+  keyboard/touch controls. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Invalidate retained account export closures and
+  prepared downloads after known read refusals or file cancellation. Cached
+  Components now share the definitive-refusal cleanup used by posts; session and
+  transient failures preserve offline content. Cross-tab native Download checks
+  pass locally at desktop/mobile widths. Full acceptance remains open in
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17: Normal account ZIP imports now admit post/comment file bindings
+  atomically on device, preserving order and independent receipt-dependent sync.
+  Added canonical round-trip/refusal checks and extended native browser coverage.
+  Full acceptance remains open in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Restore offline comment parent/root navigation
+  for anonymous and account workspaces, including generic Thing discussions.
+  Preserve actual authors, pending device edits and authorized root context;
+  hide refused/deleted ancestor links. Three native browser fixtures pass.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Retain existing owned post/comment originals on a
+  fresh device for native offline editing/removal, with atomic bounded admission,
+  verified private reconnect and durable existing-ID deletion receipts. Correct
+  inherited-audience comment PATCH payloads without relaxing server policy.
+  Local fresh-context browser evidence passes; full local-first acceptance remains
+  open. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Native post/comment media removal now commits
+  offline and retries verified account cleanup with durable cancellation receipts.
+  Delete 1.6.0 fences target/purpose/version; local bytes survive ambiguous replies
+  and conflicts. Local browser evidence and remaining merge gates are in
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-post-and-comment-file-removal--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Account post/comment media now stages device bytes
+  before upload and binds submitted content through confirmed file receipts.
+  Attachment order/additions share the normal conditional post transaction;
+  `api.things-update` 1.11.0 exposes the guarantee. Local verification and remaining
+  merge gates are in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Account post/comment/reply authorship commits locally
+  with independent verified-account sync, stable retries and refusal cleanup.
+  Native offline private post and nested reply checks pass; bound media/draft sync
+  remain open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Retain account discussion/comment reads offline
+  with partial coverage, canonical comment-only kinds and atomic refusal cleanup
+  across display caches. Native retained-file comments and schema-free Data
+  previews use local paths. Local production-client checks pass; authoring/sync
+  remains open. See [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-discussion-reads-and-cross-cache-refusal--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Native imported-file metadata editing now uses
+  scoped local record eligibility rather than upload ID syntax. Anonymous offline
+  edit/reload/export and zero remote writes verified in the production-client
+  browser fixture; see [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#anonymous-imported-file-metadata--2026-10-17).
+
+- 2026-10-17 — **Codex (AI)**: Standalone recording ZIPs now import, play,
+  edit and export locally, then sync privately after verified login. Retention
+  preserves annotations and purpose; native library deletion uses durable file
+  queues without waiting for unsynced metadata. Production-client anonymous and
+  account regressions cover cold offline playback and lost deletion responses.
+  Full-suite acceptance remains open; see the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Normal account standalone-file ZIP imports now
+  finish on-device with atomic bytes/content/queue intent. Independent changes
+  sync separately; media references wait for real private upload IDs. Preserve
+  canonical re-export byte targets when Components precede standalone files.
+  Production-client offline import/reload/export/reconnect and 1440/390/320px
+  checks pass. Document same-origin local storage for preview testing. Full
+  managed/media acceptance remains open. [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-17 — **Codex (AI)**: Normal account Download now exports saved file
+  bytes and offline annotations as canonical ZIPs without waiting for sync.
+  Production-client cold offline Download → anonymous Import → native preview
+  and retained-file exports pass. Full account imports/media coverage remains
+  open. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-17 — **Codex (AI)**: Retain opened owned standalone files with bounded,
+  version-checked bytes and native offline metadata editing/download. Reuse
+  conditional sync and durable deletion receipts without duplicate uploads.
+  Production-build cold reload and 1440/390/320px checks pass locally; the full
+  local-first rollout remains incomplete. Details in
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Add durable deletion receipts for existing owned
+  standalone files without their original upload request ID, retaining version,
+  scope and authentication fences. Local storage/browser and capability checks
+  pass; existing-file offline retention remains in progress. Details in
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Account Files picker, local folder moves,
+  discovery and native previews now use scoped device persistence independently
+  of upload. Preserve stable local IDs after sync, revoke retired media URLs and
+  refuse shared-context/recovery-byte access. See the ongoing
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Queue completed account-file deletion locally,
+  retaining recovery bytes through offline use and lost replies. Add native
+  version review, full-quota restoration, durable delete 1.3.0 replay fences,
+  ready-only moderation stamps and coalesced sync wake-ups. Ordinary account
+  picker/list/media wiring remains pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#completed-account-file-deletion--2026-10-16).
+
+- 2026-10-16 — **Codex (AI)**: Make queued file cancellation durable across
+  offline use, lost responses and delayed upload starts. Reuse private,
+  quota-accounted attachment receipts and the existing cleanup lifecycle; add
+  native Cancel upload with retained bytes until confirmation. Real local
+  browser/database and built API checks pass; completed-file deletion and normal
+  account file UI integration remain pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#durable-upload-cancellation--2026-10-16).
+
+- 2026-10-16 — **Codex (AI)**: Add conditional attachment deletion to the existing
+  cleanup lifecycle. Stale/racing edits are protected, deferred cleanup remains
+  retryable and billed, and built API discovery advertises delete 1.2.0. Real
+  local database/browser and built-server checks pass; durable upload cancellation
+  and local deletion wiring remain pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#conditional-attachment-deletion--2026-10-16).
+
+- 2026-10-16 — **Codex (AI)**: Persist account file annotations and folder choices
+  locally with an independent conditional sync queue, folder dependencies and
+  native conflict comparison. Verified offline edits, lost replies and responsive
+  review in the real local app; corrected the Vite fixture to reuse app-loaded
+  modules. Normal account file picker/media/deletion integration remains pending.
+  See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#durable-account-file-details--2026-10-16).
+
+- 2026-10-16 — **Codex (AI)**: Add conditional file annotation and single-item
+  placement to the existing APIs and account transport. Real local replica tests
+  verify concurrent/stale writes, private bytes and canonical fixture cleanup;
+  built Nitro discovery/docs/auth smoke passes. Native account file reconciliation
+  remains pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#conditional-account-file-metadata--2026-10-16).
+
+- 2026-10-16 — **Codex (AI)**: Add the durable account file upload foundation:
+  atomic device bytes/intent, scoped multipart recovery, permission-preserving
+  retries, and native sync status. Local browser verification covers offline
+  admission and lost completion without duplicate byte uploads; ordinary account
+  file/post UI wiring remains pending. See [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#durable-account-file-upload-adapter--2026-10-16).
+
+
+- 2026-10-16 — **Codex (AI)**: Account post bookmarks/reactions now complete
+  locally for read-only retained posts; native Saved/permalink recovery works
+  offline and across tabs, with conditional independent sync, scope isolation,
+  known-refusal eviction and stale-read fencing. Local clean-browser checks
+  cover private sharing, logout, revocation and 1440/390/320px layouts. Full
+  local-first acceptance remains open; see the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-16 — **Codex (AI)**: Cached account bookmarks and reactions complete
+  locally and synchronize independently using conditional membership writes,
+  immutable retries and native conflict review. Generic and legacy interaction
+  mutations invalidate revisions atomically. Local replica/browser checks cover
+  offline reload, cross-tab changes, lost responses and 320px review layout;
+  full local-first acceptance remains open. Details:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md#account-bookmark-and-reaction-synchronization--2026-10-16).
+
+- 2026-10-16 — **Codex (AI)**: Anonymous Component Library now retains bookmarks
+  and reactions to bundled definitions offline without creating owned copies.
+  Verified reload, cross-tab changes, save ordering and 1440/390/320px layouts.
+  Account interaction sync remains outstanding;
+  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Visited account Component/Schema catalogues now
+  retain owned definitions atomically for offline editing; scoped tab changes
+  refresh device catalogues and native Component previews. Verified multi-page
+  retention, offline schema data creation, cross-tab edits and responsive bounds.
+  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-16 — **Codex (AI)**: Builder definition and Component source controls
+  recover unfinished fields offline in isolated anonymous/account workspaces.
+  Content saves no longer await draft/Timeline queues; private ordinary copies
+  reuse canonical local transfer. Verified stale/malformed recovery, stalled
+  drafts, native saves and 1440/390/320px layouts. Full matrix remains open;
+  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-16 — **Codex (AI)**: Normal account Downloads now export saved device
+  edits offline through the canonical transfer pipeline, with complete scoped
+  export snapshots, dependency/alias guards and explicit missing-content errors.
+  Verified normal-dialog download, importer round-trip and cold offline reload;
+  [PR #1000 evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Ordinary account imports now create editable local
+  private copies and queue sync atomically, reusing canonical copy preparation
+  and stable retry identities. Verified native offline import/edit/reload and
+  a real server export/import round-trip. Managed/file imports and the wider
+  matrix remain open. Details: [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Ordinary account deletion and Builder reset now
+  finish locally while offline and sync through conditional canonical deletes.
+  Conflict review restores the account version immediately or deletes the
+  reviewed version; folder/linked-child ordering and stale-read tombstones
+  protect pending work. Local browser evidence and remaining merge gates:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Anonymous/offline Builder global and site pages reuse
+  canonical route definitions, native rendering and scoped draft recovery;
+  bounded caches refresh across tabs without sharing content. Save/reset complete
+  independently of account drafts. Local offline/account/import browser evidence
+  and remaining gates are in the [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-16 — **Codex (AI)**: Device component catalogue, native argument
+  editing and independent version drafts now work offline. Saved copies open
+  their exact local IDs; content creation completes independently of draft
+  requests. Local browser coverage includes 1440/390/320px and stalled account
+  drafts. Full local-first acceptance remains open. Details:
+  [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Schema catalogue, authoring, copying and data
+  forms now work in anonymous/offline workspaces. Schema and Thing creation
+  complete independently of draft saves; recovery stays scoped, malformed
+  snapshots are preserved, and account data waits for its schema to sync.
+  Local offline, stalled-draft and responsive evidence is recorded in the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: The native Search page now filters saved device
+  Things anonymously and offline using the shared canonical field grammar.
+  Source-scoped caches/cursors keep online and device results separate; anonymous
+  public search omits credentials. Local server comparison and responsive/cold
+  offline checks are documented in the [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Lopu messages now save to scoped device history
+  without login or network. Account messages queue the existing idempotent
+  recorder after verified reconnect; failures retain local text. The normal nav
+  and notifications page expose searchable offline history. Clean anonymous
+  offline reload and disposable account reconnect checks pass locally.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Account folder moves now commit locally with sync
+  intent and reconnect through conditional account writes. Pending placement
+  wins over stale folder lists. Promise-based offline refusals also prevent an
+  optional archive probe from crashing cold account folders. Native offline
+  move/reload/reconnect passes locally at desktop/phone widths.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Settings → Things now exposes scoped device
+  workspace usage and an explicit browser storage-protection request without
+  login. Missing accounting retains last-known values with an error; identity
+  changes retire reads. Offline reload, other-tab writes and native responsive
+  failure/recovery checks pass locally.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Anonymous Timeline is discoverable through the
+  normal Things library and search, using a protected read projection over
+  canonical local history. Cold offline rename no longer requests a server
+  capability manifest. Native offline navigation/reload is verified at
+  1440/390/320px; intermittent startup failures remain a merge gate.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Page + related History resolves anonymous local
+  composition offline through canonical references, bounded membership and the
+  shared cursor contract. Includes race/scope regression coverage, native
+  offline browser checks and cleanup for the disposable account API fixture.
+  Preserves the review-bot cache-error fallback, verified with the combined build.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Restored local components now open in native detail
+  pages and support local discussions, reactions and browser Actions. Routing
+  uses scoped storage and local author projections, preserves deleted identities,
+  and keeps public reads/account authority separate. See the local verification
+  in [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Local History now downloads saved-version archives
+  offline through the shared account resolver, retaining original content, names
+  and notes with bounded output and cancelled-editor download protection. Native
+  offline download and restored-page portable round-trip verified locally. See
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Anonymous History now restores, undoes and merges
+  ordinary content offline through the shared account planner and atomic local
+  writer, preserving independent recorded components and retry/CAS guarantees.
+  Offline native UI and real local account API regressions passed. Full rollout
+  remains unmerged; [PR #1000 evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Anonymous variations now review and save merges
+  offline using the canonical account comparison and recorded-component rules.
+  Native preview, conflict choices, cold reload and account API parity passed
+  locally. Current-content restore and the full local-first matrix remain open.
+  [PR #1000 evidence](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Anonymous variations now create, checkout and
+  save offline through History and the native Builder, sharing canonical branch
+  and ancestry rules with account Timeline. Conflict/retry/rollback and clean
+  offline desktop/phone checks passed; account API regression passed locally.
+  The full local-first matrix still blocks merge. See the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Anonymous saved versions can be named, renamed
+  and cleared offline through the existing Versions tab and a mutation planner
+  shared with account Timeline. Canonical replay/concurrency, native offline UI
+  and real local API regression checks passed. Full local-first rollout remains
+  unmerged; see the [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-16 — **Codex (AI)**: Anonymous History owner notes now save/remove
+  offline with canonical relational records, atomic limits, safe deletion
+  retries and device-only status. Clean-browser reload/refusal/viewport checks
+  passed; full local-first rollout remains unmerged. See the
+  [PR #1000 note](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-16 — **Codex (AI)**: Anonymous ordinary content now retains canonical
+  local Timeline versions and recorded native page previews, verified through
+  offline import/rename/reload at desktop and phone widths. History uses isolated
+  browser authority and never claims account sync. The full local-first matrix
+  remains incomplete; see [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Things library text search now reads local content
+  first, including anonymous/offline folders, with bounded pagination, visible
+  errors and Retry. Account refresh preserves pending edits and scope isolation.
+  Clean production-browser checks cover anonymous 61-row paging, account outage
+  recovery, cold reload and mouse selection at 1440/390/320px. Full local-first
+  completion remains open. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Local Component/Action/Data details now load native
+  discussions and support owner rename without remote capability calls. Comments,
+  nested replies, search and renamed titles survive a cold offline reload;
+  anonymous public reads omit credentials. Local browser evidence covers
+  desktop, 390px and 320px. Cloud History/handoff retain real authentication.
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Web Platform Components now run the real compiled
+  sandbox renderer after a cold offline reload. Build-produced srcdoc and an exact
+  CSP script hash retain opaque-origin isolation and existing network restrictions;
+  embed/draft bundles keep standalone behavior. Production-CSP browser checks cover
+  native DOM, workers, form events, errors, Stop and isolation probes. The broader
+  local-first matrix remains unfinished. [PR #1000 details](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+
+- 2026-10-16 — **Codex (AI)**: Bundled suites install atomically in anonymous
+  workspaces using the shared canonical install plan. Browser Actions can use
+  bounded local Things/data-Action adapters without HTTP. Offline gallery/edit/
+  save/reload and JSON round-trip pass locally; isolated Web Platform execution
+  offline remains unfinished. Vite preview preserves the existing runtime CSP.
+  [PR #1000 checkpoint and verification](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Anonymous page Components and Collections now run
+  local source Actions and refresh after native controls, including cold offline
+  reload. Source caches and local form state use complete workspace identity;
+  shared authorization and inert previews are preserved. Local 1440/390/320px
+  acceptance and 446 checks passed. Full local-first rollout remains incomplete;
+  see [PR #1000](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Anonymous Actions reuse the canonical bounded
+  executor against device storage, with local authoring/editing, scoped nested
+  data operations and protected execution details. Offline browser JSON
+  round-trip and desktop/mobile checks pass; the live server regression remains
+  100/100. Suite/request adapters and full rollout acceptance remain unfinished.
+  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Native local reactions, Saved and poll voting now
+  work offline through scoped relational Things and shared validators. Saved is
+  discoverable without login and caches are separated by workspace. Local browser
+  desktop/phone checks pass; account sync and full-suite completion remain gated.
+  [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Continue anonymous local-workspace rollout with
+  native composer file/post saves, relational comments/replies and independent
+  draft/template media copies. Posting does not wait for draft saving. Fixed
+  restored-image editor URLs and missing comments after reload; verified offline
+  desktop/mobile locally. Full-suite merge remains gated. [PR #1000 notes](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Anonymous Files supports normal picker saves,
+  exact-byte downloads and copy/move offline. Native media resolves scoped local
+  bytes with bounded, revoked object URLs; stable workspace API callbacks prevent
+  repeated Thing-page loads. Local browser/test evidence and remaining rollout
+  gaps: [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Anonymous Things ZIP import/export/copy/delete
+  now keeps real file bytes and metadata atomically on the device, with canonical
+  validation, dependency remapping and bounded quotas. Offline browser round-trip
+  retained exact bytes after original deletion; uploads/media rendering/account
+  sync remain unfinished. [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Anonymous algorithm profiles save, branch, train
+  and transfer locally using canonical profile validation and ranking maths.
+  Public feed pages rank on the device; training no longer bypasses the workspace
+  facade through a beacon, and identity changes retire queued session events.
+  Offline browser and transfer evidence, plus remaining account-sync and global
+  ranking limits, are in the
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Anonymous Theme Studio saves, applies, deletes
+  and round-trips named themes offline through canonical transfer validation.
+  Root-session refusals retire outstanding workspace operations; browser storage
+  opening now fails within a bound and permits retry. Local browser evidence and
+  remaining account-sync/history gaps are in the
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md).
+
+- 2026-10-16 — **Codex (AI)**: Local workspace rollout in progress: atomic
+  account-scoped Thing writes, immutable retries, native Builder pending-page
+  resolution, explicit conflict review and offline account cold startup with
+  separately confirmed remote authority. Local disposable-fixture outage,
+  reload/edit/reconnect and desktop/320px/390px checks passed; other feature
+  families and full integration remain incomplete. See
+  [PR #1000 checkpoint](../PRs/1000-codex-anonymous-local-first--support-anonymous-and-offline-local-workspaces.md)
+  and [coverage matrix](../docs/local-workspaces.md). No rollout merge or
+  deployment is implied by this checkpoint.
+
 - 2026-10-18: Password title search now filters the whole private vault before pagination (`api.passwords` 1.2.0), cancels stale searches, and distinguishes no matches from request failure. Added HTTP pagination/owner-isolation and capability regressions.
 - 2026-10-18 — **Codex (AI)**: Document the reusable video compressor as a
   Builder use case, including editable definitions, local encoding, saved

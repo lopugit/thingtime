@@ -1,0 +1,54 @@
+{
+  "offlinePost": true,
+  "offlineFile": true,
+  "coldReload": true,
+  "principalHistory": true,
+  "independentDraftSync": true,
+  "postId": "2fba2f5e-ac63-464c-b50c-edef939a466c",
+  "actor": "6ad51c28a3bd90f566a6dfda",
+  "views": [
+    {
+      "width": 1440,
+      "height": 1000
+    },
+    {
+      "width": 390,
+      "height": 844
+    },
+    {
+      "width": 320,
+      "height": 844
+    }
+  ],
+  "offlineWrites": [],
+  "errors": [],
+  "failedDraftWrites": 3,
+  "uploads": [
+    {
+      "path": "/api/v1/attachments/uploads",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/attachments/uploads/parts",
+      "status": 200
+    },
+    {
+      "path": "/api/v1/attachments/uploads/complete",
+      "status": 200
+    }
+  ],
+  "failedResponses": [
+    {
+      "path": "/api/v1/drafts",
+      "status": 503
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 503
+    },
+    {
+      "path": "/api/v1/drafts",
+      "status": 503
+    }
+  ]
+}

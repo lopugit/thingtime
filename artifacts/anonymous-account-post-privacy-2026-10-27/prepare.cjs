@@ -1,0 +1,1 @@
+const path=require('node:path'),root=path.resolve(__dirname,'../..');require(path.join(root,'MCP/node_modules/esbuild')).buildSync({absWorkingDir:root,entryPoints:['remix/app/local-workspace/accountPostPrivacy.browser.test.ts'],outfile:'tmp/continuation/account-privacy.test.mjs',bundle:true,platform:'node',format:'esm'});

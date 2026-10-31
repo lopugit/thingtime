@@ -1,0 +1,56 @@
+Re-extracting code files in /Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime (no LLM needed)...
+[graphify watch] 284 file(s) not classified (no supported extension or shebang), skipped: .dockerignore, .env.example, .eslintignore, .forcepush, .git, .gitattributes (+278 more)
+  AST extraction: 100/4107 uncached files (2%) [14 workers]
+  AST extraction: 200/4107 uncached files (4%) [14 workers]
+  AST extraction: 300/4107 uncached files (7%) [14 workers]
+  AST extraction: 400/4107 uncached files (9%) [14 workers]
+  AST extraction: 500/4107 uncached files (12%) [14 workers]
+  AST extraction: 600/4107 uncached files (14%) [14 workers]
+  AST extraction: 700/4107 uncached files (17%) [14 workers]
+  AST extraction: 800/4107 uncached files (19%) [14 workers]
+  AST extraction: 900/4107 uncached files (21%) [14 workers]
+  AST extraction: 1000/4107 uncached files (24%) [14 workers]
+  AST extraction: 1100/4107 uncached files (26%) [14 workers]
+  AST extraction: 1200/4107 uncached files (29%) [14 workers]
+  AST extraction: 1300/4107 uncached files (31%) [14 workers]
+  AST extraction: 1400/4107 uncached files (34%) [14 workers]
+  AST extraction: 1500/4107 uncached files (36%) [14 workers]
+  AST extraction: 1600/4107 uncached files (38%) [14 workers]
+  AST extraction: 1700/4107 uncached files (41%) [14 workers]
+  AST extraction: 1800/4107 uncached files (43%) [14 workers]
+  AST extraction: 1900/4107 uncached files (46%) [14 workers]
+  AST extraction: 2000/4107 uncached files (48%) [14 workers]
+  AST extraction: 2100/4107 uncached files (51%) [14 workers]
+  AST extraction: 2200/4107 uncached files (53%) [14 workers]
+  AST extraction: 2300/4107 uncached files (56%) [14 workers]
+  AST extraction: 2400/4107 uncached files (58%) [14 workers]
+  AST extraction: 2500/4107 uncached files (60%) [14 workers]
+  AST extraction: 2600/4107 uncached files (63%) [14 workers]
+  AST extraction: 2700/4107 uncached files (65%) [14 workers]
+  AST extraction: 2800/4107 uncached files (68%) [14 workers]
+  AST extraction: 2900/4107 uncached files (70%) [14 workers]
+  AST extraction: 3000/4107 uncached files (73%) [14 workers]
+  AST extraction: 3100/4107 uncached files (75%) [14 workers]
+  AST extraction: 3200/4107 uncached files (77%) [14 workers]
+  AST extraction: 3300/4107 uncached files (80%) [14 workers]
+  AST extraction: 3400/4107 uncached files (82%) [14 workers]
+  AST extraction: 3500/4107 uncached files (85%) [14 workers]
+  AST extraction: 3600/4107 uncached files (87%) [14 workers]
+  AST extraction: 3700/4107 uncached files (90%) [14 workers]
+  AST extraction: 3800/4107 uncached files (92%) [14 workers]
+  AST extraction: 3900/4107 uncached files (94%) [14 workers]
+  AST extraction: 4000/4107 uncached files (97%) [14 workers]
+  AST extraction: 4100/4107 uncached files (99%) [14 workers]
+  AST extraction: 4107/4107 uncached files (100%) [14 workers]
+  warning: 5 file(s) had syntax errors and may be partially extracted: android/app/build.gradle (first error at line 4, no symbols extracted), macos/ThingtimeNode/Sources/ThingtimeNodeCore/ControlPlane.swift (first error at line 388, 76 symbol(s) extracted), macos/ThingtimeNode/Tests/ThingtimeNodeCoreTests/ControlPlaneSchedulerTests.swift (first error at line 291, 44 symbol(s) extracted), macos/ThingtimeNode/Tests/ThingtimeNodeCoreTests/FileSyncIdentityAdmissionTests.swift (first error at line 52, 38 symbol(s) extracted), macos/ThingtimeNode/Tests/ThingtimeNodeCoreTests/ThingtimeAPIClientTests.swift (first error at line 99, 85 symbol(s) extracted)
+  warning: 468 code file(s) yielded no symbols (2.08 MB) — a data file, or source this extractor models no symbols for: .prettierrc.js, Commander/apps/daemon/src/services/httpRoutes.test.ts, Commander/apps/daemon/src/services/macosSystem.test.ts, Commander/apps/daemon/src/services/persistence.test.ts, Commander/apps/desktop-ui/src/components/AccountSettings.test.tsx (+463 more)
+[graphify watch] community set changed since labeling (1424 saved labels, 1443 communities now; renamed 1423 community(ies) by their hub). Run `graphify label` to refresh names with the LLM.
+[graphify] backed up curated graph (4 files) -> 2026-10-25/
+[graphify watch] Rebuilt: 69599 nodes, 206112 edges, 1443 communities
+[graphify watch] graph.json, graph.html and GRAPH_REPORT.md updated in /Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/graphify-out/.work/v1/a424ba01f51502e342b5e17a64654edfeddeb92f882679c91e252421ca7331c9/2298842d-0a32-45ae-aa5a-d4d465689e9d
+Code graph updated. For doc/paper/image changes run /graphify --update in your AI assistant.
+Tip: set GEMINI_API_KEY or GOOGLE_API_KEY to use Gemini for semantic extraction.
+Graph has 69599 nodes (above 5000 limit). Building aggregated community view...
+graph.html written (aggregated: 1443 community nodes, 6081 cross-community edges)
+Tip: run with --obsidian for full node-level detail.
+/Users/lopu/.codex-2/worktrees/anonymous-cloud-continuation/thingtime/graphify-out/snapshots/v1/a424ba01f51502e342b5e17a64654edfeddeb92f882679c91e252421ca7331c9/a50271684997480361a1b301bd92a118972a9fcc35957475bb19353cb571a080

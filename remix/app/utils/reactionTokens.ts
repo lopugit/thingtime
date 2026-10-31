@@ -1,3 +1,6 @@
+// Shared admission bounds for remote and device-only relational reactions.
+export const MAX_REACTION_KEYS_PER_POST = 100;
+export const MAX_REACTIONS_PER_USER_PER_POST = 20;
 // A reaction "token" is one or more emoji that render natively in the browser
 // (we store the actual unicode characters, never image refs). A token can be a
 // single emoji (👍) or a multi-emoji group typed/pasted as one unit

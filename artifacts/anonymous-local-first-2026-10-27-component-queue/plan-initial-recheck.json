@@ -1,0 +1,17 @@
+{
+  "failure": {
+    "ok": false,
+    "scope": "Copied static progress plan in isolated namespace; external and artifact links are not followed",
+    "sourceSha256": "06c9fb48c42f742c1ce48797ab8609af01257ae675e3b6514746474079036810",
+    "errors": [],
+    "requests": [
+      "file:///tmp/plan/anonymous-local-first.html"
+    ],
+    "viewports": []
+  },
+  "cause": "Old test predicate required taskless overview sections to be hidden. The updated product intentionally keeps the current-verification overview visible. Test now checks task-section filtering and independently asserts overview visibility.",
+  "cleanup": {
+    "session": "cffa309f-ba61-47f9-8598-ba1e9a961916",
+    "remaining": ""
+  }
+}

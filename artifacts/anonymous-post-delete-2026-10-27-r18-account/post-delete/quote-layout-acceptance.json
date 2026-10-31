@@ -1,0 +1,906 @@
+{
+  "scope": "Synced synthetic owner post quote controls; pending media scenario was not reached",
+  "widths": [
+    1440,
+    390,
+    320
+  ],
+  "checked": "Original real clicks, Escape, refocus, second open, outside close; main/card/actions widths and scroll offsets; popup viewportfit; account mutation count and local Thing IDs unchanged",
+  "result": "passed before later parent deletion conflict",
+  "measurements": [
+    {
+      "phase": "account",
+      "width": 1440,
+      "quoteStage": "before",
+      "main": {
+        "left": 0,
+        "right": 1440,
+        "width": 1440,
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BODY",
+        "label": null,
+        "placeholder": null
+      }
+    },
+    {
+      "phase": "account",
+      "width": 1440,
+      "quoteStage": "open",
+      "main": {
+        "left": 0,
+        "right": 1440,
+        "width": 1440,
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": {
+        "left": 389.8408508300781,
+        "right": 640.1591796875,
+        "width": 250.31832885742188,
+        "clientWidth": 258,
+        "scrollWidth": 258,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "focus": {
+        "tag": "TEXTAREA",
+        "label": null,
+        "placeholder": "Add your thoughts\u2026"
+      }
+    },
+    {
+      "phase": "account",
+      "width": 1440,
+      "quoteStage": "after-escape",
+      "main": {
+        "left": 0,
+        "right": 1440,
+        "width": 1440,
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BODY",
+        "label": null,
+        "placeholder": null
+      }
+    },
+    {
+      "phase": "account",
+      "width": 1440,
+      "quoteStage": "trigger-focused",
+      "main": {
+        "left": 0,
+        "right": 1440,
+        "width": 1440,
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BUTTON",
+        "label": "Repost",
+        "placeholder": null
+      }
+    },
+    {
+      "phase": "account",
+      "width": 1440,
+      "quoteStage": "after-outside-close",
+      "main": {
+        "left": 0,
+        "right": 1440,
+        "width": 1440,
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 417,
+        "right": 1023,
+        "width": 606,
+        "clientWidth": 606,
+        "scrollWidth": 606,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 1440,
+          "width": 1440,
+          "clientWidth": 1440,
+          "scrollWidth": 1440,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BODY",
+        "label": null,
+        "placeholder": null
+      }
+    },
+    {
+      "phase": "account",
+      "width": 390,
+      "quoteStage": "before",
+      "main": {
+        "left": 0,
+        "right": 390,
+        "width": 390,
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 33.5,
+        "right": 356.5,
+        "width": 323,
+        "clientWidth": 323,
+        "scrollWidth": 323,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 33.5,
+        "right": 356.5,
+        "width": 323,
+        "clientWidth": 323,
+        "scrollWidth": 323,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 390,
+          "width": 390,
+          "clientWidth": 390,
+          "scrollWidth": 390,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 390,
+          "width": 390,
+          "clientWidth": 390,
+          "scrollWidth": 390,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BUTTON",
+        "label": "Post options",
+        "placeholder": null
+      }
+    },
+    {
+      "phase": "account",
+      "width": 390,
+      "quoteStage": "open",
+      "main": {
+        "left": 0,
+        "right": 390,
+        "width": 390,
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 33,
+        "right": 357,
+        "width": 324,
+        "clientWidth": 324,
+        "scrollWidth": 324,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 33,
+        "right": 357,
+        "width": 324,
+        "clientWidth": 324,
+        "scrollWidth": 324,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 390,
+          "width": 390,
+          "clientWidth": 390,
+          "scrollWidth": 390,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 390,
+          "width": 390,
+          "clientWidth": 390,
+          "scrollWidth": 390,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": {
+        "left": 4.328819274902344,
+        "right": 255.6711654663086,
+        "width": 251.34234619140625,
+        "clientWidth": 258,
+        "scrollWidth": 258,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "focus": {
+        "tag": "TEXTAREA",
+        "label": null,
+        "placeholder": "Add your thoughts\u2026"
+      }
+    },
+    {
+      "phase": "account",
+      "width": 390,
+      "quoteStage": "after-escape",
+      "main": {
+        "left": 0,
+        "right": 390,
+        "width": 390,
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 33,
+        "right": 357,
+        "width": 324,
+        "clientWidth": 324,
+        "scrollWidth": 324,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 33,
+        "right": 357,
+        "width": 324,
+        "clientWidth": 324,
+        "scrollWidth": 324,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 390,
+          "width": 390,
+          "clientWidth": 390,
+          "scrollWidth": 390,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 390,
+          "width": 390,
+          "clientWidth": 390,
+          "scrollWidth": 390,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BODY",
+        "label": null,
+        "placeholder": null
+      }
+    },
+    {
+      "phase": "account",
+      "width": 390,
+      "quoteStage": "trigger-focused",
+      "main": {
+        "left": 0,
+        "right": 390,
+        "width": 390,
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 33,
+        "right": 357,
+        "width": 324,
+        "clientWidth": 324,
+        "scrollWidth": 324,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 33,
+        "right": 357,
+        "width": 324,
+        "clientWidth": 324,
+        "scrollWidth": 324,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 390,
+          "width": 390,
+          "clientWidth": 390,
+          "scrollWidth": 390,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 390,
+          "width": 390,
+          "clientWidth": 390,
+          "scrollWidth": 390,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BUTTON",
+        "label": "Repost",
+        "placeholder": null
+      }
+    },
+    {
+      "phase": "account",
+      "width": 390,
+      "quoteStage": "after-outside-close",
+      "main": {
+        "left": 0,
+        "right": 390,
+        "width": 390,
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 33,
+        "right": 357,
+        "width": 324,
+        "clientWidth": 324,
+        "scrollWidth": 324,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 33,
+        "right": 357,
+        "width": 324,
+        "clientWidth": 324,
+        "scrollWidth": 324,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 390,
+          "width": 390,
+          "clientWidth": 390,
+          "scrollWidth": 390,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 390,
+          "width": 390,
+          "clientWidth": 390,
+          "scrollWidth": 390,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BODY",
+        "label": null,
+        "placeholder": null
+      }
+    },
+    {
+      "phase": "account",
+      "width": 320,
+      "quoteStage": "before",
+      "main": {
+        "left": 0,
+        "right": 320,
+        "width": 320,
+        "clientWidth": 320,
+        "scrollWidth": 320,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 33,
+        "right": 287,
+        "width": 254,
+        "clientWidth": 254,
+        "scrollWidth": 254,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 33,
+        "right": 287,
+        "width": 254,
+        "clientWidth": 254,
+        "scrollWidth": 254,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 320,
+          "width": 320,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 320,
+          "width": 320,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BUTTON",
+        "label": "Post options",
+        "placeholder": null
+      }
+    },
+    {
+      "phase": "account",
+      "width": 320,
+      "quoteStage": "open",
+      "main": {
+        "left": 0,
+        "right": 320,
+        "width": 320,
+        "clientWidth": 320,
+        "scrollWidth": 320,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 33,
+        "right": 287,
+        "width": 254,
+        "clientWidth": 254,
+        "scrollWidth": 254,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 33,
+        "right": 287,
+        "width": 254,
+        "clientWidth": 254,
+        "scrollWidth": 254,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 320,
+          "width": 320,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 320,
+          "width": 320,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": {
+        "left": 4.626472473144531,
+        "right": 255.37354278564453,
+        "width": 250.7470703125,
+        "clientWidth": 258,
+        "scrollWidth": 258,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "focus": {
+        "tag": "TEXTAREA",
+        "label": null,
+        "placeholder": "Add your thoughts\u2026"
+      }
+    },
+    {
+      "phase": "account",
+      "width": 320,
+      "quoteStage": "after-escape",
+      "main": {
+        "left": 0,
+        "right": 320,
+        "width": 320,
+        "clientWidth": 320,
+        "scrollWidth": 320,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 33,
+        "right": 287,
+        "width": 254,
+        "clientWidth": 254,
+        "scrollWidth": 254,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 33,
+        "right": 287,
+        "width": 254,
+        "clientWidth": 254,
+        "scrollWidth": 254,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 320,
+          "width": 320,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 320,
+          "width": 320,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BODY",
+        "label": null,
+        "placeholder": null
+      }
+    },
+    {
+      "phase": "account",
+      "width": 320,
+      "quoteStage": "trigger-focused",
+      "main": {
+        "left": 0,
+        "right": 320,
+        "width": 320,
+        "clientWidth": 320,
+        "scrollWidth": 320,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 33,
+        "right": 287,
+        "width": 254,
+        "clientWidth": 254,
+        "scrollWidth": 254,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 33,
+        "right": 287,
+        "width": 254,
+        "clientWidth": 254,
+        "scrollWidth": 254,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 320,
+          "width": 320,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 320,
+          "width": 320,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BUTTON",
+        "label": "Repost",
+        "placeholder": null
+      }
+    },
+    {
+      "phase": "account",
+      "width": 320,
+      "quoteStage": "after-outside-close",
+      "main": {
+        "left": 0,
+        "right": 320,
+        "width": 320,
+        "clientWidth": 320,
+        "scrollWidth": 320,
+        "scrollLeft": 0,
+        "overflowX": "hidden"
+      },
+      "card": {
+        "left": 33,
+        "right": 287,
+        "width": 254,
+        "clientWidth": 254,
+        "scrollWidth": 254,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "actions": {
+        "left": 33,
+        "right": 287,
+        "width": 254,
+        "clientWidth": 254,
+        "scrollWidth": 254,
+        "scrollLeft": 0,
+        "overflowX": "visible"
+      },
+      "hiddenAncestors": [
+        {
+          "left": 0,
+          "right": 320,
+          "width": 320,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        },
+        {
+          "left": 0,
+          "right": 320,
+          "width": 320,
+          "clientWidth": 320,
+          "scrollWidth": 320,
+          "scrollLeft": 0,
+          "overflowX": "hidden"
+        }
+      ],
+      "popup": null,
+      "focus": {
+        "tag": "BODY",
+        "label": null,
+        "placeholder": null
+      }
+    }
+  ]
+}

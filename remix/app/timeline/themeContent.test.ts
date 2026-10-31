@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { THINGTIME_THEME } from '../theme/tokens.ts';
@@ -75,20 +76,23 @@ test('theme retained-byte projection matches approved live payload and never exe
 	assert.equal(bytes(poisoned), null);
 });
 
-
-test('theme-content v2 retains focus preferences while v1 preserves its immutable historical shape', () => {
-  const input = { crystal: before.crystal, tags: [], visibility: 'private' as const, folderId: null };
-  const legacy = themeContentSnapshot(input, 1);
-  const current = themeContentSnapshot(input);
-  assert.equal(legacy.version, 1);
-  assert.equal(current.version, 2);
-  const oldTheme = themeContentValue(legacy).crystal.theme as any;
-  assert.equal(Object.prototype.hasOwnProperty.call(oldTheme.colors, 'focusBorder'), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(oldTheme.general, 'focusGlowBlur'), false);
-  assert.deepEqual(themeContentSnapshot(themeContentValue(legacy), 1), legacy);
-  assert.deepEqual(themeContentValue(current).crystal.theme, THINGTIME_THEME);
-  assert.throws(() => themeContentValue({ ...current, version: 1 }));
-  const theme = { colors: { focusBorder: '#26724d', focusGlowStart: '#55ffaa', focusGlowEnd: '#4488ff' }, general: { focusGlowBlur: 100, focusGlowOpacity: 0 } };
-  const focus = themeContentSnapshot({ ...input, crystal: { name: 'Focus', theme } });
-  assert.deepEqual(themeContentValue(focus).crystal.theme, theme);
+test('theme focus tokens use v2 while historical v1 bytes and validation stay frozen', () => {
+	const oldTheme = { name: 'Historical', colors: { accent: 'saved-value' }, general: { motion: false, radiusScale: 0 } };
+	const oldValue = { crystal: { name: 'Old theme', theme: oldTheme }, tags: [], visibility: 'private', folderId: null };
+	const oldSnapshot = themeContentSnapshot(oldValue);
+	assert.equal(oldSnapshot.version, 1);
+	const encoded = JSON.stringify(oldSnapshot);
+	const digest = '1481ecb32bd4b3356e9e25be42a434396a28ed2081e29475dad97b3adccf74cc';
+	assert.equal(createHash('sha256').update(encoded).digest('hex'), digest, 'Frozen historical v1 projection digest');
+	assert.deepEqual(themeContentValue(JSON.parse(encoded)), oldValue);
+	assert.equal(JSON.stringify(themeContentSnapshot(themeContentValue(oldSnapshot))), encoded);
+	assert.equal(createHash('sha256').update(JSON.stringify(oldSnapshot)).digest('hex'), digest);
+	const theme = { colors: { focusBorder: '#334455', focusGlowStart: '#556677', focusGlowEnd: '#778899' }, general: { focusGlowBlur: 0, focusGlowOpacity: 0.375 } };
+	const current = themeContentSnapshot({ ...oldValue, crystal: { name: 'Focus', theme } });
+	assert.equal(current.version, 2);
+	assert.deepEqual(themeContentValue(current).crystal.theme, theme);
+	assert.throws(() => themeContentValue({ ...current, version: 1 }), /Invalid theme content history/);
+	for (const invalid of [{ ...theme, general: { focusGlowBlur: '3' } }, { ...theme, general: { focusGlowOpacity: Infinity } },
+		{ ...theme, colors: { focusBorder: false } }])
+		assert.throws(() => themeContentSnapshot({ ...oldValue, crystal: { name: 'Focus', theme: invalid } }));
 });

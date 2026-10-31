@@ -1,0 +1,7 @@
+{
+  "reason": "Separate synthetic public source-author and viewing account; hold only audio original-bytes save, preserve normal device retention",
+  "hashes": {
+    "remix/app/components/Attachments/AudioAttachmentPlayer.browser.test.ts": "6e51c46db97a188c9424bd17358a2e23613d7bcc68bc866a02fdd07b20535ec7",
+    "tmp/continuation/audio-player.test.mjs": "313dfdc13447e4c7b631627be4b5eeec3f356529acb20e8a5a548bde6a9c6772"
+  }
+}

@@ -1,3 +1,4 @@
+import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { initialPageAudience } from './seamlessMode';
 import React from 'react';
 import {
@@ -43,7 +44,7 @@ const PAGE_POPUP_MODIFIERS = [{ name: 'preventOverflow', options: { altAxis: tru
 const modeLabel = (mode: SeamlessMode) => mode[0].toUpperCase() + mode.slice(1);
 
 const HELP = {
-	edit: 'Click text to edit, drag the pink handles to arrange, or use + to add blocks. Save publishes your changes.',
+	edit: 'Click text to edit, drag the pink handles to arrange, or use + to add blocks. Save updates this page.',
 	view: 'Use the live page. Forms, links and actions work normally; the inspector stays available.',
 	builder: 'Build with sample arguments and no page data runtime. Switch to View to use live data.',
 	layout: 'Select blocks, drag their handles, or use + to insert. Page actions pause while arranging.'
@@ -70,9 +71,8 @@ export default function SeamlessPageEditor({
 	mode: SeamlessMode;
 	onMode: (mode: SeamlessMode) => void;
 }) {
-	const [drawerOpen, setDrawerOpen] = React.useState(() => window.innerWidth >= 768);
-	const inspectBlock = React.useCallback(() => setDrawerOpen(true), []);
-	const builder = useBuilderChrome(draft, { enabled: mode !== 'view' && !draft.branch?.locked, onInspect: inspectBlock });
+	const localOnly = useWorkspaceUser()?.localOnly === true;
+	const builder = useBuilderChrome(draft, { enabled: mode !== 'view' && !draft.branch?.locked });
 	const chromeRef = React.useRef(builder.chrome);
 	chromeRef.current = builder.chrome;
 	const chrome = React.useMemo<BuilderChrome>(
@@ -545,7 +545,7 @@ export default function SeamlessPageEditor({
 									Visit ↗
 								</Button>
 								<Button size="sm" variant="ghost" onClick={() => run(true)} isDisabled={running} title="Save and open without Thingtime navigation">
-									Deploy ↗
+									{localOnly ? 'Open locally ↗' : 'Deploy ↗'}
 								</Button></> : null}
 							</Flex>
 							<Menu
@@ -585,7 +585,7 @@ export default function SeamlessPageEditor({
 											Visit ↗
 										</MenuItem>
 										<MenuItem onClick={() => run(true)} isDisabled={running}>
-											Deploy ↗
+											{localOnly ? 'Open locally ↗' : 'Deploy ↗'}
 										</MenuItem></> : null}
 									</MenuList>
 								</Portal>
@@ -615,7 +615,7 @@ export default function SeamlessPageEditor({
 							audienceAcl={displayedAcl}
 							onAudienceAcl={changeAcl}
 							onUploadToBlock={builder.uploadToBlock}
-							helpText={draft.branch ? 'Edit this branch and save to your account. Published content stays unchanged. Recorded component definitions are used when available; live data and actions are paused.' : HELP[mode]}
+							helpText={draft.branch ? `Edit this branch and save ${localOnly ? 'on this device' : 'to your account'}. The current Thing stays unchanged. Recorded component definitions are used when available; live data and actions are paused.` : localOnly && mode === 'edit' ? 'Click text to edit, drag handles to arrange, or use + to add blocks. Save keeps changes on this device.' : HELP[mode]}
 							footerSpace="var(--tt-builder-toolbar-clearance, 160px)"
 						/>
 					)}

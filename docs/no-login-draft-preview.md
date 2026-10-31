@@ -40,28 +40,58 @@ Install/build from the repository root (no private settings or credentials):
 npm run worktree-setup
 npm --prefix remix run build:draft
 npm --prefix MCP ci
-npm --prefix MCP exec playwright install chromium
 npm --prefix MCP run build
 ```
 
-Connect an MCP host that supports **local stdio servers** to:
+Connect a local stdio MCP host to the existing Thingtime server. This is the
+normal MCP entry, so the import/staging tools remain available and rendering
+is added as an optional, fail-closed capability. Use the regular server name
+and `MCP/dist/index.js`; do not register a separate `thingtime-drafts` server:
 
 ```json
 {
   "mcpServers": {
-    "thingtime-drafts": {
+    "thingtime": {
       "command": "/absolute/path/to/node",
-      "args": ["/absolute/path/to/thingtime/MCP/dist/index.js"]
+      "args": ["/absolute/path/to/thingtime/MCP/dist/index.js"],
+      "env": {
+        "THINGTIME_MCP_ALLOWED_ROOTS": "/Users/you/Downloads/ai-exports",
+        "THINGTIME_MCP_STATE_DIR": "/Users/you/.thingtime/mcp",
+        "THINGTIME_MCP_RENDER_IMAGE": "sha256:<64-lowercase-hex-image-id>",
+        "THINGTIME_MCP_RENDER_SOCKET": "/absolute/path/to/docker.sock",
+        "THINGTIME_MCP_RENDER_DOCKER": "/absolute/path/to/docker",
+        "THINGTIME_MCP_RENDER_ASSETS": "/absolute/path/to/thingtime/remix/dist/draft-preview"
+      }
     }
   }
 }
 ```
 
-Use absolute paths; retain the sibling `remix/dist/draft-preview` build. Node
-22+ is recommended. The tool does not need a running HTTP server, login cookie,
-API token or arbitrary HTTP access in the agent host. It launches a fresh
-Chromium context and fulfills only the two shipped preview files in memory.
-Nothing is fetched from the apparent loopback URL.
+Use absolute paths and build the sibling `remix/dist/draft-preview` assets.
+`THINGTIME_MCP_RENDER_IMAGE` must be the exact cached `sha256:` image ID
+(64 lowercase hex digits), and `THINGTIME_MCP_RENDER_SOCKET` must be an absolute
+Unix socket path. `THINGTIME_MCP_RENDER_DOCKER` is optional and defaults to
+`/opt/homebrew/bin/docker`; `THINGTIME_MCP_RENDER_ASSETS` is optional and must
+be absolute when supplied. Missing or invalid settings disable rendering only;
+the existing import tools continue to work. Call `thingtime_capabilities` to
+inspect configuration status. Docker, image and asset availability are
+verified lazily for each render, so configured status alone is not runtime
+acceptance. No HTTP server, login cookie or API token is used.
+
+Set the MCP host tool-call timeout to at least 240 seconds. The inner renderer
+deadline is 30 seconds, the per-render container lifetime is 120 seconds, and
+the adapter's work and verified-cleanup bounds total 226 seconds (150 seconds
+work plus up to 76 seconds cleanup). The host timeout must leave room for that
+cleanup.
+
+The normal MCP continues to provide its local import and staging tools and
+keeps the existing `SnapshotStore`; only the isolated render child is
+credential-free. That child receives only a sanitized `PATH` plus temporary
+`HOME` and `TMPDIR`, never import roots, store paths or credentials. Rendering
+uses a per-request network-none container and returns artifacts only after
+owned-resource cleanup is verified. The optional lower-level
+`MCP/scripts/render-isolated.mjs` entry remains available for internal or
+standalone use; it is not the recommended desktop-host registration.
 
 Call `thingtime_capabilities`, then `thingtime_render_and_export`:
 
@@ -79,7 +109,8 @@ its caller-chosen **bundle-local** `id`, `thingtime` and `crystal`; these IDs do
 not claim database identity. Multi-root bundles require `root`. In-bundle
 components resolve by ID or unambiguous `componentKey`. Export includes the
 selected root's dependency closure and preserves templates/arguments. Schema
-normalization is reported. Canonical JSON and its SHA-256 identify the content
+normalization is reported. UTF-8 input is limited to 256 KiB per call. Canonical
+JSON and its SHA-256 identify the content
 actually rendered; separate renderer bundle hash and Chromium version identify the capture implementation. PNG bytes can differ by platform/system fonts.
 
 Tool results contain structured diagnostics/viewport geometry, an embedded
@@ -93,6 +124,194 @@ Run the same real protocol with the supplied example client:
 
 ```sh
 node MCP/scripts/render-example.mjs ./artifacts/draft-preview
+```
+
+### Isolated render-only stdio connection
+
+For a local MCP host, `MCP/scripts/render-isolated.mjs` launches a separate
+render-only server in Docker. It exposes exactly `thingtime_capabilities` and
+`thingtime_render_and_export`; it does not construct the generic server's
+`SnapshotStore`, register archive/chat tools, or disclose import roots/state
+paths. Its capability result derives the input contract from the canonical
+`renderInput` schema, and rendering uses the existing compiled implementation.
+
+Build the draft renderer and MCP package first, then use the wrapper host
+configuration in [Agent connection and artifacts](#agent-connection-and-artifacts).
+
+The image must provide Linux Node 22+, `/usr/bin/env`, GNU `/usr/bin/timeout`,
+`tar`, and the Chromium
+revision required by the mounted MCP Playwright package in `/ms-playwright`.
+The runtime uses UID/GID `1001:1001`, matching the existing agent-browser image,
+and the committed agent-browser `runtime/seccomp.json` profile so Chromium's
+own sandbox remains enabled. The launcher never pulls/builds an image or
+falls back to `--no-sandbox` or broader network access. `--docker` overrides
+the default `/opt/homebrew/bin/docker`; `--mcp-dist`, `--mcp-modules`, and
+`--renderer` can select explicit alternate build directories. Default paths
+refer to the launcher's checkout. Linux runtime compatibility must be checked;
+dependency installation on macOS alone is not evidence of Linux acceptance.
+
+The Docker CLI receives a clean environment and an empty temporary config
+directory. Only the selected compiled MCP directory, its dependencies, the
+draft renderer assets, the render-only entry point and package metadata enter
+an allowlisted snapshot. Dotenv files and symlinks escaping a selected tree
+are rejected. A network-none helper transfers that snapshot through tar stdin
+into a unique task-owned volume; no host directories or Docker socket are
+mounted. This works when the Docker VM does not share the checkout's path.
+The renderer mounts the volume read-only, runs non-root with no capabilities
+and `no-new-privileges`, and has no network. Its home/tmp are fresh bounded
+tmpfs mounts. The helper runs only tar as container root to populate the new
+volume, with no capabilities, network or host mounts.
+
+Runtime ceilings are 1 GiB memory, two CPUs, 256 processes, 256 MiB temporary
+space, 64 MiB home and 128 MiB shared memory; staging has a 60-second deadline.
+The total host session expires after 600 seconds by default
+(`--lifetime-seconds` selects another positive duration), including setup.
+The renderer's existing per-call bounds still apply. The host must reconnect after the session expires; this launcher is not an indefinitely persistent service. A task-owned detached
+host guardian becomes ready before resource creation. Its private IPC channel
+closes if the launcher is killed; it then removes only the exact UUID container,
+staging container and asset volume after checking their
+`thingtime.render-isolated=true` and matching `thingtime.render-session` labels.
+Normal shutdown waits for verified guardian cleanup. Cleanup retries are bounded
+by 30 seconds; failed verification reports the exact resources for inspection.
+The guardian removes the task's private host snapshot/config and exits; it is
+not a persistent service. No Docker access enters the renderer.
+
+Independently, GNU `timeout` inside the container kills the renderer at its
+remaining session deadline even if the launcher and guardian disappear. The
+staging helper has its own 60-second hard timeout. Docker `--rm` removes stopped
+containers; **Docker has no automatic named-volume TTL**. Simultaneous loss of
+the host and guardian, a host restart, or a prolonged/unavailable Docker daemon
+can still leave volumes or unverified cleanup. The `thingtime.expires-at` label
+is diagnostic, not daemon-enforced garbage collection. Inspect ownership labels
+and exact task identities before removing leftovers; never prune unrelated
+resources or treat a successful tool call as proof of cleanup.
+
+Verify the wrapper through the real SDK stdio protocol (no model invocation):
+
+```sh
+cd MCP
+TT_RENDER_WRAPPER_TEST=1 \
+  TT_RENDER_DOCKER_SOCKET=/absolute/path/to/docker.sock \
+  TT_RENDER_DOCKER_IMAGE=sha256:<64-lowercase-hex-image-id> \
+  node --import tsx --test test/render-isolated.integration.test.ts
+# Same explicit image/socket variables: normal disconnect, wrapper SIGKILL,
+# and runtime hard-timeout acceptance without rendering or a model call.
+TT_RENDER_WRAPPER_TEST=1 \
+  TT_RENDER_DOCKER_SOCKET=/absolute/path/to/docker.sock \
+  TT_RENDER_DOCKER_IMAGE=sha256:<64-lowercase-hex-image-id> \
+  node --test test/render-isolated.lifecycle.integration.test.mjs
+```
+
+`TT_RENDER_ASSETS` optionally selects an alternate renderer build;
+`TT_RENDER_ARTIFACTS` saves returned JSON/PNG resources and verification metadata
+to an explicit output directory. Label an old build as infrastructure smoke,
+then rerun against the final renderer. SDK initialization, tool discovery and
+calls verify this launcher, not the native chat host's connection or resource
+download handling. Configure/reconnect that host and call its actual tools
+before claiming host acceptance. Embedded artifact resources retain the
+transport/download limitations described above.
+
+### Unified host evidence — 26 October 2026
+
+The normal `thingtime` entry point is installed and an actual Codex CLI agent
+completed capability discovery, native affirmation rendering and invalid-JSON
+rejection. [CLI-host results](../artifacts/anonymous-local-first-2026-10-26/README.md)
+come from its real MCP results. The first attempt identified missing read-only
+metadata on capability discovery; correcting that annotation resolved the host
+approval gate without changing approval policy. Import/delete consent rules
+remain in place. The unified `mcp__thingtime__thingtime_render_and_export` tool
+was then called successfully from this Codex desktop chat. The canonical
+editable fixture rendered at 1440×1000, 390×844, 320×844 and a 400×560 card
+crop, with exact text and no overflow. The exported JSON passes the current
+`parseTransfer`, byte-identical `serializeTransfer` round-trip and
+`prepareDraft`; returned PNG headers, dimensions and SHA-256 values match the
+host verification record, and the 390px, 320px and card views were visually
+checked. Malformed JSON and a nonexistent crop each returned an error and zero
+artifacts. The post-call inventory found no containers or asset volumes created
+since the source commit; three older volumes were preserved, so this is scoped
+cleanup evidence rather than a claim that the Docker daemon is empty. [Desktop-host
+artifacts and verification](../artifacts/anonymous-local-first-2026-10-26-desktop-mcp/README.md).
+This proves the tool call and artifact delivery in this chat, not installed
+macOS-app, CI, deployed or broader local-first acceptance.
+Actual Docker lifecycle checks now pass normal disconnect, process-group loss
+and expiry. Earlier failed cleanup evidence is retained below.
+
+### Legacy render-only host evidence and artifact saving
+
+On 2026-10-25 an ephemeral **Codex CLI agent** (`0.163.0-alpha.11.1`,
+`gpt-6-luna`, low reasoning) connected to the configured `thingtime-drafts`
+stdio server above. Its actual MCP calls completed capabilities discovery and
+the affirmation render; malformed JSON was rejected without artifacts. This is
+acceptance of the legacy render-only host, distinct from SDK protocol tests.
+It does not establish the new unified `thingtime` server's tool call or
+artifact delivery, and it does not mean tools loaded into an already-running
+desktop chat. No desktop restart or reload was performed. [Verified JSON,
+PNGs, metadata and observed calls](
+../artifacts/anonymous-local-first-2026-10-25/cli-agent-host/verification.json)
+are retained; the raw CLI event stream is private and is never committed.
+
+For Codex desktop, registering the server in the shared configuration does not
+prove that an existing chat has loaded it. Use **Settings → MCP servers →
+Restart**, then `/mcp` to inspect the connection. This is a host operation;
+it does not require a Thingtime account. See the [Codex MCP connection guide](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
+The Docker daemon still needs free disk space for the isolated runtime. A full
+daemon must be repaired before retrying; do not substitute an unrestricted
+renderer or prune resources belonging to other tasks.
+
+With that local server already configured, the supported noninteractive command
+is below. Set `CODEX_BIN` to the installed CLI's absolute executable and
+`CODEX_HOME` to the intended instance's existing home. No credentials belong in
+the prompt or arguments. `--ephemeral` avoids retaining a normal session;
+`--json` emits the actual MCP results, including embedded resources. The model
+request itself uses the CLI's normal authorized account connection; the render
+server still runs inside its enforced network-none container. The acceptance
+runner also enforced a 300-second process deadline with owned-process cleanup.
+
+```sh
+umask 077
+REPO="$PWD"
+PRIVATE_RUN="$(mktemp -d "${TMPDIR:-/tmp}/thingtime-cli-host.XXXXXX")"
+# CODEX_BIN=/absolute/path/to/codex; CODEX_HOME=/intended/existing/codex-home
+node --input-type=module - "$REPO/MCP/test/fixtures/affirmation.transfer.json" > "$PRIVATE_RUN/prompt.txt" <<'NODE'
+import { readFileSync } from 'node:fs';
+const content = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+console.log('Perform exactly three MCP calls on thingtime. First call thingtime_capabilities with {}. Then call thingtime_render_and_export with ' + JSON.stringify({ content, root: 'affirmation-page', viewports: [{ width: 1440, height: 1000 }, { width: 390, height: 844 }], crop: { enabled: true, blockId: 'card' } }) + '. Finally call thingtime_render_and_export with {"content":"{invalid"}. Do not use shell, files, other tools, or accounts. Finish with a brief status; do not repeat base64.');
+NODE
+CODEX_HOME="$CODEX_HOME" "$CODEX_BIN" exec --ephemeral --json \
+  --sandbox read-only --skip-git-repo-check -C "$PRIVATE_RUN" \
+  -m gpt-6-luna -c 'model_reasoning_effort="low"' \
+  -c mcp_servers.thingtime.required=true \
+  -c mcp_servers.thingtime.tool_timeout_sec=240 \
+  -c mcp_servers.node_repl.enabled=false - \
+  < "$PRIVATE_RUN/prompt.txt" > "$PRIVATE_RUN/events.jsonl" \
+  2> "$PRIVATE_RUN/stderr.log"
+# Run extraction only after a successful CLI exit. Output's parent must exist;
+# output itself must be new. Never commit events.jsonl/prompt.txt/stderr.log.
+node "$REPO/MCP/scripts/save-render-artifacts.mjs" \
+  "$PRIVATE_RUN/events.jsonl" "$REPO/artifacts/my-cli-render" thingtime
+```
+
+To select the unified host's optional server name, pass `thingtime` as the
+extractor's final positional argument:
+
+```sh
+node "$REPO/MCP/scripts/save-render-artifacts.mjs" \
+  "$PRIVATE_RUN/events.jsonl" "$REPO/artifacts/unified-mcp-render" thingtime
+```
+
+The dependency-free extractor accepts at most 64 MiB of JSONL and 32 MiB of
+decoded artifacts. It requires a completed turn and exactly one successful
+render from the selected server (default `thingtime-drafts` for the retained
+legacy evidence); clean failed validation calls may coexist.
+It validates the complete known filename set, resource URIs, canonical JSON
+SHA-256, PNG chunk checksums/pixel lengths, image/resource equality and dimensions
+against render metadata. Malformed, truncated, mismatched or partial results
+fail before output creation. Existing directories are refused; write failures
+remove only the newly created output directory. The saved `verification.json`
+contains per-file hashes and render metadata, never the raw event stream.
+
+```sh
+node --test MCP/test/save-render-artifacts.test.mjs
 ```
 
 A web-only ChatGPT host that cannot launch stdio servers is **not connected by
@@ -130,8 +349,17 @@ that stale result. A crop uses the selected block's first authored component
 root; without `blockId`, the first component, or the root element for a single
 component. It is captured at the first requested viewport.
 
+The MCP response reports `cropEnabled` separately from measured viewport crop
+geometry. With `crop: { enabled: false }`, it returns JSON and viewport PNGs
+without `card.png`; geometry remains available for diagnostics. Artifact
+extraction uses this explicit flag and still accepts older crop-enabled results
+that predate the flag. Duplicate requested width/height pairs fail validation
+before rendering, and an explicit 320px viewport satisfies the narrow check.
+The unified adapter withholds artifacts if the worker exits with a truncated
+stdio frame, even if a complete result preceded that frame.
+
 Production/static hosting must serve the generated CSP headers. The existing
-Vite and Vercel packaging paths set them; `dist/draft-preview/policy.json`
+Vite, Nitro Node-server and Vercel packaging paths set them; `dist/draft-preview/policy.json`
 contains the same generated policy for the offline MCP host. Do not serve the
 HTML on an account origin with a generic server that omits the sandbox header.
 
@@ -169,3 +397,70 @@ reexports through the normal API. It removes only its imported Things and
 logs out. Stop the QA PM2 stack and disposable Mongo process after verification.
 No existing account is used. This is separate from the anonymous workflow,
 which performs no writes at all.
+
+
+## Current isolated render and editable-browser evidence — 2026-10-23
+
+Fresh [canonical JSON, actual PNGs and usage examples](
+../artifacts/anonymous-local-first-2026-10-23/README.md) are retained in the
+repository, alongside verification hashes, invalid-render cases and normal
+private importer round-trip evidence. The stdio MCP server is actually called
+by an SDK client in an OS namespace without an account, backend or outbound
+route. This chat has no callable Thingtime MCP tool; the SDK test does not prove
+its native host connection or a deployed service.
+
+The final packaged snapshot is
+`15e93be01ba2478f19fbdd20201bb18d72ab6c87f794e5a7c4800854b4ab85a7`;
+the renderer hash is
+`a6571e789f9963a79bd8a04dec4c565e1d46a0ca881b5147d27db23a71e1b32a`.
+The complete real stdio acceptance passed in 41.14 seconds with no skips and
+unchanged deadlines: native JSON/PNG resources, repeat canonical export,
+concurrent busy refusal, malformed input, missing dependencies, remote assets,
+invalid crops, invisible text and overflow. The actual web editor, ordinary
+nested Builder editing through cold offline reload, and normal private importer
+also passed against that final package. The downloaded JSON hashes identically
+across MCP, web and importer:
+`a251642fe58ef5b1a2f32f8414591e02d6d52ebd2a50293f6b14c12464d4a06c`.
+The artifact README links exact logs and preserves earlier captures and setup
+failures separately. These local results do not establish current-head CI,
+deployed-preview acceptance or this chat's MCP artifact transport.
+
+The clean browser editor and ordinary nested Builder checks use the complete
+packaged app in a separate disposable Linux browser/backend namespace. See
+`remix/scripts/isolated-linux-browser.mjs` and its TESTING.md checklist. Both
+processes have denied direct IPv4, mapped/native IPv6, hostname and redirect
+egress. Required system libraries, source/dependency trees and an immutable
+app snapshot are explicitly mounted read-only; no host profile, repository
+configuration, dotenv file, Docker socket or inherited credential is available.
+Fresh synthetic accounts belong only to the disposable backend. This is not the
+installed macOS application or an assertion that the runtime has no mounts.
+
+An incomplete verification build omitted the independent renderer bundle and
+correctly failed the web-editor test. The canonical `build:client` already builds
+all four independent bundles. Runtime startup now also rejects HTML fallback
+responses for missing JavaScript before marking the app healthy. The setup
+failure and successful complete-build checks remain separate evidence.
+
+## Packaged-server regression checkpoint — 2026-10-19
+
+The Node server now applies the same canonical sandbox and `no-store` headers
+as Vite/Vercel. A metadata CSP cannot enforce `sandbox`: the HTTP response must
+carry it. Native acceptance verifies storage denial on the actual Node-served
+page, including ordinary, query-string, directory and encoded asset paths.
+The JSON download control is disabled initially, during rendering and after a
+failed render; the last valid preview remains visible without becoming an
+exportable stale result.
+
+For the documented isolated browser-manager runtime, set `TT_DRAFT_WEB_BASE`
+to its loopback application origin and `TT_DRAFT_TEST_SESSION` to its public
+session ID. The integration test checks the actual health response before using
+that origin. The legacy dedicated `22460` fixture remains supported. These
+variables are test configuration, never account credentials or authorization.
+
+Local evidence: `tmp/current-render-native/native/` contains fresh MCP JSON,
+1440×1000, 390×844 and 320×844 PNGs, the 400×560 card crop, editor captures,
+serving/storage checks and the normal private importer round trip. The importer
+legitimately remaps both IDs and component keys; content and dependencies remain
+intact. The runtime has no external network, host mounts or published ports and
+is released after testing. This is local acceptance, not target-host connector,
+CI or deployed verification.

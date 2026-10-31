@@ -1,0 +1,107 @@
+✔ account Action effects commit with the existing queue and sync without executing the Action again (308.205589ms)
+✔ account browser and nested data Actions use the same queued adapter (61.008756ms)
+✔ account browser bulk operations retain per-item results and queue ordinary mutations without replay (170.570491ms)
+✔ remote-only dependencies are classified before effects; later local failures retain completed effects (115.515813ms)
+✔ account browser bulk copy uses complete device closures and queues independent effects once (227.692655ms)
+✔ account Action adapter preserves account, anonymous, cancellation and identity boundaries (38.603015ms)
+✔ account local facade and native page resolution work offline without uploading anonymous content (1382.73148ms)
+✔ account library search paints local content first, refreshes only its owner, and retires late responses (146.557878ms)
+✔ account folder lists overlay pending placement on fresh and cached pages without remote bulk writes (138.559559ms)
+✔ cached account page membership survives deletion and explicit conflict restoration (98.96305ms)
+✔ a mixed dedicated-adapter delete never removes a cached device copy remotely (11.229407ms)
+✔ online catalogue discovery retains owned definitions for device paging without adopting shared entries (430.796426ms)
+✔ a wake arriving during a drain is coalesced into a follow-up pass instead of lost (54.106086ms)
+✔ native bulk deletion queues retained recordings and cancels device files offline with explicit partial results (105.80892ms)
+✔ normal account History facade restores offline without sync, and retires before another account can apply (154.757402ms)
+✖ account native copy and fork preserve local files, remap content, and never require upload (12963.611086ms)
+✔ copy import rechecks deletion, refusal, missing bytes, retirement and quota inside its atomic commit (79.641407ms)
+✔ native account writers accept selections above the old 200-item operation cap (19263.99968ms)
+✔ target-linked deletion waits for a conflicting child before removing its parent (115.030576ms)
+✔ identity retirement fences a delayed delete acknowledgment (23.049016ms)
+✔ keeping a linked account version prevents its pending parent deletion from cascading it away (70.475403ms)
+✔ never-sent creates delete atomically without remote mutation or orphaned queue (16.048441ms)
+✔ deletion survives reload, lost responses and stale readback without resurrection (25.738672ms)
+✔ delete during in-flight create preserves intent (create refused: false) (24.978555ms)
+✔ delete during in-flight create preserves intent (create refused: true) (23.831665ms)
+✔ folder deletion drains children before removal and preserves nested content (64.558411ms)
+✔ delete conflicts require review; keep-account restores and keep-local deletes only the reviewed version (64.017784ms)
+✔ delete batches roll back on missing content and stale editor deletion is refused (16.773114ms)
+✔ delete claims serialize across tabs and permission refusals never become successful readback (12.082409ms)
+✔ a deletion conflict can safely check again after another device already deleted it (45.021682ms)
+✔ large cached deletion keeps one bounded recovery copy and releases it after acknowledgement (202.926277ms)
+✔ offline recovery of a not-yet-sent deletion syncs privately (191.779402ms)
+✔ offline recovery of a completed deletion syncs privately (154.86908ms)
+✔ recovery survives a delayed create acknowledgment without overwriting content or losing sync (113.588931ms)
+✔ recovery survives a delayed update acknowledgment without overwriting content or losing sync (184.538555ms)
+✔ recovery survives a delayed delete acknowledgment without overwriting content or losing sync (199.850713ms)
+✔ recovery after a lost deletion response survives reopening and replays the exact frozen DELETE (116.493691ms)
+✔ recovered content cannot overwrite a colliding account identity or bypass conditional deletion conflicts (249.093883ms)
+✔ new linked content waits for the recovered parent frozen DELETE before syncing (144.998112ms)
+✔ new account content exports canonical offline dependencies without sync or account authority (207.052433ms)
+✔ partial folder caches require a complete server plan and preserve local changes on subsequent offline downloads (64.018221ms)
+✔ fresh server export content outranks unchanged stale cache and option scopes never widen (33.916774ms)
+✔ export refuses missing dependencies, invalid options, cancellation and identity changes without retaining partial snapshots (14.241043ms)
+✔ dedicated online exports remain available but cannot erase pending device edits (28.228555ms)
+✔ large exports retain successfully and remain available when actual browser capacity refuses retention (2101.583573ms)
+✔ export-only dependencies cannot capture an owner-local component alias (38.473944ms)
+✔ multi-root preparation refuses conflicting saved dependency contexts (24.387889ms)
+✔ known read refusals remove complete export snapshots and invalidate prepared JSON plans (30.634618ms)
+✔ refused export-only dependencies invalidate every affected closure but preserve pending authored work (40.005351ms)
+✔ a refusal during an authorized export read cannot resurrect the snapshot; fresh reauthorization can export again (16.776641ms)
+✔ legacy export snapshots cannot bypass a refusal retained before this client version (7.904282ms)
+✔ dedicated remote plans are fenced during and after their authorized read (38.419761ms)
+✔ keyed remote plans are fenced during and after their authorized read (28.331749ms)
+✔ account folder ZIP uses saved annotated files and round-trips exact bytes through the normal local importer (208.500253ms)
+✔ canonical retained file aliases export the current local metadata once without inventing upload identity (41.671648ms)
+✔ local page media references to retained account aliases become independent portable file references (125.031664ms)
+✔ cancelled and deleted account files cannot reappear from a retained export snapshot (45.952067ms)
+✔ file downloads reject damaged bytes and missing workspace data without returning a partial plan (25.934484ms)
+✔ export readers return immutable copies and fence cancellation and a retired account (12.868194ms)
+✔ excluding file bytes preserves original account media references (14.138407ms)
+✔ an online managed-content fallback cannot silently omit pending device file edits (18.55912ms)
+✔ prepared byte readers cannot outlive deletion or a canonical account-file refusal (84.646977ms)
+✔ a fresh export cannot reuse retained bytes after an already-known canonical refusal (26.938233ms)
+✔ canonical account refusal does not remove independent device-authored original ownership (60.267055ms)
+✔ account imports commit files, content and both queues atomically before any upload (161.041216ms)
+✔ only media-dependent account writes wait for upload receipts and then use real account IDs (66.236774ms)
+✔ queued media writes retain exact canonical requests after an uncertain response and a newer local edit (74.208733ms)
+✔ cancelled file dependencies surface an actionable content error without stopping independent writes (44.384889ms)
+✔ bad bytes, missing placement, quota refusal and abort roll back content, files and all queues (332.445428ms)
+✔ bound media and mixed managed imports keep their dedicated account path (5.692802ms)
+✔ split templates, CSS, authored HTML and persisted arguments keep editable media after account sync (86.397879ms)
+✔ recording imports preserve purpose through local bytes, export and verified upload (48.426962ms)
+✔ cached ordinary Thing refresh retires definitive refusals but preserves offline use after session and network failures (122.643341ms)
+✔ local bulk requests process more than a storage-writer batch without imposing a selection cap (9252.097944ms)
+✔ browser bulk requests move and delete editable local Things with per-item failures and no HTTP (162.865003ms)
+✔ browser bulk copy rewrites a complete editable closure and refuses protected children before writes (219.551173ms)
+✔ browser Actions reuse local Things operations, retain expressions and never call fetch (86.348156ms)
+✔ local request boundary rejects remote IDs, ownership, unsupported fields/versions and cancelled writes (24.433079ms)
+ℹ tests 78
+ℹ suites 0
+ℹ pass 77
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 34379.768286
+
+✖ failing tests:
+
+test at app/local-workspace/accountCopy.test.ts:2:1723
+✖ account native copy and fork preserve local files, remap content, and never require upload (12963.611086ms)
+  AssertionError [ERR_ASSERTION]: deleting a deep ancestor chain drains the copy to its surviving parent
+  + actual - expected
+  
+  + null
+  - undefined
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountCopy.test.ts:63:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

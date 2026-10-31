@@ -1,0 +1,192 @@
+{
+  "anonymous": true,
+  "offline": true,
+  "transfers": 20,
+  "independentIds": true,
+  "exactUnicode": true,
+  "coldReload": true,
+  "retained": {
+    "records": [
+      {
+        "id": "local-0c5df081-379c-47e5-9757-2fcce4aafddd",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 12",
+          "text": "独立 12 🌿"
+        }
+      },
+      {
+        "id": "local-302e170b-7d41-4d9d-b718-1339ef4ed22b",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 0",
+          "text": "独立 0 🌿"
+        }
+      },
+      {
+        "id": "local-37dff696-6367-4276-9aa5-b147d14c9828",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 9",
+          "text": "独立 9 🌿"
+        }
+      },
+      {
+        "id": "local-470f503e-8419-421c-968d-e76214f24ee4",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 18",
+          "text": "独立 18 🌿"
+        }
+      },
+      {
+        "id": "local-495e2d6e-6087-4fb6-90e8-cdb639ddfa67",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 3",
+          "text": "独立 3 🌿"
+        }
+      },
+      {
+        "id": "local-6008061a-6ec2-424c-ae23-aeaa9b662148",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 6",
+          "text": "独立 6 🌿"
+        }
+      },
+      {
+        "id": "local-6a507c02-2729-47d2-a3d4-dc32f5d1ffb3",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 15",
+          "text": "独立 15 🌿"
+        }
+      },
+      {
+        "id": "local-7139237b-f525-479b-b5ce-efff9903c1f8",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 1",
+          "text": "独立 1 🌿"
+        }
+      },
+      {
+        "id": "local-78ccc054-98c2-4252-bf23-ee9c7b69be59",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 10",
+          "text": "独立 10 🌿"
+        }
+      },
+      {
+        "id": "local-8079a7a8-bc48-42b8-83dd-c1e712c603f7",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 16",
+          "text": "独立 16 🌿"
+        }
+      },
+      {
+        "id": "local-97e55039-1bc9-4e17-aeac-a3c8713d3848",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 5",
+          "text": "独立 5 🌿"
+        }
+      },
+      {
+        "id": "local-991580a1-eecc-4725-a5f9-2d3fa8e74fc0",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 8",
+          "text": "独立 8 🌿"
+        }
+      },
+      {
+        "id": "local-a9dc369f-e69c-4b0f-a6b5-85521d0ce075",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 7",
+          "text": "独立 7 🌿"
+        }
+      },
+      {
+        "id": "local-ab5e731d-136d-412d-9376-b0b58b3ce70b",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 14",
+          "text": "独立 14 🌿"
+        }
+      },
+      {
+        "id": "local-af45b5a8-ca11-4727-9255-34272135d273",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 11",
+          "text": "独立 11 🌿"
+        }
+      },
+      {
+        "id": "local-bab7f30d-87f1-4d41-b630-09fca9d0e03c",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 17",
+          "text": "独立 17 🌿"
+        }
+      },
+      {
+        "id": "local-c211b4a2-a95d-430e-a572-b76b38c24508",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 4",
+          "text": "独立 4 🌿"
+        }
+      },
+      {
+        "id": "local-c3682db7-19c7-439b-9dac-9dd4a69c79ce",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 13",
+          "text": "独立 13 🌿"
+        }
+      },
+      {
+        "id": "local-dd47fbe7-8cf1-4ad4-a02f-921a16006870",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 2",
+          "text": "独立 2 🌿"
+        }
+      },
+      {
+        "id": "local-fc31bb28-1372-4092-9b04-9c0e9762c9e5",
+        "scope": "[\"anonymous\",1]",
+        "crystal": {
+          "name": "Capacity transfer 19",
+          "text": "独立 19 🌿"
+        }
+      }
+    ],
+    "accountRecords": 0
+  },
+  "bounds": [
+    {
+      "width": 1440,
+      "dialogWidth": 510.6008605957031,
+      "scrollWidth": 512
+    },
+    {
+      "width": 390,
+      "dialogWidth": 342,
+      "scrollWidth": 342
+    },
+    {
+      "width": 320,
+      "dialogWidth": 272,
+      "scrollWidth": 272
+    }
+  ],
+  "writes": [],
+  "errors": []
+}

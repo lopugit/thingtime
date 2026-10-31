@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { getSettingsCollection } from '../mongodb/collections';
-import { getUserLopuInstructions } from '../auth/users';
+import { getUserLopuInstructionRecord } from '../auth/users';
+import { readInstructionParts } from './lopuInstructionStore';
+import { readInstructionsForInference, type InstructionInferenceCapacity } from '../lopu/instructionInference';
 import { DEFAULT_LOPU_BASE_PROMPT, LopuPromptConflictError, validateLopuBasePrompt, type LopuBasePromptSettings, type LopuPromptSettings } from '../lopu/promptSettingsCore';
 
 export const LOPU_BASE_PROMPT_KEY = 'Thingtime.LopuBasePrompt';
@@ -25,7 +27,12 @@ export async function setLopuBasePrompt(basePrompt: unknown, expectedRevision: s
   }
   return settings;
 }
-export async function getLopuPromptSettings(ownerId?: string): Promise<LopuPromptSettings> {
-  const [base, personal] = await Promise.all([getLopuBasePrompt(), ownerId ? getUserLopuInstructions(ownerId) : { instructions: [] }]);
+export async function getLopuPromptSettings(ownerId?: string, options: { modelId?: string; capacity?: InstructionInferenceCapacity } = {}): Promise<LopuPromptSettings> {
+  const [base, personal] = await Promise.all([getLopuBasePrompt(), ownerId ? getUserLopuInstructionRecord(ownerId) : { instructions: [] }]);
+  if ('reference' in personal) {
+    // Preserve ordinary saves through a bounded streaming compatibility path.
+    // Larger inference requires verified model capacity before reconstruction.
+    return { basePrompt: base.basePrompt, instructions: await readInstructionsForInference(() => readInstructionParts(ownerId!, personal.reference), options) };
+  }
   return { basePrompt: base.basePrompt, instructions: personal.instructions };
 }

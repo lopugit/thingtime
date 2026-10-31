@@ -21,3 +21,12 @@ test('a successful HTTP response alone cannot establish private database readine
     assert.equal(applicationHealthIsReady(true, { ...health, ...change }, 'own-session'), false);
   }
 });
+
+test('a partial client build cannot substitute the SPA for an isolated renderer bundle', async () => {
+  for (const missing of ['/draft-preview/runner.js', '/platform/runtime.js', '/library/runner.js', '/embed/thingtime.min.js']) {
+    const request = async (url, options) => options.method === 'HEAD'
+      ? new Response('', { headers: { 'content-type': url.endsWith(missing) ? 'text/html' : 'text/javascript' } })
+      : new Response(html('current'));
+    await assert.rejects(verifyApplicationAssets(request), error => error.message.includes(missing) && error.message.includes('build:client'));
+  }
+});

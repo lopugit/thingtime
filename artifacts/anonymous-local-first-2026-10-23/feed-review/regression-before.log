@@ -1,0 +1,144 @@
+✖ a captured pending owned-only feed post cannot return after deletion without a read-cache watermark (61.119626ms)
+✖ a captured synced owned-only feed post cannot return after deletion without a read-cache watermark (21.206136ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 918.091797
+
+✖ failing tests:
+
+test at app/local-workspace/accountPosts.test.ts:2:13235
+✖ a captured pending owned-only feed post cannot return after deletion without a read-cache watermark (61.119626ms)
+  AssertionError [ERR_ASSERTION]: filtering/ranking must not resurrect a deleted captured root
+  + actual - expected
+  
+  + [
+  +   {
+  +     acl: [
+  +       'tt:user'
+  +     ],
+  +     attachments: [],
+  +     author: {
+  +       avatarUrl: null,
+  +       displayName: 'Local workspace',
+  +       id: 'viewer',
+  +       localOnly: true,
+  +       username: 'local'
+  +     },
+  +     commentCount: 0,
+  +     comments: [],
+  +     createdAt: '2026-10-23T07:17:08.923Z',
+  +     id: 'pending-owned',
+  +     images: [],
+  +     isShare: false,
+  +     listing: null,
+  +     localOnly: false,
+  +     localWorkspace: true,
+  +     mediaLayout: null,
+  +     reactionCounts: {},
+  +     repliesLoaded: false,
+  +     richText: null,
+  +     shareCount: 0,
+  +     shareOf: null,
+  +     tags: [],
+  +     targetId: null,
+  +     text: 'Owned before deletion',
+  +     thing: null,
+  +     thingtime: [
+  +       'post'
+  +     ],
+  +     title: null,
+  +     type: 'text',
+  +     viewerReactions: [],
+  +     viewerSaved: false,
+  +     visibility: 'private',
+  +     votes: {
+  +       down: 0,
+  +       score: 0,
+  +       up: 0,
+  +       viewerVote: null
+  +     }
+  +   }
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountPosts.test.ts:235:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ { reactionCounts: {}, viewerReactions: [], viewerSaved: false, votes: [Object], id: 'pending-owned', thingtime: [Array], author: [Object], acl: [Array], visibility: 'private', localOnly: false, type: 'text', text: 'Owned before deletion', richText: null, images: [], attachments: [], mediaLayout: null, listing: null, thing: null, tags: [], title: null, targetId: null, createdAt: '2026-10-23T07:17:08.923Z', commentCount: 0, comments: [], repliesLoaded: false, shareCount: 0, isShare: false, shareOf: null, localWorkspace: true } ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at app/local-workspace/accountPosts.test.ts:2:13235
+✖ a captured synced owned-only feed post cannot return after deletion without a read-cache watermark (21.206136ms)
+  AssertionError [ERR_ASSERTION]: filtering/ranking must not resurrect a deleted captured root
+  + actual - expected
+  
+  + [
+  +   {
+  +     acl: [
+  +       'tt:user'
+  +     ],
+  +     attachments: [],
+  +     author: {
+  +       avatarUrl: null,
+  +       displayName: 'Local workspace',
+  +       id: 'viewer',
+  +       localOnly: true,
+  +       username: 'local'
+  +     },
+  +     commentCount: 0,
+  +     comments: [],
+  +     createdAt: '2026-10-23T00:00:00.000Z',
+  +     id: 'synced-owned',
+  +     images: [],
+  +     isShare: false,
+  +     listing: null,
+  +     localOnly: false,
+  +     localWorkspace: true,
+  +     mediaLayout: null,
+  +     reactionCounts: {},
+  +     repliesLoaded: false,
+  +     richText: null,
+  +     shareCount: 0,
+  +     shareOf: null,
+  +     tags: [],
+  +     targetId: null,
+  +     text: 'Owned before deletion',
+  +     thing: null,
+  +     thingtime: [
+  +       'post'
+  +     ],
+  +     title: null,
+  +     type: 'text',
+  +     viewerReactions: [],
+  +     viewerSaved: false,
+  +     visibility: 'private',
+  +     votes: {
+  +       down: 0,
+  +       score: 0,
+  +       up: 0,
+  +       viewerVote: null
+  +     }
+  +   }
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (/workspace/thingtime/remix/app/local-workspace/accountPosts.test.ts:235:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ { reactionCounts: {}, viewerReactions: [], viewerSaved: false, votes: [Object], id: 'synced-owned', thingtime: [Array], author: [Object], acl: [Array], visibility: 'private', localOnly: false, type: 'text', text: 'Owned before deletion', richText: null, images: [], attachments: [], mediaLayout: null, listing: null, thing: null, tags: [], title: null, targetId: null, createdAt: '2026-10-23T00:00:00.000Z', commentCount: 0, comments: [], repliesLoaded: false, shareCount: 0, isShare: false, shareOf: null, localWorkspace: true } ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

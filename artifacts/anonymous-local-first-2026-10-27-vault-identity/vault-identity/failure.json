@@ -1,0 +1,5 @@
+{
+  "error": "Expected values to be strictly equal:\n\n401 !== 200\n",
+  "errors": [],
+  "checks": []
+}

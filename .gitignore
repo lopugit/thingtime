@@ -85,7 +85,7 @@ graphify-out/.locks/
 graphify-out/cache/*
 !graphify-out/cache/semantic-cas/
 !graphify-out/cache/semantic-cas/**
-# HTML is local derived visualization; immutable portable graph data stays tracked.
+# Root and snapshot HTML are local derived visualizations, not portable content.
 graphify-out/graph.html
 graphify-out/snapshots/**/graph.html
 graphify-out/snapshots/**/.graphify_*

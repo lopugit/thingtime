@@ -1,3 +1,7 @@
+import { LopuInstructionsSync } from './local-workspace/lopuInstructions.client';
+import { CharacterContentRoute } from './components/Characters/CharacterContentScope';
+import { LocalMediaDiagnostics } from './local-workspace/media.client';
+import { AccountSyncStatus } from './local-workspace/AccountSyncStatus';
 import { ThingDraftsProvider } from './drafts/ThingDrafts';
 import { NativeSyncBootstrap } from './fileSync/NativeSyncBootstrap';
 import { PAGE_VIEWPORT_CSS } from './components/Layout/pageViewport';
@@ -8,13 +12,14 @@ import { Analytics } from '@vercel/analytics/react';
 import React from 'react';
 import { pageTitle } from './utils/pageTitle';
 
-import type { RootLoaderData } from './root-data.server';
+import type { ClientRootData } from './local-workspace/rootFallback';
+import { LOCAL_WORKSPACE_OWNER } from './local-workspace/runtime.client';
 import { GlobalStyles } from './globals/GlobalStyles';
 import { Main } from './components/Layout/Main';
 import { Nav } from './components/Nav/Nav';
 import { DrawerSystem } from './components/Nav/Drawer/DrawerSystem';
 import { ChakraWrapper } from './Providers/Chakra/ChakraWrapper';
-import { ThingtimeProvider } from './Providers/ThingtimeProvider';
+import { WorkspaceThingtimeProvider } from './local-workspace/WorkspaceThingtimeProvider';
 import { TimelineHost } from './components/Timeline/TimelineHost';
 import { TimelineProvider } from './timeline/TimelineProvider';
 import { BUILDER_OVERLAY_CHROME_CSS } from './components/Builder/BuilderOverlayHost';
@@ -64,7 +69,8 @@ try {
 }
 
 export default function App() {
-  const rootData = useLoaderData() as RootLoaderData & { clientIdentityGeneration: number };
+  const rootData = useLoaderData() as ClientRootData & { clientIdentityGeneration: number };
+  const contentOwnerId = rootData.offlineWorkspace?.ownerId || (rootData.user && !rootData.user.temporary ? rootData.user.id : undefined);
   const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
   React.useLayoutEffect(() => { rootIdentity.confirm(rootData.clientIdentityGeneration); }, [rootData.clientIdentityGeneration]);
   const { envFromCookie, titlePrefix } = rootData;
@@ -74,8 +80,8 @@ export default function App() {
   const isAuthorizePopup = isStandalonePage || pathname === '/invite' || pathname === '/authorize' || pathname === '/passwords/provider' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
-  React.useLayoutEffect(() => bindTransferIdentity(rootIdentity, rootData.user?.id, rootData.clientIdentityGeneration),
-    [rootData.user?.id, rootData.clientIdentityGeneration]);
+  React.useLayoutEffect(() => bindTransferIdentity(rootIdentity, contentOwnerId || LOCAL_WORKSPACE_OWNER, rootData.clientIdentityGeneration),
+    [contentOwnerId, rootData.dataPlane, rootData.clientIdentityGeneration]);
 
   React.useEffect(() => {
     setMounted(true);
@@ -136,7 +142,7 @@ export default function App() {
         html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [class~="tt.devKit"],
         html[data-lopu-sheet="open"] [data-testid="site-edit-pill"] { z-index: ${LOPU_WINDOW_Z - 1} !important; }
       `}</style>
-      <ThingtimeProvider key={rootData.user?.id || 'guest'} accountId={rootData.user?.id} storageKey={rootData.user?.id ? `thingtime:account:${rootData.user.id}` : 'thingtime'}>
+      <WorkspaceThingtimeProvider>
         <ThingDraftsProvider>
          <TimelineProvider>
          {mounted && !isAuthorizePopup ? <TimelineHost /> : null}
@@ -161,10 +167,13 @@ export default function App() {
           <Outlet />
         ) : (
           <Main>
+            <AccountSyncStatus />
+            <LopuInstructionsSync />
+            <LocalMediaDiagnostics />
             {/* every page is a block-based site: per-route + global blocks
                 render around the native screen; the ✏️ pill enters edit mode */}
             <SiteBlocksHost>
-              <Outlet />
+              <CharacterContentRoute><Outlet /></CharacterContentRoute>
             </SiteBlocksHost>
           </Main>
         )}
@@ -185,9 +194,11 @@ export default function App() {
         {mounted && !isStandalonePage ? <EasterEggs /> : null}
          </TimelineProvider>
         </ThingDraftsProvider>
-      </ThingtimeProvider>
+      </WorkspaceThingtimeProvider>
       <ScrollRestoration />
-      {mounted ? <Analytics /> : null}
+      {/* Only Vercel deployments serve the insights script. Local/fork and
+          offline shells must not parse their SPA fallback as JavaScript. */}
+      {mounted && envFromCookie.THINGTIME_VERCEL_URL && envFromCookie.THINGTIME_VERCEL_ENV !== 'development' ? <Analytics /> : null}
     </ChakraWrapper>
   );
 }

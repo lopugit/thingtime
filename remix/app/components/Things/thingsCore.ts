@@ -84,6 +84,8 @@ export type ThingsCache = {
 };
 
 export const thingsCacheKey = (userId: string | null | undefined) => `tt-things-v2-${userId || 'anon'}`;
+// Native library and detail previews share only an exact workspace destination.
+export const thingsWorkspaceCacheKey = (scope: string, localPlane?: 'home') => `tt-things-workspace-${JSON.stringify([scope, localPlane || 'selected'])}`;
 
 export const folderKeyOf = (folderId: string | null) => folderId || 'root';
 

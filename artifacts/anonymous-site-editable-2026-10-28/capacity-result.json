@@ -1,0 +1,18 @@
+{
+  "jobId": "1dd18597-68a9-42df-9046-2cc263e4206f",
+  "pid": 58099,
+  "startedAt": "2026-10-28T10:42:19.766Z",
+  "deadline": "2026-10-28T10:48:19.768Z",
+  "knownOtherSession": "97256867-340f-4586-8061-696120702aff",
+  "status": "deadline-no-headroom",
+  "samples": 8,
+  "emptySamples": 0,
+  "lastSample": {
+    "at": "2026-10-28T10:48:13.145Z",
+    "runningContainers": [
+      "tt-agent-97256867-340f-4586-8061-696120702aff 989.2MiB / 2GiB"
+    ]
+  },
+  "completedAt": "2026-10-28T10:48:19.769Z",
+  "runCount": 0
+}

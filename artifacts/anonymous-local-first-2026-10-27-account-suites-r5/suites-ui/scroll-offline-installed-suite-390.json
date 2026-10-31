@@ -1,0 +1,39 @@
+{
+  "label": "offline-installed-suite",
+  "width": 390,
+  "skippedHidden": 2,
+  "roots": [
+    {
+      "marker": "0",
+      "tag": "HTML",
+      "kind": "page",
+      "clientHeight": 844,
+      "scrollHeight": 4511,
+      "maxScroll": 3667,
+      "rect": {
+        "width": 390,
+        "height": 4510.671875
+      },
+      "points": [
+        0,
+        611.1666666666666,
+        1222.3333333333333,
+        1833.5,
+        2444.6666666666665,
+        3055.8333333333335,
+        3667
+      ],
+      "observed": [
+        0,
+        611,
+        1222,
+        1834,
+        2445,
+        3056,
+        3667
+      ]
+    }
+  ],
+  "phase": "complete",
+  "completedRoots": 1
+}

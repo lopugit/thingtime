@@ -39,18 +39,19 @@ test('bounded input and explicit root validation', async () => {
   await assert.rejects(() => prepareDraft(fixture(), 'account-thing'), /not in the supplied/);
 });
 
-
-test('Builder provenance survives draft export/reopen in either schema order without admitting mixed content kinds', async () => {
-  for (const prepend of [true, false]) {
+test('new editable and transient block types cannot enable Actions in anonymous export previews', async () => {
+  for (const type of ['element', 'collection', 'condition']) {
     const input = fixture();
-    for (const thing of input.things) thing.thingtime = prepend ? ['builder-thing', ...thing.thingtime] : [...thing.thingtime, 'builder-thing'];
-    const prepared = await prepareDraft(input);
-    for (const thing of prepared.manifest.things) assert.equal(thing.thingtime.at(-1), 'builder-thing');
-    assert.equal((await prepareDraft(prepared.json)).hash, prepared.hash);
-    assert.equal(prepared.manifest.things.length, 2);
+    input.things[0].crystal.blocks = [{ id: 'interactive', type, tag: 'div', children: [] }];
+    await assert.rejects(() => prepareDraft(input), /Unsupported draft block/);
   }
-  for (const extra of ['data', 'action', 'schema', 'webpage']) {
-    const input = fixture(); input.things[1].thingtime.push('builder-thing', extra);
-    await assert.rejects(() => prepareDraft(input), /component and webpage Things only/);
+  for (const patch of [
+    { source: { action: 'private-action' } },
+    { props: { 'data-tt-action': 'private-action' } },
+    { props: { onClick: 'private-action' } }
+  ]) {
+    const input = fixture();
+    Object.assign(input.things[0].crystal.blocks[0], patch);
+    await assert.rejects(() => prepareDraft(input), /Unsupported draft field/);
   }
 });

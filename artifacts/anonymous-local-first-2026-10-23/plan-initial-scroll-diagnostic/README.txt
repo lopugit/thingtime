@@ -1,0 +1,1 @@
+Initial static assertions passed, but visual review found the test captured testing/artifacts sections before native smooth scrolling settled. These screenshots show the prior position and are diagnostic only. The corrected fixture uses explicit instant native scrolling and checks target/footer viewport geometry. Product HTML was unchanged.
