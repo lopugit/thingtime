@@ -251,22 +251,21 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
 
 14. **✅ FIXED IN PR #115 — 🧹 Remove render-time debug leaks in the hot path.**
 
-    The severe part — the unbounded `window.useThingtimeScope` per-render array
-    in `useThingtime.tsx` — was already gone before this pass (the hook is now a
-    plain context read). Remaining render-time `console.log`s were cleared on
-    `claude/render-log-leaks-s7` (2026-07-21): removed all four render-time logs
-    in `ThingtimeURL.tsx` (the `location`, path/thing `useMemo` bodies, and the
-    per-render return log), the per-render `commanderActive` log and the
-    per-keypress `e?.code` log in `CommanderV2.tsx`, the per-render `debug`
-    object + log in the `command` `useMemo` and the per-keypress `e?.code` log
-    in `CommanderV1Deprecated.tsx` (folded in from PR #110), and gated the three
-    `addNewChild` debug logs in `Thingtime.tsx` behind the file's existing
-    `TT_DEBUG` flag. Verified live: `/` and `/things` render cleanly with no
-    console errors and none of the removed logs. (Discrete event-handler logs in
-    `CommanderV2` — on select/close/error — were left as-is; they are not
-    render-time hot-path leaks. The two remaining render-body `console.debug`
-    calls in `LogoOld2.tsx`/`LogoOld3.tsx` are unreachable — neither component
-    is imported anywhere — so they are not hot-path leaks either.)
+    ✅ **Fixed 2026-07-21** (`claude/debug-leak-cleanup`): the
+    `window.useThingtimeScope` per-render array was already gone from main
+    (`useThingtime.tsx` is now a thin context hook); this branch removes the
+    remaining hot-path console noise — three per-render/per-memo logs plus the
+    render-body dump in `ThingtimeURL.tsx` (which logged full thing values on
+    every navigation render, in prod too) and the per-render `commanderActive`
+    log + per-keypress key-code log in `CommanderV2.tsx`. Event-scoped logs
+    (open/close/nav/error) are left in place.
+
+    Original report: `useThingtime.tsx` (L33–39, L46–57) pushes `{uuid, value, timestamp}` into an
+    unbounded per-instance array on `window.useThingtimeScope` on **every render**
+    of **every** consumer — a module-level object that leaks across SSR requests
+    and grows for the life of the tab; nothing ever trims it and it ships in prod
+    bundles. `ThingtimeURL.tsx` (L23–55) and `CommanderV2` (L337, per-keypress)
+    also log on every render. Dev-gate or remove.
 
 15. **🟡 MOSTLY DONE — 🛠️ DX ratchet: add typecheck, a headless test runner, and CI.**
 
