@@ -46,6 +46,7 @@ export type MigrationOperatorCode =
   | 'prerequisite_reappeared'
   | 'orphan_billable_thing'
   | 'invalid_sandbox_marker'
+  | 'invalid_attachment_envelope'
   | 'schema_prerequisite'
   | 'unknown_owner_change'
   | 'billable_thing_churn'
@@ -115,6 +116,12 @@ const operatorPresentation = (code: MigrationOperatorCode, options: MigrationOpe
         status: 409,
         message:
 					'A billable Thing has an invalid sandbox marker. Ledgers remain fenced. Use the private diagnostic when provided to reveal and repair the malformed record; server logs remain the fallback. Then rerun backfill-user-storage-accounting.'
+      };
+    case 'invalid_attachment_envelope':
+      return {
+        status: 409,
+        message:
+					'An attachment has an invalid protected storage envelope. Ledgers remain fenced. Use the private diagnostic when provided to reveal and repair the malformed record; server logs remain the fallback. Then rerun backfill-user-storage-accounting.'
       };
     case 'schema_prerequisite':
       return {

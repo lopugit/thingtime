@@ -1,0 +1,82 @@
+import { storedComponentScope, visitStoredBlocks, blockActionTemplate, type CompositionReference } from './sharedCompositionCore';
+import { visitStoredTemplateActions } from '../../../components/ComponentsLibrary/componentTemplate';
+
+// Rewrite executable references, not arbitrary text containing an id. All
+// copied ids are allocated before writing, so cycles and forward references
+// can be rewritten without ever pointing the fork at the original program.
+export const rewriteComposition = (
+	kinds: string[],
+	original: Record<string, any>,
+	map: (kind: CompositionReference['kind'], ref: string) => string,
+	contexts: (Record<string, unknown> | undefined)[] = [undefined]
+): Record<string, any> => {
+	const crystal = JSON.parse(JSON.stringify(original));
+	if (kinds.includes('component') || kinds.includes('schema')) {
+		for (const args of contexts)
+			visitStoredTemplateActions(crystal.render, kinds.includes('component') ? storedComponentScope(crystal, args) : {}, (action, node, raw) => {
+				if (action === raw && typeof node.ttAction === 'string' && !node.ttAction.includes('{')) return;
+				const copied = map('action', action);
+				if (copied === action) return;
+				const refs = Array.isArray(node.ttActionRefs) ? node.ttActionRefs : [];
+				node.ttActionRefs = [[raw, copied], ...refs.filter((entry) => Array.isArray(entry) && entry[0] !== raw)];
+			});
+	}
+	const field = (object: any, name: string, kind: CompositionReference['kind']) => {
+		if (object && typeof object[name] === 'string') object[name] = map(kind, object[name]);
+	};
+	const render = (node: any, depth = 0): void => {
+		if (!node || typeof node !== 'object' || depth > 64) return;
+		if (Array.isArray(node)) {
+			node.forEach((child) => render(child, depth + 1));
+			return;
+		}
+		if (typeof node.ttAction === 'string' && !/[{}$]/.test(node.ttAction)) field(node, 'ttAction', 'action');
+		if (node.tag === 'tt-dialog' || node.chakra === 'Dialog') field(node.props, 'closeOnAction', 'action');
+		if (node.tag === 'tt-collection' || node.chakra === 'Collection') {
+			field(node.props?.source, 'action', 'action');
+			const row = node.props?.itemTemplate;
+			render(row && typeof row === 'object' && 'ttTemplate' in row ? row.ttTemplate : row, depth + 1);
+		}
+		render(node.children, depth + 1);
+		render(node.rawChildren, depth + 1);
+		render(node.ttMerge, depth + 1);
+		for (const part of [node.ttIf?.then, node.ttIf?.else, node.ttRepeat?.node, node.ttEach?.node, node.ttEach?.empty, node.ttMap?.default])
+			render(part, depth + 1);
+		if (node.ttMap?.values && typeof node.ttMap.values === 'object') Object.values(node.ttMap.values).forEach((child) => render(child, depth + 1));
+	};
+	if (kinds.includes('webpage')) visitStoredBlocks(crystal.blocks,(block,scope) => {
+  if(block.type === 'component') field(block,'component','component');
+  field(block.source,'action','action');
+  if(block.type === 'collection') field(block.props?.source,'action','action');
+  if(block.type === 'element') visitStoredTemplateActions(blockActionTemplate(block),scope,(action,_node,raw) => {
+   const copied=map('action',action);
+   if(copied === action) return;
+   if(typeof block.props['data-tt-action'] === 'string' && !/[{}$]/.test(block.props['data-tt-action'])) block.props['data-tt-action']=copied;
+   else {
+    const refs=Array.isArray(block.props['data-tt-action-refs']) ? block.props['data-tt-action-refs'] : [];
+    block.props['data-tt-action-refs']=[[raw,copied],...refs.filter((entry:any)=>Array.isArray(entry)&&entry[0]!==raw)];
+   }
+  });
+ });
+	if (kinds.includes('component')) {
+		render(crystal.render);
+		field(crystal.source, 'action', 'action');
+	}
+	if (kinds.includes('schema')) render(crystal.render);
+	if (kinds.includes('action')) {
+		for (const step of crystal.steps || []) {
+			if (step.op === 'actions.invoke' || step.op === 'each') field(step, 'action', 'action');
+			if (['things.get', 'things.update', 'things.delete'].includes(step.op)) field(step, 'id', 'data');
+			if (step.op?.startsWith('things.')) field(step, 'schema', 'schema');
+		}
+		for (const capability of crystal.capabilities || []) {
+			if (Array.isArray(capability.actions)) capability.actions = capability.actions.map((ref: string) => map('action', ref));
+			if (Array.isArray(capability.schemas)) capability.schemas = capability.schemas.map((ref: string) => map('schema', ref));
+		}
+	}
+	if (kinds.includes('data')) {
+		field(crystal, 'schemaId', 'schema');
+		field(crystal, 'schema', 'schema');
+	}
+	return crystal;
+};

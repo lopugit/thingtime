@@ -1,0 +1,58 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { RETIRED_THINGS_INDEXES, createThingsDataIndexes, thingsIndexPlanEntries, thingsIndexPlanNames } from './collections.ts';
+import { ordinaryPrefixCandidates, summarizeThingIndexPlan } from './indexAudit.ts';
+
+test('audit records the executable plan without connecting and includes Mongo _id', async () => {
+  const entries = await thingsIndexPlanEntries();
+  assert.deepEqual(new Set(entries.map(({ name }) => name)), await thingsIndexPlanNames());
+  assert.equal(summarizeThingIndexPlan(entries).total, entries.length + 1);
+  assert.equal(entries.find(({ name }) => name === 'uniqueKeys_1')?.options.unique, true);
+  assert.equal(entries.find(({ name }) => name === 'things_device_ttl')?.options.expireAfterSeconds, 0);
+  assert.ok(entries.find(({ name }) => name === 'notification_unread')?.options.partialFilterExpression);
+});
+
+test('unused emoji lookup retires without removing its protected uniqueness or legacy constraint', async () => {
+  const entries = await thingsIndexPlanEntries();
+  assert.equal(entries.some(({ name }) => name === 'things_emoji_key_lookup'), false);
+  assert.ok(RETIRED_THINGS_INDEXES.includes('things_emoji_key_lookup'));
+  assert.equal((RETIRED_THINGS_INDEXES as readonly string[]).includes('things_emoji_key_unique'), false);
+  assert.equal(entries.find(({ name }) => name === 'uniqueKeys_1')?.options.unique, true);
+  assert.equal(summarizeThingIndexPlan(entries).total, 52); // Includes the modern owner/ID snapshot lookup.
+  assert.deepEqual(entries.find(({ name }) => name === 'things_geo')?.keys, { geo: '2dsphere' });
+  assert.deepEqual(entries.find(({ name }) => name === 'lopu_recording_due')?.keys, { thingtime: 1, nextRunAt: 1, shareId: 1 });
+});
+
+test('prefix audit never conflates constraint, partial, sparse, TTL, text or collation semantics', () => {
+  const long = { name: 'long', keys: { a: 1, b: -1 }, options: {} };
+  const short = { name: 'short', keys: { a: 1 }, options: {} };
+  assert.deepEqual(ordinaryPrefixCandidates([short, long]), [{ candidate: 'short', covering: 'long' }]);
+  for (const options of [{ unique: true }, { sparse: true }, { expireAfterSeconds: 0 },
+    { partialFilterExpression: { unread: true } }, { collation: { locale: 'en' } }, { hidden: true }]) {
+    assert.deepEqual(ordinaryPrefixCandidates([{ ...short, options }, long]), []);
+    assert.deepEqual(ordinaryPrefixCandidates([short, { ...long, options }]), []);
+  }
+  assert.deepEqual(ordinaryPrefixCandidates([{ ...short, keys: { a: 'text' } }, long]), []);
+  assert.deepEqual(ordinaryPrefixCandidates([{ ...short, keys: { a: -1 } }, long]), []);
+});
+
+test('invite expiry is home-only and never deletes escrow before its refund', async () => {
+  const home = await thingsIndexPlanEntries();
+  const expiry = home.find(({ name }) => name === 'account_invite_expiry');
+  assert.deepEqual(expiry?.keys, { 'crystal.status': 1, expiresAt: 1 });
+  assert.deepEqual(expiry?.options.partialFilterExpression, { thingtime: 'account-invite' });
+  assert.equal(expiry?.options.expireAfterSeconds, undefined);
+  const custom: string[] = [];
+  await Promise.all(createThingsDataIndexes({ collection: () => ({ createIndex: async (_keys: unknown, options: any = {}) => { custom.push(options.name); } }) }));
+  assert.equal(custom.includes('account_invite_expiry'), false);
+});
+
+ test('logs reuse the shared Thing order and central safe expiry policy with no new index slots', async () => {
+   const entries = await thingsIndexPlanEntries();
+   assert.ok(entries.some(({ keys }) => JSON.stringify(keys) === JSON.stringify({ thingtime: 1, createdAt: -1, shareId: 1 })));
+   assert.equal(entries.some(({ name }) => ['error_log_recent', 'error_log_expires_at', 'migration_diagnostic_expires_at'].includes(name)), false);
+   const ttl = entries.find(({ name }) => name === 'things_ephemeral_expires_at')!;
+   assert.deepEqual(ttl.keys, { expiresAt: 1 });
+   assert.deepEqual(ttl.options.partialFilterExpression, { thingtime: { $in: ['migration-diagnostic', 'error-log'] } });
+   assert.equal(ttl.options.expireAfterSeconds, 0);
+ });

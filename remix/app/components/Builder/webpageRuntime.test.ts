@@ -1,0 +1,239 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { MAX_PAGINATION_CURSOR_CHARS, INVALID_PAGINATION_CURSOR } from '~/schemas/paginationCursor';
+import { buildOverview, OVERVIEW_ROLES, parseOverviewInput, type OverviewRole, type OverviewThing } from '~/api/utils/agents/overviewCore';
+import { localQueryHref } from '../Actions/localUiAction';
+
+import { MAX_SHARED_SOURCE_LOADS, gatherFormFields, evictSharedLoads, queryScopeOf, readSourceCache, sourceCacheKey, writeSourceCache } from './webpageRuntime';
+
+// The bounds the page runtime puts on things it does not control: the
+// shared-load map (how many in-flight/settled source requests it may retain),
+// the URL query scope (what a link may put in front of a template), and the
+// source cache key (whose data a cache line may paint).
+
+test('the shared-load map never grows past a page worth of live blocks', () => {
+	const promises = new Map<string, string>();
+	// one `interval` source ticking for a whole session: a new key every tick,
+	// and the runtime version never moves because no control ever runs
+	for (let tick = 0; tick < MAX_SHARED_SOURCE_LOADS * 20; tick += 1) {
+		promises.set(`clock:${tick}`, `result-${tick}`);
+		evictSharedLoads(promises);
+	}
+	assert.equal(promises.size, MAX_SHARED_SOURCE_LOADS);
+});
+
+test('eviction is oldest-first, so the newest keys are the ones that survive', () => {
+	const promises = new Map<string, number>();
+	for (let index = 0; index < MAX_SHARED_SOURCE_LOADS + 3; index += 1) promises.set(`k${index}`, index);
+	evictSharedLoads(promises);
+	assert.equal(promises.size, MAX_SHARED_SOURCE_LOADS);
+	assert.equal(promises.has('k0'), false);
+	assert.equal(promises.has('k2'), false);
+	assert.equal(promises.has('k3'), true);
+	assert.equal(promises.has(`k${MAX_SHARED_SOURCE_LOADS + 2}`), true);
+});
+
+test('a full page of siblings loading at one version keeps every entry', () => {
+	// the burst for one version is a single render pass — no block may lose the
+	// entry another is still waiting on, or the dedupe silently stops deduping
+	const promises = new Map<string, number>();
+	for (let block = 0; block < MAX_SHARED_SOURCE_LOADS; block += 1) {
+		promises.set(`block-${block}`, block);
+		evictSharedLoads(promises);
+	}
+	assert.equal(promises.size, MAX_SHARED_SOURCE_LOADS);
+	assert.equal(promises.has('block-0'), true);
+});
+
+test('evicting an already-small map is a no-op', () => {
+	const promises = new Map<string, number>([['a', 1]]);
+	evictSharedLoads(promises);
+	assert.deepEqual([...promises.keys()], ['a']);
+});
+
+test('the query scope keeps plain names and drops the rest', () => {
+	const scope = queryScopeOf('?id=abc&page-size=10&_draft=1&9bad=x&has%20space=y');
+	assert.equal(scope.id, 'abc');
+	assert.equal(scope['page-size'], '10');
+	assert.equal(scope._draft, '1');
+	assert.equal('9bad' in scope, false);
+	assert.equal('has space' in scope, false);
+});
+
+test('a sharing bearer key never enters the template or action input query scope', () => {
+	assert.deepEqual(queryScopeOf('?key=private-link-key&question=hello'), { question: 'hello' });
+});
+
+test('the query scope caps value length and key count', () => {
+	const long = 'x'.repeat(500);
+	assert.equal(queryScopeOf(`?note=${long}`).note?.length, 200);
+	const many = Array.from({ length: 80 }, (_value, index) => `k${index}=${index}`).join('&');
+	assert.ok(Object.keys(queryScopeOf(`?${many}`)).length <= 32);
+});
+
+test('overview next-page cursors survive local navigation and query binding intact', () => {
+	const input = parseOverviewInput(new URLSearchParams('taskSchema=tasks&projectSchema=projects&agentSchema=agents&questionSchema=questions&progressSchema=progress&todoSchema=todos'));
+	const records = Object.fromEntries(OVERVIEW_ROLES.map(role => [role, []])) as Record<OverviewRole, OverviewThing[]>;
+	records.task = Array.from({ length: 55 }, (_, i) => ({ id: `task-${i}`, crystal: { title: String(i) } }));
+	const first = buildOverview(input, records, true, 'now');
+	assert.ok(first.nextCursor!.length > 200);
+	const href = localQueryHref('overview-page', { cursor: first.nextCursor });
+	assert.ok(href);
+	const scope = queryScopeOf(new URL(href, 'https://thingtime.test').search);
+	assert.equal(scope.cursor, first.nextCursor);
+	const next = buildOverview({ ...input, cursor: scope.cursor }, records, true, 'now');
+	assert.deepEqual(next.rows.map(row => row.id), ['task-50', 'task-51', 'task-52', 'task-53', 'task-54']);
+});
+
+test('pagination query values retain the transport budget and oversize stays an explicit refusal', () => {
+	const cursor = 'a'.repeat(MAX_PAGINATION_CURSOR_CHARS);
+	for (const key of ['cursor', 'todoCursor', 'progressCursor']) {
+		const href = localQueryHref('overview-page', { [key]: cursor });
+		assert.ok(href);
+		assert.equal(queryScopeOf(new URL(href, 'https://thingtime.test').search)[key], cursor);
+		assert.equal(localQueryHref('overview-page', { [key]: `${cursor}a` }), null);
+		assert.equal(queryScopeOf(`?${key}=${cursor}a`)[key], INVALID_PAGINATION_CURSOR);
+	}
+});
+
+// ── source cache: whose last result a page may paint ────────────────────────
+// /p/<page> is a shared public URL and a source result is the signed-in
+// viewer's own private data, so the cache line has to be per-viewer. These
+// pin the key shape itself: the seed is read in a lazy initializer, before
+// the hook knows who is looking, so a page-only key would paint the previous
+// account's data to the next person on the browser.
+
+const withFakeStorage = (run: (store: Map<string, string>) => void): void => {
+	const store = new Map<string, string>();
+	const globals = globalThis as { window?: unknown };
+	const had = 'window' in globals;
+	const previous = globals.window;
+	globals.window = {
+		localStorage: {
+			getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
+			setItem: (key: string, value: string) => void store.set(key, value)
+		}
+	};
+	try {
+		run(store);
+	} finally {
+		if (had) globals.window = previous;
+		else delete globals.window;
+	}
+};
+
+test('a source cache key names the viewer, the page and the block', () => {
+	assert.equal(sourceCacheKey('user-a', 'webpage-pokeworld', 'block-1'), 'tt-page-source:user-a:webpage-pokeworld:block-1');
+});
+
+test('no viewer means no cache line at all', () => {
+	// signed out, or rendering outside a runtime provider (the builder canvas,
+	// a gallery thumbnail): there is nobody to key the data to, so it neither
+	// reads nor writes rather than falling back to a page-only key
+	assert.equal(sourceCacheKey(null, 'webpage-pokeworld', 'block-1'), null);
+	assert.equal(sourceCacheKey('user-a', null, 'block-1'), null);
+	assert.equal(sourceCacheKey('user-a', 'webpage-pokeworld', ''), null);
+	withFakeStorage((store) => {
+		writeSourceCache(null, 'webpage-pokeworld', 'block-1', { secret: 'mine' });
+		assert.equal(store.size, 0);
+		assert.equal(readSourceCache(null, 'webpage-pokeworld', 'block-1'), undefined);
+	});
+});
+
+test('one viewer never paints from another viewer’s cached source result', () => {
+	withFakeStorage(() => {
+		writeSourceCache('user-a', 'webpage-expenses', 'block-1', { rows: ['rent £900'] });
+		// the same page and block, a different account on the same browser
+		assert.equal(readSourceCache('user-b', 'webpage-expenses', 'block-1'), undefined);
+		// ...and the signed-out visitor, which is what /p/ serves by default
+		assert.equal(readSourceCache(null, 'webpage-expenses', 'block-1'), undefined);
+		assert.deepEqual(readSourceCache('user-a', 'webpage-expenses', 'block-1'), { rows: ['rent £900'] });
+	});
+});
+
+test('a `__proto__` query key never becomes a scope entry', () => {
+	// the key clears QUERY_KEY_PATTERN, so what stops it is that `out.__proto__ =`
+	// is a [[Set]] through Object.prototype's accessor: a string value is ignored
+	// and no own property lands. Templates read own properties only, so the
+	// token resolves to nothing rather than to a prototype.
+	const scope = queryScopeOf('?__proto__=polluted&safe=yes');
+	assert.equal(scope.safe, 'yes');
+	assert.equal(Object.prototype.hasOwnProperty.call(scope, '__proto__'), false);
+	assert.equal(Object.getPrototypeOf(scope), Object.prototype);
+});
+
+test('form gathering treats iframe password and checkbox fields by element type', async () => {
+	const { gatherFormFields } = await import('./webpageRuntime');
+	const fields = [
+		{ tagName: 'INPUT', type: 'password', value: 'must-not-be-collected', getAttribute: () => 'password' },
+		{ tagName: 'INPUT', type: 'checkbox', checked: false, value: 'on', getAttribute: () => 'enabled' },
+		{ tagName: 'INPUT', type: 'text', value: 'hello', getAttribute: () => 'message' }
+	];
+	const form = { querySelectorAll: () => fields.map((field) => ({ ...field, matches: () => false })) } as unknown as HTMLElement;
+	assert.deepEqual(gatherFormFields(form), { enabled: false, message: 'hello' });
+});
+
+test('forms preserve empty text, false, leading zeros and long text without collecting unsafe fields', async () => {
+	const { gatherFormFields } = await import('./webpageRuntime');
+	const fields = [
+		['notes', 'text', '', false],
+		['phone', 'text', '0412345678', false],
+		['long', 'text', 'a'.repeat(5000), false],
+		['secret', 'password', 'private', false],
+		['file', 'file', 'fakepath', false],
+		['disabled', 'text', 'old', true],
+		['constructor', 'text', 'bad', false]
+	].map(([name, type, value, disabled]) => ({ tagName: 'INPUT', type, value, getAttribute: () => name, matches: () => disabled }));
+	const result = gatherFormFields({ querySelectorAll: () => fields } as unknown as HTMLElement);
+	assert.deepEqual(result, { notes: '', phone: '0412345678', long: 'a'.repeat(5000) });
+});
+
+test('a source cache paints only the matching action and resolved input binding', () => {
+	withFakeStorage((store) => {
+		const a = JSON.stringify({ action: 'detail', inputs: { id: 'record-a' } });
+		const b = JSON.stringify({ action: 'detail', inputs: { id: 'record-b' } });
+		writeSourceCache('viewer', 'page', 'block', { id: 'record-a' }, a);
+		assert.deepEqual(readSourceCache('viewer', 'page', 'block', a), { id: 'record-a' });
+		assert.equal(readSourceCache('viewer', 'page', 'block', b), undefined);
+		writeSourceCache('viewer', 'page', 'block', { id: 'record-b' }, b);
+		assert.equal(readSourceCache('viewer', 'page', 'block', a), undefined);
+		assert.deepEqual(readSourceCache('viewer', 'page', 'block', b), { id: 'record-b' });
+		assert.equal(store.size, 1, 'record navigation reuses one bounded cache slot');
+	});
+});
+
+test('legacy unbound and malformed source caches cannot seed a new record', () => {
+	withFakeStorage((store) => {
+		const key = sourceCacheKey('viewer', 'page', 'block')!;
+		store.set(key, JSON.stringify({ id: 'old-record' }));
+		assert.equal(readSourceCache('viewer', 'page', 'block', 'new-binding'), undefined);
+		store.set(key, 'invalid json');
+		assert.equal(readSourceCache('viewer', 'page', 'block', 'new-binding'), undefined);
+		writeSourceCache('viewer', 'page', 'block', 'x'.repeat(256 * 1024), 'new-binding');
+		assert.equal(store.get(key), 'invalid json', 'oversized cache is not stored');
+	});
+});
+
+test('typed JSON form fields decode once and reject invalid drafts before an Action can run', async () => {
+	const { gatherFormFields } = await import('./webpageRuntime');
+	const form = (value: string) => ({ querySelectorAll: () => [{
+		tagName: 'INPUT', type: 'hidden', value, matches: () => false,
+		getAttribute: (key: string) => key === 'name' ? 'program' : key === 'data-tt-input-type' ? 'json' : null
+	}] } as unknown as HTMLElement);
+	for (const value of [{ nested: [[0, false], [null, '{name}']], ttArg: 'literal' }, '', 'null', '123', '$input.keep', null]) {
+		assert.deepEqual(gatherFormFields(form(JSON.stringify(value))), { program: value });
+	}
+	for (const value of ['', '{', 'x'.repeat(65537)]) assert.throws(() => gatherFormFields(form(value)), /Check the JSON/);
+});
+
+
+test('ordinary Actions cannot gather fields from nested transient settings hosts', () => {
+	const field = (name: string, privateHost: boolean) => ({
+		tagName: 'INPUT', type: 'text', value: privateHost ? 'synthetic-private-transfer-code' : 'public',
+		getAttribute: (key: string) => key === 'name' ? name : null,
+		matches: () => false,
+		closest: (selector: string) => privateHost && selector === '[data-tt-transient-boundary]' ? {} : null
+	});
+	const form = { querySelectorAll: () => [field('ordinary', false), field('destinationCode', true)] } as unknown as HTMLElement;
+	assert.deepEqual(gatherFormFields(form), { ordinary: 'public' });
+});
