@@ -199,23 +199,6 @@ export async function startNativeSyncTask(saved: SavedFileSyncConfiguration, sco
 				check();
 				await runPagedForegroundCloudSync(reviewed, binding, {
 					currentScope, localTarget, journal: journal!, runtime, progress: publish,
-					...(host.uploadBatch ? { uploadBatch: host.uploadBatch } : {}),
-					...(host.folderBatch ? { folderBatch: host.folderBatch } : {}),
-					...(supportsNativeAuthorizationContext(capabilities) ? { nativeOperationGuards: true as const } : {}),
-					...(inspect && supportsNativeStreamingIndex(capabilities) && !reviewed.configuration.propagateDeletes ? {
-						streamLocalChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>) => readNativeIndexChanges({ ownerId: binding.ownerId, deviceId: binding.deviceId,
-							rootId: reviewed.configuration.localRootId, captureId, afterSequence, readyToFinish, signal: streamSignal ?? signal, request, excludedPaths: reviewed.configuration.excludedPaths, ignoreRules: reviewed.configuration.ignoreRules,
-							...(supportsNativeStreamingBatches(capabilities) ? { pageSize: NATIVE_INVENTORY_BATCH_ENTRIES } : {}) }),
-						streamRemoteChanges: (captureId: string, afterSequence: number, streamSignal?: AbortSignal, readyToFinish?: () => Promise<boolean>, resume?: { cursor?: string; snapshotComplete?: boolean; checkpoint(cursor: string, snapshotComplete: boolean): Promise<void> }) => {
-							if (!readyToFinish || !resume) throw Error('The durable cloud index consumer is unavailable.');
-							return readCloudIndexChanges(binding, reviewed.configuration.remoteFolderId, { ...runtime, signal: streamSignal ?? signal }, captureId, afterSequence, readyToFinish, resume);
-						}
-					} : {}),
-					inventorySession: descriptor => {
-						check(); update({ inventoryDescriptor: descriptor });
-						const key = 'tt:sync-inventory:' + syncScopeKey(binding);
-						writeStampedCache(key, descriptor); pruneCacheNamespace('tt:sync-inventory:', key, 32);
-					},
 					transfer: value => { check(); update({ transfer: value }); },
 					progressSession: descriptor => {
 						check(); update({ progressDescriptor: descriptor });

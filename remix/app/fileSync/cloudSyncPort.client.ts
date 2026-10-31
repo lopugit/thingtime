@@ -159,10 +159,9 @@ export function createBoundCloudSyncPort(savedScope: SyncScope, version: 1 | 2, 
 			}
 			if (isCloudFolderWrite(write)) return await createCloudFolderTransport(runtime, write, input.signal).apply();
 			const source = operation.mutation.kind === 'copy' ? await input.openSource(operation.mutation.source) : undefined;
-			return await fileTransport(runtime, write, input.signal).apply(source,
+			return fileTransport(runtime, write, input.signal).apply(source,
 				(bytes, total) => input.progress?.(operation.mutation.path, bytes, total),
 				bytes => { check(); input.transfer?.({ direction: 'upload', bytes }); });
-			} finally { release?.(); }
 		}
 	};
 }

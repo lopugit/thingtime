@@ -6,9 +6,6 @@ import type { FolderHost } from './desktopFolders.client';
 import type { SyncProgressDescriptor } from './progressProjection';
 import { createTransferActivitySession, type TransferActivity } from './transferActivity';
 import type { TransferSpeedSeries } from './transferSpeed';
-import { SyncConditionsWait } from './foregroundSyncContext';
-import { NativeInventoryRetryWait } from './nativeInventory';
-import { SyncConnectionWait } from './syncConnectionWait';
 
 export type SyncTaskSnapshot = {
 	scope: SyncScope;
@@ -17,7 +14,6 @@ export type SyncTaskSnapshot = {
 	host?: FolderHost;
 	progress: ForegroundSyncProgress & { message?: string };
 	progressDescriptor?: SyncProgressDescriptor;
-	inventoryDescriptor?: SyncInventoryDescriptor;
 	transferSeries?: TransferSpeedSeries;
 	status?: 'running' | 'paused' | 'error' | 'complete';
 	waiting?: boolean;
@@ -75,8 +71,7 @@ export function createSyncTaskRuntime() {
 		// the user's durable Stop, so returning to the foreground can recover.
 		suspend(message: string) { if (active && !active.signal.aborted) { suspensionMessage = message; active.abort(); } },
 		invalidate() { active?.abort(); transferSession?.clear(); publish(null); },
-		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'inventoryDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => void) => Promise<void>, onStop?: () => Promise<void>, options?: { automatic?: boolean }) {
-			if (options?.automatic && pausedScopes.has(syncScopeKey(scope))) return;
+		async start(scope: SyncScope, run: (signal: AbortSignal, update: (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => void) => Promise<void>, onStop?: () => Promise<void>) {
 			if (active) throw Error('A transfer is already running. Reopen its connection to review or stop it.');
 			if (!options?.automatic) pausedScopes.delete(syncScopeKey(scope));
 			pendingStop = undefined;
@@ -85,16 +80,12 @@ export function createSyncTaskRuntime() {
 			suspensionMessage = undefined;
 			const transfers = createTransferActivitySession(); transferSession = transfers;
 			publish({ scope: structuredClone(scope), active: true, status: 'running', transferSeries: transfers.series, progress: { stage: 'checking', confirmed: 0, total: 0 } });
-			const update = (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'inventoryDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => {
+			const update = (patch: Partial<Pick<SyncTaskSnapshot, 'progress' | 'progressDescriptor' | 'pagedReview' | 'legacyReview' | 'host'>> & { transfer?: TransferActivity }) => {
 				controller.signal.throwIfAborted();
 				const { transfer, ...view } = patch;
 				if (view.progress) transfers.stage(view.progress.stage);
 				if (transfer) transfers.add(transfer);
-				if (snapshot) {
-					const immediate = Object.keys(view).some(key => !['progress', 'progressDescriptor', 'inventoryDescriptor'].includes(key)) ||
-						!!view.progress && (view.progress.stage !== snapshot.progress.stage || view.progress.stage === 'complete' || view.progress.stage === 'reviewing');
-					publish({ ...snapshot, ...view }, immediate);
-				}
+				if (snapshot) publish({ ...snapshot, ...view });
 			};
 			try { await run(controller.signal, update); }
 			catch (error) {
@@ -103,11 +94,8 @@ export function createSyncTaskRuntime() {
 					message: snapshot.stopping ? snapshot.progress.message : controller.signal.aborted ? suspensionMessage ?? 'Transfer stopped. Retry to recover saved work.' :
 						error instanceof Error ? error.message : 'Transfer interrupted. Retry to recover saved work.' } });
 			} finally {
-				// The runner may own a journal needed by its stop hook. Do not release
-				// execution until that hook settles, including failed pause persistence.
-				await pendingStop?.catch(() => {});
 				transfers.stop();
-				if (snapshot) publish({ ...snapshot, active: false, stopping: false,
+				if (snapshot) publish({ ...snapshot, active: false,
 					status: snapshot.status === 'running' ? (snapshot.progress.stage === 'complete' ? 'complete' : 'paused') : snapshot.status,
 					pagedReview: undefined, legacyReview: undefined });
 				if (active === controller) { active = undefined; saveStop = undefined; pendingStop = undefined; }

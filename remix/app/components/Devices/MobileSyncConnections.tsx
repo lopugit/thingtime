@@ -316,7 +316,6 @@ function Connections({
 			let latestProgress: ForegroundSyncProgress = { stage: 'checking', confirmed: 0, total: 0 };
 			const publish = (value: ForegroundSyncProgress & { message?: string }) => {
 				assertActive();
-				latestProgress = value;
 				speeds.stage(value.stage);
 				setTransfers((previous) => ({ ...previous, [saved.id]: value }));
 				writeStampedCache(progressKey(saved.id), value);
@@ -417,12 +416,7 @@ function Connections({
 								},
 								progress: publish,
 								transfer: value => { assertActive(); speeds.add(value); },
-								inventorySession: (descriptor: SyncInventoryDescriptor) => {
-                                    assertActive(); setInventoryDescriptors(previous => ({ ...previous, [saved.id]: descriptor }));
-                                    const cacheKey = 'tt:sync-inventory:' + syncScopeKey(syncScope);
-                                    writeStampedCache(cacheKey, descriptor); pruneCacheNamespace('tt:sync-inventory:', cacheKey, 32);
-                                },
-                                progressSession: (descriptor: SyncProgressDescriptor) => {
+								progressSession: (descriptor: SyncProgressDescriptor) => {
 									assertActive(); setProgressDescriptors(previous => ({ ...previous, [saved.id]: descriptor }));
 									const cacheKey = 'tt:sync-progress-tree:' + syncScopeKey(syncScope);
 									writeStampedCache(cacheKey, descriptor); pruneCacheNamespace('tt:sync-progress-tree:', cacheKey, 32);
@@ -746,9 +740,8 @@ function Connections({
 						</Box>}
 						{(host || capabilities?.platform === 'ios') && (progress || progressDescriptor) && <Box width="100%" minW={0}>
 							<SyncProgressViewer scopeKey={`${key}:${generation}:${saved.id}`} descriptor={progressDescriptor}
-								uploadPriorities={!downloading ? { scope: progressScope, excludedPaths: saved.configuration.excludedPaths, ignoreRules: saved.configuration.ignoreRules } : undefined}
 								series={task?.transferSeries ?? (transferSession.current?.id === saved.id ? transferSession.current.session.series : undefined)}
-								progress={progress ?? undefined} status={task?.status ?? (running ? 'running' : progress?.stage === 'complete' ? 'complete' : progress?.message && progress.stage !== 'retained' ? 'error' : 'paused')}
+								progress={progress ?? undefined} status={task?.status ?? (running ? 'running' : progress?.stage === 'complete' ? 'complete' : 'paused')}
 								message={progress?.message} accountTransport={reviewTransport} currentScope={() => {
 									if (!mounted.current || rootIdentity.read().pending || rootIdentity.read().generation !== generation || runtimeOrigin() !== scope.origin)
 										throw Error('The account or storage destination changed.');

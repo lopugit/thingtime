@@ -164,14 +164,14 @@ function SettingsDocumentSession({ defaultDocument, upgradeDocument, title = 'Se
     discardDraft: () => { revision.current++; setDocument(saved); }, refresh: () => setReload(value => value + 1)
   };
   return <Box minW={0} data-settings-document={documentScope.documentKey}>
-    {showLayoutControls && <Flex gap={2} mb={2} align="center" flexWrap="wrap">
-      <Button size="xs" variant="ghost" isDisabled={saveBusy || layoutEditingDisabled} onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : 'Edit layout'}</Button>
+    <Flex gap={2} mb={2} align="center" flexWrap="wrap">
+      <Button size="xs" variant="ghost" isDisabled={saveBusy} onClick={() => setEditing(value => !value)}>{editing ? 'Done editing layout' : 'Edit layout'}</Button>
       {dirty && <Text fontSize="xs">Unsaved layout</Text>}
       {editing && <Button size="xs" isDisabled={!ready || !writable || !dirty || saveBusy} onClick={() => void save()}>Save layout</Button>}
       {!writable && <Text fontSize="xs">Sign in to save a personal layout.</Text>}
-    </Flex>}
-    {showLayoutControls && error && <Flex gap={2} align="center"><Text role="alert" fontSize="xs">{error}</Text><Button size="xs" onClick={() => setReload(value => value + 1)}>Retry</Button></Flex>}
-    {showLayoutControls && editing ? <SettingsEditor key="edit" draft={draft} name={document.name} onName={name => { if (saving.current) return; revision.current++; setDocument(previous => ({ ...previous, name })); }}>
+    </Flex>
+    {error && <Flex gap={2} align="center"><Text role="alert" fontSize="xs">{error}</Text><Button size="xs" onClick={() => setReload(value => value + 1)}>Retry</Button></Flex>}
+    {editing ? <SettingsEditor key="edit" draft={draft} name={document.name} onName={name => { if (saving.current) return; revision.current++; setDocument(previous => ({ ...previous, name })); }}>
       {chrome => children({ blocks: document.blocks, chrome, editing: true, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}
     </SettingsEditor> : <React.Fragment key="view">{children({ blocks: document.blocks, chrome: null, editing: false, setBlocks: update, save, canSave: ready && writable && !saveBusy, saving: saveBusy, dirty })}</React.Fragment>}
   </Box>;
