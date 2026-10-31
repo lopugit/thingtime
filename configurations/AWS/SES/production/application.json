@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "environment": "production",
+  "status": "Source defaults and deployment template; deployed environment values not exported",
+  "source": "remix/app/api/utils/email/config.ts",
+  "recommendedRegionFromVerifiedIdentity": "ap-southeast-2",
+  "settings": {
+    "THINGTIME_EMAIL_PROVIDER": "ses",
+    "AWS_SES_REGION": "ap-southeast-2",
+    "THINGTIME_EMAIL_TRANSACTIONAL_FROM": "Thingtime <no-reply@thingtime.com>",
+    "THINGTIME_EMAIL_NEWSLETTER_FROM": "Thingtime Updates <updates@thingtime.com>",
+    "THINGTIME_EMAIL_NOTIFICATIONS_FROM": "Thingtime <no-reply@thingtime.com>"
+  },
+  "optionalUnset": [
+    "THINGTIME_EMAIL_REPLY_TO",
+    "AWS_SES_CONFIGURATION_SET",
+    "THINGTIME_EMAIL_FAIL_CLOSED"
+  ],
+  "sourceDefaults": {
+    "provider": "console",
+    "region": "us-east-1",
+    "failClosed": false
+  }
+}

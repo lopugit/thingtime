@@ -252,7 +252,7 @@ export const conceptEntries: ConceptEntry[] = [
 		why:
 			'This is the architecture that makes the whole vision hold together: things are pure JSON documents in the things collection (FUNDAMENTALS §1–3 — everything through the API), kind is just a field, and rendering is a registry lookup at display time. Because templates adapt shapes rather than owning schemas, the same document can render as a card in the feed, a page at its URL, and raw data in the editor — one source of truth, three faces. The element kind closes the loop: even the templates\' own medium (html/css) is expressible as a thing.',
 		desktop: [
-			'resolveKindRenderer(): explicit kind → alias → structural match(), first registered wins.',
+			'resolveKindRender(): render: prop → explicit kind → structural match(), first candidate that adapt()s wins.',
 			'adapt() returns canonical props or null; null falls through to the fallback (a nested viewer), so bad data degrades gracefully, never crashes.',
 			'The element renderer whitelists tags/props/styles, strips on* handlers and javascript: URLs, and caps node count/depth — user-built components stay sandboxed to safe HTML.'
 		],

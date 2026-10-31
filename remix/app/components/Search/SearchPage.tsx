@@ -10,161 +10,60 @@ import {
   Select,
   Text
 } from '@chakra-ui/react';
-import { Plus, Search as SearchIcon, Sparkles, X } from 'lucide-react';
-import { Link as RouterLink, useLocation, useNavigate } from 'react-router';
+import { Braces, ExternalLink, Eye, Plus, Search as SearchIcon, Sparkles, X } from 'lucide-react';
+import { Link as RouterLink, useLocation, useNavigate, useNavigation } from 'react-router';
 
+import { canonicalPostTags } from '~/components/Attachments/attachmentUiCore';
+import { blocksToText, getEditorJsDoc } from '~/components/Editor/editorJsValue';
+import { PostCard } from '~/components/Feed/PostCard';
+import type { PostChange } from '~/components/Feed/feedTypes';
+import { SubspaceCard } from '~/components/Subspaces/SubspaceCard';
+import { SEARCH_SUBSPACE_RESULTS, type PublicSubspace } from '~/components/Subspaces/subspaceTypes';
+import { searchTagHref } from '~/components/Feed/hashtags';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
+import { ThingView } from '~/components/Thingtime/ThingView';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { SEARCHABLE_CRYSTAL_KINDS } from '~/components/Schemas/schemaBrowseTypes';
+import {
+  SEARCHABLE_CRYSTAL_KINDS,
+  entryToSearchSource,
+  registryToCardSource,
+  toSearchSource
+} from '~/components/Schemas/schemaBrowseTypes';
 import { useApi } from '~/hooks/useApi';
-import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { thingtimeSchemas, type SchemaThingField } from '~/schemas/registry';
-import { flattenSchemaFields } from '~/schemas/tools';
+import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { thingtimeSchemas } from '~/schemas/registry';
 import { CARD_STYLES } from '~/theme/card';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
+import {
+  ConditionRowsEditor,
+  ROOT_FIELD_SUGGESTIONS,
+  compileRows,
+  invalidNumberField,
+  newRow
+} from './searchBuilder';
 import type {
   ConditionRow,
-  RowValueType,
   SchemaSource,
   SearchPerson,
   SearchPost,
   SearchResponse,
   SearchThing
 } from './searchTypes';
+import { thingDetailPath } from './commanderSearch';
 
 // The /search page — the Commander search bar, grown up. A ranked text search
 // (Google-style) over every visible thing, plus a minimalist query builder
 // that compiles GUI rows into the API's whitelisted MongoDB operator grammar,
 // plus a schema browser that prefills the builder from a shape's fields.
 
-const CACHE_KEY = 'tt-search';
+// Search snapshots can contain the viewer's OWN private things (visibilityQueryFor
+// adds an ownerId clause), so the cache is scoped per user id — never a shared
+// global key — and the pre-scoping global blob is purged on mount. Mirrors the
+// per-user convention of tt-two-factor-${id} / useRecentReactions keyFor(userId).
+const LEGACY_CACHE_KEY = 'tt-search';
+const cacheKeyFor = (userId: string | null | undefined) => (userId ? `tt-search-${userId}` : null);
 const PAGE_SIZE = 20;
-
-// UI operator vocabulary. `between` is sugar for a gte+lte pair; the rest map
-// 1:1 onto the API grammar (which whitelists them server-side too).
-const OPERATORS: { id: string; label: string; kind: 'value' | 'range' | 'list' | 'exists' | 'type' }[] = [
-  { id: 'contains', label: 'contains', kind: 'value' },
-  { id: 'eq', label: 'is', kind: 'value' },
-  { id: 'ne', label: 'is not', kind: 'value' },
-  { id: 'between', label: 'between', kind: 'range' },
-  { id: 'gt', label: '>', kind: 'value' },
-  { id: 'gte', label: '≥', kind: 'value' },
-  { id: 'lt', label: '<', kind: 'value' },
-  { id: 'lte', label: '≤', kind: 'value' },
-  { id: 'in', label: 'any of', kind: 'list' },
-  { id: 'nin', label: 'none of', kind: 'list' },
-  { id: 'startsWith', label: 'starts with', kind: 'value' },
-  { id: 'endsWith', label: 'ends with', kind: 'value' },
-  { id: 'exists', label: 'exists', kind: 'exists' },
-  { id: 'type', label: 'has type', kind: 'type' }
-];
-
-const DATATYPES = ['string', 'number', 'boolean', 'date', 'array', 'object', 'null'];
-
-const ROOT_FIELD_SUGGESTIONS = ['tags', 'thingtime', 'createdAt', 'updatedAt', 'targetId'];
-
-const opKind = (op: string) => OPERATORS.find((entry) => entry.id === op)?.kind || 'value';
-
-const rowId = () =>
-  typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-
-const newRow = (partial: Partial<ConditionRow> = {}): ConditionRow => ({
-  id: rowId(),
-  field: '',
-  op: 'contains',
-  value: '',
-  value2: '',
-  valueType: 'auto',
-  ...partial
-});
-
-const PURE_NUMBER = /^-?\d+(\.\d+)?$/;
-
-// GUI string → API scalar, honouring the row's datatype hint. 'auto' reads
-// like a developer would: true/false/null literals and pure numbers become
-// their real types, everything else stays text.
-const coerceValue = (raw: string, valueType: RowValueType): string | number | boolean | null => {
-  const value = raw.trim();
-  if (valueType === 'text') return value;
-  if (valueType === 'number') return PURE_NUMBER.test(value) ? Number(value) : value;
-  if (valueType === 'boolean') return value === 'true';
-  if (valueType === 'null') return null;
-  if (value === 'true') return true;
-  if (value === 'false') return false;
-  if (value === 'null') return null;
-  if (PURE_NUMBER.test(value)) return Number(value);
-  return value;
-};
-
-type ApiCondition = Record<string, unknown>;
-
-// Pre-submit validation: a row explicitly typed 'number' whose value isn't one
-// is a typo the user should hear about, not a silent string comparison.
-const invalidNumberField = (rows: ConditionRow[]): string | null => {
-  for (const row of rows) {
-    if (row.valueType !== 'number' || !row.field.trim()) continue;
-    const kind = opKind(row.op);
-    const values =
-      kind === 'range'
-        ? [row.value, row.value2]
-        : kind === 'list'
-          ? row.value.split(',')
-          : kind === 'value'
-            ? [row.value]
-            : [];
-    for (const value of values) {
-      const trimmed = value.trim();
-      if (trimmed && !PURE_NUMBER.test(trimmed)) return row.field.trim();
-    }
-  }
-  return null;
-};
-
-// Compile GUI rows to the API's condition list. Empty rows are ignored (that's
-// what makes schema prefill browsable — rows appear, you fill what you care
-// about). Returns null when nothing is filled in.
-const compileRows = (rows: ConditionRow[]): ApiCondition[] | null => {
-  const conditions: ApiCondition[] = [];
-  for (const row of rows) {
-    const field = row.field.trim();
-    if (!field) continue;
-    const kind = opKind(row.op);
-
-    if (kind === 'exists') {
-      conditions.push({ field, op: 'exists', value: row.value !== 'false' });
-      continue;
-    }
-    if (kind === 'type') {
-      if (!row.value) continue;
-      conditions.push({ field, op: 'type', value: row.value });
-      continue;
-    }
-    if (kind === 'range') {
-      const low = row.value.trim();
-      const high = row.value2.trim();
-      if (!low && !high) continue;
-      // the API's native between keeps the range atomic in any-of searches
-      conditions.push({
-        field,
-        op: 'between',
-        values: [low ? coerceValue(low, row.valueType) : null, high ? coerceValue(high, row.valueType) : null]
-      });
-      continue;
-    }
-    if (kind === 'list') {
-      const values = row.value
-        .split(',')
-        .map((entry) => entry.trim())
-        .filter(Boolean)
-        .map((entry) => coerceValue(entry, row.valueType));
-      if (!values.length) continue;
-      conditions.push({ field, op: row.op, values });
-      continue;
-    }
-    if (row.valueType !== 'null' && !row.value.trim()) continue;
-    conditions.push({ field, op: row.op, value: coerceValue(row.value, row.valueType) });
-  }
-  return conditions.length ? conditions : null;
-};
 
 // A schema field definition → a prefilled (but empty) builder row.
 const rowFromSchemaField = (field: SchemaSource['fields'][number]): ConditionRow => {
@@ -192,13 +91,6 @@ const rowFromSchemaField = (field: SchemaSource['fields'][number]): ConditionRow
   return newRow({ field: field.name, op: 'contains', meta });
 };
 
-// only fields the search grammar can actually address prefill a row — the
-// data schema's illustrative '*' wildcard and object/record payload fields
-// (e.g. a schema thing's own `fields` array) would just 400 on submit
-const SEARCHABLE_FIELD_NAME = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
-const searchableField = (field: { name: string; type: string }) =>
-  SEARCHABLE_FIELD_NAME.test(field.name) && field.type !== 'object' && field.type !== 'record';
-
 // display labels for the kind <Select>, rendered from SEARCHABLE_CRYSTAL_KINDS
 // so the dropdown, the builtin schema chips, and /schemas' "Search things"
 // gating can never drift apart
@@ -207,75 +99,21 @@ const KIND_OPTION_LABELS: Record<string, string> = {
   data: 'data',
   schema: 'schemas',
   comment: 'comments',
-  reaction: 'reactions'
+  reaction: 'reactions',
+  attachment: 'attachments'
 };
 
-const builtinSchemaSources = (): SchemaSource[] =>
+// builtin crystal schemas the query builder can scope to → SchemaSource, via
+// the shared registry→card→search converters (schemaBrowseTypes). One mapper
+// (toSearchSource) shapes both builtin and community shapes, so their field
+// metadata — and the seeded-builtin dedup — can never drift between /search
+// and /schemas.
+const builtinSearchSources = (): SchemaSource[] =>
   thingtimeSchemas
     .filter((schema) => schema.kind === 'crystal' && SEARCHABLE_CRYSTAL_KINDS.has(schema.id))
-    .map((schema) => ({
-      key: `builtin-${schema.id}`,
-      name: schema.title,
-      description: schema.summary,
-      origin: 'builtin' as const,
-      fields: schema.fields
-        .filter((field) => searchableField(field))
-        .map((field) => ({
-          name: field.name,
-          type: field.type === 'enum' ? 'enum' : field.type,
-          description: field.description,
-          values: field.values,
-          max: undefined,
-          min: undefined,
-          unit: undefined
-        }))
-    }));
-
-// The seed-builtin-schemas admin migration mirrors every builtin crystal
-// schema into things as a system-owned schema thing (shareId schema-<id>,
-// author resolves to null). The browser already lists builtins from the code
-// registry, so those mirrors are dropped from the community column — without
-// this they'd render twice.
-const seededBuiltinShareIds = new Set(
-  thingtimeSchemas.filter((schema) => schema.kind === 'crystal').map((schema) => `schema-${schema.id}`)
-);
-
-// A schema thing (or browse entry) → a SchemaSource. Nested object/array
-// fields flatten to the dotted crystal paths the search grammar addresses.
-const schemaThingToSource = (
-  thing: Pick<SearchThing, 'id' | 'crystal' | 'author'> & {
-    usageCount?: number;
-    reactionCounts?: Record<string, number>;
-  }
-): SchemaSource | null => {
-  if (seededBuiltinShareIds.has(thing.id) && !thing.author) return null;
-  const crystal = thing.crystal || {};
-  const fields = Array.isArray(crystal.fields) ? (crystal.fields as SchemaThingField[]) : [];
-  if (typeof crystal.name !== 'string' || !fields.length) return null;
-  const reactions = Object.values(thing.reactionCounts || {}).reduce((sum, count) => sum + (count || 0), 0);
-  return {
-    key: `thing-${thing.id}`,
-    name: crystal.name,
-    description: typeof crystal.description === 'string' ? crystal.description : '',
-    origin: 'community',
-    author: thing.author?.username || null,
-    shareId: thing.id,
-    usageCount: typeof thing.usageCount === 'number' ? thing.usageCount : undefined,
-    reactions: reactions || undefined,
-    fields: flattenSchemaFields(fields)
-      .filter((flat) => SEARCHABLE_FIELD_NAME.test(flat.path))
-      .map((flat) => ({
-        name: flat.path,
-        type: typeof flat.field.type === 'string' ? flat.field.type : 'string',
-        description: typeof flat.field.description === 'string' ? flat.field.description : undefined,
-        values: Array.isArray(flat.field.values) ? flat.field.values.filter((v: any) => typeof v === 'string') : undefined,
-        min: Number.isFinite(flat.field.min) ? flat.field.min : undefined,
-        max: Number.isFinite(flat.field.max) ? flat.field.max : undefined,
-        unit: typeof flat.field.unit === 'string' ? flat.field.unit : undefined,
-        maxLength: Number.isFinite(flat.field.maxLength) ? flat.field.maxLength : undefined
-      }))
-  };
-};
+    .map(registryToCardSource)
+    .map(toSearchSource)
+    .filter((source): source is SchemaSource => !!source);
 
 type CachedSearch = {
   q: string;
@@ -286,6 +124,10 @@ type CachedSearch = {
   things: SearchThing[];
   posts: Record<string, SearchPost>;
   people?: SearchPerson[];
+  // the Subspaces section — slug/name matches for the text query, first
+  // SEARCH_SUBSPACE_RESULTS (client-side GET /api/v1/subspaces?q=; search.ts
+  // itself knows nothing about subspaces)
+  subspaces?: PublicSubspace[];
   total: number | null;
   totalCapped: boolean;
   ranked: boolean;
@@ -316,14 +158,14 @@ function PersonCard({ person }: { person: SearchPerson }) {
         {person.avatarUrl ? (
           <img alt="" src={person.avatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          <Text fontSize="sm">{(person.displayName || person.username).slice(0, 1).toUpperCase()}</Text>
+          <Text fontSize="sm">{getUserDisplayName(person).slice(0, 1).toUpperCase()}</Text>
         )}
       </Center>
       <Box minWidth={0}>
         <Text color="var(--tt-text, #33333c)" fontSize="sm" fontWeight="600" isTruncated>
-          {person.displayName || person.username}
+          {getUserDisplayName(person)}
           <Text as="span" color="var(--tt-muted, #9a9aa6)" fontWeight="400" ml={1.5}>
-            @{person.username}
+            {getUserIdentityDetail(person)}
           </Text>
         </Text>
         {person.bio ? (
@@ -336,8 +178,22 @@ function PersonCard({ person }: { person: SearchPerson }) {
   );
 }
 
+// Editor.js docs (rich-text) preview as their plain text, not raw block JSON,
+// via the canonical blocksToText serializer. Returns null when the value isn't
+// a rich-text doc OR is one with no extractable text (e.g. { blocks: [] } or
+// non-Editor.js data that merely carries a `blocks` array) so the caller falls
+// back to the JSON preview rather than masking real data with a placeholder.
+const richTextPreview = (value: unknown): string | null => {
+  const doc = getEditorJsDoc(value);
+  if (!doc) return null;
+  const text = blocksToText(doc.blocks).replace(/\s+/g, ' ').trim();
+  return text || null;
+};
+
 const previewValue = (value: unknown): string => {
   if (value === null) return 'null';
+  const richText = richTextPreview(value);
+  if (richText) return richText;
   if (typeof value === 'string') return value;
   try {
     return JSON.stringify(value);
@@ -345,6 +201,27 @@ const previewValue = (value: unknown): string => {
     return String(value);
   }
 };
+
+function RankedMatchScore({ score }: { score?: number }) {
+  if (typeof score !== 'number' || !Number.isFinite(score)) return null;
+  const display = score.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+  const label = `Ranked match score: ${display}`;
+  return (
+    <Text
+      aria-label={label}
+      color="var(--tt-muted, #9a9aa6)"
+      fontFamily="mono"
+      fontSize="10px"
+      fontWeight="500"
+      letterSpacing="0.02em"
+      opacity={0.72}
+      title={label}
+      whiteSpace="nowrap"
+    >
+      ranked match · {display}
+    </Text>
+  );
+}
 
 function CrystalPreview({ crystal }: { crystal: Record<string, any> }) {
   // schemaId is internal provenance (the schema thing's shareId) — the
@@ -397,7 +274,11 @@ const ThingResultCard = React.memo(function ThingResultCard({
 }) {
   const created = new Date(thing.createdAt);
   const when = Number.isNaN(created.getTime()) ? '' : created.toLocaleDateString();
-  const title = post?.text || thing.crystal?.name || thing.crystal?.title || thing.crystal?.text || '';
+  // crystal name/title/text fields can hold an Editor.js doc — previewValue
+  // surfaces its plain text (and falls back to JSON for other non-string
+  // values, e.g. a numeric name, so they still show instead of vanishing).
+  const titleSource = post?.text || thing.crystal?.name || thing.crystal?.title || thing.crystal?.text || '';
+  const title = typeof titleSource === 'string' ? titleSource : titleSource ? previewValue(titleSource) : '';
 
   return (
     <Box {...CARD_STYLES} p={4}>
@@ -408,13 +289,46 @@ const ThingResultCard = React.memo(function ThingResultCard({
           </Badge>
         ))}
         {thing.tags.map((tag) => (
-          <Badge key={tag} colorScheme="gray" fontFamily="mono" textTransform="none">
+          <Badge
+            key={tag}
+            as={RouterLink}
+            _hover={{ textDecoration: 'underline' }}
+            colorScheme="gray"
+            fontFamily="mono"
+            textTransform="none"
+            to={searchTagHref(tag)}
+          >
             #{tag}
           </Badge>
         ))}
-        <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" marginLeft="auto">
-          {thing.author ? `@${thing.author.username}` : 'unknown'} · {when}
-        </Text>
+        <Flex
+          align="center"
+          gap={2}
+          marginLeft={{ base: 0, sm: 'auto' }}
+          width={{ base: '100%', sm: 'auto' }}
+          wrap={{ base: 'wrap', sm: 'nowrap' }}
+        >
+          <Flex align="center" gap={2} justify="space-between" width={{ base: '100%', sm: 'auto' }}>
+            <RankedMatchScore score={thing.rankScore} />
+            <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" marginLeft="auto" whiteSpace="nowrap">
+              {thing.author ? getUserIdentityDetail(thing.author) : 'unknown'} · {when}
+            </Text>
+          </Flex>
+          <Flex
+            as={RouterLink}
+            align="center"
+            aria-label={`Open ${title || thing.thingtime[0] || 'thing'}`}
+            color="var(--tt-text, #5a5a66)"
+            fontSize="xs"
+            gap={1}
+            marginLeft={{ base: 'auto', sm: 0 }}
+            textDecoration="underline"
+            to={thingDetailPath(thing.id)}
+          >
+            Open thing
+            <ExternalLink size={11} />
+          </Flex>
+        </Flex>
       </Flex>
       {title ? (
         <Text color="var(--tt-text, #33333c)" fontSize="md" mb={2} whiteSpace="pre-wrap">
@@ -433,13 +347,89 @@ const ThingResultCard = React.memo(function ThingResultCard({
   );
 });
 
+const StandardThingResult = React.memo(function StandardThingResult({
+  thing,
+  post,
+  onPostChanged
+}: {
+  thing: SearchThing;
+  post: SearchPost | null;
+  onPostChanged: (id: string, change: PostChange) => void;
+}) {
+  // PostCard hands the post id back to `onChanged`, so the parent's
+  // useCallback-stable handler passes straight through — a per-card wrapper
+  // here would defeat PostCard's React.memo exactly like PostList's used to.
+
+  if (post) {
+    return (
+      <Box>
+        {typeof thing.rankScore === 'number' ? (
+          <Flex justify="flex-end" mb={1} px={1}>
+            <RankedMatchScore score={thing.rankScore} />
+          </Flex>
+        ) : null}
+        <PostCard post={post} onChanged={onPostChanged} />
+      </Box>
+    );
+  }
+
+  const created = new Date(thing.createdAt);
+  const when = Number.isNaN(created.getTime()) ? '' : created.toLocaleDateString();
+  const label =
+    (typeof thing.crystal?.name === 'string' && thing.crystal.name) ||
+    (typeof thing.crystal?.title === 'string' && thing.crystal.title) ||
+    thing.thingtime[0] ||
+    'Thing';
+
+  return (
+    <Box {...CARD_STYLES} p={4}>
+      <Flex align="center" gap={2} mb={3} wrap="wrap">
+        {thing.thingtime.map((id) => (
+          <Badge key={id} colorScheme="purple" fontFamily="mono" textTransform="none">
+            {id}
+          </Badge>
+        ))}
+        <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" marginLeft="auto">
+          {thing.author ? getUserIdentityDetail(thing.author) : 'unknown'} · {when}
+        </Text>
+        <RankedMatchScore score={thing.rankScore} />
+        <Flex
+          as={RouterLink}
+          align="center"
+          aria-label={`Open ${label}`}
+          color="var(--tt-text, #5a5a66)"
+          fontSize="xs"
+          gap={1}
+          textDecoration="underline"
+          to={thingDetailPath(thing.id)}
+        >
+          Open thing
+          <ExternalLink size={11} />
+        </Flex>
+      </Flex>
+      <ThingView label={label} thing={thing.crystal} />
+    </Box>
+  );
+});
+
 export const SearchPage = () => {
   const api = useApi();
   const lopu = useLopu();
   const location = useLocation();
   const navigate = useNavigate();
+  const navigation = useNavigation();
+  const user = useCurrentUser();
 
-  const cached = React.useMemo(() => readLocalCache<CachedSearch>(CACHE_KEY), []);
+  const cacheKey = cacheKeyFor(user?.id);
+  // Purge any pre-scoping global 'tt-search' blob (it may hold another account's
+  // private results) once, so it can never paint for the wrong principal.
+  React.useEffect(() => {
+    clearLocalCache(LEGACY_CACHE_KEY);
+  }, []);
+  const cached = React.useMemo(
+    () => (cacheKey ? readLocalCache<CachedSearch>(cacheKey) : null),
+    [cacheKey]
+  );
   const urlQ = React.useMemo(() => new URLSearchParams(location.search).get('q') || '', [location.search]);
   // a NEW ?q= (e.g. the Commander's "Search things for…" row) means a fresh
   // text search — don't drag the previous session's filters into it
@@ -450,12 +440,15 @@ export const SearchPage = () => {
   const [rows, setRows] = React.useState<ConditionRow[]>(!freshFromUrl && cached?.rows?.length ? cached.rows : []);
   const [kind, setKind] = React.useState(freshFromUrl ? '' : cached?.kind || '');
   const [sort, setSort] = React.useState(freshFromUrl ? 'auto' : cached?.sort || 'auto');
+  const [presentation, setPresentation] = React.useState<'standard' | 'data'>('standard');
 
   // optimistic first paint: last-known results render instantly from
-  // localStorage, the fresh search reconciles in the background
+  // localStorage and simply stay — nothing refetches until the user (or a
+  // ?q=/?schema deep link) runs a search
   const [things, setThings] = React.useState<SearchThing[]>(cached?.things || []);
   const [posts, setPosts] = React.useState<Record<string, SearchPost>>(cached?.posts || {});
   const [people, setPeople] = React.useState<SearchPerson[]>(cached?.people || []);
+  const [subspaces, setSubspaces] = React.useState<PublicSubspace[]>(cached?.subspaces || []);
   const [total, setTotal] = React.useState<number | null>(cached?.total ?? null);
   const [totalCapped, setTotalCapped] = React.useState(cached?.totalCapped || false);
   const [ranked, setRanked] = React.useState(cached?.ranked || false);
@@ -476,9 +469,43 @@ export const SearchPage = () => {
   const [schemasLoading, setSchemasLoading] = React.useState(false);
   const schemasLoadedRef = React.useRef(false);
 
+  // false once the user leaves /search — an in-flight search resolving after
+  // navigation must never replace-navigate them back here
+  const mountedRef = React.useRef(true);
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // render-synced mirrors of the router position: the resolve-time ?q= sync
+  // must only fire while the user is still exactly where they submitted —
+  // same history entry, no navigation pending. The data router keeps this
+  // page mounted while the NEXT route's loaders run, so mountedRef alone
+  // can't see an in-progress departure; Back within /search never unmounts.
+  const locationKeyRef = React.useRef(location.key);
+  locationKeyRef.current = location.key;
+  const navigationIdleRef = React.useRef(true);
+  navigationIdleRef.current = navigation.state === 'idle';
+  // the last ?q= runSearch itself pushed into the URL — the urlQ effect uses
+  // it to tell our own echo from an external navigation (comparing against
+  // live input state breaks when the input was cache-restored, never searched)
+  const lastSyncedQRef = React.useRef<string | null>(null);
+
+  // whether the result area reflects an actual search — cached results are
+  // one, and a ?q= deep link is about to run one. Gates the "Nothing matched"
+  // empty state, which would otherwise show on a fresh visit where no search
+  // has been fired yet
+  const [hasSearched, setHasSearched] = React.useState(!!cached || !!urlQ);
+
   const requestSeqRef = React.useRef(0);
   const apiRef = React.useRef(api);
   apiRef.current = api;
+  // always-current viewer id so the search body can flag logged-out queries as
+  // edge-cacheable (`anon=1` → GET form) without stale-closure risk
+  const viewerIdRef = React.useRef(user?.id ?? null);
+  viewerIdRef.current = user?.id ?? null;
   const lopuRef = React.useRef(lopu);
   lopuRef.current = lopu;
 
@@ -489,14 +516,23 @@ export const SearchPage = () => {
   // stale cursor can't be mixed with new params
   const submittedRef = React.useRef(stateRef.current);
 
+  // the ?tags deep-link key the tags effect below last applied — declared here
+  // (above runSearch) because a FAILED search must reset it: the success-path
+  // URL sync never ran, so ?tags would otherwise stay in the URL with the
+  // guard still set, making a re-tap of the same chip a byte-identical
+  // navigation that silently no-ops instead of retrying
+  const appliedUrlTagsRef = React.useRef<string | null>(null);
+
   const runSearch = React.useCallback(
     async (options: { cursor?: string | null } = {}) => {
       const { cursor } = options;
       const seq = ++requestSeqRef.current;
+      // where the user was when they asked — the resolve-time URL sync must
+      // never fire from anywhere else
+      const submittedLocationKey = locationKeyRef.current;
       setLoading(true);
 
       const current = cursor ? submittedRef.current : stateRef.current;
-      if (!cursor) submittedRef.current = current;
 
       const invalidField = invalidNumberField(current.rows);
       if (invalidField) {
@@ -510,29 +546,47 @@ export const SearchPage = () => {
       }
 
       const conditions = compileRows(current.rows);
+      // relevance needs a text query — the server 400s otherwise, so drop it to
+      // server-pick (auto) when q is empty, matching the feed Advanced panel
+      const effectiveSort =
+        current.sort === 'auto' || (current.sort === 'relevance' && !current.q.trim())
+          ? undefined
+          : current.sort;
       const body: Record<string, unknown> = {
         q: current.q.trim() || undefined,
         mode: current.mode,
         conditions: conditions || undefined,
         thingtime: current.kind || undefined,
-        sort: current.sort === 'auto' ? undefined : current.sort,
+        sort: effectiveSort,
         cursor: cursor || undefined,
-        limit: PAGE_SIZE
+        limit: PAGE_SIZE,
+        anon: viewerIdRef.current ? undefined : 1
       };
 
       try {
-        // people ride along on first-page text searches — users aren't things
-        // (separate collection), so they get their own endpoint, in parallel
+        // people and subspaces ride along on first-page text searches — users
+        // aren't things (separate collection) and subspaces have their own
+        // directory search, so each gets its own endpoint, in parallel; either
+        // failing quietly keeps the post results the search is about
         const wantPeople = !cursor && !!current.q.trim();
-        const [resp, peopleResp] = (await Promise.all([
+        const [resp, peopleResp, subspacesResp] = (await Promise.all([
           apiRef.current.v1.things.search(body),
           wantPeople
             ? apiRef.current.v1.profile.search({ q: current.q.trim(), limit: 8 }).catch(() => null)
+            : Promise.resolve(null),
+          wantPeople
+            ? apiRef.current.v1.subspaces.list({ q: current.q.trim(), limit: SEARCH_SUBSPACE_RESULTS, anon: viewerIdRef.current ? undefined : 1 }).catch(() => null)
             : Promise.resolve(null)
-        ])) as [SearchResponse, { users?: SearchPerson[] } | null];
+        ])) as [SearchResponse, { users?: SearchPerson[] } | null, { subspaces?: PublicSubspace[] } | null];
         if (seq !== requestSeqRef.current) return;
+        setHasSearched(true);
+        // only a RESOLVED first page owns load-more continuation — committing
+        // submittedRef at submit time would let a failed search's params be
+        // mixed with the painted result set's cursor by a later Load more
+        if (!cursor) submittedRef.current = current;
 
         if (!cursor) setPeople(wantPeople ? peopleResp?.users || [] : []);
+        if (!cursor) setSubspaces(wantPeople ? subspacesResp?.subspaces || [] : []);
 
         setThings((prev) => {
           if (!cursor) return resp.things || [];
@@ -558,20 +612,54 @@ export const SearchPage = () => {
             things: (resp.things || []).slice(0, PAGE_SIZE),
             posts: resp.posts || {},
             people: wantPeople ? peopleResp?.users || [] : [],
+            subspaces: wantPeople ? subspacesResp?.subspaces || [] : [],
             total: resp.total ?? null,
             totalCapped: !!resp.totalCapped,
             ranked: !!resp.ranked,
             nextCursor: resp.nextCursor ?? null
           };
-          writeLocalCache(CACHE_KEY, snapshot);
+          if (cacheKey) writeLocalCache(cacheKey, snapshot);
 
-          // keep the URL shareable for plain text searches
-          const params = new URLSearchParams();
-          if (current.q.trim()) params.set('q', current.q.trim());
-          navigate({ pathname: '/search', search: params.toString() ? `?${params}` : '' }, { replace: true });
+          // keep the URL shareable for plain text searches — but only while
+          // the user is still HERE: still mounted, same history entry as when
+          // they submitted, and no navigation in flight. A replace-navigate
+          // fired outside those bounds yanks the user back to /search, aborts
+          // a pending departure (data routers keep us mounted while the next
+          // route's loaders run), or silently undoes a Back within /search.
+          if (
+            mountedRef.current &&
+            navigationIdleRef.current &&
+            locationKeyRef.current === submittedLocationKey
+          ) {
+            const params = new URLSearchParams();
+            if (current.q.trim()) params.set('q', current.q.trim());
+            lastSyncedQRef.current = current.q.trim();
+            navigate({ pathname: '/search', search: params.toString() ? `?${params}` : '' }, { replace: true });
+          }
         }
       } catch (err: any) {
         if (seq !== requestSeqRef.current) return;
+        // a failed ?tags deep-link search must not strand the param: reset the
+        // applied guard and strip the dead ?tags (mirrors the ?schema failure
+        // path) so revisiting the same chip link retries instead of no-opping.
+        // The guard is only ever set while a seeded search hasn't succeeded
+        // yet — success strips ?tags, which resets it via the tags effect.
+        if (appliedUrlTagsRef.current !== null) {
+          appliedUrlTagsRef.current = null;
+          // same still-here bounds as the success sync — never yank the user
+          // back to /search from a departure or a different history entry
+          if (
+            mountedRef.current &&
+            navigationIdleRef.current &&
+            locationKeyRef.current === submittedLocationKey
+          ) {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('tags')) {
+              params.delete('tags');
+              navigate({ pathname: '/search', search: params.toString() ? `?${params}` : '' }, { replace: true });
+            }
+          }
+        }
         lopuRef.current({ title: err?.error || 'Search hit a snag 😞', status: 'error' });
       } finally {
         if (seq === requestSeqRef.current) setLoading(false);
@@ -580,13 +668,20 @@ export const SearchPage = () => {
     [navigate]
   );
 
-  // first mount: refetch whatever the page painted from cache (or run the
-  // URL's ?q= / an empty browse-recent search) — optimistic render, live data.
-  // With a ?schema deep link the schema effect owns the first search instead:
-  // running both races them, and the winner's replace-navigate strips ?schema
-  // out from under the loser's cancellable resolution.
+  // first mount: only an EXPLICIT deep link searches automatically. A ?q=
+  // (Commander's "Search things for…") runs that text search; a ?schema deep
+  // link's search is owned by the schema effect instead (running both races
+  // them, and the winner's replace-navigate strips ?schema out from under the
+  // loser's cancellable resolution). A plain /search visit fires nothing —
+  // cached results still paint instantly, but no search runs until the user
+  // asks for one.
   React.useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('schema')) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('schema')) return;
+    // a ?tags deep link's search is owned by the tags effect below (same
+    // reasoning as ?schema: running both would race them)
+    if (params.get('tags')) return;
+    if (!params.get('q')) return;
     runSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -599,9 +694,16 @@ export const SearchPage = () => {
   React.useEffect(() => {
     if (urlQ === lastUrlQRef.current) return;
     lastUrlQRef.current = urlQ;
+    // runSearch syncs ?q= after every submit — our own echo is not a new
+    // search. Compare against the q the sync actually pushed, NOT live input
+    // state: a cache-restored, never-searched input matching the URL must
+    // still search (e.g. Commander re-running yesterday's query)
+    if (urlQ === lastSyncedQRef.current) return;
+    // the URL provably moved off the q we synced (e.g. Back stripped it) — a
+    // future identical ?q= is a real navigation, not our echo. Must clear
+    // BEFORE the empty-q return below, which is exactly the Back case.
+    lastSyncedQRef.current = null;
     if (!urlQ) return;
-    // runSearch syncs ?q= after every submit — our own echo is not a new search
-    if (urlQ === stateRef.current.q.trim()) return;
     setQ(urlQ);
     setRows([]);
     setKind('');
@@ -618,21 +720,60 @@ export const SearchPage = () => {
     runSearch();
   }, [pendingUrlSearch, runSearch]);
 
+  // Tag chips on posts (and inline #hashtag links) deep-link here with
+  // ?tags=<tag>[&tags=<tag>…] — one tag per repeated param, read via getAll
+  // with NO delimiter, so a stored tag containing a comma (the server permits
+  // them) seeds ONE row that matches the post instead of splitting into rows
+  // that match nothing. Seed the builder with visible `tags is <tag>` rows —
+  // editable and removable like any hand-made row — and run the scoped search
+  // (each `tags eq` condition matches array membership server-side, so mode
+  // 'all' means "has every listed tag"). The post-search URL sync then strips
+  // ?tags — the same consume-then-clean flow as ?schema — and the emptied
+  // param resets the guard so tapping the same chip again still re-runs.
+  const urlTags = React.useMemo(
+    () => canonicalPostTags(new URLSearchParams(location.search).getAll('tags')),
+    [location.search]
+  );
+  React.useEffect(() => {
+    // JSON keeps the guard key unambiguous even for tags that themselves
+    // contain a comma (join would collide ["a,b"] with ["a","b"])
+    const key = urlTags.length ? JSON.stringify(urlTags) : '';
+    if (!key) {
+      appliedUrlTagsRef.current = null;
+      return;
+    }
+    if (appliedUrlTagsRef.current === key) return;
+    appliedUrlTagsRef.current = key;
+    setQ('');
+    setRows(urlTags.map((tag) => newRow({ field: 'tags', op: 'eq', value: tag, valueType: 'text' })));
+    setKind('');
+    setSort('auto');
+    setMode('all');
+    setActiveSchema(null);
+    setPinnedRowId(null);
+    setPendingUrlSearch(true);
+  }, [urlTags]);
+
   // community schemas ride the paginated /api/v1/schemas/browse rail —
   // newest/popular sorts, text search, cursor pagination (same system as
   // /schemas). Loading is lazy (first open) and failures stay non-fatal.
   const schemaRailRef = React.useRef({ schemaQ, schemaSort });
   schemaRailRef.current = { schemaQ, schemaSort };
   const schemaSeqRef = React.useRef(0);
-  const loadSchemas = React.useCallback(async (options: { cursor?: string | null } = {}) => {
+  const loadSchemas = React.useCallback(
+    async (options: { cursor?: string | null; sort?: 'newest' | 'popular' } = {}) => {
     const seq = ++schemaSeqRef.current;
     const { cursor } = options;
     setSchemasLoading(true);
     try {
       const rail = schemaRailRef.current;
+      // An explicit sort override wins over the ref — a sort button changes the
+      // sort and reloads in one click, before the setSchemaSort re-render syncs
+      // the ref, so passing it as an argument avoids a stale-ref pre-write dance.
+      const sort = options.sort ?? rail.schemaSort;
       const resp: any = await apiRef.current.v1.schemas.browse({
         q: rail.schemaQ.trim() || undefined,
-        sort: rail.schemaSort,
+        sort,
         cursor: cursor || undefined,
         limit: 12
       });
@@ -641,7 +782,7 @@ export const SearchPage = () => {
       // rate-limited first fetch must retry when the rail is next opened
       schemasLoadedRef.current = true;
       const sources = (resp.schemas || [])
-        .map(schemaThingToSource)
+        .map(entryToSearchSource)
         .filter((source: SchemaSource | null): source is SchemaSource => !!source);
       setCommunitySchemas((prev) => {
         if (!cursor) return sources;
@@ -662,11 +803,16 @@ export const SearchPage = () => {
   }, [schemasOpen, loadSchemas]);
 
   const schemaSources = React.useMemo(
-    () => [...communitySchemas, ...builtinSchemaSources()],
+    () => [...communitySchemas, ...builtinSearchSources()],
     [communitySchemas]
   );
 
   const applySchema = React.useCallback((source: SchemaSource) => {
+    // A selected schema is the new primary query. Clear any Commander text
+    // and relevance-only sort left over from the previous search so the
+    // generated field filters cannot be silently narrowed to zero results.
+    setQ('');
+    setSort('auto');
     setActiveSchema(source.key);
     const prefilled = source.fields.map((field) => rowFromSchemaField(field));
     // community data things carry `schema: "<Name>"` by convention — pin that
@@ -711,24 +857,30 @@ export const SearchPage = () => {
       let source: SchemaSource | null = null;
       if (urlSchema.startsWith('builtin:')) {
         const id = urlSchema.slice('builtin:'.length);
-        source = builtinSchemaSources().find((builtin) => builtin.key === `builtin-${id}`) || null;
+        source = builtinSearchSources().find((builtin) => builtin.key === `builtin-${id}`) || null;
       } else {
         try {
           const resp: any = await apiRef.current.v1.things.get({ id: urlSchema });
-          if (resp?.ok && resp.thing) source = schemaThingToSource(resp.thing);
+          if (resp?.ok && resp.thing) source = entryToSearchSource(resp.thing);
         } catch {
           // unknown/invisible schema — fall through to the plain page
         }
       }
       // the user navigated away (or a different ?schema took over) while we
-      // resolved — the newer page state owns the search now
+      // resolved — the newer page state owns the search now. Refs freeze on
+      // unmount, so mountedRef must be checked too: navigating after unmount
+      // would recreate the yank-back bug from this effect.
+      if (!mountedRef.current) return;
       if (appliedUrlSchemaRef.current !== urlSchema || currentUrlSchemaRef.current !== urlSchema) return;
       if (!source) {
         lopuRef.current({ title: 'That schema isn’t visible from here 🥲', status: 'info', duration: 6000 });
-        // the mount search deferred to us — still paint results, and let a
-        // revisit of the same link retry the resolution
+        // let a revisit of the same link retry the resolution, and strip the
+        // dead ?schema so the page returns to plain-visit behavior (cached
+        // paint / invite state) — no search anybody didn't ask for
         appliedUrlSchemaRef.current = null;
-        setPendingUrlSearch(true);
+        const params = new URLSearchParams(window.location.search);
+        params.delete('schema');
+        navigate({ pathname: '/search', search: params.toString() ? `?${params}` : '' }, { replace: true });
         return;
       }
       // make sure the resolved shape has a chip in the rail even before the
@@ -743,7 +895,7 @@ export const SearchPage = () => {
       applySchema(source);
       setPendingUrlSearch(true);
     })();
-  }, [urlSchema, applySchema]);
+  }, [urlSchema, applySchema, navigate]);
 
   const updateRow = React.useCallback((id: string, patch: Partial<ConditionRow>) => {
     setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
@@ -771,6 +923,26 @@ export const SearchPage = () => {
     [runSearch]
   );
 
+  const updateResultPost = React.useCallback((id: string, change: PostChange) => {
+    if (change === null) {
+      setPosts((prev) => {
+        if (!prev[id]) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setThings((prev) => prev.filter((thing) => thing.id !== id));
+      return;
+    }
+    setPosts((prev) => {
+      const current = prev[id];
+      if (!current) return prev;
+      const next = typeof change === 'function' ? change(current) : change;
+      if (!next) return prev;
+      return { ...prev, [id]: next };
+    });
+  }, []);
+
   // the count is a visibility-superset approximation (private-to-others docs
   // can be counted but never shown), so present it as such
   const totalLabel =
@@ -778,7 +950,7 @@ export const SearchPage = () => {
 
   return (
     <Flex background="var(--tt-surface, #fafafb)" justifyContent="center" minHeight="100vh" width="100%">
-      <Flex direction="column" gap={5} maxWidth="760px" pb={24} pt="90px" px={4} width="100%">
+      <Flex direction="column" gap={5} maxWidth="760px" pb={24} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 36px)" px={4} width="100%">
         {/* Commander, grown up: the same rainbow-ringed input, page-sized */}
         <form onSubmit={submit}>
           <Center position="relative" width="100%">
@@ -790,7 +962,8 @@ export const SearchPage = () => {
               position="relative"
               width="100%"
             >
-              <Rainbow opacity={0.6} position="absolute" repeats={2} thickness={10} />
+              {/* instant: the page's centerpiece shouldn't fade in over 10s */}
+              <Rainbow instant opacity={0.6} position="absolute" repeats={2} thickness={10} />
               <Flex
                 align="center"
                 background="var(--tt-card, #ffffff)"
@@ -906,8 +1079,7 @@ export const SearchPage = () => {
               <Button
                 onClick={() => {
                   setSchemaSort('newest');
-                  schemaRailRef.current = { ...schemaRailRef.current, schemaSort: 'newest' };
-                  loadSchemas();
+                  loadSchemas({ sort: 'newest' });
                 }}
                 size="xs"
                 variant={schemaSort === 'newest' ? 'solid' : 'ghost'}
@@ -917,8 +1089,7 @@ export const SearchPage = () => {
               <Button
                 onClick={() => {
                   setSchemaSort('popular');
-                  schemaRailRef.current = { ...schemaRailRef.current, schemaSort: 'popular' };
-                  loadSchemas();
+                  loadSchemas({ sort: 'popular' });
                 }}
                 size="xs"
                 variant={schemaSort === 'popular' ? 'solid' : 'ghost'}
@@ -987,225 +1158,108 @@ export const SearchPage = () => {
         ) : null}
 
         {/* builder rows */}
-        {rows.length ? (
-          <Flex direction="column" gap={2}>
-            <datalist id="tt-search-fields">
-              {fieldSuggestions.map((field) => (
-                <option key={field} value={field} />
-              ))}
-            </datalist>
-            {rows.map((row) => {
-              const kindOfOp = opKind(row.op);
-              const enumValues = row.meta?.values;
-              const unit = row.meta?.unit;
-              const rangeHint = row.meta?.min !== undefined || row.meta?.max !== undefined;
-              // ONLY the row applySchema pinned for a community schema renders
-              // as the locked chip (removing it un-scopes the search) — a
-              // hand-typed `schema eq X` row stays editable
-              if (activeSchemaSource?.origin === 'community' && row.id === pinnedRowId) {
-                return (
-                  <Flex align="center" gap={2} key={row.id}>
-                    <Flex
-                      align="center"
-                      background="var(--tt-surface-alt, #f5f5f7)"
-                      borderRadius="full"
-                      gap={1.5}
-                      paddingX={3}
-                      paddingY={1}
-                    >
-                      <Sparkles size={12} />
-                      <Text color="var(--tt-text, #33333c)" fontSize="xs" fontWeight="600">
-                        shape · {row.value}
-                      </Text>
-                    </Flex>
-                    <IconButton
-                      aria-label="Remove shape scope"
-                      icon={<X size={14} />}
-                      onClick={() => {
-                        removeRow(row.id);
-                        setActiveSchema(null);
-                        setPinnedRowId(null);
-                      }}
-                      size="sm"
-                      variant="ghost"
-                    />
-                  </Flex>
-                );
-              }
-              return (
-                <Flex align="center" gap={2} key={row.id} wrap="wrap">
-                  {row.meta?.type ? (
-                    <Flex direction="column" flexShrink={0} minWidth="140px" maxWidth="180px">
-                      <Text
-                        color="var(--tt-ink, #16161a)"
-                        fontFamily="var(--tt-font-mono, monospace)"
-                        fontSize="13px"
-                        isTruncated
-                        title={row.meta?.description || row.field}
-                      >
-                        {row.field}
-                      </Text>
-                      <Text color="var(--tt-faint, #b6b6c0)" fontSize="10px">
-                        {row.meta.type}
-                        {unit ? ` · ${unit}` : ''}
-                      </Text>
-                    </Flex>
-                  ) : (
-                    <Input
-                      list="tt-search-fields"
-                      maxWidth="180px"
-                      onChange={(event) => updateRow(row.id, { field: event.target.value })}
-                      placeholder="field (e.g. legs)"
-                      size="sm"
-                      title={row.meta?.description || 'crystal field path — bare names mean crystal.<name>'}
-                      value={row.field}
-                    />
-                  )}
-                  <Select
-                    maxWidth="130px"
-                    onChange={(event) => updateRow(row.id, { op: event.target.value })}
-                    size="sm"
-                    value={row.op}
-                  >
-                    {OPERATORS.map((operator) => (
-                      <option key={operator.id} value={operator.id}>
-                        {operator.label}
-                      </option>
-                    ))}
-                  </Select>
-
-                  {kindOfOp === 'exists' ? (
-                    <Select
-                      maxWidth="90px"
-                      onChange={(event) => updateRow(row.id, { value: event.target.value })}
-                      size="sm"
-                      value={row.value || 'true'}
-                    >
-                      <option value="true">yes</option>
-                      <option value="false">no</option>
-                    </Select>
-                  ) : kindOfOp === 'type' ? (
-                    <Select
-                      maxWidth="120px"
-                      onChange={(event) => updateRow(row.id, { value: event.target.value })}
-                      placeholder="datatype"
-                      size="sm"
-                      value={row.value}
-                    >
-                      {DATATYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </Select>
-                  ) : kindOfOp === 'range' ? (
-                    <>
-                      <Input
-                        maxWidth="110px"
-                        onChange={(event) => updateRow(row.id, { value: event.target.value })}
-                        placeholder={row.meta?.min !== undefined ? String(row.meta.min) : 'min'}
-                        size="sm"
-                        value={row.value}
-                      />
-                      <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
-                        –
-                      </Text>
-                      <Input
-                        maxWidth="110px"
-                        onChange={(event) => updateRow(row.id, { value2: event.target.value })}
-                        placeholder={row.meta?.max !== undefined ? String(row.meta.max) : 'max'}
-                        size="sm"
-                        value={row.value2}
-                      />
-                      {unit || rangeHint ? (
-                        <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="xs">
-                          {unit || ''}
-                        </Text>
-                      ) : null}
-                    </>
-                  ) : kindOfOp === 'list' && enumValues?.length ? (
-                    <Flex gap={1} wrap="wrap">
-                      {enumValues.map((option) => {
-                        const selected = row.value
-                          .split(',')
-                          .map((entry) => entry.trim())
-                          .filter(Boolean);
-                        const isOn = selected.includes(option);
-                        return (
-                          <Button
-                            colorScheme={isOn ? 'pink' : undefined}
-                            key={option}
-                            onClick={() => {
-                              const next = isOn
-                                ? selected.filter((entry) => entry !== option)
-                                : [...selected, option];
-                              updateRow(row.id, { value: next.join(',') });
-                            }}
-                            size="xs"
-                            variant={isOn ? 'solid' : 'outline'}
-                          >
-                            {option}
-                          </Button>
-                        );
-                      })}
-                    </Flex>
-                  ) : (
-                    <Input
-                      list={enumValues?.length ? `tt-search-values-${row.id}` : undefined}
-                      maxWidth="220px"
-                      onChange={(event) => updateRow(row.id, { value: event.target.value })}
-                      placeholder={kindOfOp === 'list' ? 'value, value, …' : unit ? `value (${unit})` : 'value'}
-                      size="sm"
-                      value={row.value}
-                    />
-                  )}
-                  {enumValues?.length && kindOfOp === 'value' ? (
-                    <datalist id={`tt-search-values-${row.id}`}>
-                      {enumValues.map((option) => (
-                        <option key={option} value={option} />
-                      ))}
-                    </datalist>
-                  ) : null}
-
-                  {kindOfOp === 'value' || kindOfOp === 'range' || kindOfOp === 'list' ? (
-                    <Select
-                      flexShrink={0}
-                      onChange={(event) => updateRow(row.id, { valueType: event.target.value as RowValueType })}
-                      size="sm"
-                      title="value datatype — auto reads true/false/null and numbers as their real types"
-                      value={row.valueType}
-                      width="105px"
-                    >
-                      <option value="auto">auto</option>
-                      <option value="text">text</option>
-                      <option value="number">number</option>
-                      <option value="boolean">bool</option>
-                      <option value="null">null</option>
-                    </Select>
-                  ) : null}
-
-                  <IconButton
-                    aria-label="Remove filter"
-                    icon={<X size={14} />}
-                    onClick={() => removeRow(row.id)}
-                    size="sm"
-                    variant="ghost"
-                  />
+        <ConditionRowsEditor
+          rows={rows}
+          onUpdateRow={updateRow}
+          onRemoveRow={removeRow}
+          fieldSuggestions={fieldSuggestions}
+          datalistId="tt-search-fields"
+          renderRow={(row) => {
+            // ONLY the row applySchema pinned for a community schema renders
+            // as the locked chip (removing it un-scopes the search) — a
+            // hand-typed `schema eq X` row stays editable
+            if (activeSchemaSource?.origin !== 'community' || row.id !== pinnedRowId) return undefined;
+            return (
+              <Flex align="center" gap={2}>
+                <Flex
+                  align="center"
+                  background="var(--tt-surface-alt, #f5f5f7)"
+                  borderRadius="full"
+                  gap={1.5}
+                  paddingX={3}
+                  paddingY={1}
+                >
+                  <Sparkles size={12} />
+                  <Text color="var(--tt-text, #33333c)" fontSize="xs" fontWeight="600">
+                    shape · {row.value}
+                  </Text>
                 </Flex>
-              );
-            })}
-          </Flex>
-        ) : null}
+                <IconButton
+                  aria-label="Remove shape scope"
+                  icon={<X size={14} />}
+                  onClick={() => {
+                    removeRow(row.id);
+                    setActiveSchema(null);
+                    setPinnedRowId(null);
+                  }}
+                  size="sm"
+                  variant="ghost"
+                />
+              </Flex>
+            );
+          }}
+        />
 
         {/* results */}
-        <Flex align="baseline" gap={2}>
+        <Flex
+          align={{ base: 'stretch', sm: 'center' }}
+          gap={3}
+          justify="space-between"
+          direction={{ base: 'column', sm: 'row' }}
+        >
           {totalLabel ? (
             <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
               {totalLabel}
               {ranked ? ' · best match first' : sort === 'oldest' ? ' · oldest first' : ' · newest first'}
             </Text>
           ) : null}
+          <Flex
+            align="center"
+            aria-label="Search result view"
+            background="var(--tt-surface-alt, #f5f5f7)"
+            border="1px solid var(--tt-border, #ececef)"
+            borderRadius="var(--tt-radius-sm, 9px)"
+            gap={1}
+            marginLeft={{ base: 0, sm: 'auto' }}
+            p={1}
+            role="group"
+            width={{ base: '100%', sm: 'auto' }}
+          >
+            <Button
+              aria-pressed={presentation === 'standard'}
+              flex={{ base: 1, sm: 'initial' }}
+              leftIcon={<Eye size={13} />}
+              onClick={() => setPresentation('standard')}
+              size="xs"
+              variant={presentation === 'standard' ? 'solid' : 'ghost'}
+            >
+              Standard
+            </Button>
+            <Button
+              aria-pressed={presentation === 'data'}
+              flex={{ base: 1, sm: 'initial' }}
+              leftIcon={<Braces size={13} />}
+              onClick={() => setPresentation('data')}
+              size="xs"
+              variant={presentation === 'data' ? 'solid' : 'ghost'}
+            >
+              Data
+            </Button>
+          </Flex>
         </Flex>
+
+        {subspaces.length ? (
+          <Flex direction="column" gap={2} data-testid="search-subspaces">
+            <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700">
+              Subspaces 🪐
+            </Text>
+            <Flex direction="column" gap={2}>
+              {subspaces.map((subspace) => (
+                <SubspaceCard key={subspace.id} subspace={subspace} compact />
+              ))}
+            </Flex>
+          </Flex>
+        ) : null}
 
         {people.length ? (
           <Flex direction="column" gap={2}>
@@ -1221,13 +1275,26 @@ export const SearchPage = () => {
         ) : null}
 
         <Flex direction="column" gap={3}>
-          {things.map((thing) => (
-            <ThingResultCard key={thing.id} post={posts[thing.id] || null} thing={thing} />
-          ))}
-          {!things.length && !people.length && !loading ? (
+          {things.map((thing) =>
+            presentation === 'standard' ? (
+              <StandardThingResult
+                key={thing.id}
+                onPostChanged={updateResultPost}
+                post={posts[thing.id] || null}
+                thing={thing}
+              />
+            ) : (
+              <ThingResultCard key={thing.id} post={posts[thing.id] || null} thing={thing} />
+            )
+          )}
+          {/* while a ?schema deep link resolves, neither copy is true yet —
+              hold the box until its search settles (which strips ?schema) */}
+          {!things.length && !people.length && !subspaces.length && !loading && !urlSchema ? (
             <Box {...CARD_STYLES} p={8} textAlign="center">
               <Text color="var(--tt-muted, #9a9aa6)">
-                Nothing matched — loosen a filter, or try plain words up top ✨
+                {hasSearched
+                  ? 'Nothing matched — loosen a filter, or try plain words up top ✨'
+                  : 'Type a few words, add a filter, or pick a schema — then hit Search ✨'}
               </Text>
             </Box>
           ) : null}

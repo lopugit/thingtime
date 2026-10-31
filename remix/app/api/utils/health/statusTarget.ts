@@ -1,7 +1,9 @@
+import { PublicError, safeErrorText } from '../errors/safeError';
+
 export type BasicServiceHealthStatus = {
   ok: boolean;
   service: 'frontend' | 'nitro';
-  state: 'ready' | 'unavailable' | 'unknown';
+  state: 'ready' | 'degraded' | 'unavailable' | 'unknown';
   label: string;
   checkedAt: string;
   origin: string;
@@ -13,6 +15,11 @@ export type BasicServiceHealthStatus = {
   shellDetected?: boolean;
   runtime?: string;
   nodeEnv?: string;
+  storageAccounting?: {
+    state: 'ready' | 'recovering' | 'migration-required' | 'unavailable';
+    expectedVersion: number;
+    migrationId: string;
+  };
 };
 
 const REQUEST_TIMEOUT_MS = 3500;
@@ -154,7 +161,7 @@ export const fetchRemoteJson = async <T,>(
     });
 
     if (!response.ok) {
-      throw new Error(`Remote status returned ${response.status}`);
+      throw new PublicError(`Remote status returned ${response.status}`);
     }
 
     return {
@@ -189,6 +196,6 @@ export const unavailableServiceStatus = (
     checkedAt: new Date().toISOString(),
     origin,
     targetOrigin: origin,
-    error: error instanceof Error ? error.message : String(error)
+    error: safeErrorText(error, `service health: ${service}`, 'Service unavailable')
   };
 };

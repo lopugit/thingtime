@@ -20,6 +20,7 @@ import type { FeedFiltersState, PostType, PostVisibility } from './feedTypes';
 // Minimalist feed filters dropdown: post type + circle checkboxes and a
 // date-range radio, all inside one Menu that stays open while toggling.
 // Empty arrays mean "no filter" — the button label counts active groups.
+// An optional Advanced entry toggles the page's advanced search panel.
 
 const INK = 'var(--tt-ink, #16161a)';
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -29,6 +30,10 @@ const RADIUS_MD = 'var(--tt-radius-md, 12px)';
 export type FeedFiltersProps = {
   value: FeedFiltersState;
   onChange: (next: FeedFiltersState) => void;
+  // when provided, the menu grows an Advanced entry that toggles the page's
+  // advanced search panel (rendered by the page, below these controls)
+  advancedOpen?: boolean;
+  onAdvancedToggle?: (open: boolean) => void;
 };
 
 type DatePreset = 'all' | 'today' | 'week' | 'month';
@@ -65,7 +70,7 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const FeedFilters = (props: FeedFiltersProps) => {
-  const { value, onChange } = props;
+  const { value, onChange, advancedOpen, onAdvancedToggle } = props;
 
   const user = useCurrentUser();
 
@@ -159,6 +164,15 @@ export const FeedFilters = (props: FeedFiltersProps) => {
             This month 🌙
           </MenuItemOption>
         </MenuOptionGroup>
+
+        {onAdvancedToggle && (
+          <>
+            <MenuDivider />
+            <MenuItem fontSize="sm" fontWeight={advancedOpen ? 700 : 400} onClick={() => onAdvancedToggle(!advancedOpen)}>
+              {advancedOpen ? 'Advanced ✓ 🔬' : 'Advanced 🔬'}
+            </MenuItem>
+          </>
+        )}
 
         {activeCount > 0 && (
           <>

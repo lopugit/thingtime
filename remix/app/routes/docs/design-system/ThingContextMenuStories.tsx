@@ -284,6 +284,7 @@ const StaticMenu = (props: {
 				<ThingContextMenu
 					open
 					presentation="popover"
+					inline
 					model={model}
 					meta={{ path: 'garden.flowers', type: props.readonly ? 'string (readonly)' : 'string' }}
 					defaultDrillPath={props.drillPath}

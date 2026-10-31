@@ -1,4 +1,8 @@
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
+import { safeErrorText } from '../errors/safeError.ts';
+// @ts-ignore Node 24's direct TypeScript test runner requires the extension.
+import { isKnownCollection, physicalCollectionName } from './collectionNames.ts';
+// @ts-ignore Node 24's direct TypeScript test runner requires the extension.
 import {
   MONGO_BLOCKED_QUERY_KEYS,
   MONGO_BSON_VALUE_TYPES,
@@ -56,8 +60,16 @@ const boundedInteger = (value: unknown, fallback: number, min: number, max: numb
 const isSafeFieldPath = (value: string) =>
   value.length > 0 && value.length <= 200 && !value.includes('\0') && !value.startsWith('$');
 
+// things-era protected root fields, normalized the same way keys are below.
+// DERIVED from MONGO_PROTECTED_THING_FIELDS rather than spelled out, so the
+// hard ingress strip, the probe/aliasing guard and the response redactor can
+// never drift apart when a field joins the list.
+const normalizeQueryKey = (key: string) => key.toLowerCase().replace(/[^a-z0-9]/g, '');
+const protectedThingFieldSet = new Set<string>(MONGO_PROTECTED_THING_FIELDS.map(normalizeQueryKey));
+
 const shouldRedactKey = (key: string) => {
-  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalized = normalizeQueryKey(key);
+  if (protectedThingFieldSet.has(normalized)) return true;
   return (
     normalized.includes('password') ||
     normalized.includes('secret') ||
@@ -72,12 +84,7 @@ const shouldRedactKey = (key: string) => {
     normalized === 'cookie' ||
     normalized === 'sessionid' ||
     normalized === 'sessionjti' ||
-    normalized === 'rosterid' ||
-    // things-era system kinds (user/theme/…) store credentials + PII ciphertext
-    // under the root `secure` BinData field and hashed uniqueness material under
-    // `uniqueKeys` — neither matches the generic heuristics above
-    normalized === 'secure' ||
-    normalized === 'uniquekeys'
+    normalized === 'rosterid'
   );
 };
 
@@ -466,8 +473,9 @@ export const redactMongoValue = (value: unknown, state?: RedactionState): { valu
 };
 
 // things-era system kinds (user/theme/…) keep credentials + PII ciphertext
-// under root `secure`/`uniqueKeys`. Strip both server-side at EVERY point
-// things documents can enter a pipeline — primary collection, $lookup,
+// under root `secure`/`uniqueKeys`, and unlisted things keep their hidden-link
+// bearer secret under root `linkKey`. Strip them all server-side at EVERY
+// point things documents can enter a pipeline — primary collection, $lookup,
 // $unionWith — so no later stage (e.g. $objectToArray over $$ROOT, which
 // turns field names into values) can see them; key-based response redaction
 // alone can't survive renaming. Derived from MONGO_PROTECTED_THING_FIELDS so
@@ -535,10 +543,69 @@ const stripThingsIngress = (stages: unknown): { stages: Record<string, unknown>[
   return { stages: output };
 };
 
+// Does a $match body use $text anywhere (top-level or inside $and/$or)? $text is
+// only legal as the FIRST pipeline stage, so a $text $match can't be displaced by
+// the protected-field strip.
+const matchUsesText = (match: unknown): boolean => {
+  if (!match || typeof match !== 'object') return false;
+  if ('$text' in (match as Record<string, unknown>)) return true;
+  for (const value of Object.values(match as Record<string, unknown>)) {
+    if (Array.isArray(value) && value.some((entry) => matchUsesText(entry))) return true;
+  }
+  return false;
+};
+
 export const hardenThingsQuery = (query: NormalizedMongoQuery): NormalizedMongoQuery | MongoQueryFail => {
   const walked = stripThingsIngress(query.pipeline);
   if ('status' in walked) return walked;
-  const pipeline = query.collection === 'things' ? [PROTECTED_THING_STRIP, ...walked.stages] : walked.stages;
+  let pipeline = walked.stages;
+  if (query.collection === 'things') {
+    // The protected-field strip is an output $project, so it normally goes first.
+    // But $text is only legal as the FIRST pipeline stage — prepending the strip
+    // ahead of a `{ $match: { $text } }` makes MongoDB reject the whole query
+    // ($text is an advertised things capability, and this PR adds the wildcard
+    // text index behind it). When the pipeline opens with a $text $match we hoist
+    // it ahead of the strip; the strip follows immediately, so protected fields
+    // are still removed from every output doc and never reach a LATER stage.
+    //
+    // Security: a hoisted $match runs on RAW documents (before the strip), exactly
+    // like a find-filter — so it must obey the same probe rules the find path uses
+    // (COMPUTE_PROBE_PREDICATES), NOT the looser pipeline scan (NO_PROBE_PREDICATES,
+    // which only blocks named references and was safe only while the strip always
+    // ran first). Otherwise an admin could combine $text with a whole-document
+    // probe ($expr/$objectToArray over $$ROOT) in that first stage and turn it into
+    // a boolean oracle over secure/uniqueKeys before they are stripped. Reject any
+    // such probe; $text itself only reads the text index and stays allowed.
+    const [first, ...rest] = walked.stages;
+    const firstIsTextMatch =
+      !!first &&
+      typeof first === 'object' &&
+      '$match' in (first as Record<string, unknown>) &&
+      matchUsesText((first as Record<string, unknown>).$match);
+    // $indexStats emits index metadata, never input Thing documents, and
+    // Mongo requires it at position zero. Hoist only its exact empty-object
+    // form; never generalize this exception to arbitrary first-stage probes.
+    // The normal strip still follows it, and stripThingsIngress above still
+    // protects every subsequent $lookup/$unionWith that introduces documents.
+    const stats = (first as Record<string, unknown> | undefined)?.$indexStats;
+    const firstIsIndexStats = !!first && Object.keys(first).length === 1 &&
+      !!stats && typeof stats === 'object' && !Array.isArray(stats) && Object.keys(stats).length === 0;
+    if (firstIsTextMatch) {
+      const probe = findProtectedQueryReference((first as Record<string, unknown>).$match, {
+        matchPath: isSensitiveFieldPath,
+        blockedPredicates: COMPUTE_PROBE_PREDICATES
+      });
+      if (probe) {
+        return fail(
+          400,
+          `A $text $match on things can't also use ${probe} — it runs before the protected-field strip`
+        );
+      }
+    }
+    pipeline = firstIsTextMatch || firstIsIndexStats
+      ? [first as Record<string, unknown>, PROTECTED_THING_STRIP, ...rest]
+      : [PROTECTED_THING_STRIP, ...walked.stages];
+  }
 
   let projection = query.projection;
   if (query.collection === 'things') {
@@ -563,13 +630,61 @@ export const hardenThingsQuery = (query: NormalizedMongoQuery): NormalizedMongoQ
   return { ...query, pipeline, projection };
 };
 
+// The whole validation layer above (allowlists, sensitivity checks,
+// stripThingsIngress) speaks LOGICAL collection names — the client-facing
+// vocabulary. Physical collections are versioned (things → things_v2, see
+// collectionNames.ts), so the last step before execution maps every join
+// target in the validated pipeline onto its current physical name. Recursion
+// mirrors stripThingsIngress: $lookup/$unionWith sub-pipelines and $facet
+// branches; $graphLookup carries a from but no sub-pipeline. Unknown strings
+// are left untouched — validation has already rejected anything outside the
+// allowlist, so this never invents a collection.
+export const resolvePipelineCollections = (stages: unknown): Record<string, unknown>[] => {
+  const resolve = (name: unknown) =>
+    typeof name === 'string' && isKnownCollection(name) ? physicalCollectionName(name) : name;
+  const output: Record<string, unknown>[] = [];
+  for (const stage of Array.isArray(stages) ? stages : []) {
+    if (!stage || typeof stage !== 'object') continue;
+    const entry = { ...(stage as Record<string, unknown>) };
+    if (entry.$lookup && typeof entry.$lookup === 'object') {
+      const lookup = { ...(entry.$lookup as Record<string, unknown>) };
+      if (lookup.from !== undefined) lookup.from = resolve(lookup.from);
+      if (Array.isArray(lookup.pipeline)) lookup.pipeline = resolvePipelineCollections(lookup.pipeline);
+      entry.$lookup = lookup;
+    }
+    if (entry.$graphLookup && typeof entry.$graphLookup === 'object') {
+      const graph = { ...(entry.$graphLookup as Record<string, unknown>) };
+      if (graph.from !== undefined) graph.from = resolve(graph.from);
+      entry.$graphLookup = graph;
+    }
+    if (entry.$unionWith !== undefined) {
+      const union = entry.$unionWith;
+      if (typeof union === 'string') {
+        entry.$unionWith = resolve(union);
+      } else if (union && typeof union === 'object') {
+        const copy = { ...(union as Record<string, unknown>) };
+        if (copy.coll !== undefined) copy.coll = resolve(copy.coll);
+        if (Array.isArray(copy.pipeline)) copy.pipeline = resolvePipelineCollections(copy.pipeline);
+        entry.$unionWith = copy;
+      }
+    }
+    if (entry.$facet && typeof entry.$facet === 'object') {
+      const facet: Record<string, unknown> = {};
+      for (const [key, sub] of Object.entries(entry.$facet as Record<string, unknown>)) {
+        facet[key] = resolvePipelineCollections(sub);
+      }
+      entry.$facet = facet;
+    }
+    output.push(entry);
+  }
+  return output;
+};
+
 export const safeMongoError = (error: unknown) => {
-  const message = error instanceof Error ? error.message : 'MongoDB query failed';
-  return message
-    .replace(/(mongodb(?:\+srv)?:\/\/)([^@\s/]+)@/gi, '$1***@')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 500);
+  // Raw driver messages can embed connection strings and server internals
+  // (CodeQL js/stack-trace-exposure) — respond with the error class + server
+  // codeName only; the full error is logged server-side by safeErrorText.
+  return safeErrorText(error, 'mongodb query', 'MongoDB query failed');
 };
 
 export const mongoQueryCapabilities = () => ({
