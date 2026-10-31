@@ -4,6 +4,10 @@ type CookieOptions = {
   sameSite?: 'lax' | 'strict' | 'none';
   path?: string;
   maxAge?: number;
+  // Registrable-domain cookies (e.g. `.thingtime.com`) are shared across every
+  // deployment on that domain — used by the account-hints cookie so previews
+  // can suggest accounts signed in on other Thingtime deployments.
+  domain?: string;
 };
 
 const parseCookieHeader = (cookieHeader?: string | null) => {
@@ -47,6 +51,7 @@ const serializeOptions = (options: CookieOptions) => {
   const parts: string[] = [];
 
   if (options.maxAge !== undefined) parts.push(`Max-Age=${options.maxAge}`);
+  if (options.domain) parts.push(`Domain=${options.domain}`);
   if (options.path) parts.push(`Path=${options.path}`);
   if (options.httpOnly) parts.push('HttpOnly');
   if (options.secure) parts.push('Secure');

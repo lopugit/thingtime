@@ -2,6 +2,7 @@ import { json, readJsonBody } from '~/api/http';
 
 import { mintAccountToken, persistRosterIfChanged, resolveRoster, toPublicAccounts } from '~/api/utils/auth/accounts';
 import { serializeAuthCookie } from '~/api/utils/auth/authCookie';
+import { prepareUnboundAttachmentCleanupForSessionReplacement } from '~/api/utils/attachments/attachments';
 
 // POST /api/v1/auth/accounts/switch — { userId }
 // Makes a roster account the active one by minting a fresh JWT for its live
@@ -25,6 +26,10 @@ export const action = async ({ request }: { request: Request }) => {
       { status: 404, headers }
     );
   }
+
+	if (roster.active && roster.active.userId !== target.userId) {
+		await prepareUnboundAttachmentCleanupForSessionReplacement(roster.active.userId).catch(() => null);
+	}
 
   headers.append('Set-Cookie', await serializeAuthCookie(await mintAccountToken(target)));
 

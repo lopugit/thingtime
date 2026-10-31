@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-desktop/
+.thingtime-mcp/
+*.log
+.env
+.env.*
+!.env.example

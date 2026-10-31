@@ -18,6 +18,24 @@ export const isSafeUrl = (value: string): boolean => {
 export const safeUrl = (value: unknown): string | undefined =>
 	typeof value === 'string' && isSafeUrl(value) ? value : undefined;
 
+// Does an already-protocol-screened url leave this site? Decided on the
+// RESOLVED url rather than a scheme prefix, because the URL parser folds `\`
+// into `/` for http(s): `/\evil.example` reads as site-relative but resolves to
+// another origin, so a prefix test would call it internal and navigate the
+// viewer's own tab off-site with the opener attached. Relative urls keep the
+// sentinel origin and stay internal; mailto:/tel: hand off to another app
+// rather than navigating, so they are not "external" for link-target purposes.
+export const isExternalHref = (value: unknown): boolean => {
+	if (typeof value !== 'string') return false;
+	try {
+		const url = new URL(value.trim(), SAFE_BASE);
+		if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+		return url.origin !== new URL(SAFE_BASE).origin;
+	} catch {
+		return false;
+	}
+};
+
 // Shared untrusted-content screening for BOTH thing renderers (Chakra + HTML),
 // so a new CSS-escape vector or handler-prop bypass is patched in ONE place
 // instead of drifting between two copied deny-lists.
@@ -35,9 +53,15 @@ export const isSafeCssText = (value: unknown): boolean => {
 export const isEventHandlerProp = (key: string): boolean => /^on/i.test(key);
 
 // External links must drop the opener (reverse-tabnabbing): mutates the given
-// already-sanitized props object in place when target === '_blank'.
+// already-sanitized props object in place for any non-self target. Browsers
+// match target names case-insensitively ("_BLANK" still opens a new window),
+// and any NAMED target window also receives an opener, so everything except
+// the same-tab targets gets the rel.
 export const applyNoOpener = (props: Record<string, unknown>): void => {
-	if (props.target === '_blank') props.rel = 'noopener noreferrer';
+	if (typeof props.target !== 'string') return;
+	const target = props.target.toLowerCase();
+	if (target === '_self' || target === '_top' || target === '_parent' || target === '') return;
+	props.rel = 'noopener noreferrer';
 };
 
 // CSS `url("…")` value for backgroundImage, or undefined. Scheme-checked like
