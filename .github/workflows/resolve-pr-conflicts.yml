@@ -1,7 +1,7 @@
 name: Lopu PR manager
 
 run-name: >-
-  Lopu manages PRs${{ inputs.pr_number && format(' for #{0}', inputs.pr_number) || inputs.branch && format(' under {0}', inputs.branch) || format(' after {0}', github.event_name) }}
+  ${{ inputs.feature_stack_run_id && format('Lopu merges Feature Stack run {0}', inputs.feature_stack_run_id) || format('Lopu manages PRs{0}', inputs.pr_number && format(' for #{0}', inputs.pr_number) || inputs.branch && format(' under {0}', inputs.branch) || format(' after {0}', github.event_name)) }}
 
 on:
   push:
@@ -58,7 +58,7 @@ on:
         required: false
         default: "manage-prs"
         type: choice
-        options: [manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql]
+        options: [manage-prs, promote-develop, promote-features, sync-main-develop, build-all, backfill-codeql, merge-feature-stack]
       promotion_dry_run:
         description: "Plan feature promotion only — do not create or update repository state"
         required: false
@@ -104,6 +104,16 @@ on:
         required: false
         default: "0"
         type: string
+      feature_stack_plan_b64:
+        description: "Internal: canonical-base64 immutable Feature Stack plan"
+        required: false
+        default: ""
+        type: string
+      feature_stack_run_id:
+        description: "Internal: durable Thingtime Feature Stack run id"
+        required: false
+        default: ""
+        type: string
   repository_dispatch:
     # Both internal stack events enter through the same public Lopu listener;
     # the protected controller assigns exactly one merge or rebase owner.
@@ -137,4 +147,6 @@ jobs:
       detector_handoff: ${{ inputs.detector_handoff || false }}
       manual_retry: ${{ inputs.manual_retry || false }}
       depth: ${{ inputs.depth || '0' }}
+      feature_stack_plan_b64: ${{ inputs.feature_stack_plan_b64 || '' }}
+      feature_stack_run_id: ${{ inputs.feature_stack_run_id || '' }}
     secrets: inherit

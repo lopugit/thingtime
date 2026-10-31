@@ -1,5 +1,5 @@
 import React from 'react';
-import { Badge, Box, Button, Flex, Select, Spinner, Table, Tbody, Td, Text, Th, Thead, Tr } from '@chakra-ui/react';
+import { Box, Button, Flex, Select, Spinner, Table, Tbody, Td, Text, Th, Thead, Tr } from '@chakra-ui/react';
 
 import {
 	MODERATION_MEDIA_PROVIDER_OPTIONS,
@@ -10,6 +10,7 @@ import {
 } from '~/api/utils/moderation/moderationSettingsCore';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
+import { CARD_STYLES } from '~/theme/card';
 
 // /admin → Moderation: the AI-moderation settings + the NSFW/TOS review
 // queue. Rows are moderationFlag things written by the analysis pipelines
@@ -43,7 +44,26 @@ type ModerationOverview = {
 	effective?: { media: string; text: string };
 };
 
-const statusColor = (status: string) => (status === 'blocked' ? 'red' : status === 'nsfw' ? 'orange' : status === 'clear' ? 'green' : 'gray');
+const MONO = 'var(--tt-font-mono, ui-monospace, Menlo, monospace)';
+
+const eyebrow = {
+	fontFamily: MONO,
+	fontSize: '10px',
+	fontWeight: 600,
+	letterSpacing: '0.08em',
+	textTransform: 'uppercase' as const,
+	color: 'var(--tt-muted, #9a9aa6)'
+};
+
+// House status pattern: token-colored dot + mono uppercase label.
+const statusColor = (status: string) =>
+	status === 'blocked'
+		? 'var(--tt-danger, #d6455a)'
+		: status === 'nsfw'
+			? 'var(--tt-warning, #ffbc48)'
+			: status === 'clear'
+				? 'var(--tt-positive, #2f8f4f)'
+				: 'var(--tt-faint, #b6b6c0)';
 
 export const ModerationTab = () => {
 	const api = useApi();
@@ -147,16 +167,16 @@ export const ModerationTab = () => {
 
 	return (
 		<Box>
-			<Box border="1px solid var(--tt-border, #2a2a30)" borderRadius="var(--tt-radius-md, 12px)" p={3} mb={4}>
-				<Text fontWeight={600} fontSize="sm" mb={1}>
+			<Box {...CARD_STYLES} p={4} mb={4}>
+				<Text sx={eyebrow} mb={1}>
 					AI moderation settings
 				</Text>
-				<Text fontSize="xs" opacity={0.65} mb={3}>
+				<Text fontSize="xs" color="var(--tt-text, #5a5a66)" mb={3}>
 					Which AI analyzes each surface. Choices here override the server env default; “Default” follows the environment’s API keys.
 				</Text>
 				<Flex columnGap={6} rowGap={3} flexWrap="wrap">
 					<Box minW="260px" flex="1">
-						<Text fontSize="xs" fontWeight={600} mb={1}>
+						<Text fontSize="xs" fontWeight={600} color="var(--tt-ink, #16161a)" mb={1}>
 							Media uploads (images){effective ? ` — running: ${effective.media}` : ''}
 						</Text>
 						<Select
@@ -174,13 +194,13 @@ export const ModerationTab = () => {
 							))}
 						</Select>
 						{mediaNote ? (
-							<Text fontSize="xs" opacity={0.6} mt={1}>
+							<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" mt={1}>
 								{mediaNote}
 							</Text>
 						) : null}
 					</Box>
 					<Box minW="260px" flex="1">
-						<Text fontSize="xs" fontWeight={600} mb={1}>
+						<Text fontSize="xs" fontWeight={600} color="var(--tt-ink, #16161a)" mb={1}>
 							Post & comment text{effective ? ` — running: ${effective.text}` : ''}
 						</Text>
 						<Select
@@ -198,7 +218,7 @@ export const ModerationTab = () => {
 							))}
 						</Select>
 						{textNote ? (
-							<Text fontSize="xs" opacity={0.6} mt={1}>
+							<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" mt={1}>
 								{textNote}
 							</Text>
 						) : null}
@@ -206,7 +226,7 @@ export const ModerationTab = () => {
 				</Flex>
 			</Box>
 			<Flex alignItems="center" columnGap={3} rowGap={2} flexWrap="wrap" mb={3}>
-				<Text fontSize="sm" opacity={0.75}>
+				<Text fontSize="sm" color="var(--tt-text, #5a5a66)">
 					{overview
 						? `${overview.counts.flags} flag(s) · ${overview.counts.unanalyzedReady} attachment(s) + ${overview.counts.unmoderatedText} text post(s) awaiting analysis`
 						: '…'}
@@ -219,7 +239,7 @@ export const ModerationTab = () => {
 				</Button>
 			</Flex>
 			{error ? (
-				<Text fontSize="sm" color="var(--tt-danger, #e5484d)" mb={3}>
+				<Text fontSize="sm" color="var(--tt-danger, #d6455a)" mb={3}>
 					{error}
 				</Text>
 			) : null}
@@ -228,11 +248,24 @@ export const ModerationTab = () => {
 					<Spinner />
 				</Flex>
 			) : overview && overview.flags.length === 0 ? (
-				<Text fontSize="sm" opacity={0.6} py={4}>
+				<Text fontSize="sm" color="var(--tt-muted, #9a9aa6)" py={4}>
 					No moderation flags 🎉 — flagged uploads will appear here for review.
 				</Text>
 			) : overview ? (
-				<Box overflowX="auto">
+				<Box
+					overflowX="auto"
+					{...CARD_STYLES}
+					sx={{
+						'& th': {
+							fontFamily: MONO,
+							fontSize: '10px',
+							letterSpacing: '0.08em',
+							color: 'var(--tt-muted, #9a9aa6)',
+							borderColor: 'var(--tt-border-light, #f0f0f2)'
+						},
+						'& td': { borderColor: 'var(--tt-border-light, #f0f0f2)' }
+					}}
+				>
 					<Table size="sm" minW="880px">
 						<Thead>
 							<Tr>
@@ -248,19 +281,29 @@ export const ModerationTab = () => {
 							{overview.flags.map((row) => (
 								<Tr key={row.id}>
 									<Td>
-										<Text fontWeight={600} fontSize="sm" noOfLines={1} maxW="220px" title={row.targetKind === 'text' ? row.excerpt || row.attachmentId : row.attachmentName}>
+										<Text fontWeight={600} fontSize="sm" color="var(--tt-ink, #16161a)" noOfLines={1} maxW="220px" title={row.targetKind === 'text' ? row.excerpt || row.attachmentId : row.attachmentName}>
 											{row.targetKind === 'text' ? `“${(row.excerpt || '').slice(0, 60) || row.attachmentId}”` : row.attachmentName || row.attachmentId}
 										</Text>
-										<Text fontSize="xs" opacity={0.6}>
+										<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
 											{row.targetKind === 'text' ? `${row.attachmentPurpose || 'post'} text` : row.attachmentPurpose || 'unknown'} · owner{' '}
 											{row.attachmentOwnerId.slice(0, 8)}…
 										</Text>
 									</Td>
 									<Td>
-										<Badge colorScheme={statusColor(row.status)} fontSize="0.65em">
-											{row.status}
-										</Badge>
-										<Text fontSize="10px" opacity={0.6}>
+										<Flex alignItems="center" columnGap={1.5}>
+											<Box width="7px" height="7px" borderRadius="2px" flexShrink={0} background={statusColor(row.status)} />
+											<Text
+												fontFamily={MONO}
+												fontSize="10px"
+												fontWeight={600}
+												letterSpacing="0.06em"
+												textTransform="uppercase"
+												color="var(--tt-muted, #9a9aa6)"
+											>
+												{row.status}
+											</Text>
+										</Flex>
+										<Text fontFamily={MONO} fontSize="10px" color="var(--tt-muted, #9a9aa6)">
 											{row.provider || '—'}
 										</Text>
 									</Td>
@@ -296,7 +339,15 @@ export const ModerationTab = () => {
 										<Button size="xs" variant="outline" mr={1} isLoading={busy === `${row.id}:nsfw`} onClick={() => review(row, 'nsfw')}>
 											NSFW
 										</Button>
-										<Button size="xs" colorScheme="red" variant="outline" isLoading={busy === `${row.id}:block`} onClick={() => review(row, 'block')}>
+										<Button
+											size="xs"
+											variant="outline"
+											color="var(--tt-danger, #d6455a)"
+											borderColor="rgba(214, 69, 90, 0.4)"
+											_hover={{ background: 'rgba(214, 69, 90, 0.12)' }}
+											isLoading={busy === `${row.id}:block`}
+											onClick={() => review(row, 'block')}
+										>
 											Block
 										</Button>
 									</Td>

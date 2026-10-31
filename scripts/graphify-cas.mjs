@@ -9,10 +9,13 @@ import {
   readFileSync,
   readlinkSync,
   readdirSync,
+  chmodSync,
   renameSync,
+  rmdirSync,
   rmSync,
   statSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs"
 import { mkdtempSync } from "node:fs"
@@ -22,6 +25,7 @@ import { pathToFileURL } from "node:url"
 import { execFileSync, spawnSync } from "node:child_process"
 
 export const SNAPSHOT_SCHEMA = "thingtime.graphify-snapshot.v1"
+export const DEFAULT_SNAPSHOT_RETENTION = 1
 export const PORTABLE_FILES = [
   "graph.json",
   "manifest.json",
@@ -49,6 +53,7 @@ const INTERNAL_COMMANDS = new Set([
   "cache-migrate",
   "ensure",
   "fingerprint",
+  "prune",
   "snapshot",
 ])
 const DEFAULT_LOCK_TIMEOUT_MS = 2 * 60 * 60 * 1000
@@ -126,58 +131,101 @@ function sleep(milliseconds) {
   Atomics.wait(signal, 0, 0, milliseconds)
 }
 
-function lockOwnerAlive(lockPath) {
-  const owner = safeJson(path.join(lockPath, "owner.json"))
-  if (!owner || !Number.isSafeInteger(owner.pid) || owner.pid <= 0) {
-    // Another writer can observe the directory between atomic mkdir and the
-    // owner-file write. Give that tiny acquisition window time to settle.
-    try {
-      return Date.now() - statSync(lockPath).mtimeMs < 30_000
-    } catch {
-      return false
-    }
-  }
+const OWNER_FILE = /^owner-[0-9a-f-]{36}\.json$/
+
+function ownerAlive(owner) {
+  // Unknown ownership is never grounds for deleting somebody else's lock.
+  if (!owner || !Number.isSafeInteger(owner.pid) || owner.pid <= 0) return true
   try {
     process.kill(owner.pid, 0)
     return true
   } catch (error) {
-    return error.code === "EPERM"
+    return error.code !== "ESRCH"
+  }
+}
+
+function removeEmptyLock(lockPath) {
+  try {
+    rmdirSync(lockPath)
+  } catch (error) {
+    if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error.code)) throw error
+  }
+}
+
+function releaseOwner(lockPath, ownerFile) {
+  // A delayed reaper/releaser may now be looking at a replacement directory.
+  // Only its uniquely named record can be removed; rmdir cannot remove a new
+  // owner's populated directory. Never recursively remove the shared path.
+  try {
+    unlinkSync(path.join(lockPath, ownerFile))
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error
+  }
+  removeEmptyLock(lockPath)
+}
+
+function reapExitedOwner(lockPath) {
+  let entries
+  try {
+    entries = readdirSync(lockPath)
+  } catch (error) {
+    if (error.code === "ENOENT") return
+    throw error
+  }
+  for (const entry of entries) {
+    // Recognize an exited pre-upgrade writer, but never recursively delete it.
+    if (entry !== "owner.json" && !OWNER_FILE.test(entry)) continue
+    if (!ownerAlive(safeJson(path.join(lockPath, entry)))) {
+      releaseOwner(lockPath, entry)
+    }
   }
 }
 
 export function withRepositoryLock(root, callback) {
   const lockPath = path.join(graphifyRoot(root), ".locks", "writer")
   const timeout = Number(
-    process.env.GRAPHIFY_CAS_LOCK_TIMEOUT_MS || DEFAULT_LOCK_TIMEOUT_MS,
+    process.env.GRAPHIFY_CAS_LOCK_TIMEOUT_MS ?? DEFAULT_LOCK_TIMEOUT_MS,
   )
+  if (!Number.isFinite(timeout) || timeout < 0) {
+    fail("GRAPHIFY_CAS_LOCK_TIMEOUT_MS must be a finite non-negative number")
+  }
   const deadline = Date.now() + timeout
   mkdirSync(path.dirname(lockPath), { recursive: true })
-
-  while (true) {
-    try {
-      mkdirSync(lockPath)
-      writeFileSync(
-        path.join(lockPath, "owner.json"),
-        `${JSON.stringify({ pid: process.pid })}\n`,
-      )
-      break
-    } catch (error) {
-      if (error.code !== "EEXIST") throw error
-      if (!lockOwnerAlive(lockPath)) {
-        rmSync(lockPath, { recursive: true, force: true })
-        continue
-      }
-      if (Date.now() >= deadline) {
-        fail(`Timed out waiting for Graphify snapshot writer ${lockPath}`)
-      }
-      sleep(250)
-    }
-  }
+  const token = randomUUID()
+  const ownerFile = `owner-${token}.json`
+  const candidate = path.join(path.dirname(lockPath), `.writer-${token}`)
+  mkdirSync(candidate)
 
   try {
-    return callback()
+    writeFileSync(
+      path.join(candidate, ownerFile),
+      `${JSON.stringify({ pid: process.pid, token })}\n`,
+      { flag: "wx" },
+    )
+    while (true) {
+      try {
+        // Publish ownership atomically. There is never a visible new-format
+        // writer directory waiting for its owner record to be written.
+        // rename cannot replace a populated directory owned by another writer.
+        renameSync(candidate, lockPath)
+        break
+      } catch (error) {
+        if (!["EEXIST", "ENOTEMPTY"].includes(error.code)) throw error
+        reapExitedOwner(lockPath)
+        if (Date.now() >= deadline) {
+          fail(`Timed out waiting for Graphify snapshot writer ${lockPath}`)
+        }
+        sleep(50)
+      }
+    }
+    try {
+      return callback()
+    } finally {
+      releaseOwner(lockPath, ownerFile)
+    }
   } finally {
-    rmSync(lockPath, { recursive: true, force: true })
+    // This path is private to this attempt, never the shared lock pathname.
+    rmSync(candidate, { recursive: true, force: true })
   }
 }
 
@@ -346,33 +394,120 @@ export function listSnapshots(root, sourceFingerprint = null) {
   return records
 }
 
+function compareSnapshotQuality(left, right) {
+  const nodeDelta =
+    Number(right.metadata.node_count ?? 0) -
+    Number(left.metadata.node_count ?? 0)
+  if (nodeDelta !== 0) return nodeDelta
+  const linkDelta =
+    Number(right.metadata.link_count ?? 0) -
+    Number(left.metadata.link_count ?? 0)
+  if (linkDelta !== 0) return linkDelta
+  return right.metadata.artifact_hash.localeCompare(
+    left.metadata.artifact_hash,
+  )
+}
+
 export function selectSnapshot(root, sourceFingerprint = null) {
   const records = listSnapshots(root, sourceFingerprint)
-  records.sort((left, right) => {
-    const nodeDelta =
-      Number(right.metadata.node_count ?? 0) -
-      Number(left.metadata.node_count ?? 0)
-    if (nodeDelta !== 0) return nodeDelta
-    const linkDelta =
-      Number(right.metadata.link_count ?? 0) -
-      Number(left.metadata.link_count ?? 0)
-    if (linkDelta !== 0) return linkDelta
-    return right.metadata.artifact_hash.localeCompare(
-      left.metadata.artifact_hash,
-    )
-  })
+  records.sort(compareSnapshotQuality)
   return records[0] ?? null
 }
 
-function copyPortableFiles(from, to) {
+export function snapshotRetentionLimit(
+  value = process.env.GRAPHIFY_SNAPSHOT_RETENTION,
+) {
+  if (value === undefined || String(value).trim() === "") {
+    return DEFAULT_SNAPSHOT_RETENTION
+  }
+  const normalized = String(value).trim()
+  if (!/^[1-9][0-9]*$/.test(normalized)) {
+    fail(
+      `GRAPHIFY_SNAPSHOT_RETENTION must be a positive integer, received ${JSON.stringify(value)}`,
+    )
+  }
+  const retention = Number(normalized)
+  if (!Number.isSafeInteger(retention)) {
+    fail("GRAPHIFY_SNAPSHOT_RETENTION exceeds JavaScript's safe integer range")
+  }
+  return retention
+}
+
+/**
+ * Bound portable snapshots in the current Git tree while keeping the active
+ * source snapshot. Removed snapshots remain recoverable from Git history and
+ * from any branch ref that still points to them.
+ */
+export function pruneSnapshots(
+  root,
+  activeSnapshot,
+  retention = snapshotRetentionLimit(),
+) {
+  if (!activeSnapshot?.path) fail("Cannot prune without an active snapshot")
+  if (!Number.isSafeInteger(retention) || retention < 1) {
+    fail("Snapshot retention must be a positive integer")
+  }
+
+  const records = listSnapshots(root)
+  const activePath = path.resolve(activeSnapshot.path)
+  if (!records.some((record) => path.resolve(record.path) === activePath)) {
+    fail(`Active snapshot is not a valid snapshot record: ${activePath}`)
+  }
+
+  records.sort((left, right) => {
+    const leftActive = path.resolve(left.path) === activePath
+    const rightActive = path.resolve(right.path) === activePath
+    if (leftActive !== rightActive) return leftActive ? -1 : 1
+    return compareSnapshotQuality(left, right)
+  })
+
+  const retained = records.slice(0, retention)
+  const retainedPaths = new Set(
+    retained.map((record) => path.resolve(record.path)),
+  )
+  const removed = []
+  for (const record of records) {
+    if (retainedPaths.has(path.resolve(record.path))) continue
+    rmSync(record.path, { recursive: true, force: true })
+    removed.push(record.path)
+  }
+
+  const snapshotsRoot = path.join(graphifyRoot(root), "snapshots", "v1")
+  if (existsSync(snapshotsRoot)) {
+    for (const sourceName of readdirSync(snapshotsRoot)) {
+      const sourceRoot = path.join(snapshotsRoot, sourceName)
+      if (
+        statSync(sourceRoot).isDirectory() &&
+        readdirSync(sourceRoot).length === 0
+      ) {
+        rmdirSync(sourceRoot)
+      }
+    }
+  }
+
+  return {
+    retention,
+    retained: retained.map((record) => record.path),
+    removed,
+  }
+}
+
+// Snapshot files are read-only on disk (markSnapshotReadOnly); a working copy
+// must be writable again or upstream Graphify cannot overwrite its own output.
+function copyWritable(source, destination) {
+  cpSync(source, destination)
+  chmodSync(destination, (statSync(destination).mode & 0o777) | 0o600)
+}
+
+export function copyPortableFiles(from, to) {
   mkdirSync(to, { recursive: true })
   for (const name of PORTABLE_FILES) {
     const source = path.join(from, name)
-    if (existsSync(source)) cpSync(source, path.join(to, name))
+    if (existsSync(source)) copyWritable(source, path.join(to, name))
   }
   for (const name of [".graphify_analysis.json", ".graphify_labels.json"]) {
     const source = path.join(from, name)
-    if (existsSync(source)) cpSync(source, path.join(to, name))
+    if (existsSync(source)) copyWritable(source, path.join(to, name))
   }
 }
 
@@ -550,6 +685,7 @@ export function finalizeSnapshot(
       }
     } else {
       renameSync(staging, destination)
+      markSnapshotReadOnly(destination)
     }
   } finally {
     rmSync(staging, { recursive: true, force: true })
@@ -567,10 +703,36 @@ function isTracked(root, relativePath) {
   }
 }
 
+function isIgnored(root, relativePath) {
+  try {
+    runGit(root, ["check-ignore", "-q", "--", relativePath])
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Snapshot files are immutable content: mark them read-only so an older
+ * upstream `graphify` hook that writes through a root alias symlink fails
+ * loudly (EACCES) instead of silently editing committed bytes. Git only tracks
+ * the executable bit, so this never shows up as a diff; directories stay
+ * writable so pruning can still remove a superseded snapshot.
+ */
+export function markSnapshotReadOnly(snapshotPath) {
+  for (const name of SNAPSHOT_FILES) {
+    const file = path.join(snapshotPath, name)
+    if (!existsSync(file)) continue
+    const mode = statSync(file).mode & 0o777
+    if (mode & 0o222) chmodSync(file, mode & ~0o222)
+  }
+}
+
 /** Materialize compatibility aliases without putting mutable pointers in Git. */
 export function activateSnapshot(root, snapshot) {
   const outputRoot = graphifyRoot(root)
   mkdirSync(outputRoot, { recursive: true })
+  markSnapshotReadOnly(snapshot.path)
   const names = [...PORTABLE_FILES, "graph.html"]
   for (const name of names) {
     const source = path.join(snapshot.path, name)
@@ -592,6 +754,11 @@ export function activateSnapshot(root, snapshot) {
       } else if (isTracked(root, relativeAlias)) {
         // Migration mode: never replace a still-tracked portable output.
         continue
+      } else if (isIgnored(root, relativeAlias)) {
+        // Older upstream hooks can materialize an ignored regular file at a
+        // fixed compatibility path. It is generated, recoverable, and safe to
+        // replace; unrelated untracked files still fail closed below.
+        rmSync(alias)
       } else {
         fail(`Refusing to replace non-symlink Graphify alias: ${alias}`)
       }
@@ -601,6 +768,7 @@ export function activateSnapshot(root, snapshot) {
 }
 
 function runMutation(root, args) {
+  const retention = snapshotRetentionLimit()
   return withRepositoryLock(root, () => {
     const fingerprint = computeSourceFingerprint(root)
     const minimumNodeCount = args.includes("--force")
@@ -625,6 +793,7 @@ function runMutation(root, args) {
         minimumNodeCount,
       })
       activateSnapshot(root, snapshot)
+      pruneSnapshots(root, snapshot, retention)
       process.stdout.write(`${snapshot.path}\n`)
       return snapshot
     } catch (error) {
@@ -634,19 +803,15 @@ function runMutation(root, args) {
   })
 }
 
-function ensureSnapshot(root) {
-  const fingerprint = computeSourceFingerprint(root)
-  const exact = selectSnapshot(root, fingerprint.sourceFingerprint)
-  if (exact) {
-    activateSnapshot(root, exact)
-    return exact
-  }
+function ensureSnapshot(root, consume = (snapshot) => snapshot) {
+  const retention = snapshotRetentionLimit()
   return withRepositoryLock(root, () => {
     const current = computeSourceFingerprint(root)
     const existing = selectSnapshot(root, current.sourceFingerprint)
     if (existing) {
       activateSnapshot(root, existing)
-      return existing
+      pruneSnapshots(root, existing, retention)
+      return consume(existing)
     }
 
     const workingOutput = prepareWorkingOutput(
@@ -669,11 +834,25 @@ function ensureSnapshot(root) {
         minimumNodeCount,
       })
       activateSnapshot(root, snapshot)
-      return snapshot
+      pruneSnapshots(root, snapshot, retention)
+      return consume(snapshot)
     } catch (error) {
       rmSync(workingOutput, { recursive: true, force: true })
       throw error
     }
+  })
+}
+
+function pruneSnapshotStore(root) {
+  const retention = snapshotRetentionLimit()
+  return withRepositoryLock(root, () => {
+    const current = computeSourceFingerprint(root)
+    const snapshot =
+      selectSnapshot(root, current.sourceFingerprint) ?? selectSnapshot(root)
+    if (!snapshot) fail("No valid Graphify snapshot is available to retain")
+    activateSnapshot(root, snapshot)
+    const result = pruneSnapshots(root, snapshot, retention)
+    return { snapshot, ...result }
   })
 }
 
@@ -696,6 +875,18 @@ function runRouted(root, args) {
   }
   if (args[0] === "fingerprint") {
     process.stdout.write(`${JSON.stringify(computeSourceFingerprint(root))}\n`)
+    return
+  }
+  if (args[0] === "prune") {
+    const result = pruneSnapshotStore(root)
+    process.stdout.write(
+      `${JSON.stringify({
+        active: path.relative(root, result.snapshot.path),
+        retention: result.retention,
+        retained: result.retained.length,
+        removed: result.removed.length,
+      })}\n`,
+    )
     return
   }
   if (args[0] === "snapshot") {
@@ -722,9 +913,8 @@ function runRouted(root, args) {
     return
   }
 
-  const snapshot = ensureSnapshot(root)
-  activateSnapshot(root, snapshot)
-  invokeGraphify(root, snapshot.path, args)
+  // Keep the selected snapshot and its aliases pinned until the reader exits.
+  ensureSnapshot(root, (snapshot) => invokeGraphify(root, snapshot.path, args))
 }
 
 export function main(argv = process.argv.slice(2)) {
