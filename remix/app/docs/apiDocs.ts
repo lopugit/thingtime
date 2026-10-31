@@ -8264,7 +8264,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/algorithms/update',
     summary: 'Renames, restyles, or toggles sharing on one of the current user feed algorithms.',
     detail:
-      'Optional listed (strict boolean) opts into the public directory and enables sharing; listed:false removes directory discoverability without revoking links. shared:false clears listed as well. Existing shared algorithms are never automatically listed. Optional description is bounded to 300 characters. Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights. shared (strict boolean) turns the "try my feed brain" branch invitation on or off: while true, anyone with the /feed?algorithm=<id> link can read the tiny preview and branch a private copy; the algorithm itself stays private either way.',
+      'Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights. shared (strict boolean) turns the "try my feed brain" branch invitation on or off: while true, anyone with the /feed?algorithm=<id> link can read the tiny preview and branch a private copy; the algorithm itself stays private either way.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -8293,100 +8293,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'embed-things',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
-    group: 'embed',
-    title: 'Embedded things',
-    endpoint: '/api/v1/embed/things',
-    summary: 'Reads, lists, creates, and version-safely updates Thingtime data embedded on other websites.',
-    detail:
-      'Public embedded things can be read cross-origin. Creating, listing, or updating uses the normal Thingtime session-or-bearer authentication path and stores JSON-safe values as canonical embed Things. Owner listings sort by updatedAt descending with a stable shareId tie-breaker. Legacy kind reads/writes remain during migration and on custom data planes; after the explicit home cutover, embeds use the shared schema/owner updated-order index. Existing private-read and version-conflict checks are unchanged.',
-    auth: {
-      mode: 'optional',
-      description:
-        'Public GET by id is anonymous. Private reads, owner lists, creates, and updates require an auth cookie or Authorization: Bearer token.'
-    },
-    methods: ['GET', 'POST'],
-    steps: [
-      'GET with id to load a public embedded thing, or authenticate to load a caller-owned private thing.',
-      'GET without id while authenticated to list the caller embedded things.',
-      'POST name, value, and visibility without id to create a thing.',
-      'POST id, the last-seen version, value, and optional metadata to update; reload after a 409 conflict.'
-    ],
-    requestExamples: [
-      {
-        name: 'Load a public thing',
-        description: 'Fetch a thing for a script-tag embed.',
-        method: 'GET',
-        query: { id: '0df8c965-48a5-4a39-bc47-43c04d404615' }
-      },
-      {
-        name: 'Create an embedded thing',
-        description: 'Create an owner-controlled public thing.',
-        method: 'POST',
-        body: {
-          name: 'Website capability card',
-          visibility: 'public',
-          value: { title: 'Hello from Thingtime', enabled: true }
-        }
-      },
-      {
-        name: 'Update an embedded thing',
-        description: 'Save edits against the version that was loaded.',
-        method: 'POST',
-        body: {
-          id: '0df8c965-48a5-4a39-bc47-43c04d404615',
-          version: 1,
-          value: { title: 'Hello, world', enabled: true }
-        }
-      }
-    ],
-    responseExamples: [
-      {
-        status: 200,
-        description: 'Thing loaded or saved.',
-        body: {
-          ok: true,
-          thing: {
-            id: '0df8c965-48a5-4a39-bc47-43c04d404615',
-            name: 'Website capability card',
-            value: { title: 'Hello from Thingtime', enabled: true },
-            visibility: 'public',
-            version: 1
-          }
-        }
-      },
-      {
-        status: 409,
-        description: 'Another client saved a newer version.',
-        body: { ok: false, error: 'Thing changed somewhere else. Load it before saving again.' }
-      },
-      {
-        status: 429,
-        description: 'Read budget exhausted (anonymous cross-origin callers are counted per IP).',
-        body: { ok: false, error: 'Too many embed reads — take a breather 🌸' }
-      },
-      {
-        status: 429,
-        description: 'Save budget exhausted for this account.',
-        body: { ok: false, error: 'Saving embeds very enthusiastically — take a breather 🌸' }
-      }
-    ],
-    notes: [
-      'Cross-origin public reads use CORS. Do not put a full-account bearer token in publicly served browser source.',
-      'Values are bounded JSON data; functions, non-finite numbers, unsafe object keys, and oversized payloads are rejected.',
-      'Both verbs are rate limited (embed.read / embed.write). A 429 sends Retry-After, and the read 429 keeps its CORS headers so a host page can read the status instead of seeing an opaque network error.'
-    ]
-  }),
-  endpoint({
     id: 'algorithms-shared',
     group: 'algorithms',
     title: 'Shared feed algorithm preview',
     endpoint: '/api/v1/algorithms/shared',
     summary: 'Reads the public preview of an explicitly shared feed algorithm ("try my feed brain").',
     detail:
-      'Resolves only algorithms whose owner turned sharing on. Returns identity and training size (name, emoji, eventCount, ownerUsername) — this preview never exposes weights or interests, and the algorithm doc itself is never readable. Branching is the disclosure: POST /api/v1/algorithms with branchFrom set to this id copies the owner’s learned weights into your own algorithm, where they surface as its topInterests, and that copy is independent of any later unshare. Unknown, unshared, and private ids all 404 identically.',
+      'Resolves only algorithms whose owner turned sharing on. Returns identity and training size (name, emoji, eventCount, ownerUsername) — never weights or interests, which stay private to the owner. Branch a copy by POSTing /api/v1/algorithms with branchFrom set to this id. Unknown, unshared, and private ids all 404 identically.',
     auth: {
       mode: 'none',
       description: 'Public and anonymous — possession of the share link plus the owner sharing flag is the gate.'

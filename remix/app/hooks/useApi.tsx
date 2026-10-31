@@ -1042,12 +1042,14 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         [asyncFetcher]
       )
     },
-    // third-party app connections (Reddit, YouTube, Mastodon, …) — link
-    // external accounts, browse their feeds, manage AI feed filters
-    connections: {
-      providers: useCallback(async () => getJson('/api/v1/connections/providers'), [getJson]),
-      list: useCallback(async () => getJson('/api/v1/connections'), [getJson]),
-      connect: useCallback(
+    algorithms: {
+      list: useCallback(async () => getJson('/api/v1/algorithms'), []),
+      // share-link preview (identity + training size only, never weights)
+      getShared: useCallback(
+        async (args) => getJson(`/api/v1/algorithms/shared?id=${encodeURIComponent(args?.id || '')}`),
+        []
+      ),
+      create: useCallback(
         async (args) => {
           await requireThingtimeCapability('api.connections', '2.0.0');
           return asyncFetcher.submit({ provider: args?.provider, fields: args?.fields, expectedOwnerId: args?.expectedOwnerId }, { action: '/api/v1/connections', signal: args?.signal });
@@ -1144,78 +1146,7 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
       ),
       update: useCallback(
         async (args) =>
-          asyncFetcher.submit(
-            {
-              id: args?.id,
-              ...(args && 'name' in args ? { name: args.name } : {}),
-              ...(args && 'memberIds' in args ? { memberIds: args.memberIds } : {})
-            },
-            { action: '/api/v1/groups', method: 'PATCH' }
-          ),
-        [asyncFetcher]
-      ),
-      remove: useCallback(
-        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/groups', method: 'DELETE' }),
-        [asyncFetcher]
-      ),
-      audienceSources: useCallback(async () => getJson('/api/v1/groups/audience-sources'), [getJson])
-    },
-    tokens: {
-      // personal access tokens (Settings → Token minter) — the mint response
-      // carries the token string exactly once
-      list: useCallback(async () => getJson('/api/v1/tokens'), [getJson]),
-      mint: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
-            {
-              name: args?.name,
-              scopes: args?.scopes,
-              expiresInMs: args?.expiresInMs ?? null,
-              maxUses: args?.maxUses ?? null,
-              onlyCreatedThings: args?.onlyCreatedThings === true,
-              visibility: args?.visibility ?? 'all',
-              allowGet: args?.allowGet === true
-            },
-            { action: '/api/v1/tokens' }
-          ),
-        [asyncFetcher]
-      ),
-      revoke: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/tokens/revoke' }), [asyncFetcher])
-    },
-    algorithms: {
-      search: useCallback(async (args = {}, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
-        if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
-        await requireThingtimeCapability('api.algorithms-search', '1.0.0');
-        return getJson(`/api/v1/algorithms/search${toQuery(args)}`, options);
-      }, [getJson]),
-      list: ownedAlgorithms.list,
-      listPage: ownedAlgorithms.listPage,
-      // share-link preview (identity + training size only, never weights)
-      getShared: useCallback(
-        async (args, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
-          if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
-          return getJson(`/api/v1/algorithms/shared?id=${encodeURIComponent(args?.id || '')}`, options);
-        },
-        [getJson]
-      ),
-      create: useCallback(
-        async (args, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
-          if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
-          await requireThingtimeCapability('api.algorithms', '1.2.0');
-          const { name, emoji, branchFrom, events, description } = args;
-          if (description !== undefined) await requireThingtimeCapability('api.algorithms', '1.1.0');
-          options?.signal?.throwIfAborted();
-          return asyncFetcher.submit({ name, emoji, branchFrom, events, description }, { action: '/api/v1/algorithms', signal: options?.signal, expectedActor: options?.expectedActor, expectedDataPlane: options?.expectedDataPlane });
-        },
-        [asyncFetcher]
-      ),
-      update: useCallback(
-        async (args, options?: { signal?: AbortSignal; expectedActor?: string; expectedDataPlane?: string }) => {
-          if (options?.expectedActor) await requireThingtimeCapability('api.algorithms-sync', '1.2.0');
-          if (args?.listed !== undefined || args?.description !== undefined) await requireThingtimeCapability('api.algorithms-update', '1.1.0');
-          options?.signal?.throwIfAborted();
-          return asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared, listed: args?.listed, description: args?.description }, { action: '/api/v1/algorithms/update', signal: options?.signal, expectedActor: options?.expectedActor, expectedDataPlane: options?.expectedDataPlane });
-        },
+          asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared }, { action: '/api/v1/algorithms/update' }),
         [asyncFetcher]
       ),
       remove: useCallback(
