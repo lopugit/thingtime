@@ -35,7 +35,7 @@ import {
 } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 import { Link } from 'react-router';
-import { ArrowLeft, Bookmark, Eye, Flag, Heart, Maximize2, MessageCircle, Plus, Repeat2, Send, Share } from 'lucide-react';
+import { ArrowLeft, Eye, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCommentDraft } from '~/hooks/useCommentDraft';
@@ -48,16 +48,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
-import { DRAWER_POPUP_Z } from '~/components/Nav/Drawer/useDrawer';
-import { quickRecentReactions } from '~/components/Emoji/reactionPickerState';
-import { getEditorJsDoc } from '~/components/Editor/editorJsValue';
-import { RichTextBlocks } from '~/components/Kinds/kindRenderersMedia';
-import { PostAttachments } from '~/components/Attachments/PostAttachments';
-import { downloadableAttachments } from '~/components/Attachments/attachmentUiCore';
-import { useAttachmentArchive } from '~/components/Attachments/useAttachmentArchive';
-import type { PostArchiveTarget } from './PostThingMenu';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
-import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
 import { PostThingMenu } from './PostThingMenu';
@@ -162,8 +153,15 @@ const applyCommentChange = (current: PostComment, change: CommentChange): PostCo
 // glyph made multi-emoji reactions look like single-emoji ones).
 // Joined with a zero-width space so adjacent tokens can't shape into one
 // glyph (two lone regional indicators would otherwise merge into a flag).
-const reactionDisplayEmojis = (entries: Array<[string, number]>, viewerSet: Set<string>, maxOthers: number) =>
-	[...entries.filter(([token]) => viewerSet.has(token)), ...entries.filter(([token]) => !viewerSet.has(token)).slice(0, maxOthers)]
+const reactionDisplayEmojis = (
+  entries: Array<[string, number]>,
+  viewerSet: Set<string>,
+  maxOthers: number
+) =>
+  [
+    ...entries.filter(([token]) => viewerSet.has(token)),
+    ...entries.filter(([token]) => !viewerSet.has(token)).slice(0, maxOthers),
+  ]
     .map(([token]) => token)
     .join('​');
 
@@ -289,6 +287,20 @@ export const AuthorFlairChip = ({ flair, size = 'sm' }: { flair: PublicAuthorFla
       {label}
     </Text>
   );
+};
+
+// 1234 → "1.2k" — view counts stay one glyph-cluster wide however popular a
+// post gets (the other counters stay raw; they cap out far lower)
+const formatCompactCount = (count: number): string => {
+  if (count < 1000) return String(count);
+  if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0).replace(/\.0$/, '')}k`;
+  return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
+};
+
+const formatDwell = (ms: number): string => {
+  if (ms < 1000) return `${Math.round(ms / 100) / 10}s`;
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  return `${Math.round(ms / 60_000)}m ${Math.round((ms % 60_000) / 1000)}s`;
 };
 
 // 1234 → "1.2k" — view counts stay one glyph-cluster wide however popular a
@@ -2699,25 +2711,11 @@ function PostCardImpl(props: PostCardProps) {
 			))}
 
           {/* outward share: native sheet / copy link */}
-          {!localOnly && <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />}
-
-          {/* bookmark: save to the viewer's private library (/saved) —
-          filled/accent when saved, hidden logged-out (nothing to save into) */}
-          {interactionUser && (
-            <ActionIcon
-              icon={<Bookmark size={18} strokeWidth={2.2} fill={post.viewerSaved ? 'currentColor' : 'none'} />}
-              label={post.viewerSaved ? 'Remove from Saved' : 'Save to library'}
-              active={post.viewerSaved === true}
-              color={post.viewerSaved ? ACCENT : MUTED}
-              _hover={{ background: 'var(--tt-surface-hover, #ececee)', color: post.viewerSaved ? ACCENT : INK }}
-              aria-pressed={post.viewerSaved === true}
-              onClick={handleToggleSave}
-            />
-          )}
+          <ActionIcon icon={<Share size={18} strokeWidth={2.2} />} label="Share" onClick={handleShareLink} />
 
           {/* public view stats (X-style, right edge): count = unique viewers;
           the tooltip carries impressions + average time on screen */}
-          {(!commentCollection || typeof post.viewCount === 'number') && <Tooltip
+          <Tooltip
             label={`${post.viewCount || 0} unique ${(post.viewCount || 0) === 1 ? 'viewer' : 'viewers'} · ${
               post.viewStats?.impressions || 0
             } impressions · avg ${formatDwell(post.viewStats?.avgDwellMs || 0)} on screen`}
@@ -2741,7 +2739,7 @@ function PostCardImpl(props: PostCardProps) {
               <Eye size={18} strokeWidth={2.2} />
               <Text as="span">{formatCompactCount(post.viewCount || 0)}</Text>
             </Flex>
-          </Tooltip>}
+          </Tooltip>
         </Flex>
 
         {/* comments — the post's conversation, or a FOCUSED thread panel:

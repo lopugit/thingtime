@@ -98,25 +98,11 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // like the other public reads (anonymous callers key by IP)
   'users.relationships': { limit: 120, windowMs: 60_000, enabled: true },
   'users.connections': { limit: 120, windowMs: 60_000, enabled: true },
-  // profile activity heatmap (/api/v1/users/activity) — one aggregation of
-  // day-counts per profile view, bounded like the other public reads
-  'users.activity': { limit: 120, windowMs: 60_000, enabled: true },
   // notifications: list backs the bell (poll + focus refetch), read flips
   // readAt, settings is a rare interactive toggle
   'notifications.list': { limit: 120, windowMs: 60_000, enabled: true },
   'notifications.read': { limit: 60, windowMs: 60_000, enabled: true },
-  'notifications.record': { limit: 120, windowMs: 60_000, enabled: true },
-  'timeline.read': { limit: 240, windowMs: 60_000, enabled: true },
-  'timeline.write': { limit: 240, windowMs: 60_000, enabled: true },
-  'timeline.explain': { limit: 20, windowMs: 600_000, enabled: true },
-  // version export (GET export=1) resolves one full version plus its notes and
-  // name into a 4 MiB file; bounded separately from ordinary history reads
-  'timeline.export': { limit: 30, windowMs: 60_000, enabled: true },
   'notifications.settings': { limit: 30, windowMs: 60_000, enabled: true },
-  'notifications.devices': { limit: 30, windowMs: 60_000, enabled: true },
-  // one-click email unsubscribe — anonymous (keys by IP), tokens are HMACs so
-  // this is hygiene against link-scanner hammering, not a security boundary
-  'notifications.emailUnsubscribe': { limit: 20, windowMs: 60_000, enabled: true },
   // post view telemetry (POST /api/v1/things/views) — anonymous-capable
   // batched beacons; one flush covers a whole scroll session, so this window
   // is generous for humans and a wall for replay scripts (anon keys by IP)

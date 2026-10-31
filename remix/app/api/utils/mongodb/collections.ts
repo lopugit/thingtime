@@ -396,14 +396,6 @@ export const getAuthOtpsCollection = async () => getHomeCollection('authOtps');
 // counts (an anti-manipulation surface) stay under platform control even when
 // a request carries a custom data-endpoint override.
 export const getPostViewsCollection = async () => getHomeCollection('postViews');
-// CI control plane (api/utils/ciControl): every ci-* Thing — current-state
-// projections AND the append-only ci-event history — lives in its own
-// home-pinned satellite, never in `things`. Measured in production
-// (2026-09-02): 1.82M of things_v2's 1.82M docs were CI telemetry, and every
-// one of the collection's 60+ indexes paid an entry per row (3.1 GB of index
-// for ~4.5k real content docs). A satellite gets a six-index plan sized for
-// its two readers (dashboard + per-parent history) and TTL retention.
-export const getCiControlCollection = async () => getHomeCollection('ciControl');
 
 // Per-process single flight complements the durable plan fingerprint and
 // renewable cross-process lease. Normal collection access awaits readiness,
@@ -1111,27 +1103,31 @@ export const createThingsDataIndexes = (db: any, { relationshipLookups = false, 
       },
       ['targetId_1_ownerId_1_crystal.emoji_1']
     ),
-    // Retire the superseded follow-marker generation. Current follow writers
-    // use protected root uniqueKeys for lookup and dedupe (custom endpoints
-    // retain crystal lookups); no registered schema mints crystal.follow. Leaving this old
-    // kind-blind unique index behind would needlessly constrain ordinary data
-    // Things after the crystal namespace reopens in phase 2.
-    dropIndexRetrying(col, 'things_follow_unique'),
+    // One follow edge per (followed, follower): toggle-on is an idempotent
+    // upsert, deduped under races. Only follow things carry crystal.follow
+    // (constant true) — same marker-field trick as the reaction index, since
+    // partial filters can't reliably scope on the multikey thingtime array.
+    createIndexReplacing(
+      col,
+      { targetId: 1, ownerId: 1 },
+      {
+        name: 'things_follow_unique',
+        unique: true,
+        partialFilterExpression: { targetId: { $type: 'string' }, 'crystal.follow': { $exists: true } }
+      }
+    ),
     // One friendship doc per unordered user pair, regardless of who asked:
     // crystal.friendKey is '<minId>~<maxId>', written only by the friend
-    // endpoint. Uniqueness rides uniqueKeys ('friendKey:<min>~<max>', stamped
-    // at insert) so duplicate/crossed requests still die structurally; this
-    // index is retained only for custom endpoints / an unready home layout.
-    // The steady-state home reader shares uniqueKeys_1 after awaited repair.
-    ...(relationshipLookups ? [createIndexReplacing(
+    // endpoint. Uniqueness kills duplicate/crossed requests structurally.
+    createIndexReplacing(
       col,
       { 'crystal.friendKey': 1 },
       {
-        name: 'things_friend_key_lookup',
+        name: 'things_friend_unique',
+        unique: true,
         partialFilterExpression: { 'crystal.friendKey': { $exists: true } }
-      },
-      ['things_friend_unique']
-    )] : []),
+      }
+    ),
     // (Notification list/unread queries are served by the general
     // { thingtime, ownerId, createdAt desc, shareId } index above.)
     // Legacy relational era (kind:'reaction'/'comment' docs written by the
@@ -1624,90 +1620,11 @@ const createHomeDatabaseIndexes = (db: any, { relationshipLookups, legacyLookups
         // general per-endpoint rate-limit windows; TTL reaps expired windows
         col('rateLimits').createIndex({ key: 1 }, { unique: true }),
         col('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-        col('deploymentPeers').createIndex({ origin: 1 }, { unique: true }),
-        col('deploymentPeers').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-        // listActivePeers filters by federationId, then pages lastSeenAt desc /
-        // origin asc. The federation prefix is new: name the index and retire
-        // the auto-named `lastSeenAt_-1_origin_1` it supersedes, or every
-        // already-deployed database keeps both forever (a plain createIndex
-        // with a new key shape never drops the old one).
-        createIndexReplacing(
-          col('deploymentPeers'),
-          { federationId: 1, lastSeenAt: -1, origin: 1 },
-          { name: 'deployment_peers_federation_recent' },
-          ['lastSeenAt_-1_origin_1']
-        ),
-        // Admin integration vault: write-only encrypted values, endpoint policy,
-        // short create-only claims, and redacted, expiring audit evidence.
-        col('adminIntegrationSecrets').createIndex({ id: 1 }, { unique: true }),
-        col('adminIntegrationSecrets').createIndex({ label: 1 }, { unique: true }),
-        col('adminIntegrationEndpoints').createIndex({ id: 1 }, { unique: true }),
-        col('adminIntegrationEndpoints').createIndex({ secretId: 1 }),
-        col('adminIntegrationClaims').createIndex({ endpointId: 1, resourceKey: 1 }, { unique: true }),
-        col('adminIntegrationClaims').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-        col('adminIntegrationAudit').createIndex({ createdAt: -1 }),
-        col('adminIntegrationAudit').createIndex({ endpointId: 1, createdAt: -1 }),
-        col('adminIntegrationAudit').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-        col('lopuCredentials').createIndex({ id: 1 }, { unique: true }),
-        col('lopuCredentials').createIndex({ name: 1 }, { unique: true }),
-        col('lopuCredentials').createIndex({ priority: 1 }),
-        col('lopuCredentials').createIndex({ enabled: 1, priority: 1 }),
         // post view telemetry: one doc per (post, viewer identity) — the
         // unique index IS the dedup that keeps unique-viewer counts honest
         // under racing writes; its postId prefix serves the per-post stats
         // aggregation on feed reads
         col('postViews').createIndex({ postId: 1, viewerKey: 1 }, { unique: true })
-  ];
-};
-
-export const withHomeIndexMaintenance = async <T>(work: (db: any, assertLease: () => Promise<void>) => Promise<T>, execution: IndexExecutionOptions = {}): Promise<T> => {
-  const policy = indexExecutionPolicy(execution);
-  const db = await getRawHomeThingtimeDb();
-  const settings = db.collection(physicalCollectionName('settings'));
-  let result!: T;
-  await runDurableIndexPlan({ settings, fingerprint: `maintenance:${randomUUID()}`, ...policy,
-    commandSafetyMs: policy.commandMaxTimeMS + 10_000, run: async assertLease => {
-    await runBudgetedIndexWork(db, async limited => { result = await work(limited, assertLease); }, assertLease, policy.commandMaxTimeMS);
-  } });
-  indexesEnsured = null;
-  return result;
-};
-
-// Explicit index migrations and operator recovery revoke readiness before DDL.
-// A generation fence prevents a concurrent older run from publishing ready.
-export const invalidateHomeIndexReadiness = async () => {
-  indexesEnsured = null;
-  const db = await getRawHomeThingtimeDb();
-  await invalidateDurableIndexPlan(db.collection(physicalCollectionName('settings')));
-};
-
-export const ensureIndexes = async ({ force = false, ...execution }: IndexExecutionOptions & { force?: boolean } = {}) => {
-  const policy = indexExecutionPolicy(execution);
-  if (isHomeIndexRecoveryActive() && !force) return;
-  if (force) {
-    // Finish existing work before invalidating, so an older completion cannot
-    // overwrite the explicit rebuild request.
-    await indexesEnsured?.catch(() => {});
-    indexesEnsured = null;
-    const raw = await getRawHomeThingtimeDb();
-    await invalidateDurableIndexPlan(raw.collection(physicalCollectionName('settings')));
-  }
-  if (indexesEnsured) {
-    const previous = indexesEnsured;
-    await previous;
-    const db = await getRawHomeThingtimeDb();
-    const marker = await db.collection(physicalCollectionName('settings')).findOne({ _id: INDEX_LIFECYCLE_ID });
-    if (ensuredFingerprint && marker?.readyFingerprint === ensuredFingerprint && !marker?.owner) return;
-    if (indexesEnsured === previous) indexesEnsured = null;
-  }
-  if (!indexesEnsured) {
-    const run = (async () => {
-      const db = await getRawHomeThingtimeDb();
-      const settings = db.collection(physicalCollectionName('settings'));
-      // Read raw settings: the public home getters now wait on this initializer.
-      const [legacy, relationship] = await Promise.all([
-        settings.findOne({ key: 'Thingtime.IndexLayout.LegacyThings.v1' }, { projection: { ready: 1 } }),
-        settings.findOne({ key: 'Thingtime.IndexLayout.Relationships.v1' }, { projection: { ready: 1 } })
       ]);
       const options = { legacyLookups: legacy?.ready !== true, relationshipLookups: relationship?.ready !== true };
       const plan = (target: any) => createHomeDatabaseIndexes(target, options);

@@ -601,81 +601,9 @@ export const ProfilePage = (props: ProfilePageProps) => {
 
         {/* follower/following/friend counts + follow/friend actions (and the
         pending friend-request inbox on your own profile) */}
-        {!temporaryProfile && <RelationshipControls username={profile.username} isSelf={isSelf} />}
+        <RelationshipControls username={profile.username} isSelf={isSelf} />
 
-        {wornTheme && (
-          <Box
-            as="button"
-            type="button"
-            onClick={handleWornChipClick}
-            mt={3}
-            p="1.5px"
-            borderRadius="999px"
-            background={RAINBOW}
-            backgroundSize="calc(100px + 200%)"
-            sx={{ animation: RAINBOW_ANIM }}
-            cursor="pointer"
-            display="inline-flex"
-            title={
-              isSelf
-                ? 'Your active theme — open the Theme Studio'
-                : tryingOn
-                  ? 'Take their theme off'
-                  : 'Preview Thingtime through their eyes'
-            }
-          >
-            <Flex
-              alignItems="center"
-              columnGap="6px"
-              px={3}
-              py="5px"
-              borderRadius="999px"
-              background="var(--tt-card, #fff)"
-              fontSize="13px"
-              fontWeight={600}
-              color="var(--tt-text, #5a5a66)"
-              transition="background 140ms ease"
-              _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
-            >
-              {isSelf
-                ? `Wearing "${wornTheme.name}" 🌈`
-                : tryingOn
-                  ? `Wearing "${wornTheme.name}" ✓ — take it off`
-                  : `Wearing "${wornTheme.name}" 🌈 — try it on`}
-            </Flex>
-          </Box>
-        )}
-
-        {isSelf && user?.temporary ? (
-          <Flex mt={4} columnGap={2} rowGap={2} flexWrap="wrap">
-            <Link to="/login">
-              <Button
-                size="sm"
-                color="white"
-                fontFamily="heading"
-                fontWeight="600"
-                background={RAINBOW}
-                backgroundSize="calc(100px + 200%)"
-                sx={{ animation: RAINBOW_ANIM }}
-                _hover={{ opacity: 0.9 }}
-                borderRadius="var(--tt-radius-md, 12px)"
-              >
-                {LOGIN_TO_CLAIM_LABEL}
-              </Button>
-            </Link>
-            <Link to="/register">
-              <Button
-                size="sm"
-                variant="outline"
-                borderColor="var(--tt-border, #ececef)"
-                _hover={{ bg: 'var(--tt-surface-alt, #f5f5f7)' }}
-                borderRadius="var(--tt-radius-md, 12px)"
-              >
-                Create account
-              </Button>
-            </Link>
-          </Flex>
-        ) : isSelf && user ? (
+        {isSelf && user ? (
           <Flex mt={4} columnGap={2} rowGap={2} flexWrap="wrap">
             <Button
               size="sm"

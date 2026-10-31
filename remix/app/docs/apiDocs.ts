@@ -12094,35 +12094,26 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'users-follow',
     group: 'social',
-    title: 'Read or change a follow',
+    title: 'Follow / unfollow',
     endpoint: '/api/v1/users/follow',
-    summary: 'Read, follow, or unfollow another user — one-way, no approval needed.',
+    summary: 'Follow or unfollow another user — one-way, no approval needed.',
     detail:
-      'GET with username or userId returns the public user, both follow directions, and follower/following ' +
-      'counts. POST writes one home-pinned thingtime ["follow"] edge per follower/followed pair, deduped by ' +
-      'its crystal.followKey unique index. Omitting `follow` toggles; passing it explicitly is idempotent. ' +
+      'Follows are one-way edges (thingtime ["follow"], one thing per follower/followed pair, deduped ' +
+      'by a unique index). Omitting `follow` toggles; passing it explicitly makes the call idempotent. ' +
       'A new follow emits a new-follower notification to the followed user (respecting their ' +
-      'notification prefs). Follow state also routes Messenger DMs out of the message-requests pile. ' +
-      'Friendships are a separate, approval-based system — see /api/v1/users/friend.',
+      'notification prefs). Friendships are a separate, approval-based system — see /api/v1/users/friend.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
     },
-    methods: ['GET', 'POST'],
+    methods: ['POST'],
     steps: [
-      'GET with userId or username to read the relationship, public user, and counts.',
-      'POST { userId } or { username } to toggle that follow.',
+      'POST { userId } or { username } of the user to follow.',
       'Optionally pass follow: true|false for an idempotent set instead of a toggle.',
-      'Read following, followsYou, followerCount, and followingCount back and reconcile the optimistic UI.',
+      'Read { following, followerCount } back and update the button + count optimistically.',
       'Handle 400 self-follow, 401 unauthenticated, 404 unknown user, 429 rate-limited.'
     ],
     requestExamples: [
-      {
-        name: 'Read a relationship',
-        description: 'Check both follow directions and counts for one user.',
-        method: 'GET',
-        query: { username: 'ada-lovelace' }
-      },
       {
         name: 'Toggle follow',
         description: 'Follow (or unfollow, if already following) by user id.',
@@ -12139,23 +12130,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Relationship returned after a read or mutation.',
-        body: {
-          ok: true,
-          user: { id: 'c0ffee12-cccc-4ccc-8ccc-000000000003', username: 'ada-lovelace' },
-          following: true,
-          followsYou: false,
-          followerCount: 42,
-          followingCount: 17
-        }
+        description: 'Now following.',
+        body: { ok: true, following: true, followerCount: 12 }
       },
       {
         status: 400,
         description: 'Self-follow.',
         body: { ok: false, error: 'You already have your own undivided attention 💅' }
       }
-    ],
-    notes: ['POST changes draw from the users.follow rate-limit bucket (30 requests per minute).']
+    ]
   }),
   endpoint({
     id: 'users-friend',
@@ -12251,53 +12234,6 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'users-activity',
-    group: 'profile',
-    title: 'Activity heatmap',
-    endpoint: '/api/v1/users/activity',
-    summary: 'Day-bucketed counts of a user’s viewer-visible things over the last year (the profile contribution graph).',
-    detail:
-      'Returns `days` — a map of UTC `YYYY-MM-DD` day strings to how many things the user created that ' +
-      'day — plus `total` and `firstDayUtc` (the first counted UTC day — the Sunday opening the 53-week ' +
-      'grid, so the window is exactly the days a Sunday-first contribution grid renders). Counts only: no content, ' +
-      'no kind breakdown. Visibility matches the profile post list exactly: logged out you count public ' +
-      'things only, friends additionally count friends-circle things, and owners count everything they ' +
-      'own. User actions (posts, comments, reactions, saves, poll votes, folders, schemas…) count; ' +
-      'server-minted control-plane records (notifications, friend/subscription state, messenger index ' +
-      'rows…) never do.',
-    auth: {
-      mode: 'optional',
-      description: 'Works logged out (public activity only); anonymous callers are rate-limited per hashed IP.'
-    },
-    methods: ['GET'],
-    steps: [
-      'GET ?username=<name>.',
-      'Render `days` as a 53×7 contribution grid; missing days mean zero.',
-      'Handle 404 unknown user and 429 rate-limited.'
-    ],
-    requestExamples: [
-      {
-        name: 'Profile activity',
-        description: 'A year of day-counts for a profile heatmap.',
-        method: 'GET',
-        query: { username: 'lopu' }
-      }
-    ],
-    responseExamples: [
-      {
-        status: 200,
-        description: 'Day-counts for the last year.',
-        body: {
-          ok: true,
-          days: { '2026-08-01': 3, '2026-08-14': 1 },
-          total: 4,
-          firstDayUtc: '2025-08-17'
-        }
-      },
-      { status: 404, description: 'Unknown user.', body: { ok: false, error: 'User not found' } }
-    ]
-  }),
-  endpoint({
     id: 'users-connections',
     group: 'social',
     title: 'Connection lists',
@@ -12346,63 +12282,25 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-list',
-    // 1.1.0: the subspace-* types (join-request, join-accepted, post-removed,
-    // report, role, ban) joined the type enum — additive
-    // 1.2.0: (develop) history filters, stable cursor, from/to window, viewer
-    // object; (subspaces) subspace-post-removed and subspace-ban rows carry the
-    // subspace's MOD TEAM as their actor (actorId = the subspace shareId,
-    // actorName "s/<slug> mods", actorUsername / actorAvatarUrl null)
-    // 1.3.0: both lines merged — this endpoint ships history filters AND the
-    // subspace family together; additive
-    // Includes the 1.6.2 APNs collapse-identifier fix.
-    // 1.7.0 adds lopu-message for scheduled conversation updates.
-    featureVersion: '1.7.0',
-    contractVersion: '1.7.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
-    summary: 'Your searchable notification history. Add history=1 to include all records regardless of delivery settings; the default bell view still applies preferences.',
+    summary: 'Your notifications, newest first, filtered by your notification prefs — plus the unread count.',
     detail:
       'Notifications are server-minted things (new followers, friend requests/accepts, comments, ' +
-      'replies, reactions, shares, @mentions, capped posts-from-followed/friends fan-out, and subspace ' +
-      'moderation: subspace-join-request, subspace-join-accepted, subspace-post-removed, ' +
-      'subspace-report, subspace-role, subspace-ban) plus SYSTEM ' +
-      'notes from Lopu (category system — action-run, recording-reminder, lopu-reminder, login-success, and client-recorded system-message; ' +
-      'actorId "thingtime", the headline in title, an in-app href, outcome ok|error). Every row ' +
-      'carries its category: social (friend-request, friend-accepted, new-follower, groups, ' +
-      'subspace-join-request, subspace-join-accepted, subspace-role, subspace-ban), ' +
-      'engagement (comment, reply, reaction, share, mention, subspace-post-removed, subspace-report), ' +
-      'feed (post-from-followed, ' +
-      'post-from-friend), system (action-run, recording-reminder, lopu-reminder, login-success, system-message). history=1 includes all saved ' +
-      'notifications independently of push and email preferences; without it the bell applies push settings. ' +
-      'System messages may include detail with the bounded, credential-redacted full text. ' +
-      'Optional filters back the /notifications history page: category=<one>, ' +
-      'types=<csv> (intersected with category when both are given; unknown names match nothing), ' +
-      'unread=1, q=<text ≤100 chars, literal case-insensitive match over preview / actor name / ' +
-      'actor username / system title>, since=<ISO> and until=<ISO> (inclusive createdAt bounds), ' +
-      'and withTotal=1 to also return total — the count of everything matching the filters, cursor ' +
-      'ignored. unreadCount is always the badge count (enabled, non-quiet rows, filters ignored); history=1 also returns historyUnreadCount across all stored unread rows. Client popup records are already read because they were displayed. Cursor ' +
-      'pagination uses the opaque cursor=<nextCursor> so notifications sharing the same timestamp ' +
-      'are never skipped; legacy before=<nextBefore> remains supported. Optional from (inclusive) ' +
-      'and to (exclusive) ISO timestamps bound historical pages and exports, alongside since/until. ' +
-      'The viewer object identifies the authenticated account by username so native companions can ' +
-      'visibly confirm which account is connected. Records are no longer automatically pruned by count. ' +
-      'Subspace-scoped rows (role, ban, join…) carry the subspace shareId in targetId and lead their preview ' +
-      'with "s/<slug> · …" so clients can link to /s/<slug>; post-scoped ones (post-removed, report) set postId ' +
-      'like every other post notification. The punitive pair (subspace-post-removed, subspace-ban) is sent by the ' +
-      'subspace’s mod team: actorId is the SUBSPACE shareId, actorName "s/<slug> mods", actorUsername and ' +
-      'actorAvatarUrl null — the moderator who acted is named only in the mod log; every other subspace row names ' +
-      'the acting moderator.',
+      'replies, reactions, shares, and capped posts-from-followed/friends fan-out). The list is ' +
+      'ALWAYS filtered by your current notification settings, so disabling a type hides even ' +
+      'already-written notifications of that type. unreadCount backs the bell badge. Cursor ' +
+      'pagination via before=<nextBefore>.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
     },
     methods: ['GET'],
     steps: [
-      'GET ?limit=&cursor=&from=&to= — newest first. Use cursor for stable 10-at-a-time history; from is inclusive and to is exclusive.',
+      'GET ?limit=&before= — newest first.',
       'Show unreadCount on the bell; refetch on window focus.',
-      'History page: add history=1, category / types / unread / q / since / until and withTotal=1; keep the filter set in the URL.',
-      'Click-through: href (system notes) → that path, else postId → /post/<id>, else a subspace-* row → /s/<slug> (slug from the preview), else actor → /profile/<username>.',
+      'Click-through: postId → /post/<id>, otherwise actor → /profile/<username>.',
       'Handle 401 unauthenticated and 429 rate-limited.'
     ],
     requestExamples: [
@@ -12410,33 +12308,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'Bell dropdown',
         description: 'First page for the notifications popover.',
         method: 'GET',
-        query: { limit: 10 }
-      },
-      {
-        name: 'History — unread system notes this month',
-        description: 'The /notifications page filtered to system notes (action runs) that are still unread, with a total.',
-        method: 'GET',
-        query: { limit: 30, category: 'system', unread: 1, since: '2026-08-01T00:00:00.000Z', withTotal: 1 }
-      },
-      {
-        name: 'History — search',
-        description: 'Everything mentioning "deckard" across previews, actor names and system titles.',
-        method: 'GET',
-        query: { limit: 30, q: 'deckard', withTotal: 1 }
+        query: { limit: 20 }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'Notifications + unread count (a person row and a system note).',
+        description: 'Notifications + unread count.',
         body: {
           ok: true,
-          viewer: { username: 'lopu' },
           notifications: [
             {
               id: 'a1b2…',
               type: 'new-follower',
-              category: 'social',
               actorId: '664f…',
               actorUsername: 'rick',
               actorName: 'Rick Deckard',
@@ -12444,63 +12328,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               targetId: '664f…',
               postId: null,
               preview: null,
-              title: null,
-              href: null,
-              outcome: null,
               readAt: null,
               createdAt: '2026-08-01T12:00:00.000Z'
-            },
-            {
-              id: 'c3d4…',
-              type: 'action-run',
-              category: 'system',
-              actorId: 'thingtime',
-              actorUsername: null,
-              actorName: 'Lopu',
-              actorAvatarUrl: null,
-              targetId: 'tt-action-run-…',
-              postId: null,
-              preview: '42 ms · 3 ops',
-              title: 'Action “Daily digest” finished ✅',
-              href: '/actions/daily-digest',
-              outcome: 'ok',
-              readAt: null,
-              createdAt: '2026-08-01T11:58:00.000Z'
             }
           ],
-          unreadCount: 2,
-          total: 2,
-          nextBefore: null,
-          nextCursor: null
+          unreadCount: 1,
+          nextBefore: null
         }
       }
     ]
-  }),
-  endpoint({
-    id: 'timeline', contractVersion: '1.23.0', featureVersion: '1.23.0', group: 'things',
-    title: 'Timeline history and draft synchronization', endpoint: '/api/v1/timeline',
-    summary: 'Read private history, synchronize drafts, restore, undo or merge versions, name and export saved versions, and synchronize named branches.',
-    detail: 'In 1.22.0, version export also retains canonical algorithm-content version-1 snapshots from revisions and admitted owner-authored client drafts, including deletion before-images. The archive preserves the immutable event and actual Timeline receipt; an accepted draft does not acknowledge algorithm content sync or grant mutation authority. Algorithm snapshots contain approved profile design and library placement, never training observations, sharing authority, lineage or active selection. Other client-draft adapters remain unsupported by remote export. First-party remote algorithm exports require 1.22.0; local exports need no remote capability. In 1.21.0, version export also retains approved theme-content snapshots, including the before image of a deletion. This read-only archive does not enable generic protected-content restore. In 1.20.0, name-version also accepts an admitted owner-authored client draft with retained after content. The original event stays immutable with mode:draft and source:client; naming never publishes it or promotes it to a server revision. First-party account clients save canonical name commands offline before upload and send them only after the exact draft is acknowledged. Anonymous names remain in their local authority and never enter account sync. In 1.19.0, remove-note retains a private, payload-free, metered removal record under the same protected note identity, including for an absent note. Delayed add-note/explain-change retries under that identity return 409 and cannot recreate text or rerun inference. Repeated removals acknowledge without another charge. The retained record uses the same formatVersion/id/ownerId/removedAt contract in local and account authorities. Removal refunds only the difference between the original note and its small durable fence; malformed accounting refuses before mutation. Removed identities do not appear in page/entry notes or count against the per-event note cap. First-party note queues require 1.19.0, complete saves/removals locally and defer a pending-note removal until its add resolves. In 1.18.0, a saved version can carry a pinned display name, one saved edit can be undone on its own, and one saved version can be exported as a private file. POST {command:name-version,operationId,eventId,thingId,name,expectedRevision} names, renames (expectedRevision equals the current name revision) or clears (name:null) one admitted revision or owner-authored client draft with after content; a clear keeps a payload-free tombstone record so the revision counter continues and a stale rename from before the clear is refused with 409. The name is a private relational timeline-version-name record (1–80 characters, one per event, unbilled control metadata whose text never reaches crystal projections, search or root data), and every name, rename and clear appends a metered timeline-version-name effect event in the named version’s branch whose before/after carry the full prior/new record (after is null on clear); that event is never refunded and rename churn is bounded only by timeline.write. The reply is {ok,name,entry}: entry is null only for a no-op (the same name again, or clearing an absent name); an identical operationId retry returns the original receipt and a different request under a used id is refused with 409; a stale expectedRevision returns 409; a version of another Thing or account returns 404; effect, invalid-provenance draft and deletion events return 422. Names invent no version numbers. First-party clients queue retained-version names locally and require verified account sync for remote acceptance; naming does not alter version retention. History pages and exact version reads return names:[…] beside notes; older servers omit the field. preview-version/apply-version accept mode:undo for an update revision carrying both snapshots: base is that edit’s after-state, incoming its before-state, merged against the live current content with the ordinary conflict choices, so later edits of other properties are kept and overlapping edits need a choice; baseEventId is the undone event. A result equal to the current content is refused with 409 (already reverted); create, delete, effect and draft events return 422. The committed event is operation restore with label Undid change and both the current head and the undone version as parents; no new operation value exists, so older clients show it as an ordinary restore. componentMode current avoids recorded-component copies; page versions with recorded dependencies need exactly one parent. Undoing a version on an abandoned branch is allowed and deterministic; undoing on a deleted Thing stays 404 because recover is restore-only. GET export=1 with eventId, ownerId and dataPlane (optional storage; no other keys, no duplicates) returns {ok,export:{formatVersion:1,exportedAt,event,receipt,content,notes,name}} for one revision version: content is a thing-content snapshot holding only the six restorable keys (crystal, extended, tags, geo, acl, folderId) resolved through compact ancestors, while the raw event keeps thingtime and targetId; deletions export their before-image. Effect and draft events return 422, an unknown or foreign version 404, and a version whose retained parts or resolved file exceed the 4 MiB response ceiling returns 413 while remaining retained. Export spends timeline.read plus its own timeline.export allowance and writes nothing. In 1.17.0, every recorded change can carry contextual notes. Notes are private relational records (one protected timeline-note Thing per note, author owner or lopu, plain text of at most 2000 characters, 8192 bytes per record, at most 8 per event), never fields on the immutable event. POST {command:add-note,operationId,eventId,thingId,text} stores an owner note; POST {command:explain-change,operationId,eventId,thingId} asks Thingtime’s own Lopu models for a short plain-language explanation of that recorded change, stored as a lopu note only when a usable explanation is produced (503 otherwise, nothing stored); POST {command:remove-note,operationId,noteId} removes either author’s note (1.19.0 retains and meters a minimal identity fence; a missing note acknowledges idempotently). The note id is note- followed by the operationId, so a lost reply retried with the same request returns the identical note and never duplicates; the same operationId with different content is refused with 409. The event must already be in this account’s history (404 otherwise), and a full event returns 413. explain-change requires a full account, passes the Lopu access gate used by chat (403 LOPU_GUEST/LOPU_UNVERIFIED or 402 LOPU_NO_CREDITS refusals with the same bodies) and spends its own timeline.explain allowance; explanations are not yet metered against Lopu credits. History pages and exact version reads return notes:[…] beside their entries; older servers omit the field. Notes are the owner’s private content and never appear in public projections. In 1.15.0, ordinary server Action runs append immutable action-outcome version-1 effect events before execution and on completion in the same canonical Timeline. Admission must persist before steps run; completion retries only the immutable receipt. Outcomes are private to the invoker and contain only runId, actionName (at most 160 characters), status (started|ok|error), startedAt, durationMs and numeric budget counters. They share trusted operation provenance with committed mutations, survive Action deletion and use normal metered storage. They cannot be restored, merged or replayed. No raw inputs, results, exceptions, traces or credentials are retained in this adapter. A started event alone is not proof of completion. Shared read-only runs and browser preparation create no account outcome events. In 1.14.0, restore preview-version/apply-version accept recover:true to recover a deleted ordinary Thing at its original id. Recovery requires a trusted recorded deletion and an unoccupied id; current:null, recovery:true and recoveryFingerprint identify the preview; apply requires expectedRecovery from that preview. The result is private, preserves a surviving owned folder or falls back to Things root, and creates a new revision while retaining the deletion and earlier history. Protected records and target-attached interactions require their dedicated editors. Recorded page components become private copies in the same storage-accounted transaction. expectedHeadId, expectedRecovery and expectedComponents fence stale previews; exact operation-id retries return the original receipt. Trusted committed main revisions now advance an atomic canonical Published branch head that survives deletion; it cannot be pushed through named-branch commands. Older histories without this pointer use a bounded 2048-event / 16 MiB recovery scan and refuse safely if incomplete. In 1.13.0, GET related=1 with thingId reads one owned webpage and its currently authorized stored composition as one paged private Timeline stream. Only this account’s source Thing histories are included; other authors’ private histories are excluded even when their Components are readable. Returns related:{rootId,thingIds,revision,sharedCount}, a bounded transient scope projection (maximum 128 Things). Supply relatedRevision when paging before/after. A changed membership restarts at the recent page and returns reset:true, so newly linked Things with older events are not skipped. Standard byte/page limits, account/source fences and canonical event/receipt records remain unchanged. In 1.12.0, preview-version/apply-version accept componentMode:recorded|current and optional componentChoices. Previews include thingtime and components:{current,incoming,result,conflicts,missing,unavailable,copyCount,fingerprint}. Component resolution applies only to webpage Things; arbitrary data fields named blocks remain ordinary data. Applying requires expectedComponents from that preview. Recorded mode creates private Component Things with fresh shareIds and componentKeys, rewrites only actual page references, and records the page and copies with storage accounting in one transaction. Other pages retain their shared components. Merge compares base/incoming captures against the definitions rendered by the current page. Missing definitions require current mode or a complete version; recorded-unavailable components become inactive private placeholder Components. Current mode deliberately keeps live resolution. Live definitions are fingerprinted again inside the transaction; changed previews return 409. Source history remains immutable. Older clients with page components must update before applying. Nested Action/Schema/media histories are not yet restored by this operation. In 1.11.0, preview-branch-merge accepts optional componentChoices, keyed by JSON-encoded single-reference paths with current/incoming choices. Supplying it returns components:{base,current,incoming,entries,choices}: bounded reference-to-dependency maps and canonical capture entries, never additional durable state. The shared comparison merges atomic definitions by content and preserves selected links; conflicting or missing history needs explicit review. Folder-only versions inherit their crystal source. Legacy comparisons with retained dependencies refuse with 409 instead of dropping them. Combined capture metadata is preflighted against the remaining 4 MiB response budget and read in batches of at most 128. The merged client event keeps the selected dependency links and uses the existing branch push queue. Published Things remain unchanged. In 1.10.0, GET components=1 with eventId, ownerId and dataPlane returns {ok,eventId,entries} containing only that private version’s linked component-binding events. Optional storage selects home/selected as usual; duplicate or unrelated query fields are refused. The reader batches at most 120 references and caps responses at 4 MiB. Each binding retains only {ref,component:{id,crystal}|null} in an ordinary immutable event and relationship records. It captures readable definitions, not another author’s private history or runtime outputs. New server page mutations capture definitions in the content transaction; client drafts retain the definitions shown by their editor. Existing versions without bindings remain explicitly incomplete. In 1.6.0, storage=home explicitly selects home history without changing the browser database selection; omit storage (or use selected) for the selected database. ownerId and dataPlane remain mandatory identity fences on reads/writes. The scoped selection applies to drafts, exact versions, branches, comparisons and restoration alike. A selection equal to the home URI identifies as home. GET with ownerId discovers the current dataPlane and managed Timeline folder id. Add thingId and dataPlane to page history, or history=1 for the complete account feed; before pages older events and after pages newer events, with server positions independent of client clocks. POST the shared version-1 TimelineEvent as the body, with ownerId and dataPlane in the query. Only current-owner, source:client, mode:draft events are accepted. A draft upload never changes the target Thing or claims a server operation ran. Event identity is immutable and retries return the original receipt. Durable storage uses identical local/server event and relationship records: every parent, dependency, Thing, branch and operation link is its own document; the bounded API aggregate assembles those references on read. Server mutation transactions mint revision events. In 1.3.0, folder moves retain compact folder-placement snapshots with an exact saved content ancestor; version restore and merge reconstruct that historical content. Folder deletion drains child placements and their events before removing the folder. Protected library moves use managed-folder-placement, containing only folder ids; generic content restoration is unavailable for these records. Version commands use the same POST: {command:preview-version,mode:restore|merge,eventId,choices?} returns a comparison, conflicts and expectedHeadId; {command:apply-version,mode,eventId,expectedHeadId,operationId,choices?} commits through ordinary Thing validation with a fresh UUID v4 operationId. Retry the exact command and operationId after a lost response. Changed live heads or unresolved overlaps are refused. Conflict choices map JSON-encoded property paths to current or incoming. Arrays are compared atomically. Restores create a new revision and retain later history. In 1.2.0, GET eventId plus dataPlane loads one exact private version, with optional matching thingId; it cannot be combined with history/branch paging parameters. GET branches=1 plus thingId and dataPlane pages named branches with before and limit (maximum 40). POST {command:create-branch,operationId,branchId,thingId,eventId,expectedRevision:0,name} creates a branch; branchId is branch- followed by a UUID v4. POST {command:advance-branch,operationId,branchId,thingId,eventId,expectedRevision,name:null} moves a head forward; expectedRevision:0 attaches a different Thing. Names are 1-80 characters. Branch metadata and each per-Thing head are separate canonical local/remote records. Commands return {ok,branch,head,entry}, with an immutable audit event; exact retries return the original result. Stale or divergent pushes return 409 without moving the head or published content. Pull branches again to compare. In 1.7.0, POST {command:preview-branch-merge,branchId,thingId,eventId,expectedHeadId,expectedRevision,choices:{}} compares an incoming version with the exact named branch head using their shared ancestor. It returns {ok,preview:{branch,head,incomingEventId,baseEventId,current,incoming,result,conflicts}} without writing. Choices use the same current/incoming grammar. Persist the reviewed result locally as a canonical source:client, mode:draft, operation:merge event with both versions as parents, then enqueue advance-branch against the preview revision. Upload the event before the command; retries preserve both immutable identities. A stale branch refuses the push while keeping the merged version in History. Merging a branch never publishes the Thing. In 1.8.0, POST {command:checkout-branch,branchId,thingId,expectedHeadId,expectedRevision} reads an exact private branch version as {ok,checkout:{branch,head,entry,snapshot}}. The entry remains the original canonical event/receipt; snapshot is a transient full thing-content view reconstructed from its historical ancestors. Checkout never writes or borrows current published content. Branch field edits use ordinary client draft events and advance-branch commands. Cached full versions and pinned drafts remain editable offline; stale or divergent pushes retain the draft and require a merge. Checkout replies are bounded to 4 MiB. In 1.9.0, GET branchId plus thingId, ownerId and dataPlane reads one named branch directly as {ok,branch,head}, without scanning branch pages or loading version content. Only those query fields and optional storage are accepted; duplicates, version selectors and paging fields are refused. A missing branch/Thing membership returns 404. The response uses the existing canonical records. Feed the returned head id/revision into checkout-branch; an intervening push still returns 409. This read never acknowledges pending pushes or changes published content. In 1.4.0, dedicated home-library display-title renames record library-title version-1 snapshots containing only {title:string|null}; themes, feed algorithms, custom emoji and chat archives retain their original source name and protected payload. Retained title content is metered, unchanged titles append no content event, and failed recording rolls back the rename. These metadata snapshots do not support generic protected-content restore. Full account credentials are required; scoped app/PAT credentials are excluded. All responses are private/no-store. Version 1.23.0 adds theme-content v2 snapshots for the focus styling fields introduced by api.themes 1.2.0. Historical v1 snapshots retain their original field allowlist and exact payload; new snapshots select v2 only when focus fields are present. Theme History reads and restoration accept both versions without injecting defaults into retained history.',
-    auth: { mode: 'session-or-bearer', description: 'A current full account session; scoped credentials cannot read account history.' },
-    methods: ['GET', 'POST'],
-    steps: ['Negotiate api.timeline 1.0.0 for synchronization, 1.1.0 for version commands, 1.2.0 for branches and exact version reads, 1.3.0 for compact folder-placement restore and merge, 1.4.0 for library display-title history, 1.5.0 for approved saved-theme content revisions, 1.6.0 for explicit home history under a custom database selection, 1.7.0 for named-branch merge previews, 1.8.0 for exact branch checkout, 1.9.0 for direct named branch lookup, 1.10.0 for recorded component dependencies, 1.11.0 for component-aware branch merges, 1.12.0 for component-aware published restore/merge, 1.17.0 for contextual notes (add-note, explain-change, remove-note commands and page/entry `notes`), 1.18.0 for named versions, undo and version export (name-version, mode:undo, GET export=1 and page/entry `names`), or 1.19.0 for durable note removal and 1.20.0 for naming admitted client drafts and independent queued note writes, 1.21.0 for approved theme-content version exports, or 1.22.0 for algorithm-content version exports.', 'Discover the current account/data-plane scope before opening local storage.', 'Read each Thing’s recent history, page older history on demand, and pull newer events by server position.', 'Persist authored drafts locally before POST; retry the exact immutable event until its receipt arrives. Large server snapshots may use thing-content-parts references; their payloads remain protected and are reconstructed for supported version operations.', 'Preview a restore or merge, resolve overlaps, then apply against that exact head.'],
-    requestExamples: [{ name: 'Discover scope', description: 'Bind subsequent synchronization to the selected account and data source.', method: 'GET', query: { ownerId: 'current-user-id' } }, { name: 'Discover home history', description: 'Use home history while leaving the selected database unchanged.', method: 'GET', query: { ownerId: 'current-user-id', storage: 'home' } }, { name: 'Read a named branch', description: 'Resolve one branch/Thing pointer independently of paged history and local caches.', method: 'GET', query: { ownerId: 'current-user-id', dataPlane: 'home', branchId: 'branch-177abf25-b322-4ac0-9707-a59c36e7bcd5', thingId: 'page-id' } }, { name: 'Add a note', description: 'Attach a private owner note to one recorded change; retry the exact body after a lost reply.', method: 'POST', query: { ownerId: 'current-user-id', dataPlane: 'home' }, body: { command: 'add-note', operationId: '9d3f5a7e-6c21-4b8e-9f0a-2c4d6e8f0a1b', eventId: 'event-id', thingId: 'page-id', text: 'Renamed before the launch review.' } }, { name: 'Ask Lopu to explain', description: 'Store a short plain-language explanation of that recorded change as a lopu note (full accounts only).', method: 'POST', query: { ownerId: 'current-user-id', dataPlane: 'home' }, body: { command: 'explain-change', operationId: 'b1c2d3e4-f5a6-4b7c-8d9e-0f1a2b3c4d5e', eventId: 'event-id', thingId: 'page-id' } }, { name: 'Name a version', description: 'Pin a display name on one synced saved version; send the current name revision (0 when unnamed) and retry the exact body after a lost reply. name:null clears it.', method: 'POST', query: { ownerId: 'current-user-id', dataPlane: 'home' }, body: { command: 'name-version', operationId: 'c7d8e9f0-1a2b-4c3d-8e4f-5a6b7c8d9e0f', eventId: 'event-id', thingId: 'page-id', name: 'Launch copy', expectedRevision: 0 } }, { name: 'Preview an undo', description: 'Compare reverting exactly this saved edit against the current content; current components avoid private copies.', method: 'POST', query: { ownerId: 'current-user-id', dataPlane: 'home' }, body: { command: 'preview-version', mode: 'undo', eventId: 'event-id', choices: {}, componentMode: 'current', componentChoices: {} } }, { name: 'Apply an undo', description: 'Commit the reviewed undo against the previewed head; the new version is a restore labelled Undid change.', method: 'POST', query: { ownerId: 'current-user-id', dataPlane: 'home' }, body: { command: 'apply-version', mode: 'undo', eventId: 'event-id', expectedHeadId: 'head-event-id', operationId: 'd8e9f0a1-2b3c-4d4e-9f5a-6b7c8d9e0f1a', choices: {}, componentMode: 'current', componentChoices: {}, expectedComponents: '3f1c…' } }, { name: 'Export a version', description: 'Download one saved version with its resolved content, notes and name as a private JSON file.', method: 'GET', query: { ownerId: 'current-user-id', dataPlane: 'home', eventId: 'event-id', export: '1' } }],
-    responseExamples: [{ status: 200, description: 'Current synchronization scope.', body: { ok: true, ownerId: 'current-user-id', dataPlane: 'home', folderId: 'timeline-folder-…' } }, { status: 200, description: 'Stored note; identical retries return the same record.', body: { ok: true, note: { formatVersion: 1, id: 'note-9d3f5a7e-6c21-4b8e-9f0a-2c4d6e8f0a1b', ownerId: 'current-user-id', eventId: 'event-id', thingId: 'page-id', author: 'owner', text: 'Renamed before the launch review.', createdAt: '2026-10-13T09:30:00.000Z' } } }, { status: 413, description: 'The event already holds the maximum number of notes.', body: { ok: false, error: 'This change already has 8 notes. Remove one to add another.', code: 'storage_invariant' } }, { status: 200, description: 'Stored version name plus its effect-event receipt; a no-op returns entry:null and identical retries return the same record.', body: { ok: true, name: { formatVersion: 1, id: 'event-id/name', ownerId: 'current-user-id', eventId: 'event-id', thingId: 'page-id', name: 'Launch copy', revision: 1, createdAt: '2026-10-13T10:00:00.000Z', updatedAt: '2026-10-13T10:00:00.000Z' }, entry: { event: { id: 'version-name-c7d8e9f0-1a2b-4c3d-8e4f-5a6b7c8d9e0f', mode: 'effect', operation: 'effect', label: 'Named version', branchId: 'main', dependencies: [{ thingId: 'page-id', eventId: 'event-id' }], after: { adapter: 'timeline-version-name', version: 1, value: { name: 'Launch copy', revision: 1 } } }, receipt: { formatVersion: 1, eventId: 'version-name-c7d8e9f0-1a2b-4c3d-8e4f-5a6b7c8d9e0f', ownerId: 'current-user-id', position: 1760349600000, acceptedAt: '2026-10-13T10:00:00.000Z' } } } }, { status: 409, description: 'The name changed elsewhere since this revision was read.', body: { ok: false, error: 'This version name changed on another device. Refresh and try again.', code: 'storage_conflict' } }, { status: 422, description: 'Effects and versions without retained after content cannot be named.', body: { ok: false, error: 'Only a retained content version can be named.', code: 'storage_invariant' } }, { status: 200, description: 'Undo preview: the undone event is the base, its before-state the incoming side, and later edits of other properties survive in result.', body: { ok: true, preview: { eventId: 'event-id', thingId: 'page-id', mode: 'undo', expectedHeadId: 'head-event-id', current: { adapter: 'thing-content', version: 1, value: { crystal: { title: 'Launch copy', body: 'Later edit' }, extended: null, tags: [], geo: null, acl: ['tt:user'], folderId: null } }, incoming: { adapter: 'thing-content', version: 1, value: { crystal: { title: 'Draft copy', body: 'Original' }, extended: null, tags: [], geo: null, acl: ['tt:user'], folderId: null } }, result: { adapter: 'thing-content', version: 1, value: { crystal: { title: 'Draft copy', body: 'Later edit' }, extended: null, tags: [], geo: null, acl: ['tt:user'], folderId: null } }, baseEventId: 'event-id', conflicts: [], thingtime: ['data'], components: { current: {}, incoming: {}, result: {}, conflicts: [], missing: [], unavailable: [], copyCount: 0, fingerprint: '3f1c…' } } } }, { status: 409, description: 'The edit is already reverted in the current content.', body: { ok: false, error: 'Nothing to undo: this change is already reverted.', code: 'storage_conflict' } }, { status: 422, description: 'Only an update revision with both snapshots can be undone on its own.', body: { ok: false, error: 'Only a saved edit can be undone on its own.', code: 'storage_invariant' } }, { status: 200, description: 'One exported version: raw event and receipt, resolved restorable content, notes and name.', body: { ok: true, export: { formatVersion: 1, exportedAt: '2026-10-13T10:05:00.000Z', event: { id: 'event-id', thingId: 'page-id', mode: 'revision', operation: 'update', label: 'Edited Thing' }, receipt: { formatVersion: 1, eventId: 'event-id', ownerId: 'current-user-id', position: 1760349000000, acceptedAt: '2026-10-13T09:50:00.000Z' }, content: { adapter: 'thing-content', version: 1, value: { crystal: { title: 'Launch copy' }, extended: null, tags: [], geo: null, acl: ['tt:user'], folderId: null } }, notes: [], name: { formatVersion: 1, id: 'event-id/name', ownerId: 'current-user-id', eventId: 'event-id', thingId: 'page-id', name: 'Launch copy', revision: 1, createdAt: '2026-10-13T10:00:00.000Z', updatedAt: '2026-10-13T10:00:00.000Z' } } } }, { status: 413, description: 'The version or its retained parts exceed the 4 MiB export file; it stays retained.', body: { ok: false, error: 'This version is too large to export in one file. It remains retained in your account.', code: 'storage_invariant' } }, { status: 422, description: 'Effect and draft events are not exportable versions.', body: { ok: false, error: 'Only saved versions can be exported.', code: 'storage_invariant' } }, { status: 409, description: 'Changed identity or immutable event conflict.', body: { ok: false, error: 'Account changed; reconnect Timeline' } }]
-  }),
-  endpoint({
-    id: 'notifications-record',
-    featureVersion: '1.0.0',
-    contractVersion: '1.0.0',
-    group: 'notifications',
-    title: 'Save an in-app notification',
-    endpoint: '/api/v1/notifications/record',
-    summary: 'Save a private system-message for the authenticated account, without another popup, push or email.',
-    detail: 'Body: userId (must equal the current account), eventId (UUID v4 reused only for transport retries), title (1–400 characters), description (optional, up to 48000 characters), status (success/error/info/warning), href (optional internal path). Unknown fields are rejected. The server fixes actor, type, owner and creation time; clients cannot forge login-success or action-run records. Credential-like content is redacted and URL queries/fragments are dropped. Retries are idempotent and never overwrite a record or reset read state. Anonymous requests are refused, and rate limits bound ingestion. A successful response confirms the database write.',
-    auth: { mode: 'session', description: 'Requires the authenticated first-party account; app/PAT credentials remain default-denied.' },
-    methods: ['POST'],
-    steps: ['Negotiate api.notifications-record 1.0.0 at this origin.', 'POST the message and a new UUID for each event; reuse that UUID on retries.', 'Read it with GET /api/v1/notifications?history=1&category=system.'],
-    requestExamples: [{ name: 'Save a message', description: 'The owner is the current authenticated account.', method: 'POST', body: { userId: 'current-user-id', eventId: 'bb617572-ff32-4c98-b3e4-d668ac000fac', title: 'Saved successfully', status: 'success' } }],
-    responseExamples: [{ status: 200, description: 'Saved (or already recorded).', body: { ok: true, id: 'notification-message-…' } }, { status: 400, description: 'Invalid message or account changed.', body: { ok: false, error: 'Invalid notification message or account changed' } }]
   }),
   endpoint({
     id: 'notifications-read',
@@ -12538,244 +12374,54 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'notifications-devices',
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
-    group: 'notifications',
-    title: 'Register notification devices',
-    endpoint: '/api/v1/notifications/devices',
-    summary: 'Register iPhone and Apple Watch APNs targets for the signed-in Thingtime account.',
-    detail:
-      'GET requires a full session and returns ownerId, server configured status, and eligible iOS/watchOS device counts without tokens. POST optionally accepts ownerId to reject stale account registration with HTTP 409. POST accepts one to four variable-length hexadecimal APNs tokens. The server selects the bundle topic, ' +
-      'stores each token in a protected binary secure field, keeps at most twelve recent devices per account, ' +
-      'and returns only non-secret registration metadata. DELETE removes one registration by id. Thingtime sends ' +
-      'the same notification payload to paired iPhone and watchOS targets so Apple can suppress duplicate alerts.',
-    auth: {
-      mode: 'session-or-bearer',
-      description: 'Requires an auth cookie, full-session Bearer token, or a paired Watch credential with watch.push capability.'
-    },
-    methods: ['GET', 'POST', 'DELETE'],
-    steps: [
-      'Register for remote notifications on every app launch and preserve the APNs token as variable-length data.',
-      'POST the current iOS and/or watchOS token after the Thingtime session is authenticated.',
-      'DELETE a stale device id when the user explicitly disconnects that device.'
-    ],
-    requestExamples: [
-      { name: 'Check native push connection', description: 'Read only this signed-in account’s eligible device counts and server readiness.', method: 'GET' },
-      {
-        name: 'Register paired Apple devices',
-        description: 'Register current sandbox tokens from an iPhone and its paired watch.',
-        method: 'POST',
-        body: {
-          devices: [
-            { token: '<hex APNs token>', platform: 'ios', environment: 'sandbox' },
-            { token: '<hex APNs token>', platform: 'watchos', environment: 'sandbox' }
-          ]
-        }
-      },
-      {
-        name: 'Disconnect one device',
-        description: 'Remove a registration owned by the current account.',
-        method: 'DELETE',
-        body: { id: 'device-registration-id' }
-      }
-    ],
-    responseExamples: [
-      { status: 200, description: 'Authenticated GET connection status, never device tokens.', body: { ok: true, ownerId: 'your-user-id', configured: true, devices: { ios: 1, watchos: 0 } } },
-      {
-        status: 200,
-        description: 'Registered; tokens are intentionally omitted.',
-        body: {
-          ok: true,
-          devices: [
-            {
-              id: 'device-registration-id',
-              platform: 'watchos',
-              environment: 'sandbox',
-              topic: 'com.thingtime.appletime.watchkitapp',
-              updatedAt: '2026-09-03T00:00:00.000Z'
-            }
-          ]
-        }
-      }
-    ]
-  }),
-  endpoint({
     id: 'notifications-settings',
-    // 1.1.0: six subspace-* switches joined the matrix — additive; 1.2.0:
-    // merged with develop's 1.1.0 (action-run switch) — additive
-    // 1.7.0 makes action-run delivery opt-in in both channels; saved choices survive.
-    featureVersion: '1.7.0',
-    contractVersion: '1.7.0',
     group: 'notifications',
     title: 'Notification settings',
     endpoint: '/api/v1/notifications/settings',
-    summary: 'Read or merge-patch your notification switches — per type, per channel (push + email), plus channel masters.',
+    summary: 'Read or merge-patch your per-type notification switches (defaults ON).',
     detail:
-      'Includes recording-reminder for opted-in daily Watch recording todos (push on, email opt-in). Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
-      'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
-      'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, mention, groups ' +
-      '(reserved), action-run, login-success, system-message (system notes; email defaults off), the subspace family ' +
-      'subspace-join-request, subspace-join-accepted, subspace-post-removed, subspace-report, subspace-role, ' +
-      'subspace-ban, plus the email-only weekly-summary digest. Action-run defaults OFF in both channels unless explicitly enabled. Other types default ON, except email for the high-volume ' +
-      'types (post-from-followed / post-from-friend / action-run and the mod-queue pair subspace-join-request / ' +
-      'subspace-report), which are opt-in. GET always ' +
-      'returns the full matrix. POST merges only the keys you send — the new channel shape ' +
-      '{ prefs: { push?, email?, masters? } } or the original flat { prefs: { <type>: boolean } } ' +
-      '(which patches the push channel); unknown keys 400. A disabled push type is hidden from your ' +
-      'bell and unread badge immediately, but never from history=1 and never prevents storage; a disabled email type stops future emails. Emails only go ' +
-      'to verified addresses and are capped per recipient per hour; every one carries a manage link ' +
-      'and a one-click unsubscribe link.',
+      'Types: friend-request, friend-accepted, new-follower, post-from-followed, post-from-friend, ' +
+      'comment, reply, reaction, share, groups (reserved for the future groups feature). GET always ' +
+      'returns every known type. POST merges only the keys you send; unknown types 400. A disabled ' +
+      'type is hidden from your list and unread count immediately — and single-recipient emits skip ' +
+      'writing it at all.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
     },
     methods: ['GET', 'POST'],
     steps: [
-      'GET returns { prefs: { push, email, masters } } with every switch as a boolean.',
-      'POST { prefs: { email: { <type>: boolean } } } (or push / masters) merges just those switches.',
-      'The flat legacy body { prefs: { <type>: boolean } } still works and patches push.',
+      'GET returns { prefs } with every type as a boolean.',
+      'POST { prefs: { <type>: boolean, … } } merges just those switches.',
       'Flip switches optimistically; revert on failure.',
-      'Handle 400 unknown key / non-boolean, 401 unauthenticated, 429 rate-limited.'
+      'Handle 400 unknown type / non-boolean, 401 unauthenticated, 429 rate-limited.'
     ],
     requestExamples: [
       {
-        name: 'Disable follower emails',
-        description: 'Stop new-follower emails only — the bell keeps working.',
+        name: 'Disable follower pings',
+        description: 'Stop new-follower notifications only.',
         method: 'POST',
-        body: { prefs: { email: { 'new-follower': false } } }
-      },
-      {
-        name: 'Mute all emails',
-        description: 'Flip the email master off without touching per-type switches.',
-        method: 'POST',
-        body: { prefs: { masters: { email: false } } }
+        body: { prefs: { 'new-follower': false } }
       }
     ],
     responseExamples: [
       {
         status: 200,
-        description: 'The full merged switch matrix.',
+        description: 'The full merged switch set.',
         body: {
           ok: true,
           prefs: {
-            push: {
-              'friend-request': true,
-              'friend-accepted': true,
-              'new-follower': true,
-              'post-from-followed': true,
-              'post-from-friend': true,
-              comment: true,
-              reply: true,
-              reaction: true,
-              share: true,
-              mention: true,
-              groups: true,
-              'action-run': false
-            },
-            email: {
-              'friend-request': true,
-              'friend-accepted': true,
-              'new-follower': false,
-              'post-from-followed': false,
-              'post-from-friend': false,
-              comment: true,
-              reply: true,
-              reaction: true,
-              share: true,
-              mention: true,
-              groups: true,
-              'action-run': false,
-              'weekly-summary': true
-            },
-            masters: { push: true, email: true }
+            'friend-request': true,
+            'friend-accepted': true,
+            'new-follower': false,
+            'post-from-followed': true,
+            'post-from-friend': true,
+            comment: true,
+            reply: true,
+            reaction: true,
+            share: true,
+            groups: true
           }
-        }
-      }
-    ]
-  }),
-  endpoint({
-    id: 'notifications-email-unsubscribe',
-    group: 'notifications',
-    title: 'Email one-click unsubscribe',
-    endpoint: '/api/v1/notifications/email/unsubscribe',
-    summary: 'The one-click link in notification email footers — flips the email master switch off.',
-    detail:
-      'GET with ?uid=<userId>&token=<hmac> (both come pre-built in every notification email footer; ' +
-      'the token is an HMAC over the user id, so a link can only ever mute its own recipient). No ' +
-      'session needed — email clients don’t carry cookies. Responds with a small HTML confirmation ' +
-      'page, is idempotent, and the switch can be flipped back on any time in Settings → ' +
-      'Notifications. Invalid or missing tokens get a 400 page; requests are IP rate-limited.',
-    auth: {
-      mode: 'none',
-      description: 'Authenticated by the HMAC token in the link, not by session.'
-    },
-    methods: ['GET'],
-    steps: [
-      'Click the “Unsubscribe from all” link in any notification email.',
-      'The email master switch flips off; per-type switches are untouched.',
-      'Re-enable any time from Settings → Notifications.'
-    ],
-    requestExamples: [
-      {
-        name: 'One-click unsubscribe',
-        description: 'As clicked from an email footer.',
-        method: 'GET',
-        query: { uid: '664f…', token: '3f2a…' }
-      }
-    ],
-    responseExamples: [
-      {
-        status: 200,
-        description: 'HTML confirmation page (text/html, not JSON).',
-        body: { note: 'Returns an HTML page: “You’re unsubscribed 💌”.' }
-      }
-    ]
-  }),
-  endpoint({
-    id: 'notifications-email-weekly-summary',
-    group: 'notifications',
-    title: 'Weekly summary digest run',
-    endpoint: '/api/v1/notifications/email/weekly-summary',
-    summary: 'Kick off the weekly email digest — cron (CRON_SECRET bearer) or admin only.',
-    detail:
-      'Sends every opted-in, email-verified user a recap of the last seven days around their things ' +
-      '(new followers, friend requests, comments, replies, reactions, shares, post views, posts). ' +
-      'Users with zero activity are skipped, and a six-day per-recipient lookback makes the run ' +
-      'idempotent — a retried cron or a manual admin run never double-sends. The Vercel cron ' +
-      '(remix/vercel.json) calls GET with Authorization: Bearer <CRON_SECRET>; signed-in admins can ' +
-      'also run it, and POST { dryRun: true } (or GET ?dryRun=1) previews counts without sending.',
-    auth: {
-      mode: 'session-or-bearer',
-      description: 'Admin session, or the CRON_SECRET bearer token Vercel cron attaches.'
-    },
-    methods: ['GET', 'POST'],
-    steps: [
-      'Configure CRON_SECRET in Vercel so the scheduled cron authenticates.',
-      'GET ?dryRun=1 as an admin to preview who would get a digest.',
-      'POST {} (admin) to run manually; the lookback prevents double-sends.',
-      'Handle 401 unauthenticated / 403 non-admin.'
-    ],
-    requestExamples: [
-      {
-        name: 'Dry run',
-        description: 'Preview counts without sending anything.',
-        method: 'POST',
-        body: { dryRun: true }
-      }
-    ],
-    responseExamples: [
-      {
-        status: 200,
-        description: 'Run summary.',
-        body: {
-          ok: true,
-          considered: 42,
-          eligible: 17,
-          sent: 9,
-          skipped: { alreadySent: 5, noActivity: 3, failed: 0 },
-          truncated: false,
-          dryRun: false
         }
       }
     ]

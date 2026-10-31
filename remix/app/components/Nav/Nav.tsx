@@ -299,26 +299,18 @@ export const Nav = (props) => {
 							</Center>
 						) : null}
 					</Center>
-					<CommanderV2 key={user?.id || "anonymous"} global id="nav" />
+					<CommanderV2 global id="nav" rainbow={false}></CommanderV2>
 					{/* relative + above the commander host (zIndex 9999): the centered
 				search pill is absolutely positioned, and long usernames (and now
 				the bell) can extend under it — these controls must stay tappable */}
 				<Center
 					className="nav-right-section"
-					flexShrink={0}
-					columnGap={[2, 8]}
+					columnGap={[3, 8]}
 					height="100%"
 					marginLeft="auto"
 					position="relative"
 					zIndex={10000}
 				>
-						{/* 🦄 Lopu opener — toggles the floating chat window (hidden on
-						/lopu*, where the page is the chat); the same ring as the launcher */}
-						<LopuNavButton />
-						<Center as="button" type="button" display={{ base: 'flex', md: 'none' }} width="36px" height="36px"
-							aria-label="Open Commander search" title="Search" onClick={onElectronSearchClick}>
-							<Search size={18} />
-						</Center>
 						{inEditMode && (
 							<Center
 								// transform="scaleX(-100%)"
@@ -345,12 +337,32 @@ export const Nav = (props) => {
 								></Icon>
 							</Center>
 						)}
-						{isMobile ? <NavAccountLink className="nav-right-account-button" claimedUser={claimedUser} /> : null}
-						{isMobile ? (
+						{user && (
 							<Center>
 								<NotificationsBell />
 							</Center>
-						) : null}
+						)}
+						<Center cursor="pointer">
+							{user ? (
+								<Link to="/profile">
+									<Flex flexDir={'row'} gap={2} alignItems="center">
+										<Box fontSize="xs" fontWeight="600">
+											{user.displayName || user.username}
+										</Box>
+										<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
+									</Flex>
+								</Link>
+							) : (
+								<Link to="/login">
+									<Flex flexDir={'row'} gap={2}>
+										<Box fontSize="xs" opacity={0.5}>
+											Login
+										</Box>
+										<Icon transform={['', 'scaleX(-100%)']} size="12px" name="🌈"></Icon>
+									</Flex>
+								</Link>
+							)}
+						</Center>
 						<Center display={['flex', 'none']} cursor="pointer" onClick={onLogoClick} sx={gallopSx}>
 							<Link to="/">
 								<Icon size="12px" name="🦄"></Icon>
