@@ -1,18 +1,71 @@
+import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
 import { defineNitroConfig } from 'nitro/config';
 
 import { apiV1DocsRouteKeys, apiV1RouteKeys } from './app/docs/apiDocs.ts';
+import {
+  CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH,
+  CHATGPT_CAPABILITY_MANIFEST_PATH,
+  CHATGPT_PROTECTED_RESOURCE_METADATA_PATH
+} from './app/api/utils/chatgpt/pluginCore.ts';
+import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/thingtimeCapabilities.ts';
+import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore.ts';
 
 const publicDir = new URL('./dist', import.meta.url).pathname;
+const embedDir = new URL('./dist/embed', import.meta.url).pathname;
 const designDocsDir = new URL('../docs/design', import.meta.url).pathname;
 const apiHandler = './server/routes/api/[...].ts';
+const chatGptDiscoveryHandler = './server/routes/chatgpt-discovery.ts';
+const thingtimeCapabilitiesHandler = './server/handlers/thingtime-capabilities.ts';
 const apiRoutes = [...apiV1RouteKeys, ...apiV1DocsRouteKeys];
 
 export default defineNitroConfig({
   serverDir: 'server',
+  // Electron owns the HTTP socket; Nitro's middleware preset assumes another
+  // host serves public assets unless explicitly enabled. Keep cloud defaults.
+  ...(/^node[_-]middleware$/.test(process.env.NITRO_PRESET ?? '') ? { serveStatic: true } : {}),
   modules: ['workflow/nitro'],
   compatibilityDate: '2026-07-02',
-  routes: Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
+  // Browser image engines can be reached through shared schema imports. Do not
+  // instantiate their WASM while the API runner is starting.
+  wasm: { lazy: true },
+  routes: {
+    ...Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
+    [THINGTIME_CAPABILITY_MANIFEST_PATH]: thingtimeCapabilitiesHandler,
+    [`${THINGTIME_CAPABILITY_MANIFEST_PATH}-docs`]: apiHandler,
+    '/social-card-docs': apiHandler,
+    [APPLE_APP_ASSOCIATION_PATH]: './server/handlers/apple-app-association.ts',
+    [`${APPLE_APP_ASSOCIATION_PATH}-docs`]: './server/routes/api/[...].ts',
+    // Crawler discovery lives at the well-known root paths; their -docs twins
+    // are served by the API catch-all like every other documented endpoint.
+    [ROBOTS_PATH]: './server/handlers/robots.ts',
+    [`${ROBOTS_PATH}-docs`]: './server/routes/api/[...].ts',
+    [SITEMAP_PATH]: './server/handlers/sitemap.ts',
+    [`${SITEMAP_PATH}-docs`]: './server/routes/api/[...].ts',
+    [CHATGPT_PROTECTED_RESOURCE_METADATA_PATH]: chatGptDiscoveryHandler,
+    [CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH]: chatGptDiscoveryHandler,
+    [CHATGPT_CAPABILITY_MANIFEST_PATH]: chatGptDiscoveryHandler
+  },
+  // One key: a duplicate `serverAssets` literal silently dropped the shell
+  // mount (the last key wins), leaving the page route on its client fallback.
+  serverAssets: [
+    // The Vite shell copied by sync:nitro-template. Nitro's default assets:server
+    // mount resolves to <rootDir>/assets (which does not exist here), so the page
+    // catch-all reads the shell through this explicit assets:shell mount instead.
+    { baseName: 'shell', dir: 'server/assets' },
+    {
+      baseName: 'client',
+      dir: publicDir,
+      pattern: 'index.html'
+    }
+  ],
   publicAssets: [
+    {
+      baseURL: '/embed',
+      dir: embedDir,
+      // The SDK uses a stable copy-paste URL; revalidate it frequently so an
+      // old browser cache cannot pin an incompatible protocol for a year.
+      maxAge: 60 * 5
+    },
     {
       baseURL: '/',
       dir: publicDir,

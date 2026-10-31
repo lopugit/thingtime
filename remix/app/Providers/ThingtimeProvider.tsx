@@ -9,6 +9,7 @@ import localforage from 'localforage';
 import { safeJoin } from '~/utils';
 import { createLatestRevisionAutosave } from './latestRevisionAutosave';
 import type { LatestRevisionAutosaveCoordinator } from './latestRevisionAutosave';
+import { flushThingtimeSnapshot } from './flushThingtimeSnapshot';
 import { drainThingtimeMutationQueue } from './thingtimeMutationQueue';
 import {
 	hasPersistedThingtimeRuntimeMethods,
@@ -17,10 +18,14 @@ import {
 	stringifyThingtime,
 	stringifyThingtimeForStorage
 } from './thingtimeSerialization';
+import { createThingtimeSyncChannel, shouldPublishAppliedWrite } from './thingtimeSyncChannel';
+import type { ThingtimeSyncChannel, ThingtimeSyncPath } from './thingtimeSyncChannel';
 export interface ThingtimeTypes {
 	thingtime: any;
 	set: any;
 	setThingtime: any;
+	flushThingtimePersistence?: (signal?: AbortSignal) => Promise<void>;
+	canPersistThingtime?: boolean;
 	getThingtime: any;
 	thingtimeRef: any;
 	loading: boolean;
@@ -40,17 +45,11 @@ export const ThingtimeContext = createContext<EverythingTypes | null>(null);
 // re-supplies legitimate runtime functions from ThingtimeDefaults. CSP is a
 // second boundary, not the mechanism that makes storage-controlled code inert.
 
-try {
-	window.smarts = smarts;
-	window.flatted = {
-		parse: parseThingtime,
-		stringify: stringifyThingtime
-	};
-} catch (err) {
-	// nothing
-}
-
 export const ThingtimeProvider = (props: any): React.JSX.Element => {
+	const storageKey = props?.storageKey || 'thingtime';
+	const persistLocal = props?.persistLocal !== false;
+	const exposeGlobals = props?.exposeGlobals !== false;
+
 	const [_Everything, setEverything] = React.useState<ThingtimeTypes>({
 		thingtime: null,
 		set: null,
@@ -76,7 +75,13 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	const thingtimeRef = React.useRef(thingtimeState);
 	const hydrationResolvedRef = React.useRef(false);
 	const persistenceReadyRef = React.useRef(false);
+	const providerActiveRef = React.useRef(true);
+	React.useEffect(() => { providerActiveRef.current = true; return () => { providerActiveRef.current = false; }; }, []);
 	const persistenceRevisionRef = React.useRef(0);
+	// The autosave coordinator is created once, so it reads the storage key
+	// through a ref instead of closing over the first render's prop value.
+	const storageKeyRef = React.useRef(storageKey);
+	storageKeyRef.current = storageKey;
 	const persistenceRef = React.useRef<LatestRevisionAutosaveCoordinator<any> | null>(null);
 	if (!persistenceRef.current) {
 		persistenceRef.current = createLatestRevisionAutosave<any, string>({
@@ -88,7 +93,7 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 				return serialized;
 			},
 			write: async (serialized) => {
-				await localforage.setItem('thingtime', serialized);
+				await localforage.setItem(storageKeyRef.current, serialized);
 			},
 			onError: (error, context) => {
 				console.error(`[tt] Thingtime autosave ${context.phase} failed at revision ${context.revision}`, error);
@@ -100,7 +105,31 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 
 	const [events] = React.useState(() => new Subject());
 
+	// Cross-tab sync (TODO/claude-todo/07): identify this tab so broadcasts can
+	// be ignored by their sender, and hold the channel + latest setThingtime in
+	// refs so the channel effect never has to re-subscribe.
+	const syncTabIdRef = React.useRef<string | null>(null);
+	if (!syncTabIdRef.current) {
+		syncTabIdRef.current =
+			typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+				? crypto.randomUUID()
+				: `tt-tab-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+	}
+	const syncChannelRef = React.useRef<ThingtimeSyncChannel | null>(null);
+	const setThingtimeSyncRef = React.useRef<((path: ThingtimeSyncPath, value: any) => void) | null>(null);
+
 	const undoRedo = useThingtimeLine(Everything);
+
+	React.useEffect(() => {
+		if (!exposeGlobals) return;
+
+		try {
+			window.smarts = smarts;
+			window.flatted = { parse: parseThingtime, stringify: stringifyThingtime };
+		} catch {
+			// Global tools are best-effort outside a browser.
+		}
+	}, [exposeGlobals]);
 
 	const setThingtimeObjectWrapper = React.useCallback((newThingtimeArg) => {
 		const newThingtime = {
@@ -133,6 +162,14 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	type SetThingtimeOptions = {
 		ignoreUndoRedo?: boolean;
 		namespace?: string;
+		// Applied from another tab's broadcast — never re-published (no echo
+		// loops) and never entered into this tab's undo/redo timeline.
+		fromRemote?: boolean;
+		// Ephemeral view chrome for THIS viewport — what is currently open and
+		// focused here, as opposed to user data or a saved preference. Still
+		// persisted (a reload restores it), but never broadcast, so one tab's
+		// panel/focus state cannot actuate another tab's UI mid-session.
+		tabLocal?: boolean;
 	};
 
 	interface SetThingtimeProps {
@@ -256,19 +293,42 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		const result = drainThingtimeMutationQueue(
 			thingtimeRef.current,
 			queue,
-			(workingThingtime, nextThingtime) =>
-				applyThingtimeUpdateRef.current?.(
-					workingThingtime,
-					nextThingtime.path,
-					nextThingtime.value,
-					nextThingtime.options,
-					nextThingtime.timestamp
-				) ?? workingThingtime,
+			(workingThingtime, nextThingtime) => {
+				const applyUpdate = applyThingtimeUpdateRef.current;
+				if (!applyUpdate) return workingThingtime;
+
+				const nextState = applyUpdate(workingThingtime, nextThingtime.path, nextThingtime.value, nextThingtime.options, nextThingtime.timestamp);
+
+				// Publish only after this update applied successfully. Remote writes use
+				// the same queue but never echo back onto the channel, and tab-local
+				// view chrome is persisted without ever actuating another tab.
+				//
+				// Contained in its own try: this callback's RETURN VALUE is the new
+				// state, and drainThingtimeMutationQueue drops an update whose apply
+				// throws. Letting a transport failure escape here would therefore
+				// discard a write that already applied — the user's own edit would
+				// vanish because a peer-facing broadcast failed. Sync is best-effort;
+				// the local write is not.
+				if (shouldPublishAppliedWrite(nextThingtime.options)) {
+					try {
+						syncChannelRef.current?.publish(nextThingtime.path as ThingtimeSyncPath, nextThingtime.value);
+					} catch (error) {
+						console.error('[tt] Failed to broadcast an applied Thingtime write', error);
+					}
+				}
+
+        if (nextThingtime.options?.namespace === 'user' && !nextThingtime.options?.fromRemote) {
+          const parts = Array.isArray(nextThingtime.path) ? [...nextThingtime.path] : smarts.parsePropertyPath(nextThingtime.path);
+          while (parts[0] === 'tt' || parts[0] === 'thingtime') parts.shift();
+          if (parts.length) events.next({ type: 'draft-edit', path: [parts[0]], value: nextState[parts[0]] });
+        }
+				return nextState;
+			},
 			(error) => console.error('[tt] There was an error applying a queued Thingtime update', error)
 		);
 		setThingtimeFlushScheduledRef.current = false;
 		if (result.applied) setThingtimeObjectWrapper(result.state);
-	}, [setThingtimeObjectWrapper]);
+	}, [setThingtimeObjectWrapper, events]);
 
 	const setThingtime = React.useCallback<SetThingtimeProps>(
 		(
@@ -286,6 +346,23 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		},
 		[flushSetThingtimeQueue]
 	);
+
+ const flushThingtimePersistence = React.useCallback(async (signal?: AbortSignal) => {
+  const expectedStorageKey = storageKey;
+  const assertCurrent = () => {
+   signal?.throwIfAborted();
+   if (!providerActiveRef.current || storageKeyRef.current !== expectedStorageKey) throw new Error('The active account changed before preferences finished saving.');
+   if (!persistLocal || loading || !persistenceReadyRef.current) throw new Error('Local preferences are not ready to save.');
+  };
+  await flushThingtimeSnapshot({
+   assertCurrent, drain: flushSetThingtimeQueue, read: () => thingtimeRef.current,
+   schedule: value => {
+    const revision = ++persistenceRevisionRef.current;
+    if (!persistenceRef.current?.schedule(value, revision)) throw new Error('Local preferences could not be scheduled for saving.');
+   },
+   flush: async () => { await persistenceRef.current?.flush(); }
+  });
+ }, [storageKey, persistLocal, loading, flushSetThingtimeQueue]);
 
 	const getThingtime = React.useCallback(
 		(...args) => {
@@ -342,7 +419,20 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 
 		const hydrate = async () => {
 			try {
-				const localStorageThingtime = await localforage.getItem('thingtime');
+				let localStorageThingtime = persistLocal ? await localforage.getItem(storageKey) : null;
+        // Preserve the pre-account device workspace once, without ever uploading
+        // it on hydration or handing it to a later account on this device.
+        if (persistLocal && !localStorageThingtime && props.accountId) {
+          let claim: string | null = null;
+          try {
+            claim = localStorage.getItem('tt-legacy-workspace-account');
+            if (!claim) { claim = props.accountId; localStorage.setItem('tt-legacy-workspace-account', claim); }
+          } catch { /* Account isolation takes precedence when storage is unavailable. */ }
+          if (claim === props.accountId) {
+            localStorageThingtime = await localforage.getItem('thingtime');
+            if (localStorageThingtime) await localforage.setItem(storageKey, localStorageThingtime);
+          }
+        }
 				if (cancelled) return;
 
 				if (localStorageThingtime) {
@@ -380,7 +470,10 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 						if (parseResult.repaired || hasPersistedThingtimeRuntimeMethods(parsed)) {
 							const repairedSerialized = stringifyThingtimeForStorage(restoredThingtime);
 							if (!repairedSerialized) throw new Error('Repaired Thingtime value could not be serialized');
-							await localforage.setItem('thingtime', repairedSerialized);
+							// Repair the blob this provider actually read. Writing the literal
+							// default key here would overwrite another provider's tree and
+							// leave this one unrepaired, so it would repair again every load.
+							await localforage.setItem(storageKey, repairedSerialized);
 							if (cancelled) return;
 						}
 					} else {
@@ -417,24 +510,27 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 			cancelled = true;
 			clearTimeout(retryTimer);
 		};
-	}, [flushSetThingtimeQueue, restoreThingtime]);
+	}, [flushSetThingtimeQueue, persistLocal, restoreThingtime, storageKey, props.accountId]);
 
 	// thingtime change listener
 	React.useEffect(() => {
-		try {
-			window.setThingtime = setThingtime;
-			window.getThingtime = getThingtime;
-			window.thingtime = thingtimeState;
-			window.tt = thingtimeState;
-			window.events = events;
-		} catch {
-			// nothing
+		if (exposeGlobals) {
+			try {
+				window.setThingtime = setThingtime;
+				window.getThingtime = getThingtime;
+				window.thingtime = thingtimeState;
+				window.tt = thingtimeState;
+				window.events = events;
+			} catch {
+				// Global state is best-effort outside a browser.
+			}
 		}
 
 		// Never persist the temporary pre-hydration value. In development React
 		// replays effects, so a one-shot "skip the first effect" flag can otherwise
 		// schedule that placeholder state before LocalForage finishes loading.
-		if (!loading && persistenceReadyRef.current) {
+		// Embedded mounts opt out of local persistence entirely (persistLocal).
+		if (persistLocal && !loading && persistenceReadyRef.current) {
 			persistenceRevisionRef.current += 1;
 			persistenceRef.current?.schedule(thingtimeState, persistenceRevisionRef.current);
 		}
@@ -442,7 +538,29 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		thingtimeRef.current = thingtimeState;
 
 		// not sure why this used to have @undoRedoEventKeyShortcutEventListener here.. ?
-	}, [setThingtime, events, getThingtime, loading, thingtimeState, setThingtimeObjectWrapper]);
+	}, [setThingtime, events, exposeGlobals, getThingtime, loading, persistLocal, thingtimeState, setThingtimeObjectWrapper]);
+
+	// Keep the sync channel pointed at the current setThingtime without ever
+	// recreating the channel itself.
+	setThingtimeSyncRef.current = (path, value) => {
+		// Remote writes ride the normal queue (so pre-hydration messages are held
+		// in order) but skip this tab's undo timeline — undo stays per-tab.
+		setThingtime(path, value, { ignoreUndoRedo: true, fromRemote: true });
+	};
+
+	React.useEffect(() => {
+		if (!persistLocal) return;
+		const channel = createThingtimeSyncChannel({
+			channelName: storageKey,
+			tabId: syncTabIdRef.current as string,
+			onRemoteWrite: (path, value) => setThingtimeSyncRef.current?.(path, value)
+		});
+		syncChannelRef.current = channel;
+		return () => {
+			syncChannelRef.current = null;
+			channel?.close();
+		};
+	}, [storageKey, persistLocal]);
 
 	React.useEffect(() => {
 		const persistence = persistenceRef.current;
@@ -477,6 +595,8 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		const newEverything = {
 			thingtime: thingtimeState,
 			setThingtime: setThingtime,
+			flushThingtimePersistence,
+			canPersistThingtime: persistLocal && !loading && persistenceReadyRef.current,
 			getThingtime: getThingtime,
 			thingtimeRef: thingtimeRef,
 			paths: paths,
@@ -491,11 +611,13 @@ export const ThingtimeProvider = (props: any): React.JSX.Element => {
 		// ⚠️ ORDER OF THESE OPERATIONS IS IMPORTANT ⚠️
 		// 2
 		setEverything(EverythingRef.current); // 2
-	}, [thingtimeState, setThingtime, getThingtime, thingtimeRef, paths, loading, events]);
+	}, [thingtimeState, setThingtime, flushThingtimePersistence, getThingtime, thingtimeRef, paths, loading, events, persistLocal]);
 
 	Object.assign(Everything, {
 		thingtime: thingtimeState,
 		setThingtime: setThingtime,
+			flushThingtimePersistence,
+			canPersistThingtime: persistLocal && !loading && persistenceReadyRef.current,
 		getThingtime: getThingtime,
 		thingtimeRef: thingtimeRef,
 		paths: paths,

@@ -1,42 +1,13 @@
 import React from 'react';
 
 import { useThingtime } from '../Thingtime/useThingtime';
-import {
-	electronUrlSettingPath,
-	getElectronAutoUpdateEnabled,
-	getElectronBridge,
-	getElectronSettingUrl,
-	loadElectronUrl,
-	normalizeElectronUrl,
-	type ThingtimeDesktopInfo
-} from '~/utils/electronBridge';
-
-const CLEAR_ELECTRON_URL_PARAM = 'thingtimeDesktopClearUrl';
-
-function hasClearElectronUrlRequest() {
-	try {
-		return new URL(window.location.href).searchParams.get(CLEAR_ELECTRON_URL_PARAM) === '1';
-	} catch {
-		return false;
-	}
-}
-
-function clearElectronUrlRequestFromLocation() {
-	try {
-		const url = new URL(window.location.href);
-		url.searchParams.delete(CLEAR_ELECTRON_URL_PARAM);
-		window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
-	} catch {
-		// Best-effort cleanup only.
-	}
-}
+import { getElectronAutoUpdateEnabled, getElectronBridge, type ThingtimeDesktopInfo } from '~/utils/electronBridge';
 
 export function ElectronBridgeHost() {
-	const { thingtime, setThingtime, loading } = useThingtime();
+	const { thingtime, loading } = useThingtime();
 	const [desktopInfo, setDesktopInfo] = React.useState<ThingtimeDesktopInfo | null>(null);
-	const appliedUrlRef = React.useRef<string | null>(null);
-	const clearingSavedUrlRef = React.useRef(false);
 	const updateCheckSessionRef = React.useRef<string | null>(null);
+	const bridgeIsMacDesktop = typeof window !== 'undefined' && getElectronBridge()?.platform === 'darwin';
 
 	React.useEffect(() => {
 		const bridge = getElectronBridge();
@@ -63,10 +34,10 @@ export function ElectronBridgeHost() {
 		};
 	}, []);
 
-	React.useEffect(() => {
+	React.useLayoutEffect(() => {
 		const root = document.documentElement;
 		const titlebar = desktopInfo?.titlebar;
-		const enabled = !!titlebar?.enabled;
+		const enabled = bridgeIsMacDesktop || !!titlebar?.enabled;
 
 		root.classList.toggle('thingtime-electron-desktop', enabled);
 
@@ -87,64 +58,7 @@ export function ElectronBridgeHost() {
 			root.style.removeProperty('--thingtime-electron-titlebar-left-inset');
 			root.style.removeProperty('--thingtime-electron-titlebar-nav-start');
 		};
-	}, [desktopInfo?.titlebar]);
-
-	React.useEffect(() => {
-		const sessionHash = desktopInfo?.sessionHash;
-
-		if (loading || !sessionHash || !hasClearElectronUrlRequest()) {
-			return;
-		}
-
-		appliedUrlRef.current = null;
-		clearingSavedUrlRef.current = true;
-		setThingtime(electronUrlSettingPath(sessionHash), '', {
-			ignoreUndoRedo: true,
-			namespace: 'electron'
-		});
-		clearElectronUrlRequestFromLocation();
-	}, [desktopInfo?.sessionHash, loading, setThingtime]);
-
-	React.useEffect(() => {
-		const bridge = getElectronBridge();
-		const sessionHash = desktopInfo?.sessionHash;
-
-		if (!bridge || loading || !sessionHash || hasClearElectronUrlRequest()) {
-			return;
-		}
-
-		const targetUrl = normalizeElectronUrl(getElectronSettingUrl(thingtime, sessionHash));
-
-		if (clearingSavedUrlRef.current) {
-			if (!targetUrl) {
-				clearingSavedUrlRef.current = false;
-			}
-
-			return;
-		}
-
-		if (!targetUrl || appliedUrlRef.current === targetUrl) {
-			return;
-		}
-
-		const currentUrl = normalizeElectronUrl(desktopInfo?.currentUrl || window.location.href);
-
-		if (currentUrl === targetUrl) {
-			appliedUrlRef.current = targetUrl;
-			return;
-		}
-
-		appliedUrlRef.current = targetUrl;
-
-		loadElectronUrl(bridge, targetUrl)
-			.then((info) => {
-				setDesktopInfo(info);
-			})
-			.catch((error) => {
-				appliedUrlRef.current = null;
-				console.warn('Unable to load saved Thingtime desktop URL', error);
-			});
-	}, [desktopInfo?.currentUrl, desktopInfo?.sessionHash, loading, thingtime]);
+	}, [bridgeIsMacDesktop, desktopInfo?.titlebar]);
 
 	React.useEffect(() => {
 		const bridge = getElectronBridge();

@@ -139,17 +139,20 @@ v1 renders it as a small rounded chip (6px cells, 1.6px gap, white card,
   5. **Developers** (dark `#131318`): green eyebrow, "One API. Every shape.",
      curl→JSON code card + white "same thing, as a GUI" card, green→arrow between;
      green "Read the docs" + outlined "Get an API key" buttons.
-  6. **Back us**: purple eyebrow BACK THE LAUNCH, "Help us launch the GUI for the
-     internet 💖", bullets, hotpink Indiegogo + white GoFundMe buttons (confetti
-     on click); right card = rainbow progress bar (animated), `$12,438 of $20,000`,
-     `148 backers · 21 days left · 🦄 12 unicorns`, reward tiers ($25 stickers /
-     $60 merch / $150 unicorn tier in hotpink border + `#fff5fa`).
+  6. **Support**: purple eyebrow SUPPORT THINGTIME, "Help keep Thingtime growing 💖",
+     bullets, hotpink "Ways to support Thingtime" (routes to `/support`) + white
+     "Contribute on GoFundMe ↗" buttons; right card = a plain statement card
+     (no progress bar, raised total, backer/deadline counters or reward tiers).
+     The section never states campaign figures — the fundraiser owns those — and
+     never implies a contribution buys AI credits, services or merchandise.
   7. **FAQ**: "Questions 🦄", accordion rows split by 2px ink rules, ＋/− toggle in purple.
   8. **Footer**: small voxel logo, links row, `🚀 🌈 ✨ 🦄 💖`, copyright line
      "data should be open, accessible, and empowering".
 - **Confetti**: full-viewport fixed canvas, square particles (7/9/11px) in the
-  extended palette, gravity + sway, bursts on waitlist join / add-thing / back-us
-  clicks. Respect `prefers-reduced-motion`.
+  extended palette, gravity + sway, bursts on waitlist join / add-thing clicks.
+  The support CTAs deliberately do not burst: a celebration fired from an
+  outbound click reads as "payment received" before anything has been paid.
+  Respect `prefers-reduced-motion`.
 
 ## Theming system contract
 

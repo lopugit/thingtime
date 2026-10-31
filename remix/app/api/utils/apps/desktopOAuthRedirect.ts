@@ -3,10 +3,12 @@
 // the exact same validation and callback construction rules.
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '[::1]']);
 const PKCE_S256_CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;
+const NATIVE_SCHEME_RE = /^[a-z][a-z0-9+.-]{2,127}$/;
 
 export type DesktopRedirect = {
 	uri: string;
 	origin: string;
+	native?: true;
 };
 
 export const normalizeDesktopRedirectUri = (value: unknown): DesktopRedirect | null => {
@@ -21,9 +23,16 @@ export const normalizeDesktopRedirectUri = (value: unknown): DesktopRedirect | n
 		return null;
 	}
 
-	if (url.protocol !== 'http:') return null;
-	if (!LOOPBACK_HOSTS.has(url.hostname)) return null;
 	if (url.username || url.password || url.search || url.hash) return null;
+	if (url.protocol !== 'http:') {
+		// Native callbacks use one exact registered reverse-domain URI. PKCE and
+		// the callback registration protect the public-client handoff.
+		const scheme = url.protocol.slice(0, -1);
+		if (!NATIVE_SCHEME_RE.test(scheme) || !scheme.includes('.')) return null;
+		if (url.port || url.hostname !== 'oauth' || url.pathname !== '/callback') return null;
+		return { uri: url.toString(), origin: url.toString(), native: true };
+	}
+	if (!LOOPBACK_HOSTS.has(url.hostname)) return null;
 	if (!url.port) return null;
 
 	const port = Number(url.port);
