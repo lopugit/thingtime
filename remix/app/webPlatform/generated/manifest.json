@@ -1,0 +1,617 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-23T09:41:00.371Z",
+  "webrefCommit": "23cee93b3a958b736699c04fa51437c0981857e2",
+  "packages": {
+    "css": "8.7.5",
+    "elements": "2.9.0",
+    "idl": "3.84.0"
+  },
+  "total": 18798,
+  "counts": {
+    "css": {
+      "at-rule": 56,
+      "descriptor": 106,
+      "function": 154,
+      "property": 845,
+      "selector": 162,
+      "type": 527,
+      "value": 538
+    },
+    "html": {
+      "attribute": 233,
+      "element": 116,
+      "event": 37
+    },
+    "javascript": {
+      "built-in": 638,
+      "language": 285,
+      "specification": 939
+    },
+    "webapi": {
+      "attribute": 4139,
+      "callback": 75,
+      "callback interface": 3,
+      "const": 1006,
+      "constructor": 444,
+      "dictionary": 928,
+      "enum": 398,
+      "field": 3349,
+      "interface": 1136,
+      "interface mixin": 99,
+      "iterable": 15,
+      "maplike": 14,
+      "namespace": 9,
+      "operation": 2389,
+      "setlike": 10,
+      "typedef": 148
+    }
+  },
+  "sources": [
+    {
+      "name": "html",
+      "url": "https://html.spec.whatwg.org/multipage/indices.html",
+      "sha256": "f4549573d2791a9b14469c6b1a4065a20911c36723bcf0e717816ca70f8a6e15"
+    },
+    {
+      "name": "css",
+      "url": "https://www.w3.org/TR/css-2026/",
+      "sha256": "fddc6c448e08e5eaa22a362c759a3a7c28045da1cdffad2d8421d679d49839d2"
+    },
+    {
+      "name": "ecma262",
+      "url": "https://tc39.es/ecma262/2026/",
+      "sha256": "0119d5a26afb504f4a7aba84d9d8288912044cc459c0552ea5f22f911cb87f40"
+    },
+    {
+      "name": "ecma402",
+      "url": "https://tc39.es/ecma402/2026/",
+      "sha256": "40f6e57de4e284c6fddfd97c22c4a6b1956d01bee1bc5b2c849ca0bb711cf711"
+    },
+    {
+      "name": "webref-editor-index",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/ed/index.json",
+      "sha256": "9226b54c3766b92d705d80630a7c3ba4d636e2222e967c102cf61dc1ac41830e"
+    },
+    {
+      "name": "webref-published-index",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/index.json",
+      "sha256": "5ce418332f5a60e3f6a15e5906cc844b261b52d42e48c1d6ce124035df44878f"
+    },
+    {
+      "name": "css:compositing-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/compositing.json",
+      "sha256": "072cd15aca93b296b3cd2385240a8fdd34ebe4185d705802722a55355069000f"
+    },
+    {
+      "name": "css:css-animations-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-animations.json",
+      "sha256": "aa2f9b83132572e4a075c57554a8a34fd0c707ea9eede120b6885a9a2c28ac54"
+    },
+    {
+      "name": "css:css-align-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-align.json",
+      "sha256": "29f35ccfc4643be062f90102ed01b4e055d3b655a1df4c71ef4419540c6fa0ea"
+    },
+    {
+      "name": "css:css-backgrounds-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-backgrounds-4.json",
+      "sha256": "d8471c4199c573c4fcc6edd940cd196e89ff0c3169b8a6b39a20d7dcfe7a90be"
+    },
+    {
+      "name": "css:css-backgrounds-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-backgrounds.json",
+      "sha256": "d221745e8abf5c5be9fc56ba432480f2df35258eab3fcea1e43c550318f412b1"
+    },
+    {
+      "name": "css:css-animations-2",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-animations-2.json",
+      "sha256": "5120b63fd231f2db1dc0afbc0357d1b2dc0990429406741eb5bf7cacccaeb85e"
+    },
+    {
+      "name": "css:css-anchor-position-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-anchor-position.json",
+      "sha256": "be479518e80ac4cd298e02641494edbfc914d173b4c7a1251a1fae26daf22718"
+    },
+    {
+      "name": "css:css-anchor-position-2",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-anchor-position-2.json",
+      "sha256": "b78448553bd4ff4e67815ed6f1e5b018c08470b3cceddea710b16da0e86b0aba"
+    },
+    {
+      "name": "css:css-borders-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-borders.json",
+      "sha256": "8ebc66b07eab698f387a73167ab05df125ec76314351e5dca31533b77882aa37"
+    },
+    {
+      "name": "css:css-cascade-6",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-cascade-6.json",
+      "sha256": "5605c0b6e5dd4209e5c424b5c940bbb075df50597b5821e3da86d099a316afda"
+    },
+    {
+      "name": "css:css-break-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-break.json",
+      "sha256": "b87b70f9bc15ff1cdb51e7d465137696b03718cb6d235960913cecc2cd34a70f"
+    },
+    {
+      "name": "css:css-color-5",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-color-5.json",
+      "sha256": "6d2be325e9d9c8d4a26b3e442e3445846a831ede06cb6a2b14770cd785e0889a"
+    },
+    {
+      "name": "css:css-box-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-box.json",
+      "sha256": "505d415998f5dd258b79cbc6ba1d68a28c6126af00f52b96a5813e0463854329"
+    },
+    {
+      "name": "css:css-color-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-color.json",
+      "sha256": "4920364946311ebd0a740c0811b6565b07124b71d7aa3ed73588a3796c137cff"
+    },
+    {
+      "name": "css:css-color-adjust-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-color-adjust.json",
+      "sha256": "815469e5b269806ff5290f41f135d83a9e25fc53ff10dcc1b82217606400cf3f"
+    },
+    {
+      "name": "css:css-cascade-5",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-cascade.json",
+      "sha256": "1d5ca1fcc27f8ed8b095a9e56ae2756d41f7abb5b972286f0a5c21c8a1f5236f"
+    },
+    {
+      "name": "css:css-content-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-content.json",
+      "sha256": "0416ac2e4b761b95211939daf96806a97cd398a7b6badc786d34349aacdcf8e7"
+    },
+    {
+      "name": "css:css-color-hdr-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-color-hdr.json",
+      "sha256": "89922092574633a6c4623758f588c4b312721e56f7378407f05111271bda8bfe"
+    },
+    {
+      "name": "css:css-contain-2",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-contain.json",
+      "sha256": "db9b43fe0a4aeb3644862c158936ad5b2f774683f2b8a5998e98d9233abe7ad1"
+    },
+    {
+      "name": "css:css-contain-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-contain-3.json",
+      "sha256": "b2f8c4c1e6d86d847d8ff19634c0987c1b0e95435c8b9abb801d9cba436f9c25"
+    },
+    {
+      "name": "css:css-conditional-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-conditional-4.json",
+      "sha256": "21d5cdbe26679e8e1774e0fa5a32eb32e0692998cf39a2f828a57259f574a13a"
+    },
+    {
+      "name": "css:css-counter-styles-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-counter-styles.json",
+      "sha256": "b075789812ea3535efabb093c28287789bfd9ad284b68f59159a89b3fdc7702d"
+    },
+    {
+      "name": "css:css-conditional-5",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-conditional-5.json",
+      "sha256": "d46fb380f3f22eeaa19990557bfd51c2c4bb01df928a48a40442c20d378da446"
+    },
+    {
+      "name": "css:css-conditional-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-conditional.json",
+      "sha256": "5a676f14b110b0d8d3ebadfdf9e0a49ca537c0f89c4fc4abe9693fb24c4d4086"
+    },
+    {
+      "name": "css:css-env-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-env.json",
+      "sha256": "04dc71cbde1009b3d1546b38962c399eb6438372dc05aad3a15fb0625bd1a98e"
+    },
+    {
+      "name": "css:css-easing-2",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-easing.json",
+      "sha256": "c1824d5ef8acbc9a975341b6267845d21b75dbae6e5b8411e7a13670eab3db5d"
+    },
+    {
+      "name": "css:css-forms-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-forms.json",
+      "sha256": "32658ad5cba1411a4156d62a43b3862b38df2ad55ae0af1ad6b10e5f71044520"
+    },
+    {
+      "name": "css:css-display-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-display.json",
+      "sha256": "586b16b644f9ef6264818972b4fe5dc7cebf4cfd1451a292b979fe28286d1e06"
+    },
+    {
+      "name": "css:css-flexbox-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-flexbox.json",
+      "sha256": "feaa39b08e1108ba751b3d2b95934fcb12fcbf2a7369fc5227e7b5a4af94201a"
+    },
+    {
+      "name": "css:css-gaps-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-gaps.json",
+      "sha256": "6a1ecd88f43b1d1480b4089eb156a2676031ef7edc50b58e9c0639119377b36c"
+    },
+    {
+      "name": "css:css-fonts-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-fonts.json",
+      "sha256": "47bfafc0238b2bf1240fc1bc2ac36e86d91d26353c2080eb94aaa30cc76907f1"
+    },
+    {
+      "name": "css:css-fonts-5",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-fonts-5.json",
+      "sha256": "1db1b98a003179faca83a8688b2d1bed5b7087aef03b1dd7b161133062849a6d"
+    },
+    {
+      "name": "css:css-grid-2",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-grid.json",
+      "sha256": "c7b98bcacf7fe93c38138c43793dc883d33c920b40285061fb6dc209b4eb0648"
+    },
+    {
+      "name": "css:css-image-animation-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-image-animation.json",
+      "sha256": "50ec067fcfcbe291d5f8d245bc4413586a0a8e45e4d9a770f3f9d9d0a41eaea1"
+    },
+    {
+      "name": "css:css-highlight-api-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-highlight-api.json",
+      "sha256": "864283587693d61c47d2b2756f105ee4d3bac0cb66dbc2c7bd351baf3735868c"
+    },
+    {
+      "name": "css:css-gcpm-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-gcpm.json",
+      "sha256": "6ddbb45e1e8624175d230abb84b8333f24232d6ac700b4538f4c587592e1c016"
+    },
+    {
+      "name": "css:css-grid-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-grid-3.json",
+      "sha256": "8d1ed92bf0b99913e1c9c7ffede56500b45799a7847c2a1e7428034d06e7208a"
+    },
+    {
+      "name": "css:css-images-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-images-4.json",
+      "sha256": "a41a30154e44673fc9f936bb745de354b77965a39477e87dbaee01a271b5da4c"
+    },
+    {
+      "name": "css:css-inline-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-inline.json",
+      "sha256": "0a5a725e17dae556a83b74da359e8bb97e12b9269bc0a30935d9b83572b913ad"
+    },
+    {
+      "name": "css:css-images-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-images.json",
+      "sha256": "c081a10bb35516e097bf417916f870d88d7b7987951d0069c9836253b2d8a8e7"
+    },
+    {
+      "name": "css:css-layout-api-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-layout-api.json",
+      "sha256": "c3158a84c31f8816fac6ab1127ecd77e97ec40bba1e2d5a962b6fb09aebae4f4"
+    },
+    {
+      "name": "css:css-mixins-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-mixins.json",
+      "sha256": "76a4c12490d913730aef591bd53fde250f34ee2ae363a8c4545389c4221d776b"
+    },
+    {
+      "name": "css:css-line-grid-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-line-grid.json",
+      "sha256": "cc365f944e8e9f3817e06a139d431a765c3a095a0ac020672fc97bb6b3917c57"
+    },
+    {
+      "name": "css:css-link-params-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-link-params.json",
+      "sha256": "731f8a36c28116d52e27ac84ae7ab54d1ed9bc83cd7093f9e34061a43fb8119e"
+    },
+    {
+      "name": "css:css-multicol-2",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-multicol.json",
+      "sha256": "50c2cb132ba4ea88871a2e24d9b8ee95ea5b4c8808ab6430bbecfd33ee70b141"
+    },
+    {
+      "name": "css:css-lists-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-lists.json",
+      "sha256": "5fe505162dd153b0028916022e7fce26dd493aa652a830bce66d40f7d5926999"
+    },
+    {
+      "name": "css:css-logical-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-logical.json",
+      "sha256": "dd6f9d86a5a2edacb6ed1dc7692afd21cc2f6e1b8a1054a196647e3cf35027d5"
+    },
+    {
+      "name": "css:css-masking-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-masking.json",
+      "sha256": "474f2463547c253829fcdcb26e6c8cc336f16b78dbaeb54eb0cfa6b23308a552"
+    },
+    {
+      "name": "css:css-nav-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-nav.json",
+      "sha256": "86b60b6409e5261ca59ff7e34cfe55d9831db6f59d7b16894ba761bd648c0753"
+    },
+    {
+      "name": "css:css-overflow-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-overflow.json",
+      "sha256": "abbbcae948874621982ceebe7da619654cb7d99349a27d52900e639e4094eb1f"
+    },
+    {
+      "name": "css:css-overflow-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-overflow-4.json",
+      "sha256": "babef48d4842b20d9ad4f385fefbcd4fb239a08457414772610250893a39187c"
+    },
+    {
+      "name": "css:css-overflow-5",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-overflow-5.json",
+      "sha256": "0a8e10588c7bdc2d1eab58d14f8b1f2a9c2833f1e67d351f93e3fd9ed933caf5"
+    },
+    {
+      "name": "css:css-nesting-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-nesting.json",
+      "sha256": "d736939bce46b119777494905fdfb43be49ed271b73c5b18965395cc9095850d"
+    },
+    {
+      "name": "css:css-page-floats-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-page-floats.json",
+      "sha256": "ce77e85c326b0f7848381873a4863b30c62e7a2ec4f8dcd42a895eb5679f0a57"
+    },
+    {
+      "name": "css:css-page-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-page.json",
+      "sha256": "5cdfc6825fb67026cec02386e961bd665311a072f629b4f5a41e953ccf489191"
+    },
+    {
+      "name": "css:css-overscroll-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-overscroll.json",
+      "sha256": "3bbca30a355ff3f26f575868e033400a493424348d04d886d228d40073809800"
+    },
+    {
+      "name": "css:css-properties-values-api-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-properties-values-api.json",
+      "sha256": "9a5c9a5800f2f07fa179967d8057e6b8193126744e1573cd659785fef8f9642e"
+    },
+    {
+      "name": "css:css-round-display-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-round-display.json",
+      "sha256": "90d9f0466eefea53940c6a9384a08b7bb883a69d03a401a1f50d0f01df9c570a"
+    },
+    {
+      "name": "css:css-regions-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-regions.json",
+      "sha256": "3779749cc85adb10ff1a887312942be6b8f6c4a20530e2ac69c45f5d10d5fe83"
+    },
+    {
+      "name": "css:css-paint-api-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-paint-api.json",
+      "sha256": "72a97d9e92dedce9f9cf5a112ec98390db47c7134248aa77f26fd53d94045270"
+    },
+    {
+      "name": "css:css-rhythm-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-rhythm.json",
+      "sha256": "1944ccbd5ba67d8d00bc54594c9ecd95d990918e71aef0a51a5c11df9d907a5e"
+    },
+    {
+      "name": "css:css-position-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-position-4.json",
+      "sha256": "17e7cde4d7a20deb776cdf208c32327017678e32b31a2e27f9de978f24e3c7e0"
+    },
+    {
+      "name": "css:css-pseudo-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-pseudo.json",
+      "sha256": "a41e529687ef22087ebe821acbf678a7119e518466713c065e9f4616db010fe7"
+    },
+    {
+      "name": "css:css-position-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-position.json",
+      "sha256": "da387ad8e77be1209a0b3cb6aea8219c88bb97ac1be2c06ae8e110664f08a8e4"
+    },
+    {
+      "name": "css:css-scrollbars-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-scrollbars.json",
+      "sha256": "a243a2c73995ef079a1e47caa06523069ab9d66419de420b5c63478de4cfead3"
+    },
+    {
+      "name": "css:css-scroll-anchoring-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-scroll-anchoring.json",
+      "sha256": "797bef3883e68bfad48486d335b0b859d3b49cf003d5b2a3f645b194487e1faa"
+    },
+    {
+      "name": "css:css-ruby-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-ruby.json",
+      "sha256": "8d367d27fc0c950cd4e04cb665120f0ae887f11d4afb8fa993c13d4bad92b6ee"
+    },
+    {
+      "name": "css:css-scroll-snap-2",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-scroll-snap-2.json",
+      "sha256": "f88395c2b24460e17919ced9e09ee4b51c0f08a8c19fece3811bda848b9b4ccd"
+    },
+    {
+      "name": "css:css-scroll-snap-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-scroll-snap.json",
+      "sha256": "fb41506abc7fd0b0bd54ca3f81b0dd4eb92777d1d73de362e0c7540be7e482ef"
+    },
+    {
+      "name": "css:css-sizing-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-sizing-4.json",
+      "sha256": "ab062bf29d41e0a364e3cf00fb768cf75f8492ba3a81ecede5b7e0721ed217c2"
+    },
+    {
+      "name": "css:css-shapes-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-shapes.json",
+      "sha256": "82348288ef05f0d91475f56d951f6f6d20451b01ad1771d5937c28077d3b2db2"
+    },
+    {
+      "name": "css:css-sizing-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-sizing.json",
+      "sha256": "bc95345f34c242cea8001151df41754cadad40c4973f4a83d7a430127d243d91"
+    },
+    {
+      "name": "css:css-text-decor-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-text-decor.json",
+      "sha256": "964a9792860d30ee55aff26305b3ae178d76f5d7a326df3bd48b2ca98745ee85"
+    },
+    {
+      "name": "css:css-transforms-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-transforms.json",
+      "sha256": "d9d6b2c44838baca7e81c5b496bd099c798eb0208e4e7ff16f2c67d2bef97d4f"
+    },
+    {
+      "name": "css:css-tables-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-tables.json",
+      "sha256": "531ef77f8fcaaf30fae7faeec0dec2b53ea1bead7d1f1552fbd98fb9989b3141"
+    },
+    {
+      "name": "css:css-syntax-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-syntax.json",
+      "sha256": "49ca821abd97c3999dc78c78a278b6f60d1824adae6b5ff4b7b7acdf3ac96de7"
+    },
+    {
+      "name": "css:css-speech-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-speech.json",
+      "sha256": "f2afb4e7a4aadeeadbdccc016510d0a5f72d80c43890dc046b283f6f1f2b849a"
+    },
+    {
+      "name": "css:css-text-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-text.json",
+      "sha256": "ee77e87501bd443d50b95aa44a1a3f46873e2397a115f749974017a5b93a69e9"
+    },
+    {
+      "name": "css:css-text-decor-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-text-decor-4.json",
+      "sha256": "d4f787c07d46e839f8b60bce40df6b903ffde88d249b02823703d13f9518df95"
+    },
+    {
+      "name": "css:css-text-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-text-4.json",
+      "sha256": "59fe7c6afc87b478b8fd555c1cf532857fe10e78ab23f04f0847d8247d42a0fb"
+    },
+    {
+      "name": "css:css-transforms-2",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-transforms-2.json",
+      "sha256": "f2518e4e236cfab214859d3e824041ddc43dac52ed32ff2fe027bdfacf27fa23"
+    },
+    {
+      "name": "css:css-variables-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-variables.json",
+      "sha256": "e4f72bccc046d3232d385e4018c48bd7b11ce402e94f5defe6f0fa4fdd88cfb3"
+    },
+    {
+      "name": "css:css-transitions-2",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-transitions-2.json",
+      "sha256": "2d03047f08584c4816f36e25e1b023125dfe4cac8298e781c952f9def785e732"
+    },
+    {
+      "name": "css:css-view-transitions-2",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-view-transitions.json",
+      "sha256": "e043e787a6055e155c0063b1758d6406b00c8ea14c4eb6f2923275330ec2efbe"
+    },
+    {
+      "name": "css:css-transitions-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-transitions.json",
+      "sha256": "08b82b0585b39328d5d7724b7e57b0ecd800ece838419b0478b873803c9409e0"
+    },
+    {
+      "name": "css:css-values-5",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-values-5.json",
+      "sha256": "350df5eaf1f023fead0f85af80074212186a9e3013c0634e2a6310ab4924327c"
+    },
+    {
+      "name": "css:css-ui-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-ui.json",
+      "sha256": "a0601ac19e9a4de3c78541a56e1bad73e367744f03261f67d6e7ed4c9dd387aa"
+    },
+    {
+      "name": "css:css-values-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-values.json",
+      "sha256": "6f4c48cf4c91f1cb00929b74b6ce2b6a889d2a610c302a796aa7e8b9b2d00fb1"
+    },
+    {
+      "name": "css:mathml-core",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/mathml-core.json",
+      "sha256": "e069145e80160aef41cf9f3083b2cf2bee1fe295d18e85b7c441ba4b8c3a10bb"
+    },
+    {
+      "name": "css:css-will-change-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-will-change.json",
+      "sha256": "c721b22a70203e69d6ca2c480396217b1ee8d5fd6a502c3fb7793f517359f904"
+    },
+    {
+      "name": "css:css3-exclusions",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-exclusions.json",
+      "sha256": "8e08c238e3d587081982b4cd254f6d92a8beea6c5d577b213ec230dcf823896f"
+    },
+    {
+      "name": "css:filter-effects-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/filter-effects.json",
+      "sha256": "6a66124511a0e2aeb8fd0755c82796a1ada3772310d2cf47978f82220d5f8135"
+    },
+    {
+      "name": "css:css-writing-modes-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/css-writing-modes.json",
+      "sha256": "a3680f348b9058fa1199de2157c5fbec222574804b53d51a6c211d4003ce20f0"
+    },
+    {
+      "name": "css:mediaqueries-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/mediaqueries.json",
+      "sha256": "f57a6222642ba3e7970e34b69fffa4668548c05a784049ef42a1dab91a3ee4f2"
+    },
+    {
+      "name": "css:fill-stroke-3",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/fill-stroke.json",
+      "sha256": "3415aef39868479d3b47bcf1c62f272d75e38687eb833dce68191fe164a88953"
+    },
+    {
+      "name": "css:CSS2",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/CSS.json",
+      "sha256": "0128a8a0407784ade6fc9c71bfe27ed24df10e422ad86da45e7bd61971b1da64"
+    },
+    {
+      "name": "css:mediaqueries-5",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/mediaqueries-5.json",
+      "sha256": "fb993441d24dd0a6ddfbf73fb8e65f0b08a065b176b1c7408d31c15e40610ac3"
+    },
+    {
+      "name": "css:svg-strokes",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/svg-strokes.json",
+      "sha256": "7817a31149c99111a86ab01611d5bcea21091b1d24e3f83209e2fa218e96bf64"
+    },
+    {
+      "name": "css:selectors-5",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/selectors-5.json",
+      "sha256": "f7ab45f9a36e938d70a7b54e8d72545536bf287c461f19d7ab2e4b26b3db343a"
+    },
+    {
+      "name": "css:selectors-4",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/selectors.json",
+      "sha256": "f03bca837962b63c289d68755097bbaf2cd4d8b0efe3fb6cabfd2af3b717cbfc"
+    },
+    {
+      "name": "css:upgrade-insecure-requests",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/upgrade-insecure-requests.json",
+      "sha256": "52ceb4b4dd9c12927cbbf5fb139cc59cfc50f5baf89f9ea2755893d233f787bf"
+    },
+    {
+      "name": "css:SVG2",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/SVG.json",
+      "sha256": "d3e7c2d8e49d79c9823ff8d407de3053e303f56b3d800bf878794988265f2058"
+    },
+    {
+      "name": "css:scroll-animations-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/scroll-animations.json",
+      "sha256": "eb08529abc79397bba8c271c9f0cc08db6ad5e2eeceb3813d67527c0f278ae85"
+    },
+    {
+      "name": "css:motion-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/motion.json",
+      "sha256": "be8249853c18a8f66e0c83ae74b4596be925146c17c5fbc51017fa6f8b003809"
+    },
+    {
+      "name": "css:webvtt1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/webvtt.json",
+      "sha256": "97cfbf6b3965f5452717a2ffd32415ef978a371ea404c10fd48a8d4bc19d89bb"
+    },
+    {
+      "name": "css:window-management",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/window-management.json",
+      "sha256": "27def5700f8b93569a954c5b4b9c5b866fe9fe20484356c3c7e70c49f489b2e6"
+    },
+    {
+      "name": "css:webxr-dom-overlays-1",
+      "url": "https://raw.githubusercontent.com/w3c/webref/23cee93b3a958b736699c04fa51437c0981857e2/tr/css/webxr-dom-overlays.json",
+      "sha256": "c589b789617a474b03f07787659c0ccc3b64348ac480ee8109573749491e6562"
+    }
+  ]
+}
