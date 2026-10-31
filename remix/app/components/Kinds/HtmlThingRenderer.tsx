@@ -166,32 +166,12 @@ export const ALLOWED_PROPS = new Set([
 	'ry',
 	'points',
 	'xmlns',
-	'transform',
-	'opacity',
-	'fillOpacity',
-	'strokeOpacity',
-	'strokeDasharray',
-	'textAnchor',
-	'dominantBaseline',
-	'fontSize',
-	'fontWeight',
-	'fontFamily',
-	'letterSpacing',
-	'dx',
-	'dy',
 	// the ONLY data-* attributes allowed through: the component ttAction
 	// binding (componentTemplate.ts) — inert markup that a trusted-surface
 	// click wrapper reads to run an action AS the viewer. Values are plain
 	// strings (an action key/id and a JSON inputs blob); no URL or JS sink.
 	'data-tt-action',
-	'data-tt-action-inputs',
-	'data-tt-submit',
-	'data-tt-credential-form',
-	'data-tt-private-control',
-	// Inert private-label address; trusted transient hosts hydrate textContent.
-	'data-tt-private-text',
-	// Inert editor address, validated against the authored template before editing.
-	'data-tt-label-key'
+	'data-tt-action-inputs'
 ]);
 
 const sanitizeStyle = (style: unknown): React.CSSProperties | undefined => {

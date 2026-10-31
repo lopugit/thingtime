@@ -1,7 +1,3 @@
-import { useWorkspaceRefresh } from '~/local-workspace/useWorkspaceRefresh';
-import { useComponentVersionDraft } from '~/drafts/useComponentVersionDraft';
-import { createWithDraft } from '~/drafts/createWithDraft';
-import { DraftSaveStatus } from '~/drafts/DraftPicker';
 import React from 'react';
 import {
   Badge,
@@ -21,7 +17,7 @@ import {
   Textarea
 } from '@chakra-ui/react';
 import { BookOpen, Braces, Columns3, LayoutGrid, Library, Plus, Rows3, Save, Search, SlidersHorizontal, Sparkles } from 'lucide-react';
-import { Link, useNavigate, useLocation } from 'react-router';
+import { useNavigate } from 'react-router';
 
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { ChakraThingRenderer, HtmlThingRenderer, isChakraThingNode } from '~/components/Kinds';
@@ -32,18 +28,13 @@ import { useOutsideTapClose } from '~/hooks/useOutsideTapClose';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
 import { timeAgo } from '~/components/Feed/feedTypes';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl';
 import { useApi } from '~/hooks/useApi';
-import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
-import { workspaceStorageBinding, workspaceStorageIdentity, subscribeWorkspaceStorage } from '~/local-workspace/storageStatus.client';
-import { workspaceScopeKey } from '~/local-workspace/storage';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { getThingtimeSchema } from '~/schemas/registry';
+import { ACL_OWNER, getThingtimeSchema } from '~/schemas/registry';
 import type { SchemaThingField } from '~/schemas/registry';
 import { describeSchemaField } from '~/schemas/tools';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
-import { CatalogImporter } from './CatalogImporter';
 
 import {
   COMPONENT_LIBRARY_LABELS,
@@ -65,14 +56,9 @@ import {
 } from './componentTemplate';
 
 // /components — the UI-first sibling of /schemas. Cards render their
-// component from the stored template, args are editable in place, the
+// component LIVE from the stored template, args are editable in place, the
 // underlying schema hides behind a quiet expander, and "Save version" stores
 // the current tester state as a standalone component thing in your Things.
-//
-// Browse cards stay INERT (claude-todo/20: the grid never arms a control):
-// the preview is a plain render with no click wrapper, and the card is a
-// LINK — title and preview open the component's dedicated page
-// (/components/:key), where the live pane runs under the trust ladder.
 
 const cacheKeyFor = (userId: string | null | undefined) => (userId ? `tt-components-${userId}` : null);
 const PAGE_SIZE = 20;
@@ -139,9 +125,8 @@ const ShapeChip = ({ children, dim }: { children: React.ReactNode; dim?: boolean
 );
 
 // ---------------------------------------------------------------------------
-// Card preview: template resolved against the tester args, drawn only through
-// the sanitising allowlist renderers. NOT armed — no onClickCapture, ever: a
-// browse card is not a trusted surface, the dedicated page is.
+// Live preview: template resolved against the tester args, drawn only through
+// the sanitising allowlist renderers.
 
 const ComponentPreview = ({ source, values }: { source: ComponentCardSource; values: ComponentArgValues }) => {
   const resolved = React.useMemo(() => resolveTemplate(source.render, values), [source.render, values]);
@@ -181,7 +166,6 @@ const ArgInput = ({
 }) => {
   const label = spec.label || spec.name;
   const inputProps = {
-    'aria-label': label,
     background: 'var(--tt-card, #ffffff)',
     borderColor: 'var(--tt-border, #ececef)',
     fontSize: '13px',
@@ -202,7 +186,7 @@ const ArgInput = ({
         {label}
       </Text>
       {spec.type === 'boolean' && (
-        <Switch aria-label={label} isChecked={!!value} onChange={(event) => onChange(spec, event.target.checked)} size="sm" />
+        <Switch isChecked={!!value} onChange={(event) => onChange(spec, event.target.checked)} size="sm" />
       )}
       {spec.type === 'enum' && (
         <Select {...inputProps} onChange={(event) => onChange(spec, event.target.value)} value={String(value ?? '')}>
@@ -248,19 +232,14 @@ const ArgInput = ({
 
 type ComponentCardProps = {
   source: ComponentCardSource;
-  device: boolean;
-  localOnly: boolean;
   onReact: (source: ComponentCardSource, token: string) => void;
   onSave: (source: ComponentCardSource) => void;
-  onSaveVersion: (source: ComponentCardSource, values: ComponentArgValues, name: string, acl: string[]) => Promise<boolean>;
+  onSaveVersion: (source: ComponentCardSource, values: ComponentArgValues, name: string, isPublic: boolean) => Promise<boolean>;
+  onOpenDocs: (source: ComponentCardSource) => void;
   loadFamily: (key: string) => Promise<BrowseComponentEntry[]>;
 };
 
-// in-card buttons keep working in place: a click on one never reaches the
-// card's link targets
-const stop = (event: React.SyntheticEvent) => event.stopPropagation();
-
-const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, onSave, onSaveVersion, loadFamily }: ComponentCardProps) => {
+const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersion, onOpenDocs, loadFamily }: ComponentCardProps) => {
   // `active` is the design currently on the card — the family's representative
   // until the designs click-through swaps in a sibling rendition. The rest of
   // the card body reads it through the `source` alias.
@@ -270,7 +249,6 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
     ...defaultsFromArgs(family.args),
     ...(family.savedArgs || {})
   }));
-  React.useEffect(() => { setActive(current => current.id === family.id ? family : current); }, [family]);
   const source = active;
   const entry = active.entry;
 
@@ -300,12 +278,8 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
   const [schemaOpen, setSchemaOpen] = React.useState(false);
   const [versionOpen, setVersionOpen] = React.useState(false);
   const [versionName, setVersionName] = React.useState('');
-  const [versionAcl, setVersionAcl] = React.useState<string[]>(['tt:user']);
+  const [versionPublic, setVersionPublic] = React.useState(false);
   const [savingVersion, setSavingVersion] = React.useState(false);
-  const creating = React.useRef(false);
-  const versionDraft = useComponentVersionDraft(active.id, { values, name: versionName, acl: versionAcl }, saved => {
-    setValues(saved.values); setVersionName(saved.name); setVersionAcl(saved.acl); setArgsOpen(true); setVersionOpen(true);
-  }, savingVersion, false);
   const { recent } = useRecentReactions();
   const [pickerOpen, setPickerOpen] = React.useState(false);
   // outside-tap close (NOT closeOnBlur): dismissing the mobile keyboard blurs
@@ -317,43 +291,23 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
   }, []);
 
   const systemFields = React.useMemo(systemThingFields, []);
-  const canInteract = !!entry;
   const reactionEntries = Object.entries(entry?.reactionCounts || {}).filter(([, count]) => count > 0);
   const libraryLabel = COMPONENT_LIBRARY_LABELS[source.library] || source.library;
 
-  // The card's dedicated page: the family's deep-link key, plus ?design=
-  // when the click-through swapped in a sibling rendition (by library, or by
-  // id when the family holds two renditions of one library — the same rule
-  // the page's own design switcher writes).
-  const pageHref = (suffix = '') => {
-    const base = `/components/${encodeURIComponent(device ? active.id : deepLinkKeyFor(family))}${suffix}`;
-    const query = new URLSearchParams({ catalog: device ? 'device' : 'online' });
-    if (device || active.id === family.id) return `${base}?${query}`;
-    const sameLibrary = family.designs.filter((design) => design.library === active.library).length;
-    query.set('design', sameLibrary > 1 ? active.id : active.library);
-    return `${base}?${query}`;
-  };
-
   const openVersionPanel = () => {
     setVersionName(`${source.name} v${(entry?.usageCount || 0) + 2}`);
-    setVersionAcl(['tt:user']);
     setVersionOpen((open) => !open);
   };
 
   const submitVersion = async () => {
-    if (creating.current) return;
-    creating.current = true; setSavingVersion(true);
-    try {
-      await createWithDraft(versionDraft, async () => ({ ok: await onSaveVersion(source, values, versionName, versionAcl) }));
-      setVersionOpen(false);
-    } catch { /* The authoritative content writer already reported its error. */ }
-    finally { creating.current = false; setSavingVersion(false); }
+    setSavingVersion(true);
+    const ok = await onSaveVersion(source, values, versionName, versionPublic);
+    setSavingVersion(false);
+    if (ok) setVersionOpen(false);
   };
 
   return (
     <Flex
-      as="article"
-      aria-label={source.name}
       background="var(--tt-card, #ffffff)"
       border="1px solid var(--tt-border, #ececef)"
       borderRadius="var(--tt-radius-lg, 16px)"
@@ -363,16 +317,7 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
       sx={{ breakInside: 'avoid' }}
     >
       <Flex align="center" gap={2} wrap="wrap">
-        {/* a real link: middle-click, keyboard, and "open in new tab" all work */}
-        <Text
-          as={Link}
-          color="var(--tt-ink, #16161a)"
-          fontSize="md"
-          fontWeight={700}
-          to={pageHref()}
-          _hover={{ textDecoration: 'underline' }}
-          data-testid="component-card-title"
-        >
+        <Text color="var(--tt-ink, #16161a)" fontSize="md" fontWeight={700}>
           {source.name}
         </Text>
         <Badge
@@ -431,10 +376,7 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
                 height="22px"
                 key={design.id}
                 minWidth={0}
-                onClick={(event) => {
-                  stop(event);
-                  switchDesign(design);
-                }}
+                onClick={() => switchDesign(design)}
                 paddingX={2}
                 size="xs"
                 variant="unstyled"
@@ -447,24 +389,7 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
         </Flex>
       )}
 
-      {/* the preview stays an inert render; a real anchor stretched over it
-          is the click/keyboard target that opens the dedicated page */}
-      <Box position="relative" data-testid="component-card-preview">
-        <ComponentPreview source={source} values={values} />
-        <Box
-          aria-label={`Open ${source.name}`}
-          as={Link}
-          borderRadius="var(--tt-radius-md, 12px)"
-          bottom={0}
-          left={0}
-          position="absolute"
-          right={0}
-          to={pageHref()}
-          top={0}
-          _focusVisible={{ boxShadow: '0 0 0 2px var(--tt-link, #4c7dff)', outline: 'none' }}
-          data-testid="component-card-open"
-        />
-      </Box>
+      <ComponentPreview source={source} values={values} />
 
       {source.args.length > 0 && (
         <Flex direction="column" gap={2}>
@@ -473,10 +398,7 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
             color="var(--tt-muted, #9a9aa6)"
             fontSize="12px"
             leftIcon={<SlidersHorizontal size={13} />}
-            onClick={(event) => {
-              stop(event);
-              setArgsOpen((open) => !open);
-            }}
+            onClick={() => setArgsOpen((open) => !open)}
             size="xs"
             variant="ghost"
           >
@@ -516,10 +438,7 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
           color="var(--tt-faint, #b6b6c0)"
           fontSize="12px"
           leftIcon={<Braces size={13} />}
-          onClick={(event) => {
-            stop(event);
-            setSchemaOpen((open) => !open);
-          }}
+          onClick={() => setSchemaOpen((open) => !open)}
           size="xs"
           variant="ghost"
         >
@@ -642,7 +561,7 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
         )}
       </Flex>
 
-      {canInteract && (
+      {entry && (
         <Flex align="center" gap={1.5} wrap="wrap">
           {reactionEntries.map(([token, count]) => {
             const mine = entry.viewerReactions.includes(token);
@@ -654,10 +573,7 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
                 height="26px"
                 key={token}
                 minWidth={0}
-                onClick={(event) => {
-                  stop(event);
-                  onReact(source, token);
-                }}
+                onClick={() => onReact(source, token)}
                 paddingX={2}
                 size="xs"
                 variant="unstyled"
@@ -678,10 +594,7 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
                 borderRadius="full"
                 color="var(--tt-muted, #9a9aa6)"
                 height="26px"
-                onClick={(event) => {
-                  stop(event);
-                  setPickerOpen((open) => !open);
-                }}
+                onClick={() => setPickerOpen((open) => !open)}
                 paddingX={2}
                 size="xs"
                 variant="unstyled"
@@ -735,37 +648,24 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
       )}
 
       <Flex gap={2} wrap="wrap">
-        {canInteract && (
+        {entry && (
           <Button
             leftIcon={<Library size={14} />}
-            onClick={(event) => {
-              stop(event);
-              onSave(source);
-            }}
+            onClick={() => onSave(source)}
             size="xs"
             variant={entry.saved ? 'solid' : 'outline'}
           >
             {entry.saved ? 'In my library' : 'Add to library'}
           </Button>
         )}
-        <Button
-          leftIcon={<Save size={14} />}
-          onClick={(event) => {
-            stop(event);
-            openVersionPanel();
-          }}
-          size="xs"
-          variant="outline"
-        >
+        <Button leftIcon={<Save size={14} />} onClick={openVersionPanel} size="xs" variant="outline">
           Save version
         </Button>
-        {/* the dedicated page, landing on its docs section — a real link */}
-        <Button as={Link} leftIcon={<BookOpen size={14} />} onClick={stop} size="xs" to={pageHref('/docs')} variant="ghost" data-testid="component-card-docs">
+        <Button leftIcon={<BookOpen size={14} />} onClick={() => onOpenDocs(active)} size="xs" variant="ghost">
           Docs
         </Button>
       </Flex>
 
-      {(argsOpen || versionOpen) && <DraftSaveStatus paused={!!versionDraft.recoveryError} status={versionDraft.status} error={versionDraft.error} retry={versionDraft.retry} />}
       {versionOpen && (
         <Flex
           align="center"
@@ -781,20 +681,18 @@ const ComponentCard = React.memo(({ source: family, device, localOnly, onReact, 
             borderColor="var(--tt-border, #ececef)"
             flex={1}
             fontSize="13px"
-            minWidth="0"
+            minWidth="180px"
             onChange={(event) => setVersionName(event.target.value)}
             placeholder="Version name"
             size="sm"
             value={versionName}
           />
-          <Box flex="1 1 220px" minWidth="0">
-            <ThingAudienceControl localOnly={localOnly}
-              acl={versionAcl}
-              label="Who can use this version?"
-              onChange={setVersionAcl}
-              testId={`component-version-audience-${source.id}`}
-            />
-          </Box>
+          <Flex align="center" gap={1.5}>
+            <Switch isChecked={versionPublic} onChange={(event) => setVersionPublic(event.target.checked)} size="sm" />
+            <Text color="var(--tt-muted, #9a9aa6)" fontSize="12px">
+              public
+            </Text>
+          </Flex>
           <Button colorScheme="pink" isLoading={savingVersion} onClick={submitVersion} size="sm">
             Save to my Things
           </Button>
@@ -808,20 +706,12 @@ ComponentCard.displayName = 'ComponentCard';
 // ---------------------------------------------------------------------------
 
 export const ComponentsBrowsePage = () => {
-  const location = useLocation();
-  const identity = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
-  const device = new URLSearchParams(location.search).get('catalog') !== 'online';
-  return <ComponentsWorkspace key={`${identity}:${device}`} device={device} />;
-};
-const ComponentsWorkspace = ({ device }: { device: boolean }) => {
   const navigate = useNavigate();
   const api = useApi();
   const lopu = useLopu();
-  const user = useWorkspaceUser(), accountUser = useCurrentUser();
-  const binding = workspaceStorageBinding();
-  const cacheScope = binding ? JSON.stringify([workspaceScopeKey(binding.scope), device ? 'device' : 'online']) : undefined;
+  const user = useCurrentUser();
 
-  const cacheKey = cacheKeyFor(cacheScope);
+  const cacheKey = cacheKeyFor(user?.id);
   const cached = React.useMemo(
     () => (cacheKey ? readLocalCache<CachedComponents>(cacheKey) : null),
     [cacheKey]
@@ -867,12 +757,11 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
       setLoading(true);
       try {
         const resp = (await apiRef.current.v1.components.browse({
-          device: device || undefined,
-          q: device || scopeMode === 'all' ? query.trim() || undefined : undefined,
-          sort: device || scopeMode === 'all' ? sortMode : sortMode === 'oldest' ? 'oldest' : undefined,
+          q: scopeMode === 'all' ? query.trim() || undefined : undefined,
+          sort: scopeMode === 'all' ? sortMode : sortMode === 'oldest' ? 'oldest' : undefined,
           // catalog filters ride no-q pages only — the server ignores them
           // during text search, so don't send a misleading param
-          lib: (device || scopeMode === 'all') && (device || !query.trim()) && libMode !== 'all' ? libMode : undefined,
+          lib: scopeMode === 'all' && !query.trim() && libMode !== 'all' ? libMode : undefined,
           // one card per family on the plain catalog view; q-search pages and
           // library-filtered views stay per-design (q collapses client-side)
           group:
@@ -884,7 +773,6 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
         })) as BrowseComponentsResponse;
         if (seq !== requestSeqRef.current) return;
         if (!resp?.ok) throw resp;
-        if (resp.localCacheError) lopuRef.current({ title: resp.localCacheError, status: 'warning' });
 
         setEntries((prev) => {
           if (!cursor) return resp.components;
@@ -907,26 +795,22 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
             total: resp.total,
             totalCapped: resp.totalCapped
           };
-          // Cache under the full workspace and catalogue identity.
+          // only persist when signed in, always under the per-user key
           if (cacheKeyRef.current) writeLocalCache(cacheKeyRef.current, snapshot);
         }
       } catch (err: any) {
         if (seq !== requestSeqRef.current) return;
-        lopuRef.current({ title: err?.error || err?.message || 'Component browsing hiccuped — try again 🌈', status: 'error' });
+        lopuRef.current({ title: err?.error || 'Component browsing hiccuped — try again 🌈', status: 'error' });
       } finally {
         if (seq === requestSeqRef.current) setLoading(false);
       }
     },
-    [view, device]
+    [view]
   );
-
-  const familyCacheRef = React.useRef(new Map<string, BrowseComponentEntry[]>());
-  useWorkspaceRefresh(() => { familyCacheRef.current.clear(); void runBrowse(); }, device);
 
   // reconcile cached paint with fresh data
   React.useEffect(() => {
     runBrowse();
-    return () => { requestSeqRef.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -943,11 +827,12 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
   const sources = React.useMemo(() => collapseEntriesByFamily(entries), [entries]);
 
   // family design rosters hydrate lazily on first switch, cached per key
+  const familyCacheRef = React.useRef(new Map<string, BrowseComponentEntry[]>());
   const loadFamily = React.useCallback(async (key: string): Promise<BrowseComponentEntry[]> => {
     const cached = familyCacheRef.current.get(key);
     if (cached) return cached;
     try {
-      const resp = (await apiRef.current.v1.components.browse({ family: key, device: device || undefined, limit: 50 })) as BrowseComponentsResponse;
+      const resp = (await apiRef.current.v1.components.browse({ family: key })) as BrowseComponentsResponse;
       if (!resp?.ok) throw resp;
       familyCacheRef.current.set(key, resp.components);
       return resp.components;
@@ -955,7 +840,16 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
       lopuRef.current({ title: err?.error || 'Couldn’t load this component’s designs 🌈', status: 'error' });
       return [];
     }
-  }, [device]);
+  }, []);
+
+  const handleOpenDocs = React.useCallback(
+    (source: ComponentCardSource) => {
+      const key = deepLinkKeyFor(source);
+      const design = source.familyKey ? `?design=${encodeURIComponent(source.library)}` : '';
+      navigate(`/components/${encodeURIComponent(key)}/docs${design}`);
+    },
+    [navigate]
+  );
 
   // ---- actions ------------------------------------------------------------
 
@@ -1032,7 +926,7 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
   );
 
   const handleSaveVersion = React.useCallback(
-    async (source: ComponentCardSource, values: ComponentArgValues, name: string, acl: string[]): Promise<boolean> => {
+    async (source: ComponentCardSource, values: ComponentArgValues, name: string, isPublic: boolean): Promise<boolean> => {
       if (!user) {
         lopuRef.current({ title: 'Sign in to save component versions ✨', status: 'info', duration: 6000 });
         return false;
@@ -1056,7 +950,6 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
             library: source.library,
             category: source.category,
             ...(source.componentKey ? { componentKey: source.componentKey } : {}),
-            ...(source.familyKey ? { familyKey: source.familyKey } : {}),
             version: (source.entry.usageCount || 0) + 2,
             args: source.args,
             savedArgs,
@@ -1064,20 +957,19 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
             ...(source.previewBg ? { previewBg: source.previewBg } : {}),
             forkOf: source.id
           },
-          acl
+          // private by default — flip the toggle to publish into the catalog
+          ...(isPublic ? {} : { acl: [ACL_OWNER] })
         });
         if (!resp?.ok) throw resp;
         patchEntry(source.id, (entry) => ({ ...entry, usageCount: (entry.usageCount || 0) + 1 }));
-        familyCacheRef.current.clear();
-        if (device) void runBrowse();
         lopuRef.current({ title: `Saved "${trimmed}" to your Things ✨`, status: 'success' });
         return true;
       } catch (err: any) {
-        lopuRef.current({ title: err?.error || err?.message || 'Version didn’t save — try again 🌈', status: 'error' });
+        lopuRef.current({ title: err?.error || 'Version didn’t save — try again 🌈', status: 'error' });
         return false;
       }
     },
-    [user, patchEntry, device, runBrowse]
+    [user, patchEntry]
   );
 
   // ---- infinite scroll ----------------------------------------------------
@@ -1111,10 +1003,9 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
 
   const cardFor = (source: ComponentCardSource) => (
     <ComponentCard
-      key={`${source.key}:${source.id}`}
-      device={device}
-      localOnly={!!user?.localOnly}
+      key={source.key}
       loadFamily={loadFamily}
+      onOpenDocs={handleOpenDocs}
       onReact={handleReact}
       onSave={handleSave}
       onSaveVersion={handleSaveVersion}
@@ -1126,7 +1017,7 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
 
   return (
     <Flex background="var(--tt-surface, #fafafb)" justifyContent="center" minHeight="100vh" width="100%">
-      <Flex direction="column" gap={5} maxWidth={view === 'feed' ? '760px' : '1180px'} pb={24} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 36px)" px={4} width="100%">
+      <Flex direction="column" gap={5} maxWidth={view === 'feed' ? '760px' : '1180px'} pb={24} pt="90px" px={4} width="100%">
         <Flex align="baseline" gap={3} wrap="wrap">
           <Text color="var(--tt-ink, #16161a)" fontSize="2xl" fontWeight={800}>
             Components
@@ -1146,13 +1037,6 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
           </Button>
         </Flex>
 
-        {accountUser?.isAdmin && <CatalogImporter key={accountUser.id} onPublished={() => { familyCacheRef.current.clear(); void runBrowse(); }} />}
-
-        <Flex gap={2} wrap="wrap">
-          <Button size="sm" aria-pressed={device} onClick={() => navigate('/components?catalog=device')}>This device</Button>
-          <Button size="sm" aria-pressed={!device} onClick={() => navigate('/components?catalog=online')}>Online catalogue</Button>
-        </Flex>
-        {device && <Text fontSize="sm">Bundled components and copies saved in this workspace. Your online account may contain more components.</Text>}
         {/* same rainbow-ringed input as /search and /schemas */}
         <form onSubmit={submit}>
           <Center position="relative" width="100%">
@@ -1222,13 +1106,13 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
           <Button {...pillProps(sort === 'newest')} onClick={() => setAndRun({ sort: 'newest' })}>
             Newest
           </Button>
-          {!device && <Button {...pillProps(sort === 'popular')} onClick={() => setAndRun({ sort: 'popular' })}>
+          <Button {...pillProps(sort === 'popular')} onClick={() => setAndRun({ sort: 'popular' })}>
             Popular
-          </Button>}
+          </Button>
           <Button {...pillProps(sort === 'oldest')} onClick={() => setAndRun({ sort: 'oldest' })}>
             Oldest
           </Button>
-          {user && (device || !user.localOnly) && (
+          {user && (
             <>
               <Box width={2} />
               <Text {...monoLabel}>show</Text>
@@ -1255,7 +1139,7 @@ const ComponentsWorkspace = ({ device }: { device: boolean }) => {
 
         {view === 'feed' && <Flex direction="column" gap={3}>{sources.map(cardFor)}</Flex>}
         {view === 'grid' && (
-          <Grid gap={3} templateColumns="repeat(auto-fill, minmax(min(100%, 340px), 1fr))">
+          <Grid gap={3} templateColumns="repeat(auto-fill, minmax(340px, 1fr))">
             {sources.map(cardFor)}
           </Grid>
         )}

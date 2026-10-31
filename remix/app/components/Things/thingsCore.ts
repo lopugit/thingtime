@@ -119,7 +119,6 @@ export const THINGS_KIND_FILTERS = [
   { id: 'data', label: 'Data', icon: '📦' },
   { id: 'schema', label: 'Schemas', icon: '💎' },
   { id: 'component', label: 'Components', icon: '🧩' },
-  { id: 'webpage', label: 'Pages', icon: '▤' },
   { id: 'action', label: 'Actions', icon: '⚡' },
   { id: 'comment', label: 'Comments', icon: '💬' }
 ] as const;

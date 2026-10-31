@@ -23,7 +23,6 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RenderThing } from '~/components/Kinds';
-import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { ThingComments } from './ThingComments';
 
@@ -448,18 +447,16 @@ export const PreviewModal = ({
   onAction: (thing: ThingsThing, action: 'rename' | 'move' | 'share' | 'delete') => void;
 }) => {
   const viewer = useCurrentUser();
-  const localView = useLocalApiView();
-  const selectedPlane = useDataPlane();
   // Ownership IS the trust boundary for the interactive render below. This
   // modal opens on ANY thing the viewer can read — the ?preview=<id> deep link
   // resolves foreign public things too — so a component authored by someone
   // else must render INERT here, exactly like the feed/search surfaces. The
   // check lives inside the modal rather than at the call site so a future
   // caller cannot forget it.
-  const untrusted = !!thing && (!viewer?.id || thing.author?.id !== viewer.id || (localView.localPlane === 'home' && selectedPlane !== 'home'));
+  const untrusted = !!thing && (!viewer?.id || thing.author?.id !== viewer.id);
   return (
-  <Modal isOpen={!!thing} onClose={onClose} size="lg" scrollBehavior="inside">
-    <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />
+  <Modal isOpen={!!thing} onClose={onClose} size="lg">
+    <ModalOverlay />
     {thing && (
       <ModalContent {...modalCard}>
         <ModalHeader fontSize="16px">

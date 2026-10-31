@@ -71,59 +71,16 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'subspaces.list': { limit: 120, windowMs: 60_000, enabled: true },
   // schema browsing (/api/v1/schemas/browse) — read-only, bounded like search
   'schemas.browse': { limit: 120, windowMs: 60_000, enabled: true },
-  // embed SDK reads (GET /api/v1/embed/things) — the only anonymous
-  // cross-origin read in the API (Access-Control-Allow-Origin: *), so an
-  // unbounded one would be a free amplification/scraping surface off any host
-  // page. Bounded like the other public reads; anonymous callers key by IP.
-  'embed.read': { limit: 120, windowMs: 60_000, enabled: true },
-  // embed SDK writes (POST /api/v1/embed/things) — MAX_THINGS_PER_OWNER bounds
-  // how many embeds exist, not how fast they churn; each save costs a count +
-  // find + CAS update, so throttle the rate too. Write-shaped like things.write.
-  'embed.write': { limit: 60, windowMs: 60_000, enabled: true },
   // component browsing (/api/v1/components/browse) — same read-only shape
   'components.browse': { limit: 120, windowMs: 60_000, enabled: true },
-  // webpage resolution (/api/v1/webpages/resolve) — read-only, one page +
-  // batched component refs per call; every client navigation may hit it
-  'webpages.resolve': { limit: 240, windowMs: 60_000, enabled: true },
-  // demo library listing (/api/v1/webpages/demos) — read-only, the catalog is
-  // code and the seeded census is one bounded projection; browse-shaped
-  'webpages.demos': { limit: 120, windowMs: 60_000, enabled: true },
-  // suite / app install (/api/v1/webpages/suites/install) — one call upserts a
-  // whole bundle into the caller's own things through the ordinary write
-  // path; installs are rare and idempotent, so keep the window tight
-  'webpages.install': { limit: 12, windowMs: 60_000, enabled: true },
   // admin component-library seeding (/api/v1/admin/components/seed) — batch
   // writes; enforced fail-closed at the route
   'components.seed': { limit: 30, windowMs: 60_000, enabled: true },
-  // admin site-page seeding (/api/v1/admin/webpages/seed) — deterministic
-  // table upserts; enforced fail-closed at the route
-  'webpages.seed': { limit: 30, windowMs: 60_000, enabled: true },
   // action execution (POST /api/v1/actions/run) — compute + writes; each run
   // is additionally bounded by its own budget envelope (registry limits)
-  // interactive APP pages run one action per control press (a D-pad step, a
-  // battle turn) plus their source loads — 4/s sustained is the ceiling a
-  // human can drive, and every run stays inside the executor's own budgets
-  'actions.run': { limit: 240, windowMs: 60_000, enabled: true },
+  'actions.run': { limit: 60, windowMs: 60_000, enabled: true },
   // run-history reads (GET /api/v1/actions/runs) — read-only, browse-shaped
   'actions.runs': { limit: 120, windowMs: 60_000, enabled: true },
-  // public theme gallery list (GET /api/v1/themes/shared with no id) — the same
-  // anonymous browse shape as schemas.browse; it only ever returns public theme
-  // projections, but each call is two indexed reads and up to 60 token docs
-  'themes.gallery': { limit: 120, windowMs: 60_000, enabled: true },
-  'algorithms.sync': { limit: 60, windowMs: 60_000, enabled: true },
-  'themes.sync': { limit: 60, windowMs: 60_000, enabled: true },
-  // third-party connections (/api/v1/connections) — reads of stored feed
-  // pages and connection lists, bounded like the other authenticated reads
-  'connections.read': { limit: 120, windowMs: 60_000, enabled: true },
-  // link/unlink/filter writes and OAuth begin — each mints or mutates account
-  // linkage, write-shaped like things.write
-  'connections.write': { limit: 60, windowMs: 60_000, enabled: true },
-  // calls that leave our infrastructure for a provider API (YouTube channel
-  // search/resolve, forced feed sync). These spend a SHARED, quota-limited
-  // third-party budget — a YouTube Data API search costs 100 of ~10,000 daily
-  // units — so one signed-in account must not be able to exhaust the feature
-  // for everyone. Deliberately much tighter than the local reads above.
-  'connections.provider': { limit: 20, windowMs: 60_000, enabled: true },
   // any other mutating write through /api/v1/things (create/upsert/patch/delete
   // posts and other thing kinds) — reactions/comments route to their own keys
   'things.write': { limit: 60, windowMs: 60_000, enabled: true },
