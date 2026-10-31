@@ -124,21 +124,18 @@
    failed events, persist the latest project status server-side, and have the
    footer/dashboard read the cached status instead of polling Vercel directly.
 
-6. **✅ Done (reconciled 2026-08-18): cross-tab sync for persisted thingtime state.**
+6. **✅ Done (2026-07-21): cross-tab sync for persisted thingtime state.**
 
-   `BroadcastChannel('thingtime')`
-   (`remix/app/Providers/thingtimeSyncChannel.ts`) publishes each successfully
-   applied local `setThingtime` write. Payloads go through the active safe
-   `thingtimeSerialization.ts` codec, so tagged Dates and cycles survive while
-   persisted/runtime function source never crosses tabs. Other tabs apply the
-   write through the existing mutation queue with `{ ignoreUndoRedo: true,
-   fromRemote: true }`, preventing echo loops and keeping undo per-tab. The
-   internal root `timemachine` path is excluded from channel traffic, while
-   ordinary paths restored by undo/redo still converge across tabs. The
-   debounced latest-revision autosave in `ThingtimeProvider` remains the one
-   persist path. Unit and live two-tab verification are recorded in
-   `claude-todo/07-cross-tab-thingtime-sync.md`; optional cold-tab revision
-   reconciliation remains future hardening.
+   Implemented exactly as specced: `BroadcastChannel('thingtime')`
+   (`remix/app/Providers/thingtimeSyncChannel.ts`) publishes each local
+   `setThingtime` write (path + flatted-serialized value); other tabs apply it
+   through the existing mutation queue with `{ ignoreUndoRedo: true,
+   fromRemote: true }`, so there are no echo loops and undo stays per-tab. The
+   single persist path in `ThingtimeProvider` is unchanged. Live-verified in
+   two tabs (both directions, stale-tab clobber scenario, 20-write burst);
+   unit-tested in `thingtimeSyncChannel.test.ts`. Optional remaining hardening
+   (cold-tab revision diff on focus) is noted in
+   `claude-todo/07-cross-tab-thingtime-sync.md`.
 
 ---
 
