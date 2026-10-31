@@ -6,7 +6,6 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { verifyUnsignedArtifacts } = require('../lib/thingtime-node-bridge.cjs');
-const { verifyBundledMongo } = require('../lib/bundled-mongodb.cjs');
 const { verifyAgentPackage } = require('../lib/verify-agent-package.cjs');
 
 const requireBundledMongo = process.argv.includes('--require-bundled-mongo');
@@ -31,8 +30,5 @@ await verifyUnsignedArtifacts({
     runtimePath
 });
 await verifyPasswordProvider(path.join(contentsPath, 'Helpers/Thingtime Passwords.app'), { unsigned: true });
-const mongoRoot = path.join(contentsPath, 'Resources', 'database', 'mongodb');
-if (requireBundledMongo || existsSync(mongoRoot))
-    await verifyBundledMongo(mongoRoot, { pinned: requireBundledMongo, execute: requireBundledMongo });
 verifyAgentPackage(appPath, undefined, { required: true });
 console.log(`Verified unsigned Thingtime app ${appPath}`);

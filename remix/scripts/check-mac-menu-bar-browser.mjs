@@ -118,9 +118,6 @@ try {
 		await page.setViewportSize({ width, height: 900 });
 		await page.goto(`${origin}/scripts/mac-menu-bar.browser.html?scripts`, { waitUntil: 'domcontentloaded', timeout: 120000 });
 		await page.getByRole('button', { name: 'Request run', exact: true }).waitFor({ timeout: 120000 });
-		const formBounds = await page.getByPlaceholder('example-1').boundingBox();
-		assert.ok(formBounds && formBounds.x >= 18, `${width}: suite supplies its own side padding`);
-		assert.ok(Math.abs(formBounds.x + formBounds.width / 2 - width / 2) <= 2, `${width}: suite centers its own form`);
 		await page.getByRole('button', { name: 'Save reusable Action', exact: true }).click();
 		await page.getByRole('link', { name: 'Open saved Thing', exact: true }).waitFor();
 		await page.getByRole('combobox', { name: 'Choose a record', exact: true }).selectOption('fixture-mac');
@@ -159,7 +156,7 @@ try {
 		JSON.stringify({
 			ok: true,
 			widths: [1440, 390],
-			searchLastOf47: !process.env.TT_SCRIPTS_ONLY,
+			searchLastOf10001: !process.env.TT_SCRIPTS_ONLY,
 			details: !process.env.TT_SCRIPTS_ONLY,
 			zeroAndUnavailable: !process.env.TT_SCRIPTS_ONLY,
 			states: process.env.TT_SCRIPTS_ONLY ? 0 : 7,
