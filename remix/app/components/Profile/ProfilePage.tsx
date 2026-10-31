@@ -38,6 +38,8 @@ export type ProfilePageProps = {
   username?: string;
 };
 
+type WornTheme = { id: string; name: string };
+
 type RemoteProfileState =
   | { status: 'idle' }
   | { status: 'loading' }
@@ -195,24 +197,9 @@ export const ProfilePage = (props: ProfilePageProps) => {
   // it again restores the snapshot. A toast-button flow would expire in
   // seconds — the chip itself is the keep/revert control.
   const { applyThemeDoc } = useTtTheme();
-  const { thingtime, setThingtime, getThingtime } = useThingtime();
-
-  // Both halves of the try-on live in persisted `settings.*`, not component
-  // state: `settings.theme` is written through to localforage, so a try-on
-  // survives navigating away, but a React ref does not. With the snapshot in a
-  // ref, leaving the profile and coming back showed the chip in its "try on"
-  // state again, and a second click snapshotted the ALREADY-WORN foreign theme
-  // as the revert target — the visitor's own look became unrecoverable from the
-  // one control that advertises it. Deriving both from persisted state keeps
-  // "click again to take it off" true across navigation and reloads.
-  //
-  // An open RUN (the held look plus the share id it borrowed), not the applied
-  // share id alone, is what the chip reads — see themeTryOnCore for why the
-  // share id alone mislabels a visitor who simply wears the same theme as the
-  // owner, and why a run has to end once they adopt a look of their own.
-  const currentThemeSettings = thingtime?.settings?.theme;
-  const tryOnRun = thingtime?.settings?.themeBeforeTryOn;
-  const tryingOn = isWearingTryOn({ wornTheme, currentTheme: currentThemeSettings, run: tryOnRun });
+  const { setThingtime, getThingtime } = useThingtime();
+  const [tryingOn, setTryingOn] = React.useState(false);
+  const preTryThemeRef = React.useRef<any>(null);
 
   const handleWornChipClick = React.useCallback(async () => {
     if (!wornTheme) return;
@@ -221,12 +208,13 @@ export const ProfilePage = (props: ProfilePageProps) => {
       return;
     }
     if (tryingOn) {
-      const openRun = getThingtime('settings.themeBeforeTryOn');
-      setThingtime('settings.theme', restoredThemeSettings(openRun, getThingtime('settings.theme')), {
+      const snapshot = preTryThemeRef.current;
+      setThingtime('settings.theme', snapshot && typeof snapshot === 'object' ? snapshot : { preset: 'Thingtime', overrides: {} }, {
         ignoreUndoRedo: true,
         namespace: 'theme'
       });
-      setThingtime('settings.themeBeforeTryOn', null, { ignoreUndoRedo: true, namespace: 'theme' });
+      preTryThemeRef.current = null;
+      setTryingOn(false);
       lopuRef.current({ title: 'Back to your own look ✨', status: 'success' });
       return;
     }
@@ -236,15 +224,9 @@ export const ProfilePage = (props: ProfilePageProps) => {
         lopuRef.current({ title: 'That theme is no longer shared 🌫️', status: 'error' });
         return;
       }
-      // Open or continue the run, then borrow. Hopping to a second profile
-      // while a run is open advances only the borrowed id, so the original
-      // look stays the revert target — while a visitor who arrived already
-      // wearing a shared theme (share link, gallery, cross-device pickup), or
-      // who has since adopted a look of their own, gets THAT captured, so
-      // take-off returns them to what they were actually wearing.
-      const run = nextTryOnRun(getThingtime('settings.themeBeforeTryOn'), getThingtime('settings.theme'), resp.theme.id);
-      setThingtime('settings.themeBeforeTryOn', run, { ignoreUndoRedo: true, namespace: 'theme' });
+      preTryThemeRef.current = getThingtime('settings.theme') ?? null;
       applyThemeDoc(resp.theme.theme, { shareId: resp.theme.id });
+      setTryingOn(true);
       lopuRef.current({
         title: `Trying on "${resp.theme.name}" 🌈`,
         description: 'Click the chip again to take it off, or keep it and tweak in /themes.',
@@ -599,9 +581,48 @@ export const ProfilePage = (props: ProfilePageProps) => {
           </Text>
         )}
 
-        {/* follower/following/friend counts + follow/friend actions (and the
-        pending friend-request inbox on your own profile) */}
-        <RelationshipControls username={profile.username} isSelf={isSelf} />
+        {wornTheme && (
+          <Box
+            as="button"
+            type="button"
+            onClick={handleWornChipClick}
+            mt={3}
+            p="1.5px"
+            borderRadius="999px"
+            background={RAINBOW}
+            backgroundSize="calc(100px + 200%)"
+            sx={{ animation: RAINBOW_ANIM }}
+            cursor="pointer"
+            display="inline-flex"
+            title={
+              isSelf
+                ? 'Your active theme — open the Theme Studio'
+                : tryingOn
+                  ? 'Take their theme off'
+                  : 'Preview Thingtime through their eyes'
+            }
+          >
+            <Flex
+              alignItems="center"
+              columnGap="6px"
+              px={3}
+              py="5px"
+              borderRadius="999px"
+              background="var(--tt-card, #fff)"
+              fontSize="13px"
+              fontWeight={600}
+              color="var(--tt-text, #5a5a66)"
+              transition="background 140ms ease"
+              _hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
+            >
+              {isSelf
+                ? `Wearing "${wornTheme.name}" 🌈`
+                : tryingOn
+                  ? `Wearing "${wornTheme.name}" ✓ — take it off`
+                  : `Wearing "${wornTheme.name}" 🌈 — try it on`}
+            </Flex>
+          </Box>
+        )}
 
         {isSelf && user ? (
           <Flex mt={4} columnGap={2} rowGap={2} flexWrap="wrap">
