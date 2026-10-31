@@ -95,7 +95,15 @@ console.log('A. Single-namespace basics (isolated sandbox)');
   check('KV entries visible through the things surface', kvViaThings.body?.things?.length === 1);
 
   const usageBefore = await api('/api/v1/app-data/usage', { token: t });
-  check('usage ledger reports bytes + budget', usageBefore.body?.usedBytes > 0 && usageBefore.body?.budgetBytes > 0);
+  check(
+    'sandbox usage reports the explicit user ledger and no standing app aggregate',
+    usageBefore.body?.usedBytes > 0 &&
+      usageBefore.body?.budgetBytes > 0 &&
+      usageBefore.body?.userStorage?.usedBytes === usageBefore.body?.usedBytes &&
+      usageBefore.body?.userStorage?.remainingBytes >= 0 &&
+      usageBefore.body?.appStorage === null &&
+      usageBefore.body?.storageAccountingReady === true
+  );
 
   const patched = await api('/api/v1/things', {
     token: t,
@@ -110,6 +118,17 @@ console.log('A. Single-namespace basics (isolated sandbox)');
   check('DELETE inside namespace', removed.body?.ok === true);
   const usageAfterDelete = await api('/api/v1/app-data/usage', { token: t });
   check('delete refunds the ledger', usageAfterDelete.body?.usedBytes < usageAfterPatch.body?.usedBytes);
+
+  const deletedKv = await api('/api/v1/app-data/delete', {
+    token: t,
+    method: 'POST',
+    body: { key: `log:${suffix}` }
+  });
+  const usageAfterKvDelete = await api('/api/v1/app-data/usage', { token: t });
+  check(
+    'explicit sandbox KV delete refunds the ephemeral ledger',
+    deletedKv.body?.deleted === true && usageAfterKvDelete.body?.usedBytes < usageAfterDelete.body?.usedBytes
+  );
 
   const save = await api('/api/v1/things', { token: t, method: 'POST', body: { thingtime: ['save'], targetId: `va-post-${suffix}` } });
   check('save things refused (first-party surface)', save.status === 403);

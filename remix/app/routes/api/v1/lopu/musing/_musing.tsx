@@ -1,4 +1,6 @@
+import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { consumeLopuMusingQuota } from '~/api/utils/lopu/rateLimit';
+import { wishSlotMusing } from '~/api/utils/lopu/fallbacks';
 import { fetchWeather, hasLopuAiProviderConfigured, streamLopuMusing } from '~/api/utils/lopu/musing';
 
 // Format the current time in the visitor's own timezone (Vercel geo header),
@@ -26,6 +28,25 @@ export const loader = async ({ request }: { request: Request }) => {
   const lat = h.get('x-vercel-ip-latitude');
   const lon = h.get('x-vercel-ip-longitude');
   const tz = h.get('x-vercel-ip-timezone');
+
+  // 🔮 11:11 / midnight make-a-wish slot (claude-todo/10): keyed off the same
+  // visitor-timezone time the prompt uses. Free (no quota burn, no weather
+  // fetch, no AI call) and deterministic — everyone in the slot gets the wish.
+  const wish = wishSlotMusing(formatLocalTime(tz));
+  if (wish) {
+    const encoder = new TextEncoder();
+    const events = [{ type: 'meta', source: 'fallback', mode: 'wish' }, { type: 'delta', text: wish }, { type: 'done' }];
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          for (const ev of events) controller.enqueue(encoder.encode(JSON.stringify(ev) + '\n'));
+          controller.close();
+        }
+      }),
+      { headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' } }
+    );
+  }
+
   const quota = hasLopuAiProviderConfigured() ? await consumeLopuMusingQuota(request) : null;
   const forceFallback = quota ? !quota.allowed : false;
 
@@ -39,11 +60,13 @@ export const loader = async ({ request }: { request: Request }) => {
     localTime: formatLocalTime(tz)
   };
 
+  const viewer = await getCurrentUser(request);
+  const ownerId = viewer?.accountKind !== 'service' ? viewer?.id : undefined;
   const encoder = new TextEncoder();
   const body = new ReadableStream({
     async start(controller) {
       try {
-        for await (const ev of streamLopuMusing(ctx, { forceFallback })) {
+        for await (const ev of streamLopuMusing(ctx, { forceFallback, signal: request.signal, ownerId })) {
           controller.enqueue(encoder.encode(JSON.stringify(ev) + '\n'));
         }
       } catch {

@@ -1,0 +1,528 @@
+{
+  "version": 1,
+  "encoding": "decimal UTF-8 byte length then colon then raw string; concatenate fields",
+  "vectors": [
+    {
+      "name": "ascii",
+      "descriptor": {
+        "version": 1,
+        "kind": "folders",
+        "batchId": "11111111-1111-4111-8111-111111111111",
+        "scope": {
+          "origin": "https://sync.test",
+          "ownerId": "owner",
+          "dataPlane": "home",
+          "rootId": "connection",
+          "deviceId": "device"
+        },
+        "configuration": {
+          "id": "connection",
+          "updatedAt": "2026-10-21T00:00:00.000Z",
+          "configuration": {
+            "configurationVersion": 2,
+            "name": "Backup",
+            "deviceId": "device",
+            "localRootId": "local-root",
+            "remoteFolderId": "cloud-root",
+            "mode": "backup",
+            "paused": false,
+            "propagateDeletes": false,
+            "network": "wifi",
+            "chargingOnly": false,
+            "excludedPaths": [
+              "ignored"
+            ],
+            "ignoreRules": "*.tmp\n"
+          }
+        },
+        "members": [
+          {
+            "ordinal": 0,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "cloud-root",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent",
+                  "source": {
+                    "path": "Parent",
+                    "id": "inode-0",
+                    "version": "v:0",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "root"
+            }
+          },
+          {
+            "ordinal": 1,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "00000000-0000-4000-8000-000000000001",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent/Child",
+                  "source": {
+                    "path": "Parent/Child",
+                    "id": "inode-1",
+                    "version": "v:1",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "member",
+              "ordinal": 0
+            }
+          },
+          {
+            "ordinal": 2,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "00000000-0000-4000-8000-000000000002",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000003",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent/Child/Nested",
+                  "source": {
+                    "path": "Parent/Child/Nested",
+                    "id": "inode-2",
+                    "version": "v:2",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "member",
+              "ordinal": 1
+            }
+          }
+        ]
+      },
+      "canonicalUtf8": "25:thingtime-folder-batch-v136:11111111-1111-4111-8111-11111111111117:https://sync.test5:owner4:home10:connection6:device10:connection24:2026-10-21T00:00:00.000Z1:26:Backup6:device10:local-root6:folder10:cloud-root6:backup1:01:04:wifi1:01:17:ignored6:*.tmp\n1:31:036:00000000-0000-4000-8000-00000000000110:cloud-root10:cloud-root6:Parent7:inode-03:v:04:root0:1:136:00000000-0000-4000-8000-00000000000210:cloud-root36:00000000-0000-4000-8000-00000000000112:Parent/Child7:inode-13:v:16:member1:01:236:00000000-0000-4000-8000-00000000000310:cloud-root36:00000000-0000-4000-8000-00000000000219:Parent/Child/Nested7:inode-23:v:26:member1:1",
+      "sha256": "da941485cd146657bf55b468f5297171c78d65d51dc8cd71ead0b24db4a89bb8"
+    },
+    {
+      "name": "unicode",
+      "descriptor": {
+        "version": 1,
+        "kind": "folders",
+        "batchId": "11111111-1111-4111-8111-111111111111",
+        "scope": {
+          "origin": "https://sync.test",
+          "ownerId": "owner",
+          "dataPlane": "home",
+          "rootId": "connection",
+          "deviceId": "device"
+        },
+        "configuration": {
+          "id": "connection",
+          "updatedAt": "2026-10-21T00:00:00.000Z",
+          "configuration": {
+            "configurationVersion": 2,
+            "name": "Backup",
+            "deviceId": "device",
+            "localRootId": "local-root",
+            "remoteFolderId": "cloud-root",
+            "mode": "backup",
+            "paused": false,
+            "propagateDeletes": false,
+            "network": "wifi",
+            "chargingOnly": false,
+            "excludedPaths": [
+              "ignored"
+            ],
+            "ignoreRules": "*.tmp\n"
+          }
+        },
+        "members": [
+          {
+            "ordinal": 0,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "cloud-root",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Café😀",
+                  "source": {
+                    "path": "Café😀",
+                    "id": "inode-0",
+                    "version": "版本😀:0",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "root"
+            }
+          },
+          {
+            "ordinal": 1,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "00000000-0000-4000-8000-000000000001",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Café😀/Child",
+                  "source": {
+                    "path": "Café😀/Child",
+                    "id": "inode-1",
+                    "version": "版本😀:1",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "member",
+              "ordinal": 0
+            }
+          },
+          {
+            "ordinal": 2,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "00000000-0000-4000-8000-000000000002",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000003",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Café😀/Child/Nested",
+                  "source": {
+                    "path": "Café😀/Child/Nested",
+                    "id": "inode-2",
+                    "version": "版本😀:2",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "member",
+              "ordinal": 1
+            }
+          }
+        ]
+      },
+      "canonicalUtf8": "25:thingtime-folder-batch-v136:11111111-1111-4111-8111-11111111111117:https://sync.test5:owner4:home10:connection6:device10:connection24:2026-10-21T00:00:00.000Z1:26:Backup6:device10:local-root6:folder10:cloud-root6:backup1:01:04:wifi1:01:17:ignored6:*.tmp\n1:31:036:00000000-0000-4000-8000-00000000000110:cloud-root10:cloud-root9:Café😀7:inode-012:版本😀:04:root0:1:136:00000000-0000-4000-8000-00000000000210:cloud-root36:00000000-0000-4000-8000-00000000000115:Café😀/Child7:inode-112:版本😀:16:member1:01:236:00000000-0000-4000-8000-00000000000310:cloud-root36:00000000-0000-4000-8000-00000000000222:Café😀/Child/Nested7:inode-212:版本😀:26:member1:1",
+      "sha256": "2c927678515b64493367ea0a064dabd92e5ac20b846023f3ec4f2b844b1887a9"
+    },
+    {
+      "name": "v1-no-ignore",
+      "descriptor": {
+        "version": 1,
+        "kind": "folders",
+        "batchId": "11111111-1111-4111-8111-111111111111",
+        "scope": {
+          "origin": "https://sync.test",
+          "ownerId": "owner",
+          "dataPlane": "home",
+          "rootId": "connection",
+          "deviceId": "device"
+        },
+        "configuration": {
+          "id": "connection",
+          "updatedAt": "2026-10-21T00:00:00.000Z",
+          "configuration": {
+            "configurationVersion": 1,
+            "name": "Backup",
+            "deviceId": "device",
+            "localRootId": "local-root",
+            "remoteFolderId": "cloud-root",
+            "mode": "backup",
+            "paused": false,
+            "propagateDeletes": false,
+            "network": "wifi",
+            "chargingOnly": false,
+            "excludedPaths": [
+              "ignored"
+            ]
+          }
+        },
+        "members": [
+          {
+            "ordinal": 0,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "cloud-root",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent",
+                  "source": {
+                    "path": "Parent",
+                    "id": "inode-0",
+                    "version": "v:0",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "root"
+            }
+          },
+          {
+            "ordinal": 1,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "00000000-0000-4000-8000-000000000001",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent/Child",
+                  "source": {
+                    "path": "Parent/Child",
+                    "id": "inode-1",
+                    "version": "v:1",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "member",
+              "ordinal": 0
+            }
+          },
+          {
+            "ordinal": 2,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "00000000-0000-4000-8000-000000000002",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000003",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent/Child/Nested",
+                  "source": {
+                    "path": "Parent/Child/Nested",
+                    "id": "inode-2",
+                    "version": "v:2",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "member",
+              "ordinal": 1
+            }
+          }
+        ]
+      },
+      "canonicalUtf8": "25:thingtime-folder-batch-v136:11111111-1111-4111-8111-11111111111117:https://sync.test5:owner4:home10:connection6:device10:connection24:2026-10-21T00:00:00.000Z1:16:Backup6:device10:local-root6:folder10:cloud-root6:backup1:01:04:wifi1:01:17:ignored0:1:31:036:00000000-0000-4000-8000-00000000000110:cloud-root10:cloud-root6:Parent7:inode-03:v:04:root0:1:136:00000000-0000-4000-8000-00000000000210:cloud-root36:00000000-0000-4000-8000-00000000000112:Parent/Child7:inode-13:v:16:member1:01:236:00000000-0000-4000-8000-00000000000310:cloud-root36:00000000-0000-4000-8000-00000000000219:Parent/Child/Nested7:inode-23:v:26:member1:1",
+      "sha256": "f9ac05af08dd30a6f6fe50d0e448792d97189846a86cad79674152e6933918ba"
+    },
+    {
+      "name": "existing-parent",
+      "descriptor": {
+        "version": 1,
+        "kind": "folders",
+        "batchId": "11111111-1111-4111-8111-111111111111",
+        "scope": {
+          "origin": "https://sync.test",
+          "ownerId": "owner",
+          "dataPlane": "home",
+          "rootId": "connection",
+          "deviceId": "device"
+        },
+        "configuration": {
+          "id": "connection",
+          "updatedAt": "2026-10-21T00:00:00.000Z",
+          "configuration": {
+            "configurationVersion": 2,
+            "name": "Backup",
+            "deviceId": "device",
+            "localRootId": "local-root",
+            "remoteFolderId": "cloud-root",
+            "mode": "backup",
+            "paused": false,
+            "propagateDeletes": false,
+            "network": "wifi",
+            "chargingOnly": false,
+            "excludedPaths": [
+              "ignored"
+            ],
+            "ignoreRules": "*.tmp\n"
+          }
+        },
+        "members": [
+          {
+            "ordinal": 0,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "existing-owned-parent",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent/Child",
+                  "source": {
+                    "path": "Parent/Child",
+                    "id": "inode-1",
+                    "version": "v:1",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "existing",
+              "id": "existing-owned-parent"
+            }
+          }
+        ]
+      },
+      "canonicalUtf8": "25:thingtime-folder-batch-v136:11111111-1111-4111-8111-11111111111117:https://sync.test5:owner4:home10:connection6:device10:connection24:2026-10-21T00:00:00.000Z1:26:Backup6:device10:local-root6:folder10:cloud-root6:backup1:01:04:wifi1:01:17:ignored6:*.tmp\n1:11:036:00000000-0000-4000-8000-00000000000210:cloud-root21:existing-owned-parent12:Parent/Child7:inode-13:v:18:existing21:existing-owned-parent",
+      "sha256": "4cb191550d965b1a0b7c1945e60df6f94b499febff49735f460d569cbb321de7"
+    }
+  ]
+}

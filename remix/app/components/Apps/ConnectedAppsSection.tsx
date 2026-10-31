@@ -25,16 +25,41 @@ export type AppDataRow = {
   appId: string;
   appName: string | null;
   entryCount: number;
-  usedBytes: number;
-  budgetBytes: number;
+	usedBytes: number | null;
+  budgetBytes: number | null;
+	budgetKind: 'finite' | 'unlimited' | 'unavailable';
+	storageAccountingStatus: 'ready' | 'reconciling' | 'unavailable';
+	storageAccountingVersion: number | null;
   lastUpdatedAt: string | null;
 };
 
 export const formatBytes = (bytes: number): string => {
   if (!(bytes > 0)) return '0 B';
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+  if (bytes < 1024 * 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GiB`;
+  return `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(1)} TiB`;
+};
+
+export const exactByteLabel = (bytes: number): string => `${bytes.toLocaleString('en-US')} ${bytes === 1 ? 'byte' : 'bytes'}`;
+
+export const formatBytesExact = (bytes: number): string =>
+	bytes < 1024 ? exactByteLabel(bytes) : `${formatBytes(bytes)} · ${exactByteLabel(bytes)}`;
+
+export const appDataStorageLabel = (data: AppDataRow): string => {
+	const entries = `${data.entryCount} ${data.entryCount === 1 ? 'entry' : 'entries'}`;
+	if (data.storageAccountingStatus === 'reconciling') return `${entries} · storage total reconciling`;
+	if (data.storageAccountingStatus !== 'ready' || data.usedBytes === null) {
+		return `${entries} · storage total unavailable`;
+	}
+	const budget =
+		data.budgetKind === 'finite' && data.budgetBytes !== null
+			? formatBytesExact(data.budgetBytes)
+			: data.budgetKind === 'unlimited'
+				? 'unlimited'
+				: 'allowance unavailable';
+	return `${entries} · ${formatBytesExact(data.usedBytes)} of ${budget}`;
 };
 
 type ConnectedAppsCache = { grants: AppGrantRow[]; data: AppDataRow[] };
@@ -45,9 +70,7 @@ export const ConnectedAppsSection = ({ userId }: { userId: string }) => {
   const navigate = useNavigate();
   const cacheKey = `tt-app-grants-${userId}`;
 
-  const [state, setState] = React.useState<ConnectedAppsCache>(
-    () => readLocalCache<ConnectedAppsCache>(cacheKey) ?? { grants: [], data: [] }
-  );
+	const [state, setState] = React.useState<ConnectedAppsCache>(() => readLocalCache<ConnectedAppsCache>(cacheKey) ?? { grants: [], data: [] });
   const [revoking, setRevoking] = React.useState<string | null>(null);
   const [loaded, setLoaded] = React.useState(false);
 
@@ -102,10 +125,7 @@ export const ConnectedAppsSection = ({ userId }: { userId: string }) => {
   }, [state]);
 
   return (
-    <SettingsSection
-      eyebrow="Connected apps"
-      description="Apps you’ve signed into with Thingtime — and everything they store in your account."
-    >
+		<SettingsSection eyebrow="Connected apps" description="Apps you’ve signed into with Thingtime — and everything they store in your account.">
       <Flex flexDirection="column">
         {rows.length === 0 && (
           <Text fontSize="sm" opacity={0.7} py={2}>
@@ -128,25 +148,14 @@ export const ConnectedAppsSection = ({ userId }: { userId: string }) => {
                   )}
                 </>
               }
-              hint={
-                data
-                  ? `${data.entryCount} ${data.entryCount === 1 ? 'entry' : 'entries'} · ${formatBytes(data.usedBytes)} of ${formatBytes(data.budgetBytes)}`
-                  : grant
-                    ? `Signed in · ${grant.scopes.join(', ')}`
-                    : clientId
-              }
+							hint={data ? appDataStorageLabel(data) : grant ? `Signed in · ${grant.scopes.join(', ')}` : clientId}
             >
               <Flex gap={2}>
                 <Button size="xs" variant="outline" onClick={() => navigate(`/apps?app=${encodeURIComponent(clientId)}`)}>
                   Browse 📦
                 </Button>
                 {grant && (
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    isDisabled={revoking === clientId}
-                    onClick={() => revoke(clientId)}
-                  >
+									<Button size="xs" variant="outline" isDisabled={revoking === clientId} onClick={() => revoke(clientId)}>
                     Revoke 🔌
                   </Button>
                 )}
