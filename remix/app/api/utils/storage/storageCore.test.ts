@@ -13,7 +13,7 @@ import {
   thingStorageSizeBytes
 } from './storageCore.ts';
 // @ts-ignore Node's direct TypeScript runner requires the extension.
-import { COLLECTION_SCHEMA_VERSIONS, MESSENGER_THINGTIME } from '../../../schemas/registry.ts';
+import { COLLECTION_SCHEMA_VERSIONS, DEVICE_CONTROL_THINGTIME, DEVICE_THINGTIME, MESSENGER_THINGTIME } from '../../../schemas/registry.ts';
 
 test('thingStorageSizeBytes is exact UTF-8 JSON bytes for the canonical payload', () => {
   const payload = {
@@ -135,7 +135,7 @@ test('billable policy defaults user content on and excludes control-plane and sa
   assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['service-quota'], crystal: {} }), false);
 	assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['attachment'], crystal: {} }), true);
 	assert.equal((CONTROL_PLANE_STORAGE_THINGTIMES as readonly string[]).includes('attachment'), false);
-	for (const thingtime of ['follow', 'friend', 'notification'] as const) {
+	for (const thingtime of ['friend', 'notification'] as const) {
 		assert.equal(
 			(CONTROL_PLANE_STORAGE_THINGTIMES as readonly string[]).includes(thingtime),
 			true,
@@ -150,14 +150,23 @@ test('billable policy defaults user content on and excludes control-plane and sa
 	for (const thingtime of MESSENGER_THINGTIME) {
 		assert.equal(
 			(CONTROL_PLANE_STORAGE_THINGTIMES as readonly string[]).includes(thingtime),
-			true,
-			`${thingtime} must be excluded from user-content reconciliation`
+			false,
+			`${thingtime} must participate in user-content reconciliation`
 		);
 		assert.equal(
 			isBillableStorageThing({ ownerId: 'u1', thingtime: [thingtime], crystal: {} }),
-			false,
-			`${thingtime} is Messenger relationship/index plumbing; uploaded bytes remain billed as attachment Things`
+			true,
+			`${thingtime} is user-owned Messenger storage; attachment object bytes are metered separately`
 		);
+	}
+	for (const thingtime of DEVICE_THINGTIME) {
+		const control = (DEVICE_CONTROL_THINGTIME as readonly string[]).includes(thingtime);
+		assert.equal(
+			(CONTROL_PLANE_STORAGE_THINGTIMES as readonly string[]).includes(thingtime),
+			control,
+			`${thingtime} control/content classification must match reconciliation`
+		);
+		assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: [thingtime], crystal: {} }), !control, `${thingtime} billing policy`);
 	}
 	assert.equal(isBillableStorageThing({ ownerId: 'u1', thingtime: ['migration-diagnostic'], crystal: {} }), false);
   assert.equal(

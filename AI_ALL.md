@@ -1,5 +1,18 @@
 # Thingtime AI instructions
 
+Updated 11 September 2026 from the current repo and a two-month PR review.
+Read the canonical-file rules and recurring lessons first, then the relevant
+runbook sections. If an injected excerpt is truncated, open the complete
+relevant sections before acting. Source links, review limits and the dated branch checkpoint
+are in [the review](docs/ai-guidance-review-2026-09-11.md).
+
+This file is the canonical **repository** guidance. The complete current global
+`/Users/lopu/.AI/AI_ALL.md` is preserved in the final, reference-only appendix;
+that snapshot is not a second writable global policy or a replacement for live
+global instructions. Machine-local commands in it are not setup steps for every
+clone. The operative Thingtime sections below retain the repo guidance and
+update stale details. Do not recursively reread this file through its aliases.
+
 ## Canonical instruction file
 
 - `AI_ALL.md` is the only writable canonical root AI instruction file for this
@@ -16,6 +29,431 @@
 - For PR reviews, prioritize code quality, performance, potential bugs,
   crashes, and especially security issues before style commentary.
 
+## Get it done; report decisions after completion
+
+Original request (verbatim):
+
+> “Can you please add a global and thingtime local AI_ALL.md entry that AI agents should never come back to the user with questions, they should decide on what to do and what the user would want them to do, generally being the user would want them to "Get it done", and to never block work on a goal or task or tasks with questions to the user, but should work in a way where when the task/feature is complete they can send a report to the user will all the decisions and potential questions they may have for the user and assumptions they took in the task and then ask if the user wants those things changed or corrected please? Thank you.”
+
+- Default to "Get it done." Do not come back to the user with routine clarification or preference questions, or block a goal, task, subtask, or feature on those questions. Infer the intended outcome from the request, prior decisions, existing conventions, and available evidence; make reasonable decisions and carry the authorized work through implementation and verification.
+- Investigate uncertainty yourself, use supported tools and bounded recovery, and choose safe, reversible defaults where practical. Do not make the user select between reasonable implementation options, approve a routine plan, or answer questions the agent can resolve. Keep independent work moving when one path is unavailable.
+- Keep a concise record of material decisions, assumptions, tradeoffs, and potential questions while working. Defer optional questions until the task or feature is complete; do not use them as checkpoints or completion gates.
+- When the work is complete, send a report covering the delivered result, verification, material decisions and assumptions, tradeoffs, and any deferred questions. Then invite the user to change or correct those choices. Make corrections when requested without requiring a response to consider the completed work delivered.
+- This preference does not supply missing authorization or override explicit constraints, required confirmations, security or credential boundaries, or genuinely required human presence. If one of those prevents a dependent action, complete all independent authorized work, explain the exact remaining blocker and the smallest necessary intervention, and never claim the blocked action or overall task is complete. Do not invent an approval requirement for ordinary agent decisions.
+
+## Individually editable Thingtime blocks
+
+- Things created for human-facing display (including agent notes, status cards and subspace embeds) must carry an explicit `renderComponent` pointing to an accessible saved Component Thing or containing an embedded Component definition. The renderer comes from that pointer or embedded definition, never from a `type`/`kind` alias or a data-shape guess. Keep the content as editable Thing data, bind it into the Component through the supported composition contract, and keep saved Component/Webpage Things on their canonical editable render/block definitions.
+- Default display surfaces to the rendered presentation. Keep the data/Thingtime inspector as an explicit user-selected inspection or editing view; a tree of `type`, `text`, and other implementation fields is not the finished presentation. Reuse the canonical Component resolver, renderer and permission checks rather than hardcoding each embed. A reference does not grant access to its Component or dependencies; missing, invalid or inaccessible explicit render components must not silently select another renderer from the data type.
+- Verify the saved render component and content through exact-Thing readback, then check the rendered result and reload in every intended placement, including narrow sidebars and mobile. Preserve existing content, ownership, audiences, and individual block editing when repairing older Things; missing renderers or access must be reported accurately rather than claimed as working.
+- Build Thingtime pages and interfaces from individual, user-editable Thingtime blocks. Headings, text, inputs, buttons, images/icons, containers, lists, and each field inside a repeated card must be selectable and editable through normal Builder controls, including rearranging, styling, duplicating, and deleting them where applicable.
+- Do not package a whole page, form, dashboard, or multi-part card as one opaque Component, native block, or monolithic HTML template. Editing one large source definition is not a substitute for individual block editing. Reusable Components must expose their constituent blocks for editing; repeated content must expose an editable block template rather than freezing each rendered instance into hardcoded markup.
+- When a needed primitive, binding, repetition, or interaction is missing, extend the reusable Thingtime Builder/framework so ordinary users can compose and edit it. Keep native code limited to necessary device capabilities and data adapters; compose the visible interface with editable Thingtime blocks.
+- Verify this in the actual Builder: select and edit representative nested text, controls, icons, and repeated-card fields separately, save, reload, and confirm the live page still works. A single outer selection outline or editable JSON/HTML alone does not meet this requirement.
+
+## Power users: no arbitrary product limits
+
+Thingtime is for power users and should stay simple to use at any scale. Do not
+impose arbitrary file-size, character-count, field-count, item-count, or similar
+limits on features, uploads, text inputs, imports, or exports. A product limit is
+allowed only when the user explicitly requests it for that particular feature.
+Use streaming, chunking, pagination, backpressure, cancellation and resumable
+operations to manage resources without rejecting or truncating valid user data.
+Processing batch sizes are implementation details, not maximum user data sizes.
+Preserve authorization, integrity validation and legitimate storage accounting.
+Where a protocol or external platform has an unavoidable constraint, identify it
+accurately, handle it transparently where possible, and explain the concrete
+constraint rather than presenting an invented Thingtime limit. Remove existing
+arbitrary caps in the flow being changed, including hidden UI/server mismatches.
+
+## Feature maps — read the map for the domain you touch
+
+`docs/feature-map/` holds one short map per domain (attachments and media,
+sharing and audiences, things and folders, posts and feed, API endpoints and
+capabilities, UI shell and menus, auth and accounts, local development). Each
+lists the routes, service modules, the authorization helper every read/write
+must call, the UI entry points, the registration steps and the tests to run.
+Before broad `graphify`/`rg` exploration, read the map for the domain you are
+changing; when you add a route, service, menu action or test script, update the
+map in the same PR. Maps link to `FUNDAMENTALS.md`, `TESTING.md`, the API docs
+registry and design notes instead of duplicating them.
+
+## Recurring development lessons — 2026-09-11
+
+These rules come from the [two-month PR review](docs/ai-guidance-review-2026-09-11.md)
+(750 PRs active from 11 July to 11 September 2026, including 707 opened in that
+window). The review links each family to PRs and current source. Promotions,
+closed PRs and historical validation are evidence, not proof of current delivery
+or authorization for new work.
+
+### Start with the current implementation and task owner
+
+- Inspect the checkout, unmerged/staged files, branch, current remote base and
+  relevant open PRs before editing. Preserve unrelated work; use an isolated
+  worktree when the attached checkout is conflicted or belongs to another task.
+- Check the relevant TODO, active claims and existing implementation before
+  starting a second solution. A stale TODO or an open promotion can describe
+  work already present. Compare actual source trees and retained regression
+  coverage before calling a PR redundant; do not count generated Graphify or
+  changelog-only differences as feature delivery.
+- Keep one implementation and one policy source. Extend shared helpers,
+  registries and UI components before adding parallel versions. When consolidating
+  duplicate work, preserve distinct tests, review findings and unfinished
+  acceptance checks, and link the surviving PR.
+- Read dated decisions as history. Confirm the current client entry, runtime,
+  contracts and deployment before applying an old fix. The web app currently
+  uses Vite, React Router in non-framework mode and Nitro; `entry.client.tsx`
+  mounts with `createRoot`. Do not add SSR/hydration machinery to repair a stale
+  chunk, client cache or missing-route problem without reproducing that cause.
+- When work exposes a build, test, setup or runtime failure, trace the cause and
+  repair the canonical entry point, dependency declaration, bootstrap step or
+  contract that let it recur. Verify the repaired path from a clean or missing
+  dependency state when practical. A manual install or one-off retry may unblock
+  the current run, but it is not the final fix; record a focused regression or
+  runbook check so later worktrees encounter the repaired workflow.
+
+### Carry new fields through the whole data path
+
+- Trace editor/composer → `useApi` request shaping → route/body validation →
+  canonical write utility → storage → public/read projection → rendered view.
+  Adding a field to a component or schema alone is insufficient. Inspect
+  `remix/app/hooks/thingsRequestPayload.ts` whenever post/comment payloads change.
+- Await the live Editor.js save snapshot before freezing a create/edit payload.
+  Test changing formatting or typing and immediately pressing Publish, before
+  the autosave debounce. Preserve native rich text, whitespace, media order,
+  layout and plain-text fallback through real browser transport and exact-ID
+  readback, then reload the permalink and reopen the editor.
+- A retry after an uncertain write must reuse the original operation identity
+  and immutable payload. Do not turn ambiguous completion into a second post,
+  upload, action, recording result or billing charge.
+
+### Preserve useful state while enforcing identity boundaries
+
+- Paint cached state immediately for the same viewer and resource, then
+  reconcile in the background. Distinguish cold start, stale-but-usable data,
+  retryable failure, forbidden and not found. Do not turn a network failure into
+  an empty-success screen or discard good content during Retry.
+- Scope caches and draft ownership to the relevant account, API origin, target
+  and access/link context. Reset protected view state before a new identity
+  renders. Fence async loads, saves, prompts and native callbacks with operation
+  identity/generation and cancellation; an old completion cannot mutate a newer
+  screen, session, recording or retry request.
+- Protect optimistic edits from older reads. Cover fast repeated toggles,
+  out-of-order replies, background refresh during mutation, rollback and reload
+  convergence. Test every consumer of the shared result, including feed,
+  profile, permalink, nested comments and cached thread reads.
+- Keep drafts mounted across equivalent modes such as Chat → Voice → Chat.
+  Preserve user-entered settings across migrations, page/modal switches and
+  app restarts; do not reseed defaults on every render or store write.
+- Use the canonical persistence codec. Date-like strings remain strings,
+  explicit Dates retain type, legacy executable tags stay inert, and cycles
+  remain supported. Test persistence, undo and cross-tab transport together;
+  never restore `eval` of saved content or echo remote sync writes indefinitely.
+
+### Treat sharing as a stored dependency and audience problem
+
+- Reuse the shared composition traversal in `remix/app/api/utils/webpages/`
+  and `actions/sharedComposition.ts`. Keep rendering, dependency discovery,
+  collaborator-write validation and private copying consistent. Traverse only
+  authorized stored references under bounded work budgets; visitor input, query
+  values, action results, labels and condition operands must not create grants.
+- For every sharing change, cover page/component/schema roots, schema controls,
+  action references, HTML attributes, CSS/responsive media, saved/default args,
+  page-instance overrides, conditional output branches and composed templates.
+  Shared writers must also be refused when they inject inaccessible dependencies
+  through an argument-only edit or an inactive branch.
+- Reauthorize the outer root and each independently readable foreign-author
+  audience boundary on every read/run/copy. Preserve standalone ACLs, hidden
+  links, groups, app namespaces and revocation. Do not borrow an author's or
+  visitor's unrelated private authority. Shared read-only actions cannot mutate
+  saved data or mint persistent owner action-run records.
+- Private copies need fresh owned identities and rewritten executable/media
+  bindings; test copying a copy. When the feature promises independent files,
+  copy authorized exact-version bytes through normal upload approval, quota,
+  moderation and transactional binding, with cleanup on refusal/failure.
+  Verify the copy after source edits, revocation and deletion. Stub image bytes
+  prove UI/authorization paths only; real object-store independence needs its
+  own evidence. Preserve validated linked-media records without arbitrary fetches.
+
+### Keep storage, uniqueness and migrations coherent
+
+- Keep MongoDB indexes to the smallest performant set. Define index creation at
+  the highest reusable Thing abstraction through the central index registry and
+  shared query builders. Logs, posts, media and other kinds must prefer common
+  property paths and the existing general Thing indexes instead of adding one
+  index per kind or field. Reuse or generalize an existing index wherever it can
+  serve the query correctly and efficiently.
+- A new index is a rare, evidence-backed exception. Before proposing one, inspect
+  existing definitions and representative `explain('executionStats')` plans;
+  document why shared indexes or a better query/property layout cannot meet the
+  need. Heavily favor performance and optimization: compare scan/sort work,
+  latency, write amplification, storage and index-budget headroom. Do not force
+  a slow scan merely to reduce the count, or assume one wildcard/compound index
+  can satisfy every sort, uniqueness constraint or TTL lifecycle.
+- Keep reusable index definitions, shared property semantics and query ordering
+  aligned across writers and readers. Consolidate kind-specific indexes when
+  practical, preserve authorization and uniqueness, and explicitly opt only
+  safe-to-delete kinds into shared TTL policies. Retention that refunds credits,
+  deletes external media or updates accounting requires its canonical cleanup
+  lifecycle. Verify replacement performance and live rollout before retiring
+  old indexes; never remove a required constraint to meet a numeric target.
+
+- Keep user-writable crystal fields separate from protected root `uniqueKeys`
+  identities. Never add a kind-blind unique crystal-path index or reserve normal
+  data-property names as the permanent fix. Trace **every** generic, dedicated,
+  bulk and migration writer; a dedicated poll/passkey/relationship path can miss
+  a helper used elsewhere. Test hostile same-name data alongside legitimate
+  writes and real concurrent create/move/toggle behavior.
+- Use the canonical logical UTF-8 byte measurement and storage transactions.
+  Account, app and app-user admission must agree on the same delta; unknown,
+  malformed, stale or reconciling ledgers stay explicitly unavailable. Do not
+  display unknown as zero, bypass admission or silently fall back to
+  non-transactional writes.
+- Match each transaction's Mongo client/session to its collections. Identity,
+  auth and control-plane operations stay home-pinned; content follows the
+  selected data plane. Exercise transaction-dependent paths on a disposable
+  replica set through the real API; standalone Mongo or utility mocks cannot
+  prove that transaction contract.
+- Migration scans must retain all protected envelope fields required by the
+  real validators/accounting code. Cover seeds, legacy rows, optional additions,
+  malformed rows, interruption, retry and concurrent writers. Declare prerequisite
+  ordering; keep readiness fenced until reconciliation reaches a fixed point.
+  Diagnose with allowlisted field labels, not raw secret-bearing documents.
+- Before changing an index, inspect the executable index/query plan, all writer
+  versions and DB-sharing previews. Preserve uniqueness through backfill,
+  activation/drain and retirement. Keep CI telemetry in its home `ciControl`
+  satellite with its retention policy. A merged index plan does not prove a
+  production migration or index retirement has happened.
+
+### Keep private data private across every projection
+
+- Whitelist public fields at the server boundary. A UI visibility toggle is not
+  redaction. Owner-only email preferences must not expose email in public
+  profiles; root data, search, metadata, notifications and diagnostic projections
+  must preserve their own privacy boundaries. Check anonymous, owner, other-user,
+  administrator and scoped-token callers as relevant.
+- Normal vault/diagnostic reads remain redacted. Reveals require the current
+  permission and fresh verification bound to account, session, origin and the
+  exact selected item; recheck immediately before disclosure. Responses are
+  private/no-store, transient display is cleared at identity/navigation/lifecycle
+  boundaries, and passwords/passkey evidence never follow an origin fallback.
+- Keep source/attachment lifecycle and upload-approval checks on the server.
+  Test revocation between read and commit, namespace escape, wrong-account
+  references and private metadata in logs/toasts. Preserve protected storage
+  projections rather than weakening validators to get a migration green.
+
+### Keep Vercel variables minimal and configuration in the vault
+
+- Keep Vercel environment variables to the absolute minimum. Store application
+  configuration, provider credentials and environment-specific values in the
+  Thingtime vault, scoped to the deployment environment, instead of duplicating
+  them across Vercel production, preview, development or custom environments.
+- Keep only irreducible startup values in Vercel: the minimum needed to identify
+  the environment and securely reach and unlock the vault. Do not create a
+  circular dependency by storing the only vault bootstrap credential inside
+  that same vault. Reuse platform-provided deployment metadata where possible.
+  A new Vercel variable requires a documented bootstrap necessity.
+- Resolve configuration through a central server-side vault abstraction with
+  explicit environment selection, validation and bounded caching. Preserve
+  production/development isolation and fail closed when required configuration
+  is unavailable; never silently borrow another environment's credentials.
+  Keep secrets out of client bundles, build artifacts, logs and public APIs.
+- Migrate existing Vercel values through the canonical vault workflow. Verify
+  each affected environment's build and runtime behavior, rotation and recovery
+  before removing the old value. Keep a bounded rollback path and document
+  fork-safe setup with placeholders rather than real credentials.
+
+### Register and negotiate the real executable API
+
+- API changes must update route implementation/import map, canonical docs,
+  semantic feature versions, generated capability coverage and every dependent
+  client's small requirement map. Check both manifest generators:
+  `createApiCapabilitiesManifest` in `remix/app/docs/apiDocs.ts` and
+  `thingtimeCapabilityManifest` in
+  `remix/app/api/utils/capabilities/thingtimeCapabilities.ts`.
+  Bump the affected feature deliberately; a commit SHA is not compatibility.
+- Smoke the built Nitro/Vercel handler, not only a helper: discovery endpoints
+  must return JSON with the selected origin and expected feature versions, not
+  HTTP 200 containing the SPA shell. Verify routing before filesystem/SPA fallbacks.
+- Test matching/missing/breaking capabilities, wrong origin, invalid JSON,
+  timeout and retry after deployment. Failed negotiation must allow a fresh
+  manifest fetch; an older rejection must not clear a newer in-flight check.
+  Preserve the canonical bounded checker rather than scattering cached probes.
+- Test stale-tab behavior across alias changes. Use the shared bounded
+  stale-chunk recovery guard; never introduce a reload/retry loop to mask failure.
+
+### Complete the actual login and consent flow
+
+- Trace options/authorize → browser or host → exact callback → verification →
+  live session/account read in the requesting client. Browser success text,
+  launching OAuth or receiving a code alone does not prove the host connected.
+- Preserve exact redirect/origin checks, PKCE, session revocation and one-use
+  verified challenges. Cover cancellation, timeout, competing tabs/autofill,
+  replay, provider refusal and account changes; release only the operation's own
+  state. Do not loosen callbacks or permit arbitrary origins to repair one host.
+- Thingtime's host-native `login_thingtime` is the anonymous MCP bootstrap;
+  account/data tools stay OAuth-protected. Do not replace the native handoff with
+  a terminal login that leaves the user's current chat disconnected.
+
+### Verify UI behavior on every requested surface
+
+- Reuse the design system and shared modal/layer, settings and input components.
+  Include meaningful customization with safe defaults; avoid implementation-only
+  settings. Popup and dedicated Settings views must share category behavior and
+  deep links, including reload, back and Open settings page.
+- Check mouse, keyboard, touch/long-press and actual editing focus. Menus must
+  remain clickable rather than start a drag; global undo must not steal native
+  text undo or IME input; another editor's save/remount must not wipe the caret.
+- Open drawers, nested menus, tool history, pickers and confirmation cards at
+  desktop and narrow mobile widths. Exercise long labels, multiple attachments,
+  sticky navigation and scrolling to the bottom. Use the shared layering system
+  instead of arbitrary z-index escalation; ensure focused controls and Send stay
+  reachable. Compilation and closed-state screenshots cannot prove these states.
+
+### Separate proposals, execution, history and delivery
+
+- Lopu has no gender; use **it**. Use the existing Lopu notification primitives.
+- A tool proposal/approval request is not a completed action or a runtime error.
+  Show the real approval card through the intended non-mutating proposal path;
+  execution needs the existing server-verified grant for that exact operation.
+  Plain-text assent, a prior successful receipt or reopened history is not a
+  reusable grant. Historical cards remain non-interactive.
+- Later replies may use bounded, sanitized first-party historical receipts as
+  evidence. Preserve success/failure/request distinctions, omit raw results and
+  credentials, and never replay an action solely to reconstruct its history.
+- Persist notification history independently of delivery preferences. Save final
+  stream text once with idempotency; retain muted events and complete history,
+  keeping bell and history counters distinct. Account changes cannot misattribute
+  messages. Test long text through schema projection and credential redaction.
+- Track saved notification → delivery attempt → provider acceptance → actual
+  device display separately. Keep full Thing IDs in payloads; APNs collapse IDs
+  must meet the byte limit through the canonical stable hash, not truncation.
+  Expose only allowlisted provider diagnostics and retire invalid device tokens.
+
+### Native apps and recordings need native acceptance
+
+- Iterate with `corepack pnpm@10.12.1 --dir electron dev:parallel`, the repo's
+  unsigned Electron development app, rather than repeatedly packaging and
+  signing `Thingtime.app`. Keep its bundle identity,
+  user data, local web port, process names, and any helper or LaunchAgent
+  separate from `/Users/lopu/Applications/Thingtime.app` so both apps can run
+  at once. If a feature needs a parallel dev lane that is missing, add durable
+  scripts/configuration for it during the task and document how to start,
+  inspect, stop and clean it. Do not let a dev app replace or stop the user's
+  installed signed app or its Node service.
+- Use a specifically built, separate Thingtime Mac development app on this
+  machine for feature testing and ongoing development usage. Keep a verified
+  development build available for that usage; clean up only superseded builds
+  and task-owned temporary resources. If Node/XPC, TCC or another security
+  boundary requires signing, build and verify a signed development app with a
+  stable, distinct development identity and installed path. Check the real
+  protected operation there; unsigned acceptance does not prove that boundary.
+- Treat `~/Applications/Thingtime.app` as the stable production app. Rebuild or
+  reinstall it only when a new Mac feature merged into `main` makes a newer
+  version available. Verify the fetched `main` source, merged feature and
+  version/build against the installed app before using the canonical stable
+  build/install workflow. Never install an unmerged branch or worktree build
+  over it. Follow the development/production policy below for final delivery.
+
+- For user-visible native telemetry, verify the real running app against an
+  independent operating-system reading on the user's machine. For Thingtime
+  Mac development, use the separate development build installed for this
+  purpose; stable release acceptance remains a separate check after the
+  eligible `main` update. Exercise the
+  full collector → local/remote transport → selected origin → rendered control
+  path for the paired device and account, in every promised view. Record which
+  fields have actual values and which macOS truly omits. Synthetic tests,
+  successful builds, API snapshots and a card full of placeholders do not
+  establish feature acceptance. If a selected origin lacks a needed capability,
+  provide a working local path or treat delivery as blocked and say so.
+- When QA exposes a missing value or broken path, fix the underlying path and
+  add a regression check before release. Update `TESTING.md` for the new bug
+  class; do not convert the observed failure into an accepted exception.
+
+- Negotiate an explicit native feature version; the existence of a generic bridge
+  does not prove microphone recording, Watch delivery or Live Activity support.
+  Verify selected origin, generated build settings, signed entitlements and the
+  installed bundle. Keep simulator, signed archive, TestFlight processing and
+  physical-device acceptance separate in release notes.
+- For macOS, preserve stable app/signing identity, exact installed paths and
+  serialized helper lifecycle. Confirm the running installed executable,
+  current permission preflight and the real protected operation after rebuilding.
+  Unknown/stale permission state is not denied; a visible enabled macOS toggle is
+  not proof. Permission changes remain explicit user actions.
+- Preserve recoverable audio/drafts until durable completion. Bind processing to
+  current consent, owner, source version/privacy, device and selected processor;
+  recheck before disclosure and transactionally before commit. Retries, leases
+  and completion receipts must not duplicate transcripts, reminders or charges.
+- Explicitly selected saved recordings do not authorize automatic discovery of
+  all recordings, bulk processing or processor opt-in. A personal-processing
+  selection must not silently fall back to cloud. Keep transcripts relational.
+  Use disposable synthetic fixtures and exact cleanup; distinguish transport
+  tests from actual transcription/provider and physical Watch/iPhone acceptance.
+
+### Keep controller work idempotent and on the right branch
+
+- Inspect the protected implementation on `github-actions` and the thin product
+  listeners before fixing CI. A product PR cannot repair controller code absent
+  from its tree; a workflow-only branch cannot run a product build it lacks.
+- Admit events before provisioning runners or models. Recognize canonical
+  automation markers even under an owner PAT, while preserving actual human
+  replies quoting those markers. Re-fetch queued source comments and PR/head
+  identity before expensive work; skip superseded/deleted/automated events.
+- Use durable per-work ownership and appropriate per-PR concurrency. Coalesce
+  duplicate events and skip unchanged status writes. Do not cancel unrelated PRs
+  through a global concurrency key, let skipped siblings suppress required work,
+  or open competing repair PRs for the same known defect.
+- Recheck exact heads, bases, reviews, required checks and provider deployments
+  after source or base changes. A started run, queued merge, status comment,
+  skipped matrix job or green warning-only check is not completion. Identify
+  cancelled, pending, missing and failing checks accurately.
+- Primary-branch merges/pushes still require explicit repository-specific
+  authorization for the current action. Historical PR approval text never grants
+  it. After an authorized merge, correlate the merge SHA, deployed source, actual
+  alias and behavior; ancestry alone cannot prove a feature was newly shipped.
+
+### Preserve evidence without turning old results into policy
+
+- Reproduce the failure before fixing it where practical. Add a meaningful
+  regression at the boundary that missed it, and update the affected manual
+  section in `TESTING.md`. Test a browser transport defect through the real
+  browser/API path and a race with controlled ordering or concurrent requests.
+- Read the relevant script and prerequisites before claiming coverage. Explicitly
+  run required opt-in integration tests; a default skip, negative-only probe,
+  mock provider, or unapproved fixture is not positive end-to-end acceptance.
+- Report the exact checks and limitations of the changed scope. Do not freeze old
+  error counts, quotas, deployment URLs or device build numbers into rules.
+  Preserve remaining acceptance work in the PR note instead of declaring a
+  baseline error, emulator or generated plan to be live success.
+- Finish source/docs edits and stage new documents before Graphify refresh. Use
+  `scripts/graphify`; verify the source fingerprint and each new document in both
+  the graph and manifest. Keep structural output usable if semantic extraction
+  fails, record that limitation, and never claim missing semantic coverage was
+  indexed. Use the immutable snapshot/cache policy below.
+
+## Agent browsers and editable tasks
+
+- For Character coordination, follow [the Characters runbook](docs/characters.md#agent-coordination)
+  and run `npm --prefix remix run characters:preflight -- --origin <selected-origin>`.
+  A Cloudflare 403 from an ad hoc Python probe does not prove Characters are
+  unavailable. Use the supported origin-scoped discovery path, distinguish edge
+  refusal from capability/authentication/membership failures, and continue
+  independent work. Never spoof clients, copy browser credentials, change origins
+  or weaken network isolation to recover coordination.
+- Follow [the agent-browser runbook](docs/agent-browsers.md) for task-owned
+  testing in the Thingtime Mac app, installation, CLI claims and live viewing.
+  Keep tasks, todos and progress as editable Things; the native adapter owns
+  device browser installations, claims and enforced network boundaries.
+- Scope a native task to its origin, database identity, owner and Thing ID.
+  Claim separately for each concurrent agent; never reuse another claim's
+  handle or mutable browser profile. Read and preserve the effective policy.
+- Full-app acceptance must cover independent data and authentication, rendered
+  desktop/mobile task controls, live viewing, cleanup and enforced browser plus
+  backend network restrictions. A fixture, healthy API or build alone is not
+  evidence that the installed feature works.
+- The live global credential policy remains authoritative: use the Thingtime
+  password manager on the executing device through its supported interfaces.
+
 ## Fundamentals (read first)
 
 Read `FUNDAMENTALS.md` before adding features. Non-negotiables:
@@ -28,8 +466,10 @@ Read `FUNDAMENTALS.md` before adding features. Non-negotiables:
   data and real signups share one code path.
 - Use one `thingtime` database and the everything-is-a-thing model: entities
   (users, themes, feed algorithms, waitlist, posts, comments, schemas, and so
-  on) live in `things` by `kind`, plus `sessions` and the single-purpose
-  auth/email satellites (`passwordResets`, `authOtps`, `email_*`, `rosters`).
+  on) live in `things` by `kind`, plus `sessions`, the single-purpose
+  auth/email satellites (`passwordResets`, `authOtps`, `email_*`, `rosters`),
+  and the `ciControl` satellite for every `ci-*` control-plane Thing (webhook
+  telemetry with TTL retention — never written to `things`).
   `users`, `themes`, `feedAlgorithms`, and `waitlist` are legacy collections:
   update existing records in place, but never add new records. Use one
   connection source (`mongodb/config.ts` `getMongoUri()`). Physical
@@ -51,11 +491,21 @@ Read `FUNDAMENTALS.md` before adding features. Non-negotiables:
   (`components/Lopu/useLopu.tsx` — `useLopu()` / `useLopuStream()`), never raw
   Chakra `useToast` or `alert()`.
 
-The active build roadmap lives in `claude-todo/`. The owner's engineering
+The active build roadmap lives in `TODO/claude-todo/`. The owner's engineering
 decisions and thinking method are logged in `DECISIONS.md`; read it when
 product direction or architecture tradeoffs matter. Default to
 single-source-of-truth, determinism, test-equals-live cohesion, and merge
 commits.
+
+Evidence and sequencing sit upstream of that backlog, one stage per tree:
+`NOTES/` holds dated, sourced observations and open questions that nothing has
+committed to yet; `PLAN/` turns a note into gated milestones, metrics, and stop
+conditions; `TODO/` is the actionable work; `DECISIONS.md` records the durable
+fork once the owner decides. Write a note before a plan and a plan before a new
+`TODO/claude-todo/NN-*.md`, and update the index that fronts each tree
+(`NOTES/README.md`, `PLAN/README.md`, `TODO/TODO.md` plus
+`TODO/claude-todo/README.md`) in the same change — those indexes are the entry
+points, not the individual files.
 
 ## Local development and worktrees
 
@@ -100,6 +550,18 @@ commits.
   PM2 on a free trio: `TT_WEB_PORT=<web> TT_HMR_PORT=<hmr> TT_API_PORT=<api>
   npm --prefix remix run dev`. Keep any tooling config that hardcodes worktree
   ports (for example `.claude/launch.json`) untracked.
+- Fresh worktrees: run `npm run worktree-bootstrap` (or let the tracked
+  `post-checkout` hook do it on first checkout). It relinks remix dependencies,
+  copies missing ignored env files from the main checkout, writes the
+  derived-port `.claude/launch.json`, and sets this worktree's `core.hooksPath`
+  to the relative `.githooks` so stale hooks from another checkout never run
+  here. Keep `core.hooksPath` relative; an absolute path shared across
+  worktrees runs one checkout's hook files everywhere.
+- Local attachment bytes: set `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR` in
+  `remix/.env` (see README "Local attachment storage") so uploads, previews,
+  downloads and archives work without the private bucket. Seed realistic data
+  with `node remix/scripts/seed-fixture.mjs create` (real API only) and remove it
+  with `cleanup`; never insert attachment records into Mongo by hand.
 - Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local
   setup into new managed worktrees. Keep tracked files and every
   `node_modules/` directory out of `.worktreeinclude`: copied pnpm symlink
@@ -113,14 +575,84 @@ commits.
   and nested app env files such as `remix/.env*`; keep secret-bearing env files
   untracked and never commit secrets. `remix/.env.auto` is untracked and
   generated; `remix/scripts/pre-dev.sh` rewrites it on the next dev/build run.
-- Committed git hooks live in `.githooks/`; enable them in a checkout with
-  `npm run install-git-hooks` or `git config core.hooksPath .githooks`. There
-  are currently no active hooks. Branch awareness needs no hook: local
-  checkouts generate untracked `remix/.env.auto` via `pre-dev.sh`, and Vercel
-  reads `VERCEL_GIT_COMMIT_REF` from the system env at build and runtime.
+- Inspect `git config --get core.hooksPath` and `scripts/graphify hook status`
+  before changing hooks. Graphify post-commit/post-checkout hooks are active on
+  this machine; do not overwrite them with the older empty `.githooks/` setup.
+  Preserve repository-wrapper snapshot handling. Branch awareness itself needs
+  no hook: local checkouts generate untracked `remix/.env.auto` via `pre-dev.sh`,
+  and Vercel reads `VERCEL_GIT_COMMIT_REF` at build and runtime.
 - If local web dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-nitro-react-router-9999` app. The app `postinstall`, `dev`, and `build` scripts also run this check automatically.
 
+## Thingtime Mac development and production delivery
+
+- All Thingtime Mac development work, including bundled UI/assets,
+  dependencies, build settings, helpers and daemons, must be tested and used
+  on this machine through a specifically built, separate development app.
+  Use the canonical parallel development workflow; build the final changed
+  source, start that development app and exercise the affected surface before
+  handoff. A commit, PR or cloud build alone is not local acceptance.
+- Keep the development app's bundle identity, installed path, profile/user data,
+  database, ports, processes, helpers and LaunchAgents separate from the stable
+  `~/Applications/Thingtime.app` and its services. Preserve the stable app and
+  user data. Do not stop, replace or reinstall it as routine feature delivery.
+  Add durable parallel tooling when a required development lane is missing.
+- Keep the stable app connected to Production (`https://thingtime.com`)
+  unless the user explicitly requests a different stable-app connection.
+  Use the separate development app for local and preview test connections.
+- Use fast unsigned development builds where appropriate. When signing or a
+  privacy permission is required, use a stable, distinct development bundle
+  identifier, signing identity, entitlements and path; install the verified
+  development bundle under its own name in `~/Applications/`. Verify its
+  signature with `codesign --verify --deep --strict`, executable path, permission
+  preflights and real protected operations after rebuilding. Never reuse the
+  production app identity or migrate its data to make development tests pass.
+  Explicit user presence and privacy-consent requirements remain in force.
+- Keep a verified development build available for testing and ongoing usage.
+  Stop obsolete task-owned processes and remove superseded generated artifacts
+  without removing the active development build, user state or live work.
+- Rebuild/reinstall the stable `~/Applications/Thingtime.app` only when a new Mac
+  feature merged into `main` makes a newer version available. Before replacing
+  it, fetch and verify the canonical `main`, identify the merged feature and
+  candidate source SHA, and compare candidate version/build with the installed
+  app. Build stable releases from verified `main` source; never use unmerged
+  feature-branch/worktree changes or treat a newer timestamp alone as a release.
+  This installation condition grants no permission to merge or push `main`.
+- For an eligible stable update, run canonical verification, signing and
+  installation checks before replacement; preserve the known-good app on
+  failure. Use `ditto` or the canonical installer to preserve signatures and
+  bundle contents. Quit the old app cleanly, retain its settings and user data,
+  restart only affected services through their canonical lifecycle, and launch
+  the installed copy. Verify its signature, running executable, version/build
+  and relevant smoke checks, including signing-sensitive operations. Never
+  force-quit unsaved work or change privacy grants without required consent.
+- Report development build/output and installed paths, source revision, running
+  build, smoke-check evidence and remaining limitations. Distinguish development
+  acceptance from stable release acceptance. Report an ineligible stable update
+  as intentionally deferred; do not replace the stable app to close a task.
+- Thingtime Recovery, Commander and other native apps retain their existing
+  local-delivery requirement: rebuild affected apps from final changed source,
+  run their canonical tests/signing workflow, install verified bundles under
+  their own names in `~/Applications/`, launch and verify the installed copies
+  before handoff. Preserve known-good installations and user data on failure.
+  For targets that cannot run on this Mac, use the supported simulator or
+  connected test device and report the exact verified target. This requirement
+  never authorizes replacing the stable Thingtime app with development work.
+
+## Commander macOS distribution signing
+
+- For Commander direct-distribution builds, prefer an installed `Developer ID Application` identity whenever one is available. Do not silently fall back to `Apple Development`, `Apple Distribution`, or ad-hoc signing for a release build: those identities do not provide the same Gatekeeper contract.
+- Keep local iteration explicit with `COMMANDER_SIGNING_MODE=development`; production/direct-distribution builds must fail closed when no Developer ID Application certificate and private key are installed.
+- Keep Apple Developer and notarization credentials in the Keychain or CI secret store only. Never print, export, commit, or copy their values into project documentation.
+
 ## Browser and UI validation
+
+### Configurable images and files
+
+- Every configurable or customizable image/file usage across Thingtime must use the shared upload-first pattern: offer an upload picker as the primary control and an optional **Use URL instead** button that reveals a URL field. Reuse the shared media/upload components; do not introduce URL-only settings. Preserve previews, replacement/removal, progress, retry, and unsaved drafts. Use canonical server-validated attachment purposes, target/slot authorization, moderation, quota accounting, and cleanup; a pasted URL remains a validated fallback and must never bypass these boundaries.
+
+### Feature customization defaults
+
+- Every new user-facing feature or meaningful product addition must include a reasonably chosen settings surface for the behaviors users are likely to want to customize. Choose safe, useful defaults; avoid exposing implementation-only knobs; preserve existing preferences through migrations; and document what each control changes. If a feature genuinely has no meaningful user choice, no setting is required.
 
 - For rendered browser validation in Codex Desktop, prefer the in-app Browser first when it is available. If localhost is blocked there, or the user explicitly asks for Chrome, use the Codex Chrome tab control workflow (`chrome:control-chrome`) before falling back to standalone Playwright. Keep Chrome checks read-only unless the user requested an action, and do not inspect cookies, local storage, passwords, or profile data.
 - Before finishing a PR, run the manual checklists in `TESTING.md` for every
@@ -172,6 +704,16 @@ commits.
   variables, also document the fork-safe setup steps in `README.md`. Use
   placeholder values only; never copy real tokens, passwords, project secrets,
   or account-specific credentials into public docs.
+- Thingtime email delivery work must stay aligned with the owned-stack plan in
+  `docs/email-owned-architecture.md`. App/auth code enqueues through the shared
+  email service boundary — `sendEmail()` in
+  `remix/app/api/utils/email/service.ts`, backed by the `email_messages` outbox
+  and its deliverability satellites (FUNDAMENTALS §3) — rather than calling SES,
+  SMTP, or another transport directly, so provider-backed and self-hosted
+  delivery share the same templates, events, suppressions, compliance checks,
+  and audit trail. New mail must map onto an existing `EmailStream`
+  (`transactional`, `newsletter`, `notification`) instead of adding a fourth
+  name for the same traffic.
 - For Vercel dashboard links, do not use `VERCEL_GIT_REPO_OWNER` as the
   dashboard owner slug; that value is the Git provider owner. Prefer Vercel API
   project/deployment data when `VERCEL_API_TOKEN` is available, or an explicit
@@ -179,15 +721,18 @@ commits.
 
 ## GitHub push and PR publishing
 
-- All pull requests must target the `develop` branch, not `main`. `develop` is
-  the integration base for every feature, fix, docs, and chore branch. Stacked
-  branch → branch PRs keep their parent feature branch as base. Target `main`
-  only when the user explicitly authorizes that exact PR against `main` (for
-  example a `develop` → `main` promotion PR).
-- When you find an open PR still based on `main` that is not an authorized
-  promotion PR, retarget it to `develop` (`gh pr edit <n> --base develop`).
-  GitHub refuses base changes on PRs that belong to a native stack; report
-  those to the user instead of forcing them.
+- Product feature, fix, docs and chore PRs target `develop`. Protected
+  controller-only changes use the canonical `github-actions` branch and its
+  own runbook/contracts; do not route those through a missing product build.
+  Stacked branch → branch PRs keep their parent feature branch as base. Target
+  `main` only when the user explicitly authorizes that exact PR against `main`
+  (for example a `develop` → `main` promotion PR). Opening a promotion is not
+  permission to merge it or update the remote primary branch.
+- For a PR being maintained in the current task, correct an unintended `main`
+  base to `develop` (`gh pr edit <n> --base develop`) unless it is an authorized
+  promotion. Do not retarget unrelated PRs during a read-only history review.
+  GitHub refuses some native-stack base changes; report those rather than
+  forcing them.
 - The repository may not have a configured Git remote in a cloud checkout. The
   canonical repository URL from `package.json` is
   `https://github.com/lopugit/thingtime.git`.
@@ -232,11 +777,17 @@ commits.
 
   This entry point also repairs missing pnpm links in fresh worktrees before
   ESLint starts.
-- Full `pnpm --dir remix exec tsc --noEmit` currently has pre-existing
-  project/type failures outside many focused changes, including Commander
-  components, `app/smarts/index.tsx`, and dependency declaration mismatches.
-  Until those are fixed, use targeted linting plus focused runtime/build checks
-  where possible and clearly report the full-project typecheck limitation.
+- Run `corepack pnpm --dir remix run typecheck` and
+  `corepack pnpm --dir remix run typecheck:ratchet`. The tracked TypeScript
+  error baseline is zero; the ratchet is a failing gate, not warning-only.
+  Fix diagnostics rather than raising the baseline, suppressing errors,
+  excluding source or weakening compiler/lint settings. Baseline updates may
+  only preserve or lower the count and must reject compiler failures.
+- Run the full Remix lint command before delivery as well as focused checks.
+  ESLint errors fail; warnings currently have no numeric budget. Do not claim
+  zero warnings, formatting coverage or stronger compiler strictness from a
+  passing error gate. See `docs/static-analysis-baselines.md` for commands,
+  audit evidence, coverage limits and follow-up priorities.
 - Use the package manager already used by the workspace being changed. For
   Remix checks, prefer `pnpm --dir remix ...`. Avoid lockfile changes unless
   dependency changes are intentional.
@@ -295,7 +846,10 @@ Rules:
   `graphify-out/snapshots/v1/`, hydrates a private semantic cache from immutable
   variants under `graphify-out/cache/semantic-cas/v1/`, and
   refreshes ignored root aliases so ordinary `graphify query` remains
-  compatible. Do not invoke mutating commands through the bare binary in this
+  compatible. It retains one active portable snapshot by default and prunes
+  superseded snapshots after successful activation; use
+  `GRAPHIFY_SNAPSHOT_RETENTION=<positive integer>` only for an explicit bounded
+  local need. Do not invoke mutating commands through the bare binary in this
   repository.
 - After modifying code, run `scripts/graphify update .` to keep the graph
   current (AST-only, no API cost). When Markdown, docs, PDFs, images, or another
@@ -303,7 +857,8 @@ Rules:
   Codex LLM proxy and then let the wrapper cluster/export the result.
 - Never commit mutable `graphify-out/graph.json`, `manifest.json`,
   `GRAPH_REPORT.md`, or `cost.json` root files. They are ignored symlink aliases
-  selected by the wrapper. Commit the immutable snapshot directory and any new
+  selected by the wrapper. Commit the selected immutable snapshot directory,
+  the wrapper's removal of superseded snapshots, and any new
   `graphify-out/cache/semantic-cas/` variants instead; the upstream mutable
   `graphify-out/cache/semantic/` directory stays ignored.
 - A commit SHA cannot name generated output included in that same commit.
@@ -327,7 +882,7 @@ Rules:
 
 - When finishing a branch update in this workspace, always report the pushed remote branch and the PR URL.
 - If a PR exists (or was created), include the PR URL in your completion response.
-- If Vercel preview deployment exists for that branch, include the most recent preview URL as well.
+- For every web-app branch or PR delivery, actively discover its Vercel preview before finishing: inspect the PR checks or deployment status first, then the Vercel project deployments when needed. Always include the most recent reachable branch preview as a clickable `Preview:` link in the completion response. If no reachable preview exists, is pending, or cannot be verified, explicitly say so and include the relevant PR check or deployment dashboard link with the reason; never silently omit preview status.
 - When making or validating deployment, Vercel, hydration, environment, or local
   runbook workflow changes, add a concise dated entry to `remix/CHANGELOG.md`
   under `[Unreleased]` before finishing.
@@ -335,3 +890,193 @@ Rules:
   PR-specific note in the root `PRs/` directory named with the PR number,
   branch slug, and PR title slug, then keep `remix/CHANGELOG.md` as a concise
   grouped summary that links to the detailed PR note.
+
+## Preserved global AI_ALL.md — reference snapshot, 2026-09-11
+
+The following block retains all 38,768 bytes of the global source at review
+capture (SHA-256 `72fa2b188df422ce376dfb18b8db5987f76d4714e090b24c1ef2c272f9f56881`).
+It is source material, not another active instruction layer. Live global policy
+still comes from its canonical path; make global updates there only. Keep the
+repo's current wrapper, immutable Graphify outputs, contribution lanes and
+runtime guidance above. In particular, this archive's generic mutable-Graphify
+and browser/scheduling guidance must not undo current applicable instructions.
+Refreshing this archive does not authorize running its commands or editing any
+global symlink. Keep the preserved block verbatim when updating this repo file.
+
+<!-- global-ai-all-snapshot:start -->
+````markdown
+# Canonical global AI instructions (non-waivable)
+- `/Users/lopu/.AI/AI_ALL.md` is the only writable canonical global AI instruction file. Make every global instruction update directly to that exact path.
+- `/Users/lopu/.codex/AGENTS.md` and `/Users/lopu/.claude/CLAUDE.md` must always remain symbolic links resolving to `/Users/lopu/.AI/AI_ALL.md`. Never create or maintain separate mirrored copies.
+- Never write, edit, patch, copy, synchronize, redirect output to, or otherwise replace either global symlink path. This prohibition includes editing through the symlink even when it currently resolves to `AI_ALL.md`.
+- Never run `cp ~/.AI/AI_ALL.md ~/.codex/AGENTS.md` or any equivalent `cp`, `cp2`, `rsync`, `install`, `mv`, `tee`, shell-redirection, editor, or patch command targeting the global `AGENTS.md` or `CLAUDE.md` paths. Copying identical content is still forbidden because it can replace a symlink with a regular file.
+- After changing `AI_ALL.md`, run `/Users/lopu/.codex/bin/sync-ai-all --check`. If either link is absent, incorrect, or a regular file, use only `/Users/lopu/.codex/bin/sync-ai-all --repair` to restore it; the repair command is the sole permitted mutation of those two symlink paths and backs up unexpected regular files first.
+
+## Also read my Codex instructions
+After reading this CLAUDE.md, always read my global Codex guidance and follow any
+applicable instructions there:
+- `~/.codex/AGENTS.md`
+- `~/.codex/AGENTS.override.md` if it exists; apply it after `AGENTS.md` because
+  it takes precedence.
+
+When working inside a project directory, also locate and read the applicable
+project `AGENTS.md` files before editing or making project decisions. At minimum,
+read the project-root `AGENTS.md`, every `AGENTS.md` on the path from the project
+root to the current working directory, and any `AGENTS.md` in subdirectories that
+contain files you will inspect or modify. If multiple instruction files conflict,
+the more specific project-local `AGENTS.md` wins over broader guidance unless a
+higher-priority global instruction explicitly says otherwise.
+
+If anything in Codex or project `AGENTS.md` files conflicts with this CLAUDE.md,
+CLAUDE.md wins.
+
+# graphify
+- **graphify** (`~/.Codex/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
+- **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
+When the user types `/graphify`, invoke the Skill tool with `skill: "graphify"` before doing anything else.
+
+## Finding my Claude Design questionnaire answers
+My prototypes are built in Claude Design (claude.ai/design, also in the Claude
+Desktop sidebar). When I ask for the answers I gave to a project's intake
+questionnaire ("Claude has some questions"), get them from Claude Design — NOT
+from Cowork/desktop chat history or local session files:
+1. Open claude.ai/design with the Chrome tools (I'm logged in as NF).
+2. Open the relevant project (e.g. "Thingtime project launch" = my first
+   Thingtime prototype build).
+3. Answers are at the top of the project's chat, in the opening
+   "Questions answered" block. The exact question wording is collapsed;
+   the stored record is the field:answer list.
+
+# Graphify folder workflow
+- For every Codex session with an attached folder where the task involves folder, file, repo, codebase, docs, or project-content work, use graphify as the default folder map before broad manual inspection.
+- Before folder work, check the target root for `graphify-out/graph.json`. If it is missing, initialize the folder with the full graphify flow, not a raw partial extraction: prefer `/graphify <folder>` or run `graphify extract <folder>` and then run the cluster/report/html generation step supported by the installed CLI, such as `graphify cluster-only <folder>` plus the equivalent HTML/export step. A finished initial build should leave usable portable outputs such as `graphify-out/graph.json`, `graphify-out/graph.html`, `graphify-out/GRAPH_REPORT.md`, `graphify-out/manifest.json`, and `graphify-out/cost.json` when the corpus and CLI support them.
+- Run folder/file/codebase questions through the graphify CLI before broad `rg`, `find`, `ls`, or one-off file reads: use `graphify query "<question>" --graph <folder>/graphify-out/graph.json`, and use `graphify path` or `graphify explain` for relationship tracing.
+- Graphify query hard rule: before every `graphify query`, convert the request into concrete graph vocabulary such as changed files, routes, symbols, functions, classes, or domain nouns; never seed with generic package metadata terms like `repository`, `api`, `package`, `scripts`, `dependencies`, `name`, `version`, `license`, `homepage`, `bugs`, `env`, or `config` unless that metadata is the target.
+- If graphify skips, removes, or would delete `graphify-out/graph.html` because the refreshed graph is above the default visualization limit, regenerate the HTML export with an explicit high limit so the portable graph output stays present. Use `GRAPHIFY_VIZ_NODE_LIMIT` set above the current graph node count with generous headroom, for example `GRAPHIFY_VIZ_NODE_LIMIT=1000000 graphify export html` from the project root, or rerun the refresh/export command with that environment variable. Do not accept a `graph.html` deletion solely because the default viz cap was too low; only skip HTML when generation is genuinely impossible or the user asks to skip it, and state that limitation plainly.
+- For graphify builds that need semantic/LLM extraction on this machine, use the local Codex LLM proxy by default instead of a direct provider key: first confirm `http://127.0.0.1:4768/api/health` is healthy or start `codex-llm-proxy` with PM2 from `/Users/lopu/things/code/lopugit/llm-proxy`; run graphify with `OPENAI_BASE_URL=http://127.0.0.1:4768/v1`, `OPENAI_API_KEY="$(cat ~/.codex-llm-proxy/key)"`, `GRAPHIFY_OPENAI_MODEL=codex-default`, `--backend openai`, `--max-concurrency 4`, and `--api-timeout 7200`. Never print the local proxy key in chat, logs, docs, commits, or command output.
+- Do not let missing, slow, or failed semantic/LLM extraction prevent a usable graphify build. If the proxy or semantic backend is unavailable, report the limitation plainly, continue with structural/code-only extraction or update, and still run the cluster/report/html generation step from whatever graph data exists. State that docs, Markdown, PDFs, images, or other non-code content were not semantically indexed when that fallback is used.
+- After changing files or folders in an initialized target, always refresh the graph. Use `graphify update <folder>` for incremental refreshes and do not do a full rebuild unless the graph is missing, corrupted, explicitly requested, or the incremental path cannot handle the change. If only code files changed, run the code-only update path and skip semantic extraction. If Markdown, docs, PDFs, images, or other non-code corpus files changed, run the semantic update/extract path with the local proxy when available, then rerun the cluster/report/html generation step so the portable outputs stay current. If semantic extraction is unavailable or fails, fall back to the code-only update and still regenerate the available outputs, with the limitation stated clearly.
+- For every git repo with `graphify-out/` or any newly initialized graphify output, verify the repo-local graphify hooks and merge driver before the first graph-related commit, merge, or PR push. Run `graphify hook status`; if either `post-commit` or `post-checkout` is missing, run `graphify hook install` from the repo root and then rerun `graphify hook status`. Also ensure `graphify-out/graph.json` is routed through Graphify's union merge driver: set `git config merge.graphify.name "graphify graph.json union merge"` and `git config merge.graphify.driver "graphify merge-driver %O %A %B"` when missing, add or preserve the tracked `.gitattributes` line `graphify-out/graph.json merge=graphify`, and verify with `git check-attr merge -- graphify-out/graph.json`. After a merge-driver merge, regenerate the derived portable outputs (`GRAPH_REPORT.md`, `graph.html`, `manifest.json`, `cost.json`) with `graphify cluster-only <folder>` or the appropriate update/export step rather than hand-resolving generated graphify files.
+- If graphify is missing or the folder cannot be initialized/updated, install or repair graphify when permissions allow; otherwise report the blocker plainly instead of silently falling back.
+- Keep graphify-generated artifacts in sync and update each project's ignore rules so the useful graph outputs are committed while temporary/local graphify internals are ignored. Commit portable outputs such as `graphify-out/graph.json`, `graphify-out/graph.html`, `graphify-out/GRAPH_REPORT.md`, `graphify-out/manifest.json`, and `graphify-out/cost.json`; ignore machine-local or regenerable files such as `graphify-out/.graphify_python`, `graphify-out/.graphify_root`, `.graphify_*` temp/cache files, chunk files, and other graphify scratch folders unless explicitly requested.
+
+# Shell session hygiene
+- If Bash prints `syntax error: unexpected end of file` followed by `error importing function definition for '<name>'`, assume the current AI process inherited stale or malformed exported Bash functions (`BASH_FUNC_*`) before the user's fixed startup files could run.
+- Prefer renewing into a fresh login Bash with the current startup files after clearing the stale inherited function-export environment. The goal is a clean login Bash, not a long-running non-login workaround.
+- Do not try to fix this by launching another login Bash from the same polluted Bash environment alone: Bash imports exported functions before it reads `.bash_profile`, `.bashrc`, or `BASH_ENV`. If import spam appears, use a sanitized launcher only as a bridge to clear or avoid inherited `BASH_FUNC_*` variables, then start a fresh login Bash so the current `.bash_profile` and `BASH_ENV` take effect.
+- Verify the clean path with `bash -c 'declare -F add >/dev/null && echo has-add; env | grep "^BASH_FUNC_" || echo no-exported-functions'`. A healthy Codex/noninteractive shell should report the function is available and no exported functions are present.
+- If a fresh login Bash is still noisy after sanitizing, tell the user the already-running Codex app/server process likely needs a full restart to drop the old parent environment.
+- Do not edit zsh config for this Bash exported-function issue unless the user explicitly asks.
+
+# Scheduled wake-ups
+- **Never use `ScheduleWakeup` under any circumstance.** For a future or recurring continuation, use `/loop` with a standalone cron-scheduled automation/job instead of a chat-attached wake-up.
+- Treat every `/loop` request as requiring a cron-backed scheduled automation, including when the user omits an interval. Never reinterpret a missing interval as "dynamic mode", immediate one-session execution, or permission to skip scheduling. Infer and state a reasonable cron cadence from the task context; ask the user only when the cadence materially affects safety or cost and cannot be inferred safely.
+- The cron job is the wake-up mechanism: each run must inspect durable task state, check or resume the work, and continue it toward completion. Working on the task immediately in the current session is encouraged when useful, but it never replaces arming the cron job unless the user explicitly cancels the loop or asks for immediate-only execution.
+- Every `/loop` task must be idempotent, detect already-running or already-completed work and no-op, prevent overlapping runs, persist enough state for a fresh scheduled run to continue safely, and include explicit completion or stop conditions. When the task is complete, the scheduled job must record completion and stop or disable further runs. Do not emulate scheduling with `sleep`, a foreground wait, or repeated wake-up calls.
+
+# Browser automation preference
+- For browser-dependent tasks, prefer using the user's live Chrome window or tab first when available, especially when the task may depend on logged-in state, cookies, extensions, or visible page context.
+- Chrome extension control may be exposed through the Node/browser-client bridge rather than visible `chrome_*` tools; check that bridge before assuming the Chrome plugin is unavailable.
+- If a live Chrome tab is unavailable, unsuitable, or cannot be controlled reliably, fall back to Playwright-based browsing.
+- If Playwright browsing is needed but Playwright or its browser runtime is missing, install the required pieces when the current permissions allow it: Playwright package support, a compatible standalone Chromium/Chrome browser, and any Node/runtime compatibility dependencies needed for Playwright to launch successfully.
+
+# UI change verification
+- For every UI, frontend, or visual layout change, open the affected page or app in a Chrome tab before finishing the task whenever it can be run locally, on a preview URL, or in production. Inspect the changed states at the relevant desktop and mobile viewport sizes, then fix alignment, overflow, clipping, and overlapping issues before handing back.
+- During that browser check, scroll each affected page from the top all the way to the bottom at the relevant viewport sizes. Verify that sticky elements, long content, section transitions, lazy-loaded content, and bottom-of-page content remain aligned and free of overflow or overlap.
+- If the changed experience includes modals, pop-ups, drawers, menus, accordions, tabs, dropdowns, expandable panels, hover/focus states, or other nested dynamic content, interact with those controls so the relevant states are visible and testable. Fix layout, stacking, clipping, focus, and overflow issues in those opened states before handing back.
+- If Chrome UI testing reveals an infinite scroll, recursive loading loop, repeating pop-up/modal/drawer, navigation loop, or any recursive clicking/scrolling edge case, do not keep interacting indefinitely. Stop that path, refresh the page once, and retry only once; if it gets stuck again, move on to the next test path or task and report the loop plainly.
+- Treat text or controls sitting too high, too low, too far left, or too far right as layout defects. Also fix text that wraps badly, clips, escapes its container, collides with adjacent content, or causes horizontal scrolling unless the user explicitly asks to defer visual cleanup.
+
+# macOS app local installation
+- After successfully building and verifying a macOS `.app` bundle for local use, always copy the final runnable bundle into the standard per-user `~/Applications/` directory (plural) before treating the build as complete. Create that directory if it is missing, and report both the build-output path and installed path.
+- Preserve code signatures, extended attributes, and bundle contents when copying, such as by using `ditto`. Resolve and validate the exact source and destination first; replace only the same named destination app, and never overwrite or delete another app bundle.
+- Verify the installed copy itself with `codesign --verify --deep --strict` and a bundle executable check. Future launches and user-facing app links should use the installed `~/Applications/<AppName>.app` copy rather than a transient build, archive, DerivedData, or repo `dist` path.
+- Do not install a partial or failed build. Run the project's required tests and canonical verification path first, and keep any prior known-good installed copy when verification fails.
+
+# macOS privacy permission signing and testing
+- For direct-distribution macOS builds, prefer an installed `Developer ID Application` identity and a secure signing timestamp whenever one is available. Do not silently replace it with `Apple Development`, `Apple Distribution`, or ad-hoc signing: those are distinct trust models and do not make a Gatekeeper-ready direct download. Keep development signing explicit and fail closed for a requested distribution build when the Developer ID identity is unavailable.
+- Keep Apple Developer certificates, private keys, and notarization credentials in the Keychain or approved CI secret store only. Never print, export, commit, or copy them into documentation; notarization remains a separate requirement for public direct downloads.
+- For apps that need Screen Recording, Accessibility, Automation, camera, microphone, or another TCC-controlled permission, establish a stable bundle identifier and stable Apple Development signing identity before asking the user to grant access. Do not use repeatedly changing ad-hoc signatures for iterative permission testing: macOS can retain a blue/enabled System Settings toggle for an older code requirement while rejecting the rebuilt app whose ad-hoc CDHash changed.
+- Discover and validate the intended `Apple Development` identity with `security find-identity -v -p codesigning`; allow a project-specific override instead of silently falling back to ad-hoc signing. Keep the same bundle identifier, signing identity, entitlements, and installed application path across rebuilds. A signing-identity or designated-requirement change is a one-time TCC migration and must be reported to the user.
+- Assemble and sign the runnable bundle in a clean, deterministic staging directory outside iCloud Drive, Documents File Provider, or another synchronized folder, such as `~/Library/Caches/<bundle-id>/bundle-stage/<AppName>.app`. This avoids Finder metadata, resource forks, and extended attributes that can make `codesign` fail with “resource fork, Finder information, or similar detritus not allowed.” Sign nested code first when present and the outer app last; use hardened runtime for the final app where supported, then verify the staged bundle with `codesign --verify --deep --strict`.
+- Inspect and record the designated requirement with `codesign -dr - <app>` and the signing details with `codesign -dvv <app>`. Rebuild and sign a second time when establishing a new local workflow, then confirm the designated requirement remains identical even if the binary CDHash changes. Treat a changing designated requirement as a release-process defect before testing permissions.
+- Install the exact verified signed bundle into `~/Applications/<AppName>.app` with `ditto`, verify the installed copy again, and launch only that installed copy. Before diagnosing TCC, use a read-only process check to confirm the running executable resolves to the installed path rather than `.build`, DerivedData, `dist`, or a stale copy elsewhere.
+- Test each privacy permission independently using the appropriate preflight API, such as `CGPreflightScreenCaptureAccess()` for Screen Recording and `AXIsProcessTrustedWithOptions` without prompting for Accessibility. Request access only after an explicit user action; do not repeatedly call a prompting API on startup or after every failed refresh. The app should show actionable instructions and a button that opens the exact Privacy & Security pane.
+- When System Settings shows the app enabled but the preflight still fails, inspect recent unified TCC logs for that bundle identifier and messages such as `Failed to match existing code requirement` before changing code or resetting permissions. Never print unrelated TCC records or sensitive application history. A stale grant after moving from ad-hoc to stable signing normally requires the user to switch that app off and on once in the relevant privacy pane, then quit and reopen the installed app.
+- Do not automate a privacy-toggle change or run `tccutil reset` without the user's explicit confirmation at the moment of the action. Prefer the narrow off/on migration for the exact app; explain that `tccutil reset` can remove grants more broadly. After the user refreshes the grant, relaunch the installed copy and verify the real protected operation, not just the toggle or preflight result: capture an actual window for Screen Recording and perform a harmless focus/read operation for Accessibility.
+- A permission-sensitive macOS build is complete only after tests pass, the staged and installed signatures verify, the installed executable path is confirmed, Screen Recording and Accessibility preflights match the visible settings, and the app successfully performs its protected operations after a rebuild made with the same stable designated requirement. Preserve a prior known-good installed bundle whenever any of those checks fail.
+
+# MarkItDown first-read workflow
+- MarkItDown is installed globally at `/Users/lopu/.local/bin/markitdown`, and the MarkItDown MCP server is installed at `/Users/lopu/.local/bin/markitdown-mcp`.
+- Before reading any MarkItDown-supported file or URL, check `/Users/lopu/.codex/markitdown-filetypes.md`. If that file type is not marked with `[x]` or `[X]`, run it through MarkItDown first and use the Markdown output as the initial read.
+- MarkItDown-supported inputs include PDF, PowerPoint, Word, Excel/spreadsheets, images with EXIF/OCR, audio with EXIF/transcription, HTML, CSV, JSON, XML, ZIP archives, YouTube URLs, EPUBs, plain text, and other formats supported by MarkItDown.
+- Prefer the `markitdown` CLI for local files and the MarkItDown MCP `convert_to_markdown(uri)` tool for `file:`, `http:`, `https:`, or `data:` URIs when the MCP tool is available.
+- Treat MarkItDown output as a first-pass reading aid, not a complete substitute for native inspection. If the Markdown output is too thin, loses structure, omits images/layout/charts/speaker notes/formulas/metadata, or the task needs exact structured data, open or parse the file with the appropriate native/domain tool as a fallback and state that fallback clearly.
+- For text-native formats such as CSV, JSON, XML, HTML, and plain text, use MarkItDown when it improves readability or strips noise, but prefer direct parsing/native inspection when exact fields, rows, schema, markup, scripts, or data fidelity matter.
+- If a file type is disabled in `/Users/lopu/.codex/markitdown-filetypes.md`, skip MarkItDown for that type and use the appropriate native/domain tool directly.
+
+# Remote primary-branch safety (non-waivable)
+- Never merge a branch or pull request into, enable auto-merge or a merge queue for, or push commits or ref updates directly to a remote repository's primary/default branch (`main`, `master`, or another server-designated default branch) unless an instruction explicitly authorizes that exact primary-branch action for that exact repository. If the repository or action is ambiguous, stop and ask.
+- Primary-branch permission must be repository-specific. A direct user instruction or repo-local instruction counts only when it unambiguously applies to that repository and authorizes the relevant merge or push. Do not infer permission from requests to finish, publish, deploy, commit, push a feature branch, open a pull request, or perform related work, nor from a previous authorization for another task or repository.
+- Without exact primary-branch authorization, work on a feature branch and, when otherwise permitted, push that feature branch and open or update a pull request. Leave the pull request open for review; do not merge it, enqueue it, enable auto-merge, or update the remote primary branch.
+- Authorization for one repository never propagates to another repository. This includes related or external repositories, dependencies, services, SDKs, infrastructure repositories, submodules, sibling repositories, forks, and upstream projects touched while completing the same task. Each remote repository requires its own separate explicit primary-branch authorization.
+- A repo-local primary-branch sync or auto-publish rule applies only to that repository. It never authorizes a primary-branch merge or push in any related external repository.
+- For cross-repository work, identify each proposed primary-branch action separately and obtain permission for each repository before acting. Safe read-only work, local edits, feature-branch pushes, and pull requests may continue independently when otherwise authorized.
+
+# GitHub project publishing
+- All new projects should be initialized as git repositories and published to private GitHub repositories by default. If a new project has no GitHub remote, create a private repository for it before treating the project as durable work.
+- Push owned changes to the private GitHub remote as often as practical: create focused commits for meaningful changes, use new branches for separate work streams, and push those commits/branches after verification unless the user asks to keep the work local.
+- For existing repos, any file change is not complete until the owned changes are on a pushed branch and a GitHub PR exists, unless the user explicitly says not to commit, not to push, not to open a PR, or to keep the work local. Detached HEAD, unrelated dirty files, pending checks, failed non-blocking checks, missing preview URLs, or pre-existing untracked files are conditions to work around, not reasons to stop at local changes.
+- Open every PR as a regular OPEN (ready-for-review) PR, never as a draft, unless the user explicitly asks for a draft. If an earlier step created a draft PR in the same task, mark it ready for review before handing back.
+- If the checkout is on a detached HEAD after making or validating changes, create a scoped branch from the current HEAD before staging, preferably `codex/<short-task-slug>` unless the user requested another branch name. Then stage only the owned changes, commit, push that branch, and open a PR. Do not hand back "detached HEAD so I did not push"; detached HEAD means "make a branch here and publish it."
+- If the worktree has unrelated modifications, leave them unstaged and continue. Use `git status --short`, `git diff --name-only`, and `git diff --cached --name-only` to confirm the staged set only contains owned changes. If user edits overlap the same files, preserve them and stage a narrow patch when possible; ask only when the overlap makes a safe commit impossible.
+- If the current branch already has an open PR, push the owned commit to that branch and report the PR URL. If no PR exists, open a PR against the appropriate base branch after pushing. If the branch is protected, inappropriate for the task, or shared with unrelated work, create a new scoped branch from the current commit and open the PR there.
+- If no GitHub remote exists, infer the canonical repo from local metadata when safe or create a private GitHub repo for new projects, then push. If the remote cannot be inferred for an existing project, ask one focused question instead of silently keeping changes local. If GitHub auth or network push fails after a real push attempt, keep the local commit, report the exact blocker and branch name, and do not describe the task as fully published.
+- If CI, CodeQL, Vercel, or another deployment check is pending or failing for a reason unrelated to the change, still open a PR with the validation notes and current check state. Re-check after creating the PR and report the pushed branch, PR URL, latest check status, and any Vercel preview URL or dashboard link that exists.
+- For every web-app branch or PR delivery, actively discover its Vercel preview before finishing: inspect the PR checks or deployment status first, then the Vercel project deployments when needed. Always include the most recent reachable branch preview as a clickable `Preview:` link in the completion response. If no reachable preview exists, is pending, or cannot be verified, explicitly say so and include the relevant PR check or deployment dashboard link with the reason; never silently omit preview status.
+- Do not push secrets, local credentials, machine-specific caches, or generated private state. Add or update project ignore rules before publishing when needed.
+
+# API capability manifests (non-waivable)
+- Every externally reachable HTTP or remote API must have a machine-readable, origin-scoped capability manifest. Use independently versioned semantic feature identifiers (for example `api.devices`) as the compatibility contract; a Git commit SHA, deployment URL, route existence check, or UI build version is never sufficient compatibility evidence.
+- The manifest must be generated from the API's canonical registry and active runtime route map. It must cover every executable endpoint, including intentionally undocumented diagnostics or internal routes, while publishing no account data, secrets, deployment configuration, filesystem paths, or environment values.
+- Adding an endpoint, removing an endpoint, or changing an endpoint's request, response, permissions, side effects, pagination, or streaming behavior requires the same change to register or update its manifest feature. Bump the feature's SemVer deliberately: PATCH for compatible corrections, MINOR for compatible optional/additive behavior, and MAJOR for removals or incompatible behavior. Do not silently rely on a default version for a changed existing contract.
+- Clients must ship a small explicit requirement map only for the features they use; they negotiate against the selected origin before persisting/activating an endpoint or performing dependent work. Require matching majors and the declared minimum compatible minor/patch. Keep any legacy route probe narrowly scoped, safe, time-bounded, and only for an explicitly supported no-manifest rollout path.
+- Add or update automated coverage with every API change: assert every registered semantic operation and every active runtime route appears in the manifest, assert required client capability ranges accept compatible updates and reject missing/breaking features, and smoke the built server's manifest response. A route is not complete until this coverage, its manifest contract, API documentation, and client negotiation behavior are all updated together.
+
+# Web app creation defaults
+- For new web app creation requests, use Nitro, React Router in non-framework mode, and Vite unless the user explicitly asks for a different stack or an existing repo already requires one.
+- For Vite apps that will be exposed through Tailscale Funnel, add or update a repo-local `vite.config.*` so `server.allowedHosts` includes the exact Tailscale Funnel hostname before handing back the public URL. Prefer an explicit hostname list for hosts the user controls; do not set `allowedHosts: true` unless the user explicitly accepts the broader dev-server exposure.
+- For Funnel-backed Vite dev servers, bind the app to loopback, preferably `server.host: "127.0.0.1"` or the equivalent package script flag, and let Tailscale proxy from the public/tailnet listener into `127.0.0.1:<port>`. Do not use `0.0.0.0` for this pattern unless there is a specific non-Funnel reason to expose the dev server on every interface.
+- Default visual direction for new web apps: clean, minimalist, greyscale, Vercel-style UI with restrained typography, neutral surfaces, and very little decorative color.
+- New web apps should use a slide-out drawer pattern. When open on desktop and mobile, the drawer should be flush with the left, top, and bottom viewport edges with `0` spacing on those sides. If the current viewport does not require a 100% width drawer, leave breathing room on the right instead of forcing full width.
+- When the drawer is collapsed, show only a compact drawer/menu icon trigger. Do not leave a long vertical rail or pane that consumes horizontal layout space.
+- Main site content should be center aligned across the full available width, with max-width containers for readable content while keeping the overall page and primary content areas centered.
+- Non-production web app builds and preview URLs should prefix the page title with a short environment/source identifier for at-a-glance tab management, such as `[TS]` for Tailscale Funnel, `[VC]` for Vercel preview, `[LC]` for localhost, or another concise project-specific dev identifier. Prefer the Magic/CodexTime pattern of host-based title prefixing in `index.html`; confirmed production domains may keep the normal public title.
+
+# Vercel project setup
+- New web apps and web app projects should be set up in Vercel by default. If a matching Vercel project does not already exist, create one and connect it to the project's private GitHub repository so new commits and all branches rebuild automatically.
+- Use the Vercel admin API credentials at `/Users/lopu/things/cloud/config/enc/vercel.auth.all` when Vercel automation needs authentication, but never copy the secret value into chat, commits, logs, or project files.
+- Record Vercel project and deployment URLs in a project-local `VERCEL_DEPLOYMENTS.md` file unless the project already has a clearly equivalent deployment README. Keep that file updated with the Vercel project/dashboard URL, production URL, branch/preview URL patterns, and any project-specific notes needed to find current deployments.
+- For Nitro + Vite + React Router non-framework apps deployed on Vercel, make the Vercel build prove that the Vite static shell is present before trusting the deployment. Use a build path like `npm run build:client && NITRO_PRESET=vercel nitro build`, and configure Nitro `publicAssets` so it points at the real Vite `dist` directory from the project root, preferably with an absolute path such as `const publicDir = new URL("./dist", import.meta.url).pathname`; do not leave `publicAssets.dir: "dist"` if `srcDir: "server"` causes Nitro to emit an empty `.vercel/output/static`. Add a repo check such as `npm run verify:vercel-output` that asserts `.vercel/output/static/index.html` exists, contains the Vite `<div id="root"></div>` shell, and `.vercel/output/config.json` has filesystem routing before the Nitro fallback. If a live Vercel URL returns Nitro JSON like `Cannot find any route matching /` while `/api/...` works, inspect `.vercel/output/static`, fix the public asset path, rebuild, then ensure the public alias or production domain is assigned to the fixed deployment rather than an older broken deployment. Verify `/`, `/index.html`, at least one `/assets/...` file, and `/api/site` on the actual public alias after reassignment.
+
+# AI and automated PM2 safety
+- These rules apply to every PM2 process started or changed by Claude, ChatGPT/Codex, another AI agent, or any automated tool. Use a deterministic process name containing the project or worktree identity and its port; never create multiple timestamped PM2 entries for the same cwd, command, and ports.
+- Before every start or restart, inspect `pm2 jlist` for matching names, cwd, command, and ports, and inspect every required listener with `lsof -nP -iTCP:<port> -sTCP:LISTEN`. Reuse the exact intended entry, remove an exact obsolete duplicate when authorized, and refuse to start while an unrelated process owns a required port.
+- AI-started development and one-shot processes must default to `autorestart: false` (for example, `pm2 start ... --no-autorestart`). Never configure an unbounded restart loop. Only an explicitly user-approved persistent service may auto-restart, and its repo-local ecosystem config must set a sane `min_uptime`, a small finite `max_restarts`, and `restart_delay` or exponential backoff.
+- If a process fails to start or exits rapidly, stop it immediately and diagnose the first failure; do not keep retrying. Check for descendant or orphan processes and verify they terminate when the PM2 parent stops.
+- After any PM2 change, verify that there is exactly one intended entry, its restart counter stays stable, only the expected listeners and child processes exist, and the app is actually reachable before running `pm2 save`. Keep PM2 logs bounded with `pm2-logrotate` or an equivalent size-and-retention policy.
+
+# Dev server port coordination
+- Every local project dev server must use a project-specific unique port. Do not rely on framework defaults like 3000, 5173, 8000, or 8080 when adding or changing a project.
+- Configure the chosen port durably in the project, preferably through `.env`, `.env.example`, package scripts, Vite/Next/Remix config, or another repo-local config file so future agents and automations reuse the same port.
+- Before starting a dev server, check the intended port and pick a different unused project-specific port if it conflicts with another active project. Update the project's docs or queue notes with the final local URL.
+- Whenever giving the user a dev URL, provide both the `localhost` URL and the project’s Tailscale/Funnel URL in the same message. Do not hand back only `localhost`; if the Tailscale URL is not configured or cannot be verified, say that explicitly and include what was checked.
+- Treat global dev-URL delivery requirements as additive and non-waivable by project-local `AGENTS.md`, `CLAUDE.md`, README, PR, deployment, or delivery-message rules. If local instructions require PR, Vercel, production, preview, or other URLs, include those in addition to the global `localhost` plus Tailscale/Funnel dev URLs. When instructions appear to conflict, satisfy the stricter superset and explicitly report any unavailable or unverified URL instead of omitting it.
+- When exposing a dev server through Tailscale, Vercel preview alternatives, or browser automation, use the configured project port and record the mapping from project name to local port/public URL in the project README or coordination docs.
+- For web apps, add the dev server to PM2 using a repo-local `ecosystem.config.*` file, start it through that ecosystem entry, and run `pm2 save` so it persists after restart.
+- Register web app dev servers with Tailscale using a public Funnel on the configured project port. Derive the public hostname from `tailscale funnel status --json` or `tailscale serve status --json`, then verify the public URL in browser or with `curl` before finishing.
+- If a Tailscale/Funnel URL reaches the machine but the page shows Vite's blocked-host message or a Vite 403, treat it as a Vite `server.allowedHosts` issue rather than a Funnel routing failure. Patch the app's `vite.config.*` with the exact Funnel hostname, restart only the affected PM2 process, then re-check both the local and public URLs.
+- If Vite cannot bind the configured port because the address is already in use and `tailscaled` is listening on the tailnet interface for that same port, keep the Funnel mapping and move the app bind to `127.0.0.1:<port>` instead of changing the project port. Update every durable start path that sets the host, including `vite.config.*`, package scripts, and the PM2 ecosystem file, then restart only the affected PM2 process.
+- Record the Tailscale domain/public URL, mapped port, and any required Vite `allowedHosts` hostname in the project README alongside the local dev URL.
+````
+<!-- global-ai-all-snapshot:end -->

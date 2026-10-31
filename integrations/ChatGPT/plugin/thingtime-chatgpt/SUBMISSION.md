@@ -38,7 +38,7 @@ bundled Thingtime streamable-HTTP server in **Settings → MCP servers**. Codex
 uses a callback-specific ChatGPT Client ID Metadata Document and a bounded
 `127.0.0.1` loopback callback. Confirm the authorization page accepts the
 matching callback, shows the encrypted multi-account form, and that Codex
-discovers all 31 tools, five prompts, resource templates, and the embedded UI
+discovers all 32 tools, five prompts, resource templates, and the embedded UI
 before entering a least-privilege reviewer PAT.
 This validates the shared local Codex-host configuration; it does not enable
 custom MCP apps in ChatGPT iOS chats.
@@ -61,10 +61,10 @@ custom MCP apps in ChatGPT iOS chats.
 
 ## MCP metadata justification
 
-All 31 tools require the `thingtime` OAuth bridge scope and are scoped to
+All 32 tools require the `thingtime` OAuth bridge scope and are scoped to
 one selected Thingtime connection. The server does not proxy arbitrary URLs.
 
-- **Read-only:** account listing, profile lookup, exact single/batch reads,
+- **Read-only:** login/status, account listing, profile lookup, exact single/batch reads,
   targeted comments, browse/search, schemas, validation, relationships,
   changes, history, and undo preview only retrieve or calculate data.
   Exact retrieval and targeted comment listing also advertise

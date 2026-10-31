@@ -1,36 +1,54 @@
 import React from 'react';
-import { Center, Flex, Input, Spinner, Text } from '@chakra-ui/react';
+import { Box, Flex, Input, Spinner, Text, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody } from '@chakra-ui/react';
 import { useLocation, useNavigate } from 'react-router';
 import Fuse from 'fuse.js';
 
-import { Rainbow } from '../Rainbow/Rainbow';
 import { Thingtime } from '../Thingtime/Thingtime';
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useLopu } from '../Lopu/useLopu';
 
-import { sanitise } from '~/functions/sanitise';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { usePath } from '~/hooks/usePath';
+import { useTtTheme } from '~/hooks/useTtTheme';
 import { SECRET_WORDS, partyMode, rainbowFlash, pickSparkle } from '~/eggs/eggs';
 import { commanderEnterSuggestionIndex, commanderSearchResults } from '../Search/commanderSearch';
 import type { CommanderSearchResult } from '../Search/commanderSearch';
 import type { SearchPerson, SearchResponse } from '../Search/searchTypes';
-import { CommanderClickAwayBoundary } from './commanderClickAway';
+import { commanderCommandEnterIndex, matchCommanderCommands, runCommanderCommand } from './commanderCommands';
+import type { CommanderCommandContext } from './commanderCommands';
 import { parseCommanderLiteral } from './commanderLiteral';
+import { shouldToggleCommanderFromKeydown } from './commanderShortcut';
+import { QUICK_PAGES, pushQuickRecent, readQuickRecents } from '../QuickSwitcher/quickSwitcherCore';
+import { QUICK_SWITCHER_TOGGLE_EVENT } from '../QuickSwitcher/QuickSwitcher';
+import { DRAWER_MODAL_Z } from '../Nav/Drawer/useDrawer';
+import { hasOpenOverlay } from '~/hooks/useFeedShortcuts';
 
 export const CommanderV2 = (props) => {
 	const { thingtime, setThingtime, getThingtime, thingtimeRef, paths } = useThingtime();
 
-	// log settings.commander.nav.commanderActive
-	console.log('thingtime.settings.commander.nav.commanderActive', thingtime?.settings?.commander?.nav?.commanderActive);
-
-	const { mode, changePath } = usePath();
+	const { changePath } = usePath();
 
 	const navigate = useNavigate();
 	const lopu = useLopu();
 	const api = useApi();
 	const user = useCurrentUser();
+	const { setPreset: setThemePreset, builtinThemes } = useTtTheme();
+
+	// ⌨️ `>` command registry (claude-todo/10). Side effects are injected so the
+	// registry itself stays DOM-free and unit-testable.
+	const commandContext = React.useMemo<CommanderCommandContext>(
+		() => ({
+			navigate: (to) => navigate(to),
+			lopu,
+			setThemePreset,
+			builtinThemeNames: builtinThemes?.map((theme) => theme.name) || [],
+			// >undo/>redo re-dispatch the chord the app-wide timeline listener
+			// already handles (useThingtimeMachine) — no new provider API needed
+			dispatchKeydown: (init) => window.dispatchEvent(new KeyboardEvent('keydown', init))
+		}),
+		[navigate, lopu, setThemePreset, builtinThemes]
+	);
 
 	const commanderId = React.useMemo(() => {
 		return props?.id || 'global';
@@ -45,23 +63,9 @@ export const CommanderV2 = (props) => {
 	const [inputValue, setInputValue] = React.useState('');
 	const [virtualValue, setVirtualValue] = React.useState('');
 	const [hoveredSuggestion, setHoveredSuggestion] = React.useState<number | null>(null);
-	const [active, setActive] = React.useState(false);
 	const [contextPath, setContextPath] = React.useState<string | undefined>();
 
-	const commanderMode = React.useMemo(() => {
-		return props?.mode || 'value';
-	}, [props?.mode]);
-
 	const [showContext, setShowContextState] = React.useState(false);
-
-	// mobile chrome allowance: 52px for the fixed drawer trigger on the left
-	// plus 148px reserved for the right-side nav icons (the notifications bell
-	// joined the username + logo there — 108px started clipping under the pill)
-	const mobileVW = React.useMemo(() => {
-		return 'calc(100vw - 200px)';
-	}, []);
-
-	const rainbowRepeats = 2;
 
 	const setShowContext = React.useCallback(
 		(value, from?: string) => {
@@ -168,6 +172,25 @@ export const CommanderV2 = (props) => {
 		}
 	}, [inputValue, pathFuse]);
 
+	// `>` prefix = command mode: the dropdown lists matching registry commands
+	// instead of the search row + live/fuzzy results
+	const commandMode = React.useMemo(() => {
+		return (inputValue || '').trim().startsWith('>');
+	}, [inputValue]);
+
+	const commandMatches = React.useMemo(() => {
+		return commandMode ? matchCommanderCommands(inputValue) : [];
+	}, [commandMode, inputValue]);
+
+	// A hovered row index only means anything against the row list that produced
+	// it, and `>` mode swaps that list for a different one indexed from 0. Typing
+	// `>` while row 2 was highlighted (arrowed or just moused over) would leave
+	// row 2 pointing at `>undo`, so Enter silently undid the user's last change
+	// instead of opening the palette. Drop the selection when the mode flips.
+	React.useEffect(() => {
+		setHoveredSuggestion(null);
+	}, [commandMode]);
+
 	// Commander is a live platform search, not just a fuzzy index over the
 	// persisted local Thingtime tree. Debounce the same ACL-aware Things +
 	// profile APIs used by /search, keep stale responses from repainting a newer
@@ -184,7 +207,9 @@ export const CommanderV2 = (props) => {
 
 	React.useEffect(() => {
 		const query = trimmedInput;
-		if (!commanderActive || query.length < 2) {
+		// `>` command mode is a local registry lookup — never spend a search
+		// request on it
+		if (!commanderActive || commandMode || query.length < 2) {
 			remoteRequestRef.current += 1;
 			setRemoteLoadingQuery('');
 			return;
@@ -206,6 +231,7 @@ export const CommanderV2 = (props) => {
 				setRemoteSearch({
 					query,
 					results: commanderSearchResults({
+						query,
 						things: thingsResponse?.things,
 						posts: thingsResponse?.posts,
 						people: peopleResponse?.users
@@ -221,28 +247,90 @@ export const CommanderV2 = (props) => {
 		}, 250);
 
 		return () => window.clearTimeout(timer);
-	}, [commanderActive, trimmedInput, user?.id]);
+	}, [commanderActive, commandMode, trimmedInput, user?.id]);
 
-	const remoteResults = remoteSearch.query === trimmedInput ? remoteSearch.results : [];
+	const [recents, setRecents] = React.useState(() => readQuickRecents(user?.id));
+	const pageFuse = React.useMemo(() => new Fuse(QUICK_PAGES, { keys: ['label', 'keywords'], threshold: 0.38, ignoreLocation: true }), []);
+	React.useEffect(() => {
+		setRecents(readQuickRecents(user?.id));
+		setRemoteSearch({ query: '', results: [] });
+		setInputValue('');
+		setContextPath(undefined);
+		setShowContext(false);
+		remoteRequestRef.current += 1;
+	}, [user?.id, setShowContext]);
+	const quickRows = React.useMemo(
+		() =>
+			trimmedInput
+				? pageFuse
+						.search(trimmedInput)
+						.slice(0, 5)
+						.map((result) => result.item)
+				: [...recents, ...QUICK_PAGES],
+		[trimmedInput, pageFuse, recents]
+	);
+	const remoteResults: CommanderSearchResult[] = React.useMemo(() => {
+		const seen = new Set<string>();
+		return [
+			...quickRows
+				.filter((row) => row.href.startsWith('/') && !row.href.startsWith('//'))
+				.map((row) => ({
+					id: row.key,
+					resultType: 'thing' as const,
+					icon: row.glyph || '↗',
+					avatarUrl: null,
+					title: row.label,
+					context: row.sublabel || (row.kind === 'page' ? 'Page' : 'Recent'),
+					href: row.href
+				})),
+			...(remoteSearch.query === trimmedInput ? remoteSearch.results : [])
+		].filter((row) => {
+			if (seen.has(row.href)) return false;
+			seen.add(row.href);
+			return true;
+		});
+	}, [quickRows, remoteSearch, trimmedInput]);
 	const remoteLoading = remoteLoadingQuery === trimmedInput;
 
 	// dropdown rows: index 0 is the pinned full-search row; live platform
-	// results follow; local fuzzy paths remain the final command tier.
-	const showSuggestions = React.useMemo(() => {
-		return inputValue?.length && commanderActive && !commanderSettings?.commanderActive?.hideSuggestionsOnToggle;
-	}, [
-		inputValue,
-		suggestions,
-		commanderActive,
-		commanderId,
-		thingtime?.settings?.commander,
-		commanderSettings?.commanderActive?.hideSuggestionsOnToggle
-	]);
+	// results follow; local fuzzy paths remain the final command tier. In `>`
+	// command mode the rows are the matching commands instead, indexed from 0.
+	const showSuggestions = commanderActive && (!commandMode || commandMatches.length > 0);
 
-	const suggestionRowCount = React.useMemo(() => 1 + remoteResults.length + (suggestions?.length || 0), [remoteResults.length, suggestions]);
+	const suggestionRowCount = React.useMemo(() => {
+		if (commandMode) {
+			return commandMatches.length;
+		}
+		return 1 + remoteResults.length + (suggestions?.length || 0);
+	}, [commandMode, commandMatches, remoteResults.length, suggestions]);
+
+	const closeCommander = React.useCallback(
+		(e?: any) => {
+			if (e?.defaultPrevented || !commanderActive) return;
+			setThingtime(`settings.commander.${commanderId}.commanderActive`, false, { namespace: 'default', tabLocal: true });
+		},
+		[setThingtime, commanderId, commanderActive]
+	);
 
 	const selectSuggestion = React.useCallback(
 		(suggestionIdx) => {
+			if (commandMode) {
+				const command = commandMatches?.[suggestionIdx];
+				if (!command) return;
+				const takesArgs = /[<[]/.test(command.usage);
+				if (takesArgs) {
+					// complete to ">name " and keep the palette open for the argument
+					setInputValue(`>${command.name} `);
+					setHoveredSuggestion(null);
+					inputRef?.current?.focus?.();
+					return;
+				}
+				runCommanderCommand(`>${command.name}`, commandContext);
+				setInputValue('');
+				setHoveredSuggestion(null);
+				closeCommander();
+				return;
+			}
 			if (suggestionIdx === 0) {
 				const query = (inputValue || '').trim();
 				console.log('Commander search row selected, navigating to /search', { query });
@@ -256,6 +344,16 @@ export const CommanderV2 = (props) => {
 			}
 			const remoteSuggestion = remoteResults[suggestionIdx - 1];
 			if (remoteSuggestion) {
+				setRecents(
+					pushQuickRecent(user?.id, {
+						key: remoteSuggestion.id,
+						kind: remoteSuggestion.resultType === 'person' ? 'person' : 'thing',
+						label: remoteSuggestion.title,
+						href: remoteSuggestion.href,
+						glyph: remoteSuggestion.icon,
+						sublabel: remoteSuggestion.context
+					})
+				);
 				navigate(remoteSuggestion.href);
 				setShowContext(false, 'Platform search result');
 				setInputValue('');
@@ -289,9 +387,21 @@ export const CommanderV2 = (props) => {
 				closeCommander();
 			}
 		},
-		// closeCommander is declared below — referenced in the closure body only
-		// (calling it at select time is fine; naming it in deps would hit the TDZ)
-		[setInputValue, setContextPath, setShowContext, suggestions, remoteResults, inputValue, navigate, changePath]
+		[
+			setInputValue,
+			setContextPath,
+			setShowContext,
+			suggestions,
+			remoteResults,
+			inputValue,
+			navigate,
+			changePath,
+			commandMode,
+			commandMatches,
+			commandContext,
+			closeCommander,
+			user?.id
+		]
 	);
 
 	const commandContainsPath = React.useMemo(() => {
@@ -302,17 +412,18 @@ export const CommanderV2 = (props) => {
 		return commandIncludesSuggestion;
 	}, [commandPath, suggestions]);
 
+	// Whether the palette is open is chrome for THIS viewport, not a shared
+	// preference — `commanderId` is a literal ('nav'/'global'), identical in
+	// every tab, so broadcasting it would toggle every other tab's palette and
+	// move its focus. Closing is the damaging direction: the peer's toggle
+	// effect below clears its input when `clearCommanderOnToggle` is set, which
+	// would destroy a query someone is mid-way through typing there. Commander
+	// *preferences* under the same key still sync normally.
+	// Passing options replaces setThingtime's default object, so restate the
+	// namespace these writes have always used rather than silently dropping it.
 	const openCommander = React.useCallback(() => {
-		setThingtime(`settings.commander.${commanderId}.commanderActive`, true);
+		setThingtime(`settings.commander.${commanderId}.commanderActive`, true, { namespace: 'default', tabLocal: true });
 	}, [setThingtime, commanderId]);
-
-	const closeCommander = React.useCallback(
-		(e?: any) => {
-			if (e?.defaultPrevented || !commanderActive) return;
-			setThingtime(`settings.commander.${commanderId}.commanderActive`, false);
-		},
-		[setThingtime, commanderId, commanderActive]
-	);
 
 	const toggleCommander = React.useCallback(() => {
 		if (commanderSettings?.commanderActive) {
@@ -323,6 +434,26 @@ export const CommanderV2 = (props) => {
 	}, [thingtime?.settings?.commander, commanderSettings?.commanderActive, commanderId, closeCommander, openCommander]);
 
 	const executeCommand = React.useCallback(() => {
+		// ⌨️ `>` commands run through the registry and never fall through to the
+		// path/setter machinery below. A hovered dropdown row wins over the raw
+		// input (same rule as path suggestions).
+		if (commanderActive && commandMode) {
+			const rowIndex = commanderCommandEnterIndex({
+				hoveredSuggestion,
+				inputValue,
+				matchCount: commandMatches?.length || 0
+			});
+			if (rowIndex !== null) {
+				selectSuggestion(rowIndex);
+				return;
+			}
+			runCommanderCommand(inputValue, commandContext);
+			setInputValue('');
+			setHoveredSuggestion(null);
+			closeCommander();
+			return;
+		}
+
 		// 🥚 Easter egg: secret words typed into the Commander and Entered.
 		const secret = (inputValue || '').trim().toLowerCase();
 		const secretWord = commanderActive ? SECRET_WORDS[secret] : undefined;
@@ -409,18 +540,20 @@ export const CommanderV2 = (props) => {
 		inputValue,
 		closeCommander,
 		navigate,
-		lopu
+		lopu,
+		commandMode,
+		commandMatches,
+		commandContext
 	]);
 
 	const allCommanderKeyListener = React.useCallback(
 		(e: any) => {
 			// don't do anything if commander is not focused
 			const focused = document.activeElement === inputRef.current;
-			if (!focused) {
+			if (!focused || e.isComposing || e.defaultPrevented) {
 				return;
 			}
 
-			console.log('commander key listener e?.code', e?.code);
 			thingtimeRef.current = thingtime;
 			if (e?.metaKey && e?.code === 'KeyP') {
 				e.preventDefault();
@@ -443,6 +576,7 @@ export const CommanderV2 = (props) => {
 					return;
 				}
 				// if arrow keys then move selection (row 0 = the pinned search row)
+				if (['ArrowUp', 'ArrowDown', 'Enter'].includes(e?.code)) e.preventDefault();
 				if (e?.code === 'ArrowUp') {
 					// move selection up
 					const curSuggestionIdx = typeof hoveredSuggestion === 'number' ? hoveredSuggestion : suggestionRowCount;
@@ -488,325 +622,150 @@ export const CommanderV2 = (props) => {
 		};
 	}, [allCommanderKeyListener]);
 
+	// ⌨️ Cmd/Ctrl+K opens the Commander from anywhere (claude-todo/10). Only the
+	// global (nav) instance listens so multiple mounted Commanders don't fight.
+	// Unlike allCommanderKeyListener above, this must fire when the input is NOT
+	// focused — that's the whole point.
+	React.useEffect(() => {
+		if (!global) {
+			return;
+		}
+		const cmdKListener = (e: any) => {
+			// commanderShortcut.ts owns the chord AND the one surface that outranks
+			// it: Editor.js binds CMD+K to its link tool, so the palette yields
+			// inside an editor block rather than opening on top of it.
+			const mac = /Mac|iP(hone|ad|od)/i.test(navigator.platform || '');
+			if (e.defaultPrevented || e.isComposing || (mac && e.ctrlKey) || (!commanderActive && hasOpenOverlay())) return;
+			if (shouldToggleCommanderFromKeydown(e)) {
+				e.preventDefault();
+				toggleCommander();
+			}
+		};
+		const onToggle = () => {
+			if (commanderActive || !hasOpenOverlay()) toggleCommander();
+		};
+		window.addEventListener(QUICK_SWITCHER_TOGGLE_EVENT, onToggle);
+		window.addEventListener('keydown', cmdKListener);
+
+		return () => {
+			window.removeEventListener(QUICK_SWITCHER_TOGGLE_EVENT, onToggle);
+			window.removeEventListener('keydown', cmdKListener);
+		};
+	}, [global, toggleCommander, commanderActive]);
+
 	React.useEffect(() => {
 		// Only local path rows preview a virtual command value. The full-search
-		// row and remote results preserve exactly what the user typed.
-		const localIndex = typeof hoveredSuggestion === 'number' ? hoveredSuggestion - 1 - remoteResults.length : -1;
+		// row and remote results preserve exactly what the user typed, and
+		// command mode never previews a row into the input either.
+		const localIndex = !commandMode && typeof hoveredSuggestion === 'number' ? hoveredSuggestion - 1 - remoteResults.length : -1;
 		if (localIndex >= 0) {
 			setVirtualValue(suggestions?.[localIndex]);
 		} else {
 			setVirtualValue(inputValue);
 		}
-	}, [hoveredSuggestion, inputValue, remoteResults.length, suggestions]);
+	}, [commandMode, hoveredSuggestion, inputValue, remoteResults.length, suggestions]);
 
 	React.useEffect(() => {
 		setVirtualValue(inputValue);
 	}, [inputValue]);
 
-	const electronCommanderInputSx = React.useMemo(
-		() => ({
-			transition: 'opacity 0.14s ease-out, transform 0.14s ease-out, box-shadow 0.14s ease-out',
-			'html.thingtime-electron-desktop #commander[data-commander-active="false"] &': {
-				display: 'none',
-				opacity: 0,
-				pointerEvents: 'none',
-				transform: 'translateY(-6px) scale(0.98)'
-			},
-			'html.thingtime-electron-desktop #commander[data-commander-active="true"] &': {
-				display: 'flex',
-				opacity: 1,
-				transform: 'translateY(0) scale(1)',
-				boxShadow: 'var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))'
-			}
-		}),
-		[]
-	);
+	React.useEffect(() => {
+		if (hoveredSuggestion !== null) document.getElementById(`commander-option-${hoveredSuggestion}`)?.scrollIntoView({ block: 'nearest' });
+	}, [hoveredSuggestion]);
 
+	const rows = commandMode
+		? commandMatches.map((entry) => ({ label: entry.usage, detail: entry.description, glyph: '›' }))
+		: [
+				{ label: trimmedInput ? `Search all Things for “${trimmedInput}”` : 'Search all Things', detail: 'Open full search', glyph: '🔍' },
+				...remoteResults.map((row) => ({ label: row.title, detail: row.context, glyph: row.icon })),
+				...(suggestions || []).map((path) => ({ label: path, detail: 'Local path', glyph: '💎' }))
+		  ];
 	return (
-		<CommanderClickAwayBoundary onClickAway={closeCommander}>
-			<Flex
-				className="commanderHost"
-				data-commander-active={commanderActive ? 'true' : 'false'}
-				position="absolute"
-				zIndex={9999}
-				top={0}
-				right={0}
-				// position='fixed'
-				// top='100px'
-				left={0}
-				justifyContent={['flex-start', 'center']}
-				// display={["flex", commanderActive ? "flex" : "none"]}
-				maxWidth="100%"
-				height={12}
-				// height="100%"
-				pointerEvents="none"
+		<Modal isOpen={!!commanderActive} onClose={() => closeCommander()} initialFocusRef={inputRef} size="xl" scrollBehavior="inside">
+			<ModalOverlay zIndex={DRAWER_MODAL_Z} />
+			<ModalContent
 				id="commander"
-				paddingLeft={['52px', 1]}
-				paddingRight={1}
-				sx={{
-					'html.thingtime-electron-desktop &': {
-						top: 'calc(var(--thingtime-electron-titlebar-height, 52px) + 8px)',
-						right: 'auto',
-						left: '50%',
-						width: 'min(420px, calc(100vw - 32px))',
-						height: '48px',
-						paddingLeft: 0,
-						paddingRight: 0,
-						transform: 'translateX(-50%)',
-						zIndex: 10050
-					}
-				}}
+				className="commanderHost"
+				data-commander-active="true"
+				data-testid="commander-dialog"
+				containerProps={{ zIndex: DRAWER_MODAL_Z }}
+				maxWidth="min(620px, calc(100vw - 24px))"
+				maxHeight="calc(100dvh - 100px)"
+				marginTop="max(64px, calc(var(--thingtime-safe-area-top, 0px) + 56px))"
+				marginBottom={3}
+				background="var(--tt-card, white)"
+				color="var(--tt-ink, #16161a)"
+				borderRadius="16px"
 			>
-				<Flex
-					position="absolute"
-					zIndex={9999}
-					top="100%"
-					right={0}
-					left={0}
-					alignItems={['flex-start', 'center']}
-					flexDirection="column"
-					maxWidth="100%"
-					height="auto"
-					marginTop={2}
-					borderRadius="12px"
-					marginX={1}
-				>
-					<Flex
-						alignItems={['flex-start', 'center']}
-						flexDirection="column"
-						overflowY="scroll"
-						width="auto"
-						maxWidth="100%"
-						maxHeight="90vh"
-						borderRadius="12px"
-					>
-						<Flex
-							flexDirection="column"
-							flexShrink={0}
-							display={showSuggestions ? 'flex' : 'none'}
-							overflowY="scroll"
-							width={['100%', '400px']}
-							maxWidth="100%"
-							maxHeight="300px"
-							marginBottom={3}
-							background="var(--tt-surface-alt, #f5f5f7)"
-							borderRadius="var(--tt-radius-md, 12px)"
-							boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
-							pointerEvents="all"
-							id="commander-suggestions"
-							onMouseLeave={() => setHoveredSuggestion(null)}
-							paddingY={3}
-						>
-							<Flex
-								background={hoveredSuggestion === 0 ? 'var(--tt-surface-hover, #ececee)' : null}
-								_hover={{
-									background: 'var(--tt-surface-hover, #ececee)'
-								}}
-								cursor="pointer"
-								fontFamily="mono"
-								fontSize="13px"
-								color="var(--tt-text, #5a5a66)"
-								onClick={() => selectSuggestion(0)}
-								onMouseEnter={() => setHoveredSuggestion(0)}
-								paddingX={4}
-								paddingY={1}
-							>
-								🔍 Search things for “{inputValue}”
-							</Flex>
-							{remoteLoading ? (
-								<Flex align="center" color="var(--tt-muted, #9a9aa6)" fontSize="11px" gap={2} px={4} py={2}>
-									<Spinner size="xs" />
-									Searching across Thingtime…
-								</Flex>
-							) : null}
-							{remoteResults.length ? (
-								<Text
-									color="var(--tt-muted, #9a9aa6)"
-									fontFamily="mono"
-									fontSize="10px"
-									fontWeight="700"
-									px={4}
-									pb={1}
-									pt={2}
-									textTransform="uppercase"
-								>
-									Across Thingtime
-								</Text>
-							) : null}
-							{remoteResults.map((result, i) => {
-								const suggestionIndex = i + 1;
-								return (
-									<Flex
-										key={`${result.resultType}-${result.id}`}
-										background={hoveredSuggestion === suggestionIndex ? 'var(--tt-surface-hover, #ececee)' : null}
-										_hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
-										cursor="pointer"
-										flexDirection="column"
-										onClick={() => selectSuggestion(suggestionIndex)}
-										onMouseEnter={() => setHoveredSuggestion(suggestionIndex)}
-										paddingX={4}
-										paddingY={1.5}
-									>
-										<Text color="var(--tt-text, #5a5a66)" fontSize="13px" fontWeight="600" noOfLines={1}>
-											{result.resultType === 'person' ? '👤' : '🌀'} {result.title}
-										</Text>
-										<Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="10px" noOfLines={1}>
-											{result.context}
-										</Text>
-									</Flex>
-								);
-							})}
-							{suggestions?.length ? (
-								<Text
-									color="var(--tt-muted, #9a9aa6)"
-									fontFamily="mono"
-									fontSize="10px"
-									fontWeight="700"
-									px={4}
-									pb={1}
-									pt={2}
-									textTransform="uppercase"
-								>
-									Local paths
-								</Text>
-							) : null}
-							{suggestions?.map((suggestion, i) => {
-								const suggestionIndex = i + 1 + remoteResults.length;
-								return (
-									<Flex
-										key={i}
-										background={hoveredSuggestion === suggestionIndex ? 'var(--tt-surface-hover, #ececee)' : null}
-										_hover={{
-											background: 'var(--tt-surface-hover, #ececee)'
-										}}
-										cursor="pointer"
-										fontFamily="mono"
-										fontSize="13px"
-										color="var(--tt-text, #5a5a66)"
-										onClick={() => selectSuggestion(suggestionIndex)}
-										onMouseEnter={() => setHoveredSuggestion(suggestionIndex)}
-										paddingX={4}
-										paddingY={1}
-									>
-										{suggestion}
-									</Flex>
-								);
-							})}
+				<ModalHeader fontSize="sm" paddingBottom={2}>
+					Commander search
+				</ModalHeader>
+				<ModalCloseButton aria-label="Close Commander search" />
+				<ModalBody paddingTop={0} paddingBottom={4}>
+					<Input
+						ref={inputRef}
+						value={inputValue}
+						onChange={onInputChange}
+						placeholder="Search Things, people, pages or >commands…"
+						aria-label="Commander search"
+						role="combobox"
+						aria-expanded={!!showSuggestions}
+						aria-controls="commander-suggestions"
+						aria-autocomplete="list"
+						aria-activedescendant={hoveredSuggestion === null ? undefined : `commander-option-${hoveredSuggestion}`}
+						height="44px"
+						background="var(--tt-surface-alt, #f5f5f7)"
+					/>
+					<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" marginY={2}>
+						Search, jump to a page, or use &gt; for commands. ⌘K / Ctrl+K
+					</Text>
+					{!commandMode && remoteLoading && trimmedInput.length >= 2 ? (
+						<Flex align="center" gap={2} fontSize="xs" role="status">
+							<Spinner size="xs" />
+							Searching…
 						</Flex>
-						{showContext && (
-							<Flex
-								display={showContext ? 'flex' : 'none'}
-								maxWidth="100%"
-								background="var(--tt-surface-alt, #f5f5f7)"
-								borderRadius="var(--tt-radius-md, 12px)"
-								boxShadow="var(--tt-shadow-popover, 0 16px 40px -12px rgba(20, 20, 40, 0.3))"
-								pointerEvents="all"
-								paddingY={3}
-							>
-								<Thingtime width="600px" path={contextPath} thing={contextValue}></Thingtime>
-							</Flex>
-						)}
-					</Flex>
-				</Flex>
-				<Center position="relative" width={['100%', '400px']} maxWidth={[mobileVW, '100%']} height="100%">
-					{/* TODO: Fix duplicate code because of rainbow mode disabling hack */}
-					{props?.rainbow && (
-						<Rainbow
-							filter="blur(15px)"
-							opacity={commanderActive ? 0.25 : 0}
-							repeats={rainbowRepeats}
-							thickness={8}
-							opacityTransition="all 1000ms ease-out"
-							overflow="visible"
-						>
-							<Center
-								className="commanderInputShell"
-								position="relative"
-								zIndex={9999}
-								overflow="hidden"
-								width={['100%', '400px']}
-								maxWidth={[mobileVW, '100%']}
-								height="100%"
-								padding="1px"
-								borderRadius="var(--tt-radius-sm, 9px)"
-								pointerEvents="all"
-								outline="none"
-								sx={electronCommanderInputSx}
-							>
-								<Rainbow
-									opacity={commanderActive ? 0.6 : 0}
-									position="absolute"
-									repeats={rainbowRepeats}
-									opacityTransition="all 2500ms ease-out"
-									thickness={10}
-								></Rainbow>
-								<Input
-									// display='none'
-									// opacity={0}
-									ref={inputRef}
-									sx={{
-										'&::placeholder': {
-											color: 'var(--tt-muted, #9a9aa6)'
-											// color: "white",
-										}
-									}}
-									zIndex={9999}
-									width="100%"
-									height="100%"
-									background="var(--tt-surface-alt, #f5f5f7)"
-									border="none"
-									borderRadius="var(--tt-radius-xs, 7px)"
-									outline="none"
-									onChange={onInputChange}
-									onFocus={openCommander}
-									placeholder="Imagine.."
-									value={inputValue}
-								></Input>
-							</Center>
-						</Rainbow>
-					)}
-					{!props?.rainbow && (
-						<Center
-							className="commanderInputShell"
-							position="relative"
-							zIndex={9999}
-							overflow="hidden"
-							width={['100%', '400px']}
-							maxWidth={[mobileVW, '100%']}
-							height="100%"
-							padding="1px"
-							borderRadius="var(--tt-radius-sm, 9px)"
-							pointerEvents="all"
-							outline="none"
-							sx={electronCommanderInputSx}
-						>
-							<Input
-								// display='none'
-								// opacity={0}
-								ref={inputRef}
-								sx={{
-									'&::placeholder': {
-										color: 'var(--tt-muted, #9a9aa6)'
-										// color: "white",
-										// textShadow: "0 0 5px black",
-									}
-								}}
-								zIndex={9999}
-								width="100%"
-								height="100%"
-								background="var(--tt-surface-alt, #f5f5f7)"
-								border="none"
-								borderRadius="var(--tt-radius-xs, 7px)"
-								outline="none"
-								onChange={onInputChange}
-								onFocus={openCommander}
-								placeholder="Imagine.."
-								value={inputValue}
-							></Input>
-						</Center>
-					)}
-				</Center>
-			</Flex>
-		</CommanderClickAwayBoundary>
+					) : null}
+					<Box id="commander-suggestions" role="listbox" aria-label="Search results" maxHeight="min(52dvh, 420px)" overflowY="auto">
+						{showSuggestions
+							? rows.map((row, index) => (
+									<Flex
+										key={`${index}-${row.label}`}
+										id={`commander-option-${index}`}
+										role="option"
+										aria-selected={hoveredSuggestion === index}
+										align="center"
+										gap={3}
+										paddingX={3}
+										paddingY={2}
+										background={hoveredSuggestion === index ? 'var(--tt-surface-hover, #ececee)' : undefined}
+										borderRadius="8px"
+										cursor="pointer"
+										onMouseDown={(event) => event.preventDefault()}
+										onMouseEnter={() => setHoveredSuggestion(index)}
+										onClick={() => selectSuggestion(index)}
+									>
+										<Text aria-hidden="true" flexShrink={0}>
+											{row.glyph}
+										</Text>
+										<Box minWidth={0}>
+											<Text fontSize="sm" fontWeight={600} noOfLines={1}>
+												{row.label}
+											</Text>
+											<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" noOfLines={2}>
+												{row.detail}
+											</Text>
+										</Box>
+									</Flex>
+							  ))
+							: null}
+					</Box>
+					{showContext ? (
+						<Box overflow="auto" maxHeight="35dvh">
+							<Thingtime path={contextPath} thing={contextValue} />
+						</Box>
+					) : null}
+				</ModalBody>
+			</ModalContent>
+		</Modal>
 	);
 };

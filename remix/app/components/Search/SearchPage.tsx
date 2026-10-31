@@ -13,9 +13,13 @@ import {
 import { Braces, ExternalLink, Eye, Plus, Search as SearchIcon, Sparkles, X } from 'lucide-react';
 import { Link as RouterLink, useLocation, useNavigate, useNavigation } from 'react-router';
 
+import { canonicalPostTags } from '~/components/Attachments/attachmentUiCore';
 import { blocksToText, getEditorJsDoc } from '~/components/Editor/editorJsValue';
 import { PostCard } from '~/components/Feed/PostCard';
 import type { PostChange } from '~/components/Feed/feedTypes';
+import { SubspaceCard } from '~/components/Subspaces/SubspaceCard';
+import { SEARCH_SUBSPACE_RESULTS, type PublicSubspace } from '~/components/Subspaces/subspaceTypes';
+import { searchTagHref } from '~/components/Feed/hashtags';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -95,7 +99,8 @@ const KIND_OPTION_LABELS: Record<string, string> = {
   data: 'data',
   schema: 'schemas',
   comment: 'comments',
-  reaction: 'reactions'
+  reaction: 'reactions',
+  attachment: 'attachments'
 };
 
 // builtin crystal schemas the query builder can scope to → SchemaSource, via
@@ -119,6 +124,10 @@ type CachedSearch = {
   things: SearchThing[];
   posts: Record<string, SearchPost>;
   people?: SearchPerson[];
+  // the Subspaces section — slug/name matches for the text query, first
+  // SEARCH_SUBSPACE_RESULTS (client-side GET /api/v1/subspaces?q=; search.ts
+  // itself knows nothing about subspaces)
+  subspaces?: PublicSubspace[];
   total: number | null;
   totalCapped: boolean;
   ranked: boolean;
@@ -280,7 +289,15 @@ const ThingResultCard = React.memo(function ThingResultCard({
           </Badge>
         ))}
         {thing.tags.map((tag) => (
-          <Badge key={tag} colorScheme="gray" fontFamily="mono" textTransform="none">
+          <Badge
+            key={tag}
+            as={RouterLink}
+            _hover={{ textDecoration: 'underline' }}
+            colorScheme="gray"
+            fontFamily="mono"
+            textTransform="none"
+            to={searchTagHref(tag)}
+          >
             #{tag}
           </Badge>
         ))}
@@ -339,10 +356,9 @@ const StandardThingResult = React.memo(function StandardThingResult({
   post: SearchPost | null;
   onPostChanged: (id: string, change: PostChange) => void;
 }) {
-  const handlePostChanged = React.useCallback(
-    (change: PostChange) => onPostChanged(thing.id, change),
-    [onPostChanged, thing.id]
-  );
+  // PostCard hands the post id back to `onChanged`, so the parent's
+  // useCallback-stable handler passes straight through — a per-card wrapper
+  // here would defeat PostCard's React.memo exactly like PostList's used to.
 
   if (post) {
     return (
@@ -352,7 +368,7 @@ const StandardThingResult = React.memo(function StandardThingResult({
             <RankedMatchScore score={thing.rankScore} />
           </Flex>
         ) : null}
-        <PostCard post={post} onChanged={handlePostChanged} />
+        <PostCard post={post} onChanged={onPostChanged} />
       </Box>
     );
   }
@@ -432,6 +448,7 @@ export const SearchPage = () => {
   const [things, setThings] = React.useState<SearchThing[]>(cached?.things || []);
   const [posts, setPosts] = React.useState<Record<string, SearchPost>>(cached?.posts || {});
   const [people, setPeople] = React.useState<SearchPerson[]>(cached?.people || []);
+  const [subspaces, setSubspaces] = React.useState<PublicSubspace[]>(cached?.subspaces || []);
   const [total, setTotal] = React.useState<number | null>(cached?.total ?? null);
   const [totalCapped, setTotalCapped] = React.useState(cached?.totalCapped || false);
   const [ranked, setRanked] = React.useState(cached?.ranked || false);
@@ -499,6 +516,13 @@ export const SearchPage = () => {
   // stale cursor can't be mixed with new params
   const submittedRef = React.useRef(stateRef.current);
 
+  // the ?tags deep-link key the tags effect below last applied — declared here
+  // (above runSearch) because a FAILED search must reset it: the success-path
+  // URL sync never ran, so ?tags would otherwise stay in the URL with the
+  // guard still set, making a re-tap of the same chip a byte-identical
+  // navigation that silently no-ops instead of retrying
+  const appliedUrlTagsRef = React.useRef<string | null>(null);
+
   const runSearch = React.useCallback(
     async (options: { cursor?: string | null } = {}) => {
       const { cursor } = options;
@@ -540,15 +564,20 @@ export const SearchPage = () => {
       };
 
       try {
-        // people ride along on first-page text searches — users aren't things
-        // (separate collection), so they get their own endpoint, in parallel
+        // people and subspaces ride along on first-page text searches — users
+        // aren't things (separate collection) and subspaces have their own
+        // directory search, so each gets its own endpoint, in parallel; either
+        // failing quietly keeps the post results the search is about
         const wantPeople = !cursor && !!current.q.trim();
-        const [resp, peopleResp] = (await Promise.all([
+        const [resp, peopleResp, subspacesResp] = (await Promise.all([
           apiRef.current.v1.things.search(body),
           wantPeople
             ? apiRef.current.v1.profile.search({ q: current.q.trim(), limit: 8 }).catch(() => null)
+            : Promise.resolve(null),
+          wantPeople
+            ? apiRef.current.v1.subspaces.list({ q: current.q.trim(), limit: SEARCH_SUBSPACE_RESULTS, anon: viewerIdRef.current ? undefined : 1 }).catch(() => null)
             : Promise.resolve(null)
-        ])) as [SearchResponse, { users?: SearchPerson[] } | null];
+        ])) as [SearchResponse, { users?: SearchPerson[] } | null, { subspaces?: PublicSubspace[] } | null];
         if (seq !== requestSeqRef.current) return;
         setHasSearched(true);
         // only a RESOLVED first page owns load-more continuation — committing
@@ -557,6 +586,7 @@ export const SearchPage = () => {
         if (!cursor) submittedRef.current = current;
 
         if (!cursor) setPeople(wantPeople ? peopleResp?.users || [] : []);
+        if (!cursor) setSubspaces(wantPeople ? subspacesResp?.subspaces || [] : []);
 
         setThings((prev) => {
           if (!cursor) return resp.things || [];
@@ -582,6 +612,7 @@ export const SearchPage = () => {
             things: (resp.things || []).slice(0, PAGE_SIZE),
             posts: resp.posts || {},
             people: wantPeople ? peopleResp?.users || [] : [],
+            subspaces: wantPeople ? subspacesResp?.subspaces || [] : [],
             total: resp.total ?? null,
             totalCapped: !!resp.totalCapped,
             ranked: !!resp.ranked,
@@ -608,6 +639,27 @@ export const SearchPage = () => {
         }
       } catch (err: any) {
         if (seq !== requestSeqRef.current) return;
+        // a failed ?tags deep-link search must not strand the param: reset the
+        // applied guard and strip the dead ?tags (mirrors the ?schema failure
+        // path) so revisiting the same chip link retries instead of no-opping.
+        // The guard is only ever set while a seeded search hasn't succeeded
+        // yet — success strips ?tags, which resets it via the tags effect.
+        if (appliedUrlTagsRef.current !== null) {
+          appliedUrlTagsRef.current = null;
+          // same still-here bounds as the success sync — never yank the user
+          // back to /search from a departure or a different history entry
+          if (
+            mountedRef.current &&
+            navigationIdleRef.current &&
+            locationKeyRef.current === submittedLocationKey
+          ) {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('tags')) {
+              params.delete('tags');
+              navigate({ pathname: '/search', search: params.toString() ? `?${params}` : '' }, { replace: true });
+            }
+          }
+        }
         lopuRef.current({ title: err?.error || 'Search hit a snag 😞', status: 'error' });
       } finally {
         if (seq === requestSeqRef.current) setLoading(false);
@@ -626,6 +678,9 @@ export const SearchPage = () => {
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('schema')) return;
+    // a ?tags deep link's search is owned by the tags effect below (same
+    // reasoning as ?schema: running both would race them)
+    if (params.get('tags')) return;
     if (!params.get('q')) return;
     runSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -664,6 +719,40 @@ export const SearchPage = () => {
     // runs after the resets above have re-rendered, so stateRef is fresh
     runSearch();
   }, [pendingUrlSearch, runSearch]);
+
+  // Tag chips on posts (and inline #hashtag links) deep-link here with
+  // ?tags=<tag>[&tags=<tag>…] — one tag per repeated param, read via getAll
+  // with NO delimiter, so a stored tag containing a comma (the server permits
+  // them) seeds ONE row that matches the post instead of splitting into rows
+  // that match nothing. Seed the builder with visible `tags is <tag>` rows —
+  // editable and removable like any hand-made row — and run the scoped search
+  // (each `tags eq` condition matches array membership server-side, so mode
+  // 'all' means "has every listed tag"). The post-search URL sync then strips
+  // ?tags — the same consume-then-clean flow as ?schema — and the emptied
+  // param resets the guard so tapping the same chip again still re-runs.
+  const urlTags = React.useMemo(
+    () => canonicalPostTags(new URLSearchParams(location.search).getAll('tags')),
+    [location.search]
+  );
+  React.useEffect(() => {
+    // JSON keeps the guard key unambiguous even for tags that themselves
+    // contain a comma (join would collide ["a,b"] with ["a","b"])
+    const key = urlTags.length ? JSON.stringify(urlTags) : '';
+    if (!key) {
+      appliedUrlTagsRef.current = null;
+      return;
+    }
+    if (appliedUrlTagsRef.current === key) return;
+    appliedUrlTagsRef.current = key;
+    setQ('');
+    setRows(urlTags.map((tag) => newRow({ field: 'tags', op: 'eq', value: tag, valueType: 'text' })));
+    setKind('');
+    setSort('auto');
+    setMode('all');
+    setActiveSchema(null);
+    setPinnedRowId(null);
+    setPendingUrlSearch(true);
+  }, [urlTags]);
 
   // community schemas ride the paginated /api/v1/schemas/browse rail —
   // newest/popular sorts, text search, cursor pagination (same system as
@@ -719,6 +808,11 @@ export const SearchPage = () => {
   );
 
   const applySchema = React.useCallback((source: SchemaSource) => {
+    // A selected schema is the new primary query. Clear any Commander text
+    // and relevance-only sort left over from the previous search so the
+    // generated field filters cannot be silently narrowed to zero results.
+    setQ('');
+    setSort('auto');
     setActiveSchema(source.key);
     const prefilled = source.fields.map((field) => rowFromSchemaField(field));
     // community data things carry `schema: "<Name>"` by convention — pin that
@@ -856,7 +950,7 @@ export const SearchPage = () => {
 
   return (
     <Flex background="var(--tt-surface, #fafafb)" justifyContent="center" minHeight="100vh" width="100%">
-      <Flex direction="column" gap={5} maxWidth="760px" pb={24} pt="90px" px={4} width="100%">
+      <Flex direction="column" gap={5} maxWidth="760px" pb={24} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 36px)" px={4} width="100%">
         {/* Commander, grown up: the same rainbow-ringed input, page-sized */}
         <form onSubmit={submit}>
           <Center position="relative" width="100%">
@@ -1154,6 +1248,19 @@ export const SearchPage = () => {
           </Flex>
         </Flex>
 
+        {subspaces.length ? (
+          <Flex direction="column" gap={2} data-testid="search-subspaces">
+            <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700">
+              Subspaces 🪐
+            </Text>
+            <Flex direction="column" gap={2}>
+              {subspaces.map((subspace) => (
+                <SubspaceCard key={subspace.id} subspace={subspace} compact />
+              ))}
+            </Flex>
+          </Flex>
+        ) : null}
+
         {people.length ? (
           <Flex direction="column" gap={2}>
             <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700">
@@ -1182,7 +1289,7 @@ export const SearchPage = () => {
           )}
           {/* while a ?schema deep link resolves, neither copy is true yet —
               hold the box until its search settles (which strips ?schema) */}
-          {!things.length && !people.length && !loading && !urlSchema ? (
+          {!things.length && !people.length && !subspaces.length && !loading && !urlSchema ? (
             <Box {...CARD_STYLES} p={8} textAlign="center">
               <Text color="var(--tt-muted, #9a9aa6)">
                 {hasSearched

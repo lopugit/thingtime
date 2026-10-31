@@ -2,11 +2,629 @@
 
 https://thingtime.com
 
+### Agent browsers and tasks
+
+ChatGPT/Codex private lifecycle reporting uses the existing saved workspace
+through the [MCP reporting gateway](docs/agent-reporting.md). Authorize the
+independent `agents.report` permission once; routine calls then reuse a distinct
+task Character, saved Actions and stable request receipts. Existing Things
+permissions are not upgraded automatically. Forks supply their own private
+workspace references and external test fixtures, with no account-specific
+definitions or credentials committed.
+
+Thingtime for Mac includes task-owned browser installs, claims and a live
+viewer, with isolated, IP-restricted and unrestricted network settings. The
+Agent work records, dashboards, schemas, components and Actions are ordinary saved
+Things authored in Thingtime. The committed `api.agent-overview` 2.0.0 code is
+a schema-parameterized read adapter; it includes no dashboard definitions.
+See the [adapter contract and fork/test setup](docs/agent-overview.md), and
+[agent browser setup, CLI and security boundaries](docs/agent-browsers.md).
+Local isolated acceptance uses Colima and the Docker CLI, disposable identities
+and an external `AGENT_OVERVIEW_AUTHORED_THINGS` JSON fixture; it requires no
+production secrets or copied personal browser profiles.
+
+### Subspace messages and embedded Things
+
+New subspaces receive a linked Messenger space and general channel automatically.
+For existing databases, run the registered `subspace-messaging-spaces` migration
+through authenticated admin migration tools after deploying this version.
+The migration is retry-safe; opening Messages also repairs a missing space.
+Use the existing Mongo replica-set setup for transactional provisioning and
+storage accounting. No new provider keys or environment secrets are required.
+Subspace membership remains authoritative for message access. Moderators can
+place accessible Things above posts or in the sidebar; each visitor still needs
+the referenced Thing's own permission.
+
+Human-facing Thing data declares `renderComponent` at its displayed data level:
+either `{ "id": "<accessible-component-id>" }` or a Component definition such as
+`{ "render": { "tag": "p", "children": ["{text}"] } }`.
+The shared `ThingView` binds editable fields directly and through the `thing`
+alias. References retain their own access checks, and display does not execute
+Component sources or Actions. Data inspection is an explicit choice. Saved
+Component and Webpage Things keep their canonical definitions. See the
+[embed rendering contract](docs/feature-map/posts-comments-and-feed.md#subspace-messages-and-embedded-things).
+
+Run `npm --prefix remix run test:subspace-messages-acceptance` for the disposable
+local API acceptance harness. Browser acceptance uses its `--ui` option and a
+task-owned browser executable via `SUBSPACE_BROWSER_EXECUTABLE`; evidence goes
+to `SUBSPACE_EVIDENCE_DIR`. The harness fails closed behind an OS network fence
+and creates synthetic accounts in its own database, without production secrets.
+
+### Password manager setup
+
+The private `/passwords` library uses the [Thingtime password manager contract](docs/password-manager.md).
+Use a Mongo replica set for canonical storage transactions and configure the
+usual Thingtime JWT signing keys. Set `THINGTIME_USER_VAULT_KEY=<32 random bytes
+encoded as base64url>` in ignored local env files and your deployment secret
+manager. The existing `THINGTIME_ADMIN_VAULT_KEY` is a compatibility fallback;
+reuse the already configured vault key when upgrading. Back up the vault key
+securely with your database. Replacing or losing it makes existing recovery
+wrappers unreadable; do not generate a new key on each deploy. The server-assisted
+recovery model is documented above. No provider developer accounts are required
+for storing passwords or importing TOTP setup codes.
+
+Password attachments also require the existing private, versioned S3 setup
+(`THINGTIME_PRIVATE_S3_BUCKET=<bucket>`, `THINGTIME_PRIVATE_S3_REGION=<region>`,
+`THINGTIME_PRIVATE_S3_ROLE_ARN=<role ARN>`), signed multipart PUT/GET CORS for your
+deployment origin, and the account's private-upload permission. Names and bytes
+are encrypted before object upload; keep the same recovery key when upgrading.
+For isolated local QA, set `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=<local path>`
+and `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://localhost:<web port>`.
+This local adapter refuses deployed/Vercel environments. No new provider secrets
+are needed beyond the existing vault and private object storage configuration.
+
+Password generation needs browser WebCrypto and no external provider account.
+Generator settings are account/origin scoped; generated values remain in the
+masked draft until saved. URL icons require anonymous HTTPS CORS from the image
+host; uploads use the existing encrypted attachment configuration above. No icon
+proxy credentials or third-party favicon service are required.
+
+The drawer now has **Password manager** and a dedicated `/settings/passwords`
+category. Thingtime sign-in passkeys remain under Security. The web vault works
+on supported secure browser origins; arbitrary-site passkey creation/sign-in also
+needs an installed provider. For Chromium, run
+`npm --prefix remix run build:password-extension`, extract
+`remix/public/downloads/thingtime-passwords-extension.zip`, and use **Load unpacked**
+in an isolated Chrome/Chromium profile. Enable the extension in its popup and select
+your trusted Thingtime/fork HTTPS origin; explicit localhost/127.0.0.1 origins are
+supported for isolated local development. Reload existing relying-party tabs.
+The extension is off by default, needs no extension-specific secret, and is not a
+store release. Firefox, Safari and mobile browser integration are unverified;
+unsupported WebAuthn options and native-object requirements may require the
+browser's other provider. See [extension setup and limits](browser-extension/README.md).
+A working web vault alone does not prove passkey registration on another website.
+
+Native system AutoFill and passkey registration are implemented in the Apple
+credential provider. Install a properly signed/provisioned provider and enable
+Thingtime in the operating system's Password AutoFill settings. Registration
+starts from the destination website and may require device authentication. The
+web Passkeys guide connects through the existing native bridge when available;
+this change does not modify native packaging. Verify an actual registration and
+sign-in on the installed device before claiming provider availability. See the
+[password manager contract](docs/password-manager.md#native-password-autofill).
+
+### Unified Timeline (implementation in progress)
+
+History is available at `/history` and from a Thing's History menu. List, Cards,
+Line and Frames use the same private Timeline records and sync connection.
+The browser requires the existing Timeline replica-set setup below; no new
+secret or account-specific setup is needed. Filters currently cover the loaded
+history window. [Design integration and limits](docs/timeline-design-integration.md).
+
+**Server Action activity** uses the same private Timeline (`api.timeline` 1.16.0,
+`api.actions-run` 1.37.0). Accepted runs and redacted outcomes appear in all four
+History looks, including read-only runs. The Action inspector links to History;
+its recent input/result/trace details remain a bounded debug cache. The display
+name and numeric execution metadata are retained, never raw inputs, outputs or
+errors. Admission must save before steps run. If completion cannot be saved,
+the result explicitly reports incomplete history; do not rerun to repair it.
+A server-sealed completion is retained in the same browser outbox and retried
+after reload/reconnection. API clients retain `history.recovery` and POST
+`{command:"recover-action-outcome",recovery}` to the scoped Timeline endpoint.
+Recovery preserves the original event, obeys quota and never runs the Action.
+Browser preparation and shared read-only runs do not write account outcomes.
+No new collection, index, secret or migration is required. Run
+`TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> npm --prefix remix run
+test:timeline:action-outcomes`; optionally use the same synthetic
+`TIMELINE_TEST_ADMIN_FIXTURE` setup below for quota coverage.
+
+**Recovery signing setup for forks:** use the existing ES256 `JWT_PRIVATE_KEY`
+and matching `JWT_PUBLIC_KEY` authentication configuration, or a private,
+cryptographically random `JWT_SECRET` of at least 32 UTF-8 bytes. Set these in
+ignored local environment files or your deployment secret manager; placeholder
+values are `JWT_PRIVATE_KEY=<PEM private key>` / `JWT_PUBLIC_KEY=<PEM public key>`
+or `JWT_SECRET=<private random secret>`. Set a stable `JWT_ISSUER` for each trust
+domain. Recovery refuses the known development fallback. Without configured
+keys, ordinary admission/outcome writes still work; failed completion cannot
+produce a recoverable proof and remains explicitly incomplete. The disposable
+quota test also needs configured keys in its server process.
+
+Proofs bind the exact immutable event, issuer and public database location, have
+no expiry, and are not session credentials. Removing the signing key invalidates
+unacknowledged proofs made with it; already committed history is unaffected.
+An unverifiable local outcome stays retained with an error while unrelated edits
+can still sync. A lost execution response or process interruption before a result
+was produced cannot be reconstructed or rerun automatically.
+
+**Page + related** gathers a saved page and your connected Components, Actions,
+Data and Schemas into the same History browser (`api.timeline` 1.13.0). It follows
+the current saved composition, up to 128 Things; shared authors' histories stay
+private. Membership refreshes with the visible history, and changing a reference
+restarts paging so older edits on newly linked Things are not skipped. The
+account/origin/database-scoped local cache retains at most eight membership
+hints; canonical events still use the existing bounded IndexedDB cache and
+remote timeline. No extra credentials, collection, index or migration is needed.
+Run `TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> npm --prefix remix
+run test:timeline:related` against the guarded local replica described below.
+
+**Recover deleted Things** in History (`api.timeline` 1.14.0): select a saved
+version or its deletion, review the result, then choose **Recover Thing privately**.
+The original ID/link returns with a new private version; deletion and later history
+stay intact. A surviving owned folder is kept, otherwise recovery uses Things root.
+Recorded page components become private copies. Protected records, attached
+interactions, folder children and external files/effects need their own recovery
+flows. Large previews remain subject to the existing response budget.
+No new collection, index, secret or migration is required. Run
+`TIMELINE_TEST_BASE=http://127.0.0.1:<disposable-api-port> npm --prefix remix run
+test:timeline:recovery` on the guarded replica. Published heads use the existing
+atomic branch/head format under Timeline; they are not editable variations.
+
+Large retained Timeline versions are split into protected relational snapshot
+parts so history cannot strand edits/deletion of an existing large Thing. No
+additional collection, index, secret or configuration is needed. Complete large
+preview and streamed restoration are still listed in the Timeline acceptance
+ledger.
+
+The shared History panel records ordinary Thing revisions and editor drafts in
+the account's private **Timeline** folder. Local IndexedDB keeps authored edits
+and a bounded cache; the database keeps the complete accepted history. Preview
+a restore or merge before applying it; restores append a version and merges ask
+for explicit choices where both sides changed the same field.
+Events and relationship links use identical relational records locally and
+remotely. Each revision/link is a separate document, with bounded history pages
+assembled on demand; Things and branches do not collect growing history arrays.
+In per-Thing History, **Branches** creates a named alternative from the selected
+version, pulls branch updates, and pushes another selected version. Each
+branch/Thing head is its own document. Pending commands survive reload and retry
+with the original identity; a conflicting push preserves both versions.
+**Merge selected version…** compares with a named branch, asks you to choose
+any overlapping fields, then saves the reviewed two-parent version locally and
+queues its branch push. A stale push keeps that version in History. Published
+content stays unchanged. **Edit branch** opens historical fields; **Open in Builder**
+opens block-based pages in the usual visual editor. Branch text, props, layout
+and page metadata use the same device-first draft events and guarded branch
+pushes. Recover drafts after reload; queued or conflicting pushes stay in History.
+New page revisions and visual drafts retain each resolved component binding in
+an individual canonical Timeline event. **Preview page** in History and branch
+Builder use those recorded definitions, including cached copies offline. Older
+versions without captures say so; **Preview current components** is an explicit
+comparison choice. Live data and Actions stay paused. Captures preserve only
+readable component definitions, not source-owner history, media bytes, runtime
+outputs or the full theme/Schema/Action dependency graph. Restoring or merging
+page content does not restore the referenced component Things. Dependency-aware
+published restore/merge and AI branch editing remain open. Named-branch merges
+now retain direct recorded components, combine independent changes, and ask
+which definition to keep for overlapping edits. Review Current branch, This
+version and Merge result before saving; missing history stays explicitly missing.
+Recorded preview requires Timeline 1.10.0; component-aware branch comparison
+requires Timeline 1.11.0; current preview uses webpages-resolve 1.5.0. No schema migration,
+additional collection, index, credential or configuration is needed.
+Named-branch comparison requires `api.timeline` 1.7.0 and a connection. Once
+reviewed, the local event and push survive reload/offline in the same existing
+stores, with no schema migration or additional setup.
+
+Forks need the existing transaction-capable Mongo replica set and completed
+storage-accounting migrations. Timeline uses the normal `getThingsCollection()`
+data plane and requires no extra credentials, provider account or collection.
+The browser needs IndexedDB on a stable origin for reload/offline recovery.
+Database version 5 adds individual branch, head and command stores while
+preserving the earlier relational event/link migration and pending drafts.
+Account, origin and custom Mongo data source each have separate local queues.
+History is private and available only to full account credentials.
+
+`api.timeline` 1.6.0 adds explicit home-history access while a custom database is
+selected. Saved themes have a **History** button, and the Timeline folder lets
+you choose **Home account** or **Selected database** without changing the active
+database. Both use the same records and scope-keyed IndexedDB stores; sessions
+that resolve to home share one upload queue. No additional runtime setup is needed.
+
+Saved theme creation, token/visibility edits and deletion also use this shared
+history (`api.timeline` 1.5.0, `api.themes` / `api.themes-delete` 1.1.0). The
+approved token snapshots remain private even for public themes and commit with
+the home-database writer/accounting when a custom data source is selected.
+They preserve historical token values rather than applying current defaults.
+No new runtime setup is needed. Dedicated theme restoration, active-theme
+selection history and legacy-theme migration coverage remain in progress.
+
+Run `npm --prefix remix run test:timeline` for the focused suite. The opt-in HTTP
+suite uses `TIMELINE_TEST_BASE=http://127.0.0.1:<isolated-api-port> npm --prefix
+remix run test:timeline:integration`. It refuses any database except the disposable
+local `timeline-rs` replica set at `127.0.0.1:20337`; it creates fixtures through
+the app API. Never use a shared or production database for these checks.
+`test:timeline:themes` uses the same guard for theme creation, unchanged saves,
+rename/move/edit ancestry, privacy and retained deletion. The quota suite below
+also checks atomic theme-save refusal and retained deletion at the ceiling.
+`test:timeline:home-scope` creates a second database on that guarded replica and
+checks concurrent history isolation, exact versions, branches and home restore
+under a custom selection, matching live Thing ids and stale read/write refusal.
+`test:timeline:visual-branch` uses the same guard for a visual page/branch
+fixture and batched component permission checks. Optionally set
+`TIMELINE_TEST_FIXTURE_PATH` to a private temporary JSON file for browser testing;
+it contains disposable sign-in credentials and must stay untracked.
+`test:timeline:branch-merge` uses the same guard for named-branch comparisons,
+canonical merged-event uploads, explicit conflicts, exact retries and stale-push
+retention. Set `TIMELINE_TEST_FIXTURE_PATH` to a private temporary file only when
+browser acceptance needs its synthetic login, and remove it afterward.
+`test:timeline:component-merge` uses the same guard for retained definitions,
+explicit choices, canonical uploads/retries, stale heads and unchanged published
+Things. No new collection, schema migration or private configuration is needed.
+`test:timeline:published-components` uses the same guarded replica for published
+restore/merge, isolated component copies, stale-preview refusal, placeholder
+preservation, exact retries and all-or-nothing storage rollback. The review
+creates private page-specific copies by default; Current shared components is an
+explicit alternative. No additional secret, service, migration or environment
+variable is required. Optional browser fixture files contain synthetic local
+credentials; keep them untracked and remove them after validation.
+The home-scope suite's private fixture file contains only synthetic local
+credentials; remove it after browser acceptance.
+
+History's **Open Thing in home** explicitly switches the selected database, then
+opens an account- and database-qualified Thing link. Thing-page caches include
+that same database identity, so switching sources cannot reuse another source's
+same-id content. `api.mongodb-endpoint` 1.1.0 exposes the public `dataPlane` key
+in root data and supports `X-Thingtime-Expected-Data-Plane` as an optional request
+precondition. It refuses stale selections with 409 and invalid keys with 400;
+it never selects a database or grants access. Updated clients negotiate this
+capability before scoped reads/writes. When this deployment uses its configured
+explicit installed-desktop API bridge, root identity and ordinary source-fenced requests use that same
+selected endpoint; the selection and precondition are forwarded for upstream enforcement.
+Existing actor-fenced commands and vault verification retain their local-origin
+requirements. No new secret or environment variable is required; use the
+existing MongoDB or fallback setup.
+
+For quota acceptance, use that same disposable replica and a dedicated local
+dev-server process. Run the following once with a new private fixture path:
+
+```sh
+TIMELINE_TEST_BASE=http://127.0.0.1:<isolated-api-port> \
+TIMELINE_TEST_ADMIN_FIXTURE=/tmp/timeline-quota-<unique-run>.json \
+npm --prefix remix run test:timeline:quota -- --prepare-admin
+```
+
+This registers an ordinary synthetic account, saves its generated credentials
+in a new mode-0600 file, and prints only its username. Restart only this test
+server with `ADMIN_USERNAMES=<printed-synthetic-username>` in its process
+environment; signup deliberately refuses already-allowlisted usernames. Run
+the same command without `--prepare-admin`. It authenticates that exact fixture,
+creates a separate regular account and assigns its test allowance through the
+normal admin API. Do not add the synthetic username to shared env files, use
+real accounts, or print/commit the credential file. Remove the test process
+override and fixture when finished. The test checks exact-ceiling refusals,
+folder organization/deletion, retained-byte accounting and the existing 409
+refusal to downgrade below usage. It does not manufacture an over-limit ledger.
+
+Retained history counts toward account storage. Deleting a recorded Thing keeps
+its history and therefore does not by itself free those bytes. At the limit,
+history reads and previews remain available; saving another retained version
+needs enough storage. Retention controls are still in the delivery ledger.
+See [the implementation contract and open delivery gates](docs/unified-timeline.md).
+
+### Public schemas, uploaded files and Lopu instructions
+
+Every built-in schema (root Thing, content kinds and database collections) is
+published as a Thingtime-owned public Schema Thing at `schema-<id>`. Browse
+`/schemas`, open a schema and choose **Copy and extend** to save an independent
+Schema in your Things. Copies retain nested fields and render templates; open
+record fields use bounded JSON. `forkOf` records the source. Editing a copy
+never changes the platform definition or another person's schema. Native write
+permissions, protected kinds and specialized validation continue to apply.
+
+After deploying a fork, an administrator should dry-run and then run
+**backfill-user-storage-accounting** in Admin migrations. That fenced migration
+also refreshes the public schema catalog; do not run a standalone schema seed
+around active storage ledgers. Existing identities, posts and ownership remain
+in place. No new environment variable is needed for schemas or prompt settings.
+
+**Settings → Lopu** shows the shared base prompt and saves a private list of
+custom instructions with individual enable switches. **Settings → Admin → Lopu
+base prompt** edits the shared public guidance. Set the normal server
+`ADMIN_USERNAMES=<your-admin-username>` on your fork, and use its normal MongoDB
+configuration. The base prompt is public: keep credentials in Secure Vault.
+Changes apply to the next AI reply and newly started direct voice sessions.
+Chat, voice, musings and recording analysis share this guidance; surface rules
+and server-enforced permissions remain in effect. Simultaneous edits report a
+conflict and offer reload rather than overwriting someone else's changes.
+
+Lopu can save an owned chat attachment as an independent private file Thing,
+optionally file it in an owned folder, and use its ID/content URL in another
+Thing's properties. The original chat remains intact; deleting it does not
+delete the saved copy. This requires the existing private-upload approval and
+quota, and the existing object-storage configuration. Private URLs retain their
+access checks when placed in a public Thing. Public sharing remains explicit.
+
+For isolated acceptance, start a loopback MongoDB replica set and a PM2-managed
+web stack with `MONGODB_CONNECTION_STRING=mongodb://127.0.0.1:<port>/thingtime?replicaSet=<name>`,
+`THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=<absolute-test-directory>` and
+`LOPU_CHAT_PROVIDER=test`. Create a disposable account with `seed-fixture.mjs`,
+then set `ADMIN_USERNAMES=<fixture-username>` in both the app and test process.
+From `remix/`, run `node --import tsx scripts/verify-schema-files.ts
+.fixtures/<fixture>.json`. It refuses non-loopback databases/APIs, exercises the
+real multipart upload and Lopu tool paths, verifies private bytes after chat
+deletion, and creates an upload form for browser acceptance. The local storage
+adapter tests the lifecycle without claiming a live S3 or model-provider test.
+
+### Builder service workspaces
+
+Insert **Service workspace** from the builder block menu. Its native
+`<tt-service-workspace rootId="your-stable-workspace-id" name="My service business">`
+component creates real Thingtime folders and relational records for customers,
+properties, job templates, scheduled visits, sub-jobs, time logs, equipment,
+resource usage and memberships. The owner is an Admin. Add existing Thingtime
+usernames in Team; Customer/B2B memberships must select their customer account.
+Use Setup to connect the owned builder page to the same live access policy.
+Members sign in with their normal Thingtime account. Removing membership revokes
+workspace, page, comments and attachment access on subsequent requests.
+
+Records open directly; their context menus offer Edit, Duplicate and recoverable
+Delete. Trash includes all record types. Each job and visit has separate comments,
+media titles/descriptions, attachments and optional Before/After groups. Time logs
+use the workspace IANA time zone and reject ambiguous or nonexistent DST times.
+The day/week planner supports dragging, ordering buttons and date controls.
+The bounded workspace API pages 250 records at a time, up to 5,000 records.
+The workspace runs live on its page (`/p/<id>`, no special mode needed) and
+inside the seamless editor's Edit, Layout and View modes; Builder mode,
+component-library previews and feed embeds show an inert placeholder instead.
+Back returns to the record you came from (property → job → visit), and adding a
+log, sub-job or customer link keeps its parent record open.
+
+Fork-safe maps and Vault setup:
+
+1. Configure a stable `THINGTIME_USER_VAULT_KEY=<base64url-encoded-32-byte-key>`
+   on the server. Never publish its value or rotate it without migrating entries.
+2. In the workspace owner's **Settings → Secure Vault**, save
+   `GOOGLE_MAPS_JAVASCRIPT_API_KEY=<browser-restricted-key>` and
+   `GOOGLE_PLACES_API_KEY=<server-places-key>`. New entries have an Environment
+   selector; existing entries have **Change environment**. Moves preserve the
+   encrypted value and can return an entry to Ungrouped.
+3. Enable Google Maps JavaScript API and Places API (New) with billing in the
+   matching Google project. Restrict the JavaScript key to the intended website
+   referrers and API. That key is intentionally visible to workspace browsers.
+   Keep the Places key server-only, restrict it to Places API, and use supported
+   server restrictions. No Mapbox token is needed for this Google implementation.
+   Website-referrer restrictions do not work on the server Places key. Setup
+   failures are reported with safe guidance for the rejected restriction or
+   disabled service; provider messages and project identifiers are never echoed.
+4. Choose the matching Vault environment in workspace Setup. Automatic selection
+   works when there is exactly one entry of each required name; duplicate matches
+   require an explicit environment. Reload after switching a loaded Maps SDK key.
+   Place searches send only the entered query to Google; map coordinates are
+   fetched on demand, not persisted as a provider-content cache.
+
+The native service-workspace property map uses the Google Maps SDK with the
+specific Google script and service hosts listed in remix/scripts/csp.mjs. The
+application still blocks executable inline scripts and eval. Keep these hosts
+in the production and development policies when deploying a fork, and review
+[Google's Maps domains](https://developers.google.com/maps/domains) if the SDK
+changes its endpoints. Run test:vercel-config and verify:vercel-output to catch
+policy regressions; browser acceptance with restricted keys remains required.
+
+Local regression fixture: run `TT_SERVICE_TEST_LOCAL=1 node --env-file=.env
+--import tsx scripts/test-service-workspace-local.ts` from `remix/` against the
+isolated Mongo replica at `127.0.0.1:18943` (`jimsLocal`). The opt-in test rejects
+other database URLs. Use `npm run web-pms` in the `thingtime-jims-franchise`
+worktree: local web `http://localhost:18940`, HMR 18941, Nitro 18942.
+Tailscale/Funnel was unavailable during validation: the installed CLI launcher
+points to the missing `/Applications/Tailscale.app` executable.
+
+### Seamless page editor
+
+`/builder?page=<id>` and `/p/<id>` share `LiveWebpage` and its lazy
+`SeamlessPageEditor`. One floating controls bar groups page navigation, preview
+settings, and Builder / Edit / Layout / View / Visit / Deploy / Inspector.
+Builder disables page data; Edit combines contenteditable text with pink block
+handles, outlines, insertion and context menus; Layout arranges blocks; View
+runs the page with the inspector available. Visit saves and reloads
+`/p/<id>?mode=visit` without editor controls (`mode=run` remains compatible).
+Deploy opens `/t/<id>` with only a small credit link back to `/p/`. All paths
+use the same resolver, runtime and access checks.
+The preview menu offers Viewport and Container presentations with the same
+full-width, desktop, tablet, mobile, device presets and custom dimensions.
+Sized Viewports use a style-mirrored iframe portal for real CSS media queries;
+Container uses the page DOM, a maximum width and minimum height, grows with its
+content, and has no maximum height. It does not disable the chosen mode's runtime.
+No second app or API runtime is booted in the frame. Inline drafts publish only
+when saved. Switching between iframe and native presentation can remount form
+DOM; switching editing modes preserves it.
+
+Local verification for `thingtime-seamless-builder`: `http://localhost:11060`
+(Vite 11060, HMR 11061, Nitro 11062), started with `npm run web-pms` using the
+existing worktree port resolver. `/tests/seamless-builder.html` is a Vite-only,
+non-publishing editor fixture. Tailscale/Funnel is unavailable on this machine:
+the configured CLI points at a missing `/Applications/Tailscale.app` executable.
+No new secrets or external setup are required by these editor features.
+
 Thingtime is a powerful platform for storing and sharing information of all kinds. Whether you want to keep track of your personal notes, collaborate on a project with your team, or build a new app that relies on rich data, Thingtime has you covered.
 
 With Thingtime, you can create and share any abstract data structure you want, or store any practical piece of information and share it for people and machines to use equally. Thingtime is not only a platform, but also an ecosystem that empowers developers and users alike to build, share, and utilize all kinds of data and knowledge.
 
 At Thingtime, we believe that data and knowledge should be open, accessible, and empowering. We are building Thingtime to make this vision a reality. Join us and start exploring the limitless possibilities of data!
+
+## Platform Secure Vault and Claude OAuth
+
+Manage shared platform credentials at **Admin → System → Thingtime Secure
+Vault**. Existing CI credentials keep their IDs and encrypted records; CI
+Control shows the same list and links to System for changes. Enabled Claude
+accounts run in priority order, with at most eight accounts considered per
+request. A credential failure can try the next account before output begins,
+using the same model, effort and speed. An explicit chat model never silently
+switches to another provider.
+
+Fork setup:
+
+1. Set `THINGTIME_ADMIN_VAULT_KEY=<base64url-encoded-32-byte-key>` in each
+   deployment environment. Keep the encryption key stable; changing it without
+   re-encrypting records makes existing entries unreadable.
+2. Add a **Claude / Anthropic** entry in System using a Claude Code OAuth token
+   (`sk-ant-oat…`). The existing entries formerly managed in CI Control already
+   work here. Standalone local setups may use
+   `CLAUDE_CODE_OAUTH_TOKEN_THINGTIME` or `CLAUDE_CODE_OAUTH_TOKEN` when the
+   platform vault has no enabled Claude entries. Anthropic API keys and
+   `ANTHROPIC_AUTH_TOKEN` are never used for inference.
+3. CI keeps its existing `THINGTIME_CI_ROUTER_SECRET` signed delivery protocol
+   and pulls its AI credential subset from that same store. The dedicated
+   `OpenAI Moderation` entry remains scoped to moderation.
+4. To manage Vercel variables in System, set `VERCEL_PROJECT_ID` and the team's
+   `VERCEL_TEAM_ID` (or `VERCEL_ORG_ID`). Add a platform credential labelled
+   **Vercel**, or configure `VERCEL_API_TOKEN`. The server fixes the project and
+   origin; clients cannot select another project. Lists omit values. Showing
+   one value requires fresh current-password or passkey verification. Vercel
+   `sensitive` values cannot be revealed; they can be replaced. Creates use
+   encrypted variables with no upsert, and edits take effect on redeployment.
+
+The pinned official Claude Code runtime runs with built-in tools, MCP servers,
+user settings and session persistence disabled. Thingtime retains its own
+permission-checked tool executor. The Vercel build includes a compressed native
+executable with a SHA-256/size manifest, checks the function size, and expands
+it into private temporary storage before execution. No runtime download or
+Anthropic API-key fallback is performed. Provider access checks distinguish
+OAuth configuration from model/allowance verification by a real reply.
+
+For Vercel deployments, run `npm --prefix remix run build` so packaging and
+`verify:vercel-output` validate every emitted Node function that invokes Claude,
+including Workflow steps. Each function needs its own pinned runtime assets and
+size verification; the main Nitro function and Workflow step execute in separate
+filesystem roots. Workflow generation can emit an arm64 function independently
+of an x64 Linux builder. The packager aligns each Claude-consuming function’s
+CPU architecture with its packaged executable and verifies that match; flow and
+webhook functions retain their emitted configuration. Keep the canonical
+post-build packaging/verification stages in a fork’s build command. Authenticated server-managed Claude execution still
+requires a deployed smoke test with the existing OAuth setup above.
+
+Local worktree verification: `http://localhost:15080/admin/system` (Nitro
+15082, HMR 15081). Tailscale/Funnel was unavailable on this machine during
+verification because the configured Tailscale executable was missing. Standard
+checkouts continue to derive ports from `remix/scripts/worktree-ports.cjs`.
+
+## Lopu reminders and notification tests
+
+The Lopu page keeps one conversation while switching between Chat and Voice.
+Device-transcription mode saves its text and transcript Thing into that chat.
+The composer offers device attachments and an owned-Thing search picker. Files
+are private chat attachments; model context currently includes file metadata,
+not decoded audio/video/image content. Selected Things contribute readable text.
+Direct web voice saves completed user and assistant transcripts into the same
+chat through `api.lopu-voice-capture` 1.0.0, without repeating inference. The
+selected chat's newest 20 persisted text messages (up to 24000 characters) seed
+the direct provider session; binary attachments and tool payloads are not
+replayed. Direct voice stays opt-in and requires a supported owner-configured
+provider. History seeding may incur the provider's normal text-input charges.
+Failed transcript saves remain in an origin/account-scoped local outbox (up to
+50 events / 240000 characters), with a visible retry button and an online retry.
+No provider credentials are stored in that outbox. If browser storage is
+unavailable, keep the tab open until saving succeeds.
+Native bridge 1.3.0 also saves completed direct-voice text through this endpoint.
+Its protected Application Support outbox survives app relaunch, never stores
+cookies/tokens, and verifies both the origin contract and current account before
+delivery. It holds at most 50 events / 240000 characters per account/origin
+(200 total), stops recording if a new event cannot be saved safely, and retries
+when Lopu reconnects or **Retry saving voice** is tapped. Only the active voice
+session may select a newly created chat; older background saves update history
+without navigating away. Existing native builds must update before direct voice
+can promise shared history. Normal native transcription also reconciles its
+saved chat. Real-provider and physical-device acceptance remain release gates.
+
+Scheduled tasks support notification-only, saved chat-message, and fresh
+read-only AI-update modes, an existing conversation or a new chat each run,
+and five-field cron expressions with an IANA time zone. They are searchable
+Things; run notes are separate quota-billed `scheduled-task-run` Things linked
+by `targetId`. The protected schedule remains canonical: editing the displayed
+Thing does not reprogram execution. A paused task stops future starts, not an
+already-running response. Ambiguous failures require owner review rather than
+automatic replay. AI updates use normal account access and billing, and cannot
+run mutating tools. Each message may produce a `lopu-message` notification.
+
+Thing detail pages and `/things` previews fetch their discussion by target ID.
+Comments are separate Things inheriting the target audience; they are never
+embedded in the target crystal. Lopu can list comments and propose a comment
+with an explicit confirmation. No new database migration or index is required.
+
+Local validation for this worktree uses `http://localhost:11270` (Nitro 11272).
+No Tailscale/Funnel mapping has been configured or verified for these ports.
+The shared PM2 daemon was unresponsive during validation; the temporary
+foreground test stack is not a durable service configuration.
+
+Lopu chat and the standard voice page share `create_thing`, `send_notification`,
+`create_reminder`, `list_reminders`, and `set_reminder_enabled`. Only the signed-in
+owner can receive or manage these reminders. Notes/todos and reminder content
+are ordinary private Things; linked protected schedules are control-plane data.
+Settings → Notifications provides pause/resume, refresh, delivery samples
+(Quiet, Normal, Urgent/time-sensitive), rich-text/image examples, and each
+registered notification type. Samples never email another account or bypass
+notification preferences. Native banners use plain text; the richer examples
+render in Thingtime history. Critical Apple alerts are not implemented.
+
+Fork setup: deploy the registered `/api/v1/lopu/recordings/run` scheduler with a
+distinct server-only `CRON_SECRET` and an authenticated five-minute schedule
+(the Vercel cron in this branch). No browser timer runs these reminders. Missed
+intervals advance without replaying a backlog. Keep the existing storage
+accounting migration healthy; content writes still use account quotas. Configure
+APNs as documented below, enable the Time Sensitive Notifications capability on
+both native bundle identifiers, and regenerate matching provisioning profiles.
+Provider configuration alone does not prove either push delivery or AI quota.
+
+“Send to Lopu” is a separate explicit recording action, available from the
+recordings activity menu and by holding/swiping a Watch recording. It requires
+the owner's recording-AI opt-in and a speech-capable transcription connection.
+Once its private transcript is ready, a saved chat receives it through normal
+Lopu billing/tools/confirmation gates. Retries do not silently repeat an
+ambiguous tool execution; inspect the linked conversation for results/questions.
+Automatic transcription/notes alone do not grant this execution consent.
+
+Local verification for this worktree: `http://localhost:16340/settings` and
+`http://localhost:16340/lopu/recordings` (API 16342, HMR 16341). PM2 uses
+`npm run web-pms` with automatic restart disabled. Tailscale/Funnel is currently
+unavailable: the installed CLI shim refers to a missing Tailscale app binary.
+These are worktree-local URLs, not a production deployment receipt.
+
+## Account speed-test allowances
+
+Commander speed tests use the signed-in account's protected subscription and
+admin quota overrides. Defaults are Free: 4 complete tests/hour, Plus: 20/hour,
+Pro: unlimited, and Pay as you go: unlimited. This adds no speed-test billing.
+Usage is shared across account sessions, devices, and IP addresses; authenticated
+requests do not also spend a guest IP bucket. Partial attempts consume the
+corresponding part of a test. Anonymous callers retain one test per 15 minutes.
+Fixed payload sizes, serial upload chunks, and transfer timeouts still apply.
+
+Settings → Account compares the live published tiers. Existing immutable tier
+revisions remain readable without a data migration. Admin tier and account
+override editors expose `speedTestsPerHour` (`null` = unlimited, `0` = disabled).
+Commander sends only the selected origin/account's credential and requires
+`api.network-probe-ping` 1.1.0, `api.network-probe-download` 1.1.0, and `api.network-probe-upload` 2.1.0 before
+transferring payloads. Deploy the compatible server before updating Commander;
+an old server fails compatibility checks rather than silently using guest limits.
+Forks use their own normal account/OAuth setup; no new secret or environment
+variable is required for this feature.
+
+Local validation worktree `speed-test-tier-allowances` uses Vite 18580, HMR 18581,
+and Nitro 18582 via the canonical PM2 ecosystem config. Its comparison is at
+http://localhost:18580/settings#plan-features. No public Funnel mapping was
+verified: the local Tailscale launcher currently points to a missing app binary.
+
+## Embed Thingtime on any website
+
+Thingtime now builds as a single minified browser file with shared state,
+Shadow DOM mounts, an injected popup, and a first-party secure editor/save
+window:
+
+```html
+<div data-thingtime-mount></div>
+<script src="https://thingtime.com/embed/thingtime.min.js"></script>
+```
+
+See [the Thingtime Embed SDK guide](docs/THINGTIME_EMBED.md) for declarative and
+JavaScript APIs, public persistence, conflict handling, security boundaries,
+local development, and build verification.
 
 ## AI agent instructions
 
@@ -15,6 +633,94 @@ Repository-wide AI guidance lives in the single canonical `AI_ALL.md`.
 Claude, and other compatible tools read the same instructions. Update
 `AI_ALL.md` only; keep both symlinks intact.
 
+## Thingtime MCP
+
+The [`MCP/`](MCP/) package contains Thingtime's consent-first AI conversation
+normalizers. As a standalone MCP server it supports explicit current-chat
+handoff, private local staging, ChatGPT/Claude exports, and a portable connector
+manifest. The Electron app also bundles its read-only desktop connector: it can
+discover local ChatGPT Work/Codex history plus Claude sessions from the main and
+Thingtime desktop profiles, then import projects, chats, and visible messages
+through the authenticated Messenger API. See [`MCP/README.md`](MCP/README.md)
+for both workflows and their privacy boundaries.
+
+## Lopu voice + personal Secure Vault
+
+Signed-in people can open `/lopu/voice` (the Lopu page's Voice mode, also the
+mic in the floating window) for a continuous voice conversation — every final
+utterance is a normal Lopu chat turn, tools included — or use **Transcribe
+mode** to save each final utterance as its own timestamped, numbered,
+owner-private Thing page instead. The session gear remains available before,
+during, and after listening; **Spoken replies** (off by default) reads Lopu's
+replies aloud. **Direct voice** (off by default) streams the microphone
+straight to the chat's own Secure Vault provider when its kind offers realtime
+speech — xAI Grok Voice today, as 24 kHz PCM over the provider's realtime
+WebSocket on a five-minute ephemeral credential minted by
+`POST /api/v1/lopu/voice/session`; the long-lived provider token stays
+server-side, the gear explains in one line when a provider cannot do it, and
+the standard device-transcription path runs instead. The iOS app adds native
+speech recognition, the same direct provider-audio streaming, background
+audio, and a local Live Activity so an active conversation can continue while
+the phone is locked.
+
+Each account has a personal Secure Vault in **Settings → Secure Vault** for
+password/key-value records and Lopu provider connections. Values are
+masked by default in the browser and AES-256-GCM encrypted at rest with record- and
+owner-bound authenticated data. Configure a 32-byte base64url key as
+`THINGTIME_USER_VAULT_KEY`; when omitted, Thingtime derives a purpose-separated
+user-vault key from `THINGTIME_ADMIN_VAULT_KEY` so an existing deployment can
+reuse its vault root without sharing the admin vault's ciphertext domain. For a
+new fork, generate the secret outside the repository and put it only in the
+runtime secret store:
+
+```sh
+openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
+```
+
+Built-in connection templates cover OpenAI/Codex, Anthropic/Claude, Google
+Gemini, xAI/Grok, OpenRouter, Mistral, DeepSeek, Groq, and Cohere, each with
+its catalog of models (reasoning tiers, fast/priority modes, and which models
+speak the realtime direct-voice transport). A connection's model is optional:
+pick one from the kind's catalog or type a custom id, or leave it blank to run
+on the kind's first catalog model; a custom OpenAI-compatible host must name
+its model. Reasoning effort and speed are chosen per Lopu chat in the ordinary
+`/lopu` composer and travel to the provider's own request fields. Store
+provider tokens only through the encrypted Secure Vault form — never in
+source or a public environment file. Custom OpenAI-compatible endpoint
+hostnames must be public HTTPS destinations and must also appear in the
+comma-separated `THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS` runtime setting;
+built-in provider hosts are already allowed. DNS is checked again immediately
+before each server-side provider request, redirects are rejected, and
+ordinary responses never include stored credentials. The explicit Show action
+requires fresh password or passkey verification for one owner-authorized entry.
+
+### Lopu defaults and chat credentials
+
+**Settings → Lopu → Default AI for new chats** chooses Thingtime credits or
+one of the current account's saved AI connections. Credit-backed defaults
+include the model, reasoning effort and speed. Defaults are account- and
+origin-scoped on this device; existing conversations retain their own choices.
+The **Chat settings** gear in the full-page, floating and embedded Lopu composer
+saves a credential override with that conversation. The endpoint and model
+shown for personal credentials come from the saved connection.
+
+Use **Manage saved credentials, models and endpoints** to configure a
+connection in Secure Vault. ChatGPT OAuth uses the supported ChatGPT plan
+runtime and its discovered model; it is not an API key for an arbitrary URL.
+Connect and discover models on a persistent local/self-hosted runtime that
+advertises `api.ai-chatgpt-plan` and the Lopu chat capabilities, following the
+ChatGPT plan setup below. Hosted deployments without that runtime report the
+connection unavailable. Custom endpoints use their own saved credentials and
+the existing provider host allowlist described above. This UI adds no new
+secret, endpoint, OAuth client registration or token storage mechanism.
+
+Missing/unavailable selections stay pinned. Sending waits for pending choice
+writes, refused writes prevent that send, cold chat links load saved metadata,
+and an unknown chat delegates its stored choice to the server without sending
+new-chat defaults. There is no automatic fallback from a selected personal
+credential to Thingtime credits. Layouts use ordinary editable Builder blocks;
+only authored labels, styles and bindings are stored in the layout Thing.
+
 ## Conflict-free Graphify snapshots
 
 Thingtime does not ask every branch to modify the same generated Graphify JSON
@@ -22,13 +728,20 @@ files. `scripts/graphify` stores portable output under the immutable,
 content-addressed `graphify-out/snapshots/v1/` tree and exposes the selected
 snapshot through ignored compatibility aliases at the conventional root
 paths. Independent branches therefore add different files instead of
-line-merging `graph.json`, `manifest.json`, and `GRAPH_REPORT.md`.
+line-merging `graph.json`, `manifest.json`, and `GRAPH_REPORT.md`. After a
+successful activation, the wrapper keeps one current portable snapshot by
+default and removes superseded snapshots from the checked-out tree, so merged
+branch artifacts cannot grow `develop` without bound.
 
 Use `scripts/graphify query`, `scripts/graphify update .`, or
 `scripts/graphify extract . --backend openai`; the wrapper serializes local
-writers, validates each atomic output set, deduplicates identical artifacts,
-regenerates the report/HTML, and converts Graphify's mutable semantic cache into
-coexisting immutable variants. See
+writers, holds query snapshots until their reader exits, validates each atomic
+output set, deduplicates identical artifacts, regenerates the report/HTML, and
+converts Graphify's mutable semantic cache into coexisting immutable
+variants. `scripts/graphify prune` applies the bounded
+retention policy without rebuilding; set `GRAPHIFY_SNAPSHOT_RETENTION` to a
+positive integer only when a local workflow deliberately needs more than one
+portable snapshot. See
 [`docs/graphify-content-addressed-snapshots.md`](docs/graphify-content-addressed-snapshots.md)
 for the rationale, layout, migration path, and retention model.
 
@@ -130,7 +843,7 @@ promotion, standing promotion, and main/develop synchronization are translated
 to typed **Lopu PR manager** inputs instead of dispatching retired workflow
 files.
 
-CI Control also supports **Feature Stacks**. An admin checks 2–20 open feature
+CI Control also supports **Feature Stacks**. An admin checks one or more open feature
 PRs in the exact order they should be combined, chooses one or two live target
 branches (for example `develop` and `main`), confirms the batch, and dispatches
 it once. The server snapshots every selected same-repository PR head SHA. The
@@ -179,6 +892,28 @@ THINGTIME_VERCEL_WEBHOOK_SECRET="secret-returned-when-the-webhook-is-created"
 THINGTIME_CI_ROUTER_SECRET="another-independent-long-random-secret"
 ```
 
+CI control-plane rows (every `ci-*` Thing, including the append-only
+`ci-event` history) live in their own `ciControl` satellite collection, never
+in `things`, and are TTL-reaped by a root `expiresAt` stamp. The retention
+windows are optional, in days; `0` keeps that class forever, and unset means
+the default:
+
+```sh
+# append-only ci-event history (default 14)
+THINGTIME_CI_EVENT_RETENTION_DAYS="14"
+# per-job workflow rows — ci-workflow-run with a job: external id (default 30)
+THINGTIME_CI_JOB_RETENTION_DAYS="30"
+# top-level workflow runs, deployments, and previews (default 90)
+THINGTIME_CI_ACTIVITY_RETENTION_DAYS="90"
+```
+
+Repository, feature, branch, pull-request, policy, dispatch, and feature-stack
+projections never expire. A GitHub delivery that changes nothing on the
+repository row records no `ci-event` for it. Deployments that predate the
+satellite still hold their CI rows in `things`: run the admin migration
+`relocate-ci-control-telemetry` (repeat until it reports nothing left) and then
+`rebuild-things-indexes` from **/migrations** — see the MongoDB section.
+
 Create a repository-installed GitHub App with repository metadata read,
 Actions read/write (workflow dispatch and run/job observation), Administration
 read/write (short-lived self-hosted runner registration and deletion), Contents
@@ -210,6 +945,57 @@ The signed Lopu credential delivery route is:
 https://<your-thingtime-origin>/api/v1/integrations/ci/credentials
 ```
 
+The signed Feature Stack progress route is:
+
+```text
+https://<your-thingtime-origin>/api/v1/integrations/ci/progress
+```
+
+The protected controller posts an initial snapshot, phase changes, a heartbeat
+every ten minutes, and one terminal snapshot. The route uses the same
+`THINGTIME_CI_ROUTER_SECRET`, attaches each immutable event only to its exact
+stored stack/run identity, and never accepts browser sessions or arbitrary
+workflow log text.
+
+Feature Stack activity shows one card per target with its reported phase, blocker,
+next step, and source link. The progress bar counts confirmed target merges only;
+a published PR, failed worker, or closed PR is never a completed target. Waiting
+has no predicted finish time. Worker updates older than twelve minutes are marked
+stale, separately from target PR updates.
+
+**Ask Lopu about this run** opens a private status conversation for the selected
+saved run. Enable the product and the matching protected controller together:
+
+- Deploy `/api/v1/admin/ci/stacks/chat` and the signed
+  `/api/v1/integrations/ci/chat` route. Their origin-scoped capability identifiers
+  are `api.admin-ci-stack-chat` and `api.integrations-ci-chat`, both `1.0.0`.
+- Keep `THINGTIME_CI_ROUTER_SECRET` identical in the application deployment and
+  GitHub repository secret store. Set `THINGTIME_CREDENTIAL_VAULT_ORIGIN` in GitHub
+  repository variables to the application's HTTPS origin. Configure at least one
+  enabled Claude account in the existing CI credential waterfall; no new secret
+  is required. The status responder uses the shared Claude model selection and
+  credential waterfall, independently of a stack's custom merge endpoint/model.
+- Roll out the matching progress reporter on `github-actions`, then start a new
+  stack run. Existing running jobs cannot acquire the responder retroactively.
+  Old controllers show an explicit unavailable state. A missing/incompatible
+  product capability disables chat without blocking merge progress.
+
+The responder runs inside the progress job alongside the merge workers. It has
+no tools or repository checkout in its model session and receives only bounded
+job/step/target PR facts and the last four answered exchanges. It is not an input
+to the workers' private reasoning sessions: questions cannot restart jobs, edit
+code, change merge plans or grant merge authority. It checks every thirty seconds;
+replies can take a couple of minutes. The panel polls only while expanded and
+visible, with a user-controlled auto-refresh checkbox and manual Refresh.
+
+Questions/replies are shared among CI administrators, redacted for credential-like
+text, stored as relational protected `ci-stack-chat-message` records, and expire
+after ninety days. Reads return the latest fifty exchanges. Sending is limited to
+six questions per minute per admin. Retrying an uncertain send preserves its UUID;
+worker delivery uses a four-minute lease and at most two claims, with exact
+workflow/run-attempt fencing. Offline, answering, failed and answered states stay
+visible. Paused, stopped, ended, or replaced runs accept no new questions.
+
 Store each secret directly in the deployment environment. Also add the same
 `THINGTIME_CI_ROUTER_SECRET` as a GitHub Actions repository secret and set the
 repository variable `THINGTIME_CI_ROUTER_URL` to the stable route above. The
@@ -225,21 +1011,83 @@ all available; its API refuses to select Vercel before that complete capability
 is ready. An already-saved Vercel policy still fails over safely to GitHub if a
 dependency later disappears.
 
+The selected-PR detail panel also has independent, durable **Develop** and
+**Production / main** preview switches. The product backend validates the live
+same-repository PR, stores the full policy, and sends only that bounded policy
+through the installed `thingtime-ci-control[bot]` GitHub App. It does not build,
+publish, alias, clean up, or hold a Vercel deployment credential. The protected
+`github-actions` controller revalidates the exact ref/SHA and writes one PR
+comment immediately with every selected environment's expected persistent URL
+and estimated ready time. Each selected environment is compiled on GitHub
+without environment secrets; only the validated prebuilt output enters the
+credentialed publisher. The same comment gains each immutable `*.vercel.app`
+snapshot URL and terminal status. A READY deployment moves only its PR-scoped
+alias and never replaces `thingtime.com` or `dev.thingtime.com`.
+
+Production access still requires an explicit admin acknowledgement. Later
+`synchronize`, reopen, and ready-for-review webhooks redispatch every enabled
+environment; disable and close dispatch marker-scoped cleanup. The backend
+therefore needs only the existing GitHub App credentials. Configure the
+following non-secret values and dedicated deployment token on the protected
+`vercel-develop-pr-control` GitHub Environment (placeholders only):
+
+```sh
+VERCEL_DEVELOP_DEPLOY_TOKEN="<dedicated-Vercel-deployment-token>"
+VERCEL_TEAM_ID="<Vercel-team-id>"
+VERCEL_PROJECT_ID="<Vercel-project-id>"
+VERCEL_PROJECT_NAME="<Vercel-project-name>"
+VERCEL_GITHUB_REPO_ID="<Vercel-linked-GitHub-repository-id>"
+VERCEL_CUSTOM_ENVIRONMENT_ID="<develop-Custom-Environment-id>"
+PREVIEW_ALIAS_SUFFIX="previews.dev.example.com"
+PRODUCTION_PREVIEW_ALIAS_SUFFIX="previews.example.com"
+PREVIEW_EXPECTED_BUILD_MINUTES="5"
+ADMIN_PREVIEW_DISPATCHER_LOGIN="your-ci-control-app[bot]"
+```
+
+Never expose these as `PUBLIC_*` or copy them into the product deployment.
+`VERCEL_CUSTOM_ENVIRONMENT_ID` is required only for the Develop switch. The
+alias suffixes default to Thingtime's two preview namespaces, so forks must set
+both to verified wildcard domains owned by their own Vercel project.
+`PREVIEW_EXPECTED_BUILD_MINUTES` is optional, defaults to 5, and accepts a whole
+number from 1 through 60 for the PR comment's clearly labelled estimate.
+The GitHub App needs Contents write permission to create the repository
+dispatch. GitHub Actions owns and updates the marker comment.
+
 After deployment and App installation, create both provider webhooks and click
 **Admin → CI Control → Reconcile** once. Reconcile imports existing branches,
 open PRs, Actions runs, deployments, and previews; subsequent webhooks keep the
 projection current. Until that first successful reconcile, an empty dashboard
 with zero counts is expected.
+## Support Thingtime
 
-# 💹 Donate on Indiegogo to save humanity 🩷
+Help cover Thingtime's hosting, storage and AI costs through the existing
+[Thingtime GoFundMe](https://www.gofundme.com/f/thingtime).
+The campaign checkout offers one-off and monthly contributions (verified
+14 September 2026); GoFundMe adds a 5% recurring fee for monthly donors.
+Contributions support the project; they do not purchase AI credits or services.
+The fundraiser is the source for its current total and payment terms.
 
-### You can get Merch 🌈 + other benefits 🦄💯
+The `/support` page also lets visitors draft a paid setup/workflow-help or
+business sponsorship enquiry to `connect@thingtime.com`. Scope, availability,
+price and payment terms are agreed before any work starts. The form opens an
+editable email draft or copies it; it does not send mail or process payments.
 
-https://www.indiegogo.com/projects/thingtime-a-gui-for-the-internet/coming_soon
+The [funding launch runbook](docs/funding-launch-plan.md) covers the first
+48 hours, channel references, service experiments and verification. Keep actual
+budgets, prospects and draft investment materials in a private owner plan.
 
-## Or Donate on GoFundMe 💖
+For forks, replace the public campaign URL and contact email in
+`remix/app/components/Support/supportContent.ts` before publishing, and update
+this README and `.github/FUNDING.yml` to match. No payment keys are needed for
+the support page. Keep donation links separate from `THINGTIME_LOPU_TOPUP_URL`:
+that existing optional setting does not process payments or grant credits.
 
-https://www.gofundme.com/f/thingtime
+Funding worktree preview: `npm run web-pms` starts the deterministic
+`thingtime-funding-launch` stack on <http://localhost:14040/support>
+(HMR 14041, API 14042). The port resolver remains the source of truth for other
+worktrees. Tailscale/Funnel is currently unverified on the development machine:
+the installed CLI launcher points to a missing Tailscale application; no public
+Funnel mapping has been created for these ports.
 
 ### Force Push ? 👉👈
 
@@ -377,11 +1225,24 @@ private environment variables in local development or on Vercel.
 The web app lives in `remix/` for historical path compatibility, but it now
 runs as a React Router non-framework Vite client with Nitro API/server routes.
 Vite serves the browser app on port `9999` and proxies `/api` to the Nitro dev
-server on port `10000` when local backend env is configured. If the local
-MongoDB/auth env is absent, the dev proxy sends `/api` requests to
-`https://thingtime.com` instead so a fresh clone can still log in, create
-service-account tokens, and use the production-backed API without copying any
-private `.env` files.
+server on port `10000`. Both Vite and built Nitro servers fail closed when
+MongoDB or JWT signing configuration is missing: API requests return `503`
+with `LOCAL_API_NOT_CONFIGURED`, without forwarding bodies or cookies.
+Configure a dedicated local Mongo replica set and an explicit local `JWT_SECRET`
+(or signing key); never reuse production database credentials for tests.
+`THINGTIME_API_FALLBACK_ORIGIN` has no default and is ignored by Vite and ordinary
+web servers. Only the installed desktop shell (`THINGTIME_DESKTOP=1`, loopback
+origin, explicit HTTPS endpoint) can deliberately bridge to its selected API;
+`NODE_ENV=test` disables that bridge as well. Public docs/capability discovery
+remain available without database configuration.
+
+The fixture runner accepts only literal loopback HTTP URLs, refuses redirects
+and requires attachment upload URLs on the same local origin. These application
+guards complement the mandatory browser **and backend** network isolation for
+acceptance tests; a local URL alone does not prove the configured DB is local.
+For the compiled-server regression, build with `NITRO_PRESET=node-server npm
+--prefix remix run build:server`, then run the isolated smoke described in
+`remix/scripts/local-api-isolation-smoke.mjs`.
 
 Local development URLs on Lopu's Mac:
 
@@ -424,9 +1285,9 @@ the `VERCEL_GIT_COMMIT_REF` system env var at build and runtime.
 The local dev launcher loads `remix/.env`, `remix/.env.local`, and
 `remix/.env.auto` before spawning Nitro and Vite, so ignored private values like
 MongoDB credentials are available to local API status checks without committing
-secrets. These files are optional for normal app usage; set them only when you
-want to override the default production-backed API fallback or run the backend
-self-sufficiently against your own services.
+secrets. Static pages can render without these files, but local API requests
+require explicit database and signing configuration; there is no automatic
+production-backed fallback.
 
 Build and verify the repository-root Vercel output with:
 
@@ -449,12 +1310,36 @@ the thin control-plane branch carries its own root config with all Git
 deployments disabled, so branches created from it never try to build an absent
 app.
 
+### One-step worktree bootstrap
+
+A fresh linked worktree (Claude Code, Codex, `git worktree add`) has no remix
+dependencies, no ignored env files and no port-specific `.claude/launch.json`.
+`npm run worktree-bootstrap` (`remix/scripts/worktree-bootstrap.cjs`) relinks
+dependencies from the shared pnpm store, copies missing ignored env files from
+the main checkout (never overwriting), writes `.claude/launch.json` with this
+checkout's derived dev ports, points this worktree's `core.hooksPath` at the
+tracked `.githooks`, and prints the ports, PM2 name and local URLs. The tracked
+`post-checkout` hook runs it automatically (in the background, logged to the
+Git directory as `worktree-bootstrap.log`) the first time a linked worktree is
+checked out without dependencies. Flags: `--no-deps`, `--no-env`,
+`--no-launch`, `--no-hooks`, `--quiet`.
+
 ## Electron desktop app
 
 The desktop shell lives in `electron/` and packages the same `remix/` web app
 with Electron. It builds the Vite client and Nitro server with
-`NITRO_PRESET=node_server`, stages the output in `electron/dist/web`, then
-launches the bundled Nitro server on `127.0.0.1` inside the Electron app.
+`NITRO_PRESET=node_middleware`, stages the output in `electron/dist/web`, then
+binds the bundled Nitro middleware on `127.0.0.1` inside the Electron app.
+Desktop keeps the same port per user-data profile in `renderer-origin.json`, so
+IndexedDB sync runs and local editor drafts survive relaunch. The address record
+is private, atomically published and flushed before the renderer starts. If its
+port is occupied, close the application using that port and reopen Desktop;
+Desktop preserves the address and refuses to load the other server. A malformed
+record stops startup for recovery. Keep it with the Chromium profile in backups;
+do not delete it to work around a collision. No environment variable, external
+service or secret is required. Earlier random-port profiles are left untouched;
+this does not migrate storage from their old origins. See
+[Desktop restart verification](electron/README.md#renderer-restart-verification).
 
 Build the unpacked desktop app from the repository root with:
 
@@ -473,6 +1358,66 @@ The local Electron shell reads `remix/.env`, `remix/.env.local`, and
 `remix/.env.auto` before starting Nitro. Keep real MongoDB, auth, Vercel, and AI
 tokens in ignored env files or the launch environment only; commit placeholder
 examples in docs, not secrets.
+
+### Connect desktop AI history to Messenger
+
+In the signed-in Thingtime desktop app, open `/messages`, choose either Spaces
+or Chats, and select **✦ AI**. The connector presents three independent sources
+when present on the Mac: ChatGPT, the main Claude profile, and Claude Thingtime.
+
+- **Sync local chats** reads only visible local Work/Codex or Cowork/Claude Code
+  conversation records. It never reads provider cookies, passwords, hidden
+  reasoning, tool traffic, or browser storage, and raw local paths are not sent
+  to Thingtime.
+- **Import full export…** opens a native file chooser for an official ChatGPT
+  or Claude JSON/ZIP export. Cloud-only history is unavailable to the local
+  reader, so use the provider's official export when a conversation is not
+  stored on the Mac.
+- Projects/workspaces become Messenger Spaces, conversations become chats or
+  channels, and provider messages are read-only. Reactions, threads, and new
+  Thingtime replies remain local to Thingtime; they are not posted back to the
+  provider.
+- Sync runs in bounded batches and is idempotent. Repeating the same import
+  updates the same owner-scoped records without duplicating chats, messages, or
+  quota usage.
+
+Imported history is user-owned content and consumes the signed-in account's
+storage allowance just like posts and native Messenger rows. Message JSON is
+metered on the Messenger row; any Thingtime-hosted attachment object remains
+separately metered by its protected attachment record. A quota failure rolls
+back the current transactional unit and returns a storage error rather than
+silently importing unaccounted data.
+
+No connector-specific environment variable is required in the packaged app.
+For a fork/local build, keep the normal authenticated Thingtime origin and
+database configuration in ignored Electron/Remix env files; do not grant the
+web browser filesystem access. The browser version intentionally shows the
+desktop-app requirement instead of attempting local discovery.
+
+## Brand identity for search engines (robots.txt, sitemap, Organization logo)
+
+Thingtime tells crawlers about itself from code, not configuration:
+
+- `remix/app/api/utils/meta/brandIdentity.ts` — the public `Organization`
+  JSON-LD node every HTML shell emits (site name, square logo path, wordmark
+  path, `sameAs` profile links). Forks: edit these constants; the logo paths
+  must be files generated by `npm --prefix remix run branding-assets`.
+- `remix/app/api/utils/meta/indexablePaths.ts` — which static routes are
+  indexable. The same list drives the shell's `robots` meta tag and the
+  `static` sitemap section, so they can never disagree.
+- `remix/app/api/utils/seo/sitemapCore.ts` + `sitemap.ts` — `GET /robots.txt`
+  (everything allowed, AI crawlers listed in `AI_CRAWLER_USER_AGENTS`) and
+  `GET /sitemap.xml` / `GET /api/v1/sitemap` (index + `static`, `posts`,
+  `pages`, `profiles` sections, anonymous-only, edge cached for an hour).
+- `npm --prefix remix run sitemap:generate -- --origin https://your.host
+  [--fetch] [--out dir]` — offline generator; `--fetch` mirrors every UGC
+  section from the live API into static files under `remix/sitemap-out/`
+  (untracked). Never copy a sitemap into `remix/public/`: Vercel's
+  filesystem-first routing would shadow the live route.
+
+Submit `https://<your host>/sitemap.xml` once in Google Search Console and
+Bing Webmaster Tools; nothing else needs configuring. No secrets, environment
+variables or vault entries are involved.
 
 ## API self-documentation
 
@@ -587,15 +1532,27 @@ on the same document. Docs: `/docs/api` → things.
 
 ## MongoDB
 
-MongoDB powers the app status checks and database-backed API routes. Local
-development does not require MongoDB env by default: when
-`MONGODB_CONNECTION_STRING` is missing, Vite and Nitro forward same-origin API
-requests to `https://thingtime.com` with the same method, path, query, headers,
-cookies, and payload. Upstream auth cookies are rewritten for local HTTP so
-zero-env localhost login can persist through the proxy.
+MongoDB powers database-backed API routes. Incomplete local or deployed servers
+return a configuration error; they do not silently forward to production. The
+installed desktop shell has its own explicit selected-API bridge. For one active
+database/API deployment per environment, see the
+[environment gateway configuration and rollout](docs/environment-api-gateway.md).
+That runbook covers stable aliases, separate environment secrets, capability
+negotiation, `proxy` and opt-in `dedicated` connection modes, promotion/rollback
+and gradual pool draining. Vercel defaults to proxy mode; local and self-hosted
+servers without gateway settings retain direct connections. Dedicated mode
+owns its MongoDB pools but uses the configured environment database, so it does
+not imply database isolation or an Atlas tier change. The intended mapping is
+`thingtime.com`/production to production data, `dev.thingtime.com`/develop to
+development data, and both standard previews and ordinary PR previews to
+`master.previews.thingtime.com` / preview on development data. PR builds keep
+their existing custom develop credential scope; the publisher explicitly selects
+the logical preview gateway without exposing unrelated standard-preview settings
+to branch code. A recent configuration audit found previews and
+custom develop already share the development cluster, separate from production;
+the master preview alias and gateway activation are still pending.
 
-Set these variables only when you want this checkout or deployment to serve API
-requests from its own MongoDB instead of falling back to Thingtime production:
+Configure a self-hosted API or the environment gateway owner with:
 
 ```sh
 MONGODB_CONNECTION_STRING="mongodb+srv://<user>:<db_password>@<cluster>/<database>?retryWrites=true&w=majority"
@@ -606,12 +1563,103 @@ MONGO_PASS="<password>"
 literal `<db_password>` placeholder. The app substitutes `MONGO_PASS` into that
 placeholder using URL encoding so special characters in the password are safe.
 
+### Public data-environment identity
+
+Every deployed API must publish a safe identifier for its **database and
+authentication authority**. It is not a MongoDB host, database name, or
+credential; it lets browser bundles, Electron, account federation, and peer
+discovery distinguish deployments that share data from deployments that only
+look similar by URL. Set one public value for each Vercel target:
+
+```sh
+# Production target
+THINGTIME_DATA_ENV="production"
+
+# Preview + development targets that share the development database
+THINGTIME_DATA_ENV="development"
+
+# A separate named database/authentication authority
+THINGTIME_DATA_ENV="custom:demo"
+THINGTIME_DATA_AUTHORITY_ORIGIN="https://demo.thingtime.com"
+# Optional when multiple ids deliberately share one authority/database
+THINGTIME_FEDERATION_ID="demo"
+```
+
+`/api/v1/capabilities` (feature `api.capabilities` `1.1.0`) and root data
+publish only `{ id, kind, federationId, authorityOrigin }`. Clients must use
+that identity for sign-in and federation; `VERCEL_ENV`, branch names, URLs, and
+commit SHAs are diagnostics, never the data-authority contract.
+
+### Deployment peer discovery
+
+First-party production, preview, and development deployments can converge on a
+small mesh of live peers through `/api/v1/peers`. Configure the same discovery
+secret and a distinct persistent signing key on every participating deployment
+(never `PUBLIC_*`, never a browser variable):
+
+```sh
+THINGTIME_PEER_DISCOVERY_SECRET="replace-with-a-random-32-plus-character-secret"
+# Base64url PKCS#8 Ed25519 private key; create and store it in the deployment's secret manager.
+THINGTIME_PEER_SIGNING_PRIVATE_KEY="replace-with-base64url-ed25519-pkcs8-private-key"
+THINGTIME_PUBLIC_ORIGIN="https://this-deployment.example.thingtime.com"
+# Required public data/authentication authority: production, development, or custom:<id>
+THINGTIME_DATA_ENV="development"
+# Optional; defaults to the authority origin for THINGTIME_DATA_ENV
+THINGTIME_PEER_BOOTSTRAP_ORIGIN="https://dev.thingtime.com"
+# Optional comma-separated first-party host suffixes; defaults to thingtime.com,vercel.app
+THINGTIME_PEER_ALLOWED_HOST_SUFFIXES="thingtime.com,vercel.app"
+```
+
+Peers sign exact request method, path, timestamp, raw body, and federation id using HMAC, then
+also add an Ed25519 signature derived from that deployment's private key. The
+receiver verifies the public signature and pins the public key to the canonical
+origin after first HMAC-authenticated contact; a later key change fails closed.
+Every NDJSON peer event is independently Ed25519-signed too. The protocol
+rejects anonymous requests, expired or tampered signatures, non-first-party
+origins, credentials in URLs, and arbitrary outbound targets. Each origin is a
+separate `deploymentPeers` control-plane row with a ten-minute TTL lease. Only
+deployments with the same public federation id may discover one another. A
+signed `POST {"op":"sync"}` first announces to that data environment's authority,
+then probes a bounded breadth-first set of known peers; `GET` is capped,
+cursor-paginated NDJSON rather than an all-peers array. Run self-sync from a
+trusted deployment scheduler or deploy hook at a modest cadence (for example
+every five minutes). The checked-in Vercel cron advances the production
+bootstrap every five minutes using its existing `CRON_SECRET`; preview and
+non-Vercel deployments need the equivalent trusted deploy hook or scheduler.
+Do not expose either peer credential to clients or forks.
+
+Administrators can inspect the locally known lease projection at **Dev →
+Deployment peers** (`/peers`). The page calls a separate private,
+cursor-paginated admin endpoint—not the mesh protocol—and can filter every
+displayed public lease property in grid, card, or list form. It never returns
+HMAC material, private keys, signed request envelopes, or the persisted gossip
+cursor to a browser.
+
 For a local MongoDB instance you can instead use a complete URI with no password
 placeholder:
 
 ```sh
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
+
+### Index and storage hygiene
+
+The boot-time `ensureIndexes` converges every collection to the index plan in
+`remix/app/api/utils/mongodb/collections.ts` and prunes the names listed in
+`RETIRED_THINGS_INDEXES`. Index files never shrink on their own: after a mass
+delete (for example relocating CI telemetry out of `things`), each index keeps
+its old on-disk size until it is dropped and recreated. The admin migrations
+page (**/migrations**) shows a storage census per physical collection —
+document bytes, on-disk bytes, index bytes, and index count — and flags a
+generation whose index total is far above its document bytes. Reclaim it with
+the `rebuild-things-indexes` migration (unique constraints stay enforced by a
+twin index throughout). The audit that produced this runbook, with the
+production measurements, is in `docs/architecture/mongodb-index-storage-audit.md`.
+
+Vercel functions and the Atlas cluster are both pinned to Sydney (`syd1` in the
+root `vercel.json`). For how that becomes region-local latency worldwide without
+splitting the database or the URL, see
+`docs/architecture/geo-distribution.md` — a proposal, not shipped behaviour.
 
 ### Hosted `develop` and Preview data plane
 
@@ -636,6 +1684,103 @@ and no `x-thingtime-api-fallback` response header. Compare the same endpoint on
 `https://thingtime.com` and confirm that Production reports a different Atlas
 host. The current Thingtime hostnames and deployment state are recorded in
 `VERCEL_DEPLOYMENTS.md`; forks should substitute infrastructure they control.
+
+## Components library (`/components` + the external catalog)
+
+`/components` is the UI-first sibling of `/schemas`: component things
+(thingtime `["component"]`) carry an arg-templated render tree (drawn only
+through the sanitising allowlist renderers) plus arg descriptors the page
+turns into a live tester. "Save version" stores the current tester state as a
+user-owned component thing in your Things.
+
+The platform component catalog (styled after Ant Design, Bootstrap, MUI,
+shadcn/ui, Untitled UI, daisyUI, React Flow, and the Thingtime house style)
+lives in its own public repository —
+[lopugit/thingtime-components](https://github.com/lopugit/thingtime-components)
+— as a folder database (one JSON per component + manifest) alongside the
+deterministic generator/validator/seeder pipeline. This app repo ships only
+the component runtime and the Thingtime-required components; catalog
+components live in MongoDB as system `component` things and the frontend
+fetches them from there (`GET /api/v1/components/browse`). That catalog
+repo's `components-db/index.json` `count`/`target` are the source of truth
+for the catalog size — tranche 2 grew it to 70 archetypes / 350 families /
+2800 components.
+
+Fork-safe seeding into your own dev DB (real API only — no direct Mongo):
+
+Admins can also publish a catalog from `/components` → **Import component
+catalog**. Choose a JSON array of component definitions (or an object with a
+`components` array), review the validated count, then select **Publish catalog**.
+This uses the signed-in session, so no password file is needed. Files are capped
+at 32 MiB / 5,000 definitions. Batches respect the API's count, body-size and
+rate limits; stopping or retrying preserves completed work without duplicating
+components. The selected origin must advertise `api.admin-components-seed`
+1.0.0 and `api.webpages-suites-install` 1.1.0 or compatible versions.
+
+```sh
+# 1. Start the dev stack and register a throwaway user, then restart with
+#    that user on the admin allowlist:
+ADMIN_USERNAMES="<your-seed-user>" npm run web-pms
+
+# 2. Clone the catalog repo and put credentials where the seeder finds them:
+git clone https://github.com/lopugit/thingtime-components.git
+cd thingtime-components
+cat > scripts/components-db/.seed-env <<'ENV'
+TT_SEED_BASE=http://127.0.0.1:<nitro-port>
+TT_SEED_ADMIN_USER=<your-seed-user>
+TT_SEED_ADMIN_PASS=<your-seed-password>
+ENV
+
+# 3. Validate the catalog, then seed (idempotent, batched):
+node scripts/components-db/generate.mjs --check
+node scripts/components-db/seed.mjs
+```
+
+The seed endpoint (`POST /api/v1/admin/components/seed`) upserts system-owned
+public things with deterministic `component-<slug>` shareIds (the prefix is
+reserved against squatters), refreshes drifted crystals in place, and never
+touches foreign docs. `GET` on the same path returns the census.
+Verification: `node remix/scripts/verify-components.mjs http://127.0.0.1:<nitro-port>`.
+
+## App suites (Pokeworld + StarsAlign on Thingtime)
+
+Two real apps ship as **installable app suites** — schema things + component
+things + action things + data things + builder pages, defined in
+`remix/app/schemas/appSuites/` and driven by the action domain packs in
+`remix/app/api/utils/actions/packs/` (`astro.*` on `astronomy-engine`,
+`pokeworld.*`). Design notes: `PRs/578-builder-demo-library-app-suites-pokeworld-starsalign.md`.
+
+Fork-safe setup (no secrets involved):
+
+1. Seed the demo library as an admin — `POST /api/v1/admin/webpages/seed-demos`
+   or the 🌱 button on `/builder/demos`. This writes the seeded system copies
+   of every suite (pages at `/p/pokeworld`, `/p/starsalign`) plus the public
+   content data things (school entries, species). Re-running converges.
+2. Sign in and open `/builder/demos` → **📱 Apps** → **Install app**, or press
+   any control on the seeded page. `POST /api/v1/webpages/suites/install
+   { key }` upserts the whole suite into your things by stable key
+   (idempotent), and the same `/p/<key>` URLs now serve your copy.
+3. Assets load from the original sites (`https://www.pokeworld.center/tiles/…`
+   and `/sprites/…`); no keys, map APIs, or env vars are needed.
+4. Existing checkouts: the astro pack adds the `astronomy-engine` dependency —
+   run `corepack pnpm --dir remix install --frozen-lockfile` (or
+   `npm run worktree-setup`) once, or the Nitro dev worker dies with
+   `Could not resolve 'astronomy-engine'` and every `/api` call 503s.
+
+Verify end to end against a running stack:
+
+```sh
+node remix/scripts/verify-app-suites.mjs http://127.0.0.1:<web-port>
+```
+
+The script registers a throwaway user, installs both suites, plays (walks
+into an encounter, battles, throws balls), and drives every StarsAlign
+program; set `TT_VERIFY_ADMIN_USER` / `TT_VERIFY_ADMIN_PASS` to an
+`ADMIN_USERNAMES` account to seed first (register that account **before**
+allowlisting it — env admins cannot self-register). If the shared local
+Mongo sits at the 64-index cap, run the stack against a private replica set:
+`mongod --port 27117 --replSet rsapps --dbpath <dir>` + `rs.initiate()` and
+`MONGODB_CONNECTION_STRING='mongodb://127.0.0.1:27117/?replicaSet=rsapps&directConnection=true'`.
 
 ## Admin access
 
@@ -746,14 +1891,127 @@ temporarily as a legacy HS256 verifier while older browser cookies expire:
 JWT_SECRET="<legacy-long-random-secret>"
 ```
 
-If neither asymmetric key material nor `JWT_SECRET` is set, preview and
-production auth fail closed. Local development can still run without keys using
-an insecure dev-only fallback.
+If neither asymmetric key material nor `JWT_SECRET` is set, the web API fails
+closed in development, preview, and production. Local API tests must provide
+their own explicit signing key.
 
 The JWKS endpoint supports offline signature, issuer, and expiry verification.
 It does not tell external platforms whether the backing Mongo session has been
 revoked; add a server-side introspection endpoint before relying on live
 revocation checks outside Thingtime.
+
+### Lopu AI assistant (chat, tools, live builder patches)
+
+Lopu (`/lopu` with a route-driven Chat | Voice mode switch — `/lopu`,
+`/lopu/:chatId`, `/lopu/voice` — the navbar 🦄 beside ⌘K and the draggable
+floating window it toggles, the 🦄 launcher bubble, and Lopu conversations in
+Messenger) streams replies over NDJSON from `POST /api/v1/lopu/chats/reply`
+and runs tools as the signed-in viewer (pages, sections, components, actions,
+schemas, data). Models come from the `ai-model` catalog (`GET /api/v1/ai/models`,
+seeded from `AI_WORKFLOW_BASE_MODELS`; admins toggle rows at `/admin` → Lopu
+models and set the chat defaults at `/api/v1/settings/lopu-chat-defaults`).
+A signed-in viewer can also run a chat on one of their own Secure Vault AI
+connections: the catalog response lists them as redacted `vaultProviders`
+(never a token, never an endpoint beyond its hostname), the composer's picker
+shows them under "Your providers" with the reason when one is unusable, and a
+chat pins the choice as `providerId` (`POST /api/v1/lopu/chats`, `/update`,
+`/reply`); the turn then dials the user's provider through the same SSRF
+fence voice uses (`api/utils/lopu/vaultProviderClient.ts`) and the server keys
+are never a fallback for it. See "Lopu voice + personal Secure Vault" above
+for the vault key and allowlist. Design note:
+`PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md` (§1.3 own
+providers, §6 voice + vault).
+
+```sh
+# at least one provider key makes Lopu think; with neither it answers with an
+# honest canned line instead of failing
+ANTHROPIC_API_KEY="<anthropic-api-key>"          # or ANTHROPIC_AUTH_TOKEN
+OPENAI_API_KEY="<openai-api-key>"
+OPENAI_BASE_URL="https://api.openai.com/v1"      # optional: any OpenAI-compatible endpoint
+
+LOPU_CHAT_PROVIDER="auto"        # auto | claude | openai | test (deterministic scripted provider, no keys)
+LOPU_OPENAI_TOOLS="native"       # native | text — `text` speaks a fenced ```tt-tool protocol for
+                                 # OpenAI-compatible endpoints without function calling; endpoints
+                                 # that refuse `stream: true` fall back to a plain completion automatically
+LOPU_CLAUDE_MODEL="claude-opus-5"   # optional: the Anthropic model used for the `default` waterfall slot
+LOPU_OPENAI_MODEL="gpt-5.6-sol"     # optional: the OpenAI model used for the `default` waterfall slot
+LOPU_TEST_PROVIDER_PACE_MS="12"     # optional: ms between scripted chunks in test mode
+# local development only (ignored in production and on Vercel): reach a fake
+# OpenAI-compatible endpoint saved in a Secure Vault connection under a public
+# HTTPS origin — the rewritten origin skips the allowlist/DNS checks
+THINGTIME_LOPU_PROVIDER_DEV_REWRITES="https://lopu-fake-provider.invalid=http://127.0.0.1:18170"
+```
+
+Keys are verified, not merely detected. On the first catalog read per process
+(`GET /api/v1/ai/models`) the server probes each configured provider once —
+`GET https://api.anthropic.com/v1/models` (`ANTHROPIC_BASE_URL` honoured;
+`x-api-key`, or `Authorization: Bearer` for `ANTHROPIC_AUTH_TOKEN`) and
+`GET ${OPENAI_BASE_URL:-https://api.openai.com/v1}/models` — with a 5 s cap, no
+retries and no redirects, and caches the verdict in-process for 10 minutes
+(2 minutes after anything but a success). A 401/403 marks that provider's
+models unavailable (`providers.<p>.verified === false`, picker hint
+"<Provider> key invalid") so a stale or wrong key never routes chats into the
+canned fallback; a timeout, network error or unexpected status leaves them
+offered but unverified (`verified: null`). Admins see the verdict per provider
+at `/admin` → Lopu models → Provider keys and can force a re-check with
+"Re-check keys" (`POST /api/v1/admin/ai/models { probe: true }`). Only
+presence and verdicts leave the server — never a value, a response body, or a
+base URL.
+
+Live check against a running stack: `node remix/scripts/verify-lopu.mjs
+http://127.0.0.1:<nitro-port>` (start the stack with `LOPU_CHAT_PROVIDER=test`
+so the reply builds a component and a page deterministically; set
+`TT_VERIFY_ADMIN_USERNAME`/`TT_VERIFY_ADMIN_PASSWORD` to cover the admin
+routes, and `THINGTIME_USER_VAULT_KEY` + the dev rewrite above on the server
+to exercise a BYO-provider turn end to end — otherwise that one check is
+skipped and the unconfigured-vault path is asserted instead).
+
+#### Verified access, usage accounting and credits
+
+Lopu is **invite-only by default**: every account starts with
+`meta.lopuVerified` unset (= not verified) and an admin verifies it from
+Admin → Lopu accounts (`POST /api/v1/admin/users/lopu-access { userId,
+verified }`); admins are always verified. The `Thingtime.LopuAccess` singleton
+(`GET|POST /api/v1/settings/lopu-access`, admin POST) holds the rules:
+`requireVerification` (default true), `allowByoUnverified` (let an unverified
+account still run turns on its own Secure Vault provider, default false),
+`starterCredits` (granted once when an account is first created, default 0)
+and `lowBalanceWarningCredits` (the amber threshold, default 1). The gate runs
+before any provider call in chats create, chats reply, voice reply and the
+direct-voice session and answers `403 { code: "LOPU_UNVERIFIED" }`, `402
+{ code: "LOPU_NO_CREDITS", balanceMicros }` or `403 { code: "LOPU_GUEST" }` for
+a temporary session; listing and reading conversations is never gated.
+
+Turns on Thingtime's server keys are **prepaid in credits** (1 credit = 1 USD
+of the provider's list price = 1,000,000 micros): every turn is priced from
+`remix/app/api/utils/ai/pricing.ts` (every catalog model, `estimated: true`
+where a sibling's price stands in; `GET /api/v1/ai/models` publishes
+`pricing` per model) and recorded as a protected `lopu-usage` row; a
+`thingtime` turn is debited from the user's `lopu-account` with a `lopu-credit`
+ledger row, a `byo` turn (the user's own Secure Vault provider) or the `free`
+canned fallback is recorded but never debited. The balance may go negative by
+at most one turn; the next turn is refused. Users see all of it at Settings →
+Lopu 🦄 → Credits & usage (`GET /api/v1/lopu/account`, `/history`) and ask for
+more with `POST /api/v1/lopu/account/topup-request { credits, note? }` (one
+pending request at a time; the admin inbox gets the same ops mail as the
+"new user" notification); admins list accounts at `GET
+/api/v1/admin/lopu/accounts?q` and grant, adjust, refund, approve or decline
+with `POST /api/v1/admin/lopu/credits`. The scripted test provider
+(`LOPU_CHAT_PROVIDER=test`) reports 100 input / 50 output tokens per hop and
+prices against the `test-model` row (0.2 credits per hop) so the whole flow is
+observable without a real key.
+
+```sh
+# optional: a "Buy credits" link shown beside "Request credits" — no payment
+# processor is wired in; unset it and the UI offers requests only
+THINGTIME_LOPU_TOPUP_URL="https://example.com/buy-lopu-credits"
+```
+
+Live check: `node remix/scripts/verify-lopu.mjs` (section A2) walks the whole
+flow — unverified 403 → admin verifies → 402 at zero credits → grant → a priced
+turn debits the balance → history rows → top-up request → approval — and needs
+`TT_VERIFY_ADMIN_USERNAME`/`TT_VERIFY_ADMIN_PASSWORD`, because under the
+default rules a fresh account cannot chat until an admin verifies it.
 
 ### Password reset + email 2FA
 
@@ -775,9 +2033,10 @@ comparison. Login attempts are rate-limited per IP (`auth.login`).
 
 ### Admin integration vault and policy proxy
 
-The **/admin → External integrations** tab stores a write-only external
-credential and binds it to a saved endpoint policy. The browser never receives
-the credential again—not masked, decrypted, or through an audit record.
+The **/admin → External integrations** tab stores an encrypted external
+credential and binds it to a saved endpoint policy. Lists and audit records
+never contain credential values. The explicit Show action requires fresh
+password or passkey verification by a current admin for one selected entry.
 Provision this distinct server-only value before creating any secret:
 
 ```sh
@@ -793,6 +2052,17 @@ stable across deploys: rotating the environment value without re-encrypting
 stored entries intentionally makes them undecryptable. For a fork, create a
 new random 32-byte base64url key and add Claude accounts through Admin → CI
 Control; never copy Thingtime’s encrypted rows or production tokens.
+
+Hosted development also needs its own key, scoped to the deployment's actual
+Vercel custom environment (not the CLI-only Development target or every PR
+preview). Redeploy that environment to activate it; do not rotate an existing
+key without re-encrypting all affected vault entries. Admin External
+integrations, CI credential waterfall, and user Secure Vault are separate
+stores. Sharing server-provider environment variables does not copy saved CI
+OAuth credentials or user connections. An authorized cross-environment copy
+must use the credential store's authenticated transfer path or secure re-entry,
+preserve order and permissions, and re-encrypt with the destination key without
+logging values. Shared provider credentials also share upstream billing/quota.
 
 Do not reuse the JWT, session, peer-discovery, or cron secret. The policy proxy
 accepts a saved endpoint id rather than arbitrary URLs; it enforces HTTPS
@@ -845,7 +2115,7 @@ or **all** variation per user:
 | Scope | Covers | Flag |
 | --- | --- | --- |
 | `public` | post, comment, and custom-emoji attachments | `meta.publicUploads` |
-| `private` | message attachments + the user's own profile avatar/banner | `meta.privateUploads` |
+| `private` | message attachments, recordings (including recording-import drafts), and the user's own profile avatar/banner | `meta.privateUploads` |
 | `all` | both of the above in one write | both flags |
 
 The account carries `meta.publicUploads: false` and `meta.privateUploads:
@@ -875,6 +2145,36 @@ test recipient (or a plus alias of it).
 
 ### Private S3 media and attachments
 
+The internal shared-file copy helper uses the same private bucket and upload
+lifecycle described below. Its server role needs the existing exact-version
+read and multipart-write permissions (`s3:GetObjectVersion`, `s3:PutObject`,
+list/abort/finalize operations); no public bucket access or browser AWS
+credentials are needed. It accepts an authorized attachment ID, never an
+external URL, reserves the recipient's quota before copying, and sends copied
+bytes through normal type detection and moderation. A timed-out/failed copy
+remains billed until normal cleanup confirms the object is gone. `/things/fork`
+uses this path with capability `api.things-fork` 1.4.0, retargets authored
+HTML/CSS and stored URL or exact attachment-ID arguments (including defaults,
+lists, matching template branch selectors and page overrides), and binds new files to copied Things. It
+rechecks source sharing before and after writes and reports deferred cleanup.
+Bound post-purpose file galleries are discovered in one bounded query and keep
+their copied home target and order, including on post/data Things. A file also
+embedded in a page is copied once. Unsupported gallery files fail the copy;
+recording, message and profile-purpose files are not included by this path.
+Linked galleries receive new private quota-accounted link records, preserving
+validated URLs and annotations without fetching external bytes. Source changes
+or revocation trigger cleanup; flagged links cannot be copied into an unflagged
+record. The content endpoint still never redirects to an external URL.
+File copies require the recipient's normal post-purpose upload approval and
+recheck it during copying; the internal service does not bypass that gate.
+Split-fragment file IDs use bounded root-render `ttMediaRefs` bindings after
+interpolation, preserving editable inputs. Attachment-content 1.6.3 applies the
+same binding when discovering shared media; unused bindings grant no access.
+external media URLs remain external. Live storage and browser acceptance are
+tracked in [PR #755](PRs/755-shared-composition-file-copies.md), separately
+from unit-test proof.
+The byte-copy protocol follows [S3 UploadPartCopy](https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPartCopy.html).
+
 Uploaded images are moderated asynchronously after upload: attachment
 completion atomically stamps protected `moderation.status: pending` before the
 upload can be projected or served publicly. Pending media stays available only
@@ -903,13 +2203,31 @@ THINGTIME_MODERATION_PROVIDER="openai+claude"  # 'openai+claude' (alias 'tiered'
                                                # unset default by keys: both → openai+claude; ANTHROPIC only → claude;
                                                # OPENAI only → openai; neither → off
 ANTHROPIC_API_KEY="<key>"                # Claude API key (escalation / claude provider)
-OPENAI_API_KEY="<key>"                   # OpenAI key for the free omni-moderation screen
+OPENAI_API_KEY="<key>"                   # legacy fallback; prefer the dedicated encrypted vault entry below
 TT_MODERATION_MODEL="claude-opus-5"      # optional Claude model override
 TT_MODERATION_ESCALATION_SCORE="0.2"     # optional; escalate unflagged images whose max
                                          # image-category score meets this 0..1 threshold
 ```
 
-Note: `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are shared with the Lopu musing
+For each deployment environment, open `/admin/ci-control` → AI credential
+waterfall and add an enabled credential with the exact platform **OpenAI
+Moderation** (use Add platform), a descriptive account name, and an OpenAI API
+key. The server reads the first enabled entry in that platform's priority order
+from that environment's encrypted admin vault. Production and develop must each
+have their own entry and existing `THINGTIME_ADMIN_VAULT_KEY` bootstrap; never
+copy encrypted records between environments. No new Vercel variable or MongoDB
+index is needed. This dedicated key is used only for image, invitation-avatar,
+and post/comment moderation, including the Admin settings effective-provider
+view. It does not replace paid chat or CI keys. Rotation takes effect on the
+next request; reads/decryption failures stop moderation rather than silently
+using a stale key. When there is no enabled entry, `OPENAI_API_KEY` remains a
+migration fallback. Verify an actual image verdict before removing that legacy
+value, and check its other consumers before removal. A successful models-list
+check alone does not prove moderation access. Omni has no usage charge, but the
+API organization must have working API access; persistent 429s can reflect
+account funding/provisioning even with a visible active key.
+
+Note: legacy `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are shared with the Lopu musing
 feature — their presence alone activates image moderation when
 `THINGTIME_MODERATION_PROVIDER` is unset. Set it to `off` explicitly in
 environments that carry the keys for musing but must not moderate. An
@@ -1210,6 +2528,388 @@ incomplete-MPU lifecycle remains a required independent guard.
 An MPU that never issued a part URL has no possible late browser PUT and can be
 refunded promptly after Abort/ListParts/HEAD proves it empty.
 
+### Local attachment storage (laptop stand-in for the private bucket)
+
+The private bucket is reached only through Vercel's OIDC role, so a checkout
+without that role cannot upload, preview or download a single byte. For local
+development set one variable in `remix/.env` and restart the dev stack:
+
+```sh
+THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=.local-attachments
+```
+
+`remix/app/api/utils/attachments/localAttachmentStorage.ts` then implements the
+same `AttachmentS3` interface on the filesystem (objects, versions, multipart
+parts under that directory, ignored by git) and mints short-lived HMAC-signed
+URLs to `GET|PUT /api/v1/attachments/local-object`, which it also serves.
+Uploads, image previews, downloads, "download all" archives, copies and
+moderation fetches run unchanged; quota, ACL and moderation gates are exactly
+the production ones. The module refuses to start when `VERCEL`, `VERCEL_ENV`
+or `VERCEL_TARGET_ENV` is set (reported as a non-retryable storage
+configuration failure) and the route answers 404 without the variable, so it
+can never become a storage tier. A relative directory resolves against the dev
+server's working directory (`remix/`); `~` is expanded. Delete the directory to
+reset local media.
+
+The signed URLs are root-relative by default, which is what the browser and
+every server-side reader need. A native app (the Watch recording inbox against
+a simulator build), `curl`, or a smoke script cannot follow a relative URL, so
+for those also set the dev server's origin and restart:
+
+```sh
+THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://127.0.0.1:10000   # this checkout's Nitro port (npm run web-ports)
+```
+
+Exact object versions are immutable, so the stand-in answers with an `ETag`
+and `Last-Modified` and honours `If-None-Match` (304) like a bucket would.
+
+### Seed a local fixture through the API
+
+```sh
+node remix/scripts/seed-fixture.mjs create --files 3 --name demo   # user + folder + public post with 3 stored files
+node remix/scripts/seed-fixture.mjs list
+node remix/scripts/seed-fixture.mjs cleanup remix/.fixtures/demo.json
+```
+
+The script only talks to the real endpoints (register, uploads/parts/complete,
+things, PATCH move) so seeded data shares one code path with real signups
+(FUNDAMENTALS §2). New accounts start with uploads locked: pass
+`--admin-user <name> --admin-password-file <file>` so the script enables uploads
+via `POST /api/v1/admin/users/public-uploads`. Without an admin, `create`
+registers the user and stops at the first refused upload; add
+`ADMIN_USERNAMES=<that username>` to `remix/.env`, restart the dev stack (env
+admins bypass approval, and a name listed there cannot *register*, hence the
+order), then `node remix/scripts/seed-fixture.mjs resume remix/.fixtures/<name>.json`.
+State, including the generated password for logging in as the fixture
+user, lives in `remix/.fixtures/<name>.json` (ignored, mode 0600). Cleanup
+deletes the post (cascading its attachments) and folder and signs the fixture
+session out; there is no account-deletion API, so the user row remains.
+
+### Poll index headroom during the Watch rollout
+
+Poll writers share production's protected Binary `uniqueKeys_1` constraint and
+retain `things_vote_key_lookup` for indexed legacy reads. Startup and voting do
+not retire this lookup or run a separate poll backfill. The explicitly leased
+admin index migrations govern shared relationship/legacy layouts; custom data
+endpoints retain their compatibility indexes. The Watch scheduler's
+`lopu_recording_due` index remains part of this branch's plan.
+
+For production-free concurrency, ACL, toggle and quota verification, run
+`npm --prefix remix run verify:poll-unique-keys` against the verifier's explicitly
+allowed disposable loopback replica set. See the script's prerequisites; it
+does not accept production or develop database URIs.
+
+### Personal recording runtime (local adapter)
+
+Saved iPhone audio Things can be explicitly processed in `/lopu/recordings`:
+paste the recording's `/thing/<id>` link or ID, then choose **Queue recording**
+for transcription/notes or **Send to Lopu** for a confirmed transcript handoff.
+This requires `api.lopu-recordings` 1.5.0, an enabled recording processor, and a
+ready standalone owner-private audio attachment with purpose `recording`.
+The existing `postId` request field accepts either that recording Thing ID or
+a private Watch post ID. Automatic discovery still covers only new Watch posts;
+saved phone recordings are never processed merely because they exist. Upload
+approval, storage quotas, selected-provider/local-device setup and separate Lopu
+tool confirmations remain required. Transcript comments are linked children;
+processing never converts the audio into a post or rewrites its crystal/binding.
+
+In `/things`, an owned private audio recording also offers **Send to Lopu** in
+both the right-click and three-dot menus. The action checks this domain's
+capabilities and your enabled processor, then asks for confirmation. It sends
+only the selected recording, not other selected Things; it never enables a
+processor automatically. Recording activity shows the eventual transcript and
+conversation. The server remains authoritative for attachment readiness and
+privacy, even when a cached tile still shows the menu.
+
+The opt-in HTTP delivery smoke (`pnpm --dir remix run test:recording-delivery`)
+skips by default. To run it, use an isolated loopback Thingtime server backed by
+a disposable Mongo replica set and a configured private test S3 bucket. Register
+an unused `recqa`-prefixed account through the normal signup API, and have an
+administrator approve its **public upload** scope: Watch attachments use the
+post upload purpose even though their resulting Things are private. Do not
+bypass upload approval or seed the database directly.
+
+Inject `THINGTIME_RECORDING_QA_USERNAME` and `THINGTIME_RECORDING_QA_PASSWORD`
+through your local secret manager/environment (never chat, command arguments,
+or tracked files), then run:
+
+```sh
+pnpm --dir remix run test:recording-delivery http://127.0.0.1:18000 --confirm-disposable-qa
+```
+
+Substitute your configured local port. The script rejects remote origins and
+non-QA usernames, and requires disabled, unused recording settings. It uploads
+one second of synthetic silence, pairs disposable test devices, exercises real
+HTTP claims/completions with deterministic synthetic inference, and checks
+duplicate-safe private transcript/note/todo writes and opt-out enforcement.
+Cleanup disables processing, removes this run's source/output Things, and signs
+out its own API session. The disposable account, device records and job metadata
+remain for diagnosis; upload cleanup may be deferred by the storage lifecycle.
+Any cleanup failure makes the test fail. No real recordings, browser sessions,
+Keychain entries or AI providers are used. A pass proves broker delivery, not
+real speech recognition, Claude output quality, or physical Watch acceptance.
+
+For an opt-in macOS smoke test, run
+`node --import tsx scripts/personal-recording-runtime-smoke.mts` from `remix/`.
+It skips unless `TT_PERSONAL_RUNTIME_SMOKE=1` is set with absolute local paths
+in `TT_SMOKE_CLAUDE`, `TT_SMOKE_WHISPER`, `TT_SMOKE_FFMPEG`, and `TT_SMOKE_MODEL`.
+It generates synthetic speech, checks WAV/M4A transcription, and cleans up its
+temporary audio. Set `TT_PERSONAL_CLAUDE_SMOKE=1` separately to send only that
+synthetic transcript to your native Claude Code sign-in and verify notes/todos.
+This consumes your account allowance; no tokens or real recordings belong in
+these variables. It does not pair a device or enable account processing.
+
+`remix/scripts/personal-recording-runtime.mjs` provides local `transcribe` and
+`complete` operations for the forthcoming personally paired recording worker.
+The paired-device broker is registered at `/api/v1/lopu/recordings/personal`;
+the interactive Mac launcher and recording-settings setup panel are available.
+Synthetic audio and real Keychain storage have been verified. Real paired-account
+audio delivery and end-to-end Watch acceptance are still pending.
+No server, public listener, background service or automatic recording processing
+is started by importing this module.
+
+Fork setup: install `ffmpeg`, `whisper-cpp`, and the unmodified Claude Code CLI.
+Sign into Claude Code yourself (`claude auth login`); do not copy a Claude
+session token into a Thingtime endpoint credential. Obtain a compatible GGML
+Whisper model from the whisper.cpp project's documented model source and verify
+its checksum before use. Supply absolute `claudePath`, `whisperPath`,
+`ffmpegPath`, and `modelPath` values to `createPersonalRecordingRuntime` from
+machine-local, untracked setup. Models and credentials must stay outside git.
+
+Audio is decoded/transcribed locally, with a 24 MiB input and 20-minute duration
+limit. The English `base.en` model was exercised with synthetic audio; choose
+and validate a multilingual model when needed. Only the resulting text is sent
+to the personal Claude Code CLI. The CLI runs with customizations and tools
+disabled, native first-party sign-in checked, private text on stdin, bounded
+execution and output, and a temporary directory removed after success or failure.
+Inherited API keys and endpoint overrides are excluded from its environment.
+Transcription can mishear names; inspect the transcript before relying on tasks.
+Run `npm --prefix remix run test:ai-models` for its regression coverage.
+
+The outbound transport in `remix/scripts/personal-recording-worker.ts` now
+provides one bounded `runOnce()` cycle around that runtime. It requires a
+personally paired Thingtime device credential and negotiates
+`api.lopu-recordings-personal` version `1.0.0` on the exact selected origin
+before sending the credential. HTTPS is required except for loopback testing;
+redirects are rejected. Audio stays local; only transcript text reaches Claude
+Code. Heartbeat loss stops local processing, and interrupted result submissions
+retry the identical lease/result rather than running inference again.
+
+The API-layer broker now implements device-bound claims, private audio reads,
+bounded heartbeats and completion receipts. It uses the shared recording content
+writer with transactional checks of current consent, device/session revocation
+and source privacy. Accepted transcripts and server-selected output IDs survive
+a worker crash; exact completion retries do not run inference or create content
+again. Jobs assigned to a personal device cannot fall back to cloud credentials.
+
+**Integration status:** the Mac CLI runs in the foreground, not as an installed
+background service. The settings UI and API accept `runtimeDeviceId` only for an owned paired
+device with an active `recordings.personal.v1` session. New jobs snapshot that
+selection; retry explicitly assigns the selected processor while preserving
+completed checkpoints. Offline personal jobs wait without a cloud fallback.
+Clients require `api.lopu-recordings` 1.4.0 and
+`api.lopu-recordings-personal` 1.0.0 on the selected origin. Older deployments
+fail closed. Do not copy an API key, CI credential or Claude OAuth
+token into its `credential` option: it accepts only an existing Thingtime paired
+device credential. Keep machine-local worker setup untracked; importing
+this module does not pair a device or enable recording processing.
+Do not set internal job or settings fields directly in a database to bypass
+that gate. Broker/authority mock tests in `test:lopu` are unit coverage, not real
+database race or Watch proof. Run
+`node --import tsx remix/scripts/personal-recording-api-smoke.mts <loopback-origin>`
+from a dependency-equipped checkout for the real HTTP signup, signed pairing,
+selection, empty-queue and opt-out smoke. It creates one synthetic local account
+and device, leaves processing disabled, prints no credentials, and invokes no
+audio or AI provider. It refuses non-loopback origins. Remaining acceptance:
+real audio/results, revocation races, deployed worker and physical Watch.
+
+Mac launcher (run from `remix/`):
+
+```sh
+npm run recordings:worker -- --help
+npm run recordings:worker -- configure --origin https://your-thingtime.example --claude /absolute/path/claude --whisper /absolute/path/whisper-cli --ffmpeg /absolute/path/ffmpeg --model /absolute/path/ggml-model.bin
+npm run recordings:worker -- pair --origin https://your-thingtime.example
+npm run recordings:worker -- status --origin https://your-thingtime.example
+npm run recordings:worker -- run --origin https://your-thingtime.example --once
+```
+
+If pairing was interrupted, try `resume` first. If an unfinished challenge has
+expired and cannot be resumed, inspect `/devices` and revoke any computer it
+already created before abandoning local recovery. The explicit command
+`npm run recordings:worker -- forget-pending --origin https://your-thingtime.example --confirm-abandon-recovery`
+permanently removes only the unfinished local Keychain entry, checks the exact
+stored state, and refuses a completed pairing. It does **not** revoke a server
+device. Create a fresh one-time secret and run `pair` afterward. No automatic
+cleanup occurs after an ambiguous network failure.
+
+Pairing requires a fresh one-time challenge from the signed-in account's
+`POST /api/v1/devices/pairing` operation. In `/lopu/recordings`, open **Pair a Mac
+for recordings**, review the instructions, then create the one-time secret.
+The panel requires `api.devices-pairing` 1.1.0 and discards responses whose
+`ownerId` differs from the displayed account. Secrets are masked initially,
+copied/revealed only by an explicit click, kept only in component memory and
+cleared on expiry, account change, unmount or hiding the panel. Hiding is not
+server-side revocation; the challenge remains usable until consumed or expired.
+Paste **only that
+Thingtime pairing secret** into the hidden interactive prompt, never a Claude
+token, password or API key. No secret belongs in command arguments or files.
+The launcher stores its origin-bound credential and interrupted claim in macOS
+Keychain, using stdin rather than process arguments. `resume --origin ...`
+recovers a lost response using the exact saved proof and credential; it does
+not create a second device. Keychain read-back must succeed before pairing
+continues. Expired/invalid pending challenges currently require manual recovery
+of this launcher's exact Keychain item; automatic reset is intentionally absent.
+
+Runtime paths are stored in a private per-origin config under
+`~/Library/Application Support/Thingtime/recording-worker/`; it contains no
+credentials. A per-origin lock prevents overlapping setup/workers. Stale locks
+fail closed and must be inspected manually, not blindly deleted. Pairing never
+enables recording processing: select the computer and explicitly opt in at
+`/lopu/recordings`. Run without `--once` for foreground polling; it stops after
+three consecutive failures, with no automatic restart. `status` is local setup
+status only, not an assertion of provider or transcription health. Real
+Keychain/native-runner acceptance remains separate from mocked tests.
+
+This worktree's local QA URL is `http://127.0.0.1:18000/lopu/recordings` (HMR
+18001, Nitro 18002), managed by `npm run web-pms`. Tailscale/Funnel was not
+available during validation: the installed shim points to a missing
+`/Applications/Tailscale.app` binary. No public local-server URL is configured.
+
+### Shared AI endpoint waterfall
+
+AI completions and recording-automation mutations follow the protected account
+subscription, resolved on the home server for each request. Free and custom
+tiers retain the admin-configured `ai.complete`/`things.write` limits and
+windows; Plus receives five times the request allowance; Pro and Pay as you go
+have no Thingtime request-rate cap for these two product endpoints. The
+existing account bucket is preserved across tier, token, device and IP changes.
+No subscription migration or new credential is required for existing accounts.
+Entitlement/limiter outages return 503, not a misleading exhausted-quota 429.
+Provider quotas, attachment size/upload limits, storage allowances, bounded
+workers and authentication/credential-protection limits remain independent.
+
+`POST /api/v1/ai/complete` is the shared, non-streaming text completion entry
+point. A full signed-in user sends `{ connectionIds, prompt, system? }`.
+`connectionIds` is an explicit ordered list of one to four **owned Secure
+Vault connection IDs**, not tokens. Each connection keeps its own endpoint,
+credential and model. Choose that order per request; no provider is opted in
+implicitly. The `useApi().v1.ai.complete()` client negotiates the origin's
+`api.ai-complete` feature at version 1.1.0 before sending text.
+
+Fork setup: configure the existing Secure Vault encryption key in the host's
+secret store, add connections in Settings → Secure Vault, and admit custom
+HTTPS hosts with `THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS`. Never put credentials
+in source, URLs, prompts or request bodies. Existing Anthropic Messages,
+Gemini generateContent and OpenAI-compatible endpoint adapters are supported.
+All selected IDs are validated as owned before any external delivery; each
+key is resolved again immediately before its attempt. Platform/CI credentials
+are never implicitly selected. This endpoint does not persist prompts or
+responses; each selected provider's own data handling still applies.
+
+The shared waterfall policy also drives recording-stage retries. Each
+connection is tried once (20-second transport timeout, 80-second total
+budget); network, timeout, authentication, quota and selected 5xx failures
+permit fallback. Invalid configuration, unsafe endpoints, malformed replies
+and cancellation stop. Responses report `connectionId` and a bounded
+`attempts` trace containing IDs, outcomes and optional HTTP statuses, never
+tokens, endpoint URLs or upstream error bodies. All failures return a fixed
+safe message. There is a fail-closed limit of 20 requests per ten minutes per
+account. Scoped app/PAT/device credentials are not full account sessions.
+
+**Integration status:** this is text routing, not audio transcription or a
+Claude Code OAuth bridge. The planned personal runtime keeps Claude Code's
+sign-in inside the unmodified runtime and uses a separate endpoint credential
+to authenticate Thingtime. Do not place a Claude session token in an HTTP
+provider entry. Local speech-to-text, runtime pairing and real Watch recording
+acceptance remain separate release gates; no paid transcription key is
+required by this text endpoint.
+
+### Private Apple Watch recording automation
+
+`/lopu/recordings` (also linked from Settings) controls Lopu's recording
+automation. It is **off until each account opts in**: private audio and its
+transcript are sent to the account's explicitly selected AI providers. Only newly uploaded
+private `watch-upload-*` posts tagged `apple-watch` are discovered. Owners can
+explicitly queue an older private Watch post on the same page. This covers
+direct Watch uploads and the older paired-iPhone relay.
+
+Configure these values in your deployment's secret store, never in Git:
+
+```sh
+OPENAI_API_KEY="<server-side provider key>"
+ANTHROPIC_API_KEY="<optional server-side Anthropic API key for notes/todos>"
+CRON_SECRET="<long random scheduler secret>"
+# Optional operator-controlled compatible provider base and analysis model:
+OPENAI_BASE_URL="https://api.openai.com/v1"
+LOPU_OPENAI_MODEL="gpt-4o-mini"
+```
+
+Audio connections must support `gpt-4o-mini-transcribe`; a chat-only proxy or
+Claude API key cannot transcribe recordings. Analysis supports OpenAI and
+Anthropic API connections. It honors the connection's own model, otherwise
+the matching Thingtime Admin model preference (`LOPU_OPENAI_MODEL` /
+`LOPU_CLAUDE_MODEL` supply default-slot fallbacks). `Provider configured`
+means a key is present, not that a live transcription has passed. Audio is
+limited to 24 MiB; M4A/MP4, MP3, WAV and WebM are accepted. Never point the
+provider base at an untrusted service: it receives the key and private audio.
+
+For account-specific waterfalls, add API connections in **Settings → Secure
+Vault**, then order them separately under **Audio transcription** and **Notes
+and todos** on `/lopu/recordings`. Each list holds 1–4 unique connection IDs.
+Legacy settings keep the platform audio/text provider as their only entry;
+no extra provider is opted in automatically. Platform defaults are optional
+when the account supplies its own compatible keys. Secure Vault requires a
+stable `THINGTIME_USER_VAULT_KEY` (or the existing admin vault key), configured
+using the Secure Vault setup above. Keep encryption keys in the host's secret
+store. Choices return labels/capabilities only; keys are decrypted server-side
+only for that owner's selected attempt. GitHub Actions/CI credentials are not
+enumerated or inherited. Claude Code OAuth/setup tokens are not API keys and
+are rejected; use a separately billed Anthropic Console API key.
+
+Authentication, rate/quota, timeout and provider-availability failures try the
+next selected connection, at most once per connection (20 seconds each, 80
+seconds per stage). Invalid requests, unsafe endpoints and malformed outputs
+stop instead of forwarding the recording again. Consent, source privacy and
+the selected list are rechecked before every attempt. Disabling processing or
+changing the list stops further fallback. A successful transcript checkpoint
+is reused when retrying analysis. All provider endpoints, including custom
+platform bases, must pass the existing HTTPS/public-DNS guard and server
+`THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS` allowlist; redirects are refused.
+
+The repository-root Vercel cron calls `GET /api/v1/lopu/recordings/run` every
+five minutes using `Authorization: Bearer <CRON_SECRET>`. Other hosts must
+schedule that authenticated endpoint themselves. An administrator may use
+same-origin `POST` for a manual run. The scheduler discovers bounded batches,
+processes one recording per run, and resumes interrupted work through durable
+leases/checkpoints. A busy installation must schedule sufficient worker
+capacity; five minutes is polling cadence, not a completion guarantee.
+
+Transcripts become quota-billed, relational comments on the source private
+post (long transcripts are split). Derived notes and unfinished todos are
+ordinary owner-private Things linking back to that post. This feature creates
+reminders, not purchases, messages or executable actions. It rechecks source
+privacy and opt-in before every write; atomic checkpoints prevent duplicate
+comments/todos on retry. Processing scratch is non-indexed BinData and is
+discarded on completion. Activity and retry buttons expose failures without
+printing provider credentials or signed attachment URLs.
+
+Daily reminders use the account's selected IANA time zone and hour, with at
+most one bell entry per unfinished todo per local date, including DST days.
+Reminders arrive at or after that hour as the bounded queue is processed.
+Complete a todo, pause its reminders, or disable daily reminders globally to
+stop them. The normal notification preferences also apply; reminder emails
+are opt-in. Native delivery additionally requires the Watch push setup.
+
+API contracts: `api.lopu-recordings` and `api.lopu-recordings-run` 1.0.0;
+notification list/settings 1.2.0 add `recording-reminder`. Both manifests and
+the runtime route registry advertise these versions. Clients must negotiate
+against the selected origin before using recording operations.
+
+Local QA worktree: `thingtime-watch-recording-automation` uses Vite 17460,
+HMR 17461 and Nitro 17462, derived by `npm run web-ports`. Start with the
+repository PM2 lifecycle. No public Funnel was configured for this worktree
+during implementation: the machine's Tailscale CLI pointed at a missing app.
+
 ### Notification emails (SES notification stream)
 
 Activity notifications (friend requests, new followers, comments, replies,
@@ -1235,6 +2935,17 @@ CRON_SECRET="<random string>"           # lets the Vercel cron trigger the
 APP_URL="https://your-deployment.com"   # absolute links in emails
 ```
 
+**Set `APP_URL` on every deployment that sends email.** Verification and
+password-reset links carry single-use auth tokens, so their origin is never
+taken from the request `Host` header. `resolveTrustedOrigin`
+(`remix/app/api/utils/auth/appOrigin.ts`) resolves, in order: `APP_URL`; then
+the hostname the platform reports for this deployment (`VERCEL_BRANCH_URL` /
+`VERCEL_URL`, or `VERCEL_PROJECT_PRODUCTION_URL` on a production target — all
+server-injected, never caller-supplied); then, only off-platform, a narrow Host
+allowlist for local development (`localhost`, `127.0.0.1`, `[::1]`,
+`*.thingtime.com`, `*.ts.net`); otherwise the canonical production origin.
+Forks should point `APP_URL` and the canonical origin at their own domain.
+
 The weekly digest is scheduled in `remix/vercel.json` (`crons`) against
 `GET /api/v1/notifications/email/weekly-summary`; Vercel attaches
 `Authorization: Bearer <CRON_SECRET>` automatically when that env var exists.
@@ -1242,6 +2953,45 @@ Signed-in admins can run the same endpoint manually (`?dryRun=1` or
 `POST { dryRun: true }` previews without sending), and the run is idempotent —
 a six-day per-recipient lookback in the `email_messages` outbox prevents
 double-sends.
+
+### Native Apple push notifications (iPhone + Apple Watch)
+
+The native targets register their current APNs tokens through the authenticated
+`POST /api/v1/notifications/devices` session. Thingtime chooses the application
+topics server-side, stores tokens only in protected binary `secure` data, and
+never returns token values from the API. The Watch pairs directly using an
+four-digit code entered at the selected origin's `/watch/pair` or `/pair/1234`
+page on an iPhone or computer. Alternatively the paired phone offers the request
+to its active account, or the Watch targets an entered username; matching signed-in
+sessions show an explicit, prefilled **Approve Watch** button. Codes expire after
+five minutes; sending a request never auto-approves it. The phone handoff uses a
+separate one-request proof, never the Watch's private claim secret. The Watch
+stores only a scoped device credential in Watch Keychain,
+not the browser session or password, and downloads notifications without an
+iPhone relay. Deploy `api.watch-pairing` 1.2.0 alongside the Watch build before
+enabling this flow on an origin; the client checks the origin's capability
+manifest. See [Watch preview setup](iOS/README.md#connect-the-watch-during-preview-testing)
+for code-entry, domain selection, and local test instructions. Each push
+registration is bound to its browser/device session so revocation or expiry
+makes that target ineligible for delivery even if cleanup is delayed.
+
+Configure the APNs provider in each Vercel environment that should deliver
+native alerts:
+
+```sh
+APNS_KEY_ID="<Apple push key id>"
+APNS_TEAM_ID="<Apple developer team id>"
+APNS_PRIVATE_KEY="<base64-encoded .p8 contents>"
+APNS_IOS_BUNDLE_ID="com.thingtime.appletime"
+APNS_WATCH_BUNDLE_ID="com.thingtime.appletime.watchkitapp"
+```
+
+Keep the `.p8` key in Vercel or another approved secret store only. Never add it
+to `.env.example`, the repository, build logs, or client configuration. The two
+bundle identifiers need Push Notifications capability and matching development
+and distribution provisioning before a real device can receive alerts. If the
+APNs variables are absent, the in-app notification remains durable and the
+provider send is intentionally skipped.
 
 ### Service account provisioning
 
@@ -1284,6 +3034,24 @@ session document.
 
 See `docs/api/service-accounts.md` for the complete request and response shape.
 
+## Email Delivery And Owned SMTP
+
+Thingtime's long-term email plan lives in
+`docs/email-owned-architecture.md`. It covers the migration from provider-backed
+sending toward an owned SMTP stack, including Mongo-backed queues/events,
+transactional versus newsletter stream separation, inbound/reply handling,
+DNS/authentication records, sender reputation warm-up, bounce/complaint
+processing, one-click unsubscribe, abuse contacts, and compliance requirements.
+
+Do not send production email directly from feature code. App routes and auth
+flows should enqueue mail through the Thingtime email service boundary —
+`sendEmail()` in `remix/app/api/utils/email/service.ts`, backed by the
+`email_messages` outbox and its deliverability satellites in `FUNDAMENTALS.md`
+§3 — so SES, other bridge providers, and the future owned MTA can share the same
+templates, events, suppression list, and audit trail. That boundary and its
+collections already exist; the plan extends them rather than introducing a
+second email path.
+
 Lopu musings can optionally use Claude and/or OpenAI. Without these keys, the
 endpoint serves the built-in fallback library.
 
@@ -1304,6 +3072,101 @@ When an AI key is configured, the musing endpoint uses MongoDB to allow 10
 AI-backed musings per detected IP address per rolling hour. Requests over the
 limit, or requests made while the rate-limit collection is unavailable, stream
 the preset fallback responses instead of calling an AI provider.
+
+## Third-party app connections
+
+`/connections` links external accounts (Reddit, YouTube channels, Mastodon,
+Bluesky, Lemmy, Hacker News, GitHub activity, any RSS/Atom feed, plus a
+deterministic demo provider) to a Thingtime account; `/connections/feed`
+browses them with native Thingtime comments/reactions layered on the synced
+posts, and AI feed filters ("warn for sad news" → veiled behind a Show
+button, or hidden) applied server-side.
+
+Fork-safe setup: the shipped providers are keyless public-content APIs and
+need **no configuration**. AI-backed filter classification reuses the Lopu
+provider keys above (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) and the Admin AI
+model waterfall; without any key, classification falls back to a
+deterministic keyword heuristic so the feature keeps working. Verify a
+deployment end to end with:
+
+```sh
+pnpm --dir remix run verify:connections
+```
+
+(94 real-API checks against the local nitro port; `TT_VERIFY_LIVE=1` adds a
+live Hacker News pull, for 96.)
+
+### SSO account linking (Facebook, Instagram, TikTok, YouTube account)
+
+SSO providers use real OAuth sign-in: Connect sends the browser to the
+provider's own login, and the token response is sealed into the linked
+account's secure storage server-side (no token ever reaches a client). Each
+provider stays `configured: false` (UI: "Needs setup") until its app
+credentials are set:
+
+```sh
+# Meta app (facebook provider — scopes public_profile,user_posts)
+FACEBOOK_APP_ID="<meta-app-id>"
+FACEBOOK_APP_SECRET="<meta-app-secret>"
+# Instagram API with Instagram Login (professional accounts)
+INSTAGRAM_APP_ID="<instagram-app-id>"
+INSTAGRAM_APP_SECRET="<instagram-app-secret>"
+# TikTok Login Kit (scopes user.info.basic,video.list)
+TIKTOK_CLIENT_KEY="<tiktok-client-key>"
+TIKTOK_CLIENT_SECRET="<tiktok-client-secret>"
+# Google OAuth client (youtube-account provider — youtube.readonly)
+GOOGLE_CLIENT_ID="<google-oauth-client-id>"
+GOOGLE_CLIENT_SECRET="<google-oauth-client-secret>"
+# Reddit script app (reddit-account provider — syncs your REAL front page)
+REDDIT_CLIENT_ID="<reddit-app-client-id>"
+REDDIT_CLIENT_SECRET="<reddit-app-secret>"
+# Mastodon app registered on ONE instance (mastodon-account provider — syncs
+# your REAL home timeline; users of that instance sign in there)
+MASTODON_INSTANCE="mastodon.social"
+MASTODON_CLIENT_ID="<mastodon-app-client-id>"
+MASTODON_CLIENT_SECRET="<mastodon-app-secret>"
+# X app (x provider — home timeline; requires a PAID X API tier to read)
+X_CLIENT_ID="<x-oauth2-client-id>"
+X_CLIENT_SECRET="<x-oauth2-client-secret>"
+# Twitch app (twitch provider — followed channels that are live)
+TWITCH_CLIENT_ID="<twitch-client-id>"
+TWITCH_CLIENT_SECRET="<twitch-client-secret>"
+# Tumblr app (tumblr provider — your REAL dashboard feed)
+TUMBLR_CLIENT_ID="<tumblr-consumer-key>"
+TUMBLR_CLIENT_SECRET="<tumblr-consumer-secret>"
+# Pinterest app (pinterest provider — your own pins; no home-feed API)
+PINTEREST_CLIENT_ID="<pinterest-app-id>"
+PINTEREST_CLIENT_SECRET="<pinterest-app-secret>"
+# LinkedIn app (linkedin provider — account linking only; feeds are partner-gated)
+LINKEDIN_CLIENT_ID="<linkedin-client-id>"
+LINKEDIN_CLIENT_SECRET="<linkedin-client-secret>"
+# Spotify app (spotify provider — recently played + followed-artist releases)
+SPOTIFY_CLIENT_ID="<spotify-client-id>"
+SPOTIFY_CLIENT_SECRET="<spotify-client-secret>"
+# Optional: YouTube Data API key — lights up channel NAME search for the
+# Thingtime-managed virtual subscription list (ids/URLs/@handles work keyless)
+YOUTUBE_API_KEY="<youtube-data-api-key>"
+# Optional: pin the OAuth redirect origin when the app runs behind a proxy or
+# tunnel (must match the redirect URI registered with each provider app)
+CONNECTIONS_OAUTH_REDIRECT_BASE="https://your-host.example.com"
+# Optional: dedicated HMAC key the PKCE code verifier is derived from. Falls
+# back to JWT_SECRET / JWT_PRIVATE_KEY, so every deployment already has one;
+# set it only to rotate PKCE independently of the auth signing key. Any
+# in-flight connect started before a rotation just has to be retried.
+CONNECTIONS_PKCE_SECRET="<random-32-byte-secret>"
+```
+
+Register `https://<your-host>/api/v1/connections/oauth/callback` as the OAuth
+redirect URI in each provider app's settings (Meta and TikTok require https —
+a tunnel origin works for local dev). Official-API honesty notes: Meta removed
+the friends News Feed API in 2015, so the facebook provider syncs your own
+timeline posts; Instagram and TikTok expose your own media/videos, not the
+home/For You feed; the youtube-account provider syncs the latest uploads from
+your real subscriptions. The REAL algorithmic home feeds come from the
+providers whose APIs expose them: `reddit-account` (your front page),
+`mastodon-account` (your home timeline), and `bluesky-account` (your
+following timeline — connects with an app password, no developer app needed:
+the password is exchanged for a session and never stored).
 
 ## Branch automation: develop → main promotion
 
@@ -1396,8 +3259,8 @@ change, and the hourly backstop. There is no second product-branch workflow:
   `all`, and this keeps force-pushes within the default `GITHUB_TOKEN`'s
   powers). If a rebuild still trips GitHub's workflow-file push restriction,
   the builder re-pins `.github` to the previous `all` state and retries.
-- Vercel builds `all` like any other product branch, so it doubles as a living
-  everything-preview.
+- Vercel no longer auto-builds `all`; use an explicitly requested
+  GitHub-built preview when the aggregate needs browser validation.
 
 ## Vercel deployment status
 
@@ -1436,35 +3299,94 @@ VERCEL_DASHBOARD_TEAM_SLUG="<team-or-scope-slug>"
 Use `VERCEL_DASHBOARD_TEAM_SLUG` when tokenless dashboard links need to point to
 a Vercel team slug that differs from the GitHub repository owner.
 
+Deployment status can additionally be fed by a Vercel webhook instead of polling
+the Vercel REST API. This is optional and off by default:
+
+```sh
+VERCEL_WEBHOOK_SECRET="<signing-secret-shown-once-when-the-webhook-is-created>"
+```
+
+Create a project-scoped Vercel webhook for deployment created/succeeded/
+promoted/error/canceled events pointing at:
+
+```text
+https://<your-thingtime-origin>/api/v1/vercel/webhook
+```
+
+Forks: the helper script `remix/scripts/vercel/create-webhook.mjs` registers
+that webhook against `VERCEL_PROJECT_ID` / `VERCEL_TEAM_ID` (documented above).
+It falls back to this repository's own upstream project and team when those are
+unset, so set both to your own values before running it — otherwise the call is
+aimed at an account your token does not own. Creating the webhook by hand in the
+Vercel dashboard needs neither variable.
+
+While `VERCEL_WEBHOOK_SECRET` is unset the endpoint answers `404` and
+`/api/v1/vercel/status` behaves exactly as before (live API polling). Once it is
+set, the latest event per git branch is persisted server-side and a `ready`
+state is served from that record with no Vercel API calls; mid-build states
+still poll for phase and progress.
+
+A recorded `error`/`canceled` is only served when the record demonstrably
+belongs to the deployment answering the request (matched on `VERCEL_URL`, or on
+`VERCEL_GIT_COMMIT_SHA` when no URL is available). One branch can have several
+concurrent deployments sharing that single record — Thingtime builds one head
+SHA into both generic Preview and the `develop` Custom Environment — and a
+sibling's failure must not mark a healthy deployment as failed, since this also
+backs `/api/v1/health/vercel`. Unattributable failures fall back to polling.
+
+This is a **separate** webhook from the CI Control receiver at
+`/api/v1/integrations/vercel/webhook` (`THINGTIME_VERCEL_WEBHOOK_SECRET`)
+documented above, which ingests the same Vercel deployment events into the CI
+Control event log for a different purpose. Configuring one does not configure
+the other, and the two secrets are independent. If you only want deployment
+status in the footer, you only need this one.
+
 Vercel automatically provides variables such as `VERCEL`, `VERCEL_ENV`,
 `VERCEL_URL`, `VERCEL_BRANCH_URL`, `VERCEL_GIT_COMMIT_REF`, and
 `VERCEL_GIT_COMMIT_SHA` during deployments.
 
 ### Trusted `develop`-target PR deployments
 
-A pull request's base branch does not select its Vercel environment. A feature
-branch targeting `develop` is therefore still an ordinary Preview unless the
-trusted controller in `.github/workflows/develop-pr-preview.yml` explicitly
-deploys its exact head SHA to the `develop` Custom Environment. Thingtime now
-also assigns the current `develop` runtime variables to generic Preview, so an
-ordinary newly built Preview shares the development data/services even without
-the controller. The controller remains responsible for the stable
-`pr-<number>.previews.dev.thingtime.com` alias, identity/SHA gates, status
-comment, and marker-scoped cleanup.
+A pull request's base branch does not select its Vercel environment, and it
+does not gate the preview either: every same-repository PR — whether it targets
+`develop`, `main`, `github-actions` or another feature branch — gets its exact
+head SHA deployed by the trusted controller in
+`.github/workflows/develop-pr-preview.yml` into the `develop` Custom
+Environment by default, and published at
+`https://pr-<number>.previews.dev.thingtime.com` until the PR closes. The only
+base-independent requirements are the trust gates below and a head that
+carries `remix/` (controller-only branches have nothing to build and take the
+skip/reconcile path). Thingtime also assigns the current `develop` runtime
+variables to generic Preview, so an ordinary newly built Preview shares the
+development data/services even without the controller. The controller remains
+responsible for the stable alias, identity/SHA gates, status comment, and
+marker-scoped cleanup. A `production`-environment preview of a PR is an
+explicit admin choice made through the admin preview lane
+(`deploy-admin-pr-previews.mjs`, published under
+`pr-<number>.previews.thingtime.com`); it never happens by default.
 
-The workflow deliberately uses two stages. The product branches retain only a
+The workflow deliberately separates authorization, compilation, and
+publication. Product branches retain only a
 thin event listener pinned to the reusable implementation on the protected
 `github-actions` branch. Its `pull_request_target` job has no environment or
 Vercel secret, checks out no code, and emits only a bounded
-`repository_dispatch` payload. The privileged dispatch job runs in the trusted
-default-branch event context behind the `vercel-develop-pr-control` environment
-while checking out the controller from `github-actions`. It proves the
-source workflow path/run, repository, same-repository PR, head SHA, action, and
-triggering actor through GitHub's API, then re-reads the live PR. Both the PR
-author and triggering actor must be explicitly allowlisted, currently hold
-write/admin permission, and the non-draft PR must still target `develop`.
-Neither GitHub job checks out or executes PR-head code; Vercel performs the
-remote build only after those gates pass.
+`repository_dispatch` payload. The protected authorizer checks out only
+`github-actions`, proves the source workflow path/run, repository,
+same-repository PR, head SHA, action, and triggering actor through GitHub's API,
+then re-reads the live PR. Both the PR author and triggering actor must be
+explicitly allowlisted and currently hold write/admin permission, and the PR
+must be non-draft. Its base branch is not part of the gate: `develop`, `main`
+and feature-branch targets all preview into the `develop` environment.
+
+A separate environment-free GitHub job checks out exactly that authorized SHA,
+installs locked dependencies, and generates `.vercel/output` without any
+repository or Environment secrets. The protected publisher never executes the
+product checkout: it validates the short-lived archive's paths, links, size,
+routes, and Vite shell, then uses a pinned Vercel CLI with `--prebuilt` and
+`--target=develop`. Only that controller process receives the Vercel token and S3
+CORS probe URL. Root `vercel.json` disables automatic Git deployments for
+every branch except exact `main` and `develop`, so feature pushes cannot create
+a second native Vercel build for the same SHA.
 
 The reusable implementation and controller script must first merge to the
 protected `github-actions` branch. The thin listener must then reach the
@@ -1521,13 +3443,10 @@ only the verified PR wildcard alias explicitly. This leaves the stable
 development hostname on the real `develop` branch while PRs receive only
 `https://pr-<number>.previews.dev.thingtime.com`.
 
-Generic Preview intentionally receives every runtime variable currently
-assigned to the `develop` Custom Environment, while retaining its existing
-Preview-only filesystem, CI, repository, webhook, and workflow variables. This
-includes the development-only APP URL, CRON, JWT, MongoDB, and S3 settings, plus
-the AI, SES/email, and Vercel API values that `develop` intentionally shares
-with Production. Production MongoDB, JWT, and S3 settings remain separate and
-are not assigned to Preview.
+Generic Preview retains the development runtime variables required by manual
+or prebuilt preview publication, but ordinary feature pushes no longer trigger
+automatic Vercel builds. Production MongoDB, JWT, and S3 settings remain
+separate and are not assigned to Preview.
 
 For Thingtime, set `PREVIEW_ALIAS_SUFFIX=previews.dev.thingtime.com` and
 `STABLE_DEVELOP_DOMAIN=dev.thingtime.com`. Forks should replace both with
@@ -1618,13 +3537,15 @@ private integration values as `dev.thingtime.com`. Treat all branches Vercel is
 allowed to build as trusted development code, use disposable data, and keep
 production MongoDB/JWT/S3 credentials out of Preview.
 
-`*.previews.thingtime.com` is reserved for a separate future production-preview
-controller. Do not point the develop controller at that suffix, copy the
-production S3 role into generic Preview, or let ordinary Vercel feature/fork
-previews assume the production AWS role. A production-preview controller must have its
-own trusted actors, protected control environment, exact production OIDC trust,
-deployment cleanup, CORS probe, and bucket CORS rule before that namespace is
-activated.
+`*.previews.thingtime.com` remains detached from the production branch and
+primary domains. Admin CI Control may assign only the exact
+`pr-<number>.previews.thingtime.com` alias to an owned, marker-verified READY
+production-environment preview. Its immutable `*.vercel.app` snapshot remains
+available beside that persistent URL. Do not point the develop controller at
+the production suffix, copy the production S3 role into generic Preview, or let
+ordinary Vercel feature/fork previews assume the production AWS role. The
+production-preview wildcard, exact production OIDC trust, cleanup, and bucket
+CORS rules must remain independently protected.
 
 Every generic Preview and eligible controller deployment intentionally shares
 the same development MongoDB, S3 bucket, quotas, and other runtime state as
@@ -1673,6 +3594,33 @@ API tokens unprefixed and server-only.
 
 ## Native iOS TestFlight web URL
 
+The iOS app includes a **Thingtime** system Share extension for incoming text,
+links, media and files. Shares are saved locally; opening Thingtime makes them
+available in **Files → On My iPhone → Thingtime → Shared**, where the normal
+upload picker can select them. For forks, register `<iPhone bundle ID>.share`
+with the same App Group as the containing app and its own provisioning profile.
+See [incoming shares and native verification](iOS/README.md#receive-content-from-the-ios-share-sheet).
+An older installed native build needs an app update to gain this share target;
+changing the embedded website cannot install an extension.
+
+Lopu voice requires build 27 or later; build 25's general native bridge did not
+include its recorder or Live Activity widget. Voice support is negotiated with
+`lopuVoiceVersion`, separately from the shell version. For a fork's signed build,
+register the app, its `.watchkitapp` companion, and its `.lopu-widget` extension
+under your own bundle prefix. The Fastlane build syncs a distribution profile
+for each target and includes all three in manual export. Override
+`LOPU_WIDGET_BUNDLE_IDENTIFIER` and `LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER`
+only when your fork's Xcode bundle settings match those values; keep signing
+credentials in the ignored iOS env/Keychain. Audio recovery files stay on-device
+in Files → On My iPhone → Thingtime → Lopu Recordings. Build 28 also uploads
+new recordings as owner-private audio Things under `/things`. This requires
+private-upload approval, available account storage, and the selected origin
+advertising `api.attachment-uploads` and `api.attachment-upload-complete` 1.2.0
+in `/.well-known/thingtime-capabilities.json`. Forks use the existing private
+S3 attachment setup; no new credential is needed. Failed uploads remain local
+and retry when Lopu reopens or regains connectivity in the same account. See [voice recovery](iOS/README.md#lopu-voice-recovery).
+
+
 The native iOS app lives in `iOS/` and defaults its embedded `WKWebView` to
 `https://thingtime.com`. TestFlight builds can target a Vercel branch or preview
 deployment by setting a non-secret build-time URL:
@@ -1691,3 +3639,3101 @@ iOS/scripts/testflight-beta.sh
 `iOS/.env` is ignored by git. The value is baked into that uploaded app build;
 future web changes on the same Vercel branch URL do not require a new iOS
 binary.
+
+### Recovery release catalogue and cloud publishing
+
+Recovery reads all published GitHub release pages (including prereleases) in one
+refresh, then selects desktop and companion Recovery ZIPs for the current Mac.
+Its sidebar reports GitHub's published count separately from compatible archives;
+Actions runs and source commits are not downloadable releases. The legacy build 4
+archive has no resource seal and must not be installed or re-signed by the client.
+A failed download, verification, or refresh preserves the installed app and caches.
+Publishers can withdraw a damaged component without removing release history by
+placing `<!-- thingtime-recovery-unavailable:v1:desktop:missing-resource-seal -->`
+on its own line in that GitHub release's notes (`recovery` replaces `desktop` for
+the companion app). Recovery labels that component unavailable and disables its
+download before transferring the archive. Other components remain available.
+Installing a valid replacement can repair a damaged current app: when the old app
+cannot enter the verified cache, Recovery preserves it separately and reports its
+backup path. Installer failures reopen Recovery with a persistent explanation.
+
+Main and approved PR release builds use the protected `github-actions` pipeline.
+The main listener requires `contents: write` and `pull-requests: read` so its nested
+worker can run; product changes reach it through the normal main promotion process.
+The macOS signing inputs are `MAC_CSC_LINK` (base64 encrypted Developer ID P12),
+`MAC_CSC_KEY_PASSWORD`, and `APPLE_TEAM_ID`, stored in GitHub Actions secrets.
+Notarization uses `APPLE_API_KEY_BASE64`, `APPLE_API_KEY_ID`, and
+`APPLE_API_ISSUER`, or the already configured `ASC_KEY_CONTENT`, `ASC_KEY_ID`,
+and `ASC_ISSUER_ID` equivalents. API-key content is base64 encoded. The ASC
+fallback is considered only after macOS signing is explicitly configured, so an
+unrelated iOS setup does not change the unsigned lane. An entirely absent macOS
+secret set produces clearly marked `.unsigned` prereleases containing both
+apps; partial configuration fails closed. Unsigned archives never become the latest trusted release. Forks
+must configure their own release origin and signing setup rather than reusing
+Thingtime's account credentials.
+
+### Rich text controls development
+
+The isolated `thingtime-editor-rich-text` worktree uses the deterministic Vite
+port **14870**, HMR **14871**, and Nitro **14872**. The ephemeral verification
+page is `http://localhost:14870/tests/editor-rich-text.html`; it mounts the real
+Editor.js and builder components without saving account data. Run
+`npm run web-ports` in other checkouts to resolve their own ports.
+
+The full colour/size panel is available from the inline palette button and
+**More text styles…** in block settings. Sizes support px, em, rem, pt and %;
+relative units retain CSS semantics. Existing numeric sizes remain px.
+Live changes preview in the document; **Save** keeps them and **Cancel** restores
+the starting style. An unstyled picker begins at 50% lightness. Drag its title to
+move it, or use the corner handle (pointer/arrow keys) to resize it. Block settings
+and the advanced rich editor are resizable too.
+
+**Undo**, **Redo** and **Changes** belong to the current editing session.
+Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z navigate complete draft snapshots, including empty
+blocks. The Changes timeline retains alternate futures and supports restoring a
+point or selectively reverting/reapplying an event's fields. If a later edit
+changed the same field, selective restoration reports a conflict instead of
+silently overwriting it. Whole inline HTML fields and list/table arrays are
+atomic for selective restoration. Histories remain in memory while their editor
+owner is mounted; they are not persisted across page reloads. Builder inline
+and advanced editors each retain their own session history across close/reopen.
+The carry-style checkboxes in Changes control which whole-block properties
+survive native block conversions; all are enabled initially.
+
+Integrations can listen for the bubbling `tt-editor-update` DOM event on the
+editor session. Its detail contains the current `event` (id, parentId, timestamp,
+label, changes and document snapshot) and `cursor`; treat the payload as read-only.
+This is a local DOM event and creates no remote API or account records.
+No additional configuration or credentials are required.
+
+Tailscale/Funnel could not be configured on 2026-09-05: the local CLI shim points
+to an absent `/Applications/Tailscale.app/Contents/MacOS/tailscale` binary. No
+public Funnel URL or allowed-host entry was added for this worktree.
+
+Recovery's app selector switches between Thingtime Electron and Commander, with
+separate cache roots and fixed bundle identifiers. The shared Recovery launcher
+can update itself from either view. Commander archives use
+`Commander-App-Release-<version>-macos-<arch>.zip` (or the explicit
+`Commander-App-UNSIGNED-Release-` prefix and `.unsigned` tag). A Commander view
+with no published compatible archive says so; **Save installed build** verifies
+and caches `~/Applications/Commander.app` for offline recovery.
+
+GitHub cards show component, channel, date, architecture, size and release/build
+identity. **This Mac** cards read build numbers from cache metadata and bundled
+`Info.plist`, with embedded Electron commit metadata as a fallback for old apps.
+Unknown IDs remain explicitly unknown. The cloud workflow passes its numeric
+build number to both apps, and Electron writes it to `CFBundleVersion`.
+
+### Passkey deployment and Apple app setup
+
+Passkeys use the `thingtime.com` relying-party ID on its subdomains, but the
+credential record belongs to the selected **account environment**. Production,
+development and custom databases can contain different accounts/passkeys. A
+shared domain does not replicate credentials. Localhost and custom domains have
+their own RP ID. If a saved passkey is unavailable, sign in with the password for
+that environment and check Settings → Security before creating another.
+
+The web client requires `api.auth-passkeys-register-options`,
+`api.auth-passkeys-register`, `api.auth-passkeys-login-options` and
+`api.auth-passkeys-login` version **1.1.0** for its respective ceremony. Deploy the
+server and client together. Challenges are independent, signed, origin-bound
+httpOnly cookies, capped at three pending per ceremony kind and expiring after
+ten minutes. Verified challenges are spent atomically in the existing `authOtps`
+TTL satellite; never disable its unique `challenge` index or verification checks.
+In-flight legacy cookies have a narrowly scoped compatibility read path.
+
+For the native iOS app, enable **Associated Domains** on your Apple App ID and
+regenerate the provisioning profile. `iOS/project.yml` declares
+`webcredentials:thingtime.com`; forks must change that to their actual RP domain.
+Set the server environment variable `THINGTIME_APPLE_APP_IDS` to the public
+application identifier from the app’s signed `application-identifier` entitlement
+(for example `ABCDEFGHIJ.com.example.app`; comma-separate additional intended app
+IDs). This is public association metadata, **not** a certificate or private key.
+The matching RP origin must serve `/.well-known/apple-app-site-association` over
+HTTPS without redirects or login. Missing or invalid configuration publishes an
+empty app list and deliberately grants no app access. Rebuild/distribute the
+signed app with its updated profile, then verify on a physical iPhone. Existing
+installed builds without the entitlement cannot be repaired by a web deploy alone.
+
+Passkey repair worktree validation: local web port **19040**, HMR **19041**, Nitro
+**19042**. Local URL: `http://localhost:19040`. Tailscale/Funnel was unavailable on
+2026-09-05 because its CLI points to a missing `/Applications/Tailscale.app`;
+no public Funnel mapping was changed.
+
+
+### Commander signed GitHub releases
+
+Commander main releases use the protected GitHub Actions controller and the same
+approved Developer ID / notarization secrets as Electron. See
+[Commander release setup](Commander/README.md#github-releases) for the complete
+fork-safe secret names, supported Apple silicon platform, checks, and Recovery
+installation flow. Neither the source checkout nor PR builds receive a persisted
+publication token. No unsigned release is substituted when credentials are missing.
+
+## Dependency configuration recovery
+
+[configurations/](configurations/README.md) holds non-secret service customizations
+and environment-specific restoration instructions. AWS S3 snapshots distinguish
+development and production; SES documents verified domain settings and clearly
+labelled deployment templates. Forks must substitute their own bucket/domain
+names and provision credentials through their secret store.
+
+### Persistent media and responsive images
+
+Media settings let users disable persistence, clear downloaded bytes, or disable
+low-resolution previews. A service worker stores binary files in IndexedDB, then
+Cache Storage or memory when unavailable (128 MiB per backend, 256 entries, seven
+days, at most 16 MiB per file). Browser eviction remains possible. Large files,
+opaque third-party responses and unsupported environments use native HTTP
+loading; HTML and general API responses are never captured by this worker.
+Managed private media requires an online access check before every worker cache
+read, including ranges, so cached content cannot bypass revoked access.
+
+The protected attachment-content feature is version 1.1.0. Image variants use
+Sharp at widths 64/320/640/1280/1920 with bounded decoding and concurrency. GIFs,
+animated/unsupported images and oversized sources fall back to the original.
+No resizing infrastructure or extra secret is required. New upload and signed
+download Cache-Control metadata permits private storage/revalidation; signed
+redirects and authorization receipts retain no-store.
+
+Local validation in the `thingtime-persistent-media-cache` worktree uses
+http://localhost:13540 (Vite), 13541 (HMR), 13542 (Nitro). The browser fixture
+at http://localhost:13543/tests/media-cache.html is served by
+`node remix/scripts/serve-media-cache-qa.mjs`; it uses real UI/worker code with
+synthetic media and access revocation, without writing application data.
+Tailscale/Funnel could not be verified: the installed CLI wrapper points to a
+missing Tailscale.app executable. No public mapping was created or changed.
+
+Thingtime Desktop checks Node privacy access directly from the running helper. The Things setup card refreshes every five seconds while visible and on return from System Settings; **Check access** retries immediately. A failed check preserves and labels the last known result. If macOS shows access enabled but the helper reports denial after moving from a development build to Developer ID signing, switch **Thingtime Node** off and on once for each affected permission, restart the node in Desktop settings, and check again. Desktop never resets privacy grants automatically.
+## Thing index audit
+
+The staged consolidation audit and production/develop rollout gates live in
+[Thing index consolidation](docs/architecture/thing-index-consolidation.md).
+Run `cd remix && node --import tsx scripts/audit-things-indexes.mts` for the
+exact source-plan inventory. It does not connect to a database or need secrets;
+live index counts must be checked separately through the admin workbench.
+
+The combined relationship/legacy increment targets 47 home indexes, but keeps
+60 during compatibility rollout (unknown extra indexes are preserved). Run
+`consolidate-relationship-lookup-indexes` and `retire-legacy-thing-indexes`
+on that home database. Deploy the
+compatible code to every origin sharing it first, dry-run, then run with
+`confirm: true` under the migration lease. Duplicate keys block activation;
+no relationship documents are deleted. Custom endpoints are not migrated.
+Each migration first activates readers without dropping indexes; run it again
+after at least one minute to finish retirement. Repeated early runs do not
+reset the drain deadline. Legacy rows block retirement except canonical embeds,
+whose redundant `kind` metadata can be safely removed after readers drain.
+Readiness uses the existing home settings/key index and a 30-second cache;
+normal requests never backfill data. No additional secret or provider setup is
+required. Follow the linked rollout guide and verify native query plans and
+the live index set before retiring any supporting index.
+
+For isolated native regression checks, start a **fresh disposable** MongoDB
+replica set named `ttindex` on loopback port `27192` (never your normal local
+database). Then run `cd remix` and
+`TT_INDEX_TEST_ALLOW_LOCAL=1 MONGODB_CONNECTION_STRING='mongodb://127.0.0.1:27192/thingtime?replicaSet=ttindex' npm run verify:relationship-indexes`.
+The script creates fixture accounts/content through the real API utilities,
+runs the leased migration, checks behavior and emits identity-free native
+explain counts. It refuses any other URI. Stop the disposable server afterward;
+it is not a persistent development service.
+
+## Verified vault viewing
+
+Saved CI credentials, admin integration secrets and personal Secure Vault values remain encrypted and masked by default. Their **Show** control requires the current account password or a fresh user-verified passkey for each selected entry. Admin/CI credentials require a current admin role; personal entries remain owner-only. Displayed values are transient and hide after 30 seconds, closing the dialog or leaving the tab.
+
+Local validation worktree `thingtime-vault-verified-reveal` uses Vite 17340, HMR 17341 and Nitro 17342 through the canonical PM2 ecosystem. Local URL: http://localhost:17340/admin/ci-control. Public Tailscale/Funnel URL is unavailable: the installed launcher points to a missing `/Applications/Tailscale.app` executable; no public mapping was changed.
+
+Fork setup: configure a unique 32-byte base64url `THINGTIME_ADMIN_VAULT_KEY` as a server-only secret for each deployment environment. Personal vaults use `THINGTIME_USER_VAULT_KEY` when configured, otherwise the admin key. Preserve existing keys to retain decryptability; never copy ciphertext between environments with different keys. Password verification needs the account's current password hash; passkeys must be registered in the selected environment and require HTTPS (or localhost). Normal authentication signing keys and the existing auth challenge TTL collection support two-minute, single-use, session/origin/item-bound passkey verification. No additional database index or migration is required. The same-origin `api.vault-reveal` 1.0.0 capability is negotiated before use, and fixed security attempt limits apply to every subscription tier.
+
+Desktop permission recovery includes **Open App Locations** in Things and Desktop settings. It opens a private folder of symlinks to the current Desktop and bundled Node, plus installed Thingtime Recovery, Commander, ThingDisk, and ThingDock apps from the standard Applications folders. Duplicate older installations are omitted. You may need to remove the affected app from a macOS permission list and re-add it using these shortcuts. Grant only the permissions you intend. macOS decides whether to display Quit & Reopen; Thingtime offers Later / Restart Node Now when you return from the recovery flow. Restart other affected apps separately. No permission is changed automatically.
+
+### Settings navigation and Mac connection panel
+
+Settings uses one shared component in the drawer popup and full page. Direct links are `/settings/profile` (the default), `/settings/things`, `/settings/appearance`, `/settings/notifications`, `/settings/security`, `/settings/connections`, `/settings/lopu`, and `/settings/admin` (administrators only). Existing Secure Vault and Lopu hash bookmarks remain supported. A popup category is bookmarkable with `?settings=<category>` on the current page; Open settings page carries that category to its dedicated URL.
+
+A healthy Mac connection panel can be hidden from Things using “Don’t show again unless there’s a problem”. This preference is local to the browser and account; Desktop saves it per account and API endpoint so it survives app restarts and changing loopback ports. It persists across reloads, and does not change node operation or privacy access. Live service, pairing, connection, and permission failures reveal the panel again. Settings → Things always retains the panel and a switch to restore it.
+
+Shared-settings validation worktree: `http://localhost:13040` (HMR 13041, Nitro 13042), managed by the repository PM2 lifecycle. Funnel was unavailable during validation because the installed Tailscale CLI points to a missing application executable; no public Funnel URL was verified. No new environment variables or external setup are required for these settings changes.
+
+### Apple widgets and Control Centre
+
+The iOS app and native Mac widget companion share a configurable WidgetKit suite.
+See [Apple widget setup](apple/README.md) for gallery choices, content privacy,
+App Group provisioning, local signing, and fork-safe build settings. App Group
+capabilities must be enabled on both the iOS app and its widget extension before
+installing a signed build; no credentials belong in project files.
+
+The Mac companion now uses a native interface and browser OAuth. Open
+**Connection** to select production or your local server and approve widget
+permissions. No client secret or manual app registration is required; fork
+callback identifiers and capability requirements are documented in
+[Apple widget setup](apple/README.md#oauth-setup-for-forks-and-local-servers).
+
+### Automatic import and native push recovery (10 September 2026)
+
+The iPhone app automatically imports older `Lopu-*.caf` recordings from its
+`Documents/Lopu Recordings` folder when Lopu opens with a signed-in account.
+Voice settings → **Import older recordings** is enabled by default and can be
+turned off. Import uses the canonical `api.things` 1.7.0 and private attachment
+contracts. Local originals stay on the iPhone. A local account/origin-bound
+receipt prevents repeated imports; files already uploaded by build 29 are
+reconciled against the account's existing audio Things before uploading.
+Files created during the current app session use the normal recording outbox.
+Offline or failed imports retry when Lopu reconnects.
+
+For native alerts, open **Settings → Notifications → iPhone and Watch push**
+in the iPhone app and tap **Enable / reconnect iPhone push**. If iOS permission
+was denied, the adjacent button opens the iPhone notification settings. The
+page reports eligible account registrations; notification tests report whether
+Apple accepted the push, rejected it, or no device is connected. Apple acceptance
+is transport confirmation; verify a banner on a physical iPhone (including its
+Focus and notification presentation settings).
+
+Forks need an APNs-enabled Apple App ID, signed iOS entitlements, and the APNs
+variables documented above on each intended server deployment. Use a P-256 APNs
+`.p8` signing key; App Store Connect API keys are a different credential. The
+server selects sandbox versus production from the device registration. TestFlight
+uses production APNs. Never expose keys or device tokens in public diagnostics.
+`api.notifications-devices` 1.2.0 adds authenticated, non-cacheable GET status and
+an optional owner guard on registration. `api.notifications-test` 1.1.0 adds the
+sanitized delivery report. Single and bulk native delivery remain attached to
+the Vercel request lifetime through `waitUntil`.
+
+### Stack AI endpoint selection
+
+Stack merges can save an ordered AI model/endpoint waterfall. Configure
+`ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` on the Thingtime deployment for
+built-in HTTP endpoints. For personal endpoints, use Settings → Secure Vault;
+custom hosts retain the existing `THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS`
+allowlist and public HTTPS restrictions. The controller and app must share
+`THINGTIME_CI_ROUTER_SECRET` (secret-store values only). API keys stay on the app;
+never put them into workflow inputs. Roll out the protected controller's v4 plan
+support before using custom orders. Inherited orders keep the existing CLI
+workflow. See [the reusable selector contract](docs/ai-waterfall-selector.md).
+
+This feature's local validation worktree uses `http://localhost:13310`
+(Vite), 13311 (HMR), and 13312 (Nitro), derived by `npm run web-ports`.
+Tailscale/Funnel is not available on the validation host: its configured CLI
+wrapper points at a missing Tailscale application. No public dev mapping was
+created or changed.
+
+## Inherited Thing actions
+
+Persisted entity menus use `ThingContextMenu` and `buildThingEntityMenu`;
+`schemas/thingActions.ts` owns the base verbs. Post privacy/moderation and
+Drive selection/clipboard operations extend this model. `PersistedThingMenu`
+resolves only an opened Thing through `/api/v1/things` and guards recording
+handoff against account changes. Do not add a new per-kind dropdown renderer.
+Navigation actions carry an explicit `href` and render real anchors; they never
+reuse mutation callbacks. Drawer navigation also preserves native modified and
+middle clicks. Actions without a destination remain buttons.
+
+The Things browser stores `q`, `kind`, `view`, `display`, `sort`, and `group` in
+the URL alongside folder/device/preview state. Preference defaults are written
+explicitly so Back and shared links do not depend on later local-cache changes.
+Search typing replaces the current history entry; filter changes create entries.
+
+CRUD remains `/api/v1/things`. Semantic operations use
+`POST /api/v1/things/actions` with `{ "id": "your-thing-id", "action": "send-to-lopu" }`.
+Negotiate origin-scoped `api.things-actions` 1.0.0 before dispatch. The first
+operation delegates to the protected recording writer; old recording clients
+retain their compatibility operation. Shared schema/UI does not mean arbitrary
+protected-state mutation: attachment lifecycle, chat membership, moderation,
+consent and quota checks remain enforced by their domain writers. A schema's
+menu hints never grant authority. No storage migration or new secret is required.
+Handoff requires the home data source; a custom source returns 409 so an ID
+from another database cannot accidentally select a home recording.
+
+For forks, configure normal account/storage setup and explicitly enable a
+recording processor before testing handoff. Personal processing uses a paired
+device; API processing uses the account's configured provider connections.
+Never embed credentials in a menu, action request, source fixture or public docs.
+
+Local menu QA uses this worktree's deterministic port (currently
+`http://localhost:16250`). Tailscale/Funnel was unavailable during verification:
+the local launcher points to a missing Tailscale app; no public mapping was changed.
+
+### Saved AI waterfalls
+
+Settings → AI waterfalls stores private named model/endpoint orders using the existing Things database and authenticated API. No extra collection, migration, or secret is required. Configure provider keys or personal Secure Vault connections as described in [the waterfall setup](docs/ai-waterfall-selector.md). Forks must deploy the registered `api.ai-waterfalls` 1.0.0 contract before clients can save a library.
+
+## Portable transfer real-storage acceptance
+
+The optional `remix` command `test:transfer-binary` exercises real multipart
+uploads and image ZIP import/export through the application API. It is disabled
+unless `TT_TRANSFER_BINARY_TEST=1` is explicitly set. Use a local fixture server
+(`TT_TRANSFER_TEST_URL=http://127.0.0.1:<your-worktree-port>`) backed by a
+disposable test account and the private storage setup documented above. That
+account must already have public-upload approval and a ready storage ledger.
+Provide its session cookie through `TT_TRANSFER_TEST_COOKIE` in the process
+environment using your local secret tooling; never put it in a command literal,
+tracked file, screenshot or test report. Do not use a production account.
+
+Run `corepack pnpm --dir remix run test:transfer-binary` with those environment
+values. The test checks API capability versions, uploads tiny PNG fixtures,
+compares bytes and annotations after ZIP/reimport, checks anonymous denial and
+concurrent emoji import claims, then deletes its own returned IDs and verifies
+cleanup. It does not connect directly to MongoDB, enable uploads, reconcile
+storage or run migrations. A failed approval/storage precondition is a blocker,
+not a passed test. Investigate any reported cleanup IDs before another run.
+
+For isolated archive UI checks, run `node --import tsx scripts/archive-ui-smoke.mts`
+from `remix` with `TT_TRANSFER_UI_ORIGIN=http://localhost:<worktree-port>`.
+Install Playwright and Chrome locally, or point `TT_PLAYWRIGHT_MODULE` at an
+existing Playwright module. The test accepts loopback HTTP only, starts a fresh
+browser context, supplies fictional history, blocks API mutations, and writes
+screenshots to a temporary directory. It never copies browser credentials or
+imports real account data. This does not replace live media/clipboard acceptance.
+
+`corepack pnpm --dir remix run test:transfer-archives` adds a metadata-only
+archive import/read/delete lifecycle check. Enable it with
+`TT_TRANSFER_ARCHIVE_TEST=1` and the same origin/cookie variables, plus
+`TT_TRANSFER_TEST_USERNAME` for the expected disposable fixture identity.
+Remote dev origins require `TT_TRANSFER_REMOTE_DEV_TEST=1`; only
+`https://dev.thingtime.com` or an exact `https://pr-N.previews.dev.thingtime.com`
+origin is accepted. Production, lookalikes and implicit remote writes are
+refused. The selected origin must advertise import 1.9.0 and Things 1.13.0
+before any archive is created. The test uses fictional participants, verifies
+full history and private reads, rejects individual-row mutation/deletion and
+stale preview deletion, then removes only its returned archive root. No real
+user, live-message, invitation, notification or upload APIs are called. This
+test does not yet cover avatars, custom emoji, export or UI rendering; a skipped
+or capability-blocked run is not live acceptance.
+
+## Thingtime Widgets automatic releases
+
+`.github/workflows/widgets-release.yml` publishes an Apple-silicon Widgets ZIP and
+a matching Recovery ZIP after relevant changes reach `main`. Owner-only manual
+dispatch is also restricted to `main`; PR code cannot reach its signing or publish
+steps. This dedicated job pins the exact main SHA, runs native/Recovery tests before
+importing signing material, and leaves the Electron repository-wide latest release
+unchanged. The version comes from `macos/ThingtimeWidgets/project.yml`, with a
+workflow build number and source SHA appended to the release tag.
+
+Fork setup: enable Actions and configure `MAC_CSC_LINK` (base64 Developer ID P12),
+`MAC_CSC_KEY_PASSWORD`, `APPLE_TEAM_ID`, and `APPLE_API_KEY_BASE64`,
+`APPLE_API_KEY_ID`, `APPLE_API_ISSUER` for notarization. The existing `ASC_KEY_CONTENT`,
+`ASC_KEY_ID`, `ASC_ISSUER_ID` aliases are accepted. Store actual values only in
+GitHub Actions secrets. A fork must also deliberately update the repository-owner
+guard and Recovery's release-catalog origin. No Apple Development/ad-hoc fallback
+is allowed for published production builds.
+
+The workflow imports credentials into a temporary Keychain, signs nested widget
+code before the app, notarizes and staples, then verifies both final ZIPs after
+extraction. It publishes `SHA256SUMS.txt` and removes temporary signing material.
+The `Thingtime-Widgets-App-Release-<version>-macos-arm64.zip` asset is recognized by
+Recovery's **App → Thingtime Widgets** selector; its cache and install target are
+isolated from Desktop, Commander and Recovery. Local bundle construction is not
+proof of a successful cloud release: the first main run and download/install via
+Recovery remain release acceptance checks.
+
+## Gifted signup invitations
+
+Signed-in personal accounts can create single-use invites in **Settings → Account →
+Invite someone with a gift**. Choose a username, display name, optional avatar and
+0–10,000 credits (six decimal places). The gift is deducted immediately and held
+until signup. Cancelling an unused invite returns it; new links default to Never expire, with 1, 7, 30 or 90 day options. Pending links can be shown/copied later. Older hash-only invites offer an explicit replacement that invalidates the previous link while preserving the gift and expiry.
+Up to 20 unused invites are allowed per account. Tokens are indexed by hash; a
+recoverable copy lives in protected binary invite state and is returned only by
+the owner-authenticated link action, never by list or preview. Closing an invite
+deletes this state.
+
+The `/invite#<token>` page lets the recipient keep or replace every suggested
+profile field and choose their own password. Email is optional; supplying one
+enables the existing email verification and password recovery flow. An invited
+account receives its gift without another promotional starter grant. Invitations
+do not grant admin status, Lopu verification or general upload permissions.
+
+Fork setup uses the existing home MongoDB transaction support (a replica set),
+canonical account/credit collections, rate limiter and configured moderation
+provider. No new provider key is required. Set the existing `CRON_SECRET` in the
+deployment secret store so Vercel's hourly `/api/v1/auth/invites/expire` job can
+refund expired gifts, up to 50 per run; account visits also settle their expired
+invites. Do not add a TTL index that deletes invitation records before refund.
+The advertised contracts are `api.auth-invites@2.1.0`,
+`api.auth-invites-expire@1.0.0` and `api.auth-register@1.3.0`.
+
+Avatar upload is a narrowly scoped signup thumbnail: the browser crops an image
+under 10 MB, then the server decodes, strips metadata, moderates and re-encodes a
+128px lossless PNG of at most 80 KiB. The private control record holds this bounded
+thumbnail until redemption, cancellation or expiry. It becomes the new user's
+canonical profile avatar on signup; it never enables general attachment uploads
+or accepts an arbitrary remote URL or another user's attachment ID.
+
+Local validation for `codex/gift-credit-invites`: `http://localhost:11000`
+(Vite), API `11002`, HMR `11001`, managed through `npm run web-pms`. The local
+Tailscale CLI wrapper currently targets a missing Tailscale application, so no
+Funnel URL could be configured or verified for this worktree.
+
+### Mobile authentication and moderation recovery
+
+Foreign previews use the authority published by `dataEnvironment` for same-tab sign-in. Deploy the `/authorize?self=1&redirect=1` frontend to that authority as well as the preview. Keep the existing SSO signing/issuer configuration consistent within each environment; never share production sessions with an unrelated development database. Return codes are single-use, origin-bound and carried in fragments.
+
+Image review uses the Admin moderation selection and server-only `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` configuration. A short OpenAI throttle is retried once; persistent provider quota/auth failures require repairing that provider account or selecting another configured moderation provider in Admin. Logs expose only allowlisted status/code diagnostics. Never disable review to work around a provider outage. Invite drafts remain editable so the sender can explicitly remove the optional photo.
+
+Recovery worktree QA uses Vite `http://localhost:13210`, Nitro 13212 and HMR 13211 through the canonical PM2 worktree-port resolver. Tailscale Funnel could not be verified on 2026-09-13: the installed CLI wrapper points to an absent `/Applications/Tailscale.app` executable.
+
+### Recovery app sections and build dates
+
+In Thingtime Recovery, use the App picker to choose Thingtime Electron, Commander,
+Thingtime Widgets or Thingtime Recovery itself. Each section shows only that app's
+cached builds and GitHub releases, even when a GitHub release includes several apps.
+
+Build dates use the signed bundle's `ThingtimeBuildDate` ISO-8601 value (native)
+or `Contents/Resources/web/metadata.json` `builtAt` (Electron). Native packaging
+records the UTC timestamp before signing. Older builds use GitHub's publication
+date, labelled **Released**, which is retained in the local cache for offline use.
+A **Cached** date is separate and never presented as a build date. Builds without
+recorded build/release metadata show **Build date unavailable**.
+
+### Admin error logs
+
+Current admins can open **Things → Error logs** (`/things?logs=1`) and search redacted failures by message, source, provider, route, code or request ID. Each record is a protected `error-log` Thing in the deployment's home database. Generic Things reads, writes, search, feeds and exports cannot expose or alter it. The admin endpoint rechecks current privileges on every request and disables caching.
+
+No new provider credentials or external logging service are required. Forks need the normal home MongoDB setup and an admin account (see existing `ADMIN_USERNAMES` setup). Boot-time index convergence adds the shared home-only `things_ephemeral_expires_at` in place of the former diagnostic TTL; error-log reads reuse `{ thingtime, createdAt, shareId }`; give the existing MongoDB application role index-creation permission. Logs expire after seven days and do not consume account storage. No content migration is needed.
+
+Captures cover shared `safeErrorText`, registered API unhandled exceptions/5xx responses, and OpenAI/Anthropic moderation failures. Records contain a closed, redacted error snapshot plus server-generated correlation metadata, never request bodies, cookies, authorization headers, images, or full SDK objects. Upstream request IDs and error types help distinguish throttling from account restrictions. Persistence is best effort: one-second deadline, five captures/request, five concurrent writes and 60 writes/minute per server instance. Console metadata remains when persistence is unavailable or capped; this is a diagnostic trail, not a complete audit ledger. Background paths should await `recordErrorLog` before returning. Do not pass user content as authored context fields.
+
+
+### Background AI replies
+
+Signed-in web clients negotiate `api.lopu-background-tasks` plus each operation's
+capability before starting chat replies, voice transcript replies, musings or AI
+completions. A same-origin SharedWorker submits and observes while tabs remain;
+unsupported or failed workers use the same idempotent page transport. Nitro owns
+inference from admission onward. Vercel `waitUntil` drains the canonical handler
+after the last tab closes. Reconnection never makes a second provider call and
+workers never receive provider credentials.
+
+The Lopu drawer's **Background tasks** page shows running, interrupted and recent
+operations, saved output, Stop and conversation links. Static rings show stages,
+not estimated percentages. **Retry / Continue** submits a new explicit chat turn
+asking Lopu to inspect saved tool receipts and current state first. It never
+resubmits approval tokens. Closing a page detaches its observer; Stop requests
+cancellation. A tool already committing may finish, with its receipt preserved.
+
+Fork setup uses the normal MongoDB/auth/provider settings; no new secret or queue
+service is required. Keep the canonical web build and Vercel output verification:
+the generated server function needs 300 seconds. Replies stop at 240 seconds and
+task collection at 260 seconds, leaving time for persistence/accounting. A killed
+runtime becomes interrupted after its deadline; tools are never replayed
+implicitly. This is bounded execution. Existing scheduled/recording workers keep
+their lifecycle; live microphone capture and direct realtime audio still need an
+open capture surface.
+
+Task output is owner-private, origin/data-source-scoped secure BinData (2 MiB
+maximum). Access expires after seven days; the next task read clears expired
+bytes. The small immutable operation marker remains for deduplication. Normal
+chat transcripts retain their existing lifecycle; lost/deleted conversation
+access also prevents reading task output.
+
+This branch's disposable local QA uses the normal worktree PM2 stack at
+`http://127.0.0.1:14700` (HMR 14701, Nitro 14702). Never point
+`LOPU_CHAT_PROVIDER=test` at real account data: its scripted tools make real
+writes. `LOPU_TEST_PROVIDER_PACE_MS=150` slows disposable fixtures for tab-close,
+Stop and recovery checks.
+
+Funnel status for this QA worktree is unavailable: the installed `tailscale`
+wrapper targets a missing Tailscale.app executable; no mapping was changed.
+### Feed algorithms and geographic Things
+
+The feed offers Hot, New, Top, Rising, Controversial, Local, Global and Political.
+`/algorithms` searches the explicitly published directory and creates private learning profiles.
+Sharing a link and publishing are separate choices; neither exposes the stored Thing or raw weights.
+Branching copies the learned interests and always starts private.
+
+Things accept optional `geo: { "lat": -37.81, "lng": 144.96 }` on POST/PUT/PATCH;
+`null` removes location. Only finite latitude -90..90 and longitude -180..180 are accepted.
+The server derives an indexed GeoJSON Point; normal ACLs govern its lat/lng projection.
+POST `/api/v1/things/search` accepts `near: {lat,lng}` and `radiusKm` (default 50, max 1000).
+Local uses browser location only after an explicit button press, without adding it to posts;
+a location tag works without granting permission. No geocoding provider or secret is required.
+The normal MongoDB index bootstrap creates `things_geo` on first use.
+
+Algorithm development worktree: localhost port 13480 (HMR 13481 / Nitro 13482).
+Tailscale/Funnel is unavailable on the validation machine: its CLI points to an absent Tailscale.app.
+
+### Lopu uploads, attachment contents and HTTP SDK
+
+Interactive owned components can render the native upload control with HTML
+`{"tag":"tt-upload","props":{"name":"photo","imageOnly":true}}` or Chakra
+`{"chakra":"Upload","props":{"name":"photo","imageOnly":true}}`.
+`imageOnly` is optional; omit it for general files. After selecting a file,
+**Use file** saves a private attachment through the standard attachment APIs and
+writes the form fields `photo` (an authenticated content URL) and
+`photoAttachmentId`. **Use URL instead** exposes the linked-media option.
+Clearing a field does not delete its saved file. Shared/read-only component runs
+cannot upload. Existing upload approval, account storage quota, moderation and
+attachment ACL checks apply; a form value never grants public access.
+
+Lopu forwards actual supported image, PDF and UTF-8 text contents to the selected
+AI provider, including recent chat attachments and explicitly selected attachment
+Things. It rechecks access before disclosure. Limits: ten files, 5 MiB per binary
+file, 128 KiB total text, and 12 MiB total per turn. Linked media, unsupported
+formats (including audio/video), oversized and unavailable files are explicitly
+reported as unread. The selected provider/model must support the supplied media;
+Lopu does not silently switch providers or put signed storage URLs into history.
+
+First-party browser code can import the capability-negotiated SDK:
+
+```ts
+import { lopu } from '~/sdk/lopu.client';
+const page = await lopu.fetch('https://example.com'); // status, contentType, body
+const data = await lopu.json('https://example.com/data.json');
+const result = await lopu.request({
+  url: 'https://example.com/records', method: 'POST',
+  headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Example' })
+});
+```
+
+The SDK uses same-origin `POST /api/v1/lopu/network` (`api.lopu-network@1.0.0`)
+on Nitro/Vercel. It requires a full signed-in account with Lopu access (or the
+`lopu.chat` scope), enforces the Lopu rate limit, and does not forward Thingtime
+cookies. External requests use public HTTPS on port 443, a 15-second deadline,
+DNS-pinned public addresses, a 32 KiB request body and a 256 KiB text/JSON response.
+Redirects, compressed/binary responses, private networks and automatic retries
+are refused. Only explicitly supplied supported headers are sent. Keep provider
+secrets in server-side vault code, never in component JSON or browser bundles.
+
+Lopu itself has `fetch_url` for public reads and `http_request` for an exact
+method/URL/headers/body request that requires its Confirm card. Authored JSON
+components remain scriptless; the SDK is for first-party application code.
+Fork setup uses the existing attachment storage, moderation and Lopu account
+configuration documented above. No new gateway key is required. Configure any
+external API credentials in the fork's own vault, using placeholders in docs.
+
+Validation checkout `lopu-attachments-sdk-mobile` uses local web/HMR/API ports
+15420/15421/15422: http://localhost:15420/lopu. Its Tailscale/Funnel URL is
+unavailable: the installed `tailscale` launcher points to a missing
+`/Applications/Tailscale.app` binary. No existing Funnel mapping was changed.
+
+### Legal documents
+
+Public directory: `/legal`. Current documents: `/pages/privacy-policy`,
+`/pages/apple-tv-privacy-policy`, `/pages/terms-of-service`. Append the version
+(e.g. `/1.0.0`) for a permanent edition. `/privacy` and `/terms` redirect to
+the current documents. The registry is `remix/app/legal/documents.ts`; preserve
+published entries and add a new version when changing policy text, marking the
+previous edition archived. Do not rewrite a published version. Legacy website
+and merchandise text is retained as explicitly historical material.
+
+Copy text and Download .txt use the same registry as the reader. Copy public URL
+always exports `https://thingtime.com`, including on previews. Fork operators
+must replace operator/contact details, verify their actual data practices and
+change that canonical origin before publishing their own policies. No private
+configuration or credentials are needed for these pages. App Store Connect
+requires separate App Privacy disclosures in addition to policy URL/text.
+
+Legal-page development worktree: local `http://localhost:18460` (Nitro 18462,
+HMR 18461). Public preview is delivered through the branch Vercel deployment;
+check the PR deployment status for its current URL.
+
+### Upload admission and local regression checks
+
+Attachment starts use the shared admin rate-limit policy (default: 60 per minute
+per account). The exact persisted legacy 30/hour default is upgraded on read;
+custom/disabled rules are retained. A subsequent admin save records the policy
+version, so explicitly setting 30/hour again remains possible. The browser honors
+`Retry-After` for at most two retries of at most 60 seconds each, keeping the same
+request identity; longer/persistent limits retain the selection and show the wait.
+Upload approval, storage accounting and moderation still apply independently.
+Run `pnpm --dir remix test:attachments`, `test:rate-limit`, and
+`test:api-capabilities` after changes to upload admission.
+
+The upload-regression worktree uses `http://localhost:19800` (HMR 19801, Nitro
+19802), derived by `npm run web-ports`. Tailscale/Funnel could not be configured
+on 2026-09-16: the installed launcher points to a missing Tailscale app.
+
+
+### Lopu continuation development
+
+Lopu has no fixed tool-count, step-count, continuation-count, or task-duration cap.
+On Vercel, completed tool batches checkpoint between hosting windows; large
+streams also checkpoint before continuing with a fresh request ID. The browser
+continues persisted checkpoints while the app is open, retaining chat/model and
+completed-work receipts. Background jobs renew a worker lease instead of stopping
+a healthy job on a timer. An uncertain provider/write failure remains a manual
+recovery boundary. Closing every app tab can leave a saved checkpoint awaiting
+return to the conversation; this is not a durable cross-window workflow runner.
+Provider transport, context, platform billing and authorization constraints still
+apply. No new private configuration or credentials are required.
+
+Regression fixture: `http://localhost:16650/scripts/lopu-continuation.browser.html`
+(worktree `thingtime-lopu-auto-continue`; HMR 16651, Nitro 16652). It runs the
+production store/composer with synthetic responses, including 17 continuations
+and Stop. The Tailscale/Funnel URL could not be configured: the installed wrapper
+references a missing `/Applications/Tailscale.app/Contents/MacOS/tailscale`.
+## Social previews and search metadata
+
+The Nitro shell automatically serves Open Graph/Twitter metadata, canonical
+URLs and safe Schema.org JSON-LD from anonymous public projections. See
+[the metadata runbook](docs/seo-social-metadata.md) for validation, crawler
+cache diagnosis, fork setup and the broader SEO/rich-results TODO.
+
+
+### Lopu message queue
+
+While Lopu replies, **Queue** (or desktop Enter) adds another message without
+stopping the current task. Hold a queue handle to drag, or use the up/down arrows.
+**Send together** is checked by default: consecutive checked messages with the
+same model, page and media context become one prompt in order, with one reply.
+Unchecked messages wait for their own reply. The 8,000-character request limit
+also creates a batch boundary. Pause/Resume controls automatic delivery.
+
+**Send now** saves a text note immediately. The active task reads it after its
+current provider response/tool batch, without interrupting or replaying tools.
+A note arriving after the last boundary remains in history for the next reply.
+Attachments and selected Things use Queue or a normal send; notes never grant
+extra tool permissions.
+
+Queues are private to this browser tab and account, survive reload in session
+storage, and restore paused for review. Keep the tab open for automatic queued
+sends; already accepted background tasks continue independently. Retries preserve
+operation IDs and frozen payloads. Stop pauses queued delivery too.
+
+Queue development: `npm run web-pms` in the `thingtime-message-queue` worktree
+uses `http://localhost:18900` (HMR 18901, Nitro 18902). Public Tailscale/Funnel
+verification is unavailable on the development host because its installed CLI
+launcher points to a missing Tailscale app; no public mapping was changed.
+
+
+### Builder component SDK
+
+Start at `/docs/builder` (also reachable from `/builder/docs`) for forms, Data
+Things, uploads, source bindings, external lookups and troubleshooting. The same
+reference feeds Lopu's builder instructions. Native `tt-upload` / Chakra `Upload`
+controls require an interactive owned page, sign-in, upload approval, storage
+quota and the attachment service configuration described above. Use file commits
+a private attachment; the form action must save both its URL and attachment id.
+
+Google Maps address lookup is opt-in. Enable the Geocoding API and billing in your
+own Google Cloud project, restrict the key for your server usage, and save the key
+as a **secret in your own Vault**. An owned action references only the Vault entry
+id with `lookup`, provider `google-geocoding`, and an explicit provider capability.
+Never place the actual key in a component, action, frontend environment variable,
+source control or prompt. The server needs the existing Vault encryption setup;
+Google needs no shared project-wide API key. See `/docs/builder/lookups` for the
+complete example, attribution, limits and storage-policy links. Other providers
+require a registered server adapter; authored arbitrary fetch URLs are unsupported.
+
+Local regression fixture: `/scripts/builder-sdk-regression.html` on a Vite dev server.
+It uses production renderers with synthetic file/API transport, makes no external
+provider requests and persists no user data. Run `node remix/scripts/verify-actions.mjs
+http://127.0.0.1:<nitro-port>` only against a disposable database: it creates test
+accounts and data. Provider-positive unit tests use synthetic Google responses;
+a real credential and configured object storage are required for live integration
+acceptance.
+
+Builder SDK QA worktree mapping: web `http://localhost:14870`, HMR `14871`, API
+`14872`; docs `http://localhost:14870/docs/builder`. Tailscale/Funnel was unavailable
+on 2026-09-18 because the installed CLI shim referenced a missing application
+binary. Other worktrees derive their own ports via `npm run web-ports`.
+
+The reusable record controls and browser Action protocol are documented at
+`/docs/builder/record-controls` and `/docs/builder/browser-flows`. `tt-map`
+accepts a **browser** Maps JavaScript API key restricted to the exact website
+origins and API in your Google project. This public browser key is distinct
+from the server-only Vault credential used by `lookup`; never substitute the
+server credential. Maps are optional and missing setup is shown explicitly.
+
+An opt-in local composition fixture exercises ordinary saved Components and
+Actions through the real API. It does not migrate existing pages. Start a
+disposable local replica-set database and the PM2 worktree stack first; register
+a fixture user through `/api/v1/auth/register`. Save its API session response
+as a private, untracked JSON file containing `cookie` and `user.id` (mode 0600).
+Then, from `remix/`, run:
+
+```sh
+TT_BUILDER_QA_ORIGIN=http://127.0.0.1:<web-port> \
+TT_BUILDER_QA_SESSION=/private/path/to/local-fixture-session.json \
+node --import tsx scripts/test-builder-app-local.ts
+```
+
+The script refuses non-loopback origins and uses stable `qa-*` fixture IDs.
+Open `/p/qa-editable-builder-page` for records and
+`/p/qa-reference-page` for 181 searchable reference choices. For real file QA,
+use the local attachment storage setup above and enable fixture uploads through
+the normal local admin flow. Only use this fixture against disposable data.
+The 2026-09-23 editable-app checkout uses `http://localhost:17120`, HMR 17121,
+Nitro 17122, and its disposable Mongo replica set on 17123. Tailscale/Funnel
+remains unavailable: the installed shim points to a missing Tailscale app.
+
+
+### Chat continuity and iOS activity (2026-09-21)
+
+Lopu's send menu and chat settings choose browser-managed or server-managed
+continuation. Browser management requires an open page to start the next safe
+checkpoint; server management uses the existing Workflow SDK 4.8 integration
+and requires Vercel Workflow enabled for the selected Vercel project. It uses
+the normal account database and a live full-user session. Selected custom
+MongoDB connections use browser management; their credentials are never copied
+into workflow state. Session revocation stops a server chain. Recoverable
+errors back off, with five consecutive retries before requesting attention;
+manual Stop, incomplete tools, pending confirmations and unsaved page edits
+never automatically resume. Continuations retain the current conversation
+without displaying synthetic user prompts.
+
+The iOS app displays one aggregate chat Live Activity with counts and generic
+status. A Live Activity does not prevent iOS suspension: server-managed work
+continues independently. Existing private APNs setup uses `APNS_KEY_ID`,
+`APNS_TEAM_ID`, `APNS_PRIVATE_KEY`, and optional `APNS_IOS_BUNDLE_ID`; its topic
+is `<bundle-id>.push-type.liveactivity`. Keep values in the existing private
+deployment configuration. Native clients negotiate `api.lopu-live-activity`
+1.0.0; protected tokens are bound to a live session, origin and data source.
+See [iOS setup and device checklist](iOS/README.md). No additional signing
+credentials are introduced by this feature.
+
+The continuity worktree validation server uses
+`http://localhost:19940` (Vite), 19941 (HMR), and 19942 (Nitro), with the local
+PM2 ecosystem override `remix/tmp/continuity-ecosystem.config.cjs`. Its unique
+`tt-wt-continuity-19940` identity avoids the existing worktree basename
+collision. No Funnel URL was verified: the installed Tailscale wrapper points
+to a missing app executable on the validation machine. Production/deployment
+URLs remain recorded in the project's deployment documentation.
+
+
+### Functional component and webpage demos
+
+The demo catalog uses native inputs and owner-scoped Actions. Newsletter/contact
+forms, site requests, and component records save private Things. They do not
+send email, charge cards, book services, or control devices. To add an external
+effect, create an integration Action in your account, configure its credentials
+through the normal connection settings, and bind the copied component to that
+Action. Never put credentials in component arguments or template JSON.
+
+`site-forms` and `catalog-records` are installed through
+`POST /api/v1/webpages/suites/install`; clients require
+`api.webpages-suites-install >= 1.1.0` from the selected origin's manifest.
+Copying a site demo installs missing form dependencies first without replacing customized Actions. Installed pages bind their owner’s concrete component ids. Existing installations
+can be refreshed with the suite's Install button; saved records remain intact.
+A fork needs the ordinary database/session setup described above. No external
+service key is needed for private demo records. Admins refresh system demos via
+`POST /api/v1/admin/webpages/seed-demos` after deploying the updated catalog.
+
+The declarative `$ui` binding changes bounded scalar state only in its current
+component instance (`set`, `toggle`, `increment`, `cycle`, `reset`), copies text,
+or opens Thingtime search. It cannot call arbitrary JavaScript or replace the
+runtime's viewer, query, source result, or account authority. `$ui` fields remain
+controlled so Reset and adjacent buttons also update visible inputs. Ordinary
+Action fields retain native editing and validation; Enter submits their group.
+
+Local regression fixture: `/tests/functional-demos.html` on a Vite development
+server. Verify two-instance isolation, parent renders, typed values, checkboxes,
+range/counter synchronization, reset, native disclosures, and mobile overflow.
+Native `tt-dialog` controls use browser-managed modal focus and Escape dismissal;
+`tt-countdown` accepts a bounded seconds value and provides Start/Pause/Reset.
+They run only on interactive surfaces and never execute authored JavaScript.
+## Remote integration runtime
+
+Curated integration examples use `remix/app/library/catalog.ts` and the fixed
+provider request registry in `apis.ts`. The runtime is delivered before the
+catalogue; an empty registry intentionally offers no executable examples.
+Only registry IDs and JSON inputs can enter the `IntegrationExample` component.
+Arbitrary persisted JavaScript, package URLs, and credentials are not accepted.
+
+`corepack pnpm --dir remix run build:client` builds the application, the isolated
+`/library/runner.js`, and the embed bundle. The normal dev command builds and
+watches the isolated runner too. Custom deployments must serve
+`/library/sandbox.html` with `librarySandboxCsp` from `remix/scripts/csp.mjs`;
+the Vercel build and Vite middleware apply it automatically. Do not apply the
+sandbox policy to the main application shell.
+
+Remote packages load from pinned esm.sh URLs only on Run. Pure transformations
+run in terminable workers; visual packages run in an opaque-origin sandbox.
+The frames cannot access Thingtime cookies or storage. Keyless APIs must allow
+browser CORS; provider outages and rate limits remain visible errors.
+
+Credentialed examples require the fork's normal account/session and MongoDB
+rate-limit setup. No shared provider secret or new deployment environment
+variable is required: each visitor enters their own key in the open component.
+Keys remain in component memory, travel over HTTPS to the authenticated
+`POST /api/v1/library/request`, and are forwarded only to a registered provider
+using a read-only GET with redirects disabled. Keys and live results are never
+saved in copied Things. Account changes and unmounting discard key state; the
+Clear button removes it immediately. Use provider-scoped keys; Stripe examples
+accept test-mode keys only. Fork operators must preserve request-body privacy
+in their own reverse proxies and observability tools.
+
+Clients negotiate `api.library-request` 1.0.0 against the selected origin before
+credentialed requests. The endpoint is bounded to 20 requests/minute/account,
+24 KiB request bodies, 16 KiB inputs, 256 KiB upstream responses and a 12-second
+upstream timeout. Run `corepack pnpm --dir remix run test:library` for boundaries,
+credential redaction, reusable Thing validation and capability coverage.
+
+### The integration library
+
+Browse `/library` for 540 executable recipes across 51 libraries/services: 380
+transformation actions, 59 visual components and 101 API Things. There are 468
+credential-free examples and 72 examples with provider-specific credential entry.
+Search, category/provider/type/access filters and pagination keep the catalogue
+small on screen; selecting a card shows editable inputs, live output, source and
+links to official docs. Browsing performs no integration-provider requests.
+
+Save a private copy to create sample data, an input-preparation Action Thing and
+a runnable Component Thing. Add `IntegrationExample` to builder markup with a
+curated `exampleId` and optional `inputJson`; it never accepts code or keys in
+markup. Preparation actions return inputs; remote execution occurs when Run is
+pressed in the component. Keys are entered separately for each open demo.
+
+API capability `api.library-request` 1.2.0 adds the curated credentialed provider
+registry. Each provider's account link explains its key and access requirements.
+Credentialed server examples use read-only GETs and fixed Google Places POST searches; Stripe is test-mode only. Real
+account authorization/quota behavior requires the visitor's own valid key.
+
+For browser acceptance, open `/scripts/library-browser-check.html` on the Vite
+dev server and press **Run all public examples**. The harness executes only
+credential-free catalogue defaults, four at a time, through the actual isolated
+runner. `?ids=example-id,another-id` limits a rerun. This development-only harness
+is not copied into production static assets. Provider outages can change results.
+
+
+## Remote device files and brightness
+
+Open **Things → Browse files**, or expand **Files** in a paired device's drawer.
+The shared Things grid/list, type/name filters and action menu work in a full
+page, narrow dock and expanded pop-up. Copy or Cut, select **Your Thingtime** or
+another paired device and destination folder, then Paste. Keyboard shortcuts
+work while the file browser is focused; text inputs keep normal text editing.
+
+Update the Mac's Thingtime Node as well as the web server. An updated heartbeat
+refreshes the existing device's capabilities; re-pairing is unnecessary. The
+native brightness adapter supports DisplayServices and falls back to a matched
+IOKit display, reporting unavailable when macOS exposes no usable control.
+
+Remote files stay inside the paired Mac's home folder and obey its existing
+permission mode and locked-session policy. Files are bounded to 32 MiB each;
+a recursive browser transfer supports 500 entries, 32 levels and 128 MiB total.
+Symlinks, special files and overwrite are refused. Moves across locations copy
+and verify first, then remove originals; remote removals use recoverable Trash.
+Thingtime uploads require existing private-upload access and storage allowance,
+and use the normal protected attachment pipeline. Empty remote files can be
+read/copied on devices; Thingtime's upload pipeline requires non-empty content.
+No new secrets or environment variables are required. Forks need their existing
+MongoDB, S3 attachment setup and pairing configuration, plus the API capability
+versions documented in [the remote file contract](docs/remote-files.md).
+
+Local acceptance for `codex/remote-device-files` uses `http://localhost:22420`
+(HMR 22421, Nitro 22422), with a unique PM2 entry
+`tt-wt-remote-device-files-22420` using the canonical `pm2AppConfig` and
+`autorestart: false`. These overrides avoid another Codex checkout with the same
+`thingtime` directory basename. Tailscale/Funnel was unavailable on 2026-09-21:
+the configured launcher points to the missing Tailscale app; no public mapping
+was changed or verified.
+
+### Integration builder library
+
+The integration catalogue also has real builder pages: `/builder?page=webpage-integrations&mode=view` links to a page per provider, and each example has its own page and reusable component. The pages derive from `remix/app/library/builderPages.ts`, so adding a catalogue example updates the hierarchy without hand-maintained copies. Opening a page does not run its third-party requests. Saving edits creates an owner-private page; keys and live results stay in the open demo and are never saved.
+
+On a new deployment, configure your normal database and an admin account (see the admin setup above), then sign in as that admin and select **Prepare builder pages** on `/library`. The button negotiates `api.admin-webpages-seed-demos` 1.2.0 and calls `POST /api/v1/admin/webpages/seed-demos?catalog=integrations` with `{}`. This idempotently seeds only the integration components and pages, leaving other demo suites untouched. Re-run after catalogue updates; investigate any nonzero `skipped` count before linking to the pages. No third-party credentials are needed for setup. Viewers supply their own credentials when running keyed examples.
+
+### Map and platform examples
+
+Mapbox includes five GL JS components plus forward/reverse geocoding and driving/walking directions. Google Maps includes maps, advanced markers, info windows, polylines and radius circles. Google Places includes text/nearby search, place details and autocomplete with first-result selection in the JavaScript SDK, plus three Places API (New) REST examples. YouTube, Spotify, Microsoft Graph, GitLab, Cloudflare and Contentful add focused platform reads. Their new components and builder pages are included by **Prepare builder pages**.
+
+Use two distinct credential types:
+
+- Browser demos accept a Mapbox **public** `pk…` token or a Google Maps browser API key. Restrict the key to your actual website origin (include your preview host or localhost when testing) and the necessary APIs. Enable Maps JavaScript API, Places API (New) when applicable, and billing. Google advanced markers use `DEMO_MAP_ID`; use your own map ID in an application. Mapbox GL JS loads a pinned official CDN release; Google uses its supported quarterly channel. Browser keys go directly to the selected provider inside an opaque-origin frame. The SDK document has its own CSP; Google SDK compatibility does not loosen the app shell or ordinary package sandbox policy.
+- REST examples use dedicated server keys or short-lived OAuth **access tokens**, entered in the example's password field. Website-referrer restrictions do not apply to server requests. Use provider/API restrictions and least-privilege scopes: Spotify catalog access; Microsoft Graph `User.Read`, `Files.Read` or `Calendars.ReadBasic`; GitLab `read_api`; Cloudflare Zone/DNS Read; Contentful delivery (not management) access. Use the example's account/docs links for acquisition and provider-specific setup. No OAuth client secret, automatic token exchange, or refresh token is needed or accepted by these examples.
+
+No keys are bundled or stored with copied Things. **Clear**, reset, account changes and leaving the demo discard credentials; Clear/reset also remove running SDK frames. Provider keys, billing, quotas, development-mode access and third-party availability determine whether a live request succeeds. The tests use provider contract fixtures; they do not claim authenticated access to a visitor's account.
+
+The maps-library development worktree uses Vite `http://localhost:18860` (HMR 18861, Nitro 18862) through its local PM2 ecosystem entry `tt-wt-library-maps-platforms-18860`, with autorestart disabled. Tailscale/Funnel is not available on this machine because the Tailscale application is missing; production and Vercel previews remain available.
+
+### Discussion pagination on forks
+
+Private comment pagination uses the deployment’s existing `JWT_PRIVATE_KEY` or
+`JWT_SECRET` (with `THINGTIME_ADMIN_VAULT_KEY` as a fallback) to derive a separate
+encryption key for opaque cursors. Configure one of these existing secrets in
+both preview and production deployments; never use a public JWT key. No new
+secret variable is required. Production fails closed with HTTP 503 when none is
+configured. Local development without a configured secret uses an ephemeral
+key, so refreshing comments after a server restart starts a new cursor chain.
+
+
+### Reusable local image and video tools
+
+Author image/video tools directly as saved Thingtime Pages and Components, using
+ordinary editable child elements inside the reusable `tt-media-pipeline` adapter.
+This framework release does not author or install a compressor page. The legacy
+`media-tools` suite keeps its existing video definitions. New intrinsic blocks
+require `api.things >= 1.41.0`, `api.things-update >= 1.12.0` and
+`api.webpages-resolve >= 1.8.0` on the selected origin. Save through ordinary
+Builder controls. Selected files and encoded output stay transient on device.
+Existing saved `tt-web-platform` media programs mount controls automatically and
+retain their save Action.
+
+Images use pinned [ImageMagick WASM](https://github.com/dlemstra/magick-wasm)
+and [resvg WASM](https://github.com/yisibl/resvg-js), shipped as same-origin build
+assets. Actual tested inputs include JPEG, PNG, WebP, GIF, BMP, TIFF, ICO, HEIC and
+static SVG paths. Other bundled raster decoders may work; unsupported inputs fail
+explicitly. Output choices are WebP (Automatic), JPEG, PNG, AVIF and GIF; quality
+controls lossy formats and PNG stays lossless. Aspect ratio and orientation are
+preserved, without upscaling. Metadata is stripped. Transparent JPEG conversion
+requires choosing a background explicitly. Animation keeps frames/timing/loops
+in supported WebP/GIF outputs; APNG, multi-page/layered images and incompatible
+animation outputs are refused rather than flattened. SVG is rasterized and only
+the supported static subset is accepted: no text requiring fonts, embedded or
+external images, scripts or animation. Transparent GIF output is refused in favor
+of WebP. WASM and available device memory constrain very large jobs; cancellation
+terminates the worker and leaves the original unchanged. Output can be larger;
+actual before/after byte counts are always reported.
+
+Videos continue through the pinned
+[Mediabunny 1.61.6 source](https://github.com/Vanilagy/mediabunny/tree/v1.61.6)
+and browser WebCodecs, using MP4 H.264/AAC or WebM VP9/Opus when supported.
+Only primary video/audio tracks are retained; extra tracks, subtitles and
+metadata are omitted. Audio is never silently removed. The MPL-2.0 Mediabunny
+source notice remains at `/platform/mediabunny-LICENSE.txt`; image-engine notices
+are in `remix/THIRD_PARTY_NOTICES.md`.
+
+No upload, server encoder, external codec CDN, provider key or new secret is
+required. Existing account/database configuration is needed only to install or
+save Things. Selected and output bytes remain local. The host fetches only the
+public bundled WASM engines, then passes their bytes to a fixed terminable worker
+whose CSP denies network and child workers. `wasm-unsafe-eval` is scoped to that
+worker's policy, not the application shell; it enables WebAssembly compilation,
+not authored JavaScript. ImageMagick denies external delegates and coders; its
+virtual filesystem has only codec-internal temporary memory paths. Custom hosts
+must serve `/assets/mediaWorker-*.js` with `mediaWorkerCsp` from
+`remix/scripts/csp.mjs`. Legacy editable documents remain opaque sandboxed frames.
+
+Browser regression on macOS: install FFmpeg/ffprobe, a task-owned Chrome for
+Testing binary and Playwright outside the repository. Set `PLAYWRIGHT_MODULE`
+to its module and `CHROME_FOR_TESTING_PATH` to that binary, then run:
+
+```sh
+cd remix
+npm run build:platform
+node scripts/media-acceptance/build.mjs
+env -i HOME="$HOME" PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" PLAYWRIGHT_MODULE="$PLAYWRIGHT_MODULE" CHROME_FOR_TESTING_PATH="$CHROME_FOR_TESTING_PATH" /usr/bin/sandbox-exec -f scripts/media-acceptance/network.sb node scripts/media-acceptance/check.mjs
+```
+
+The test owns loopback port 18641 only for its duration and closes its server and
+fresh browser afterward. It has no API backend, account or database. OS egress
+is denied except that loopback port; direct-IP, redirect and browser probes
+must demonstrate the boundary before acceptance proceeds. There is no permissive
+fallback. Screenshots, trace and independently probed media stay in ignored
+`remix/tmp/media-acceptance/`. Other operating systems need an equivalent verified
+OS/container egress boundary before running this acceptance test.
+
+### Web standards Builder app
+
+The worker-compatible Web API recipes include URL members, headers/query/form
+collections, blobs/files, response bodies, encoding, DOM exceptions, geometry,
+events/abort signals, streams and their controllers. Stream examples include
+backpressure, BYOB reads, text encoding across chunk boundaries and compression.
+These are editable Component program definitions using in-memory receivers.
+Audit that family with `TT_STANDARDS_AUDIT_LANGUAGES=webapi` and the runtime audit
+setup below; it needs no account, permissions or external request.
+
+The reusable `web-standards` suite is installed for the signed-in account using
+`POST /api/v1/webpages/suites/install` with
+`{"key":"web-standards","onlyMissing":true}`. Open the returned `entryPageId`
+in Builder, or visit `/p/web-standards`. Normal database/auth configuration is
+required; no new external credentials are needed. Installation creates private
+Things and does not change another account. Use a first-party account session;
+never place session cookies or tokens in a saved page, Component or repository.
+Explicit reinstall without `onlyMissing` refreshes suite definitions.
+
+The inventory is a checked-in standards snapshot, so running the app does not
+fetch specification sites. To refresh it, install the pinned extraction tools
+outside the repository and run:
+
+```sh
+npm install --prefix /tmp/tt-standards-tools --ignore-scripts @webref/css@8.7.5 @webref/elements@2.9.0 @webref/idl@3.84.0
+node remix/scripts/sync-web-standards.mjs --tools=/tmp/tt-standards-tools/node_modules
+corepack pnpm --dir remix run test:web-platform
+```
+
+Review source/status and coverage changes before committing the generated
+inventory and manifest together. The snapshot includes drafts and internal
+specification clauses; many entries still need interactive recipes. It does
+not claim completed coverage of every standard or API. See
+[the app's data model and runtime](docs/web-standards-builder.md). The ordinary
+client build and PM2 dev lifecycle build the isolated runtime automatically. Both
+`/platform/runtime.html` and `/platform/runtime.js` must retain `no-store` on
+custom hosting/CDNs. The built HTML uses the runtime's content digest in its
+script URL; publish that generated HTML and matching JS together. Do not replace
+it with the unbuilt public template or strip its query version.
+
+Language examples also contain editable class/function definitions, generators,
+private/static fields, accessors, inheritance, template literals/tags and
+control-flow nodes. All use the same reusable program primitive. Interface
+inspection reports accessor presence without invoking it; paths crossing an
+accessor require a receiver-specific demo. No new credentials or permissions
+are needed for these in-memory examples.
+
+To audit default JavaScript example execution, start the managed local stack
+and use an installed Google Chrome plus Playwright (it may be installed outside
+the repository). No account or database is used by this read-only audit:
+
+```sh
+TT_STANDARDS_TEST_URL=http://127.0.0.1:<web-port> \
+TT_PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs \
+TT_STANDARDS_AUDIT_OUTPUT=/tmp/standards-audit.json \
+corepack pnpm --dir remix run audit:web-platform
+```
+
+The report separates unavailable browser/context features from program errors.
+An empty selection, program error or exhausted frame-load retry fails the audit.
+
+For runtime-only verification after `corepack pnpm --dir remix run build`, use
+`TT_STANDARDS_AUDIT_BUILT=1` in place of the test URL. This ephemeral test fixture
+serves the built HTML and JavaScript with their canonical CSP, needs no running
+app server and closes after the audit. Use an explicit HTTPS preview URL for a
+hosted runtime audit.
+
+The opt-in `HtmlTemplateField.browser.test.ts` regression needs only
+`TT_PLAYWRIGHT_MODULE`; it bundles the real field component into an intercepted
+Chrome fixture without account data. For the complete browser/API flow, use
+`remix/scripts/check-web-standards-browser.mjs` with an explicit local
+`TT_STANDARDS_TEST_URL` and `TT_STANDARDS_TEST_DATABASE_HOST` pointing to a
+disposable database. Set `TT_STANDARDS_TEST_BUILT_CLIENT=1` after a full build to
+serve public built client files inside the browser test while keeping API calls
+on that local stack. An optional `TT_STANDARDS_TEST_SESSION_FILE` must be an
+ignored, private file belonging to that same local origin; never use production
+credentials for these fixture writes.
+
+### macOS voice input setup
+
+The desktop app's Lopu microphone uses Apple's Speech framework through the
+bundled signed helper; no cloud API key or private dashboard configuration is
+needed for standard device transcription. Build and install using the
+[Electron workflow](electron/README.md), then press the microphone and allow
+Microphone and Speech Recognition when macOS asks. Re-enable denied access in
+System Settings → Privacy & Security. On-device recognition is preferred where
+the language supports it; Apple's service may be used otherwise.
+
+### Account drafts and templates
+
+Signed-in post, comment, Thing, definition and schema editors save private
+working drafts to the account. The post composer has **Load drafts & templates**;
+post menus offer **Save as template**. Loading a template creates an editable copy
+and keeps the template. The picker includes an automatic account-resume preference;
+local device recovery stays enabled. Offline changes sync when connectivity returns.
+The 512 KiB editing-snapshot limit is separate from attachment byte quotas.
+
+No new secret or deployment variable is needed. Forks need the normal authenticated
+MongoDB setup **with transactions/a replica set** and the existing private attachment
+storage configuration for uploaded files and independent template media copies.
+The development-only `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR` stand-in and fixture
+upload approval flow above support local verification; never configure the local
+stand-in on Vercel. Use placeholder values in shared setup files.
+
+Create a disposable fixture with `seed-fixture.mjs`, then run
+`node remix/scripts/verify-account-drafts.mjs remix/.fixtures/<name>.json --media`.
+Fixture JSON contains test credentials and stays ignored. The verifier exercises
+only the real local API. Existing device Thing data/preferences are retained and
+copied once to the first opening account; later accounts use separate device
+workspaces and draft caches. Hydration alone does not upload that legacy data.
+
+
+### Lopu Action access QA
+
+Lopu's per-chat Ask/Full modes require no new deployment secret. Existing
+first-party sessions, Mongo transactions and the Lopu provider setup still
+apply. For an isolated verification without model billing:
+
+1. Start a disposable loopback Mongo replica at port `22563`, replica set
+   `lopuActions`, with a new empty dbpath. Do not point this check at shared data.
+2. Use the canonical PM2 app definition with an isolated process name and
+   `TT_WEB_PORT=22560`, `TT_HMR_PORT=22561`, `TT_API_PORT=22562`.
+   Set `MONGODB_CONNECTION_STRING=mongodb://127.0.0.1:22563/?replicaSet=lopuActions`
+   and a fresh local-only `JWT_SECRET` on both the app and script; unset
+   `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY` for this disposable stack. No production
+   credentials or provider keys are required.
+3. From `remix/`, run `TT_LOPU_ACTIONS_LOCAL=1 node --import tsx
+   scripts/verify-lopu-actions.mts` with the same Mongo/JWT environment.
+   The script refuses any other Mongo URI, creates synthetic accounts and data,
+   and revokes its login at completion. Stop the named QA PM2 processes afterward.
+4. Open `/scripts/lopu-actions.browser.html` on the QA Vite origin for the
+   production composer's isolated desktop/phone fixture.
+
+This checks runtime and storage behavior, not live provider reasoning or
+production gear migration. See [Lopu Action access](docs/lopu-action-access.md).
+
+### No-login native draft preview and export
+
+Use **Builder → No-login draft preview** (`/draft-preview/index.html`) for
+in-memory editable JSON previews and canonical downloads. The local stdio MCP
+server exposes `thingtime_render_and_export`, returning desktop/mobile/card
+PNGs and JSON as inline resources without an account or HTTP access from the
+agent host. No private environment variables are needed. See the
+[fork-safe setup, actual tool connection, bounds and disposable importer QA](docs/no-login-draft-preview.md).
+
+
+### Native mobile device pairing development
+
+The iOS and Android apps advertise `devicePairingVersion` 1.0.0. With a full account, open
+Things or Settings → Things and choose **Add this device**. Pairing keys and
+pending claims stay in the iOS device-only Keychain or Android Keystore-encrypted no-backup storage, scoped to account and server
+origin. A destination must advertise the mobile requirements in
+`remix/app/devices/platform.ts`; production or older previews may not support
+them yet. HTTPS is required except for loopback development. Pairing does not
+request file or photo permissions or enable a background sync worker.
+
+For local acceptance, start this checkout with `npm run web-pms`, create a
+disposable account through `POST /api/v1/auth/register`, and put its test login
+outside the web root in a mode-0600 JSON fixture containing `base`, `username`, `password`.
+Use placeholders only in shared docs; never commit the fixture. The test uses
+real API pairing and Keychain storage, and leaves its device record under the
+disposable account for retry inspection; it signs the test browser session out.
+
+```sh
+DEST='platform=iOS Simulator,id=<simulator-uuid>' \
+  iOS/scripts/test-mobile-devices.sh /absolute/path/to/private-fixture.json
+```
+
+The script generates the Xcode project, builds for testing, injects the fixture
+only into a temporary protected test-run file, removes that file on exit, and
+runs protocol, destination and live API tests. Keep simulator signing enabled
+for Keychain acceptance. A normal native unit run skips the live test without
+its explicit test environment. No developer account or signing secret belongs
+in this fixture. See [the full sync acceptance ledger](docs/mobile-file-sync.md)
+for Photos and transfer work that is still in progress.
+
+The iOS app also advertises `fileAccessVersion` 1.0.0. After pairing, **Folder
+access → Choose folder** uses the system Files picker. **Check folder** computes
+a bounded inventory and **Remove access** forgets the grant without deleting
+files. Selection alone does not start uploads. No new secret, entitlement or
+server environment variable is required: use the existing authenticated origin
+and retain normal app signing for Keychain access. Native security-scoped
+bookmarks stay in device-only Keychain storage, scoped to account and origin;
+web settings receive opaque IDs and display names. Follow Apple's
+[directory access contract](https://developer.apple.com/documentation/uikit/providing-access-to-directories).
+Use synthetic folders for acceptance. Unavailable providers, changed files,
+symlinks and oversized scans fail rather than yielding empty inventories. The
+current bounds are 32 grants, 10,000 entries / 4 MiB metadata per scan, and 64 KiB
+per native read. Android implements the same folder protocol using the system Files picker;
+persistent transfer workers remain pending. The UI fixture at `/scripts/mobile-folders.browser.html` tests controls
+with synthetic native replies; it does not verify the iOS system picker.
+
+The Android shell lives in `android/`. It requires JDK 17, Android SDK 35 and
+an updated System WebView on API 26+. Run `android/gradlew -p android assembleDebug`
+and install the resulting debug APK. A fork can select its HTTPS server with
+`-PthingtimeWebUrl=https://your-thingtime.example`; local debug builds use
+loopback HTTP plus `adb reverse`. The opt-in Android test script also requires
+`userId` in the private fixture. See [Android build and acceptance](android/README.md)
+for exact commands, emulator tests and security boundaries. Android folder
+access starts with scoped read-only Storage Access Framework grants and encrypted
+native references without broad storage permissions or additional secrets;
+see [selected-folder setup and limits](android/README.md#selected-folders).
+Release signing
+and store distribution remain separate setup; never commit signing keys.
+
+### Verifying file-sync content fingerprints locally
+
+The existing content endpoint advertises `api.attachment-content` 1.14.0 and
+accepts `GET /api/v1/attachments/content?id=<attachment-id>&fingerprint=1`.
+Clients must negotiate that feature first. The fingerprint is a canonical
+multipart composite, not a whole-file SHA-256; see the [sync contract and
+remaining acceptance](docs/mobile-file-sync.md). Missing checksum evidence is
+an error and must never become a deletion decision.
+
+For the opt-in byte acceptance test, use a disposable account on a local MongoDB
+and loopback dev server. Enable private uploads through the normal admin API,
+or register the fixture first, then set `ADMIN_USERNAMES=<fixture-username>` in
+the ignored worktree `remix/.env`. Configure the local attachment storage stand-in
+above, including `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN` with this checkout's
+origin, then restart with `npm run web-pms`. Keep a mode-0600 JSON fixture outside
+the web root containing `base`, `username`, `password` and `userId` (from
+`/api/v1/auth/me`). Never commit credentials or grant a real account test access.
+
+```sh
+cd remix
+node --import tsx scripts/file-sync-fingerprint.integration.mts /absolute/path/to/private-fixture.json
+```
+
+This creates one 8 MiB + 17 byte file, checks replay identity, compares local and
+cloud fingerprints, independently hashes the downloaded bytes, checks anonymous
+denial, then deletes its file and signs out its test session. Remove temporary
+`ADMIN_USERNAMES` entries and restart after acceptance. It does not exercise
+production S3, native background scheduling or complete cross-device sync.
+
+### Verifying stable file version commits locally
+
+`api.files` 1.0.0 adds `GET|POST /api/v1/files` on the home data plane. See the
+[stable file contract](docs/mobile-file-sync.md#stable-cloud-files-checkpoint--2026-10-17)
+and `/api/v1/files-docs` for the closed request shape. Clients must negotiate
+`api.files`, persist the complete immutable commit before sending, and reuse
+its UUID file ID, operation ID and expected revision after an uncertain result.
+Use an attachment-content fingerprint receipt for the exact uploaded bytes.
+A missing/failed operation lookup must preserve pending work.
+
+With the same disposable local account, normal upload approval, private fixture
+and local storage setup above, run:
+
+```sh
+cd remix
+node --import tsx scripts/file-versions.integration.mts /absolute/path/to/private-fixture.json
+```
+
+This exercises real Mongo transactions and retained attachment bytes, concurrent
+replacement, exact retries, Timeline, library/folder integration and Trash/restore.
+Files 1.1.0 also verifies complete private folder inventories through
+`GET /api/v1/files?rootId=<folder-id>`: nested folders, exact live-file fingerprints,
+ordinary-note exclusion, anonymous denial and collision refusal. Clients must
+negotiate 1.1.0 for this read and must never treat a failed scan as empty.
+Inventory reads require the existing home Mongo replica-set transaction setup;
+there are no additional credentials, collections or indexes.
+It leaves a tiny synthetic file and its two accounted versions in that account's
+private Trash, and signs out. No hard-delete shortcut is used. Remove temporary
+fixture admin configuration and restart afterwards. No new secrets or indexes
+are required. Production S3, native file workers, retention/purge, sharing and
+native transfer-status UI remain separate acceptance work.
+
+### Verifying cloud sync execution locally
+
+With the disposable local account, upload approval and storage setup above:
+
+```sh
+cd remix
+node --import tsx scripts/file-sync-cloud.integration.mts /absolute/path/to/private-fixture.json
+```
+
+This drives the actual sync executor and cloud transport through a lost
+folder-creation reply, nested directory uploads, an interrupted multipart upload,
+disk-journal reload and an accepted file commit with its response lost. Files
+1.2.0 composes ordinary Things folder creation and canonical Timeline receipts;
+no extra secrets, environment variables or indexes are required. It verifies recovery without source access/reupload, replacement, retained
+byte hashes, account/database fences and recoverable Trash. The synthetic file
+and both charged versions remain private in Trash. Created folders are removed
+through the normal Things API, while their original receipts remain readable.
+The temporary mode-0600 run
+file is removed after success and retained after failure for inspection/recovery.
+Remove any temporary fixture admin setting and restart afterwards. This does
+not exercise OS background scheduling, native disk writes or production S3.
+
+
+### Verifying editable sync configurations locally
+
+With the same disposable local account fixture (mode 0600) described above:
+
+```sh
+cd remix
+node --import tsx scripts/file-sync-configuration.integration.mts /absolute/path/to/private-fixture.json
+```
+
+No upload approval, object-store credentials, extra environment variables or
+indexes are needed for this configuration-only check. It creates a synthetic
+cloud folder and private `file-sync` Thing through the existing Things API,
+verifies guarded editing, fixed-ID create/edit recovery after accepted response
+loss and runtime policy boundaries, removes only its own
+fixtures through ordinary deletion, and logs out. The public schema is visible
+at `/docs/schemas#schema-file-sync`. Configurations contain opaque references;
+they do not grant OS access or launch transfers. The paired mobile device card
+now edits connections through this API. For a browser-only regression, open
+`/scripts/mobile-sync-editor.browser.html` on the local dev server; it uses the
+production editor with synthetic API/native responses and never accesses files.
+Native approval persistence and transfer workers remain in the
+[full sync acceptance ledger](docs/mobile-file-sync.md).
+
+Optional per-connection resource limits use configuration version 3. Negotiate
+`api.things` 1.39.0 and `api.file-sync-batches` 1.2.0 against the selected origin
+before saving/activating them, and require the native `fileResourceLimitsVersion`
+1.0.0 capability before execution. Upload/download ceilings are decimal bit rates
+in the editor (Kbps/Mbps/Gbps), stored as bytes per second and shared across that
+connection's transfers. Transfer and index concurrency are maximums, not promises
+of parallelism; host safety and CPU backpressure can lower the effective values.
+Blank controls preserve existing defaults. CPU percent is an averaged upper
+budget normalized to total available machine CPU, attributed to this connection's
+indexer, source IO and transport; it does not change other apps' priorities.
+The initial implementation conservatively allocates one third of that CPU budget
+to each scope and does not borrow unused shares. Unsupported native clients fail
+closed rather than silently ignoring limits. CPU-limited downloads and two-way
+sync additionally negotiate `api.attachment-content` 1.17.0 and native
+`fileDownloadVersion` 1.0.0 before admission. The authenticated content endpoint
+returns a private, no-store, 60-second signed target for the exact stored object
+version and signed byte range. The host resolves that target independently and
+the task-owned transport downloads directly without copying account cookies or
+processing payload bytes in the renderer. Targets are ephemeral and never saved
+in progress or journals. Custom storage providers must implement the optional
+`signDownloadRange` adapter; unsupported providers fail closed. The S3 adapter
+reuses the configured credentials and existing versioned GetObject permission.
+No new secret or provider setting is
+needed. Direct object transfers retain existing scoped upload authorization.
+
+Pause cancels current work immediately and saves a per-connection stop independently
+of progress refreshes. Resume is explicit. A failed pause save is reported; the
+current process blocks automatic restart, but reopening may recover the old saved
+job. Keep the device folder selected to resume its journaled progress. Intentional
+rate/CPU waits do not consume network-stall deadlines; actual stalled IO remains
+bounded, and cancelling releases unused pacing reservations before Resume.
+
+
+
+### Running a foreground mobile folder upload
+
+Use an iOS/Android build advertising `fileAccessVersion` 1.1.0, pair it in Things,
+choose a folder and save a private connection to an owned cloud folder. Select
+Upload or Backup, unpause it, then choose **Upload now**. Keep the app visible;
+**Stop upload** and **Retry upload** preserve the saved run. Wi-Fi/charging policy
+is checked between requests, not continuously enforced on an in-flight part.
+iOS builds advertising `filePublicationVersion` 1.0.0 also support foreground
+downloads after native approval, with deletion propagation disabled.
+Two-way and background operation remain unavailable. No new secrets,
+collections or environment variables are needed beyond existing pairing,
+Mongo transactions, upload approval and attachment storage setup.
+
+With the disposable localhost account, mode-0600 fixture and normal upload
+approval described above, run:
+
+```sh
+cd remix
+node --import tsx scripts/file-sync-foreground.integration.mts /absolute/path/to/private-fixture.json
+```
+
+This runs the real configured executor/cloud API with synthetic native source
+and policy adapters. It checks lost commit response recovery without reupload,
+failed checkpoint storage followed by a local edit, stable replacement and
+independent downloaded-byte hashes. It removes its configuration/root through
+normal Things APIs and retains its tiny accounted versions in private Trash.
+Remove any temporary fixture admin setting and restart with `npm run web-pms`
+after testing. Native end-to-end upload, production S3 and OS background behavior
+require separate acceptance; see [the sync ledger](docs/mobile-file-sync.md).
+
+
+Android builds with file access 1.2.0 support verified native chunk ranges while
+retaining a full pre-publication source check. For the optional installed-app
+picker/upload acceptance and its synthetic-file requirements, see
+[Android foreground upload acceptance](android/README.md#verified-reads-and-foreground-upload-acceptance).
+
+Android upload capability 1.3 performs whole-file multipart uploads in the native
+host, with no bulk WebView bytes. It needs the existing selected-folder/photo
+grant and account upload API setup, plus private disk space for one multipart
+part and any uncertain parts retained for retry (bounded to 32 parts / 5 GiB).
+Retries reauthorize and hash-check retained bytes under the original upload IDs;
+removing a folder selection clears its cache. No new secrets are required.
+On Android 14+, a user-started current-file upload may continue under an OS
+user-initiated transfer job; older Android uses a foreground service. Notifications
+must be enabled for progress and Pause controls. The first Upload now asks for
+notification access before starting transfer work; declining keeps foreground
+behavior. Folder progression and Timeline publication resume when the app returns.
+No new server secrets or dashboard setup are required. See
+[background upload limits and acceptance](android/README.md#current-file-background-upload-continuation).
+The optional `THINGTIME_FOLDER_UPLOAD_TEST=1` run uses the same disposable
+localhost account and normal upload-approval/storage setup; it needs no new
+service credentials. It remains separate from the passing provider/bridge tests.
+
+
+### Verifying bounded cloud download ranges
+
+The existing attachment-content API at 1.14.0 accepts
+`range=1&version=<opaque-version>&offset=<byte-offset>&length=<bytes>` for at most
+2 MiB per response. Use the canonical fingerprint receipt's version, require
+HTTP 206 with matching ETag/Content-Range, and verify the complete staged
+fingerprint before native publication. Capability negotiation is required; the
+older byte-cache path keeps its 16 MiB limit. This uses the same private storage,
+authorization and local stand-in setup described above, with no new secret or
+storage namespace.
+
+With the disposable local fixture and normal upload approval configured:
+
+```sh
+cd remix
+node --import tsx scripts/file-sync-foreground.integration.mts /absolute/path/to/private-fixture.json --large-download
+```
+
+This uses 17 MiB + 17 bytes, checks full and multipart hashes, anonymous denial,
+wrong-version refusal and source replacement. Normal cleanup retains accounted
+versions in private Trash; remove temporary fixture admin env and restart the
+managed stack afterward. Executor tests use a staged publisher fixture; actual
+the iOS publication path and its remaining native acceptance are described below.
+
+
+### Native iOS download staging checks
+
+The iOS shell advertises `fileStagingVersion` 1.0.0 for private resumable reception.
+It uses the existing account/origin and folder grant checks, keeps bytes and
+immutable operation metadata in protected application support storage excluded
+from backup, and verifies the entire planned fingerprint before returning a
+stage. No new secret, entitlement or server environment variable is required.
+Staging itself does not publish. Updated iOS builds additionally expose
+`filePublicationVersion` 1.0.0: choose Download mode with deletion propagation off,
+then Download now requests native consent for that selected folder and reviewed
+settings. Consent is stored locally in Keychain and cleared by selecting/removing
+the grant. No new secret, entitlement or server environment variable is needed.
+Publication requires same-volume atomic rename/swap support; unsupported providers
+fail without a copying-over fallback. Displaced versions stay in private transfer
+storage; conflict/restore UI and retention cleanup remain pending.
+
+From `iOS/`, run `xcodegen generate`, choose a concrete simulator with
+`xcrun simctl list devices available`, then run:
+
+```sh
+DEST='platform=iOS Simulator,id=<simulator-uuid>'
+xcodebuild -project Thingtime.xcodeproj -scheme Thingtime -destination "$DEST" \
+  -only-testing:ThingtimeTests/MobileSyncStagingTests \
+  -only-testing:ThingtimeTests/MobileFolderTests \
+  -only-testing:ThingtimeTests/MobileDevicePairingTests test
+```
+
+The byte and WebKit tests use disposable local files and a synthetic owner verifier;
+real account, file-provider, process-kill and physical-device acceptance remain
+separate. See the [full sync ledger](docs/mobile-file-sync.md).
+
+
+
+### Installed iOS file-history export acceptance
+
+The same disposable account fixture and local attachment storage setup support
+History exports. No additional secrets, saved folder grants or server routes are
+required. Run from the repository root:
+
+```sh
+THINGTIME_FILE_EXPORT_TEST=1 DEST='platform=iOS Simulator,id=<simulator-uuid>' iOS/scripts/test-mobile-sync-installed.sh /private/account.json
+```
+
+This selects `FileExportInstalledTests`, creates two private byte versions through
+the ordinary upload/files APIs, and opens the real History page. Follow the
+printed folder name: open the updated-file row, cancel the first **Save this
+version**, then save the earlier and later versions into that empty folder using
+Files. Next review/cancel restore, then review/restore the earlier version.
+The runner checks native replies, exact destination bytes, collision naming,
+unchanged cancellation revisions and both retained cloud byte versions. It does
+not accept an external completion marker. The cloud fixture is moved to private
+Trash; the exported files are retained for inspection. Keep credentials out of
+logs and repository files. Physical/provider, low-storage and interrupted-save
+acceptance remain separate from this simulator check.
+
+### Installed iOS download and process-exit acceptance
+
+Use a disposable loopback account with normal private-upload approval and the
+existing local attachment storage setup. Keep its `{base, username, password,
+userId}` fixture outside the repository with mode 0600. The `base` must match the
+iOS build exactly, including `localhost` versus `127.0.0.1`. No additional service
+credentials or collection are needed. From the repository root:
+
+```sh
+corepack pnpm --dir remix exec tsx scripts/mobile-sync-installed-fixture.mts /private/account.json /private/cloud-state.json prepare
+DEST='platform=iOS Simulator,id=<simulator-uuid>' iOS/scripts/test-mobile-sync-installed.sh /private/account.json
+```
+
+The native test signs the disposable account in through the normal login API and
+opens the production Things screen. It refuses to replace another account's
+session. It creates an empty `Download acceptance <id>` folder in app Documents
+and waits for manual/CUA acceptance; it does not fabricate native permissions,
+pairing, transfer replies or successful completion. Pair the device, select that
+folder in Files, save an unpaused Cloud to device connection to `Mobile download
+acceptance`, and leave deletion propagation off. Cancel the native dialog and
+confirm no files were written; retry and approve. Verify both downloaded files
+against the fixture's independent SHA-256 values. Repeat, then run the fixture
+helper with `replace` and download again. Verify the new hash and retained
+original bytes before writing `{"verified":true}` to the test's
+`Application Support/MobileSyncInstalledAcceptance/complete.json`.
+
+Record the created connection ID as `configurationId` in the private cloud
+state, remove its native folder access, then run the fixture helper with
+`cleanup`. It removes only its folders/connection through ordinary APIs and
+retains accounted file versions in private Trash. Sign out the simulator test
+account and remove the empty/test Documents folder. If temporary admin approval
+was enabled in ignored local env, restore that setting and use `npm run web-pms`.
+
+The separate process-exit suite needs no account or server:
+
+```sh
+DEST='platform=iOS Simulator,id=<simulator-uuid>' iOS/scripts/test-mobile-publication-process.sh
+```
+
+It deliberately exits only the simulator test host after rename and before
+receipt persistence, then verifies create, replace and edit-before-recovery in
+a different process. It stops Xcode diagnostic collection only after durable
+proof and the publishing PID establish that the process really exited. These
+checks do not establish device reboot, iCloud/third-party provider or physical
+device acceptance. See [the full ledger](docs/mobile-file-sync.md).
+
+### Android private download staging checks
+
+Android now exposes the same private `fileStagingVersion` 1.0.0 contract. Native
+chunks and immutable progress records live in app-private no-backup storage;
+completed stages require full content verification. Initial folder grants remain
+read-only. Publication 1.1 enables downloads only into explicitly created
+Thingtime offline folders after native approval. Generic SAF roots cannot publish. No new secret, service or environment variable is needed.
+
+With JDK 17, Android SDK 35, `adb`, Node and installed `remix` dependencies, run
+`ANDROID_SERIAL=<test-emulator-id> THINGTIME_WEB_URL=http://127.0.0.1:14900 android/scripts/test-mobile-staging-process.sh`
+on a disposable emulator. The origin override is optional; the default is the
+public HTTPS origin. No login fixture is used. The script rebuilds/installs the
+debug APKs, deliberately kills the test process after byte flush and after stage
+completion, verifies both recoveries in fresh processes and checks native wire
+responses with the shared TypeScript codec. See the [Android staging runbook](android/README.md#private-download-staging-and-process-recovery)
+for evidence, cleanup and remaining boundaries.
+
+### Android native folder write approval checks
+
+The Android adapter now implements the shared `write-approve` contract behind
+its still-disabled publication capability. It requires a native consent dialog,
+re-selection of the exact folder in Android Files with write access, and fresh
+account verification. The encrypted approval binds the account, site, remote
+root, device and configuration revision/hash to this native selection. Selecting
+the folder again invalidates that binding, including when its URI is unchanged.
+No provider file is written by approval or private staging.
+
+On a disposable emulator, create only the synthetic `ThingtimeSyncQA` fixture
+and the private local-account fixture described in the [Android runbook](android/README.md#native-write-approval-acceptance).
+Run `THINGTIME_FOLDER_APPROVAL_TEST=1 android/scripts/test-mobile-devices.sh /absolute/path/private-fixture.json`.
+Follow the native Cancel / Continue to Files / same-folder Allow / changed-config
+Cancel sequence. No production credentials, broad storage permission or extra
+service is needed. Generic-provider publication and background sync remain open.
+
+### Android offline-folder publication backend checks
+
+The Android app now includes a transactional backend for Thingtime-owned offline
+folders. It uses verified immutable native blobs plus an atomic entry/receipt
+transaction, and retains displaced versions. Native **Choose folder → New offline
+folder** creates an explicitly consented root in Android Files. Files access is
+read-only; foreground Download now uses scoped native consent. Existing selected SAF
+folders are not converted to another storage model or written by this backend.
+
+On a disposable emulator, run
+`THINGTIME_WEB_URL=http://127.0.0.1:14900 android/scripts/test-mobile-managed-process.sh`
+with the normal JDK 17 / Android SDK 35 / adb / Node setup. The optional origin
+uses your checkout's port; no account fixture, new secret or service is needed.
+Three actual process-exit scenarios verify rollback, completed-receipt recovery
+and retained replacements through the production shared mobile codec. See the
+[Android runbook](android/README.md#offline-folder-publication-backend-checks)
+for boundaries, evidence and fixture cleanup.
+
+
+### Android offline folders in Files
+
+Use **Things → Folder access → Choose folder → New offline folder** in the
+Android app. Native consent explains that the folder remains visible in Android
+Files while signed out, other apps can read documents selected there, removing
+account access keeps the files, and uninstalling Thingtime deletes them. Finish
+by selecting the created root in the system picker. **Existing folder** retains
+the ordinary SAF selection flow. No broad storage permission, secret, external
+service or new deployment configuration is needed.
+
+For the disposable local-account fixture and emulator setup above, run
+`THINGTIME_OFFLINE_FILES_TEST=1 android/scripts/test-mobile-devices.sh /absolute/path/private-fixture.json`.
+Follow the [Android Files acceptance steps](android/README.md#offline-folders-in-android-files),
+including visual inspection before confirming the test. This verifies native
+creation, selection, listing and reads of a synthetic published file; it does
+not establish cloud download, external editing or background synchronization.
+
+
+### Android foreground cloud downloads
+
+Android bridge publication 1.1.0 negotiates download support for each selected
+folder. Explicitly created Thingtime offline folders support **Download now**
+with native consent tied to the current account, device, folder grant and exact
+connection settings. Generic SAF folders remain read/upload sources. Keep the
+app open and deletion propagation off. Downloaded files are readable through
+Android Files; removing Thingtime access preserves them. Background scheduling,
+writable Files editing and restore/retention controls remain pending.
+
+Use the existing local attachment backend and a disposable upload-approved
+account for the [installed download runbook](android/README.md#foreground-cloud-downloads-to-offline-folders).
+No new secret, permission or external dashboard setting is needed. Private test
+credentials/state stay outside Git with mode 0600. The media cache bypasses
+version-pinned, fingerprint and actor-scoped sync requests so their API headers
+and authorization checks reach the transfer runner unchanged.
+
+
+### Two-way foreground folder sync
+
+Approved iOS folders and Android Thingtime offline folders can use **Two-way**
+with **Sync now**, while the app stays open and deletion propagation is off.
+A run reconciles both directions using the shared journal and confirmed common
+baseline; conflicting edits preserve both copies and require review. Generic
+Android SAF folders remain upload sources. Mac, background scheduling, native
+trash propagation and conflict-resolution controls remain in progress.
+The [Android two-way acceptance runbook](android/README.md#two-way-foreground-acceptance)
+uses the same disposable loopback account, normal upload approval and local
+attachment backend; no new configuration or credentials are required.
+
+
+### Shared Apple folder receiver
+
+The iOS native folder reader, grants and recoverable publication now live in
+[`apple/FileSync`](apple/FileSync/README.md), a local Swift package that also runs
+on macOS. That runbook documents native consent, platform bookmarks, isolated
+staging and real process-exit checks. The Mac helper now has a local folder
+adapter and native picker/approval dialogs. Its Electron account bridge and shared
+folder controls are implemented; installed Keychain/TCC, real cloud transfer and
+desktop restart persistence remain release acceptance requirements.
+See [Mac host setup](macos/ThingtimeNode/README.md#local-folder-sync-adapter).
+The companion server must advertise `api.devices-node-identity` 1.x; the optional
+feature is negotiated separately so older deployments can still pair. Native
+credentials remain in Keychain; no new secret is required. The full-account
+`POST /api/v1/devices/disconnect` revokes one owned device's credentials and keeps
+its history and files. Reconnect requires a new pairing; a completed old claim
+cannot revive a revoked credential.
+
+
+### Desktop sync host validation
+
+From the repository root, install the locked Electron dependencies with
+`corepack pnpm --dir electron install --frozen-lockfile`, then run
+`corepack pnpm --dir electron run verify:folder-sync-host`. The test launches a
+fresh temporary Electron profile and synthetic loopback servers, exercises real
+Chromium cookies and IPC sender checks, and removes its profile on completion.
+It uses no account secret, installed Node, LaunchAgent or real user folder;
+native XPC replies are explicitly synthetic. A usable graphical macOS session
+and the Electron binary are required.
+
+For rendered shared controls, use the canonical PM2 stack and open
+`/scripts/mobile-sync-editor.browser.html?platform=desktop`. This fixture uses
+synthetic grants/API replies with the production editor and desktop runtime.
+The native host negotiates the selected endpoint's public capabilities and keeps
+credentials in their existing cookie session/Keychain. The bundled proxy requires
+`THINGTIME_DESKTOP=1` (set by Desktop) and its selected API endpoint; do not set
+this mode on an ordinary public web deployment. No additional secret is needed.
+See the [desktop acceptance boundary](docs/mobile-file-sync.md#desktop-folder-host-and-shared-controls--2026-10-17)
+before release; page reload is not yet full desktop restart recovery.
+
+
+### Mac sync acceptance against local APIs
+
+Build the test-only native adapter, then run the shared sync acceptance from
+`remix/` against this checkout's PM2-managed loopback stack:
+
+```sh
+swift build --package-path macos/ThingtimeNode --product MacFolderSyncFixture
+cd remix
+corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json
+# Exercise an upload crossing the canonical 8 MiB multipart boundary:
+corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json --large-upload
+# Exercise both streams and restart after a lost staging acknowledgement:
+corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json --large-upload --large-download
+# Also force a real native cooldown immediately before an upload HTTP request:
+corepack pnpm exec tsx scripts/mac-file-sync.integration.mts /path/to/private-fixture.json --cooldown-before-upload
+```
+
+The mode-0600 fixture contains `base` (an `http://127.0.0.1:<web-port>` origin),
+`username`, `password` and `userId` for a disposable account. Use placeholder
+values in examples; never commit a fixture. The account needs private uploads
+enabled through the normal admin API. Use the existing home MongoDB and local
+attachment-storage setup, and the checkout's `web-pms` lifecycle. No additional
+service secret or environment variable is introduced by this test.
+
+The script pairs its own device using the canonical signed claim protocol,
+creates private Folder/file-sync Things, and launches `MacFolderSyncFixture`
+with a private temporary credential record. The executable uses the production
+Swift adapter, file reader, staging/publication and live API identity verifier.
+Its picker, consent, conditions and credential storage are test adapters; no
+installed app, Keychain entry, TCC permission or LaunchAgent is used. The helper
+is a test target and is not copied into packaged Desktop resources. Shared
+TypeScript adapters validate replies and drive actual upload/download bytes.
+
+The test loses accepted cloud/publication replies, restarts the native process,
+verifies original IDs and no reapplication, performs independent replacements,
+checks full byte hashes and retained cloud versions, then disconnects the device.
+Cleanup uses canonical APIs, retaining accounted versions in private Trash and
+protected device history, signs the fixture session out, and removes its private
+temporary directory. It can take over a minute: native identity honors one
+server-directed 1–60-second cooldown on 429, while preserving live checks and
+cancellation. This recovery is not a sustained-throughput or installed-app claim.
+
+The optional `--cooldown-before-upload` check consumes only its disposable paired
+device's identity budget, then verifies that native authorization can outlast the
+30-second JSON deadline without expiring the unsent request. Authorization and
+source checks finish before the HTTP timer starts; caller cancellation still
+covers the whole operation. Network deadlines remain 30 seconds for API JSON and
+120 seconds for signed upload parts. This option intentionally increases read
+traffic and is an acceptance check, not a throughput measurement.
+
+Mac file access 1.2 uses a bounded native range stream (up to 32 MiB) for the
+existing shared upload source. Descriptor-relative reads retain one coordinated,
+version-checked descriptor and emit at most 64 KiB per acknowledged XPC frame.
+The signed bridge streams framed output with pipe backpressure; Electron checks
+framing/range bounds and returns a binary buffer only after final native and
+browser-account verification. Cancellation, changed source/path, incomplete
+output or late authorization refusal discards the range. The 1 MiB ordinary XPC
+message cap is unchanged. Older Mac and current mobile bridges retain chunked
+reads. Mac staging 1.1 now uses the corresponding bounded download stream. No direct native network upload or
+new device credential scope is added. The `--large-upload` option tests the real
+native/cloud path with an 8 MiB-plus file; installed signing/TCC acceptance and
+sustained throughput remain separate checks.
+
+Mac file staging 1.1 carries each downloaded range as binary Electron IPC and
+length-prefixed binary helper input, then pulls at most 64 KiB per XPC callback.
+The shared runner buffers 2 MiB cloud ranges; the native protocol caps ranges at
+32 MiB and metadata at 128 KiB. Native storage flushes the complete range before
+saving its offset. Incomplete tails are discarded on resume, while accepted
+ranges survive process restart and lost acknowledgements without replay.
+The existing staged-content verification and explicit publication approval stay
+separate. `--large-download` uses a 2 MiB-plus download and the acceptance script
+now always loses one accepted staging reply, restarts its private native fixture,
+and verifies exact offset recovery. Older Mac and current mobile hosts keep the
+64 KiB append path. No new credentials, network authority or environment setup.
+
+## Portable backup vault tooling
+
+The [portable backup format](docs/portable-backups.md) provides independent chunk
+storage, interruption recovery and offline verification/copy/restore for a
+supplied frozen inventory. Account-wide snapshot creation, scheduled cloud jobs
+and the product backup UI are still in development. The explicit cloud-folder
+worker below uses existing authenticated APIs; it adds no server configuration,
+bucket permission or public endpoint.
+
+The internal [account inventory producer](docs/portable-backups.md#account-inventory-producer)
+requires MongoDB 5+ snapshot reads, enough retained database history to finish
+enumeration, and the central modern `{ ownerId: 1, shareId: 1 }` index. Legacy
+database migration must finish before this index can be installed within the
+existing budget. Snapshot expiry or a missing index refuses the operation.
+Do not increase a production history window blindly: measure enumeration time
+and the database storage cost first. No new credentials or app environment
+variables are needed. This producer is internal and refuses unsupported managed
+families; it does not yet supply a whole-account backup API. Ordinary Things,
+file references, ready owned attachments, saved drafts/templates/tombstones,
+saved themes, approved account profile/preferences and canonical Timeline record
+families are covered. Account profile content has a 1 MiB value bound; credentials,
+security state and live restore authority are excluded explicitly. Canonical file-history references must match attachment records at
+the same database timestamp. Timeline and draft payloads, plus large ordinary
+Thing snapshots, are frozen into private chunk storage during the database
+snapshot. Draft records are bounded to 4 MiB and ordinary snapshots to 128 MiB;
+the latter stream one row at a time through 8 MiB chunks. Validation/encoding
+can hold multiple record-sized buffers, so provision worker memory accordingly. Keep that destination local
+and durable enough to finish within the database history window; failure does
+not permit switching timestamps. Archived receipts are read-only history, not
+server restore authority. The consistency check below also deletes its source
+database, original files and first vault, then verifies history and current/earlier/conflict
+file bytes, saved drafts/templates/tombstones, partial and large saved themes,
+and large ordinary content in an independent copy. Themes use the existing
+Timeline content format; the offline reader does not change the active theme or
+restore sharing. Other managed-family coverage remains incomplete.
+
+The producer now also needs the existing [private attachment storage](#private-s3-media-and-attachments)
+configuration (or the [local stand-in](#local-attachment-storage-laptop-stand-in-for-the-private-bucket))
+in its trusted worker process. It performs exact-version HEADs, never searches
+for credentials or assumes a latest object version. No new bucket permissions,
+secret names or public endpoint are added. `resumeAccountBackup` takes an
+explicit authenticated runtime and reads existing 2 MiB content ranges; live
+revocation, missing objects or expired retention prevent completion. Root
+storage keys and credentials never enter snapshot metadata. Independent cloud
+retention/pinning and complete account job admission remain unfinished.
+
+For its isolated consistency check, start a disposable local MongoDB 5+ replica
+set and explicitly provide its loopback port and replica name. This script does
+not load app `.env` files; it creates and removes only a randomly named test
+database and a temporary vault. The variable below is test-only:
+
+```sh
+THINGTIME_ACCOUNT_SNAPSHOT_TEST_URI='mongodb://127.0.0.1:20337/?replicaSet=timeline-rs' \
+  corepack pnpm --dir remix exec tsx scripts/account-snapshot.integration.mts
+```
+
+The account profile integration check creates its own disposable replica on
+loopback port **28142**, with a private temporary data directory. It requires
+macOS `/usr/bin/sandbox-exec`, `mongod` and `mongosh` on PATH
+(`THINGTIME_TEST_MONGOD` may name another mongod binary). An OS network policy
+limits the database, bootstrap shell and application worker to that loopback
+port. Before starting them, a preflight uses **28144** as a forbidden destination
+and verifies denied hostname, direct-IP and redirect connections. Missing or
+failed isolation stops the run; there is no unrestricted fallback.
+It refuses occupied ports, uses no app `.env` or existing database,
+forces the console-only email transport, and stops/removes its replica and data
+on completion. Signup and all profile/settings/restore writes use the actual
+production Request handlers with real cookies, sessions and transactions. The
+same internal account reader used by inventory supplies the snapshot. This is a
+handler/database integration check; it does not claim HTTP/browser acceptance.
+
+```sh
+npm --prefix remix run test:backups:account-profile
+```
+
+The fixture proves concurrent updates keep the old database snapshot, independent
+copy recovery, explicit restoration through current writers and revoked-read
+refusal. It also verifies that a fresh database without the owner-inventory index
+migration cannot publish a complete account plan. The profile lookup uses the
+existing unique share-ID index; whole-account enumeration still requires the
+modern owner/ID index above. External image URLs remain metadata; managed image
+restore, whole-account coverage and the product restore UI are separate gates.
+
+Use a private directory owned by your OS user for each vault. The destination's
+parent must already exist. The current local adapter requires POSIX permissions,
+hard-link publication and directory sync; it is not a raw FAT/USB-media writer.
+The format is not encrypted: future cloud/physical-media adapters must supply
+appropriate storage encryption and key recovery before offering that service.
+Never pass a vault's archived filenames as destination paths.
+
+```sh
+# Verify an existing sealed vault without changing it.
+corepack pnpm --dir remix run backup:vault verify /private/source-vault SNAPSHOT_UUID
+# Resume a verified independent copy into another private destination.
+corepack pnpm --dir remix run backup:vault copy /private/source-vault SNAPSHOT_UUID /private/destination-vault
+# Restore one file to the exact chosen path; an existing file is never replaced.
+corepack pnpm --dir remix run backup:vault restore-file /private/destination-vault SNAPSHOT_UUID /chosen/output.bin THING_ID
+# Synthetic local filesystem and offline CLI acceptance (no account credentials).
+corepack pnpm --dir remix run test:backups
+# Disposable real API fixture; follow the existing foreground-sync fixture setup.
+corepack pnpm --dir remix exec tsx scripts/file-sync-foreground.integration.mts /private/fixture.json --portable-backup
+```
+
+The real API fixture must be mode 0600 and contain only the disposable loopback
+account described in the existing sync acceptance runbook. It moves its generated
+cloud file to private Trash and removes its own temporary local vaults. Offline
+CLI access comes from possession of the private vault; online product adapters
+must continue to enforce the current account, origin and device permissions.
+
+### Independent cloud backup destination
+
+The `backup:replica upload|download VAULT SNAPSHOT_UUID` worker copies an existing
+sealed vault to or from a separately configured S3 destination. Forks must supply
+their own private, encrypted, independently retained bucket and prefix-restricted
+IAM policy. It uses no primary attachment settings or ambient AWS credentials.
+The owning app/vault supplies a bounded private stdin handoff; never put real
+credentials in CLI arguments, logs or checked-in configuration. Required provider
+operations, placeholder handoff fields, permission scopes and recovery behavior
+are documented in [independent S3 replicas](docs/portable-backups.md#independent-s3-replica-worker).
+Run `npm --prefix remix run test:backups` for the synthetic loopback transport and
+real child-process kill/resume proof. The native vault selector/background UI,
+live-provider validation, retention, full-account coverage and large-volume
+throughput remain open. No bucket is automatically created or made public.
+
+### Capture a selected cloud folder
+
+`backup:cloud` is an explicit worker/operator tool, not the native backup UI.
+On Node 24, it freezes the Files 1.5.0 paged inventory for one private folder,
+including empty folders. A private disposable SQLite index checks ancestry and
+identity/path uniqueness and sorts the manifest without a whole-tree array.
+The default preparation index limit is 512 MiB; snapshot timeout/frontier and
+available scratch disk limits fail explicitly. Ordinary Things,
+other folders, historical versions and account settings are **not** part of this
+selection. Oversized/incomplete trees fail; a capture interval is recorded rather
+than claiming an account-wide point in time. See [coverage and recovery](docs/portable-backups.md#cloud-folder-capture).
+
+Supply a mode-0600 JSON file owned by your OS user containing an explicitly
+obtained full account session JWT; scoped PAT/app tokens cannot use this API.
+The tool does not discover browser/native credentials or sign in for you. This
+file is sensitive: keep it outside the repo, never commit/share it, and remove it
+when finished. A later native flow must use its existing consent/session bridge.
+Only placeholder values are shown:
+
+```json
+{"origin":"https://your-thingtime.example","ownerId":"YOUR_ACCOUNT_ID","token":"YOUR_SESSION_JWT"}
+```
+
+```sh
+# Choose one UUID and keep it to resume this exact frozen snapshot.
+corepack pnpm --dir remix run backup:cloud create /private/session.json /private/vault SNAPSHOT_UUID FOLDER_ID
+corepack pnpm --dir remix run backup:cloud resume /private/session.json /private/vault SNAPSHOT_UUID
+```
+
+Use HTTPS (HTTP is accepted only for loopback development). The worker pins
+owner/origin/home storage and rechecks the session before capture and final
+sealing. Credentials never enter the vault. Resume reads the saved inventory and
+exact retained attachment versions even after live edits/Trash; unavailable bytes
+or revoked access stop completion. A failure before the metadata plan finishes
+requires a new snapshot UUID; a new live inventory cannot replace a partial plan.
+Offline verify/copy/single-item extraction use the commands above. Whole-tree
+restore now also uses a bounded disk index, removing the old 10,001-item/32-MiB
+whole-tree memory limit. The local vault is still
+unencrypted and does not provision a cloud replica or physical-media service.
+
+### Restore a saved folder tree
+
+The offline vault CLI can restore the complete selected filesystem tree into a
+**new private local recovery directory**. Its `files/` subdirectory contains the
+original root's contents; `state/`, `staging/` and `locks/` retain recovery state.
+It does not restore into an existing user folder or overwrite existing files.
+First inspect the dry-run paths/byte total and copy its `review` hash:
+
+```sh
+corepack pnpm --dir remix run backup:vault plan-tree /private/vault SNAPSHOT_UUID /private/recovery
+corepack pnpm --dir remix run backup:vault restore-tree /private/vault SNAPSHOT_UUID /private/recovery REVIEW_HASH
+# After interruption, resume the same snapshot, directory and reviewed plan.
+corepack pnpm --dir remix run backup:vault resume-tree /private/vault SNAPSHOT_UUID /private/recovery REVIEW_HASH
+```
+
+Node 24 is required. The private disposable SQLite index defaults to a 512 MiB
+metadata budget and a 2 MiB cache; file bytes remain range-streamed. The CLI
+streams the same JSON review document with stdout backpressure, so a large
+review may be redirected to a local file. Normal success/errors remove scratch;
+a process kill can leave private temporary data, which is not recovery state.
+Existing v1 review hashes and interrupted-restore receipts remain compatible.
+
+The destination's parent must already exist. Review binds the snapshot metadata
+and canonical destination; changed scope, paths or destination require review
+again. Empty folders are preserved. Each 8 MiB range is synced/read back before
+its receipt; resumed ranges and complete files are verified locally without
+fetching their source chunks again. Files publish individually after complete
+fingerprint verification, so `files/` can be partial until the command succeeds.
+Existing user edits, extra files, symlinks and corrupted accepted ranges stop
+completion rather than being replaced. Staging uses hard links after publication,
+so it does not keep a second full copy of restored bytes.
+
+Use a private **single-host local POSIX disk**, not a shared/network filesystem.
+The process guard recovers after an exited worker; it conservatively refuses a
+still-live or reused PID. It never removes another worker's lock candidate.
+A destination interrupted before its initial identity record was saved needs a
+new directory; no existing directory is silently adopted. Keep recovery state
+until the operation succeeds. Native/account restore UI, generic Thing restore,
+permissions/timestamps restoration and encrypted media remain separate work.
+
+### Desktop middleware assets
+
+The Electron build uses Nitro's `node_middleware` preset and explicitly enables
+its static-file serving in `remix/nitro.config.ts`. No additional environment
+variable or private service is required. After staging with
+`corepack pnpm@10.12.1 --dir electron build:web`, run
+`corepack pnpm@10.12.1 --dir electron verify:renderer-restart` to verify the
+packaged startup scripts/styles and persistence across app processes. The web
+cloud presets keep their existing static hosting defaults.
+
+The Desktop proxy passes Nitro/srvx request objects directly to its forwarding
+helper. Forwarded-origin headers are stripped in that helper; do not clone these
+objects with Node's `new Request(existingRequest)`, which can fail its private
+Undici-state check. The native export fixture's `--headless` mode exercises
+account checks and retained byte ranges through the actual bundled proxy.
+
+
+### Native Trash recovery development
+
+Apple native recovery uses the same local package as download publication:
+
+```sh
+swift test --package-path apple/FileSync
+apple/FileSync/scripts/test-trash-process.sh
+apple/FileSync/scripts/test-publication-process.sh
+swift test --package-path macos/ThingtimeNode --filter 'MacFolderSyncTests|ThingtimeAPIClientTests|WireCodecTests|FolderStreamXPCTests'
+```
+
+The process scripts create and remove only their own temporary fixtures. No
+credentials or extra environment variables are required. For the real loopback
+Mac/API checks use the private fixture setup above; it now verifies native Trash
+restart/restore and revoked-device refusal, with isolated picker/consent and
+credential-store adapters. Native storage is endpoint-specific on Mac
+(`FolderSyncTrash-v1-<endpoint identifier>`) and app-private on iOS
+(`MobileSyncTrash-v1`). It is excluded from OS backup and has no automatic purge;
+this recovery state is not yet included in whole-account snapshots. Cross-volume
+moves refuse. Mac/iOS native Trash 1.2 enables explicitly approved foreground
+deletion and recovery browsing under the same surviving picker grant. Removing
+or rechoosing that grant currently loses UI recovery access; retain it until
+files have been restored. Android offline folders use transactional recovery as
+described below; arbitrary new-grant recovery remains open;
+see [the acceptance ledger](docs/mobile-file-sync.md).
+
+
+The Mac/API acceptance fixture also verifies `api.files` 1.4.0 fresh nested
+path observations (absent, created, deleted, recreated with a new id, and alias
+refusal). New downloads require that capability and a pinned cloud root; a
+missing root or old server cannot authorize publication. No additional secrets
+or environment variables are required. The path reader shares the inventory
+bounds described in [the acceptance ledger](docs/mobile-file-sync.md).
+
+
+Recovery UI layout checks use the real component with synthetic responses only:
+open `/scripts/native-recovery-preview.html` on this checkout's PM2 dev server.
+Verify 1280px and 390px layouts, invalid paths, destination review and completed
+feedback. This fixture does not grant filesystem access or exercise native
+consent. Native recovery itself requires no new secrets, dashboards or services.
+The Mac/API fixture now exercises planner-driven child/parent deletion, lost
+native replies, restart, paged recovery listing and reviewed restore.
+
+### Android offline-folder recovery development
+
+Android native Trash 1.2 uses the existing app-private `ManagedFiles-v1`
+SQLite catalog and immutable blobs. Catalog schema 3 adds indexed retained-item
+receipts; migration preserves prior roots, document IDs and publication receipts.
+Deletion, parent-folder revision and recovery receipt commit together. Restoration
+inserts an absent destination and its receipt in one transaction. A crash before
+commit leaves the original state; after commit an exact retry returns the saved
+receipt. No deleted bytes are automatically purged. These local records are not
+Timeline versions or an independent backup, and remain excluded from OS backup.
+
+Use JDK 17, the Android SDK and a connected disposable emulator/device:
+
+```sh
+ANDROID_SERIAL=emulator-5554 THINGTIME_WEB_URL=http://127.0.0.1:14900 \
+  android/scripts/test-mobile-trash-process.sh
+THINGTIME_OFFLINE_FILES_TEST=1 THINGTIME_NATIVE_TRASH_TEST=1 \
+  android/scripts/test-mobile-devices.sh /path/to/private-local-fixture.json
+```
+
+Use the existing mode-0600 loopback account fixture setup above. The second
+command creates/selects its synthetic offline folder through Android Files,
+exercises real native cancel/allow dialogs and the shared recovery screen, then
+asks for rendered Files inspection. Test screenshots are saved in the debug
+app's private `files/native-trash-*.png` paths. Generic external SAF providers
+remain read-only. Deletion needs separate per-configuration `allowTrash` consent;
+restoration needs fresh native confirmation and never overwrites an occupied
+path. Rechoosing the same saved Android grant invalidates old consent but permits
+newly reviewed recovery; removing it and selecting a new grant does not transfer
+recovery authority. Physical devices, background deletion, independent backup
+copies, large-volume export and shipping physical media remain separate work.
+
+For installed planner-driven Android deletion acceptance, prepare a fresh cloud
+fixture with `remix/scripts/mobile-sync-installed-fixture.mts`, then set
+`THINGTIME_OFFLINE_DOWNLOAD_STATE=/path/to/private-cloud-state.json`,
+`THINGTIME_TWO_WAY_SYNC_TEST=1` and `THINGTIME_DELETE_SYNC_TEST=1` when running
+`android/scripts/test-mobile-devices.sh /path/to/private-local-fixture.json`.
+This mode automates copy/delete/restore consent after real folder selection. It
+suppresses one actual committed deletion response, stops through the normal UI,
+reloads the WebView and verifies IndexedDB operation identities before resuming.
+The runner streams readiness and consent prompts while it is running. Wait for
+`OFFLINE_CREATE_QA_READY` before choosing a folder: the initial bridge checks
+must finish first. At `OFFLINE_FILES_QA_READY`, inspect the restored file in
+Android Files, return to Thingtime, then acknowledge the inspection with
+`adb -s <test-device-id> shell run-as com.thingtime.mobile.dev touch files/offline-files-confirmed`.
+Run concurrent-edit review and direct-native-recovery modes separately. Clean up
+the owned cloud fixture with its `cleanup` action afterward.
+
+If an Android emulator shows stale WebView layers and evaluation timeouts with
+software graphics, stop that test emulator and cold-start the same AVD with
+`emulator -avd <test-avd> -no-snapshot -gpu host`. Preserve its `ANDROID_AVD_HOME`
+and app data, then restore the local port forwarding. This removed the observed stale
+paint layers on the local API 35 test AVD, but intermittent WebView timeouts
+remained. It is not physical-device coverage or a reason to disable checks.
+
+
+### Android retained-version recovery development
+
+Catalog schema 4 adds grant-scoped browsing and copy restoration of versions
+already preserved by offline-folder replacement. No new secrets, services or
+permissions are required. It keeps current and retained files; an exact restore
+retry reuses its receipt. Old capture dates are shown as unknown rather than
+invented. These local bytes remain excluded from OS backup.
+
+Use the existing JDK 17/SDK and mode-0600 loopback account fixture setup:
+
+```sh
+ANDROID_SERIAL=emulator-5554 THINGTIME_OFFLINE_FILES_TEST=1 \
+  THINGTIME_NATIVE_VERSIONS_TEST=1 \
+  android/scripts/test-mobile-devices.sh /path/to/private-local-fixture.json
+```
+
+Wait for the streamed folder prompt and create/select only the named synthetic
+empty folder. The test handles version review/cancel/reload/restore consent,
+then asks you to inspect `nested/original.bin` and `nested/earlier-copy.bin` in
+Android Files. Return to Thingtime and acknowledge with the same
+`files/offline-files-confirmed` command above. Screenshots are saved as
+`files/native-version-*.png` in the debug app. Keep source files unchanged during
+installed acceptance so hot reload cannot replace a pending bridge listener.
+The shared synthetic layout fixture also exercises replaced-version controls.
+Removing a grant, uninstalling the app and device loss are not recovery paths;
+independent snapshots and large-volume export remain separate acceptance work.
+
+
+#### Mac streaming throughput
+
+Mac file-access capability 1.12.0 adds fresh conditions to the authorized context
+that already returns roots. Corrected Mac adapters use it at every mutation guard;
+read-only streaming preparation retains scope checks and independently authorized
+native inspections without repeating mutation approval. Public feature negotiation
+is bound to the exact live host window/generation/account/device/origins; account
+and native identity remain fresh for native requests. Old hosts retain the original
+path. No rate-limit, permission, configuration or credential setup changes are needed.
+A controlled parent-path streaming regression measures 40→13 native RPCs and
+184→72 HTTP requests, including preparation. This does not establish installed
+throughput; see [verification and limits](PRs/1075-codex-sync-operation-amplification-reduce-read-only-native-sync-preflight-overhead.md).
+
+
+Mac file-access capability 1.11.1 supports bounded 4096-change transport pages;
+the shared client keeps journal transactions and planner wakeups at 128 entries,
+including the first ready chunk. Older hosts retain 128-change requests. Native
+JSON responses remain capped at 512 KiB. Runtime bridge launches retain fresh
+child signature checks and current parent authentication while avoiding repeated
+full outer-bundle resource traversal after an initial successful verification;
+explicit status/service/release verification stays complete. See the
+[desktop trust boundary](electron/README.md) and
+[native batch contract](macos/ThingtimeNode/README.md#bounded-streaming-transport-batches).
+This changes no sync configuration, grant, root scheduling or remote API contract.
+
+#### Priorities before streaming preparation
+
+On the trusted native Mac path, selected upload paths can be prepared from the
+already durable index before ordinary earlier observations. The queue stays at
+128 pending operations: one ordinary operation can free a full queue, then an
+eligible priority binding uses that slot. Required ancestor folders are prepared
+and acknowledged before their child, including ancestors outside the selected
+prefix. Reserved or uncertain operations keep their original IDs.
+
+Journal version 13 adds a scoped path index over retained input rows. A separate local task
+backfills normalized keys in resumable 128-row transactions through a fixed legacy
+cutoff; indexing and uploads continue while it runs. A priority becomes eligible
+only after its NFC/casefold and earliest-revision proof exists. Processed-ahead
+observations retain individual durable markers; the contiguous source watermark
+cannot cross an unprocessed gap, and streaming never publishes a complete baseline.
+Old/generic adapters and remote-source preparation retain FIFO behavior. This does
+not prioritize files the native indexer has not discovered, add transfer concurrency,
+or provide native upload-speed telemetry. Installed priority acceptance remains open;
+see [the migration and verification note](PRs/1076-codex-sync-priority-preparation-prepare-saved-upload-priorities-before-ordinary-indexed-input.md).
+
+#### iOS native multipart uploads
+
+Updated iOS hosts upload selected folder and photo originals from private,
+file-backed parts through the existing attachment protocol. Bytes stay native;
+the shared runner retains operation IDs, verifies part/server fingerprints and
+publishes canonical file/Timeline history. Signed destinations are obtained from
+the configured authenticated server, with no account credentials sent to storage.
+No new secrets or environment variables are needed. Interrupted iOS parts persist
+privately under their original account, grant and upload identity, capped at
+32 parts / 5 GiB; retries reauthorize and verify bytes before upload. Success or
+removing that grant clears its retained parts. Allow disk space for retained parts
+plus a PhotoKit original when applicable. These are
+foreground transfers; see the [native upload limits and acceptance](iOS/README.md#file-backed-native-uploads).
+
+#### iOS photo backup setup
+
+In the iOS app, **Choose folder → Photo library (backup)** opens the native
+explanation and Photos access choice. Select full or limited access, then create
+an editable backup connection to a cloud folder. Granting access does not upload
+anything. Photo sources are read-only and keep saved cloud copies after device
+deletion. The shared Apple reader exports original PhotoKit resources, including
+embedded metadata and paired Live Photo resources when available locally. It
+needs temporary free disk space for the largest original plus one upload part and does not silently
+download iCloud-only originals. Album/favorite/caption restoration, large-library
+paging and background completion remain open. No service secret is needed;
+forks retain the usage description in `iOS/project.yml` and ordinary authenticated
+file-sync APIs. See [iOS setup and disposable acceptance](iOS/README.md).
+
+#### Android photo backup setup
+
+On Android 11+, **Choose folder → Photo library (backup)** requests photo/video
+and original-media metadata access, then opens Files to select the library or a
+storage volume. Android 14+ selected-photo access is supported and labelled.
+Create a private cloud folder and a file-sync connection; photo sources use backup
+mode and retain cloud copies after source deletion. Start transfers explicitly
+while the app is open. No extra credentials or server environment variables are
+required beyond the existing file-sync/Timeline setup. Native photo libraries
+remain bounded to 10,000 entries per selected tree; background workers, large-library
+paging and installed Mac Photos acceptance remain unfinished. See the
+[Android setup and disposable acceptance workflow](android/README.md#photo-library-backup-android-11).
+
+#### Mac photo backup setup
+
+In an updated signed Mac app, **Choose folder → Photo library (backup)** opens
+the native explanation and macOS photo permission request. Configure an editable
+backup connection and start it explicitly; permission alone never uploads data.
+The source uses the shared Apple original-resource reader and existing binary
+XPC ranges. Photos are read-only, saved cloud copies survive source deletion, and
+revoked access is unavailable rather than an empty library. Local originals and
+free temporary space for the largest original are required; iCloud-only downloads,
+large-library paging and background work remain open. Forks must retain
+`NSPhotoLibraryUsageDescription` in both the native helper Info.plist and
+Electron's `build.mac.extendInfo`; no extra secret is required. See
+[Mac setup and acceptance](macos/ThingtimeNode/README.md#photo-library-backup).
+
+#### iOS native multipart jobs
+
+Build an updated iOS host advertising `fileUploadVersion` 1.2.0 to upload a whole
+file through one native request. Existing hosts retain their per-part path. No
+new environment variables, credentials or services are required. Keep the
+existing Things/device/attachment capability endpoints enabled. The host rereads
+the reviewed private file-sync Thing and checks pairing, folder/photo access,
+Wi-Fi and charging policy before each part and completion. Upload capability
+1.3.0 requests iOS 26+ continued processing for the current user-started file;
+refusal retains foreground behavior. Preserve the `processing` background mode
+and `$(PRODUCT_BUNDLE_IDENTIFIER).file-upload` permitted identifier in
+`iOS/project.yml`, then regenerate with XcodeGen. No new secret is required.
+The simulator declined the background acceptance request; physical-iPhone proof
+and OS relaunch remain open. See
+[iOS upload-job details](iOS/README.md#native-multipart-jobs).
+
+
+### Cloud inventory paging acceptance
+
+`npm --prefix remix run test:files:inventory-pages` runs production signup,
+Things and Files Request handlers against its own disposable Mongo replica on
+loopback **28241**. It requires macOS `sandbox-exec`, `mongod` and `mongosh`;
+`THINGTIME_TEST_MONGOD` can select another installed mongod binary. It refuses
+occupied ports, verifies OS denial using forbidden port **28243** (including
+hostname/direct-IP/redirect checks), and applies that boundary to the database,
+bootstrap shell and test worker. There is no permissive fallback or app `.env`.
+It generates one disposable identity in memory, uses console-only email, honors
+normal rate limits while creating 135 folders, and removes its owned processes
+and temporary database after the run. No real account credential is used.
+The proof covers two NDJSON pages, a concurrent API rename, journal sealing and
+logout refusal. It is a handler/database check, not HTTP/browser or installed
+app acceptance. Production needs Mongo snapshot-session support (5+) and enough
+snapshot history for a capture; expiry fails the scan instead of mixing dates.
+The 10,000-path live planner cap and installed/large-volume acceptance remain open.
+
+### Wide-folder cloud path checks
+
+Files capability 1.6.0 streams per-parent path observations with bounded memory.
+The server needs a writable POSIX temporary filesystem with anonymous open-file
+support (Linux/macOS); no additional account, credential or environment variable
+is required. Each active path scan can address up to 128 MiB of temporary disk,
+with two scans admitted per service/process. The file is unlinked before content
+is written, so normal closure and process death both release its allocation.
+Disk capacity, permission, cancellation and timeout failures return unavailable,
+never missing-file evidence. The 20-second observation deadline and legacy
+whole-tree inventory/foreground limits are unchanged. Run the existing isolated
+`npm --prefix remix run test:files:inventory-pages` fixture for actual authenticated
+handler coverage; see `docs/mobile-file-sync.md` for remaining acceptance gates.
+
+### Editable file-sync review compatibility
+
+The Mac/iOS review layout uses ordinary private webpage Things. Forks must serve
+`api.things >=1.36.0` and `api.webpages-resolve >=1.6.0` with matching majors on
+the selected API origin before saving this layout. Existing account/data-plane
+fences and desktop authenticated proxy transport apply; no extra secret or
+settings-specific endpoint is required. See [mobile file sync](docs/mobile-file-sync.md#editable-paged-conflict-review--2026-10-19)
+for the isolated browser harness and remaining native acceptance gates.
+
+
+### Disposable Mac paged-sync acceptance
+
+Build the current server and non-shipping Swift fixture, then run:
+
+```sh
+swift build --package-path macos/ThingtimeNode --product MacFolderSyncFixture
+(cd remix && NITRO_PRESET=node-server pnpm exec nitro build)
+pnpm --dir remix run test:files:mac-paged
+```
+
+The runner needs local `mongod`, `mongosh` and an installed Apple Development
+signing identity (`THINGTIME_TEST_SIGNING_IDENTITY` can select it explicitly).
+It signs a temporary test executable with the app-scope bookmark entitlement;
+it never installs or replaces Thingtime. Ports 28311/28312 are reserved only for
+this disposable HTTP server and Mongo replica. A macOS OS network sandbox
+refuses other ports, direct IPs and outbound destinations. The runner generates
+a synthetic account through signup, restarts only its own server with that
+account's normal fixture upload approval, and removes its database, files and
+credentials when finished. No owner credentials or production data are used.
+
+`mac-file-sync.integration.mts --paged` drives the same paged foreground runner
+as Mac/iOS, sealed native inventories, streamed cloud inventories, single-path
+checks and durable reviews. It compares actual local/cloud byte hashes through
+accepted-reply loss, native restarts, convergence, saved-choice recovery and
+recoverable Trash. Its picker, consent and credential store are test adapters;
+its IndexedDB is an in-process fixture. Installed UI, physical providers, large
+root throughput and browser-process persistence require separate acceptance.
+
+For the combined large-root check, add `-- --wide` to the command. It provisions
+10,001 ordinary folders through the normal import API, creates matching native
+directories and verifies two byte transfers and complete 10,003-path checkpoints
+through reply loss and restart. Allow up to 20 minutes. Mac access 1.5.1 or iOS
+access 1.3.1 is required for the paged native path: earlier builds retain the
+10,000-path bound because their publication alias check used a whole listing.
+
+
+### Mac file-sync lifecycle checks
+
+Explicit Mac transfers use an app-owned runner and reconnectable Files controls.
+Automatic scheduling after full Quit/relaunch is still in progress. The portable
+UI regression is `npm --prefix remix run test:files:desktop-lifecycle --
+<absolute-evidence-directory>` and uses a disposable profile and synthetic data
+on OS-restricted loopback 28188. It requires the existing MCP esbuild/Playwright
+tooling. `npm --prefix electron run verify:folder-sync-host` uses a temporary
+Electron profile on loopback 28421/28422 with an enforced network boundary; a
+Chromium nested-sandbox initialization failure is an unavailable native test,
+not permission to disable a sandbox. Neither command uses a personal account,
+installed app data or a production backend. See the
+[acceptance ledger](docs/mobile-file-sync.md#app-owned-mac-transfer-lifecycle--2026-10-19).
+
+### Backup source retention rollout
+
+Cloud backup workers require attachment-content 1.15.0 and acquire renewable
+24-hour exact-version holds. Deploy retention-aware attachment deletion and
+cleanup writers together for every deployment sharing a database; bucket
+lifecycle rules must also preserve those versions. Old writers and provider
+administrators cannot be fenced by an application-only hold. Held bytes remain
+billed, and deletion waits for expiry. No new secret or provider environment
+variable is required. See [portable backup retention](docs/portable-backups.md#source-version-retention--2026-10-19)
+for isolated test prerequisites, boundaries and remaining product work.
+
+### Home-folder upload and progress development
+
+The Mac home-backup preset starts paused, excludes `Library`, `Applications` and
+`.Trash`, preserves custom exclusions and never propagates deletions. The user
+must select a native home-folder grant and review the cloud target before saving
+and starting. Exclusions now prune native discovery before directory access;
+this needs Mac file access 1.6.0 or iOS 1.4.0. Older hosts refuse excluded scans.
+No new secrets or external configuration are introduced. The selected server
+must satisfy the existing sync capability requirements; a web deployment alone
+does not upgrade the native host.
+
+The two-step progress viewer reads the existing scoped journal and exposes its
+labels, controls and repeated hierarchy fields through Builder. It is bounded
+and can read completed runs until ordinary journal collection. Test with
+`node remix/scripts/test-home-backup-ui.mjs /tmp/thingtime-home-upload-ui/home`
+and the existing desktop lifecycle harness. These checks use disposable native
+and HTTP fixtures under OS network isolation; they do not read a real home folder
+or establish installed-app acceptance. See [the acceptance ledger](docs/mobile-file-sync.md).
+### Automatic AI model catalogue sync
+
+Thingtime refreshes the server Anthropic and OpenAI model inventories daily at
+03:23 UTC (`/api/v1/ai/models/sync` in the root `vercel.json`). Set a random
+`CRON_SECRET=<random-secret>` in the deployment environment; Vercel sends it as
+`Authorization: Bearer <random-secret>`. Outside Vercel, schedule that authenticated
+GET once daily. A missing secret refuses the job. MongoDB must support transactions
+(replica set / Atlas), as with other home control-plane mutations.
+
+OpenAI discovery uses `OPENAI_API_KEY` (and optional `OPENAI_ORG_ID`,
+`OPENAI_PROJECT_ID`, `OPENAI_BASE_URL`). For Anthropic model discovery, configure
+`ANTHROPIC_MODELS_API_KEY=<models-api-key>` in the server deployment environment.
+If absent, an existing `ANTHROPIC_API_KEY` is used for catalogue reads only. These
+keys are never passed to Claude inference, which continues using the isolated
+Claude Code runtime and its admin-vault OAuth credential.
+
+Without either discovery key, or when the Models API denies catalogue access
+(401/403), Thingtime reads Anthropic's public [model lifecycle table](https://platform.claude.com/docs/en/about-claude/model-deprecations).
+This works without an API key or paid Claude subscription, even when inference
+is not configured. Public records carry `catalogSource: "public-docs"`,
+`catalogCheckedAt`, and `publicCatalogAvailable`; they do not set or overwrite
+credential-scoped `providerAvailable` / `lastSyncedAt`. Only an explicit Retired
+row hides a public model; omission from a documentation page never retires it.
+The admin UI labels public metadata as account-access unverified. A free Claude
+account does not gain inference access merely because a model is listed.
+
+Malformed, empty, redirected, oversized or timed-out documentation responses
+preserve the prior catalogue. API network/server failures also preserve it.
+Claude Code's initialization list is not authoritative discovery.
+Personal Secure Vault endpoints have their own configuration and do not alter
+the shared catalogue.
+
+Admin → AI Providers → **Sync model catalog** runs a manual refresh. Provider
+model-not-available errors also request a refresh, without replaying the failed
+turn or silently changing its model. A shared five-minute cooldown and two-minute
+lease prevent concurrent requests from hammering providers. Inspect the per-provider
+sync report/status to distinguish success, failure and skipped/cooling-down jobs.
+
+**Allow all current models** changes the existing compatible model toggles for that
+provider. **Auto-allow new models** defaults off and controls newly discovered
+compatible chat models; it preserves individual disable choices on subsequent
+syncs. Unsupported model types remain recorded but are not offered for chat.
+New model versions use conservative provider-default reasoning/standard speed;
+pricing and context limits remain unknown until explicitly supported. Unknown
+pricing remains `priced: false` in usage accounting; it is never presented as a
+provider price of zero. Admins should consider this before enabling auto-allow.
+
+A complete authenticated provider snapshot atomically marks absent models unavailable, retaining
+their records and admin choices. The public catalogue and shared model selectors
+only offer enabled, available models. Admin retains all compatible rows for audit.
+The workflow order selector uses those live models, including discovered versions.
+From AI workflow model order, **Save & apply** saves the named waterfall and then
+persists the shared model order before closing. If either save fails, the dialog
+stays open with an error; retry updates an already-created waterfall rather than
+creating another copy. **Apply waterfall** still stages the order for the separate
+**Save model order** button; **Save waterfall** only saves the personal template.
+
+### Incoming mail (Gmail, IMAP, POP3 and offline inboxes)
+
+Open `/settings/email` to connect email accounts, then `/mail` (`/email` is an
+alias). Each account can independently enable **Cloud** and **Local** sync.
+IMAP discovers selectable folders; POP3 exposes its single inbox. **All inboxes**
+combines inbox folders. A proxy inbox is a saved selection of folders from any
+connected accounts: it changes only the view and never copies, moves or deletes
+provider messages. Both protocols can be enabled, so the same provider message
+may appear once per protocol/folder; independent source identities are preserved.
+
+Cloud sync uses the existing account vault bootstrap key
+(`THINGTIME_USER_VAULT_KEY`, or the already configured admin vault key), the home
+Mongo data plane, and the normal transactional storage allowance. Configure the
+vault using the existing Secure Vault setup; no mail-specific encryption key is
+needed. Missing encryption fails closed. Credentials and message content are
+account-bound encrypted protected Things; generic search/sharing cannot expose
+them. Use an app password where your provider requires one. Providers that have
+disabled password authentication require OAuth: Gmail supports **Connect Gmail
+with Google** below; other OAuth-only providers need an adapter. Do not enter a
+normal account password when the provider requires OAuth. These are incoming
+mail readers; the existing transactional email outbox remains separate.
+
+Ordinary browser pages cannot open raw TCP/TLS connections to POP3 or IMAP.
+**Local** means the browser stores and renders mail offline and talks to a paired
+loopback connector for network sync. The connector runs the same read-only
+protocol adapter as the cloud; local-only credentials never go to Thingtime's
+cloud. To run it from a clone with Node 24 and the Remix dependencies installed:
+
+```sh
+export THINGTIME_MAIL_ORIGIN=https://your-thingtime-origin.example
+# Generate a random token privately and paste the same token into Email settings.
+# Never commit or share the resulting token.
+export THINGTIME_MAIL_TOKEN="$(openssl rand -hex 32)"
+npm --prefix remix run mail:connector
+```
+
+`THINGTIME_MAIL_ORIGIN` must be the exact browser origin without a trailing slash
+(for this development worktree, `http://127.0.0.1:13760`). The connector binds
+only `127.0.0.1:17879`, checks Host, Origin and a bearer pairing token, accepts no
+cookies, and allows at most two concurrent syncs. Close its terminal process to
+stop it. Your browser may require local-network permission. Pair each browser
+separately; do not expose the connector through a public proxy or Funnel.
+
+TLS ports are IMAP 993 / POP3 995; mandatory STARTTLS uses 143 / 110. Certificate
+verification is always enabled. The adapters reject private/reserved addresses
+and pin the validated DNS address to prevent rebinding. Plaintext, custom ports,
+internal mail servers and OAuth for the raw IMAP/POP3 adapters are not supported. No mail
+server deletion/mark-read/move commands are issued.
+
+Sync is explicit through **Sync inbox** / **Sync folders**, with **Load older
+mail** for bounded ten-message provider pages. It is not a background cron or
+push service. A device caches up to 2,000 messages, with up to 12,000 text
+characters per message, and marks truncated/oversized messages. HTML is rendered
+as text; remote images and scripts are never loaded. Attachments remain at the
+provider and are counted, not downloaded by this version. Cloud-only proxy
+inboxes sync across your devices; views including device-only accounts stay on
+that device. Browser records are individually AES-GCM encrypted with a
+non-exportable device key; stale-tab writes are refused. This protects stored
+bytes from accidental disclosure, not an attacker running scripts in the same
+origin or an unlocked operating-system account.
+
+#### Gmail with Google authorization
+
+Email settings → **Connect Gmail with Google** starts a ten-minute connection.
+Open **Continue with Google** in a new browser tab (Safari/system browser in
+native apps), choose the Google account and grant Gmail read and write access. Return to
+Thingtime, press **I’ve finished with Google** if needed, and confirm the shown
+address. This connects a mailbox to the current Thingtime account; it does not
+change the Thingtime sign-in identity. No app password or local connector is
+needed, including with Google two-step verification.
+
+The default stores message copies on the device. The refresh authorization is
+always stored encrypted in the existing Thingtime account vault, allowing
+Thingtime’s API to read and manage Gmail on request. Enable cloud message storage separately
+in Edit. Pausing sync keeps the authorization; removing the account removes its
+saved authorization and Thingtime cache without changing Gmail. You can also
+revoke access in your Google Account’s third-party connections settings. If
+Google revokes/expires the grant, remove the old connection and connect again.
+Messages use the same encrypted records and proxy inboxes as other providers.
+Gmail pages contain at most 20 messages; large messages show a partial notice.
+Google-connected accounts also support mark read/unread, archive, move to Trash,
+restore from Trash, create/rename labels and add/remove message labels. The Mail
+composer saves edits encrypted on the device immediately; **Save draft to Gmail**
+creates or updates a Google draft. **Review and send** shows the sender and all
+To/Cc/Bcc recipients before the explicit **Send email** action. No permanent
+mail deletion is exposed. IMAP/POP3 adapters remain read-only.
+
+The composer supports plain-text drafts up to 30,000 characters and 50 addresses
+per recipient field. Existing rich-text/attachment drafts open in Gmail to avoid
+silently losing their formatting or files. Device drafts stay separate from the
+Google draft until saved. Sending uses the confirmed fields; a changed Google
+draft message ID refuses the write. Google does not provide a transactional
+compare-and-swap against edits made simultaneously in another Gmail client.
+
+Provider mutations require a stable writeId and create an encrypted accounted
+`mail-operation` child before network I/O. Completed retries return the saved
+result. An interrupted/uncertain send is never automatically replayed: check
+Gmail Sent before deliberately creating another message. Receipts remain after
+account removal to retain duplicate protection; they contain no mail body or
+Google grant. A short account lease serializes Thingtime mutations and fences
+stale sync cache writes. This is at-most-once admission, not guaranteed delivery
+or automatic recovery after a lost provider response.
+
+Fork/deployment setup (admin only):
+
+1. Create a Google Cloud **Web application** OAuth client, enable **Gmail API**,
+   and configure the consent screen with `openid`, `email`, and
+   `https://www.googleapis.com/auth/gmail.modify`. Add test users while the
+   Google app is in Testing. Register each exact callback URL, for example
+   `https://your-thingtime.example/api/v1/mail/google/callback`.
+2. In the existing Admin System Secure Vault, save a secret with the fixed label
+   `google-mail-oauth`. Its JSON selects credentials by exact origin:
+
+   ```json
+   {
+     "origins": {
+       "https://your-thingtime.example": {
+         "clientId": "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com",
+         "clientSecret": "YOUR_WEB_CLIENT_SECRET",
+         "redirectUri": "https://your-thingtime.example/api/v1/mail/google/callback"
+       }
+     }
+   }
+   ```
+
+   Use separate development/production clients and explicit origin entries.
+   Unlisted preview origins fail closed; no environment borrows credentials.
+   Local testing may register `http://127.0.0.1:<port>` or `http://localhost:<port>`
+   with the same callback path. Use the existing admin/user vault bootstrap;
+   no additional Vercel environment variables are needed. Never commit real
+   client secrets or tokens. Rotation of the Google client ID requires users to
+   reconnect; changing a secret for the same client preserves existing grants.
+3. For public launch, complete Google’s consent verification for restricted
+   Gmail scopes and the applicable security assessment for server-transmitted
+   data. Testing-mode refresh authorization may expire after seven days.
+   See [Google scope requirements](https://developers.google.com/workspace/gmail/api/auth/scopes)
+   and [OAuth production requirements](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification).
+4. Verify a real consent/refresh/revoke flow on that origin before claiming it
+   active. Unit/synthetic tests do not prove Google app verification or account
+   consent. Provider tokens never enter browser/native storage, callback HTML,
+   public account projections or generic Thing APIs.
+
+Validation commands:
+
+```sh
+npm --prefix remix run test:mail
+npm --prefix remix run test:mail:transport
+npm --prefix remix run test:mail:connector
+# Opt-in HTTP checks refuse any DB except 127.0.0.1:20437 / mail-qa-rs.
+MAIL_TEST_BASE=http://127.0.0.1:13760 npm --prefix remix run test:mail:integration
+# Requires the same disposable DB/vault/JWT settings in remix/.env.local.
+MAIL_TEST_BASE=http://127.0.0.1:13760 npm --prefix remix run test:mail:storage
+```
+
+The transport test uses temporary self-signed fixture certificates trusted only
+by its child Node process and synthetic TLS servers. It does not weaken the
+production connector's certificate or destination checks. HTTP tests create
+fixture users through the real API, never by inserting Mongo records. The local
+web app uses the normal PM2 worktree lifecycle (`npm run web-pms`). No public
+Tailscale/Funnel endpoint is configured for the disposable mail QA database.
+
+The storage integration uses the production HTTP route and real authenticated
+replica transactions with a synthetic provider boundary to force a sync/delete
+race. The connector integration can run with `--serve` for synthetic browser QA;
+never use its published fixture token for real mail. The production connector
+requires your own random token. Browser offline checks cover cached reading and
+search in an already loaded app; offline cold-launch of the whole app is separate.
+
+### Automatic iOS TestFlight publishing
+
+Native changes merged to `main` can publish tested, signed TestFlight builds with
+matching phone/Watch/widget versions. The existing GitHub credentials remain the
+initial source; an explicit one-time migration can move them into the encrypted
+admin Secure Vault, after which short-lived GitHub OIDC identities fetch only the
+Apple release bundle. See [setup, fork configuration, migration and release
+verification](docs/ios-automatic-testflight.md). No additional Vercel environment
+variables or permanent GitHub-to-vault password are required.
+
+
+### Native mail and browser API relay
+
+Email settings separates cloud storage from the encrypted device copy. For new
+accounts, the desktop app defaults to **Directly from this app**; browsers and
+iOS default to **Thingtime API relay — no installation**. Existing accounts keep
+their paired-connector choice until changed explicitly.
+
+- **Directly from this app** uses Electron IPC and the same bounded read-only
+  IMAP/POP3 implementation as the API. No loopback listener or pairing token is
+  needed. Credentials and message content stay on the device unless cloud sync
+  is also enabled. Navigation, cancellation and app exit abort active work.
+- **Thingtime API relay** sends credentials to the currently selected Thingtime
+  server for each request. `POST /api/v1/mail/sync` returns the shared version 1
+  batch without saving credentials, accounts or messages. It requires a full
+  Thingtime session, `expectedOwnerId` in query and body, and explicit
+  `account.sync.transport: "relay"` with `sync.local: true`. It needs working auth
+  and rate-limit storage but no mail vault encryption key. The host must allow
+  outbound TCP to public mail servers on 993/143/995/110 with verified TLS.
+- Cloud sync remains the separate option for encrypted server storage. The
+  desktop app forwards private mail API requests only to its explicitly selected
+  HTTPS account endpoint, through the existing trusted loopback proxy. Ordinary
+  incomplete web deployments refuse fallback, and native failures never fall
+  back to a cloud transport.
+
+The iOS drawer has a **Mail** shortcut to the selected site's `/mail`; its relay
+uses the WebView's current session and the same encrypted device store. iOS does
+not advertise direct IMAP/POP3 support. Other web-based native hosts can use the
+same relay endpoint; standalone Watch/Widget companions do not sync mail.
+
+Desktop builds stage `electron/dist/mail/provider.cjs` from the canonical web
+provider using the existing MCP esbuild toolchain. `electron build:web` installs
+that toolchain and builds/verifies the artifact; no global Node connector is
+required by an installed app. Use the normal Electron `dev:parallel`, signed
+`build` and `install:local` commands. No additional secrets or deployment
+variables are needed. Do not enable request-body logging for private mail routes.
+
+For relay HTTP regression checks, use the disposable mail replica and fixture
+created by `test:mail:integration`, then run
+`MAIL_TEST_BASE=http://127.0.0.1:<worktree-port> npm --prefix remix run test:mail:relay`.
+It checks the real session, endpoint, explicit mode and absence of cloud writes
+using DNS-only POP3 discovery; it never attempts a provider login.
+
+### Import an existing OpenAI deployment key
+
+An admin can use **AI Providers → AI platform credentials → Import configured OpenAI key** to copy the current server’s `OPENAI_API_KEY` into the encrypted shared vault as `OPENAI_THINGTIME_API_KEY` (platform `OpenAI`). The value never travels through the browser. The operation requires capability `api.admin-ci-credentials` 3.1.0, a same-origin admin session and an already configured vault. Repeating it preserves existing entries, including disabled entries. Configure your own provider key on your own deployment; no account-specific value is bundled. The environment variable remains available to existing chat consumers; this import does not remove or rotate it.
+
+
+## ChatGPT plan usage on a local or self-hosted runtime
+
+Thingtime implements the public [Sign in with ChatGPT flow](https://developers.openai.com/siwc/token-sharing-open-source). Each user grants plan access; availability and limits remain controlled by OpenAI. This implementation does not claim partner status or approval for an arbitrary hosted service. OpenAI explicitly documents [self-hosted remote VMs](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms); consult the hosted integration process for a separately operated hosted offering.
+
+### Electron local setup
+
+Desktop rebuilds preserve the selected session store and content origin. When recovering from an older build that used random loopback ports, **Desktop session storage** accepts the verified original HTTPS API origin and exact historical loopback content URL. Native confirmation binds those origins and reopens the old cookie/localStorage/IndexedDB store in place after restart. It retains the newer isolated workspace separately with an explicit switch-back control. It does not guess the prior backend, copy credentials, merge historical ports, or fall back to another port if the selected port is occupied. Recovery is available through the logged-out/offline connection controls.
+
+In **Settings → Things → Thingtime desktop**, enable the optional local API. If the account session cannot load, open the desktop connection controls on the recovery screen; local setup does not require a working cloud account. macOS builds include MongoDB Community Server 8.0.34 for Apple Silicon or Intel. Fresh installations select the bundled server automatically; no Homebrew or separate MongoDB installation is needed. Existing saved executable selections and database files are preserved. You can still choose another compatible `mongod` executable or supply your own MongoDB replica-set connection. The bundled server requires macOS 14 or later; remote API mode remains available on macOS 13. Restart to apply the choice.
+
+The managed database is a child process of Thingtime: it starts only with the enabled local runtime and shuts down with the app. No system-wide MongoDB daemon is installed. Data and encrypted runtime settings live outside the application bundle in the per-user Thingtime application data directory, so replacing the app preserves them. Replacing or downgrading an existing database server requires an explicit compatible migration; never delete the data directory to resolve a startup error.
+
+Builds download checksum-pinned official MongoDB archives into `~/Library/Caches/com.thingtime.desktop/mongodb/<version>` and stage the server under `Contents/Resources/database/mongodb`. The same directory includes the upstream source archive, SSPL license and third-party notices. No MongoDB download occurs at app startup. Release verification checks the database resources and executable before installation. To update the pin, update both architecture digests and the source digest in `electron/lib/bundled-mongodb.cjs`, then rebuild and verify both architectures; do not substitute an arbitrary local binary.
+
+Managed MongoDB runs as an app-owned, authenticated single-node replica set bound to loopback. Its files are separate from any existing database. Electron keeps generated database, signing and vault secrets encrypted using the operating-system credential protection. The local API uses a stable port (default 28631, database 28632; parallel development 28641/28642). Port conflicts fail closed. Local mode never falls back to a cloud account backend.
+
+A local account backend has its own accounts and sessions. Sign in or create a local Thingtime account there; selecting it does not copy a cloud identity or its data. **Settings → AI Providers → ChatGPT plan** starts consent on this computer. Choose a discovered model, then select the account in **Lopu → Your providers**. A full account session can use its available, selected ChatGPT plan for Lopu text chat without an admin invitation. This does not verify the Thingtime account or unlock hosted catalog/API-key providers or voice. Scoped app/PAT credentials and Character override headers cannot claim this exception; ordinary requests use the current session identity, while already-authorized durable continuations retain their saved owner-bound full-session authority. Plan failures never switch to API-credit billing. Usage links to ChatGPT Settings → Usage; Thingtime does not guess a remaining percentage from token counts.
+
+### API, database and GUI placement
+
+- **API:** Desktop endpoint profiles select the runtime that owns accounts and executes requests. Switching requires restart and keeps browser sessions in separate endpoint partitions. A selected remote API must advertise compatible capabilities before a ChatGPT operation is forwarded. HTTPS is required except for explicit loopback endpoints.
+- **Account database:** Local-runtime settings can use managed local MongoDB or an explicitly configured remote replica set. Connection details remain encrypted. For a self-hosted server, configure `MONGODB_CONNECTION_STRING` and its normal signing environment. Changing an account database is not a data migration: preserve its matching vault key, accounts and encrypted records, or explicitly move a connection.
+- **Content database:** The existing MongoDB data selector controls ordinary Things only. It never moves identity records or OAuth credentials to a browser-selected database.
+- **Web GUI:** A self-hosted Thingtime deployment serves the same GUI alongside its API. A remote GUI can manage and use an imported connection; initial loopback consent happens on the local runtime computer. No browser reads plaintext OAuth tokens, and no database contains a copied runtime host identity.
+
+### Move a connection
+
+Open **ChatGPT plan → Move between runtimes** while signed in to the destination API and create a destination code. On the source, paste that code, choose the connection and review the receiving API/account. Confirming the move stops source inference/refresh before releasing a package encrypted for the destination. Download that package and import it at the destination. Only ciphertext travels through the GUI; the receiving private key stays on its runtime. Codes expire and are session-bound. A lost move response can be retried with the same connection and destination code; it must not start a second refresh owner. Keep the encrypted package until import succeeds. Complete the import before the destination code expires (15 minutes). If it expires after the source has stopped, reconnect locally and create a new move; credentials are not automatically restored on the source.
+
+Do not copy live credential records between running databases. Each runtime keeps its own stable host identity. Mongo storage uses an exclusive runtime authority with transaction/revision fencing; after a crash, confirm the old process has stopped before removing its stale authority lock. Never clear a lock simply to start a second process. Remote GUI imports do not enable a callback listener on the remote server; reconnect locally and move a replacement when needed.
+
+For a persistent self-hosted runtime configure these placeholders in its private environment:
+
+```dotenv
+THINGTIME_CHATGPT_PLAN_DIR=/absolute/private/runtime-identity-directory
+THINGTIME_CHATGPT_PLAN_STORAGE=mongodb
+THINGTIME_USER_VAULT_KEY=<your-own-32-byte-vault-key>
+```
+
+The directory must be private (0700), outside the repository and web root, and belongs to one runtime. MongoDB storage uses the configured account backend and vault encryption; never commit keys or copy a source runtime identity directory to another host. Enable `THINGTIME_CHATGPT_PLAN_ALLOW_LOOPBACK_AUTHORIZATION=1` only on the local runtime where the consent browser runs, or with an intentionally configured loopback tunnel. Electron configures this itself. Legacy explicit filesystem storage remains available when the storage option is omitted; its 0600 credential files rely on filesystem protection, not database vault encryption. Ephemeral serverless runtimes remain unsupported by this persistent single-owner implementation.
+
+After an unclean shutdown, stop every process using that runtime directory and confirm its API listener and child processes are gone. Read the stable `hostId` from its private `identity.json` (Mongo mode) or `accounts.json` (file mode), then remove only that directory’s stale `.runtime.lock`. In Mongo mode, use the canonical `getSettingsCollection()` on the configured home database to inspect the exact key `Thingtime.ChatGPTPlan.<hostId>.authority`. Clear only `lockOwner` to `null` with a compare-and-set filter containing that exact key, the observed `lockOwner` and observed `fence`. Do not upsert, delete the row or alter `fence`/`revision`. Restart one runtime; its claim advances the fence. Never recover while the previous process might still run. A crash between OpenAI refresh and saving the rotated token may require reconnecting that account; restoring an old token is not a recovery strategy.
+
+Validation: `corepack pnpm --dir remix run test:chatgpt-plan`, `test:api-capabilities`, `test:lopu-chat-streaming`, and `corepack pnpm --dir electron test`. Live consent, an account-specific model list and a completed provider response are separate acceptance requirements; mocked OAuth tests do not establish those outcomes.
+### Paired Mac menu bar and reusable scripts
+
+Install **Mac menu bar** or **Device scripts** from the Builder app catalogue.
+Installation creates private, editable Components, Actions and a page. Pair the
+Mac with the same account and API origin in the installed Thingtime app.
+No extra server secret or collection is required; forks use the ordinary device
+pairing setup and their own API origin.
+
+Menu inventory needs node-state capability 1.11.0 and a current macOS node. It
+refreshes in the background every 30 seconds. Accessibility improves coverage;
+the page distinguishes partial, collecting, locked, offline and unavailable data.
+Some macOS items are not exposed by public APIs. Memory and cumulative CPU time
+are whole-process readings, not individual-icon usage. Locked snapshots contain
+no inventory. Application paths are private device data.
+
+Device scripts reuse the paired-device command queue (`script.run`), negotiated
+with command capability 1.10.0 and native `script.bash.v1`. Each execution needs
+fresh approval of the exact Bash source, even under an always-allow policy.
+Scripts run as the Mac user, without a shell profile or inherited credentials;
+they are **not sandboxed** and can access that user's files and network. The
+source limit is 16 KiB, timeout 1–30 seconds, and combined output limit 16 KiB.
+Ordinary child processes are terminated with the run; intentionally detached
+daemons are outside this contract. Use a fresh Run ID for each intentional run;
+retry an uncertain submission with the same ID and identical input.
+
+The receipt is not execution success: read stdout, stderr, exit code, signal,
+timeout and truncation after approval. Exact command results are owner-only and
+expire after ten minutes. **Save result as a private Thing** explicitly retains
+the full output in `extended.result`, with searchable metadata in `crystal`.
+**Save reusable Action** creates an editable recipe with literal source in its
+JSON string input default (up to the device’s 16 KiB limit); bind the result
+Action as a component source to reuse the data in other Builder pages. Never
+place secrets directly in saved script source or output.
+
+Synthetic UI acceptance: run `node remix/scripts/run-mac-menu-bar-browser.mjs`
+with `TT_PLAYWRIGHT_MODULE` pointing to the installed Playwright module. On macOS
+it applies a process-tree OS network boundary allowing only loopback port 13820,
+uses no real credentials/backend, and writes screenshots/traces to
+`remix/tmp/menu-bar-qa/`. It fails closed if the boundary cannot be established.
+
+### Characters and private agent coordination
+
+Run `npm --prefix remix run characters:preflight -- --origin https://thingtime.com`
+before coordination (substitute your selected origin). It validates public
+discovery without credentials; successful discovery still requires an authorized
+Character session and verified private membership. See the runbook for Cloudflare
+403 diagnostics and the separate sign-in/membership steps. No new server settings
+or secrets are required.
+
+[Characters](docs/characters.md) documents setup, password modes, API capability
+negotiation, owner privacy, independent subspace membership and isolated acceptance.
+No new deployment secret is required. Use the existing authenticated account to
+create a Character, save agent credentials in its password manager, and have a
+moderator add that Character to the intended private coordination subspace.
+Do not put account-specific IDs or credentials into fork setup files.
+
+### Personalizing sensitive settings layouts
+
+Desktop runtime, endpoint and previous-workspace recovery controls use ordinary
+Builder blocks. Choose **Edit layout** to adjust their text, order and presentation;
+live native actions pause while editing. Offline desktop layouts save on this
+device under their origin and runtime authority, so connection repair does not
+require a cloud account. Account settings layouts use private webpage Things and
+require `api.things` 1.35.0, `api.webpages-resolve` 1.6.0,
+`api.actions-run` 1.7.0 and `api.mongodb-endpoint` 1.1.0 on the selected API.
+Desktop requests use the existing same-origin API proxy; no cross-origin cookies
+or credential copying are introduced. Concurrent edits refuse stale saves.
+
+Saved documents contain authored blocks only. Password/file values, MongoDB
+credentials, OAuth tokens and transfer files remain in transient/native adapters;
+external component loaders and data Actions cannot be inserted into these
+sensitive layouts. Offline layout writes require browser Web Locks.
+
+### File-sync release and installed Password AutoFill
+
+The combined Mac app includes both approved folder-sync/export adapters and the
+standalone Password AutoFill host/extension. Build them through the canonical
+`npm run build-electron` path, then install only the verified app with
+`corepack pnpm@10.12.1 --dir electron install:local`. Do not replace the
+file-sync main/preload files wholesale with an older installed-app branch.
+
+For a fork, set `THINGTIME_PASSWORD_SIGNING_IDENTITY` to the intended Apple
+signing identity (it may fall back to `THINGTIME_NODE_SIGNING_IDENTITY`) and
+`APPLE_TEAM_ID` or `DEVELOPMENT_TEAM` to your team. When using manual provisioning,
+set both `THINGTIME_PASSWORD_HOST_PROFILE` and
+`THINGTIME_PASSWORD_PROVIDER_PROFILE`; use profile names, never credential
+contents. Optional `THINGTIME_PASSWORD_REGISTER_DEVICE=1` enables Xcode device
+registration. Keep signing assets in Keychain/Xcode's supported stores. The
+helper host and extension need their stable bundle identifiers, the shared
+Keychain group and AutoFill entitlements provisioned for the same team.
+
+`npm --prefix electron run build:passwords` builds the helper; the canonical
+`verify:signed` path also checks its nested signatures, identity/team, entitlement
+and provisioning contracts. `CODE_SIGNING_ALLOWED=NO` is for isolated compilation
+only and does not establish installed AutoFill or Keychain acceptance. Never
+install an unsigned helper over a working signed app.
+
+For an isolated native helper compilation, set all five overrides together:
+`THINGTIME_PASSWORD_HOST_BUNDLE_ID`, `THINGTIME_PASSWORD_PROVIDER_BUNDLE_ID`,
+`THINGTIME_PASSWORD_KEYCHAIN_GROUP`, `THINGTIME_PASSWORD_STAGING_APP` and
+`THINGTIME_PASSWORD_BUILD_DIR`. Use a distinct host ID such as
+`com.example.thingtime.passwords.dev`, provider ID `<host-id>.provider`, and a
+private Keychain group ending in `.<host-id>`. Staging/build paths must be absolute,
+distinct from the canonical outputs, and outside every `Applications` directory.
+For unsigned compilation set `THINGTIME_NODE_SIGNING_MODE=unsigned`; a signed
+development run still needs its own provisioned identity and independent test
+session. Do not install or register an unsigned fixture as the user's provider.
+The visible host/provider name is Thingtime; existing production bundle IDs,
+Keychain group and `Thingtime Passwords.app` packaging path remain unchanged.
+Packaged verification requires resolved Thingtime display/short names and matching
+host/provider versions. The host uses bundled name localization so its physical
+`Thingtime Passwords.app` filename and identity remain stable. On macOS prefer the native provider in Chrome; the
+Thingtime browser adapter remains optional and does not talk to the native host.
+An enabled provider needs a saved matching RP passkey before a site sign-in entry
+can appear. Other browser extensions' passkey offers can intercept this flow;
+macOS and the browser control provider order. See [provider setup and discovery](docs/password-manager.md#native-progress-recovery-and-naming).
+
+The desktop bridge reports `passwordsVersion` 1.1.0 when the bundled host supports
+read-only connection status. Password manager and Passwords settings then show one
+Connect/Disconnect control based on saved owner/origin linkage. Older installed
+bridges show an update instruction. An extension-only upgrade does not provide
+this host/Electron capability. Status reads do not contact the server or establish
+that macOS AutoFill is enabled; verify those requirements separately. Keep an
+existing custom host's OAuth/login behavior when updating native components.
+
+### Commander-backed Mac backup indexing
+
+The signed macOS node bundles the repository's `commander-indexer` Rust binary.
+Install the stable Rust toolchain (including Cargo) before building the desktop
+app; `macos/ThingtimeNode/scripts/build-bundle.sh` builds it with `--locked`,
+packages it beside `ThingtimeNode`, and signs nested code before the app. No
+Commander installation, search database, account credentials or extra service is
+required. Swift-only/iOS hosts keep the existing native scanner.
+
+Run `bash macos/ThingtimeNode/scripts/test-commander-backup.sh` for the Rust suite
+and real Rust-to-Swift capture tests. Backup mode uses the shared bounded parallel
+walker, no-follow descriptor-relative hashing, the existing multipart fingerprint
+format and the saved sync ignore list. It does not read repository `.gitignore`
+files. Private JSONL protocol version 1 travels over task-owned pipes, with a
+required hello/completion and successful exit before the host can seal a capture.
+The private SQLite inventory, account/grant checks and upload worker stay canonical.
+Symlinks and special files remain explicitly reported skips until supported.
+
+A temporary identity timeout, offline connection, HTTP408/429 or server5xx leaves
+the private capture intact. Status/effects still require fresh authorization;
+sealing waits with capped backoff. Revocation, changed grants and cancellation
+still stop the job. Automatic sync can retry the same capture after reconnecting.
+
+
+Mac file access 1.10.0 also negotiates `pageSize` for sealed inventory import.
+New clients request up to 4096 rows within the existing 512 KiB response bound;
+older hosts and omitted options retain 128-row responses. The client splits each
+batch into the existing 128-row journal format. Each request still checks the
+account, selected origin, device and grant before and after native IO. No new
+service, secret or database migration is required, and saved sealed captures
+remain compatible with the signed update.
+
+### Live cloud file changes (api.files 1.7)
+
+The existing home Mongo replica set must support read-only snapshot sessions
+and collection change streams for `/api/v1/files?rootId=...&changes=1`. Use the
+existing `things` index `{thingtime:1,ownerId:1,createdAt:-1,shareId:1}` and
+canonical Timeline history; no new collection, secret, public channel, or
+background process is required. Grant the application Mongo user its normal
+read/change-stream rights on the home Things collection. An unavailable native
+subscription returns 503 and preserves the client cursor. Never substitute a
+full-tree polling loop. Fork tests use private synthetic data; run
+`npm --prefix remix run test:files` and `test:api-capabilities`.
+
+Acquire the Timeline watermark before streaming the initial inventory, retain
+that watermark through restart, then consume bounded deltas with `after` and
+optional `wait=1`. Folder changes carry a subtree invalidation; expand only that
+subtree with the original root plus `pages=1&subtreeId=...`. Checkpoint the delta
+cursor only after its entries and descendant pages are durable. The source
+queue must drain independently of slow transfers; a tree snapshot is not a live
+subscription, and a missing/invalidated cursor is an explicit reconciliation
+failure rather than absence or permission to delete.
+
+### Empty stored files
+
+Zero-byte uploads are supported for `file` and `file-import` only. Clients
+negotiate `api.attachment-uploads` 1.6, `api.attachment-upload-complete` 1.5,
+`api.attachment-content` 1.16 and `api.files` 1.8 before using this path. Start
+returns a ready zero-part object; it never needs a native multipart loop. The
+private versioned bucket must permit the existing server PutObject operation
+with checksum and conditional-write headers. No new secret or public bucket
+access is required. Upload-start 1.6.2 and completion 1.5.1 conditionally PUT a
+new empty object before HEAD verification: S3 masks a missing key as 403 when
+the runtime role correctly lacks ListBucket. Do not add ListBucket or interpret
+403 as absence. Conditional conflicts and lost replies still require the exact
+attachment identity, immutable version, size and empty checksum before ready.
+The local object adapter stores an actual immutable empty
+object too. Run `node remix/scripts/test-cloud-inventory-pages.mjs --empty-files`
+for a disposable Mongo/store proof covering real authenticated upload, read,
+commit and restore handlers. It never reads the app environment or real data.
+
+
+### Mac folder-upload transport
+
+The host signing POST derives `Origin` from its pinned local window origin to
+pass the unchanged desktop expected-actor mutation fence. Signer diagnostics
+use only fixed categories/status codes in `~/Library/Logs/Thingtime/folder-sync.log`
+(128 KiB plus one rotated file); no credentials or signed destinations are logged.
+
+Part source revalidation uses a positive-length native read at EOF, preserving
+the size/version and physical-path fences without reading extra content. Run
+`npm --prefix electron run verify:folder-upload-native` for real Mac reader/stream
+and HTTP-byte regression coverage in a disposable, network-isolated fixture.
+
+The bundled Mac UI uses a dynamic loopback origin. With the desktop folder
+host's `fileUploadVersion` 1.1.0 capability, shared sync sends checksum-locked
+parts through the authenticated host adapter rather than cross-origin browser
+PUTs. Forks require the selected API's `api.attachment-upload-parts` >=1.1.0
+(with matching major 1), existing attachment storage/signing configuration and
+native range-read support. No bucket CORS exception, embedded credentials or
+browser security override is required. Parts are bounded to 32 MiB; empty files
+retain their zero-part API path. See [the contract](docs/mobile-file-sync.md#desktop-checksum-locked-part-uploads--2026-10-20).
+
+### Native upload speed measurement — 2026-10-21
+
+Mac folder upload 1.1.0 adds exact completed-PUT `payloadBytes` receipts. Transfer
+speed trackers show acknowledged payload samples and shorter per-direction
+measurement coverage, with native updates on completed-part acknowledgment.
+These are not continuous network/wire measurements. Old hosts stay unknown;
+ready uploads add zero, retained offsets and canonical receipt replays add no
+new payload. Unknown intervals can recover without resetting saved units/windows
+or logical entry counts. No additional private setup is required beyond the
+existing paired-device/native upload configuration. Signed installed acceptance
+must verify displayed values against accepted payload sizes before this feature
+is considered complete.
+
+Native identity checks used by indexing, transfers and monitoring share one
+FIFO/in-flight gate per origin/device credential. Its conservative budget allows
+an initial 12-attempt burst, refills three tokens per second and caps charged
+attempts at 180 in every rolling 60 seconds. This replaces the fixed 334 ms
+post-completion gap. Tokens and rolling timestamps are charged at completion
+after `willSend`, reserving one active permit so a delayed HTTP start cannot
+refill then exceed a later burst. Cancellation before `willSend` costs nothing;
+after that boundary it is conservatively charged even if no HTTP was sent.
+
+The documented server default is 240/minute; the live deployment's actual
+configured limit was not read. Shared valid Retry-After cooldowns still enforce
+custom lower limits. No response caching or authentication reduction: queued
+callers recheck cancellation and current credentials, with unchanged owner,
+origin, source and revocation fences. Scope eviction cannot forget live rolling
+history, token debt or cooldown. Installed throughput after this scheduling
+correction remains unverified.
+
+### Bounded small-file upload batches — 2026-10-21
+
+Trusted Mac upload/backup streams negotiate `fileAccessVersion` 1.13.0,
+`fileUploadBatchVersion` 1.0.0 and selected-origin `api.file-sync-batches` 1.0.0.
+Independent absent-target regular files of 1–256 KiB can share a batch of at
+most 256 files and 32 MiB. The first eligible file starts immediately; folders,
+existing targets/conflicts, empty/large files and older adapters retain the
+existing executor. Hardlink paths remain queued under their original IDs and
+are split across batches. No extra secrets or fork-specific setup are needed
+beyond existing private attachment storage, paired devices and folder grants.
+
+Preparation uses a bounded metadata observation and provisional durable index
+entries; those entries grant no source access. One explicit native operation
+checks current identity before/after the batch and validates each local grant,
+path, pinned descriptor and revision before disclosure/PUT, after PUT, and after
+stored fingerprint verification. Electron alone holds authenticated API access
+and signed URLs; no cookies, tokens or network destinations cross XPC. New
+payload dispatch expires after 30 seconds, total operation/callback lifetime is
+180 seconds, and payload workers are capped at 16. Already-issued storage grants
+can stage bytes until expiry after remote revocation; fresh final server and
+configuration checks still gate canonical visibility.
+
+The five bounded control phases are metadata observe, receipt-only prepare
+probe, checksum prepare, stored-content verify and canonical commit. Descriptors
+are capped at 320 KiB, control requests at 512 KiB, and host-only signed-URL
+responses at 2 MiB. Server work uses at most eight provider slots per owner per
+process and fresh authority/namespace checks in bounded waves. The separate
+bulk policy charges 65,536 weighted units/minute plus 512 MiB prepared payload
+bytes/minute; it does not raise existing identity/global limits. These limits
+are feasibility ceilings, not measured upload speed.
+
+Every member retains its original operation/upload identity, CAS, Timeline and
+receipt. A durable dispatch marker precedes canonical POST. Partial or unknown
+outcomes enter original-ID individual receipt-first recovery before regrouping;
+a missing receipt cannot retire a possibly in-flight canonical write. Active
+batch claims survive restart and capability fallback. Journal version 14 blocks
+older clients from silently ignoring these claims. Root serialization, priority
+ancestry and contiguous source/baseline proof remain unchanged; trusted bulk
+preparation is bounded to 512 operations (other modes retain 128).
+
+Controlled planner/journal/service tests and isolated real native/HTTP fixtures
+measure distinct portions of this path. Practical installed throughput and
+byte-identical same-job recovery remain acceptance requirements; neither test
+establishes 100 files/second. A transient native identity timeout on scan-changes
+alone resumes its original cursor with existing backoff, without cancelling an
+independent safe payload. Revocation, account changes and other actions remain
+terminal under their existing policy.
+
+### Upload priority readiness — 2026-10-21
+
+The existing file-sync progress view includes an individually editable priority
+readiness section. It shows whether the trusted native adapter supports
+preparing priorities, the saved preference count/revision, the legacy validation
+cursor and fixed cutoff, and the last checked candidate's saved-list position
+and input sequence. Closed explanations distinguish missing eligible input,
+validation still pending, prepared/in-flight work, ready candidates and an
+unmeasured scheduling check. These are observations, never uploaded-file counts
+or proof that a priority folder is fully backed up. Paused/reopened views label
+retained observations. No new setup or permission is required; scheduling,
+receipts, authorization and migration algorithms are unchanged.
+
+### File-sync phase timing — 2026-10-21
+
+Desktop file sync writes closed request timing rows to the existing application
+logs `folder-sync.log` (128 KiB plus one rotated previous file). No setup or
+credentials are required. Writes use a bounded asynchronous queue; rotation,
+queue overflow or abrupt shutdown can make a capture partial. These are host
+request observations, not a file-operation or HTTP request census. See
+[the timing field definitions](docs/mobile-file-sync.md#closed-host-phase-timing--2026-10-21)
+before interpreting a bounded installed capture. No authorization, source check,
+rate-limit, receipt or native request/response contract changes.
+
+### Bounded folder metadata batches — 2026-10-21
+
+Trusted Mac upload/backup streams additionally negotiate `fileAccessVersion`
+1.14.0, optional `fileFolderBatchVersion` 1.0.0 and selected-origin
+`api.file-sync-batches` 1.1.0. Existing file-batch 1.0 clients remain compatible.
+At most 256 absent-target folders share a 320 KiB descriptor; requests and
+folder results remain bounded to 512 KiB. No new credentials, storage provider,
+collection or setup is required. Existing grants, paired devices, private roots,
+exclusions and ignore rules still apply. Other hosts retain scalar execution.
+
+Receipt history is checked before local source IO. One bounded native operation
+validates every missing member's exact directory stamp under fresh pre/post
+identity, grant, account, configuration and conditions checks. It discloses no
+file bytes. A changed child entry publishes the already-indexed immediate
+parent's new full stamp, including when the child is excluded; it does not scan
+the excluded subtree. Stale folder observations remain provisional and cannot
+be silently refreshed under an old operation ID.
+
+The existing batch route adds `folder-probe` and `folder-commit` to its four
+file/metadata phases. Canonical folder writes use parent-first waves of at most
+eight in one Mongo transaction, retaining inner placement locks, individual
+Timeline receipts, quota and exact ownership/path checks. An after-write error
+rolls back that whole wave; earlier committed waves remain recoverable. A parent
+receipt must pin the original operation ID, and the parent must still occupy its
+current owned private path before children are dispatched. Historical receipts
+alone do not authorize a moved, deleted or replaced parent.
+
+Journal version 15 retains typed folder reservations and original uncertain
+IDs across restart or capability loss. A proven-unpublished parent supersession
+can create an explicit **new child target intent**, only after the old child's
+receipt is missing, its durable dispatch fence is false, its source is unchanged
+and the replacement parent is canonically confirmed at the reviewed path.
+Original operations and supersession evidence remain retained; retirement never
+counts as uploaded files or bytes. Unknown writes stay with their original IDs.
+No source watermark or baseline is advanced by this recovery decision.
+
+These changes target folder-constrained file frontiers. Controlled tests and
+isolated native/Mongo fixtures are distinct evidence; installed same-job
+throughput and byte-identical recovery remain release acceptance requirements.
+
+# GitHub-built Vercel deployments
+
+Thingtime builds production, custom environments and previews on standard
+GitHub-hosted Ubuntu runners. Vercel hosts the resulting Build Output API
+artifact; it does not compile application source. The protected implementation
+lives on `github-actions` in `.github/workflows/deploy-vercel-prebuilt.yml`.
+Product branches carry a thin listener only. Existing PR preview controllers
+already use the same separate build/publish pattern.
+
+`main` maps to production, branches matching Vercel's custom-environment
+matchers map to that environment (`develop` today), and other product branches
+map to Preview. The default-branch listener also observes requested push runs
+of Web CI and Lopu CodeQL so older branches need not contain the new listener.
+Duplicate ready SHAs are skipped. Deleted, stale and fork PR events never
+authorize a deployment. Use **Actions → Vercel prebuilt deployments → Run
+workflow**, on `main`, to deploy a branch manually; `auto` selects its target.
+Production always requires the current `main` head. Use `preview` explicitly
+to test the production branch without moving production.
+
+Fork setup: create a GitHub environment named `vercel-prebuilt-control`, restrict
+it to the default branch, add `VERCEL_DEPLOY_TOKEN` as an environment secret,
+and set non-secret environment variables `VERCEL_PROJECT_ID`,
+`VERCEL_PROJECT_NAME`, `VERCEL_TEAM_ID` and `VERCEL_TEAM_SLUG` for your own project.
+Keep deployment credentials out of repository-level secrets and build jobs.
+Point reusable workflow references at your protected controller branch.
+Disconnect Vercel's native Git integration and remove its source deploy hooks
+after proving a GitHub-built deployment. Keep `git.deploymentEnabled: false`
+and the always-skip ignore command as repository safeguards. Existing runtime
+variables, vault selection, regions, domains and production cron definitions
+remain managed by their normal contracts. The publisher copies only regions,
+Fluid settings and production cron definitions from the immutable source
+configuration; it never executes source in its credential-bearing job.
+
+See [Vercel deployment references](VERCEL_DEPLOYMENTS.md) for the project and
+verification receipts. Standard Actions usage for this public repository is
+subject to GitHub's current plan terms; Vercel hosting/runtime charges remain.
+
+### Saved Mapbox map applications
+
+A saved Builder app can use the `tt-mapbox` viewport and the origin-scoped
+`api.maps` 1.0.0 operations. Save your own Mapbox token in the private Thingtime
+Vault and configure its entry ID (`<owned-vault-entry-id>`) in the saved app.
+The browser map requires a public `pk` token; never put secret tokens in page
+definitions. The map SDK and CSS are staged from the pinned npm package as same-origin app assets; browser
+tile/style requests still go directly to Mapbox service origins. Configure a
+style URL from your own Mapbox Studio account.
+Autocomplete and live optimization require the corresponding provider access;
+saving selected geocodes additionally requires Mapbox Permanent Geocoding
+entitlement and its storage conditions. No new Vercel provider-key variable is
+needed. Standard Mapbox navigation output cannot be cached. See
+[editable maps and routing](docs/maps.md) for operation contracts and verification.
+
+### Storage recovery and production checks
+
+See [account storage recovery](docs/storage-recovery.md) for the 100 MiB pending
+accounting budget, the existing cron/admin recovery entry point, private
+controller setup and pre-merge/deployment/runtime verification. It reuses the
+existing home MongoDB replica set, scheduler secret and protected Vercel
+controller environment; no additional application secret is required.
+
+### Preview cleanup policy
+
+Administrators use **Admin → Preview retention** (`/admin/preview-retention`) or
+Settings → Admin to save Vercel cleanup and PR liveliness rules. **Edit layout**
+opens the existing Builder: labels, controls, descriptions, buttons and containers
+are individual editable blocks. **Save layout** persists the intended account's
+private settings webpage through the Things API, independently of **Save retention
+rules**, which updates the admin policy. Both placements reuse that same saved
+layout; live operations pause while editing. The native bundled UI negotiates
+the selected API's public manifest through the existing scoped transport; private
+policy/layout operations retain the authenticated local proxy and actor, data-plane
+and selected-origin fences. Defaults enable
+cleanup for deployments with no open PR, with zero grace; superseded active-PR
+cleanup and inactivity expiry are off. Grace periods are whole hours. Tagged
+previews count closed-PR grace from the later of creation and PR closure;
+untagged branch snapshots use creation age because historical closure time may
+be unknown. Optional open-PR inactivity uses GitHub `updated_at`, expires that
+PR's previews and suspends publishing until activity resumes; it never closes
+or edits the PR. Active builds and the newest READY current-head preview of
+each active PR remain protected when pruning superseded snapshots.
+
+The policy is a revision-guarded home settings singleton
+`Thingtime.CiPreviewRetention`. It contains no provider credentials. The
+protected controller reads it through an origin-negotiated, signed
+`/api/v1/integrations/ci/preview-retention` request using the existing
+`THINGTIME_CI_ROUTER_SECRET` bootstrap secret. For a fork, configure the same
+secret securely in its server vault/bootstrap and protected GitHub workflow;
+set `THINGTIME_GITHUB_REPOSITORY=owner/repository` and the controller's selected
+Thingtime origin. Never copy production credentials into a preview or test.
+Production, stable/gateway deployments, protected aliases and unrelated project
+resources are protected independently of these settings. Invalid or unavailable
+policy preserves deployments instead of using a stale enabled value.
+
+Roll out the product API to the selected gateway first, verify admin capability
+1.0.1, controller capability 1.0.0 and admin save/readback
+there, then roll out the protected controller
+policy consumer. An ordinary gateway-backed UI preview does not contain a new
+API; leave cleanup fail-closed until its selected origin exposes the contract.
+This changes deployed policy only after that rollout.
+
+Local acceptance for this change used the task-owned dev stack at
+`http://127.0.0.1:18210` with a disposable replica at `127.0.0.1:17343`.
+A public Funnel was intentionally not provisioned for this disposable admin
+fixture; the isolated local acceptance environment is stopped after testing.

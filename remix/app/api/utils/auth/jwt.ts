@@ -221,3 +221,36 @@ export const getPublicJwks = async (): Promise<PublicJwks> => {
     ],
   };
 };
+
+/** A durable seal over immutable content, NOT an account/session credential.
+ * No expiry: offline delivery is not a time-limited authorization grant. The
+ * receiving service still authenticates the owner and verifies the exact
+ * content, issuer and storage audience. Never use the public dev fallback. */
+const contentProofSecret = () => {
+  const secret = getLegacySecret({ allowDevFallback: false });
+  return secret && secret.length >= 32 && process.env.JWT_SECRET !== LEGACY_DEV_SECRET ? secret : null;
+};
+export async function signContentProof(purpose: string, digest: string, audience: string): Promise<string> {
+  const build = (alg: string) => new SignJWT({ purpose, digest })
+    .setProtectedHeader({ alg, typ: 'thingtime-content-proof+jwt', ...(alg === 'ES256' ? { kid: getJwtKeyId() } : {}) })
+    .setIssuer(getJwtIssuer()).setAudience(audience).setIssuedAt();
+  const key = getEs256SigningKey();
+  if (key) return build('ES256').sign(await key);
+  const secret = contentProofSecret();
+  if (!secret) throw new Error('A configured signing key is required for durable content proofs');
+  return build('HS256').sign(secret);
+}
+export async function verifyContentProof(token: string, purpose: string, digest: string, audience: string): Promise<boolean> {
+  const options = { issuer: getJwtIssuer(), audience, typ: 'thingtime-content-proof+jwt' };
+  const matches = (payload: Record<string, unknown>) => payload.purpose === purpose && payload.digest === digest &&
+    Object.keys(payload).sort().join(',') === 'aud,digest,iat,iss,purpose';
+  const key = getEs256VerifyKey();
+  if (key) {
+    try { return matches((await jwtVerify(token, await key, { ...options, algorithms: ['ES256'] })).payload); }
+    catch { /* Configured legacy signatures remain verifiable during migration. */ }
+  }
+  const secret = contentProofSecret();
+  if (!secret) return false;
+  try { return matches((await jwtVerify(token, secret, { ...options, algorithms: ['HS256'] })).payload); }
+  catch { return false; }
+}
