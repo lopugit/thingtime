@@ -34,11 +34,116 @@ export interface EverythingTypes {
 
 export const ThingtimeContext = createContext<EverythingTypes | null>(null);
 
-// The persist codec (flatted parse/stringify + reviver/replacer) lives in
-// ./thingtimeSerialization so it can be unit-tested without React. Persisted
-// functions are always omitted on write and removed on read; hydration then
-// re-supplies legitimate runtime functions from ThingtimeDefaults. CSP is a
-// second boundary, not the mechanism that makes storage-controlled code inert.
+// wrap flatted parse and stringify with a function reviver and replacer
+
+// Only strings the replacer itself wrote via toISOString() may revive as Dates.
+// V8's Date.parse accepts everyday strings ("Post 1", "2024", "5 April"), so a
+// lenient check silently rewrote user data as ISO strings after one
+// save/reload cycle.
+const LEGACY_ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+const reviver = (key: string, value: any) => {
+	// current scheme: Dates persist tagged, mirroring ttype:'function'
+	if (value?.ttype === 'date') {
+		const revived = new Date(value.iso);
+		if (!isNaN(revived.getTime())) {
+			return revived;
+		}
+		return typeof value.iso === 'string' ? value.iso : value;
+	}
+
+	// legacy scheme: untagged toISOString() output from the previous replacer
+	if (typeof value === 'string' && LEGACY_ISO_DATE_PATTERN.test(value) && !isNaN(Date.parse(value))) {
+		return new Date(value);
+	}
+
+	// if value is a function, return it as a function
+	if (value?.ttype === 'function') {
+		try {
+			const func = eval(value.code);
+			if (typeof func === 'function') {
+				if (value?.ttScope && typeof value.ttScope === 'object') {
+					func.ttScope = value.ttScope;
+				}
+
+				// if the scope has keys
+				// re-eval the function with these keyed values in a fake function scope
+				if (Object.keys(func.ttScope || {}).length > 0) {
+					const scopeKeys = Object.keys(func.ttScope);
+					const newEval = `function scoper() {
+						${scopeKeys.map((key) => `const ${key} = this.ttScope.${key};`).join('\n')}
+						return ${value.code}
+					}`;
+					const scopedFunc = eval(newEval);
+					scopedFunc.ttScope = func.ttScope;
+					return scopedFunc;
+				}
+
+				return func;
+			}
+		} catch (err) {
+			console.error('There was an error evaluating the function code:', err);
+		}
+		return function () {
+			console.warn('Function could not be revived:', value.code);
+		};
+	}
+
+	return value;
+};
+
+const replacer = function (this: any, key: string, value: any) {
+	// JSON.stringify runs Date.prototype.toJSON before the replacer, so `value`
+	// is already an ISO string here — the original Date only survives on the
+	// holder. Persist it tagged (mirroring ttype:'function') so revival never
+	// has to guess whether a string is a Date.
+	const original = this?.[key];
+	if (original instanceof Date && !isNaN(original.getTime())) {
+		return {
+			ttype: 'date',
+			iso: original.toISOString()
+		};
+	}
+
+	// if value is a function, return it as an object with ttype and code properties
+	if (typeof value === 'function') {
+		return {
+			ttype: 'function',
+			code: value.toString(),
+			ttScope: value?.ttScope || {}
+		};
+	}
+
+	return value;
+};
+
+const parse = (text: string): any => {
+	try {
+		return parseAux(text, reviver);
+	} catch (err) {
+		console.error('There was an error parsing the thingtime data:', err);
+		return null;
+	}
+};
+
+const stringify = (data: any): string => {
+	try {
+		return stringifyAux(data, replacer);
+	} catch (err) {
+		console.error('There was an error stringifying the thingtime data:', err);
+		return '';
+	}
+};
+
+try {
+	window.smarts = smarts;
+	window.flatted = {
+		parse,
+		stringify
+	};
+} catch (err) {
+	// nothing
+}
 
 export const ThingtimeProvider = (props: any): React.JSX.Element => {
 	const storageKey = props?.storageKey || 'thingtime';
