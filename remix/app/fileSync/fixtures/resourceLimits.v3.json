@@ -1,0 +1,731 @@
+{
+  "encoding": "resource-f64be-hex-v1",
+  "vectors": [
+    {
+      "kind": "upload",
+      "name": "rate-312.5",
+      "descriptor": {
+        "version": 1,
+        "batchId": "11111111-1111-4111-8111-111111111111",
+        "scope": {
+          "origin": "https://sync.test",
+          "ownerId": "owner",
+          "dataPlane": "home",
+          "rootId": "connection",
+          "deviceId": "device"
+        },
+        "configuration": {
+          "id": "connection",
+          "updatedAt": "2026-10-21T00:00:00.000Z",
+          "configuration": {
+            "configurationVersion": 3,
+            "name": "Backup",
+            "deviceId": "device",
+            "localRootId": "local-root",
+            "remoteFolderId": "cloud-root",
+            "mode": "backup",
+            "paused": false,
+            "propagateDeletes": false,
+            "network": "wifi",
+            "chargingOnly": false,
+            "excludedPaths": [
+              "ignored"
+            ],
+            "ignoreRules": "*.tmp\n",
+            "resourceLimits": {
+              "uploadBytesPerSecond": 312.5,
+              "downloadBytesPerSecond": 250000,
+              "transferConcurrency": 2,
+              "indexingConcurrency": 3,
+              "cpuPercent": 25
+            }
+          }
+        },
+        "members": [
+          {
+            "ordinal": 0,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "cloud-parent",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent/file.bin",
+                  "expectedTarget": null,
+                  "source": {
+                    "path": "Parent/file.bin",
+                    "id": "inode-1",
+                    "version": "v1",
+                    "kind": "file",
+                    "size": 4,
+                    "sha256": null,
+                    "fingerprint": {
+                      "algorithm": "sha256-parts-v1",
+                      "partSizeBytes": 8388608,
+                      "partCount": 1,
+                      "sha256": "8de472e2399610baaa7f84840547cd409434e31f5d3bd71e4d947f283874f9c0"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "canonicalBase64": "MjU6dGhpbmd0aW1lLXVwbG9hZC1iYXRjaC12MjM2OjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMTE3Omh0dHBzOi8vc3luYy50ZXN0NTpvd25lcjQ6aG9tZTEwOmNvbm5lY3Rpb242OmRldmljZTEwOmNvbm5lY3Rpb24yNDoyMDI2LTEwLTIxVDAwOjAwOjAwLjAwMFoxOjM2OkJhY2t1cDY6ZGV2aWNlMTA6bG9jYWwtcm9vdDY6Zm9sZGVyMTA6Y2xvdWQtcm9vdDY6YmFja3VwMTowMTowNDp3aWZpMTowMToxNzppZ25vcmVkNjoqLnRtcAoxNjo0MDczODgwMDAwMDAwMDAwMTY6NDEwZTg0ODAwMDAwMDAwMDE2OjQwMDAwMDAwMDAwMDAwMDAxNjo0MDA4MDAwMDAwMDAwMDAwMTY6NDAzOTAwMDAwMDAwMDAwMDE6MTE6MDM2OjIyMjIyMjIyLTIyMjItNDIyMi04MjIyLTIyMjIyMjIyMjIyMjEwOmNsb3VkLXJvb3QxMjpjbG91ZC1wYXJlbnQxNTpQYXJlbnQvZmlsZS5iaW43Omlub2RlLTEyOnYxMTo0MDoxNTpzaGEyNTYtcGFydHMtdjE3OjgzODg2MDgxOjE2NDo4ZGU0NzJlMjM5OTYxMGJhYWE3Zjg0ODQwNTQ3Y2Q0MDk0MzRlMzFmNWQzYmQ3MWU0ZDk0N2YyODM4NzRmOWMw",
+      "sha256": "cf27b52b049a769dc24a35938a5810a59b7fc2be1700accd1193ebc18d684a8f"
+    },
+    {
+      "kind": "upload",
+      "name": "rate-1e-7",
+      "descriptor": {
+        "version": 1,
+        "batchId": "11111111-1111-4111-8111-111111111111",
+        "scope": {
+          "origin": "https://sync.test",
+          "ownerId": "owner",
+          "dataPlane": "home",
+          "rootId": "connection",
+          "deviceId": "device"
+        },
+        "configuration": {
+          "id": "connection",
+          "updatedAt": "2026-10-21T00:00:00.000Z",
+          "configuration": {
+            "configurationVersion": 3,
+            "name": "Backup",
+            "deviceId": "device",
+            "localRootId": "local-root",
+            "remoteFolderId": "cloud-root",
+            "mode": "backup",
+            "paused": false,
+            "propagateDeletes": false,
+            "network": "wifi",
+            "chargingOnly": false,
+            "excludedPaths": [
+              "ignored"
+            ],
+            "ignoreRules": "*.tmp\n",
+            "resourceLimits": {
+              "uploadBytesPerSecond": 1e-7,
+              "downloadBytesPerSecond": 250000,
+              "transferConcurrency": 2,
+              "indexingConcurrency": 3,
+              "cpuPercent": 25
+            }
+          }
+        },
+        "members": [
+          {
+            "ordinal": 0,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "cloud-parent",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent/file.bin",
+                  "expectedTarget": null,
+                  "source": {
+                    "path": "Parent/file.bin",
+                    "id": "inode-1",
+                    "version": "v1",
+                    "kind": "file",
+                    "size": 4,
+                    "sha256": null,
+                    "fingerprint": {
+                      "algorithm": "sha256-parts-v1",
+                      "partSizeBytes": 8388608,
+                      "partCount": 1,
+                      "sha256": "8de472e2399610baaa7f84840547cd409434e31f5d3bd71e4d947f283874f9c0"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "canonicalBase64": "MjU6dGhpbmd0aW1lLXVwbG9hZC1iYXRjaC12MjM2OjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMTE3Omh0dHBzOi8vc3luYy50ZXN0NTpvd25lcjQ6aG9tZTEwOmNvbm5lY3Rpb242OmRldmljZTEwOmNvbm5lY3Rpb24yNDoyMDI2LTEwLTIxVDAwOjAwOjAwLjAwMFoxOjM2OkJhY2t1cDY6ZGV2aWNlMTA6bG9jYWwtcm9vdDY6Zm9sZGVyMTA6Y2xvdWQtcm9vdDY6YmFja3VwMTowMTowNDp3aWZpMTowMToxNzppZ25vcmVkNjoqLnRtcAoxNjozZTdhZDdmMjlhYmNhZjQ4MTY6NDEwZTg0ODAwMDAwMDAwMDE2OjQwMDAwMDAwMDAwMDAwMDAxNjo0MDA4MDAwMDAwMDAwMDAwMTY6NDAzOTAwMDAwMDAwMDAwMDE6MTE6MDM2OjIyMjIyMjIyLTIyMjItNDIyMi04MjIyLTIyMjIyMjIyMjIyMjEwOmNsb3VkLXJvb3QxMjpjbG91ZC1wYXJlbnQxNTpQYXJlbnQvZmlsZS5iaW43Omlub2RlLTEyOnYxMTo0MDoxNTpzaGEyNTYtcGFydHMtdjE3OjgzODg2MDgxOjE2NDo4ZGU0NzJlMjM5OTYxMGJhYWE3Zjg0ODQwNTQ3Y2Q0MDk0MzRlMzFmNWQzYmQ3MWU0ZDk0N2YyODM4NzRmOWMw",
+      "sha256": "25547d7b378b7d47dd0d9baea818e077f73208f5aef18eca8b1ecd096f3196b0"
+    },
+    {
+      "kind": "upload",
+      "name": "rate-1e+21",
+      "descriptor": {
+        "version": 1,
+        "batchId": "11111111-1111-4111-8111-111111111111",
+        "scope": {
+          "origin": "https://sync.test",
+          "ownerId": "owner",
+          "dataPlane": "home",
+          "rootId": "connection",
+          "deviceId": "device"
+        },
+        "configuration": {
+          "id": "connection",
+          "updatedAt": "2026-10-21T00:00:00.000Z",
+          "configuration": {
+            "configurationVersion": 3,
+            "name": "Backup",
+            "deviceId": "device",
+            "localRootId": "local-root",
+            "remoteFolderId": "cloud-root",
+            "mode": "backup",
+            "paused": false,
+            "propagateDeletes": false,
+            "network": "wifi",
+            "chargingOnly": false,
+            "excludedPaths": [
+              "ignored"
+            ],
+            "ignoreRules": "*.tmp\n",
+            "resourceLimits": {
+              "uploadBytesPerSecond": 1e+21,
+              "downloadBytesPerSecond": 250000,
+              "transferConcurrency": 2,
+              "indexingConcurrency": 3,
+              "cpuPercent": 25
+            }
+          }
+        },
+        "members": [
+          {
+            "ordinal": 0,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "cloud-parent",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent/file.bin",
+                  "expectedTarget": null,
+                  "source": {
+                    "path": "Parent/file.bin",
+                    "id": "inode-1",
+                    "version": "v1",
+                    "kind": "file",
+                    "size": 4,
+                    "sha256": null,
+                    "fingerprint": {
+                      "algorithm": "sha256-parts-v1",
+                      "partSizeBytes": 8388608,
+                      "partCount": 1,
+                      "sha256": "8de472e2399610baaa7f84840547cd409434e31f5d3bd71e4d947f283874f9c0"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "canonicalBase64": "MjU6dGhpbmd0aW1lLXVwbG9hZC1iYXRjaC12MjM2OjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMTE3Omh0dHBzOi8vc3luYy50ZXN0NTpvd25lcjQ6aG9tZTEwOmNvbm5lY3Rpb242OmRldmljZTEwOmNvbm5lY3Rpb24yNDoyMDI2LTEwLTIxVDAwOjAwOjAwLjAwMFoxOjM2OkJhY2t1cDY6ZGV2aWNlMTA6bG9jYWwtcm9vdDY6Zm9sZGVyMTA6Y2xvdWQtcm9vdDY6YmFja3VwMTowMTowNDp3aWZpMTowMToxNzppZ25vcmVkNjoqLnRtcAoxNjo0NDRiMWFlNGQ2ZTJlZjUwMTY6NDEwZTg0ODAwMDAwMDAwMDE2OjQwMDAwMDAwMDAwMDAwMDAxNjo0MDA4MDAwMDAwMDAwMDAwMTY6NDAzOTAwMDAwMDAwMDAwMDE6MTE6MDM2OjIyMjIyMjIyLTIyMjItNDIyMi04MjIyLTIyMjIyMjIyMjIyMjEwOmNsb3VkLXJvb3QxMjpjbG91ZC1wYXJlbnQxNTpQYXJlbnQvZmlsZS5iaW43Omlub2RlLTEyOnYxMTo0MDoxNTpzaGEyNTYtcGFydHMtdjE3OjgzODg2MDgxOjE2NDo4ZGU0NzJlMjM5OTYxMGJhYWE3Zjg0ODQwNTQ3Y2Q0MDk0MzRlMzFmNWQzYmQ3MWU0ZDk0N2YyODM4NzRmOWMw",
+      "sha256": "209cb6fcfd5392f9ce477fbc4ee2589fe31d042ab4a088a7bc2a70109e61b592"
+    },
+    {
+      "kind": "folder",
+      "name": "rate-312.5",
+      "descriptor": {
+        "version": 1,
+        "kind": "folders",
+        "batchId": "11111111-1111-4111-8111-111111111111",
+        "scope": {
+          "origin": "https://sync.test",
+          "ownerId": "owner",
+          "dataPlane": "home",
+          "rootId": "connection",
+          "deviceId": "device"
+        },
+        "configuration": {
+          "id": "connection",
+          "updatedAt": "2026-10-21T00:00:00.000Z",
+          "configuration": {
+            "configurationVersion": 3,
+            "name": "Backup",
+            "deviceId": "device",
+            "localRootId": "local-root",
+            "remoteFolderId": "cloud-root",
+            "mode": "backup",
+            "paused": false,
+            "propagateDeletes": false,
+            "network": "wifi",
+            "chargingOnly": false,
+            "excludedPaths": [
+              "ignored"
+            ],
+            "ignoreRules": "*.tmp\n",
+            "resourceLimits": {
+              "uploadBytesPerSecond": 312.5,
+              "downloadBytesPerSecond": 250000,
+              "transferConcurrency": 2,
+              "indexingConcurrency": 3,
+              "cpuPercent": 25
+            }
+          }
+        },
+        "members": [
+          {
+            "ordinal": 0,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "cloud-root",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent",
+                  "source": {
+                    "path": "Parent",
+                    "id": "inode-0",
+                    "version": "v:0",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "root"
+            }
+          },
+          {
+            "ordinal": 1,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "00000000-0000-4000-8000-000000000001",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent/Child",
+                  "source": {
+                    "path": "Parent/Child",
+                    "id": "inode-1",
+                    "version": "v:1",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "member",
+              "ordinal": 0
+            }
+          },
+          {
+            "ordinal": 2,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "00000000-0000-4000-8000-000000000002",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000003",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent/Child/Nested",
+                  "source": {
+                    "path": "Parent/Child/Nested",
+                    "id": "inode-2",
+                    "version": "v:2",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "member",
+              "ordinal": 1
+            }
+          }
+        ]
+      },
+      "canonicalBase64": "MjU6dGhpbmd0aW1lLWZvbGRlci1iYXRjaC12MjM2OjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMTE3Omh0dHBzOi8vc3luYy50ZXN0NTpvd25lcjQ6aG9tZTEwOmNvbm5lY3Rpb242OmRldmljZTEwOmNvbm5lY3Rpb24yNDoyMDI2LTEwLTIxVDAwOjAwOjAwLjAwMFoxOjM2OkJhY2t1cDY6ZGV2aWNlMTA6bG9jYWwtcm9vdDY6Zm9sZGVyMTA6Y2xvdWQtcm9vdDY6YmFja3VwMTowMTowNDp3aWZpMTowMToxNzppZ25vcmVkNjoqLnRtcAoxNjo0MDczODgwMDAwMDAwMDAwMTY6NDEwZTg0ODAwMDAwMDAwMDE2OjQwMDAwMDAwMDAwMDAwMDAxNjo0MDA4MDAwMDAwMDAwMDAwMTY6NDAzOTAwMDAwMDAwMDAwMDE6MzE6MDM2OjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMTEwOmNsb3VkLXJvb3QxMDpjbG91ZC1yb290NjpQYXJlbnQ3Omlub2RlLTAzOnY6MDQ6cm9vdDA6MToxMzY6MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyMTA6Y2xvdWQtcm9vdDM2OjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMTEyOlBhcmVudC9DaGlsZDc6aW5vZGUtMTM6djoxNjptZW1iZXIxOjAxOjIzNjowMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDMxMDpjbG91ZC1yb290MzY6MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyMTk6UGFyZW50L0NoaWxkL05lc3RlZDc6aW5vZGUtMjM6djoyNjptZW1iZXIxOjE=",
+      "sha256": "1901c393f3ce0ef4d96dcae95c622d5a5c38e724f231de99a000f46c35aae915"
+    },
+    {
+      "kind": "folder",
+      "name": "rate-1e-7",
+      "descriptor": {
+        "version": 1,
+        "kind": "folders",
+        "batchId": "11111111-1111-4111-8111-111111111111",
+        "scope": {
+          "origin": "https://sync.test",
+          "ownerId": "owner",
+          "dataPlane": "home",
+          "rootId": "connection",
+          "deviceId": "device"
+        },
+        "configuration": {
+          "id": "connection",
+          "updatedAt": "2026-10-21T00:00:00.000Z",
+          "configuration": {
+            "configurationVersion": 3,
+            "name": "Backup",
+            "deviceId": "device",
+            "localRootId": "local-root",
+            "remoteFolderId": "cloud-root",
+            "mode": "backup",
+            "paused": false,
+            "propagateDeletes": false,
+            "network": "wifi",
+            "chargingOnly": false,
+            "excludedPaths": [
+              "ignored"
+            ],
+            "ignoreRules": "*.tmp\n",
+            "resourceLimits": {
+              "uploadBytesPerSecond": 1e-7,
+              "downloadBytesPerSecond": 250000,
+              "transferConcurrency": 2,
+              "indexingConcurrency": 3,
+              "cpuPercent": 25
+            }
+          }
+        },
+        "members": [
+          {
+            "ordinal": 0,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "cloud-root",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent",
+                  "source": {
+                    "path": "Parent",
+                    "id": "inode-0",
+                    "version": "v:0",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "root"
+            }
+          },
+          {
+            "ordinal": 1,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "00000000-0000-4000-8000-000000000001",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent/Child",
+                  "source": {
+                    "path": "Parent/Child",
+                    "id": "inode-1",
+                    "version": "v:1",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "member",
+              "ordinal": 0
+            }
+          },
+          {
+            "ordinal": 2,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "00000000-0000-4000-8000-000000000002",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000003",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent/Child/Nested",
+                  "source": {
+                    "path": "Parent/Child/Nested",
+                    "id": "inode-2",
+                    "version": "v:2",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "member",
+              "ordinal": 1
+            }
+          }
+        ]
+      },
+      "canonicalBase64": "MjU6dGhpbmd0aW1lLWZvbGRlci1iYXRjaC12MjM2OjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMTE3Omh0dHBzOi8vc3luYy50ZXN0NTpvd25lcjQ6aG9tZTEwOmNvbm5lY3Rpb242OmRldmljZTEwOmNvbm5lY3Rpb24yNDoyMDI2LTEwLTIxVDAwOjAwOjAwLjAwMFoxOjM2OkJhY2t1cDY6ZGV2aWNlMTA6bG9jYWwtcm9vdDY6Zm9sZGVyMTA6Y2xvdWQtcm9vdDY6YmFja3VwMTowMTowNDp3aWZpMTowMToxNzppZ25vcmVkNjoqLnRtcAoxNjozZTdhZDdmMjlhYmNhZjQ4MTY6NDEwZTg0ODAwMDAwMDAwMDE2OjQwMDAwMDAwMDAwMDAwMDAxNjo0MDA4MDAwMDAwMDAwMDAwMTY6NDAzOTAwMDAwMDAwMDAwMDE6MzE6MDM2OjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMTEwOmNsb3VkLXJvb3QxMDpjbG91ZC1yb290NjpQYXJlbnQ3Omlub2RlLTAzOnY6MDQ6cm9vdDA6MToxMzY6MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyMTA6Y2xvdWQtcm9vdDM2OjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMTEyOlBhcmVudC9DaGlsZDc6aW5vZGUtMTM6djoxNjptZW1iZXIxOjAxOjIzNjowMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDMxMDpjbG91ZC1yb290MzY6MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyMTk6UGFyZW50L0NoaWxkL05lc3RlZDc6aW5vZGUtMjM6djoyNjptZW1iZXIxOjE=",
+      "sha256": "bfb972ff70e3228ebed0225d613f1ec0b2917182aade6eb2af98d3a623e42d27"
+    },
+    {
+      "kind": "folder",
+      "name": "rate-1e+21",
+      "descriptor": {
+        "version": 1,
+        "kind": "folders",
+        "batchId": "11111111-1111-4111-8111-111111111111",
+        "scope": {
+          "origin": "https://sync.test",
+          "ownerId": "owner",
+          "dataPlane": "home",
+          "rootId": "connection",
+          "deviceId": "device"
+        },
+        "configuration": {
+          "id": "connection",
+          "updatedAt": "2026-10-21T00:00:00.000Z",
+          "configuration": {
+            "configurationVersion": 3,
+            "name": "Backup",
+            "deviceId": "device",
+            "localRootId": "local-root",
+            "remoteFolderId": "cloud-root",
+            "mode": "backup",
+            "paused": false,
+            "propagateDeletes": false,
+            "network": "wifi",
+            "chargingOnly": false,
+            "excludedPaths": [
+              "ignored"
+            ],
+            "ignoreRules": "*.tmp\n",
+            "resourceLimits": {
+              "uploadBytesPerSecond": 1e+21,
+              "downloadBytesPerSecond": 250000,
+              "transferConcurrency": 2,
+              "indexingConcurrency": 3,
+              "cpuPercent": 25
+            }
+          }
+        },
+        "members": [
+          {
+            "ordinal": 0,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "cloud-root",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000001",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent",
+                  "source": {
+                    "path": "Parent",
+                    "id": "inode-0",
+                    "version": "v:0",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "root"
+            }
+          },
+          {
+            "ordinal": 1,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "00000000-0000-4000-8000-000000000001",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000002",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent/Child",
+                  "source": {
+                    "path": "Parent/Child",
+                    "id": "inode-1",
+                    "version": "v:1",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "member",
+              "ordinal": 0
+            }
+          },
+          {
+            "ordinal": 2,
+            "write": {
+              "scope": {
+                "origin": "https://sync.test",
+                "ownerId": "owner",
+                "dataPlane": "home",
+                "rootId": "connection",
+                "deviceId": "device"
+              },
+              "folderId": "00000000-0000-4000-8000-000000000002",
+              "cloudRootId": "cloud-root",
+              "before": null,
+              "operation": {
+                "id": "00000000-0000-4000-8000-000000000003",
+                "confirmed": false,
+                "mutation": {
+                  "kind": "copy",
+                  "from": "local",
+                  "path": "Parent/Child/Nested",
+                  "source": {
+                    "path": "Parent/Child/Nested",
+                    "id": "inode-2",
+                    "version": "v:2",
+                    "kind": "folder",
+                    "size": 0,
+                    "sha256": null
+                  },
+                  "expectedTarget": null
+                }
+              }
+            },
+            "parent": {
+              "kind": "member",
+              "ordinal": 1
+            }
+          }
+        ]
+      },
+      "canonicalBase64": "MjU6dGhpbmd0aW1lLWZvbGRlci1iYXRjaC12MjM2OjExMTExMTExLTExMTEtNDExMS04MTExLTExMTExMTExMTExMTE3Omh0dHBzOi8vc3luYy50ZXN0NTpvd25lcjQ6aG9tZTEwOmNvbm5lY3Rpb242OmRldmljZTEwOmNvbm5lY3Rpb24yNDoyMDI2LTEwLTIxVDAwOjAwOjAwLjAwMFoxOjM2OkJhY2t1cDY6ZGV2aWNlMTA6bG9jYWwtcm9vdDY6Zm9sZGVyMTA6Y2xvdWQtcm9vdDY6YmFja3VwMTowMTowNDp3aWZpMTowMToxNzppZ25vcmVkNjoqLnRtcAoxNjo0NDRiMWFlNGQ2ZTJlZjUwMTY6NDEwZTg0ODAwMDAwMDAwMDE2OjQwMDAwMDAwMDAwMDAwMDAxNjo0MDA4MDAwMDAwMDAwMDAwMTY6NDAzOTAwMDAwMDAwMDAwMDE6MzE6MDM2OjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMTEwOmNsb3VkLXJvb3QxMDpjbG91ZC1yb290NjpQYXJlbnQ3Omlub2RlLTAzOnY6MDQ6cm9vdDA6MToxMzY6MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyMTA6Y2xvdWQtcm9vdDM2OjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMTEyOlBhcmVudC9DaGlsZDc6aW5vZGUtMTM6djoxNjptZW1iZXIxOjAxOjIzNjowMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDMxMDpjbG91ZC1yb290MzY6MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyMTk6UGFyZW50L0NoaWxkL05lc3RlZDc6aW5vZGUtMjM6djoyNjptZW1iZXIxOjE=",
+      "sha256": "6e8921d46c72daf1d3d4129bbce5a74d2d4f21599966dc130e81ca9dc21915e8"
+    }
+  ]
+}

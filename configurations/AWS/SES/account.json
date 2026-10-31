@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "verifiedOn": "2026-09-05",
+  "source": "AWS SES Sydney console",
+  "region": "ap-southeast-2",
+  "domainIdentity": "thingtime.com",
+  "domainStatus": "Verified",
+  "additionalEmailIdentities": 1,
+  "dailySendingQuota": 50000,
+  "maximumSendRatePerSecond": 14,
+  "note": "Quotas and identity verification are account state, not portable restore settings. Personal email identity intentionally omitted."
+}

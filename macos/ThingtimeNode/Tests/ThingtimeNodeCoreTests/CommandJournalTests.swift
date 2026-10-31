@@ -3,6 +3,23 @@ import XCTest
 @testable import ThingtimeNodeCore
 
 final class CommandJournalTests: XCTestCase {
+    func testFileReadBytesAreBoundedWithoutLosingCommandIdentity() async throws {
+        let url = temporaryURL("file-journal.json")
+        let journal = try CommandJournal(fileURL: url, maxFileResultBytes: 5)
+        for index in 0..<2 {
+            let id = "read-\(index)"
+            guard case let .execute(hash) = try await journal.begin(commandId: id, payload: Data(id.utf8)) else { return XCTFail() }
+            let result: JSONValue = .object(["filesystem": .object(["data": .string("YWJj")])])
+            try await journal.finish(commandId: id, payloadHash: hash, outcome: JournaledOutcome(response: .success(id: id, result: result)), now: Date(timeIntervalSince1970: Double(index)))
+        }
+        let old = await journal.entry(commandId: "read-0")
+        XCTAssertEqual(old?.outcome?.error?.code, "file_result_expired")
+        let recent = await journal.entry(commandId: "read-1")
+        XCTAssertTrue(recent?.outcome?.ok == true)
+        do { _ = try await journal.begin(commandId: "read-0", payload: Data("different".utf8)); XCTFail() }
+        catch { XCTAssertEqual(error as? ThingtimeNodeError, .commandConflict) }
+    }
+
     func testReplaysSamePayloadAndRejectsConflictingReuse() async throws {
         let url = temporaryURL("journal.json")
         let journal = try CommandJournal(fileURL: url, maxEntries: 8)

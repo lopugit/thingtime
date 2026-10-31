@@ -1,106 +1,18 @@
-import { Badge, Box, Button, Container, Divider, Flex, Heading, Text } from '@chakra-ui/react';
-import { useLoaderData, useRevalidator } from 'react-router';
-import type { MongoConnectionStatus } from '~/api/utils/mongodb/status';
-import { MongoEndpointConfig } from '~/components/MongoDB/MongoEndpointConfig';
+import { PageShell } from '../components/Layout/PageShell';
+import { MONGODB_STATUS_SECTIONS } from '../components/MongoDB/mongodbStatusSections';
 
-const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
-  <Flex justifyContent="space-between" columnGap={6} py={2}>
-    <Text
-      color="var(--tt-muted, #718096)"
-      fontFamily="mono"
-      fontSize="11px"
-      letterSpacing="0.12em"
-      textTransform="uppercase"
-    >
-      {label}
-    </Text>
-    <Text fontSize="sm" fontFamily="mono" textAlign="right" wordBreak="break-word">
-      {value ?? '—'}
-    </Text>
-  </Flex>
-);
-
+// /mongodb-status renders the SAME section list its site doc seeds (see
+// components/MongoDB/mongodbStatusSections.tsx) — the page IS its block
+// composition, pixel-identically, with one source of truth. Data comes from
+// the sections' shared module-cached hook (optimistic: cached state paints
+// instantly, a background refetch reconciles) instead of a
+// navigation-blocking route loader.
 export default function MongoStatusPage() {
-  const status = useLoaderData() as MongoConnectionStatus;
-  const revalidator = useRevalidator();
-
-  const connected = status.connected;
-  const checking = revalidator.state === 'loading';
-
   return (
-    <Container maxWidth="container.sm" py={24}>
-      <Flex flexDirection="column" rowGap={6}>
-        <Flex alignItems="center" columnGap={3}>
-          <Box
-            width="14px"
-            height="14px"
-            borderRadius="full"
-            backgroundColor={connected ? 'var(--tt-positive, #48BB78)' : 'var(--tt-danger, #FC8181)'}
-            flexShrink={0}
-          />
-          <Heading size="lg">MongoDB Connection Status</Heading>
-        </Flex>
-
-        <Flex columnGap={2}>
-          <Badge
-            alignSelf="flex-start"
-            colorScheme={connected ? 'green' : 'red'}
-            fontSize="md"
-            px={3}
-            py={1}
-            borderRadius="md"
-          >
-            {connected ? 'Connected' : 'Disconnected'}
-          </Badge>
-          {status.custom && (
-            <Badge alignSelf="flex-start" colorScheme="purple" fontSize="md" px={3} py={1} borderRadius="md">
-              Custom endpoint
-            </Badge>
-          )}
-        </Flex>
-
-        <Text color="var(--tt-muted, #718096)" fontSize="sm">
-          This page checks the live MongoDB connection through the Thingtime API
-          (<Text as="span" fontFamily="mono">/api/v1/mongodb/status</Text>).
-        </Text>
-
-        <Divider />
-
-        <Box>
-          <Row label="Host" value={status.host} />
-          <Row label="Database" value={status.dbName} />
-          <Row label="Ping" value={typeof status.pingMs === 'number' ? `${status.pingMs} ms` : null} />
-          <Row label="Collections" value={typeof status.collections === 'number' ? status.collections : null} />
-          <Row label="Last checked" value={new Date(status.checkedAt).toLocaleString()} />
-          {status.error && (
-            <Row
-              label="Error"
-              value={
-                <Text as="span" color="var(--tt-danger, #FC8181)" fontSize="xs">
-                  {status.error}
-                </Text>
-              }
-            />
-          )}
-        </Box>
-
-        <Divider />
-
-        <Flex>
-          <Button
-            size="sm"
-            onClick={() => revalidator.revalidate()}
-            isLoading={checking}
-            loadingText="Re-checking…"
-          >
-            Re-check connection
-          </Button>
-        </Flex>
-
-        <Divider />
-
-        <MongoEndpointConfig />
-      </Flex>
-    </Container>
+    <PageShell width={760}>
+      {MONGODB_STATUS_SECTIONS.map((section) => (
+        <section.Component key={section.key} />
+      ))}
+    </PageShell>
   );
 }

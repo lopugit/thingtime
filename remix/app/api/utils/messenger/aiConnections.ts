@@ -5,6 +5,8 @@
 import { createHash } from 'node:crypto';
 
 import { getHomeThingsCollection, getThingsCollection } from '../mongodb/collections';
+import { thingUniqueKey, thingUniqueKeyFilter, thingUniqueKeysFilter } from '../mongodb/uniqueKeys';
+import { ensureRelationshipLookupReady, relationshipLookupFilter } from '../mongodb/relationshipLookup';
 import { MAX_MESSAGE_CHARS } from '~/schemas/registry';
 import { publicExternalAiSource, type AiMessageRole, type AiSourceProvider } from './externalAi';
 import { chatMemberKey, communityMemberKey, fail, newThingDoc, type Fail } from './shared';
@@ -197,8 +199,12 @@ const sourceStorageOptions = (source: AiSourceInput, options: Record<string, unk
 	...(source.deviceId ? { messengerPlane: 'home' as const } : {})
 });
 
-const withSourceStorageTransaction = <T>(source: AiSourceInput, work: (session: any) => Promise<T>) =>
-	withMessengerStorageTransaction(work, source.deviceId ? 'home' : 'active');
+const withSourceStorageTransaction = async <T>(source: AiSourceInput, work: (session: any) => Promise<T>) => {
+	// Resolve the cached home layout before opening the import snapshot. This
+	// metadata check never repairs data or performs DDL inside an upsert.
+	await ensureRelationshipLookupReady({ home: !!source.deviceId });
+	return withMessengerStorageTransaction(work, source.deviceId ? 'home' : 'active');
+};
 
 const ensureMembership = async (kind: 'community' | 'chat', targetId: string, ownerId: string, session: any, source: AiSourceInput) => {
 	const things = await sourceThings(source);
@@ -224,7 +230,7 @@ const ensureMembership = async (kind: 'community' | 'chat', targetId: string, ow
   const { crystal: _memberCrystal, updatedAt: _memberUpdatedAt, ...memberRoot } = base;
   await updateMessengerThing(
 		things,
-    { 'crystal.memberKey': memberKey } as any,
+    { thingtime: memberKind, ownerId, targetId, ...await relationshipLookupFilter('memberKey', memberKey, { home: !!source.deviceId }) } as any,
     {
       $setOnInsert: {
 				...memberRoot,
@@ -259,6 +265,7 @@ const ensureGroup = async (ownerId: string, source: AiSourceInput, group: AiGrou
   const base = newThingDoc('community', {
     shareId: stableShareId('ai-space', key),
     ownerId,
+		uniqueKeys: [thingUniqueKey('externalCommunityKey', key)],
     crystal: {
       name: group.name,
       description: `${source.label} ${group.kind}`,
@@ -267,11 +274,14 @@ const ensureGroup = async (ownerId: string, source: AiSourceInput, group: AiGrou
       externalSource: sourceProjection(source, { groupKind: group.kind })
     }
   });
-  const { crystal: _groupCrystal, updatedAt: _groupUpdatedAt, ...groupRoot } = base;
+	// `uniqueKeys` rides `$setOnInsert`, never `$addToSet`: the filter is an
+	// equality on that field, so MongoDB seeds the upserted document with the
+	// scalar key and `$addToSet` would fail on a non-array field.
+	const { crystal: _groupCrystal, updatedAt: _groupUpdatedAt, ...groupRoot } = base;
 	return withSourceStorageTransaction(source, async (session) => {
 		await updateMessengerThing(
 			things,
-			{ 'crystal.externalCommunityKey': key } as any,
+			thingUniqueKeyFilter('externalCommunityKey', key) as any,
 			{
 				$setOnInsert: groupRoot,
 				$set: {
@@ -285,7 +295,7 @@ const ensureGroup = async (ownerId: string, source: AiSourceInput, group: AiGrou
 			} as any,
 			sourceStorageOptions(source, { upsert: true, session })
 		);
-		const doc = await things.findOne({ 'crystal.externalCommunityKey': key } as any, { session });
+		const doc = await things.findOne(thingUniqueKeyFilter('externalCommunityKey', key) as any, { session });
 		if (!doc) throw new Error('ai_group_upsert_failed');
 		await ensureMembership('community', String((doc as any).shareId), ownerId, session, source);
 		return doc;
@@ -300,7 +310,7 @@ const ensureConversation = async (ownerId: string, source: AiSourceInput, conver
 		let communityId: string | null = null;
 		if (conversation.groupId) {
 			const communityKey = externalKey(ownerId, source.keyScope, 'group', conversation.groupId);
-			const community = await things.findOne({ 'crystal.externalCommunityKey': communityKey } as any, { session });
+			const community = await things.findOne(thingUniqueKeyFilter('externalCommunityKey', communityKey) as any, { session });
 			if (!community) return fail(409, 'An imported conversation arrived before its project; retry the sync batch');
 			communityId = String((community as any).shareId);
 		}
@@ -308,6 +318,7 @@ const ensureConversation = async (ownerId: string, source: AiSourceInput, conver
 			shareId: stableShareId('ai-chat', key),
 			ownerId,
 			targetId: communityId,
+			uniqueKeys: [thingUniqueKey('externalConversationKey', key)],
 			crystal: {
 				chatType: communityId ? 'channel' : 'group',
 				name: conversation.title,
@@ -322,10 +333,15 @@ const ensureConversation = async (ownerId: string, source: AiSourceInput, conver
 		});
 		base.createdAt = createdAt;
 		base.updatedAt = safeDate(conversation.updatedAt, createdAt);
-		const { crystal: _conversationCrystal, targetId: _conversationTargetId, updatedAt: _conversationUpdatedAt, ...conversationRoot } = base;
+		const {
+			crystal: _conversationCrystal,
+			targetId: _conversationTargetId,
+			updatedAt: _conversationUpdatedAt,
+			...conversationRoot
+		} = base;
 		await updateMessengerThing(
 			things,
-			{ 'crystal.externalConversationKey': key } as any,
+			thingUniqueKeyFilter('externalConversationKey', key) as any,
 			{
 				$setOnInsert: conversationRoot,
 				$set: {
@@ -344,7 +360,7 @@ const ensureConversation = async (ownerId: string, source: AiSourceInput, conver
 			} as any,
 			sourceStorageOptions(source, { upsert: true, session })
 		);
-		const doc = await things.findOne({ 'crystal.externalConversationKey': key } as any, { session });
+		const doc = await things.findOne(thingUniqueKeyFilter('externalConversationKey', key) as any, { session });
 		if (!doc) throw new Error('ai_conversation_upsert_failed');
 		await ensureMembership('chat', String((doc as any).shareId), ownerId, session, source);
 		return doc;
@@ -361,7 +377,7 @@ const upsertMessages = async (
   const conversationIds = Array.from(new Set(messages.map((message) => message.conversationId)));
 	const conversationKeys = conversationIds.map((id) => externalKey(ownerId, source.keyScope, 'conversation', id));
   const chats = await things
-    .find({ 'crystal.externalConversationKey': { $in: conversationKeys } } as any, {
+    .find(thingUniqueKeysFilter('externalConversationKey', conversationKeys) as any, {
       projection: { shareId: 1, 'crystal.externalConversationKey': 1 }
     })
     .toArray();
@@ -390,14 +406,20 @@ const upsertMessages = async (
         shareId: stableShareId('ai-message', key),
         ownerId,
         targetId: chatId,
+				uniqueKeys: [thingUniqueKey('externalMessageKey', key)],
         crystal: {}
       });
       base.createdAt = createdAt;
       base.updatedAt = createdAt;
-      const { crystal: _ignoredCrystal, targetId: _messageTargetId, updatedAt: _messageUpdatedAt, ...root } = base;
+			const {
+				crystal: _ignoredCrystal,
+				targetId: _messageTargetId,
+				updatedAt: _messageUpdatedAt,
+				...root
+			} = base;
       operations.push({
         updateOne: {
-          filter: { 'crystal.externalMessageKey': key },
+          filter: thingUniqueKeyFilter('externalMessageKey', key),
           update: {
             $setOnInsert: root,
             $set: {
@@ -443,7 +465,7 @@ const upsertMessages = async (
 	// text and quota bytes forever.
 	for (let offset = 0; offset < staleSegmentKeys.length; offset += 500) {
 		const keys = staleSegmentKeys.slice(offset, offset + 500);
-		await deleteMessengerThings(things, { 'crystal.externalMessageKey': { $in: keys } } as any, sourceStorageOptions(source));
+		await deleteMessengerThings(things, thingUniqueKeysFilter('externalMessageKey', keys) as any, sourceStorageOptions(source));
 	}
 
   const chatIds = Array.from(new Set(chats.map((chat: any) => String(chat.shareId))));
@@ -562,7 +584,7 @@ export const syncAiConnections = async (ownerId: string, input: unknown, context
 	const things = await sourceThings(source);
 	const connectionKey = externalKey(ownerId, source.keyScope, 'connection', source.sourceId);
   const existingCount = await things.countDocuments({ thingtime: 'ai-connection', ownerId } as any);
-  const existing = await things.findOne({ 'crystal.aiConnectionKey': connectionKey } as any);
+  const existing = await things.findOne(thingUniqueKeyFilter('aiConnectionKey', connectionKey) as any);
   if (!existing && existingCount >= MAX_CONNECTIONS_PER_USER) return fail(400, 'This account already has enough AI app connections');
 
   for (const group of groups as AiGroupInput[]) await ensureGroup(ownerId, source, group);
@@ -584,6 +606,7 @@ export const syncAiConnections = async (ownerId: string, input: unknown, context
   const base = newThingDoc('ai-connection', {
     shareId: stableShareId('ai-connection', connectionKey),
     ownerId,
+		uniqueKeys: [thingUniqueKey('aiConnectionKey', connectionKey)],
     crystal: {}
   });
   const priorModes = new Set<string>([existing?.crystal?.mode, source.mode].filter(Boolean));
@@ -591,10 +614,10 @@ export const syncAiConnections = async (ownerId: string, input: unknown, context
   const connectors = Array.from(
     new Set([...(Array.isArray(existing?.crystal?.connectors) ? existing.crystal.connectors : []), source.connector])
   ).slice(0, 8);
-  const { crystal: _ignoredCrystal, updatedAt: _connectionUpdatedAt, ...root } = base;
+	const { crystal: _ignoredCrystal, updatedAt: _connectionUpdatedAt, ...root } = base;
   await updateMessengerThing(
 		things,
-    { 'crystal.aiConnectionKey': connectionKey } as any,
+    thingUniqueKeyFilter('aiConnectionKey', connectionKey) as any,
     {
       $setOnInsert: root,
       $set: {
@@ -621,7 +644,7 @@ export const syncAiConnections = async (ownerId: string, input: unknown, context
     },
 		sourceStorageOptions(source, { upsert: true })
   );
-  const connection = await things.findOne({ 'crystal.aiConnectionKey': connectionKey } as any);
+  const connection = await things.findOne(thingUniqueKeyFilter('aiConnectionKey', connectionKey) as any);
   if (!connection) throw new Error('ai_connection_upsert_failed');
   return {
     ok: true,

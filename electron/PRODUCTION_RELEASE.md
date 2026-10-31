@@ -36,7 +36,7 @@ imports any certificate or notarization material. Its GitHub write token is
 scoped to API and final release-publication steps; the checked-out source build
 does not retain one.
 
-## Secret mapping
+## Secret mapping and distribution selection
 
 Configure these repository or protected-environment GitHub Actions secrets
 using your own values. Do not put a certificate, key, password, or account id
@@ -61,27 +61,42 @@ temporary keychain under `RUNNER_TEMP`, confirms the identity begins with
 access, and deletes the keychain and temporary files in an `if: always()`
 cleanup step.
 
+When all six values are absent, the same owner-approved PR worker instead
+builds the temporary **UNSIGNED** lane. If any, but not all, values are present,
+the worker stops: a partially configured release must never be mislabelled as
+either trusted or unsigned. UNSIGNED means no Developer ID certificate and no
+notarization; the bundles use only ad-hoc signatures so their nested macOS code
+can execute after the user has explicitly approved macOS's warning.
+
 ## Desktop and Recovery artifacts
 
-After unsigned validation, the worker runs `corepack pnpm --dir electron run
-dist` with the imported identity and notarization API-key environment. It then
-runs `macos/ThingtimeRecovery/script/build-production-release.sh` with the same
-Developer ID identity. The Recovery script signs its nested helper before the
-outer application, notarizes and staples the ZIP, and runs strict `codesign`,
-Gatekeeper, and stapler checks.
+After source validation, a fully configured worker runs `corepack pnpm --dir
+electron run dist` with the imported identity and notarization API-key
+environment, then runs
+`macos/ThingtimeRecovery/script/build-production-release.sh`. The Recovery
+script signs its nested helper before the outer application, notarizes and
+staples the ZIP, and runs strict `codesign`, Gatekeeper, and stapler checks.
 
-Publication requires both the Electron updater-compatible ZIP and exactly one
-separately signed Recovery ZIP. The prerelease SemVer form includes its source
-provenance, for example:
+When credentials are entirely absent, the worker instead runs `corepack pnpm
+--dir electron run dist:unsigned` and
+`macos/ThingtimeRecovery/script/build-unsigned-release.sh`. Those artifacts are
+given unmistakable `UNSIGNED` asset names and a SemVer suffix of `.unsigned`.
+They are not a substitute for the signed lane.
+
+Each PR prerelease retains source provenance, for example:
 
 ```text
 0.1.0-pr.68.codex-thingtime-mcp-desktop-connectors.gabcdef123456
+0.1.0-pr.68.codex-thingtime-mcp-desktop-connectors.gabcdef123456.unsigned
 ```
 
-The release notes retain the full PR number, normalized branch, and commit.
-The updater and Recovery launcher independently verify cache and installed
-bundles before offering launch or atomic installation; no unsigned fallback is
-permitted.
+The release notes retain the full PR number, normalized branch, commit, and
+distribution type. The regular updater cache accepts only the signed/notarized
+lane. Thingtime Recovery lists an unsigned release with a permanent UNSIGNED
+badge and requires an explicit acknowledgement before it can cache, launch, or
+atomically install that bundle. macOS can independently require the user to
+choose **System Settings → Privacy & Security → Open Anyway** before first
+launch; Recovery never calls an unsigned bundle a verified update.
 
 ## Local versus production proof
 
@@ -90,7 +105,7 @@ and proved strict deep-signature verification, installed-bundle verification,
 the standalone Recovery UI, and a genuine Recovery self-replacement/relaunch.
 Those local artifacts are intentionally not direct-distribution releases.
 
-Production publication remains fail-closed until the six secrets above are
-configured and the dedicated `github-actions` builder/releaser plus the thin
-`develop` listener have been merged. A credential failure is safer than
-publishing a TCC-unstable, unsigned, or unnotarized artifact.
+The trusted production lane remains fail-closed until all six secrets are
+configured. The temporary unsigned lane is available only to the same
+owner-approved PR release gate, is clearly marked at every artifact boundary,
+and is intended to be retired when the trusted credentials arrive.

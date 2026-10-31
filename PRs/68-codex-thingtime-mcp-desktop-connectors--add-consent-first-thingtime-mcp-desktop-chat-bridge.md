@@ -218,6 +218,22 @@ relational shape for later ThingtimeDB storage and platform chat views.
   generic browser-player control remain out of scope.
 - The node reports only installed/running availability for these three media
   surfaces; it never performs Automation requests while publishing telemetry.
+
+### 2026-08-24 unsigned PR-release fallback
+
+- The protected `github-actions` release worker now chooses a trusted
+  Developer ID/notarized lane only when its full six-secret configuration is
+  present. When all six are absent it publishes an explicit `.unsigned` PR
+  SemVer and `UNSIGNED` Electron/Recovery ZIP names; a partial configuration
+  fails before publication.
+- The fallback uses ad-hoc signatures solely to keep nested macOS executables
+  functioning. It has no Apple team identity or notarization and the release
+  notes instruct the user to approve the first launch via **Privacy & Security
+  → Open Anyway**.
+- Thingtime Recovery recognizes the marker plus asset name, maintains a
+  separate UNSIGNED cache status, requires a deliberate acknowledgement, then
+  allows cache, launch, and atomic install. The normal signed cache remains
+  strict and never presents an unsigned build as verified.
   All three volume effects retain the journalled `needs-review` boundary after
   an Apple Event, rather than claiming the audible result was observed.
 - The four paired-device API contracts are now `1.7.0`; Electron refuses to
@@ -952,3 +968,55 @@ an offline database or offline conflict resolution layer.
   GitHub desktop asset, and completed an actual signed Recovery self-replace /
   relaunch. Production publication remains correctly blocked on the existing
   Developer ID + notarization credential prerequisite.
+
+### Unsigned Recovery handoff audit (2026-08-24)
+
+- The unsigned catalog/cache UI already exposed explicitly acknowledged
+  `UNSIGNED` assets, but the detached Recovery installer unconditionally used
+  signed-team verification. That made an ad-hoc release cacheable yet unable to
+  launch or install—a broken fallback path.
+- The installer now resolves the selected app back to its constrained cache
+  manifest and derives the trust lane from `isUnsigned`; callers cannot supply
+  their own unsigned flag. An unsigned Recovery launcher can therefore verify
+  and launch/install only explicitly marked ad-hoc bundles. A missing legacy
+  marker remains strict signed behavior and fails closed when the unsigned
+  launcher has no team identity. Replaced bundles are classified and cached in
+  their matching lane before an atomic replacement.
+- The Electron detached handoff also repeats its production Developer ID,
+  notarization, and nested-code verification after the main process exits and
+  immediately before either a cached launch or install. This is separate from
+  the explicitly opt-in unsigned native Recovery lane.
+- Verified locally with 78 Electron tests and 9 Recovery-core tests, including
+  a real ad-hoc app fixture that launches via the detached unsigned Recovery
+  path and a regression proving a missing `isUnsigned` marker cannot downgrade
+  verification. A fresh release-mode unsigned Recovery ZIP round-trip also
+  passed. A live GitHub unsigned release requires the still-open protected
+  control-plane PR #390 to merge before the release worker can publish one.
+- The first full Electron unsigned build also revealed that electron-builder's
+  implicit macOS target produced a DMG but no updater ZIP. `electron/package.json`
+  now explicitly requests both `dmg` and `zip`, with a contract test that locks
+  the rollback artifact in place. The final local release-mode artifacts both
+  verified independently at version
+  `0.1.0-pr.68.updater.g2048de7d6262.unsigned`.
+
+### Index-budget consolidation follow-up (2026-08-28)
+
+- Lopu's repository review correctly found the merged lineage at 62/64 Things
+  indexes, violating this PR's own four-slot safe-upgrade invariant. The five
+  new uniqueness families for AI connections, imported communities/chats/
+  messages, and device idempotency now share the existing protected root
+  `uniqueKeys` multikey index as domain-prefixed Binary values. The complete
+  home plan is 57/64 without weakening the guard.
+- Existing preview rows are upgraded before their obsolete indexes are
+  retired. New writes stamp root keys atomically, exact/batched reads prefer
+  those indexed keys, and crystal fallbacks keep an interrupted pre-upgrade row
+  recoverable. Device documents no longer add the redundant
+  `crystal.deviceUniqueKeys` plaintext array.
+- The migration is home-only. Custom data endpoints receive the additive
+  current index set but are no longer scanned, rewritten, or stripped of
+  historical index names owned by their users.
+- Validation: collections 19/19, devices 52/52, messenger 41/41, the complete
+  unit battery, targeted ESLint, and the production/Vercel build all pass. A
+  live worktree server also passes auth 22/22 (cold service-account creation
+  128 ms) and Things 31/31 API groups; the imported-AI and device entry routes
+  are present and auth-guarded.

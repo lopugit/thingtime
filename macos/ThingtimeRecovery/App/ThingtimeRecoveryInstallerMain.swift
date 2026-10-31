@@ -12,6 +12,7 @@ guard CommandLine.arguments.count == 2 else {
 
 let planURL = URL(fileURLWithPath: CommandLine.arguments[1]).standardizedFileURL
 var failure: Error?
+var recoveryAppURL: URL?
 do {
     let data = try Data(contentsOf: planURL)
     let plan = try JSONDecoder().decode(RecoveryInstallPlan.self, from: data)
@@ -22,10 +23,25 @@ do {
     let contentsDirectory = helperExecutable.deletingLastPathComponent().deletingLastPathComponent()
     guard contentsDirectory.lastPathComponent == "Contents" else { throw RecoveryError.operationFailed("the signed recovery installer is not inside an app bundle") }
     let currentApp = contentsDirectory.deletingLastPathComponent()
-    let context = try BundleVerifier.signingContext(for: currentApp)
+    recoveryAppURL = currentApp
+    // An ad-hoc Recovery app has no Apple team identity. It may still launch
+    // and install explicitly acknowledged unsigned cache entries, while the
+    // core installer retains strict team verification for the signed lane.
+    let currentTrust = try BundleVerifier.distribution(for: currentApp, component: .recovery)
+    let context: SigningContext?
+    switch currentTrust {
+    case .signed:
+        context = try BundleVerifier.signingContext(for: currentApp)
+    case .unsigned:
+        context = nil
+    }
     try RecoveryInstaller.execute(plan: plan, signingContext: context)
 } catch {
     failure = error
 }
 try? FileManager.default.removeItem(at: planURL)
-if let failure { fail(failure.localizedDescription) }
+if let failure {
+    try? RecoveryInstallNotice(message: failure.localizedDescription, isError: true).save()
+    if let recoveryAppURL { try? ProcessExecution.launchApplication(recoveryAppURL) }
+    fail(failure.localizedDescription)
+}

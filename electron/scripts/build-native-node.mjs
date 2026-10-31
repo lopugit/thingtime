@@ -12,6 +12,7 @@ const cacheRoot = process.env.THINGTIME_NODE_CACHE_ROOT || path.join(homedir(), 
 const sourceApp = path.join(cacheRoot, 'bundle-stage', 'Thingtime Node.app');
 const stagedRoot = path.join(electronDir, 'dist', 'native');
 const stagedApp = path.join(stagedRoot, 'Thingtime Node.app');
+const signingMode = String(process.env.THINGTIME_NODE_SIGNING_MODE || 'signed').trim();
 
 function run(command, args, options = {}) {
 	const result = spawnSync(command, args, {
@@ -37,6 +38,9 @@ if (!/^\d+\.\d+\.\d+(?:[-.][0-9A-Za-z]+)*$/u.test(baseVersion)) {
 if (!/^\d+$/u.test(buildNumber)) {
 	throw new Error('THINGTIME_ELECTRON_BUILD_NUMBER must be numeric.');
 }
+if (!['signed', 'unsigned'].includes(signingMode)) {
+	throw new Error('THINGTIME_NODE_SIGNING_MODE must be signed or unsigned.');
+}
 
 run(buildScript, [], {
 	cwd: packageRoot,
@@ -45,6 +49,7 @@ run(buildScript, [], {
 		THINGTIME_NODE_EMBEDDED: '1',
 		THINGTIME_NODE_BUILD_NUMBER: buildNumber,
 		THINGTIME_NODE_CACHE_ROOT: cacheRoot,
+		THINGTIME_NODE_SIGNING_MODE: signingMode,
 		THINGTIME_NODE_VERSION: baseVersion
 	}
 });
@@ -64,6 +69,7 @@ await writeFile(
 			buildNumber,
 			loginRegistration: 'electron-authoritative',
 			runtime: '../ai/thingtime-node-runtime.mjs',
+			signingMode,
 			version: baseVersion
 		},
 		null,

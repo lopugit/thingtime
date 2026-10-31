@@ -9,6 +9,8 @@ public enum ActionOrigin: String, Codable, Equatable, Sendable {
 }
 
 public enum SafeActionKind: String, Codable, Equatable, Sendable {
+    case filesystem = "filesystem"
+    case runScript = "script.run"
     case refreshTelemetry = "telemetry.refresh"
     case setOutputVolume = "system.volume.set"
     case setOutputMuted = "system.audio.mute.set"
@@ -100,7 +102,7 @@ public struct SafeActionPolicy: Sendable {
         if context.sessionLocked {
             return .deny(reason: "Remote computer control is disabled while the user session is locked.")
         }
-        if context.origin == .remoteAccount, !context.userApproved {
+        if (context.origin == .remoteAccount || action.kind == .runScript), !context.userApproved {
             return .requireApproval(reason: "This computer action requires explicit approval.")
         }
         return .allow
@@ -108,6 +110,10 @@ public struct SafeActionPolicy: Sendable {
 
     private func validateParameters(_ action: SafeActionRequest) -> String? {
         switch action.kind {
+        case .runScript:
+            return DeviceScript.validate(action.parameters)
+        case .filesystem:
+            return RemoteFilesystem.validate(action.parameters)
         case .refreshTelemetry:
             return action.parameters.isEmpty ? nil : "telemetry.refresh does not accept parameters."
         case .lockScreen, .sleepSystem, .restartSystem, .shutDownSystem, .logOutSession, .hideOtherApplications:
@@ -330,9 +336,9 @@ public struct SafeActionPolicy: Sendable {
 @MainActor
 public final class SafeActionExecutor {
     private let policy: SafeActionPolicy
-    private let telemetry: DeviceTelemetryCollector
+    private let telemetry: any DeviceTelemetryProviding
 
-    public init(policy: SafeActionPolicy = SafeActionPolicy(), telemetry: DeviceTelemetryCollector) {
+    public init(policy: SafeActionPolicy = SafeActionPolicy(), telemetry: any DeviceTelemetryProviding) {
         self.policy = policy
         self.telemetry = telemetry
     }
@@ -352,6 +358,10 @@ public final class SafeActionExecutor {
         }
 
         switch action.kind {
+        case .runScript:
+            return try await Task.detached(priority: .utility) { try DeviceScript.execute(action.parameters) }.value
+        case .filesystem:
+            return try RemoteFilesystem().execute(action.parameters)
         case .refreshTelemetry:
             return try JSONValue.from(telemetry.snapshot())
         case .setOutputVolume:
@@ -627,7 +637,7 @@ public final class SafeActionExecutor {
         case .lockScreen:
             try SystemSession.lockScreen()
             for attempt in 0 ..< 20 {
-                if telemetry.snapshot().session.isLocked {
+                if telemetry.sessionSnapshot().isLocked {
                     return .object(["locked": .bool(true)])
                 }
                 if attempt < 19 { try await Task.sleep(for: .milliseconds(100)) }
