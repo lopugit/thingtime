@@ -1,19 +1,31 @@
-const THINGTIME_PRODUCTION_ORIGIN = 'https://thingtime.com';
+import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../../app/api/utils/capabilities/capabilityContract';
+import { agentTestEnvironment } from '../../app/api/utils/agentTesting';
+
 const MONGO_PASSWORD_PLACEHOLDER = '<db_password>';
 
 const normaliseOrigin = (value?: string | null) => {
   const trimmed = value?.trim();
-  if (!trimmed) return THINGTIME_PRODUCTION_ORIGIN;
+  if (!trimmed) return null;
 
   try {
-    const url = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
+    const url = new URL(trimmed);
+    if (url.username || url.password) return null;
+    const explicitLoopback = process.env.THINGTIME_DESKTOP === '1' &&
+      process.env.THINGTIME_DESKTOP_API_MODE === 'remote' &&
+      url.protocol === 'http:' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
+    if (url.protocol !== 'https:' && !explicitLoopback) {
+      return null;
+    }
     return url.origin;
   } catch {
-    return THINGTIME_PRODUCTION_ORIGIN;
+    return null;
   }
 };
 
-export const getApiFallbackOrigin = () => normaliseOrigin(THINGTIME_PRODUCTION_ORIGIN);
+export const getApiFallbackOrigin = () => {
+  if (process.env.THINGTIME_AGENT_TEST_MODE === '1') throw new Error('Isolated tests cannot use an API fallback.');
+  return normaliseOrigin(process.env.THINGTIME_API_FALLBACK_ORIGIN);
+};
 
 export const getMissingSelfHostedApiEnv = () => {
   const missing: string[] = [];
@@ -25,27 +37,65 @@ export const getMissingSelfHostedApiEnv = () => {
     missing.push('MONGO_PASS');
   }
 
-  if (
-    process.env.NODE_ENV === 'production' &&
-    !process.env.JWT_PRIVATE_KEY?.trim() &&
-    !process.env.JWT_SECRET?.trim()
-  ) {
+  if (!process.env.JWT_PRIVATE_KEY?.trim() && !process.env.JWT_SECRET?.trim()) {
     missing.push('JWT_PRIVATE_KEY or JWT_SECRET');
   }
 
   return missing;
 };
 
-export const hasSelfHostedApiEnv = () => getMissingSelfHostedApiEnv().length === 0;
+// An explicit desktop remote selection must never accidentally activate an
+// inherited local database/signing configuration (including startup plugins).
+export const hasSelfHostedApiEnv = () =>
+  !(process.env.THINGTIME_DESKTOP === '1' && process.env.THINGTIME_DESKTOP_API_MODE === 'remote') &&
+  getMissingSelfHostedApiEnv().length === 0;
 
+// Only the installed desktop shell may deliberately bridge to a selected API.
+// Incomplete development/preview servers must never become production clients.
 export const shouldProxyApiToFallback = (request: Request) => {
-  if (hasSelfHostedApiEnv()) return false;
-
+  if (agentTestEnvironment()) return false;
+  if (hasSelfHostedApiEnv() || process.env.NODE_ENV === 'test') return false;
+  if (process.env.THINGTIME_DESKTOP !== '1') return false;
+  if (process.env.THINGTIME_DESKTOP_API_MODE && process.env.THINGTIME_DESKTOP_API_MODE !== 'remote') return false;
   const requestUrl = new URL(request.url);
-  const fallbackUrl = new URL(getApiFallbackOrigin());
-
-  return requestUrl.hostname !== fallbackUrl.hostname;
+  const fallbackOrigin = getApiFallbackOrigin();
+  return requestUrl.hostname === '127.0.0.1' && fallbackOrigin !== null && requestUrl.origin !== fallbackOrigin;
 };
+
+/** Negotiate the selected deployment, not the bundled GUI's own manifest,
+ * before forwarding any ChatGPT connection action or encrypted handoff. */
+export const selectedRuntimeSupportsPlan = async (origin = getApiFallbackOrigin(), signal?: AbortSignal) => {
+  if (!origin || origin !== getApiFallbackOrigin() || process.env.THINGTIME_DESKTOP_API_MODE !== 'remote') return false;
+  try {
+    const response = await fetch(new URL(THINGTIME_CAPABILITY_MANIFEST_PATH, origin), {
+      headers: { Accept: 'application/json' }, redirect: 'error',
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(5_000)]) : AbortSignal.timeout(5_000), cache: 'no-store'
+    });
+    if (!response.ok || !response.body) return false;
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let length = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        length += value.byteLength;
+        if (length > 2 * 1024 * 1024) { await reader.cancel(); return false; }
+        chunks.push(value);
+      }
+    } finally { reader.releaseLock(); }
+    const manifest = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return origin === getApiFallbackOrigin() && process.env.THINGTIME_DESKTOP_API_MODE === 'remote' &&
+      !signal?.aborted && manifest?.schemaVersion === 1 && manifest.origin === origin &&
+      capabilitySatisfies(manifest.features?.['api.ai-chatgpt-plan']?.version ?? '', '1.1.0');
+  } catch { return false; }
+};
+
+export const unavailableLocalApiResponse = () => Response.json({
+  ok: false,
+  code: 'LOCAL_API_NOT_CONFIGURED',
+  error: 'Configure this server database and authentication before using its API. Automatic remote fallback is disabled.'
+}, { status: 503, headers: { 'Cache-Control': 'private, no-store, max-age=0', Pragma: 'no-cache' } });
 
 const getSetCookieHeaders = (headers: Headers) => {
   const withGetter = headers as Headers & { getSetCookie?: () => string[] };
@@ -93,50 +143,63 @@ const cloneProxyRequestHeaders = (request: Request, fallbackUrl: URL) => {
   }
 
   headers.set('origin', fallbackUrl.origin);
-  headers.set('x-thingtime-api-fallback', 'thingtime.com');
+  headers.set('x-thingtime-api-fallback', fallbackUrl.origin);
 
   return headers;
 };
 
-export const proxyApiRequestToFallback = async (request: Request) => {
+export const EXPECTED_API_ORIGIN_HEADER = 'X-Thingtime-Expected-Api-Origin';
+
+const endpointChangedResponse = () => Response.json({
+  ok: false, code: 'API_ENDPOINT_CHANGED', error: 'The selected API changed. Retry on the current endpoint.'
+}, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
+
+export const proxyApiRequestToFallback = async (request: Request, options: { stripForwardedOrigin?: boolean; expectedOrigin?: string | null } = {}) => {
+  if (process.env.THINGTIME_AGENT_TEST_MODE === '1') return Response.json({ ok: false, error: 'Isolated tests cannot use an API fallback.' }, { status: 503 });
+  const expectedOrigin = options.expectedOrigin === undefined ? getApiFallbackOrigin() : options.expectedOrigin;
   const requestUrl = new URL(request.url);
-  const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, getApiFallbackOrigin());
+  const syncOrigin = request.headers.get(EXPECTED_API_ORIGIN_HEADER);
+  if (syncOrigin !== null && syncOrigin !== expectedOrigin) return Response.json({
+    ok: false, code: 'API_ORIGIN_CHANGED', error: 'The selected sync server changed.'
+  }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
+  // Pin authority before any async work. A completed negotiation for a previous
+  // endpoint never authorizes sending credentials or a body to its replacement.
+  if (expectedOrigin !== getApiFallbackOrigin()) return endpointChangedResponse();
+  // Direct callers cannot bypass the dispatcher's policy.
+  if (!shouldProxyApiToFallback(request)) return unavailableLocalApiResponse();
+  const fallbackUrl = new URL(requestUrl.pathname + requestUrl.search, expectedOrigin!);
   const headers = cloneProxyRequestHeaders(request, fallbackUrl);
+  if (options.stripForwardedOrigin) {
+    headers.delete('x-forwarded-host');
+    headers.delete('x-forwarded-proto');
+  }
   const init: RequestInit & { duplex?: 'half' } = {
     method: request.method,
     headers,
-    redirect: 'manual'
+    redirect: 'manual',
+    signal: request.signal
   };
 
   if (request.method !== 'GET' && request.method !== 'HEAD') {
-    const body = await request.arrayBuffer();
-    if (body.byteLength) {
-      init.body = body;
+    if (request.body) {
+      init.body = request.body;
       init.duplex = 'half';
     }
   }
 
   let upstreamResponse: Response;
   try {
+    request.signal.throwIfAborted();
+    if (expectedOrigin !== getApiFallbackOrigin() || !shouldProxyApiToFallback(request)) return endpointChangedResponse();
     upstreamResponse = await fetch(fallbackUrl, init);
-  } catch (error) {
-    // Never surface the caught exception's message (CodeQL
-    // js/stack-trace-exposure) — log it server-side and respond with the
-    // error class + network code only.
-    console.error('[api fallback] proxy fetch failed', error);
-    const cause = error instanceof Error ? (error as { cause?: unknown }).cause : undefined;
-    const causeCode = cause instanceof Error ? (cause as { code?: unknown }).code : undefined;
-    const detail =
-      error instanceof Error
-        ? typeof causeCode === 'string' || typeof causeCode === 'number'
-          ? `${error.name} (${causeCode})`
-          : error.name
-        : 'Unknown error';
+  } catch {
+    if (request.signal.aborted) throw new DOMException('Desktop API request cancelled.', 'AbortError');
+    // Fetch errors can contain credential-bearing URLs or provider messages.
+    // Keep this boundary static and never log or reflect the caught object.
     return new Response(
       JSON.stringify({
         ok: false,
-        error: 'Thingtime production API fallback failed',
-        detail
+        error: 'Selected desktop API is unavailable'
       }),
       {
         status: 502,
@@ -146,6 +209,11 @@ export const proxyApiRequestToFallback = async (request: Request) => {
         }
       }
     );
+  }
+
+  if (expectedOrigin !== getApiFallbackOrigin() || !shouldProxyApiToFallback(request)) {
+    await upstreamResponse.body?.cancel().catch(() => undefined);
+    return endpointChangedResponse();
   }
 
   const responseHeaders = new Headers(upstreamResponse.headers);
@@ -162,7 +230,10 @@ export const proxyApiRequestToFallback = async (request: Request) => {
     responseHeaders.append('Set-Cookie', rewriteSetCookieForLocalOrigin(cookie, requestUrl));
   }
 
-  const body = request.method === 'HEAD' ? null : await upstreamResponse.arrayBuffer();
+  // Return the live stream. Buffering here hid Lopu tool progress until the
+  // entire run completed; forwarding the body also propagates reader cancel.
+  const body = request.method === 'HEAD' ? null : upstreamResponse.body;
+  if (request.method === 'HEAD') await upstreamResponse.body?.cancel().catch(() => undefined);
   return new Response(body, {
     status: upstreamResponse.status,
     statusText: upstreamResponse.statusText,

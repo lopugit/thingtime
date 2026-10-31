@@ -2,6 +2,7 @@ import { Box, Flex, Text } from '@chakra-ui/react';
 
 import type { CurrentUser } from '~/hooks/useCurrentUser';
 import { RAINBOW } from '~/theme/rainbow';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
 // Canonical gradient now lives in ~/theme/rainbow (runtime-themed via CSS
 // vars); re-exported here for existing importers (welcome, profile, DevKit).
@@ -23,23 +24,25 @@ export const UserCard = ({ user, children }: { user: NonNullable<CurrentUser>; c
         🦄
       </Text>
       <Text fontSize="xl" fontWeight="700" wordBreak="break-word">
-        {user.displayName || user.username}
+        {getUserDisplayName(user)}
       </Text>
       <Text fontSize="sm" color="gray.500" wordBreak="break-word">
-        @{user.username}
+        {getUserIdentityDetail(user)}
       </Text>
-      <Text fontSize="sm" wordBreak="break-word">
-        {user.email}{' '}
-        {user.emailVerified ? (
-          <Text as="span" color="green.500">
-            ✅ verified
-          </Text>
-        ) : (
-          <Text as="span" color="red.300">
-            ✉️ unverified
-          </Text>
-        )}
-      </Text>
+      {!user.temporary && (
+        <Text fontSize="sm" wordBreak="break-word">
+          {user.email}{' '}
+          {user.emailVerified ? (
+            <Text as="span" color="green.500">
+              ✅ verified
+            </Text>
+          ) : (
+            <Text as="span" color="red.300">
+              ✉️ unverified
+            </Text>
+          )}
+        </Text>
+      )}
       {children}
     </Flex>
   </Box>
