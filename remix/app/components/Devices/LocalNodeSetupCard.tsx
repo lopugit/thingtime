@@ -1,20 +1,27 @@
 import React from 'react';
+import { localNodeIsHealthy } from './localNodePanel';
 
-import { Badge, Box, Flex, Spinner, Text } from '@chakra-ui/react';
+import { Badge, Box, Button, Flex, Spinner, Text } from '@chakra-ui/react';
 import { FolderPlus, Laptop, Settings, ShieldCheck } from 'lucide-react';
 
 import { DevicePolicyButton, type DeviceActionHandler, type DeviceControlResolver } from './DeviceStateGrid';
+import { PermissionRecoveryControls } from './PermissionRecoveryControls';
+import { permissionStatusLabel } from './localNodePermissions';
 import { localNodeBadgePresentation, PASTEL_PAIRED_ACCOUNT_BADGE_STYLE } from './localNodePresentation';
 import type { LocalThingtimeNodeState } from './useLocalThingtimeNode';
 
 export const LocalNodeSetupCard = ({
 	state,
 	controlFor,
-	onAction
+	onAction,
+	onRefresh,
+	onDismiss
 }: {
 	state: LocalThingtimeNodeState;
 	controlFor: DeviceControlResolver;
 	onAction: DeviceActionHandler;
+	onRefresh: () => unknown;
+	onDismiss?: () => void;
 }) => {
 	if (!state.available) return null;
 	const registered = state.status?.loginItem?.registered === true;
@@ -26,18 +33,18 @@ export const LocalNodeSetupCard = ({
 			kind: 'accessibility' as const,
 			label: 'Accessibility',
 			detail: 'Required to list, read, and send in supported desktop AI apps.',
-			status: state.permissions.find((permission) => permission.kind === 'accessibility')?.status || 'denied'
+			status: state.permissions.find((permission) => permission.kind === 'accessibility')?.status || 'unknown'
 		},
 		{
 			kind: 'screen-recording' as const,
 			label: 'Screen Recording',
 			detail: 'Optional preflight for the bounded screen-sharing foundation.',
 			status:
-				state.permissions.find((permission) => permission.kind === 'screenRecording' || permission.kind === 'screen-recording')?.status || 'denied'
+				state.permissions.find((permission) => permission.kind === 'screenRecording' || permission.kind === 'screen-recording')?.status || 'unknown'
 		}
 	];
 	const missingPermissions = permissions.filter((permission) => permission.status !== 'authorized');
-	const ready = registered && pairedToCurrentAccount && missingPermissions.length === 0;
+	const ready = localNodeIsHealthy(state);
 	const badge = localNodeBadgePresentation({
 		checking: state.checking,
 		paired,
@@ -67,7 +74,11 @@ export const LocalNodeSetupCard = ({
 							{ready
 								? 'This Mac is connected to your account'
 								: registered && pairedToCurrentAccount
-								? 'Finish privacy access for this Mac'
+								? missingPermissions.length === 0 && state.permissionsCheckedAt && !state.permissionCheckError
+									? 'This Mac needs connection attention'
+									: state.permissionCheckError || !state.permissionsCheckedAt
+									? 'Check privacy access for this Mac'
+									: 'Finish privacy access for this Mac'
 								: registered && paired
 								? 'Pair this Thingtime account to this Mac'
 								: 'Make this Mac a Thingtime node'}
@@ -89,7 +100,9 @@ export const LocalNodeSetupCard = ({
 						{ready
 							? 'The persistent node is paired to this account. Add local Codex folders here whenever you want to create chats in a new project.'
 							: registered && pairedToCurrentAccount
-							? 'macOS privacy grants stay local and must be enabled explicitly for the signed Thingtime Node helper.'
+							? missingPermissions.length === 0 && !state.permissionCheckError
+								? 'Check the node’s connection and service status in Settings → Things.'
+								: 'macOS privacy grants stay local and must be enabled explicitly for the signed Thingtime Node helper.'
 							: registered && paired
 							? 'This Mac already serves another Thingtime account and can safely add this account as a separate connection.'
 							: 'The signed local node keeps approved device state and desktop AI connectors available when the Thingtime window is closed.'}
@@ -145,14 +158,31 @@ export const LocalNodeSetupCard = ({
 					Folder paths remain in a private file on this Mac; your account receives only an opaque id and folder name.
 				</Flex>
 			) : null}
-			{registered && missingPermissions.length ? (
+			{registered ? (
 				<Box borderTop="1px solid var(--tt-border, #ececef)" marginTop={3} paddingTop={3}>
+					<Flex align="center" justify="space-between" gap={2} wrap="wrap" marginBottom={2}>
+						<Text color="var(--tt-muted, #71717a)" fontSize="11px" role="status">
+							{state.permissionCheckError
+								? 'Access check unavailable · showing last known results'
+								: state.permissionsCheckedAt
+								? `Checked at ${new Date(state.permissionsCheckedAt).toLocaleTimeString()}`
+								: 'Access has not been checked yet'}
+						</Text>
+						<Button size="xs" variant="outline" isDisabled={state.checking} onClick={() => void onRefresh()}>
+							{state.checking ? 'Checking access…' : 'Check access'}
+						</Button>
+					</Flex>
+					{state.permissionCheckError ? (
+						<Text role="alert" color="orange.600" fontSize="12px" marginBottom={2}>
+							{state.permissionCheckError}
+						</Text>
+					) : null}
 					{permissions.map((permission) => (
 						<Flex align="center" gap={3} key={permission.kind} paddingY={1.5} wrap="wrap">
 							<Settings aria-hidden size={14} />
 							<Box flex="1" minWidth="190px">
 								<Text fontSize="12px" fontWeight={700}>
-									{permission.label} · {permission.status === 'authorized' ? 'Allowed' : 'Needs access'}
+									{permission.label} · {permissionStatusLabel(permission.status, Boolean(state.permissionCheckError))}
 								</Text>
 								<Text color="var(--tt-muted, #71717a)" fontSize="10px" lineHeight="1.4">
 									{permission.detail}
@@ -165,15 +195,37 @@ export const LocalNodeSetupCard = ({
 									controlKey={`permission-${permission.kind}`}
 									deviceId="local-node"
 									input={{ permissionKind: permission.kind }}
-									label="Request access"
+									label="Open System Settings"
 									onAction={onAction}
 									size="xs"
 								/>
 							) : null}
 						</Flex>
 					))}
+					<PermissionRecoveryControls />
+					{missingPermissions.length ? (
+						<Text color="var(--tt-muted, #71717a)" fontSize="12px" lineHeight="1.5" marginTop={2} whiteSpace="normal">
+							Already enabled in System Settings? macOS may still be using a grant from an older signed Node. Turn Thingtime Node off and on once for
+							each affected permission, then restart the node in Desktop settings and choose Check access. Access is checked again automatically when
+							you return here.
+						</Text>
+					) : null}
 				</Box>
 			) : null}
+			{ready && onDismiss && (
+				<Button
+					mt={3}
+					size="sm"
+					variant="link"
+					color="var(--tt-accent, #805ad5)"
+					whiteSpace="normal"
+					height="auto"
+					textAlign="left"
+					onClick={onDismiss}
+				>
+					Don’t show again unless there’s a problem
+				</Button>
+			)}
 		</Box>
 	);
 };

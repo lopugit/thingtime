@@ -3,6 +3,7 @@ import Darwin
 import Foundation
 import Security
 import ThingtimeNodeCore
+import AppleFileSync
 
 private final class XPCService: NSObject, ThingtimeNodeXPCProtocol {
     private let controller: ThingtimeNodeController
@@ -44,7 +45,51 @@ private final class XPCService: NSObject, ThingtimeNodeXPCProtocol {
                     return
                 }
             }
-            let response = await controller.handle(request)
+            let response = access == .folderSync
+                ? await controller.handleLocalFolderSync(request)
+                : await controller.handle(request)
+            reply(Self.encoded(response))
+        }
+    }
+
+    func stream(_ data: Data, sink: ThingtimeNodeByteSink, withReply reply: @escaping (Data) -> Void) {
+        guard let request = try? NodeWireCodec.decodeRequest(data), request.method == "folder-sync.request",
+              case .object(let fields) = request.parameters, fields["action"] == .string("read-range") else {
+            reply(Self.encoded(.failure(id: "", code: "invalid_request", message: "Invalid folder stream.")))
+            return
+        }
+        Task {
+            let response = await controller.handleLocalFolderSync(request, stream: { bytes in
+                let acknowledgement = StreamAcknowledgement()
+                sink.receive(bytes) { acknowledgement.finish($0) }
+                try acknowledgement.wait()
+            })
+            reply(Self.encoded(response))
+        }
+    }
+
+    func stage(_ data: Data, source: ThingtimeNodeByteSource, withReply reply: @escaping (Data) -> Void) {
+        guard let request = try? NodeWireCodec.decodeRequest(data), request.method == "folder-sync.request",
+              case .object(let fields) = request.parameters, fields["action"] == .string("stage-range") else {
+            reply(Self.encoded(.failure(id: "", code: "invalid_request", message: "Invalid staging stream.")))
+            return
+        }
+        let reader = StagingStreamReader(source)
+        Task {
+            let response = await controller.handleLocalFolderSync(request, receive: { try reader.read($0) })
+            reply(Self.encoded(response))
+        }
+    }
+
+    func bulk(_ data: Data, callback: ThingtimeNodeBatchCallback, withReply reply: @escaping (Data) -> Void) {
+        guard let request = try? NodeWireCodec.decodeRequest(data), request.method == "folder-sync.request",
+              case .object(let fields) = request.parameters, fields["action"] == .string("upload-batch") else {
+            reply(Self.encoded(.failure(id: "", code: "invalid_request", message: "Invalid folder batch."))); return
+        }
+        Task {
+            let response = await controller.handleLocalFolderSync(request, batchCallback: { frame, seconds in
+                try await NodeBatchCallback.exchange(callback, frame: frame, timeout: seconds)
+            })
             reply(Self.encoded(response))
         }
     }
@@ -52,6 +97,56 @@ private final class XPCService: NSObject, ThingtimeNodeXPCProtocol {
     private static func encoded(_ response: NodeResponse) -> Data {
         (try? NodeWireCodec.encodeResponse(response))
             ?? Data(#"{"error":{"code":"encoding_error","message":"The node response could not be encoded."},"id":"","ok":false}"#.utf8)
+    }
+}
+
+/// A stalled/disconnected consumer must not hold a coordinated file indefinitely.
+private final class StreamAcknowledgement: @unchecked Sendable {
+    private let lock = NSLock(), semaphore = DispatchSemaphore(value: 0)
+    private var accepted = false
+    private var completed = false
+    func finish(_ value: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        guard !completed else { return }; completed = true; accepted = value; semaphore.signal()
+    }
+    func wait() throws {
+        let deadline = DispatchTime.now() + 15
+        while semaphore.wait(timeout: .now() + 0.1) != .success {
+            try Task.checkCancellation()
+            guard DispatchTime.now() < deadline else { throw CancellationError() }
+        }
+        lock.lock(); let value = accepted; lock.unlock()
+        guard value else { throw CancellationError() }; try Task.checkCancellation()
+    }
+}
+
+private final class StagingStreamReader: @unchecked Sendable {
+    private let source: ThingtimeNodeByteSource
+    private var offset: Int64 = 0 // Called serially by the single staging worker.
+    init(_ source: ThingtimeNodeByteSource) { self.source = source }
+    func read(_ length: Int) throws -> Data {
+        let value = StreamDataReply()
+        source.read(offset, length: length) { value.finish($0) }
+        let data = try value.wait()
+        guard data.count == length else { throw CancellationError() }
+        offset += Int64(data.count); return data
+    }
+}
+private final class StreamDataReply: @unchecked Sendable {
+    private let lock = NSLock(), semaphore = DispatchSemaphore(value: 0)
+    private var data: Data?
+    func finish(_ value: Data) {
+        lock.lock(); defer { lock.unlock() }
+        guard data == nil else { return }; data = value; semaphore.signal()
+    }
+    func wait() throws -> Data {
+        let deadline = DispatchTime.now() + 15
+        while semaphore.wait(timeout: .now() + 0.1) != .success {
+            try Task.checkCancellation()
+            guard DispatchTime.now() < deadline else { throw CancellationError() }
+        }
+        try Task.checkCancellation()
+        lock.lock(); defer { lock.unlock() }; return data ?? Data()
     }
 }
 
@@ -110,9 +205,11 @@ private final class LocalPairingPresenceGate {
 private struct PeerSignatureValidator {
     private let teamIdentifier: String?
     private let allowedIdentifiers: [String]
+    private let allowsUnsignedDistribution: Bool
 
     init() {
         teamIdentifier = Self.currentTeamIdentifier()
+        allowsUnsignedDistribution = ProcessInfo.processInfo.environment["THINGTIME_NODE_UNSIGNED_DISTRIBUTION"] == "1"
         let configured = ProcessInfo.processInfo.environment["THINGTIME_NODE_ALLOWED_CLIENT_IDENTIFIERS"]
             .map { $0.split(separator: ",").map { String($0) } }
         allowedIdentifiers = (configured ?? [
@@ -129,20 +226,26 @@ private struct PeerSignatureValidator {
 
     func accepts(_ connection: NSXPCConnection) -> Bool {
         guard connection.effectiveUserIdentifier == getuid() else { return false }
-        guard let teamIdentifier else {
-            // A Mach service that is not stably signed must not accept control
-            // requests from arbitrary same-user processes.
-            return false
-        }
-        guard teamIdentifier.range(of: #"^[A-Z0-9]{10}$"#, options: .regularExpression) != nil else {
-            return false
-        }
         guard !allowedIdentifiers.isEmpty else { return false }
 
         var guest: SecCode?
         let attributes = [kSecGuestAttributePid as String: NSNumber(value: connection.processIdentifier)] as CFDictionary
         guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &guest) == errSecSuccess,
               let guest else { return false }
+
+        if allowsUnsignedDistribution {
+            var requirement: SecRequirement?
+            guard SecRequirementCreateWithString("identifier \"com.thingtime.desktop.node.bridge\"" as CFString, [], &requirement) == errSecSuccess,
+                  let requirement else { return false }
+            return SecCodeCheckValidity(guest, SecCSFlags(rawValue: kSecCSStrictValidate), requirement) == errSecSuccess
+        }
+
+        guard let teamIdentifier,
+              teamIdentifier.range(of: #"^[A-Z0-9]{10}$"#, options: .regularExpression) != nil else {
+            // A Mach service that is not stably signed must not accept control
+            // requests from arbitrary same-user processes.
+            return false
+        }
 
         var requirement: SecRequirement?
         let identifiers = allowedIdentifiers.map { "identifier \"\($0)\"" }.joined(separator: " or ")
@@ -178,7 +281,7 @@ private final class XPCListenerDelegate: NSObject, NSXPCListenerDelegate {
             ThingtimeNodeLog.lifecycle.error("Rejected an XPC connection that did not meet the peer requirement")
             return false
         }
-        connection.exportedInterface = NSXPCInterface(with: ThingtimeNodeXPCProtocol.self)
+        connection.exportedInterface = ThingtimeNodeXPC.interface()
         connection.exportedObject = service
         connection.resume()
         return true
@@ -408,8 +511,23 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 desktopChat: desktopChat,
                 controllerRelay: controllerRelay
             )
+            let folderDialogs = MacFolderSyncDialogs()
+            let folderConditions = MacSyncConditions()
+            let folderSync = try MacFolderSync(origin: endpointScope.canonicalBaseURL,
+                store: MobileFolderStore(),
+                staging: MobileSyncStaging(directory: endpointScope.commandJournalFileURL().deletingLastPathComponent()
+                    .appendingPathComponent("FolderSync-v1-" + endpointScope.identifier, isDirectory: true)),
+                trash: MobileSyncTrash(directory: endpointScope.commandJournalFileURL().deletingLastPathComponent()
+                    .appendingPathComponent("FolderSyncTrash-v1-" + endpointScope.identifier, isDirectory: true)),
+                verify: { owner, device in try await apiClient.verifyFileSyncIdentity(ownerID: owner, deviceID: device) },
+                choose: { try await folderDialogs.choose() }, approve: { try await folderDialogs.approve($0) },
+                chooseSource: { try await folderDialogs.chooseSource() },
+                approveTrash: { try await folderDialogs.approve($0, allowTrash: true) },
+                approveRestore: { try await folderDialogs.restore($0, request: $1) },
+                cancelDialog: { folderDialogs.cancel() }, conditions: { folderConditions.snapshot() })
             let controller = ThingtimeNodeController(
                 journal: journal,
+                folderSync: folderSync,
                 pairing: pairing,
                 connector: connector,
                 telemetry: telemetry,
@@ -417,6 +535,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 controlPlaneClient: apiClient,
                 desktopChat: desktopChat,
                 pairingScopeChanged: { _ in
+                    await folderSync.suspend()
                     try await controlPlaneRuntime.reconcile()
                     if try await pairing.status().paired == false {
                         await desktopChat.clearActiveSessions()
@@ -511,6 +630,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: ThingtimeStatusMenuCopy.refreshStatus, action: #selector(refreshStatus(_:)), keyEquivalent: "r"))
         menu.addItem(NSMenuItem(title: ThingtimeStatusMenuCopy.openThingtime, action: #selector(openThingtime(_:)), keyEquivalent: "o"))
+        menu.addItem(NSMenuItem(title: ThingtimeStatusMenuCopy.aboutThingtime, action: #selector(showAbout(_:)), keyEquivalent: ""))
         menu.addItem(.separator())
         if launchdManaged {
             menu.addItem(NSMenuItem(title: ThingtimeStatusMenuCopy.restartThingtime, action: #selector(restart(_:)), keyEquivalent: ""))
@@ -518,6 +638,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: ThingtimeStatusMenuCopy.quitThingtime, action: #selector(quit(_:)), keyEquivalent: "q"))
         menu.items.forEach { $0.target = self }
         statusItem.menu = menu
+    }
+
+    @objc private func showAbout(_ sender: Any?) {
+        let info = ThingtimeNodeAboutInfo(bundleInfo: Bundle.main.infoDictionary ?? [:])
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: "Thingtime Node",
+            .applicationVersion: info.version,
+            .version: info.build,
+            .credits: NSAttributedString(string: info.details)
+        ])
     }
 
     @objc private func refreshStatus(_ sender: Any?) {

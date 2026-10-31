@@ -20,7 +20,7 @@ const {
 	verifySignedArtifacts
 } = require('../lib/thingtime-node-bridge.cjs');
 
-async function makeSignedNodeFixture() {
+async function makeSignedNodeFixture(signingAuthority = 'Apple Development: Test (ABCDE12345)', { outer = false } = {}) {
 	const root = await mkdtemp(path.join(tmpdir(), 'thingtime-node-bridge-'));
 	const helperApp = path.join(root, 'Thingtime Node.app');
 	const helperExecutable = path.join(helperApp, 'Contents', 'MacOS', 'ThingtimeNode');
@@ -32,13 +32,14 @@ async function makeSignedNodeFixture() {
 		helperApp,
 		helperExecutable,
 		launchAgentPath: path.join(root, 'Library', 'LaunchAgents', 'com.thingtime.desktop.node.plist'),
-		outerApp: null,
+		outerApp: outer ? path.join(root, 'Thingtime.app') : null,
 		runtimePath
 	};
 	await mkdir(path.dirname(helperExecutable), { recursive: true });
 	await writeFile(helperExecutable, 'signed helper');
 	await writeFile(bridgeExecutable, 'signed bridge');
 	await writeFile(runtimePath, 'export {};');
+	if (paths.outerApp) await mkdir(paths.outerApp);
 
 	const state = {
 		bootstrapCalls: 0,
@@ -53,15 +54,36 @@ async function makeSignedNodeFixture() {
 		replaceOnBootout: false,
 		serviceRegistered: false
 	};
+	state.signatureCalls = []; state.signatureOverrides = new Map(); state.rejectOuter = false;
 	const runner = async (command, args, options = {}) => {
+		if (command === '/usr/bin/plutil') {
+			if (process.platform === 'darwin') return require('../lib/thingtime-node-bridge.cjs').runProcess(command, args, options);
+			// The service only runs on macOS; model plutil on other CI hosts.
+			const xml = Buffer.from(options.input).toString('utf8');
+			const string = (key) => xml.match(new RegExp(`<key>${key}</key>\\s*<string>(.*?)</string>`))?.[1];
+			const helper = xml.match(/<key>ProgramArguments<\/key>\s*<array>\s*<string>(.*?)<\/string>/u)?.[1];
+			return { status: 0, stdout: JSON.stringify({
+				Label: string('Label'), ThingtimeDesktopOwner: string('ThingtimeDesktopOwner'),
+				ProgramArguments: helper ? [helper] : [],
+				EnvironmentVariables: {
+					THINGTIME_NODE_CONNECTOR_EXECUTABLE: string('THINGTIME_NODE_CONNECTOR_EXECUTABLE'),
+					THINGTIME_NODE_CONNECTOR_ARGUMENTS_JSON: string('THINGTIME_NODE_CONNECTOR_ARGUMENTS_JSON')?.replaceAll('&quot;', '"')
+				},
+				MachServices: { 'com.thingtime.desktop.node.xpc': xml.includes('<key>com.thingtime.desktop.node.xpc</key>') }
+			}), stderr: '' };
+		}
 		if (command === '/usr/bin/codesign') {
 			const target = args.at(-1);
+			state.signatureCalls.push([...args]);
+			const override = state.signatureOverrides.get(target) || {};
 			if (args[0] === '--verify') {
-				const valid = target !== bridgeExecutable || (await readFile(bridgeExecutable, 'utf8')) === 'signed bridge';
+				const valid = target === bridgeExecutable ? (await readFile(bridgeExecutable, 'utf8')) === 'signed bridge' :
+					target === helperApp ? (await readFile(helperExecutable, 'utf8')) === 'signed helper' : !state.rejectOuter;
 				return { status: valid ? 0 : 1, signal: null, stdout: '', stderr: valid ? '' : 'invalid signature' };
 			}
 			if (args.includes('--entitlements')) {
-				return { status: 0, signal: null, stdout: '<?xml version="1.0"?><plist><dict></dict></plist>', stderr: '' };
+				const keys = override.entitlements || (target === paths.outerApp ? ['com.apple.security.cs.allow-jit', 'com.apple.security.cs.allow-unsigned-executable-memory'] : []);
+				return { status: 0, signal: null, stdout: `<?xml version="1.0"?><plist><dict>${keys.map(key => `<key>${key}</key><true/>`).join('')}</dict></plist>`, stderr: '' };
 			}
 			const certificateExtractionArgument = args.find((argument) => argument.startsWith('--extract-certificates='));
 			if (certificateExtractionArgument) {
@@ -73,12 +95,12 @@ async function makeSignedNodeFixture() {
 			if (args.includes('--extract-certificates')) {
 				return { status: 1, signal: null, stdout: '', stderr: 'separate certificate prefix argument is unsupported' };
 			}
-			const identifier = target === bridgeExecutable ? 'com.thingtime.desktop.node.bridge' : 'com.thingtime.desktop.node';
+			const identifier = override.identifier || (target === paths.outerApp ? 'com.thingtime.desktop' : target === bridgeExecutable ? 'com.thingtime.desktop.node.bridge' : 'com.thingtime.desktop.node');
 			return {
 				status: 0,
 				signal: null,
 				stdout: '',
-				stderr: `Identifier=${identifier}\nTeamIdentifier=6DQQ9V7C84\nAuthority=Apple Development: Test (ABCDE12345)\nRuntime Version=15.0.0\n`
+				stderr: `Identifier=${identifier}\nTeamIdentifier=${override.team || '6DQQ9V7C84'}\nAuthority=${override.authority || signingAuthority}\nRuntime Version=15.0.0\n${signingAuthority.startsWith('Developer ID Application:') ? 'Timestamp=Oct 13, 2026 at 6:00:00 PM' : ''}\n`
 			};
 		}
 		if (command === bridgeExecutable) {
@@ -238,6 +260,7 @@ test('connector requests are allowlisted, bounded, and command-bound', () => {
 
 test('device mutations require a command id and reject unsupported action kinds', () => {
 	assert.deepEqual(validateDeviceRequest({ action: 'snapshot' }), { action: 'snapshot' });
+	assert.deepEqual(validateDeviceRequest({ action: 'battery' }), { action: 'battery' });
 	assert.deepEqual(
 		validateDeviceRequest({
 			action: 'execute',
@@ -282,6 +305,15 @@ test('device mutations require a command id and reject unsupported action kinds'
 		() => validateDeviceRequest({ action: 'execute', request: { kind: 'application.launch', parameters: { bundleIdentifier: 'com.example.app' } } }),
 		/commandId/u
 	);
+});
+
+test('desktop battery read uses the narrow native bridge method', async () => {
+	const integration = new ThingtimeNodeIntegration({ app: { isPackaged: true }, electronDir: '' });
+	integration.request = async (method) => {
+		assert.equal(method, 'telemetry.battery');
+		return { battery: { cycleCount: 282 } };
+	};
+	assert.deepEqual(await integration.device({ action: 'battery' }), { battery: { cycleCount: 282 } });
 });
 
 test('connector child environment uses an explicit non-secret allowlist', () => {
@@ -345,6 +377,51 @@ test('revalidates the native bridge signature before every execution', async () 
 		assert.equal(fixture.state.bridgeRuns, 1);
 	} finally {
 		await rm(fixture.root, { recursive: true, force: true });
+	}
+});
+
+test('request trust checks keep child verification fresh and avoid rescanning already-running outer resources', async () => {
+	const f = await makeSignedNodeFixture(undefined, { outer: true });
+	try {
+		await f.integration.request('node.status'); await f.integration.request('node.status');
+		const deep = target => f.state.signatureCalls.filter(args => args[0] === '--verify' && args.at(-1) === target).length;
+		assert.equal(deep(f.paths.outerApp), 1); assert.equal(deep(f.paths.helperApp), 2); assert.equal(deep(f.paths.bridgeExecutable), 2);
+		assert.equal(f.state.signatureCalls.filter(args => args[0] === '--display' && args.at(-1) === f.paths.outerApp).length, 4);
+		await f.integration.verify(); assert.equal(deep(f.paths.outerApp), 2);
+	} finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test('failed first verification cannot initialize request trust, and a different installation verifies fully', async () => {
+	const f = await makeSignedNodeFixture(undefined, { outer: true });
+	try {
+		f.state.rejectOuter = true;
+		await assert.rejects(f.integration.request('node.status'), error => error.code === 'invalid_signature');
+		assert.equal(f.state.bridgeRuns, 0); f.state.rejectOuter = false;
+		await f.integration.request('node.status');
+		assert.equal(f.state.signatureCalls.filter(args => args[0] === '--verify' && args.at(-1) === f.paths.outerApp).length, 2);
+		f.state.rejectOuter = true;
+		await assert.rejects(f.integration.verify(), error => error.code === 'invalid_signature');
+		await assert.rejects(f.integration.request('node.status'), error => error.code === 'invalid_signature');
+		assert.equal(f.state.bridgeRuns, 1); f.state.rejectOuter = false;
+		f.paths.outerApp = path.join(f.root, 'Other.app'); await mkdir(f.paths.outerApp);
+		await f.integration.request('node.status');
+		assert.equal(f.state.signatureCalls.filter(args => args[0] === '--verify' && args.at(-1) === f.paths.outerApp).length, 1);
+	} finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test('every later launch rejects modified children and changed outer signed metadata', async () => {
+	for (const drift of ['bridge', 'helper', 'team', 'class', 'entitlements', 'identifier']) {
+		const f = await makeSignedNodeFixture(undefined, { outer: true });
+		try {
+			await f.integration.request('node.status');
+			if (drift === 'bridge') await writeFile(f.bridgeExecutable, 'tampered');
+			else if (drift === 'helper') await writeFile(f.paths.helperExecutable, 'tampered');
+			else if (drift === 'team' || drift === 'class') for (const target of [f.paths.helperApp, f.paths.bridgeExecutable, f.paths.outerApp])
+				f.state.signatureOverrides.set(target, drift === 'team' ? { team: 'ABCDE12345' } : { authority: 'Developer ID Application: Other (6DQQ9V7C84)' });
+			else f.state.signatureOverrides.set(f.paths.outerApp, drift === 'identifier' ? { identifier: 'com.other.app' } : { entitlements: [] });
+			await assert.rejects(f.integration.request('node.status'), error => ['invalid_signature', 'invalid_entitlements'].includes(error.code), drift);
+			assert.equal(f.state.bridgeRuns, 1);
+		} finally { await rm(f.root, { recursive: true, force: true }); }
 	}
 });
 
@@ -425,9 +502,7 @@ test('app launch restarts an explicitly enabled managed node after its menu-bar 
 	};
 	try {
 		await fixture.integration.reconcileRegisteredService(options, { startIfStopped: true });
-		assert.equal(fixture.state.bootstrapCalls, 0, 'a never-enabled node must not be installed silently');
-		await fixture.integration.registerService(options);
-		assert.equal(fixture.state.bootstrapCalls, 1);
+		assert.equal(fixture.state.bootstrapCalls, 1, 'default-on launch installs the bundled node');
 
 		// Native Quit performs launchctl bootout but deliberately preserves the
 		// Electron-managed plist as proof that this node was explicitly enabled.
@@ -475,6 +550,18 @@ test('packaging verification extracts leaf certificates with the macOS equals-fo
 	}
 });
 
+test('local installation verification accepts the existing Developer ID identity with a secure timestamp', async () => {
+	const fixture = await makeSignedNodeFixture('Developer ID Application: Test (6DQQ9V7C84)');
+	try {
+		assert.deepEqual(await verifySignedArtifacts(fixture.paths, fixture.runner, { mode: 'local' }), {
+			identityClass: 'production',
+			teamIdentifier: '6DQQ9V7C84'
+		});
+	} finally {
+		await rm(fixture.root, { recursive: true, force: true });
+	}
+});
+
 test('registration refuses to overwrite a foreign LaunchAgent before bootout', async () => {
 	const fixture = await makeSignedNodeFixture();
 	try {
@@ -499,7 +586,7 @@ test('failed registration restores the prior managed plist and running service',
 			runtimePath: fixture.paths.runtimePath
 		});
 		await mkdir(path.dirname(fixture.paths.launchAgentPath), { recursive: true });
-		await writeFile(fixture.paths.launchAgentPath, previousPlist);
+		await writeFile(fixture.paths.launchAgentPath, previousPlist, { mode: 0o600 });
 		fixture.state.serviceRegistered = true;
 		fixture.state.failBootstrapCount = 1;
 
@@ -512,4 +599,154 @@ test('failed registration restores the prior managed plist and running service',
 	} finally {
 		await rm(fixture.root, { recursive: true, force: true });
 	}
+});
+
+for (const persistentOwner of [false, true]) {
+	test(`launch adopts a comment-free bundled node (persistent owner: ${persistentOwner})`, async () => {
+		const fixture = await makeSignedNodeFixture();
+		try {
+			await fixture.integration.registerService();
+			let plist = (await readFile(fixture.paths.launchAgentPath, 'utf8')).replace(/<!--.*?-->/gsu, '');
+			if (!persistentOwner) plist = plist.replace(/\s*<key>ThingtimeDesktopOwner<\/key>\s*<string>.*?<\/string>/su, '');
+			await writeFile(fixture.paths.launchAgentPath, plist);
+			fixture.state.serviceRegistered = false;
+			await fixture.integration.reconcileRegisteredService({}, { startIfStopped: true });
+			assert.equal(fixture.state.bootstrapCalls, 2);
+			assert.match(fixture.state.bootstrapPlists[1], /<key>ThingtimeDesktopOwner<\/key>/u);
+		} finally { await rm(fixture.root, { recursive: true, force: true }); }
+	});
+}
+
+test('launch restarts once after a Desktop version change at the same installed path', async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await fixture.integration.registerService();
+		fixture.integration.app.getVersion = () => '0.1.0+build.11';
+		await fixture.integration.reconcileRegisteredService({}, { startIfStopped: true });
+		await fixture.integration.reconcileRegisteredService({}, { startIfStopped: true });
+		assert.equal(fixture.state.bootstrapCalls, 2);
+		assert.match(fixture.state.bootstrapPlists[1], /0.1.0\+build.11/u);
+	} finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('auto-start off leaves a missing node uninstalled', async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await fixture.integration.reconcileRegisteredService({}, { startIfStopped: false });
+		assert.equal(fixture.state.bootstrapCalls, 0);
+	} finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('comment-free agent pointing to a different helper is left untouched', async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await fixture.integration.registerService();
+		const plist = (await readFile(fixture.paths.launchAgentPath, 'utf8'))
+			.replace(/<!--.*?-->/gsu, '')
+			.replace(/\s*<key>ThingtimeDesktopOwner<\/key>\s*<string>.*?<\/string>/su, '')
+			.replace(fixture.paths.helperExecutable, '/other/ThingtimeNode');
+		await writeFile(fixture.paths.launchAgentPath, plist);
+		const calls = fixture.state.bootoutCalls;
+		await assert.rejects(fixture.integration.reconcileRegisteredService({}, { startIfStopped: true }), { code: 'login_item_conflict' });
+		assert.equal(fixture.state.bootoutCalls, calls);
+		assert.equal(await readFile(fixture.paths.launchAgentPath, 'utf8'), plist);
+	} finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('registered but unresponsive node is recovered once on launch', async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await fixture.integration.registerService();
+		const status = fixture.integration.status.bind(fixture.integration);
+		let calls = 0;
+		fixture.integration.status = async () => ++calls === 1 ? { serviceStatus: 'starting' } : status();
+		await fixture.integration.reconcileRegisteredService({}, { startIfStopped: true });
+		assert.equal(fixture.state.bootstrapCalls, 2);
+	} finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('binary plist rewrite retains Desktop ownership', { skip: process.platform !== 'darwin' }, async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await fixture.integration.registerService();
+		const result = await require('../lib/thingtime-node-bridge.cjs').runProcess('/usr/bin/plutil', ['-convert', 'binary1', fixture.paths.launchAgentPath]);
+		assert.equal(result.status, 0);
+		fixture.state.serviceRegistered = false;
+		await fixture.integration.reconcileRegisteredService({}, { startIfStopped: true });
+		assert.equal(fixture.state.bootstrapCalls, 2);
+	} finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('Desktop stop preserves the plist and a later start resumes exactly one node', async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await fixture.integration.controlService('start');
+		const plist = await readFile(fixture.paths.launchAgentPath, 'utf8');
+		const stopped = await fixture.integration.controlService('stop');
+		assert.equal(stopped.serviceStatus, 'stopped');
+		assert.equal(await readFile(fixture.paths.launchAgentPath, 'utf8'), plist);
+		await fixture.integration.controlService('start');
+		await fixture.integration.controlService('start');
+		assert.equal(fixture.state.bootstrapCalls, 2);
+		await fixture.integration.controlService('restart');
+		assert.equal(fixture.state.bootstrapCalls, 3);
+	} finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('concurrent node commands are serialized and invalid controls cannot mutate launchd', async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await assert.rejects(fixture.integration.controlService('delete'), { code: 'invalid_request' });
+		assert.equal(fixture.state.bootoutCalls, 0);
+		await Promise.all([fixture.integration.controlService('start'), fixture.integration.controlService('stop')]);
+		assert.equal(fixture.state.serviceRegistered, false);
+		assert.equal(fixture.state.bootstrapCalls, 1);
+	} finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('batch child failure cancels callbacks and suppresses late acknowledgements', async () => {
+    const fixture = await makeSignedNodeFixture();
+    try {
+        fixture.integration.verifyForRequest = async () => {};
+        let callbackSignal, resolveCallback, writes = 0;
+        fixture.integration.runner = async (_command, _args, options) => {
+            options.onInput(() => { writes++; });
+            options.onStdout(Buffer.from(JSON.stringify({ type: 'batch', callbackId: 1,
+                frame: { kind: 'prepare-ready', checksums: [] } }) + '\n'));
+            await new Promise(setImmediate);
+            return { status: 1, stdout: '', stderr: '' };
+        };
+        await assert.rejects(fixture.integration.request('folder-sync.request', { action: 'upload-batch' }, undefined, {
+            onBatchFrame: (_frame, signal) => { callbackSignal = signal; return new Promise(resolve => { resolveCallback = resolve; }); }
+        }), error => error.code === 'node_unavailable');
+        assert.equal(callbackSignal.aborted, true);
+        resolveCallback({ results: [] }); await new Promise(setImmediate); assert.equal(writes, 0);
+    } finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('Activity disable persists launchd disable before bootout and preserves registration data', async () => {
+ const fixture = await makeSignedNodeFixture();
+ try {
+  await fixture.integration.controlService('start');
+  const plist = await readFile(fixture.paths.launchAgentPath, 'utf8');
+  fixture.state.launchctlCalls.length = 0;
+  await fixture.integration.controlService('disable');
+  const disableIndex = fixture.state.launchctlCalls.findIndex(([operation]) => operation === 'disable');
+  const bootoutIndex = fixture.state.launchctlCalls.findIndex(([operation]) => operation === 'bootout');
+  assert.ok(disableIndex >= 0 && disableIndex < bootoutIndex);
+  assert.equal(fixture.state.launchctlCalls[disableIndex][1], `gui/${process.getuid()}/com.thingtime.desktop.node`);
+  assert.equal(await readFile(fixture.paths.launchAgentPath, 'utf8'), plist);
+  await fixture.integration.controlService('start');
+  assert.ok(fixture.state.launchctlCalls.some(([operation]) => operation === 'enable'));
+ } finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('Activity disable cannot change a foreign login item', async () => {
+ const fixture = await makeSignedNodeFixture();
+ try {
+  await mkdir(path.dirname(fixture.paths.launchAgentPath), { recursive: true });
+  await writeFile(fixture.paths.launchAgentPath, '<plist><dict><key>Label</key><string>com.thingtime.desktop.node</string></dict></plist>');
+  await assert.rejects(fixture.integration.controlService('disable'), { code: 'login_item_conflict' });
+  assert.ok(!fixture.state.launchctlCalls.some(([operation]) => operation === 'disable' || operation === 'bootout'));
+ } finally { await rm(fixture.root, { recursive: true, force: true }); }
 });

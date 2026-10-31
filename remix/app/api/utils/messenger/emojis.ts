@@ -1,3 +1,4 @@
+import { filterSubspaceMessagingChats, linkedSubspaceId, subspaceMessagingAccess } from './subspaceAccess';
 // Custom emojis: one thing per emoji. New images are protected S3 attachment
 // Things; legacy BinData/data-URI rows remain readable so migration is
 // backwards-compatible.
@@ -18,6 +19,8 @@ import type { Fail} from './shared';
 import { communityRoleOf, emojiScopeKey, fail, findThingByKind, newThingDoc, ROLE_RANK } from './shared';
 import { customEmojiIdForAttachment, matchesCommittedEmojiRequest } from './messengerMediaCore';
 import { deleteMessengerThing, insertMessengerThing } from './storage';
+import { assertFreshEmojiImport, matchesEmojiImportAttempt, validateEmojiImportAttempt, type EmojiImportAttempt } from '../attachments/emojiImportCore';
+import type { AttachmentDoc } from '../attachments/attachmentStore';
 
 export type PublicCustomEmoji = {
   id: string;
@@ -63,8 +66,16 @@ export type UploadEmojiResult = Fail | { ok: true; emoji: PublicCustomEmoji };
 
 export const uploadEmoji = async (
   viewerId: string,
-	input: { name?: unknown; attachmentId?: unknown; communityId?: unknown }
+	input: { name?: unknown; attachmentId?: unknown; communityId?: unknown },
+  // Internal transfer path only. The public emoji route supplies two args;
+  // archive fields may never choose this attempt identity or community scope.
+  importAttempt?: EmojiImportAttempt
 ): Promise<UploadEmojiResult> => {
+	if (importAttempt) {
+		try { validateEmojiImportAttempt(importAttempt); }
+		catch { return fail(400, 'Invalid emoji import attempt'); }
+		if (input.communityId != null) return fail(400, 'Imported emojis belong to the personal library');
+	}
 	if (isCustomMongoEndpointActive()) {
 		return fail(400, 'Custom emoji attachments are unavailable with a custom MongoDB endpoint');
 	}
@@ -106,9 +117,24 @@ export const uploadEmoji = async (
 		crystal: { name, emojiKey: emojiScopeKey(scope, name), animated }
   });
 	(emoji as any).emojiAttachmentId = attachmentId;
+	if (importAttempt) (emoji as any).emojiImportAttemptId = importAttempt.id;
 	const bindAttachment = createReadyAttachmentEmojiInsertHook([attachmentId]);
   try {
 		await withHomeMongoTransaction(async (session) => {
+      if (communityId) {
+        const community = await things.findOne({ thingtime: 'community', shareId: communityId } as any, { session });
+        if (!community) throw new Error('emoji_membership_changed');
+        if (linkedSubspaceId(community)) {
+          const gate = await subspaceMessagingAccess(things, community, viewerId, session);
+          if (!gate?.allowed) throw new Error('emoji_membership_changed');
+          await things.updateOne({ _id: gate.subspace._id } as any, { $set: { updatedAt: new Date() } }, { session });
+          await things.updateOne({ _id: gate.member._id } as any, { $set: { updatedAt: new Date() } }, { session });
+        }
+      }
+			if (importAttempt) {
+				const upload = await things.findOne({ shareId: attachmentId, ownerId: viewerId, thingtime: ['attachment'] } as any, { session });
+				assertFreshEmojiImport(upload as unknown as AttachmentDoc | null, viewerId, importAttempt);
+			}
 			const count = await things.countDocuments(scopeFilter, { session });
 			if (count >= MAX_EMOJIS_PER_SCOPE) {
 				throw Object.assign(new Error('emoji_scope_full'), { status: 400 });
@@ -117,10 +143,12 @@ export const uploadEmoji = async (
 			await bindAttachment(emoji as any, session);
 		});
   } catch (err: any) {
+    if (err?.message === 'emoji_membership_changed') return fail(403, 'Subspace membership changed — reload and try again');
 		if (err?.message === 'emoji_scope_full') return fail(400, `Emoji cap reached (${MAX_EMOJIS_PER_SCOPE}) — retire some first`);
 		if (err?.code === 11000 || err?.errorLabels?.includes?.('UnknownTransactionCommitResult')) {
 			const existing = await things.findOne({ shareId: emojiId, thingtime: 'custom-emoji' } as any);
-			if (matchesCommittedEmojiRequest(existing as any, { ownerId: viewerId, communityId, name, attachmentId })) {
+			if (matchesCommittedEmojiRequest(existing as any, { ownerId: viewerId, communityId, name, attachmentId }) &&
+				(!importAttempt || matchesEmojiImportAttempt(existing, importAttempt))) {
 				return { ok: true, emoji: toPublicEmoji(existing) };
 			}
     if (err?.code === 11000) return fail(409, `:${name}: is already taken here`);
@@ -148,7 +176,9 @@ export const listEmojis = async (viewerId: string, input: { communityId?: unknow
       .slice(0, 100);
     const things = await getThingsCollection();
     const docs = await things.find({ thingtime: 'custom-emoji', shareId: { $in: ids } } as any).toArray();
-    return { ok: true, emojis: docs.map(toPublicEmoji) };
+    const scoped = docs.filter(doc => !!doc.targetId).map(doc => ({ shareId: doc.shareId, crystal: { communityId: doc.targetId } }));
+    const allowed = new Set((await filterSubspaceMessagingChats(things, scoped, viewerId)).map(doc => String(doc.shareId)));
+    return { ok: true, emojis: docs.filter(doc => !doc.targetId || allowed.has(String(doc.shareId))).map(toPublicEmoji) };
   }
   let communityId: string | null = null;
   if (typeof input.chatId === 'string' && input.chatId.trim()) {

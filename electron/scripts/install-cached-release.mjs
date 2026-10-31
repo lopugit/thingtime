@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { installLocalApp } from './install-local-app.mjs';
 
 const appName = 'Thingtime.app';
+const verifyScript = new URL('./verify-signed-app.mjs', import.meta.url).pathname;
 
 function fail(message) {
 	throw new Error(message);
@@ -53,18 +54,51 @@ async function waitForExit(pid) {
 	}
 }
 
-const planPath = parseArguments(process.argv.slice(2));
-try {
-	const plan = readPlan(planPath);
-	await waitForExit(plan.waitForPid);
+export function verifyCachedReleaseSource(sourceApp, runner = spawnSync) {
+	const result = runner(process.execPath, [verifyScript, '--mode', 'production', sourceApp], {
+		encoding: 'utf8',
+		env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
+	if (result.error || result.status !== 0) {
+		fail('The cached Thingtime bundle did not pass Developer ID, notarization, and nested-code verification.');
+	}
+}
+
+export async function executeCachedReleasePlan(plan, options = {}) {
+	const waitForExitFn = options.waitForExit || waitForExit;
+	const verifyApp = options.verifyApp || verifyCachedReleaseSource;
+	const installApp = options.installApp || installLocalApp;
+	const openApp = options.openApp || ((appPath) => spawnSync('/usr/bin/open', ['-n', appPath], { stdio: 'ignore' }));
+
+	await waitForExitFn(plan.waitForPid);
+	// Verify again after the main process exits, immediately before use. This
+	// closes the gap between the UI-side cache check and the detached handoff.
+	verifyApp(plan.sourceApp);
 	const targetApp = plan.action === 'install'
-		? installLocalApp({ sourceApp: plan.sourceApp, targetDir: plan.targetDir, signatureMode: 'production' }).targetApp
+		? installApp({ sourceApp: plan.sourceApp, targetDir: plan.targetDir, signatureMode: 'production' }).targetApp
 		: plan.sourceApp;
-	const opened = spawnSync('/usr/bin/open', ['-n', targetApp], { stdio: 'ignore' });
+	const opened = openApp(targetApp);
 	if (opened.error || opened.status !== 0) fail('Thingtime was installed but could not be reopened automatically.');
-} finally {
-	rmSync(planPath, { force: true });
+	return targetApp;
+}
+
+async function main(values) {
+	const planPath = parseArguments(values);
+	try {
+		const plan = readPlan(planPath);
+		await executeCachedReleasePlan(plan);
+	} finally {
+		rmSync(planPath, { force: true });
+	}
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : null;
-if (invokedPath !== import.meta.url) fail('Thingtime cached release helper must run as its own process.');
+if (invokedPath === import.meta.url) {
+	try {
+		await main(process.argv.slice(2));
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error));
+		process.exitCode = 1;
+	}
+}

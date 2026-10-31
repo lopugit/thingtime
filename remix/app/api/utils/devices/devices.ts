@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { isDevicePlatform } from '../../../devices/platform';
+import { normalizeCapabilities, safeCapabilities } from './deviceCapabilities';
 
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { createSession, type SessionDoc } from '../auth/sessions';
 import { getHomeThingsCollection, getSessionsCollection, withHomeMongoTransaction } from '../mongodb/collections';
+import { thingUniqueKeyFilter, thingUniqueKeys } from '../mongodb/uniqueKeys';
 import { deleteAccountedThings, insertAccountedThing, updateAccountedThing } from '../storage/accountedThings';
 import {
 	DEVICE_SESSION_LIFETIME_MS,
@@ -86,15 +89,13 @@ export const newDeviceThing = (
 			DEVICE_UNIQUE_KEY_FIELDS.map((field) => fields.crystal[field]).filter((value): value is string => typeof value === 'string' && value.length > 0)
 		)
 	];
-	const crystal: Record<string, unknown> = {
-		...fields.crystal,
-		...(deviceUniqueKeys.length ? { deviceUniqueKeys } : {})
-	};
+	const crystal: Record<string, unknown> = { ...fields.crystal };
 	return {
 		shareId: fields.shareId || randomUUID(),
 		schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
 		thingtime: [kind],
 		crystal,
+		...(deviceUniqueKeys.length ? { uniqueKeys: thingUniqueKeys('deviceUniqueKey', deviceUniqueKeys) } : {}),
 		extended: null,
 		ownerId: fields.ownerId,
 		acl: ['tt:user'],
@@ -110,22 +111,6 @@ const iso = (value: unknown): string | null => {
 	if (!value) return null;
 	const date = new Date(value as any);
 	return Number.isFinite(date.getTime()) ? date.toISOString() : null;
-};
-
-const safeCapabilities = (value: unknown): string[] =>
-	Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string').slice(0, 64) : [];
-
-const normalizeCapabilities = (value: unknown): string[] | null => {
-	if (value === undefined) return [];
-	if (!Array.isArray(value) || value.length > 64) return null;
-	const out: string[] = [];
-	for (const entry of value) {
-		if (typeof entry !== 'string') return null;
-		const capability = entry.trim().slice(0, 100);
-		if (!capability || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(capability)) return null;
-		if (!out.includes(capability)) out.push(capability);
-	}
-	return out.sort();
 };
 
 export type PublicDeviceState = DeviceStateSnapshot & {
@@ -152,6 +137,11 @@ export type PublicDevice = {
 	pairedAt: string;
 	online: boolean;
 	lastSeenAt: string | null;
+	lastSyncAt: string | null;
+	syncStatus: 'paired' | 'healthy' | 'error' | null;
+	watchHealth: { batteryLevel: number | null; lowPowerMode: boolean; error: string | null; updatedAt: string | null } | null;
+	createdThingCount: number;
+	recentThings: Array<{ id: string; label: string; createdAt: string }>;
 	locked: boolean | null;
 	volume: number | null;
 	brightness: number | null;
@@ -325,10 +315,10 @@ type ClaimDeviceResult =
 	| { ok: true; op: 'prepare'; proof: { pairingId: string; serverNonce: string; expiresAt: string } }
 	| { ok: true; device: PublicDevice; credentialStored: true };
 
-const minimalPublicDevice = (doc: any): PublicDevice => ({
+export const minimalPublicDevice = (doc: any): PublicDevice => ({
 	id: String(doc.shareId),
 	name: String(doc.crystal?.name || 'Computer'),
-	platform: doc.crystal?.platform === 'windows' || doc.crystal?.platform === 'linux' ? doc.crystal.platform : 'macos',
+	platform: isDevicePlatform(doc.crystal?.platform) ? doc.crystal.platform : 'macos',
 	model: typeof doc.crystal?.model === 'string' ? doc.crystal.model : null,
 	osVersion: typeof doc.crystal?.osVersion === 'string' ? doc.crystal.osVersion : null,
 	appVersion: typeof doc.crystal?.appVersion === 'string' ? doc.crystal.appVersion : null,
@@ -336,6 +326,11 @@ const minimalPublicDevice = (doc: any): PublicDevice => ({
 	pairedAt: iso(doc.crystal?.pairedAt) || new Date(doc.createdAt).toISOString(),
 	online: false,
 	lastSeenAt: null,
+	lastSyncAt: null,
+	syncStatus: null,
+	watchHealth: null,
+	createdThingCount: 0,
+	recentThings: [],
 	locked: null,
 	volume: null,
 	brightness: null,
@@ -610,6 +605,12 @@ export const claimDevicePairing = async (input: ClaimDeviceInput): Promise<Claim
 	return deviceFail(400, 'Pairing claim op must be prepare or complete; legacy unproved claims are rejected');
 };
 
+/** Native clients may bind local grants only to the owner of their current device credential. */
+export const readDeviceIdentity = async (ownerId: string, deviceId: string): Promise<DeviceFail | { ok: true; ownerId: string; deviceId: string }> => {
+	if (!(await deviceOwnedBy(ownerId, deviceId))) return deviceFail(404, 'Device not found');
+	return { ok: true, ownerId, deviceId };
+};
+
 export const listDevices = async (
 	ownerId: string,
 	requestedDeviceId?: unknown
@@ -624,7 +625,7 @@ export const listDevices = async (
 	if (!ids.length) return { ok: true, devices: [] };
 
 	const sessions = await getSessionsCollection();
-	const [states, connectors, commands, approvals, liveSessions] = await Promise.all([
+	const [states, connectors, commands, approvals, liveSessions, createdCounts, recentCreatedThingGroups] = await Promise.all([
 		things.find({ thingtime: 'device-state', ownerId, targetId: { $in: ids } } as any).toArray(),
 		things
 			.find({ thingtime: 'device-connector', ownerId, targetId: { $in: ids } } as any)
@@ -657,9 +658,39 @@ export const listDevices = async (
 			.find(
 				{ purpose: 'device', userId: ownerId, 'meta.deviceId': { $in: ids }, revokedAt: null },
 				{
-					projection: { 'meta.deviceId': 1, 'meta.lastSeenAt': 1, expiresAt: 1 }
+					projection: {
+						'meta.deviceId': 1,
+						'meta.lastSeenAt': 1,
+						'meta.lastSyncAt': 1,
+						'meta.lastSyncStatus': 1,
+						'meta.watchHealth': 1,
+						expiresAt: 1
+					}
 				}
 			)
+			.toArray(),
+		things
+			.aggregate([
+				{ $match: { ownerId, sourceDeviceId: { $in: ids } } },
+				{ $group: { _id: '$sourceDeviceId', count: { $sum: 1 } } }
+			])
+			.toArray(),
+		things
+			.aggregate([
+				{ $match: { ownerId, sourceDeviceId: { $in: ids } } },
+				{
+					$group: {
+						_id: '$sourceDeviceId',
+						things: {
+							$topN: {
+								n: 10,
+								sortBy: { createdAt: -1, shareId: 1 },
+								output: { shareId: '$shareId', thingtime: '$thingtime', crystal: '$crystal', createdAt: '$createdAt' }
+							}
+						}
+					}
+				}
+			])
 			.toArray()
 	]);
 
@@ -678,6 +709,10 @@ export const listDevices = async (
 	const approvalCounts = new Map<string, number>();
 	for (const doc of approvals as any[]) approvalCounts.set(String(doc.targetId), (approvalCounts.get(String(doc.targetId)) ?? 0) + 1);
 	const lastSeenByDevice = new Map<string, Date>();
+	const lastSyncByDevice = new Map<
+		string,
+		{ at: Date; status: PublicDevice['syncStatus']; health: PublicDevice['watchHealth'] }
+	>();
 	for (const session of liveSessions as any[]) {
 		if (session.expiresAt && new Date(session.expiresAt).getTime() <= Date.now()) continue;
 		const id = typeof session.meta?.deviceId === 'string' ? session.meta.deviceId : '';
@@ -685,16 +720,59 @@ export const listDevices = async (
 		if (!id || !lastSeenAt || !Number.isFinite(lastSeenAt.getTime())) continue;
 		const previous = lastSeenByDevice.get(id);
 		if (!previous || previous < lastSeenAt) lastSeenByDevice.set(id, lastSeenAt);
+		const syncAt = session.meta?.lastSyncAt ? new Date(session.meta.lastSyncAt) : null;
+		if (syncAt && Number.isFinite(syncAt.getTime())) {
+			const syncStatus =
+				session.meta?.lastSyncStatus === 'healthy' || session.meta?.lastSyncStatus === 'error' || session.meta?.lastSyncStatus === 'paired'
+					? session.meta.lastSyncStatus
+					: null;
+			const priorSync = lastSyncByDevice.get(id);
+			if (!priorSync || priorSync.at < syncAt) {
+				const rawHealth = session.meta?.watchHealth;
+				const health = rawHealth && typeof rawHealth === 'object'
+					? {
+						batteryLevel: typeof rawHealth.batteryLevel === 'number' ? Math.max(0, Math.min(1, rawHealth.batteryLevel)) : null,
+						lowPowerMode: rawHealth.lowPowerMode === true,
+						error: typeof rawHealth.error === 'string' ? rawHealth.error.slice(0, 200) : null,
+						updatedAt: iso(rawHealth.updatedAt)
+					}
+					: null;
+				lastSyncByDevice.set(id, { at: syncAt, status: syncStatus, health });
+			}
+		}
+	}
+	const createdCountByDevice = new Map<string, number>(
+		(createdCounts as any[]).map((entry) => [String(entry._id), Number(entry.count) || 0])
+	);
+	const recentByDevice = new Map<string, PublicDevice['recentThings']>();
+	for (const group of recentCreatedThingGroups as any[]) {
+		const id = typeof group._id === 'string' ? group._id : '';
+		if (!id) continue;
+		const bucket = (Array.isArray(group.things) ? group.things : []).slice(0, 10).map((doc: any) => {
+			const crystal = doc.crystal && typeof doc.crystal === 'object' ? doc.crystal : {};
+			const label =
+				(typeof crystal.text === 'string' && crystal.text.trim()) ||
+				(typeof crystal.name === 'string' && crystal.name.trim()) ||
+				(Array.isArray(doc.thingtime) && doc.thingtime.length ? doc.thingtime.join(' + ') : 'Thing');
+			return { id: String(doc.shareId), label: String(label).slice(0, 140), createdAt: new Date(doc.createdAt).toISOString() };
+		});
+		recentByDevice.set(id, bucket);
 	}
 
 	const publicDevices = docs.map((doc: any) => {
 		const base = minimalPublicDevice(doc);
 		const state = publicDeviceState(stateByDevice.get(base.id));
 		const lastSeenAt = lastSeenByDevice.get(base.id) ?? null;
+		const lastSync = lastSyncByDevice.get(base.id) ?? null;
 		return {
 			...base,
 			online: !!lastSeenAt && Date.now() - lastSeenAt.getTime() <= ONLINE_WINDOW_MS,
 			lastSeenAt: lastSeenAt?.toISOString() ?? null,
+			lastSyncAt: lastSync?.at.toISOString() ?? null,
+			syncStatus: lastSync?.status ?? null,
+			watchHealth: lastSync?.health ?? null,
+			createdThingCount: createdCountByDevice.get(base.id) ?? 0,
+			recentThings: recentByDevice.get(base.id) ?? [],
 			locked: state?.locked ?? null,
 			volume: state?.volume ?? null,
 			brightness: state?.brightness ?? null,
@@ -710,6 +788,7 @@ export const listDevices = async (
 };
 
 type UpdateDeviceStateInput = {
+	capabilities?: unknown;
 	revision?: unknown;
 	state?: unknown;
 	connectors?: unknown;
@@ -720,6 +799,8 @@ export const updateDeviceState = async (
 	deviceId: string,
 	input: UpdateDeviceStateInput
 ): Promise<DeviceFail | { ok: true; revision: number; applied: boolean; stale: boolean }> => {
+	const capabilities = input?.capabilities === undefined ? undefined : normalizeCapabilities(input.capabilities);
+	if (capabilities === null) return deviceFail(400, 'capabilities must be a bounded list of identifiers');
 	const revision = Number(input?.revision);
 	if (!Number.isSafeInteger(revision) || revision < 1) return deviceFail(400, 'revision must be a positive safe integer');
 	const state = normalizeDeviceState(input?.state);
@@ -733,11 +814,11 @@ export const updateDeviceState = async (
 	const stateKey = deviceHash('state', ownerId, deviceId);
 	const connectorKeys = connectors.map((connector) => deviceHash('connector', ownerId, deviceId, connector.id));
 	const [existingState, existingConnectors] = await Promise.all([
-		things.findOne({ 'crystal.deviceUniqueKeys': stateKey } as any),
+		things.findOne(thingUniqueKeyFilter('deviceUniqueKey', stateKey) as any),
 		things.find({ thingtime: 'device-connector', ownerId, targetId: deviceId } as any).toArray()
 	]);
 	const stateHash = devicePayloadHash(state);
-	const snapshotHash = deviceSnapshotHash(state, connectors);
+	const snapshotHash = deviceSnapshotHash(state, connectors, capabilities);
 	const stateDecision = decideDeviceRevision(
 		Number.isSafeInteger(existingState?.crystal?.revision) ? Number(existingState.crystal.revision) : null,
 		typeof existingState?.crystal?.snapshotHash === 'string' ? existingState.crystal.snapshotHash : null,
@@ -797,6 +878,10 @@ export const updateDeviceState = async (
 					{ ...HOME_ACCOUNTING, session }
 				);
 				if (!updated.modifiedCount) throw Object.assign(new Error('device_snapshot_race'), { status: 409 });
+			}
+			if (capabilities !== undefined) {
+				await updateAccountedThing(things, { shareId: deviceId, ownerId, thingtime: 'device' } as any,
+					{ $set: { 'crystal.capabilities': capabilities, updatedAt: now } }, { ...HOME_ACCOUNTING, session });
 			}
 			await deleteAccountedThings(
 				things,
@@ -890,7 +975,16 @@ export const listDeviceEvents = async (
 	if (cursorValue && !cursor) return deviceFail(400, 'cursor is invalid');
 	const requestedLimit = Number(limitValue);
 	const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(200, Math.floor(requestedLimit))) : 100;
-	const filter: any = { thingtime: 'device-command-event', ownerId, targetId: id };
+	// Every device-command-event is stamped with this deterministic scope key.
+	// Supplying it here lets pagination reuse the retention index (Mongo can
+	// reverse-scan its createdAt/shareId suffix), avoiding a second index over
+	// the same event partition and preserving MongoDB upgrade headroom.
+	const filter: any = {
+		thingtime: 'device-command-event',
+		ownerId,
+		targetId: id,
+		'crystal.deviceControlEventScopeKey': deviceControlEventScopeKey(ownerId, id)
+	};
 	if (cursor) {
 		filter.$or = [{ createdAt: { $gt: cursor.at } }, { createdAt: cursor.at, shareId: { $gt: cursor.id } }];
 	}

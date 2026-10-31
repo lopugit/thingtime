@@ -1,8 +1,11 @@
 import { useCallback, useMemo } from 'react';
+import type { DevicePlatform } from '../../devices/platform';
 
 import { createApiFailure, readApiResponsePayload } from '~/hooks/apiFailure';
+import type { DeviceBattery } from './deviceTypes';
 
 export const PUBLIC_DEVICE_COMMAND_KINDS = [
+	'filesystem',
 	'connector.start',
 	'connector.stop',
 	'session.list',
@@ -45,6 +48,11 @@ export const PUBLIC_DEVICE_COMMAND_KINDS = [
 	'system.media.spotify.playback.set',
 	'system.media.spotify.volume.set',
 	'system.media.chrome-youtube.volume.set',
+	'input.pointer.move',
+	'input.pointer.click',
+	'input.pointer.scroll',
+	'input.keyboard.type',
+	'input.keyboard.shortcut',
 	'system.lock',
 	'system.sleep',
 	'system.restart',
@@ -80,7 +88,7 @@ export type PublicDeviceState = {
 	soundEffectsVolume?: number | null;
 	soundEffectsMuted?: boolean | null;
 	brightness: number | null;
-	battery: { level: number | null; charging: boolean | null; isExternalPower?: boolean | null; isPreventingIdleSleep?: boolean; isLowPowerModeEnabled?: boolean } | null;
+	battery: DeviceBattery | null;
 	powerTimers?: { displayIdleMinutes: number | null; systemSleepMinutes: number | null; diskIdleMinutes: number | null };
 	openApps: PublicDeviceOpenApp[];
 	audioDevices: Array<{
@@ -125,7 +133,7 @@ export type PublicDeviceConnector = {
 export type PublicDevice = {
 	id: string;
 	name: string;
-	platform: 'macos' | 'windows' | 'linux';
+	platform: DevicePlatform;
 	model: string | null;
 	osVersion: string | null;
 	appVersion: string | null;
@@ -133,10 +141,15 @@ export type PublicDevice = {
 	pairedAt: string;
 	online: boolean;
 	lastSeenAt: string | null;
+	lastSyncAt: string | null;
+	syncStatus: 'paired' | 'healthy' | 'error' | null;
+	watchHealth: { batteryLevel: number | null; lowPowerMode: boolean; error: string | null; updatedAt: string | null } | null;
+	createdThingCount: number;
+	recentThings: Array<{ id: string; label: string; createdAt: string }>;
 	locked: boolean | null;
 	volume: number | null;
 	brightness: number | null;
-	battery: { level: number | null; charging: boolean | null; isExternalPower?: boolean | null; isPreventingIdleSleep?: boolean; isLowPowerModeEnabled?: boolean } | null;
+	battery: DeviceBattery | null;
 	openApps: PublicDeviceOpenApp[];
 	state: PublicDeviceState | null;
 	connectors: PublicDeviceConnector[];

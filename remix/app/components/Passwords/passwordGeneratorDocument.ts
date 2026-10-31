@@ -1,0 +1,22 @@
+import type { WebpageBlock } from '../Builder/webpageBlocks';
+import { PASSWORD_PRESETS } from '~/passwords/generator';
+const node = (id: string, tag: string, text = '', props: Record<string, unknown> = {}, children?: WebpageBlock[], css?: Record<string, string>): WebpageBlock => ({ id: id.replace(/[A-Z]/g, char => `-${char.toLowerCase()}`), type: 'element', tag, text, props, ...(children ? { children } : {}), ...(css ? { css } : {}) } as unknown as WebpageBlock);
+const action = (operation: string, inputs: Record<string, string> = {}) => ({ 'data-tt-action': '$transient', 'data-tt-action-inputs': { operation, ...inputs } });
+const style = { width: '100%', 'min-width': '0', padding: '10px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '8px', background: 'var(--tt-card, white)', color: 'inherit' };
+const field = (key: string, caption: string, type = 'text') => node(`generator-${key}-label`, 'label', '', {}, [node(`generator-${key}-caption`, 'span', caption), node(`generator-${key}`, 'input', '', { name: key, 'aria-label': caption, type, value: `{result.${key}}`, disabled: '{result.busy}', ...action('generator.setting', { key }), ...(type === 'number' ? { min: 1, step: 1 } : {}), autoComplete: 'off' }, undefined, style)], { display: 'grid', gap: '6px', 'min-width': '0' });
+const toggle = (key: string, caption: string) => node(`generator-${key}-label`, 'label', '', {}, [node(`generator-${key}`, 'input', '', { type: 'checkbox', name: key, checked: `{result.${key}}`, disabled: '{result.busy}', ...action('generator.setting', { key }) }), node(`generator-${key}-caption`, 'span', caption)], { display: 'flex', gap: '10px', 'align-items': 'center', 'min-height': '44px' });
+export const PASSWORD_GENERATOR_BLOCKS: WebpageBlock[] = [node('password-generator', 'fieldset', '', {}, [
+  node('generator-title', 'legend', 'Password generator'),
+  node('generator-intro', 'p', 'Generate securely on this device into the selected password field. No generated password is stored in this layout or generator settings.'),
+  node('generator-target-label', 'label', 'Password field', { htmlFor: 'generator-target' }),
+  node('generator-target', 'select', '', { id: 'generator-target', name: 'target', 'aria-label': 'Password field', value: '{result.targetId}', disabled: '{result.busy}', ...action('generator.target') }, [{ id: 'generator-target-options', type: 'collection', props: { itemsPath: 'result.targets', size: 'all', transparent: true }, children: [node('generator-target-option', 'option', '{item.label}', { value: '{item.id}' })] } as unknown as WebpageBlock], style),
+  node('generator-preset-label', 'label', 'Platform preset', { htmlFor: 'generator-preset' }),
+  node('generator-preset', 'select', '', { id: 'generator-preset', name: 'preset', 'aria-label': 'Platform preset', value: '{result.preset}', disabled: '{result.busy}', ...action('generator.preset') }, Object.entries(PASSWORD_PRESETS).map(([key, preset]) => node(`generator-preset-${key}`, 'option', preset.label, { value: key })), style),
+  node('generator-guidance', 'p', '{result.guidance}', {}, undefined, { 'overflow-wrap': 'anywhere', 'line-height': '1.6' }),
+  ({ id: 'generator-sources', type: 'collection', props: { itemsPath: 'result.sources', size: 'all', transparent: true }, children: [node('generator-source', 'a', '{item.url}', { href: '{item.url}', target: '_blank', rel: 'noopener noreferrer' }, undefined, { 'overflow-wrap': 'anywhere' })] } as unknown as WebpageBlock),
+  field('length', 'Length (characters)', 'number'),
+  node('generator-classes', 'div', '', {}, [toggle('uppercase', 'Uppercase A–Z'), toggle('lowercase', 'Lowercase a–z'), toggle('digits', 'Numbers 0–9'), toggle('symbols', 'Symbols')], { display: 'flex', 'flex-wrap': 'wrap', gap: '8px 20px' }),
+  field('allowedSymbols', 'Allowed symbols'), toggle('excludeAmbiguous', 'Exclude ambiguous characters (I l 1 O 0 o |)'), field('excludedCharacters', 'Additional characters to exclude'),
+  node('generator-feedback', 'p', '{result.notice}', { role: 'status', 'aria-live': 'polite' }, undefined, { 'overflow-wrap': 'anywhere', 'line-height': '1.6' }),
+  node('generator-generate', 'button', '{result.buttonLabel}', { type: 'button', disabled: '{result.busy}', ...action('generator.generate') }, undefined, { ...style, cursor: 'pointer', 'min-height': '44px', 'font-weight': '600', 'white-space': 'normal' })
+], { 'min-width': '0', display: 'grid', gap: '12px', padding: '14px', border: '1px solid var(--tt-border, #ddd)', 'border-radius': '10px' })];

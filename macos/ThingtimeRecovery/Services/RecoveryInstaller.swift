@@ -6,6 +6,10 @@ public enum RecoveryInstallAction: String, Codable, Hashable {
     case installDesktop
     case installRecovery
     case launchDesktop
+    case installCommander
+    case launchCommander
+    case installWidgets
+    case launchWidgets
 }
 
 public struct RecoveryInstallPlan: Codable, Hashable {
@@ -29,6 +33,8 @@ public struct RecoveryInstallPlan: Codable, Hashable {
         switch action {
         case .installDesktop, .launchDesktop: component = .desktop
         case .installRecovery: component = .recovery
+        case .installCommander, .launchCommander: component = .commander
+        case .installWidgets, .launchWidgets: component = .widgets
         }
         let expectedCacheRoot = paths.cacheRoot(for: component).standardizedFileURL
         guard cacheRoot.standardizedFileURL == expectedCacheRoot else { throw RecoveryError.invalidPlan("Thingtime Recovery's cache location is invalid.") }
@@ -47,32 +53,67 @@ public struct RecoveryInstallPlan: Codable, Hashable {
 }
 
 public enum RecoveryInstaller {
-    public static func execute(plan: RecoveryInstallPlan, paths: RecoveryPaths = RecoveryPaths(), signingContext: SigningContext) throws {
+    public static func execute(plan: RecoveryInstallPlan, paths: RecoveryPaths = RecoveryPaths(), signingContext: SigningContext? = nil) throws {
         let component = try plan.validate(paths: paths)
         guard regularDirectory(plan.sourceApp) else { throw RecoveryError.invalidPlan("The selected recovery bundle is no longer available.") }
-        try BundleVerifier.verify(plan.sourceApp, component: component, signingContext: signingContext)
+        let cache = RecoveryCache(component: component, root: paths.cacheRoot(for: component))
+        guard let cachedBundle = try cache.bundle(at: plan.sourceApp) else {
+            throw RecoveryError.invalidPlan("The selected recovery bundle is missing its cache metadata.")
+        }
+        let trust = verificationTrust(for: cachedBundle)
+        try verify(plan.sourceApp, component: component, trust: trust, signingContext: signingContext)
         try waitForExit(plan.waitForPID)
+        try verify(plan.sourceApp, component: component, trust: trust, signingContext: signingContext)
         switch plan.action {
-        case .launchDesktop:
+        case .launchDesktop, .launchCommander, .launchWidgets:
             try ProcessExecution.launchApplication(plan.sourceApp)
-        case .installDesktop, .installRecovery:
+        case .installDesktop, .installRecovery, .installCommander, .installWidgets:
             try closeRunningApplications(bundleIdentifier: component.bundleIdentifier)
             let target = paths.installedApp(for: component)
-            if FileManager.default.fileExists(atPath: target.path) {
-                let cache = RecoveryCache(component: component, root: paths.cacheRoot(for: component))
-                let existingVersion = Bundle(url: target)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
-                try cache.cacheBundle(
-                    sourceApp: target,
-                    descriptor: CacheReleaseDescriptor(id: "installed-\(component.rawValue)-\(existingVersion)-\(UUID().uuidString)", name: "Previously installed \(component.title) \(existingVersion)", tag: "installed-\(existingVersion)", version: existingVersion),
-                    verify: { try BundleVerifier.verify($0, component: component, signingContext: signingContext) }
-                )
+            let preserved = try installCachedBundle(source: plan.sourceApp, target: target, component: component, cache: cache, trust: trust, signingContext: signingContext)
+            if let preserved {
+                try? RecoveryInstallNotice(message: "The previous app could not enter the verified cache. It was preserved at \(preserved.path).", isError: false).save(paths: paths)
             }
-            try atomicallyInstall(source: plan.sourceApp, target: target, component: component, signingContext: signingContext)
             try ProcessExecution.launchApplication(target)
         }
     }
 
-    private static func atomicallyInstall(source: URL, target: URL, component: RecoveryComponent, signingContext: SigningContext) throws {
+    static func verificationTrust(for bundle: CachedBundle) -> RecoveryBundleTrust {
+        bundle.entry.isUnsigned == true ? .unsigned : .signed
+    }
+
+    private static func verify(_ appURL: URL, component: RecoveryComponent, trust: RecoveryBundleTrust, signingContext: SigningContext?) throws {
+        switch trust {
+        case .unsigned:
+            try BundleVerifier.verifyUnsigned(appURL, component: component)
+        case .signed:
+            guard let signingContext else {
+                throw RecoveryError.operationFailed("A signed Thingtime release can only be verified by a signed Thingtime Recovery app.")
+            }
+            try BundleVerifier.verify(appURL, component: component, signingContext: signingContext)
+        }
+    }
+
+    /// A damaged installed app must never prevent recovery from a valid one.
+    /// If it cannot enter the verified cache, retain the complete old bundle
+    /// separately; never label it trusted or delete the only rollback copy.
+    static func installCachedBundle(source: URL, target: URL, component: RecoveryComponent, cache: RecoveryCache, trust: RecoveryBundleTrust, signingContext: SigningContext?) throws -> URL? {
+        var preservePrevious = false
+        if FileManager.default.fileExists(atPath: target.path) {
+            do {
+                let version = Bundle(url: target)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+                let previousTrust = try BundleVerifier.distribution(for: target, component: component)
+                try cache.cacheBundle(sourceApp: target, descriptor: CacheReleaseDescriptor(id: "installed-\(component.rawValue)-\(version)-\(UUID().uuidString)", name: "Previously installed \(component.title) \(version)", tag: "installed-\(version)", isUnsigned: previousTrust == .unsigned, version: version)) {
+                    try verify($0, component: component, trust: previousTrust, signingContext: signingContext)
+                }
+            } catch {
+                preservePrevious = true
+            }
+        }
+        return try atomicallyInstall(source: source, target: target, component: component, trust: trust, signingContext: signingContext, preservePrevious: preservePrevious)
+    }
+
+    private static func atomicallyInstall(source: URL, target: URL, component: RecoveryComponent, trust: RecoveryBundleTrust, signingContext: SigningContext?, preservePrevious: Bool) throws -> URL? {
         let manager = FileManager.default
         let parent = target.deletingLastPathComponent()
         try manager.createDirectory(at: parent, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -80,19 +121,26 @@ public enum RecoveryInstaller {
         let backup = parent.appendingPathComponent(".\(component.rawValue)-backup-\(UUID().uuidString).app")
         defer {
             try? manager.removeItem(at: staging)
-            try? manager.removeItem(at: backup)
         }
         try ProcessExecution.run("/usr/bin/ditto", arguments: ["--rsrc", "--extattr", source.path, staging.path], label: "\(component.title) installation copy")
-        try BundleVerifier.verify(staging, component: component, signingContext: signingContext)
+        try verify(staging, component: component, trust: trust, signingContext: signingContext)
         if manager.fileExists(atPath: target.path) { try manager.moveItem(at: target, to: backup) }
         do {
             try manager.moveItem(at: staging, to: target)
-            try BundleVerifier.verify(target, component: component, signingContext: signingContext)
+            try verify(target, component: component, trust: trust, signingContext: signingContext)
         } catch {
             if manager.fileExists(atPath: target.path) { try? manager.removeItem(at: target) }
-            if manager.fileExists(atPath: backup.path) { try? manager.moveItem(at: backup, to: target) }
+            if manager.fileExists(atPath: backup.path) {
+                do { try manager.moveItem(at: backup, to: target) }
+                catch {
+                    throw RecoveryError.operationFailed("Installation rollback could not restore the previous app. Its backup is preserved at \(backup.path).")
+                }
+            }
             throw error
         }
+        if preservePrevious, manager.fileExists(atPath: backup.path) { return backup }
+        try? manager.removeItem(at: backup)
+        return nil
     }
 
     private static func closeRunningApplications(bundleIdentifier: String) throws {

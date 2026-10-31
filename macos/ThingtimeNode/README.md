@@ -157,3 +157,129 @@ verification.
 
 The standalone bundle includes the equivalent self-relative LaunchAgent plist
 so its menu can enable or disable login startup during native development.
+
+
+## Brightness and filesystem support
+
+Brightness uses the system DisplayServices functions when present (including
+Apple Silicon internal displays), with the matched IOKit service as fallback.
+Only valid reads and available setters advertise write support. Heartbeats
+refresh capabilities for an existing pairing. The hardware regression test is
+opt-in: `TT_BRIGHTNESS_HARDWARE_TEST=1 swift test --filter DisplayBrightnessTests`.
+It reads, changes, verifies and restores the original display level.
+
+`filesystem.v1` exposes bounded home-relative inode listing and transfers through
+journaled, approved commands. No-follow directory descriptors prevent path or
+symlink escape; existing destinations are never overwritten. Chunk writes verify
+SHA-256 before exclusive publication. Recursive native copies stage before
+publication, and source removal uses Trash. Interrupted chunks expire after
+24 hours when the directory is next accessed. The command journal limits recent
+read data to 512 KiB while keeping command identities and mutation receipts.
+See [the web/native contract](../../docs/remote-files.md) for all limits and
+capability requirements. Deploy the compatible web server before updating nodes.
+
+
+## Local folder sync adapter
+
+`MacFolderSync` wraps the shared `AppleFileSync` package behind the exact local
+XPC method `folder-sync.request`. The generic and remotely leased dispatch paths
+reject it. The signed helper owns folder selection and separate download consent;
+only opaque root IDs/names, bounded entries/chunks and publication receipts cross
+XPC. Configuration revision/hash and owner/origin/device scope bind write approval.
+Bookmarks stay in `com.thingtime.folder-grants.v1` Keychain items. Staging lives in
+an endpoint-specific `FolderSync-v1-<endpoint identifier>` directory beside the
+existing command journal; it must never be shared across endpoints.
+
+Build from the repository root with the local `apple/FileSync` package present:
+
+```sh
+swift test --package-path macos/ThingtimeNode --filter 'MacFolderSyncTests|ThingtimeAPIClientTests|WireCodecTests'
+swift build --package-path macos/ThingtimeNode -c release --product ThingtimeNode
+```
+
+Deploy both registered identity/disconnect routes with the normal server setup.
+The helper negotiates `api.devices-node-identity` 1.x and selects exactly one local
+credential for the requested device. It freshly verifies that credential's owner
+and device before/after every folder request, without browser cookies, and checks
+local unpairing again after the response. Missing support, offline/revoked identity
+or ambiguous credentials fail closed. Full-account disconnect revokes all matching
+device sessions; it retains the protected device history, sync Things and files.
+A mutation already authorized when revocation occurs may finish; revocation does
+not roll it back.
+
+Electron now verifies the active browser account using its own session, derives
+the configured server origin, negotiates public capabilities and exposes only the
+exact folder method to the bundled main frame. The shared web controls use this
+adapter in Things/Settings. The helper returns network class and charging/unknown,
+without SSIDs, interface addresses or raw power-source metadata.
+
+Parallel development still avoids the installed Node; establish an isolated
+native lane before installed picker/consent acceptance. Focused tests use injected
+grant persistence/dialogs and real temporary files; they do not prove signed
+Keychain, sandbox/TCC or actual AppKit interaction. The Electron host verification
+uses a real isolated Chromium session with synthetic native dispatch.
+
+Current 64 KiB bridge chunks and fresh identity reads are correctness scaffolding;
+the `devices.read` rate limit can stop sustained transfers. Native streaming and
+measured throughput, durable restart journals despite Desktop's ephemeral local
+origin, and real installed cloud transfers remain required before release.
+
+### Composite authorization and identity diagnostics
+
+Mac file-access 1.12.0 returns current conditions with the authorized context and
+roots. The same fresh paired identity checks surround that native request. Updated
+clients combine the former context/list/conditions reads and retain actual mutation
+configuration/device/network checks. Older clients and hosts keep the existing path.
+
+The `com.thingtime.desktop.node` / `actions` OSLog category records `File-sync
+identity:` only for slow (>1 second), non-200 or retried identity requests. Closed
+fields are HTTP status, elapsed milliseconds, attempt and validated cooldown seconds;
+no account/device/session identifiers, URLs, credentials or response text enter it.
+This distinguishes a slow response from a server-directed 429 wait on a later
+installed attempt. `Slow file-sync request:` continues to report bounded action,
+elapsed time and category for requests exceeding 10 seconds. Neither log changes
+retry, authentication or lease behavior.
+
+### Bounded streaming transport batches
+
+Mac `fileAccessVersion` 1.11.1 corrects the streaming response byte bound to count
+complete change rows, commas and a reserved 16 KiB envelope within 512 KiB.
+Compatible clients request up to 4096 changes per native RPC, then persist and
+wake the planner in independent 128-entry journal chunks. The first durable chunk
+can transfer while later chunks spool. The durable cursor resumes at the last
+committed chunk after interruption; 1.11.0 hosts keep 128-entry requests. Root
+execution remains serialized with existing authority, source and receipt checks.
+No new settings, secrets or service permissions are required. Installed throughput
+acceptance remains separate from the bounded synthetic and signature measurements.
+
+## Photo library backup
+
+The local folder adapter advertises `fileAccessVersion` 1.3.0. **Choose folder**
+now offers an existing folder or **Photo library (backup)**. Photos selection
+requires a native explanation and macOS permission; no pairing, startup, status,
+list or scan path prompts for access. Cancelling or changing identity before
+confirmation cannot save a grant. The shared account/origin-scoped grant stores
+an opaque read-only photo source; it cannot authorize staging, publication,
+Trash or restoration into Photos. Folder grants keep their existing behavior.
+
+`PhotoLibraryReader` exports local originals and embedded metadata to one private
+temporary file, then uses bounded reads and binary XPC ranges. The shared backup
+configuration retains saved cloud copies after device deletion. A missing original,
+changed resource or revoked permission refuses completion. The existing scan and
+XPC response bounds remain; large libraries fail explicitly, and background work,
+iCloud download policy and album/database reconstruction remain unfinished.
+
+Forks need `NSPhotoLibraryUsageDescription` in `Resources/Info.plist` and the
+outer Electron app's `build.mac.extendInfo`. Preserve the signed application and
+helper identities. No new server secret or environment variable is required.
+
+Run `swift test --package-path macos/ThingtimeNode --filter
+'MacPhotosSyncTests|MacFolderSyncTests|FolderStreamXPCTests'` from the repository
+root. Build the non-shipping `MacFolderSyncFixture` product, then from `remix/` run
+`corepack pnpm exec tsx scripts/mac-file-sync.integration.mts
+/private/disposable-account.json --photos` against the documented loopback API.
+The fixture replaces picker/Photos/Keychain adapters with synthetic originals;
+it verifies real native streaming, API authentication, cloud hashes, retained
+versions, local-deletion retention, restart and repeat convergence. It does not
+prove actual PhotoKit permission, installed signed-app selection or personal
+library behavior. Those require a separate explicit live acceptance session.

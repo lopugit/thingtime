@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { groupThings, type ThingsThing } from './thingsCore';
+import { isBuilderApp, isTopLevelLibraryThing, groupThings, parseThingsReferrer, schemaRenderOf, thingLink, thingOpenHref, thingBuilderHref, thingLiveHref, type ThingsThing } from './thingsCore';
 
 const makeThing = (id: string, kind: string): ThingsThing => ({
   id,
@@ -18,6 +18,14 @@ const makeThing = (id: string, kind: string): ThingsThing => ({
   updatedAt: '2026-08-12T00:00:00.000Z'
 });
 
+test('Builder app recognition requires an explicit top-level folder marker', () => {
+  const app = { ...makeThing('app', 'folder'), crystal: { name: 'Routes', builderApp: true } };
+  assert.equal(isBuilderApp(app), true);
+  assert.equal(isBuilderApp({ ...app, folderId: 'other' }), false);
+  assert.equal(isBuilderApp({ ...app, thingtime: ['data'] }), false);
+  assert.equal(isBuilderApp({ ...app, crystal: { name: 'Routes' } }), false);
+});
+
 test('kind grouping resolves canonical icons for populated sections', () => {
   const groups = groupThings(
     [makeThing('post-1', 'post'), makeThing('folder-1', 'folder'), makeThing('future-1', 'future-kind')],
@@ -32,4 +40,116 @@ test('kind grouping resolves canonical icons for populated sections', () => {
       { key: 'future-kind', label: 'Future-kinds', icon: '🌀', ids: ['future-1'] }
     ]
   );
+});
+
+test('thingLink routes every kind to its dedicated page and the rest to /thing/:id', () => {
+  assert.equal(thingLink(makeThing('folder-1', 'folder')), '/things?folder=folder-1');
+  assert.equal(thingLink(makeThing('post-1', 'post')), '/post/post-1');
+  assert.equal(thingLink({ id: 'comment-1', thingtime: ['post', 'comment'] }), '/post/comment-1');
+  assert.equal(thingLink(makeThing('action-demo-orders-place', 'action')), '/actions/action-demo-orders-place');
+  assert.equal(thingLink(makeThing('webpage-pokeworld', 'webpage')), '/p/webpage-pokeworld');
+  assert.equal(thingLink(makeThing('schema-1', 'schema')), '/schemas/schema-1');
+  assert.equal(thingLink(makeThing('component-1', 'component')), '/thing/component-1');
+  assert.equal(thingLink(makeThing('data-1', 'data')), '/thing/data-1');
+  assert.equal(thingLink(makeThing('future-1', 'future-kind')), '/thing/future-1');
+  // ids are URL-encoded so an odd id can never break out of the path
+  assert.equal(thingLink(makeThing('a b/c', 'data')), '/thing/a%20b%2Fc');
+});
+
+test('thingOpenHref carries the referrer hint only onto the universal page', () => {
+  assert.equal(thingOpenHref(makeThing('component-1', 'component'), 'things'), '/thing/component-1?from=things');
+  assert.equal(thingOpenHref(makeThing('data-1', 'data'), 'actions'), '/thing/data-1?from=actions');
+  assert.equal(thingOpenHref(makeThing('post-1', 'post'), 'things'), '/post/post-1');
+  assert.equal(thingOpenHref(makeThing('folder-1', 'folder'), 'things'), '/things?folder=folder-1');
+  assert.equal(thingOpenHref(makeThing('action-1', 'action'), 'things'), '/actions/action-1');
+});
+
+test('parseThingsReferrer accepts only the three surfaces and never a prototype key', () => {
+  assert.equal(parseThingsReferrer('things'), 'things');
+  assert.equal(parseThingsReferrer('actions'), 'actions');
+  assert.equal(parseThingsReferrer('feed'), 'feed');
+  assert.equal(parseThingsReferrer(null), 'feed');
+  assert.equal(parseThingsReferrer(undefined), 'feed');
+  assert.equal(parseThingsReferrer(''), 'feed');
+  assert.equal(parseThingsReferrer('bogus'), 'feed');
+  // an inherited key must not read as a referrer: a raw record lookup would
+  // answer with Object.prototype's member and leave the back link broken
+  for (const inherited of ['toString', 'constructor', '__proto__', 'valueOf', 'hasOwnProperty']) {
+    assert.equal(parseThingsReferrer(inherited), 'feed', `${inherited} falls back to the feed`);
+  }
+});
+
+test('schemaRenderOf reads a schema thing render template and nothing else', () => {
+  const render = { kind: 'element', tag: 'div', children: ['{name}'] };
+  assert.deepEqual(schemaRenderOf({ thingtime: ['schema'], crystal: { render } }), render);
+  assert.equal(schemaRenderOf({ thingtime: ['schema'], crystal: {} }), null);
+  assert.equal(schemaRenderOf({ thingtime: ['schema'], crystal: { render: ['not', 'a', 'tree'] } }), null);
+  assert.equal(schemaRenderOf({ thingtime: ['data'], crystal: { render } }), null);
+  assert.equal(schemaRenderOf(null), null);
+  assert.equal(schemaRenderOf(undefined), null);
+});
+
+test('managed and attachment renames preserve source names in the optimistic projection', async () => {
+  const { thingRenameCrystal } = await import('./thingsCore');
+  for (const kind of ['theme', 'feed-algorithm', 'custom-emoji', 'chat-archive', 'attachment']) {
+    const thing = { ...makeThing('library', kind), crystal: { name: 'Original identity', payload: { retained: true } } };
+    const next = { ...thing.crystal, ...thingRenameCrystal(thing, 'Display title') };
+    assert.deepEqual(next, { name: 'Original identity', payload: { retained: true }, title: 'Display title' });
+  }
+});
+
+test('explicit legacy Lopu folder markers use canonical browse links and sort before data', async () => {
+  const { isFolder, sortThings, thingIcon, thingDisplayName, thingRenameCrystal } = await import('./thingsCore');
+  const folder = { ...makeThing('legacy-folder', 'data'), crystal: { kind: 'folder', name: 'Original folder', value: { kept: true } } };
+  assert.equal(isFolder(folder), true);
+  assert.equal(thingIcon(folder), '📁');
+  assert.equal(thingLink(folder), '/things?folder=legacy-folder');
+  assert.equal(thingOpenHref(folder, 'things'), '/things?folder=legacy-folder');
+  assert.equal(sortThings([makeThing('data', 'data'), folder], 'newest')[0].id, folder.id);
+  const patch = thingRenameCrystal(folder, 'Renamed folder');
+  assert.deepEqual(patch, { title: 'Renamed folder', name: 'Renamed folder' });
+  assert.equal(thingDisplayName({ ...folder, crystal: { ...folder.crystal, ...patch } }), 'Renamed folder');
+  assert.deepEqual(folder.crystal.value, { kept: true });
+  for (const crystal of [{ name: 'folder' }, { type: 'Folder' }, { folder: true }]) assert.equal(isFolder({ ...folder, crystal }), false);
+  assert.equal(isFolder({ ...folder, thingtime: ['post', 'data'] }), false);
+});
+
+
+test('cached root uses the same structural placement contract without removing search access', () => {
+  assert.equal(isTopLevelLibraryThing(makeThing('top', 'data')), true);
+  for (const row of [makeThing('blob', 'attachment'), makeThing('settings','file-sync'), {...makeThing('child','data'),parentId:'parent'}, {...makeThing('report','data'),crystal:{parentId:'task',body:'Progress'}}, {...makeThing('nested','file'),folderId:'folder'}, {...makeThing('linked','data'),targetId:'owner'}]) assert.equal(isTopLevelLibraryThing(row), false);
+  assert.equal(isTopLevelLibraryThing(makeThing('file','file')), true);
+});
+
+
+test('owner activation opens legacy and explicitly marked Builder Things without changing permalinks', () => {
+  const expected = { webpage: '/builder?page=owned', component: '/builder?thing=owned', action: '/builder?thing=owned', schema: '/builder?thing=owned' };
+  for (const [kind, href] of Object.entries(expected)) {
+    const thing = { ...makeThing('owned', kind), author: { id: 'owner' } };
+    assert.equal(thingOpenHref(thing, 'things', 'owner'), href);
+    assert.equal(thingBuilderHref(thing, 'owner'), href);
+    assert.equal(thingOpenHref(thing, 'things', 'other'), thingOpenHref(thing, 'things'));
+    assert.equal(thingBuilderHref(thing), null);
+    assert.ok(!thingLink(thing).startsWith('/builder'));
+  }
+  const data = { ...makeThing('saved data/1', 'data'), thingtime: ['data', 'builder-thing'], author: { id: 'owner' } };
+  assert.equal(thingOpenHref(data, 'feed', 'owner'), '/builder?thing=saved%20data%2F1');
+  assert.equal(thingBuilderHref({ ...data, thingtime: ['data'] }, 'owner'), null);
+  assert.equal(thingBuilderHref({ ...data, author: null }, 'owner'), null);
+  assert.equal(thingBuilderHref({ ...data, thingtime: ['folder', 'builder-thing'] }, 'owner'), '/builder?folder=saved%20data%2F1&kind=all');
+});
+
+test('live navigation requires an existing presentation contract', () => {
+  for (const kind of ['webpage', 'component', 'action', 'schema']) {
+    const thing = makeThing('live', kind);
+    assert.equal(thingLiveHref(thing), thingLink(thing));
+  }
+  const data = { ...makeThing('data', 'data'), thingtime: ['data', 'builder-thing'] };
+  assert.equal(thingLiveHref(data), null);
+  assert.equal(thingLiveHref({ ...data, thingtime: ['data'], crystal: { renderComponent: { id: 'saved-component' } } }), '/thing/data');
+  assert.equal(thingLiveHref({ ...data, crystal: { tag: 'div', blocks: [], type: 'webpage' } }), null);
+  assert.equal(thingLiveHref({ ...data, crystal: { renderComponent: null } }), null);
+  assert.equal(thingLiveHref({ ...data, crystal: { renderComponent: { id: 'saved-component' } } }), '/thing/data');
+  assert.equal(thingLiveHref({ ...data, crystal: { renderComponent: { render: { tag: 'section' } } } }), '/thing/data');
+  assert.equal(thingLiveHref({ ...data, thingtime: ['folder', 'builder-thing'] }), null);
 });

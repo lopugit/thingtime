@@ -178,13 +178,46 @@ public struct BatteryTelemetry: Codable, Equatable, Sendable {
     public let isExternalPower: Bool?
     public let isPreventingIdleSleep: Bool
     public let isLowPowerModeEnabled: Bool
+    public let fullyCharged: Bool?
+    public let cycleCount: Int?
+    public let designCycleCount: Int?
+    public let designCapacityMAh: Int?
+    public let fullChargeCapacityMAh: Int?
+    public let remainingCapacityMAh: Int?
+    public let currentMA: Int?
+    public let voltageMV: Int?
+    public let temperatureC: Double?
+    public let timeToEmptyMinutes: Int?
+    public let timeToFullMinutes: Int?
+    public let adapterWatts: Int?
+    public let adapterVoltageMV: Int?
+    public let adapterCurrentMA: Int?
 
-    public init(level: Double?, isCharging: Bool?, isExternalPower: Bool?, isPreventingIdleSleep: Bool, isLowPowerModeEnabled: Bool = false) {
+    public init(level: Double?, isCharging: Bool?, isExternalPower: Bool?, isPreventingIdleSleep: Bool, isLowPowerModeEnabled: Bool = false,
+                fullyCharged: Bool? = nil, cycleCount: Int? = nil, designCycleCount: Int? = nil,
+                designCapacityMAh: Int? = nil, fullChargeCapacityMAh: Int? = nil, remainingCapacityMAh: Int? = nil,
+                currentMA: Int? = nil, voltageMV: Int? = nil, temperatureC: Double? = nil,
+                timeToEmptyMinutes: Int? = nil, timeToFullMinutes: Int? = nil,
+                adapterWatts: Int? = nil, adapterVoltageMV: Int? = nil, adapterCurrentMA: Int? = nil) {
         self.level = level
         self.isCharging = isCharging
         self.isExternalPower = isExternalPower
         self.isPreventingIdleSleep = isPreventingIdleSleep
         self.isLowPowerModeEnabled = isLowPowerModeEnabled
+        self.fullyCharged = fullyCharged
+        self.cycleCount = cycleCount
+        self.designCycleCount = designCycleCount
+        self.designCapacityMAh = designCapacityMAh
+        self.fullChargeCapacityMAh = fullChargeCapacityMAh
+        self.remainingCapacityMAh = remainingCapacityMAh
+        self.currentMA = currentMA
+        self.voltageMV = voltageMV
+        self.temperatureC = temperatureC
+        self.timeToEmptyMinutes = timeToEmptyMinutes
+        self.timeToFullMinutes = timeToFullMinutes
+        self.adapterWatts = adapterWatts
+        self.adapterVoltageMV = adapterVoltageMV
+        self.adapterCurrentMA = adapterCurrentMA
     }
 }
 
@@ -320,6 +353,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
     public let spotify: SpotifyTelemetry
     public let chromeYouTube: ChromeYouTubeTelemetry
     public let collectedAt: Date
+    public let menuBar: MenuBarTelemetry?
 
     public init(
         deviceName: String,
@@ -340,6 +374,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         runningApplications: [RunningApplicationTelemetry],
         displays: [DisplayTelemetry],
         collectedAt: Date,
+        menuBar: MenuBarTelemetry? = nil,
         printers: [PrinterTelemetry] = [],
         cameras: [CameraTelemetry] = [],
         bluetoothDevices: [BluetoothDeviceTelemetry] = [],
@@ -368,6 +403,7 @@ public struct DeviceTelemetry: Codable, Equatable, Sendable {
         self.runningApplications = runningApplications
         self.displays = displays
         self.collectedAt = collectedAt
+        self.menuBar = menuBar
         self.printers = printers
         self.cameras = cameras
         self.bluetoothDevices = bluetoothDevices
@@ -387,9 +423,26 @@ public enum ThingtimeNodeLog {
 }
 
 @MainActor
-public final class DeviceTelemetryCollector {
+public protocol DeviceTelemetryProviding: Sendable {
+    func snapshot(now: Date) -> DeviceTelemetry
+    func sessionSnapshot() -> SessionTelemetry
+    func batterySnapshot() -> BatteryTelemetry
+    func permissionPreflight() -> PermissionPreflight
+    func requestPermission(_ kind: ThingtimePermissionKind) -> PermissionPreflight
+    func setPreventIdleSleep(_ enabled: Bool) throws
+}
+
+public extension DeviceTelemetryProviding {
+    func snapshot() -> DeviceTelemetry { snapshot(now: Date()) }
+}
+
+@MainActor
+public final class DeviceTelemetryCollector: DeviceTelemetryProviding {
     private let sessionActivity: SessionActivityMonitor
     private let powerAssertions: PowerAssertionController
+    private var menuBarSnapshot: MenuBarTelemetry?
+    private var menuBarRead: Task<Void, Never>?
+    private var menuBarGeneration = UUID()
 
     public init() {
         sessionActivity = SessionActivityMonitor()
@@ -434,7 +487,27 @@ public final class DeviceTelemetryCollector {
     }
 
     public func snapshot(now: Date = Date()) -> DeviceTelemetry {
-        DeviceTelemetry(
+        let session = sessionSnapshot()
+        if session.isLocked {
+            menuBarGeneration = UUID()
+            menuBarSnapshot = SystemMenuBar.snapshot(now: now, locked: true)
+        } else if menuBarRead == nil && (menuBarSnapshot == nil || now.timeIntervalSince(menuBarSnapshot!.collectedAt) >= 30 || menuBarSnapshot?.status == "locked") {
+            let generation = UUID()
+            menuBarGeneration = generation
+            if menuBarSnapshot == nil || menuBarSnapshot?.status == "locked" {
+                menuBarSnapshot = .init(status: "collecting", collectedAt: now, accessibility: AXIsProcessTrusted(), unreadableApplications: 0, items: [])
+            }
+            // AX calls can time out in another process. Keep them off the node's
+            // main actor so heartbeat, permission UI and commands stay responsive.
+            menuBarRead = Task { [weak self] in
+                let snapshot = await Task.detached(priority: .utility) { await SystemMenuBar.snapshotWithIcons() }.value
+                guard let self else { return }
+                self.menuBarRead = nil
+                guard self.menuBarGeneration == generation, !self.sessionSnapshot().isLocked else { return }
+                self.menuBarSnapshot = snapshot
+            }
+        }
+        return DeviceTelemetry(
             deviceName: Host.current().localizedName ?? ProcessInfo.processInfo.hostName,
             hostName: ProcessInfo.processInfo.hostName,
             modelIdentifier: Self.sysctlString("hw.model"),
@@ -448,7 +521,7 @@ public final class DeviceTelemetryCollector {
             soundEffectsOutputMuted: SystemAudio.soundEffectsOutputMuted(),
             audioDevices: SystemAudio.devices(),
             wifi: SystemWiFi.snapshot(),
-            session: sessionTelemetry(),
+            session: sessionSnapshot(),
             permissions: permissionPreflight(),
             runningApplications: NSWorkspace.shared.runningApplications
                 .map {
@@ -465,6 +538,7 @@ public final class DeviceTelemetryCollector {
                 },
             displays: SystemDisplayConfiguration.displays(),
             collectedAt: now,
+            menuBar: menuBarSnapshot,
             printers: SystemPrinters.all(),
             cameras: SystemCameras.all(),
             bluetoothDevices: SystemBluetooth.pairedDevices(),
@@ -477,11 +551,18 @@ public final class DeviceTelemetryCollector {
         )
     }
 
+    /// Narrow local bridge read. Do not collect or return the full device
+    /// snapshot just to render battery status in the desktop app.
+    public func batterySnapshot() -> BatteryTelemetry {
+        SystemBattery.snapshot(isPreventingIdleSleep: powerAssertions.isPreventingIdleSleep)
+    }
+
     public func setPreventIdleSleep(_ enabled: Bool) throws {
         try powerAssertions.setPreventingIdleSleep(enabled)
     }
 
-    private func sessionTelemetry() -> SessionTelemetry {
+    /// Policy checks must not enumerate hardware or request unrelated privacy access.
+    public func sessionSnapshot() -> SessionTelemetry {
         let dictionary = CGSessionCopyCurrentDictionary() as? [String: Any]
         return SessionTelemetry(
             // NSWorkspace notifications are the public authority. The extra
@@ -566,7 +647,46 @@ public struct DisplayBrightnessSnapshot: Equatable, Sendable {
 }
 
 public enum SystemDisplayBrightness {
+    // Apple Silicon built-in displays need DisplayServices: they do not always
+    // publish an IODisplayConnect service. Resolve the optional private framework
+    // at runtime so older macOS versions retain the IOKit implementation.
+    private typealias GetBrightness = @convention(c) (UInt32, UnsafeMutablePointer<Float>) -> Int32
+    private typealias SetBrightness = @convention(c) (UInt32, Float) -> Int32
+    private static let displayServices = dlopen(
+        "/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices", RTLD_LAZY | RTLD_LOCAL
+    )
+    private static let nativeGet: GetBrightness? = displayServices.flatMap { handle in
+        dlsym(handle, "DisplayServicesGetBrightness").map { unsafeBitCast($0, to: GetBrightness.self) }
+    }
+    private static let nativeSet: SetBrightness? = displayServices.flatMap { handle in
+        dlsym(handle, "DisplayServicesSetBrightness").map { unsafeBitCast($0, to: SetBrightness.self) }
+    }
+
+    static func readSnapshot(
+        displayID: UInt32,
+        nativeRead: (UInt32) -> Double?,
+        nativeWritable: Bool,
+        legacyRead: (UInt32) -> DisplayBrightnessSnapshot?
+    ) -> DisplayBrightnessSnapshot? {
+        if let value = nativeRead(displayID), let snapshot = normalizedSnapshot(level: value, canSet: nativeWritable) {
+            return snapshot
+        }
+        return legacyRead(displayID)
+    }
+
+    private static func nativeBrightness(_ displayID: UInt32) -> Double? {
+        guard let nativeGet else { return nil }
+        var value = Float.zero
+        guard nativeGet(displayID, &value) == kIOReturnSuccess else { return nil }
+        return Double(value)
+    }
+
     public static func snapshot(for displayID: CGDirectDisplayID) -> DisplayBrightnessSnapshot? {
+        guard CGDisplayIsActive(displayID) != 0 else { return nil }
+        return readSnapshot(displayID: displayID, nativeRead: nativeBrightness, nativeWritable: nativeSet != nil, legacyRead: legacySnapshot)
+    }
+
+    private static func legacySnapshot(for displayID: CGDirectDisplayID) -> DisplayBrightnessSnapshot? {
         withUniqueMatchingService(for: displayID) { service -> DisplayBrightnessSnapshot? in
             var value = Float.zero
             guard IODisplayGetFloatParameter(
@@ -587,6 +707,12 @@ public enum SystemDisplayBrightness {
         guard level.isFinite, (0 ... 1).contains(level) else {
             throw ThingtimeNodeError.invalidRequest("Brightness must be between 0 and 1.")
         }
+        guard CGDisplayIsActive(displayID) != 0 else {
+            throw ThingtimeNodeError.policyDenied("The selected display is no longer connected.")
+        }
+        if let nativeSet, let current = nativeBrightness(displayID),
+           normalizedSnapshot(level: current, canSet: true) != nil,
+           nativeSet(displayID, Float(level)) == kIOReturnSuccess { return }
         let result = withUniqueMatchingService(for: displayID) { service in
             IODisplaySetFloatParameter(
                 service,
@@ -597,7 +723,7 @@ public enum SystemDisplayBrightness {
         }
         if result == kIOReturnSuccess { return }
         throw ThingtimeNodeError.policyDenied(
-            "The selected display does not expose public IOKit brightness control."
+            "macOS does not expose brightness control for the selected display."
         )
     }
 
