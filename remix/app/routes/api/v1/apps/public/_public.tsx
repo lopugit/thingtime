@@ -1,7 +1,6 @@
 import { json } from '~/api/http';
 
-import { appAllowsDesktopRedirect, appAllowsOrigin, appIsRevoked, findAppByClientId, normalizeAppOrigin, toEmbedApp } from '~/api/utils/apps/apps';
-import { normalizeDesktopRedirectUri } from '~/api/utils/apps/desktopOAuthRedirect';
+import { findAppByClientId, normalizeAppOrigin, toEmbedApp } from '~/api/utils/apps/apps';
 import { describeScopes, parseScopeParam, scopeCovers } from '~/api/utils/apps/scopes';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
@@ -9,9 +8,11 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 // anonymous lookup used by the authorize popup to render its consent screen.
 // Returns the app's public face (clientId + name) plus the REQUIRED and
 // OPTIONAL scope sets as descriptor entries ({ id, title, description, kind,
-// baseline }) for the permissions selector — ONLY when the app exists and the
-// origin is on its allowlist, so the popup can refuse to run for unregistered
-// embedders before any login UI shows.
+// baseline }) for the permissions selector — when the app exists and the
+// origin is a valid web origin. Origins are default-open (apps.ts): any origin
+// may run the flow, so preview deploys work without registration; the
+// normalized origin is echoed back and becomes the token's binding + the
+// popup's postMessage target.
 export const loader = async ({ request }: { request: Request }) => {
   // Anonymous endpoint — bound per IP before any DB work.
   const limit = await enforceRateLimit(request, 'apps.public', null);
@@ -33,6 +34,9 @@ export const loader = async ({ request }: { request: Request }) => {
 
   const optional = parseScopeParam(url.searchParams.get('optional_scope'), [], false);
   if (optional.ok === false) return json({ ok: false, error: optional.error }, { status: 400 });
+
+  const app = await findAppByClientId(clientId);
+  if (!app) return json({ ok: false, error: 'App not found' }, { status: 404 });
 
   // Optional entries the required set already covers are noise — and worse, a
   // toggle for a scope a required ancestor already grants would be a lie

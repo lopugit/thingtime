@@ -4,9 +4,11 @@ import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { updateApp } from '~/api/utils/apps/apps';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
-// POST /api/v1/apps/update — { clientId, name?, origins?, nativeRedirectUris? } — update one of
-// your embed apps. Origins are re-validated; tokens minted for an origin you
-// remove stop working on their next request (appTokens re-checks the list).
+// POST /api/v1/apps/update — { clientId, name?, origins? } — update one of
+// your embed apps. Origins are optional reference metadata (SSO is
+// default-open per api/utils/apps/apps.ts): entries are re-validated for
+// cleanliness, but editing the list never revokes tokens — deleting the app
+// does.
 export const action = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
   if (!user) {

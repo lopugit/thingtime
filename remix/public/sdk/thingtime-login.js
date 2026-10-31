@@ -20,8 +20,10 @@
  *
  * Or drive it yourself: Thingtime.login({ clientId, scopes }).then(session => …)
  *
- * Register your app (name + your site's exact origins) on Thingtime first —
- * the popup only hands tokens to allowlisted origins. Full docs + examples:
+ * Register your app on Thingtime first to get its clientId — then ANY origin
+ * can open the login popup (localhost, preview deploys, production alike).
+ * Each token is bound to the exact origin that opened the popup and only ever
+ * postMessages back to it. Full docs + examples:
  * https://thingtime.com/docs/embed
  */
 (function () {

@@ -5,8 +5,7 @@ import { createSession, getLiveSession } from '../auth/sessions';
 import { findUserById, toPublicUserWithStorage } from '../auth/users';
 import type { PublicUser } from '../auth/users';
 import { getSessionsCollection } from '../mongodb/collections';
-import { appAllowsTokenAudience, appIsRevoked, findAppByClientId } from './apps';
-import { sandboxPublicUser } from './sandbox';
+import { findAppByClientId } from './apps';
 import { sessionScopes } from './scopes';
 import type { AppScopeId } from './scopes';
 import { thirdPartyProfileMediaUrl } from './profileMedia';
@@ -95,11 +94,10 @@ export type AppTokenContext = {
 
 // Resolve an app-scoped Bearer token, or null. Bearer-only on purpose: app
 // tokens live in third-party page JS and never ride a Thingtime cookie, so a
-// cross-site request can't use ambient credentials. The grant also dies with
-// its app: the app must still exist and must still allow the bound origin.
-// Sandbox tokens (purpose 'app-sandbox') resolve too — to a synthetic user,
-// with no app-registration requirement — so integrators can exercise the
-// whole surface pre-registration.
+// cross-site request can't use ambient credentials. The grant dies with its
+// app: the app must still exist. Origins are default-open (apps.ts), so the
+// registered list is never re-checked here — the binding that matters is the
+// token's own meta.origin, which the embed routes compare to request Origin.
 export const resolveAppToken = async (request: Request): Promise<AppTokenContext | null> => {
   const header = request.headers.get('Authorization');
   if (!header?.startsWith('Bearer ')) return null;
@@ -135,10 +133,7 @@ export const resolveAppToken = async (request: Request): Promise<AppTokenContext
   }
 
   const app = await findAppByClientId(clientId);
-  if (!app || !appAllowsTokenAudience(app, origin)) return null;
-  // Admin suspension: a revoked app's tokens die here even if the session
-  // sweep hasn't caught them yet.
-  if (appIsRevoked(app)) return null;
+  if (!app) return null;
 
   const user = await findUserById(claims.sub);
   if (!user || (!serviceAccountAuthenticationAllowed(user) || !(await characterAccountLive(user)))) return null;

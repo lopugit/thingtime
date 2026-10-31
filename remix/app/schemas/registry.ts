@@ -427,7 +427,8 @@ export const MAX_IMAGE_URL_CHARS = 2048;
 export const MAX_COMMENT_CHARS = 1000;
 
 // Embeddable "Login with Thingtime" apps (see api/utils/apps): registered by a
-// developer user, identified by clientId, locked to an origin allowlist.
+// developer user, identified by clientId. SSO origins are default-open; the
+// origins list is optional reference metadata.
 export const MAX_APP_NAME_CHARS = 80;
 export const MAX_APP_ORIGINS = 20;
 export const MAX_APPS_PER_USER = 20;
@@ -2121,58 +2122,15 @@ const appSchema: ThingtimeSchema = {
   summary: 'A registered third-party app that can embed "Login with Thingtime".',
   detail:
     'Created only through /api/v1/apps (no generic-route sanitizer on purpose — the server mints ' +
-    'the clientId and validates the origin allowlist, so neither can be forged through /api/v1/things). ' +
-    'The clientId identifies the app to the embed SDK; origins is the exact list of web origins ' +
-    'allowed to open the authorize popup and receive tokens. The subscription tier and optional admin ' +
-    'override determine storageAllowanceBytes; storageUsedBytes is the atomic aggregate ledger. The app ' +
-    'owner controls userStorageAllowanceBytes as the default app-user cap, while protected relational ' +
-    'app-storage Things hold individual overrides. Deleting the app revokes every app-scoped session ' +
-    'minted for it.',
+    'the clientId, so it cannot be forged through /api/v1/things). The clientId identifies the app ' +
+    'to the embed SDK. SSO origins are default-open: any valid web origin can open the authorize ' +
+    'popup and receive tokens (so preview deploys work without registration); origins is an ' +
+    'optional reference list, and each token is bound to the exact origin that requested it. ' +
+    'Deleting the app revokes every app-scoped session minted for it.',
   fields: [
     { name: 'clientId', type: 'id', required: true, description: 'Server-minted public app id (ttapp_<uuid>) used by the embed SDK.' },
-    {
-      name: 'name',
-      type: 'string',
-      required: true,
-      max: MAX_APP_NAME_CHARS,
-      description: `App name shown on the consent screen, max ${MAX_APP_NAME_CHARS} chars.`
-    },
-    {
-      name: 'origins',
-      type: 'string[]',
-      required: true,
-      max: MAX_APP_ORIGINS,
-      description: `Allowed web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}. One * wildcard is allowed in the leftmost host label for preview deploys (e.g. https://myapp-*-myteam.vercel.app); it never crosses a dot. Per the Public Suffix List: on multi-tenant hosts (vercel.app, netlify.app, …) the star label must END with your platform-appended slug, and public suffixes (co.uk, …) take no wildcard at all.`
-    },
-    { name: 'nativeRedirectUris', type: 'string[]', required: false, max: MAX_APP_ORIGINS, description: 'Exact installed-app OAuth callbacks, e.g. com.example.app://oauth/callback. Separate from web origins; no wildcards.' },
-    { name: 'subscriptionTier', type: 'string', required: true, description: 'Stable app storage tier id.' },
-    { name: 'subscriptionTierVersionId', type: 'id', required: true, description: 'Immutable subscription-tier revision assigned to this app.' },
-    { name: 'subscriptionTierVersion', type: 'number', required: true, min: 1, description: 'Revision number of the assigned tier.' },
-    {
-      name: 'storageAllowanceBytes',
-      type: 'number',
-      required: true,
-      description: 'Server-owned aggregate app-data allowance across every user of this app, in bytes; null is metered/unlimited.'
-    },
-    {
-      name: 'storageAllowanceOverrideBytes',
-      type: 'number',
-      required: false,
-      description: 'Optional administrator plan override; null means metered/unlimited.'
-    },
-    {
-      name: 'storageUsedBytes',
-      type: 'number',
-      required: true,
-      description: 'Bytes currently charged across every non-sandbox namespace owned by this app.'
-    },
-    {
-      name: 'userStorageAllowanceBytes',
-      type: 'number',
-      required: true,
-      description: 'App-owner-managed default allowance for each individual app user, in bytes.'
-    },
-    { name: 'storageAccountingVersion', type: 'number', required: true, description: 'Enables fail-closed quota writes after reconciliation.' }
+    { name: 'name', type: 'string', required: true, max: MAX_APP_NAME_CHARS, description: `App name shown on the consent screen, max ${MAX_APP_NAME_CHARS} chars.` },
+    { name: 'origins', type: 'string[]', required: false, max: MAX_APP_ORIGINS, description: `Optional reference list of the app's web origins (https, or http for localhost dev), max ${MAX_APP_ORIGINS}. Not enforced — SSO is open to any origin by default.` }
   ],
   example: {
     clientId: 'ttapp_4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f',
