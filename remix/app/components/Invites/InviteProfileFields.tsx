@@ -7,11 +7,13 @@ export const InviteProfileFields = ({
 	value,
 	onChange,
 	disabled = false,
+	optional = false,
 	onPreparingChange
 }: {
 	value: InviteProfile;
 	onChange: React.Dispatch<React.SetStateAction<InviteProfile>>;
 	disabled?: boolean;
+	optional?: boolean;
 	onPreparingChange?: (busy: boolean) => void;
 }) => {
 	const [preparing, setPreparing] = React.useState(false);
@@ -30,15 +32,15 @@ export const InviteProfileFields = ({
 			<ProfileMediaField
 				ownerId={id}
 				slot="avatar"
-				label="Profile picture"
+				label={optional ? 'Profile picture suggestion (optional)' : 'Profile picture'}
 				storageMode="inline-thumbnail"
 				savedUrl={value.avatarUrl}
 				savedLinkedUrl={null}
 				disabled={disabled}
 				onChange={photoChanged}
 			/>
-			<FormControl isRequired>
-				<FormLabel htmlFor={`${id}-name`}>Display name</FormLabel>
+			<FormControl isRequired={!optional}>
+				<FormLabel htmlFor={`${id}-name`}>{optional ? 'Display name suggestion (optional)' : 'Display name'}</FormLabel>
 				<Input
 					id={`${id}-name`}
 					value={value.displayName}
@@ -51,8 +53,8 @@ export const InviteProfileFields = ({
 					autoComplete="name"
 				/>
 			</FormControl>
-			<FormControl isRequired>
-				<FormLabel htmlFor={`${id}-username`}>Username</FormLabel>
+			<FormControl isRequired={!optional}>
+				<FormLabel htmlFor={`${id}-username`}>{optional ? 'Username suggestion (optional)' : 'Username'}</FormLabel>
 				<Input
 					id={`${id}-username`}
 					value={value.username}

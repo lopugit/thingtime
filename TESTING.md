@@ -1814,6 +1814,144 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Run `npm run test:attachments` (it carries the public-upload permission
       unit tests alongside the upload-gate regression test).
 
+## Social meta / link unfurls (`remix/app/api/utils/meta/socialMeta.ts`, `socialPreview.ts`, `socialCard.ts`)
+
+- [ ] Raw crawler HTML has one matching title, canonical, og:url, og:image and
+      parseable Schema.org JSON-LD graph. Image URLs are absolute 1200×630 PNGs
+      with matching Open Graph/Twitter alt text; GET the actual image bytes.
+      `/things` exposes collection context only, while private/missing/account
+      targets are noindex and have no structured UGC. Query/fragment secrets
+      and user-authored script terminators never become executable markup.
+      Check a freshly composed Messages/Messenger preview separately from old
+      cached bubbles; see `docs/seo-social-metadata.md`.
+
+- [ ] `/` and an unknown SPA path keep the canonical press-kit wordmark image;
+      `/branding` and other matched routes receive named branded cards. All
+      image URLs are absolute with 1200×630 dimensions and a large Twitter card.
+      Branding uses its optional document-title label; unknown paths use
+      `Thingtime - Your Home for Everything`. Query/fragment secrets and raw
+      parameter values never enter fallback copy. Public post cards keep their
+      authorized content.
+
+- [ ] Add a disposable explicit app route with no preview export, including a
+      nested/index or eager/lazy module. Run normal Vite/Nitro generation and
+      confirm matching HTML, metadata API and PNG defaults without a backend
+      metadata entry. Change an optional literal `socialPreview` export and
+      verify regeneration; remove it and recover defaults. Re-run generation
+      unchanged and require identical portable output. Unknown/splat paths and
+      different secret parameter values retain safe generic/pattern copy.
+
+- [ ] Create an anonymously readable saved page with supported heading, prose,
+      nested Component text and a managed photo; verify `/p/:id` and `/t/:id`
+      infer the same public content in HTML/API/card without metadata setup.
+      Set/clear existing `name` and `description` to verify optional override
+      precedence. Edit the page/Component and require a new content revision.
+      Keep viewer/query/state bindings, runtime sources/Actions, unknown or
+      hidden conditional branches and private `siteRoute` layouts out of the
+      preview. Deny/revoke a photo or replace its stored version during decode:
+      its bytes must not appear. No arbitrary remote image URL is fetched.
+
+- [ ] `/invite` returns invitation-specific title/description and the revisioned
+      `/social-card?path=%2Finvite` PNG. Valid, expired and malformed fragment
+      tokens share the same anonymous invitation card; neither crawler HTML
+      nor PNG reveals tokens, recipient details, email, gift amounts or validity.
+      Unfurling must never consume an invite. Confirm noindex and canonical
+      `/invite`, then separately check a newly composed messaging-app link.
+
+Crawlers never run JS, so verify with plain `curl` against the Nitro port (the
+Vite dev port serves the raw shell without injection; in production, Vercel
+routes every public share surface plus `/social-card` to the Nitro `__server`
+function — `remix/scripts/patch-vercel-output.mjs`).
+
+- [ ] `curl -s <nitro>/post/<public post id>` returns `og:type article`, an
+      `og:title` carrying the author + truncated text (or the poll question),
+      an `og:description` capped near 200 chars, an absolute `og:url` /
+      `/social-card?path=...` `og:image`, and `twitter:card summary_large_image`.
+- [ ] `curl -o card.png '<nitro>/social-card?path=/post/<public-photo-post-id>'`
+      yields a valid 1200×630 PNG. A two-photo post is a two-tile collage; a
+      four-or-more-photo post is a four-tile collage, while its excerpt, author
+      and `N photos` badge remain visible alongside it. Text, image,
+      marketplace, and structured Thingtime posts each have their own card
+      variant; polls show question + options, listings show
+      price/category/location, and shares identify the original content type.
+- [ ] A rich comment permalink has the comment treatment; a reply permalink
+      has the threaded reply treatment and identifies its visible parent.
+      Comments with photos retain their collage, while text-post attachments
+      select a video, audio, or file treatment rather than the generic card.
+- [ ] `/media/:id`, `/thing/:id`, `/p/:id`, `/profile/:username`, `/feed`,
+      `/explore`, deep docs/catalogue URLs, and `/social-card?path=/...` each
+      produce a route-appropriate title, eyebrow and descriptive card rather
+      than the indistinguishable pink placeholder. Standalone image, video,
+      audio, and file routes have distinct media treatments. A published
+      `/p/:id` page uses its name, description or safely extracted block text.
+- [ ] Fail closed: `curl -s <nitro>/post/<private post id>` and
+      `/post/<garbage id>` both return ONLY the generic site block —
+      indistinguishable from each other, and no post text, author, or image
+      may appear anywhere in the HTML. (Status stays 200 by design: h3 treats
+      a 404 Response from this middleware as "unhandled" and would fall
+      through to the raw source template — see `server/routes/[...].ts`.)
+- [ ] The image renderer fetches only stored, public Thingtime image
+      attachments through the canonical thumbnail service; a linked remote attachment,
+      private attachment, oversized response, malformed `path`, or non-image
+      MIME type never becomes a server-side fetch or an image-card leak.
+- [ ] A public photo whose original exceeds 2 MiB still appears in the PNG
+      through a bounded thumbnail. Compare rendered pixels with the source,
+      then revoke access or replace its stored version during processing and
+      confirm stale bytes are omitted, including when a thumbnail was cached.
+- [ ] `GET /api/v1/social-previews?path=/post/<id>` returns the same title,
+      description, canonical and image URL as raw page HTML. Same-origin URLs
+      work; external URLs and embedded credentials are refused. Query strings
+      and fragments never appear in the output. Cookies and custom database
+      selection cannot grant access to private content or alter the home data
+      authority. Negotiate `api.social-previews` 1.0.0 first.
+- [ ] User-authored text with `<`, `>`, `&`, quotes, and newlines arrives
+      HTML/XML-escaped and whitespace-collapsed inside both `content="…"` and
+      the generated card.
+- [ ] `curl -s -H 'x-forwarded-host: thingtime.com' -H 'x-forwarded-proto:
+      https' <nitro>/post/<id>` derives `https://thingtime.com/...` absolute
+      URLs (the request-origin pattern, not a hardcoded host).
+- [ ] The Thingtime card uses the canonical `/branding` wordmark/icon matrices,
+      palette and font families, rather than a substitute mark. It remains readable at 1200×630 and iMessage-sized
+      previews; no text or photo tile clips at the edge.
+- [ ] Check the card from the **deployed** preview, not just locally:
+      `curl -o card.png '<preview-origin>/social-card?path=/feed'` and open it.
+      Cards ship the canonical Space Grotesk, Hanken Grotesk and JetBrains Mono faces because the
+      Vercel runtime has no system fonts, and a dev machine's fonts hide a
+      missing one — a fontless deploy renders full artwork with zero glyphs.
+      Emoji are deliberately dropped from the PNG (the face has no pictographs,
+      so they would draw as tofu boxes) while the `og:`/`twitter:` text tags
+      keep them. Check scripts not covered by the bundled faces separately;
+      successful Latin rendering is not evidence of complete Unicode coverage.
+- [ ] `npm --prefix remix run test:social-previews` passes.
+- [ ] After `npm run build`, `verify:vercel-output` passes: the permalink
+      and social-card routes sit between the API routes and the SPA fallback,
+      point at the Nitro server function, and trace the native PNG renderer.
+- [ ] A normal browser load of `/post/<id>`, `/profile/<username>`, and
+      `/p/<id>` still renders the SPA (the injected head block must not break
+      the shell).
+
+## Emailed-link origin trust (`remix/app/api/utils/auth/appOrigin.ts`)
+
+Verification and password-reset links carry single-use auth tokens, so a
+`Host`-derived origin is an account-takeover primitive: the victim gets a real
+email whose link points at the attacker.
+
+- [ ] `npm run test:auth-origin` passes (APP_URL precedence, spoofed/lookalike
+      hosts, the multi-tenant `*.vercel.app` namespace, Vercel preview vs
+      production env precedence, and the local-dev host allowlist).
+- [ ] With `APP_URL` set, `curl -X POST .../api/v1/auth/password-reset -H 'Host:
+      attacker.example'` (and the same via `X-Forwarded-Host`) emails a link on
+      the `APP_URL` origin — never the supplied host.
+- [ ] With `APP_URL` UNSET on a Vercel preview, the emailed link uses the
+      deployment's own `VERCEL_BRANCH_URL`, and a spoofed `Host:
+      attacker-xyz.vercel.app` does not change it. Our own preview namespace is
+      NOT trusted from the Host header — anyone can deploy into `*.vercel.app`.
+- [ ] With `APP_URL` unset and no Vercel env (plain local dev), links use the
+      requested origin for `localhost`/`127.0.0.1`/`[::1]`/`*.thingtime.com`/
+      `*.ts.net`, and any other Host yields `https://thingtime.com`.
+- [ ] All four emailed-link routes stay on the helper: `register`,
+      `resend-verification`, `password-reset`, `service-account`.
+
 ## Canonical AI instruction links (`AI_ALL.md`)
 
 - [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
@@ -6002,9 +6140,14 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Gifted signup invitations (2026-09-13)
 
-- [ ] In Settings → Lopu, create an invite with a profile photo, display name,
+- [ ] In Settings → Account, create an invite with a profile photo, display name,
       username and fractional gift. The balance decreases once; copied links use
       the browser/deployment origin, never the internal Nitro port.
+- [ ] Create an invitation with both name and username blank, then with each
+      suggestion supplied independently. The optional labels have no required
+      marker; creation succeeds. Open the blank invite and choose a fresh name
+      and username; signup requires valid final values and persists the
+      recipient's choices. Invalid values must leave the invite and gift usable.
 - [ ] Visit the link signed out at desktop and mobile widths; scroll top to
       bottom. The avatar/name/username are prefilled, editable, and remain after
       refresh. Remove and replace the photo; submit stays disabled while it is
@@ -10353,59 +10496,38 @@ Automated: `npm --prefix remix run test:connections`, `test:api-capabilities`, `
   report failure, preserve the old authority, and allow retry after unlock;
   verify the picker continues to identify the actual active destination.
 
-- Password Copy regression (2026-10-26): copy a concealed field without revealing
-  it, and compare the clipboard result with the synthetic source value. TOTP Copy
-  must contain only the current code, never the setup seed/countdown. Check fixed,
-  non-secret rejection feedback and no Copy controls for passkey signing fields.
-  While work is pending, edit/switch/close the entry, change account/data plane,
-  or enter Builder; no late TOTP write or stale status may appear in the new
-  scope. A clipboard write already submitted cannot be revoked. Edit the Copy
-  label independently, save/reload, and verify no private value entered layouts
-  or Action history. The password unit suite passed 56 tests, zero skips, on
-  26 October. All 11 isolated Chromium acceptance groups passed at desktop/mobile
-  sizes; real clipboard, installed/native and production acceptance remain pending.
+- In an isolated API/database with a synthetic admin, open `/admin/preview-retention`
+  at desktop and mobile widths. Scroll top to bottom, expand/collapse both
+  sections, exercise all switches and conditional numeric fields. Check keyboard
+  labels, focus, wrapping and absence of horizontal overflow. The same controls
+  appear in Settings → Admin.
+- Save cleanup paused, a nonzero orphan grace, superseded pruning/grace and an
+  optional inactivity duration. Independently GET the admin endpoint, reload the
+  page and confirm the exact saved revision/policy. Disable inactivity again and
+  confirm null persists. A stale revision must return 409 and preserve the newer
+  values; anonymous and ordinary accounts must be refused.
+- Verify admin retention 1.0.1 and controller retention 1.0.0 in both manifest
+  generators and the built/runtime manifest. The route/manifest test must assert
+  each independent feature version when only one contract receives a PATCH.
+  A stored policy this server cannot
+  validate must GET as 503 unavailable; malformed submitted policy stays 400. Signed
+  controller reads require the exact repository/ref and a fresh timestamp,
+  return only the policy and no revision/audit data. Wrong signatures, stale
+  requests and DB failure must refuse cleanup. Check both manifest generators.
+- Protected controller tests cover no-open-PR grace, opt-in superseded cleanup,
+  active current-head protection, opt-in inactive open-PR expiry, failed policy
+  reads and stable/production/gateway/alias protection. Real Vercel deletion is
+  separate provider acceptance and must never run from this disposable fixture.
+- Deployment order: product gateway API first, signed read and admin save/readback
+  second, protected controller consumer last. A UI preview using the older
+  gateway cannot establish the new backend's acceptance.
 
-- Password Builder regression: run `npm --prefix remix run test:passwords` inside
-  a loopback-only namespace, then the isolated password-manager browser fixture.
-  Edit nested title/field/reveal labels and repeated entry/file/history templates;
-  save and reload. Decrypted password, TOTP seed, source JSON, attachment key/nonce
-  and typed replacements must never occur in saved layouts or Action history.
-  Verify focused typing survives blur/focus with masking, required-title Enter
-  submission, delayed read/save cancellation on entering Builder, and hide/owner
-  changes. Native/QR fixture callbacks are synthetic, not OS/device acceptance.
+### Builder provenance and shared media
 
-  Reproduce the synthetic browser checks with `npm --prefix remix run
-  test:passwords-browser`, supplying `TT_QA_IMAGE` and `TT_QA_SECCOMP` as for the
-  existing isolated credential runner. The generated QR fixture contains only
-  the public test seed `JBSWY3DPEHPK3PXP`. The runner uses a task-owned clean
-  Chromium profile, retains its sandbox, and proves network isolation before
-  testing. Real Apple provider/chooser acceptance remains separate.
-
-- QR image capacity regression (2026-10-26): upload a valid PNG larger than
-  12 MiB with more than 20 megapixels and a small off-centre synthetic TOTP code.
-  The image must decode without a file/pixel rejection; overlapping scans must
-  reach original resolution while keeping each working canvas bounded. Close
-  the editor during scanning and during a pending bitmap creation: release late
-  bitmaps, clear pixels, preserve the existing draft and stop a captured screen
-  stream before decoding its immutable frame. Repeat the real OS chooser check
-  separately; a synthetic stream is not permission/picker acceptance.
-  Queue cancellation between an immediately resolved resource and the caller's
-  continuation: upload/screen bitmaps must close exactly once, and immediate or
-  late chooser streams must stop exactly once. A video-construction failure
-  after acquiring a stream must also stop sharing.
-
-
-### Main OAuth/password integration regressions (27 October 2026)
-
-- Run `test:connections-browser` and `test:passwords-browser` with the documented
-  isolated runtime image and Chromium seccomp profile. Retain the network boundary
-  report. In Builder, select the authored provider-field template from its document,
-  since template editing intentionally removes live provider fieldset instances.
-- At desktop/mobile widths, generate into the selected masked password field,
-  save a chosen icon and verify the list image against the fixture source, and
-  open/close the passkey guide without replacing the credential draft. Decode or
-  authorization failures must keep the generic list icon; changing owner aborts
-  pending icon loads and revokes their object URLs.
-- Load an older saved password layout, enter Builder, edit and discard: required
-  private-property and list-icon migrations remain active while authored labels
-  and order are preserved. No decrypted input enters saved layouts.
+Create a public saved Webpage referencing a saved Component with a managed
+image. Confirm both returned content kinds include `builder-thing`, then open
+its `/p/<id>` page anonymously: the image must load through
+`attachments/content?id=<id>&sharedRoot=<page-id>` for both original and
+`width=640` reads. Repeat with the Component as sharedRoot. Private roots,
+marker-only/control/unknown kinds and target-attached roots must remain refused;
+removing provenance or widening ACLs is not a workaround.

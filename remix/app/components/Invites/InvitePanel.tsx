@@ -35,7 +35,7 @@ export const InvitePanel = () => {
 				Invite someone with a gift 🎁
 			</Text>
 			<Text mt={2} mb={5} fontSize="sm" color="var(--tt-muted)">
-				Set up their profile and choose credits to gift. They can change everything and choose their own password. Each link works once. Choose when
+				Choose credits to gift. Profile suggestions are optional; your friend chooses their own name, username and password when signing up. Each link works once. Choose when
 				it expires, or leave it available until used or cancelled.
 			</Text>
 			<form
@@ -62,7 +62,7 @@ export const InvitePanel = () => {
 					}
 				}}
 			>
-				<InviteProfileFields value={profile} onChange={setProfile} disabled={busy} onPreparingChange={setPhotoBusy} />
+				<InviteProfileFields optional value={profile} onChange={setProfile} disabled={busy} onPreparingChange={setPhotoBusy} />
 				<FormControl mt={4} isRequired>
 					<FormLabel htmlFor="invite-credits">Credits to gift</FormLabel>
 					<Input

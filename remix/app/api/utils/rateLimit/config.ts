@@ -11,6 +11,7 @@ export type RateLimitRule = { limit: number; windowMs: number; enabled: boolean 
 export type RateLimitConfig = Record<string, RateLimitRule>;
 
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
+  'social-previews.read': { limit: 120, windowMs: 60_000, enabled: true },
   'mail.read': { limit: 120, windowMs: 60_000, enabled: true },
   'mail.write': { limit: 60, windowMs: 60_000, enabled: true },
   'mail.sync': { limit: 30, windowMs: 60_000, enabled: true },

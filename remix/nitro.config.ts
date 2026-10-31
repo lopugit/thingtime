@@ -1,4 +1,17 @@
 import { defineNitroConfig } from 'nitro/config';
+import { generateRoutePreviews } from './scripts/generate-route-previews.mjs';
+
+import { apiV1DocsRouteKeys, apiV1RouteKeys } from './app/docs/apiDocs.ts';
+import {
+  CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH,
+  CHATGPT_CAPABILITY_MANIFEST_PATH,
+  CHATGPT_PROTECTED_RESOURCE_METADATA_PATH
+} from './app/api/utils/chatgpt/pluginCore.ts';
+import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/thingtimeCapabilities.ts';
+import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore.ts';
+
+// Extract the actual browser route tree without importing/executing its pages.
+generateRoutePreviews();
 
 const publicDir = new URL('./dist', import.meta.url).pathname;
 const designDocsDir = new URL('../docs/design', import.meta.url).pathname;

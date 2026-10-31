@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { buildSocialMetaTags, resolveSocialMeta, renderSocialMetaHtml } from './socialMeta';
 import { DEFAULT_PAGE_TITLE, pageTitle } from '../../../utils/pageTitle';
+import type { ResolveWebpageResult } from '../webpages/webpages';
 import { readFileSync } from 'node:fs';
 import {
 	normaliseSocialMediaKind,
@@ -10,14 +11,14 @@ import {
 	socialMediaVariant,
 	socialPreviewCardUrl,
 	socialPreviewFromPublicPost,
+	socialPreviewFromPublicWebpage,
 	socialPreviewRevision,
 	staticSocialPreview
 } from './socialPreview';
 
-test('uncustomized pages use the press-kit PNG and safe shared page titles', async () => {
+test('all declared routes get automatic cards while unknown paths keep safe brand fallback', async () => {
 	for (const [path, title] of [
 		['/', DEFAULT_PAGE_TITLE],
-		['/invite#secret-token', DEFAULT_PAGE_TITLE],
 		['/branding', 'Thingtime - Brand resources'],
 		['/unknown/private-name?token=secret', DEFAULT_PAGE_TITLE],
 		['/settings', 'Thingtime - Settings']
@@ -26,7 +27,9 @@ test('uncustomized pages use the press-kit PNG and safe shared page titles', asy
 		const values = new Map(tags.map((tag) => [tag.key, tag.content]));
 		assert.equal(values.get('og:title'), title);
 		assert.equal(values.get('twitter:title'), title);
-		assert.equal(values.get('og:image'), 'https://thingtime.example/branding/presskit/thingtime-og-card-1200x630.png?v=20260917');
+		if (path === '/' || path.startsWith('/unknown/'))
+			assert.equal(values.get('og:image'), 'https://thingtime.example/branding/presskit/thingtime-og-card-1200x630.png?v=20260917');
+		else assert.match(values.get('og:image') || '', /\/social-card\?/);
 		assert.equal(values.get('twitter:image'), values.get('og:image'));
 		assert.equal(values.get('twitter:card'), 'summary_large_image');
 		assert.doesNotMatch(renderSocialMetaHtml(tags), /secret-token|token=secret/);
@@ -62,7 +65,7 @@ test('social preview paths never become a redirect or an arbitrary route', () =>
 test('social-card URLs carry only a normalized local path and a safe revision', () => {
 	assert.equal(
 		socialPreviewCardUrl('https://thingtime.example', '/post/hello?source=chat', '2026-09-04T12:00:00.000Z'),
-		'https://thingtime.example/social-card?path=%2Fpost%2Fhello&v=2026-09-04T12%3A00%3A00.000Z'
+		'https://thingtime.example/social-card?path=%2Fpost%2Fhello&r=brand-20261029&v=2026-09-04T12%3A00%3A00.000Z'
 	);
 });
 
@@ -98,20 +101,23 @@ test('static public routes get route-specific social context', () => {
 	const profile = staticSocialPreview('/profile');
 	assert.equal(feed.kind, 'feed');
 	assert.match(feed.description, /Posts, photos, polls/i);
-	assert.equal(docs.kind, 'docs');
-	assert.match(docs.title, /docs/i);
-	assert.match(component.title, /Colourful Button/);
+	assert.equal(docs.kind, 'webpage');
+	assert.match(docs.title, /docs.*api/i);
+	assert.equal(component.title, 'Thingtime - Components');
+	assert.doesNotMatch(component.title + component.description, /colourful-button|Colourful Button/i);
 	assert.equal(profile.variant, 'profile');
 });
 
-test('a named catalogue page bounds its tags like every data-backed preview', () => {
-	// The leaf is a raw URL segment, so it is as long as the caller makes it.
-	const long = staticSocialPreview(`/docs/${'a'.repeat(600)}`);
-	assert.ok(Array.from(long.title).length <= 70, `title was ${Array.from(long.title).length} code points`);
-	assert.ok(Array.from(long.description).length <= 200, `description was ${Array.from(long.description).length} code points`);
-	assert.ok(long.title.endsWith('…'));
-	// Ordinary names are still printed whole.
-	assert.equal(staticSocialPreview('/components/colourful-button').title, 'Thingtime component: Colourful Button');
+test('dynamic route parameters never become public copy and fresh routes need no backend entry', () => {
+	for (const path of ['/components/private-name', '/docs/api/private-group/private-doc', '/pair/123456']) {
+		const preview = staticSocialPreview(path);
+		assert.equal(preview.publicContent, undefined);
+		assert.doesNotMatch(preview.title + preview.description, /private|123456/);
+		assert.notEqual(preview.variant, 'app');
+	}
+	assert.equal(staticSocialPreview('/support').title, 'Thingtime - Support');
+	assert.equal(staticSocialPreview('/support').variant, 'webpage');
+	assert.equal(staticSocialPreview('/unknown/private-token').title, DEFAULT_PAGE_TITLE);
 });
 
 test('Open Graph tags declare a full PNG card for social renderers', () => {
@@ -220,20 +226,223 @@ test('every canonical post family and thread shape gets a distinct social varian
 });
 
 test('an anonymously readable unlisted photo post has contextual metadata but stays noindex', async () => {
-  const { publicPostPreview } = await import('./socialPreview');
-  const { socialMetaFromPreview } = await import('./socialMeta');
-  const result = { ok: true, thing: { updatedAt: '2026-09-21' }, post: {
-    acl: ['tt:hidden'], author: { displayName: 'Photographer' }, text: 'Classic cars at the weekend meet',
-    thingtime: ['post'], attachments: [{ id: 'car-photo', mediaKind: 'image' }]
-  }};
-  const preview = await publicPostPreview('/post/car-meet', result);
-  assert.ok(preview);
-  assert.match(preview.title, /Classic cars/);
-  assert.equal(preview.images[0].attachmentId, 'car-photo');
-  const tags = new Map(socialMetaFromPreview('https://thingtime.example', preview).tags.map(tag => [tag.key, tag.content]));
-  assert.match(tags.get('og:description')!, /Classic cars/);
-  assert.match(tags.get('og:image')!, /social-card/);
-  assert.equal(tags.get('robots'), 'noindex, follow');
-  assert.equal(await publicPostPreview('/post/private', { ...result, ok: false }), null);
-  assert.equal(await publicPostPreview('/post/private', { ...result, post: { ...result.post, acl: ['tt:user'] } }), null);
+	const { publicPostPreview } = await import('./socialPreview');
+	const { socialMetaFromPreview } = await import('./socialMeta');
+	const result = {
+		ok: true,
+		thing: { updatedAt: '2026-09-21' },
+		post: {
+			acl: ['tt:hidden'],
+			author: { displayName: 'Photographer' },
+			text: 'Classic cars at the weekend meet',
+			thingtime: ['post'],
+			attachments: [{ id: 'car-photo', mediaKind: 'image' }]
+		}
+	};
+	const preview = await publicPostPreview('/post/car-meet', result);
+	assert.ok(preview);
+	assert.match(preview.title, /Classic cars/);
+	assert.equal(preview.images[0].attachmentId, 'car-photo');
+	const tags = new Map(socialMetaFromPreview('https://thingtime.example', preview).tags.map((tag) => [tag.key, tag.content]));
+	assert.match(tags.get('og:description')!, /Classic cars/);
+	assert.match(tags.get('og:image')!, /social-card/);
+	assert.equal(tags.get('robots'), 'noindex, follow');
+	assert.equal(await publicPostPreview('/post/private', { ...result, ok: false }), null);
+	assert.equal(await publicPostPreview('/post/private', { ...result, post: { ...result.post, acl: ['tt:user'] } }), null);
+});
+
+test('invitation links have a shared card without reading or validating their private payload', async () => {
+	const expected = staticSocialPreview('/invite');
+	assert.equal(expected.kind, 'invite');
+	assert.equal(expected.variant, 'invite');
+	assert.equal(expected.title, 'You’re invited to Thingtime');
+	assert.equal(expected.indexable, false);
+	assert.equal(expected.publicContent, undefined);
+	// Fragments never reach a real HTTP server. These inputs also cover the
+	// safe helper path and legacy query payloads; none may enter the card URL.
+	for (const suffix of [
+		'',
+		'#valid-private-token',
+		'#expired-private-token',
+		'#%E0%A4%A',
+		'?token=private&email=person%40example.com&gift=99#<script>'
+	]) {
+		const meta = await resolveSocialMeta(new Request(`https://thingtime.example/invite${suffix}`));
+		const tags = new Map(meta.tags.map((tag) => [tag.key, tag.content]));
+		assert.equal(tags.get('og:title'), expected.title);
+		assert.equal(tags.get('og:description'), expected.description);
+		assert.equal(tags.get('twitter:card'), 'summary_large_image');
+		assert.equal(tags.get('og:image'), socialPreviewCardUrl('https://thingtime.example', '/invite', expected.revision));
+		assert.equal(tags.get('robots'), 'noindex, follow');
+		assert.equal(meta.canonical, 'https://thingtime.example/invite');
+		assert.doesNotMatch(renderSocialMetaHtml(meta), /private|expired|person|%E0|gift|<script>/);
+	}
+	assert.equal(pageTitle('/invite'), 'Thingtime - Invitation');
+	assert.equal(pageTitle('/invite#private', '[LC]'), '[LC] Thingtime - Invitation');
+});
+
+test('metadata API accepts only same-origin paths and drops queries, fragments and caller identity', async () => {
+	const { resolveSocialMetadata, socialMetadataPath } = await import('./socialMetadata');
+	for (const value of ['/post/public?token=secret#secret', 'https://thingtime.example/post/public?token=secret#secret'])
+		assert.equal(socialMetadataPath('https://thingtime.example', value), '/post/public');
+	for (const value of [
+		'https://other.example/post/public',
+		'//other.example/a',
+		'https://user:secret@thingtime.example/a',
+		'file:///a',
+		['javascript', 'alert(1)'].join(':'),
+		'/a\\b',
+		'/a\nsecret'
+	])
+		assert.throws(() => socialMetadataPath('https://thingtime.example', value));
+	const resolved: string[][] = [];
+	const resolve = async (origin: string, path: string) => {
+		resolved.push([origin, path]);
+		return {
+			...staticSocialPreview(path),
+			title: 'Public title',
+			description: 'Public description',
+			publicContent: true,
+			secret: 'never-project',
+			crystal: { private: true }
+		};
+	};
+	const url = 'https://thingtime.example/api/v1/social-previews?path=' + encodeURIComponent('/post/public?token=secret#secret');
+	const anonymous = await resolveSocialMetadata(new Request(url), resolve);
+	const signedIn = await resolveSocialMetadata(
+		new Request(url, {
+			headers: {
+				Cookie: 'tt_auth=private; tt_mongo=private',
+				Authorization: 'Bearer private',
+				'x-tt-mongo-url': 'mongodb://attacker.invalid/thingtime'
+			}
+		}),
+		resolve
+	);
+	assert.deepEqual(signedIn, anonymous);
+	assert.deepEqual(resolved, [
+		['https://thingtime.example', '/post/public'],
+		['https://thingtime.example', '/post/public']
+	]);
+	assert.deepEqual(Object.keys(anonymous).sort(), ['canonical', 'description', 'image', 'publicContent', 'title', 'type', 'url']);
+	assert.equal(anonymous.canonical, 'https://thingtime.example/post/public');
+	assert.equal(anonymous.title, 'Public title');
+	assert.equal(anonymous.image.width, 1200);
+	assert.equal(anonymous.image.height, 630);
+	assert.equal(anonymous.image.type, 'image/png');
+	assert.doesNotMatch(JSON.stringify(anonymous), /secret|private|crystal|never-project/);
+	const unavailable = await resolveSocialMetadata(new Request(url), async () => {
+		throw new Error('private database detail');
+	});
+	const missing = await resolveSocialMetadata(new Request(url), async (_, path) => staticSocialPreview(path));
+	assert.deepEqual(unavailable, missing);
+	assert.equal(missing.publicContent, false);
+});
+
+test('metadata route leaves inherited custom databases and rate limits anonymously before resolving', async () => {
+	const { createSocialPreviewsLoader } = await import('../../../routes/api/v1/social-previews/_social-previews');
+	const { runWithMongoEndpoint, getActiveMongoEndpoint } = await import('../mongodb/endpoint');
+	const { resolveSocialMetadata } = await import('./socialMetadata');
+	let calls = 0;
+	const handler = createSocialPreviewsLoader({
+		limit: async (_request, key, identity, options) => {
+			assert.equal(getActiveMongoEndpoint(), null);
+			assert.equal(key, 'social-previews.read');
+			assert.equal(identity, null);
+			assert.equal(options?.failClosed, true);
+			return { allowed: true, limit: 120, remaining: 119, resetAt: new Date().toISOString() };
+		},
+		resolve: async (request) => {
+			calls++;
+			assert.equal(getActiveMongoEndpoint(), null);
+			return resolveSocialMetadata(request, async (_, path) => staticSocialPreview(path));
+		}
+	});
+	const selection = { url: 'mongodb://attacker.invalid/thingtime', savedId: null };
+	await runWithMongoEndpoint(selection, async () => {
+		const response = await handler({
+			request: new Request('https://thingtime.example/api/v1/social-previews?path=%2Finvite', {
+				headers: { Cookie: 'tt_auth=private', 'x-tt-mongo-url': selection.url }
+			})
+		});
+		assert.equal(response.status, 200);
+		assert.equal(response.headers.get('cache-control'), 'no-store');
+		assert.equal(getActiveMongoEndpoint()?.url, selection.url);
+		assert.equal((await response.json()).publicContent, false);
+	});
+	const refused = createSocialPreviewsLoader({
+		limit: async () => ({ allowed: false, limit: 120, remaining: 0, resetAt: new Date().toISOString() }),
+		resolve: async () => {
+			throw new Error('must not resolve');
+		}
+	});
+	const limited = await refused({ request: new Request('https://thingtime.example/api/v1/social-previews') });
+	assert.equal(limited.status, 429);
+	assert.ok(limited.headers.get('retry-after'));
+	const unavailable = createSocialPreviewsLoader({
+		limit: async () => ({ allowed: false, unavailable: true, limit: 120, remaining: 0, resetAt: new Date().toISOString() })
+	});
+	assert.equal((await unavailable({ request: new Request('https://thingtime.example/api/v1/social-previews') })).status, 503);
+	assert.equal((await handler({ request: new Request('https://thingtime.example/api/v1/social-previews', { method: 'POST' }) })).status, 405);
+	assert.equal(calls, 1);
+});
+
+test('all dynamic card URLs carry a global brand revision independently of content revision', async () => {
+	const { SOCIAL_CARD_RENDERER_REVISION } = await import('./socialPreview');
+	for (const path of ['/invite#secret', '/feed', '/post/public?token=secret', '/profile/example', '/p/public']) {
+		const base = new URL(socialPreviewCardUrl('https://thingtime.example', path));
+		const edited = new URL(socialPreviewCardUrl('https://thingtime.example', path, 'content-edit'));
+		assert.equal(base.searchParams.get('r'), SOCIAL_CARD_RENDERER_REVISION);
+		assert.equal(edited.searchParams.get('r'), SOCIAL_CARD_RENDERER_REVISION);
+		assert.equal(edited.searchParams.get('v'), 'content-edit');
+		assert.equal(base.searchParams.has('v'), false);
+		assert.doesNotMatch(edited.href, /secret|token/);
+	}
+});
+
+test('public page composition supplies automatic text and photos, overrides win, and child edits refresh cards', () => {
+	const page: NonNullable<ResolveWebpageResult['page']> = {
+		id: 'public-page',
+		thingtime: ['webpage'],
+		author: null,
+		visibility: 'public',
+		acl: ['tt:all'],
+		targetId: null,
+		folderId: null,
+		crystal: { name: 'Untitled page', blocks: [{ type: 'component', component: 'hero' }] },
+		extended: null,
+		tags: [],
+		createdAt: '2026-10-29',
+		updatedAt: '2026-10-29'
+	};
+	const component = {
+		...page,
+		id: 'hero',
+		thingtime: ['component'],
+		crystal: {
+			render: {
+				tag: 'section',
+				children: [
+					{ tag: 'h1', children: ['A real heading'] },
+					{ tag: 'p', children: ['Real visible body copy'] },
+					{ tag: 'img', props: { src: '/api/v1/attachments/content?id=public-photo', alt: 'Public photo' } }
+				]
+			}
+		}
+	};
+	const input: ResolveWebpageResult = { ok: true, page, source: 'user', components: [component], refs: { hero: 'hero' } };
+	const inferred = socialPreviewFromPublicWebpage('/p/public-page', input);
+	assert.equal(inferred.title, 'A real heading on Thingtime');
+	assert.equal(inferred.description, 'Real visible body copy');
+	assert.deepEqual(inferred.images, [{ attachmentId: 'public-photo', label: 'Public photo' }]);
+	assert.equal(inferred.publicContent, true);
+	assert.equal(inferred.indexable, true);
+	component.crystal.render.children[0].children = ['Edited child heading'];
+	assert.notEqual(socialPreviewFromPublicWebpage('/p/public-page', input).revision, inferred.revision);
+	page.crystal.name = 'Custom title';
+	page.crystal.description = 'Custom summary';
+	const explicit = socialPreviewFromPublicWebpage('/p/public-page', input);
+	assert.equal(explicit.title, 'Custom title on Thingtime');
+	assert.equal(explicit.description, 'Custom summary');
+	assert.equal(socialPreviewFromPublicWebpage('/p/missing', { ...input, page: null }).publicContent, undefined);
 });

@@ -1099,3 +1099,7 @@ function GenericThingPage() {
 		</Flex>
 	);
 }
+
+
+// Optional public fallback copy; actual content still requires anonymous access.
+export const socialPreview = { title: 'A thing on Thingtime', pageTitle: 'Thing' } as const;

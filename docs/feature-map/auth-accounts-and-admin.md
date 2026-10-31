@@ -515,10 +515,37 @@ and independent account lease. Run `test:connections`, `test:environment-gateway
 is backend-first; see [the runbook](../environment-api-gateway.md#connections-major2-rollout).
 
 
-Production feature integration retains `api.passwords` 1.3.0 and the editable
-password generator, icon editor and passkey guide while adding private structured
-field templates. List icons use transient decoded blob URLs with an editable
-fallback; icon URLs and decrypted property values never enter saved layouts.
-`test:connections-browser` and `test:passwords-browser` share the hardened
-`run-private-tools-browser.mjs` runner, with explicit synthetic fixture dispatch,
-network-disabled containers and the Chromium sandbox retained.
+`Admin → Preview retention` (`/admin/preview-retention`) and Settings → Admin
+share `Admin/PreviewRetentionSettings.tsx` and `previewRetentionSettingsBlocks.ts`.
+`SettingsDocumentHost`/`accountSettingsDocumentAdapter` save the private block
+layout through the existing Things API; `WebpageBlocksRenderer` supplies nested
+Builder selection and `TransientBlockHost` binds ordinary controls to scoped
+policy handlers. No opaque form slot or saved credential is used. Layout edits
+pause live operations and use the existing revision fence.
+`GET/POST /api/v1/admin/ci/preview-retention` requires the current admin and
+negotiated `api.admin-ci-preview-retention` 1.0.0. `ciControl/previewRetention.ts`
+reads the home settings singleton afresh and saves with a revision comparison;
+concurrent edits return 409. The signed, read-only controller endpoint is
+`POST /api/v1/integrations/ci/preview-retention`, capability
+`api.integration-ci-preview-retention` 1.0.0. `previewRetentionCore.ts` owns
+validation and safe defaults. Both manifests derive these explicit versions
+from `apiDocs.ts`; Nitro imports register both executable routes.
+
+The protected `github-actions` controller consumes the saved policy. It preserves
+deployments if policy discovery, authentication, reads or validation fail.
+The product API must roll out to the selected gateway origin before enabling the
+new policy reader; a UI-only preview forwarding to the old gateway cannot prove
+the new backend. See README “Preview cleanup policy” for defaults and rollout.
+Run `test:ci-control` (including the retention block-tree regression), `test:api-capabilities`, and Admin route tests. Manual
+coverage: TESTING.md “Preview retention and PR liveliness”.
+
+## Gift invites
+
+`Invites/InvitePanel.tsx` uses the shared `InviteProfileFields` with optional
+creator suggestions. `inviteCore.ts::inviteProfile` validates supplied suggestions;
+`invites.ts::createInvite` accepts omitted or blank names/usernames. The recipient
+chooses their final profile in `InviteSignup.tsx`; `prepareInviteSignup` still
+requires a valid final name and username, supports legacy suggested defaults, and
+never lets suggestions override explicit recipient input. `api.auth-invites` 2.2.0
+advertises optional creator fields and the client negotiates that minimum.
+`test:invites` covers empty suggestions, recipient choice and escrow/replay safety.

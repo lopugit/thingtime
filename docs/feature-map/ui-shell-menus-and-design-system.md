@@ -223,13 +223,52 @@ reload, other-tab writes, ledger failure/recovery, protection outcome and
 
 ## Local global/site composition
 
-`BuilderPagesList` links global editing and canonical site routes to `BuilderPage`.
-`schemas/sitePages.ts` supplies the same native-section definitions to offline
-Builder and server seeding. `SiteBlocksHost` resolves the workspace's pages with
-`useWebpage` and a bounded identity-owned `siteBlocksCache`; failed refreshes
-retain paint and offer Retry. Each global/route composition uses the existing
-webpage runtime, with native permission and Action trust checks intact.
-`drafts/sitePageDraft.ts` validates recoverable editor snapshots against the saved
-page revision. Cross-tab refresh is a scope-only local-workspace invalidation.
-Run `test:webpages`, `test:drafts`, `test:local-workspace` and the opt-in
-`local-workspace/siteBlocks.browser.test.ts` described in `docs/local-workspaces.md`.
+## Editable private settings
+
+`Settings/SettingsDocumentHost.tsx` composes the ordinary Builder drawer/chrome
+with authored `WebpageBlock[]`. Account layouts use private keyed webpages through
+`settingsDocument.client.ts` and existing Things revision fences. Device recovery
+uses the same document format with origin/authority scoped local storage and Web
+Locks. Neither adapter captures form DOM or runtime credential state.
+
+`desktopSettingsDocuments.ts` defines the runtime, endpoint and previous-workspace
+recovery controls as editable intrinsic blocks. `useDesktopSettingsAdapter.ts`
+provides public bindings and a bounded transient native-operation map. Sensitive
+hosts reject external sources, native/component blocks and persisted password/file
+values before rendering; normal Builder insertion and source editing follow the
+same restrictions. Scope changes abort transient controls and fence late results.
+
+## Password manager navigation
+
+`Nav/Drawer/drawerMenu.tsx` exposes an authenticated Password manager entry for
+`/passwords` and `/settings/passwords`. The shared `Settings/settingsTabs.ts`
+category supports full-page/popup navigation, reload and the legacy
+`#password-manager` anchor. `PasswordManagerSettings.tsx` composes an editable
+settings document with `PasswordPasskeySetup`; its explicit Thingtime sign-in
+passkeys link targets `/settings/security#account-passkeys`. Browser approval at
+`/passwords/provider` uses the same safe editable-document and transient-control
+hosts; passwords and signing keys never enter layout blocks. Check keyboard,
+Back, nested Builder selection, narrow/mobile widths and full-page scroll in the
+real browser. See [password manager](../password-manager.md#browser-passkeys-and-settings).
+
+
+## Automatic page titles and social previews
+
+`app/utils/pageTitle.ts` and the server's shared social resolver use
+`automaticRoutePreview.ts`. `scripts/generate-route-previews.mjs` discovers the
+real eager/lazy/nested/index route tree from `app/routes.tsx` without importing
+pages. Vite watches route/module changes; Vite and Nitro builds regenerate the
+portable `automaticRoutePreviews.generated.json`. New ordinary routes receive
+safe pattern-derived copy and a branded image automatically. Parameter values,
+queries/fragments and wildcard/unknown paths do not supply metadata text.
+
+Optional literal `socialPreview` exports customize display copy/card variant;
+`pageTitle` is the document-title label, independent of the share headline.
+No backend page-metadata registry is maintained. For saved `/p/:id` and `/t/:id`
+pages, supported anonymous public headings/prose/managed images supply defaults;
+existing saved `name`/`description` fields override them. The extractor does not
+execute Actions, sources or client JavaScript, infer private bindings, or expose
+system `siteRoute` layouts. Access/indexability and attachment ACLs remain in
+the canonical server paths. Run `test:social-previews`; see
+[the metadata contract](../seo-social-metadata.md) and TESTING's social-unfurl
+checklist. Live rendered/crawler acceptance remains a separate check.
