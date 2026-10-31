@@ -1,8 +1,0 @@
-node_modules/
-dist/
-build/
-.vercel/
-.output/
-.cache/
-coverage/
-public/vendor/mapbox-gl/

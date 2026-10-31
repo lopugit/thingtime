@@ -20,8 +20,12 @@ const MAX_DEPLOYMENT_PAGES = 20;
 const MAX_WORKFLOW_DEPLOYMENTS = 500;
 const MAX_RECONCILE_PULL_REQUESTS = 100;
 const MAX_GITHUB_PAGES = 10;
+const MAX_PR_STACK_DEPTH = 12;
 const REQUEST_TIMEOUT_MS = 30_000;
 const CANCEL_TIMEOUT_MS = 2 * 60 * 1000;
+const STABLE_DEVELOP_TIMEOUT_MS = 10 * 60 * 1000;
+const STABLE_DEVELOP_POLL_MS = 5_000;
+const MAX_STABLE_DEPLOYMENTS = 50;
 
 class HttpError extends Error {
 	constructor(status, code) {
@@ -44,6 +48,11 @@ const requiredEnv = (name) => {
 	const value = process.env[name]?.trim();
 	if (!value) throw new Error(`Missing required workflow setting: ${name}`);
 	return value;
+};
+
+const optionalEnv = (name, fallback) => {
+	const value = process.env[name]?.trim();
+	return value || fallback;
 };
 
 const boundedInteger = (value, name) => {
@@ -79,6 +88,9 @@ const normalizeLogin = (value) => {
 	}
 	return login;
 };
+
+const isSafeHeadRef = (value) =>
+	typeof value === 'string' && value.length >= 1 && value.length <= 255 && !/[\u0000-\u001f\u007f]/.test(value);
 
 const parseTrustedLogins = (value) => {
 	const entries = String(value ?? '')
@@ -159,6 +171,53 @@ const previewAlias = (number, suffix = 'previews.dev.thingtime.com') => {
 	return `pr-${prNumber}.${safeHostname(suffix, 'Preview alias suffix')}`;
 };
 
+const customEnvironmentDomainNames = (domains) =>
+	(Array.isArray(domains) ? domains : [])
+		.map((domain) => (typeof domain === 'string' ? domain : domain?.name ?? domain?.domain))
+		.filter((domain) => typeof domain === 'string');
+
+const stableDevelopDomainBindingIssue = (customEnvironment, stableDomain, config) => {
+	if (customEnvironmentDomainNames(customEnvironment?.domains).length !== 0) return 'custom-environment-domain-present';
+	if (stableDomain?.projectId !== config.projectId) return 'wrong-project';
+	if (stableDomain?.verified !== true) return 'unverified';
+	if (stableDomain?.gitBranch !== 'develop') return 'wrong-git-branch';
+	if (stableDomain?.customEnvironmentId != null && stableDomain.customEnvironmentId !== '') return 'custom-environment-bound';
+	return null;
+};
+
+const previewWildcardBindingIssue = (wildcardDomain, { projectId, suffix, expectedGitBranch }) => {
+	if (wildcardDomain?.projectId !== projectId) return 'wrong-project';
+	if (wildcardDomain?.name !== `*.${suffix}`) return 'wrong-name';
+	if (wildcardDomain?.verified !== true) return 'unverified';
+	if ((wildcardDomain?.gitBranch ?? null) !== expectedGitBranch) return 'wrong-git-branch';
+	if (wildcardDomain?.customEnvironmentId != null && wildcardDomain.customEnvironmentId !== '') return 'custom-environment-bound';
+	return null;
+};
+
+const stableDevelopDeploymentIssue = (deployment, config, expectedSha) => {
+	if (!deployment || typeof deployment !== 'object') return 'missing-deployment';
+	if (!/^dpl_[A-Za-z0-9]+$/.test(deployment.id ?? '')) return 'invalid-deployment-id';
+	if (deployment.projectId !== config.projectId) return 'wrong-project';
+	if (deployment.customEnvironment?.id !== config.customEnvironmentId || deployment.customEnvironment?.slug !== 'develop') {
+		return 'wrong-environment';
+	}
+	if (deployment.meta?.[WORKFLOW_DEPLOYMENT_MARKER] === '1') return 'pr-preview-deployment';
+	if (deployment.gitSource?.type !== 'github') return 'wrong-git-provider';
+	if (String(deployment.gitSource?.repoId ?? '') !== String(config.gitRepoId)) return 'wrong-git-repository';
+	if (deployment.gitSource?.ref !== 'develop') return 'wrong-git-ref';
+	if (deployment.gitSource?.prId != null) return 'pull-request-deployment';
+	if (!/^[0-9a-f]{40}$/.test(deployment.gitSource?.sha ?? '')) return 'invalid-git-sha';
+	if (expectedSha && deployment.gitSource.sha !== expectedSha) return 'wrong-git-sha';
+	if (String(deployment.meta?.githubRepoId ?? '') !== String(config.gitRepoId)) return 'metadata-git-repository-mismatch';
+	const [repositoryOwner, repositoryName] = config.repository.split('/');
+	if (deployment.meta?.githubCommitOrg !== repositoryOwner || deployment.meta?.githubCommitRepo !== repositoryName) {
+		return 'metadata-repository-name-mismatch';
+	}
+	if (deployment.meta?.githubCommitRef !== 'develop') return 'metadata-ref-mismatch';
+	if (deployment.meta?.githubCommitSha !== deployment.gitSource.sha) return 'metadata-sha-mismatch';
+	return null;
+};
+
 const runtimeConfig = () => ({
 	repository: safeRepository(requiredEnv('GITHUB_REPOSITORY')),
 	repositoryId: boundedInteger(requiredEnv('GITHUB_REPOSITORY_ID'), 'GitHub repository id'),
@@ -171,41 +230,46 @@ const runtimeConfig = () => ({
 	gitRepoId: boundedInteger(requiredEnv('VERCEL_GITHUB_REPO_ID'), 'Vercel Git repository id'),
 	customEnvironmentId: exactPrefixedId(requiredEnv('VERCEL_CUSTOM_ENVIRONMENT_ID'), 'Vercel custom environment id', 'env_'),
 	previewAliasSuffix: safeHostname(requiredEnv('PREVIEW_ALIAS_SUFFIX'), 'Preview alias suffix'),
+	productionPreviewAliasSuffix: safeHostname(
+		optionalEnv('PRODUCTION_PREVIEW_ALIAS_SUFFIX', 'previews.thingtime.com'),
+		'Production preview alias suffix'
+	),
 	stableDevelopDomain: safeHostname(requiredEnv('STABLE_DEVELOP_DOMAIN'), 'Stable develop domain')
 });
 
-const classifyPullRequest = (pullRequest, repository, repositoryId) => {
+const pullRequestShapeIssue = (pullRequest, repository, repositoryId) => {
 	if (!pullRequest || typeof pullRequest !== 'object') {
-		return { allowed: false, reason: 'missing-pull-request' };
+		return 'missing-pull-request';
 	}
-	if (pullRequest.state !== 'open') return { allowed: false, reason: 'not-open' };
-	if (pullRequest.base?.ref !== 'develop') return { allowed: false, reason: 'wrong-base' };
+	if (pullRequest.state !== 'open') return 'not-open';
 	if (Number(pullRequest.base?.repo?.id) !== repositoryId || pullRequest.base?.repo?.full_name !== repository) {
-		return { allowed: false, reason: 'wrong-base-repository' };
+		return 'wrong-base-repository';
 	}
 	if (Number(pullRequest.head?.repo?.id) !== repositoryId || pullRequest.head?.repo?.full_name !== repository) {
-		return { allowed: false, reason: 'fork' };
+		return 'fork';
 	}
 	if (!TRUSTED_ASSOCIATIONS.has(pullRequest.author_association)) {
-		return { allowed: false, reason: 'untrusted-association' };
+		return 'untrusted-association';
 	}
-	if (pullRequest.draft) return { allowed: false, reason: 'draft' };
+	if (pullRequest.draft) return 'draft';
 	if (!/^[0-9a-f]{40}$/.test(pullRequest.head?.sha ?? '')) {
-		return { allowed: false, reason: 'invalid-sha' };
+		return 'invalid-sha';
 	}
-	if (
-		typeof pullRequest.head?.ref !== 'string' ||
-		pullRequest.head.ref.length < 1 ||
-		pullRequest.head.ref.length > 255 ||
-		/[\u0000-\u001f\u007f]/.test(pullRequest.head.ref)
-	) {
-		return { allowed: false, reason: 'invalid-ref' };
+	if (!isSafeHeadRef(pullRequest.head?.ref)) {
+		return 'invalid-ref';
 	}
 	try {
 		normalizeLogin(pullRequest.user?.login);
 	} catch {
-		return { allowed: false, reason: 'invalid-author' };
+		return 'invalid-author';
 	}
+	return null;
+};
+
+const classifyPullRequest = (pullRequest, repository, repositoryId, { terminalBranch = 'develop' } = {}) => {
+	const shapeIssue = pullRequestShapeIssue(pullRequest, repository, repositoryId);
+	if (shapeIssue) return { allowed: false, reason: shapeIssue };
+	if (pullRequest.base?.ref !== terminalBranch) return { allowed: false, reason: 'wrong-base' };
 	return { allowed: true };
 };
 
@@ -243,11 +307,29 @@ const repositoryDispatchSourceIssue = (run, payload, config) => {
 	const sourcePullRequest = Array.isArray(run.pull_requests)
 		? run.pull_requests.find((candidate) => Number(candidate.number) === payload.prNumber)
 		: null;
-	if (!sourcePullRequest) return 'missing-source-pull-request';
+	if (!sourcePullRequest) {
+		// GitHub removes the workflow run's pull_requests association after a PR
+		// closes. For that one event, bind the dispatch to the same-repository run's
+		// immutable head SHA and branch instead.
+		if (payload.action !== 'closed') return 'missing-source-pull-request';
+		if (Number(run.head_repository?.id) !== config.repositoryId) return 'wrong-source-head-repository';
+		if (run.head_sha !== payload.headSha) return 'wrong-source-head-sha';
+		if (run.head_branch !== payload.headRef) return 'wrong-source-head-ref';
+		return null;
+	}
 	if (Number(sourcePullRequest.head?.repo?.id) !== config.repositoryId || Number(sourcePullRequest.base?.repo?.id) !== config.repositoryId) {
 		return 'wrong-source-pull-request-repository';
 	}
 	if (sourcePullRequest.head?.sha !== payload.headSha) return 'wrong-source-head-sha';
+	if (sourcePullRequest.head?.ref !== payload.headRef) return 'wrong-source-head-ref';
+	return null;
+};
+
+const dispatchPullRequestIssue = (pullRequest, dispatch) => {
+	if (!dispatch) return null;
+	if (pullRequest.head?.sha !== dispatch.headSha) return 'head-sha-mismatch';
+	if (pullRequest.head?.ref !== dispatch.headRef) return 'head-ref-mismatch';
+	if (dispatch.action === 'closed' && pullRequest.state !== 'closed') return 'closed-state-mismatch';
 	return null;
 };
 
@@ -257,6 +339,9 @@ const deploymentPayload = ({ pullRequest, config }) => {
 		name: config.projectName,
 		project: config.projectId,
 		customEnvironmentSlugOrId: config.customEnvironmentId,
+		// PR deployments receive only their exact PR alias. The stable develop alias
+		// is promoted separately after an exact native develop deployment is READY.
+		autoAssignCustomDomains: false,
 		gitSource: {
 			type: 'github',
 			repoId: config.gitRepoId,
@@ -320,7 +405,35 @@ const choosePreferredDeployment = (deployments, expectedSha) =>
 			return readiness || Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0);
 		})[0] ?? null;
 
-const runSelfTest = () => {
+const chooseStableDevelopDeployment = (deployments, config, expectedSha) =>
+	deployments
+		.filter(
+			(deployment) =>
+				stableDevelopDeploymentIssue(deployment, config, expectedSha) === null &&
+				(deployment.readyState === 'READY' || ACTIVE_STATES.has(deployment.readyState))
+		)
+		.sort((left, right) => {
+			const readiness = Number(right.readyState === 'READY') - Number(left.readyState === 'READY');
+			return readiness || Number(right.createdAt ?? 0) - Number(left.createdAt ?? 0);
+		})[0] ?? null;
+
+const deploymentListParams = (config, { prNumber = null, sha = null, until = null, workflowOwned = true } = {}) => {
+	const params = new URLSearchParams({
+		projectId: config.projectId,
+		limit: '100'
+	});
+	if (workflowOwned) params.set(`meta-${WORKFLOW_DEPLOYMENT_MARKER}`, '1');
+	if (prNumber !== null && !workflowOwned) throw new Error('PR deployment filters require workflow ownership');
+	if (prNumber !== null) params.set('meta-githubPrId', String(boundedInteger(prNumber, 'PR number')));
+	if (sha) {
+		if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('Vercel deployment SHA filter is invalid');
+		params.set('sha', sha);
+	}
+	if (until !== null) params.set('until', String(boundedInteger(until, 'Vercel deployment cursor')));
+	return params;
+};
+
+const runSelfTest = async () => {
 	let checks = 0;
 	const equal = (actual, expected) => {
 		assert.deepEqual(actual, expected);
@@ -354,12 +467,16 @@ const runSelfTest = () => {
 		projectId: 'prj_example',
 		projectName: 'thingtime',
 		gitRepoId: 4242,
-		customEnvironmentId: 'env_develop'
+		customEnvironmentId: 'env_develop',
+		stableDevelopDomain: 'dev.thingtime.com',
+		previewAliasSuffix: 'previews.dev.thingtime.com',
+		productionPreviewAliasSuffix: 'previews.thingtime.com'
 	};
 
 	equal(classifyPullRequest(base, config.repository, config.repositoryId), { allowed: true });
 	equal(classifyPullRequest({ ...base, state: 'closed' }, config.repository, config.repositoryId).reason, 'not-open');
 	equal(classifyPullRequest({ ...base, base: { ...base.base, ref: 'main' } }, config.repository, config.repositoryId).reason, 'wrong-base');
+	equal(pullRequestShapeIssue({ ...base, base: { ...base.base, ref: 'codex/parent' } }, config.repository, config.repositoryId), null);
 	equal(
 		classifyPullRequest({ ...base, head: { ...base.head, repo: { id: 99, full_name: 'lopugit/thingtime' } } }, config.repository, config.repositoryId)
 			.reason,
@@ -408,9 +525,78 @@ const runSelfTest = () => {
 	const payload = deploymentPayload({ pullRequest: base, config });
 	equal(payload.project, config.projectId);
 	equal(payload.customEnvironmentSlugOrId, config.customEnvironmentId);
-	truthy(!Object.hasOwn(payload, 'autoAssignCustomDomains'));
+	equal(payload.autoAssignCustomDomains, false);
 	equal(payload.gitSource.sha, base.head.sha);
 	equal(payload.meta[WORKFLOW_DEPLOYMENT_MARKER], '1');
+	equal(customEnvironmentDomainNames(['dev.thingtime.com', { name: 'preview.example.com' }, { domain: 'legacy.example.com' }]), [
+		'dev.thingtime.com',
+		'preview.example.com',
+		'legacy.example.com'
+	]);
+	equal(customEnvironmentDomainNames(null), []);
+	equal(
+		stableDevelopDomainBindingIssue(
+			{ domains: [] },
+			{
+				projectId: config.projectId,
+				verified: true,
+				gitBranch: 'develop',
+				customEnvironmentId: null
+			},
+			config
+		),
+		null
+	);
+	equal(
+		stableDevelopDomainBindingIssue(
+			{ domains: [] },
+			{
+				projectId: config.projectId,
+				verified: true,
+				gitBranch: 'develop',
+				customEnvironmentId: ''
+			},
+			config
+		),
+		null
+	);
+	equal(
+		stableDevelopDomainBindingIssue(
+			{ domains: [{ name: config.stableDevelopDomain }] },
+			{ projectId: config.projectId, verified: true, gitBranch: 'develop', customEnvironmentId: null },
+			config
+		),
+		'custom-environment-domain-present'
+	);
+	equal(
+		stableDevelopDomainBindingIssue(
+			{ domains: [] },
+			{ projectId: config.projectId, verified: true, gitBranch: null, customEnvironmentId: config.customEnvironmentId },
+			config
+		),
+		'wrong-git-branch'
+	);
+	equal(
+		previewWildcardBindingIssue(
+			{ projectId: config.projectId, name: '*.previews.dev.thingtime.com', verified: true, gitBranch: 'develop', customEnvironmentId: null },
+			{ projectId: config.projectId, suffix: config.previewAliasSuffix, expectedGitBranch: 'develop' }
+		),
+		null
+	);
+	equal(
+		previewWildcardBindingIssue(
+			{ projectId: config.projectId, name: '*.previews.thingtime.com', verified: true, gitBranch: null, customEnvironmentId: '' },
+			{ projectId: config.projectId, suffix: config.productionPreviewAliasSuffix, expectedGitBranch: null }
+		),
+		null
+	);
+	equal(
+		previewWildcardBindingIssue(
+			{ projectId: config.projectId, name: '*.previews.dev.thingtime.com', verified: true, gitBranch: null, customEnvironmentId: null },
+			{ projectId: config.projectId, suffix: config.previewAliasSuffix, expectedGitBranch: 'develop' }
+		),
+		'wrong-git-branch'
+	);
 
 	const deployment = {
 		id: 'dpl_example',
@@ -454,6 +640,64 @@ const runSelfTest = () => {
 	);
 	equal(choosePreferredDeployment([deployment], base.head.sha)?.id, deployment.id);
 	equal(choosePreferredDeployment([{ ...deployment, readyState: 'ERROR' }], base.head.sha), null);
+	const developSha = 'd'.repeat(40);
+	const stableDeployment = {
+		id: 'dpl_stable',
+		projectId: config.projectId,
+		createdAt: 3,
+		readyState: 'READY',
+		customEnvironment: { id: config.customEnvironmentId, slug: 'develop' },
+		meta: {
+			githubCommitOrg: 'lopugit',
+			githubCommitRepo: 'thingtime',
+			githubCommitRef: 'develop',
+			githubCommitSha: developSha,
+			githubRepoId: String(config.gitRepoId),
+			// Vercel can associate the standing develop-to-main PR in metadata even
+			// though this is a native develop branch deployment. gitSource.prId is
+			// the authoritative non-PR fence.
+			githubPrId: '289'
+		},
+		gitSource: { type: 'github', repoId: config.gitRepoId, sha: developSha, ref: 'develop', prId: null }
+	};
+	equal(stableDevelopDeploymentIssue(stableDeployment, config, developSha), null);
+	equal(
+		stableDevelopDeploymentIssue(
+			{ ...stableDeployment, meta: { ...stableDeployment.meta, [WORKFLOW_DEPLOYMENT_MARKER]: '1' } },
+			config,
+			developSha
+		),
+		'pr-preview-deployment'
+	);
+	equal(
+		stableDevelopDeploymentIssue(
+			{ ...stableDeployment, gitSource: { ...stableDeployment.gitSource, prId: 201 } },
+			config,
+			developSha
+		),
+		'pull-request-deployment'
+	);
+	equal(stableDevelopDeploymentIssue(stableDeployment, config, 'e'.repeat(40)), 'wrong-git-sha');
+	equal(chooseStableDevelopDeployment([stableDeployment], config, developSha)?.id, stableDeployment.id);
+	equal(chooseStableDevelopDeployment([{ ...stableDeployment, readyState: 'ERROR' }], config, developSha), null);
+	equal(developRefSha({ ref: 'refs/heads/develop', object: { type: 'commit', sha: developSha } }), developSha);
+	throws(() => developRefSha({ ref: 'refs/heads/main', object: { type: 'commit', sha: developSha } }));
+	equal(Object.fromEntries(deploymentListParams(config, { prNumber: 201, sha: base.head.sha, until: 123 })), {
+		projectId: config.projectId,
+		limit: '100',
+		[`meta-${WORKFLOW_DEPLOYMENT_MARKER}`]: '1',
+		'meta-githubPrId': '201',
+		sha: base.head.sha,
+		until: '123'
+	});
+	equal(Object.fromEntries(deploymentListParams(config, { sha: developSha, workflowOwned: false })), {
+		projectId: config.projectId,
+		limit: '100',
+		sha: developSha
+	});
+	throws(() => deploymentListParams(config, { prNumber: 0 }));
+	throws(() => deploymentListParams(config, { prNumber: 201, workflowOwned: false }));
+	throws(() => deploymentListParams(config, { sha: 'not-a-sha' }));
 	truthy(IDEMPOTENT_METHODS.has('GET'));
 	truthy(!IDEMPOTENT_METHODS.has('POST'));
 	truthy(CLEANUP_ACTIONS.has('converted_to_draft'));
@@ -463,7 +707,8 @@ const runSelfTest = () => {
 		sourceRunId: 123,
 		actor: 'lopu',
 		action: 'synchronize',
-		headSha: base.head.sha
+		headSha: base.head.sha,
+		headRef: base.head.ref
 	};
 	const sourceRun = {
 		id: 123,
@@ -471,12 +716,15 @@ const runSelfTest = () => {
 		path: CONTROLLER_WORKFLOW_PATH,
 		status: 'in_progress',
 		repository: { id: 42 },
+		head_repository: { id: 42 },
+		head_sha: base.head.sha,
+		head_branch: base.head.ref,
 		actor: { login: 'lopu' },
 		triggering_actor: { login: 'lopu' },
 		pull_requests: [
 			{
 				number: 201,
-				head: { sha: base.head.sha, repo: { id: 42 } },
+				head: { sha: base.head.sha, ref: base.head.ref, repo: { id: 42 } },
 				base: { repo: { id: 42 } }
 			}
 		]
@@ -484,6 +732,71 @@ const runSelfTest = () => {
 	equal(repositoryDispatchSourceIssue(sourceRun, dispatchPayload, config), null);
 	equal(repositoryDispatchSourceIssue({ ...sourceRun, path: '.github/workflows/untrusted.yml' }, dispatchPayload, config), 'wrong-workflow-path');
 	equal(repositoryDispatchSourceIssue(sourceRun, { ...dispatchPayload, headSha: 'b'.repeat(40) }, config), 'wrong-source-head-sha');
+	equal(repositoryDispatchSourceIssue(sourceRun, { ...dispatchPayload, headRef: 'codex/wrong' }, config), 'wrong-source-head-ref');
+	equal(repositoryDispatchSourceIssue({ ...sourceRun, pull_requests: [] }, dispatchPayload, config), 'missing-source-pull-request');
+	const closedDispatchPayload = { ...dispatchPayload, action: 'closed' };
+	const closedSourceRun = { ...sourceRun, status: 'completed', pull_requests: [] };
+	equal(repositoryDispatchSourceIssue(closedSourceRun, closedDispatchPayload, config), null);
+	equal(
+		repositoryDispatchSourceIssue({ ...closedSourceRun, head_repository: { id: 99 } }, closedDispatchPayload, config),
+		'wrong-source-head-repository'
+	);
+	equal(repositoryDispatchSourceIssue({ ...closedSourceRun, head_sha: 'b'.repeat(40) }, closedDispatchPayload, config), 'wrong-source-head-sha');
+	equal(repositoryDispatchSourceIssue({ ...closedSourceRun, head_branch: 'codex/wrong' }, closedDispatchPayload, config), 'wrong-source-head-ref');
+	equal(dispatchPullRequestIssue(base, dispatchPayload), null);
+	equal(dispatchPullRequestIssue({ ...base, head: { ...base.head, sha: 'b'.repeat(40) } }, dispatchPayload), 'head-sha-mismatch');
+	equal(dispatchPullRequestIssue({ ...base, head: { ...base.head, ref: 'codex/wrong' } }, dispatchPayload), 'head-ref-mismatch');
+	equal(dispatchPullRequestIssue(base, closedDispatchPayload), 'closed-state-mismatch');
+	equal(dispatchPullRequestIssue({ ...base, state: 'closed' }, closedDispatchPayload), null);
+	const parsedDispatch = parseRepositoryDispatch({
+		action: CONTROLLER_DISPATCH_TYPE,
+		client_payload: {
+			pr_number: '201',
+			source_run_id: '123',
+			actor: 'Lopu',
+			action: 'closed',
+			head_sha: base.head.sha,
+			head_ref: base.head.ref
+		}
+	});
+	equal(parsedDispatch, closedDispatchPayload);
+	throws(() =>
+		parseRepositoryDispatch({
+			action: CONTROLLER_DISPATCH_TYPE,
+			client_payload: { pr_number: '201', source_run_id: '123', actor: 'lopu', action: 'closed', head_sha: base.head.sha, head_ref: '' }
+		})
+	);
+	const stacked = {
+		...base,
+		number: 202,
+		base: { ref: 'codex/parent', repo: { id: 42, full_name: 'lopugit/thingtime' } },
+		head: { ...base.head, ref: 'codex/child', sha: 'c'.repeat(40) }
+	};
+	const parent = {
+		...base,
+		number: 203,
+		base: { ref: 'develop', repo: { id: 42, full_name: 'lopugit/thingtime' } },
+		head: { ...base.head, ref: 'codex/parent', sha: 'b'.repeat(40) }
+	};
+	const resolvedStack = await resolvePullRequestStack(config, stacked, {
+		findParent: async (_config, ref) => {
+			equal(ref, 'codex/parent');
+			return parent;
+		}
+	});
+	equal(
+		resolvedStack.chain.map((candidate) => candidate.number),
+		[202, 203]
+	);
+	await assert.rejects(
+		resolvePullRequestStack(config, stacked, {
+			findParent: async () => {
+				throw new EligibilityError('stack-parent-missing');
+			}
+		}),
+		(error) => error instanceof EligibilityError && error.reason === 'stack-parent-missing'
+	);
+	checks += 1;
 
 	console.log(`develop PR preview self-test: ${checks}/${checks} passed`);
 };
@@ -562,6 +875,53 @@ const vercelRequest = (path, options = {}) => {
 
 const getPullRequest = async (repository, number) => githubRequest(`/repos/${repository}/pulls/${boundedInteger(number, 'PR number')}`);
 
+const findOpenStackParent = async (config, headRef) => {
+	if (!isSafeHeadRef(headRef)) throw new EligibilityError('invalid-stack-base-ref');
+	const [owner] = config.repository.split('/');
+	const query = new URLSearchParams({ state: 'open', head: `${owner}:${headRef}`, per_page: '100' });
+	const candidates = await githubRequest(`/repos/${config.repository}/pulls?${query}`);
+	if (!Array.isArray(candidates)) throw new Error('GitHub stack-parent response was invalid');
+	const matching = candidates.filter(
+		(candidate) =>
+			candidate.head?.ref === headRef &&
+			Number(candidate.head?.repo?.id) === config.repositoryId &&
+			candidate.head?.repo?.full_name === config.repository
+	);
+	if (matching.length === 0) throw new EligibilityError('stack-parent-missing');
+	if (matching.length !== 1) throw new EligibilityError('stack-parent-ambiguous');
+	return matching[0];
+};
+
+const resolvePullRequestStack = async (config, pullRequest, { terminalBranch = 'develop', findParent = findOpenStackParent } = {}) => {
+	if (!['develop', 'main'].includes(terminalBranch)) throw new Error('Preview stack terminal branch is invalid');
+	const chain = [];
+	const seenNumbers = new Set();
+	let current = pullRequest;
+	for (let depth = 0; depth < MAX_PR_STACK_DEPTH; depth += 1) {
+		const shapeIssue = pullRequestShapeIssue(current, config.repository, config.repositoryId);
+		if (shapeIssue) throw new EligibilityError(depth === 0 ? shapeIssue : `stack-parent-${shapeIssue}`);
+		const number = boundedInteger(current.number, 'Pull request number');
+		if (seenNumbers.has(number)) throw new EligibilityError('stack-cycle');
+		seenNumbers.add(number);
+		chain.push(current);
+		if (current.base.ref === terminalBranch) return { chain, terminalBranch };
+		current = await findParent(config, current.base.ref);
+	}
+	throw new EligibilityError('stack-depth-exceeded');
+};
+
+const developRefSha = (reference) => {
+	if (reference?.ref !== 'refs/heads/develop' || reference?.object?.type !== 'commit' || !/^[0-9a-f]{40}$/.test(reference.object.sha ?? '')) {
+		throw new Error('GitHub develop ref was invalid');
+	}
+	return reference.object.sha;
+};
+
+const getDevelopHeadSha = async (config) => {
+	const reference = await githubRequest(`/repos/${config.repository}/git/ref/heads/develop`);
+	return developRefSha(reference);
+};
+
 const parseRepositoryDispatch = (event) => {
 	if (event?.action !== CONTROLLER_DISPATCH_TYPE || !event.client_payload) {
 		throw new EligibilityError('unexpected-repository-dispatch');
@@ -571,10 +931,12 @@ const parseRepositoryDispatch = (event) => {
 		sourceRunId: boundedInteger(event.client_payload.source_run_id, 'Source workflow run id'),
 		actor: normalizeLogin(event.client_payload.actor),
 		action: String(event.client_payload.action ?? ''),
-		headSha: String(event.client_payload.head_sha ?? '')
+		headSha: String(event.client_payload.head_sha ?? ''),
+		headRef: String(event.client_payload.head_ref ?? '')
 	};
 	if (!PR_EVENT_ACTIONS.has(payload.action)) throw new EligibilityError('unexpected-source-action');
 	if (!/^[0-9a-f]{40}$/.test(payload.headSha)) throw new EligibilityError('invalid-source-head-sha');
+	if (!isSafeHeadRef(payload.headRef)) throw new EligibilityError('invalid-source-head-ref');
 	return payload;
 };
 
@@ -609,16 +971,25 @@ const assertTrustedPrincipal = async (config, login, label) => {
 };
 
 const assertTrustedPullRequest = async (config, pullRequest, { actor = null } = {}) => {
-	const classification = classifyPullRequest(pullRequest, config.repository, config.repositoryId);
-	if (!classification.allowed) throw new EligibilityError(classification.reason);
+	const shapeIssue = pullRequestShapeIssue(pullRequest, config.repository, config.repositoryId);
+	if (shapeIssue) throw new EligibilityError(shapeIssue);
 	await assertTrustedPrincipal(config, pullRequest.user.login, 'author');
 	if (actor) await assertTrustedPrincipal(config, actor, 'actor');
 	return pullRequest;
 };
 
+const assertTrustedPullRequestStack = async (config, pullRequest, { actor = null } = {}) => {
+	const stack = await resolvePullRequestStack(config, pullRequest);
+	for (const candidate of stack.chain) {
+		await assertTrustedPullRequest(config, candidate);
+	}
+	if (actor) await assertTrustedPrincipal(config, actor, 'actor');
+	return { pullRequest, stack };
+};
+
 const assertCurrentPullRequest = async (config, snapshot, actor) => {
 	const current = await getPullRequest(config.repository, snapshot.number);
-	await assertTrustedPullRequest(config, current, { actor });
+	await assertTrustedPullRequestStack(config, current, { actor });
 	if (!pullRequestMatchesSnapshot(current, snapshot)) throw new EligibilityError('stale-head');
 	return current;
 };
@@ -773,40 +1144,82 @@ const assertVercelConfiguration = async (config) => {
 	if (customEnvironment?.id !== config.customEnvironmentId || customEnvironment?.slug !== 'develop') {
 		throw new Error('Vercel custom environment identity did not match develop');
 	}
-	if ((customEnvironment.domains ?? []).length !== 0) {
-		throw new Error('Develop custom environment must not have an automatically assigned domain');
-	}
-
 	const stableDomain = await vercelRequest(
 		`/v9/projects/${encodeURIComponent(config.projectId)}/domains/${encodeURIComponent(config.stableDevelopDomain)}`
 	);
-	if (stableDomain?.projectId !== config.projectId || stableDomain?.gitBranch !== 'develop' || stableDomain?.customEnvironmentId != null) {
-		throw new Error('Stable develop domain must remain branch-scoped and detached from the custom environment');
+	const stableDomainIssue = stableDevelopDomainBindingIssue(customEnvironment, stableDomain, config);
+	if (stableDomainIssue) {
+		throw new Error(`Stable develop domain must track only the develop Git branch (${stableDomainIssue})`);
 	}
 
-	const wildcardDomainName = `*.${config.previewAliasSuffix}`;
-	const wildcardDomainPath = encodeURIComponent(wildcardDomainName).replaceAll('*', '%2A');
-	const wildcardDomain = await vercelRequest(`/v9/projects/${encodeURIComponent(config.projectId)}/domains/${wildcardDomainPath}`);
-	if (
-		wildcardDomain?.projectId !== config.projectId ||
-		wildcardDomain?.name !== wildcardDomainName ||
-		wildcardDomain?.verified !== true ||
-		wildcardDomain?.gitBranch != null ||
-		wildcardDomain?.customEnvironmentId != null
-	) {
-		throw new Error('PR preview wildcard must be verified and detached from branches and custom environments');
+	const wildcardPolicies = [
+		{ label: 'Development preview', suffix: config.previewAliasSuffix, expectedGitBranch: 'develop', expectedRuntimeBranch: 'develop' },
+		// Vercel deliberately refuses to bind a project domain to the production
+		// branch as a Preview domain. Detached is therefore the only valid
+		// production binding; the live branch probe below makes that default
+		// explicit and fails closed if Vercel ever routes it elsewhere.
+		{ label: 'Production preview', suffix: config.productionPreviewAliasSuffix, expectedGitBranch: null, expectedRuntimeBranch: 'main' }
+	];
+	for (const policy of wildcardPolicies) {
+		const wildcardDomainName = `*.${policy.suffix}`;
+		const wildcardDomainPath = encodeURIComponent(wildcardDomainName).replaceAll('*', '%2A');
+		const wildcardDomain = await vercelRequest(`/v9/projects/${encodeURIComponent(config.projectId)}/domains/${wildcardDomainPath}`);
+		const wildcardBindingIssue = previewWildcardBindingIssue(wildcardDomain, {
+			projectId: config.projectId,
+			suffix: policy.suffix,
+			expectedGitBranch: policy.expectedGitBranch
+		});
+		if (wildcardBindingIssue) {
+			const expected = policy.expectedGitBranch ?? 'the Vercel production default';
+			throw new Error(`${policy.label} wildcard must track only ${expected} (${wildcardBindingIssue})`);
+		}
+
+		const wildcardDomainConfig = await vercelRequest(`/v6/domains/${wildcardDomainPath}/config`);
+		let resolvedCnames;
+		try {
+			resolvedCnames = await resolveCname(`controller-dns-probe.${policy.suffix}`);
+		} catch {
+			throw new Error(`${policy.label} wildcard CNAME did not resolve`);
+		}
+		const wildcardDnsIssue = wildcardDnsConfigurationIssue(wildcardDomainConfig, resolvedCnames);
+		if (wildcardDnsIssue) {
+			throw new Error(`${policy.label} wildcard DNS failed live CNAME verification (${wildcardDnsIssue})`);
+		}
 	}
-	const wildcardDomainConfig = await vercelRequest(`/v6/domains/${wildcardDomainPath}/config`);
-	let resolvedCnames;
-	try {
-		resolvedCnames = await resolveCname(`controller-dns-probe.${config.previewAliasSuffix}`);
-	} catch {
-		throw new Error('PR preview wildcard CNAME did not resolve');
+	await assertWildcardFallbackRuntimes(config);
+};
+
+const verifyWildcardFallbackRuntime = async ({ suffix, expectedBranch }) => {
+	const hostname = `controller-fallback-probe.${suffix}`;
+	let lastError = null;
+	for (let attempt = 0; attempt < 5; attempt += 1) {
+		try {
+			const response = await fetch(`https://${hostname}/api/root-data`, {
+				headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
+				redirect: 'manual',
+				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+			});
+			if (!response.ok) {
+				lastError = new Error(`HTTP ${response.status}`);
+			} else {
+				const payload = await response.json();
+				const branch = payload?.envFromCookie?.THINGTIME_BRANCH_NAME;
+				if (branch === expectedBranch) return;
+				lastError = new Error(`runtime branch was ${typeof branch === 'string' ? branch : 'missing'}`);
+			}
+		} catch (error) {
+			lastError = error;
+		}
+		if (attempt < 4) await delay(1_000 * (attempt + 1));
 	}
-	const wildcardDnsIssue = wildcardDnsConfigurationIssue(wildcardDomainConfig, resolvedCnames);
-	if (wildcardDnsIssue) {
-		throw new Error(`PR preview wildcard DNS failed live CNAME verification (${wildcardDnsIssue})`);
-	}
+	throw new Error(
+		`Wildcard fallback runtime did not resolve to ${expectedBranch} (${lastError instanceof Error ? lastError.message : 'unknown'})`
+	);
+};
+
+const assertWildcardFallbackRuntimes = async (config) => {
+	await verifyWildcardFallbackRuntime({ suffix: config.previewAliasSuffix, expectedBranch: 'develop' });
+	await verifyWildcardFallbackRuntime({ suffix: config.productionPreviewAliasSuffix, expectedBranch: 'main' });
 };
 
 const verifyPublishedAlias = async (aliasUrl) => {
@@ -830,15 +1243,13 @@ const verifyPublishedAlias = async (aliasUrl) => {
 
 const deploymentDetail = async (deploymentId) => vercelRequest(`/v13/deployments/${encodeURIComponent(deploymentId)}?withGitRepoInfo=true`);
 
-const listDeploymentSummaries = async (config, { sha = null } = {}) => {
+const listDeploymentSummaries = async (config, { prNumber = null, sha = null, workflowOwned = true } = {}) => {
 	const results = [];
 	const seenIds = new Set();
 	const seenCursors = new Set();
 	let until = null;
 	for (let page = 0; page < MAX_DEPLOYMENT_PAGES; page += 1) {
-		const params = new URLSearchParams({ projectId: config.projectId, limit: '100' });
-		if (sha) params.set('sha', sha);
-		if (until !== null) params.set('until', String(until));
+		const params = deploymentListParams(config, { prNumber, sha, until, workflowOwned });
 		const response = await vercelRequest(`/v7/deployments?${params}`);
 		if (!Array.isArray(response?.deployments)) throw new Error('Vercel deployment list response was invalid');
 		for (const deployment of response.deployments) {
@@ -857,7 +1268,7 @@ const listDeploymentSummaries = async (config, { sha = null } = {}) => {
 };
 
 const listWorkflowDeployments = async (config, { prNumber = null, sha = null } = {}) => {
-	const summaries = await listDeploymentSummaries(config, { sha });
+	const summaries = await listDeploymentSummaries(config, { prNumber, sha });
 	const owned = summaries.filter(
 		(candidate) =>
 			candidate.meta?.[WORKFLOW_DEPLOYMENT_MARKER] === '1' && (prNumber === null || String(candidate.meta?.githubPrId ?? '') === String(prNumber))
@@ -879,6 +1290,25 @@ const listWorkflowDeployments = async (config, { prNumber = null, sha = null } =
 		if (issue) throw new Error(`Workflow deployment ownership check failed (${issue})`);
 		if (sha && detail.gitSource.sha !== sha) throw new Error('Vercel SHA filter returned a mismatched deployment');
 		details.push(detail);
+	}
+	return details;
+};
+
+const listStableDevelopDeployments = async (config, sha) => {
+	const summaries = await listDeploymentSummaries(config, { sha, workflowOwned: false });
+	if (summaries.length > MAX_STABLE_DEPLOYMENTS) {
+		throw new Error('Stable develop deployment detail scan exceeded its safety bound');
+	}
+	const details = [];
+	for (const candidate of summaries) {
+		const id = candidate.uid ?? candidate.id;
+		if (!/^dpl_[A-Za-z0-9]+$/.test(id ?? '')) continue;
+		try {
+			details.push(await deploymentDetail(id));
+		} catch (error) {
+			if (error instanceof HttpError && error.status === 404) continue;
+			throw error;
+		}
 	}
 	return details;
 };
@@ -955,6 +1385,24 @@ const getOwnedAlias = async (config, alias) => {
 	}
 };
 
+const getStableDevelopAliasBinding = async (config) => {
+	const found = await getOwnedAlias(config, config.stableDevelopDomain);
+	if (!found) return null;
+	if (!/^dpl_[A-Za-z0-9]+$/.test(found.deploymentId ?? '')) {
+		throw new Error('Stable develop alias did not point to a deployment');
+	}
+	let deployment;
+	try {
+		deployment = await deploymentDetail(found.deploymentId);
+	} catch (error) {
+		if (error instanceof HttpError && error.status === 404) {
+			throw new Error('Stable develop alias pointed to a missing deployment');
+		}
+		throw error;
+	}
+	return { alias: config.stableDevelopDomain, record: found, deployment };
+};
+
 const getAliasBinding = async (config, prNumber) => {
 	const alias = previewAlias(prNumber, config.previewAliasSuffix);
 	const found = await getOwnedAlias(config, alias);
@@ -1003,6 +1451,84 @@ const assignAliasVerified = async (config, deployment, prNumber) => {
 	const verified = await getAliasBinding(config, prNumber);
 	if (verified?.deployment.id !== deployment.id) throw new Error('Alias did not resolve to the expected deployment');
 	return { alias, oldDeploymentId: assignment.oldDeploymentId ?? null };
+};
+
+const assignStableDevelopAliasVerified = async (config, deployment, expectedSha) => {
+	const issue = stableDevelopDeploymentIssue(deployment, config, expectedSha);
+	if (issue || deployment.readyState !== 'READY') {
+		throw new Error(`Refusing to publish an unverified stable develop deployment (${issue ?? deployment.readyState})`);
+	}
+	if ((await getDevelopHeadSha(config)) !== expectedSha) return { headChanged: true, oldDeploymentId: null };
+
+	const existing = await getStableDevelopAliasBinding(config);
+	if (existing?.deployment.id === deployment.id) {
+		return { headChanged: false, oldDeploymentId: null };
+	}
+
+	let assignment = null;
+	try {
+		assignment = await vercelRequest(`/v2/deployments/${encodeURIComponent(deployment.id)}/aliases`, {
+			method: 'POST',
+			accept: [200],
+			retries: 0,
+			body: { alias: config.stableDevelopDomain }
+		});
+	} catch (error) {
+		const reconciled = await getStableDevelopAliasBinding(config);
+		if (reconciled?.deployment.id !== deployment.id) throw error;
+		assignment = reconciled.record;
+	}
+	if (assignment?.alias !== config.stableDevelopDomain) {
+		throw new Error('Vercel assigned an unexpected stable develop alias');
+	}
+	const verified = await getStableDevelopAliasBinding(config);
+	if (verified?.deployment.id !== deployment.id) {
+		throw new Error('Stable develop alias did not resolve to the expected deployment');
+	}
+	await assertVercelConfiguration(config);
+	await verifyPublishedAlias(`https://${config.stableDevelopDomain}`);
+	return {
+		headChanged: (await getDevelopHeadSha(config)) !== expectedSha,
+		oldDeploymentId: assignment.oldDeploymentId ?? null
+	};
+};
+
+const reconcileStableDevelopAlias = async (config, { waitForReady = false } = {}) => {
+	await assertVercelConfiguration(config);
+	const timeoutAt = Date.now() + STABLE_DEVELOP_TIMEOUT_MS;
+	for (;;) {
+		const expectedSha = await getDevelopHeadSha(config);
+		const binding = await getStableDevelopAliasBinding(config);
+		const bindingIssue = binding ? stableDevelopDeploymentIssue(binding.deployment, config, expectedSha) : 'missing-alias';
+		if (binding && bindingIssue === null && binding.deployment.readyState === 'READY') {
+			console.log(`Stable develop alias already current: ${config.stableDevelopDomain} -> ${expectedSha}`);
+			return { changed: false, deploymentId: binding.deployment.id, sha: expectedSha };
+		}
+
+		const deployments = await listStableDevelopDeployments(config, expectedSha);
+		const preferred = chooseStableDevelopDeployment(deployments, config, expectedSha);
+		if (preferred?.readyState === 'READY') {
+			const assigned = await assignStableDevelopAliasVerified(config, preferred, expectedSha);
+			if (assigned.headChanged) {
+				if (!waitForReady && Date.now() >= timeoutAt) {
+					console.log('Stable develop alias promotion deferred because develop advanced during assignment');
+					return { changed: true, deferred: true, deploymentId: preferred.id, sha: expectedSha };
+				}
+				continue;
+			}
+			console.log(`Stable develop alias promoted: ${config.stableDevelopDomain} -> ${preferred.id} (${expectedSha})`);
+			return { changed: true, deploymentId: preferred.id, sha: expectedSha };
+		}
+
+		if (!waitForReady) {
+			console.log(`Stable develop alias promotion deferred: current=${expectedSha}; binding=${bindingIssue}; deployment=${preferred?.readyState ?? 'missing'}`);
+			return { changed: false, deferred: true, deploymentId: binding?.deployment.id ?? null, sha: expectedSha };
+		}
+		if (Date.now() >= timeoutAt) {
+			throw new Error(`Timed out waiting for the exact develop deployment (${expectedSha})`);
+		}
+		await delay(STABLE_DEVELOP_POLL_MS);
+	}
 };
 
 const prepareDeployment = async (config, pullRequest) => {
@@ -1120,7 +1646,7 @@ const cleanupComment = (reason) => {
 const handleIneligible = async (config, pullRequest, reason, { comment = true } = {}) => {
 	const prNumber = boundedInteger(pullRequest.number, 'PR number');
 	const cleaned = await cleanupPrResources(config, prNumber);
-	if (comment) {
+	if (comment && (cleaned.aliasRemoved || cleaned.deleted > 0)) {
 		await upsertComment(
 			config.repository,
 			prNumber,
@@ -1149,7 +1675,7 @@ const reconcile = async (config) => {
 		let pullRequest = null;
 		try {
 			const candidate = await getPullRequest(config.repository, prNumber);
-			await assertTrustedPullRequest(config, candidate);
+			await assertTrustedPullRequestStack(config, candidate);
 			pullRequest = candidate;
 		} catch (error) {
 			if (!(error instanceof EligibilityError) && !(error instanceof HttpError && error.status === 404)) throw error;
@@ -1220,7 +1746,7 @@ const reportFailure = async (config, pullRequest, githubDeployment, vercelDeploy
 };
 
 const deploy = async (config, pullRequest) => {
-	await assertTrustedPullRequest(config, pullRequest, { actor: config.actor });
+	await assertTrustedPullRequestStack(config, pullRequest, { actor: config.actor });
 	const corsProbeUrl = safeCorsProbeUrl(requiredEnv('DEVELOP_S3_CORS_PROBE_URL'));
 	const snapshot = pullRequestSnapshot(pullRequest);
 	await assertVercelConfiguration(config);
@@ -1304,13 +1830,14 @@ const deploy = async (config, pullRequest) => {
 
 const main = async () => {
 	if (process.argv.includes('--self-test')) {
-		runSelfTest();
+		await runSelfTest();
 		return;
 	}
 
 	let config = runtimeConfig();
 	const eventName = requiredEnv('GITHUB_EVENT_NAME');
 	if (eventName === 'schedule') {
+		await reconcileStableDevelopAlias(config);
 		await reconcile(config);
 		return;
 	}
@@ -1326,34 +1853,46 @@ const main = async () => {
 			? boundedInteger(event.inputs?.pr_number, 'PR number')
 			: dispatch?.prNumber ?? boundedInteger(event.pull_request?.number, 'PR number');
 	const pullRequest = await getPullRequest(config.repository, prNumber);
+	const dispatchIssue = dispatchPullRequestIssue(pullRequest, dispatch);
+	if (dispatchIssue) {
+		console.log(`Skipped stale controller dispatch for PR #${prNumber}: ${dispatchIssue}`);
+		return;
+	}
 	const action = dispatch?.action ?? String(event.action ?? 'workflow_dispatch');
-	const classification = classifyPullRequest(pullRequest, config.repository, config.repositoryId);
+	const mergedIntoDevelop =
+		action === 'closed' &&
+		pullRequest.state === 'closed' &&
+		pullRequest.merged === true &&
+		pullRequest.base?.ref === 'develop' &&
+		Number(pullRequest.base?.repo?.id) === config.repositoryId &&
+		pullRequest.base?.repo?.full_name === config.repository;
 
-	if (!classification.allowed) {
-		const cleanupRelevant = CLEANUP_ACTIONS.has(action) || pullRequest.base?.ref === 'develop' || event.changes?.base?.ref?.from === 'develop';
+	let stackEligibilityError = null;
+	try {
+		await assertTrustedPullRequestStack(config, pullRequest, { actor: config.actor });
+	} catch (error) {
+		if (!(error instanceof EligibilityError)) throw error;
+		stackEligibilityError = error;
+	}
+	if (stackEligibilityError) {
+		const cleanupRelevant =
+			CLEANUP_ACTIONS.has(action) ||
+			pullRequest.base?.ref === 'develop' ||
+			event.changes?.base?.ref?.from === 'develop';
 		if (cleanupRelevant) {
-			const reason = action === 'closed' ? 'closed' : classification.reason;
+			const reason = action === 'closed' ? 'closed' : stackEligibilityError.reason;
 			await handleIneligible(config, pullRequest, reason);
 		} else {
-			console.log(`Skipped unrelated PR #${prNumber}: ${classification.reason}`);
+			console.log(`Skipped unrelated PR #${prNumber}: ${stackEligibilityError.reason}`);
+		}
+		if (mergedIntoDevelop) {
+			await assertTrustedPrincipal(config, config.actor, 'actor');
+			await assertTrustedPrincipal(config, pullRequest.merged_by?.login, 'merger');
+			await reconcileStableDevelopAlias(config, { waitForReady: true });
 		}
 		return;
 	}
-
-	if (dispatch && pullRequest.head.sha !== dispatch.headSha) {
-		console.log(`Skipped stale controller dispatch for PR #${prNumber}`);
-		return;
-	}
-
-	try {
-		await assertTrustedPullRequest(config, pullRequest, { actor: config.actor });
-	} catch (error) {
-		if (error instanceof EligibilityError) {
-			await handleIneligible(config, pullRequest, error.reason);
-			return;
-		}
-		throw error;
-	}
+	await reconcileStableDevelopAlias(config);
 	await deploy(config, pullRequest);
 };
 

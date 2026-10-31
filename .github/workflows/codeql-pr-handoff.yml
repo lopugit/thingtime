@@ -1,0 +1,51 @@
+name: Lopu CodeQL PR handoff
+
+# Privileged metadata-only bridge for PRs targeting arbitrary branches. This
+# is deliberately separate from codeql-analysis.yml: pull_request tokens are
+# capped at actions:read, while this pull_request_target-only bridge needs
+# actions:write solely to create the unprivileged workflow_dispatch analysis.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  handoff:
+    name: Lopu queues an unprivileged PR scan
+    if: github.event_name == 'pull_request_target' && vars.CODEQL_CENTRAL_PR_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Dispatch the exact PR head through the default-branch listener
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]{0,9}$ ]] || {
+            echo "::error::Invalid PR number in the trusted event payload."
+            exit 1
+          }
+          [[ "$EXPECTED_HEAD_SHA" =~ ^[0-9a-f]{40,64}$ ]] || {
+            echo "::error::Invalid PR head SHA in the trusted event payload."
+            exit 1
+          }
+          [[ "$DEFAULT_BRANCH" =~ ^[A-Za-z0-9._/-]{1,255}$ ]] || {
+            echo "::error::Invalid default branch in the trusted repository payload."
+            exit 1
+          }
+
+          gh workflow run codeql-analysis.yml \
+            --repo "$REPO" \
+            --ref "$DEFAULT_BRANCH" \
+            -f "pr_number=$PR_NUMBER" \
+            -f "expected_head_sha=$EXPECTED_HEAD_SHA"
