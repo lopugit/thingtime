@@ -2579,23 +2579,78 @@ function PostCardImpl(props: PostCardProps) {
           <PostBody post={post} attachments={post.attachments} poll={pollContext} />
         )}
 
-        </>}
-        {/* action row — icons + counts only (X-style, no labels); the merged
-        react control sits right beside the comments icon (comment rows keep
-        their IG-style right-aligned react columns) */}
-        {/* wraps at phone widths: the vote pill made the row wider than a
-        375px card, so the view counter (marginLeft auto) drops to its own
-        right-aligned line instead of being clipped by the card edge */}
-        <Flex borderTop={BORDER} paddingTop={2} alignItems="center" columnGap={[1, 2]} rowGap={1} flexWrap="wrap">
-          <ActionIcon
-            icon={<MessageCircle size={18} strokeWidth={2.2} />}
-            count={post.commentCount}
-            label={commentsOpen ? 'Hide comments' : 'Show comments'}
-            active={commentsOpen}
-            aria-expanded={commentsOpen}
-            onClick={toggleComments}
-          />
-          {showVotes && <UpdownControl votes={post.votes} hideUnknownScore={!!commentCollection} onVote={handleUpdown} enabled={!!user} accent={post.subspace?.accent} />}
+        {/* tags — each chip links to that tag's public feed (claude-todo/10 ✨) */}
+        {post.tags?.length > 0 && (
+          <Flex columnGap={1} rowGap={1} flexWrap="wrap">
+            {post.tags.map((tag) => (
+              <Text
+                key={tag}
+                as={Link}
+                to={`/feed?tag=${encodeURIComponent(tag)}`}
+                fontFamily="mono"
+                fontSize="12px"
+                fontWeight={600}
+                color={MUTED}
+                paddingX={2}
+                paddingY="1px"
+                borderRadius="999px"
+                border={BORDER}
+                _hover={{ color: INK, background: 'var(--tt-surface-hover, #ececee)' }}
+                title={`See every post tagged #${tag}`}
+              >
+                #{tag}
+              </Text>
+            ))}
+          </Flex>
+        )}
+
+        {/* reaction chips + counts row — each chip toggles that reaction */}
+        {(reactionEntries.length > 0 || post.commentCount > 0 || post.shareCount > 0) && (
+          <Flex alignItems="center" fontSize="xs" color={MUTED} columnGap={2} rowGap={1} flexWrap="wrap">
+            {reactionEntries.map(([token, count]) => {
+              const mine = viewerSet.has(token);
+              const { text, truncated } = truncateToken(token);
+              return (
+                <Flex
+                  as="button"
+                  type="button"
+                  key={token}
+                  alignItems="center"
+                  columnGap={1}
+                  paddingX={2}
+                  paddingY="1px"
+                  maxWidth="100%"
+                  borderRadius="999px"
+                  border={mine ? '1px solid var(--tt-accent, #7c5cff)' : BORDER}
+                  background={mine ? 'var(--tt-accent-soft, rgba(124, 92, 255, 0.12))' : 'transparent'}
+                  color={mine ? INK : MUTED}
+                  cursor={user ? 'pointer' : 'default'}
+                  _hover={user ? { background: 'var(--tt-surface-hover, #ececee)' } : undefined}
+                  onClick={() => handleReact(token)}
+                  title={token}
+                >
+                  <Text as="span" sx={{ whiteSpace: 'nowrap' }}>
+                    {text}
+                    {truncated ? '…' : ''}
+                  </Text>
+                  <Text as="span">{count}</Text>
+                </Flex>
+              );
+            })}
+            <Flex alignItems="center" columnGap={2} marginLeft="auto">
+              {post.commentCount > 0 && (
+                <Text as="span">
+                  {post.commentCount} comment{post.commentCount === 1 ? '' : 's'}
+                </Text>
+              )}
+              {post.shareCount > 0 && (
+                <Text as="span">
+                  {post.shareCount} share{post.shareCount === 1 ? '' : 's'}
+                </Text>
+              )}
+            </Flex>
+          </Flex>
+        )}
 
           {interactionUser ? (
             <Box ref={reactAnchorRef} position="relative" display="flex">
