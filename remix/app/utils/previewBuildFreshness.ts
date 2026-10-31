@@ -52,8 +52,9 @@ type PreviewFreshnessRuntime = {
 
 // A Vercel branch alias can move to a repaired deployment while an iOS tab is
 // still holding the previous client bundle. Vite serialises this self-contained
-// function into a classic inline head script, before it evaluates the main app
-// module graph, so even an import-time React failure cannot disable recovery.
+// function into a classic same-origin head script, before it evaluates the main
+// app module graph, so even an import-time React failure cannot disable recovery
+// and the application CSP does not need an inline-script exception.
 export const installPreviewBuildFreshness = (runtime?: PreviewFreshnessRuntime): (() => void) => {
 	if (!runtime && (typeof window === 'undefined' || typeof document === 'undefined')) {
 		return () => undefined;

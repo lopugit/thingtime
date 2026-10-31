@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { userPublicUploadsEnabled } from './users';
+import { userPrivateUploadsEnabled, userPublicUploadsEnabled } from './users';
 
 // Signup-permissions hotfix. The permission is deliberately TRI-STATE, and each
 // state has to survive a refactor:
@@ -42,4 +42,23 @@ test('only an exact false withholds the permission', () => {
 test('admins are never gated by the flag', () => {
 	// An admin locked out of uploads could not test or fix the approval flow.
 	assert.equal(userPublicUploadsEnabled(doc({ publicUploads: false, admin: true })), true);
+});
+
+test('private upload permission is an independent tri-state scope', () => {
+	// same tri-state contract as the public flag…
+	assert.equal(userPrivateUploadsEnabled(doc(undefined)), true);
+	assert.equal(userPrivateUploadsEnabled(doc({})), true);
+	assert.equal(userPrivateUploadsEnabled(doc({ privateUploads: false })), false);
+	assert.equal(userPrivateUploadsEnabled(doc({ privateUploads: true })), true);
+	for (const value of [0, '', null, 'false']) {
+		assert.equal(userPrivateUploadsEnabled(doc({ privateUploads: value })), true, `unexpected deny for ${JSON.stringify(value)}`);
+	}
+	assert.equal(userPrivateUploadsEnabled(doc({ privateUploads: false, admin: true })), true);
+
+	// …and the scopes never bleed into each other: granting one variation must
+	// not grant the other ("all" is simply both flags true).
+	assert.equal(userPublicUploadsEnabled(doc({ publicUploads: false, privateUploads: true })), false);
+	assert.equal(userPrivateUploadsEnabled(doc({ publicUploads: true, privateUploads: false })), false);
+	assert.equal(userPublicUploadsEnabled(doc({ publicUploads: true, privateUploads: true })), true);
+	assert.equal(userPrivateUploadsEnabled(doc({ publicUploads: true, privateUploads: true })), true);
 });

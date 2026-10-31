@@ -1,6 +1,7 @@
 import { json, readJsonBody } from '../../http';
 import { getCurrentUser } from '../auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '../rateLimit/enforce';
+import { resolveWatchDevice } from '../watch/watchPairing';
 
 export const ATTACHMENT_PRIVATE_CACHE_CONTROL = 'private, no-store, max-age=0';
 export const ATTACHMENT_JSON_BODY_BYTES = 16 * 1024;
@@ -37,6 +38,11 @@ export const isSameOriginAttachmentRequest = (request: Request): boolean => {
 	}
 };
 
+const usesDeviceCredential = (request: Request): boolean => {
+	const authorization = request.headers.get('Authorization')?.trim() || '';
+	return /^Bearer\s+ttnode_/i.test(authorization);
+};
+
 type MutationService = (
 	ownerId: string,
 	input: unknown
@@ -49,13 +55,25 @@ type AttachmentMutationDependencies = {
 };
 
 const defaultDependencies: AttachmentMutationDependencies = {
-	getUser: getCurrentUser,
+	getUser: async (request) => {
+		const user = await getCurrentUser(request);
+		if (user) return user;
+		return (await resolveWatchDevice(request, 'watch.things.create'))?.user ?? null;
+	},
 	enforceLimit: enforceRateLimit,
 	readBody: readJsonBody
 };
 
+// Upload purposes by permission scope. Mirrors attachmentUploadIntent in
+// attachments.ts (an absent purpose defaults to 'post'): public purposes land
+// on publicly viewable surfaces, private ones only in the account's own DMs or
+// profile. An unknown purpose is left to the service's own 400 — nothing is
+// reserved either way.
+const PUBLIC_UPLOAD_PURPOSES = new Set<unknown>([undefined, 'post', 'comment', 'custom-emoji', 'subspace-icon', 'subspace-banner']);
+const PRIVATE_UPLOAD_PURPOSES = new Set<unknown>(['message', 'profile-avatar', 'profile-banner', 'recording', 'recording-import', 'file', 'file-import']);
+
 export const createAttachmentMutationAction = (
-	options: { rateKey: string; service: MutationService; requirePublicUploads?: boolean },
+	options: { rateKey: string; service: MutationService; requireUploadPermission?: boolean },
 	overrides: Partial<AttachmentMutationDependencies> = {}
 ) => {
 	const dependencies = { ...defaultDependencies, ...overrides };
@@ -76,23 +94,6 @@ export const createAttachmentMutationAction = (
 			if (user.accountKind !== 'user') {
 				return json({ ok: false, error: 'Attachments require a user account' }, { status: 403 });
 			}
-			// Public file/media uploads are withheld from new accounts until an admin
-			// grants them (see auth/users.ts userPublicUploadsEnabled). Gate the
-			// START of an upload: nothing is reserved, no MPU is opened, and every
-			// downstream part/complete call has no upload id to act on. The already
-			// -uploaded lifecycle calls (parts/complete/abort/delete) stay ungated so
-			// a permission change mid-upload can't strand a paid-for reservation.
-			if (options.requirePublicUploads && !user.publicUploadsEnabled) {
-				return json(
-					{
-						ok: false,
-						error: 'Uploads are awaiting admin approval for this account',
-						code: 'public_uploads_not_approved'
-					},
-					{ status: 403 }
-				);
-			}
-
 			const limit = await dependencies.enforceLimit(request, options.rateKey, `user:${user.id}`, { failClosed: true });
 			if (!limit.allowed) {
 				if (limit.unavailable) {
@@ -102,6 +103,37 @@ export const createAttachmentMutationAction = (
 			}
 
 			const body = await dependencies.readBody(request, ATTACHMENT_JSON_BODY_BYTES);
+			// File/media uploads are withheld per SCOPE from new accounts until an
+			// admin grants them (auth/users.ts userPublicUploadsEnabled /
+			// userPrivateUploadsEnabled): the requested purpose decides which flag
+			// gates this start. Sits after the body read because the purpose lives in
+			// the body — a denied attempt still consumes rate budget, which only
+			// throttles retry spam. Gate the START of an upload: nothing is reserved,
+			// no MPU is opened, and every downstream part/complete call has no upload
+			// id to act on. The already-uploaded lifecycle calls
+			// (parts/complete/abort/delete) stay ungated so a permission change
+			// mid-upload can't strand a paid-for reservation.
+			if (options.requireUploadPermission) {
+				const purpose = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>).purpose : undefined;
+				if (usesDeviceCredential(request) && purpose !== undefined && purpose !== 'post') {
+					return json({ ok: false, error: 'Apple Watch credentials can only start post-purpose uploads' }, { status: 403 });
+				}
+				const needsPublic = PUBLIC_UPLOAD_PURPOSES.has(purpose) && !user.publicUploadsEnabled;
+				const needsPrivate = PRIVATE_UPLOAD_PURPOSES.has(purpose) && !user.privateUploadsEnabled;
+				if (needsPublic || needsPrivate) {
+					return json(
+						{
+							ok: false,
+							error: needsPublic
+								? 'Public file and media uploads are awaiting admin approval for this account'
+								: 'Private file and media uploads are awaiting admin approval for this account',
+							code: needsPublic ? 'public_uploads_not_approved' : 'private_uploads_not_approved'
+						},
+						{ status: 403 }
+					);
+				}
+			}
+
 			const result = await options.service(user.id, body);
 			if (result.ok === false) {
 				const { status, ...bodyResult } = result;

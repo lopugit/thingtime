@@ -1,3 +1,7 @@
+import type { CharacterIdentity } from './characterCore';
+import { bindVaultPassword } from './vaultKeys';
+import { InviteError } from '../invites/inviteCore';
+import { prepareInviteSignup } from '../invites/invites';
 import { ensureIndexes, withHomeMongoTransaction } from '../mongodb/collections';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
@@ -7,6 +11,7 @@ import { sendVerificationEmail } from './email';
 import { signJwt } from './jwt';
 import { hashPassword } from './passwords';
 import { createSession } from './sessions';
+import { emitSystemNotification } from '../notifications/notifications';
 import { findUserByEmail, findUserByUsername, insertUser, toPublicUser } from './users';
 import type { PublicUser, UserDoc } from './users';
 import { DEFAULT_SUBSCRIPTION_TIER, subscriptionTierById } from '../subscriptions/tierCatalog';
@@ -19,6 +24,8 @@ export type RegisterInput = {
   email: string;
   displayName?: string | null;
   meta?: Record<string, any>;
+  inviteToken?: unknown;
+  avatarUrl?: unknown;
   // Base URL used to build the verification link (request origin in routes).
   origin?: string;
 };
@@ -28,17 +35,24 @@ export type RegisterResult =
   | { ok: true; user: PublicUser; jwt: string; jti: string; verificationLink: string };
 
 export type CreateUserAccountInput = {
+  // Internal-only: never accepted from public signup metadata.
+  character?: CharacterIdentity;
   username: string;
   password: string;
   email: string;
   displayName?: string | null;
+  // Internal-only invitation options, never copied from a public body.
+  emailOptional?: boolean;
+  avatarUrl?: string | null;
+  onCreated?: (user: any, session: any) => Promise<void>;
   emailVerified?: boolean;
   accountKind?: 'user' | 'service';
   emailVerificationRequiredBy?: Date | null;
   storageAllowanceBytes?: number;
-  // Opt a creation path INTO public uploads (admin-provisioned accounts only).
-  // Public signup never sets it — see the meta assignment below.
+  // Opt a creation path INTO an upload scope (admin-provisioned accounts
+  // only). Public signup never sets them — see the meta assignment below.
   publicUploads?: boolean;
+  privateUploads?: boolean;
   meta?: Record<string, any>;
 };
 
@@ -47,10 +61,10 @@ export type CreateUserAccountResult = { ok: false; status: number; error: string
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
 // Privileged meta keys that must never be set at account creation (only via
-// their own admin-gated / authenticated endpoints). `publicUploads` joins
-// `admin` here: a public signup body must not be able to hand itself the
-// upload permission this hotfix exists to withhold.
-const PRIVILEGED_META_KEYS = ['admin', 'publicUploads'];
+// their own admin-gated / authenticated endpoints). `publicUploads` and
+// `privateUploads` join `admin` here: a public signup body must not be able to
+// hand itself the upload permissions this hotfix exists to withhold.
+const PRIVILEGED_META_KEYS = ['admin', 'publicUploads', 'privateUploads', 'character'];
 
 // Drop privileged keys from any caller-supplied meta before it's persisted.
 const sanitizeCreateMeta = (meta: unknown): Record<string, any> => {
@@ -63,13 +77,23 @@ const sanitizeCreateMeta = (meta: unknown): Record<string, any> => {
 // Single insertion path for user accounts. Browser registration, service
 // account provisioning, and seeding share this validation + schema path.
 export const createUserAccount = async (input: CreateUserAccountInput): Promise<CreateUserAccountResult> => {
-  const username = (input.username || '').trim().toLowerCase();
-  const email = (input.email || '').trim().toLowerCase();
-  const password = input.password || '';
+  const username = typeof input.username === 'string' ? input.username.trim().toLowerCase() : '';
+  const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
+  const password = typeof input.password === 'string' ? input.password : '';
 
   if (!username) return { ok: false, status: 400, error: 'Username is required' };
+  // '/' is the acl grammar's separator: an acl grant is tt:user/<username>
+  // with an optional /comment or /write capability suffix (schemas/registry.ts
+  // splitCapability). A username containing '/' would make those entries
+  // ambiguous — picking the account "someone/write" in the custom-audience
+  // picker mints tt:user/someone/write, which the server reads as EDIT rights
+  // for the DIFFERENT account "someone". Same chokepoint reasoning as the
+  // ADMIN_USERNAMES reservation below; the service-account path already
+  // slugifies to [a-z0-9._-], and /profile/:username can't address one either.
+  if (username.includes('/')) return { ok: false, status: 400, error: 'Usernames can’t contain “/”' };
   if (password.length < 6) return { ok: false, status: 400, error: 'Password must be at least 6 characters' };
-  if (!isEmail(email)) return { ok: false, status: 400, error: 'A valid email is required' };
+  if (Buffer.byteLength(password) > 4096) return { ok: false, status: 400, error: 'Password must be at most 4096 UTF-8 bytes' };
+  if ((!email && !input.emailOptional) || (email && !isEmail(email))) return { ok: false, status: 400, error: 'A valid email is required' };
 
   // Reserve env-allowlist admin usernames across EVERY creation path (register,
   // service-account, seed) so no public route can mint an account whose
@@ -85,7 +109,7 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
   await ensureIndexes();
 
   if (await findUserByUsername(username)) return { ok: false, status: 409, error: 'Username already taken' };
-  if (await findUserByEmail(email)) return { ok: false, status: 409, error: 'Email already registered' };
+  if (email && await findUserByEmail(email)) return { ok: false, status: 409, error: 'Email already registered' };
 
   const now = new Date();
   // UserDoc's type lives in users.ts; intersect the version stamp in here.
@@ -95,6 +119,7 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
     email,
     passwordHash: await hashPassword(password),
     displayName: input.displayName ?? null,
+    avatarUrl: input.avatarUrl ?? null,
     emailVerified: input.emailVerified ?? false,
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.users,
     createdAt: now,
@@ -103,13 +128,20 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
     // Defense-in-depth: privileged flags can never be set at creation time,
     // even if a caller sneaks them into meta. `admin` is granted only via the
     // admin-gated setUserAdmin (auth/admin.ts).
-    // Public file/media uploads start WITHHELD for every newly created account
-    // — verifying the email address no longer grants them. An admin turns them
-    // on per user from /admin (POST /api/v1/admin/users/public-uploads) after
-    // the "new user" notification lands. `publicUploads` is stripped from any
-    // caller-supplied meta above, so this is the only writer at creation time.
-    // Accounts that predate the hotfix have no flag at all and stay enabled.
-    meta: { ...sanitizeCreateMeta(input.meta), publicUploads: input.publicUploads === true }
+    // File/media uploads start WITHHELD for every newly created account, in
+    // BOTH scopes (public = post/comment/emoji, private = messages + own
+    // profile media) — verifying the email address no longer grants either. An
+    // admin turns them on per user, per scope or all at once, from /admin
+    // (POST /api/v1/admin/users/public-uploads) after the "new user"
+    // notification lands. Both keys are stripped from any caller-supplied meta
+    // above, so this is the only writer at creation time. Accounts that
+    // predate the hotfix have no flags at all and stay enabled.
+    meta: {
+      ...sanitizeCreateMeta(input.meta),
+      ...(input.character ? { character: input.character } : {}),
+      publicUploads: input.publicUploads === true,
+      privateUploads: input.privateUploads === true
+    }
   };
 
   if (input.emailVerificationRequiredBy !== undefined) {
@@ -146,8 +178,10 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
 				throw new Error('Initial subscription assignment failed');
     }
 			assignedSubscription = assigned.subscription;
+      await input.onCreated?.(user, session);
 		});
   } catch (err: any) {
+    if (err instanceof InviteError) return { ok: false, status: err.status, error: err.message };
 		if (assignmentFailure) return assignmentFailure;
     // a unique index caught a duplicate that raced past the checks above —
     // things-era collisions surface via uniqueKeys ('email:<hash>' or
@@ -166,7 +200,7 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
       } else if (err?.keyPattern?.username || uniqueKey.startsWith('username:')) {
         field = 'Username';
       } else {
-        field = (await findUserByEmail(email)) ? 'Email' : 'Username';
+        field = email && (await findUserByEmail(email)) ? 'Email' : 'Username';
       }
       return { ok: false, status: 409, error: `${field} already registered` };
     }
@@ -183,12 +217,16 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
 // Single creation path for users — used by the register route AND by seeding,
 // so a seeded user is identical to a real signup (FUNDAMENTALS.md §2).
 export const registerUser = async (input: RegisterInput): Promise<RegisterResult> => {
+  let invite;
+  try { if (input.inviteToken !== undefined) invite = await prepareInviteSignup(input.inviteToken, input); }
+  catch (err) { if (err instanceof InviteError) return { ok: false, status: err.status, error: err.message }; throw err; }
   const created = await createUserAccount({
     username: input.username,
     password: input.password,
     email: input.email,
     displayName: input.displayName,
-    meta: input.meta
+    meta: input.meta,
+    ...(invite ? { ...invite, emailOptional: true } : {})
   });
 
   if (created.ok === false) return created;
@@ -196,12 +234,16 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   const user = created.user;
   const userId = String(user._id);
 
+  await bindVaultPassword(userId, input.password, user.passwordHash);
+
   // session + JWT (logs the user in immediately; emailVerified stays false)
   const session = await createSession(userId);
   const jwt = await signJwt({ sub: userId, jti: session.jti });
+  await emitSystemNotification({ recipientId: userId, type: 'system-message', title: 'Account created successfully ✨', historyOnly: true, outcome: 'ok' });
 
   // email verification token + (stubbed) send
   const email = user.email;
+  if (!email) return { ok: true, user: created.publicUser, jwt, jti: session.jti, verificationLink: '' };
   const verification = await createEmailVerification({ userId, email });
   const origin = input.origin || process.env.APP_URL || 'http://localhost:9999';
   const verificationLink = `${origin}/api/v1/auth/verify-email?token=${verification.token}`;

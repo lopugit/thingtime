@@ -6,10 +6,16 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { stageVercelOutput } from './vercel-build.mjs';
+import { assertBuildLocation, stageVercelOutput } from './vercel-build.mjs';
 import { getVercelIgnoreDecision } from './vercel-ignore-build.mjs';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+test('remote Vercel source compilation fails closed while GitHub and local prebuilds work', () => {
+	assert.throws(() => assertBuildLocation({ VERCEL: '1' }), /source builds are disabled/);
+	assert.doesNotThrow(() => assertBuildLocation({ VERCEL: '1', GITHUB_ACTIONS: 'true' }));
+	assert.doesNotThrow(() => assertBuildLocation({}));
+});
 
 test('the repository root pins the same pnpm version as Remix', async () => {
 	const rootPackage = JSON.parse(await readFile(resolve(repositoryRoot, 'package.json'), 'utf8'));
@@ -19,7 +25,7 @@ test('the repository root pins the same pnpm version as Remix', async () => {
 	assert.equal(rootPackage.packageManager, remixPackage.packageManager);
 });
 
-test('the repository-root Vercel config owns the product build', async () => {
+test('the repository-root Vercel config disables every automatic source deployment', async () => {
 	const config = JSON.parse(await readFile(resolve(repositoryRoot, 'vercel.json'), 'utf8'));
 
 	assert.equal(config.framework, null);
@@ -27,28 +33,16 @@ test('the repository-root Vercel config owns the product build', async () => {
 	assert.equal(config.buildCommand, 'node scripts/vercel-build.mjs');
 	assert.equal(config.outputDirectory, null);
 	assert.equal(config.ignoreCommand, 'node scripts/vercel-ignore-build.mjs');
-	assert.equal(config.git?.deploymentEnabled?.['github-actions'], false);
+	assert.equal(config.git?.deploymentEnabled, false);
 	assert.equal(existsSync(resolve(repositoryRoot, 'remix/vercel.json')), false);
 });
 
-test('the ignore decision excludes only the control plane and duplicate commits', () => {
-	assert.equal(getVercelIgnoreDecision({ VERCEL_GIT_COMMIT_REF: 'github-actions' }).skip, true);
-	assert.equal(
-		getVercelIgnoreDecision({
-			VERCEL_GIT_COMMIT_REF: 'develop',
-			VERCEL_GIT_COMMIT_SHA: 'same',
-			VERCEL_GIT_PREVIOUS_SHA: 'same'
-		}).skip,
-		true
-	);
-	assert.equal(
-		getVercelIgnoreDecision({
-			VERCEL_GIT_COMMIT_REF: 'codex/product-change',
-			VERCEL_GIT_COMMIT_SHA: 'new',
-			VERCEL_GIT_PREVIOUS_SHA: 'old'
-		}).skip,
-		false
-	);
+test('no branch, new SHA or custom environment can opt into a Vercel source build', () => {
+	for (const branch of ['main', 'develop', 'staging', 'github-actions', 'feature/x', '']) {
+		for (const environment of ['production', 'preview', 'develop', 'development', '']) {
+			assert.equal(getVercelIgnoreDecision({ VERCEL_GIT_COMMIT_REF: branch, VERCEL_TARGET_ENV: environment, VERCEL_GIT_COMMIT_SHA: 'new', VERCEL_GIT_PREVIOUS_SHA: 'old' }).skip, true);
+		}
+	}
 });
 
 test('staging promotes a complete Nitro artifact and replaces stale root output', async (t) => {

@@ -2,13 +2,14 @@ import { createAttachmentMutationAction, attachmentPostOnlyLoader } from '~/api/
 import { startAttachmentUpload } from '~/api/utils/attachments/attachments';
 
 // POST /api/v1/attachments/uploads — reserve quota and create a private MPU.
-// Requires the account's public file/media upload permission: new signups start
-// without it (even once their email is verified) until an admin grants it from
-// the /admin Users tab.
+// Requires the upload permission scope matching the requested purpose (public
+// = post/comment/custom-emoji, private = message/profile media): new signups
+// start with both withheld (even once their email is verified) until an admin
+// grants them — per scope or all — from the /admin Users tab.
 export const action = createAttachmentMutationAction({
 	rateKey: 'attachments.start',
 	service: startAttachmentUpload,
-	requirePublicUploads: true
+	requireUploadPermission: true
 });
 
 export const loader = attachmentPostOnlyLoader;
