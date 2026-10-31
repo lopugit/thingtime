@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { ensureIndexes, getLopuMusingRateLimitsCollection } from '../mongodb/collections';
+import { getLopuMusingRateLimitsCollection } from '../mongodb/collections';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
 const LOPU_MUSING_LIMIT = 10;
@@ -57,7 +57,6 @@ export const consumeLopuMusingQuota = async (request: Request): Promise<RateLimi
   const key = hashIp(getRequestIp(request));
 
   try {
-    await ensureIndexes();
     const coll = await getLopuMusingRateLimitsCollection();
 
     await coll.updateOne(
