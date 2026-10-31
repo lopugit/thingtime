@@ -2823,139 +2823,6 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
-    id: 'admin-users-lopu-access',
-    group: 'admin',
-    title: 'Verify Lopu access',
-    endpoint: '/api/v1/admin/users/lopu-access',
-    summary: 'Verify or un-verify a user’s Lopu access (admin only).',
-    detail:
-      'POST { userId, verified } sets meta.lopuVerified (plus meta.lopuVerifiedAt / meta.lopuVerifiedBy) on the user. ' +
-      'Lopu is invite-only while the Thingtime.LopuAccess singleton says requireVerification (the default): every account ' +
-      'starts unverified and every Lopu turn — chats create, chats reply, voice reply, direct-voice session — answers ' +
-      '403 { code: "LOPU_UNVERIFIED" } until an admin verifies it here (an unverified account may still run turns on its own ' +
-      'Secure Vault provider when allowByoUnverified is on). Admins are always verified. The response is the same admin user ' +
-      'row the directory uses, now carrying lopuVerified; GET /api/v1/lopu/account and the user’s own profile read the flag back.',
-    auth: { mode: 'session', description: 'Requires an admin session (isAdmin). Bodies must be application/json (415 otherwise).' },
-    methods: ['POST'],
-    steps: [
-      'Find the user under Admin → Lopu accounts (GET /api/v1/admin/lopu/accounts?q=) or the Users tab.',
-      'POST { userId, verified: true } to let Lopu build with them; verified: false locks the account again.',
-      'Read user.lopuVerified back to update the toggle; the user’s next /api/v1/lopu/account read reflects it at once.',
-      'Non-admins receive 403; a missing userId or a non-boolean verified 400; an unknown user 404.'
-    ],
-    requestExamples: [
-      { name: 'Verify a user', description: 'Let Lopu build with this account.', method: 'POST', body: { userId: '64f000000000000000000002', verified: true } },
-      { name: 'Lock a user again', description: 'Withdraw Lopu access.', method: 'POST', body: { userId: '64f000000000000000000002', verified: false } }
-    ],
-    responseExamples: [
-      { status: 200, description: 'Updated user row.', body: { ok: true, user: { id: '64f000000000000000000002', username: 'nik', isAdmin: false, lopuVerified: true, publicUploadsEnabled: true, privateUploadsEnabled: true } } },
-      { status: 400, description: 'verified was not a boolean.', body: { ok: false, error: 'verified must be a boolean' } },
-      { status: 404, description: 'Unknown user.', body: { ok: false, error: 'User not found' } }
-    ],
-    notes: ['Rate limited per admin by admin.users.lopu-access (60 per minute), enforced fail-closed. Responses are private and uncacheable.']
-  }),
-  endpoint({
-    id: 'admin-lopu-accounts',
-    group: 'admin',
-    title: 'Lopu accounts directory',
-    endpoint: '/api/v1/admin/lopu/accounts',
-    summary: 'Lists Lopu accounts — verified status, credit balance, this month’s and lifetime usage, and pending top-up requests (admin only).',
-    detail:
-      'GET ?q&cursor&limit. Without q every lopu-account row is listed newest first (cursor-paged, limit ≤ 100, default 50); with q the ' +
-      'admin user search resolves the matching users and each is listed with their account — or without one (hasAccount: false, a zero ' +
-      'balance) when they never opened Lopu, so an admin can verify or grant credits before the first turn. Each row carries ' +
-      '{ user: { id, username, displayName, email, lopuVerified, isAdmin }, hasAccount, accountId, balanceMicros, balanceCredits, lowBalance, ' +
-      'month: { key, costMicros, turns }, lifetime: { costMicros, inputTokens, outputTokens, turns }, starterGranted, pendingRequest, createdAt, ' +
-      'updatedAt }; the response also returns the current Thingtime.LopuAccess settings so the editor and the table share one read. ' +
-      '1 credit = 1 USD of list price = 1,000,000 micros.',
-    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
-    methods: ['GET'],
-    steps: [
-      'GET to page through every account (follow nextCursor), or GET ?q=<username> to find one user.',
-      'Toggle user.lopuVerified through POST /api/v1/admin/users/lopu-access.',
-      'Grant credits or resolve pendingRequest through POST /api/v1/admin/lopu/credits.',
-      'Non-admins receive 403; a malformed cursor 400.'
-    ],
-    requestExamples: [
-      { name: 'Find a user', description: 'Search by username.', method: 'GET', query: { q: 'nik' } },
-      { name: 'Page through accounts', description: 'Newest accounts first, five per page.', method: 'GET', query: { limit: '5' } }
-    ],
-    responseExamples: [
-      {
-        status: 200,
-        description: 'One account row with a pending request.',
-        body: {
-          ok: true,
-          accounts: [
-            {
-              user: { id: '64f000000000000000000002', username: 'nik', displayName: 'Nik', email: 'nik@example.com', lopuVerified: true, isAdmin: false },
-              hasAccount: true,
-              accountId: 'lopu-account-3f9c2a1b-7d5e-4c6a-8b0f-1e2d3c4b5a69',
-              balanceMicros: 1980500,
-              balanceCredits: 1.9805,
-              lowBalance: false,
-              month: { key: '2026-09', costMicros: 19500, turns: 1 },
-              lifetime: { costMicros: 19500, inputTokens: 1200, outputTokens: 380, turns: 1 },
-              starterGranted: true,
-              pendingRequest: { id: 'lopu-credit-0a1b2c3d-…', entry: 'request', amountMicros: 3000000, amountCredits: 3, requestStatus: 'pending', note: 'Building a site', createdAt: '2026-09-06T10:00:00.000Z' },
-              createdAt: '2026-09-06T09:00:00.000Z',
-              updatedAt: '2026-09-06T10:00:00.000Z'
-            }
-          ],
-          nextCursor: null,
-          settings: { requireVerification: true, allowByoUnverified: false, starterCredits: 0, lowBalanceWarningCredits: 1 }
-        }
-      },
-      { status: 403, description: 'Caller is not an admin.', body: { ok: false, error: 'Admins only' } }
-    ],
-    notes: ['Rate limited per admin by admin.lopu.accounts (60 per minute). Responses are private and uncacheable.']
-  }),
-  endpoint({
-    id: 'admin-lopu-credits',
-    group: 'admin',
-    title: 'Lopu credits',
-    endpoint: '/api/v1/admin/lopu/credits',
-    summary: 'Grants, adjusts or refunds Lopu credits, or approves / declines a user’s top-up request (admin only).',
-    detail:
-      'Three shapes. { userId, credits, entry?, reason?, note? } moves a balance directly: credits is a number between −10000 and 10000 ' +
-      '(never 0), entry is grant (the default) | topup | adjust | refund — grant and topup must be positive, adjust and refund may be signed. ' +
-      '{ requestId, credits?, reason? } approves a pending top-up request: the requested amount is granted as a topup unless credits ' +
-      'overrides it, the request flips to approved (resolvedAt / resolvedBy / grantedMicros) and the topup ledger row links back to it. ' +
-      '{ requestId, decline: true, reason? } declines it with no balance change. Every grant is one $inc on the user’s lopu-account plus a ' +
-      'lopu-credit ledger row carrying balanceAfterMicros; a request can only be resolved once (409 afterwards), and a user has at most ' +
-      'one pending request. Answers { ok, account, ledger, request } — the admin account row, the ledger row written (null on a decline) ' +
-      'and the resolved request (null on a direct grant).',
-    auth: { mode: 'session', description: 'Requires an admin session (isAdmin). Bodies must be application/json (415 otherwise).' },
-    methods: ['POST'],
-    steps: [
-      'POST { userId, credits, reason } to grant credits to any user (their account is created on the spot when missing).',
-      'POST { requestId } (from the directory’s pendingRequest) to approve a request as asked, or add credits to grant a different amount.',
-      'POST { requestId, decline: true, reason } to decline it.',
-      'Read account.balanceMicros back; 400 for a zero / out-of-range / mis-signed amount or an unknown entry, 404 for an unknown user or request, 409 for a request already resolved.'
-    ],
-    requestExamples: [
-      { name: 'Grant credits', description: 'Add five credits with a reason.', method: 'POST', body: { userId: '64f000000000000000000002', credits: 5, reason: 'Welcome to Lopu' } },
-      { name: 'Refund a turn', description: 'A signed refund of 0.02 credits.', method: 'POST', body: { userId: '64f000000000000000000002', credits: 0.02, entry: 'refund', reason: 'Provider error mid-reply' } },
-      { name: 'Approve a request', description: 'Grant what the user asked for.', method: 'POST', body: { requestId: 'lopu-credit-0a1b2c3d-…', reason: 'Approved' } },
-      { name: 'Decline a request', description: 'No balance change.', method: 'POST', body: { requestId: 'lopu-credit-0a1b2c3d-…', decline: true, reason: 'Not yet' } }
-    ],
-    responseExamples: [
-      {
-        status: 200,
-        description: 'A grant applied.',
-        body: {
-          ok: true,
-          account: { user: { id: '64f000000000000000000002', username: 'nik', displayName: 'Nik', email: 'nik@example.com', lopuVerified: true, isAdmin: false }, hasAccount: true, balanceMicros: 5000000, balanceCredits: 5, lowBalance: false, month: { key: '2026-09', costMicros: 0, turns: 0 }, lifetime: { costMicros: 0, inputTokens: 0, outputTokens: 0, turns: 0 }, starterGranted: true, pendingRequest: null },
-          ledger: { id: 'lopu-credit-…', entry: 'grant', amountMicros: 5000000, balanceAfterMicros: 5000000 },
-          request: null
-        }
-      },
-      { status: 400, description: 'A zero amount.', body: { ok: false, error: 'credits must be a non-zero number of credits between -10000 and 10000' } },
-      { status: 409, description: 'The request was already resolved.', body: { ok: false, error: 'That request was already approved' } }
-    ],
-    notes: ['Rate limited per admin by admin.lopu.credits (60 per minute), enforced fail-closed. Responses are private and uncacheable.']
-  }),
-  endpoint({
     id: 'admin-moderation',
     group: 'admin',
     title: 'Moderation review queue',
@@ -6532,74 +6399,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		notes: ['No response or log contains the cron secret. Mongo TTL deletion is intentionally disabled.']
 	}),
 	endpoint({
-		id: 'attachment-detection-backfill',
-		group: 'attachments',
-		title: 'Backfill sniffed attachment types',
-		endpoint: '/api/v1/attachments/backfill-detected-types',
-		summary: 'Admin-only sweep that re-runs magic-byte detection for ready attachments finalized before detection existed.',
-		detail:
-			'Ready attachments completed before server-side magic-byte sniffing keep crystal contentType application/octet-stream with no detectedContentType, so browser-playable uploads still render as opaque file cards. Each pass scans those legacy rows in shareId order and publishes exactly what completion would have: browser-playable containers flip to their inline contentType and mediaKind, other canonical sniffed types gain detectedContentType display metadata, and undetectable bytes stay untouched so a later pass under a wider detector can still claim them. Names, byte sizes, object keys, and object versions never change. ' +
-			'Every pass is bounded (at most 200 rows, five workers, a 25-second wall-clock budget) and idempotent — upgraded rows leave the candidate set, so repeated real passes converge. Follow nextCursor while hasMore is true to walk the full backlog; the cursor is required for dry runs, which write nothing and would otherwise rescan the same rows.',
-		auth: {
-			mode: 'session-or-bearer',
-			description:
-				'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403. Same-origin JSON requests only.'
-		},
-		methods: ['POST'],
-		steps: [
-			'POST { dryRun: true } first to count what one pass would change without writing.',
-			'POST {} (or { dryRun: false }) to apply one bounded pass for real.',
-			'While hasMore is true, POST again with the returned nextCursor.',
-			'Watch upgradedInline and labeledOpaque against undetected, missingObject, conflicts, and failed in each report.'
-		],
-		requestExamples: [
-			{
-				name: 'Dry-run one pass',
-				description: 'Counts the legacy rows one pass would upgrade, writing nothing.',
-				method: 'POST',
-				body: { dryRun: true }
-			},
-			{
-				name: 'Apply with a cursor',
-				description: 'Continues the sweep after a previous pass reported hasMore.',
-				method: 'POST',
-				body: { cursor: 'att_2f6b0c1d', limit: 200 }
-			}
-		],
-		responseExamples: [
-			{
-				status: 200,
-				description: 'One bounded backfill pass.',
-				body: {
-					ok: true,
-					dryRun: false,
-					scanned: 42,
-					upgradedInline: 17,
-					labeledOpaque: 3,
-					undetected: 21,
-					missingObject: 0,
-					conflicts: 1,
-					failed: 0,
-					hasMore: false,
-					stoppedForTimeBudget: false
-				}
-			},
-			{ status: 403, description: 'Signed-in non-admin.', body: { ok: false, error: 'Admins only' } }
-		],
-		notes: [
-			'Detection reads only the first 8 KiB of each object from private S3; nothing is re-uploaded and object-byte storage accounting is unchanged.',
-			'Unavailable while a custom MongoDB data endpoint is active — run it on the canonical deployment.'
-		]
-	}),
-	endpoint({
 		id: 'moderation-sweep',
 		group: 'admin',
 		title: 'Scheduled moderation sweep',
 		endpoint: '/api/v1/moderation/sweep',
-		featureVersion: '1.1.0',
-		summary: 'Internal hourly starter that retries moderation the async kickoffs lost, then self-drains remaining successful batches.',
+		summary: 'Internal hourly job that retries moderation the async kickoffs lost — unmoderated post/comment text and unanalyzed ready attachments.',
 		detail:
-			'Vercel Cron calls this bounded, idempotent GET at minute 29 each hour. The text pass analyzes a batch of post-family things that carry real text but no moderation stamp (the fire-and-forget kickoff died mid-flight, the provider was down, or the doc predates text moderation being enabled) — it no-ops when the text surface is off, because in off mode an absent stamp is deliberate. The attachment pass runs the same bounded sweep as the admin Moderation tab. When either surface completes a full failure-free batch, the route starts a durable Vercel Workflow that continues one bounded batch at a time immediately; the workflow stops at a short batch or any failure. Failures stay unstamped and retry on the next hourly cron. There is no session, PAT, app-token, or service-account fallback.',
+			'Vercel Cron calls this bounded, idempotent GET at minute 29 each hour. The text pass analyzes a batch of post-family things that carry real text but no moderation stamp (the fire-and-forget kickoff died mid-flight, the provider was down, or the doc predates text moderation being enabled) — it no-ops when the text surface is off, because in off mode an absent stamp is deliberate. The attachment pass runs the same bounded sweep as the admin Moderation tab. Failures stay unstamped and retry on the next run. There is no session, PAT, app-token, or service-account fallback.',
 		auth: {
 			mode: 'bearer',
 			description: 'Requires the exact Vercel cron Authorization header derived from the private CRON_SECRET deployment variable.'
@@ -6608,7 +6414,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		steps: [
 			'Configure CRON_SECRET only in the deployment environment.',
 			'Let the hourly Vercel schedule invoke this endpoint; clients do not call it.',
-			'Monitor failed counts; a full failure-free batch immediately starts a durable continuation, while later hourly invocations safely retry anything still unstamped.'
+			'Monitor failed counts; later invocations safely retry anything still unstamped.'
 		],
 		requestExamples: [
 			{
@@ -6620,12 +6426,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [
 			{
 				status: 200,
-				description: 'One bounded sweep pass; continuationRunId is set when a durable self-draining workflow was started.',
+				description: 'One bounded sweep pass over both surfaces.',
 				body: {
 					ok: true,
 					text: { scanned: 3, analyzed: 3, flagged: 1, failed: 0, skippedOff: false },
-					attachments: { scanned: 2, analyzed: 1, flagged: 0, skipped: 1, failed: 0 },
-					continuationRunId: 'wrun_01moderationsweepexample'
+					attachments: { scanned: 2, analyzed: 1, flagged: 0, skipped: 1, failed: 0 }
 				}
 			},
 			{ status: 401, description: 'Missing or inexact cron authorization.', body: { ok: false, error: 'Unauthorized' } }

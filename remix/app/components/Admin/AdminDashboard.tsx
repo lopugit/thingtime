@@ -578,6 +578,9 @@ const UsersTab = () => {
   });
   const [subscriptionFor, setSubscriptionFor] = React.useState<UserRow | null>(null);
   const [linksFor, setLinksFor] = React.useState<UserRow | null>(null);
+  // The per-scope Approve menu (UploadApprovalsControl) is the only control
+  // that changes what the upload gates enforce, so this banner counts rows
+  // still waiting on either scope.
   const pendingUploadCount = React.useMemo(
     () => (rows ?? []).filter((row) => row.publicUploadsPending || row.privateUploadsPending).length,
     [rows]
@@ -704,7 +707,7 @@ const UsersTab = () => {
                     <Button size="xs" variant="outline" mr={1} onClick={() => setSubscriptionFor(row)}>
                       Tier
                     </Button>
-                    <Button size="xs" variant="outline" onClick={() => setLinksFor(row)}>
+                    <Button size="xs" variant="outline" mr={1} onClick={() => setLinksFor(row)}>
                       Links{row.counts.ownedAccounts + row.counts.linkedApps > 0 ? ` (${row.counts.ownedAccounts + row.counts.linkedApps})` : ''}
                     </Button>
                   </Td>
@@ -980,35 +983,28 @@ export const AdminDashboard = () => {
   }
 
   return (
-    <PageShell width={1280}>
-      <PageHeader
-        eyebrow="Thingtime · control room"
-        title="Admin 🛠️"
-        variant="ink"
-        subtitle="Manage users, apps, subscription tiers, CI automation, external integrations, quotas, and ownership."
-      />
-      <Tabs
-        variant="unstyled"
-        size="sm"
-        isLazy
-        lazyBehavior="keepMounted"
-        index={selectedTabIndex ?? 0}
-        onChange={(index) => navigate(adminTabPath(index))}
-      >
-        <TabList
-          bg="var(--tt-surface-alt, #f5f5f7)"
-          borderRadius="var(--tt-radius-pill, 999px)"
-          padding="3px"
-          gap="2px"
-          flexWrap="wrap"
-          width="fit-content"
-          maxWidth="100%"
-        >
-          {ADMIN_TABS.map((tab) => (
-            <Tab key={tab.slug} as={RouterLink} to={`/admin/${tab.slug}`} {...ADMIN_TAB_STYLES}>
-              {tab.label}
-            </Tab>
-          ))}
+    <Box
+      maxW="1280px"
+      mx="auto"
+      px={{ base: 3, md: 6 }}
+      py={6}
+      paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 16px)"
+      width="100%"
+    >
+      <Heading size="lg" mb={1}>
+        Admin
+      </Heading>
+      <Text fontSize="sm" opacity={0.65} mb={4}>
+        Manage users, apps, subscription tiers, CI automation, quotas, and ownership.
+      </Text>
+      <Tabs variant="enclosed" size="sm" isLazy lazyBehavior="keepMounted">
+        <TabList flexWrap="wrap">
+          <Tab>Users</Tab>
+          <Tab>Apps</Tab>
+          <Tab>Moderation</Tab>
+          <Tab>Tiers</Tab>
+          <Tab>CI Control</Tab>
+          <Tab>System</Tab>
         </TabList>
         <TabPanels>
           <TabPanel px={0}>

@@ -3199,67 +3199,27 @@ email whose link points at the attacker.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
-- [ ] Local attachment storage stand-in (PR: developer-experience follow-ups):
-      with `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=.local-attachments` in
-      `remix/.env` and the dev stack restarted, run
-      `node remix/scripts/seed-fixture.mjs create --files 3 --name demo`, enable
-      uploads (admin login flags or `ADMIN_USERNAMES` + `resume`), then confirm
-      `remix/.local-attachments/objects/<id>/<version>.bin|.json` exist, the
-      post page renders the images (WebP `width=` previews return 200), the
-      content endpoint 302s to a signed `/api/v1/attachments/local-object` URL
-      that streams the bytes (Range → 206), the download-all archive unzips
-      cleanly, and `cleanup` deletes the post/folder and every object file.
-      An unsigned or expired `local-object` URL answers 403; with the variable
-      unset every request answers 404; the module throws when `VERCEL` is set.
-      `npm --prefix remix run test:attachments` covers the multipart, copy,
-      signature and traversal cases without a server.
-- [ ] Download all (PR: download-all attachments): a post with two or more
-      stored attachments shows a `Download all · N files · size` pill under its
-      gallery/file rows (single-file posts and linked-only galleries show none).
-      Clicking it fetches `GET /api/v1/attachments/archive?id=<post>&manifest=1`
-      first, then saves `<post opener>.zip`; unzip it and confirm every stored
-      file is present in gallery order with duplicate names suffixed ` (2)`,
-      linked media listed in `links.txt`, and moderation-pending/blocked files
-      absent for other viewers. The post ⋯ menu shows a **Files** section with
-      `Download all files (N files)` and `Share download link`; the latter copies
-      `https://<origin>/api/v1/attachments/archive?id=<post>` (no `key`) and
-      the toast explains the audience rule. `wget` / `curl -OJ` of that URL
-      saves the same ZIP for a public or unlisted post, returns 404 JSON for a
-      private one without a session, and stops working the moment the post is
-      made private. Repeat for a comment permalink (comment-purpose media only)
-      and check the `-docs` twin plus `/.well-known/thingtime-capabilities.json`
-      advertise `api.attachment-archive` 1.0.0.
-- [ ] Internal shared-file copies: run `npm --prefix remix run test:attachments`.
-      With post-purpose upload approval denied (or its lookup unavailable),
-      copying must reserve no quota or S3 upload. Revoke approval between parts:
-      no next part/finalization may run and only the new upload is cleaned.
-      Confirm source authorization precedes quota reservation; revocation,
-      moderation, purpose or exact-version changes stop copying; only the new
-      owner's partial upload is cleaned, with deferred cleanup still billed.
-      Repeat through `/things/fork` using real private storage and
-      verify the copied image after revoking/deleting the original. Unit mocks
-      alone do not prove that live-S3 acceptance or the Copy button works.
-      Run the action suite for URL/HTML/CSS retargeting, transactional binding,
-      failed-copy cleanup, late root revocation and no-write template failures.
-      Cover exact attachment IDs in saved args, argument defaults, nested lists
-      and page overrides: generated URLs must use copied IDs, while labels,
-      prose and URL template strings stay unchanged. Matching `ttMap` keys and
-      `ttIf` comparisons must still select the same branch after ID retargeting. Split partial IDs
-      must resolve to copied files in loops and inactive branches without changing
-      input data. Re-fork and check the new file IDs again; unused root media
-      bindings must grant nothing. Oversized bindings must fail before writes.
-      Copy a post/data Thing with a relational file gallery but no inline media
-      URL: all eligible files must retain their copied home target and order.
-      A file also embedded elsewhere must be copied once. Oversized galleries
-      and discovery failures must perform no upload writes; recording/message/
-      profile-purpose files must not enter this copy plan.
-      Linked gallery copies must mint new private records with the same URL
-      and annotations, never fetch external bytes or permit content redirects.
-      Invalid/flagged sources fail before minting; late URL changes or revoked
-      access clean only the new record. Confirm ordinary downloads still reject
-      linked attachments, while authorized shared copies can include them.
-      Confirm the button requires `api.things-fork` 1.4.0 before sending a copy.
-
+- [ ] A freshly registered (both-scopes-withheld) account sees the 🔐
+      approval-pending card in place of the upload dropzone in the post,
+      comment, AND messenger composers (the card is purpose-aware), and a
+      direct `POST /api/v1/attachments/uploads` returns 403 with the
+      purpose-matched `public_uploads_not_approved` /
+      `private_uploads_not_approved` code — never the part/complete-only
+      `media_upload_not_granted` code. Registering records an
+      `admin.media_upload_request` email and verifying the email records an
+      `admin.new_user` alert to the admin inbox in `email_messages` (neither
+      unlocks uploads).
+- [ ] After an admin approves ONLY private uploads, the messenger composer and
+      profile media upload work while the post/comment composers still show
+      the 🔐 card (and vice-versa for public-only); approving all unlocks
+      everything after a reload/revalidation, and revoking flips surfaces back
+      while abort/delete of in-flight drafts keep working.
+- [ ] Withhold BOTH scopes while an upload is in flight: the already-started
+      `POST /api/v1/attachments/{parts,complete}` calls answer
+      `403 { code: "media_upload_not_granted" }` from the extra any-scope
+      check, mapped to the same 🔐 copy, while abort/delete of that account's
+      own drafts keep working. Withholding only one scope must NOT block the
+      other scope's in-flight parts/complete.
 - [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
       `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred
       with a red border, light red wash, centered NSFW badge, and a
@@ -3267,16 +3227,6 @@ email whose link points at the attacker.
       An image named `tt-test-illegal.png` disappears from public payloads and
       its `/api/v1/attachments/content` URL 404s for non-admins, while a
       `moderationFlag` row appears in `/admin` → Moderation.
-- [ ] Deliberately hold a just-completed attachment in `pending`: it is absent
-      from another account's attachment projection and content returns not
-      found, while its owner and an admin can still open the exact evidence.
-      Run the moderation sweep after restoring the deterministic provider and
-      confirm it releases the item to `clear`, `nsfw`, or `blocked`.
-- [ ] Generic Things create/update requests cannot set the root `moderation`
-      field or create a `thingtime: moderationFlag` record. Pre-create an
-      ordinary Thing with the deterministic `modflag-<target>` id, analyze a
-      flagged target, and confirm the ordinary Thing remains byte-for-byte
-      ordinary while the target remains `flagPending` for operator review.
 - [ ] With `THINGTIME_MODERATION_PROVIDER=openai+claude` (+ both API keys), a
       clearly clean image stamps `clear` with provider `openai` (free omni
       screen, no Claude spend) while an explicit image stamps via provider
@@ -3288,14 +3238,6 @@ email whose link points at the attacker.
       uploads stamp provider `openai`; switching either surface to Off stops
       new stamps. Choices survive a reload (settings collection, not local
       state).
-- [ ] Store a dedicated **OpenAI Moderation** credential in the encrypted admin
-      vault separately on production and develop. A valid vault key overrides
-      a stale legacy env key for invitation avatars, media and text; clean
-      synthetic input obtains a real Omni verdict. Rotation is observed on the
-      next request, the other environment stays isolated, and a vault read or
-      decryption failure never silently falls back. Paid chat/CI credentials
-      remain unchanged. Create and then cancel a zero-credit test invitation
-      with an avatar; normal vault/API reads must never return its secret.
 - [ ] With an OpenAI key configured, a post/comment containing threatening
       harassment vanishes from feeds/threads for everyone shortly after
       creation and a `text` flag row (with excerpt, no View button) appears in
@@ -3305,8 +3247,8 @@ email whose link points at the attacker.
       flags as block-worthy never appears in any feed/thread — even a refresh
       fired immediately after posting (the doc is born blocked; a `text` flag
       row appears for admins). With `TT_TEXT_SCREEN_BUDGET_MS=0` (or omni
-      unreachable) the post is born pending and owner-private until the async
-      verdict or sweep releases it.
+      unreachable) the same post appears instantly and then vanishes once the
+      async verdict lands.
 - [ ] Fail-closed pending flow: with text moderation on and omni unreachable
       (or `TT_TEXT_SCREEN_BUDGET_MS=0`), a new post appears for its author but
       NOT for other accounts; once omni is reachable again (queue retry or
@@ -3323,11 +3265,6 @@ email whose link points at the attacker.
       then hit `/api/v1/moderation/sweep` with the CRON_SECRET bearer (or the
       admin Run analysis sweep button) — the post gets stamped/flagged and the
       "text post(s) awaiting analysis" count in `/admin` → Moderation drops.
-      Seed more than 25 text posts or 10 attachments and verify a full,
-      failure-free cron pass returns a `continuationRunId`; the durable runs
-      keep draining immediately until a short batch remains. Introduce one
-      provider failure and verify that surface stops its chain and waits for
-      the next hourly cron instead of retrying in a tight loop.
 - [ ] Top-level post, rich comment, and reply composers use the same responsive
       attachment gallery and `🏞️ Add Media` tile. The existing multi-URL photo
       flow remains available as a quota-saving alternative on every rich
@@ -5452,7 +5389,305 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       always 'sandbox-' prefixed so pooled feeds can't impersonate real
       accounts.
 
-## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
+## Token minter — personal access tokens (`remix/app/components/Settings/TokenMinter.tsx`, `api/utils/auth/patTokens.ts`)
+
+- [ ] Settings → Token minter (auth only): mint with default "Full things
+      access" — the returned token appears ONCE in the reveal card (token +
+      curl example + copy buttons); after reload the reveal is gone and the
+      token is unrecoverable, but the row lists in "Your tokens" (painted
+      instantly from the `tt-pat-tokens-<userId>` local cache, server
+      reconciles behind).
+- [ ] Permissions selector: with Full things access on, unticking one leaf
+      (e.g. Delete) converts the selection to "every leaf except that one"
+      and the hint lists exactly the granted scopes; minting with zero
+      scopes is blocked with a toast.
+- [ ] Expiry dials stay in sync: preset chips (1h…1y, Never ∞), the
+      log-scale slider (1ms → 10y, far right = never), and the value+unit
+      inputs all drive the same expiresInMs; the human date preview updates.
+- [ ] Uses dials: Unlimited / 1 / 10 / 1000 / custom; a use-limited token
+      consumes exactly one use per authenticated call — the (maxUses+1)-th
+      call 401s "no uses remaining", and a 403 (missing scope) consumes
+      NOTHING. Two racing final calls can never both spend the last use
+      (atomic usesRemaining > 0 decrement).
+- [ ] A PAT works ONLY where wired: things CRUD/search/feed/user/save/
+      comment/react/share by scope (PUT upsert needs create+update), plus
+      free introspection at /api/v1/tokens/self. It must 401 on
+      /api/v1/tokens (list/mint), /tokens/revoke, /auth/me, themes,
+      algorithms, oauth — and be rejected when smuggled via the auth
+      COOKIE (Bearer-only).
+- [ ] Sub-second expiry is real: a 1500ms token works immediately and 401s
+      after 2s (session expiresAt is the authoritative ms check; the JWT
+      exp is ceiled to seconds).
+- [ ] Revoke (session-only) kills the token immediately, is idempotent,
+      flips the row optimistically (reverts on failure), and gives a
+      never-expiring token a reap date so the TTL index eventually clears
+      it. Expired tokens vanish from the list once Mongo's TTL sweep runs.
+- [ ] Permissions selector "Select all ✅ / Unselect all 🧹" buttons: all →
+      the single Full-access chip state; none → zero chips + mint blocked.
+- [ ] Sandbox ("Only its own things 🧸", onlyCreatedThings) — the tt:token
+      grant system: every PAT-created thing carries the creator's
+      tt:token/<id> entry in tokenAcl; a sandboxed token CAN patch/PUT-
+      replace/delete/comment/react/save/share things carrying its entry and
+      gets 403 "sandboxed … tt:token grant" on everything else (the 403 is a
+      post-auth target check, so it DOES consume a use — only missing-scope
+      403s are free) — including reaction/save REMOVAL on ungranted things
+      and re-sharing a token-created share of a foreign root. Delete stays
+      one atomic filter op on success (tokenAcl OR legacy createdByTokenId)
+      and returns the sandbox 403, not a phantom 404, when the thing exists
+      but carries no grant.
+- [ ] Grant layering: owner PATCHes a thing's tokenAcl to [A, B] → BOTH
+      sandboxed tokens mutate it; removing A's entry cuts A off immediately
+      while B keeps working; owner can CREATE a thing pre-granted to a
+      token that never touched it; a sandboxed token can re-grant (add
+      peers to) things it holds a grant on, and can lock itself out by
+      dropping its own entry (session always recovers it). tokenAcl
+      replaces WHOLE (null clears), max 32 entries, entries must match
+      tt:token/<id> (400 otherwise), and a tokenAcl replacement also clears
+      the legacy createdByTokenId stamp so removed grants can't resurrect
+      through the back-compat read.
+- [ ] tokenAcl is owner-only in projections: the owner (and their tokens)
+      see it on GET /things?id=; anonymous viewers and other users never
+      receive the field. Legacy round-2 docs (createdByTokenId, no
+      tokenAcl) still honor their creator via the read shim.
+- [ ] Non-sandboxed tokens and full sessions ignore tokenAcl entirely; the
+      settings list row shows "🧸 its own things only" + a "Grant 🆔"
+      copy button (copies tt:token/<id>).
+- [ ] PAT × app-token coexistence on the shared things routes (one resolver,
+      three credential kinds): a PAT ignores Origin (no app binding), the
+      OPTIONS preflight for app SDKs still serves with Authorization allowed,
+      a PAT with things.read can browse `GET /things?appId=` (first-party
+      read), a PAT 401s on the app-token-only app-data surface, an app token
+      401s on /api/v1/tokens, and the oversized-payload 413 fires BEFORE
+      actor resolution so it never consumes a PAT use. One command re-checks
+      all of this: `node scripts/verify-pat-tokens.mjs <nitro base url>`
+      (companion to `scripts/verify-app-namespaces.mjs`).
+
+## Admin dashboard, subscription tiers & ownership links (`/admin`, `api/utils/subscriptions/`, `api/utils/accounts/accountLinks.ts`)
+
+- [ ] `/admin` → Moderation lists flags (unreviewed first) with status badges;
+      `View` opens the raw media (blocked media opens for admins only);
+      `Clear` / `NSFW` / `Block` override the verdict with a Lopu toast and
+      stamp reviewedBy; `Run analysis sweep` reports analyzed/flagged/skipped
+      counts and drains pending attachments.
+- [ ] `/admin` → Users shows the public-uploads state per row; the toggle
+      flips the single unified permission optimistically and reverts with a
+      Lopu toast on failure. Non-admin sessions get 403 from
+      `POST /api/v1/admin/users/public-uploads`.
+- [ ] The same row also shows the purple `media` badge for `meta.mediaUpload`
+      grantees and admins; **Grant media / Revoke media** toggles that separate
+      flag with a Lopu toast and the badge updates after refresh. That grant is
+      a record only — it never gates an upload, so flipping it alone must NOT
+      change any upload's 403. Non-admin sessions get 403 from
+      `POST /api/v1/admin/set-media-upload`.
+
+Dev bootstrap: register a throwaway user via `POST /api/v1/auth/register`, then
+restart the dev stack with `ADMIN_USERNAMES=<that username>` (registering a
+name already on the allowlist is refused, so register FIRST). One command
+re-checks the whole management plane end-to-end:
+`TT_VERIFY_ADMIN_USER=<user> TT_VERIFY_ADMIN_PASS=<pass> node scripts/verify-admin-subscriptions.mjs <nitro base url>`.
+
+- [ ] `/admin` renders the 🔐 gate card for anonymous/non-admin visitors and
+      the dashboard (Users / Apps / Tiers / CI Control / System tabs) for admins; the drawer's
+      Account section shows the 🛠️ Admin item only for admins.
+- [ ] Users tab: free-text query searches every safe projected field; typed
+      filters cover created-day ranges, tier id/name/version, booleans, quotas,
+      storage, and every count; multiple filters combine with AND and sorting
+      is deterministic. Each row shows created time, tier badge (+ `custom`
+      badge when overrides exist), storage used/allowance, app-namespace bytes,
+      and app/PAT/connected counts. With more than 400 mixed Things/legacy
+      users, confirm the UI drains every 200-row cursor page without gaps or
+      duplicates and a field/tier match found only on page 3 is still returned.
+      Confirm numeric `is any of` / `is none of` filters accept comma-separated
+      values. Exact-email matches and all backing stores stay globally newest
+      first across page boundaries.
+      If a continuation request fails, the last complete snapshot stays visible;
+      a cold failure shows an error with an in-place Retry action instead of an
+      authoritative empty table.
+- [ ] Apps tab query covers identity, origins, created/suspended time, status,
+      owners/managers, users, storage, and every subscription field. A no-match
+      query keeps the controls visible; Clear filters restores the rows; tier
+      or link changes refresh rows without clearing the active query. Seed more
+      than 200 apps and confirm a manager/tier match beyond page 1 is queryable.
+- [ ] Tiers tab query covers every descriptor field: lifecycle/version,
+      identity text, display price amounts, computed/custom discounts,
+      Editor.js inclusion text, quotas, and all timestamps. Filtered cards stay
+      in Live / Draft / Archived groups with correct per-group empty states.
+- [ ] System has independent queries for rate-limit rules and current admins.
+      Filtering rate limits never discards hidden unsaved edits, and the
+      separate Promote a user lookup keeps its existing username/email flow.
+- [ ] Subscription editor: assigning a live tier's exact `tierVersionId` +
+      per-field override (number in MB for byte fields, or Unlimited) persists
+      and the row updates on save; Reset to default pins the current live
+      default revision. If the current revision was archived, its card remains
+      visible as current/non-selectable and note/override-only edits preserve
+      that exact historical revision.
+- [ ] Tiers tab lifecycle: create a new draft, edit its name/tagline/banner,
+      currency, all four renewal prices, quota defaults, and Editor.js
+      inclusions; reload and confirm every field persists. The draft appears
+      only in Draft / not live and never in public `GET /api/v1/tiers`.
+- [ ] Pricing discounts: each daily→weekly/monthly/yearly,
+      weekly→monthly/yearly, and monthly→yearly percentage is computed from
+      annualized prices. Enter a custom saved percentage, confirm it overrides
+      just that comparison, then clear it and confirm the computed value
+      returns. Check a zero-decimal currency (JPY) and a three-decimal currency
+      (KWD) render their minor-unit prices correctly.
+- [ ] Publish requires confirmation, makes the immutable revision live/public,
+      and hides the mutable editor. Create a new draft version, publish it, and
+      confirm the former live revision moves to Archived while an existing
+      user's pinned `tierVersionId`, title, and quota snapshot stay unchanged.
+- [ ] Archive requires confirmation and never deletes history. The default
+      Free revision cannot be archived without publishing its replacement;
+      draft and archived revisions are rejected for new assignments. A tier
+      already holding a draft disables duplicate draft creation.
+- [ ] Tier cards render the optional banner (with graceful broken-image
+      fallback), tagline, four prices, savings, quotas, and rich inclusions.
+      Desktop and 375px layouts have no clipping/overlap; open each lifecycle
+      confirmation and the Editor.js content editor while testing.
+- [ ] Tier quotas actually enforce: with `maxApps: 1` override the second
+      `POST /api/v1/apps` is refused 400; a `null` override (or payg) lifts
+      the cap. App subjects accept only `appStorageBytes`; tier/override and the
+      runtime aggregate move atomically on the app Thing, `null` meters without
+      blocking, and administrator-custom app plans lock owner tier changes.
+- [ ] `subscription-tier`, `subscription`, and `account-link` kinds are
+      PROTECTED: generic `POST /api/v1/things` refuses them, and generic
+      creation also rejects the deterministic `subscription-*` shareId
+      namespace (published tiers, self-assigned plans, or links would be
+      privilege escalation).
+- [ ] Apps tab: every app across all users with owner, co-managers, live-grant
+      user count, storage rollup, and status. Suspend uses an inline
+      Confirm/Cancel, flips the row to SUSPENDED + Restore, and: existing app
+      tokens die immediately (401), the consent screen and /oauth/authorize
+      refuse 403, restore allows re-authorization but does NOT resurrect swept
+      sessions.
+- [ ] Ownership links (many-to-many both ways): admin assigns an account link
+      → target appears under the owner's "Owned accounts" in the switcher
+      (`GET /api/v1/auth/accounts/owned`), "Sign in →" assumes it without
+      credentials (fresh per-browser session folded into the roster; other
+      browsers/owners are never signed out), non-linked users get 403. App
+      links put the app in the co-manager's `/apps` list and update/delete
+      accept them; removing the link removes access (404).
+- [ ] Mobile (375px): the admin tables scroll inside their own container —
+      the page body itself never scrolls horizontally; modals fit with no
+      clipped controls.
+
+## Admin CI control plane (`/admin` → CI Control, `api/utils/ciControl/`)
+
+- [ ] With a prior snapshot cached, CI Control paints the last-known feature
+      rows on first render without a spinner, then reconciles in the background.
+      A failed refresh preserves those rows, says they are cached, and retries.
+- [ ] Anonymous and non-admin callers receive the standard admin denial from
+      all three `/api/v1/admin/ci*` endpoints. The dashboard never renders for
+      them and the webhook routes do not accept a browser session as authority.
+- [ ] Send the same signed GitHub delivery twice: the entity projection is
+      current and exactly one relational `ci-event` exists for that delivery
+      and parent. A payload with one changed byte, a missing delivery header,
+      another repository, or a bad HMAC is rejected without writes.
+- [ ] Send Vercel deployment created → ready and retry each exact body. One
+      current deployment and preview projection advance to ready; exact retries
+      do not duplicate history. Invalid HMAC and payloads over 2 MiB fail.
+- [ ] GitHub reconciliation groups promotion PRs with their source feature,
+      paginates beyond 100 branches/open PRs, refreshes runs/deployments,
+      preserves existing event history, and never exposes the App private key
+      or installation token.
+- [ ] Dispatch every allowlisted workflow and confirm the audit row moves
+      requested → accepted (or failed) with a relational event. Arbitrary
+      workflow names, non-allowlisted inputs, and feature-branch entry refs
+      cannot reach GitHub. Rebase/release require the UI confirmation gate.
+- [ ] Save each supported automation with GitHub Actions, then Vercel Sandbox,
+      and verify the cached dashboard updates optimistically and rolls back with
+      authored copy on failure. Web CI and Electron release visibly remain
+      GitHub-only rather than accepting an unsupported provider.
+- [ ] Remove each Vercel-provider prerequisite in turn (GitHub App id,
+      installation id, private key, router secret, and Vercel runtime identity).
+      The Admin badge says setup is needed, names the missing server setting,
+      disables the Vercel option, and a direct policy POST returns the authored
+      409 without changing the prior policy. Vercel is shown ready only when all
+      prerequisites are present.
+- [ ] Send a fresh, correctly HMAC-signed provider request and verify a GitHub
+      policy returns `execute: true`; a Vercel policy creates exactly one
+      idempotent dispatch for duplicate delivery keys. Reject stale timestamps,
+      changed bodies, unknown workflows/inputs, and bad signatures without
+      starting a Workflow or writing a claim.
+- [ ] With Vercel selected, confirm the native GitHub trigger performs only its
+      provider-router job, a durable Vercel Workflow creates one uniquely
+      labelled ephemeral Sandbox runner, and the exact protected workflow
+      re-enters on that runner. Confirm completion/failure is projected and the
+      Sandbox plus GitHub runner registration are deleted afterward.
+- [ ] On Vercel's universal image, bootstrap must run GitHub's version-matched
+      `bin/installdependencies.sh` non-interactively and provide `/dev/fd` from
+      `/proc/self/fd` before registration. Make each command fail in turn and
+      verify the provisional exact runner/Sandbox is still cleaned even though
+      `createRunner()` never returns its handle to the outer Workflow.
+- [ ] Remove or invalidate each router dependency in turn (router secret, App,
+      Workflow/Sandbox auth) and verify automatic triggers fail over to
+      GitHub-hosted compute with a visible event instead of silently stopping.
+- [ ] Before the first Reconcile, the configured-but-empty dashboard explains
+      that no provider events have been imported. Run Reconcile once and verify
+      existing branches, open PRs, runs, deployments, and previews populate;
+      subsequent GitHub/Vercel deliveries advance the same records and history.
+- [ ] Desktop: search/filter feature rows, select a PR, open its GitHub and
+      preview links, inspect topology, Actions runs, and the full status
+      timeline. Scroll the page top-to-bottom and the sticky detail panel to its
+      bottom without clipping, overlap, or horizontal page overflow.
+- [ ] Mobile (375px): search/filter rows, open the bottom detail drawer, scroll
+      every section, open the dispatch modal and confirmation state, then close
+      both. The drawer is flush left/right/bottom, has no clipped controls, and
+      the page never scrolls horizontally.
+- [ ] Run `node scripts/workflow-caller-contract.mjs` manually or inspect its
+      protected advisory comment: every product-branch workflow has exactly
+      one reusable call pinned to `@github-actions`, no runner/steps/shell
+      behavior, and no product-branch Actions scripts. A mismatch warns but
+      does not join the required unit-test aggregate.
+
+PR #220 live acceptance recorded on 2026-08-10:
+
+- [x] A human exact-PR trigger handed off to Vercel, registered one unique
+      runner, re-entered as `thingtime-ci-control[bot]`, ran the protected
+      detector successfully, and deleted the exact runner and Sandbox.
+- [x] A setup failure after the original trigger exited dispatched the same
+      protected workflow back to GitHub-hosted compute through the App.
+- [x] First authenticated Reconcile populated the CI dashboard; GitHub App,
+      webhook, provider-router, and Vercel readiness were visible together.
+- [x] Desktop and 375 px mobile acceptance covered provider persistence,
+      dispatch confirmation/cancel, PR #220 detail panel/drawer, full-page
+      scrolling, and zero horizontal overflow.
+- [x] `node scripts/workflow-caller-contract.mjs`, focused CI-control tests,
+      targeted lint, build/output verification, and Graphify integrity checks
+      passed for the published branch.
+
+## App-owner storage manager (`/apps/manage`, `api/utils/apps/appStorageManagement.ts`)
+
+- [ ] Logged-out visitors get the sign-in card. An owner sees every registered
+      app; an administrator-linked co-manager sees the linked app; ordinary app
+      users and removed co-managers get the same 404-shaped denial as an unknown
+      app and cannot inspect aggregate usage or the user roster.
+- [ ] Selecting any current live card sends its stable tier id plus exact
+      `tierVersionId`, updates the whole-app allowance while preserving exact
+      usage, and rejects a downgrade below current usage atomically. The
+      bootstrapped Free → Plus → Pro → PAYG path yields 5/25/100 GiB/null. An
+      administrator-custom plan shows `custom` and disables self-service tier
+      buttons until the admin resets it; an archived current revision remains
+      visible but cannot be newly selected.
+- [ ] Default cap starts at 50 MiB, accepts 0 and finite MiB values no larger
+      than the current aggregate, and is re-checked atomically against a racing
+      plan change. Existing users without overrides immediately inherit it.
+- [ ] Select one user or many (up to all 200 shown) and apply a custom cap;
+      each protected `app-storage` ledger records its own override, `Use app
+default` unsets it, and runtime usage reports the effective cap. A custom
+      value above the aggregate is refused; a later aggregate downgrade clamps
+      enforcement even if a historical override was larger.
+- [ ] The roster includes users with current or past grants/ledgers, but a
+      username appears only while a live unexpired grant covers
+      `profile.username`. App-user IDs/usernames are never written to the
+      browser localStorage cache, and a failed manager re-authorization clears
+      the cached storage view.
+- [ ] Desktop and 375px mobile: switch apps; inspect banner/price/savings/rich
+      inclusions on tier cards; choose a plan; edit the default;
+      search, select-all, single-select, bulk apply/reset; horizontally scroll
+      the user table; and scroll the full page top-to-bottom. No page-level
+      horizontal overflow, clipping, sticky overlap, or console errors.
+
+## Rate limiting & index-ensure reliability (`api/utils/rateLimit/enforce.ts`, `api/utils/mongodb/collections.ts`)
 
 - [ ] Healthy path: burst a rate-limited endpoint past its limit (e.g.
       `things.search`, 120/min → 121 requests) → 429 with `Retry-After`,

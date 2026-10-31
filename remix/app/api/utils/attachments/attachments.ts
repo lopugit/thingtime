@@ -57,8 +57,6 @@ import {
 import { PrivateS3ConfigError } from './config';
 import { getPrivateS3, type AttachmentObjectHead, type AttachmentS3, type AttachmentUploadedPart } from './privateS3';
 import { queueAttachmentModeration } from '../moderation/analyzeAttachment';
-import { copyStoredAttachment } from './copyStoredAttachment';
-import { findUserById, userPublicUploadsEnabled, userPrivateUploadsEnabled } from '../auth/users';
 
 export const ATTACHMENT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 export const ATTACHMENT_READY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -281,11 +279,6 @@ const defaultDependencies: AttachmentServiceDependencies = {
 	uuid: randomUUID,
 	customMongoActive: isCustomMongoEndpointActive,
 	canViewTarget: canViewHomeAttachmentTarget,
-	canViewSharedTarget: (viewer, attachment, rootId) => canViewSharedCompositionAttachment(viewer, attachment, rootId),
-	canCopyFiles: async (ownerId, purpose = 'post') => {
-		const user = await findUserById(ownerId);
-		return !!user && user.accountKind !== 'service' && (purpose === 'file' ? userPrivateUploadsEnabled(user) : userPublicUploadsEnabled(user));
-	},
 	clock: Date.now,
 	queueModeration: queueAttachmentModeration
 };
@@ -1262,8 +1255,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// Moderation runs AFTER the upload is durable and never affects the
 			// response — the analyzer stamps the protected root field async and the
 			// admin sweep retries anything that misses this kickoff.
-			stage = 'queue-moderation';
-			if (doc.attachmentPurpose !== 'password') dependencies.queueModeration?.(doc.shareId);
+			dependencies.queueModeration?.(doc.shareId);
 			return { ok: true, attachment: attachmentPublicProjection(doc.shareId, doc.crystal) };
 		} catch (error) {
 			const known = knownFailure(error);
@@ -1478,21 +1470,10 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			const id = normalizeId(idInput);
 			if (!id) return fail(404, 'Attachment not found');
 			let doc = await dependencies.store.getById(id);
-			if (!doc) return fail(404, 'Attachment not found');
-			const retained = retainedVersion !== undefined && viewer?.id === doc.ownerId && !viewer?.sharedRoot &&
-				/^[a-f0-9]{64}$/.test(retainedVersion) && activeAttachmentRetention(doc, dependencies.now()) &&
-				isAttachmentObjectVersionId(doc.objectVersionId) &&
-				attachmentContentVersion(doc.shareId, doc.objectKey, doc.objectVersionId!) === retainedVersion;
-			if ((retainedVersion !== undefined && !retained) || (doc.attachmentState !== 'ready' && !(retained && doc.attachmentState === 'deleting')))
-				return fail(404, 'Attachment not found');
-			if (doc.attachmentPurpose === 'password' && (!dependencies.passwordVault || viewer?.id !== doc.ownerId || !doc.targetId || !(await dependencies.canViewTarget(viewer, doc)))) return fail(404, 'Attachment not found');
-			// Pending analysis fails closed for everyone except the owner preview and
-			// an administrator reviewing evidence. Blocked attachments stay admin-only.
-			// 404 (not 403) keeps moderation state from becoming an existence oracle.
+			if (!doc || doc.attachmentState !== 'ready') return fail(404, 'Attachment not found');
+			// TOS-blocked attachments are quarantined: never served to anyone but
+			// admins reviewing the flag. 404 (not 403) so blocking is not an oracle.
 			if (doc.moderation?.status === 'blocked' && !viewer?.isAdmin) return fail(404, 'Attachment not found');
-			if (doc.moderation?.status === 'pending' && !viewer?.isAdmin && viewer?.id !== doc.ownerId) {
-				return fail(404, 'Attachment not found');
-			}
 			// Unbound drafts are owner-previewable only while their reservation is
 			// live. Profile replacement stamps immediate expiry in the same Mongo
 			// transaction that removes the user-slot reference, making the old object

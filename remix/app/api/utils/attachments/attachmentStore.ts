@@ -99,7 +99,6 @@ export type AttachmentDoc = {
 		model?: string;
 		analyzedAt?: Date;
 		reason?: string;
-		flagPending?: boolean;
 	};
 	createdAt: Date;
 	updatedAt: Date;

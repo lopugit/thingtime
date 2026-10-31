@@ -30,6 +30,7 @@ import { applyHistoryPrefsPatch, parseHistoryPrefs, type HistoryPrefs, type Hist
 import { AttachmentBindingError, reconcileReadyProfileAttachmentsToUser, type ProfileAttachmentRefs } from '../attachments/attachmentStore';
 import { effectiveProfileMediaUrl, linkedProfileMediaUrl, profileAttachmentIdFromRecord } from '~/utils/profileMediaUrl';
 import { isAdminDoc, isEnvAdmin } from './admin';
+import { canUploadMediaDoc } from './mediaUpload';
 import { getSubscription, type SubscriptionInfo } from '../subscriptions/subscriptions';
 import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 import { sanitizeBirthday } from './birthday';
@@ -133,6 +134,11 @@ export type PublicUser = {
 	// true when meta.admin OR the ADMIN_USERNAMES env allowlist — the client uses
 	// it to reveal the admin panel; the server always re-checks server-side.
 	isAdmin: boolean;
+	// Any-scope alias over the two flags above (see auth/mediaUpload.ts): true
+	// when at least one upload scope is open, or the user is an admin. The
+	// composer's approval-pending card falls back to it and the parts/complete
+	// routes gate on it; the server re-checks on every upload route.
+	canUploadMedia: boolean;
 };
 
 // Minimal projection safe to show OTHER users (public profiles, post authors).
@@ -159,6 +165,11 @@ export type PublicProfile = {
 // own circles see (message attachments, own profile avatar/banner). "All" is
 // simply both flags. Admins are always allowed regardless of the flags, so a
 // locked-out admin can never be unable to fix the account that grants them.
+// These two flags are the ONE enforcement path, and they also feed the
+// any-scope `canUploadMediaDoc` predicate (auth/mediaUpload.ts) that
+// PublicUser.canUploadMedia and the parts/complete grant check read — so
+// approving a scope needs no second grant, and the separate `meta.mediaUpload`
+// record (its own admin setter) never gates an upload.
 export const userPublicUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.publicUploads !== false;
 export const userPrivateUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.privateUploads !== false;
 
@@ -216,8 +227,8 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		hideEmailOnProfile: user.meta?.hideEmailOnProfile !== false,
 		publicUploadsEnabled: userPublicUploadsEnabled(user),
 		privateUploadsEnabled: userPrivateUploadsEnabled(user),
-		lopuVerified: userLopuVerified(user),
-		isAdmin: isAdminDoc(user)
+		isAdmin: isAdminDoc(user),
+		canUploadMedia: canUploadMediaDoc(user)
 	};
 };
 
@@ -1812,9 +1823,7 @@ export type AdminUserRow = {
 	// signup), so the UI can tell "awaiting approval" from "grandfathered".
 	publicUploadsPending: boolean;
 	privateUploadsPending: boolean;
-	// Lopu access (meta.lopuVerified; admins always true) — toggled from
-	// Admin → Lopu accounts through POST /api/v1/admin/users/lopu-access
-	lopuVerified: boolean;
+	mediaUpload: boolean; // the stored grant flag (admins can upload regardless)
 };
 
 // Escape user-supplied text before embedding it in a Mongo $regex — shared with
@@ -1840,7 +1849,7 @@ const toAdminRow = (doc: any): AdminUserRow => ({
 	privateUploadsEnabled: userPrivateUploadsEnabled(doc),
 	publicUploadsPending: doc?.meta?.publicUploads === false && !isAdminDoc(doc),
 	privateUploadsPending: doc?.meta?.privateUploads === false && !isAdminDoc(doc),
-	lopuVerified: userLopuVerified(doc)
+	mediaUpload: doc.meta?.mediaUpload === true
 });
 
 // The admin row for a user doc already in hand (the Lopu accounts directory
@@ -1884,6 +1893,10 @@ export const setUserAdmin = async (userId: string, admin: boolean): Promise<Admi
 // twin left by an interrupted users→things migration would otherwise keep a
 // stale value that the dual-store read resurrects, so a grant would appear not
 // to take. Best-effort per store; either matching counts as applied.
+//
+// This is the ONE upload-permission setter: the scopes it writes are what the
+// upload gates enforce (and what PublicUser.canUploadMedia derives from), so
+// no second grant has to be flipped to unblock an account.
 export type UploadPermissionUpdates = { publicUploads?: boolean; privateUploads?: boolean };
 export const setUserUploadPermissions = async (userId: string, updates: UploadPermissionUpdates): Promise<AdminUserRow | null> => {
 	const keys = (['publicUploads', 'privateUploads'] as const).filter((key) => typeof updates[key] === 'boolean');
