@@ -3,12 +3,52 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { brokenToolNames, directDependencyNames, ensureDependencies, parseToolNames } = require('./ensure-dependencies.js');
+const { spawn } = require('node:child_process');
+const { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const path = require('node:path');
+
+const { brokenToolNames, directDependencyNames, ensureDependencies, parseToolNames, withInstallLock } = require('./ensure-dependencies.js');
 
 const silentLogger = {
 	log() {},
 	warn() {}
 };
+
+test('the install lock serialises concurrent installers and discards a stale lock', async () => {
+	const directory = mkdtempSync(path.join(tmpdir(), 'tt-install-lock-'));
+	const lockPath = path.join(directory, 'node_modules', '.thingtime-install.lock');
+	try {
+		// a lock nobody holds any more (older than the stale window) is removed, not waited on
+		mkdirSync(lockPath, { recursive: true });
+		const old = new Date(Date.now() - 16 * 60 * 1000);
+		utimesSync(lockPath, old, old);
+		const warnings = [];
+		assert.equal(withInstallLock(() => 'ran', { lockPath, logger: { log() {}, warn: (message) => warnings.push(message) } }), 'ran');
+		assert.match(warnings[0], /stale install lock/);
+		assert.equal(existsSync(lockPath), false, 'released after the run');
+
+		// a live lock held by another process blocks until that process releases it
+		mkdirSync(lockPath);
+		// The path travels as an argv value, not as interpolated source: under
+		// `node -e` the first user argument is process.argv[1], so the holder needs
+		// no quoting or escaping of its own (JSON.stringify is not a JS escaper).
+		const holder = spawn(
+			process.execPath,
+			['-e', "setTimeout(() => require('node:fs').rmSync(process.argv[1], { recursive: true, force: true }), 700)", lockPath],
+			{ stdio: 'ignore' }
+		);
+		const logs = [];
+		const started = Date.now();
+		const result = withInstallLock(() => Date.now() - started, { lockPath, logger: { log: (message) => logs.push(message), warn() {} } });
+		assert.ok(result >= 600, `waited for the holder (${result} ms)`);
+		assert.match(logs[0], /Another dependency install is running/);
+		assert.equal(existsSync(lockPath), false);
+		await new Promise((resolve) => holder.on('exit', resolve));
+	} finally {
+		rmSync(directory, { recursive: true, force: true });
+	}
+});
 
 test('forces a relink when a tool is broken despite complete direct links', () => {
 	let repaired = false;

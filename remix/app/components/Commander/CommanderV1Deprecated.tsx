@@ -31,7 +31,7 @@ export const CommanderV1 = (props: commanderArgs) => {
 		return props?.id || 'global';
 	}, [props?.id]);
 
-	const inputRef = React.useRef();
+	const inputRef = React.useRef<HTMLInputElement>(null);
 
 	const global = props?.global;
 
@@ -41,7 +41,7 @@ export const CommanderV1 = (props: commanderArgs) => {
 
 	const [inputValue, setInputValue] = React.useState('');
 	const [virtualValue, setVirtualValue] = React.useState('');
-	const [hoveredSuggestion, setHoveredSuggestion] = React.useState();
+	const [hoveredSuggestion, setHoveredSuggestion] = React.useState<number | null>(null);
 	const [active, setActive] = React.useState(false);
 	const [contextPath, setContextPath] = React.useState<PathArray>();
 
@@ -83,7 +83,7 @@ export const CommanderV1 = (props: commanderArgs) => {
 			}
 		} else {
 			if (props?.global) {
-				document.activeElement.blur();
+				if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 			}
 
 			if (thingtimeRef?.current?.settings?.commander?.[commanderId]?.clearCommanderOnToggle) {
@@ -113,8 +113,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 	}, []);
 
 	const command = React.useMemo(() => {
-		const debug: any = {};
-		console.log('[tt][CommanderV1Deprecated.tsx][command useMemo][debug]', debug);
 		// const sanitizedCommand = sanitise(value)
 		// const sanitizedCommand = inputValue
 		const sanitizedInput = virtualValue;
@@ -127,7 +125,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 		});
 
 		if (typeof validSetter === 'string') {
-			debug.validSetter = validSetter;
 			const indexOfSplitter = sanitizedInput?.indexOf(validSetter);
 			const [pathRaw, valRaw] = [sanitizedInput?.slice(0, indexOfSplitter), sanitizedInput?.slice(indexOfSplitter + validSetter?.length)];
 
@@ -150,8 +147,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 		}
 
 		if (props?.pathPrefix) {
-			debug.pathPrefix = props?.pathPrefix;
-			debug.safeSplitPathPrefix = safeSplit(props?.pathPrefix);
 			return [safeSplit(props?.pathPrefix), sanitizedInput];
 		}
 
@@ -216,15 +211,18 @@ export const CommanderV1 = (props: commanderArgs) => {
 		return commandIncludesSuggestion;
 	}, [safeJoin(commandPath), suggestions]);
 
+	// Still rendered from Thingtime.tsx, and it writes the same commanderActive
+	// keys as CommanderV2 — so it needs the same tab-local treatment or it would
+	// reopen the cross-tab palette-toggling hole from the other side.
 	const openCommander = React.useCallback(() => {
-		setThingtime(`settings.commander.${commanderId}.commanderActive`, true);
+		setThingtime(`settings.commander.${commanderId}.commanderActive`, true, { namespace: 'default', tabLocal: true });
 	}, [setThingtime, commanderId]);
 
 	const closeCommander = React.useCallback(
 		(e?: any) => {
 			if (!e?.defaultPrevented) {
 				if (thingtime?.settings?.commander?.[commanderId]?.commanderActive) {
-					setThingtime(`settings.commander.${commanderId}.commanderActive`, false);
+					setThingtime(`settings.commander.${commanderId}.commanderActive`, false, { namespace: 'default', tabLocal: true });
 				}
 			}
 		},
@@ -288,7 +286,6 @@ export const CommanderV1 = (props: commanderArgs) => {
 
 	const allCommanderKeyListener = React.useCallback(
 		(e: any) => {
-			console.log('commander key listener e?.code', e?.code);
 			thingtimeRef.current = thingtime;
 			if (e?.metaKey && e?.code === 'KeyP') {
 				e.preventDefault();

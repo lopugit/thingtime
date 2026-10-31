@@ -1,11 +1,23 @@
+import { ProgressiveImage } from './ProgressiveImage';
 import React from 'react';
-// Grid/Image are gone: the owner-chosen layouts below render their own
-// masonry/rows/grid containers, and each image tile is a Box `as="img"`.
+import { SharedMediaProvider, useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
-import { Download, File as FileIcon } from 'lucide-react';
+import { Download, File as FileIcon, FolderDown, Play } from 'lucide-react';
 
-import { attachmentContentUrl, attachmentTypeLabel, formatAttachmentBytes, normalizePublicAttachment } from './attachmentUiCore';
+import {
+	archiveDownloadLabel,
+	attachmentContentUrl,
+	attachmentDisplayName,
+	attachmentMediaSrc,
+	attachmentTypeLabel,
+	downloadableAttachments,
+	formatAttachmentBytes,
+	normalizePublicAttachment
+} from './attachmentUiCore';
+import { useAttachmentArchive } from './useAttachmentArchive';
+import type { ArchiveNoun } from './attachmentArchiveActions';
 import { MediaLightbox } from './MediaLightbox';
+import { AudioAttachmentPlayer } from './AudioAttachmentPlayer';
 import type { PublicAttachment } from './attachmentTypes';
 import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
 
@@ -97,15 +109,10 @@ const NsfwShield = ({
 	</Box>
 );
 
-// A post's attachment gallery. Images honor the post's owner-chosen
-// crystal.mediaLayout: absent/masonry = natural-aspect CSS-columns masonry
-// (first image top-left, order runs down each column); rows = fixed
-// images-per-row pattern (extras repeat the last row size); grid = uniform
-// columns with per-image spans (wide/tall/big). Clicking any image opens the
-// MediaLightbox at that image's ATTACHMENT-ORDER index — layout never changes
-// lightbox order. Videos keep inline players; generic files stay download rows.
+// Images and videos share one ordered gallery and lightbox. Audio and files
+// retain their dedicated players/download rows. Layout never changes gallery order.
 
-// chunk images into row sizes per the pattern, repeating the last row size
+// Chunk visual media into row sizes per the pattern, repeating the last row size
 export const mediaLayoutRows = (count: number, pattern: number[]): number[] => {
 	const rows: number[] = [];
 	let remaining = count;
@@ -120,7 +127,7 @@ export const mediaLayoutRows = (count: number, pattern: number[]): number[] => {
 };
 
 // hero rows get a cinematic ratio; pairs a gentle landscape; 3+ go square
-const rowAspectRatio = (size: number): string => (size === 1 ? '16 / 9' : size === 2 ? '4 / 3' : '1 / 1');
+export const rowAspectRatio = (size: number): string => (size === 1 ? '16 / 9' : size === 2 ? '4 / 3' : '1 / 1');
 
 const spanFor = (layout: PostMediaLayout, id: string): MediaLayoutSpan => layout.spans?.[id] || 'normal';
 export const spanColumns = (span: MediaLayoutSpan, columns: number): number => (span === 'wide' || span === 'big' ? Math.min(2, columns) : 1);
@@ -131,11 +138,35 @@ export const spanAspect = (span: MediaLayoutSpan, columns: number): string => {
 	return `${cols} / ${rows}`;
 };
 
-const AttachmentFileRow = ({ attachment, compact }: { attachment: PublicAttachment; compact?: boolean }) => (
+// The owner's own moderation-pending media renders with this badge instead of
+// silently vanishing while analysis runs (other viewers don't receive it).
+const PendingBadge = () => (
+	<Text
+		fontFamily="mono"
+		fontSize="9px"
+		fontWeight={700}
+		letterSpacing="0.1em"
+		textTransform="uppercase"
+		color="var(--tt-ink, #16161a)"
+		background="rgba(255, 214, 102, 0.95)"
+		paddingX={1.5}
+		paddingY="1px"
+		borderRadius="999px"
+		flexShrink={0}
+	>
+		Checking…
+	</Text>
+);
+
+// Linked (external URL) rows open the original URL — the HTML download
+// attribute is ignored cross-origin, so they open in a new tab instead.
+const AttachmentFileRow = ({ attachment, compact }: { attachment: PublicAttachment; compact?: boolean }) => {
+	const mediaUrl = useSharedMediaUrl();
+	return (
 	<Flex
 		as="a"
-		href={attachmentContentUrl(attachment.id, true)}
-		download={attachment.name}
+		href={mediaUrl(attachment.url || attachmentContentUrl(attachment.id, true))}
+		{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}
 		alignItems="center"
 		columnGap={2.5}
 		minHeight="48px"
@@ -164,53 +195,45 @@ const AttachmentFileRow = ({ attachment, compact }: { attachment: PublicAttachme
 				fontWeight={650}
 				color="var(--tt-ink, #16161a)"
 				noOfLines={1}
-				title={attachment.title || attachment.name}
+				title={attachment.title || attachmentDisplayName(attachment)}
 			>
-				{attachment.title || attachment.name}
+				{attachment.title || attachmentDisplayName(attachment)}
 			</Text>
 			<Text fontSize="10px" color={MUTED} noOfLines={1}>
-				{formatAttachmentBytes(attachment.size)} · {attachmentTypeLabel(attachment)}
+				{attachment.url ? 'Linked' : formatAttachmentBytes(attachment.size)} · {attachmentTypeLabel(attachment)}
 			</Text>
 		</Box>
-		<Download size={15} color="var(--tt-link, #2f8fd6)" aria-label={`Download ${attachment.name}`} />
+		{attachment.pending ? <PendingBadge /> : null}
+		<Download size={15} color="var(--tt-link, #2f8fd6)" aria-label={`Download ${attachmentDisplayName(attachment)}`} />
 	</Flex>
 );
-
-const AttachmentVideo = ({ attachment, compact }: { attachment: PublicAttachment; compact?: boolean }) => {
-	// The inline allowlist admits every container mainstream browsers can play,
-	// but codec support inside a container still varies (for example HEVC
-	// QuickTime on Firefox); an unplayable video degrades to its download row.
-	const [failed, setFailed] = React.useState(false);
-	if (failed) return <AttachmentFileRow attachment={attachment} compact={compact} />;
-	return (
-		<Box
-			as="video"
-			src={attachmentContentUrl(attachment.id)}
-			aria-label={attachment.title || attachment.name}
-			controls
-			playsInline
-			preload="metadata"
-			width="100%"
-			maxHeight={compact ? '320px' : '520px'}
-			borderRadius="var(--tt-radius-md, 12px)"
-			background="var(--tt-ink, #16161a)"
-			onError={() => setFailed(true)}
-		/>
-	);
 };
 
-export const PostAttachments = ({
-	attachments,
-	mediaLayout,
-	compact,
-	ariaLabel = 'Attachments'
-}: {
+type PostAttachmentsProps = {
 	attachments?: PublicAttachment[];
 	mediaLayout?: PostMediaLayout | null;
 	compact?: boolean;
 	ariaLabel?: string;
+	// the owning post/comment: enables "Download all" (one ZIP of every stored file)
+	postId?: string;
+	// what the owning Thing is called in toasts and tooltips
+	archiveNoun?: Extract<ArchiveNoun, 'post' | 'comment'>;
+};
+
+const PostAttachmentsGallery = ({
+	attachments,
+	mediaLayout,
+	compact,
+	ariaLabel = 'Attachments',
+	postId,
+	archiveNoun = 'post',
+	onDownloadAll
+}: PostAttachmentsProps & {
+	// supplied only by galleries that can offer an archive (see PostAttachments)
+	onDownloadAll?: (noun: ArchiveNoun) => void;
 }) => {
 	// Per-render reveal consent; navigating away re-shields.
+	const mediaUrl = useSharedMediaUrl();
 	const [revealedIds, setRevealedIds] = React.useState<ReadonlySet<string>>(new Set());
 	const reveal = React.useCallback((id: string) => {
 		setRevealedIds((current) => {
@@ -226,19 +249,22 @@ export const PostAttachments = ({
 	const [lightbox, setLightbox] = React.useState<{ open: boolean; index: number }>({ open: false, index: 0 });
 	if (!normalized.length) return null;
 
-	const images = normalized.filter((attachment) => attachment.mediaKind === 'image');
-	const videos = normalized.filter((attachment) => attachment.mediaKind === 'video');
-	// The public normalizer deliberately maps audio to the generic file kind so
-	// it stays a safe download row rather than an autoplay-capable player.
+	const visualMedia = normalized.filter((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video');
+	const audio = normalized.filter((attachment) => attachment.mediaKind === 'audio');
 	const files = normalized.filter((attachment) => attachment.mediaKind === 'file');
+	// "Download all" only earns its row once there are two or more stored files;
+	// a lone file already has its own download control. Linked media has no bytes.
+	const stored = downloadableAttachments(normalized);
+	const storedBytes = stored.reduce((sum, attachment) => sum + (Number.isFinite(attachment.size) ? attachment.size : 0), 0);
+	const downloadAll = postId && stored.length > 1 && onDownloadAll ? () => onDownloadAll(archiveNoun) : undefined;
 
-	const layout: PostMediaLayout = mediaLayout && images.length > 1 ? mediaLayout : { mode: 'masonry' };
+	const layout: PostMediaLayout = mediaLayout && visualMedia.length > 1 ? mediaLayout : { mode: 'masonry' };
 
 	// Still-shielded media is withheld from the lightbox too. The modal renders
-	// images unblurred and steps through them with arrow keys, so leaving them in
+	// media unblurred and steps through them with arrow keys, so leaving them in
 	// would walk a viewer onto media they never consented to see. Attachment
-	// order is otherwise untouched; revealing puts the image straight back.
-	const lightboxImages = images.filter((attachment) => !(attachment.nsfw === true && !revealedIds.has(attachment.id)));
+	// order is otherwise untouched; revealing restores its original position.
+	const lightboxMedia = visualMedia.filter((attachment) => !(attachment.nsfw === true && !revealedIds.has(attachment.id)));
 
 	const tile = (attachment: PublicAttachment, index: number, tileSx: Record<string, unknown>, fill: boolean) => {
 		// Server-tagged NSFW media stays shielded until this render's consent
@@ -246,13 +272,16 @@ export const PostAttachments = ({
 		// the lightbox renders the image unblurred, so it must not be reachable
 		// before the viewer opts in. Revealing turns it back into a normal tile.
 		const shielded = attachment.nsfw === true && !revealedIds.has(attachment.id);
-		const image = (
-			<Box
-				as="img"
-				src={attachmentContentUrl(attachment.id)}
-				alt={attachment.title || attachment.name || `Post image ${index + 1}`}
+		const image = attachment.mediaKind === 'video' ? (
+			<Box as="video" src={mediaUrl(attachmentMediaSrc(attachment))} aria-label={attachment.title || attachmentDisplayName(attachment)}
+				muted playsInline preload="metadata" width="100%" display="block" objectFit="cover" pointerEvents="none"
+				{...(fill ? { height: '100%', position: 'absolute' as const, inset: 0 } : { aspectRatio: '4 / 3', maxHeight: compact ? '360px' : '640px' })}
+				background="var(--tt-ink, #16161a)" />
+		) : (
+			<ProgressiveImage
+				src={mediaUrl(attachmentMediaSrc(attachment))}
+				alt={attachment.title || attachmentDisplayName(attachment) || `Post image ${index + 1}`}
 				loading="lazy"
-				referrerPolicy="no-referrer"
 				width="100%"
 				display="block"
 				// fill mode: the tile's aspect-ratio owns the box, the image covers it
@@ -263,11 +292,18 @@ export const PostAttachments = ({
 				_hover={{ transform: 'scale(1.015)' }}
 			/>
 		);
+		const interactiveProps = shielded
+			? {}
+			: {
+				as: 'button' as const,
+				type: 'button' as const,
+				'aria-label': `View ${attachment.title || attachmentDisplayName(attachment)}`,
+				onClick: () => setLightbox({ open: true, index: Math.max(0, lightboxMedia.indexOf(attachment)) })
+			};
 		return (
 			<Box
 				key={attachment.id}
-				as={shielded ? 'div' : 'button'}
-				type={shielded ? undefined : 'button'}
+				{...interactiveProps}
 				display="block"
 				width="100%"
 				position="relative"
@@ -275,14 +311,10 @@ export const PostAttachments = ({
 				overflow="hidden"
 				cursor={shielded ? 'default' : 'zoom-in'}
 				sx={tileSx}
-				aria-label={shielded ? undefined : `View ${attachment.title || attachment.name}`}
-				// the lightbox skips shielded media, so open it at this image's index
-				// within that list rather than its attachment-order index
-				onClick={shielded ? undefined : () => setLightbox({ open: true, index: Math.max(0, lightboxImages.indexOf(attachment)) })}
 			>
 				{shielded ? (
 					<NsfwShield
-						name={attachment.title || attachment.name}
+						name={attachment.title || attachmentDisplayName(attachment)}
 						compact={compact}
 						fill={fill}
 						onReveal={() => reveal(attachment.id)}
@@ -292,6 +324,19 @@ export const PostAttachments = ({
 				) : (
 					image
 				)}
+				{attachment.mediaKind === 'video' && !shielded && (
+					<Flex position="absolute" inset={0} align="center" justify="center" pointerEvents="none">
+						<Flex boxSize="48px" borderRadius="full" background="rgba(0,0,0,0.55)" color="white" align="center" justify="center">
+							<Play size={24} fill="currentColor" aria-hidden />
+						</Flex>
+					</Flex>
+				)}
+
+				{attachment.pending ? (
+					<Box position="absolute" top={1.5} left={1.5}>
+						<PendingBadge />
+					</Box>
+				) : null}
 				{attachment.title && !shielded ? (
 					<Box
 						position="absolute"
@@ -314,30 +359,32 @@ export const PostAttachments = ({
 
 	// rows mode: pre-compute each image's (row, index) placement in attachment order
 	const rowChunks: { attachment: PublicAttachment; index: number }[][] = [];
-	if (layout.mode === 'rows' && images.length) {
+	if (layout.mode === 'rows' && visualMedia.length) {
 		let cursor = 0;
-		for (const size of mediaLayoutRows(images.length, layout.pattern || [1])) {
+		for (const size of mediaLayoutRows(visualMedia.length, layout.pattern || [1])) {
 			const start = cursor;
-			rowChunks.push(images.slice(start, start + size).map((attachment, offset) => ({ attachment, index: start + offset })));
+			rowChunks.push(visualMedia.slice(start, start + size).map((attachment, offset) => ({ attachment, index: start + offset })));
 			cursor = start + size;
 		}
 	}
-	const gridColumns = Math.max(1, Math.min(layout.columns || 3, images.length, 6));
+	const gridColumns = Math.max(1, Math.min(layout.columns || 3, visualMedia.length, 6));
 
 	return (
 		<Flex flexDirection="column" rowGap={compact ? 2 : 3} aria-label={ariaLabel}>
-			{images.length > 0 && layout.mode === 'masonry' && (
+			{visualMedia.length > 0 && layout.mode === 'masonry' && (
 				<Box
 					sx={{
-						columnCount: images.length === 1 ? 1 : compact ? 2 : { base: 2, sm: Math.min(3, images.length) },
-						columnGap: '6px'
+						display: 'grid',
+						gridTemplateColumns: visualMedia.length === 1 ? '1fr' : compact ? 'repeat(2, minmax(0, 1fr))' : { base: 'repeat(2, minmax(0, 1fr))', sm: `repeat(${Math.min(3, visualMedia.length)}, minmax(0, 1fr))` },
+						gap: '6px',
+						alignItems: 'start'
 					}}
 				>
-					{images.map((attachment, index) => tile(attachment, index, { breakInside: 'avoid', marginBottom: '6px' }, false))}
+					{visualMedia.map((attachment, index) => tile(attachment, index, {}, false))}
 				</Box>
 			)}
 
-			{images.length > 0 && layout.mode === 'rows' && (
+			{visualMedia.length > 0 && layout.mode === 'rows' && (
 				<Flex flexDirection="column" rowGap="6px">
 					{rowChunks.map((row, rowIndex) => (
 						<Flex key={rowIndex} columnGap="6px">
@@ -349,14 +396,9 @@ export const PostAttachments = ({
 				</Flex>
 			)}
 
-			{images.length > 0 && layout.mode === 'grid' && (
-				<Box
-					display="grid"
-					gridTemplateColumns={`repeat(${gridColumns}, minmax(0, 1fr))`}
-					gap="6px"
-					sx={{ gridAutoFlow: 'dense' }}
-				>
-					{images.map((attachment, index) => {
+			{visualMedia.length > 0 && layout.mode === 'grid' && (
+				<Box display="grid" gridTemplateColumns={`repeat(${gridColumns}, minmax(0, 1fr))`} gap="6px" sx={{ gridAutoFlow: 'row' }}>
+					{visualMedia.map((attachment, index) => {
 						const span = spanFor(layout, attachment.id);
 						return tile(
 							attachment,
@@ -373,16 +415,7 @@ export const PostAttachments = ({
 				</Box>
 			)}
 
-			{videos.map((attachment) => {
-				const video = <AttachmentVideo key={attachment.id} attachment={attachment} compact={compact} />;
-				return attachment.nsfw && !revealedIds.has(attachment.id) ? (
-					<NsfwShield key={attachment.id} name={attachment.name} compact={compact} onReveal={() => reveal(attachment.id)}>
-						{video}
-					</NsfwShield>
-				) : (
-					video
-				);
-			})}
+			{audio.length > 0 ? <AudioAttachmentPlayer attachments={audio} compact={compact} /> : null}
 
 			{files.length > 0 && (
 				<Flex flexDirection="column" rowGap={1.5}>
@@ -392,12 +425,53 @@ export const PostAttachments = ({
 				</Flex>
 			)}
 
+			{downloadAll ? (
+				<Flex>
+					<Button
+						size="xs"
+						variant="outline"
+						borderRadius="999px"
+						leftIcon={<FolderDown size={13} aria-hidden />}
+						color="var(--tt-ink, #16161a)"
+						borderColor="var(--tt-border, #ececef)"
+						background="var(--tt-surface, #fafafb)"
+						_hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
+						title={`Every stored file in this ${archiveNoun} as one ZIP`}
+						onClick={(event) => {
+							event.preventDefault();
+							event.stopPropagation();
+							downloadAll();
+						}}
+					>
+						{archiveDownloadLabel(stored.length, storedBytes)}
+					</Button>
+				</Flex>
+			) : null}
+
 			<MediaLightbox
-				attachments={lightboxImages}
+				attachments={lightboxMedia}
 				index={lightbox.index}
 				isOpen={lightbox.open}
 				onClose={() => setLightbox((state) => ({ ...state, open: false }))}
+				onDownloadAll={downloadAll && onDownloadAll ? () => onDownloadAll('gallery') : undefined}
 			/>
 		</Flex>
 	);
 };
+
+// Only a gallery that can offer "Download all" (a post/comment with two or more
+// stored files) mounts the archive hook and the API client behind it; every
+// other card, comment row, chat and message row renders the plain gallery.
+const PostAttachmentsWithArchive = (props: PostAttachmentsProps & { postId: string }) => {
+	const archive = useAttachmentArchive();
+	const onDownloadAll = React.useCallback((noun: ArchiveNoun) => void archive.download(props.postId, noun), [archive, props.postId]);
+	return <PostAttachmentsGallery {...props} onDownloadAll={onDownloadAll} />;
+};
+
+const PostAttachmentsBody = (props: PostAttachmentsProps) =>
+	props.postId && downloadableAttachments(props.attachments).length > 1 ? <PostAttachmentsWithArchive {...props} postId={props.postId} /> : <PostAttachmentsGallery {...props} />;
+
+// Owners can share hidden post media with the same parent key; visitors inherit
+// the already-presented page context. Never send that key to an external URL.
+export const PostAttachments = (props: PostAttachmentsProps & { linkKey?: string }) =>
+	props.linkKey ? <SharedMediaProvider linkKey={props.linkKey}><PostAttachmentsBody {...props} /></SharedMediaProvider> : <PostAttachmentsBody {...props} />;

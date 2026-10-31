@@ -1,3 +1,5 @@
+import { IMAGE_UPLOAD_CONTENT_TYPES } from '../Attachments/attachmentFileTypes';
+import { isHeicImage } from '../Attachments/heicImage';
 export type ProfileMediaSlot = 'avatar' | 'banner';
 
 export type ProfileMediaMutation =
@@ -14,7 +16,7 @@ export type ProfileMediaFieldSnapshot = {
 
 export const MAX_PROFILE_MEDIA_BYTES = 64 * 1024 * 1024;
 export const MAX_EXTERNAL_PROFILE_IMAGE_URL_CHARS = 2048;
-export const PROFILE_MEDIA_CONTENT_TYPES = ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'] as const;
+export const PROFILE_MEDIA_CONTENT_TYPES = IMAGE_UPLOAD_CONTENT_TYPES;
 const PROFILE_MEDIA_CONTENT_TYPE_SET = new Set<string>(PROFILE_MEDIA_CONTENT_TYPES);
 
 export const isManagedProfileMediaUrl = (value: unknown): value is string => {
@@ -58,9 +60,9 @@ export const preservedProfileMediaSnapshot = (savedUrl: string | null): ProfileM
 	blocking: false
 });
 
-export const profileImageFileError = (file: Pick<File, 'size' | 'type'>): string | null => {
-	if (!PROFILE_MEDIA_CONTENT_TYPE_SET.has(file.type.trim().toLowerCase())) {
-		return 'Choose a JPEG, PNG, GIF, WebP, or AVIF image.';
+export const profileImageFileError = (file: Pick<File, 'size' | 'type'> & { name?: string }): string | null => {
+	if (!PROFILE_MEDIA_CONTENT_TYPE_SET.has(file.type.trim().toLowerCase()) && !isHeicImage(file)) {
+		return 'Choose a JPEG, PNG, GIF, WebP, AVIF, HEIC, or HEIF image.';
 	}
 	if (!Number.isSafeInteger(file.size) || file.size < 1) return 'Choose an image that contains data.';
 	if (file.size > MAX_PROFILE_MEDIA_BYTES) return 'Profile images can be up to 64 MiB.';

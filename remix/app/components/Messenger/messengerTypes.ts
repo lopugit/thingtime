@@ -9,6 +9,94 @@ export type ChatRole = 'owner' | 'admin' | 'member';
 export type MemberState = 'active' | 'pending' | 'left' | 'declined';
 export type MessengerMode = 'slack' | 'messenger';
 
+export type ImportedAiSource = {
+	access?: 'imported';
+  provider: 'chatgpt' | 'claude';
+  sourceId: string;
+  label: string;
+  connector: string;
+  readOnly: true;
+  role?: 'user' | 'assistant' | 'system' | 'unknown';
+  authorName?: string | null;
+  segmentIndex?: number;
+  segmentCount?: number;
+};
+
+export type AgentCapability =
+	| 'read-history'
+	| 'create-session'
+	| 'send-message'
+	| 'steer-turn'
+	| 'interrupt-turn'
+	| 'review-approval'
+	| 'accessibility'
+	| 'explicit-approval'
+	| 'attachments';
+
+export type LiveAiSource = {
+	access: 'live';
+	provider: 'chatgpt' | 'claude';
+	sourceId: string;
+	label: string;
+	connector: string;
+	readOnly: false;
+	deviceId: string;
+	connectorId: string;
+	sessionId: string;
+	projectId?: string | null;
+	projectLabel?: string | null;
+	historyCursor?: string | null;
+	historyHasMore?: boolean;
+	historySyncedAt?: string;
+	capabilities: AgentCapability[];
+	role?: 'user' | 'assistant' | 'system' | 'unknown';
+	authorName?: string | null;
+};
+
+// Lopu, the Thingtime assistant: its conversations are ordinary messenger
+// rows tagged with this source (chat: readOnly false; assistant turns:
+// readOnly true — never editable, deletable with the chat). Mirrors
+// PublicLopuExternalAiSource in api/utils/messenger/externalAi.ts.
+export type LopuAiSource = {
+	access: 'lopu';
+	provider: 'lopu';
+	sourceId: string;
+	label: string;
+	connector: string;
+	readOnly: boolean;
+	role?: 'user' | 'assistant' | 'system' | 'unknown';
+	authorName?: string | null;
+	messageId?: string | null;
+	revision?: number;
+	segmentIndex?: number;
+	segmentCount?: number;
+};
+
+export type ExternalAiSource = ImportedAiSource | LiveAiSource | LopuAiSource;
+
+export const isLiveAiSource = (source: ExternalAiSource | null | undefined): source is LiveAiSource =>
+	source?.access === 'live' && source.readOnly === false;
+
+export const isLopuAiSource = (source: ExternalAiSource | null | undefined): source is LopuAiSource =>
+	// provider is the fallback discriminator for a row projected without access
+	source?.access === 'lopu' || (source as { provider?: unknown } | null | undefined)?.provider === 'lopu';
+
+// The unicorn on a rainbow disc — Lopu's avatar wherever an AI chat/row is drawn.
+export const LOPU_RAINBOW_DISC = 'var(--tt-gradient-rainbow, linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6))';
+
+// Avatar treatment for an AI-backed chat or message row: ChatGPT and Claude
+// keep their brand discs, Lopu gets the unicorn on the rainbow disc.
+export const externalSourceAvatar = (source: ExternalAiSource): { glyph: string; background: string; color: string } =>
+	aiProviderAvatar(isLopuAiSource(source) ? 'lopu' : source.provider);
+
+// Shared display-only treatment, also used for private historical archives.
+export const aiProviderAvatar = (provider: 'lopu' | 'chatgpt' | 'claude'): { glyph: string; background: string; color: string } =>
+	provider === 'lopu'
+		? { glyph: '🦄', background: LOPU_RAINBOW_DISC, color: 'white' }
+		: provider === 'chatgpt'
+			? { glyph: '◎', background: '#17171c', color: 'white' }
+			: { glyph: '✦', background: '#d97757', color: 'white' };
+
 export type MessengerProfile = {
   id: string;
   username: string;
@@ -39,6 +127,7 @@ export type MessagePreview = {
   systemType: string | null;
 	attachmentCount: number;
   createdAt: string;
+  externalSource?: ExternalAiSource | null;
 };
 
 export type ChatSummary = {
@@ -57,6 +146,7 @@ export type ChatSummary = {
   memberCount: number;
   unreadCount: number;
   lastMessage: MessagePreview | null;
+  externalSource?: ExternalAiSource | null;
 };
 
 export type ChatMessage = {
@@ -78,6 +168,7 @@ export type ChatMessage = {
   threadCount: number;
   threadLastAt: string | null;
   createdAt: string;
+  externalSource?: ExternalAiSource | null;
 };
 
 export type CustomEmojiMap = Record<string, { name: string; image: string; animated: boolean }>;
@@ -102,6 +193,7 @@ export type Community = {
   memberCount: number;
   createdAt: string;
   sections: { id: string; name: string; order: number }[];
+  externalSource?: ExternalAiSource | null;
 };
 
 export type CommunityChannel = {
