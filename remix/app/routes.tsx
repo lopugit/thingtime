@@ -11,6 +11,7 @@ import type { RootLoaderData } from './root-data.server';
 import Authorize from './routes/authorize';
 import Explore from './routes/explore';
 import Feed from './routes/feed';
+import Messages from './routes/messages';
 import Index from './routes/_index';
 import Login from './routes/login';
 import MediaPage from './routes/media';
@@ -227,15 +228,7 @@ export const router = createBrowserRouter([
       // public trending board — guest-visible like /feed
       { path: 'explore', element: <Explore /> },
       { path: 'feed', element: <Feed /> },
-      { path: 'algorithms', lazy: lazyRoute(() => import('./routes/algorithms')) },
-      { path: 'messages', lazy: lazyRoute(() => import('./routes/messages')), loader: requireUser('/login') },
-      // Lopu 🦄 — the AI assistant page; no loader guard: it renders its own
-      // signed-out quiet state, like /apps. /lopu/:chatId deep-links a
-      // conversation (the floating window shares the same store).
-      { path: 'lopu', lazy: lazyRoute(() => import('./routes/lopu')) },
-      { path: 'lopu/tasks', lazy: lazyRoute(() => import('./routes/lopu.tasks')), loader: requireUser('/login') },
-      { path: 'lopu/voice', lazy: lazyRoute(() => import('./routes/lopu-voice')), loader: requireUser('/login') },
-      { path: 'lopu/:chatId', lazy: lazyRoute(() => import('./routes/lopu')) },
+      { path: 'messages', element: <Messages />, loader: requireUser('/login') },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
       // the generated marketing suite: hub, the social-image suite, one index
       // per category (+ /marketing/search) and a splat resolver for the

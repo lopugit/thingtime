@@ -72,9 +72,6 @@ import {
 	EXTERNAL_RESERVED_ID_PREFIX,
   MAX_TEXT_CHARS,
   MESSENGER_THINGTIME,
-	MIGRATION_DIAGNOSTIC_ID_PREFIX,
-  ERROR_LOG_ID_PREFIX, ERROR_LOG_THINGTIME,
-	MIGRATION_DIAGNOSTIC_THINGTIME,
   POST_TYPES as REGISTRY_POST_TYPES,
   PROTECTED_THINGTIME,
   REACTION_EMOJIS,
@@ -3275,10 +3272,12 @@ export const listThings = async (
     if (!viewer?.id) return fail(401, 'Unauthorized');
     // your OWN things, but not your account/theme/algorithm/waitlist things —
     // those are managed by their dedicated endpoints and would otherwise show
-    // up as inert, non-editable entries (edit/delete 403) in the data browser
+    // up as inert, non-editable entries (edit/delete 403) in the data browser.
+    // Messenger plumbing (chats, memberships, messages…) stays out for the
+    // same reason — /messages is its browser.
     match = {
       ownerId: viewer.id,
-      thingtime: { $nin: [...PROTECTED_THINGTIME] },
+      thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME] },
       $or: [{ thingtime: { $exists: true } }, { kind: 'post' }]
     };
     const folder = typeof query.folder === 'string' ? query.folder.trim() : '';
@@ -4605,15 +4604,11 @@ export const deleteThing = async (
   // dedicated endpoints (themes, algorithms) own deletion. Messenger kinds are
   // excluded too: a chat/community doc is one doc standing in for every
   // MEMBER's data, so owner-may-delete does not apply — their family owns the
-  // whole lifecycle (leave, decline, soft delete, emoji retire). Under the app
-  // lens the filter additionally carries the namespace stamp, so an app can
-  // only ever delete what it stored; sandboxed tokens add their grant stamp to
-  // the same atomic filter — no check-then-delete race either way.
-  const sandboxTokenId = patSandboxOf(viewer);
-	const deleteFilter = {
+  // whole lifecycle (leave, decline, soft delete, emoji retire).
+  const deleted = (await things.findOneAndDelete({
     shareId: shareId.trim(),
     ownerId: viewer.id,
-    thingtime: { $nin: [...PROTECTED_THINGTIME] }
+    thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME] }
   } as any)) as any as ThingDoc | null;
   if (!deleted) return fail(404, 'Thing not found');
   // comments/reactions/saves attached to the deleted thing go with it (v2

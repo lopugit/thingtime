@@ -18,8 +18,6 @@ import { applyDrawerOrdering, buildDrawerSubSections, drawerMenuItems, filterDra
 import { useDrawer, useIsMobileViewport } from './useDrawer';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MessengerUnreadBadge } from '../../Messenger/MessengerNotifications';
-import { LopuActivityBadge } from '../../Lopu/LopuActivityBadge';
-import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName } from '~/utils/userIdentity';
 
 // Shared drawer inner content, used by both the pinned NavDrawer panel and
 // the desktop hover popup.
@@ -417,7 +415,6 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				<Text className="tt-drawer-row-label" fontSize="sm" fontWeight={selected ? 600 : 400}>
 					{item.label}
 					{item.id === 'messages' ? <MessengerUnreadBadge /> : null}
-					{item.id === 'lopu' ? <LopuActivityBadge /> : null}
 				</Text>
 			</Flex>
 		);
