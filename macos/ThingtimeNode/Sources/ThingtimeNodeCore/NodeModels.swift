@@ -44,6 +44,11 @@ public enum JSONValue: Codable, Equatable, Sendable {
         return value
     }
 
+    public var arrayValue: [JSONValue]? {
+        guard case let .array(value) = self else { return nil }
+        return value
+    }
+
     public var stringValue: String? {
         guard case let .string(value) = self else { return nil }
         return value

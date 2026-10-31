@@ -1,4 +1,5 @@
 import Foundation
+import AppleFileSync
 
 public struct NodeStatus: Codable, Equatable, Sendable {
     public let service: String
@@ -55,6 +56,8 @@ public actor ThingtimeNodeController {
     private static let connectorID = "codex-app-server"
     private static let maximumPairingAttempts = 3
     private static let basePairingCapabilities = [
+        "filesystem.v1",
+        "script.bash.v1",
         "ai.session.create",
         "ai.session.interrupt",
         "ai.session.list",
@@ -81,6 +84,38 @@ public actor ThingtimeNodeController {
         "system.wifi.connect",
         "system.wifi.disconnect",
         "system.wifi.power.write",
+        "system.display.read",
+        "system.display.mode.write",
+        "system.display.layout.write",
+        "system.display.mirroring.write",
+        "system.printers.read",
+        "system.printer.default.write",
+        "system.camera.read",
+        "system.camera.preferred.write",
+        "system.bluetooth.read",
+        "system.bluetooth.device.connection.write",
+        "system.vpn.read",
+        "system.vpn.connection.write",
+        "system.power.battery.read",
+        "system.power.idle-sleep-prevention.write",
+        "system.power.idle-timer.read",
+        "system.power.idle-timer.write",
+        "system.policy.airdrop.profile.write",
+        "system.policy.camera.profile.write",
+        "system.media.apple-music.read",
+        "system.media.apple-music.playback.write",
+        "system.media.apple-music.volume.write",
+        "system.media.spotify.read",
+        "system.media.spotify.playback.write",
+        "system.media.spotify.volume.write",
+        "system.media.chrome-youtube.read",
+        "system.media.chrome-youtube.volume.write",
+        "screen.view",
+        "input.pointer.write",
+        "input.keyboard.write",
+        "system.power.restart",
+        "system.power.shutdown",
+        "system.session.logout",
         "apps.visibility"
     ]
     private static let connectorMethods: Set<String> = [
@@ -95,6 +130,7 @@ public actor ThingtimeNodeController {
     private static let readMethods: Set<String> = [
         "node.status",
         "telemetry.snapshot",
+        "telemetry.battery",
         "permissions.preflight",
         "pairing.status",
         "pairing.begin",
@@ -115,10 +151,11 @@ public actor ThingtimeNodeController {
         "desktop-chat.send"
     ]
 
+    private let folderSync: MacFolderSync?
     private let journal: CommandJournal
     private let pairing: PairingManager
     private let connector: ConnectorRuntime
-    private let telemetry: DeviceTelemetryCollector
+    private let telemetry: any DeviceTelemetryProviding
     private let actionExecutor: SafeActionExecutor
     private let controlPlaneClient: (any ControlPlaneClient)?
     private let desktopChat: DesktopChatRuntime?
@@ -126,14 +163,16 @@ public actor ThingtimeNodeController {
 
     public init(
         journal: CommandJournal,
+        folderSync: MacFolderSync? = nil,
         pairing: PairingManager,
         connector: ConnectorRuntime,
-        telemetry: DeviceTelemetryCollector,
+        telemetry: any DeviceTelemetryProviding,
         actionExecutor: SafeActionExecutor,
         controlPlaneClient: (any ControlPlaneClient)? = nil,
         desktopChat: DesktopChatRuntime? = nil,
         pairingScopeChanged: @escaping @Sendable (String?) async throws -> Void = { _ in }
     ) {
+        self.folderSync = folderSync
         self.journal = journal
         self.pairing = pairing
         self.connector = connector
@@ -142,6 +181,21 @@ public actor ThingtimeNodeController {
         self.controlPlaneClient = controlPlaneClient
         self.desktopChat = desktopChat
         self.pairingScopeChanged = pairingScopeChanged
+    }
+
+    public func handleLocalFolderSync(_ request: NodeRequest, stream: (@Sendable (Data) throws -> Void)? = nil, receive: (@Sendable (Int) throws -> Data)? = nil, batchCallback: (@Sendable (JSONValue, TimeInterval) async throws -> JSONValue)? = nil) async -> NodeResponse {
+        guard request.method == "folder-sync.request", let folderSync else {
+            return .failure(id: request.id, code: "unsupported_feature", message: "This node does not support local folder sync.")
+        }
+        do { return .success(id: request.id, result: try await folderSync.handle(request.parameters, stream: stream, receive: receive, batchCallback: batchCallback)) }
+        catch let error as MobileFolderStore.Failure { return .failure(id: request.id, code: "folder_unavailable", message: error.localizedDescription) }
+        catch is CancellationError { return .failure(id: request.id, code: "cancelled", message: "Folder access was cancelled.") }
+        catch where MacFolderSync.identityVerificationIsTransient(error) {
+            // Electron IPC preserves messages, but may drop custom Error fields.
+            // This fixed marker carries no upstream error text or private data.
+            return .failure(id: request.id, code: "folder_identity_retry", message: "[folder_identity_retry] Folder identity verification is temporarily unavailable. Retry after reconnecting.")
+        }
+        catch { return .failure(id: request.id, code: "folder_unavailable", message: "Folder access could not be verified. Check pairing, consent and the selected account.") }
     }
 
     public func handle(_ request: NodeRequest) async -> NodeResponse {
@@ -184,6 +238,8 @@ public actor ThingtimeNodeController {
             result = try JSONValue.from(status)
         case "telemetry.snapshot":
             result = try await JSONValue.from(telemetry.snapshot())
+        case "telemetry.battery":
+            result = .object(["battery": try await JSONValue.from(telemetry.batterySnapshot())])
         case "permissions.preflight":
             result = try await JSONValue.from(telemetry.permissionPreflight())
         case "pairing.status":
@@ -386,6 +442,29 @@ public actor ThingtimeNodeController {
         preconditionFailure("The bounded pairing attempt loop must return or throw.")
     }
 
+    public static func runtimeCapabilities(for device: DeviceTelemetry) -> [String] {
+        var pairingCapabilities = Self.basePairingCapabilities
+        if device.menuBar != nil { pairingCapabilities.append("system.menu-bar.read.v1") }
+        if let mainDisplay = device.displays.first(where: { $0.isMain }), mainDisplay.brightness != nil {
+            pairingCapabilities.append("system.brightness.read")
+            if mainDisplay.brightnessControlSupported {
+                pairingCapabilities.append("system.brightness.write")
+            }
+        }
+        if !device.displays.isEmpty {
+            pairingCapabilities.append("system.display.read")
+            pairingCapabilities.append(contentsOf: [
+                "system.display.mode.write",
+                "system.display.layout.write",
+                "system.display.mirroring.write"
+            ])
+            if device.displays.contains(where: { $0.brightnessControlSupported }) {
+                pairingCapabilities.append("system.display.brightness.write")
+            }
+        }
+        return Array(Set(pairingCapabilities)).sorted()
+    }
+
     private func executePairingClaimAttempt(
         pairingSecret: String,
         client: any ControlPlaneClient
@@ -399,13 +478,7 @@ public actor ThingtimeNodeController {
             osVersion: device.operatingSystemVersion,
             appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
         )
-        var pairingCapabilities = Self.basePairingCapabilities
-        if let mainDisplay = device.displays.first(where: { $0.isMain }), mainDisplay.brightness != nil {
-            pairingCapabilities.append("system.brightness.read")
-            if mainDisplay.brightnessControlSupported {
-                pairingCapabilities.append("system.brightness.write")
-            }
-        }
+        let pairingCapabilities = Self.runtimeCapabilities(for: device)
         let claimRequest: PairingClaimRequest
         if let prepared = try await pairing.preparedClaim(pairingID: challenge.pairingID) {
             claimRequest = prepared
@@ -453,7 +526,7 @@ public actor ThingtimeNodeController {
             }
             payload["commandId"] = .string(command.commandID)
             if DesktopChatRuntime.supports(connectorID: connectorID) {
-                let device = await telemetry.snapshot()
+                let session = await telemetry.sessionSnapshot()
                 return NodeRequest(
                     id: requestID,
                     commandId: command.commandID,
@@ -463,7 +536,7 @@ public actor ThingtimeNodeController {
                         "operation": .string(command.method),
                         "payload": .object(payload),
                         "explicitlyApproved": .bool(command.approvedForExecution),
-                        "sessionLocked": .bool(device.session.isLocked)
+                        "sessionLocked": .bool(session.isLocked)
                     ])
                 )
             }
@@ -503,6 +576,11 @@ public actor ThingtimeNodeController {
         let action: SafeActionRequest
         let input = try requireObject(command.parameters)
         switch command.method {
+        case "script.run":
+            guard command.approvedForExecution else { throw ThingtimeNodeError.approvalRequired("Approve this exact script before execution.") }
+            action = SafeActionRequest(kind: .runScript, parameters: input)
+        case "filesystem":
+            action = SafeActionRequest(kind: .filesystem, parameters: input)
         case "system.volume.set":
             guard let level = input["level"]?.numberValue else {
                 throw ThingtimeNodeError.invalidRequest("system.volume.set requires level.")
@@ -557,10 +635,150 @@ public actor ThingtimeNodeController {
             }
             action = SafeActionRequest(kind: .setDefaultSoundEffectsOutputDevice, parameters: ["deviceId": .string(deviceID)])
         case "system.brightness.set":
+            try requireOnlyKeys(input, ["level"])
             guard let level = input["level"]?.numberValue else {
                 throw ThingtimeNodeError.invalidRequest("system.brightness.set requires level.")
             }
             action = SafeActionRequest(kind: .setDisplayBrightness, parameters: ["brightness": .number(level)])
+        case "system.display.brightness.set":
+            try requireOnlyKeys(input, ["displayId", "level"])
+            guard let displayID = input["displayId"]?.numberValue, let level = input["level"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("system.display.brightness.set requires displayId and level.")
+            }
+            action = SafeActionRequest(kind: .setDisplayBrightnessForDisplay, parameters: ["displayId": .number(displayID), "brightness": .number(level)])
+        case "system.display.mode.set":
+            try requireOnlyKeys(input, ["displayId", "modeId"])
+            guard let displayID = input["displayId"]?.numberValue, let modeID = input["modeId"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("system.display.mode.set requires displayId and modeId.")
+            }
+            action = SafeActionRequest(kind: .setDisplayMode, parameters: ["displayId": .number(displayID), "modeId": .string(modeID)])
+        case "system.display.origin.set":
+            try requireOnlyKeys(input, ["displayId", "x", "y"])
+            guard let displayID = input["displayId"]?.numberValue,
+                  let x = input["x"]?.numberValue,
+                  let y = input["y"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("system.display.origin.set requires displayId, x, and y.")
+            }
+            action = SafeActionRequest(kind: .setDisplayOrigin, parameters: ["displayId": .number(displayID), "x": .number(x), "y": .number(y)])
+        case "system.display.mirroring.set":
+            try requireOnlyKeys(input, ["displayId", "sourceDisplayId"])
+            guard let displayID = input["displayId"]?.numberValue,
+                  let source = input["sourceDisplayId"] else {
+                throw ThingtimeNodeError.invalidRequest("system.display.mirroring.set requires displayId and sourceDisplayId.")
+            }
+            action = SafeActionRequest(kind: .setDisplayMirroring, parameters: ["displayId": .number(displayID), "sourceDisplayId": source])
+        case "system.printer.default.set":
+            try requireOnlyKeys(input, ["id"])
+            guard let id = input["id"]?.stringValue else { throw ThingtimeNodeError.invalidRequest("system.printer.default.set requires id.") }
+            action = SafeActionRequest(kind: .setDefaultPrinter, parameters: ["id": .string(id)])
+        case "system.camera.preferred.set":
+            try requireOnlyKeys(input, ["id"])
+            guard let id = input["id"]?.stringValue else { throw ThingtimeNodeError.invalidRequest("system.camera.preferred.set requires id.") }
+            action = SafeActionRequest(kind: .setPreferredCamera, parameters: ["id": .string(id)])
+        case "system.bluetooth.device.connection.set":
+            try requireOnlyKeys(input, ["id", "connected"])
+            guard let id = input["id"]?.stringValue, case let .bool(connected)? = input["connected"] else {
+                throw ThingtimeNodeError.invalidRequest("system.bluetooth.device.connection.set requires id and connected.")
+            }
+            action = SafeActionRequest(kind: .setBluetoothDeviceConnected, parameters: ["id": .string(id), "connected": .bool(connected)])
+        case "system.vpn.connection.set":
+            try requireOnlyKeys(input, ["id", "connected"])
+            guard let id = input["id"]?.stringValue, case let .bool(connected)? = input["connected"] else {
+                throw ThingtimeNodeError.invalidRequest("system.vpn.connection.set requires id and connected.")
+            }
+            action = SafeActionRequest(kind: .setVPNConnected, parameters: ["id": .string(id), "connected": .bool(connected)])
+        case "system.power.idle-sleep-prevention.set":
+            try requireOnlyKeys(input, ["enabled"])
+            guard case let .bool(enabled)? = input["enabled"] else {
+                throw ThingtimeNodeError.invalidRequest("system.power.idle-sleep-prevention.set requires enabled.")
+            }
+            action = SafeActionRequest(kind: .setPreventIdleSleep, parameters: ["enabled": .bool(enabled)])
+        case "system.power.idle-timer.set":
+            try requireOnlyKeys(input, ["scope", "minutes"])
+            guard let scope = input["scope"]?.stringValue,
+                  let minutes = input["minutes"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("system.power.idle-timer.set requires scope and minutes.")
+            }
+            action = SafeActionRequest(kind: .setPowerIdleTimer, parameters: ["scope": .string(scope), "minutes": .number(minutes)])
+        case "system.policy.airdrop.profile.propose":
+            try requireOnlyKeys(input, ["enabled"])
+            guard case let .bool(enabled)? = input["enabled"] else {
+                throw ThingtimeNodeError.invalidRequest("system.policy.airdrop.profile.propose requires enabled.")
+            }
+            action = SafeActionRequest(kind: .proposeAirDropPolicy, parameters: ["enabled": .bool(enabled)])
+        case "system.policy.camera.profile.propose":
+            try requireOnlyKeys(input, ["enabled"])
+            guard case let .bool(enabled)? = input["enabled"] else {
+                throw ThingtimeNodeError.invalidRequest("system.policy.camera.profile.propose requires enabled.")
+            }
+            action = SafeActionRequest(kind: .proposeCameraPolicy, parameters: ["enabled": .bool(enabled)])
+        case "system.media.apple-music.playback.set":
+            try requireOnlyKeys(input, ["operation"])
+            guard let operation = input["operation"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("system.media.apple-music.playback.set requires operation.")
+            }
+            action = SafeActionRequest(kind: .setAppleMusicPlayback, parameters: ["operation": .string(operation)])
+        case "system.media.apple-music.volume.set":
+            try requireOnlyKeys(input, ["level"])
+            guard let level = input["level"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("system.media.apple-music.volume.set requires level.")
+            }
+            action = SafeActionRequest(kind: .setAppleMusicVolume, parameters: ["level": .number(level)])
+        case "system.media.spotify.playback.set":
+            try requireOnlyKeys(input, ["operation"])
+            guard let operation = input["operation"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("system.media.spotify.playback.set requires operation.")
+            }
+            action = SafeActionRequest(kind: .setSpotifyPlayback, parameters: ["operation": .string(operation)])
+        case "system.media.spotify.volume.set":
+            try requireOnlyKeys(input, ["level"])
+            guard let level = input["level"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("system.media.spotify.volume.set requires level.")
+            }
+            action = SafeActionRequest(kind: .setSpotifyVolume, parameters: ["level": .number(level)])
+        case "system.media.chrome-youtube.volume.set":
+            try requireOnlyKeys(input, ["level"])
+            guard let level = input["level"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("system.media.chrome-youtube.volume.set requires level.")
+            }
+            action = SafeActionRequest(kind: .setChromeYouTubeVolume, parameters: ["level": .number(level)])
+        case "input.pointer.move":
+            try requireOnlyKeys(input, ["displayId", "x", "y"])
+            guard let displayID = input["displayId"]?.numberValue,
+                  let x = input["x"]?.numberValue,
+                  let y = input["y"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("input.pointer.move requires displayId, x, and y.")
+            }
+            action = SafeActionRequest(kind: .movePointer, parameters: ["displayId": .number(displayID), "x": .number(x), "y": .number(y)])
+        case "input.pointer.click":
+            try requireOnlyKeys(input, ["displayId", "x", "y", "button"])
+            guard let displayID = input["displayId"]?.numberValue,
+                  let x = input["x"]?.numberValue,
+                  let y = input["y"]?.numberValue,
+                  let button = input["button"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("input.pointer.click requires displayId, x, y, and button.")
+            }
+            action = SafeActionRequest(kind: .clickPointer, parameters: ["displayId": .number(displayID), "x": .number(x), "y": .number(y), "button": .string(button)])
+        case "input.pointer.scroll":
+            try requireOnlyKeys(input, ["deltaX", "deltaY"])
+            guard let deltaX = input["deltaX"]?.numberValue,
+                  let deltaY = input["deltaY"]?.numberValue else {
+                throw ThingtimeNodeError.invalidRequest("input.pointer.scroll requires deltaX and deltaY.")
+            }
+            action = SafeActionRequest(kind: .scrollPointer, parameters: ["deltaX": .number(deltaX), "deltaY": .number(deltaY)])
+        case "input.keyboard.type":
+            try requireOnlyKeys(input, ["text"])
+            guard let text = input["text"]?.stringValue else {
+                throw ThingtimeNodeError.invalidRequest("input.keyboard.type requires text.")
+            }
+            action = SafeActionRequest(kind: .typeText, parameters: ["text": .string(text)])
+        case "input.keyboard.shortcut":
+            try requireOnlyKeys(input, ["key", "modifiers"])
+            guard let key = input["key"]?.stringValue,
+                  case let .array(modifiers)? = input["modifiers"] else {
+                throw ThingtimeNodeError.invalidRequest("input.keyboard.shortcut requires key and modifiers.")
+            }
+            action = SafeActionRequest(kind: .sendShortcut, parameters: ["key": .string(key), "modifiers": .array(modifiers)])
         case "app.launch":
             try requireOnlyKeys(input, ["appId"])
             guard let appID = input["appId"]?.stringValue else {
@@ -606,6 +824,15 @@ public actor ThingtimeNodeController {
         case "system.sleep":
             try requireOnlyKeys(input, [])
             action = SafeActionRequest(kind: .sleepSystem)
+        case "system.restart":
+            try requireOnlyKeys(input, [])
+            action = SafeActionRequest(kind: .restartSystem)
+        case "system.shutdown":
+            try requireOnlyKeys(input, [])
+            action = SafeActionRequest(kind: .shutDownSystem)
+        case "system.logout":
+            try requireOnlyKeys(input, [])
+            action = SafeActionRequest(kind: .logOutSession)
         case "system.wifi.connect":
             try requireOnlyKeys(input, ["ssid"])
             guard let ssid = input["ssid"]?.stringValue else {
@@ -626,12 +853,12 @@ public actor ThingtimeNodeController {
         default:
             throw ThingtimeNodeError.invalidRequest("Unknown leased command kind.")
         }
-        let device = await telemetry.snapshot()
+        let session = await telemetry.sessionSnapshot()
         let envelope = ActionEnvelope(
             action: action,
             context: SafeActionContext(
                 origin: .remoteAccount,
-                sessionLocked: device.session.isLocked,
+                sessionLocked: session.isLocked,
                 userApproved: command.approvedForExecution
             )
         )

@@ -3,6 +3,7 @@ import { generateKeyPairSync, sign } from 'node:crypto';
 import test from 'node:test';
 
 import { isFullAccountSessionPurpose } from '../auth/getCurrentUser.ts';
+import { thingUniqueKey } from '../mongodb/uniqueKeys.ts';
 import {
 	deviceCredentialHash,
 	canonicalDevicePairingClaimBytes,
@@ -37,6 +38,7 @@ import {
 	normalizeDeviceCommand,
 	normalizeDeviceConnectorCapability,
 	normalizeDeviceConnectors,
+	normalizeDeviceDescriptor,
 	normalizeDevicePermissionMode,
 	normalizeDeviceState,
 	MAX_DEVICE_AUDIO_DEVICES,
@@ -59,6 +61,7 @@ import {
 	DEVICE_CONTROL_EVENT_MAX_COUNT,
 	DEVICE_CONTROL_EVENT_RETENTION_MS,
 	claimDevicePairing,
+	minimalPublicDevice,
 	deviceConnectorIsFresh,
 	newDeviceThing
 } from './devices.ts';
@@ -74,6 +77,13 @@ test('device and pairing credentials are strong-shaped and hashes never equal th
 	assert.equal(deviceCredentialHash(credential), deviceCredentialHash(credential));
 });
 
+test('Apple Watch is a first-class paired device descriptor', () => {
+	assert.deepEqual(
+		normalizeDeviceDescriptor({ name: 'Lopu’s Apple Watch', platform: 'watchos', model: 'Watch', osVersion: '26.5', appVersion: '23' }),
+		{ name: 'Lopu’s Apple Watch', platform: 'watchos', model: 'Watch', osVersion: '26.5', appVersion: '23' }
+	);
+});
+
 test('device idempotency hashes share one bounded multikey index field', () => {
 	const command = newDeviceThing('device-command', {
 		ownerId: 'owner',
@@ -81,14 +91,19 @@ test('device idempotency hashes share one bounded multikey index field', () => {
 		control: true,
 		crystal: { deviceCommandKey: 'command-key' }
 	});
-	assert.deepEqual(command.crystal.deviceUniqueKeys, ['command-key']);
+	assert.deepEqual(command.uniqueKeys, [thingUniqueKey('deviceUniqueKey', 'command-key')]);
+	assert.equal(command.crystal.deviceUniqueKeys, undefined);
 	const event = newDeviceThing('device-command-event', {
 		ownerId: 'owner',
 		targetId: 'device',
 		control: true,
 		crystal: { deviceEventKey: 'event-key', liveEventSequenceKey: 'sequence-key' }
 	});
-	assert.deepEqual(event.crystal.deviceUniqueKeys, ['event-key', 'sequence-key']);
+	assert.deepEqual(event.uniqueKeys, [
+		thingUniqueKey('deviceUniqueKey', 'event-key'),
+		thingUniqueKey('deviceUniqueKey', 'sequence-key')
+	]);
+	assert.equal(event.crystal.deviceUniqueKeys, undefined);
 });
 
 test('pairing complete proof is canonical Ed25519 and bound to credential, device and both nonces', () => {
@@ -154,10 +169,40 @@ test('state and connector snapshots reject local paths and unknown sensitive fie
 				isDefaultSoundEffectsOutput: true
 			}
 		],
-		wifi: { powerOn: true, ssid: 'Thingtime Guest' }
+		wifi: { powerOn: true, ssid: 'Thingtime Guest' },
+		displays: [{ id: 42, width: 1920, height: 1080, isMain: true, isBuiltIn: false, brightness: 0.6, brightnessControlSupported: true, currentMode: { id: '1920x1080@60000:0', width: 1920, height: 1080, refreshRate: 60 }, availableModes: [{ id: '1920x1080@60000:0', width: 1920, height: 1080, refreshRate: 60 }], originX: 0, originY: 0, mirroredDisplayId: null, hdrActive: false }],
+		printers: [{ id: 'printer-1', name: 'Office printer', isDefault: true }],
+		cameras: [{ id: 'camera-1', name: 'FaceTime HD', isConnected: true, isPreferred: true, authorization: 'denied' }],
+		bluetoothDevices: [{ id: 'bt-opaque', name: 'Headphones', isConnected: true }],
+		vpnServices: [{ id: 'vpn-1', name: 'Work VPN', isConnected: false }],
+		powerTimers: { displayIdleMinutes: 10, systemSleepMinutes: 30, diskIdleMinutes: 0 },
+		appleMusic: { isInstalled: true, isRunning: false },
+		spotify: { isInstalled: true, isRunning: false },
+		chromeYouTube: { isInstalled: true, isRunning: false }
 	});
 	assert.ok(normalized);
 	assert.deepEqual(normalized?.wifi, { powerOn: true, ssid: 'Thingtime Guest' });
+	assert.equal(normalized?.displays?.[0]?.currentMode?.refreshRate, 60);
+	assert.equal(normalized?.bluetoothDevices?.[0]?.id, 'bt-opaque');
+	assert.deepEqual(normalized?.powerTimers, { displayIdleMinutes: 10, systemSleepMinutes: 30, diskIdleMinutes: 0 });
+	assert.deepEqual(normalized?.appleMusic, { isInstalled: true, isRunning: false });
+	assert.deepEqual(normalized?.spotify, { isInstalled: true, isRunning: false });
+	assert.deepEqual(normalized?.chromeYouTube, { isInstalled: true, isRunning: false });
+	assert.deepEqual(
+		normalizeDeviceState({ locked: false, battery: { level: 0.5, charging: true }, openApps: [] })?.battery,
+		{ level: 0.5, charging: true, isExternalPower: null, isPreventingIdleSleep: false, isLowPowerModeEnabled: false }
+	);
+	const measured = normalizeDeviceState({ locked: false, battery: { level: 0.8, charging: false, cycleCount: 280, currentMA: -1200, voltageMV: 12000, adapterWatts: 100 }, openApps: [] });
+	assert.equal(measured?.battery?.cycleCount, 280);
+	assert.equal(measured?.battery?.currentMA, -1200);
+	assert.equal(normalizeDeviceState({ locked: false, battery: { level: 0.8, serial: 'private' }, openApps: [] }), null);
+	assert.equal(normalizeDeviceState({ locked: false, battery: { level: 0.8, adapterWatts: -10 }, openApps: [] }), null);
+	assert.equal(normalizeDeviceState({ locked: false, displays: [{ id: 1, width: 1, height: 1, isMain: true, isBuiltIn: false, brightness: null, brightnessControlSupported: false, currentMode: null, availableModes: [], originX: 0, originY: 0, mirroredDisplayId: null, hdrActive: false, path: '/private' }] }), null);
+	assert.equal(normalizeDeviceState({ locked: false, appleMusic: { isInstalled: true, isRunning: false, queue: ['private'] } }), null);
+	assert.equal(normalizeDeviceState({ locked: false, spotify: { isInstalled: true, isRunning: false, queue: ['private'] } }), null);
+	assert.equal(normalizeDeviceState({ locked: false, chromeYouTube: { isInstalled: true, isRunning: false, activeTab: 'private' } }), null);
+	assert.equal(normalizeDeviceState({ locked: false, powerTimers: { displayIdleMinutes: 10, systemSleepMinutes: 30, diskIdleMinutes: 0, profile: 'private' }, openApps: [] }), null);
+	assert.equal(normalizeDeviceState({ locked: false, powerTimers: { displayIdleMinutes: 10.5, systemSleepMinutes: 30, diskIdleMinutes: 0 }, openApps: [] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, openApps: [{ id: 'x', name: 'X', frontmost: false, path: '/Applications/X.app' }] }), null);
 	assert.equal(normalizeDeviceState({ locked: false, volume: 'not-a-level', openApps: [] }), null);
 	assert.ok(
@@ -272,6 +317,12 @@ test('device-wide commands require the capability from the signed pairing claim'
 	assert.equal(deviceSupportsCommand('system.audio.sound-effects.volume.set', ['system.audio.sound-effects.volume.write']), true);
 	assert.equal(deviceSupportsCommand('system.audio.sound-effects.mute.set', ['system.audio.sound-effects.mute.write']), true);
 	assert.equal(deviceSupportsCommand('system.brightness.set', ['system.brightness.write']), true);
+	assert.equal(deviceSupportsCommand('system.power.idle-timer.set', ['system.power.idle-timer.write']), true);
+	assert.equal(deviceSupportsCommand('system.policy.airdrop.profile.propose', ['system.policy.airdrop.profile.write']), true);
+	assert.equal(deviceSupportsCommand('system.policy.camera.profile.propose', ['system.policy.camera.profile.write']), true);
+	assert.equal(deviceSupportsCommand('input.pointer.click', ['input.pointer.write']), true);
+	assert.equal(deviceSupportsCommand('input.keyboard.shortcut', ['input.keyboard.write']), true);
+	assert.equal(deviceSupportsCommand('input.pointer.move', ['input.keyboard.write']), false);
 	assert.equal(deviceSupportsCommand('system.sleep', ['system.power.sleep']), true);
 	assert.equal(deviceSupportsCommand('system.sleep', ['system.lock']), false);
 	assert.equal(deviceSupportsCommand('screen.start', ['screen.view']), true);
@@ -283,6 +334,8 @@ test('device-wide commands require the capability from the signed pairing claim'
 
 test('command vocabulary is closed and every input envelope is kind-specific', () => {
 	assert.deepEqual(DEVICE_COMMAND_KINDS, [
+ 'script.run',
+    'filesystem',
 		'connector.start',
 		'connector.stop',
 		'session.list',
@@ -308,11 +361,36 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 		'system.audio.sound-effects.mute.set',
 		'system.audio.sound-effects-output.set',
 		'system.brightness.set',
+		'system.display.brightness.set',
+		'system.display.mode.set',
+		'system.display.origin.set',
+		'system.display.mirroring.set',
+		'system.printer.default.set',
+		'system.camera.preferred.set',
+		'system.bluetooth.device.connection.set',
+		'system.vpn.connection.set',
+		'system.power.idle-sleep-prevention.set',
+		'system.power.idle-timer.set',
+		'system.policy.airdrop.profile.propose',
+		'system.policy.camera.profile.propose',
+		'system.media.apple-music.playback.set',
+		'system.media.apple-music.volume.set',
+		'system.media.spotify.playback.set',
+		'system.media.spotify.volume.set',
+		'system.media.chrome-youtube.volume.set',
 		'system.lock',
 		'system.sleep',
+		'system.restart',
+		'system.shutdown',
+		'system.logout',
 		'system.wifi.connect',
 		'system.wifi.disconnect',
 		'system.wifi.power.set',
+		'input.pointer.move',
+		'input.pointer.click',
+		'input.pointer.scroll',
+		'input.keyboard.type',
+		'input.keyboard.shortcut',
 		'screen.start',
 		'screen.stop'
 	]);
@@ -352,12 +430,52 @@ test('command vocabulary is closed and every input envelope is kind-specific', (
 	assert.equal(normalizeDeviceCommand('system.audio.output.set', { deviceId: 'BuiltInOutputDevice' }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.sleep', {}).ok, true);
 	assert.equal(normalizeDeviceCommand('system.sleep', { now: true }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.display.mode.set', { displayId: 42, modeId: '1920x1080@60000:0' }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.display.mode.set', { displayId: 42, modeId: 'x', profile: 'never' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.display.mirroring.set', { displayId: 42, sourceDisplayId: null }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.display.origin.set', { displayId: 42, x: -200, y: 0 }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.printer.default.set', { id: 'printer-1' }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.bluetooth.device.connection.set', { id: 'bt-abc', connected: true }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.power.idle-timer.set', { scope: 'display', minutes: 10 }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.power.idle-timer.set', { scope: 'display', minutes: 10.5 }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.power.idle-timer.set', { scope: 'all', minutes: 10 }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.power.idle-timer.set', { scope: 'disk', minutes: 0, profile: 'never' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.policy.airdrop.profile.propose', { enabled: false }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.policy.camera.profile.propose', { enabled: true }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.policy.camera.profile.propose', { enabled: true, payload: 'untrusted' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'play' }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'toggle' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.media.apple-music.playback.set', { operation: 'next', script: 'do shell script' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.media.apple-music.volume.set', { level: 0.35 }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.media.apple-music.volume.set', { level: 1.1 }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.media.apple-music.volume.set', { level: 0.35, script: 'do shell script' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.media.spotify.playback.set', { operation: 'play' }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.media.spotify.playback.set', { operation: 'toggle' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.media.spotify.playback.set', { operation: 'next', script: 'do shell script' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.media.spotify.volume.set', { level: 0.35 }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.media.spotify.volume.set', { level: -0.1 }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.media.chrome-youtube.volume.set', { level: 0.35 }).ok, true);
+	assert.equal(normalizeDeviceCommand('system.media.chrome-youtube.volume.set', { level: 0.35, url: 'https://private.example' }).ok, false);
+	assert.equal(normalizeDeviceCommand('system.restart', {}).ok, true);
+	assert.equal(normalizeDeviceCommand('system.restart', { command: 'rm -rf /' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: 'Thingtime Guest' }).ok, true);
 	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: 'Thingtime Guest', password: 'never' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: ' Thingtime Guest' }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.wifi.connect', { ssid: 'x'.repeat(33) }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.wifi.disconnect', {}).ok, true);
 	assert.equal(normalizeDeviceCommand('system.wifi.power.set', { enabled: false }).ok, true);
+	assert.equal(normalizeDeviceCommand('input.pointer.move', { displayId: 42, x: 20, y: 30 }).ok, true);
+	assert.equal(normalizeDeviceCommand('input.pointer.move', { displayId: 42, x: -1, y: 30 }).ok, false);
+	assert.equal(normalizeDeviceCommand('input.pointer.click', { displayId: 42, x: 20, y: 30, button: 'left' }).ok, true);
+	assert.equal(normalizeDeviceCommand('input.pointer.click', { displayId: 42, x: 20, y: 30, button: 'double' }).ok, false);
+	assert.equal(normalizeDeviceCommand('input.pointer.scroll', { deltaX: 0, deltaY: -180 }).ok, true);
+	assert.equal(normalizeDeviceCommand('input.pointer.scroll', { deltaX: 0, deltaY: 0 }).ok, false);
+	assert.equal(normalizeDeviceCommand('input.keyboard.type', { text: 'Hello\\nThingtime' }).ok, true);
+	assert.equal(normalizeDeviceCommand('input.keyboard.type', { text: 'unsafe\u0000text' }).ok, false);
+	assert.equal(normalizeDeviceCommand('input.keyboard.type', { text: 'hello', script: 'do shell script' }).ok, false);
+	assert.equal(normalizeDeviceCommand('input.keyboard.shortcut', { key: 'tab', modifiers: ['command', 'shift'] }).ok, true);
+	assert.equal(normalizeDeviceCommand('input.keyboard.shortcut', { key: 'f13', modifiers: ['command'] }).ok, false);
+	assert.equal(normalizeDeviceCommand('input.keyboard.shortcut', { key: 'tab', modifiers: ['command', 'command'] }).ok, false);
 	assert.equal(normalizeDeviceCommand('system.lock', { shell: 'shutdown' }).ok, false);
 	assert.equal(normalizeDeviceCommand('screen.start', { screenSessionId: 'screen-1', viewOnly: true, sdp: 'secret' }).ok, false);
 });
@@ -400,7 +518,7 @@ test('paired account execution preferences default to always allow, with reversi
 	assert.equal(normalizeDevicePermissionMode('ask-every-time'), 'ask-every-time');
 	assert.equal(normalizeDevicePermissionMode('deny'), 'deny');
 	for (const kind of DEVICE_COMMAND_KINDS) {
-		assert.equal(deviceCommandRequiresApproval(kind, false), kind === 'app.force-quit', kind);
+		assert.equal(deviceCommandRequiresApproval(kind, false), ['script.run', 'app.force-quit', 'system.restart', 'system.shutdown', 'system.logout', 'system.power.idle-timer.set', 'system.policy.airdrop.profile.propose', 'system.policy.camera.profile.propose', 'system.media.apple-music.playback.set', 'system.media.apple-music.volume.set', 'system.media.spotify.playback.set', 'system.media.spotify.volume.set', 'system.media.chrome-youtube.volume.set', 'input.pointer.move', 'input.pointer.click', 'input.pointer.scroll', 'input.keyboard.type', 'input.keyboard.shortcut'].includes(kind), kind);
 		assert.equal(deviceCommandRequiresApproval(kind, true), true, kind);
 	}
 	const semantic = { kind: 'claude-thingtime', capabilities: ['session.send', 'explicit-approval'] };
@@ -468,4 +586,26 @@ test('event cursors round-trip and malformed cursors fail closed', () => {
 	const value = { at: new Date('2026-08-18T00:00:00.000Z'), id: 'event-1' };
 	assert.deepEqual(decodeDeviceEventCursor(encodeDeviceEventCursor(value)), value);
 	assert.equal(decodeDeviceEventCursor('not-json'), null);
+});
+
+for (const platform of ['ios', 'android'] as const) {
+ test(`${platform} pairs with the existing descriptor and signed proof boundary`, () => {
+  const device = normalizeDeviceDescriptor({ name: 'My phone', platform, model: 'Phone', osVersion: '1', appVersion: '1' });
+  assert.ok(device); assert.equal(device.platform, platform);
+  const projected = minimalPublicDevice({ shareId: 'mobile', createdAt: new Date(), crystal: { ...device, credential: 'never-return' }, secure: 'never-return' });
+  assert.equal(projected.platform, platform);
+  assert.equal(JSON.stringify(projected).includes('never-return'), false);
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+  const claim = { pairingId: 'pair', pairingSecret: generatePairingSecret(), credential: generateDeviceCredential(),
+   publicKey: (publicKey.export({ format: 'der', type: 'spki' }) as Buffer).subarray(-32).toString('base64url'),
+   nonce: generateDevicePairingNonce(), serverNonce: generateDevicePairingNonce(), device, capabilities: [] };
+  const signature = sign(null, canonicalDevicePairingClaimBytes(claim), privateKey).toString('base64url');
+  assert.equal(verifyDevicePairingClaim(claim, signature), true);
+  assert.equal(verifyDevicePairingClaim({ ...claim, device: { ...device, platform: 'macos' } }, signature), false);
+  assert.equal(verifyDevicePairingClaim({ ...claim, capabilities: ['filesystem.v1'] }, signature), false);
+  assert.equal(normalizeDeviceDescriptor({ ...device, credential: 'secret' }), null);
+ });
+}
+test('unknown device platforms are still refused', () => {
+ for (const platform of ['', 'iOS', 'Android', 'browser', 'unknown', null]) assert.equal(normalizeDeviceDescriptor({ name: 'Phone', platform }), null);
 });

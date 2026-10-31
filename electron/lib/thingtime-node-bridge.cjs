@@ -6,6 +6,8 @@ const fsPromises = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { FolderStream, stageRangeMetadata, encodeStageInput } = require('./folder-stream.cjs');
+const { FolderBatchStream, encodeBatchInput } = require('./folder-batch-stream.cjs');
 
 const NODE_LABEL = 'com.thingtime.desktop.node';
 const NODE_BUNDLE_ID = 'com.thingtime.desktop.node';
@@ -24,7 +26,15 @@ const MAX_PROJECT_REGISTRY_BYTES = 1_048_576;
 const ALLOWED_SIGNATURE_MODES = new Set(['local', 'production', 'runtime']);
 const LOCAL_SIGNING_AUTHORITY_PREFIX = 'Apple Development:';
 const PRODUCTION_SIGNING_AUTHORITY_PREFIX = 'Developer ID Application:';
+const AUDIO_INPUT_ENTITLEMENT = 'com.apple.security.device.audio-input';
 const ELECTRON_ENTITLEMENTS = new Set(['com.apple.security.cs.allow-jit', 'com.apple.security.cs.allow-unsigned-executable-memory']);
+// Ad-hoc hardened-runtime applications do not inherit the Developer ID library
+// validation policy. Keep this relaxation confined to the explicitly labelled
+// temporary unsigned lane; the signed update path stays exact and unchanged.
+const UNSIGNED_ELECTRON_ENTITLEMENTS = new Set([
+	...ELECTRON_ENTITLEMENTS,
+	'com.apple.security.cs.disable-library-validation'
+]);
 
 const CONNECTOR_OPERATIONS = new Set([
 	'connector/list',
@@ -140,6 +150,7 @@ function nodeRequest(method, parameters = {}, suppliedCommandId) {
 }
 
 function nodeRequestTimeoutMs(method) {
+	if (method === 'folder-sync.request') return 305_000;
 	if (method === 'pairing.claim' || method === 'pairing.resume') return PAIRING_BRIDGE_TIMEOUT_MS;
 	if (method === 'pairing.unpair' || method === 'permissions.request') return PRESENCE_BRIDGE_TIMEOUT_MS;
 	return BRIDGE_TIMEOUT_MS;
@@ -174,7 +185,7 @@ function validateDeviceRequest(value) {
 		throw new ThingtimeNodeBridgeError('invalid_request', 'Device request must be an object.');
 	}
 	const action = boundedString(value.action, 'Device action', 16);
-	if (action === 'snapshot' || action === 'permissions') return { action };
+	if (action === 'snapshot' || action === 'battery' || action === 'permissions') return { action };
 	if (action !== 'evaluate' && action !== 'execute') {
 		throw new ThingtimeNodeBridgeError('invalid_request', 'Device action is not supported.');
 	}
@@ -217,7 +228,9 @@ function buildLaunchAgentPlist({
 	apiBaseUrl,
 	projectRegistryPath = null,
 	menuBarIconId = 'tree-pink',
-	menuBarCustomIconPath = null
+	menuBarCustomIconPath = null,
+	unsignedDistribution = false,
+	desktopVersion = ''
 }) {
 	for (const [label, value] of [
 		['helper executable', helperExecutable],
@@ -249,6 +262,7 @@ function buildLaunchAgentPlist({
 		THINGTIME_NODE_CONNECTOR_ENV_JSON: JSON.stringify(connectorEnvironment)
 	};
 	if (apiBaseUrl) environment.THINGTIME_NODE_API_BASE_URL = apiBaseUrl;
+	if (unsignedDistribution === true) environment.THINGTIME_NODE_UNSIGNED_DISTRIBUTION = '1';
 	if (!MENU_BAR_ICON_IDS.has(menuBarIconId)) {
 		throw new ThingtimeNodeBridgeError('invalid_request', 'Thingtime Node menu bar icon is invalid.');
 	}
@@ -273,6 +287,10 @@ function buildLaunchAgentPlist({
 <dict>
     <key>Label</key>
     <string>${NODE_LABEL}</string>
+    <key>ThingtimeDesktopOwner</key>
+    <string>${DESKTOP_BUNDLE_ID}</string>
+    <key>ThingtimeDesktopVersion</key>
+    <string>${xmlEscape(desktopVersion)}</string>
     <key>ProgramArguments</key>
     <array>
 ${plistString(helperExecutable)}
@@ -449,7 +467,7 @@ function runProcess(command, args, options = {}) {
 	const input = options.input === undefined ? null : Buffer.from(options.input);
 	const maximumOutputBytes = options.maximumOutputBytes || MAX_FRAME_BYTES;
 	const maximumErrorBytes = options.maximumErrorBytes || MAX_ERROR_BYTES;
-	const timeoutMs = options.timeoutMs || BRIDGE_TIMEOUT_MS;
+	const timeoutMs = options.timeoutMs === null ? null : (options.timeoutMs || BRIDGE_TIMEOUT_MS);
 
 	return new Promise((resolve, reject) => {
 		let settled = false;
@@ -467,6 +485,7 @@ function runProcess(command, args, options = {}) {
 			if (settled) return;
 			settled = true;
 			clearTimeout(timer);
+			options.signal?.removeEventListener('abort', abort);
 			callback(value);
 		};
 
@@ -475,11 +494,20 @@ function runProcess(command, args, options = {}) {
 			finish(reject, new ThingtimeNodeBridgeError(code, message));
 		};
 
-		const timer = setTimeout(() => fail('node_timeout', 'Thingtime Node did not respond in time.'), timeoutMs);
-		timer.unref?.();
+		const abort = () => fail('cancelled', 'Folder access was cancelled.');
+		const timer = timeoutMs === null ? null : setTimeout(() => fail('node_timeout', 'Thingtime Node did not respond in time.'), timeoutMs);
+		timer?.unref?.();
+		options.signal?.addEventListener('abort', abort, { once: true });
+		if (options.signal?.aborted) abort();
+		child.stdin.on('error', () => fail('node_unavailable', 'Thingtime Node input closed.'));
 
 		child.on('error', () => fail('node_unavailable', 'Thingtime Node could not be started.'));
 		child.stdout.on('data', (chunk) => {
+			if (settled) return;
+			if (options.onStdout) {
+				try { options.onStdout(chunk); } catch { fail('node_protocol_error', 'Thingtime Node returned an invalid stream.'); }
+				return;
+			}
 			stdout = Buffer.concat([stdout, chunk]);
 			if (stdout.length > maximumOutputBytes) fail('node_protocol_error', 'Thingtime Node returned an oversized response.');
 		});
@@ -497,7 +525,10 @@ function runProcess(command, args, options = {}) {
 			});
 		});
 
-		if (input) child.stdin.end(input);
+		if (options.onInput) {
+			options.onInput(bytes => { if (!settled) child.stdin.write(bytes); });
+			if (input) child.stdin.write(input);
+		} else if (input) child.stdin.end(input);
 		else child.stdin.end();
 	});
 }
@@ -518,12 +549,14 @@ function parseEntitlementKeys(output) {
 	return [...keys].sort();
 }
 
-async function signatureDetails(targetPath, runner = runProcess) {
-	const verification = await runner('/usr/bin/codesign', ['--verify', '--deep', '--strict', targetPath], {
-		maximumOutputBytes: MAX_ERROR_BYTES
-	});
-	if (verification.status !== 0) {
-		throw new ThingtimeNodeBridgeError('invalid_signature', 'Thingtime Node has an invalid code signature.');
+async function signatureDetails(targetPath, runner = runProcess, verifyResources = true) {
+	if (verifyResources) {
+		const verification = await runner('/usr/bin/codesign', ['--verify', '--deep', '--strict', targetPath], {
+			maximumOutputBytes: MAX_ERROR_BYTES
+		});
+		if (verification.status !== 0) {
+			throw new ThingtimeNodeBridgeError('invalid_signature', 'Thingtime Node has an invalid code signature.');
+		}
 	}
 	const display = await runner('/usr/bin/codesign', ['--display', '--verbose=4', targetPath], {
 		maximumOutputBytes: MAX_ERROR_BYTES
@@ -583,11 +616,15 @@ function assertExpectedEntitlements(details, expectedKeys, label) {
 
 async function verifySignedArtifacts(paths, runner = runProcess, options = {}) {
 	const mode = options.mode || 'runtime';
+	const runningHost = options.runningHost;
 	if (!ALLOWED_SIGNATURE_MODES.has(mode)) {
 		throw new ThingtimeNodeBridgeError('invalid_request', 'Thingtime signature verification mode is invalid.');
 	}
 	if (mode === 'production' && !paths.outerApp) {
 		throw new ThingtimeNodeBridgeError('invalid_installation', 'Production verification requires the outer Thingtime application.');
+	}
+	if (runningHost && (mode !== 'runtime' || !paths.outerApp || runningHost.outerApp !== await fsPromises.realpath(paths.outerApp))) {
+		throw new ThingtimeNodeBridgeError('invalid_installation', 'The running Thingtime installation changed.');
 	}
 	for (const requiredPath of [paths.helperApp, paths.helperExecutable, paths.bridgeExecutable, paths.runtimePath]) {
 		let stat;
@@ -609,7 +646,7 @@ async function verifySignedArtifacts(paths, runner = runProcess, options = {}) {
 	];
 	if (paths.outerApp) {
 		signed.push({
-			details: await signatureDetails(paths.outerApp, runner),
+			details: await signatureDetails(paths.outerApp, runner, !runningHost),
 			expectedIdentifier: DESKTOP_BUNDLE_ID,
 			label: 'Thingtime',
 			targetPath: paths.outerApp
@@ -629,10 +666,10 @@ async function verifySignedArtifacts(paths, runner = runProcess, options = {}) {
 		if (!identityClass) {
 			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} is not signed with an allowed identity class.`);
 		}
-		if (mode !== 'runtime' && identityClass !== mode) {
+		if (mode !== 'runtime' && identityClass !== mode && !(mode === 'local' && identityClass === 'production')) {
 			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} is not signed for ${mode} verification.`);
 		}
-		if (mode === 'production' && !details.timestamp) {
+		if (mode !== 'runtime' && identityClass === 'production' && !details.timestamp) {
 			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} is missing a secure timestamp.`);
 		}
 		teams.add(details.teamIdentifier);
@@ -640,6 +677,9 @@ async function verifySignedArtifacts(paths, runner = runProcess, options = {}) {
 	}
 	if (teams.size !== 1 || identityClasses.size !== 1) {
 		throw new ThingtimeNodeBridgeError('invalid_signature', 'Thingtime and Thingtime Node are signed by different teams.');
+	}
+	if (runningHost && (runningHost.teamIdentifier !== [...teams][0] || runningHost.identityClass !== [...identityClasses][0])) {
+		throw new ThingtimeNodeBridgeError('invalid_signature', 'The running Thingtime signing identity changed.');
 	}
 	const requireExactLeafCertificate = options.requireExactLeafCertificate ?? mode !== 'runtime';
 	if (requireExactLeafCertificate) {
@@ -657,9 +697,63 @@ async function verifySignedArtifacts(paths, runner = runProcess, options = {}) {
 	assertExpectedEntitlements(helper, [], 'Thingtime Node');
 	assertExpectedEntitlements(bridge, [], 'Thingtime Node bridge');
 	if (paths.outerApp) {
-		assertExpectedEntitlements(signed.at(-1).details, ELECTRON_ENTITLEMENTS, 'Thingtime');
+		const desktop = signed.at(-1).details;
+		// Recovery must still accept older signed builds without microphone capture.
+		const expected = desktop.entitlementKeys.includes(AUDIO_INPUT_ENTITLEMENT)
+			? [...ELECTRON_ENTITLEMENTS, AUDIO_INPUT_ENTITLEMENT] : ELECTRON_ENTITLEMENTS;
+		assertExpectedEntitlements(desktop, expected, 'Thingtime');
 	}
 	return { identityClass: [...identityClasses][0], teamIdentifier: [...teams][0] };
+}
+
+/**
+ * A temporary distribution build is intentionally not signed by an Apple team
+ * or notarized. It is ad-hoc signed so nested macOS executables can still run.
+ * This validates only structure and identifiers; callers must never present it
+ * as an Apple-verified update.
+ */
+async function verifyUnsignedArtifacts(paths, runner = runProcess) {
+	const requiredPaths = [paths.helperApp, paths.helperExecutable, paths.bridgeExecutable, paths.runtimePath];
+	if (paths.outerApp) requiredPaths.push(paths.outerApp);
+	for (const requiredPath of requiredPaths) {
+		let stat;
+		try {
+			stat = await fsPromises.lstat(requiredPath);
+		} catch {
+			throw new ThingtimeNodeBridgeError('node_not_installed', 'Thingtime Node desktop resources are not installed.');
+		}
+		if (stat.isSymbolicLink()) {
+			throw new ThingtimeNodeBridgeError('invalid_installation', 'Thingtime Node resources must not be symbolic links.');
+		}
+	}
+
+	const unsigned = [
+		{ details: await signatureDetails(paths.helperApp, runner), expectedIdentifier: NODE_BUNDLE_ID, label: 'Thingtime Node' },
+		{ details: await signatureDetails(paths.bridgeExecutable, runner), expectedIdentifier: BRIDGE_BUNDLE_ID, label: 'Thingtime Node bridge' }
+	];
+	if (paths.outerApp) {
+		unsigned.push({ details: await signatureDetails(paths.outerApp, runner), expectedIdentifier: DESKTOP_BUNDLE_ID, label: 'Thingtime' });
+	}
+	for (const { details, expectedIdentifier, label } of unsigned) {
+		if (details.identifier !== expectedIdentifier) {
+			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} does not have the expected bundle identifier.`);
+		}
+		if (details.teamIdentifier && details.teamIdentifier !== 'not set') {
+			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} is Apple-signed and must not be published as unsigned.`);
+		}
+		if (details.authorities.some((authority) => authority.startsWith(LOCAL_SIGNING_AUTHORITY_PREFIX) || authority.startsWith(PRODUCTION_SIGNING_AUTHORITY_PREFIX))) {
+			throw new ThingtimeNodeBridgeError('invalid_signature', `${label} is Apple-signed and must not be published as unsigned.`);
+		}
+	}
+	assertExpectedEntitlements(unsigned[0].details, [], 'Thingtime Node');
+	assertExpectedEntitlements(unsigned[1].details, [], 'Thingtime Node bridge');
+	if (paths.outerApp) {
+		const desktop = unsigned.at(-1).details;
+		const expected = desktop.entitlementKeys.includes(AUDIO_INPUT_ENTITLEMENT)
+			? [...UNSIGNED_ELECTRON_ENTITLEMENTS, AUDIO_INPUT_ENTITLEMENT] : UNSIGNED_ELECTRON_ENTITLEMENTS;
+		assertExpectedEntitlements(desktop, expected, 'Thingtime');
+	}
+	return { identityClass: 'unsigned', teamIdentifier: null };
 }
 
 function safeConnectorEnvironment(environment = process.env) {
@@ -746,16 +840,8 @@ function requireLaunchctlSuccess(result, action, { allowMissing = false } = {}) 
 	throw new ThingtimeNodeBridgeError('login_item_failed', `macOS could not ${action} Thingtime Node.`);
 }
 
-function assertManagedLaunchAgentContents(contents) {
-	if (typeof contents !== 'string' || !contents.includes(MANAGED_PLIST_MARKER)) {
-		throw new ThingtimeNodeBridgeError(
-			'login_item_conflict',
-			'The existing Thingtime Node LaunchAgent is not owned by Thingtime Electron and was left unchanged.'
-		);
-	}
-}
-
-async function readManagedLaunchAgent(launchAgentPath) {
+async function readManagedLaunchAgent(paths, runner) {
+	const { launchAgentPath } = paths;
 	let stat;
 	try {
 		stat = await fsPromises.lstat(launchAgentPath);
@@ -763,14 +849,28 @@ async function readManagedLaunchAgent(launchAgentPath) {
 		if (error?.code === 'ENOENT') return null;
 		throw error;
 	}
-	if (stat.isSymbolicLink() || !stat.isFile()) {
-		throw new ThingtimeNodeBridgeError(
-			'login_item_conflict',
-			'The existing Thingtime Node LaunchAgent is not a regular Thingtime-managed file and was left unchanged.'
-		);
-	}
-	const contents = await fsPromises.readFile(launchAgentPath, 'utf8');
-	assertManagedLaunchAgentContents(contents);
+	const conflict = () => new ThingtimeNodeBridgeError(
+		'login_item_conflict',
+		'The existing Thingtime Node LaunchAgent does not identify this Desktop node and was left unchanged.'
+	);
+	if (stat.isSymbolicLink() || !stat.isFile() || stat.size > MAX_FRAME_BYTES ||
+		stat.uid !== process.getuid() || (stat.mode & 0o022) !== 0) throw conflict();
+	const contents = await fsPromises.readFile(launchAgentPath);
+	// Parse the plist instead of relying on a comment that plutil strips.
+	const result = await runner('/usr/bin/plutil', ['-convert', 'json', '-o', '-', '--', '-'], {
+		input: contents, maximumOutputBytes: MAX_FRAME_BYTES, timeoutMs: 5_000
+	});
+	let plist;
+	try { plist = JSON.parse(result.stdout); } catch { throw conflict(); }
+	if (result.status !== 0 || plist?.Label !== NODE_LABEL) throw conflict();
+	const environment = plist.EnvironmentVariables;
+	const sameBundledNode = Array.isArray(plist.ProgramArguments) && plist.ProgramArguments.length === 1 &&
+		plist.ProgramArguments[0] === paths.helperExecutable &&
+		environment?.THINGTIME_NODE_CONNECTOR_EXECUTABLE === paths.electronExecutable &&
+		environment?.THINGTIME_NODE_CONNECTOR_ARGUMENTS_JSON === JSON.stringify([paths.runtimePath]) &&
+		plist.MachServices?.[`${NODE_LABEL}.xpc`] === true;
+	const marked = plist.ThingtimeDesktopOwner === DESKTOP_BUNDLE_ID || contents.includes(MANAGED_PLIST_MARKER);
+	if (!marked && !sameBundledNode) throw conflict();
 	return contents;
 }
 
@@ -839,6 +939,8 @@ class ThingtimeNodeIntegration {
 		this.electronDir = electronDir;
 		this.environment = environment;
 		this.runner = runner;
+		this.serviceOperation = Promise.resolve();
+		this.runningHostVerification = null;
 	}
 
 	paths() {
@@ -850,30 +952,90 @@ class ThingtimeNodeIntegration {
 		});
 	}
 
-	async verify(paths = this.paths()) {
-		// Do not cache this result. The helper and bridge are executable trust
-		// boundaries, so every execution and service registration must verify the
-		// artifacts that are about to be used.
-		return verifySignedArtifacts(paths, this.runner);
+	isUnsignedDistribution() {
+		return this.app.isPackaged === true && /\.unsigned$/u.test(String(this.app.getVersion?.() || ''));
 	}
 
-	async request(method, parameters = {}, suppliedCommandId) {
+	bridgeEnvironment() {
+		if (!this.isUnsignedDistribution()) return this.environment;
+		return { ...this.environment, THINGTIME_NODE_UNSIGNED_DISTRIBUTION: '1' };
+	}
+
+	async verify(paths = this.paths()) {
+		// Explicit verification, status and service registration always validate
+		// the complete installation. No executable verification result is cached.
+		try {
+			return await (this.isUnsignedDistribution()
+				? verifyUnsignedArtifacts(paths, this.runner)
+				: verifySignedArtifacts(paths, this.runner));
+		} catch (error) {
+			this.runningHostVerification = null;
+			throw error;
+		}
+	}
+
+	async verifyForRequest(paths) {
+		if (this.isUnsignedDistribution() || !paths.outerApp) return this.verify(paths);
+		try {
+			const locations = await Promise.all([paths.outerApp, paths.helperApp, paths.bridgeExecutable, paths.runtimePath].map(value => fsPromises.realpath(value)));
+			const locationKey = JSON.stringify([paths.outerApp, ...locations]);
+			if (!this.runningHostVerification || this.runningHostVerification.locationKey !== locationKey) {
+				this.runningHostVerification = null;
+				const identity = await this.verify(paths);
+				this.runningHostVerification = { ...identity, outerApp: locations[0], locationKey };
+				return identity;
+			}
+			// Children about to execute still receive fresh full verification. The
+			// bridge authenticates this already-running process with strict dynamic
+			// SecCode validity and a kernel-derived, twice-sampled parent PID before
+			// decoding any request. Re-read outer signed identity/entitlements; do
+			// not rescan its unrelated web/database resources for every RPC.
+			return await verifySignedArtifacts(paths, this.runner, { runningHost: this.runningHostVerification });
+		} catch (error) {
+			this.runningHostVerification = null;
+			throw error;
+		}
+	}
+
+	async request(method, parameters = {}, suppliedCommandId, options = {}) {
 		const paths = this.paths();
-		await this.verify(paths);
-		const request = nodeRequest(method, parameters, suppliedCommandId);
-		const encoded = `${boundedJson(request, 'node request')}\n`;
-		const response = await this.runner(paths.bridgeExecutable, [], {
+		await this.verifyForRequest(paths);
+		const staging = method === 'folder-sync.request' && parameters.action === 'stage-range';
+		const batching = method === 'folder-sync.request' && parameters.action === 'upload-batch';
+        const policy = parameters.resourceLimits;
+        const governedPayload = method === 'folder-sync.request' && policy &&
+            ((batching && (policy.uploadBytesPerSecond || policy.cpuPercent)) ||
+             (['stage-finish', 'publish'].includes(parameters.action) && policy.cpuPercent));
+		const request = nodeRequest(method, staging ? stageRangeMetadata(parameters) : parameters, suppliedCommandId);
+		if (batching && typeof options.onBatchFrame !== 'function') throw new ThingtimeNodeBridgeError('invalid_request', 'Missing batch callback.');
+		const encoded = staging ? encodeStageInput(request, parameters.bytes) : batching ? encodeBatchInput(request) : `${boundedJson(request, 'node request')}\n`;
+		const batchAbort = new AbortController();
+		const batchSignal = AbortSignal.any([...(options.signal ? [options.signal] : []), batchAbort.signal]);
+		const stream = batching ? new FolderBatchStream(request, frame => options.onBatchFrame(frame, batchSignal), error => batchAbort.abort(error)) :
+			method === 'folder-sync.request' && parameters.action === 'read-range' ? new FolderStream(request) : null;
+		try {
+		options.signal?.throwIfAborted();
+		let response;
+		try { response = await this.runner(paths.bridgeExecutable, batching ? ['--folder-batch-stream'] : staging ? ['--folder-stage-stream'] : [], {
+			env: this.bridgeEnvironment(),
 			input: encoded,
 			maximumOutputBytes: MAX_FRAME_BYTES,
-			timeoutMs: nodeRequestTimeoutMs(method)
-		});
+			timeoutMs: governedPayload ? null : batching ? 185_000 : nodeRequestTimeoutMs(method),
+			signal: batching ? batchSignal : options.signal,
+			...(batching ? { onInput: write => stream.connect(write) } : {}),
+			...(stream ? { onStdout: chunk => stream.write(chunk) } : {})
+		}); } catch (error) {
+			if (batching) { stream.close(); batchAbort.abort(); if (stream.error) throw stream.error; }
+			throw error;
+		}
 		if (response.status !== 0) {
 			throw new ThingtimeNodeBridgeError('node_unavailable', 'Thingtime Node bridge exited unexpectedly.');
 		}
 
 		let decoded;
 		try {
-			decoded = JSON.parse(response.stdout);
+			decoded = stream ? stream.finish() : JSON.parse(response.stdout);
+			if (batching) { stream.close(); batchAbort.abort(); }
 		} catch {
 			throw new ThingtimeNodeBridgeError('node_protocol_error', 'Thingtime Node returned an invalid response.');
 		}
@@ -886,6 +1048,9 @@ class ThingtimeNodeIntegration {
 			throw new ThingtimeNodeBridgeError(code, message);
 		}
 		return decoded.result ?? {};
+		} finally {
+			if (batching) { stream.close(); batchAbort.abort(); }
+		}
 	}
 
 	async registrationStatus() {
@@ -984,11 +1149,56 @@ class ThingtimeNodeIntegration {
 			menuBarCustomIconPath,
 			menuBarIconId,
 			projectRegistryPath,
-			runtimePath: paths.runtimePath
+			runtimePath: paths.runtimePath,
+			unsignedDistribution: this.isUnsignedDistribution(),
+			desktopVersion: this.app.getVersion?.() || ''
 		});
 	}
 
-	async registerService(options = {}) {
+	withServiceLock(operation) {
+		const pending = this.serviceOperation.then(operation);
+		this.serviceOperation = pending.catch(() => {});
+		return pending;
+	}
+
+	registerService(options = {}) {
+		return this.withServiceLock(() => this._registerService(options));
+	}
+
+	reconcileRegisteredService(options = {}, policy = {}) {
+		return this.withServiceLock(() => this._reconcileRegisteredService(options, policy));
+	}
+
+	unregisterService() {
+		return this.withServiceLock(() => this._unregisterService());
+	}
+
+	controlService(action, options = {}) {
+		if (!['start', 'stop', 'restart', 'disable'].includes(action)) {
+			return Promise.reject(new ThingtimeNodeBridgeError('invalid_request', 'Unsupported node control.'));
+		}
+		return this.withServiceLock(async () => {
+			if (action === 'start') return this._reconcileRegisteredService(options, { startIfStopped: true });
+			if (action === 'restart') return this._registerService(options);
+			const paths = this.paths();
+			const existing = await readManagedLaunchAgent(paths, this.runner);
+			const registration = await this.registrationStatus();
+			if (registration.registered && existing === null) {
+				throw new ThingtimeNodeBridgeError('login_item_conflict', 'The running node has no Desktop-owned registration.');
+			}
+			if (action === 'disable') {
+				const disabled = await this.runner('/bin/launchctl', ['disable', `gui/${process.getuid()}/${NODE_LABEL}`], { maximumOutputBytes: MAX_ERROR_BYTES, timeoutMs: 10_000 });
+				requireLaunchctlSuccess(disabled, 'disable login launch for');
+			}
+			const stopped = await this.runner('/bin/launchctl', ['bootout', `gui/${process.getuid()}/${NODE_LABEL}`], {
+				maximumOutputBytes: MAX_ERROR_BYTES, timeoutMs: 10_000
+			});
+			requireLaunchctlSuccess(stopped, 'stop the node', { allowMissing: true });
+			return this.status();
+		});
+	}
+
+	async _registerService(options = {}) {
 		const paths = this.paths();
 		await this.verify(paths);
 		if (!this.app.isPackaged && this.environment.THINGTIME_NODE_ALLOW_DEV_REGISTRATION !== '1') {
@@ -1000,7 +1210,7 @@ class ThingtimeNodeIntegration {
 		await fsPromises.mkdir(launchAgentDirectory, { mode: 0o700, recursive: true });
 
 		const domain = `gui/${process.getuid()}`;
-		const previousContents = await readManagedLaunchAgent(paths.launchAgentPath);
+		const previousContents = await readManagedLaunchAgent(paths, this.runner);
 		const previousRegistration = await this.registrationStatus();
 		if (previousRegistration.registered && previousContents === null) {
 			throw new ThingtimeNodeBridgeError(
@@ -1047,18 +1257,15 @@ class ThingtimeNodeIntegration {
 		return this.status();
 	}
 
-	async reconcileRegisteredService(options = {}, { startIfStopped = false } = {}) {
+	async _reconcileRegisteredService(options = {}, { startIfStopped = false } = {}) {
 		const paths = this.paths();
 		const registration = await this.registrationStatus();
-		const existing = await readManagedLaunchAgent(paths.launchAgentPath);
+		const existing = await readManagedLaunchAgent(paths, this.runner);
 		if (!registration.registered) {
-			// A missing plist means the user has never enabled the node (or removed it
-			// explicitly), so app launch must not install one silently. The native Quit
-			// item intentionally leaves our managed plist behind; default-on desktop
-			// launch may safely bootstrap that previously approved service again.
-			if (existing === null || startIfStopped !== true) return this.status();
+			// The default-on launch preference owns installation as well as recovery.
+			if (startIfStopped !== true) return this.status();
 			await this.verify(paths);
-			return this.registerService(options);
+			return this._registerService(options);
 		}
 		await this.verify(paths);
 		if (existing === null) {
@@ -1067,13 +1274,17 @@ class ThingtimeNodeIntegration {
 				'A Thingtime Node service is registered without a Thingtime Electron-managed LaunchAgent and was left unchanged.'
 			);
 		}
-		return existing === this.servicePlist(paths, options) ? this.status() : this.registerService(options);
+		if (existing.toString('utf8') !== this.servicePlist(paths, options)) return this._registerService(options);
+		const status = await this.status();
+		// launchd registration alone does not mean a process is serving requests.
+		if (startIfStopped && status.serviceStatus === 'starting') return this._registerService(options);
+		return status;
 	}
 
-	async unregisterService() {
+	async _unregisterService() {
 		const paths = this.paths();
 		const domain = `gui/${process.getuid()}`;
-		const existing = await readManagedLaunchAgent(paths.launchAgentPath);
+		const existing = await readManagedLaunchAgent(paths, this.runner);
 		const registration = await this.registrationStatus();
 		if (registration.registered && existing === null) {
 			throw new ThingtimeNodeBridgeError(
@@ -1100,6 +1311,7 @@ class ThingtimeNodeIntegration {
 	async device(value, { userApproved = false } = {}) {
 		const request = validateDeviceRequest(value);
 		if (request.action === 'snapshot') return this.request('telemetry.snapshot');
+		if (request.action === 'battery') return this.request('telemetry.battery');
 		if (request.action === 'permissions') return this.request('permissions.preflight');
 
 		const telemetry = await this.request('telemetry.snapshot');
@@ -1139,5 +1351,6 @@ module.exports = {
 	safeConnectorEnvironment,
 	validateConnectorRequest,
 	validateDeviceRequest,
-	verifySignedArtifacts
+	verifySignedArtifacts,
+	verifyUnsignedArtifacts
 };

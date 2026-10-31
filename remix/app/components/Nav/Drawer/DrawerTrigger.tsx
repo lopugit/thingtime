@@ -12,6 +12,8 @@ import { DRAWER_POPUP_Z, DRAWER_TRIGGER_Z, useDrawer, useIsMobileViewport } from
 
 const POPUP_OPEN_DELAY_MS = 160;
 const POPUP_CLOSE_DELAY_MS = 260;
+// Clear the 52px web nav (or taller desktop titlebar), its border, and an 8px gap.
+const POPUP_TOP = 'calc(var(--thingtime-safe-area-top, 0px) + max(52px, var(--thingtime-electron-titlebar-height, 0px)) + 9px)';
 
 export const DrawerTrigger = () => {
 	const { open, toggleOpen } = useDrawer();
@@ -111,12 +113,13 @@ export const DrawerTrigger = () => {
 					className="drawerHoverPopup"
 					position="fixed"
 					zIndex={DRAWER_POPUP_Z}
-					top="calc(var(--thingtime-safe-area-top) + var(--thingtime-electron-titlebar-height, 0px) + 10px)"
+					top={POPUP_TOP}
 					left="10px"
 					width="300px"
 					maxWidth="86vw"
-					maxHeight="72vh"
+					maxHeight={`min(72dvh, calc(100dvh - ${POPUP_TOP} - var(--thingtime-safe-area-bottom, 0px) - 10px))`}
 					display="flex"
+					flexDirection="column"
 					background="var(--tt-card, #ffffff)"
 					border="1px solid"
 					borderColor="var(--tt-border, #ececef)"

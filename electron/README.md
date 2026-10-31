@@ -5,8 +5,11 @@ runtime, and the signed native macOS Thingtime Node as one desktop application.
 It does not duplicate the web source. The deterministic resource build stages:
 
 - the Vite client and Nitro server under `electron/dist/web`;
+- MongoDB Community Server 8.0.34, its source and licenses under
+  `electron/dist/database/mongodb`, plus the MongoDB driver under `electron/dist/database`;
 - `ai-connectors.mjs` and `thingtime-node-runtime.mjs` under `electron/dist/ai`;
-- the signed `Thingtime Node.app` under `electron/dist/native`.
+- the signed local/production or ad-hoc UNSIGNED `Thingtime Node.app` under
+  `electron/dist/native`.
 
 `electron-builder` places the node at
 `Thingtime.app/Contents/Helpers/Thingtime Node.app` and the runtime under
@@ -31,9 +34,58 @@ corepack pnpm@10.12.1 --dir electron build:native
 corepack pnpm@10.12.1 --dir electron verify:native
 corepack pnpm@10.12.1 --dir electron test
 corepack pnpm@10.12.1 --dir electron dev
+corepack pnpm@10.12.1 --dir electron dev:parallel
 corepack pnpm@10.12.1 --dir electron dist
+corepack pnpm@10.12.1 --dir electron dist:unsigned
 corepack pnpm@10.12.1 --dir electron install:local
 ```
+
+`dev` and `dev:parallel` run the same unsigned development lane. It builds the
+web/AI resources and starts Electron with a temporary, isolated user-data
+profile. The development process has its own application name, loopback port,
+session, and login state; it can run beside the signed app in
+`~/Applications/Thingtime.app`. Its Node bridge is deliberately disabled, and
+it cannot register, stop, restart, or reconfigure the installed Thingtime Node
+LaunchAgent. Quit the development app or press Ctrl+C to stop it; the launcher
+then removes its temporary profile and staged `electron/dist/web` and
+`electron/dist/ai` bundles. Use this lane for renderer and ordinary desktop
+iteration. Exercise Node/XPC and other signature-sensitive behavior in the
+final signed, installed app after the canonical tests and `build` +
+`install:local` commands. The development app does not replace the installed
+copy or its service.
+
+For ongoing testing, retain a named development workspace instead of deleting
+the build and synthetic session on quit:
+
+```sh
+corepack pnpm@10.12.1 --dir electron dev:parallel --workspace=my-workspace --prepare-only
+open "$HOME/Applications/Thingtime Dev my-workspace.app"
+node electron/scripts/dev-parallel.mjs --workspace=my-workspace --stop-workspace
+```
+
+The named app has its own development bundle identifier, app name, encrypted
+profile, authenticated managed MongoDB replica and deterministic loopback API,
+database and inspection ports. `development.json` in that workspace records the
+source revision, paths and ports. It snapshots the canonical desktop source and
+web resources, installs its own production dependencies, and copies no ignored
+Remix environment files or account credentials. The source checkout can later be
+archived without removing those retained dependencies. The Node/XPC bridge stays
+disabled; this unsigned UI lane does not establish privacy-permission acceptance.
+Preparation refuses active launchers or detached child groups and retains the
+previous snapshot until its replacement verifies. It never replaces the stable
+`~/Applications/Thingtime.app` or its data/services.
+
+`--prepare-only --use-staged` reuses already verified web resources when only
+desktop tooling changed. To make a disposable account an admin, register it
+through the normal local API first, then put only its non-secret username in
+workspace `settings.json`, for example `{"adminUsernames":["synthetic-dev"]}`,
+and restart this development app. Do not put passwords or tokens in that file.
+Quit preserves the build and session; `--stop-workspace` stops only verified
+workspace processes. After stopping, remove only `~/Applications/Thingtime Dev
+my-workspace.app` and its exact Application Support workspace directory to clean
+up that generated development app and disposable data. A fresh encryption namespace that
+requires human consent remains a prerequisite; do not reuse another app's
+Keychain item or weaken encryption.
 
 Use the repository's exact Corepack pin for packaging. The build preflights
 that version and gives electron-builder's nested dependency collector an
@@ -41,7 +93,22 @@ isolated temporary `pnpm` shim resolving to the same pin, so an unrelated
 global pnpm cannot silently change the packaged dependency graph. The shim is
 removed after success or failure.
 
-`build:web` runs the Remix/Nitro build with `NITRO_PRESET=node_server`,
+Concurrent worktree builds must use separate native staging/cache roots. For
+example, run the following from the worktree's repository root, replacing
+`my-worktree` with its unique name:
+
+```sh
+THINGTIME_NODE_CACHE_ROOT="$HOME/Library/Caches/com.thingtime.desktop.node/my-worktree" \
+  corepack pnpm@10.12.1 --dir electron build
+```
+
+The cache must remain under `~/Library/Caches/com.thingtime.desktop.node`.
+SwiftPM serializes its own build directory, but the shared default bundle-stage
+directory can still be replaced by another build during signing. Keep each
+worktree's cache override for subsequent native verification/build commands,
+and coordinate replacement of the single installed app before installing.
+
+`build:web` runs the Remix/Nitro build with `NITRO_PRESET=node_middleware`,
 materializes `remix/.output` into `electron/dist/web/.output` without external
 worktree symlinks, and builds both MCP desktop entry points. `build:native`
 builds the SwiftPM helper and one-shot XPC bridge, signs them with the explicit
@@ -51,11 +118,15 @@ requires the MCP runtime, while `verify:native` checks bundle identifiers,
 same-leaf-certificate stable signatures, paths, the Electron-authoritative
 login-registration contract, and symlink-free resources.
 
-`build` is the local path. It requires a real Apple Development identity,
-builds all resources, asks `electron-builder` to sign the full app with that
+`build` is the local path. It preserves the exact Apple Development or Developer
+ID signing identity of an existing `~/Applications/Thingtime.app` when that
+identity is still available; a fresh installation defaults to Apple Development.
+It builds all resources, asks `electron-builder` to sign the full app with that
 same identity and Hardened Runtime, then validates the outer app, nested node,
 bridge, bundle identifiers, team identifiers, and designated requirements. It
-never falls back to an ad-hoc signature. `install:local` accepts only that
+never falls back to an ad-hoc signature. A Developer ID local build is not a
+notarized distribution release; the production `dist` path still requires
+notarization and Gatekeeper verification. `install:local` accepts only that
 verified build, copies it to `~/Applications/Thingtime.app`, verifies the
 installed copy again, registers it with LaunchServices, and asks Spotlight to
 index it. If the exact managed Thingtime Node service is registered, installation
@@ -96,7 +167,9 @@ desktop settings automatically; no database secret is bundled into the app.
 The same origin check protects the local-node bridge. Renderer code gets fixed
 operations only: node status, login-service register/unregister, pairing,
 non-prompting permission preflight, allowlisted connector operations, and four
-safe device action kinds. It cannot choose a native method, executable, shell
+safe device action kinds. A paired Mac's battery card also has a narrow
+`telemetry.battery` read through the signed setup bridge; the full
+`telemetry.snapshot` remains forbidden there. It cannot choose a native method, executable, shell
 command, LaunchAgent field, environment variable, or XPC destination. Every
 connector/device mutation carries a caller-provided `commandId`; the native
 durable journal rejects conflicting reuse and replays completed results.
@@ -107,6 +180,26 @@ the pairing secret, key, nonce, credential, or proof to web code. The signed
 claim provides integrity/key continuity and replay fencing, not platform
 attestation.
 
+Runtime requests first verify the entire signed outer app and both native children.
+Later requests in that same integration instance still fully verify the helper and
+bridge before each launch, and freshly compare the outer app's signed identity,
+team and entitlements at the exact resolved installation path. They skip only
+repeated outer resource traversal: the native bridge independently validates its
+actual live parent with strict Apple signature validation before decoding a request.
+Any verification failure clears that initial proof; changing installation paths
+requires full verification again. Explicit verification, status, service
+registration and release/install verification retain full outer checks. No TTL,
+mtime or filesystem-watcher cache authorizes launching a child.
+
+Folder-sync public capabilities are negotiated once for an exact live window,
+generation, selected/local origins, owner and device. Invalidation or a changed
+binding renegotiates. This feature snapshot never replaces fresh account checks
+before/after native requests or the helper's paired-device authorization. Mac
+file-access 1.12.0 combines authorized roots and conditions; its part source retains
+native pinned range and pre/post-PUT validation while the shared transport retains
+initial, pre-complete and final source verification. No whole-file capability is
+advertised by this part adapter.
+
 Electron invokes the signed `ThingtimeNodeBridge` as a bounded one-shot process.
 That bridge is the only process that talks to the node's Mach-service XPC
 endpoint. The node independently requires the same macOS user, an Apple-generic
@@ -114,7 +207,17 @@ signature from the same team, and one of its three exact client bundle IDs.
 Requests and replies are capped at 1 MiB and time out; neither bridge uses a
 shell, AppleScript, cookies, provider databases, or raw private app stores.
 
-Login registration is always an explicit confirmed user action. Electron writes
+Desktop starts and maintains its bundled node when the default-on auto-start
+preference is enabled. Turning it off leaves a stopped node stopped. A persistent
+plist owner field survives macOS plist rewrites; legacy agents are adopted only
+when they identify the same bundled helper, connector, runtime and Mach service.
+The Desktop version is recorded so replacing an app at the same path restarts
+the node with that build. Desktop Settings provides Start, Stop, and Restart controls with live status.
+Stop preserves pairing and registration and suppresses automatic recovery for
+the current Desktop session. A later launch follows the auto-start preference.
+Node lifecycle mutations are serialized. The Node menu includes About Thingtime
+Node with version, build, source commit, bundle ID, architecture, and management
+mode. Manual registration remains available. Electron writes
 a per-user LaunchAgent containing valid ordinary `<key>` fields and absolute
 paths into the installed signed app, validates the plist, then calls
 `/bin/launchctl` with fixed arguments (never through a shell). Bootstrap is not
@@ -155,6 +258,23 @@ the renderer applies `html.thingtime-electron-desktop` and reserves the traffic
 light area before placing the drawer trigger and top nav content. The top nav is
 marked draggable, with inputs, links, and buttons marked non-draggable.
 
+The native **View** menu offers **Zoom In**, **Zoom Out** and **Actual Size**.
+With the desktop window focused, either Command or Control plus `=` / `+`,
+`-`, or `0` changes the whole interface or resets it to 100%, including while
+editing text. Plus/minus keypad keys work through their ordinary key values.
+Each step changes Chromium's zoom level by 0.5; its native range and
+origin-scoped zoom behavior apply, without a separate Thingtime preference.
+Alt/Option chords, composition, typing and unrelated editing shortcuts pass
+through. `electron/lib/window-zoom.cjs` consumes zoom input before renderer and
+menu dispatch so each press applies once. Run `pnpm --dir electron
+verify:window-zoom` for the real Electron keyboard/menu fixture; it opens a
+temporary local document with a disposable profile and uses no Thingtime API.
+The canonical runner uses a separate task process and fresh profile with
+normal networking and Chromium's standard sandbox enabled. It clears inherited
+Electron/Node switches, enforces a 30-second deadline and removes its profile
+and process group. The fixture uses synthetic local data and performs no
+sign-in or account writes. No network restrictions or exception flags apply.
+
 The drawer settings modal shows a **Thingtime desktop** section inside the
 desktop app. Endpoint profiles are stored locally in a versioned, atomic `0600`
 `desktop-settings.json` under Electron's app-data directory. Production,
@@ -179,13 +299,62 @@ a central pink/red mesh square. Native bundle verification requires both that
 resource and its `CFBundleIconFile` declaration before the helper can be
 embedded.
 
-The same settings surface includes an **Updates** section. Auto-check is stored
-at `thingtime.settings.electron.${sessionHash}AutoUpdateEnabled` and defaults to
-on. The current build checks recent GitHub releases for one named or describing
-`Electron App Release`, then downloads the best matching app bundle asset from
-that release into `~/Downloads`. Prefer release assets with names or labels that
-include `Electron App Release`, `Thingtime`, `Electron`, and a macOS bundle
-extension such as `.dmg`, `.zip`, or `.pkg`.
+The same settings surface includes **Thingtime versions & recovery**. It follows
+every public GitHub Releases page returned by the API (with loop detection),
+searches by SemVer, PR, branch, or commit, and accepts only a GitHub-hosted
+macOS `.zip` asset. Before a version can be launched or installed, Thingtime
+extracts it into
+`~/Library/Application Support/com.thingtime.desktop/release-cache/`,
+checks the full nested app for its Developer ID signature, hardened runtime,
+notarization staple, exact Thingtime bundle IDs, and matching signed native
+node. A failed download or verification never changes the installed app.
+
+**Launch** performs a recovery handoff: it starts a tiny detached helper, quits
+the current Thingtime instance, and only then opens the selected cached app, so
+two versions never operate the same user data concurrently. **Install** first
+caches the presently installed production app, then uses that same handoff to
+run the existing atomic installer, restart the managed node only if it was
+registered, verify the replacement, and reopen it. That installer restores the
+prior app and node if any replacement step fails. The cache keeps up to twelve
+explicitly verified bundles; remove an old entry from the UI before adding a
+thirteenth. **Reveal cache** makes the recovery folder accessible even if a
+future app UI is broken. If GitHub is offline, the settings surface still shows
+and permits launch/install of local recovery bundles; only browsing or caching
+new remote versions waits for GitHub to return.
+Auto-check remains stored at
+`thingtime.settings.electron.${sessionHash}AutoUpdateEnabled` and defaults to
+on; it is a notification preference, never permission to install silently.
+
+### Standalone Thingtime Recovery
+
+`macos/ThingtimeRecovery` builds **Thingtime Recovery.app**, a small native
+SwiftUI application which stays separate from every Electron app version. It
+reads the shared desktop cache above, keeps its own verified launcher copies in
+`~/Library/Application Support/com.thingtime.desktop/recovery-cache`, and uses
+a separately signed helper to wait for the current app to exit before atomically
+switching either app. Replacing Thingtime Desktop saves the current verified
+desktop bundle first; replacing Recovery saves the current launcher first.
+
+The native app queries public GitHub Releases and distinguishes
+`Thingtime-Electron-App-Release-*.zip` from
+`Thingtime-Recovery-App-Release-*.zip`; Electron will never mistake a recovery
+asset for a desktop update. Build and install the local Apple Development copy
+with:
+
+```sh
+swift test --package-path macos/ThingtimeRecovery
+macos/ThingtimeRecovery/script/build_and_run.sh --verify
+```
+
+Production CI passes its imported Developer ID identity and notarization API
+key to `macos/ThingtimeRecovery/script/build-production-release.sh`. That
+script signs the helper before the outer bundle, notarizes a ZIP, staples the
+app, then runs strict codesign, Gatekeeper, and stapler verification before it
+emits the companion release ZIP. While those credentials are absent, the
+owner-approved PR workflow can call
+`macos/ThingtimeRecovery/script/build-unsigned-release.sh`: its output is
+ad-hoc signed only, carries `UNSIGNED` in both asset name and SemVer suffix,
+and needs explicit macOS approval before first launch.
 
 ## GitHub Releases
 
@@ -199,17 +368,21 @@ run the Electron bridge tests before packaging. It creates a tag like
 `.pkg` assets to a GitHub Release titled `Thingtime Electron App Release
 0.1.0+build.10423`.
 
-Production publication is intentionally blocked until the protected workflow
-has a **Developer ID Application** certificate and notarization credentials.
-Apple Development is correct for stable local TCC testing, and Apple
-Distribution is for App Store workflows; neither substitutes for Developer ID
-direct distribution; Gatekeeper rejection is expected for the local Apple
-Development build. `pnpm --dir electron dist` requires an imported Developer
-ID Application identity plus one complete electron-builder notarization set
-(App Store Connect API key, Apple ID app-specific password, or a keychain
-profile). It enables Hardened Runtime and `mac.notarize`, then requires strict
-signature, Gatekeeper, and stapling validation. There is no unsigned/ad-hoc
-release command.
+The trusted production lane is intentionally blocked until the protected
+workflow has a **Developer ID Application** certificate and notarization
+credentials. Apple Development is correct for stable local TCC testing, and
+Apple Distribution is for App Store workflows; neither substitutes for
+Developer ID direct distribution. `pnpm --dir electron dist` requires an
+imported Developer ID Application identity plus one complete electron-builder
+notarization set. It enables Hardened Runtime and `mac.notarize`, then requires
+strict signature, Gatekeeper, and stapling validation.
+
+`pnpm --dir electron dist:unsigned` is a separate temporary PR-release command
+which requires a version ending in `.unsigned`. It deliberately uses ad-hoc
+signatures, no Apple team identity, and no notarization. It must never be
+described as a verified update. Thingtime Recovery shows those releases with an
+UNSIGNED badge and requires acknowledgement before caching, launching, or
+installing one; macOS may still require **Privacy & Security → Open Anyway**.
 
 The protected workflow currently lives on another ref and remains stale, so its
 signing change must be made there before publication can resume. The required
@@ -228,6 +401,108 @@ packaged app stores the full CI release version in `electron/dist/web/metadata.j
 so the updater can distinguish `0.1.0+build.10423` from `0.1.0+build.10424`
 without requiring source-controlled version churn.
 
+The signed **pre-release builder/releaser** is executable only on the protected
+`github-actions` branch. `develop` carries a tiny
+`.github/workflows/electron-pr-release.yml` listener that passes trusted PR or
+manual events to that worker; the product PR itself never supplies signing,
+notarization, or publishing code. The central worker revalidates a
+same-repository owner PR with the `desktop-release` label, checks out its exact
+head SHA without persisting a GitHub credential, tests before loading signing
+material, builds both the Electron ZIP and independently signed/notarized
+Recovery ZIP, then publishes a GitHub prerelease. Its SemVer includes source
+provenance, for example
+`0.1.0-pr.68.codex-thingtime-mcp-desktop-connectors.gabcdef123456`. The PR
+number, normalized branch, and full commit are also retained in the release
+notes. See [PRODUCTION_RELEASE.md](./PRODUCTION_RELEASE.md) for the required
+secrets and exact gate.
+
 In local development, the Electron shell loads `remix/.env`, `remix/.env.local`,
 and `remix/.env.auto` before starting Nitro so the desktop app sees the same
 server-side env as the web dev stack. Do not commit secret-bearing env files.
+
+### Mac voice input
+
+Lopu's standard voice mode uses the bundled, signed `ThingtimeSpeech` executable
+and Apple's Speech framework on macOS. Electron exposes Chromium's Web Speech
+constructor but its remote recognition service fails with `network`; desktop
+therefore negotiates `speechRecognitionVersion: 1.0.0` instead. Browser speech
+and direct-provider voice retain their existing paths. No API key is required.
+
+Press the microphone to request macOS Microphone and Speech Recognition access.
+If refused, enable Thingtime under System Settings → Privacy & Security in both
+categories. Nothing prompts or records at app startup. Recognition prefers
+on-device processing when the selected language supports it; otherwise Apple's
+service may process the audio. The helper does not save audio to disk.
+
+One bounded helper belongs to the bundled main window and emits only transient
+transcripts. Stop, reload, window close, renderer exit, parent exit and the
+startup watchdog release capture. The existing Lopu engine pauses recognition
+while processing/replying, and routes final text through the selected chat/model.
+Run `pnpm --dir electron test` plus the `desktopSpeechRecognition.test.ts` and
+`voice*.test.ts` tests in Remix. Verify a spoken turn and stopping capture in
+the installed signed app; mocked callbacks cannot prove macOS recognition.
+
+## Renderer restart verification
+
+Desktop owns the HTTP listening socket and keeps its port in the profile's
+`renderer-origin.json` (schema version 1, mode 0600). First startup binds port 0,
+flushes the new record and publishes it without overwriting another launch's
+record. Later startups bind exactly that port. An occupied port, unreadable or
+malformed record fails before creating a window; no random-port fallback or
+request to the other server is allowed. Stop the conflicting application and
+retry. Preserve the record alongside the Chromium profile for recovery/backups.
+Do not delete it as a routine startup workaround.
+
+Only HTTP cache is cleared on launch. IndexedDB and localStorage retain the
+shared sync records, keyed by canonical API origin/account/home/device/root.
+This requires no new environment variables or credentials. Old random-port
+origins are left intact but are not automatically migrated. Independent temporary
+dev profiles still receive independent origins and are cleaned up by their owner.
+
+After `build:web` and `verify:web`, run:
+
+```sh
+corepack pnpm --dir electron run verify:renderer-restart
+```
+
+The command creates a disposable profile, bundles the production journal,
+executor and configuration draft modules using MCP's installed esbuild dependency,
+and runs four separate Electron processes against the staged Nitro middleware.
+It checks pending IDs/drafts, scope isolation, receipt recovery without replay,
+a completion baseline and collision refusal followed by recovery. Native dispatch
+is absent and receipts are synthetic; this is not signed installed Mac transfer
+acceptance, a power-loss test or background-worker coverage. Installed app state
+and its managed Node are never used or modified.
+
+### Historical file export on Mac
+
+History uses `fileExportVersion` 1.0.0 and the narrow `fileExportRequest` preload
+method. The host opens a native Save panel, reads exact retained attachment
+versions in 2 MiB ranges using the selected account's cookie session, verifies
+the canonical multipart fingerprint from disk, and publishes exclusively.
+Existing files and symlinks are refused, even if the Save panel offers Replace.
+Choose a new filename instead. Paths, credentials and bytes stay in the host.
+Account cookies, navigation, renderer loss, endpoint changes and app exit cancel
+the active operation. There is no persistent folder grant or overwrite consent.
+
+This foreground export requires attachment-content 1.14.0 or compatible 1.x
+and a destination filesystem supporting exclusive hardlinks and directory fsync.
+It is not a resumable backup export; an interrupted process can leave a hidden
+`.thingtime-export-*` partial file in the chosen folder. The operation guards
+parent identity but does not promise protection against an adversarial local
+process continuously renaming the destination's ancestors.
+
+Run `node --test electron/test/file-export.test.cjs` from the repository root.
+After staging a web bundle with `build:web`, for the real native panel run `corepack pnpm@10.12.1 --dir electron exec electron
+test/fixtures/file-export-host.cjs`, click Save this version, then accept the
+suggested temporary destination. It checks 17 MiB against generated source bytes,
+using the production preload/host and real Electron cookie-session requests.
+Add `--headless` to exercise the packaged Nitro proxy with a fixture destination
+instead of a native panel. Close the test window to remove its disposable
+profile/output. This fixture
+does not establish authenticated installed-app Timeline acceptance.
+
+The `node_middleware` build explicitly enables Nitro static assets. Run
+`verify:renderer-restart` against the staged bundle: it now compares every
+startup script/style response to the packaged file, so a valid HTML shell alone
+cannot hide a missing asset server and blank renderer.

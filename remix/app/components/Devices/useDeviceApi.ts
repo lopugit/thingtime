@@ -1,8 +1,11 @@
 import { useCallback, useMemo } from 'react';
+import type { DevicePlatform } from '../../devices/platform';
 
 import { createApiFailure, readApiResponsePayload } from '~/hooks/apiFailure';
+import type { DeviceBattery } from './deviceTypes';
 
 export const PUBLIC_DEVICE_COMMAND_KINDS = [
+	'filesystem',
 	'connector.start',
 	'connector.stop',
 	'session.list',
@@ -28,8 +31,33 @@ export const PUBLIC_DEVICE_COMMAND_KINDS = [
 	'system.audio.sound-effects.mute.set',
 	'system.audio.sound-effects-output.set',
 	'system.brightness.set',
+	'system.display.brightness.set',
+	'system.display.mode.set',
+	'system.display.origin.set',
+	'system.display.mirroring.set',
+	'system.printer.default.set',
+	'system.camera.preferred.set',
+	'system.bluetooth.device.connection.set',
+	'system.vpn.connection.set',
+	'system.power.idle-sleep-prevention.set',
+	'system.power.idle-timer.set',
+	'system.policy.airdrop.profile.propose',
+	'system.policy.camera.profile.propose',
+	'system.media.apple-music.playback.set',
+	'system.media.apple-music.volume.set',
+	'system.media.spotify.playback.set',
+	'system.media.spotify.volume.set',
+	'system.media.chrome-youtube.volume.set',
+	'input.pointer.move',
+	'input.pointer.click',
+	'input.pointer.scroll',
+	'input.keyboard.type',
+	'input.keyboard.shortcut',
 	'system.lock',
 	'system.sleep',
+	'system.restart',
+	'system.shutdown',
+	'system.logout',
 	'system.wifi.connect',
 	'system.wifi.disconnect',
 	'system.wifi.power.set',
@@ -60,7 +88,8 @@ export type PublicDeviceState = {
 	soundEffectsVolume?: number | null;
 	soundEffectsMuted?: boolean | null;
 	brightness: number | null;
-	battery: { level: number; charging: boolean } | null;
+	battery: DeviceBattery | null;
+	powerTimers?: { displayIdleMinutes: number | null; systemSleepMinutes: number | null; diskIdleMinutes: number | null };
 	openApps: PublicDeviceOpenApp[];
 	audioDevices: Array<{
 		id: string;
@@ -72,6 +101,14 @@ export type PublicDeviceState = {
 		isDefaultSoundEffectsOutput: boolean;
 	}>;
 	wifi: { powerOn: boolean | null; ssid: string | null } | null;
+	displays?: Array<{ id: number; width: number; height: number; isMain: boolean; isBuiltIn: boolean; brightness: number | null; brightnessControlSupported: boolean; currentMode: { id: string; width: number; height: number; refreshRate: number } | null; availableModes: Array<{ id: string; width: number; height: number; refreshRate: number }>; originX: number; originY: number; mirroredDisplayId: number | null; hdrActive: boolean }>;
+	printers?: Array<{ id: string; name: string; isDefault: boolean }>;
+	cameras?: Array<{ id: string; name: string; isConnected: boolean; isPreferred: boolean; authorization: 'granted' | 'denied' }>;
+	bluetoothDevices?: Array<{ id: string; name: string; isConnected: boolean }>;
+	vpnServices?: Array<{ id: string; name: string; isConnected: boolean }>;
+	appleMusic?: { isInstalled: boolean; isRunning: boolean };
+	spotify?: { isInstalled: boolean; isRunning: boolean };
+	chromeYouTube?: { isInstalled: boolean; isRunning: boolean };
 	observedAt: string;
 	updatedAt: string;
 };
@@ -96,7 +133,7 @@ export type PublicDeviceConnector = {
 export type PublicDevice = {
 	id: string;
 	name: string;
-	platform: 'macos' | 'windows' | 'linux';
+	platform: DevicePlatform;
 	model: string | null;
 	osVersion: string | null;
 	appVersion: string | null;
@@ -104,10 +141,15 @@ export type PublicDevice = {
 	pairedAt: string;
 	online: boolean;
 	lastSeenAt: string | null;
+	lastSyncAt: string | null;
+	syncStatus: 'paired' | 'healthy' | 'error' | null;
+	watchHealth: { batteryLevel: number | null; lowPowerMode: boolean; error: string | null; updatedAt: string | null } | null;
+	createdThingCount: number;
+	recentThings: Array<{ id: string; label: string; createdAt: string }>;
 	locked: boolean | null;
 	volume: number | null;
 	brightness: number | null;
-	battery: { level: number; charging: boolean } | null;
+	battery: DeviceBattery | null;
 	openApps: PublicDeviceOpenApp[];
 	state: PublicDeviceState | null;
 	connectors: PublicDeviceConnector[];

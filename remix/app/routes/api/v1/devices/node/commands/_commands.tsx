@@ -16,7 +16,7 @@ export const action = async ({ request }: { request: Request }) => {
 	if (!actor) return json({ ok: false, error: 'Unauthorized device credential' }, { status: 401 });
 	const limit = await enforceRateLimit(request, 'devices.node.commands', `device:${actor.sessionId}`);
 	if (!limit.allowed) return json({ ok: false, error: 'Device command polling is moving too quickly' }, rateLimitedResponseInit(limit));
-	const body = await readJsonBody(request, 96 * 1024);
+	const body = await readJsonBody(request, 128 * 1024);
 	let result;
 	switch (body?.op) {
 		case 'claim':
@@ -40,5 +40,5 @@ export const action = async ({ request }: { request: Request }) => {
 		default:
 			return json({ ok: false, error: 'Unknown node command operation' }, { status: 400 });
 	}
-	return result.ok ? json(result) : json(result, { status: result.status });
+	return result.ok ? json(result, { headers: { 'Cache-Control': 'private, no-store' } }) : json(result, { status: result.status, headers: { 'Cache-Control': 'private, no-store' } });
 };

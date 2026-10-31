@@ -106,6 +106,40 @@ export type DeviceWiFiState = {
 	ssid: string | null;
 };
 
+export type DeviceDisplayMode = { id: string; width: number; height: number; refreshRate: number };
+export type DeviceDisplay = {
+	id: number;
+	width: number;
+	height: number;
+	isMain: boolean;
+	isBuiltIn: boolean;
+	brightness: number | null;
+	brightnessControlSupported: boolean;
+	currentMode: DeviceDisplayMode | null;
+	availableModes: DeviceDisplayMode[];
+	originX: number;
+	originY: number;
+	mirroredDisplayId: number | null;
+	hdrActive: boolean;
+};
+export type DevicePrinter = { id: string; name: string; isDefault: boolean };
+export type DeviceCamera = { id: string; name: string; isConnected: boolean; isPreferred: boolean; authorization: 'granted' | 'denied' };
+export type DeviceBluetoothDevice = { id: string; name: string; isConnected: boolean };
+export type DeviceVPNService = { id: string; name: string; isConnected: boolean };
+export type DeviceBattery = {
+	level: number | null; charging: boolean | null; isExternalPower?: boolean | null;
+	isPreventingIdleSleep?: boolean; isLowPowerModeEnabled?: boolean;
+	fullyCharged?: boolean | null; cycleCount?: number | null; designCycleCount?: number | null;
+	designCapacityMAh?: number | null; fullChargeCapacityMAh?: number | null; remainingCapacityMAh?: number | null;
+	currentMA?: number | null; voltageMV?: number | null; temperatureC?: number | null;
+	timeToEmptyMinutes?: number | null; timeToFullMinutes?: number | null;
+	adapterWatts?: number | null; adapterVoltageMV?: number | null; adapterCurrentMA?: number | null;
+};
+export type DevicePowerTimers = { displayIdleMinutes: number | null; systemSleepMinutes: number | null; diskIdleMinutes: number | null };
+export type DeviceAppleMusic = { isInstalled: boolean; isRunning: boolean };
+export type DeviceSpotify = { isInstalled: boolean; isRunning: boolean };
+export type DeviceChromeYouTube = { isInstalled: boolean; isRunning: boolean };
+
 export type DeviceSystemProperties = {
 	model?: string | null;
 	osName?: string | null;
@@ -131,6 +165,16 @@ export type DeviceObservedState = {
 	runningApps: DeviceRunningApp[];
 	audioDevices?: DeviceAudioDevice[];
 	wifi?: DeviceWiFiState | null;
+	displays?: DeviceDisplay[];
+	printers?: DevicePrinter[];
+	cameras?: DeviceCamera[];
+	bluetoothDevices?: DeviceBluetoothDevice[];
+	vpnServices?: DeviceVPNService[];
+	battery?: DeviceBattery | null;
+	powerTimers?: DevicePowerTimers;
+	appleMusic?: DeviceAppleMusic;
+	spotify?: DeviceSpotify;
+	chromeYouTube?: DeviceChromeYouTube;
 	observedAt: string;
 };
 
@@ -160,6 +204,11 @@ export type DeviceSummary = {
 	transportStatus: DeviceTransportStatus;
 	revision: number;
 	lastSeenAt: string | null;
+	lastSyncAt?: string | null;
+	syncStatus?: 'paired' | 'healthy' | 'error' | null;
+	watchHealth?: { batteryLevel: number | null; lowPowerMode: boolean; error: string | null; updatedAt: string | null } | null;
+	createdThingCount?: number;
+	recentThings?: Array<{ id: string; label: string; createdAt: string }>;
 	appVersion?: string | null;
 	nodeVersion?: string | null;
 	system?: DeviceSystemProperties;
@@ -200,6 +249,28 @@ export type DeviceActionKind =
 	| 'connect-wifi'
 	| 'disconnect-wifi'
 	| 'set-wifi-power'
+	| 'set-display-brightness'
+	| 'set-display-mode'
+	| 'set-display-origin'
+	| 'set-display-mirroring'
+	| 'set-default-printer'
+	| 'set-preferred-camera'
+	| 'set-bluetooth-device-connected'
+	| 'set-vpn-connected'
+	| 'set-prevent-idle-sleep'
+	| 'set-power-idle-timer'
+	| 'propose-airdrop-policy-profile'
+	| 'propose-camera-policy-profile'
+	| 'set-apple-music-playback'
+	| 'set-apple-music-volume'
+	| 'set-spotify-playback'
+	| 'set-spotify-volume'
+	| 'set-chrome-youtube-volume'
+	| 'move-pointer'
+	| 'click-pointer'
+	| 'scroll-pointer'
+	| 'type-text'
+	| 'send-shortcut'
 	| 'launch-app'
 	| 'quit-app'
 	| 'force-quit-app'
@@ -208,6 +279,9 @@ export type DeviceActionKind =
 	| 'hide-other-apps'
 	| 'lock'
 	| 'sleep'
+	| 'restart'
+	| 'shutdown'
+	| 'logout'
 	| 'start-screen-session'
 	| 'control-screen-session'
 	| 'stop-screen-session'

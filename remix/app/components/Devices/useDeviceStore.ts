@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityManager } from '~/activity/activityManager';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -70,11 +71,31 @@ const CAPABILITY_ALIASES: Record<string, string[]> = {
 	'system.audio.sound-effects.mute.set': ['system.audio.sound-effects.mute.write'],
 	'system.audio.sound-effects-output.set': ['system.audio.sound-effects-output.write'],
 	'system.brightness.set': ['system.brightness.write'],
+	'system.display.brightness.set': ['system.display.brightness.write'],
+	'system.display.mode.set': ['system.display.mode.write'],
+	'system.display.origin.set': ['system.display.layout.write'],
+	'system.display.mirroring.set': ['system.display.mirroring.write'],
+	'system.printer.default.set': ['system.printer.default.write'],
+	'system.camera.preferred.set': ['system.camera.preferred.write'],
+	'system.bluetooth.device.connection.set': ['system.bluetooth.device.connection.write'],
+	'system.vpn.connection.set': ['system.vpn.connection.write'],
+	'system.power.idle-sleep-prevention.set': ['system.power.idle-sleep-prevention.write'],
+	'system.power.idle-timer.set': ['system.power.idle-timer.write'],
+	'system.policy.airdrop.profile.propose': ['system.policy.airdrop.profile.write'],
+	'system.policy.camera.profile.propose': ['system.policy.camera.profile.write'],
 	'system.lock': ['system.lock'],
 	'system.sleep': ['system.power.sleep'],
+	'system.restart': ['system.power.restart'],
+	'system.shutdown': ['system.power.shutdown'],
+	'system.logout': ['system.session.logout'],
 	'system.wifi.connect': ['system.wifi.connect'],
 	'system.wifi.disconnect': ['system.wifi.disconnect'],
 	'system.wifi.power.set': ['system.wifi.power.write'],
+	'input.pointer.move': ['input.pointer.write'],
+	'input.pointer.click': ['input.pointer.write'],
+	'input.pointer.scroll': ['input.pointer.write'],
+	'input.keyboard.type': ['input.keyboard.write'],
+	'input.keyboard.shortcut': ['input.keyboard.write'],
 	'screen.start': ['screen.view'],
 	'screen.stop': ['screen.view'],
 	'screen.control': ['screen.control']
@@ -134,6 +155,11 @@ const safeRevisionFromTime = (value: string | null | undefined, rank = 0): numbe
 
 const unit = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : null);
 
+const containsUnsafeInputControl = (value: string): boolean => Array.from(value).some((character) => {
+	const code = character.codePointAt(0) || 0;
+	return !(code === 0x09 || code === 0x0a || code === 0x0d || (code > 0x1f && !(code >= 0x7f && code <= 0x9f)));
+});
+
 const actionFromCommandKind = (kind: string): DeviceActionKind => {
 	switch (kind) {
 		case 'connector.start':
@@ -176,10 +202,35 @@ const actionFromCommandKind = (kind: string): DeviceActionKind => {
 			return 'set-volume';
 		case 'system.brightness.set':
 			return 'set-brightness';
+		case 'system.display.brightness.set': return 'set-display-brightness';
+		case 'system.display.mode.set': return 'set-display-mode';
+		case 'system.display.origin.set': return 'set-display-origin';
+		case 'system.display.mirroring.set': return 'set-display-mirroring';
+		case 'system.printer.default.set': return 'set-default-printer';
+		case 'system.camera.preferred.set': return 'set-preferred-camera';
+		case 'system.bluetooth.device.connection.set': return 'set-bluetooth-device-connected';
+		case 'system.vpn.connection.set': return 'set-vpn-connected';
+		case 'system.power.idle-sleep-prevention.set': return 'set-prevent-idle-sleep';
+		case 'system.power.idle-timer.set': return 'set-power-idle-timer';
+		case 'system.policy.airdrop.profile.propose': return 'propose-airdrop-policy-profile';
+		case 'system.policy.camera.profile.propose': return 'propose-camera-policy-profile';
+		case 'system.media.apple-music.playback.set': return 'set-apple-music-playback';
+		case 'system.media.apple-music.volume.set': return 'set-apple-music-volume';
+		case 'system.media.spotify.playback.set': return 'set-spotify-playback';
+		case 'system.media.spotify.volume.set': return 'set-spotify-volume';
+		case 'system.media.chrome-youtube.volume.set': return 'set-chrome-youtube-volume';
+		case 'input.pointer.move': return 'move-pointer';
+		case 'input.pointer.click': return 'click-pointer';
+		case 'input.pointer.scroll': return 'scroll-pointer';
+		case 'input.keyboard.type': return 'type-text';
+		case 'input.keyboard.shortcut': return 'send-shortcut';
 		case 'system.lock':
 			return 'lock';
 		case 'system.sleep':
 			return 'sleep';
+		case 'system.restart': return 'restart';
+		case 'system.shutdown': return 'shutdown';
+		case 'system.logout': return 'logout';
 		case 'system.wifi.connect':
 			return 'connect-wifi';
 		case 'system.wifi.disconnect':
@@ -339,12 +390,17 @@ export const publicDeviceToSummary = (device: PublicDevice): DeviceSummary => {
 		transportStatus: device.online ? 'online' : 'offline',
 		revision,
 		lastSeenAt: device.lastSeenAt,
+		lastSyncAt: device.lastSyncAt,
+		syncStatus: device.syncStatus,
+		watchHealth: device.watchHealth,
+		createdThingCount: device.createdThingCount,
+		recentThings: device.recentThings,
 		appVersion: device.appVersion,
 		system: {
 			model: device.model,
 			osName: device.platform,
 			osVersion: device.osVersion,
-			batteryPercent: device.battery?.level ?? null,
+			batteryPercent: device.watchHealth?.batteryLevel ?? device.battery?.level ?? null,
 			charging: device.battery?.charging ?? null
 		},
 		capabilities: runtimeCapabilities(allCapabilities),
@@ -381,6 +437,23 @@ const publicDeviceToSnapshot = (device: PublicDevice): DeviceSnapshot | null => 
 			})),
 			audioDevices: device.state?.audioDevices || [],
 			wifi: device.state?.wifi || null,
+			displays: device.state?.displays || [],
+			printers: device.state?.printers || [],
+			cameras: device.state?.cameras || [],
+			bluetoothDevices: device.state?.bluetoothDevices || [],
+			vpnServices: device.state?.vpnServices || [],
+			appleMusic: device.state?.appleMusic,
+			spotify: device.state?.spotify,
+			chromeYouTube: device.state?.chromeYouTube,
+			powerTimers: device.state?.powerTimers,
+			battery: device.state?.battery
+				? {
+					...device.state.battery,
+					isExternalPower: device.state.battery.isExternalPower ?? null,
+					isPreventingIdleSleep: device.state.battery.isPreventingIdleSleep ?? false,
+					isLowPowerModeEnabled: device.state.battery.isLowPowerModeEnabled ?? false
+				}
+				: null,
 			observedAt
 		},
 		permissions: [],
@@ -574,6 +647,107 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 			const level = unit(intent.desired?.brightness ?? input.level);
 			return level === null ? null : { ...base, kind: 'system.brightness.set', input: { level } };
 		}
+		case 'set-display-brightness': {
+			const displayId = Number(input.displayId ?? intent.targetId), level = unit(input.level);
+			return Number.isSafeInteger(displayId) && displayId > 0 && level !== null ? { ...base, kind: 'system.display.brightness.set', input: { displayId, level } } : null;
+		}
+		case 'set-display-mode': {
+			const displayId = Number(input.displayId ?? intent.targetId), modeId = inputString(input.modeId);
+			return Number.isSafeInteger(displayId) && displayId > 0 && modeId ? { ...base, kind: 'system.display.mode.set', input: { displayId, modeId } } : null;
+		}
+		case 'set-display-origin': {
+			const displayId = Number(input.displayId ?? intent.targetId), x = Number(input.x), y = Number(input.y);
+			return Number.isSafeInteger(displayId) && displayId > 0 && Number.isSafeInteger(x) && Number.isSafeInteger(y) ? { ...base, kind: 'system.display.origin.set', input: { displayId, x, y } } : null;
+		}
+		case 'set-display-mirroring': {
+			const displayId = Number(input.displayId ?? intent.targetId), sourceDisplayId = input.sourceDisplayId === null ? null : Number(input.sourceDisplayId);
+			return Number.isSafeInteger(displayId) && displayId > 0 && (sourceDisplayId === null || (Number.isSafeInteger(sourceDisplayId) && sourceDisplayId > 0)) ? { ...base, kind: 'system.display.mirroring.set', input: { displayId, sourceDisplayId } } : null;
+		}
+		case 'set-default-printer': {
+			const id = inputString(input.id || intent.targetId); return id ? { ...base, kind: 'system.printer.default.set', input: { id } } : null;
+		}
+		case 'set-preferred-camera': {
+			const id = inputString(input.id || intent.targetId); return id ? { ...base, kind: 'system.camera.preferred.set', input: { id } } : null;
+		}
+		case 'set-bluetooth-device-connected': {
+			const id = inputString(input.id || intent.targetId); return id && typeof input.connected === 'boolean' ? { ...base, kind: 'system.bluetooth.device.connection.set', input: { id, connected: input.connected } } : null;
+		}
+		case 'set-vpn-connected': {
+			const id = inputString(input.id || intent.targetId); return id && typeof input.connected === 'boolean' ? { ...base, kind: 'system.vpn.connection.set', input: { id, connected: input.connected } } : null;
+		}
+		case 'set-prevent-idle-sleep':
+			return typeof input.enabled === 'boolean' ? { ...base, kind: 'system.power.idle-sleep-prevention.set', input: { enabled: input.enabled } } : null;
+		case 'set-power-idle-timer': {
+			const scope = input.scope;
+			const minutes = typeof input.minutes === 'number' && Number.isSafeInteger(input.minutes) && input.minutes >= 0 && input.minutes <= 180 ? input.minutes : null;
+			return (scope === 'display' || scope === 'system' || scope === 'disk') && minutes !== null
+				? { ...base, kind: 'system.power.idle-timer.set', input: { scope, minutes } }
+				: null;
+		}
+		case 'propose-airdrop-policy-profile':
+			return typeof input.enabled === 'boolean' ? { ...base, kind: 'system.policy.airdrop.profile.propose', input: { enabled: input.enabled } } : null;
+		case 'propose-camera-policy-profile':
+			return typeof input.enabled === 'boolean' ? { ...base, kind: 'system.policy.camera.profile.propose', input: { enabled: input.enabled } } : null;
+		case 'set-apple-music-playback': {
+			const operation = input.operation;
+			return operation === 'play' || operation === 'pause' || operation === 'next' || operation === 'previous'
+				? { ...base, kind: 'system.media.apple-music.playback.set', input: { operation } }
+				: null;
+		}
+		case 'set-apple-music-volume': {
+			const level = input.level;
+			return typeof level === 'number' && Number.isFinite(level) && level >= 0 && level <= 1
+				? { ...base, kind: 'system.media.apple-music.volume.set', input: { level } }
+				: null;
+		}
+		case 'set-spotify-playback': {
+			const operation = input.operation;
+			return operation === 'play' || operation === 'pause' || operation === 'next' || operation === 'previous'
+				? { ...base, kind: 'system.media.spotify.playback.set', input: { operation } }
+				: null;
+		}
+		case 'set-spotify-volume': {
+			const level = input.level;
+			return typeof level === 'number' && Number.isFinite(level) && level >= 0 && level <= 1
+				? { ...base, kind: 'system.media.spotify.volume.set', input: { level } }
+				: null;
+		}
+		case 'set-chrome-youtube-volume': {
+			const level = input.level;
+			return typeof level === 'number' && Number.isFinite(level) && level >= 0 && level <= 1
+				? { ...base, kind: 'system.media.chrome-youtube.volume.set', input: { level } }
+				: null;
+		}
+		case 'move-pointer': {
+			const displayId = Number(input.displayId ?? intent.targetId), x = Number(input.x), y = Number(input.y);
+			return Number.isSafeInteger(displayId) && displayId > 0 && Number.isSafeInteger(x) && x >= 0 && x <= 32_768 && Number.isSafeInteger(y) && y >= 0 && y <= 32_768
+				? { ...base, kind: 'input.pointer.move', input: { displayId, x, y } }
+				: null;
+		}
+		case 'click-pointer': {
+			const displayId = Number(input.displayId ?? intent.targetId), x = Number(input.x), y = Number(input.y), button = input.button;
+			return Number.isSafeInteger(displayId) && displayId > 0 && Number.isSafeInteger(x) && x >= 0 && x <= 32_768 && Number.isSafeInteger(y) && y >= 0 && y <= 32_768 && (button === 'left' || button === 'right' || button === 'middle')
+				? { ...base, kind: 'input.pointer.click', input: { displayId, x, y, button } }
+				: null;
+		}
+		case 'scroll-pointer': {
+			const deltaX = Number(input.deltaX), deltaY = Number(input.deltaY);
+			return Number.isSafeInteger(deltaX) && deltaX >= -5_000 && deltaX <= 5_000 && Number.isSafeInteger(deltaY) && deltaY >= -5_000 && deltaY <= 5_000 && (deltaX !== 0 || deltaY !== 0)
+				? { ...base, kind: 'input.pointer.scroll', input: { deltaX, deltaY } }
+				: null;
+		}
+		case 'type-text': {
+			const text = typeof input.text === 'string' ? input.text : '';
+			return text.length > 0 && new TextEncoder().encode(text).length <= 4_096 && !containsUnsafeInputControl(text)
+				? { ...base, kind: 'input.keyboard.type', input: { text } }
+				: null;
+		}
+		case 'send-shortcut': {
+			const key = typeof input.key === 'string' ? input.key : '', modifiers = Array.isArray(input.modifiers) ? input.modifiers : [];
+			return /^(?:[a-z0-9]|return|tab|space|delete|escape|left|right|up|down|home|end|pageup|pagedown|f(?:[1-9]|1[0-2]))$/u.test(key) && modifiers.length <= 5 && modifiers.every((modifier) => modifier === 'command' || modifier === 'control' || modifier === 'option' || modifier === 'shift' || modifier === 'function') && new Set(modifiers).size === modifiers.length
+				? { ...base, kind: 'input.keyboard.shortcut', input: { key, modifiers } }
+				: null;
+		}
 		case 'lock':
 			return { ...base, kind: 'system.lock', input: {} };
 		case 'connect-wifi': {
@@ -598,6 +772,9 @@ const commandInputForIntent = (intent: DeviceActionIntent): CreateDeviceCommandI
 			return { ...base, kind: 'app.hide-others', input: {} };
 		case 'sleep':
 			return { ...base, kind: 'system.sleep', input: {} };
+		case 'restart': return { ...base, kind: 'system.restart', input: {} };
+		case 'shutdown': return { ...base, kind: 'system.shutdown', input: {} };
+		case 'logout': return { ...base, kind: 'system.logout', input: {} };
 		default:
 			return null;
 	}
@@ -790,8 +967,8 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 	useEffect(() => {
 		if (!active) return;
 		void refreshList();
-		const timer = window.setInterval(() => void refreshList(), LIST_REFRESH_MS);
-		return () => window.clearInterval(timer);
+		const timer = activityInterval('timer:components/Devices/useDeviceStore:1', 'Device list', () => refreshList(), LIST_REFRESH_MS);
+		return () => clearActivityInterval(timer);
 	}, [active, refreshList]);
 
 	useEffect(() => {
@@ -801,6 +978,7 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 
 	useEffect(() => {
 		if (!active || !ownerId || !selectedDeviceId) return;
+		return activityManager.register({id:'device.events',title:'Device live events',kind:'event',detail:'Long-polls only the selected device. Disabling aborts the active request and its retry loop.'}, () => {
 		const controller = new AbortController();
 		let cancelled = false;
 		let cursor = readEventCursor(ownerId, selectedDeviceId);
@@ -864,6 +1042,7 @@ export const useDeviceStore = ({ userId, selectedDeviceId = null, enabled = true
 			cancelled = true;
 			controller.abort();
 		};
+		});
 	}, [active, api, notifyError, ownerId, refreshDevice, selectedDeviceId]);
 
 	const visibleStore = store.ownerId === ownerId ? store : seedStore(ownerId, selectedDeviceId);

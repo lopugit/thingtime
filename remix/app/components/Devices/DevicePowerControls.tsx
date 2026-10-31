@@ -24,7 +24,7 @@ export const DevicePowerControls = memo(({ deviceId, controlFor, onAction }: Dev
 				Power actions
 			</Text>
 			<Text color="var(--tt-muted, #71717a)" fontSize="10px" lineHeight="1.35" marginTop={0.5}>
-				Sleep keeps this Mac available to wake locally. Restart and shutdown are intentionally unavailable because the signed node never shells out or uses AppleScript.
+				Restart, shutdown, and log out are fixed macOS System Events—not shell commands—and always require a fresh approval. Their final outcome is reconciled after the node reconnects.
 			</Text>
 		</Box>
 		<Menu placement="bottom-end">
@@ -34,6 +34,9 @@ export const DevicePowerControls = memo(({ deviceId, controlFor, onAction }: Dev
 			<Portal>
 				<MenuList fontSize="12px" zIndex={DRAWER_POPUP_Z}>
 					<DevicePolicyMenuItem action="sleep" controlFor={controlFor} deviceId={deviceId} label="Sleep" onAction={onAction} />
+					<DevicePolicyMenuItem action="logout" controlFor={controlFor} deviceId={deviceId} label="Log out…" onAction={onAction} />
+					<DevicePolicyMenuItem action="restart" controlFor={controlFor} deviceId={deviceId} label="Restart…" onAction={onAction} />
+					<DevicePolicyMenuItem action="shutdown" color="red.500" controlFor={controlFor} deviceId={deviceId} label="Shut down…" onAction={onAction} />
 				</MenuList>
 			</Portal>
 		</Menu>
