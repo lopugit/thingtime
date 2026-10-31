@@ -4,12 +4,17 @@ import { extname, isAbsolute, join, normalize, relative } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
+
+import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/capabilityContract';
+import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
+import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore';
+import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
+import { mediaWorkerCsp, draftPreviewCsp, platformRuntimeCsp, designBundlesCsp, librarySandboxCsp, librarySdkCsp, devCsp } from './scripts/csp.mjs';
 
 const designDocsBase = '/docs/design-bundles';
 const designDocsDir = fileURLToPath(new URL('../docs/design', import.meta.url));
-const thingtimeProductionOrigin = 'https://thingtime.com';
-const mongoPasswordPlaceholder = '<db_password>';
+const embedBundlePath = fileURLToPath(new URL('./dist/embed/thingtime.min.js', import.meta.url));
 
 const require = createRequire(import.meta.url);
 const { resolveDevContext } = require('./scripts/worktree-ports.cjs');
@@ -31,41 +36,48 @@ const isPathInside = (parent: string, child: string) => {
   return relativePath === '' || (!relativePath.startsWith('..') && !isAbsolute(relativePath));
 };
 
-const hasUsableLocalApiEnv = () => {
-  const connectionString = process.env.MONGODB_CONNECTION_STRING?.trim();
-
-  if (!connectionString) return false;
-  if (connectionString.includes(mongoPasswordPlaceholder) && !process.env.MONGO_PASS?.trim()) {
-    return false;
-  }
-
-  if (
-    process.env.NODE_ENV === 'production' &&
-    !process.env.JWT_PRIVATE_KEY?.trim() &&
-    !process.env.JWT_SECRET?.trim()
-  ) {
-    return false;
-  }
-
-  return true;
-};
-
-const rewriteProxyCookieForLocalDev = (cookie: string) => {
-  return cookie
-    .split(';')
-    .map((part) => part.trim())
-    .filter((part, index) => {
-      if (index === 0) return true;
-
-      const lower = part.toLowerCase();
-      return !lower.startsWith('domain=') && lower !== 'secure';
-    })
-    .join('; ');
-};
-
+// Development requests always stay on this checkout's Nitro server. Missing
+// database/auth configuration is a local 503, never a remote API selection.
 const localApiTarget = `http://127.0.0.1:${devPorts.api}`;
-const shouldUseProductionApiProxy = !hasUsableLocalApiEnv();
-const apiProxyTarget = shouldUseProductionApiProxy ? thingtimeProductionOrigin : localApiTarget;
+const previewFreshnessPath = '/tt-preview-freshness.js';
+const previewFreshnessScript = '(' + installPreviewBuildFreshness.toString() + ')();\n';
+
+const previewFreshnessHtmlPlugin = (): Plugin => ({
+  name: 'thingtime-preview-freshness-bootstrap',
+  enforce: 'pre' as const,
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (req.url?.split('?')[0] !== previewFreshnessPath) {
+        next();
+        return;
+      }
+
+      res.statusCode = 200;
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+      res.end(previewFreshnessScript);
+    });
+  },
+  generateBundle() {
+    this.emitFile({
+      type: 'asset',
+      fileName: previewFreshnessPath.slice(1),
+      source: previewFreshnessScript
+    });
+  },
+  transformIndexHtml() {
+    return [
+      {
+        tag: 'script',
+        attrs: {
+          src: previewFreshnessPath,
+          'data-thingtime-preview-freshness': ''
+        },
+        injectTo: 'head-prepend' as const
+      }
+    ];
+  }
+});
 
 const designDocsStaticPlugin = () => ({
   name: 'thingtime-design-docs-static',
@@ -124,9 +136,90 @@ const designDocsStaticPlugin = () => ({
 
       res.statusCode = 200;
       res.setHeader('Cache-Control', 'no-cache');
+      // Repo-controlled generated prototypes compile their Design Components
+      // at runtime. Keep that compatibility exception on this path only; the
+      // application shell continues to use devCsp without unsafe-eval.
+      res.setHeader('Content-Security-Policy', designBundlesCsp);
+      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Content-Length', String(stats.size));
       res.setHeader('Content-Type', mimeTypes[extname(filePath)] || 'application/octet-stream');
       createReadStream(filePath).pipe(res);
+    });
+  }
+});
+
+const embedBundleDevPlugin = () => ({
+  name: 'thingtime-embed-bundle-dev',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (req.url?.split('?')[0] !== '/embed/thingtime.min.js' || !existsSync(embedBundlePath)) {
+        next();
+        return;
+      }
+
+      const stats = statSync(embedBundlePath);
+      res.statusCode = 200;
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Length', String(stats.size));
+      res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+      createReadStream(embedBundlePath).pipe(res);
+    });
+  }
+});
+
+// Proxy to the local Nitro while preserving the browser-facing host/proto (an
+// upstream proxy's x-forwarded-* wins), so origin-derived output stays correct.
+const forwardHostProxy = (target: string) => ({
+  target,
+  changeOrigin: true,
+  configure(proxy: any) {
+    proxy.on('proxyReq', (proxyReq: any, req: any) => {
+      const host = req.headers.host;
+      if (!host || proxyReq.getHeader('x-forwarded-host')) return;
+      proxyReq.setHeader('x-forwarded-host', host);
+      const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0]?.trim();
+      proxyReq.setHeader('x-forwarded-proto', proto || 'http');
+    });
+  }
+});
+
+const librarySandboxPlugin = (): Plugin => ({
+  name: 'library-isolated-preview',
+  configureServer(server) {
+    server.middlewares.use((req,res,next) => {
+      const path = req.url?.split('?')[0];
+      if (path === '/draft-preview/index.html' || path === '/draft-preview/' ) {
+        res.setHeader('Content-Security-Policy', draftPreviewCsp);
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Content-Type', 'text/html');
+        createReadStream(fileURLToPath(new URL('./public/draft-preview/index.html', import.meta.url))).pipe(res); return;
+      }
+      if (path === '/draft-preview/runner.js') {
+        const file = fileURLToPath(new URL('./dist/draft-preview/runner.js', import.meta.url));
+        if (!existsSync(file)) { res.statusCode = 503; res.end('Run npm run build:draft'); return; }
+        res.setHeader('Content-Type', 'text/javascript'); res.setHeader('Cache-Control', 'no-store');
+        createReadStream(file).pipe(res); return;
+      }
+      if (path === '/app/webPlatform/mediaWorker.ts' || /^\/assets\/mediaWorker-[A-Za-z0-9_-]+\.js$/.test(path)) {
+        res.setHeader('Content-Security-Policy', mediaWorkerCsp);
+        res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+      }
+      if (path === '/platform/runtime.html' || path === '/platform/runtime.js') {
+        const file = fileURLToPath(new URL(`./dist${path}`, import.meta.url));
+        if (!existsSync(file)) { res.statusCode=503;res.end('Run npm run build:platform');return; }
+        res.setHeader('Content-Type',path.endsWith('.html')?'text/html':'text/javascript');
+        res.setHeader('Content-Security-Policy',platformRuntimeCsp);
+        res.setHeader('Cache-Control','no-store');
+        createReadStream(file).pipe(res);return;
+      }
+      if (path !== '/library/sandbox.html' && path !== '/library/sdk.html' && path !== '/library/runner.js') return next();
+      const file = fileURLToPath(new URL(path.endsWith('.html') ? `./public${path}` : './dist/library/runner.js', import.meta.url));
+      if (!existsSync(file)) { res.statusCode=503;res.end('Run npm run build:library');return; }
+      res.setHeader('Content-Type',path.endsWith('.html')?'text/html':'text/javascript');
+      res.setHeader('Content-Security-Policy',path === '/library/sdk.html' ? librarySdkCsp : librarySandboxCsp);
+      res.setHeader('Cache-Control','no-store');
+      createReadStream(file).pipe(res);
     });
   }
 });
@@ -146,49 +239,53 @@ export default defineConfig({
     host: '127.0.0.1',
     port: devPorts.web,
     strictPort: true,
+    // Same CSP as production (scripts/csp.mjs) with dev-only allowances
+    // (react-refresh inline preamble, HMR websocket) — and still no
+    // 'unsafe-eval', so eval regressions surface in dev too.
+    headers: {
+      'Content-Security-Policy': devCsp
+    },
     allowedHosts: ['lopus-macbook-pro-2.tail9606f9.ts.net'],
     hmr: {
       port: devPorts.hmr
     },
     proxy: {
-      '/api': {
-        target: apiProxyTarget,
+      '/api/v1/passwords': forwardHostProxy(localApiTarget),
+      '/api/v1/vault/reveal': {
+        // Never send fresh verification material to the production fallback.
+        target: localApiTarget,
         changeOrigin: true,
         configure(proxy) {
-          if (!shouldUseProductionApiProxy) {
-            // changeOrigin rewrites Host to the nitro API port, hiding the
-            // origin the browser is actually on. Forward the real host the way
-            // Vercel's edge does (x-forwarded-*): statusTarget's
-            // getRequestOrigin() honours these, which keeps "Current Tab"
-            // health checks classified LOCAL — answered in the request's own
-            // cookie/session context (the footer's "MongoDB (custom)"
-            // indicator depends on this) instead of re-fetched cookielessly.
-            // An upstream proxy's x-forwarded-* (e.g. Tailscale funnel) wins.
-            proxy.on('proxyReq', (proxyReq, req) => {
-              const host = req.headers.host;
-              if (!host || proxyReq.getHeader('x-forwarded-host')) return;
-              proxyReq.setHeader('x-forwarded-host', host);
-              const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0]?.trim();
-              proxyReq.setHeader('x-forwarded-proto', proto || 'http');
-            });
-            return;
-          }
-
-          proxy.on('proxyReq', (proxyReq) => {
-            proxyReq.setHeader('x-thingtime-api-fallback', 'vite-dev');
-          });
-
-          proxy.on('proxyRes', (proxyRes) => {
-            const setCookie = proxyRes.headers['set-cookie'];
-            if (!setCookie) return;
-
-            proxyRes.headers['set-cookie'] = Array.isArray(setCookie)
-              ? setCookie.map(rewriteProxyCookieForLocalDev)
-              : [rewriteProxyCookieForLocalDev(setCookie)];
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (!proxyReq.getHeader('x-forwarded-host') && req.headers.host) proxyReq.setHeader('x-forwarded-host', req.headers.host);
+            if (!proxyReq.getHeader('x-forwarded-proto')) proxyReq.setHeader('x-forwarded-proto', 'http');
           });
         }
-      }
+      },
+      [APPLE_APP_ASSOCIATION_PATH]: { target: localApiTarget, changeOrigin: true },
+      // Crawler discovery files are Nitro routes (server/handlers/{robots,sitemap}.ts);
+      // prefix matching also covers their -docs twins. Forward the browser host so
+      // the robots Sitemap: line and every sitemap <loc> name this dev origin.
+      [ROBOTS_PATH]: forwardHostProxy(localApiTarget),
+      [SITEMAP_PATH]: forwardHostProxy(localApiTarget),
+      // Public cards and their generated -docs twin are Nitro responses too;
+      // letting Vite handle these paths returns the SPA shell (or POST 404).
+      '/social-card': forwardHostProxy(localApiTarget),
+      [THINGTIME_CAPABILITY_MANIFEST_PATH]: {
+        target: localApiTarget,
+        changeOrigin: true,
+        configure(proxy) {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            const host = req.headers.host;
+            if (!host || proxyReq.getHeader('x-forwarded-host')) return;
+            proxyReq.setHeader('x-forwarded-host', host);
+            const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0]?.trim();
+            proxyReq.setHeader('x-forwarded-proto', proto || 'http');
+          });
+        }
+      },
+      '/api': forwardHostProxy(localApiTarget)
     }
   },
-  plugins: [react(), designDocsStaticPlugin()]
+  plugins: [librarySandboxPlugin(),previewFreshnessHtmlPlugin(), react(), designDocsStaticPlugin(), embedBundleDevPlugin()]
 });

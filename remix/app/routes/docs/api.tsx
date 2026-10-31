@@ -32,7 +32,10 @@ import {
   CopyCodeButton,
   copyToClipboard
 } from './docsCode';
+import { ApiTryIt } from './ApiTryIt';
 import { Link as RouterLink, useLocation, useParams } from 'react-router';
+
+import { ApiPlayground } from './ApiPlayground';
 
 const METHOD_COLORS: Record<ApiHttpMethod, string> = {
   GET: 'blue',
@@ -386,12 +389,15 @@ function EndpointDocs({
                       No request body.
                     </Text>
                   ) : null}
+                  <ApiTryIt doc={doc} example={example} />
                 </Box>
               ))}
             </Stack>
           </Box>
         </Stack>
       </SimpleGrid>
+
+      <ApiPlayground doc={doc} />
 
       <Box mt={6}>
         <Heading as="h4" fontSize="md" mb={3}>
