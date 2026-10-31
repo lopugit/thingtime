@@ -1,5 +1,6 @@
+import { revokedSessionPipeline } from '../auth/sessions';
 import { getSessionsCollection } from '../mongodb/collections';
-import { findAppByClientId } from './apps';
+import { findAppsByClientIds } from './apps';
 import { sessionScopes } from './scopes';
 import type { AppScopeId } from './scopes';
 
@@ -27,12 +28,24 @@ const liveAppSessionsFilter = (userId: string) => ({
   $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }]
 });
 
+// Hard read bound for the aggregation below. issueAppToken caps live sessions
+// at MAX_APP_SESSIONS_PER_APP_USER per app, so reaching this would take ~100
+// distinct connected apps — the bound exists so the read can never be huge
+// even if that invariant slips.
+const MAX_GRANT_SESSIONS_READ = 1000;
+
 // One entry per connected app, aggregated over the user's live app sessions.
 export const listGrants = async (userId: string): Promise<AppGrant[]> => {
-  const sessions = await (await getSessionsCollection())
-    .find(liveAppSessionsFilter(userId))
-    .sort({ createdAt: 1 })
-    .toArray();
+  // Newest first + limit keeps the read bounded while preferring the sessions
+  // that determine expiresAt/lastGrantedAt; reversed so the grouping below
+  // still sees ascending createdAt (firstGrantedAt = group[0]).
+  const sessions = (
+    await (await getSessionsCollection())
+      .find(liveAppSessionsFilter(userId))
+      .sort({ createdAt: -1 })
+      .limit(MAX_GRANT_SESSIONS_READ)
+      .toArray()
+  ).reverse();
 
   const byClient = new Map<string, any[]>();
   for (const session of sessions) {
@@ -43,9 +56,16 @@ export const listGrants = async (userId: string): Promise<AppGrant[]> => {
     byClient.set(clientId, group);
   }
 
+  const appDocs = await findAppsByClientIds([...byClient.keys()]);
+  const appsByClientId = new Map<string, any>();
+  for (const doc of appDocs as any[]) {
+    const clientId = doc?.crystal?.clientId;
+    if (typeof clientId === 'string' && clientId) appsByClientId.set(clientId, doc);
+  }
+
   const grants: AppGrant[] = [];
   for (const [clientId, group] of byClient) {
-    const app = await findAppByClientId(clientId);
+    const app = appsByClientId.get(clientId);
     const newest = group[group.length - 1];
     // The union of scopes across live sessions — what the app can do overall.
     const scopes: AppScopeId[] = [];
@@ -77,9 +97,20 @@ export const revokeGrant = async (
     return { ok: false, status: 400, error: 'clientId is required' };
   }
 
+  // Same reap rule as every revoke path that can actually see a never-expiring
+  // row (see auth/sessions.ts): the sessions TTL index skips expiresAt: null, so
+  // a plain `$set: { revokedAt }` strands those rows forever. liveAppSessionsFilter
+  // above deliberately admits expiresAt: null, so this sweep can match one;
+  // issueAppToken always stamps a real expiry today, which makes this a guard
+  // rather than a live leak — but it is the guard that keeps it that way if app
+  // sessions ever go never-expiring, the way the bridge and service purposes
+  // already have. The sibling purpose: 'app' sweeps (appTokens.ts, apps.ts,
+  // appLifecycleCore.ts) still use a plain $set; they are safe for the same
+  // issueAppToken reason, and making the rule uniform across them is a
+  // deliberate follow-up rather than something this path can claim.
   const result = await (await getSessionsCollection()).updateMany(
     { ...liveAppSessionsFilter(userId), 'meta.clientId': clientId.trim() },
-    { $set: { revokedAt: new Date() } }
+    revokedSessionPipeline(new Date())
   );
 
   return { ok: true, revoked: result.modifiedCount };

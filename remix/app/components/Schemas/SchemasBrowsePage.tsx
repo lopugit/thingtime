@@ -14,54 +14,54 @@ import {
   Text
 } from '@chakra-ui/react';
 import { BookOpen, Columns3, GitFork, LayoutGrid, Library, Plus, Rows3, Search, Sparkles } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 
 import { Rainbow } from '~/components/Rainbow/Rainbow';
-import { ChakraThingRenderer, HtmlThingRenderer, RenderThing, isChakraThingNode } from '~/components/Kinds';
-import type { ChakraThingNode, HtmlThingNode } from '~/components/Kinds';
+import { RenderThing } from '~/components/Kinds';
+import { SchemaTemplateRender } from '~/components/Things/ThingsViews';
 import { EmojiPicker } from '~/components/Emoji/EmojiPicker';
+import { useOutsideTapClose } from '~/hooks/useOutsideTapClose';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
 import { timeAgo } from '~/components/Feed/feedTypes';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { crystalSchemas, getThingtimeSchema, thingtimeSchemas } from '~/schemas/registry';
+import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { getThingtimeSchema, thingtimeSchemas } from '~/schemas/registry';
 import type { SchemaThingField } from '~/schemas/registry';
 import { describeSchemaField, flattenSchemaFieldsForDisplay, generateSampleFromFields } from '~/schemas/tools';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
 import { SchemaBuilder, type BuilderPrefill } from './SchemaBuilder';
 import { SchemaThingForm } from './SchemaThingForm';
 import {
+  SCHEMAS_LEGACY_CACHE_KEY,
   entryToCardSource,
+  isSeededBuiltinMirror,
+  readCachedSchemas,
   registryToCardSource,
+  schemaDetailPath,
+  schemaCopyPrefill,
+  schemaSearchPath,
+  schemasCacheKeyFor,
   searchableSchemaSource,
   type BrowseSchemaEntry,
   type BrowseSchemasResponse,
-  type SchemaCardSource
+  type CachedSchemas,
+  type SchemaCardSource,
+  type SchemasScopeMode as ScopeMode,
+  type SchemasSortMode as SortMode,
+  type SchemasViewMode as ViewMode
 } from './schemaBrowseTypes';
 
-const CACHE_KEY = 'tt-schemas';
+// The per-user cache line (key rule + snapshot shape) lives in
+// schemaBrowseTypes so the schema's own page can paint from the same
+// snapshot; the legacy global key is purged on mount below.
 const PAGE_SIZE = 20;
-
-type ViewMode = 'feed' | 'grid' | 'columns';
-type SortMode = 'newest' | 'popular' | 'oldest';
-type ScopeMode = 'all' | 'mine' | 'library';
-
-type CachedSchemas = {
-  q: string;
-  sort: SortMode;
-  view: ViewMode;
-  scope: ScopeMode;
-  entries: BrowseSchemaEntry[];
-  nextCursor: string | null;
-  total: number | null;
-  totalCapped: boolean;
-};
 
 // kind the renderer registry might know this schema as (e.g. "Post" → post,
 // "News analysis" → news-analysis)
-const kindOf = (name: string) => name.toLowerCase().trim().replace(/\s+/g, '-');
+export const kindOf = (name: string) => name.toLowerCase().trim().replace(/\s+/g, '-');
 
 const pillProps = (active: boolean) =>
   ({
@@ -76,7 +76,10 @@ const pillProps = (active: boolean) =>
     _hover: { background: active ? 'var(--tt-ink, #16161a)' : 'var(--tt-surface-hover, #ececee)' }
   }) as const;
 
-const monoLabel = {
+// Card bits shared with the schema's own page (SchemaDetailPage) — exported
+// from here, the page that defines the card, so both surfaces draw one chip,
+// one label, one sample render.
+export const monoLabel = {
   color: 'var(--tt-muted, #9a9aa6)',
   fontFamily: 'var(--tt-font-mono, monospace)',
   fontSize: '11px',
@@ -86,12 +89,12 @@ const monoLabel = {
 
 // the root Thing schema's system-stamped fields (shareId, ownerId, createdAt…)
 // — every card shows these under "thingtime adds", sourced from one place
-const systemThingFields = () =>
+export const systemThingFields = () =>
   ((getThingtimeSchema('thing')?.fields || []) as unknown as SchemaThingField[]).filter(
     (field) => (field as { system?: boolean }).system
   );
 
-const ShapeChip = ({ children, dim }: { children: React.ReactNode; dim?: boolean }) => (
+export const ShapeChip = ({ children, dim }: { children: React.ReactNode; dim?: boolean }) => (
   <Flex
     align="center"
     background="var(--tt-surface-alt, #f5f5f7)"
@@ -143,11 +146,9 @@ const SamplePreview = ({ source }: { source: SchemaCardSource }) => {
   );
 };
 
-const SampleRender = ({ source }: { source: SchemaCardSource }) => {
-  const thing = React.useMemo(
-    () => ({ kind: kindOf(source.name), ...generateSampleFromFields(source.fields) }),
-    [source.name, source.fields]
-  );
+export const SampleRender = ({ source }: { source: SchemaCardSource }) => {
+  const sample = React.useMemo(() => generateSampleFromFields(source.fields), [source.fields]);
+  const thing = React.useMemo(() => ({ kind: kindOf(source.name), ...sample }), [source.name, sample]);
   return (
     <Box
       background="var(--tt-surface, #fafafb)"
@@ -157,13 +158,11 @@ const SampleRender = ({ source }: { source: SchemaCardSource }) => {
       padding={3}
     >
       {source.render ? (
-        // the schema ships its own serialised component — drawn through the
-        // sanitising allowlist gates, never the legacy unsanitised chakra path
-        isChakraThingNode(source.render) ? (
-          <ChakraThingRenderer node={source.render as ChakraThingNode} />
-        ) : (
-          <HtmlThingRenderer node={source.render as HtmlThingNode} />
-        )
+        // the schema ships its own render template — drawn over a generated
+        // sample through the SAME {field}-interpolation + sanitising-renderer
+        // path /things draws a real data thing with (never the legacy
+        // unsanitised chakra path, never a click wrapper)
+        <SchemaTemplateRender crystal={sample} template={source.render} />
       ) : (
         <RenderThing context={{ size: 'card' }} fallback={<SamplePreview source={source} />} thing={thing} />
       )}
@@ -185,14 +184,32 @@ type SchemaCardProps = {
 
 const COLLAPSED_FIELD_CHIPS = 8;
 
+// A click that lands on a real control inside the card's linked region (the
+// title <Link>, the "+N more" button) is that control's — the region only
+// opens the page for clicks on the surrounding text and chips.
+const landsOnControl = (event: React.MouseEvent): boolean => !!(event.target as HTMLElement | null)?.closest?.('a, button');
+
 const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing, onSearchThings }: SchemaCardProps) => {
+  const navigate = useNavigate();
   const entry = source.entry;
   const registry = source.registry;
   const isRoot = registry?.kind === 'root';
+  // the card is a LINK to the schema's own page, never an armed control —
+  // its header/description/field-tree region opens /schemas/<key>; the
+  // buttons below stop propagation so they stay themselves
+  const detailPath = schemaDetailPath(source);
+  const openDetail = (event: React.MouseEvent) => {
+    if (landsOnControl(event)) return;
+    navigate(detailPath);
+  };
+  const stop = (event: React.MouseEvent) => event.stopPropagation();
   const flat = React.useMemo(() => flattenSchemaFieldsForDisplay(source.fields), [source.fields]);
   const [showAllFields, setShowAllFields] = React.useState(false);
   const { recent } = useRecentReactions();
   const [pickerOpen, setPickerOpen] = React.useState(false);
+  // outside-tap close (NOT closeOnBlur): dismissing the mobile keyboard blurs
+  // the emoji search field and must not close the picker
+  const pickerContentRef = useOutsideTapClose<HTMLElement>(pickerOpen, () => setPickerOpen(false));
 
   // the thingtime ids a thing of this kind actually carries — community
   // schemas describe data crystals, share rides ["post","share"], etc.
@@ -217,8 +234,24 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
       padding={4}
       sx={{ breakInside: 'avoid' }}
     >
+      <Flex
+        cursor="pointer"
+        data-testid="schema-card-link-region"
+        direction="column"
+        gap={3}
+        onClick={openDetail}
+        sx={{ '&:hover [data-schema-title]': { textDecoration: 'underline' } }}
+      >
       <Flex align="center" gap={2} wrap="wrap">
-        <Text color="var(--tt-ink, #16161a)" fontSize="md" fontWeight={700}>
+        <Text
+          as={Link}
+          color="var(--tt-ink, #16161a)"
+          data-schema-title
+          fontSize="md"
+          fontWeight={700}
+          to={detailPath}
+          _hover={{ textDecoration: 'underline' }}
+        >
           {source.name}
         </Text>
         <Badge
@@ -245,7 +278,8 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
         <Box flex={1} />
         {entry && (
           <Text color="var(--tt-faint, #b6b6c0)" fontSize="11px">
-            {entry.author?.displayName || entry.author?.username || 'anon'} · {timeAgo(entry.createdAt)}
+            {entry.author ? getUserDisplayName(entry.author) : 'anon'}
+            {entry.author?.temporary ? ` · ${getUserIdentityDetail(entry.author)}` : ''} · {timeAgo(entry.createdAt)}
           </Text>
         )}
       </Flex>
@@ -311,7 +345,10 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
               fontSize="11px"
               height="auto"
               minWidth={0}
-              onClick={() => setShowAllFields((open) => !open)}
+              onClick={(event) => {
+                stop(event);
+                setShowAllFields((open) => !open);
+              }}
               padding={0}
               size="xs"
               variant="link"
@@ -321,6 +358,7 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
           )}
         </Flex>
       )}
+      </Flex>
 
       {!isRoot && (
         <Flex align="center" gap={1.5} wrap="wrap">
@@ -371,7 +409,10 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
                 height="26px"
                 key={token}
                 minWidth={0}
-                onClick={() => onReact(source, token)}
+                onClick={(event) => {
+                  stop(event);
+                  onReact(source, token);
+                }}
                 paddingX={2}
                 size="xs"
                 variant="unstyled"
@@ -385,14 +426,17 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
               </Button>
             );
           })}
-          <Popover isLazy isOpen={pickerOpen} onClose={() => setPickerOpen(false)} placement="top-start">
+          <Popover isLazy isOpen={pickerOpen} onClose={() => setPickerOpen(false)} placement="top-start" closeOnBlur={false}>
             <PopoverTrigger>
               <Button
                 border="1px dashed var(--tt-border, #ececef)"
                 borderRadius="full"
                 color="var(--tt-muted, #9a9aa6)"
                 height="26px"
-                onClick={() => setPickerOpen((open) => !open)}
+                onClick={(event) => {
+                  stop(event);
+                  setPickerOpen((open) => !open);
+                }}
                 paddingX={2}
                 size="xs"
                 variant="unstyled"
@@ -402,7 +446,7 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
                 </Flex>
               </Button>
             </PopoverTrigger>
-            <PopoverContent border="1px solid var(--tt-border, #ececef)" width="320px">
+            <PopoverContent ref={pickerContentRef as any} border="1px solid var(--tt-border, #ececef)" width="320px">
               <PopoverBody padding={2}>
                 <EmojiPicker
                   activeTokens={entry.viewerReactions}
@@ -423,7 +467,10 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
         {entry && (
           <Button
             leftIcon={<Library size={14} />}
-            onClick={() => onSave(source)}
+            onClick={(event) => {
+              stop(event);
+              onSave(source);
+            }}
             size="xs"
             variant={entry.saved ? 'solid' : 'outline'}
           >
@@ -431,17 +478,41 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
           </Button>
         )}
         {!isRoot && (
-          <Button leftIcon={<Sparkles size={14} />} onClick={() => onCreateThing(source)} size="xs" variant="outline">
+          <Button
+            leftIcon={<Sparkles size={14} />}
+            onClick={(event) => {
+              stop(event);
+              onCreateThing(source);
+            }}
+            size="xs"
+            variant="outline"
+          >
             Create a thing
           </Button>
         )}
         {searchableSchemaSource(source) && (
-          <Button leftIcon={<Search size={14} />} onClick={() => onSearchThings(source)} size="xs" variant="outline">
+          <Button
+            leftIcon={<Search size={14} />}
+            onClick={(event) => {
+              stop(event);
+              onSearchThings(source);
+            }}
+            size="xs"
+            variant="outline"
+          >
             Search things
           </Button>
         )}
         {!isRoot && (
-          <Button leftIcon={<GitFork size={14} />} onClick={() => onFork(source)} size="xs" variant="outline">
+          <Button
+            leftIcon={<GitFork size={14} />}
+            onClick={(event) => {
+              stop(event);
+              onFork(source);
+            }}
+            size="xs"
+            variant="outline"
+          >
             Fork
           </Button>
         )}
@@ -450,6 +521,7 @@ const SchemaCard = React.memo(({ source, onReact, onSave, onFork, onCreateThing,
             as="a"
             href={`/docs/schemas#schema-${source.id}`}
             leftIcon={<BookOpen size={14} />}
+            onClick={stop}
             size="xs"
             variant="ghost"
           >
@@ -465,12 +537,20 @@ SchemaCard.displayName = 'SchemaCard';
 // ---------------------------------------------------------------------------
 
 export const SchemasBrowsePage = () => {
-  const cached = React.useMemo(() => readLocalCache<CachedSchemas>(CACHE_KEY), []);
   const navigate = useNavigate();
   const location = useLocation();
   const api = useApi();
   const lopu = useLopu();
   const user = useCurrentUser();
+
+  const cacheKey = schemasCacheKeyFor(user?.id);
+  // Purge any pre-scoping global 'tt-schemas' blob (it may hold another
+  // account's private/viewer-scoped schemas) once, so it can never paint for
+  // the wrong principal.
+  React.useEffect(() => {
+    clearLocalCache(SCHEMAS_LEGACY_CACHE_KEY);
+  }, []);
+  const cached = React.useMemo(() => readCachedSchemas(user?.id), [user?.id]);
 
   const [q, setQ] = React.useState(cached?.q || '');
   const [sort, setSort] = React.useState<SortMode>(cached?.sort || 'newest');
@@ -492,6 +572,9 @@ export const SchemasBrowsePage = () => {
   const requestSeqRef = React.useRef(0);
   const stateRef = React.useRef({ q, sort, scope, loading, nextCursor });
   stateRef.current = { q, sort, scope, loading, nextCursor };
+  // keep the current per-user key reachable inside the stable runBrowse callback
+  const cacheKeyRef = React.useRef(cacheKey);
+  cacheKeyRef.current = cacheKey;
 
   // Legacy deep links: /schemas#schema-<id> anchors moved to /docs/schemas.
   React.useEffect(() => {
@@ -540,7 +623,8 @@ export const SchemasBrowsePage = () => {
             total: resp.total,
             totalCapped: resp.totalCapped
           };
-          writeLocalCache(CACHE_KEY, snapshot);
+          // Only persist when signed in, and always under the per-user key.
+          if (cacheKeyRef.current) writeLocalCache(cacheKeyRef.current, snapshot);
         }
       } catch (err: any) {
         if (seq !== requestSeqRef.current) return;
@@ -570,25 +654,21 @@ export const SchemasBrowsePage = () => {
     if (scope !== 'all') return [];
     const needle = q.trim().toLowerCase();
     return thingtimeSchemas
-      .filter((schema) => schema.kind === 'root' || schema.kind === 'crystal')
       .map(registryToCardSource)
       .filter((source) => !needle || source.name.toLowerCase().includes(needle) || source.description.toLowerCase().includes(needle));
   }, [scope, q]);
 
   // the seed-builtin-schemas migration mirrors builtin crystal schemas into
   // things (shareId schema-<id>, system-owned → author null); the registry
-  // column already shows those, so the mirrors are dropped from community
-  const seededBuiltinIds = React.useMemo(
-    () => new Set(crystalSchemas().map((schema) => `schema-${schema.id}`)),
-    []
-  );
+  // column already shows those, so the mirrors are dropped from community via
+  // the rule shared with /search (isSeededBuiltinMirror in schemaBrowseTypes)
   const communitySources = React.useMemo(
     () =>
       entries
-        .filter((entry) => !(seededBuiltinIds.has(entry.id) && !entry.author))
+        .filter((entry) => !isSeededBuiltinMirror(entry.id, entry.author))
         .map(entryToCardSource)
         .filter(Boolean) as SchemaCardSource[],
-    [entries, seededBuiltinIds]
+    [entries]
   );
   const sources = React.useMemo(() => [...builtinSources, ...communitySources], [builtinSources, communitySources]);
 
@@ -672,12 +752,7 @@ export const SchemasBrowsePage = () => {
         lopuRef.current({ title: 'Sign in to fork schemas 🍴', status: 'info', duration: 6000 });
         return;
       }
-      setBuilderPrefill({
-        name: `${source.name} fork`,
-        description: source.description,
-        fields: source.fields,
-        forkOf: source.origin === 'community' ? source.id : undefined
-      });
+      setBuilderPrefill(schemaCopyPrefill(source));
       setBuilderOpen(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     },
@@ -697,8 +772,7 @@ export const SchemasBrowsePage = () => {
 
   const handleSearchThings = React.useCallback(
     (source: SchemaCardSource) => {
-      const param = source.origin === 'builtin' ? `builtin:${source.id}` : source.id;
-      navigate(`/search?schema=${encodeURIComponent(param)}`);
+      navigate(schemaSearchPath(source));
     },
     [navigate]
   );
@@ -762,7 +836,7 @@ export const SchemasBrowsePage = () => {
 
   return (
     <Flex background="var(--tt-surface, #fafafb)" justifyContent="center" minHeight="100vh" width="100%">
-      <Flex direction="column" gap={5} maxWidth={view === 'feed' ? '760px' : '1180px'} pb={24} pt="90px" px={4} width="100%">
+      <Flex direction="column" gap={5} maxWidth={view === 'feed' ? '760px' : '1180px'} pb={24} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 36px)" px={4} width="100%">
         <Flex align="baseline" gap={3} wrap="wrap">
           <Text color="var(--tt-ink, #16161a)" fontSize="2xl" fontWeight={800}>
             Schemas

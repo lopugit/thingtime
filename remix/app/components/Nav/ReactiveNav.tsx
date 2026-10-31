@@ -3,7 +3,7 @@ import { Flex } from "@chakra-ui/react"
 
 import { Attention } from "../Buttons/Attention"
 import { Hamburger } from "../Buttons/Hamburger"
-import { RightNav } from "./ReactiveRightNav"
+import { ReactiveRightNav } from "./ReactiveRightNav"
 
 export const ReactiveNav = (props) => {
   const [navItems] = React.useState([{}])
@@ -64,7 +64,7 @@ export const ReactiveNav = (props) => {
           <Attention></Attention>
         </Flex>
       </Flex>
-      <RightNav></RightNav>
+      <ReactiveRightNav></ReactiveRightNav>
     </>
   )
 }

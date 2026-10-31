@@ -10,19 +10,31 @@ import {
   Select,
   Text
 } from '@chakra-ui/react';
-import { Plus, Search as SearchIcon, Sparkles, X } from 'lucide-react';
+import { Braces, ExternalLink, Eye, Plus, Search as SearchIcon, Sparkles, X } from 'lucide-react';
 import { Link as RouterLink, useLocation, useNavigate, useNavigation } from 'react-router';
 
+import { canonicalPostTags } from '~/components/Attachments/attachmentUiCore';
 import { blocksToText, getEditorJsDoc } from '~/components/Editor/editorJsValue';
+import { PostCard } from '~/components/Feed/PostCard';
+import type { PostChange } from '~/components/Feed/feedTypes';
+import { SubspaceCard } from '~/components/Subspaces/SubspaceCard';
+import { SEARCH_SUBSPACE_RESULTS, type PublicSubspace } from '~/components/Subspaces/subspaceTypes';
+import { searchTagHref } from '~/components/Feed/hashtags';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
+import { ThingView } from '~/components/Thingtime/ThingView';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { SEARCHABLE_CRYSTAL_KINDS } from '~/components/Schemas/schemaBrowseTypes';
+import {
+  SEARCHABLE_CRYSTAL_KINDS,
+  entryToSearchSource,
+  registryToCardSource,
+  toSearchSource
+} from '~/components/Schemas/schemaBrowseTypes';
 import { useApi } from '~/hooks/useApi';
 import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { thingtimeSchemas, type SchemaThingField } from '~/schemas/registry';
-import { flattenSchemaFields } from '~/schemas/tools';
+import { thingtimeSchemas } from '~/schemas/registry';
 import { CARD_STYLES } from '~/theme/card';
+import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 import {
   ConditionRowsEditor,
   ROOT_FIELD_SUGGESTIONS,
@@ -38,6 +50,7 @@ import type {
   SearchResponse,
   SearchThing
 } from './searchTypes';
+import { thingDetailPath } from './commanderSearch';
 
 // The /search page — the Commander search bar, grown up. A ranked text search
 // (Google-style) over every visible thing, plus a minimalist query builder
@@ -78,13 +91,6 @@ const rowFromSchemaField = (field: SchemaSource['fields'][number]): ConditionRow
   return newRow({ field: field.name, op: 'contains', meta });
 };
 
-// only fields the search grammar can actually address prefill a row — the
-// data schema's illustrative '*' wildcard and object/record payload fields
-// (e.g. a schema thing's own `fields` array) would just 400 on submit
-const SEARCHABLE_FIELD_NAME = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
-const searchableField = (field: { name: string; type: string }) =>
-  SEARCHABLE_FIELD_NAME.test(field.name) && field.type !== 'object' && field.type !== 'record';
-
 // display labels for the kind <Select>, rendered from SEARCHABLE_CRYSTAL_KINDS
 // so the dropdown, the builtin schema chips, and /schemas' "Search things"
 // gating can never drift apart
@@ -93,75 +99,21 @@ const KIND_OPTION_LABELS: Record<string, string> = {
   data: 'data',
   schema: 'schemas',
   comment: 'comments',
-  reaction: 'reactions'
+  reaction: 'reactions',
+  attachment: 'attachments'
 };
 
-const builtinSchemaSources = (): SchemaSource[] =>
+// builtin crystal schemas the query builder can scope to → SchemaSource, via
+// the shared registry→card→search converters (schemaBrowseTypes). One mapper
+// (toSearchSource) shapes both builtin and community shapes, so their field
+// metadata — and the seeded-builtin dedup — can never drift between /search
+// and /schemas.
+const builtinSearchSources = (): SchemaSource[] =>
   thingtimeSchemas
     .filter((schema) => schema.kind === 'crystal' && SEARCHABLE_CRYSTAL_KINDS.has(schema.id))
-    .map((schema) => ({
-      key: `builtin-${schema.id}`,
-      name: schema.title,
-      description: schema.summary,
-      origin: 'builtin' as const,
-      fields: schema.fields
-        .filter((field) => searchableField(field))
-        .map((field) => ({
-          name: field.name,
-          type: field.type === 'enum' ? 'enum' : field.type,
-          description: field.description,
-          values: field.values,
-          max: undefined,
-          min: undefined,
-          unit: undefined
-        }))
-    }));
-
-// The seed-builtin-schemas admin migration mirrors every builtin crystal
-// schema into things as a system-owned schema thing (shareId schema-<id>,
-// author resolves to null). The browser already lists builtins from the code
-// registry, so those mirrors are dropped from the community column — without
-// this they'd render twice.
-const seededBuiltinShareIds = new Set(
-  thingtimeSchemas.filter((schema) => schema.kind === 'crystal').map((schema) => `schema-${schema.id}`)
-);
-
-// A schema thing (or browse entry) → a SchemaSource. Nested object/array
-// fields flatten to the dotted crystal paths the search grammar addresses.
-const schemaThingToSource = (
-  thing: Pick<SearchThing, 'id' | 'crystal' | 'author'> & {
-    usageCount?: number;
-    reactionCounts?: Record<string, number>;
-  }
-): SchemaSource | null => {
-  if (seededBuiltinShareIds.has(thing.id) && !thing.author) return null;
-  const crystal = thing.crystal || {};
-  const fields = Array.isArray(crystal.fields) ? (crystal.fields as SchemaThingField[]) : [];
-  if (typeof crystal.name !== 'string' || !fields.length) return null;
-  const reactions = Object.values(thing.reactionCounts || {}).reduce((sum, count) => sum + (count || 0), 0);
-  return {
-    key: `thing-${thing.id}`,
-    name: crystal.name,
-    description: typeof crystal.description === 'string' ? crystal.description : '',
-    origin: 'community',
-    author: thing.author?.username || null,
-    shareId: thing.id,
-    usageCount: typeof thing.usageCount === 'number' ? thing.usageCount : undefined,
-    reactions: reactions || undefined,
-    fields: flattenSchemaFields(fields)
-      .filter((flat) => SEARCHABLE_FIELD_NAME.test(flat.path))
-      .map((flat) => ({
-        name: flat.path,
-        type: typeof flat.field.type === 'string' ? flat.field.type : 'string',
-        description: typeof flat.field.description === 'string' ? flat.field.description : undefined,
-        values: Array.isArray(flat.field.values) ? flat.field.values.filter((v: any) => typeof v === 'string') : undefined,
-        min: Number.isFinite(flat.field.min) ? flat.field.min : undefined,
-        max: Number.isFinite(flat.field.max) ? flat.field.max : undefined,
-        unit: typeof flat.field.unit === 'string' ? flat.field.unit : undefined,
-        maxLength: Number.isFinite(flat.field.maxLength) ? flat.field.maxLength : undefined
-      }))
-  };
-};
+    .map(registryToCardSource)
+    .map(toSearchSource)
+    .filter((source): source is SchemaSource => !!source);
 
 type CachedSearch = {
   q: string;
@@ -172,6 +124,10 @@ type CachedSearch = {
   things: SearchThing[];
   posts: Record<string, SearchPost>;
   people?: SearchPerson[];
+  // the Subspaces section — slug/name matches for the text query, first
+  // SEARCH_SUBSPACE_RESULTS (client-side GET /api/v1/subspaces?q=; search.ts
+  // itself knows nothing about subspaces)
+  subspaces?: PublicSubspace[];
   total: number | null;
   totalCapped: boolean;
   ranked: boolean;
@@ -202,14 +158,14 @@ function PersonCard({ person }: { person: SearchPerson }) {
         {person.avatarUrl ? (
           <img alt="" src={person.avatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          <Text fontSize="sm">{(person.displayName || person.username).slice(0, 1).toUpperCase()}</Text>
+          <Text fontSize="sm">{getUserDisplayName(person).slice(0, 1).toUpperCase()}</Text>
         )}
       </Center>
       <Box minWidth={0}>
         <Text color="var(--tt-text, #33333c)" fontSize="sm" fontWeight="600" isTruncated>
-          {person.displayName || person.username}
+          {getUserDisplayName(person)}
           <Text as="span" color="var(--tt-muted, #9a9aa6)" fontWeight="400" ml={1.5}>
-            @{person.username}
+            {getUserIdentityDetail(person)}
           </Text>
         </Text>
         {person.bio ? (
@@ -245,6 +201,27 @@ const previewValue = (value: unknown): string => {
     return String(value);
   }
 };
+
+function RankedMatchScore({ score }: { score?: number }) {
+  if (typeof score !== 'number' || !Number.isFinite(score)) return null;
+  const display = score.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
+  const label = `Ranked match score: ${display}`;
+  return (
+    <Text
+      aria-label={label}
+      color="var(--tt-muted, #9a9aa6)"
+      fontFamily="mono"
+      fontSize="10px"
+      fontWeight="500"
+      letterSpacing="0.02em"
+      opacity={0.72}
+      title={label}
+      whiteSpace="nowrap"
+    >
+      ranked match · {display}
+    </Text>
+  );
+}
 
 function CrystalPreview({ crystal }: { crystal: Record<string, any> }) {
   // schemaId is internal provenance (the schema thing's shareId) — the
@@ -312,13 +289,46 @@ const ThingResultCard = React.memo(function ThingResultCard({
           </Badge>
         ))}
         {thing.tags.map((tag) => (
-          <Badge key={tag} colorScheme="gray" fontFamily="mono" textTransform="none">
+          <Badge
+            key={tag}
+            as={RouterLink}
+            _hover={{ textDecoration: 'underline' }}
+            colorScheme="gray"
+            fontFamily="mono"
+            textTransform="none"
+            to={searchTagHref(tag)}
+          >
             #{tag}
           </Badge>
         ))}
-        <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" marginLeft="auto">
-          {thing.author ? `@${thing.author.username}` : 'unknown'} · {when}
-        </Text>
+        <Flex
+          align="center"
+          gap={2}
+          marginLeft={{ base: 0, sm: 'auto' }}
+          width={{ base: '100%', sm: 'auto' }}
+          wrap={{ base: 'wrap', sm: 'nowrap' }}
+        >
+          <Flex align="center" gap={2} justify="space-between" width={{ base: '100%', sm: 'auto' }}>
+            <RankedMatchScore score={thing.rankScore} />
+            <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" marginLeft="auto" whiteSpace="nowrap">
+              {thing.author ? getUserIdentityDetail(thing.author) : 'unknown'} · {when}
+            </Text>
+          </Flex>
+          <Flex
+            as={RouterLink}
+            align="center"
+            aria-label={`Open ${title || thing.thingtime[0] || 'thing'}`}
+            color="var(--tt-text, #5a5a66)"
+            fontSize="xs"
+            gap={1}
+            marginLeft={{ base: 'auto', sm: 0 }}
+            textDecoration="underline"
+            to={thingDetailPath(thing.id)}
+          >
+            Open thing
+            <ExternalLink size={11} />
+          </Flex>
+        </Flex>
       </Flex>
       {title ? (
         <Text color="var(--tt-text, #33333c)" fontSize="md" mb={2} whiteSpace="pre-wrap">
@@ -333,6 +343,71 @@ const ThingResultCard = React.memo(function ThingResultCard({
           <Text>{post.shareCount} shares</Text>
         </Flex>
       ) : null}
+    </Box>
+  );
+});
+
+const StandardThingResult = React.memo(function StandardThingResult({
+  thing,
+  post,
+  onPostChanged
+}: {
+  thing: SearchThing;
+  post: SearchPost | null;
+  onPostChanged: (id: string, change: PostChange) => void;
+}) {
+  // PostCard hands the post id back to `onChanged`, so the parent's
+  // useCallback-stable handler passes straight through — a per-card wrapper
+  // here would defeat PostCard's React.memo exactly like PostList's used to.
+
+  if (post) {
+    return (
+      <Box>
+        {typeof thing.rankScore === 'number' ? (
+          <Flex justify="flex-end" mb={1} px={1}>
+            <RankedMatchScore score={thing.rankScore} />
+          </Flex>
+        ) : null}
+        <PostCard post={post} onChanged={onPostChanged} />
+      </Box>
+    );
+  }
+
+  const created = new Date(thing.createdAt);
+  const when = Number.isNaN(created.getTime()) ? '' : created.toLocaleDateString();
+  const label =
+    (typeof thing.crystal?.name === 'string' && thing.crystal.name) ||
+    (typeof thing.crystal?.title === 'string' && thing.crystal.title) ||
+    thing.thingtime[0] ||
+    'Thing';
+
+  return (
+    <Box {...CARD_STYLES} p={4}>
+      <Flex align="center" gap={2} mb={3} wrap="wrap">
+        {thing.thingtime.map((id) => (
+          <Badge key={id} colorScheme="purple" fontFamily="mono" textTransform="none">
+            {id}
+          </Badge>
+        ))}
+        <Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" marginLeft="auto">
+          {thing.author ? getUserIdentityDetail(thing.author) : 'unknown'} · {when}
+        </Text>
+        <RankedMatchScore score={thing.rankScore} />
+        <Flex
+          as={RouterLink}
+          align="center"
+          aria-label={`Open ${label}`}
+          color="var(--tt-text, #5a5a66)"
+          fontSize="xs"
+          gap={1}
+          textDecoration="underline"
+          to={thingDetailPath(thing.id)}
+        >
+          Open thing
+          <ExternalLink size={11} />
+        </Flex>
+      </Flex>
+      <ThingView label={label} thing={thing.crystal} />
     </Box>
   );
 });
@@ -365,6 +440,7 @@ export const SearchPage = () => {
   const [rows, setRows] = React.useState<ConditionRow[]>(!freshFromUrl && cached?.rows?.length ? cached.rows : []);
   const [kind, setKind] = React.useState(freshFromUrl ? '' : cached?.kind || '');
   const [sort, setSort] = React.useState(freshFromUrl ? 'auto' : cached?.sort || 'auto');
+  const [presentation, setPresentation] = React.useState<'standard' | 'data'>('standard');
 
   // optimistic first paint: last-known results render instantly from
   // localStorage and simply stay — nothing refetches until the user (or a
@@ -372,6 +448,7 @@ export const SearchPage = () => {
   const [things, setThings] = React.useState<SearchThing[]>(cached?.things || []);
   const [posts, setPosts] = React.useState<Record<string, SearchPost>>(cached?.posts || {});
   const [people, setPeople] = React.useState<SearchPerson[]>(cached?.people || []);
+  const [subspaces, setSubspaces] = React.useState<PublicSubspace[]>(cached?.subspaces || []);
   const [total, setTotal] = React.useState<number | null>(cached?.total ?? null);
   const [totalCapped, setTotalCapped] = React.useState(cached?.totalCapped || false);
   const [ranked, setRanked] = React.useState(cached?.ranked || false);
@@ -425,6 +502,10 @@ export const SearchPage = () => {
   const requestSeqRef = React.useRef(0);
   const apiRef = React.useRef(api);
   apiRef.current = api;
+  // always-current viewer id so the search body can flag logged-out queries as
+  // edge-cacheable (`anon=1` → GET form) without stale-closure risk
+  const viewerIdRef = React.useRef(user?.id ?? null);
+  viewerIdRef.current = user?.id ?? null;
   const lopuRef = React.useRef(lopu);
   lopuRef.current = lopu;
 
@@ -434,6 +515,13 @@ export const SearchPage = () => {
   // query, never live (possibly edited-but-unsubmitted) builder state, so a
   // stale cursor can't be mixed with new params
   const submittedRef = React.useRef(stateRef.current);
+
+  // the ?tags deep-link key the tags effect below last applied — declared here
+  // (above runSearch) because a FAILED search must reset it: the success-path
+  // URL sync never ran, so ?tags would otherwise stay in the URL with the
+  // guard still set, making a re-tap of the same chip a byte-identical
+  // navigation that silently no-ops instead of retrying
+  const appliedUrlTagsRef = React.useRef<string | null>(null);
 
   const runSearch = React.useCallback(
     async (options: { cursor?: string | null } = {}) => {
@@ -471,19 +559,25 @@ export const SearchPage = () => {
         thingtime: current.kind || undefined,
         sort: effectiveSort,
         cursor: cursor || undefined,
-        limit: PAGE_SIZE
+        limit: PAGE_SIZE,
+        anon: viewerIdRef.current ? undefined : 1
       };
 
       try {
-        // people ride along on first-page text searches — users aren't things
-        // (separate collection), so they get their own endpoint, in parallel
+        // people and subspaces ride along on first-page text searches — users
+        // aren't things (separate collection) and subspaces have their own
+        // directory search, so each gets its own endpoint, in parallel; either
+        // failing quietly keeps the post results the search is about
         const wantPeople = !cursor && !!current.q.trim();
-        const [resp, peopleResp] = (await Promise.all([
+        const [resp, peopleResp, subspacesResp] = (await Promise.all([
           apiRef.current.v1.things.search(body),
           wantPeople
             ? apiRef.current.v1.profile.search({ q: current.q.trim(), limit: 8 }).catch(() => null)
+            : Promise.resolve(null),
+          wantPeople
+            ? apiRef.current.v1.subspaces.list({ q: current.q.trim(), limit: SEARCH_SUBSPACE_RESULTS, anon: viewerIdRef.current ? undefined : 1 }).catch(() => null)
             : Promise.resolve(null)
-        ])) as [SearchResponse, { users?: SearchPerson[] } | null];
+        ])) as [SearchResponse, { users?: SearchPerson[] } | null, { subspaces?: PublicSubspace[] } | null];
         if (seq !== requestSeqRef.current) return;
         setHasSearched(true);
         // only a RESOLVED first page owns load-more continuation — committing
@@ -492,6 +586,7 @@ export const SearchPage = () => {
         if (!cursor) submittedRef.current = current;
 
         if (!cursor) setPeople(wantPeople ? peopleResp?.users || [] : []);
+        if (!cursor) setSubspaces(wantPeople ? subspacesResp?.subspaces || [] : []);
 
         setThings((prev) => {
           if (!cursor) return resp.things || [];
@@ -517,6 +612,7 @@ export const SearchPage = () => {
             things: (resp.things || []).slice(0, PAGE_SIZE),
             posts: resp.posts || {},
             people: wantPeople ? peopleResp?.users || [] : [],
+            subspaces: wantPeople ? subspacesResp?.subspaces || [] : [],
             total: resp.total ?? null,
             totalCapped: !!resp.totalCapped,
             ranked: !!resp.ranked,
@@ -543,6 +639,27 @@ export const SearchPage = () => {
         }
       } catch (err: any) {
         if (seq !== requestSeqRef.current) return;
+        // a failed ?tags deep-link search must not strand the param: reset the
+        // applied guard and strip the dead ?tags (mirrors the ?schema failure
+        // path) so revisiting the same chip link retries instead of no-opping.
+        // The guard is only ever set while a seeded search hasn't succeeded
+        // yet — success strips ?tags, which resets it via the tags effect.
+        if (appliedUrlTagsRef.current !== null) {
+          appliedUrlTagsRef.current = null;
+          // same still-here bounds as the success sync — never yank the user
+          // back to /search from a departure or a different history entry
+          if (
+            mountedRef.current &&
+            navigationIdleRef.current &&
+            locationKeyRef.current === submittedLocationKey
+          ) {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('tags')) {
+              params.delete('tags');
+              navigate({ pathname: '/search', search: params.toString() ? `?${params}` : '' }, { replace: true });
+            }
+          }
+        }
         lopuRef.current({ title: err?.error || 'Search hit a snag 😞', status: 'error' });
       } finally {
         if (seq === requestSeqRef.current) setLoading(false);
@@ -561,6 +678,9 @@ export const SearchPage = () => {
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('schema')) return;
+    // a ?tags deep link's search is owned by the tags effect below (same
+    // reasoning as ?schema: running both would race them)
+    if (params.get('tags')) return;
     if (!params.get('q')) return;
     runSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -600,6 +720,40 @@ export const SearchPage = () => {
     runSearch();
   }, [pendingUrlSearch, runSearch]);
 
+  // Tag chips on posts (and inline #hashtag links) deep-link here with
+  // ?tags=<tag>[&tags=<tag>…] — one tag per repeated param, read via getAll
+  // with NO delimiter, so a stored tag containing a comma (the server permits
+  // them) seeds ONE row that matches the post instead of splitting into rows
+  // that match nothing. Seed the builder with visible `tags is <tag>` rows —
+  // editable and removable like any hand-made row — and run the scoped search
+  // (each `tags eq` condition matches array membership server-side, so mode
+  // 'all' means "has every listed tag"). The post-search URL sync then strips
+  // ?tags — the same consume-then-clean flow as ?schema — and the emptied
+  // param resets the guard so tapping the same chip again still re-runs.
+  const urlTags = React.useMemo(
+    () => canonicalPostTags(new URLSearchParams(location.search).getAll('tags')),
+    [location.search]
+  );
+  React.useEffect(() => {
+    // JSON keeps the guard key unambiguous even for tags that themselves
+    // contain a comma (join would collide ["a,b"] with ["a","b"])
+    const key = urlTags.length ? JSON.stringify(urlTags) : '';
+    if (!key) {
+      appliedUrlTagsRef.current = null;
+      return;
+    }
+    if (appliedUrlTagsRef.current === key) return;
+    appliedUrlTagsRef.current = key;
+    setQ('');
+    setRows(urlTags.map((tag) => newRow({ field: 'tags', op: 'eq', value: tag, valueType: 'text' })));
+    setKind('');
+    setSort('auto');
+    setMode('all');
+    setActiveSchema(null);
+    setPinnedRowId(null);
+    setPendingUrlSearch(true);
+  }, [urlTags]);
+
   // community schemas ride the paginated /api/v1/schemas/browse rail —
   // newest/popular sorts, text search, cursor pagination (same system as
   // /schemas). Loading is lazy (first open) and failures stay non-fatal.
@@ -628,7 +782,7 @@ export const SearchPage = () => {
       // rate-limited first fetch must retry when the rail is next opened
       schemasLoadedRef.current = true;
       const sources = (resp.schemas || [])
-        .map(schemaThingToSource)
+        .map(entryToSearchSource)
         .filter((source: SchemaSource | null): source is SchemaSource => !!source);
       setCommunitySchemas((prev) => {
         if (!cursor) return sources;
@@ -649,11 +803,16 @@ export const SearchPage = () => {
   }, [schemasOpen, loadSchemas]);
 
   const schemaSources = React.useMemo(
-    () => [...communitySchemas, ...builtinSchemaSources()],
+    () => [...communitySchemas, ...builtinSearchSources()],
     [communitySchemas]
   );
 
   const applySchema = React.useCallback((source: SchemaSource) => {
+    // A selected schema is the new primary query. Clear any Commander text
+    // and relevance-only sort left over from the previous search so the
+    // generated field filters cannot be silently narrowed to zero results.
+    setQ('');
+    setSort('auto');
     setActiveSchema(source.key);
     const prefilled = source.fields.map((field) => rowFromSchemaField(field));
     // community data things carry `schema: "<Name>"` by convention — pin that
@@ -698,11 +857,11 @@ export const SearchPage = () => {
       let source: SchemaSource | null = null;
       if (urlSchema.startsWith('builtin:')) {
         const id = urlSchema.slice('builtin:'.length);
-        source = builtinSchemaSources().find((builtin) => builtin.key === `builtin-${id}`) || null;
+        source = builtinSearchSources().find((builtin) => builtin.key === `builtin-${id}`) || null;
       } else {
         try {
           const resp: any = await apiRef.current.v1.things.get({ id: urlSchema });
-          if (resp?.ok && resp.thing) source = schemaThingToSource(resp.thing);
+          if (resp?.ok && resp.thing) source = entryToSearchSource(resp.thing);
         } catch {
           // unknown/invisible schema — fall through to the plain page
         }
@@ -764,6 +923,26 @@ export const SearchPage = () => {
     [runSearch]
   );
 
+  const updateResultPost = React.useCallback((id: string, change: PostChange) => {
+    if (change === null) {
+      setPosts((prev) => {
+        if (!prev[id]) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setThings((prev) => prev.filter((thing) => thing.id !== id));
+      return;
+    }
+    setPosts((prev) => {
+      const current = prev[id];
+      if (!current) return prev;
+      const next = typeof change === 'function' ? change(current) : change;
+      if (!next) return prev;
+      return { ...prev, [id]: next };
+    });
+  }, []);
+
   // the count is a visibility-superset approximation (private-to-others docs
   // can be counted but never shown), so present it as such
   const totalLabel =
@@ -771,7 +950,7 @@ export const SearchPage = () => {
 
   return (
     <Flex background="var(--tt-surface, #fafafb)" justifyContent="center" minHeight="100vh" width="100%">
-      <Flex direction="column" gap={5} maxWidth="760px" pb={24} pt="90px" px={4} width="100%">
+      <Flex direction="column" gap={5} maxWidth="760px" pb={24} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 36px)" px={4} width="100%">
         {/* Commander, grown up: the same rainbow-ringed input, page-sized */}
         <form onSubmit={submit}>
           <Center position="relative" width="100%">
@@ -1022,14 +1201,65 @@ export const SearchPage = () => {
         />
 
         {/* results */}
-        <Flex align="baseline" gap={2}>
+        <Flex
+          align={{ base: 'stretch', sm: 'center' }}
+          gap={3}
+          justify="space-between"
+          direction={{ base: 'column', sm: 'row' }}
+        >
           {totalLabel ? (
             <Text color="var(--tt-muted, #9a9aa6)" fontSize="sm">
               {totalLabel}
               {ranked ? ' · best match first' : sort === 'oldest' ? ' · oldest first' : ' · newest first'}
             </Text>
           ) : null}
+          <Flex
+            align="center"
+            aria-label="Search result view"
+            background="var(--tt-surface-alt, #f5f5f7)"
+            border="1px solid var(--tt-border, #ececef)"
+            borderRadius="var(--tt-radius-sm, 9px)"
+            gap={1}
+            marginLeft={{ base: 0, sm: 'auto' }}
+            p={1}
+            role="group"
+            width={{ base: '100%', sm: 'auto' }}
+          >
+            <Button
+              aria-pressed={presentation === 'standard'}
+              flex={{ base: 1, sm: 'initial' }}
+              leftIcon={<Eye size={13} />}
+              onClick={() => setPresentation('standard')}
+              size="xs"
+              variant={presentation === 'standard' ? 'solid' : 'ghost'}
+            >
+              Standard
+            </Button>
+            <Button
+              aria-pressed={presentation === 'data'}
+              flex={{ base: 1, sm: 'initial' }}
+              leftIcon={<Braces size={13} />}
+              onClick={() => setPresentation('data')}
+              size="xs"
+              variant={presentation === 'data' ? 'solid' : 'ghost'}
+            >
+              Data
+            </Button>
+          </Flex>
         </Flex>
+
+        {subspaces.length ? (
+          <Flex direction="column" gap={2} data-testid="search-subspaces">
+            <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700">
+              Subspaces 🪐
+            </Text>
+            <Flex direction="column" gap={2}>
+              {subspaces.map((subspace) => (
+                <SubspaceCard key={subspace.id} subspace={subspace} compact />
+              ))}
+            </Flex>
+          </Flex>
+        ) : null}
 
         {people.length ? (
           <Flex direction="column" gap={2}>
@@ -1045,12 +1275,21 @@ export const SearchPage = () => {
         ) : null}
 
         <Flex direction="column" gap={3}>
-          {things.map((thing) => (
-            <ThingResultCard key={thing.id} post={posts[thing.id] || null} thing={thing} />
-          ))}
+          {things.map((thing) =>
+            presentation === 'standard' ? (
+              <StandardThingResult
+                key={thing.id}
+                onPostChanged={updateResultPost}
+                post={posts[thing.id] || null}
+                thing={thing}
+              />
+            ) : (
+              <ThingResultCard key={thing.id} post={posts[thing.id] || null} thing={thing} />
+            )
+          )}
           {/* while a ?schema deep link resolves, neither copy is true yet —
               hold the box until its search settles (which strips ?schema) */}
-          {!things.length && !people.length && !loading && !urlSchema ? (
+          {!things.length && !people.length && !subspaces.length && !loading && !urlSchema ? (
             <Box {...CARD_STYLES} p={8} textAlign="center">
               <Text color="var(--tt-muted, #9a9aa6)">
                 {hasSearched
