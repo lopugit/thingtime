@@ -9708,8 +9708,11 @@ separate from deterministic discovery/lease tests.
   link or source deploy hook remains. A repeated unchanged request must skip
   compilation. Keep production runtime charges distinct from build charges.
 
-- Include active `staging` and its branch-bound domain. Check that the selected
-  capability manifest reports each actual deployment origin. Production must
-  retain all seven source cron schedules and Sydney function placement;
-  Preview/custom targets must have no production schedules. Root config alone
-  is insufficient for prebuilt metadata: inspect Vercel's accepted fields.
+### Local media maximum output size regression (2026-10-23)
+
+- Bind optional `output.maxOutputSize` and `output.maxOutputUnit` to separate editable fields. Blank keeps prior behavior; KB/MB use decimal units. Save/reload preserves both fields.
+- Run `test:web-platform`, `test:api-capabilities`, and `test:vercel-config`. Image codec checks compare actual Blob bytes to the target, exercise lossless PNG dimension reduction, alpha, animation frames/timing, malformed limits and impossible targets.
+- In isolated Chrome, encode MP4 and WebM with retained audio under a target. Independently probe the downloaded bytes, full duration and audio; compare actual bytes with the requested maximum. Retry a one-byte target and confirm no preview/download exists. Cancel, replace the source, change settings and clear; stale work must never publish.
+- Saved-page acceptance includes desktop/mobile Builder field editing, full-page scroll and the real deployed image/video action path. Unit/build success alone is not production acceptance.
+
+- Observed 2026-10-23 isolated Chrome acceptance (OS-enforced loopback sandbox): WebP 51,050 ≤ 60 KB, PNG 20,962 ≤ 30 KB (both alpha retained), animated WebP 4,934 ≤ 6 KB (4 frames, 250 ms, loop 0), MP4 154,136 and WebM 165,697 ≤ 200 KB / 0.2 MB. Independent probes retained AAC/Opus audio and full 4.07/4.02 s duration. One-byte/negative limits exposed no download; blank, cancel, legacy controls and desktop/mobile checks passed. These are synthetic fixture results, not saved production-page acceptance.

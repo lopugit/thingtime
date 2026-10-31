@@ -11,11 +11,19 @@ import {
 	initializeImageMagick
 } from '@imagemagick/magick-wasm';
 import { Resvg, initWasm } from '@resvg/resvg-wasm';
+import { assertMediaOutputSize, validateMaxOutputBytes } from './mediaPipeline';
 export { isImageFile } from './imageFiles';
 
 export type ImageWasmAssets = { magick: Uint8Array; resvg?: Uint8Array };
 export type ImageFormat = 'auto' | 'webp' | 'jpeg' | 'png' | 'avif' | 'gif';
-export type ImageSettings = { maxWidth: number; maxHeight: number; imageFormat?: ImageFormat; imageQuality?: number; imageBackground?: string };
+export type ImageSettings = {
+	maxWidth: number;
+	maxHeight: number;
+	imageFormat?: ImageFormat;
+	imageQuality?: number;
+	imageBackground?: string;
+	maxOutputBytes?: number;
+};
 
 // Blob-only decoding: no host filesystem, delegates or URL/pseudo-image coders.
 // AVIF's temporary files stay in this worker's private in-memory WASM filesystem.
@@ -122,6 +130,7 @@ export function pngAnimationFrames(bytes: Uint8Array): number | undefined {
 
 /** Runs only inside the task-owned, network-disabled, terminable media worker. */
 export async function compressImage(file: Blob, settings: ImageSettings, wasm: ImageWasmAssets | Uint8Array, fileName?: string) {
+	const maximum = validateMaxOutputBytes(settings.maxOutputBytes);
 	if (!file.size) throw new Error('Choose a nonempty local image');
 	const assets = wasm instanceof Uint8Array ? { magick: wasm } : wasm;
 	for (const [name, bytes] of [
@@ -171,7 +180,7 @@ export async function compressImage(file: Blob, settings: ImageSettings, wasm: I
 			throw new Error('Animation requires WebP or GIF output; choose one to preserve every frame');
 		if (animated) images.coalesce();
 		for (const image of images) image.autoOrient();
-		const size = imageDimensions(images[0].width, images[0].height, settings);
+		let size = imageDimensions(images[0].width, images[0].height, settings);
 		const inputHasAlpha = images.some((image) => !image.isOpaque);
 		if (inputHasAlpha && format === 'jpeg' && background === 'none')
 			throw new Error('JPEG cannot preserve transparency; choose WebP/PNG/AVIF or an explicit background');
@@ -192,8 +201,38 @@ export async function compressImage(file: Blob, settings: ImageSettings, wasm: I
 			image.strip();
 		}
 		images.resetPage();
-		return images.write(formats[format], (output) => {
-			const encoded = new Uint8Array(output);
+		let encoded = new Uint8Array();
+		let currentQuality = quality;
+		let smallest = Infinity;
+		let bestQuality = quality;
+		// Every attempt encodes the complete collection; no truncation or frame loss.
+		for (let attempt = 0; attempt < 16; attempt++) {
+			encoded = images.write(formats[format], (output) => new Uint8Array(output));
+			if (encoded.length < smallest) {
+				smallest = encoded.length;
+				bestQuality = currentQuality;
+			}
+			if (maximum === undefined || encoded.length <= maximum) break;
+			if (attempt < 3 && ['webp', 'jpeg', 'avif'].includes(format) && currentQuality > 10) {
+				currentQuality = Math.max(10, Math.floor(currentQuality * 0.65));
+				for (const image of images) image.quality = currentQuality;
+			} else {
+				// Some formats (notably WebP at quality 100) are smaller losslessly.
+				currentQuality = bestQuality;
+				for (const image of images) image.quality = currentQuality;
+				if (size.width === 1 && size.height === 1) break;
+				const scale = Math.min(0.75, Math.sqrt(maximum / encoded.length) * 0.85);
+				size = { width: Math.max(1, Math.floor(size.width * scale)), height: Math.max(1, Math.floor(size.height * scale)) };
+				for (const image of images) {
+					const geometry = new MagickGeometry(size.width, size.height);
+					geometry.ignoreAspectRatio = true;
+					image.resize(geometry);
+				}
+				images.resetPage();
+			}
+		}
+		assertMediaOutputSize(new Blob([encoded]), maximum);
+		{
 			if (!encoded.length) throw new Error('The image encoder returned no output');
 			ImageMagick.readCollection(encoded, (verified) => {
 				if (verified.length !== images.length) throw new Error('Image output verification failed: frame count changed');
@@ -237,6 +276,6 @@ export async function compressImage(file: Blob, settings: ImageSettings, wasm: I
 					}`
 				}
 			};
-		});
+		}
 	});
 }

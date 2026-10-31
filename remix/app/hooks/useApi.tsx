@@ -1,8 +1,9 @@
-import { startNotificationHistorySync } from '../local-workspace/notifications.client';
-import { WorkspaceApiIdentity } from '../local-workspace/apiIdentity';
-import { useOfflineWorkspace } from './useWorkspaceUser';
-import { accountApi, startAccountWorkspaceSync } from '../local-workspace/accountApi.client';
-import { anonymousApi } from '../local-workspace/api.client';
+import { requireMediaSizeWriteCapability } from '~/webPlatform/mediaSizeRequirements';
+import { hasLiveSourceBinding } from '~/schemas/liveSources';
+import { FILE_SYNC_REQUIREMENTS } from '~/fileSync/configuration';
+import { parseCloudFile, parseCloudFileCommit, type CloudFileCommit } from '~/fileSync/cloudFile';
+import type { TimelineScope } from '~/timeline/contract';
+import { useCharacterScope, CHARACTER_HEADER } from '~/components/Characters/CharacterScope';
 import type { VersionRequest } from '../timeline/publishedVersion';
 import type { BranchCheckoutRequest } from '../timeline/branchCheckout';
 import { timelineRequestScope, type TimelineStorage } from '../timeline/storageScope';
@@ -1190,6 +1191,7 @@ export function useApi() {
       }, []),
       update: useCallback(
         async (args, options?: ThingRequestOptions) => {
+          await requireMediaSizeWriteCapability(args?.crystal, 'update', requireThingtimeCapability);
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
           if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.38.0');
@@ -1253,7 +1255,7 @@ export function useApi() {
       ),
       upsert: useCallback(
         async (args) => {
-          if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.38.0');
+          await requireMediaSizeWriteCapability(args?.crystal, 'upsert', requireThingtimeCapability);
           return asyncFetcher.submit(
             {
               id: args?.id,
@@ -1273,6 +1275,7 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args, options?: ThingRequestOptions) => {
+          await requireMediaSizeWriteCapability(args?.crystal, 'create', requireThingtimeCapability);
           const expectedDataPlane = options?.expectedDataPlane === undefined ? planeRef.current : options.expectedDataPlane;
           const expectedActor = options?.expectedActor ?? args?.expectedActor;
           if (requiresUncappedDataStrings(args?.crystal)) await requireThingtimeCapability('api.things', '1.38.0');
