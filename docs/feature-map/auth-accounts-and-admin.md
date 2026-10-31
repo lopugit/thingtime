@@ -55,6 +55,13 @@ proves the host connected.
 - Local admin bootstrap recipe: register a throwaway user, add its username to
   `ADMIN_USERNAMES` in `remix/.env`, restart the dev stack.
 - `TESTING.md`: the auth, passkey, account switcher and admin sections.
+- Saved provider replacement: `connections/vaultTokenReplacement.test.mts`
+  (included in `test:connections`) exercises the vault HTTP action, exact
+  encrypted replacement, intentional blank retention, and no-write rejection.
+  Credential-save clients require `api.lopu-vault` 1.4.0. Long names, keys,
+  endpoints, model IDs and values round-trip without arbitrary field/envelope
+  caps. `schemas/dataStrings.test.ts` covers the shared validator, and capability
+  regressions cover the affected Things/copy/import/Action contracts.
 
 Lopu browser Actions bind a revalidated first-party user resolver to the exact
 synthetic Request through `internalRequestActor.ts`. `getCurrentUser` and
@@ -72,6 +79,79 @@ private draft API, editor recovery, account isolation and independent media copi
 ## Lopu prompt settings
 
 `GET/POST /api/v1/settings/lopu-prompt` exposes the shared public base prompt, the authenticated account's private instruction checklist, and admin-only base edits. `settings/lopuPromptSettings.ts` stores the shared revision in home settings and personal revisions in protected account metadata through `users.ts`; public user projections omit that text. `promptSettingsCore.ts` bounds inputs and composes enabled preferences. Revision comparisons reject stale writes. `LopuPromptSettings.tsx` serves Settings → Lopu and Settings → Admin; account-keyed mounting and private in-memory caching prevent cross-account drafts. Prompt text never grants server tool authority. Routes, concurrent save conflicts, disabled entries and private response handling are covered by `test:lopu` and `test:settings`.
+
+### Third-party account library
+
+`/connections` is the service/subservice catalog and account manager. The native
+provider boundary is `api/utils/connections/{providers,oauth,connections}.ts`;
+`tokenVault.ts` and `lopu/userVault.ts` use the shared account-key envelope. Public sources
+retain shared accounts; authenticated grants are separate Things per owner.
+OAuth resolves fixed per-provider-family encrypted admin-vault labels (for example
+`connections-google-oauth` and `connections-facebook-oauth`) using
+`environments[environmentId].origins[exactOrigin]` entries containing
+`clientId`, `clientSecret` and the exact `redirectUri`. `oauthConfig.ts` selects
+the explicit data environment, validates the origin and callback, and coalesces
+reads only for the current request. Missing, malformed, duplicate or mismatched
+configuration fails closed; provider-secret environment variables never supply
+a fallback. The optional legacy callback-base setting is a same-origin pin.
+Session-bound one-use state and encrypted grants bind client, origin, callback
+and environment. Older unbound flows/grants must restart/reconnect. Refresh is
+serialized with a home-database lease and revalidates concurrent reconnects on
+lease/write loss or failed refresh; partial replies preserve grant metadata. `connections/request` exposes only
+fixed, scope-checked operations and never returns credential material.
+Catalog, Connections, OAuth begin/callback, feed and saved-account request
+contracts deliberately require major `2.0.0`, including in the shared browser
+API helper: removing env-only setup and rejecting unbound legacy grants changes
+behavior. The request contract preserves complete API payloads and forwards opaque
+`pageToken`/`data.nextPageToken` cursors for Google lists. The bounded logging
+redactor is not an API serializer. Token redaction operates on string values
+and property names, preserves typed scalars and JSON syntax, and removes
+overlapping tokens in full without rewriting generated replacement markers. Fixed-target requests reject cross-origin
+redirects and propagate cancellation; ordinary key/value fields are data.
+OpenAI API/Claude Code OAuth cards reuse `lopu/vault`, keeping Lopu's selectable providers
+and Secure Vault as the same records. Run `test:connections`,
+`test:api-capabilities`, `test:admin-integrations` and `test:mail`; after the
+canonical Vercel build, `smoke:built-connections`
+(`scripts/smoke-built-connections.mjs`) checks both compiled manifests with
+synthetic bootstrap and all network access denied on macOS. The existing
+`TT_QA_SUITE=service-catalog node scripts/run-lopu-credentials-browser.mjs` harness
+(with its installed `TT_QA_IMAGE` and Chromium `TT_QA_SECCOMP` profile)
+exercises actual editable Connections components at desktop/mobile sizes using
+a task-owned network-none Chromium container and synthetic responses. It also
+checks all six shared Connections API operations against legacy/major-2
+manifests and scrolls desktop/mobile pages from top to bottom. See README's third-party setup section
+and TESTING's multi-account, callback, rotation and cache isolation checklist. The uncapped-data integration negotiates Things 1.42.0, Things update 1.13.0 and Actions run 1.39.0 to avoid collisions with independently shipped media/sync contracts; saved-service browser requests preserve opaque pagination tokens.
+Connections layouts are intrinsic editable documents (`serviceCatalogBlocks`,
+`aiServiceBlocks`, `connectionToolsBlocks`). `TransientBlockHost` exposes only
+validated action names and public display projections; credentials are read
+from the current fieldset during explicit submission. Enter/required-field
+handling stays scoped to that fieldset, and origin/account/edit transitions
+revoke pending adapter work. Credential submission bodies are omitted from
+the DevKit log even when provider field names do not identify them as secrets.
+
+ChatGPT hosted identity uses an approved client, verified OIDC ID tokens and
+no inference grant. Facebook identity and posts are separate grants. Account
+and link writes/disconnects commit in one home transaction; old source rows
+remain inert without a live link. Owner IDs accompany private reads; an
+optional `expectedOwnerId` rejects forms submitted after an account switch.
+
+### Server-assisted vault keys
+
+`auth/vaultEnvelope.ts` owns AES-GCM, scrypt password wrapping and HKDF session
+wrapping. `auth/vaultKeys.ts` owns the stable per-user key, approved background
+recovery, exact-password binding and live-session grants. The bounded registry
+stays in the home user secure blob through `users.ts` CAS; wrappers are excluded
+from public user projections. Session wrappers are binary on each session row,
+removed by the shared revocation pipeline. `vaultRequest.ts` gives the Nitro API
+dispatcher request-local token context without a global identity/key cache.
+Login/registration/verified reveal bind passwords; reset writes hash+wrapper in
+one CAS. Passkey/OTP/account-switch sessions obtain grants lazily after liveness
+checks. Server recovery is intentional, not zero-knowledge encryption.
+
+Run `test:connections` (envelopes, registry, concurrency, scope isolation),
+`test:sensitive-reveal`, `test:collections`, and the local-only
+`scripts/verify-vault-recovery.mjs` acceptance script. Existing legacy entries
+migrate only under canonical revision guards; corrupt key records fail closed.
 
 
 ## Password manager
@@ -213,7 +293,7 @@ requires dry-run/confirmation, checks exact identity and idle account state, and
 deletes account/bootstrap/auth records atomically in the home DB. It cannot
 accept arbitrary target accounts. Delivery and migration audit records remain.
 
-OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpenAiCredential` through the existing admin credentials route and `PlatformCredentials.tsx`. It is same-origin, admin-only and create-only; `api.admin-ci-credentials` 3.1.0 is negotiated before use. The sole source is server `OPENAI_API_KEY`, and the destination is `OpenAI` / `OPENAI_THINGTIME_API_KEY`.
+OpenAI environment-to-vault import uses `credentialVault.ts::importConfiguredOpenAiCredential` through the existing admin credentials route and `PlatformCredentials.tsx`. It is same-origin, admin-only and create-only; `api.admin-ci-credentials` 3.1.1 is negotiated before use. The sole source is server `OPENAI_API_KEY`, and the destination is `OpenAI` / `OPENAI_THINGTIME_API_KEY`.
 
 
 ## Local ChatGPT plan connections
@@ -236,39 +316,12 @@ admin lookup, session selection, agent coordination and acceptance runbook.
 credential callers; request authentication passes an explicit selection (or null
 for the session default). Never re-mint a principal session with an acting user ID.
 
-## Account storage recovery
+## Connections through an environment gateway
 
-`storage/userStorage.ts` owns transactional admission and exact recovery;
-`storagePending.ts` validates the requested 100 MiB gross positive queue budget.
-`userStorageRecovery.ts` owns protected durable jobs, leases and bounded retries.
-The dispatcher triggers recovery after mutations; the existing protected
-`lopu/recordings/run` scheduler resumes it independently of provider jobs.
-`userStorageReadiness.ts` verifies ledger and source readiness. Run `test:storage`,
-`test:storage-recovery`, `test:error-logs`, `test:api-capabilities` and the
-replica integration. See [storage recovery](../storage-recovery.md).
-
-## Preview retention and PR liveliness
-
-`Admin → Preview retention` (`/admin/preview-retention`) and Settings → Admin
-share `Admin/PreviewRetentionSettings.tsx` and `previewRetentionSettingsBlocks.ts`.
-`SettingsDocumentHost`/`accountSettingsDocumentAdapter` save the private block
-layout through the existing Things API; `WebpageBlocksRenderer` supplies nested
-Builder selection and `TransientBlockHost` binds ordinary controls to scoped
-policy handlers. No opaque form slot or saved credential is used. Layout edits
-pause live operations and use the existing revision fence.
-`GET/POST /api/v1/admin/ci/preview-retention` requires the current admin and
-negotiated `api.admin-ci-preview-retention` 1.0.0. `ciControl/previewRetention.ts`
-reads the home settings singleton afresh and saves with a revision comparison;
-concurrent edits return 409. The signed, read-only controller endpoint is
-`POST /api/v1/integrations/ci/preview-retention`, capability
-`api.integration-ci-preview-retention` 1.0.0. `previewRetentionCore.ts` owns
-validation and safe defaults. Both manifests derive these explicit versions
-from `apiDocs.ts`; Nitro imports register both executable routes.
-
-The protected `github-actions` controller consumes the saved policy. It preserves
-deployments if policy discovery, authentication, reads or validation fail.
-The product API must roll out to the selected gateway origin before enabling the
-new policy reader; a UI-only preview forwarding to the old gateway cannot prove
-the new backend. See README “Preview cleanup policy” for defaults and rollout.
-Run `test:ci-control` (including the retention block-tree regression), `test:api-capabilities`, and Admin route tests. Manual
-coverage: TESTING.md “Preview retention and PR liveliness”.
+OAuth client selection remains exact to the restored frontend origin and
+`getDeploymentDataEnvironment().id`. Gateway relay metadata does not grant a
+session, change a callback or substitute its environment label. State is one-use
+and session-bound; refresh retains the saved origin/environment/client binding
+and independent account lease. Run `test:connections`, `test:environment-gateway`,
+`test:admin-integrations` and `test:api-capabilities`. Connections major2 rollout
+is backend-first; see [the runbook](../environment-api-gateway.md#connections-major2-rollout).

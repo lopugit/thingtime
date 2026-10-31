@@ -74,6 +74,7 @@
     "test:characters-preflight": "node --import tsx --test scripts/character-coordination-preflight.test.ts",
     "test:characters": "node --experimental-test-module-mocks --import tsx --test app/api/utils/auth/characters.test.mts app/api/utils/auth/characterLogin.test.mts",
     "test:auth-introspection": "node --experimental-test-module-mocks --import tsx --test app/api/utils/auth/getCurrentUser.introspection.test.mts",
+    "smoke:built-connections": "node scripts/smoke-built-connections.mjs",
     "verify:connections": "node scripts/verify-connections.mjs",
     "test:autosave": "node --import tsx --test app/Providers/*.test.ts",
     "test:branding": "node --import tsx --test app/components/Branding/*.test.ts",
@@ -183,8 +184,7 @@
     "test:activity-ui": "node scripts/test-activity-manager-ui.mjs",
     "test:environment-gateway": "node --import tsx --test app/api/utils/deployment/environmentGateway.test.ts server/utils/environmentGateway.test.ts",
     "test:environment-gateway:acceptance": "node scripts/environment-gateway-acceptance.mjs",
-    "test:maps": "node --import tsx --test app/api/utils/maps/*.test.ts app/components/Builder/Maps/*.test.ts app/components/Builder/webpageConditionQuery.test.tsx",
-    "test:maps-built": "node scripts/maps-built-smoke.mjs"
+    "test:environment-gateway:connections": "THINGTIME_GATEWAY_ACCEPTANCE_CONNECTIONS=1 node scripts/environment-gateway-acceptance.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "2.1.272",

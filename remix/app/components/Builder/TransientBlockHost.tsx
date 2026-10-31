@@ -73,6 +73,12 @@ function TransientBlockSession({ scope, actions, enabled = true, onError, childr
 		const action = current.current.actions[binding.operation];
 		const fieldset = control.closest('fieldset');
 		const group = fieldset && root.contains(fieldset) ? fieldset : root;
+        if (control.getAttribute('data-tt-submit') === 'true') {
+            for (const field of group.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input,select,textarea')) {
+                if (field.closest('fieldset') !== (group.tagName === 'FIELDSET' ? group : null) || field.disabled) continue;
+                if (!field.reportValidity()) return;
+            }
+        }
 		const read = (name: string) => { lifetime.assertActive(); return transientNamedField(group, name); };
 		const value = transientFieldValue(control);
 		try {
@@ -96,7 +102,17 @@ function TransientBlockSession({ scope, actions, enabled = true, onError, childr
 	});
 	return <ComponentDataScope.Provider value={scope}><NativeControlsEnabled.Provider value={enabled}>
 		<div ref={host} data-tt-transient-boundary="" onClick={event => { if (current.current.enabled) event.stopPropagation(); }} onClickCapture={event => activate(event, false)} onChangeCapture={event => activate(event, true)}
-			onSubmitCapture={event => { event.preventDefault(); event.stopPropagation(); }}>
+			onKeyDownCapture={event => {
+                if (!current.current.enabled || event.key !== 'Enter' || event.nativeEvent.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+                const target = event.target as HTMLInputElement;
+                if (target.tagName !== 'INPUT' || !['text', 'password', 'email', 'url', 'search', 'tel', 'number'].includes(target.type)) return;
+                const group = target.closest('fieldset');
+                if (!group || !event.currentTarget.contains(group)) return;
+                const submitters = Array.from(group.querySelectorAll<HTMLButtonElement>('button[data-tt-submit="true"]')).filter(button => button.closest('fieldset') === group);
+                if (submitters.length !== 1 || submitters[0].disabled) return;
+                event.preventDefault(); event.stopPropagation(); submitters[0].click();
+            }}
+            onSubmitCapture={event => { event.preventDefault(); event.stopPropagation(); }}>
 			{children}
 		</div>
 	</NativeControlsEnabled.Provider></ComponentDataScope.Provider>;

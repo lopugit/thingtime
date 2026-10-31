@@ -555,3 +555,15 @@ Run `test:environment-gateway`, `test:collections`, `test:api-capabilities` and
 the built `test:environment-gateway:acceptance` runner. See
 [the gateway runbook](../environment-api-gateway.md) for server settings,
 environment partitioning and outstanding live rollout acceptance.
+
+Connections gateway clients retain all six major2 requirements. The synthetic
+`connections/gatewayOAuthFlow.test.mts` uses the signed H3 relay and actual
+OAuth/request handlers to check frontend callback, actual data-environment vault
+selection, live-session/one-use state and refresh ownership. A Connections1
+canonical backend is intentionally refused; upgrade/promote the backend before
+dependent follower actions. See the gateway runbook's Connections rollout.
+
+`test:environment-gateway:connections` additionally verifies the compiled Nitro
+OAuth/request path with a synthetic generated adapter preload and real temporary
+replica API data. It preserves the OS network boundary and normal authentication.
+Use `THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE` for a free separate test port range.

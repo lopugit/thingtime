@@ -5508,6 +5508,12 @@ halves.
 
 ## Environment gateway and index lifecycle
 
+- [ ] After develop integration, use a verified free ten-port acceptance range
+  (`THINGTIME_GATEWAY_ACCEPTANCE_PORT_BASE`). Cover proxy followers, the canonical
+  owner, explicit dedicated handlers with an independent replica, and synthetic
+  Connections2 OAuth in the same enforced network boundary. Keep the branch
+  default proxy; no runtime-mode change may stand in for rollout compatibility.
+
 - [ ] Run `npm --prefix remix run test:environment-gateway`, `test:collections`
   and `test:api-capabilities`; build Nitro and run
   `node remix/scripts/environment-gateway-acceptance.mjs` under its OS boundary.
@@ -5542,6 +5548,21 @@ halves.
       develop use the development cluster, separate from production; verify
       `master.previews.thingtime.com` before treating it as operational. Treat
       old-preview credential retirement as optional; leave the Atlas tier unchanged.
+  Also run `test:environment-gateway:connections` against a Connections2 build;
+  verify one exchange and one rotating refresh across concurrent requests with
+  real sessions/encrypted storage and only synthetic provider/vault adapters.
+- [ ] For PR992 Connections requests, refuse absent/major1/breaking-major contracts,
+  missing paths and unsupported methods before forwarding; accept matching
+  2.0.0 and compatible later major2 versions without downgrading the branch requirement.
+
+- [ ] Run `test:connections` under denied networking. The synthetic H3 relay
+  must preserve frontend callback URL and select the exact actual data-environment
+  vault key; gateway-only origins and the gateway environment label fail closed.
+  Verify one-use state, wrong account/session/origin, revoked sessions, concurrent
+  rotating refresh and account independence through the real OAuth/request handlers.
+- [ ] Promote an accepted Connections2 backend before testing follower-dependent
+  actions. Current preview Connections1 refusal is a compatibility safety gate;
+  separately verify real provider consent/callback/refresh and native acceptance.
 
 ## MongoDB data endpoint (`/mongodb-status`, `remix/app/components/MongoDB/MongoEndpointConfig.tsx`)
 
@@ -8218,14 +8239,30 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Third-party connections (`/connections`, `/connections/feed`, `/api/v1/connections/*`)
 
-Automated first: `pnpm --dir remix run verify:connections` (94 real-API
+- [ ] Through normal Builder inspector/context controls, style/reorder a
+  repeated account label and the Lopu credential label, duplicate each, then
+  delete only the duplicate. Save/reload; confirm service add/reconnect/remove
+  still preserve the other account and its Check action, and the original
+  credential selector still works. Compare each service callback's new event
+  slice, not previously recorded events. Read back the stored Lopu preference
+  before/after selecting credits, reload to confirm credits persists, and verify
+  the saved chat's independent API choice is unchanged. Saved layouts must contain no live account
+  identities or secrets. Both credential browser harnesses cover this path with
+  synthetic boundaries; inspect desktop/mobile scrolling and the open inspector.
+
+- [ ] After merging independently advanced capability branches, verify uncapped data writes require `api.things` 1.42.0, `api.things-update` 1.13.0 and `api.actions-run` 1.39.0; earlier versions used for unrelated features must not authorize these writes. Both manifests must retain the current media/sync contracts. Exercise a long-data write against the immediately preceding origin and verify refusal before transmission.
+- [ ] Follow a saved-service continuation token through the browser API helper, not only the HTTP route, and verify `pageToken` reaches the next request unchanged. The hostile-feed parser timing test must stub DNS and prove the response reached the parser, so network delay/refusal cannot change its result.
+- [ ] Edit a service icon, repeated account label and credential field independently in Builder, save and reload. Live account names and synthetic credential values must not enter the saved document or Action history; attempts to save a private field's value/default must fail before persistence even when its type is dynamic or changed to text. Verify empty required fields block both click and Enter, valid mobile Enter submits once, and switching accounts or entering edit mode cancels pending transient work.
+- [ ] Submit a synthetic provider credential under a field name without `token`, `secret` or `password`. The DevKit request log must retain status/timing without any request body, and copied curl must omit the field value. Removing one of two saved accounts must preserve the other account and its actions.
+
+Automated first: `pnpm --dir remix run verify:connections` (real-API
 checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
 
 - [ ] `/connections` renders the provider catalog signed-out with a quiet
       sign-in card; signed in, connecting the Demo provider adds it under
-      "Your connections" with Feed + Unlink working, and reconnecting the
+      its service card with Feed + Disconnect working, and reconnecting the
       same handle reports "Already connected".
-- [ ] Connecting the same external identity from a SECOND Thingtime account
+- [ ] Connecting the same PUBLIC source from a SECOND Thingtime account
       converges on the same external account (many-to-many): both accounts
       read the same posts through their own links, and each earns its own
       acl grant even when the other account's sync fired first (the shared
@@ -8241,7 +8278,7 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       stops matching; verdicts stay stable across reads (cached) and editing
       the prompt re-classifies.
 - [ ] SSO connect: unconfigured providers show "Needs setup" (disabled);
-      configured ones show "Sign in with <name>" and redirect to the
+      configured ones show "Add account" and open a new tab at the
       provider's own login; the callback lands on /connections with the
       "Account linked" toast (or the oauthError toast on decline/forged
       state); the fields-based POST /api/v1/connections always refuses SSO
@@ -8277,6 +8314,110 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       membership rows + rewrites the acl + unsets `sourceIds`, a legacy
       `tt:extacct/` post stays visible to its linked member both BEFORE and
       AFTER the run, and a second run is a no-op.
+
+- [ ] Run `node remix/scripts/verify-service-accounts.mjs http://127.0.0.1:<api-port>`
+      against a disposable local replica set. It registers two synthetic users,
+      checks private vault projections, stale-owner refusal, API registration,
+      concurrent reconnect/disconnect, and removes its test links/credentials.
+- [ ] ChatGPT: validate signature, issuer, audience, expiry and nonce; never
+      use the hosted identity token for inference. Facebook account linking
+      requests public profile only; posts access is a separate card/grant.
+- [ ] Count regression: retain more than 50 connections and more than 500
+      AI vault entries without rejecting new accounts or hiding old ones.
+      Remove one and verify every other account remains independently usable.
+- [ ] Password/session vault migration gate: run the envelope tests for wrong
+      passwords, exact Unicode/long passwords, owner/record/purpose swaps,
+      tampered metadata, expiry boundaries, and key rewrapping. These are
+      cryptographic primitive tests only. Before enabling the migration, also
+      exercise real login/2FA/passkeys, password change/reset, session
+      revocation, background actions, interrupted migration, and legacy reads
+      against the agreed recovery policy; failed unlock must never replace
+      the only key capable of decrypting saved credentials.
+- [ ] Multi-account OAuth: add two Google identities under the same service;
+      reconnect one without duplicating it or replacing the other. Connect
+      the same provider identity from another Thingtime user and verify the
+      two credentials remain independent. Legacy shared grants must request
+      reconnect and preserve the reconnecting owner's existing link ID.
+- [ ] Callback fencing: forged/expired/replayed state, another Thingtime
+      account/session, changed redirect env, and declined consent must fail
+      without exchanging/writing a grant twice or echoing provider errors.
+      A JSON form POST with `text/plain` must be rejected (CSRF regression).
+- [ ] Origin capability regression: both OAuth and manual credential forms
+      refuse servers without `expectedOwnerId` support before sending a grant
+      or credential. Sign out or switch account while capability negotiation
+      is pending; the abandoned form must not submit afterward.
+- [ ] Concurrent rotating refresh: one exchange at a time per saved grant;
+      reconnect/disconnect during refresh must win over the older response.
+      Token ciphertext must reject another owner/id or modified ciphertext.
+- [ ] Owner-scoped cache regression: switch Thingtime accounts and sign out
+      while account/feed/vault reads are pending. Never display or cache the
+      previous user's identities, feed posts, forms, or saved AI accounts.
+- [ ] Check the service cards at desktop and 390px widths: title hierarchy,
+      account-name wrapping, permission disclosures, inline forms and buttons
+      stay inside their cards. Popup blocking gives an actionable message;
+      returning focus refreshes the original tab without discarding old state.
+- [ ] Saved AI account mobile regression: add two OpenAI and two Claude
+      credentials through Thingtime Passwords-backed test fixtures. At 390px,
+      each account name gets the full row and its badge/actions sit below it;
+      desktop keeps the compact row. Open/cancel the Add account form, scroll
+      top to bottom, remove one account, log out, sign into a different user,
+      and sign back into the first user. Compare the visible three retained
+      accounts with the private API; reject foreign vault reads/stale-owner
+      writes. Use disposable accounts under enforced browser/backend isolation.
+- [ ] Google reuse API: exercise a permitted read, missing-scope denial,
+      wrong-provider operation, another owner's link, and arbitrary-URL input.
+      Result, error, logs, and client caches must not contain credentials.
+- [ ] Saved-result pagination and preservation: follow `data.nextPageToken`
+      for Drive, Gmail, Calendar and Contacts using the same connection and
+      operation, ending when the token is absent. Preserve long opaque cursors
+      containing query delimiters without changing the fixed URL. Reject
+      non-string cursors, pagination on a profile/document operation, wrong
+      owners and missing scopes before provider access. Verify large text,
+      more than 100 records/properties, deep objects and ordinary key/value
+      fields survive unchanged while credential fields/known tokens redact.
+      Refuse cross-origin redirects before fetching the next hop, release
+      abandoned response bodies and propagate cancellation. Both manifests
+      must advertise `api.connections-request` 1.1.1; distinguish mocked
+      provider coverage from real additional-scope consent and list acceptance.
+- [ ] Saved-response redaction regression: with synthetic grants, use tokens
+      matching a JSON keyword, number, delimiter, or escaped text and echo them
+      in string values and property names. Responses stay valid and preserve
+      typed scalars. Overlapping access/refresh tokens redact completely; a
+      token matching replacement text does not rewrite generated markers.
+      Known credential fields remain redacted, and pagination clients requiring
+      1.1.0 accept the 1.1.1 patch on both capability manifests.
+- [ ] Provider transport regression: an HTTP 200 with HTML, empty, or truncated
+      JSON must fail rather than report a successful empty result. Non-JSON
+      401/403 responses still request reconnect; valid empty JSON stays valid.
+      Never include the rejected response body in the error.
+- [ ] Add separate OpenAI API and Claude Code OAuth connections from their cards, reload,
+      and find the same entries in Secure Vault and Lopu's provider picker.
+      No duplicate credential store; cancelled forms erase typed secrets.
+      Subscription sign-in availability must remain explicit.
+- [ ] Provider credential replacement: a supplied null or non-string token must return an error without changing the account name,
+      endpoint, group, model, timestamps or encrypted credential. A missing or
+      empty token intentionally preserves the credential; a valid replacement
+      must decrypt exactly, including whitespace and Unicode. Verify using the
+      selected local test entry and fresh password confirmation, never logs.
+      Both manifests expose `api.lopu-vault` 1.4.0; save clients reject
+      older contracts and accept compatible patch/minor versions.
+
+- [ ] Saved credential sizes: save/reload/replace a synthetic credential over
+      768 KiB through local Thingtime Passwords-backed fixtures; reveal it with
+      fresh verification and compare the complete Unicode/whitespace value.
+      Names/keys over 5,000 characters, endpoints over 2,048 and model IDs over
+      200 must survive exactly. Confirm malformed-token requests make no writes.
+- [ ] At desktop and 390px mobile widths, scroll the account cards and Secure
+      Vault fully. Exercise long environment badges, unbroken entry names,
+      environment selectors and verification modals without horizontal overflow.
+      Modal headers and controls must remain above navigation and floating Lopu
+      controls; hit-test their visible edges after the opening animation.
+      Keep values masked in screenshots. Check independent account removal,
+      logout, second-owner denial and recovery after a fresh first-owner login.
+- [ ] Create and update a data Thing over 768 KiB, then compare an independent
+      authenticated read byte-for-byte. Both capability manifests must advertise
+      the new contracts; older selected origins must be refused before writes.
+      Physical host/database capacity is a separate constraint, not a product cap.
 
 ## Commander emoji paste recovery
 
@@ -10493,6 +10634,34 @@ Manual (signed in, after `POST /api/v1/admin/webpages/seed-demos`):
   canonical public projection, a cold local branch cache, queued push retention,
   delayed-reply revision protection and cancellation after an identity change.
   No visual Builder behavior is introduced by this increment.
+
+
+### Account vault encryption and recovery
+
+- Register on a disposable local stack; save two independently named provider
+  credentials. Normal list/account/profile responses must contain neither
+  tokens nor password/session/recovery wrappers.
+- Reveal one credential with fresh password verification, then reset that
+  account's password via its one-use reset link. Both saved credentials must
+  remain usable with the new password; the previous password, old session and
+  reset-link replay must fail. Delete one account and verify the other still
+  works. Log out and confirm the old session immediately fails.
+- Verify a legacy owner-private entry upgrades on read without changing its
+  value; a concurrent edit/reconnect/disconnect must win over a stale migration.
+  Corrupted user key material must fail without generating a replacement key.
+- Test passkey/OTP/account-switch sessions against existing credentials; each
+  live session gets its own grant. Revoked/expired/foreign/scoped sessions must
+  never fall back to server recovery. Background actions remain possible after
+  browser logout under their existing owner/capability authorization.
+- Passwords are exact UTF-8 input, limited to 4096 bytes before account creation
+  or reset-token consumption. A password that only matches bcrypt's first
+  72 bytes must not unlock an existing password wrapper.
+- Run `npm --prefix remix run test:connections`, `test:sensitive-reveal`,
+  `test:collections`; on a disposable loopback stack run
+  `node remix/scripts/verify-vault-recovery.mjs http://localhost:<web-port>`.
+- Real provider acceptance additionally requires callback → encrypted save →
+  authenticated provider API request for each connected account; mocked grants
+  and a success toast do not establish this. Keep provider approval gaps explicit.
 
 ## No-login draft preview and agent export
 
@@ -12798,6 +12967,9 @@ separate from deterministic discovery/lease tests.
   Known failures before dispatch leave the composer editable. Use synthetic
   transport for sending unless the user authorizes specific real recipients.
 
+- Credential form clearance: at desktop and 390px widths, open/cancel an Add account form. The floating Lopu launcher must step aside while the form is present, input edges remain clickable, the navbar opener remains available, and cancellation restores the launcher without changing saved preferences.
+
+- OpenAI import manifest regression: the built server must advertise `api.admin-ci-credentials` 3.1.1 on both `/api/v1/capabilities` and `/.well-known/thingtime-capabilities.json`. Import clients reject older/missing/breaking contracts before mutation and accept compatible patches/minors.
 
 ### Claude public catalogue and workflow save regression — 2026-10-18
 
@@ -13523,115 +13695,12 @@ separate from deterministic discovery/lease tests.
   link or source deploy hook remains. A repeated unchanged request must skip
   compilation. Keep production runtime charges distinct from build charges.
 
-## Editable Mapbox maps and route planning
 
-- Load favourite and route sources with multiple cursor pages. Compare every
-  valid favourite and route stop with Action readback, including records after
-  the first page. Favourite pins remain visible when selecting a route; the
-  selected route's stop order uses numbered pins and controls map fitting.
-  Toggle favourites through both boolean and query-string false, click pins,
-  focus a place, pan the map and switch selection without recreating the SDK
-  or resetting the camera on a highlight-only change. Refused/repeated-cursor
-  pages stop cleanly; account/Character changes cannot publish late data.
-  Optimize route A, then select route B: A's geometry and optimization order
-  must disappear immediately. Selection alone makes no Navigation request.
-  Resize the map-first layout and open drawers on desktop and narrow mobile;
-  the canvas, attribution and controls must stay within the available bounds.
-- On the deployed origin, open a saved map after a successful public-token
-  `browser-config` response. Confirm the Mapbox JS and CSS load from same-origin
-  Vite assets, the style/tiles load from approved Mapbox service hosts, the
-  browser reports no CSP violations, and the map visibly renders with
-  attribution. A CSP-blocked SDK must show an error, not a claimed map success.
-- Open and close the Thingtime drawer while the map is visible, then resize the
-  viewport at desktop and mobile widths. The Mapbox canvas and tiles must fill
-  the changed map container, without a blank strip or horizontal overflow.
-- Negotiate api.maps on the exact origin; unsigned/scoped callers and foreign
-  Vault references cannot read a token or make provider requests. A secret sk
-  token cannot become browser configuration. Invalid provider replies and
-  failures never expose tokens, upstream bodies or request URLs.
-- Type an address, choose one explicit suggestion, then save using permanent
-  geocoding with the exact selected ID. A changed match must refuse saving;
-  temporary search results must not survive reload in Things or localStorage.
-- Optimize two or more known points; compare displayed order, line, distance
-  and duration with the provider response. Non-roundtrip keeps endpoints fixed.
-  Mapbox v1 exceeds its provider limit at 13 stops and must explain that limit.
-- Open the saved page at desktop/mobile widths, scroll fully, open all controls,
-  and individually edit nested labels, inputs, buttons, row fields and map props.
-  After expanding source-backed Components into editable blocks and saving,
-  reload the live page and verify existing Favorites, Contacts, Groups and
-  Routes still populate from their saved Actions. Builder editing must leave
-  those Actions inert, without presenting an empty live catalogue as success.
-  In an expanded repeated row, activate a saved Action button by pointer and
-  Enter, then submit a row form with an edited named field by click and input
-  Enter. Select an item with a `$ui` row picker and verify the selected value
-  appears in a sibling field without running a saved Action. Each gesture must
-  run exactly once with that row's ID and revision and persist the intended
-  change. A nested saved Component must also run once, while Builder edit
-  clicks must run nothing.
-  Switch query-selected views and reload each URL: page-level condition blocks
-  must receive the current query, and inactive views must leave no empty gap.
-  Save/reload user data. Provider navigation results remain transient. Verify
-  account switches and unmount remove the map and its old token; attribution
-  stays visible. A fixture or passing build is not a live provider result.
+### Connections OAuth vault configuration (26 October 2026)
 
-### Preview retention and PR liveliness
+Automated: `npm --prefix remix run test:connections`, `test:api-capabilities`, `test:admin-integrations`, `test:mail`; after the canonical Vercel build, `npm --prefix remix run smoke:built-connections` checks both compiled manifests on macOS with all network access denied and synthetic bootstrap only.
 
-- For retained native development, prepare a named workspace and verify its
-  development name/bundle identity, executable path, private ports, managed
-  database and synthetic account independently from the stable installed app.
-  Save/read back/reload a real retention change, quit/relaunch the named app and
-  confirm both session and policy survive. A second launcher or preparation must
-  refuse while its app or detached child group remains active. Failed replacement
-  must preserve the last working snapshot. Retained dependencies must resolve
-  within the snapshot rather than the source worktree; stop only the verified
-  workspace group and preserve its app/data for ongoing testing. Never refresh
-  another app's Keychain permissions to make the development namespace work.
-
-- Use Edit layout → Builder inspector to select a nested label and a separate
-  input/control, change the label and a control attribute independently, and save
-  the layout. Compare its exact private webpage Thing through the API, reload both
-  placements, and confirm both edits and the live policy path still work at 1440
-  and 390 pixels. Exercise the opened inspector and page scrolling for overflow.
-  In development StrictMode, opening/closing the inspector must not leave layout
-  readiness permanently aborted or Save layout disabled after an edit. For a
-  desktop UI whose selected API origin differs, verify private layout requests
-  use the supported same-origin session proxy and refuse stale actor/plane/origin.
-  In the actual native bundled UI, select a different API origin and verify
-  capability discovery reaches that selected public origin without account
-  cookies or redirects, then exercise policy and private layout save/readback/
-  reload. A bundled local manifest must never satisfy a remote-origin check.
-  Cancel discovery and immediately remount before the old rejection settles;
-  the new request must succeed and its cache survive the late old failure.
-  Check actual elementFromPoint targets at inspector title/type/placeholder inputs
-  (including near their right edge) while floating launchers would overlap. The
-  shared overlay contract suppresses launcher buttons only while the inspector
-  exists; closing it must restore them without changing settings or panel state.
-  JSON/source editing alone or a single outer selection is insufficient. Do the
-  same on the intended production account after sign-in; local fixtures cannot
-  establish production saved-layout acceptance.
-
-- In an isolated API/database with a synthetic admin, open `/admin/preview-retention`
-  at desktop and mobile widths. Scroll top to bottom, expand/collapse both
-  sections, exercise all switches and conditional numeric fields. Check keyboard
-  labels, focus, wrapping and absence of horizontal overflow. The same controls
-  appear in Settings → Admin.
-- Save cleanup paused, a nonzero orphan grace, superseded pruning/grace and an
-  optional inactivity duration. Independently GET the admin endpoint, reload the
-  page and confirm the exact saved revision/policy. Disable inactivity again and
-  confirm null persists. A stale revision must return 409 and preserve the newer
-  values; anonymous and ordinary accounts must be refused.
-- Verify admin retention 1.0.1 and controller retention 1.0.0 in both manifest
-  generators and the built/runtime manifest. The route/manifest test must assert
-  each independent feature version when only one contract receives a PATCH.
-  A stored policy this server cannot
-  validate must GET as 503 unavailable; malformed submitted policy stays 400. Signed
-  controller reads require the exact repository/ref and a fresh timestamp,
-  return only the policy and no revision/audit data. Wrong signatures, stale
-  requests and DB failure must refuse cleanup. Check both manifest generators.
-- Protected controller tests cover no-open-PR grace, opt-in superseded cleanup,
-  active current-head protection, opt-in inactive open-PR expiry, failed policy
-  reads and stable/production/gateway/alias protection. Real Vercel deletion is
-  separate provider acceptance and must never run from this disposable fixture.
-- Deployment order: product gateway API first, signed read and admin save/readback
-  second, protected controller consumer last. A UI preview using the older
-  gateway cannot establish the new backend's acceptance.
+- Verify the selected origin's manifest advertises catalog/begin/callback/feed/Connections and saved-account requests 2.0.0. Create synthetic per-environment vault entries; confirm catalog/begin agree, invalid/missing/duplicate labels fail closed without secret-bearing errors, and preview/local requests cannot borrow production grants.
+- Begin with a valid session, rotate the client ID before callback, and verify no provider exchange. Restart and finish with the same client; verify replay and another session are refused. Same-client secret rotation should work using the current vault value.
+- Refresh a synthetic expiring grant with only access token/expiry returned: binding, scopes and refresh token survive. Race reconnect against both refresh lease acquisition and write completion; a different binding must never be returned. Old unbound grants require reconnect.
+- Live acceptance remains separate: on each intended origin compare provider account identity with the developer dashboard and verify two Google/Facebook accounts, callbacks and refresh using that environment's authorized session. Synthetic tests do not establish provider acceptance.

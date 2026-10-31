@@ -8,7 +8,7 @@ import { updateThing, viewerOf } from '~/api/utils/things/things';
 // POST /api/v1/things/update — { id, crystal?, extended?, visibility?, tags? }
 // — update your own thing. Crystal patches merge over the existing crystal and
 // are re-validated against the thing's schemas; extended replaces as a whole
-// value (null clears it), so the cap matches the generic /things route.
+// value (null clears it); schema-specific validation matches /things.
 // App tokens update only inside their namespace: acl-clamped, byte-delta
 // charged, per-(user, app) rate limited.
 export const action = async ({ request }: { request: Request }) => {
@@ -35,7 +35,9 @@ export const action = async ({ request }: { request: Request }) => {
     }
   }
 
-  const body: any = await readJsonBodyWithCors(request, 768 * 1024, cors);
+  // Preserve user data without an application byte cap. Hosting and MongoDB
+  // enforce their physical capacities; the CORS/authentication gates stay intact.
+  const body: any = await readJsonBodyWithCors(request, Infinity, cors);
   const result = await updateThing(
     viewerOf(user, actorPat(actor)),
     body?.id,

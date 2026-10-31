@@ -88,6 +88,7 @@ export const ALLOWED_PROPS = new Set([
 	'target',
 	'rel',
 	'src',
+	'referrerPolicy',
 	'alt',
 	'title',
 	'width',
@@ -184,6 +185,11 @@ export const ALLOWED_PROPS = new Set([
 	// strings (an action key/id and a JSON inputs blob); no URL or JS sink.
 	'data-tt-action',
 	'data-tt-action-inputs',
+	// Inert transient-host hints. They cannot submit a native form or choose an
+	// endpoint; the current host validates its own fields and adapter binding.
+	'data-tt-submit',
+	'data-tt-credential-form',
+	'data-tt-private-control',
 	// Inert editor address, validated against the authored template before editing.
 	'data-tt-label-key'
 ]);
