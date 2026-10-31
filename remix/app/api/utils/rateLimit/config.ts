@@ -323,6 +323,12 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
 	// User Secure Vault writes are rare and credential-sensitive; voice replies
 	// can spend a user-supplied provider quota, so both fail closed at routes.
   'library.request': { limit: 20, windowMs: 60_000, enabled: true },
+  // Provider calls for the editable route planner. Suggestions need headroom
+  // for ordinary typing; optimized routes are costlier and have a smaller cap.
+  'maps.suggest': { limit: 120, windowMs: 60_000, enabled: true },
+  'maps.optimize': { limit: 20, windowMs: 60_000, enabled: true },
+  'maps.browser-config': { limit: 60, windowMs: 60_000, enabled: true },
+  'maps.request': { limit: 60, windowMs: 60_000, enabled: true },
 	'lopu.vault': { limit: 60, windowMs: 60_000, enabled: true },
 	'lopu.voiceReply': { limit: 30, windowMs: 60_000, enabled: true },
 	// Paired device mesh. Pairing creates credentials and therefore fails

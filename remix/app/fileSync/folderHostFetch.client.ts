@@ -2,6 +2,8 @@
  * uploads keep their credential-free destination; API fallback is Mac-only. */
 export function createFolderHostFetch(input: {
  origin: string; localOrigin: string; ownerId: string; signal: AbortSignal;
+ // Trusted hosts may reuse the same proxy for an explicitly selected plane.
+ expectedDataPlane?: string;
  check(): void; fetch: typeof fetch;
 }): typeof fetch {
  const changed = () => Error('The account, device or sync server changed. Reopen folder access.');
@@ -31,7 +33,7 @@ export function createFolderHostFetch(input: {
 			init?.redirect !== 'error' ||
 			init?.cache !== 'no-store' ||
 			headers.get('X-Thingtime-Expected-Actor') !== ownerId ||
-			headers.get('X-Thingtime-Expected-Data-Plane') !== 'home' ||
+			headers.get('X-Thingtime-Expected-Data-Plane') !== (input.expectedDataPlane ?? 'home') ||
 			headers.has('authorization') ||
 			headers.has('cookie')
 		)

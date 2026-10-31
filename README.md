@@ -4,6 +4,14 @@ https://thingtime.com
 
 ### Agent browsers and tasks
 
+ChatGPT/Codex private lifecycle reporting uses the existing saved workspace
+through the [MCP reporting gateway](docs/agent-reporting.md). Authorize the
+independent `agents.report` permission once; routine calls then reuse a distinct
+task Character, saved Actions and stable request receipts. Existing Things
+permissions are not upgraded automatically. Forks supply their own private
+workspace references and external test fixtures, with no account-specific
+definitions or credentials committed.
+
 Thingtime for Mac includes task-owned browser installs, claims and a live
 viewer, with isolated, IP-restricted and unrestricted network settings. The
 Agent work records, dashboards, schemas, components and Actions are ordinary saved
@@ -26,6 +34,15 @@ storage accounting. No new provider keys or environment secrets are required.
 Subspace membership remains authoritative for message access. Moderators can
 place accessible Things above posts or in the sidebar; each visitor still needs
 the referenced Thing's own permission.
+
+Human-facing Thing data declares `renderComponent` at its displayed data level:
+either `{ "id": "<accessible-component-id>" }` or a Component definition such as
+`{ "render": { "tag": "p", "children": ["{text}"] } }`.
+The shared `ThingView` binds editable fields directly and through the `thing`
+alias. References retain their own access checks, and display does not execute
+Component sources or Actions. Data inspection is an explicit choice. Saved
+Component and Webpage Things keep their canonical definitions. See the
+[embed rendering contract](docs/feature-map/posts-comments-and-feed.md#subspace-messages-and-embedded-things).
 
 Run `npm --prefix remix run test:subspace-messages-acceptance` for the disposable
 local API acceptance harness. Browser acceptance uses its `--ui` option and a
@@ -115,10 +132,38 @@ and `THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://localhost:<web port>`.
 This local adapter refuses deployed/Vercel environments. No new provider secrets
 are needed beyond the existing vault and private object storage configuration.
 
-Native system AutoFill and passkey creation are being delivered separately in
-[PR #996](https://github.com/lopugit/thingtime/pull/996). They require signed Apple
-credential-provider bundles, provisioning and device verification. Native availability requires the signed installation and system-provider setup below. TOTP QR imports, generated codes and password transfers work here
-without native installation.
+Password generation needs browser WebCrypto and no external provider account.
+Generator settings are account/origin scoped; generated values remain in the
+masked draft until saved. URL icons require anonymous HTTPS CORS from the image
+host; uploads use the existing encrypted attachment configuration above. No icon
+proxy credentials or third-party favicon service are required.
+
+The drawer now has **Password manager** and a dedicated `/settings/passwords`
+category. Thingtime sign-in passkeys remain under Security. The web vault works
+on supported secure browser origins; arbitrary-site passkey creation/sign-in also
+needs an installed provider. For Chromium, run
+`npm --prefix remix run build:password-extension`, extract
+`remix/public/downloads/thingtime-passwords-extension.zip`, and use **Load unpacked**
+in an isolated Chrome/Chromium profile. Enable the extension in its popup and select
+your trusted Thingtime/fork HTTPS origin; explicit localhost/127.0.0.1 origins are
+supported for isolated local development. Reload existing relying-party tabs.
+The extension is off by default, needs no extension-specific secret, and is not a
+store release. Firefox, Safari and mobile browser integration are unverified;
+unsupported WebAuthn options and native-object requirements may require the
+browser's other provider. See [extension setup and limits](browser-extension/README.md).
+A working web vault alone does not prove passkey registration on another website.
+
+Native system AutoFill and passkey registration are implemented in the Apple
+credential provider. Install a properly signed/provisioned provider and enable
+Thingtime in the operating system's Password AutoFill settings. Registration
+starts from the destination website and may require device authentication. The
+web Passkeys guide connects through the existing native bridge when available;
+this change does not modify native packaging. Verify an actual registration and
+sign-in on the installed device before claiming provider availability. See the
+[password manager contract](docs/password-manager.md#native-password-autofill).
+
+TOTP QR imports, generated codes and password transfers work in the web vault
+without any native installation.
 
 ### Unified Timeline (implementation in progress)
 
@@ -1561,11 +1606,15 @@ servers without gateway settings retain direct connections. Dedicated mode
 owns its MongoDB pools but uses the configured environment database, so it does
 not imply database isolation or an Atlas tier change. The intended mapping is
 `thingtime.com`/production to production data, `dev.thingtime.com`/develop to
-development data, and standard previews to `master.previews.thingtime.com` /
-preview on development data. A configuration audit found previews and custom develop share the development
-cluster, separate from production. Verify the selected alias and its current
-manifest before treating gateway 1.1.0 as deployed; a local merge or an existing
-alias does not establish that rollout.
+development data, and both standard previews and ordinary PR previews to
+`master.previews.thingtime.com` / preview on development data. PR builds keep
+their existing custom develop credential scope; the publisher explicitly selects
+the logical preview gateway without exposing unrelated standard-preview settings
+to branch code. A recent configuration audit found previews and
+custom develop already share the development cluster, separate from production.
+Verify the selected alias and its current manifest before treating gateway 1.1.0
+as deployed; a local merge or an existing alias does not establish that rollout,
+and the master preview alias and gateway activation are still pending.
 
 Configure a self-hosted API or the environment gateway owner with:
 
@@ -3608,6 +3657,15 @@ integrations such as S3, and keep secrets such as MongoDB passwords and Vercel
 API tokens unprefixed and server-only.
 
 ## Native iOS TestFlight web URL
+
+The iOS app includes a **Thingtime** system Share extension for incoming text,
+links, media and files. Shares are saved locally; opening Thingtime makes them
+available in **Files → On My iPhone → Thingtime → Shared**, where the normal
+upload picker can select them. For forks, register `<iPhone bundle ID>.share`
+with the same App Group as the containing app and its own provisioning profile.
+See [incoming shares and native verification](iOS/README.md#receive-content-from-the-ios-share-sheet).
+An older installed native build needs an app update to gain this share target;
+changing the embedded website cannot install an extension.
 
 Lopu voice requires build 27 or later; build 25's general native bridge did not
 include its recorder or Live Activity widget. Voice support is negotiated with
@@ -6376,6 +6434,34 @@ and provisioning contracts. `CODE_SIGNING_ALLOWED=NO` is for isolated compilatio
 only and does not establish installed AutoFill or Keychain acceptance. Never
 install an unsigned helper over a working signed app.
 
+For an isolated native helper compilation, set all five overrides together:
+`THINGTIME_PASSWORD_HOST_BUNDLE_ID`, `THINGTIME_PASSWORD_PROVIDER_BUNDLE_ID`,
+`THINGTIME_PASSWORD_KEYCHAIN_GROUP`, `THINGTIME_PASSWORD_STAGING_APP` and
+`THINGTIME_PASSWORD_BUILD_DIR`. Use a distinct host ID such as
+`com.example.thingtime.passwords.dev`, provider ID `<host-id>.provider`, and a
+private Keychain group ending in `.<host-id>`. Staging/build paths must be absolute,
+distinct from the canonical outputs, and outside every `Applications` directory.
+For unsigned compilation set `THINGTIME_NODE_SIGNING_MODE=unsigned`; a signed
+development run still needs its own provisioned identity and independent test
+session. Do not install or register an unsigned fixture as the user's provider.
+The visible host/provider name is Thingtime; existing production bundle IDs,
+Keychain group and `Thingtime Passwords.app` packaging path remain unchanged.
+Packaged verification requires resolved Thingtime display/short names and matching
+host/provider versions. The host uses bundled name localization so its physical
+`Thingtime Passwords.app` filename and identity remain stable. On macOS prefer the native provider in Chrome; the
+Thingtime browser adapter remains optional and does not talk to the native host.
+An enabled provider needs a saved matching RP passkey before a site sign-in entry
+can appear. Other browser extensions' passkey offers can intercept this flow;
+macOS and the browser control provider order. See [provider setup and discovery](docs/password-manager.md#native-progress-recovery-and-naming).
+
+The desktop bridge reports `passwordsVersion` 1.1.0 when the bundled host supports
+read-only connection status. Password manager and Passwords settings then show one
+Connect/Disconnect control based on saved owner/origin linkage. Older installed
+bridges show an update instruction. An extension-only upgrade does not provide
+this host/Electron capability. Status reads do not contact the server or establish
+that macOS AutoFill is enabled; verify those requirements separately. Keep an
+existing custom host's OAuth/login behavior when updating native components.
+
 ### Commander-backed Mac backup indexing
 
 The signed macOS node bundles the repository's `commander-indexer` Rust binary.
@@ -6647,3 +6733,71 @@ configuration; it never executes source in its credential-bearing job.
 See [Vercel deployment references](VERCEL_DEPLOYMENTS.md) for the project and
 verification receipts. Standard Actions usage for this public repository is
 subject to GitHub's current plan terms; Vercel hosting/runtime charges remain.
+
+### Saved Mapbox map applications
+
+A saved Builder app can use the `tt-mapbox` viewport and the origin-scoped
+`api.maps` 1.0.0 operations. Save your own Mapbox token in the private Thingtime
+Vault and configure its entry ID (`<owned-vault-entry-id>`) in the saved app.
+The browser map requires a public `pk` token; never put secret tokens in page
+definitions. The map SDK and CSS are staged from the pinned npm package as same-origin app assets; browser
+tile/style requests still go directly to Mapbox service origins. Configure a
+style URL from your own Mapbox Studio account.
+Autocomplete and live optimization require the corresponding provider access;
+saving selected geocodes additionally requires Mapbox Permanent Geocoding
+entitlement and its storage conditions. No new Vercel provider-key variable is
+needed. Standard Mapbox navigation output cannot be cached. See
+[editable maps and routing](docs/maps.md) for operation contracts and verification.
+
+### Storage recovery and production checks
+
+See [account storage recovery](docs/storage-recovery.md) for the 100 MiB pending
+accounting budget, the existing cron/admin recovery entry point, private
+controller setup and pre-merge/deployment/runtime verification. It reuses the
+existing home MongoDB replica set, scheduler secret and protected Vercel
+controller environment; no additional application secret is required.
+
+### Preview cleanup policy
+
+Administrators use **Admin → Preview retention** (`/admin/preview-retention`) or
+Settings → Admin to save Vercel cleanup and PR liveliness rules. **Edit layout**
+opens the existing Builder: labels, controls, descriptions, buttons and containers
+are individual editable blocks. **Save layout** persists the intended account's
+private settings webpage through the Things API, independently of **Save retention
+rules**, which updates the admin policy. Both placements reuse that same saved
+layout; live operations pause while editing. The native bundled UI negotiates
+the selected API's public manifest through the existing scoped transport; private
+policy/layout operations retain the authenticated local proxy and actor, data-plane
+and selected-origin fences. Defaults enable
+cleanup for deployments with no open PR, with zero grace; superseded active-PR
+cleanup and inactivity expiry are off. Grace periods are whole hours. Tagged
+previews count closed-PR grace from the later of creation and PR closure;
+untagged branch snapshots use creation age because historical closure time may
+be unknown. Optional open-PR inactivity uses GitHub `updated_at`, expires that
+PR's previews and suspends publishing until activity resumes; it never closes
+or edits the PR. Active builds and the newest READY current-head preview of
+each active PR remain protected when pruning superseded snapshots.
+
+The policy is a revision-guarded home settings singleton
+`Thingtime.CiPreviewRetention`. It contains no provider credentials. The
+protected controller reads it through an origin-negotiated, signed
+`/api/v1/integrations/ci/preview-retention` request using the existing
+`THINGTIME_CI_ROUTER_SECRET` bootstrap secret. For a fork, configure the same
+secret securely in its server vault/bootstrap and protected GitHub workflow;
+set `THINGTIME_GITHUB_REPOSITORY=owner/repository` and the controller's selected
+Thingtime origin. Never copy production credentials into a preview or test.
+Production, stable/gateway deployments, protected aliases and unrelated project
+resources are protected independently of these settings. Invalid or unavailable
+policy preserves deployments instead of using a stale enabled value.
+
+Roll out the product API to the selected gateway first, verify admin capability
+1.0.1, controller capability 1.0.0 and admin save/readback
+there, then roll out the protected controller
+policy consumer. An ordinary gateway-backed UI preview does not contain a new
+API; leave cleanup fail-closed until its selected origin exposes the contract.
+This changes deployed policy only after that rollout.
+
+Local acceptance for this change used the task-owned dev stack at
+`http://127.0.0.1:18210` with a disposable replica at `127.0.0.1:17343`.
+A public Funnel was intentionally not provisioned for this disposable admin
+fixture; the isolated local acceptance environment is stopped after testing.

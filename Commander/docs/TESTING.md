@@ -2,6 +2,43 @@
 
 ## Launcher
 
+- [ ] Upgrade a schema-3 fixture while a writer migration/first refresh is pending. Valid old files must remain
+      searchable under current roots/ignore/hidden/Git policy, removed/stale-root paths stay absent, and unknown
+      eligible totals display Not measured rather than zero or a global legacy count. Compare contradictory .ignore,
+      .gitignore and info/exclude whitelists against a fresh real scan; source precedence and ignored-parent pruning
+      must agree. A known mismatched fingerprint
+      must never enable legacy adoption. After full reconciliation, verify normal counts and index age resume.
+
+- [ ] Leave background indexing active and search repeatedly: prior committed apps/files stay searchable, typing
+      never starts or awaits a scan, and the footer retains its last measured unique index count plus relative index age.
+      Resize the native launcher below 720px: keep the summary visible, with no overlap at the minimum window width.
+      Detailed processed/total progress appears only in Search Settings. Check the footer in a narrow launcher.
+- [ ] Under an isolated root, create/rename/delete files, folders and app bundles, including an inner bundle change;
+      verify event-driven changes without Index Now. Exercise continuous events during a scan, inherited/custom ignores,
+      root disable/removal, overlapping roots, mounted-volume removal while running and while stopped, and relaunch
+      after a saved settings change. Counts must exclude removed/disabled sources and duplicate public/Data-volume paths.
+- [ ] Keep a deliberately long full scan active, then create/rename/delete disposable files, folders and app bundles.
+      Verify changed exact-path metadata becomes searchable before the full writer commits; missing/ineligible paths
+      become tombstones, ignored descendants stay absent, and temporary observations never claim a measured committed
+      total. Keep a valid measured baseline visible through repeated pending notifications without returning to
+      Ready/Not measured; live results may precede its committed count. A root or ignore/hidden policy change must
+      immediately make the total unmeasured until a matching full replacement commits. After reconciliation, verify
+      the measured unique count and current results converge.
+- [ ] Pause a broad background metadata traversal, then add a file to an already visited folder. Exact new events
+      must remain prompt while older descendant work is pending. Change enabled roots during a pending search and
+      make that old read fail: neither its fallback nor yielded older work may restore the previous root's results.
+      A denied/failed directory enumeration must not by itself mark previously usable children as deleted.
+      Repeat a notification for a directory whose earlier walk is paused: known live children must stay visible.
+      With filesystem indexing disabled, delete/recreate a parent containing an app and verify its old tombstone
+      neither hides the recreated app nor prevents verified overlay retirement.
+- [ ] Exercise notification bursts and the installed app with all real enabled roots, including public/Data-volume
+      aliases of its database directory. Verify health/search and the native launcher remain responsive, database/WAL
+      writes do not feed another scan, and covered repeated events still trigger a bounded notification deadline.
+      A small-root fixture or synthetic event burst alone cannot pass installed whole-root acceptance.
+- [ ] Run `node script/verify-background-index.mjs '<development app path>'` after `script/dev-parallel.sh build`;
+      retain its measured search latency and inventory assertions. Run `script/dev-parallel.sh clean` before the final
+      signed install. Verify the installed app retains its original account/settings/profile and runs the new source.
+
 - [ ] Type a misspelling in the root launcher and confirm macOS does not show a correction/replacement popover.
 - [ ] Search for an application or path-backed file/folder and confirm its real Finder icon replaces the generic Commander glyph.
 - [ ] Run a broad query with at least 30 path-backed results, then move selection rapidly through the rows. Generic or
@@ -85,9 +122,13 @@
       the icon and choose Open New Window; verify the newly created window starts pinned even when the global default
       is off, and both windows retain independent queries. Exercise the configured pin/unpin shortcut and confirm the
       icon's active opacity follows native pinned state.
-- [ ] Run an index while the launcher is visible. Verify the idle footer is replaced by the active source label and
-      processed/indexed counts, advances without reopening the launcher, then returns to ready when complete.
+- [ ] Run an index while the launcher is visible. Keep scan labels and processed/indexed progress in Search Settings;
+      the launcher footer retains its measured searchable-total/age summary, or explicitly unmeasured state when
+      current eligibility has not been counted. Indexing must not interrupt typing or replace the search view.
 - [ ] Search `emoji` or `symbols`, run Search Emoji & Symbols, and verify the launcher changes into the eight-column picker without opening Settings or an external app.
+- [ ] With execution HTTP deliberately stalled, invoke the enabled Emoji & Symbols command's native shortcut.
+      The local picker must open immediately; a disabled extension/command must remain disabled. Navigate away
+      before completing the old request and verify its late view response cannot reopen or replace the current view.
 - [ ] In the emoji picker, search `heart`; verify semantic matches, category and skin-tone selectors, Left/Right/Up/Down navigation, selected-cell scrolling, and Command-K actions. Command-Return copies and Shift-Command-C copies Unicode code points.
 - [ ] Type `ear` and verify macOS does not show a spelling/correction pill over the picker; while the search field remains focused, arrow keys must move the selected emoji instead of entering correction UI. Search misspellings such as `haert` and `hert` and verify relevant heart emoji still appear.
 - [ ] Search `heart`, arrow to a non-leading heart, and choose it twice. Reopen the picker and search `heart` again; verify that emoji is promoted. Quit/relaunch Commander and repeat the query to verify the bounded device-local query/emoji counts persist.
@@ -108,6 +149,7 @@
       with Commander host/daemon CPU, memory, storage, and process count plus local Mac CPU, best-effort GPU,
       memory, thermal state, and filesystem values. Disconnect the native bridge only in a test shell and verify the
       unavailable state appears without sending machine metrics to the daemon or Thingtime.
+- [ ] Open Activity repeatedly with real IORegistry GPU output larger than a pipe buffer; metrics must finish, and an unavailable or stalled GPU probe must stop within its deadline instead of freezing the app.
 - [ ] In Activity, verify System memory shows used/total plus Active, Wired, Cached, Compressed, and Purgeable values;
       verify Filesystem includes the macOS purgeable-capacity estimate. Sort the full-width process table by every
       available header, enable Group by parent, and confirm CPU, memory, and disk rows update without crashing the
@@ -140,6 +182,11 @@
 - [ ] With an index above one million records, leave Search Settings open for at least four status polls. Counts and
       database size must stay populated, each poll must complete within five seconds, and no timeout may replace the
       last-known values with zeroes. Search a long nonexistent term afterward and verify status polling recovers.
+- [ ] Under the existing saved 512 MiB memory ceiling, reconcile a wide/deep enabled whole-volume root
+      in the signed installed app without raising or resetting the policy. Verify the writer commits, the launcher
+      leaves Not measured for an independently checked unique total/freshness, and health/search remain responsive.
+      Cover directory-handle limits 1, 2 and 16, cross-chunk ignore rules, disappearing boundary directories and
+      exclusion of the index database, WAL/SHM and temporary frontier; failure must preserve the previous snapshot.
 - [ ] Change Scanner threads, Parallel tasks, Open folders, Max CPU, and Max memory; close/reopen Settings and verify
       every value persists. Run a scan and verify the last-run line reports effective workers, average CPU, peak RAM,
       and throttle time. Set the three concurrency ceilings to different values and verify effective workers use the

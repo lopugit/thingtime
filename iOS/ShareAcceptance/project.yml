@@ -1,0 +1,40 @@
+name: ShareAcceptance
+options:
+  deploymentTarget:
+    iOS: '17.0'
+settings:
+  base:
+    CODE_SIGNING_ALLOWED: NO
+    SWIFT_VERSION: '5.0'
+targets:
+  ShareAcceptance:
+    type: application
+    platform: iOS
+    sources: [Host]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.thingtime.shareacceptance
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Share Acceptance
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: Create and verify the synthetic acceptance Live Photo.
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: Save the synthetic acceptance Live Photo.
+  ShareAcceptanceUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: ShareAcceptance
+    settings:
+      base:
+        TEST_TARGET_NAME: ShareAcceptance
+        PRODUCT_BUNDLE_IDENTIFIER: com.thingtime.shareacceptance.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  ShareAcceptance:
+    build:
+      targets:
+        ShareAcceptance: all
+    test:
+      targets: [ShareAcceptanceUITests]

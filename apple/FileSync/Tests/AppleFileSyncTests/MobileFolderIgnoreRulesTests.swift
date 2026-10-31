@@ -64,6 +64,8 @@ final class MobileFolderIgnoreRulesTests: XCTestCase {
         throw XCTSkip("The live Git oracle requires macOS Process; shared fixture conformance still runs on iOS.")
         #endif
     }
+    #endif
+
     func testEscapedGlobstarSeparatorAndHyphenFollowGit() throws {
         let separator = try MobileFolderIgnoreRules("a/**\\/b")
         XCTAssertFalse(separator.ignores("a/b", isDirectory: false))

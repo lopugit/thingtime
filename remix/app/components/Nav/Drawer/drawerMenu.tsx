@@ -21,6 +21,7 @@ export interface DrawerSubItem extends DrawerItemVisibility {
 	// mode items switch the thing mode for the current thing path instead of
 	// navigating to `to` (`to` stays as the selection-sync/highlight fallback)
 	mode?: ThingMode;
+	children?: DrawerSubItem[];
 	// optional group name; grouped items render under an expand/collapse header
 	group?: string;
 }
@@ -73,13 +74,14 @@ export const drawerMenuItems: DrawerTopItem[] = [
 	},
 	{
 		id: 'passwords',
-		label: 'Passwords',
-		icon: '🔐',
+		label: 'Password manager',
+		icon: '🔑',
 		to: '/passwords',
 		authOnly: true,
 		children: [
-			{ id: 'passwords-vault', label: 'Passwords', icon: '🔐', to: '/passwords', authOnly: true },
-			{ id: 'passwords-security', label: 'Security settings', icon: '⚙️', to: '/settings/security', authOnly: true }
+			{ id: 'passwords-vault', label: 'Passwords and passkeys', to: '/passwords', authOnly: true },
+			{ id: 'passwords-settings', label: 'Password manager settings', to: '/settings/passwords', authOnly: true },
+			{ id: 'passwords-security', label: 'Security settings', to: '/settings/security', authOnly: true }
 		]
 	},
 	{
@@ -392,3 +394,15 @@ export const buildDrawerSubSections = (items: DrawerSubItem[]): DrawerSubSection
 
 	return sections;
 };
+
+/** Iterative traversal supports built-in branches at arbitrary depth as well as custom ones. */
+export function drawerBuiltinNodes(items: DrawerTopItem[] = drawerMenuItems): { item: DrawerTopItem | DrawerSubItem; parentId?: string }[] {
+ const pending: { item: DrawerTopItem | DrawerSubItem; parentId?: string }[] = items.map(item => ({ item }));
+ const result: typeof pending = []; const seen = new Set<string>();
+ while (pending.length) {
+  const next = pending.shift()!; if (seen.has(next.item.id)) continue;
+  seen.add(next.item.id); result.push(next);
+  pending.unshift(...(next.item.children || []).map(item => ({ item, parentId: next.item.id })));
+ }
+ return result;
+}

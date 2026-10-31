@@ -17,7 +17,7 @@ import type {
   ThingtimeNetworkProbe,
 } from '@commander/protocol';
 
-import { verifyDaemonLoginCapabilities } from './daemonCapabilities';
+import { verifyDaemonLoginCapabilities, verifyDaemonIndexCapabilities } from './daemonCapabilities';
 
 const query = new URLSearchParams(window.location.search);
 const sessionToken = query.get('token') ?? '';
@@ -93,7 +93,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ itemId, actionId, query: searchQuery }),
     }),
-  indexingStatus: () => request<IndexingStatus>('/api/index/status'),
+  indexingStatus: async () => {
+    await verifyDaemonIndexCapabilities(window.location.origin);
+    return request<IndexingStatus>('/api/index/status');
+  },
   indexNow: (scope: IndexScope) =>
     request<{ ok: true; scope: IndexScope; status: IndexingStatus }>('/api/index', {
       method: 'POST',

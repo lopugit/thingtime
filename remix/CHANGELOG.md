@@ -104,6 +104,130 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-10-30: Add retained, distinctly named Thingtime development app workspaces with independent dependencies, encrypted profiles, managed local replicas and process ownership. Development stays separate from the stable installed app; see [PR details](../PRs/codex-mongo-preview-cleanup-preview-retention.md#retained-development-app--30-october-2026). **Codex (AI)**
+
+- 2026-10-30: Add individually editable, private saved Builder blocks for shared Admin preview-retention and PR-liveliness sections with revision-guarded saves, explicit capability negotiation and signed fresh controller policy reads. Preserve deployments on unavailable policy; product gateway rollout precedes controller rollout. Shared Builder overlay chrome keeps floating launch buttons off inspector inputs and restores them on close. Native capability discovery targets the selected API and immediate remounts discard aborted negotiations without weakening origin checks. Preserve the review-bot stored-policy error correction with admin capability 1.0.1. Supported lazy WASM initialization restores Nitro startup while retaining real engine asset URLs. [Details](../PRs/codex-mongo-preview-cleanup-preview-retention.md). **Codex (AI)**
+
+
+- 2026-10-29: Restore Add for long custom emoji combinations, retain unfinished
+  reaction-picker input after dismissal, and append nine recent choices to the
+  quick reaction popup. Reuse shared validation and account-scoped reaction
+  history with responsive wrapping and real API/browser regression coverage.
+  [PR #1290 delivery notes](../PRs/1290-codex-emoji-picker-drafts-recents--fix-custom-emoji-add-drafts-and-recents.md).
+  **Codex (AI)**
+
+- 2026-10-29 — **Codex (AI)**: Add a transactional 100 MiB pending-accounting budget for trusted unlimited accounts, durable leased recovery, source-aware release health and structured storage incident logs. Add pre-merge, production alias and scheduled runtime checks through the protected controller. See [storage recovery](../docs/storage-recovery.md). Details: [PR #1289](../PRs/1289-storage-ledger-release-guard.md).
+
+- 2026-10-29: Restore the original browser tab before explicit native passkey fallback starts WebAuthn; approval-page cancellation returns consistently while background opt-out/cancellation stays non-disruptive.
+
+- 2026-10-29: Restore successful browser passkey approvals to the exact requesting tab/window before the site handles its response.
+
+- 2026-10-29: Add privacy-safe browser passkey hook diagnostics and native empty-request site/count details to identify missed Thingtime routing without changing permissions or credential matching.
+
+- 2026-10-29: Restore repeated child insertion in populated Builder parents,
+  add above/below/left/right insertion, and replace overlapping nested title
+  chips with a shared ancestor breadcrumb. Add an editable block-structure
+  dialog whose page/parent/block views select the real inspector target.
+  [Implementation and acceptance](../PRs/1284-codex-builder-nested-blocks-fix-nested-builder-insertion-and-add-block-structure-navigation.md).
+  **Codex (AI)**
+
+- 2026-10-29: Identify Builder-authored Things through the existing schema array, open owned Builder Things in their editors, and add shared Open in Builder / Open live page menu actions while preserving view/share links and ordinary Thing navigation. [PR 1280 details](../PRs/1280-codex-builder-thing-navigation-open-builder-things-in-their-editors.md). — Codex (AI)
+- 2026-10-29: Localize the native AutoFill host name as Thingtime while preserving its installed filename and identity; verify bundled localization rather than raw plist branding alone.
+
+- 2026-10-29: Unify native and optional browser-provider display naming as Thingtime, verify matching branded bundles, and present native macOS passkey setup and discovery before optional browser interception.
+
+- 2026-10-29: Recover native Password AutoFill linking for an enabled provider, preserve explicit disconnect and independent account links, explain local HTTPS requirements, and install matching standalone/nested companions.
+
+- 2026-10-29: Restore shared Apple file publication and recovery on older host
+  kernels while retaining path, symlink, identity and content protections.
+  Cover the unsupported rename-flag retry and include FileSync changes in
+  automatic iOS releases. [Release evidence](../PRs/1272-codex-ios-all-share-types-add-ios-share-destination.md).
+  **Codex (AI)**
+
+- 2026-10-29: Split the historical-file export test fixture into typed JSON
+  sections so Xcode 26.2 can check it without exhausting expression inference.
+  Preserve the fingerprint bytes and all five export regressions. **Codex (AI)**
+
+- 2026-10-29: Type native upload progress expectations explicitly as 64-bit byte
+  counts so the Xcode 26.2 TestFlight regression build compiles. The existing
+  ordered-progress assertion remains intact. **Codex (AI)**
+
+- 2026-10-29: Add the native iOS Thingtime share destination for source-provided
+  text, links, media, documents, folders and custom types, with local atomic
+  batches, cancellation and retry. Include the extension in TestFlight signing
+  and archive verification, and add real system-sheet byte checks. Native
+  installation is required; a web deployment cannot add the destination.
+  [Verification and delivery boundaries](../PRs/1272-codex-ios-all-share-types-add-ios-share-destination.md).
+  **Codex (AI)**
+
+- 2026-10-28: Add private MCP task reporting with an independent delegation
+  permission, distinct task Characters, saved workspace Actions, guarded retries
+  and exact record readback. Existing Things connections require explicit
+  reporting authorization. See [setup and acceptance](../docs/agent-reporting.md).
+  [Validation and delivery boundaries](../PRs/1270-codex-mcp-private-reporting-private-agent-task-reporting.md).
+  **Codex (AI)**
+
+- 2026-10-28: Extend editable Mapbox viewports with cursor-paged favourite and route sources, numbered route stops, query selection and route-scoped transient geometry. Expose current runtime fields to ordinary page blocks so persistent maps can sit outside draft-resetting source panels. Saved app definitions remain private Things. **Codex (AI)**
+
+- 2026-10-28: Restore saved Action buttons and row form submissions in expanded editable Builder collections. The live page uses the canonical delegated Action handler once per gesture; Builder edit mode remains inert. **Codex (AI)**
+
+- 2026-10-28: Restore saved Action data in live collections after expanding Components into editable Builder blocks; collection controls remain inert while editing. **Codex (AI)**
+
+- 2026-10-28: Resize saved Mapbox maps when their containing Builder layout changes, including the Thingtime drawer opening and closing. The canvas now follows the map region without reloading tiles or persisting route results. **Codex (AI)**
+
+- 2026-10-28: Serve the saved Builder map's official Mapbox GL JS npm distribution and CSS as same-origin assets, and permit only Mapbox service and events connections in the strict application CSP. Add production CSP regression checks after live SDK loading was blocked. Provider-backed map rendering still needs deployed-origin acceptance. **Codex (AI)**
+
+- 2026-10-28: Add owner-scoped Mapbox address lookup and route optimization plus an editable map viewport for saved Builder apps. Credentials stay in Vault; navigation results remain transient under provider terms. Live app acceptance pending. [Details](../PRs/1260-codex-thingtime-route-planner-support-editable-mapbox-route-planner-apps.md). **Codex (AI)**
+
+- 2026-10-27: Native Password AutoFill now reports safe progress and recovery categories, retains registration identity across retries, fences stale requests and reads complete paginated catalogs. Display the macOS provider as Thingtime without changing credential-store identities; add isolated native build overrides, a shared editable Connect/Disconnect control backed by read-only device status, and automatic device verification after OS-picker selection. Real GitHub creation was user-confirmed; installed status controls and the final automatic-start provider remain separate acceptance. [Details](../PRs/1258-codex-native-passkey-repair-20261027-fix-native-passkey-recovery-and-thingtime-provider-naming.md). **Codex (AI)**
+
+- 2026-10-27: Add Password manager navigation/settings and an opt-in Chromium
+  passkey extension with editable website approval, fresh password verification,
+  origin/RP fences and durable vault readback. Document fork-safe ZIP setup and
+  real-data regression checks; Firefox, Safari, mobile and native-provider
+  acceptance remain separate. **Codex (AI)**
+
+- 2026-10-27: Add native desktop View menu zoom and focused-window Command/Control `+`/`=`/`-`/`0` shortcuts, sharing one zoom path while preserving text editing and preventing duplicate menu/renderer handling. Add focused and real Electron host regressions. [Validation and delivery](../PRs/1253-mac-dev-production-policy.md). **Codex (AI)**
+
+- 2026-10-27: Update Mac development delivery guidance to retain a separate development app for testing and usage, and gate stable Thingtime installation on a newer version containing a Mac feature merged into `main`. **Codex (AI)**
+
+- 2026-10-27: Admit the reviewed Darwin kernel-group verification fix and bounded trusted failure diagnostics for the native compile runner. Preserve default inert preflight, immutable pinning, network denial, and separate hosted/native acceptance gates. **Codex (AI)**
+
+- 2026-10-27: Pin the native compile listener to the independently reviewed process-lifecycle repair: verified numeric identity drops, bounded watchdog readiness, separate denial-probe deadlines, and readable failure evidence. Hosted preflight and full native acceptance remain open. **Codex (AI)**
+
+- 2026-10-27: Default the owner-gated native compile listener to an inert isolation preflight and require an explicit mode choice for candidate compilation. Keep immutable controller pinning and record hosted transport/denial/cleanup gates separately from native and installed-device acceptance. **Codex (AI)**
+
+- 2026-10-26: Preserve explicit saved or embedded render Components when typed Posts and comments are created or edited. Honor the outer declaration in nested Post embeds, negotiate the additive write contracts, and cover real typed-Post repair/readback in feed and sidebar acceptance. Existing saved content still needs an explicit renderer assigned. **Codex (AI)**
+
+- 2026-10-26: Add a contextual **➕ Add +** row to both drawer lists and support arbitrary-depth nested menus in the existing lower section. Preserve ancestor navigation, editable saved templates and existing links; expose parent selection and sibling ordering in drawer settings. **Codex (AI)**
+- 2026-10-26: Let initial and foreground resource refreshes reach a local API
+  even when the browser reports offline. Subspace embeds now get their first
+  request without weakening network isolation; offline background polling stays
+  paused. Regression and related suites pass 779 tests. [Verification](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
+- 2026-10-26: Configure production, develop and shared preview gateway targets;
+  verify their origin-scoped manifests and root-data routes while preserving
+  existing aliases and credentials. Integrate the canonical Thing renderer
+  from main for subspace embeds. Verify dedicated branch reads and rejection of
+  incoming gateway relays; identify the exact-origin allowlist correction needed
+  for ordinary PR aliases. [Rollout and verification](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
+- 2026-10-26: Replace the legacy UUID hook's insecure random source with Web Crypto while preserving its mount-time lifecycle. The main delivery includes only the owned zero-baseline changes from PR 1228. **Codex (AI)**
+- 2026-10-26: Render data Things through an explicit saved Component pointer or
+  embedded Component definition, with an opt-in data inspector and independent
+  Component access checks. Keep type aliases out of explicit renderer selection
+  and document the authoring contract in global and repository AI guidance.
+  Preserve native child controls inside transient Action layouts and prevent
+  hidden content containers retaining horizontal scroll after data inspection.
+  [Verification and limits](../PRs/1227-thing-render-components.md). **Codex (AI)**
+- 2026-10-26 — **Codex (AI)**: Add editable password generation with configurable
+  rules and source-linked presets, encrypted entry-icon metadata with upload/URL
+  controls, and a native passkey setup guide. Password capability is 1.3.0;
+  isolated generator, icon and HTTP checks cover the new boundaries.
+  [PR #1231 details](../PRs/1231-codex-password-generator-passkeys-add-editable-password-generation-entry-icons-and-passkey-setup.md).
+
+
+- 2026-10-26: Match custom drawer links and the final inline **➕ Add +** row to Thingtime navigation. Move menu layout editing into Settings and save the editable menu template as a private webpage Thing while retaining legacy device layouts. [Details](../PRs/1226-codex-drawer-renderable-row-match-the-final-add-drawer-row.md). **Codex (AI)**
+- 2026-10-26: Align shared native selects with Thingtime surfaces and radii; replace the black focus outline with a contrasting pink border and soft pink-to-violet glow. Theme Studio can customize both glow colours, softness and strength, including no glow. Add isolated desktop/mobile, light/dark and theme-editor save/reload coverage. **Codex (AI)**
+
 - 2026-10-26: Reconcile PR996 with develop `cd6f8b8abc94270980bac216da2412ffef8578b1`: preserve gateway 1.1.0 fail-closed deployment policy, password 1.2.1 compatibility, deterministic lease renewal and isolated proxy/dedicated acceptance. [PR996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md). **Codex (AI)**
 
 - 2026-10-26: Integrate the canonical environment gateway into PR996: signed per-operation forwarding, fail-closed Mongo admission, promotion/rollback draining, guarded warmup and durable index readiness/recovery. Preserve password contract 1.2.1 and reject incompatible gateway operations. [Runbook](../docs/environment-api-gateway.md). Deployed/native acceptance remains separate. — Codex (AI)
@@ -157,11 +281,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **2026-10-18 · Native password provider:** repair Developer ID archive/export, verify the exact signer and bundle-specific AutoFill profiles, and wrap the setup instructions. Signed macOS installation now succeeds; the provider is enabled and connected; OS credential ceremonies require user verification. [PR #996 evidence](../PRs/996-codex-password-manager--encrypted-password-manager-and-apple-credential-providers.md). — **Codex (AI)**
 - 2026-10-26: Integrate the reviewed environment gateway and dedicated connection policy into develop while preserving newer develop changes. Built sandboxed API acceptance and contract tests pass; canonical-owner activation remains pending. [PR #1224 details](../PRs/1224-codex-gateway-develop-integration-environment-gateways-and-dedicated-policy.md). **Codex (AI)**
 
-- 2026-10-26: Add the server-only `THINGTIME_MONGODB_CONNECTION_MODE` override for `proxy` or opt-in `dedicated` MongoDB connections, with a branch-bundled default. Document the audited preview/develop database relationship, proposed gateway mapping and gradual pool draining; gateway activation remains pending. **Codex (AI)**
+- 2026-10-26: Add the server-only `THINGTIME_MONGODB_CONNECTION_MODE` override for `proxy` or opt-in `dedicated` MongoDB connections, with a branch-bundled default. Document the audited preview/develop database relationship, proposed gateway mapping and gradual pool draining; publisher implementation, gateway activation and live acceptance remain pending. [PR 1223 details](../PRs/1223-codex-gateway-dedicated-connections-route-dedicated-branches-through-the-environment-gateway.md). **Codex (AI)**
+- 2026-10-26: Eliminate existing TypeScript and ESLint errors, enforce a zero-error TypeScript baseline, and reject invalid compiler runs or baseline increases. Repair shared helper typing and behavior, complete unavailable MongoDB health responses, and emit parser-safe generated font data. [Static analysis audit](../docs/static-analysis-baselines.md); [validation and review boundary](../PRs/1228-codex-typescript-zero-baseline-fix-remaining-typescript-errors.md). **Codex (AI)**
+- 2026-10-26: Open Things, files and devices with one click; retain modifier/checkbox selection and add hover/focus action controls across browsing layouts and the folder tree. Added isolated real-API browser acceptance with file-byte verification. [Details](../PRs/1230-codex-things-single-click-open-things-and-files-with-one-click.md). — Codex (AI)
 
 - 2026-10-26: Forward public social cards and generated docs through the local Vite proxy; verify root docs GET/POST through the actual Vite server as well as built Nitro. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
 
 - 2026-10-26: Add explicit per-environment API gateway ownership, signed origin-preserving forwarding, safe pool draining and bounded shared index-plan readiness. Branch frontends use the selected environment backend; live alias acceptance remains pending, and older preview deployments may age out naturally. [Details](../PRs/1221-codex-environment-api-gateway-centralize-environment-api-gateways-and-index-readiness.md). **Codex (AI)**
+
+- 2026-10-26: Add custom drawer links and attached Things, an Add + popup with
+  emoji/title/tooltip fields, and drawer settings management. Compose the new
+  controls from editable Builder blocks and reuse Commander search. Save, edit
+  and remove await durable device storage; retain drafts on failure.
+  [PR 1219 details](../PRs/1219-custom-drawer-items-links-and-commander-attachments.md). **Codex (AI)**
+
+- 2026-10-23: Add reusable local-media processing and individually editable Builder intrinsic controls. Compressor Pages and Components are authored directly as saved Things; retain the legacy suite. [Details](../PRs/1164-general-media-compressor-local-images-and-immediate-file-controls.md). **Codex (AI)**
+
+- 2026-10-23: Build Vercel production, custom environments and previews on GitHub
+  Actions, upload only prebuilt output, and disable native source builds. Keep
+  protected publisher credentials separate from product compilation.
 
 - 2026-10-23: Limit PR 1164 to reusable local-media and editable Builder primitives. Author compressor Pages/Components directly as saved Things; retain the legacy suite and fix capability-compatible file-sync assertions.
 
@@ -6751,6 +6889,9 @@ Detailed PR notes:
   — _Codex (AI), 2026-06-22_
 
 ---
+
+- 2026-10-30: Refresh Commander indexes in the background with responsive search and measured totals/age. Recover real-root watcher starvation, complete full indexing under the saved 512 MiB policy, and retain measured counts during pending updates. Signed installed count/freshness and health checks passed; physical Cmd+E remains unverified. [Details](../PRs/1282-codex-commander-background-index-keep-commander-indexes-fresh-without-interrupting-search.md). **Codex (AI)**
+
 
 <!--
 

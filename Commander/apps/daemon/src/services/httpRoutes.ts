@@ -21,7 +21,7 @@ export const COMMANDER_HTTP_ROUTES = [
     version: '1.0.0',
   },
   { id: 'search-cache', method: 'DELETE', path: '/api/search/cache', match: 'exact', version: '1.0.0' },
-  { id: 'index-status', method: 'GET', path: '/api/index/status', match: 'exact', version: '1.0.0' },
+  { id: 'index-status', method: 'GET', path: '/api/index/status', match: 'exact', version: '1.1.1' },
   { id: 'index', method: 'POST', path: '/api/index', match: 'exact', version: '1.0.0' },
   { id: 'history', method: 'POST', path: '/api/history', match: 'exact', version: '1.0.0' },
   { id: 'settings', method: 'PUT', path: '/api/settings', match: 'exact', version: '1.0.0' },

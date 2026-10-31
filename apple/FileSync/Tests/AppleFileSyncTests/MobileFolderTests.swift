@@ -1,6 +1,7 @@
 @testable import AppleFileSync
 import XCTest
 import CryptoKit
+import Security
 
 @MainActor
 final class MobileFolderTests: XCTestCase {
@@ -120,7 +121,45 @@ final class MobileFolderTests: XCTestCase {
         try store.remove(scope, id: a.id); XCTAssertEqual(try store.list(scope).count, 0); XCTAssertTrue(FileManager.default.fileExists(atPath: root.path))
         XCTAssertThrowsError(try store.grant(scope, id: a.id))
     }
+    func testPersistedReloadStaysScopedToAccountAndOrigin() throws {
+        let (root, scope, _) = try fixture()
+        var persisted: [String: Data] = [:]
+        func reopen() -> MobileFolderStore {
+            MobileFolderStore(load: { persisted[$0.key] }, save: { persisted[$0.key] = $1 })
+        }
+        let first = reopen(), grant = try first.add(scope, selected: root)
+        let reopened = reopen()
+        XCTAssertEqual(try reopened.grant(scope, id: grant.id).bookmark, grant.bookmark)
+        let otherOrigin = try FileSyncOwnerScope(ownerId: scope.ownerId, url: URL(string: "https://elsewhere.test")!)
+        XCTAssertTrue(try reopened.list(otherOrigin).isEmpty)
+        XCTAssertTrue(try reopened.list(FileSyncOwnerScope(ownerId: "other", url: scope.origin)).isEmpty)
+        try reopened.remove(scope, id: grant.id)
+        XCTAssertTrue(try reopen().list(scope).isEmpty)
+    }
     func testKeychainReloadStaysOnDeviceAndScopedToAccountAndOrigin() throws {
+        // Distinguish an unsigned simulator runner from a product persistence failure.
+        let probe: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.thingtime.folder-grants.test-capability",
+            kSecAttrAccount as String: UUID().uuidString,
+            kSecAttrSynchronizable as String: false,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecValueData as String: Data("probe".utf8)
+        ]
+        let status = SecItemAdd(probe as CFDictionary, nil)
+        defer {
+            if status == errSecSuccess {
+                let query = probe.filter { ![kSecValueData as String, kSecAttrAccessible as String].contains($0.key) }
+                SecItemDelete(query as CFDictionary)
+            }
+        }
+        #if targetEnvironment(simulator)
+        if status == errSecMissingEntitlement {
+            throw XCTSkip("Simulator runner has no Keychain entitlement (OSStatus \(status)); scoped persistence is covered separately. Run this integration check with a signed host.")
+        }
+        #endif
+        XCTAssertEqual(status, errSecSuccess, "Keychain capability probe failed: \(status)")
+        guard status == errSecSuccess else { return }
         let (root, scope, _) = try fixture(); let first = MobileFolderStore(), grant = try first.add(scope, selected: root)
         defer { try? first.remove(scope, id: grant.id) }
         let reopened = MobileFolderStore(); XCTAssertEqual(try reopened.grant(scope, id: grant.id).bookmark, grant.bookmark)

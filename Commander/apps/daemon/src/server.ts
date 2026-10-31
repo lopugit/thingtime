@@ -107,6 +107,11 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
   };
   const indexing = new IndexingService({
     binaryPath: options.indexerBinary,
+    ...(process.env.COMMANDER_APPLICATION_ROOTS
+      ? {
+          applicationRoots: JSON.parse(process.env.COMMANDER_APPLICATION_ROOTS) as string[],
+        }
+      : {}),
     platform,
     settings: store.snapshot().settings,
     callbacks: {
@@ -116,7 +121,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       },
       commands() {
         refreshCatalog();
-        return search.items().filter((item) => item.kind !== 'application').length;
+        return new Set(search.items().filter((item) => item.kind !== 'application').map((item) => item.id)).size;
       },
     },
   });
@@ -447,7 +452,7 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       });
       const extension = prepared.report.extension;
       await store.upsertExtension(extension);
-      refreshCatalog();
+      indexing.reindexCommands();
       return json(response, 200, {
         extension,
         preparation: {

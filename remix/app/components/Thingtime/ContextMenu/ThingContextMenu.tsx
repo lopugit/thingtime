@@ -540,7 +540,8 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 					background: action.danger ? 'rgba(214, 69, 90, 0.08)' : 'var(--tt-surface-alt, #f5f5f7)'
 				}}
 				_focusVisible={{
-					outline: 'none',
+					outline: '2px solid var(--tt-accent, #f472b6)',
+					outlineOffset: '-2px',
 					background: action.danger ? 'rgba(214, 69, 90, 0.08)' : 'var(--tt-surface-alt, #f5f5f7)'
 				}}
 				transition="background 0.15s ease"

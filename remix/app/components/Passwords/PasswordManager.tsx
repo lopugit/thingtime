@@ -1,4 +1,7 @@
 import { PasswordSource } from './PasswordSource';
+import { PasswordGenerator } from './PasswordGenerator';
+import { PasswordIconEditor } from './PasswordIcon';
+import { PasswordPasskeySetup } from './PasswordPasskeySetup';
 import { createPasswordBackup } from '~/passwords/backup.client';
 import { PasswordAttachments } from './PasswordAttachments';
 import { uploadPasswordFile } from '~/passwords/files.client';
@@ -36,6 +39,7 @@ function PasswordManagerScope({ ownerId, scopeKey, dataPlane, accountLabel }: { 
   const lopu = useLopu();
   const [records, setRecords] = React.useState<PasswordMetadata[]>([]), [cursor, setCursor] = React.useState<string | null>(null);
   const [configured, setConfigured] = React.useState<boolean | null>(null), [busy, setBusy] = React.useState(false), [error, setError] = React.useState('');
+  const [iconBusy, setIconBusy] = React.useState(false);
   const [draft, setDraft] = React.useState<Draft | null>(null), [customLabel, setCustomLabel] = React.useState(''), [customType, setCustomType] = React.useState<FieldType>('text');
   const [search, setSearch] = React.useState(''), [sort, setSort] = React.useState('title');
   const [listLoading, setListLoading] = React.useState(true), [settledSearch, setSettledSearch] = React.useState<string | null>(null);
@@ -101,10 +105,10 @@ function PasswordManagerScope({ ownerId, scopeKey, dataPlane, accountLabel }: { 
   const generation = React.useRef(0), active = React.useRef(true), controllers = React.useRef(new Set<AbortController>());
   const invocationSignal = React.useRef<AbortSignal | null>(null), runSignal = React.useRef<AbortSignal | null>(null);
   const operationSignal = (own: AbortSignal) => AbortSignal.any([own, ...(runSignal.current ? [runSignal.current] : []), ...(invocationSignal.current ? [invocationSignal.current] : [])]);
-  const retry = React.useRef<{ payload: string; writeId: string } | null>(null), importSource = React.useRef<{ file: File; count: number; saved: number; archive?: { id: string; writeId: string; saved: boolean }; filesSaved?: number; entryIds?: Map<number, string>; restoredIds?: Map<string, string>; pendingFile?: PasswordFile; pending?: { id: string; writeId: string; entry: PasswordEntry } } | null>(null);
+  const retry = React.useRef<{ payload: string; writeId: string } | null>(null), importSource = React.useRef<{ file: File; count: number; saved: number; archive?: { id: string; writeId: string; saved: boolean }; filesSaved?: number; entryIds?: Map<number, string>; restoredIds?: Map<string, string>; iconFiles?: Map<number, string>; pendingIcon?: { id: string; revision: number; writeId: string; entry: PasswordEntry }; pendingFile?: PasswordFile; pending?: { id: string; writeId: string; entry: PasswordEntry } } | null>(null);
   const clear = React.useCallback(() => {
     listEpoch.current++; setListLoading(false); generation.current++; controllers.current.forEach(controller => controller.abort()); controllers.current.clear(); runSignal.current = null;
-    resetCopy(); setRevealed({}); setCodes({}); setDraft(null); setImported(null); importSource.current = null; importRead.current?.abort(); importRead.current = null; setReadingImport(false); retry.current = null; setTransfer(null); setBusy(false); setDeleteConfirm(false); setCustomLabel(''); setAcknowledged(false); setProgress('');
+    resetCopy(); setRevealed({}); setCodes({}); setDraft(null); setIconBusy(false); setImported(null); importSource.current = null; importRead.current?.abort(); importRead.current = null; setReadingImport(false); retry.current = null; setTransfer(null); setBusy(false); setDeleteConfirm(false); setCustomLabel(''); setAcknowledged(false); setProgress('');
   }, []);
   const retire = React.useCallback(() => { copyEpoch.current++; copyCleanup.current?.(); active.current = false; generation.current++; controllers.current.forEach(controller => controller.abort()); controllers.current.clear(); }, []);
   React.useEffect(() => {
@@ -146,7 +150,7 @@ function PasswordManagerScope({ ownerId, scopeKey, dataPlane, accountLabel }: { 
     listEpoch.current++; listAbort.current?.abort(); setListLoading(true); setError(''); setSearch(value);
   };
   const run = async (work: () => Promise<void>) => {
-    if (busy || (runSignal.current && !runSignal.current.aborted) || invocationSignal.current?.aborted) return;
+    if (busy || iconBusy || (runSignal.current && !runSignal.current.aborted) || invocationSignal.current?.aborted) return;
     const version = generation.current, controller = new AbortController();
     const signal = AbortSignal.any([controller.signal, ...(invocationSignal.current ? [invocationSignal.current] : [])]);
     controllers.current.add(controller); runSignal.current = signal; setBusy(true); setError('');
@@ -198,6 +202,12 @@ function PasswordManagerScope({ ownerId, scopeKey, dataPlane, accountLabel }: { 
       await visitPasswordFile(source.file, { signal, onEntry: async (entry, index, sourceId) => {
         signal.throwIfAborted();
         source.entryIds ??= new Map(); source.restoredIds ??= new Map();
+        // Attachment IDs belong to the source vault. Bind an icon only after
+        // its encrypted file has been restored to this new owner-local entry.
+        if (entry.icon?.kind === 'attachment') {
+          source.iconFiles ??= new Map(); source.iconFiles.set(index, entry.icon.fileId);
+          const { icon: _sourceIcon, ...withoutIcon } = entry; entry = withoutIcon;
+        }
         const mapped = (old: string) => { if (!source.restoredIds!.has(old)) source.restoredIds!.set(old, crypto.randomUUID()); return source.restoredIds!.get(old)!; };
         if (sourceId) source.entryIds.set(index, mapped(sourceId));
         if (index < source.saved) return;
@@ -210,7 +220,18 @@ function PasswordManagerScope({ ownerId, scopeKey, dataPlane, accountLabel }: { 
         signal.throwIfAborted();
         if (!source.archive || index < (source.filesSaved || 0)) return;
         source.pendingFile ??= { ...newPasswordFile(file.original?.name || file.name, file.size), ...(file.original || { archivePath: file.path, role: file.path.startsWith('files/') ? 'attachment' as const : 'source' as const }) };
-        await uploadPasswordFile(ownerId, file.entryIndex === undefined ? source.archive.id : source.entryIds!.get(file.entryIndex)!, source.pendingFile, file.open, signal); signal.throwIfAborted();
+        const entryId = file.entryIndex === undefined ? source.archive.id : source.entryIds!.get(file.entryIndex)!;
+        const uploaded = await uploadPasswordFile(ownerId, entryId, source.pendingFile, file.open, signal); signal.throwIfAborted();
+        if (file.entryIndex !== undefined && file.original?.id && source.iconFiles?.get(file.entryIndex) === file.original.id) {
+          if (!source.pendingIcon) {
+            const current = await request({ operation: 'read', id: entryId });
+            source.pendingIcon = { id: entryId, revision: current.revision, writeId: crypto.randomUUID(), entry: { ...current.entry, icon: { kind: 'attachment', fileId: uploaded.id } } };
+          }
+          // Keep the complete identity and payload if the save outcome is
+          // uncertain so retry cannot create a second revision or overwrite.
+          await request({ operation: 'save', ...source.pendingIcon });
+          source.pendingIcon = undefined; signal.throwIfAborted();
+        }
         source.pendingFile = undefined; source.filesSaved = index + 1;
         setProgress(`${source.saved} entries and ${source.filesSaved} archive files saved`);
       } });
@@ -398,6 +419,9 @@ function PasswordManagerScope({ ownerId, scopeKey, dataPlane, accountLabel }: { 
         </TransientPrivateControls>
       </TransientBlockHost>}
     </SettingsDocumentHost>
+    <PasswordPasskeySetup ownerId={ownerId} nativeAvailable={nativeAvailable} />
+    {draft && draft.entry.passwordType !== 'passkey' && <PasswordGenerator key={`password-generator:${draft.id}`} ownerId={ownerId} origin={typeof window === 'undefined' ? '' : window.location.origin} targets={draft.entry.fields.filter(field => field.type === 'password').map(({ id, label }) => ({ id, label }))} disabled={busy || iconBusy} onGenerate={(value, fieldId) => setDraft(current => current?.id === draft.id && current.entry.passwordType !== 'passkey' ? { ...current, entry: { ...current.entry, fields: current.entry.fields.map(field => field.id === fieldId && field.type === 'password' ? { ...field, value } : field) } } : current)} />}
+    {draft && <PasswordIconEditor key={`password-icon:${draft.id}`} ownerId={ownerId} entryId={draft.id} saved={draft.revision > 0} icon={draft.entry.icon} website={draft.entry.fields.find(field => field.type === 'url')?.value} disabled={busy} onBusyChange={setIconBusy} onChange={icon => setDraft(current => current?.id === draft.id ? { ...current, entry: { ...current.entry, icon } } : current)} />}
     {draft?.entry.onePassword && <PasswordSource key={`source:${draft.id}`} ownerId={ownerId} entryId={draft.id} entry={draft.entry} />}
     {draft && draft.revision > 0 && <PasswordAttachments key={draft.id} ownerId={ownerId} entryId={draft.id} />}
     {draft?.entry.importArchiveId && <PasswordAttachments key={draft.entry.importArchiveId} ownerId={ownerId} entryId={draft.entry.importArchiveId} sourceItem={draft.entry.onePassword} readOnly />}

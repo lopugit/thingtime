@@ -3,6 +3,7 @@ import { ComponentDataScope } from './ComponentSelect';
 import { ComponentDragBoundary } from './ComponentDrag';
 import { NativeControlsEnabled, ComponentLocalControl } from './NativeComponentControls';
 import { sourceFailure } from './sourceFailure';
+import { loadMapboxSourcePages } from './Maps/mapboxSource';
 import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router';
@@ -22,7 +23,7 @@ import { DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS, MAX_WEBPAGE_SOURCE_INTERVAL_MS, MIN
 import { ChakraThingRenderer, isChakraThingNode, type ChakraThingNode } from '../Kinds/ChakraThingRenderer';
 import { HtmlThingRenderer, type HtmlThingNode } from '../Kinds/HtmlThingRenderer';
 import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
-import { useTtActionClicks, type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
+import { clickTtActionForEnter, useTtActionClicks, type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
 import { clearSourceCache, readSourceCache, useWebpageRuntime, writeSourceCache } from './webpageRuntime';
 
 // The ONE live-component path. A component thing renders live in exactly
@@ -79,7 +80,9 @@ export const useThingSource = ({
 	source,
 	cacheId,
 	argValues,
-	interactive
+	interactive,
+	loadAllPages = false,
+	resolvedInputs = false
 }: {
 	source: ThingSourceBinding | null | undefined;
 	// namespaces the localStorage cache line under the runtime's pageId — a
@@ -87,6 +90,9 @@ export const useThingSource = ({
 	cacheId: string;
 	argValues: Record<string, unknown>;
 	interactive: boolean;
+	// Map overlays consume every page, using the same delegated read/cache boundary.
+	loadAllPages?: boolean;
+	resolvedInputs?: boolean;
 }): { scope: ThingSourceScope; refetch: () => void } => {
 	const runtime = useWebpageRuntime();
 	const api = useApi();
@@ -94,20 +100,21 @@ export const useThingSource = ({
 	const character = useCharacterScope();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
-	const sourceKey = JSON.stringify(source || null);
+	const sourceKey = JSON.stringify(loadAllPages ? { source: source || null, allPages: true } : source || null);
 	const active = !!source && interactive;
 	const canRun = runtime.viewer.signedIn || !!runtime.sharedRun;
 	const liveStream = source?.refresh === 'live' ? source.stream : undefined;
 	const liveSourceValid = !!liveStream && validateLiveSourceStream(liveStream);
 	// inputs interpolate {arg} tokens against the args and {query.x} against
 	// the URL — the same substitution the template itself gets
-	const inputsKey = JSON.stringify({ i: source?.inputs || null, a: argValues, q: runtime.query });
+	const inputsKey = JSON.stringify(resolvedInputs ? { i: source?.inputs || null } : { i: source?.inputs || null, a: argValues, q: runtime.query });
 	const inputs = React.useMemo(() => {
 		if (!source?.inputs) return {};
+		if (resolvedInputs) return source.inputs;
 		const resolved = resolveTemplate(source.inputs, { ...argValues, query: runtime.query });
 		return resolved && typeof resolved === 'object' && !Array.isArray(resolved) ? (resolved as Record<string, unknown>) : {};
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- inputsKey is the serialised form
-	}, [inputsKey]);
+	}, [inputsKey, resolvedInputs]);
 	const binding = JSON.stringify([sourceKey, inputsKey, cacheId, dataPlane, character?.id || null]);
 	const initial = React.useMemo(
 		() => ({
@@ -251,12 +258,16 @@ export const useThingSource = ({
 
 		(async () => {
 			try {
-				const shareKey = JSON.stringify({ a: source.action, i: inputs, t: tick, l: local });
-				const response: any = await sourceLoader!(shareKey, () =>
+				const run = (cursor?: string) => {
+					const pageInputs = cursor ? { ...inputs, cursor } : inputs;
+					const shareKey = JSON.stringify({ a: source.action, i: pageInputs, t: tick, l: local });
+					return sourceLoader!(shareKey, () =>
 					runtime.sharedRun
-						? runtime.sharedRun(source.action, inputs)
-						: apiRef.current.v1.actions.run({ action: source.action, inputs, source: 'component' })
-				);
+						? runtime.sharedRun(source.action, pageInputs)
+						: apiRef.current.v1.actions.run({ action: source.action, inputs: pageInputs, source: 'component' })
+					) as Promise<any>;
+				};
+				const response: any = loadAllPages ? await loadMapboxSourcePages(run, stale, inputs.cursor) : await run();
 				if (stale()) return;
 				if (response?.status === 'ok') {
 					if (!runtime.sharedRun) {
@@ -292,7 +303,8 @@ export const useThingSource = ({
 		binding,
 		dataPlane,
 		character?.id,
-		liveSourceValid
+		liveSourceValid,
+		loadAllPages
 	]);
 
 	const scope = React.useMemo<ThingSourceScope>(
@@ -457,27 +469,7 @@ export const LiveTemplate = ({
 							}
 							onKeyDownCapture={
 								interactive
-									? (event) => {
-											const field = event.target as HTMLInputElement;
-											if (field.closest('[data-tt-native-control], [data-tt-native-upload]')) return;
-											if (
-												event.key !== 'Enter' ||
-												event.nativeEvent.isComposing ||
-												field.tagName !== 'INPUT' ||
-												['checkbox', 'radio', 'range', 'button', 'file'].includes(field.type)
-											)
-												return;
-											const group = field.closest('fieldset') || event.currentTarget;
-											const submit = group.querySelector<HTMLButtonElement>('button[data-tt-action]:not(:disabled)');
-											if (submit) {
-												const action = submit.getAttribute('data-tt-action');
-												const inputs = submit.getAttribute('data-tt-action-inputs') || '';
-												if (action !== LOCAL_UI_ACTION || /"op":"search"/.test(inputs)) {
-													event.preventDefault();
-													submit.click();
-												}
-											}
-									  }
+										? (event) => clickTtActionForEnter(event)
 									: undefined
 							}
 							onDoubleClickCapture={onDoubleClickCapture}

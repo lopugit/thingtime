@@ -187,6 +187,7 @@ export const router = createBrowserRouter([
       // signed-out quiet state (the /settings, /apps idiom)
       { path: 'mail', lazy: lazyRoute(() => import('./routes/mail')) },
       { path: 'email', lazy: lazyRoute(() => import('./routes/mail')) },
+      { path: 'passwords/provider', lazy: lazyRoute(() => import('./routes/passwords.provider')) },
       { path: 'passwords', lazy: lazyRoute(() => import('./routes/passwords')) },
       { path: 'connections', lazy: lazyRoute(() => import('./routes/connections')) },
       { path: 'connections/feed', lazy: lazyRoute(() => import('./routes/connections-feed')) },

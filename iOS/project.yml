@@ -43,6 +43,7 @@ targets:
     sources:
       - path: Thingtime
       - path: ../apple/Passwords/Host/AuthenticatorSetupBridge.swift
+      - path: ShareSupport
       - path: ../apple/Shared
       - path: ../apple/Widgets
       - path: Shared
@@ -90,6 +91,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         ENABLE_PREVIEWS: true
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_OBJC_BRIDGING_HEADER: ShareSupport/ShareItemProviderBridge.h
     entitlements:
       path: Thingtime/Resources/Thingtime.entitlements
       properties:
@@ -108,6 +110,9 @@ targets:
         embed: true
         codeSign: true
       - target: ThingtimeLopuWidget
+      - target: ThingtimeShare
+        embed: true
+        codeSign: true
 
   ThingtimePasswordProvider:
     type: app-extension
@@ -214,6 +219,41 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         SKIP_INSTALL: true
         APPLICATION_EXTENSION_API_ONLY: true
+
+  ThingtimeShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ShareExtension
+      - path: ShareSupport
+      - path: Thingtime/Resources/Assets.xcassets
+        buildPhase: resources
+    info:
+      path: ShareExtension/Info.plist
+      properties:
+        CFBundleDisplayName: Thingtime
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ThingtimeWidgetGroup: $(THINGTIME_WIDGET_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule: 'SUBQUERY(extensionItems, $item, $item.attachments.@count > 0 OR $item.attributedContentText.length > 0).@count > 0'
+    entitlements:
+      path: ShareExtension/ThingtimeShare.entitlements
+      properties:
+        com.apple.security.application-groups: [$(THINGTIME_WIDGET_GROUP)]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(THINGTIME_IOS_BUNDLE_IDENTIFIER).share
+        PROVISIONING_PROFILE_SPECIFIER: $(THINGTIME_SHARE_PROVISIONING_PROFILE_SPECIFIER)
+        GENERATE_INFOPLIST_FILE: false
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: true
+        APPLICATION_EXTENSION_API_ONLY: true
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_OBJC_BRIDGING_HEADER: ShareSupport/ShareItemProviderBridge.h
 
   ThingtimeTests:
     type: bundle.unit-test

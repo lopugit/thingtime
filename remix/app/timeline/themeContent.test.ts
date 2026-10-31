@@ -34,7 +34,7 @@ test('protected theme history excludes non-approved fields and its decoder rejec
 	for (const secret of ['root-secret', 'extension-secret', 'crystal-secret', 'theme-secret', 'token-secret']) assert.equal(JSON.stringify(event).includes(secret), false);
 	const valid = event.after!;
 	for (const changed of [
-		{ ...valid, version: 2 }, { ...valid, value: { ...valid.value as any, secure: 'hidden' } },
+		{ ...valid, version: 3 }, { ...valid, value: { ...valid.value as any, secure: 'hidden' } },
 		{ ...valid, value: { ...valid.value as any, crystal: { ...(valid.value as any).crystal, password: 'hidden' } } },
 		{ ...valid, value: { ...valid.value as any, crystal: { name: 'Name', theme: { colors: { privateKey: 'hidden' } } } } },
 		{ ...valid, value: { ...valid.value as any, crystal: { name: 'Name', theme: { general: { motion: 'yes' } } } } },
@@ -73,4 +73,22 @@ test('theme retained-byte projection matches approved live payload and never exe
 	assert.equal(bytes(draft), Buffer.byteLength(JSON.stringify({ before: draft.before, after: draft.after })));
 	const poisoned = { ...deleted, before: { ...deleted.before!, value: { ...(deleted.before!.value as any), hidden: 'payload' } } };
 	assert.equal(bytes(poisoned), null);
+});
+
+
+test('theme-content v2 retains focus preferences while v1 preserves its immutable historical shape', () => {
+  const input = { crystal: before.crystal, tags: [], visibility: 'private' as const, folderId: null };
+  const legacy = themeContentSnapshot(input, 1);
+  const current = themeContentSnapshot(input);
+  assert.equal(legacy.version, 1);
+  assert.equal(current.version, 2);
+  const oldTheme = themeContentValue(legacy).crystal.theme as any;
+  assert.equal(Object.prototype.hasOwnProperty.call(oldTheme.colors, 'focusBorder'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(oldTheme.general, 'focusGlowBlur'), false);
+  assert.deepEqual(themeContentSnapshot(themeContentValue(legacy), 1), legacy);
+  assert.deepEqual(themeContentValue(current).crystal.theme, THINGTIME_THEME);
+  assert.throws(() => themeContentValue({ ...current, version: 1 }));
+  const theme = { colors: { focusBorder: '#26724d', focusGlowStart: '#55ffaa', focusGlowEnd: '#4488ff' }, general: { focusGlowBlur: 100, focusGlowOpacity: 0 } };
+  const focus = themeContentSnapshot({ ...input, crystal: { name: 'Focus', theme } });
+  assert.deepEqual(themeContentValue(focus).crystal.theme, theme);
 });

@@ -54,6 +54,39 @@ final signed, installed app after the canonical tests and `build` +
 `install:local` commands. The development app does not replace the installed
 copy or its service.
 
+For ongoing testing, retain a named development workspace instead of deleting
+the build and synthetic session on quit:
+
+```sh
+corepack pnpm@10.12.1 --dir electron dev:parallel --workspace=my-workspace --prepare-only
+open "$HOME/Applications/Thingtime Dev my-workspace.app"
+node electron/scripts/dev-parallel.mjs --workspace=my-workspace --stop-workspace
+```
+
+The named app has its own development bundle identifier, app name, encrypted
+profile, authenticated managed MongoDB replica and deterministic loopback API,
+database and inspection ports. `development.json` in that workspace records the
+source revision, paths and ports. It snapshots the canonical desktop source and
+web resources, installs its own production dependencies, and copies no ignored
+Remix environment files or account credentials. The source checkout can later be
+archived without removing those retained dependencies. The Node/XPC bridge stays
+disabled; this unsigned UI lane does not establish privacy-permission acceptance.
+Preparation refuses active launchers or detached child groups and retains the
+previous snapshot until its replacement verifies. It never replaces the stable
+`~/Applications/Thingtime.app` or its data/services.
+
+`--prepare-only --use-staged` reuses already verified web resources when only
+desktop tooling changed. To make a disposable account an admin, register it
+through the normal local API first, then put only its non-secret username in
+workspace `settings.json`, for example `{"adminUsernames":["synthetic-dev"]}`,
+and restart this development app. Do not put passwords or tokens in that file.
+Quit preserves the build and session; `--stop-workspace` stops only verified
+workspace processes. After stopping, remove only `~/Applications/Thingtime Dev
+my-workspace.app` and its exact Application Support workspace directory to clean
+up that generated development app and disposable data. A fresh encryption namespace that
+requires human consent remains a prerequisite; do not reuse another app's
+Keychain item or weaken encryption.
+
 Use the repository's exact Corepack pin for packaging. The build preflights
 that version and gives electron-builder's nested dependency collector an
 isolated temporary `pnpm` shim resolving to the same pin, so an unrelated
@@ -224,6 +257,23 @@ occupy the titlebar row. The preload metadata exposes titlebar measurements;
 the renderer applies `html.thingtime-electron-desktop` and reserves the traffic
 light area before placing the drawer trigger and top nav content. The top nav is
 marked draggable, with inputs, links, and buttons marked non-draggable.
+
+The native **View** menu offers **Zoom In**, **Zoom Out** and **Actual Size**.
+With the desktop window focused, either Command or Control plus `=` / `+`,
+`-`, or `0` changes the whole interface or resets it to 100%, including while
+editing text. Plus/minus keypad keys work through their ordinary key values.
+Each step changes Chromium's zoom level by 0.5; its native range and
+origin-scoped zoom behavior apply, without a separate Thingtime preference.
+Alt/Option chords, composition, typing and unrelated editing shortcuts pass
+through. `electron/lib/window-zoom.cjs` consumes zoom input before renderer and
+menu dispatch so each press applies once. Run `pnpm --dir electron
+verify:window-zoom` for the real Electron keyboard/menu fixture; it opens a
+temporary local document with a disposable profile and uses no Thingtime API.
+The canonical runner uses a separate task process and fresh profile with
+normal networking and Chromium's standard sandbox enabled. It clears inherited
+Electron/Node switches, enforces a 30-second deadline and removes its profile
+and process group. The fixture uses synthetic local data and performs no
+sign-in or account writes. No network restrictions or exception flags apply.
 
 The drawer settings modal shows a **Thingtime desktop** section inside the
 desktop app. Endpoint profiles are stored locally in a versioned, atomic `0600`

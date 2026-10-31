@@ -5,6 +5,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useAttachmentUploads } from '../Attachments/useAttachmentUploads';
 import { formatAttachmentBytes } from '../Attachments/attachmentUiCore';
 import { FILESYSTEM_MAX_BYTES, filesystemPath } from '~/api/utils/devices/deviceFilesystemCore';
+import { browseClickIntent } from './browseInteraction';
 import { ThingsGridView, ThingsListView, type ThingsItemAction, type ThingsItemHandlers } from './ThingsViews';
 import { isFolder, thingDisplayName, type ThingsThing } from './thingsCore';
 import { fileRequest, filesystemClipboard, remoteEntryThing, remoteFileCommand, readRemoteFile, writeRemoteFile, requireFilesystemCapabilities, type FileApproval, type FileLocation } from './filesystemClient';
@@ -225,7 +226,10 @@ const FilesystemThingsContent = ({ deviceId, initialPath = '', initialFolderId =
     compact: true, menuZIndex: TRANSFER_MENU_Z + 2,
     itemHref: item => item.inode ? `/things?files=${encodeURIComponent(item.inode.deviceId)}&path=${encodeURIComponent(isFolder(item) ? item.inode.path : location.path || '')}` : `/things?files=thingtime${isFolder(item) ? `&folder=${encodeURIComponent(item.id)}` : location.folderId ? `&folder=${encodeURIComponent(location.folderId)}` : ''}`,
     ownerId, selected, cutIds: new Set(clipboard?.mode === 'cut' ? clipboard.items.map(item => item.id) : []), isMobile: true,
-    onItemClick: item => setSelected(current => { const next = new Set(current); next.has(item.id) ? next.delete(item.id) : next.add(item.id); return next; }),
+    onItemClick: (item, event) => {
+      if (browseClickIntent(event) === 'select') setSelected(current => { const next = new Set(current); next.has(item.id) ? next.delete(item.id) : next.add(item.id); return next; });
+      else if (browseClickIntent(event) === 'open') open(item);
+    },
     onItemOpen: open, onItemToggle: item => setSelected(current => { const next = new Set(current); next.has(item.id) ? next.delete(item.id) : next.add(item.id); return next; }),
     onItemAction: action, onItemContextMenu: (item, event) => { setContextItem(item); contextMenu.openAtPointer(event); },
     onItemDragStart: (_item, event) => event.preventDefault(), onItemDragEnd: () => {}, dropTargetId: undefined,
