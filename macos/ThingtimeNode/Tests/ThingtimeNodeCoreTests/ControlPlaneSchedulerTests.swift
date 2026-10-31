@@ -51,6 +51,16 @@ private actor TestControlPlaneClient: ControlPlaneClient {
         return Date().addingTimeInterval(30)
     }
 
+    func waitForLeaseHeartbeats(atLeast minimum: Int, within timeout: Duration) async -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now + timeout
+        while leaseHeartbeatCount < minimum {
+            guard clock.now < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        return true
+    }
+
     func reportCommand(_ report: CommandExecutionReport) async throws {
         reports.append(report)
     }
@@ -169,7 +179,13 @@ final class ControlPlaneSchedulerTests: XCTestCase {
             hooks: .init(
                 makeHeartbeat: { self.heartbeat(at: now) },
                 dispatchCommand: { leased in
-                    try? await Task.sleep(for: .milliseconds(65))
+                    guard await client.waitForLeaseHeartbeats(atLeast: 3, within: .seconds(1)) else {
+                        return .failure(
+                            id: leased.leaseID,
+                            code: "test_timeout",
+                            message: "The lease heartbeat did not renew three times while dispatch was active."
+                        )
+                    }
                     return .success(id: leased.leaseID, result: .bool(true))
                 }
             ),

@@ -170,6 +170,210 @@ relational shape for later ThingtimeDB storage and platform chat views.
   bridge response window instead of competing confirmations and a 15-second
   timeout.
 
+### 2026-08-23 expanded safe machine controls
+
+- The paired-node command vocabulary now covers mute/unmute; default output,
+  input, and system-sound-effect devices; app hide/unhide; Wi-Fi connect to a
+  visible saved/open network, disconnect, and radio power. The native snapshot
+  reports mute state and a bounded, path-free audio-device list so callers can
+  choose a reported device identifier.
+- App control now also includes **Hide other apps** in the Applications
+  heading menu and **Force quit** in each app's contextual menu. Force quit is
+  separately capability-gated and always enters the approval flow, including
+  for a paired device configured for routine always-allow controls, because it
+  can discard unsaved work.
+- Every new mutation remains behind the existing signed pairing capability,
+  device command lease, idempotency key, approval state, unlocked-session gate,
+  and native action policy. The Electron bridge uses the same closed allowlist.
+  Wi-Fi accepts only an SSID—passwords, arbitrary network configuration,
+  AppleScript, shell execution, and private frameworks are intentionally
+  excluded.
+- The device drawer now exposes mute/unmute alongside volume. The authenticated
+  device drawer needs a live paired account/device session for end-to-end UI
+  exercise; no real Wi-Fi, audio-route, or TCC state was changed during local
+  validation.
+- The controls now have a deliberately quiet default layout: everyday quick
+  controls and applications open first, while Audio & routing, Network &
+  connectivity, Power, permissions, and diagnostic sections start collapsed.
+  Audio routes use compact menus, per-application actions live in a **More**
+  context menu, Wi-Fi accepts only a saved/open SSID, and the only public
+  system-power action offered is approval-gated Sleep. Restart and shutdown
+  remain intentionally unavailable without shell or AppleScript execution.
+
+### 2026-08-24 consented media-volume follow-up
+
+- Apple Music and Spotify now have distinct, capability-gated app-volume
+  commands in addition to their existing fixed play/pause/previous/next
+  controls. The only accepted volume input is a finite numeric level from 0
+  through 1; the native node converts it to each app's documented 0–100 sound
+  volume property. The player must already be running, and every operation
+  requires both a fresh Thingtime approval and macOS Automation consent.
+- Chrome now has one separate, capability-gated active-tab volume command for
+  direct YouTube and YouTube Music pages. It runs one fixed local JavaScript
+  expression through Chrome's documented AppleScript command, with no remote
+  script, selector, URL, tab ID, browser profile, title, history, media
+  metadata, or page content accepted or reported. Chrome must be running, the
+  Mac user must enable **Allow JavaScript from Apple Events**, and an active
+  tab without a direct media element fails closed. Cross-origin embeds and
+  generic browser-player control remain out of scope.
+- The node reports only installed/running availability for these three media
+  surfaces; it never performs Automation requests while publishing telemetry.
+
+### 2026-08-24 unsigned PR-release fallback
+
+- The protected `github-actions` release worker now chooses a trusted
+  Developer ID/notarized lane only when its full six-secret configuration is
+  present. When all six are absent it publishes an explicit `.unsigned` PR
+  SemVer and `UNSIGNED` Electron/Recovery ZIP names; a partial configuration
+  fails before publication.
+- The fallback uses ad-hoc signatures solely to keep nested macOS executables
+  functioning. It has no Apple team identity or notarization and the release
+  notes instruct the user to approve the first launch via **Privacy & Security
+  → Open Anyway**.
+- Thingtime Recovery recognizes the marker plus asset name, maintains a
+  separate UNSIGNED cache status, requires a deliberate acknowledgement, then
+  allows cache, launch, and atomic install. The normal signed cache remains
+  strict and never presents an unsigned build as verified.
+  All three volume effects retain the journalled `needs-review` boundary after
+  an Apple Event, rather than claiming the audible result was observed.
+- The four paired-device API contracts are now `1.7.0`; Electron refuses to
+  activate the desktop control bridge against an older manifest.
+
+### 2026-08-24 consented remote input follow-up
+
+- The node now exposes a closed, individually capability-gated remote-input
+  surface: screen-relative pointer move, left/right/middle click, bounded
+  pixel scroll, bounded text entry, and an allowlisted keyboard-shortcut set.
+  Each command creates a fresh approval even when other device controls use
+  always-allow, is denied while the session is locked, and requires macOS
+  Accessibility at execution time.
+- Input has no generic scripting escape hatch. It neither records keys nor
+  accesses the clipboard, Input Monitoring, Full Disk Access, root, shell,
+  arbitrary AppleScript, event taps, process input, or browser automation.
+  Pointer coordinates are verified against a currently online display and all
+  payloads reject unknown fields. Quartz enqueueing is journalled as
+  `needs-review` because it cannot independently prove the target app accepted
+  the event.
+- The device drawer includes a visible Remote pointer and Remote keyboard
+  panel. Text is never placed in its idempotency-control key; it is sent only
+  as the individually approved command payload.
+- The four paired-device API contracts are now `1.8.0`; Electron refuses to
+  activate the desktop control bridge against an older manifest. The existing
+  screen-session endpoint still persists only lifecycle metadata and explicitly
+  rejects frames, screenshots, audio, SDP, ICE, and TURN data. A real live
+  screen view awaits a separately selected privacy-preserving peer-to-peer
+  transport rather than storing pixels in Thingtime.
+
+### 2026-08-24 display, hardware, and lifecycle controls
+
+- The paired-computer contract now has individually capability-gated controls
+  for every active display: mode/resolution/refresh rate, per-display
+  brightness, virtual origin/layout, and mirroring. The node reports bounded
+  display modes, current layout and read-only HDR state; callers can select
+  only ids and modes that the node just advertised.
+- The safe hardware surface now includes default-printer selection, preferred
+  camera selection, connect/disconnect for already-paired Bluetooth devices,
+  connect/disconnect for configured remote-access/VPN services, and a
+  per-node no-idle-sleep assertion. Telemetry is bounded and excludes device
+  addresses, camera content, network credentials, paths, and provider
+  configuration. Bluetooth addresses are one-way digested before leaving the
+  Mac.
+- Restart, shutdown, and log out are now fixed, argument-free System Events.
+  They never run caller-supplied scripts or shell commands; every request
+  always opens a fresh approval even when the device otherwise allows routine
+  actions. Their result is intentionally recorded as `needs-review`, since a
+  correctly accepted lifecycle request can terminate the node before it can
+  prove the final OS effect.
+- The Device drawer adds **Displays & system hardware** with display mode,
+  brightness, origin and mirroring controls, plus compact printer, camera,
+  Bluetooth, VPN, and keep-awake controls. The Power menu now makes the
+  lifecycle actions visible with the same approval/recovery semantics.
+- HDR toggling, Focus modes, AirDrop radio/state, Bluetooth radio power, and
+  global media playback remain intentionally absent: current macOS public APIs
+  do not offer a supported, scoped setter, and this PR does not substitute
+  private frameworks or UI automation. The API capability contracts for
+  paired devices, node state, command creation, and command leasing are
+  bumped to `1.1.0`.
+
+### 2026-08-24 scoped Apple Music and power-status follow-up
+
+- Paired-node state now reports the public `ProcessInfo` Low Power Mode value
+  and the minimum Apple Music availability state (installed/running). Neither
+  state is remotely mutable.
+- The media surface is intentionally limited to four fixed Apple Music events:
+  play, pause, previous, and next. It admits neither generic media commands
+  nor an application id, script, queue, library, track, title, history, or any
+  other caller-controlled input. Each action has its own pairing capability,
+  always opens a new approval, requires macOS Automation consent, and records
+  `needs-review` rather than claiming an Apple Event proves external playback.
+- Focus modes, AirDrop, Bluetooth radio power, camera-privacy state, HDR
+  toggling, Low Power Mode toggling, and global media playback remain omitted:
+  current public macOS APIs do not provide a safe, scoped setter. Private
+  frameworks and UI automation are not substitutes.
+- The four paired-device capability-manifest endpoint contracts are bumped to
+  `1.2.0`. Focused device tests (51) and native node tests (106) cover the
+  closed input envelopes, mandatory approval, unpaired fail-closed behavior,
+  telemetry projection, and Apple Music's no-arbitrary-script boundary.
+
+### 2026-08-24 fixed Spotify playback follow-up
+
+- Spotify is now an equally narrow, app-specific media surface: paired-node
+  state reports only installed/running, and the node accepts only fixed play,
+  pause, previous, and next events from Spotify's published Mac scripting
+  dictionary. It accepts no generic media target, application id, script,
+  queue, library, track, title, or history input.
+- Each Spotify command has its own capability, always opens a fresh approval,
+  requires macOS Automation consent, and resolves as `needs-review` after the
+  Apple Event; acceptance cannot prove external playback reached the requested
+  state. State normalization, API command validation, UI command construction,
+  and native policy tests independently enforce the closed four-operation
+  boundary.
+- The four paired-device capability-manifest endpoint contracts are bumped to
+  `1.3.0`.
+
+### 2026-08-24 persistent idle-timer follow-up
+
+- Paired-node telemetry now reports the three documented IOKit idle timers:
+  display dim, system sleep, and disk spindown. The matching command accepts
+  exactly one named scope (`display`, `system`, or `disk`) and a whole-minute
+  value from 0 (Never) through 180. It cannot carry an arbitrary `pmset` key,
+  power profile, shell input, or other control-plane settings.
+- Every timer update has its own device capability, always creates a fresh
+  approval, uses `IOPMSetAggressiveness`, and reads the exact value back before
+  reporting success. A rejected or clamped OS update is fail-closed as a
+  policy error rather than claiming a changed setting.
+- The four paired-device capability-manifest endpoint contracts are bumped to
+  `1.4.0`. Native policy, unpaired-node, telemetry-payload, and device-core
+  tests cover strict parameters, fresh approval, no side effect before pairing,
+  and the bounded state projection.
+
+### 2026-08-24 user-reviewed AirDrop and camera policy-profile follow-up
+
+- The paired-device surface now exposes two intentionally fixed policy
+  proposals: global AirDrop availability and global camera availability. Each
+  accepts exactly one `enabled` boolean, has its own signed capability, and
+  always receives a fresh approval before the node writes the proposal.
+- The node creates only a deterministic `com.apple.applicationaccess`
+  configuration profile in its private Application Support proposal directory
+  and opens it in macOS’s review flow. It never performs a silent install,
+  creates an MDM enrollment, accepts a profile payload/key/identifier from the
+  caller, or changes per-app Camera TCC grants. Installing or declining stays
+  a local macOS user decision.
+- The four paired-device capability-manifest endpoint contracts are bumped to
+  `1.5.0`. Native profile-serialization and action-policy tests, unpaired-node
+  regression coverage, and device-core validation enforce the closed envelope
+  and fail-closed pairing boundary.
+
+### 2026-08-24 persistent resolution and refresh follow-up
+
+- Display mode changes now use `CGConfigureDisplayWithDisplayMode` inside the
+  existing permanent Core Graphics configuration transaction. They therefore
+  persist across a Thingtime Node restart just like display origin and
+  mirroring, while remaining limited to a current node-advertised display and
+  mode id. The paired-device manifest contracts are bumped to `1.6.0` for the
+  durable side-effect correction, and Electron now refuses to activate its
+  device surface against an origin below that declared minimum.
+
 ## Security and product boundaries
 
 MCP gives a host a standard way to invoke this server; it does not give the
@@ -580,6 +784,29 @@ an offline database or offline conflict resolution layer.
   `index-CMT9dIqL.js` matches at
   `afe6e5365b08736a720dbfa6a3c717a2a49d3bc67ca507bcce5833c93cd57d7a`.
 
+### Deployment peer discovery follow-up (2026-08-24)
+
+- `/api/v1/peers` establishes a bounded first-party deployment gossip protocol.
+  Each active deployment is a separate `deploymentPeers` TTL lease; peer
+  discovery is HMAC-authenticated with method/path/timestamp/raw-body binding,
+  streams cursor-paginated NDJSON, and limits every sync to a small
+  breadth-first budget. The fixed production origin is the bootstrap seed, but
+  each trusted peer shares its own known peers, so later syncs converge without
+  a central all-peers list or fan-out storm.
+- Required fork-safe configuration is documented with placeholders only:
+  `THINGTIME_PEER_DISCOVERY_SECRET`, a persistent
+  `THINGTIME_PEER_SIGNING_PRIVATE_KEY`, `THINGTIME_PUBLIC_ORIGIN`, optional
+  bootstrap origin, and an explicit first-party hostname suffix allowlist.
+  HMAC admits only mesh members while Ed25519 signatures give each request and
+  streamed peer event a public-verification layer; public keys pin to origins
+  and unexpected rotation fails closed. Anonymous callers, stale signatures,
+  loopback/non-first-party origins, unbounded responses, and arbitrary outbound
+  targets fail closed.
+- The production bootstrap also advances the mesh with a five-minute
+  `CRON_SECRET`-protected `/api/v1/peers/sync` schedule. Previews and other
+  platforms use the same bounded endpoint from an equivalent trusted deploy
+  hook or scheduler; no peer credential is ever shipped to a client.
+
 ### Endpoint compatibility follow-up (2026-08-23)
 
 - `/api/v1/capabilities` is a public, origin-scoped generated contract
@@ -643,5 +870,153 @@ an offline database or offline conflict resolution layer.
    format exposes stable, verifiable file references.
 4. Install and validate a real peer media transport before enabling any screen
    stream UI; keep capture foundation unavailable until then.
-5. Apply the protected-workflow Developer ID/notarization patch and validate a
-   stapled Gatekeeper-accepted artifact before production publication.
+5. Merge the dedicated protected builder/releaser and thin `develop` listener,
+   configure their Developer ID/notarization secrets, then validate a stapled
+   Gatekeeper-accepted artifact before production publication.
+
+### Signed PR release and recovery updater follow-up (2026-08-24)
+
+- The signed PR builder/releaser is intentionally delivered as a separate
+  `github-actions` control-plane change, not executable code in this product
+  PR. A thin `develop` listener forwards only trusted lifecycle/manual events;
+  the protected worker revalidates the same-repository owner plus
+  `desktop-release` gate, checks out its immutable head SHA without retaining a
+  GitHub write token, tests before importing secrets, and publishes the
+  deterministic SemVer form `base-pr.<PR>.<branch>.g<commit>` as a GitHub
+  prerelease.
+- Desktop Settings now fetches and filters GitHub releases by version, PR,
+  branch, and commit. It treats a release as installable only after extracting
+  a GitHub-hosted macOS ZIP to the user-local recovery cache and re-verifying
+  the production nested signature, hardened runtime, and notarization.
+- A cached release launches through a detached handoff only after the current
+  Thingtime process exits, so two versions cannot share one local profile at
+  once. Installing first caches the current installed production bundle, then
+  delegates to the existing transactional installer after the Electron process
+  exits. The cache is intentionally bounded to twelve explicit recovery apps
+  and can be revealed in Finder, so a broken future updater UI does not strand
+  a person on that version.
+
+### Recovery updater verification follow-up (2026-08-24)
+
+- Release browsing now follows every GitHub API Link page rather than stopping
+  at 2,000 records. A loop is reported visibly instead of silently omitting
+  history. Download redirects stay on GitHub-controlled release hosts, and a
+  stale/tampered manifest entry cannot exhaust the twelve recovery slots or
+  leave a partial verified-app directory behind. GitHub outage state preserves
+  the local cache catalog so launch/install recovery actions remain usable
+  offline.
+- The earlier branch-local candidate release worker was exercised manually for
+  this branch. Owner manual run
+  `32712878513` reached its real dependency gate and exposed a concrete
+  runner-only defect before any signing material was accessed: `MCP/` is
+  npm-managed and has `package-lock.json`, so a frozen pnpm install could never
+  succeed. The workflow now uses `npm ci --prefix MCP`; its contract test locks
+  that package-manager boundary before the next signed release attempt. A
+  second run then spent more than five minutes in its unnecessary full-history
+  checkout, so the exact resolved SHA now uses `fetch-depth: 1`; this shortens
+  the gate without widening the selected source or signing authority.
+- The first complete unsigned native build on the GitHub macOS SDK then exposed
+  `PMPrinterGetID`/`PMPrinterGetName` as unretained Core Foundation references,
+  unlike the local overlay that had masked the issue. Printer telemetry and
+  selection now normalize Swift, Core Foundation, and unmanaged Core Foundation
+  string declarations through the Core Foundation Get rule before comparison.
+- That next runner exercised an existing scheduler-test race: a fixed dispatch
+  sleep sometimes yielded only two renewal ticks under GitHub's scheduler. The
+  test now holds dispatch until all three intended renewals arrive (with a
+  bounded timeout), then confirms renewal stops after completion; it no longer
+  treats a wall-clock assumption as correctness.
+- The following runner then exposed a second genuine test-gate race: the
+  deliberately unavailable local Codex stub could close its stdin between the
+  transport writable check and an asynchronous write, emitting an unhandled
+  `EPIPE`. The JSONL transport now consumes that stream error for the life of
+  the child pipe and fails all pending work with the existing closed connector
+  error, so teardown never crashes the node host.
+- Run `32716251316` passed every unsigned MCP, native, and Electron test on the
+  GitHub macOS runner, then stopped at the intentional credential boundary.
+  Repository and relevant environment secret listings contain none of the
+  required values, so the job received empty `MAC_CSC_LINK`,
+  `MAC_CSC_KEY_PASSWORD`, `APPLE_API_KEY_BASE64`, `APPLE_API_KEY_ID`,
+  `APPLE_API_ISSUER`, and `APPLE_TEAM_ID` inputs. The release is therefore
+  correctly blocked before an unsigned or unnotarized artifact can be built;
+  configuring those six repository secrets plus merging the dedicated
+  control-plane worker/listener split are the remaining release prerequisites.
+
+### Independent Recovery launcher follow-up (2026-08-24)
+
+- Added `macos/ThingtimeRecovery`, a native SwiftUI `Thingtime Recovery.app`
+  with stable identifier `com.thingtime.desktop.recovery`. It can query the
+  public GitHub release catalog, cache separately named Desktop and Recovery
+  ZIPs, browse the local cache without GitHub, launch an old desktop bundle,
+  atomically install a selected desktop version, and update itself without
+  loading an Electron app.
+- Desktop rollback entries are now held at the stable shared location
+  `~/Library/Application Support/com.thingtime.desktop/release-cache`; recovery
+  launcher entries live beside it in `recovery-cache`. The Electron main
+  process carries a regular legacy per-userData cache forward non-destructively
+  the first time it reaches the new shared location. Electron deliberately
+  rejects `Thingtime-Recovery-App-Release-*.zip` as a desktop update asset.
+- The signed native installer only accepts strict cache layouts, regular
+  directories, the expected bundle identifier, and the same signing team. A
+  production Recovery app adds Developer ID, Gatekeeper, and notarization-staple
+  requirements. It asks the running target app to quit, retains the replaced
+  verified bundle before atomic replacement, and leaves the target unchanged on
+  verification or handoff failure.
+- Local acceptance built the app in a clean Library/Caches stage, signed both
+  nested installer and outer app with the stable Apple Development requirement,
+  installed and re-verified `~/Applications/Thingtime Recovery.app`, inspected
+  its release/cached-recovery UI, deliberately rejected an invalid historical
+  GitHub desktop asset, and completed an actual signed Recovery self-replace /
+  relaunch. Production publication remains correctly blocked on the existing
+  Developer ID + notarization credential prerequisite.
+
+### Unsigned Recovery handoff audit (2026-08-24)
+
+- The unsigned catalog/cache UI already exposed explicitly acknowledged
+  `UNSIGNED` assets, but the detached Recovery installer unconditionally used
+  signed-team verification. That made an ad-hoc release cacheable yet unable to
+  launch or install—a broken fallback path.
+- The installer now resolves the selected app back to its constrained cache
+  manifest and derives the trust lane from `isUnsigned`; callers cannot supply
+  their own unsigned flag. An unsigned Recovery launcher can therefore verify
+  and launch/install only explicitly marked ad-hoc bundles. A missing legacy
+  marker remains strict signed behavior and fails closed when the unsigned
+  launcher has no team identity. Replaced bundles are classified and cached in
+  their matching lane before an atomic replacement.
+- The Electron detached handoff also repeats its production Developer ID,
+  notarization, and nested-code verification after the main process exits and
+  immediately before either a cached launch or install. This is separate from
+  the explicitly opt-in unsigned native Recovery lane.
+- Verified locally with 78 Electron tests and 9 Recovery-core tests, including
+  a real ad-hoc app fixture that launches via the detached unsigned Recovery
+  path and a regression proving a missing `isUnsigned` marker cannot downgrade
+  verification. A fresh release-mode unsigned Recovery ZIP round-trip also
+  passed. A live GitHub unsigned release requires the still-open protected
+  control-plane PR #390 to merge before the release worker can publish one.
+- The first full Electron unsigned build also revealed that electron-builder's
+  implicit macOS target produced a DMG but no updater ZIP. `electron/package.json`
+  now explicitly requests both `dmg` and `zip`, with a contract test that locks
+  the rollback artifact in place. The final local release-mode artifacts both
+  verified independently at version
+  `0.1.0-pr.68.updater.g2048de7d6262.unsigned`.
+
+### Index-budget consolidation follow-up (2026-08-28)
+
+- Lopu's repository review correctly found the merged lineage at 62/64 Things
+  indexes, violating this PR's own four-slot safe-upgrade invariant. The five
+  new uniqueness families for AI connections, imported communities/chats/
+  messages, and device idempotency now share the existing protected root
+  `uniqueKeys` multikey index as domain-prefixed Binary values. The complete
+  home plan is 57/64 without weakening the guard.
+- Existing preview rows are upgraded before their obsolete indexes are
+  retired. New writes stamp root keys atomically, exact/batched reads prefer
+  those indexed keys, and crystal fallbacks keep an interrupted pre-upgrade row
+  recoverable. Device documents no longer add the redundant
+  `crystal.deviceUniqueKeys` plaintext array.
+- The migration is home-only. Custom data endpoints receive the additive
+  current index set but are no longer scanned, rewritten, or stripped of
+  historical index names owned by their users.
+- Validation: collections 19/19, devices 52/52, messenger 41/41, the complete
+  unit battery, targeted ESLint, and the production/Vercel build all pass. A
+  live worktree server also passes auth 22/22 (cold service-account creation
+  128 ms) and Things 31/31 API groups; the imported-AI and device entry routes
+  are present and auth-guarded.

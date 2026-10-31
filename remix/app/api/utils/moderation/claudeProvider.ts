@@ -1,11 +1,13 @@
+import { createClaudeOAuthClient } from '../ai/claudeOAuth';
 // Claude API vision moderation provider. One bounded request per image:
 // base64 image + a strict-JSON classification ask. The raw image never
 // persists anywhere new — bytes come from the private S3 object and go only
 // to the Claude API call.
 import Anthropic from '@anthropic-ai/sdk';
+import { recordErrorLog } from '../errors/errorLogs';
 
 import { getAiPreferredModelWaterfall } from '../settings/prConflictResolverModelWaterfall';
-import { resolveAiPreferredClaudeModel } from '../settings/prConflictResolverModelWaterfallCore';
+import { resolveAiPreferredAnthropicChoice, toAnthropicEffort } from '../settings/prConflictResolverModelWaterfallCore';
 import type { ModerationVerdict } from './moderationCore';
 import { sanitizeModerationCategories } from './moderationCore';
 import type { ModerationProvider } from './providers';
@@ -50,17 +52,21 @@ export const createClaudeModerationProvider = (env: NodeJS.ProcessEnv = process.
 	// provider default used when the waterfall says 'default'.
 	const providerDefaultModel = env.TT_MODERATION_MODEL?.trim() || DEFAULT_MODERATION_MODEL;
 	let lastResolvedModel = providerDefaultModel;
-	const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+	const client = createClaudeOAuthClient({ env });
 	return {
 		name: 'claude',
 		get model() {
 			return lastResolvedModel;
 		},
 		analyzeImage: async ({ bytes, contentType }) => {
-			const model = resolveAiPreferredClaudeModel(await getAiPreferredModelWaterfall(), providerDefaultModel);
-			lastResolvedModel = model;
+			const choice = resolveAiPreferredAnthropicChoice(await getAiPreferredModelWaterfall(), providerDefaultModel);
+			const effort = toAnthropicEffort(choice.effort);
+			lastResolvedModel = choice.model;
+			// Moderation is a background classifier: the Admin entry's model and
+			// effort apply, but fast mode (premium priced) is deliberately ignored.
 			const response = await client.messages.create({
-				model,
+				model: choice.model,
+				...(effort ? { output_config: { effort } } : {}),
 				max_tokens: 2048,
 				messages: [
 					{
@@ -78,7 +84,11 @@ export const createClaudeModerationProvider = (env: NodeJS.ProcessEnv = process.
 						]
 					}
 				]
-			});
+			}).catch(async (error) => {
+        // Capture only the SDK's closed error snapshot, not headers/body/image.
+        await recordErrorLog(error, { source: 'moderation', provider: 'anthropic', status: error?.status, providerRequestId: error?.request_id, providerType: error?.error?.error?.type });
+        throw error;
+      });
 
 			// A safety-classifier refusal on a moderation request is itself signal:
 			// the image was extreme enough that the model declined to process it.
@@ -101,7 +111,7 @@ export const createClaudeModerationProvider = (env: NodeJS.ProcessEnv = process.
 				// Unparseable answer: keep the attachment un-stamped (analysis error
 				// path) rather than inventing a verdict — the orchestrator leaves the
 				// doc pending so a sweep can retry.
-				throw new Error(`moderation: unparseable classifier response for model ${model}`);
+				throw new Error(`moderation: unparseable classifier response for model ${choice.model}`);
 			}
 			return verdict;
 		}

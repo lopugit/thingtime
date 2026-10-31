@@ -1,11 +1,13 @@
 import React, { memo } from 'react';
 
-import { Box, Flex, Text } from '@chakra-ui/react';
-import { AppWindow, LockKeyhole } from 'lucide-react';
+import { Box, Button, Flex, Menu, MenuButton, MenuList, Portal, Text } from '@chakra-ui/react';
+import { AppWindow, LockKeyhole, MoreHorizontal } from 'lucide-react';
+
+import { DRAWER_POPUP_Z } from '~/components/Nav/Drawer/useDrawer';
 
 import type { DeviceRunningApp } from './deviceTypes';
 import type { DeviceActionHandler, DeviceControlResolver } from './DeviceStateGrid';
-import { DevicePolicyButton } from './DeviceStateGrid';
+import { DevicePolicyButton, DevicePolicyMenuItem } from './DeviceStateGrid';
 import { DeviceStatusPill } from './DeviceCard';
 
 export type DeviceApplicationsProps = {
@@ -42,6 +44,30 @@ export const DeviceApplications = memo(
 
 		return (
 			<Box border="1px solid var(--tt-border, #ececef)" borderRadius="var(--tt-radius-md, 12px)" overflow="hidden">
+				<Flex alignItems="center" borderBottom="1px solid var(--tt-border, #ececef)" justifyContent="space-between" paddingX={3} paddingY={2}>
+					<Text fontSize="11px" fontWeight={700} textTransform="uppercase">
+						Applications
+					</Text>
+					{controlFor?.('hide-other-apps') ? (
+						<Menu placement="bottom-end">
+							<MenuButton aria-label="Application actions" as={Button} minWidth={8} size="xs" variant="ghost">
+								<MoreHorizontal aria-hidden size={15} />
+							</MenuButton>
+							<Portal>
+								<MenuList fontSize="12px" zIndex={DRAWER_POPUP_Z}>
+									<DevicePolicyMenuItem
+										action="hide-other-apps"
+										controlFor={controlFor}
+										deviceId={deviceId}
+										input={{}}
+										label="Hide other apps"
+										onAction={onAction}
+									/>
+								</MenuList>
+							</Portal>
+						</Menu>
+					) : null}
+				</Flex>
 				{locked ? (
 					<Flex
 						alignItems="center"
@@ -58,11 +84,14 @@ export const DeviceApplications = memo(
 				) : null}
 				{ordered.map((application, index) => {
 					const isActive = application.bundleId === activeAppBundleId || application.isActive;
+					const isHidden = application.isHidden === true;
 					const launchControl = controlFor?.('launch-app', application.bundleId);
 					const quitControl = controlFor?.('quit-app', application.bundleId);
+					const forceQuitControl = controlFor?.('force-quit-app', application.bundleId);
 					const blockedMessage =
 						(!launchControl?.policy.allowed && launchControl?.policy.message) ||
 						(!quitControl?.policy.allowed && quitControl?.policy.message) ||
+						(!forceQuitControl?.policy.allowed && forceQuitControl?.policy.message) ||
 						null;
 					return (
 						<Box
@@ -90,6 +119,7 @@ export const DeviceApplications = memo(
 											{application.name || application.bundleId}
 										</Text>
 										{isActive ? <DeviceStatusPill label="active" tone="positive" /> : null}
+										{isHidden ? <DeviceStatusPill label="hidden" tone="neutral" /> : null}
 									</Flex>
 									<Text color="var(--tt-muted, #71717a)" fontSize="10px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
 										{application.bundleId}
@@ -103,23 +133,65 @@ export const DeviceApplications = memo(
 										action="launch-app"
 										controlFor={controlFor}
 										deviceId={deviceId}
-										input={{ bundleId: application.bundleId }}
+										input={{ appId: application.bundleId }}
 										label={isActive ? 'Focus' : 'Open'}
 										onAction={onAction}
 										targetId={application.bundleId}
 										variant="ghost"
 									/>
-									<DevicePolicyButton
-										action="quit-app"
-										color="var(--tt-danger, #dc2626)"
-										controlFor={controlFor}
-										deviceId={deviceId}
-										input={{ bundleId: application.bundleId }}
-										label="Quit"
-										onAction={onAction}
-										targetId={application.bundleId}
-										variant="ghost"
-									/>
+									<Menu placement="bottom-end">
+										<MenuButton
+											aria-label={`More actions for ${application.name || application.bundleId}`}
+											as={Button}
+											minWidth={8}
+											size="xs"
+											variant="ghost"
+										>
+											<MoreHorizontal aria-hidden size={15} />
+										</MenuButton>
+										<Portal>
+											<MenuList fontSize="12px" zIndex={DRAWER_POPUP_Z}>
+												<DevicePolicyMenuItem
+													action="launch-app"
+													controlFor={controlFor}
+													deviceId={deviceId}
+													input={{ appId: application.bundleId }}
+													label={isActive ? 'Focus app' : 'Open app'}
+													onAction={onAction}
+													targetId={application.bundleId}
+												/>
+												<DevicePolicyMenuItem
+													action={isHidden ? 'unhide-app' : 'hide-app'}
+													controlFor={controlFor}
+													deviceId={deviceId}
+													input={{ appId: application.bundleId }}
+													label={isHidden ? 'Show app' : 'Hide app'}
+													onAction={onAction}
+													targetId={application.bundleId}
+												/>
+												<DevicePolicyMenuItem
+													action="quit-app"
+													color="var(--tt-danger, #dc2626)"
+													controlFor={controlFor}
+													deviceId={deviceId}
+													input={{ appId: application.bundleId }}
+													label="Quit app"
+													onAction={onAction}
+													targetId={application.bundleId}
+												/>
+												<DevicePolicyMenuItem
+													action="force-quit-app"
+													color="var(--tt-danger, #dc2626)"
+													controlFor={controlFor}
+													deviceId={deviceId}
+													input={{ appId: application.bundleId }}
+													label="Force quit…"
+													onAction={onAction}
+													targetId={application.bundleId}
+												/>
+											</MenuList>
+										</Portal>
+									</Menu>
 								</Flex>
 							</Flex>
 							{blockedMessage ? (

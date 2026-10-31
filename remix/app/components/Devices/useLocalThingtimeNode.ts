@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -11,6 +12,7 @@ import {
 
 import type { DeviceActionControl, DeviceActionHandler, DeviceActionIntent, DeviceControlResolver } from './DeviceStateGrid';
 import type { DeviceActionKind, DeviceActionPolicy } from './deviceTypes';
+import { permissionSnapshot } from './localNodePermissions';
 import { localNodeActionIsBusy, localNodeActionKey } from './localNodePresentation';
 
 const LOCAL_ACTIONS = new Set<DeviceActionKind>([
@@ -63,6 +65,8 @@ export type LocalThingtimeNodeState = {
 	pendingActionKeys: string[];
 	status: ThingtimeNodeStatus | null;
 	permissions: ThingtimeNodePermission[];
+	permissionsCheckedAt: number | null;
+	permissionCheckError: string | null;
 	pairingChallenge: ThingtimeNodePairingChallenge | null;
 	pairedDeviceIds: string[];
 	pairedAccountCount: number;
@@ -70,6 +74,11 @@ export type LocalThingtimeNodeState = {
 };
 
 type LocalThingtimeNodeRuntimeState = Omit<LocalThingtimeNodeState, 'pairedDeviceIds' | 'pairedAccountCount' | 'pairedToCurrentAccount'>;
+
+// Keep observations across settings/page mounts, scoped to this Desktop bridge.
+// Pairing challenges and pending actions remain private to their originating view.
+type NodeObservation = Pick<LocalThingtimeNodeRuntimeState, 'status' | 'permissions' | 'permissionsCheckedAt' | 'permissionCheckError'>;
+const nodeObservations = new WeakMap<object, NodeObservation>();
 
 const localActionErrorMessage = (error: unknown, fallback: string): string => {
 	if (error instanceof Error) {
@@ -88,50 +97,69 @@ export const useLocalThingtimeNode = (
 	const lopuRef = useRef(lopu);
 	const permissionPollGenerationRef = useRef(0);
 	const statusRefreshGenerationRef = useRef(0);
+	const refreshInFlightRef = useRef<Promise<ThingtimeNodeStatus | null> | null>(null);
 	lopuRef.current = lopu;
 	const bridge = typeof window === 'undefined' ? undefined : getElectronBridge();
-	const [state, setState] = useState<LocalThingtimeNodeRuntimeState>({
+	const [state, setState] = useState<LocalThingtimeNodeRuntimeState>(() => ({
 		available: Boolean(bridge?.nodeGetStatus),
 		checking: false,
 		pendingActionKeys: [],
 		status: null,
 		permissions: [],
-		pairingChallenge: null
-	});
+		permissionsCheckedAt: null,
+		permissionCheckError: null,
+		pairingChallenge: null,
+		...(bridge ? nodeObservations.get(bridge) : undefined)
+	}));
 
-	const refresh = useCallback(async () => {
-		const generation = ++statusRefreshGenerationRef.current;
-		const currentBridge = getElectronBridge();
-		if (!currentBridge?.nodeGetStatus) {
-			setState((previous) => ({ ...previous, available: false, checking: false }));
-			return null;
-		}
-		setState((previous) => ({ ...previous, available: true, checking: true }));
-		try {
-			const [statusResult, permissionsResult] = await Promise.allSettled([currentBridge.nodeGetStatus(), currentBridge.nodeGetPermissions?.()]);
-			if (statusResult.status === 'rejected') throw statusResult.reason;
-			if (statusRefreshGenerationRef.current !== generation) return statusResult.value;
-			setState((previous) => ({
-				...previous,
-				available: true,
-				checking: false,
-				status: statusResult.value,
-				permissions:
-					permissionsResult.status === 'fulfilled' && permissionsResult.value?.permissions
-						? permissionsResult.value.permissions
-						: previous.permissions
-			}));
-			return statusResult.value;
-		} catch (error) {
-			if (statusRefreshGenerationRef.current !== generation) return null;
-			setState((previous) => ({ ...previous, available: true, checking: false }));
-			lopuRef.current({
-				title: 'Couldn’t read the local Thingtime node 😔',
-				description: apiErrorMessage(error, 'Open Thingtime Desktop and try again.'),
-				status: 'error'
+	useEffect(() => {
+		if (bridge && state.status)
+			nodeObservations.set(bridge, {
+				status: state.status,
+				permissions: state.permissions,
+				permissionsCheckedAt: state.permissionsCheckedAt,
+				permissionCheckError: state.permissionCheckError
 			});
-			return null;
-		}
+	}, [bridge, state.status, state.permissions, state.permissionsCheckedAt, state.permissionCheckError]);
+
+	const refresh = useCallback((options?: { quiet?: boolean }) => {
+		if (refreshInFlightRef.current) return refreshInFlightRef.current;
+		const run = async () => {
+			const generation = ++statusRefreshGenerationRef.current;
+			const currentBridge = getElectronBridge();
+			if (!currentBridge?.nodeGetStatus) {
+				setState((previous) => ({ ...previous, available: false, checking: false }));
+				return null;
+			}
+			setState((previous) => ({ ...previous, available: true, checking: !options?.quiet || !previous.status }));
+			try {
+				const [statusResult, permissionsResult] = await Promise.allSettled([currentBridge.nodeGetStatus(), currentBridge.nodeGetPermissions?.()]);
+				if (statusResult.status === 'rejected') throw statusResult.reason;
+				if (statusRefreshGenerationRef.current !== generation) return statusResult.value;
+				setState((previous) => ({
+					...previous,
+					available: true,
+					checking: false,
+					status: statusResult.value,
+					...permissionSnapshot(previous, permissionsResult, Date.now())
+				}));
+				return statusResult.value;
+			} catch (error) {
+				if (statusRefreshGenerationRef.current !== generation) return null;
+				setState((previous) => ({
+					...previous,
+					available: true,
+					checking: false,
+					permissionCheckError: 'Could not reach Thingtime Node. Start it in Desktop settings, then check access again.'
+				}));
+				return null;
+			}
+		};
+		const pending = run().finally(() => {
+			refreshInFlightRef.current = null;
+		});
+		refreshInFlightRef.current = pending;
+		return pending;
 	}, []);
 
 	useEffect(() => {
@@ -141,9 +169,17 @@ export const useLocalThingtimeNode = (
 
 	useEffect(() => {
 		if (!bridge?.nodeGetStatus || typeof window === 'undefined') return;
-		const refreshAfterSettings = () => void refresh();
-		window.addEventListener('focus', refreshAfterSettings);
-		return () => window.removeEventListener('focus', refreshAfterSettings);
+		const refreshAfterSettings = () => {
+			if (document.visibilityState === 'visible') return refresh({ quiet: true });
+		};
+		activityEvents(window, 'events:components/Devices/useLocalThingtimeNode', 'useLocalThingtimeNode').addEventListener('focus', refreshAfterSettings);
+		activityEvents(document, 'events:components/Devices/useLocalThingtimeNode', 'useLocalThingtimeNode').addEventListener('visibilitychange', refreshAfterSettings);
+		const timer = activityInterval('timer:components/Devices/useLocalThingtimeNode:1', 'Local node status', refreshAfterSettings, 30_000);
+		return () => {
+			clearActivityInterval(timer);
+			activityEvents(window, 'events:components/Devices/useLocalThingtimeNode', 'useLocalThingtimeNode').removeEventListener('focus', refreshAfterSettings);
+			activityEvents(document, 'events:components/Devices/useLocalThingtimeNode', 'useLocalThingtimeNode').removeEventListener('visibilitychange', refreshAfterSettings);
+		};
 	}, [bridge?.nodeGetStatus, refresh]);
 
 	useEffect(

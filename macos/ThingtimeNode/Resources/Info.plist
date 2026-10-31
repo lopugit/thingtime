@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Thingtime reads original photos and videos only after you choose a photo backup source. Uploads start when you configure and run that backup.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Thingtime uses your microphone when you start voice input for Lopu.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Thingtime transcribes your speech for Lopu. macOS may use Apple servers when on-device recognition is unavailable.</string>
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
@@ -26,9 +32,11 @@
     <string>13.0</string>
     <key>LSUIElement</key>
     <true/>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>ThingtimeNodeElectronManaged</key>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Thingtime Node requests specifically approved fixed actions through macOS System Events, Apple Music, and Spotify. It never accepts arbitrary AppleScript.</string>
+	<key>ThingtimeNodeElectronManaged</key>
     <false/>
 </dict>
 </plist>

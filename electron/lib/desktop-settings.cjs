@@ -114,6 +114,7 @@ function mergeEndpointProfiles(metadata, customEndpoints = []) {
 function emptyPersistedState() {
 	return {
 		autoStartNodeOnLaunch: true,
+		nodePanelDismissals: {},
 		customEndpoints: [],
 		customMenuBarIconPath: null,
 		menuBarIconId: DEFAULT_MENU_BAR_ICON_ID,
@@ -136,6 +137,11 @@ function normalizePersistedState(value) {
 		}
 	}
 	state.customEndpoints = [...new Map(state.customEndpoints.map((entry) => [entry.url, entry])).values()];
+	for (const [key, dismissed] of Object.entries(
+		value.nodePanelDismissals && typeof value.nodePanelDismissals === 'object' ? value.nodePanelDismissals : {}
+	).slice(-64)) {
+		if (/^[a-f0-9]{64}$/.test(key) && dismissed === true) state.nodePanelDismissals[key] = true;
+	}
 	state.autoStartNodeOnLaunch = typeof value.autoStartNodeOnLaunch === 'boolean' ? value.autoStartNodeOnLaunch : true;
 	state.selectedEndpointId = typeof value.selectedEndpointId === 'string' ? value.selectedEndpointId : null;
 	if (typeof value.selectedEndpointLabel === 'string') {
@@ -332,6 +338,35 @@ class DesktopSettingsStore {
 			this.state.menuBarIconId = normalizedId;
 			await this.persist();
 			return this.snapshot();
+		});
+	}
+
+	nodePanelPreference(accountId) {
+		if (typeof accountId !== 'string' || !accountId.trim() || byteLength(accountId) > 512)
+			throw new Error('Choose a valid account for this preference.');
+		const scope = crypto
+			.createHash('sha256')
+			.update(JSON.stringify([this.snapshot().selectedEndpoint.url, accountId]))
+			.digest('hex');
+		return { scope, dismissed: this.state.nodePanelDismissals[scope] === true };
+	}
+
+	async setNodePanelPreference({ accountId, scope, dismissed } = {}) {
+		return this.enqueue(async () => {
+			if (typeof dismissed !== 'boolean') throw new Error('Choose whether to hide the node panel.');
+			const current = this.nodePanelPreference(accountId);
+			if (scope !== current.scope) throw new Error('The API endpoint changed. Open Things settings and try again.');
+			const previous = this.state.nodePanelDismissals;
+			const entries = Object.entries(previous).filter(([key]) => key !== scope);
+			if (dismissed) entries.push([scope, true]);
+			this.state.nodePanelDismissals = Object.fromEntries(entries.slice(-64));
+			try {
+				await this.persist();
+			} catch (error) {
+				this.state.nodePanelDismissals = previous;
+				throw error;
+			}
+			return this.nodePanelPreference(accountId);
 		});
 	}
 
