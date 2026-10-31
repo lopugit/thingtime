@@ -84,12 +84,7 @@ export const parseVercelWebhookEvent = (
   if (!branch) return null;
 
   const eventAtMs = Number(envelope?.createdAt);
-  // `payload.url` is the same deployment host in envelopes that omit
-  // `payload.deployment.url` — the CI Control receiver reads both for the same
-  // reason (see ciControl/webhooks.ts). This URL is what
-  // persistedStatusIsForDeployment matches on, so losing it downgrades failure
-  // attribution to the commit SHA, which cannot separate same-SHA siblings.
-  const rawUrl = asString(deployment?.url) || asString(envelope?.payload?.url);
+  const rawUrl = asString(deployment?.url);
 
   return {
     branch,
@@ -98,12 +93,7 @@ export const parseVercelWebhookEvent = (
       commitSha: asString(meta?.githubCommitSha) || asString(meta?.gitlabCommitSha) || asString(meta?.bitbucketCommitSha),
       deploymentId: asString(deployment?.id) || asString(deployment?.uid),
       deploymentUrl: rawUrl ? (rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`) : undefined,
-      // The webhook envelope carries the inspector page at `payload.links.deployment`.
-      // `deployment.inspectorUrl` is a REST API field that webhook deliveries do
-      // NOT include, so reading only that left buildPageUrl empty for every
-      // webhook-fed status and dropped the footer's build link back to the
-      // project-wide dashboard. Kept as a fallback for REST-shaped fixtures.
-      inspectorUrl: asString(envelope?.payload?.links?.deployment) || asString(deployment?.inspectorUrl),
+      inspectorUrl: asString(deployment?.inspectorUrl),
       environment: asString(envelope?.payload?.target) || undefined,
       error: state === 'error' ? asString(envelope?.payload?.errorMessage) || 'Deployment failed' : undefined,
       eventAt: Number.isFinite(eventAtMs) && eventAtMs > 0 ? new Date(eventAtMs).toISOString() : new Date().toISOString(),
@@ -115,56 +105,10 @@ export const parseVercelWebhookEvent = (
 
 const loadDoc = async () => (await getSettingsCollection()).findOne({ key: SETTINGS_KEY });
 
-// Out-of-order guard, kept pure so it is testable without a Mongo stand-in.
-//
-// An event for a DIFFERENT deployment is ignored when it is older than what we
-// already hold (late delivery for a superseded build). For the SAME deployment,
-// a terminal state always beats 'building'.
-//
-// That last rule must NOT be conditioned on the timestamp:
-// parseVercelWebhookEvent falls back to `now` whenever an envelope carries no
-// usable numeric createdAt, so a late-delivered deployment.created dates itself
-// NEWER than the ready event it actually follows — and would then clobber a
-// ready deployment back to 'building'. Decide on state first, clocks only as
-// the tiebreaker.
-export const shouldReplaceBranchStatus = (
-  existing: Pick<VercelWebhookBranchStatus, 'deploymentId' | 'eventAt' | 'state'> | undefined,
-  next: Pick<VercelWebhookBranchStatus, 'deploymentId' | 'eventAt' | 'state'>
-): boolean => {
-  if (!existing) return true;
-  const older = Date.parse(next.eventAt) < Date.parse(existing.eventAt);
-  const sameDeployment = Boolean(existing.deploymentId) && existing.deploymentId === next.deploymentId;
-  if (!sameDeployment) return !older;
-
-  const nextIsBuilding = next.state === 'building';
-  const existingIsBuilding = existing.state === 'building';
-  if (existingIsBuilding !== nextIsBuilding) return existingIsBuilding;
-  return !older;
-};
-
-// Does a persisted entry describe the deployment that is serving THIS request?
-//
-// The store holds exactly one entry per branch, but a branch legitimately has
-// several concurrent deployments: Thingtime builds one head SHA into both the
-// generic Preview environment and the `develop` Custom Environment (see
-// VERCEL_DEPLOYMENTS.md, "Develop-target PR previews"). Those siblings share
-// this slot, so the last event to arrive wins regardless of which deployment
-// the caller is running on.
-//
-// VERCEL_URL is unique per deployment, so it is the only signal that separates
-// same-SHA siblings — prefer it, and fall back to the commit SHA only when a
-// URL is missing on either side. Unknown on both counts is not identity.
-export const persistedStatusIsForDeployment = (
-  persisted: Pick<VercelWebhookBranchStatus, 'commitSha' | 'deploymentUrl'> | null | undefined,
-  running: { commitSha?: string; deploymentUrl?: string }
-): boolean => {
-  if (!persisted) return false;
-  if (running.deploymentUrl && persisted.deploymentUrl) return persisted.deploymentUrl === running.deploymentUrl;
-  if (running.commitSha && persisted.commitSha) return persisted.commitSha === running.commitSha;
-  return false;
-};
-
-// Persist one event, subject to the guard above.
+// Persist one event. Out-of-order guard: an event for a DIFFERENT deployment is
+// ignored when it's older than what we already have (late delivery for a
+// superseded build); for the SAME deployment, terminal states always win over
+// 'building' regardless of timestamps.
 export const recordVercelWebhookEvent = async (envelope: any): Promise<VercelWebhookBranchStatus | null> => {
   const parsed = parseVercelWebhookEvent(envelope);
   if (!parsed) return null;
@@ -175,7 +119,12 @@ export const recordVercelWebhookEvent = async (envelope: any): Promise<VercelWeb
     doc?.branches && typeof doc.branches === 'object' ? { ...doc.branches } : {};
   const existing = branches[branch];
 
-  if (existing && !shouldReplaceBranchStatus(existing, next)) return existing;
+  if (existing) {
+    const sameDeployment = existing.deploymentId && existing.deploymentId === next.deploymentId;
+    const older = Date.parse(next.eventAt) < Date.parse(existing.eventAt);
+    if (!sameDeployment && older) return existing;
+    if (sameDeployment && older && existing.state !== 'building') return existing;
+  }
 
   const entry: VercelWebhookBranchStatus = {
     ...next,
