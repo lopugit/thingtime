@@ -8,7 +8,7 @@ import { Crumbs, MarketingShell, formatCount, formatPages, useMarketingSeo, useV
 import { MK } from '~/components/Marketing/marketingTheme';
 import { MkButton, SectionEyebrow } from '~/components/Marketing/Sections';
 import { useMarketingVisibility } from '~/components/Marketing/useMarketingPublications';
-import { CATEGORY_BY_KEY, MARKETING_BASE, PAGES, pageHref, pagesInCategory, searchPages } from '~/marketing/catalog';
+import { CATEGORY_BY_KEY, MARKETING_BASE, pageHref, pagesInCategory, searchPages } from '~/marketing/catalog';
 import { groupPages } from '~/marketing/pageGroups';
 import { HUB_KEY, categoryKey, categoryPageKeys, pageKey } from '~/marketing/publishing';
 import type { MarketingPage, TrendKey } from '~/marketing/types';
@@ -37,12 +37,7 @@ const CATEGORY_TREND: Record<string, TrendKey> = {
 	search: 'bold-brutal'
 };
 
-// `admin` is passed rather than read inside PublishToggle: an index renders up
-// to a few hundred cards ("show more" over the 500-page styles category), and
-// each mounted toggle subscribes to the publications store twice and registers
-// a window listener. A visitor would pay all of that for a control that only
-// ever renders null, and every publish would re-render the whole grid.
-const PageCard = ({ entry, admin, dimmed }: { entry: MarketingPage; admin: boolean; dimmed: boolean }) => (
+const PageCard = ({ entry, dimmed }: { entry: MarketingPage; dimmed: boolean }) => (
 	<Box position="relative" minWidth={0}>
 		<Box
 			as={RouterLink}
@@ -74,7 +69,7 @@ const PageCard = ({ entry, admin, dimmed }: { entry: MarketingPage; admin: boole
 				{entry.description}
 			</Text>
 		</Box>
-		{admin ? <PublishToggle publicationKey={pageKey(entry.slug)} label={entry.title} iconOnly position="absolute" top="10px" right="10px" /> : null}
+		<PublishToggle publicationKey={pageKey(entry.slug)} label={entry.title} iconOnly position="absolute" top="10px" right="10px" />
 	</Box>
 );
 
@@ -96,15 +91,7 @@ export default function MarketingCategory() {
 	}, [categoryKeyParam, query]);
 
 	const pages = React.useMemo(() => {
-		// Ask for every match, not a fixed slice: `pages.length` is what the
-		// header, the meta description and "show more" all count, so a cap here
-		// under-reports the total and strands the rest. Common queries blow past
-		// any small cap — "thingtime" alone matches 1091 of the 1635 pages — and
-		// nothing is rendered eagerly anyway: `limit` (60 at a time) bounds the
-		// DOM, exactly as it does for the uncapped 552-page styles index. The
-		// gate filters after the search, so a cap would also drop published
-		// matches that happen to sort past it.
-		if (isSearch) return visibility.pages(searchPages(query, PAGES.length));
+		if (isSearch) return visibility.pages(searchPages(query, 400));
 		if (!category) return [];
 		return visibility.pages(pagesInCategory(category.key));
 	}, [category, isSearch, query, visibility]);
@@ -125,12 +112,7 @@ export default function MarketingCategory() {
 			: 'This marketing section does not exist.';
 
 	const gated = visibility.ready && (isSearch ? !visibility.hub : !!category && !visibility.category(category.key));
-	useMarketingSeo({
-		title: gated ? 'Not published yet' : title,
-		description: gated ? 'This part of the Thingtime marketing site is not published yet.' : description,
-		// unknown publish state writes nothing; "no such section" needs none
-		enabled: (!category && !isSearch) || visibility.ready
-	});
+	useMarketingSeo({ title: gated ? 'Not published yet' : title, description: gated ? 'This part of the Thingtime marketing site is not published yet.' : description });
 
 	if (!category && !isSearch) {
 		return (
@@ -260,7 +242,7 @@ export default function MarketingCategory() {
 						</Flex>
 						<SimpleGrid columns={[1, 2, 3]} gap={3}>
 							{group.pages.map((entry) => (
-								<PageCard key={entry.slug} entry={entry} admin={visibility.everything} dimmed={visibility.everything && !visibility.isPublished(pageKey(entry.slug))} />
+								<PageCard key={entry.slug} entry={entry} dimmed={visibility.everything && !visibility.isPublished(pageKey(entry.slug))} />
 							))}
 						</SimpleGrid>
 					</Box>

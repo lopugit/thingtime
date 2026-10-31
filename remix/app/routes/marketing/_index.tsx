@@ -13,7 +13,7 @@ import { CATEGORIES, MARKETING_BASE, pageHref, pagesInCategory } from '~/marketi
 import { COMPETITORS } from '~/marketing/competitors';
 import { FEATURES } from '~/marketing/features';
 import { PERSONAS } from '~/marketing/personas';
-import { HUB_KEY, SOCIAL_KEY, categoryKey, pageKey } from '~/marketing/publishing';
+import { HUB_KEY, SOCIAL_KEY, categoryKey } from '~/marketing/publishing';
 import { TRENDS } from '~/marketing/trends';
 import { USE_CASES } from '~/marketing/useCases';
 import { getWalkthrough } from '~/marketing/walkthroughs';
@@ -64,11 +64,7 @@ const SectionTitle = ({ eyebrow, title, to, linkLabel }: { eyebrow: string; titl
 	</Flex>
 );
 
-/**
- * A chip row that only lists targets the viewer can open; the whole block
- * drops when nothing is left. `title` may be a function of how many chips
- * survived, so a headline never counts higher than the row beneath it.
- */
+/** A chip row that only lists targets the viewer can open; the whole block drops when nothing is left. */
 const ChipBlock = <T,>({
 	eyebrow,
 	title,
@@ -79,7 +75,7 @@ const ChipBlock = <T,>({
 	render
 }: {
 	eyebrow: string;
-	title: string | ((visible: number) => string);
+	title: string;
 	to?: string;
 	linkLabel?: string;
 	items: readonly T[];
@@ -92,12 +88,7 @@ const ChipBlock = <T,>({
 	const linkOk = to ? visibility.href(to) : false;
 	return (
 		<Box>
-			<SectionTitle
-				eyebrow={eyebrow}
-				title={typeof title === 'function' ? title(visible.length) : title}
-				to={linkOk ? to : undefined}
-				linkLabel={linkOk ? linkLabel : undefined}
-			/>
+			<SectionTitle eyebrow={eyebrow} title={title} to={linkOk ? to : undefined} linkLabel={linkOk ? linkLabel : undefined} />
 			<Flex gap={2} flexWrap="wrap">
 				{visible.map((item) => (
 					<Chip key={href(item)} to={href(item)}>
@@ -119,15 +110,7 @@ export default function MarketingIndex() {
 		() =>
 			CATEGORIES.filter((category) => visibility.category(category.key)).map((category) => {
 				const pages = pagesInCategory(category.key);
-				return {
-					category,
-					total: pages.length,
-					visible: visibility.pages(pages).length,
-					// the admin card's "n of m published" line — counted here rather
-					// than in the render so a keystroke does not re-walk the catalog
-					publishedPages: pages.filter((entry) => visibility.isPublished(pageKey(entry.slug))).length,
-					published: visibility.isPublished(categoryKey(category.key))
-				};
+				return { category, total: pages.length, visible: visibility.pages(pages).length, published: visibility.isPublished(categoryKey(category.key)) };
 			}),
 		[visibility]
 	);
@@ -140,9 +123,7 @@ export default function MarketingIndex() {
 			? 'This part of the Thingtime marketing site is not published yet.'
 			: `${formatCount(counts.pages)} marketing pages, guides, comparisons and animated walkthroughs${
 					counts.social ? ` plus ${formatCount(counts.social)} social images` : ''
-			  } for Thingtime, generated from one catalog.`,
-		// cold start writes nothing rather than a fail-closed "0 pages" blurb
-		enabled: visibility.ready
+			  } for Thingtime, generated from one catalog.`
 	});
 
 	if (!visibility.ready) return <MarketingColdStart />;
@@ -226,7 +207,7 @@ export default function MarketingIndex() {
 				<SectionTitle eyebrow="Browse" title={browseTitle} />
 				{categories.length || visibility.social ? (
 					<SimpleGrid columns={[1, 2, 3]} gap={4}>
-						{categories.map(({ category, total, visible, publishedPages, published }) => (
+						{categories.map(({ category, total, visible, published }) => (
 							<Box key={category.key} position="relative">
 								<Box
 									as={RouterLink}
@@ -260,7 +241,7 @@ export default function MarketingIndex() {
 									</Text>
 									{visibility.everything ? (
 										<Text fontFamily={MK.mono} fontSize="11px" color={MK.muted} marginTop={3} data-testid="marketing-category-published-count">
-											{formatCount(publishedPages)} of{' '}
+											{formatCount(visibility.pages(pagesInCategory(category.key)).filter((entry) => visibility.isPublished(`page:${entry.slug}`)).length)} of{' '}
 											{formatCount(total)} pages published
 										</Text>
 									) : null}
@@ -385,9 +366,7 @@ export default function MarketingIndex() {
 				/>
 				<ChipBlock
 					eyebrow="Styles"
-					// the twelve looks are a catalog fact, not a published one: a
-					// visitor with two style pages must not read "Twelve viral looks"
-					title={(visible) => (visible === TRENDS.length ? 'Twelve viral looks' : `${formatCount(visible)} viral look${visible === 1 ? '' : 's'}`)}
+					title="Twelve viral looks"
 					to={`${MARKETING_BASE}/styles`}
 					linkLabel="All style editions"
 					items={TRENDS}

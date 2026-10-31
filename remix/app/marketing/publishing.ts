@@ -74,26 +74,6 @@ export const pageSections = (page: BuiltPage): PageSection[] => {
 
 export type ResolvedPublicationKey = { ok: true; target: PublicationTarget; label: string } | { ok: false; error: string };
 
-// Section labels per page slug, memoised. `resolvePublicationKey` runs for
-// EVERY stored row on every publications read (api/utils/marketing/), and that
-// endpoint is fetched on every page load — the drawer gates on it too. A
-// section key is the one kind that has to BUILD its page to know which section
-// ids exist (~20us, against ~2us of hash lookup for every other key), so
-// without this the cost of a read grows with the number of hidden sections.
-// Only slugs the catalog actually has are cached, so the map is bounded by the
-// catalog and an unknown slug still costs one failed lookup.
-const sectionLabelsBySlug = new Map<string, Map<string, string>>();
-
-const sectionLabels = (slug: string): Map<string, string> | null => {
-	const cached = sectionLabelsBySlug.get(slug);
-	if (cached) return cached;
-	const page = buildPageBySlug(slug);
-	if (!page) return null;
-	const labels = new Map(pageSections(page).map((entry): [string, string] => [entry.id, `${entry.label} · ${page.title}`]));
-	sectionLabelsBySlug.set(slug, labels);
-	return labels;
-};
-
 /** Semantic check: the key names something the catalog actually generates. */
 export const resolvePublicationKey = (key: unknown): ResolvedPublicationKey => {
 	const target = parsePublicationKey(key);
@@ -116,10 +96,10 @@ export const resolvePublicationKey = (key: unknown): ResolvedPublicationKey => {
 			return page ? { ok: true, target, label: page.title } : { ok: false, error: `Unknown page: ${target.slug}` };
 		}
 		case 'section': {
-			const labels = sectionLabels(target.slug);
-			if (!labels) return { ok: false, error: `Unknown page: ${target.slug}` };
-			const label = labels.get(target.section);
-			return label ? { ok: true, target, label } : { ok: false, error: `Unknown section: ${target.slug}#${target.section}` };
+			const page = buildPageBySlug(target.slug);
+			if (!page) return { ok: false, error: `Unknown page: ${target.slug}` };
+			const section = pageSections(page).find((entry) => entry.id === target.section);
+			return section ? { ok: true, target, label: `${section.label} · ${page.title}` } : { ok: false, error: `Unknown section: ${target.slug}#${target.section}` };
 		}
 		default:
 			return { ok: false, error: 'Unknown publication key' };
@@ -217,36 +197,6 @@ export const createVisibility = (input: { publications: MarketingPublications | 
 		features: (list) => (everything ? [...list] : list.filter((feature) => published.has(socialFeatureKey(feature.key)))),
 		href
 	};
-};
-
-// --------------------------------------------------------------- actions
-
-export type MarketingAction = { label: string; to: string };
-
-/** The one in-product destination that is never gated. */
-const REGISTER_ACTION: MarketingAction = { label: 'Try Thingtime free', to: '/register' };
-
-/**
- * A hero/CTA block's two buttons as the viewer may actually follow them.
- *
- * The PRIMARY needs the same check as the secondary, not just the secondary:
- * every `use-cases/*` page ships a "Copy the template" primary pointing at
- * `templates/<key>`, so a visitor holding a published use case whose template
- * is not published would otherwise get the page's most prominent button
- * straight into the "Not published yet" gate.
- *
- * When the primary is not visible the visible secondary is promoted into its
- * slot (never rendered twice); if neither is visible the block keeps one
- * button pointing somewhere that always works.
- */
-export const visibleActions = (
-	visibility: Pick<MarketingVisibility, 'href'>,
-	cta: MarketingAction,
-	secondary?: MarketingAction | null
-): { primary: MarketingAction; secondary: MarketingAction | null } => {
-	const visibleSecondary = secondary && visibility.href(secondary.to) ? secondary : null;
-	if (visibility.href(cta.to)) return { primary: cta, secondary: visibleSecondary };
-	return { primary: visibleSecondary ?? REGISTER_ACTION, secondary: null };
 };
 
 // --------------------------------------------------------------- summary

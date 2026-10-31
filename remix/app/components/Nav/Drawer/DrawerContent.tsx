@@ -14,7 +14,7 @@ import { ReorderableList } from './ReorderableList';
 import { useMarketingPublications } from '~/components/Marketing/marketingPublicationsStore';
 import { isKeyPublished } from '~/marketing/publishingCore';
 
-import { applyDrawerOrdering, drawerBuiltinNodes, buildDrawerSubSections, drawerMenuItems, filterDrawerItemsByAuth, filterDrawerTopItems } from './drawerMenu';
+import { applyDrawerOrdering, buildDrawerSubSections, drawerMenuItems, filterDrawerItemsByAuth, filterDrawerTopItems } from './drawerMenu';
 import { useDrawer, useIsMobileViewport } from './useDrawer';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MessengerUnreadBadge } from '../../Messenger/MessengerNotifications';
@@ -230,12 +230,12 @@ export const DrawerContent = (props: DrawerContentProps) => {
 	}, [pathname, loading, variant, open]);
 
 	const subItems = React.useMemo(() => {
-		const children = filterDrawerItemsByAuth(drawerBuiltinNodes().find(({ item }) => item.id === currentParentId)?.item.children || [], !!user, !!user?.isAdmin, isPublished);
+		const children = filterDrawerItemsByAuth(selectedTopItem?.children || [], !!user, !!user?.isAdmin, isPublished);
 		const defaultIds = children.map((item) => item.id);
 		const orderedIds = applyDrawerOrdering(defaultIds, ordering?.[currentParentId]);
 
 		return orderedIds.map((id) => children.find((item) => item.id === id)).filter(Boolean);
-	}, [currentParentId, ordering, user, isPublished]);
+	}, [selectedTopItem, ordering, user, isPublished]);
 
 	const subSections = React.useMemo(() => {
 		return buildDrawerSubSections(subItems);

@@ -1039,17 +1039,7 @@ export const AdminDashboard = () => {
             </React.Suspense>
           </TabPanel>
           <TabPanel px={0}>
-						<SystemVault key={user.id} cacheIdentity={user.id} category="ai-providers" />
-						<AdminPanel category="ai-providers" />
-					</TabPanel>
-					<TabPanel px={0}>
-						<AdminPanel category="lopu" />
-					</TabPanel>
-					<TabPanel px={0}>
-						<SystemVault key={user.id} cacheIdentity={user.id} category="platform" />
-					</TabPanel>
-					<TabPanel px={0}>
-						<AdminPanel category="access" />
+            <AdminPanel />
           </TabPanel>
         </TabPanels>
       </Tabs>

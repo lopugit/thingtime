@@ -8,8 +8,9 @@ import { Crumbs, MarketingShell, useMarketingSeo } from '~/components/Marketing/
 import { MK } from '~/components/Marketing/marketingTheme';
 import { MarketingSections, MkButton, SectionEyebrow } from '~/components/Marketing/Sections';
 import { useMarketingVisibility } from '~/components/Marketing/useMarketingPublications';
-import { CATEGORY_BY_KEY, MARKETING_BASE, PAGE_BY_SLUG, buildPageBySlug, pageHref, searchPages, styleSiblingsFor } from '~/marketing/catalog';
+import { CATEGORY_BY_KEY, MARKETING_BASE, PAGE_BY_SLUG, buildPageBySlug, pageHref, searchPages } from '~/marketing/catalog';
 import { pageKey } from '~/marketing/publishing';
+import { TRENDS } from '~/marketing/trends';
 
 // /marketing/* — one generated page. The splat is the catalog slug
 // ("landing/feed", "for/developers/open-api", "styles/y2k-chrome/polls").
@@ -68,10 +69,7 @@ export default function MarketingPageRoute() {
 	const gated = !!page && visibility.ready && !visibility.page(page.slug);
 	useMarketingSeo({
 		title: gated ? 'Not published yet' : (page?.title ?? 'Not found'),
-		description: gated ? 'This part of the Thingtime marketing site is not published yet.' : (page?.description ?? 'This marketing page does not exist.'),
-		// a real page's title/description stay out of the head until we know
-		// whether the viewer may see it; "not found" needs no publish state
-		enabled: !page || visibility.ready
+		description: gated ? 'This part of the Thingtime marketing site is not published yet.' : (page?.description ?? 'This marketing page does not exist.')
 	});
 
 	React.useEffect(() => {
@@ -91,12 +89,16 @@ export default function MarketingPageRoute() {
 	if (!visibility.page(page.slug)) return <MarketingUnpublished surface={surface} trend={page.trend} active={page.category} crumbs={crumbs} />;
 
 	const related = visibility.pages(page.related.map((relatedSlug) => PAGE_BY_SLUG[relatedSlug]).filter(Boolean));
-	// Only the trends this feature actually has an edition in: 43 of the 89
-	// features are outside STYLE_FEATURE_KEYS, and offering all eleven anyway
-	// pointed every chip back at this page. Editions that are not published
-	// yet drop out on top of that.
-	const editions = page.kind === 'trend-landing' || page.kind === 'landing' ? styleSiblingsFor(page.refs.feature, page.trend) : [];
-	const styleSiblings = editions.filter((entry) => visibility.href(entry.href));
+	const styleSiblings =
+		page.kind === 'trend-landing' || page.kind === 'landing'
+			? TRENDS.filter((trend) => trend.key !== page.trend)
+					.map((trend) => {
+						const target = `styles/${trend.key}/${page.refs.feature}`;
+						const slugFor = PAGE_BY_SLUG[target] ? target : `landing/${page.refs.feature}`;
+						return { trend, to: pageHref(slugFor), visible: visibility.page(slugFor) };
+					})
+					.filter((entry) => entry.visible)
+			: [];
 
 	return (
 		<MarketingShell trend={page.trend} active={page.category} publication={surface}>
@@ -105,15 +107,15 @@ export default function MarketingPageRoute() {
 				<MarketingSections page={page} />
 			</Box>
 
-			{styleSiblings.length ? (
+			{styleSiblings.length && page.refs.feature ? (
 				<Box as="section" paddingY={[8, 12]} borderTop={`1px solid ${MK.hairline}`} data-testid="marketing-style-siblings">
 					<SectionEyebrow>Same page, other looks</SectionEyebrow>
 					<Text as="h2" fontSize="clamp(24px, 3.4vw, 36px)" fontWeight={900} letterSpacing="-0.02em" lineHeight={1.05} margin={0}>
-						Re-cut in {styleSiblings.length} other {styleSiblings.length === 1 ? 'style' : 'styles'}
+						{styleSiblings.length === 11 ? 'Re-cut in eleven other styles' : `Re-cut in ${styleSiblings.length} other ${styleSiblings.length === 1 ? 'style' : 'styles'}`}
 					</Text>
 					<Flex gap={2} flexWrap="wrap" marginTop={4}>
-						{styleSiblings.map(({ trend, href }) => (
-							<Box key={trend.key} as={RouterLink} to={href} px={3} py={1.5} fontSize="13px" fontWeight={700} border={MK.border} borderRadius={MK.radiusSm} background={MK.cardSolid} color={MK.ink} _hover={{ background: MK.tint }}>
+						{styleSiblings.map(({ trend, to }) => (
+							<Box key={trend.key} as={RouterLink} to={to} px={3} py={1.5} fontSize="13px" fontWeight={700} border={MK.border} borderRadius={MK.radiusSm} background={MK.cardSolid} color={MK.ink} _hover={{ background: MK.tint }}>
 								<span aria-hidden="true">{trend.emoji}</span> {trend.name}
 							</Box>
 						))}

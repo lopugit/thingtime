@@ -3020,66 +3020,6 @@ email whose link points at the attacker.
       `remix/public/branding/` + `brandingAssets.generated.json` (byte-stable
       when nothing changed).
 
-## Brand logo SEO — robots.txt, sitemap, Organization JSON-LD (`remix/app/api/utils/seo/`, `remix/app/api/utils/meta/brandIdentity.ts`)
-
-- [ ] `curl -sI https://<origin>/robots.txt` is `200 text/plain` (not the SPA
-      shell); the body has `User-agent: *` / `Allow: /`, an explicit `Allow: /`
-      stanza for each AI crawler in `AI_CRAWLER_USER_AGENTS`, no `Disallow`,
-      and ends with `Sitemap: https://<origin>/sitemap.xml` for **this** origin
-      (a preview must not advertise production's sitemap).
-- [ ] `curl -s https://<origin>/sitemap.xml` is `application/xml` with a
-      `<sitemapindex>` listing `?section=static`, one `?section=posts&page=N`
-      per 500 public posts, `?section=pages&page=N` per 500 public `/p/` pages
-      and `?section=profiles` when anyone has public posts. Every `<loc>`
-      resolves (follow each one) and `Cache-Control` is
-      `public, max-age=300, s-maxage=3600, stale-while-revalidate=86400`.
-- [ ] `?section=static` lists only paths the shell also marks `index, follow`
-      (`indexablePaths.ts`) and carries `<image:image>` entries for
-      `/branding/generated/<slug>/…-1024x….png` + `.svg` for all four variants,
-      every press-kit image, and the icon + wordmark on `/`. Each image URL
-      returns `200 image/*`.
-- [ ] `?section=posts&page=1` contains only `/post/<id>` permalinks that an
-      anonymous `GET /api/v1/things?id=<id>` can read; create a friends-only or
-      hidden post and confirm it never appears; delete a public post and
-      confirm it drops after the edge cache expires. `?section=profiles`
-      contains only authors of public posts (a fresh account with no public
-      posts is absent). `?section=pages` omits route twins (`crystal.siteRoute`).
-- [ ] `?section=posts&page=50` (in range, past the last page) → `404
-      text/plain`; `?section=posts&page=999` (over the 100-page cap),
-      `?section=nope` and `?page=x` → `400 text/plain`; `HEAD` returns headers with an empty body;
-      `POST` → `405` with `Allow: GET, HEAD`. Sending a session cookie or a
-      `x-tt-mongo-url` header changes nothing (the route runs anonymous on the
-      home data plane).
-- [ ] `GET /api/v1/sitemap` (+ the same query strings) returns byte-identical
-      XML to `/sitemap.xml`; `/api/v1/sitemap-docs`, `/robots.txt-docs` and
-      `/sitemap.xml-docs` return the JSON docs payload; all three features
-      appear in `/.well-known/thingtime-capabilities.json` at `1.0.0`.
-- [ ] `npm --prefix remix run sitemap:generate -- --origin https://<origin>`
-      writes `sitemap-out/{robots.txt,sitemap.xml,sitemap-static.xml}` without
-      touching the network; `-- --fetch` additionally mirrors every section from
-      the live API into `sitemap-<section>[-<n>].xml` and rewrites the index to
-      those files. `sitemap-out/` stays untracked.
-- [ ] `curl -s https://<origin>/` and `/branding` each contain one
-      `<script type="application/ld+json">` whose `@graph[2]` is an
-      `Organization` with `logo.url` =
-      `https://<origin>/branding/generated/icon/thingtime-icon-1024x1024.png`
-      (200, square ≥112px), a wordmark `image`, `sameAs` links, and
-      `@graph[0].publisher` pointing at it. Validate with Google's Rich Results
-      Test / Schema.org validator — no warnings on the Organization node.
-- [ ] `/branding` in a browser: the four hero previews are `<img>` elements
-      whose `src` is a committed `/branding/generated/<slug>/…-1024x….png`
-      (not a `data:` URI) with descriptive `alt`; the light/dark panel toggle
-      still swaps the surface; the custom exporter still works.
-- [ ] Landing page (`/`, `/welcome`) and any `<Logo icon theme="nature" />`
-      spot: DevTools shows a real `<img src="/branding/generated/icon/…png">`
-      exactly underneath the voxel grid with identical bounds (no visible
-      double image, no layout shift, hover still fades voxels). A custom
-      `matrix`/`colourMap` `<Logo>` renders no `<img>`.
-- [ ] After changing `logoMatrix.ts`, `brandIdentity.ts` paths or
-      `indexablePaths.ts`, `npm --prefix remix run test:seo` and
-      `test:social-previews` pass, and re-run `branding-assets` so the
-      Organization logo path still exists.
-
 ## Marketing suite (`remix/app/routes/marketing/`, `remix/app/components/Marketing/`, `remix/app/marketing/`)
 
 - [ ] `npm --prefix remix run test:marketing` passes: 1000+ pages, 1000+ social
@@ -3097,11 +3037,6 @@ email whose link points at the attacker.
       "Developers" sections render — the audience and the feature family — with
       their own counts, and the console logs no duplicate-key warning. Typing
       in the filter and clicking "Show more" keep both sections intact.
-- [ ] `/marketing/search?q=thingtime` (a query matching most of the catalog):
-      the heading reports the true match count — 1,091, not a round cap — and
-      clicking "Show more" all the way down reaches the last one instead of
-      stopping early. The count in the heading, the tab title/meta description
-      and the "n more of m" button must all agree.
 - [ ] A page from each kind opens by URL (`landing/feed`, `guides/passkeys`,
       `walkthroughs/feature-messages`, `compare/thingtime-vs-notion`,
       `compare/notion-alternative`, `compare/feed-vs-twitter`,
@@ -3114,11 +3049,6 @@ email whose link points at the attacker.
       mock screen, the social block shows three images with working PNG/SVG
       downloads, related links resolve. An unknown slug shows the not-found
       card with suggestions (no white screen).
-- [ ] "Same page, other looks": `landing/feed` (a lead feature) offers eleven
-      style editions and each chip lands on a different `styles/…` page.
-      `landing/everything-is-a-thing` (one of the 43 features outside
-      `STYLE_FEATURE_KEYS`) has no editions, so the whole section is absent —
-      never a row of chips that navigate back to the page you are on.
 - [ ] Dark trends (`styles/dark-neon/*`, `styles/gradient-glow/*`,
       `styles/kinetic-type/*`, `styles/listicle/*`) keep every text readable
       and the sub-nav chips legible; the browser tab title and meta
@@ -3166,101 +3096,6 @@ email whose link points at the attacker.
       rejected POST (e.g. after demotion) reverts the optimistic toggle.
 - [ ] `npm --prefix remix run test:marketing` (publishing + store tests) and
       `npm --prefix remix run test:api-capabilities` pass.
-
-## Account drafts and reusable post templates
-
-- Rich workspace isolation regression (2026-10-17): seed a matching scoped rich
-  draft, another database's draft and an older unscoped pending submission. Only
-  the matching draft resumes; the latter two never enter the working picker or
-  execute. Explicit template selection makes a new scoped copy, preserving source
-  and independent file bytes. Concurrent retries cannot reuse its ID for another
-  context; templates with pending submissions fail without creating a copy.
-  Cold-reload rich account/anonymous drafts offline; verify first-render recovery
-  and subsequent typing even when WebCrypto digest stalls, and confirm anonymous
-  posting emits no account draft requests or remote mutations. A fresh browser for
-  the same account preserves its matching immutable pending operation without
-  replay. Run `richWorkspace.browser.test.ts`, accountDraftSync and remotePlainComment
-  with their loopback opt-ins; inspect 1440/390/320px screenshots and overflow bounds.
-  Older rich/media migration and actual native data-plane transitions remain open.
-
-- [ ] Save and reopen native account drafts after a cold offline reload. Inspect
-      the picker at 1440, 390 and 320px. Reconnect with only the draft endpoint
-      failing or held unresolved: posting must commit locally and sync privately
-      before that draft request finishes or times out; later draft retry
-      must retire the completed draft while preserving templates. For rich replies,
-      wait for the composer to close after commit, not merely for the submit
-      button's label to disappear while its spinner is showing.
-- [ ] Reverse the failure in `accountDraftSync.browser.test.ts`: hold only the
-      new private post's canonical Things write, start another working draft in
-      the normal composer and verify that draft reaches the real account while
-      the post remains absent. Release the post with 503, let its frozen retry
-      converge to the same ID exactly once, and verify the working draft survives
-      retry and reload. Guest reads of both private records remain refused.
-- [ ] Discard a remote-only summary after another device changes its revision:
-      retain the actual loaded body and refuse deletion against the stale summary.
-      Conflict choices must recheck both device and account revisions; typing
-      during review must never be overwritten by an old review action.
-
-- [ ] Block, reject and stall only `/api/v1/drafts`, leaving the post API online.
-      Submit a post, edit, rich comment, plain comment and nested reply: each
-      completes independently of draft saving/cleanup. Reload to confirm the
-      successful post; uncertain retries retain the exact frozen shareId/payload.
-      Start another post while old draft cleanup is pending: late save responses
-      cannot restore the completed draft or overwrite the new editor. Keep
-      attachment ownership/binding and concurrent-device revision checks intact.
-
-- [x] Regression harness: comment/reply submissions use their selected Character
-      client, never the session-principal or other composer's client. Held or
-      rejected draft saves cannot delay content acceptance; a rejected content
-      write after a successful draft save preserves the draft and removes only
-      the optimistic pending row. `npm --prefix remix run test:feed` verifies
-      these callbacks; it does not replace the browser checklist above.
-
-- [ ] Signed in, type rich text, partial marketplace values, tags, an audience,
-      empty poll options and a nested Thing. Wait for “Saved to your drafts”,
-      close/reopen and reload: all values recover. No post is published by typing.
-- [ ] Disconnect while writing; reload on the same device, reconnect and retry.
-      The last input and the exact uncertain write identity survive. Two tabs
-      editing one draft produce a conflict with “Save as a new draft”, never an
-      older overwrite. Switching accounts never shows or saves another account's
-      drafts; local workspace/cross-tab channels are scoped to that account.
-- [ ] Load another draft while the current one is dirty: the previous draft
-      remains available. Late callbacks from an old rich-text editor cannot
-      erase a newly loaded template. Test both normalized and unfinished blocks.
-- [ ] Publish a draft: it leaves the picker. Reload during/after cleanup: the
-      completed draft does not reopen. If another device has a newer revision,
-      cleanup preserves that newer draft. Failed posts retain their draft.
-- [ ] Save an existing post from its menu as a template. Load it twice, change
-      text, then publish. The original template stays unchanged and selectable.
-      Existing media, audience, tags, listing and layout survive the copy.
-- [ ] Upload a file, save a draft, close the composer, reopen and publish.
-      Template copies get independent files; deleting the source post does not
-      break them. A template's own files cannot be consumed directly by posting.
-- [ ] Plain comments/replies resume when their input is opened. Failed writes
-      keep text, and typing a newer reply while a request finishes keeps the newer
-      draft. The rich reply picker lists drafts only for the current parent.
-- [ ] Edit a Thing, a raw definition (including invalid JSON), a schema's field
-      tree and a schema-based form. Close/reopen: each resumes in its own editor.
-      The Thing editor's draft picker can recover a saved account Thing.
-- [ ] Type incomplete JSON into a schema form, including nested array entries.
-      Reload: the exact text and whitespace return, and invalid JSON cannot
-      publish. Correct it and publish: typed JSON is saved and the draft retires.
-      Older drafts containing parsed JSON still restore the original values.
-- [ ] Recover a definition draft after another device saves a newer definition:
-      preserve the raw draft and its original version, refuse stale publication,
-      and keep History available. “Use latest saved version” must preserve the
-      recovered text in History before clearing its working draft; a failed
-      backup keeps the working draft. Repeat with a legacy draft lacking a version.
-- [ ] Check the picker at desktop and 390px mobile widths: buttons stay usable,
-      names wrap, the dialog scrolls, and nothing overlaps. The resume setting
-      controls account restoration while keeping local recovery enabled.
-- [ ] Run `npm --prefix remix run test:drafts` and related feed/editor/schema/
-      autosave/attachment/capability suites. For transactional acceptance, create
-      a disposable local fixture through `seed-fixture.mjs`, then run
-      `node remix/scripts/verify-account-drafts.mjs remix/.fixtures/<name>.json --media`.
-      Enable fixture uploads and local object storage per README first. This
-      exercises ownership, revisions, replay, tombstones and independent copies
-      through the real API and Mongo transactions, never direct test DB writes.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 

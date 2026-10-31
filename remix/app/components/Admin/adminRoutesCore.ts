@@ -7,10 +7,7 @@ export const ADMIN_TABS = [
   { slug: 'preview-retention', label: 'Preview retention' },
   { slug: 'external-integrations', label: 'External integrations' },
   { slug: 'marketing', label: 'Marketing' },
-  { slug: 'ai-providers', label: 'AI Providers' },
-  { slug: 'lopu', label: 'Lopu' },
-  { slug: 'platform', label: 'Platform' },
-  { slug: 'access', label: 'Access & limits' }
+  { slug: 'system', label: 'System' }
 ] as const;
 
 export type AdminTabSlug = (typeof ADMIN_TABS)[number]['slug'];
