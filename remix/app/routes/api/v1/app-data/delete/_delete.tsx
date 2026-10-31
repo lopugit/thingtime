@@ -1,8 +1,8 @@
 import { json } from '~/api/http';
 
-import { resolveAppToken } from '~/api/utils/apps/appTokens';
 import { deleteAppData } from '~/api/utils/apps/appData';
-import { appCorsHeaders, appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
+import { resolveAppRequest } from '~/api/utils/apps/appRequest';
+import { appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 // POST /api/v1/app-data/delete — { key } — remove one entry for this
@@ -11,24 +11,9 @@ export const action = async ({ request }: { request: Request }) => {
   const preflight = appDataPreflight(request);
   if (preflight) return preflight;
 
-  const requestOrigin = request.headers.get('Origin');
-  const cors = appCorsHeaders(requestOrigin);
-
-  const ctx = await resolveAppToken(request);
-  if (!ctx) {
-    return json({ ok: false, error: 'Unauthorized' }, { status: 401, headers: cors });
-  }
-
-  if (requestOrigin && requestOrigin !== ctx.origin) {
-    return json({ ok: false, error: 'Origin does not match this token' }, { status: 403, headers: cors });
-  }
-
-  if (!ctx.scopes.includes('app-data')) {
-    return json(
-      { ok: false, error: 'This token was not granted the app-data scope' },
-      { status: 403, headers: cors }
-    );
-  }
+  const resolved = await resolveAppRequest(request, 'app-data');
+  if (resolved instanceof Response) return resolved;
+  const { ctx, cors } = resolved;
 
   const limit = await enforceRateLimit(request, 'appData.write', `user:${ctx.user.id}:app:${ctx.clientId}`);
   if (!limit.allowed) {
@@ -40,7 +25,10 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBodyWithCors(request, 8 * 1024, cors);
-  const result = await deleteAppData(ctx.user.id, ctx.clientId, body?.key);
+  const result = await deleteAppData(ctx.user.id, ctx.clientId, body?.key, {
+    enabled: ctx.sandbox === true,
+    space: ctx.sandboxSpace ?? null
+  });
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });

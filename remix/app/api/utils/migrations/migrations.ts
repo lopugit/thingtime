@@ -1,28 +1,103 @@
-import { randomUUID } from 'node:crypto';
+import { subspaceMessagingMigration } from './subspaceMessaging';
+import { accidentalCatalogAccountMigration } from './accidentalCatalogAccount';
+import { createHash, randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 
-import { ensureIndexes, getAdoptionIssues, getCollection, getThingtimeDb } from '../mongodb/collections';
 import {
-  COLLECTIONS,
-  classifyPhysicalCollections,
-  collectionVersion,
-  physicalCollectionName
-} from '../mongodb/collectionNames';
+  ensureHomeThingsIndexPlan,
+  withHomeIndexMaintenance,
+  isHomeIndexRecoveryActive,
+  ensureIndexes,
+  getAdoptionIssues,
+  getCiControlCollection,
+  getCollection,
+  getHomeThingsCollection,
+  getHomeThingtimeDb,
+  getSettingsCollection,
+  invalidateHomeRelationshipKeys,
+  getThingtimeDb,
+  thingsIndexPlanNames,
+  withMongoTransaction
+} from '../mongodb/collections';
+import { COLLECTIONS, classifyPhysicalCollections, collectionVersion, physicalCollectionName } from '../mongodb/collectionNames';
 import { safeErrorText } from '../errors/safeError';
-import { reactionShareId } from '../things/things';
-import { buildUserSecure, packRecentReactions, toBin, userEmailKey, userUsernameKey } from '../auth/users';
+import {
+	appStorageCounterCrystalIsReady,
+	appStorageCounterEnvelopeIsTrusted,
+	appStorageCounterShareId,
+	appThingSizeBytes,
+	convertHistoricalAppStorageCounter,
+	initializeAppStorageAccounting,
+	reconcileAppStorage,
+	reconcileOrphanAppStorage,
+	setAppStorageUsed
+} from '../apps/namespace';
+import type { AppNamespaceScope } from '../apps/namespace';
+import { appStoragePolicyOf } from '../apps/apps';
+import { reactionShareId, validateLegacyInteractionResidue } from '../things/things';
+import { SERVICE_QUOTA_THINGTIME, buildConservativeLegacyServiceQuotaThing, classifyLegacyServiceQuotaThing } from '../things/quota';
+import {
+	buildUserSecure,
+	findLegacyUserStorageFieldsByIds,
+	fromBin,
+	packRecentReactions,
+	profileAttachmentRefsForUserRoot,
+	removeLegacyUserStorageFields,
+	toBin,
+	userEmailKey,
+	userUsernameKey
+} from '../auth/users';
 import { waitlistEmailKey } from '../waitlist/waitlist';
+import { externalPostSourceKey, externalPostSourceShareId } from '../connections/connections';
+import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS } from '../messenger/shared';
+import { repairRelationshipKeys } from './relationshipKeys';
+import { migrateRelationshipIndexLayout } from '../mongodb/relationshipIndexLayout';
+import { migrateLegacyThingIndexLayout } from '../mongodb/legacyThingLayout';
 import { themeAcl } from '../themes/themes';
 import {
+	builtinSchemaSeedNeedsRefresh,
+	bulkWriteErrorCodesByOp,
+	conversionBuildOutcomes,
+	exactDocumentSnapshotMatch,
+	storageMigrationOwnership,
+	upsertedOpIndexes
+} from './migrationCore';
+import { MigrationOperatorError, migrationFailureResult, type MigrationFailure } from './migrationFailure';
+import { getSubscription } from '../subscriptions/subscriptions';
+import {
+	legacyUserSubscriptionLedgerEnvelopeCanUpgrade,
+	legacyUserSubscriptionLedgerMatch,
+	subscriptionThingMatch,
+	userSubscriptionLedgerEnvelopeIsTrusted,
+	userSubscriptionLedgerEnvelopeIssues,
+	userSubscriptionLedgerMatch
+} from '../subscriptions/subscriptionIdentity';
+import {
+	InvalidAttachmentStorageEnvelopeError,
+	USER_STORAGE_ACCOUNTING_VERSION,
+	USER_STORAGE_STATUS,
+	storageSandboxState,
+	thingStorageSizeBytes
+} from '../storage/storageCore';
+import { reconcileUserStorage, userStorageAllowanceIsValid } from '../storage/userStorage';
+import {
   ACL_ALL,
+  ACL_EXTACCT_PREFIX,
+  ACL_EXT_SOURCED,
   ACL_INHERIT,
   ACL_OWNER,
+  APP_STORAGE_ACCOUNTING_VERSION,
+  APP_STORAGE_RESERVED_ID_PREFIX,
+  CI_CONTROL_THINGTIME,
   COLLECTION_SCHEMA_VERSIONS,
   LEGACY_SCHEMA_VERSION,
+  USER_STORAGE_LEDGER_ENVELOPE_VERSION,
   aclFromVisibility,
   projectBuiltinSchemaCrystal,
   thingtimeSchemas,
   validateThingtimeCrystal
 } from '~/schemas/registry';
+import { relocateCiControlRows, rebuildPlanIndexes } from './ciControlRelocationCore';
 
 // Admin-run database schema-version migrations. Every collection stores the
 // root-level schemaVersion each doc was written at (docs without one predate
@@ -37,6 +112,43 @@ import {
 
 type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
+
+// Both the pending census and the real backfill must pass the complete stored
+// attachment envelope to thingStorageSizeBytes(). Projecting only the ordinary
+// Thing payload makes a legitimate attachment indistinguishable from a forged
+// attachment claim and correctly trips the fail-closed envelope validator.
+export const USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION = {
+	_id: 1,
+	schemaVersion: 1,
+	ownerId: 1,
+	shareId: 1,
+	thingtime: 1,
+	crystal: 1,
+	extended: 1,
+	tags: 1,
+	storageClass: 1,
+	sandboxExpiresAt: 1,
+	sizeBytes: 1,
+	storageAccountingVersion: 1,
+	timelineEnvelopeVersion: 1,
+	secure: 1,
+	updatedAt: 1,
+	attachmentEnvelopeVersion: 1,
+	attachmentState: 1,
+	objectSizeBytes: 1,
+	objectKey: 1,
+	objectVersionId: 1,
+	attachmentRequestFingerprint: 1,
+	attachmentPurpose: 1,
+	attachmentProfileSlot: 1,
+	attachmentFinalizationLeaseId: 1,
+	attachmentPartsIssuedAt: 1,
+	attachmentObjectlessDelete: 1,
+	attachmentMpuEmptyVerifiedAt: 1,
+	uploadId: 1,
+	attachmentExpiresAt: 1,
+	attachmentLinked: 1
+} as const;
 
 export type MigrationReport = {
   dryRun: boolean;
@@ -61,7 +173,118 @@ export type Migration = {
   // migration refuses to drop any collection a pending migration lists here
   sourcePhysicals?: () => string[];
   pending: () => Promise<number>;
-  run: (options: { dryRun: boolean }) => Promise<MigrationReport>;
+	run: (options: { dryRun: boolean; assertLease?: () => Promise<void> }) => Promise<MigrationReport>;
+};
+
+// Every real migration shares one durable lease. Storage accounting composes
+// several source-shape migrations and then publishes hot ledgers, so allowing
+// either another copy of that orchestration or a directly-invoked prerequisite
+// to overlap can certify a stale snapshot. The settings key is unique and the
+// lease token is a fencing epoch: only its holder can renew or release it.
+//
+// Fifteen minutes is deliberately longer than the platform request lifetime;
+// the heartbeat normally renews every 30 seconds. A crashed invocation becomes
+// recoverable, while a live invocation cannot be overtaken merely because one
+// batch or transaction is slow.
+const MIGRATION_LEASE_KEY = 'admin-migrations:global';
+const MIGRATION_LEASE_MS = 15 * 60 * 1000;
+const MIGRATION_HEARTBEAT_MS = 30 * 1000;
+
+type MigrationLease = {
+	token: string;
+	assert: () => Promise<void>;
+	release: () => Promise<void>;
+};
+
+const acquireMigrationLease = async (migrationId: string): Promise<MigrationLease | null> => {
+	if (!isHomeIndexRecoveryActive()) await ensureIndexes();
+	const settings = await getSettingsCollection();
+	// Authenticated repair must remain reachable when an unrelated unique index
+	// cannot build, but the existing migration lease still needs its own constraint.
+	if (isHomeIndexRecoveryActive()) await settings.createIndex({ key: 1 }, { unique: true, maxTimeMS: 15_000 });
+	const token = randomUUID();
+	const now = new Date();
+	try {
+		const lock = await settings.findOneAndUpdate(
+			{
+				key: MIGRATION_LEASE_KEY,
+				$or: [{ lockExpiresAt: { $exists: false } }, { lockExpiresAt: { $lte: now } }]
+			},
+			{
+				$set: {
+					lockToken: token,
+					lockMigrationId: migrationId,
+					lockExpiresAt: new Date(now.getTime() + MIGRATION_LEASE_MS),
+					updatedAt: now
+				},
+				$setOnInsert: {
+					key: MIGRATION_LEASE_KEY,
+					schemaVersion: COLLECTION_SCHEMA_VERSIONS.settings,
+					createdAt: now
+				}
+			},
+			{ upsert: true, returnDocument: 'after' }
+		);
+		if (lock?.lockToken !== token) return null;
+	} catch (error: any) {
+		if (error?.code === 11000) return null;
+		throw error;
+	}
+
+	let lost = false;
+	let renewal = Promise.resolve();
+	const renew = async (): Promise<void> => {
+		if (lost) throw new MigrationOperatorError('lease_lost');
+		const at = new Date();
+		const result = await settings.updateOne(
+			{
+				key: MIGRATION_LEASE_KEY,
+				lockToken: token,
+				lockExpiresAt: { $gt: at }
+			},
+			{
+				$set: {
+					lockExpiresAt: new Date(at.getTime() + MIGRATION_LEASE_MS),
+					updatedAt: at
+				}
+			}
+		);
+		if (result.matchedCount !== 1) {
+			lost = true;
+			throw new MigrationOperatorError('lease_lost');
+		}
+	};
+	const heartbeat = setInterval(() => {
+		renewal = renewal.then(renew).catch(() => {
+			lost = true;
+		});
+	}, MIGRATION_HEARTBEAT_MS);
+	heartbeat.unref?.();
+
+	return {
+		token,
+		assert: async () => {
+			await renewal;
+			await renew();
+		},
+		release: async () => {
+			clearInterval(heartbeat);
+			await renewal.catch(() => {});
+			try {
+				await settings.updateOne(
+					{ key: MIGRATION_LEASE_KEY, lockToken: token },
+					{
+						$unset: { lockToken: '', lockMigrationId: '', lockExpiresAt: '' },
+						$set: { updatedAt: new Date() }
+					}
+				);
+			} catch {
+				// Token matching prevents releasing a successor. Expiry is the durable
+				// fallback, so successful migration work is not turned into a 500 by
+				// best-effort lock cleanup.
+			}
+		}
+	};
 };
 
 const versionFilter = (fromVersion: number) =>
@@ -109,6 +332,70 @@ const legacyPostFilter = {
   $or: [{ schemaVersion: { $exists: false } }, { schemaVersion: { $lt: THINGS_VERSION } }]
 };
 
+// Some in-place v2 upgrades deliberately left embedded interaction residue
+// for the lazy reader to preserve. Storage accounting must migrate that
+// residue before stamping the parent, regardless of the parent's schemaVersion
+// — otherwise the parent can become authoritative while its children remain
+// permanently stranded behind the new fail-closed writer guard.
+const embeddedInteractionResidueFilter = {
+	$and: [{ $or: [{ kind: 'post' }, { thingtime: 'post' }] }, { $or: [{ comments: { $exists: true } }, { reactions: { $exists: true } }] }]
+};
+const thingsMigrationPostFilter = { $or: [legacyPostFilter, embeddedInteractionResidueFilter] };
+
+const validMigrationDate = (value: unknown): boolean => {
+	const timestamp = value instanceof Date ? value.getTime() : new Date(value as any).getTime();
+	return Number.isFinite(timestamp);
+};
+
+const interactionPlan = (doc: any) => validateLegacyInteractionResidue(doc);
+
+// Mongo adds only `_id`; every other root/nested key must be exactly the
+// server-built child envelope. Matching a subset of fields would let an
+// unrelated or user-shaped Thing squat a deterministic migration id and have
+// the embedded source erased as though the conversion had succeeded.
+const exactInteractionTwin = (actual: any, expected: Record<string, unknown>): boolean => {
+	if (!actual || typeof actual !== 'object') return false;
+	const withoutMongoId = Object.fromEntries(Object.entries(actual).filter(([key]) => key !== '_id'));
+	return isDeepStrictEqual(withoutMongoId, expected);
+};
+
+class InteractionMigrationCollision extends Error {
+	constructor(readonly destinationId: string) {
+		super(`interaction destination ${destinationId} is occupied by a noncanonical Thing`);
+		this.name = 'InteractionMigrationCollision';
+	}
+}
+
+const buildLegacyRelationalDestination = (doc: any): Record<string, unknown> | null => {
+	if (
+		(doc?.kind !== 'reaction' && doc?.kind !== 'comment') ||
+		typeof doc?.ownerId !== 'string' ||
+		!doc.ownerId ||
+		typeof doc?.parentId !== 'string' ||
+		!doc.parentId ||
+		!validMigrationDate(doc.createdAt)
+	) {
+		return null;
+	}
+	const createdAt = new Date(doc.createdAt);
+	if (doc.kind === 'reaction' && (typeof doc.token !== 'string' || !doc.token)) return null;
+	if (doc.kind === 'comment' && typeof doc.text !== 'string') return null;
+	const shareId = doc.kind === 'reaction' ? reactionShareId(doc.parentId, doc.ownerId, doc.token) : String(doc.commentId || doc._id || '');
+	if (!shareId) return null;
+	return {
+		shareId,
+		schemaVersion: THINGS_VERSION,
+		thingtime: [doc.kind],
+		crystal: doc.kind === 'reaction' ? { emoji: doc.token } : { text: doc.text },
+		ownerId: doc.ownerId,
+		acl: [ACL_INHERIT],
+		targetId: doc.parentId,
+		tags: [],
+		createdAt,
+		updatedAt: createdAt
+	};
+};
+
 // interim relational era: kind:'reaction'/'comment' docs linked by parentId,
 // written by the pre-unification relational model
 const legacyRelationalFilter = { kind: { $in: ['reaction', 'comment'] } };
@@ -128,17 +415,17 @@ const thingsMigration: Migration = {
     'collection (legacy prototypes) are left untouched and reported.',
   pending: async () => {
     const things = await getCollection('things');
-    const [posts, relational] = await Promise.all([
-      things.countDocuments(legacyPostFilter),
-      things.countDocuments(legacyRelationalFilter)
-    ]);
+		const [posts, relational] = await Promise.all([things.countDocuments(thingsMigrationPostFilter), things.countDocuments(legacyRelationalFilter)]);
     return posts + relational;
   },
-  run: async ({ dryRun }) => {
+	run: async ({ dryRun, assertLease }) => {
     await ensureIndexes();
     const things = await getCollection('things');
 
-    const matched = await things.countDocuments(legacyPostFilter);
+		const [matched, relationalMatched] = await Promise.all([
+			things.countDocuments(thingsMigrationPostFilter),
+			things.countDocuments(legacyRelationalFilter)
+		]);
     // anything unversioned that is not a v1 post: legacy prototype docs and
     // other experiments (e.g. kind:'record') deliberately stay untouched
     const strays = await things.countDocuments({
@@ -155,32 +442,23 @@ const thingsMigration: Migration = {
     let skipped = 0;
 
     if (dryRun) {
-      // count what the run would create without writing anything
-      const sample = await things
-        .aggregate([
-          { $match: legacyPostFilter },
-          {
-            $group: {
-              _id: null,
-              comments: { $sum: { $size: { $ifNull: ['$comments', []] } } },
-              reactions: {
-                $sum: {
-                  $reduce: {
-                    input: { $objectToArray: { $ifNull: ['$reactions', {}] } },
-                    initialValue: 0,
-                    in: { $add: ['$$value', { $size: { $ifNull: ['$$this.v', []] } }] }
-                  }
-                }
-              }
+			// JS validation mirrors the real run and cannot throw Mongo expression
+			// errors merely because a residue field is malformed.
+			let wouldCreate = 0;
+			let malformed = 0;
+			const cursor = things.find(thingsMigrationPostFilter as any);
+			for await (const doc of cursor) {
+				const plan = interactionPlan(doc);
+				if (!plan.ok) {
+					malformed += 1;
+					continue;
             }
+				wouldCreate += plan.comments.length + plan.reactions.length;
           }
-        ])
-        .toArray();
-      const wouldCreate = sample.length ? sample[0].comments + sample[0].reactions : 0;
       notes.push(`${wouldCreate} standalone comment/reaction thing(s) would be created`);
-      const relational = await things.countDocuments(legacyRelationalFilter);
-      if (relational) notes.push(`${relational} interim relational kind doc(s) would be converted`);
-      return { dryRun, matched: matched + relational, migrated: 0, created: 0, skipped: 0, notes };
+			if (malformed) notes.push(`${malformed} post(s) have malformed embedded interaction residue and would remain pending`);
+			if (relationalMatched) notes.push(`${relationalMatched} interim relational kind doc(s) would be converted`);
+			return { dryRun, matched: matched + relationalMatched, migrated: 0, created: 0, skipped: 0, notes };
     }
 
     // batch through matching docs; re-runs only see still-unmigrated posts.
@@ -188,156 +466,145 @@ const thingsMigration: Migration = {
     // ones we've already skipped this run from later batches.
     const skippedPostIds: any[] = [];
     for (;;) {
+			await assertLease?.();
       const batchFilter = skippedPostIds.length
-        ? { $and: [legacyPostFilter, { _id: { $nin: skippedPostIds } }] }
-        : legacyPostFilter;
-      const batch = (await things.find(batchFilter as any).limit(THINGS_BATCH).toArray()) as any[];
+				? { $and: [thingsMigrationPostFilter, { _id: { $nin: skippedPostIds } }] }
+				: thingsMigrationPostFilter;
+			const batch = (await things
+				.find(batchFilter as any)
+				.limit(THINGS_BATCH)
+				.toArray()) as any[];
       if (!batch.length) break;
 
       for (const doc of batch) {
-        // Each embedded comment/reaction becomes a standalone thing at a
-        // deterministic id, along with the genuine (ownerId, targetId) it must
-        // carry. A foreign doc squatting one of these ids would let an attacker
-        // hijack migrated content, so verify every destination id is either
-        // free or already a genuine counterpart before touching the post.
-        const inserts: any[] = [];
-        for (const comment of doc.comments || []) {
-          inserts.push({
-            shareId: comment.id,
+				await assertLease?.();
+				try {
+					const outcome = await withMongoTransaction(async (session) => {
+						const fresh = (await things.findOne({ _id: doc._id } as any, { session })) as any;
+						if (!fresh) return { kind: 'gone' as const, created: 0 };
+
+						const hasComments = Object.prototype.hasOwnProperty.call(fresh, 'comments');
+						const hasReactions = Object.prototype.hasOwnProperty.call(fresh, 'reactions');
+						const isLegacyParent =
+							fresh.kind === 'post' && (!Number.isSafeInteger(fresh.schemaVersion) || Number(fresh.schemaVersion) < THINGS_VERSION);
+						if (!hasComments && !hasReactions && !isLegacyParent) {
+							return { kind: 'gone' as const, created: 0 };
+						}
+
+						const plan = interactionPlan(fresh);
+						if (plan.ok === false) return { kind: 'malformed' as const, created: 0, reason: plan.reason };
+
+						const children: Record<string, unknown>[] = [
+							...plan.reactions.map((reaction) => ({
+								shareId: reaction.shareId,
             schemaVersion: THINGS_VERSION,
-            thingtime: ['comment'],
-            crystal: { text: comment.text },
-            ownerId: comment.userId,
+								thingtime: ['reaction'],
+								crystal: { emoji: reaction.emoji },
+								ownerId: reaction.ownerId,
             acl: [ACL_INHERIT],
-            targetId: doc.shareId,
+								targetId: fresh.shareId,
             tags: [],
-            createdAt: new Date(comment.createdAt),
-            updatedAt: new Date(comment.createdAt)
-          });
-        }
-        for (const [emoji, userIds] of Object.entries(doc.reactions || {})) {
-          for (const userId of (userIds as string[]) || []) {
-            inserts.push({
-              shareId: reactionShareId(doc.shareId, userId, emoji),
+								createdAt: reaction.createdAt,
+								updatedAt: reaction.createdAt
+							})),
+							...plan.comments.map((comment) => ({
+								shareId: comment.shareId,
               schemaVersion: THINGS_VERSION,
-              thingtime: ['reaction'],
-              crystal: { emoji },
-              ownerId: userId,
+								thingtime: ['comment'],
+								crystal: { text: comment.text },
+								ownerId: comment.ownerId,
               acl: [ACL_INHERIT],
-              targetId: doc.shareId,
+								targetId: fresh.shareId,
               tags: [],
-              // v1 stored no per-reaction time; the post's updatedAt is the
-              // closest deterministic stand-in
-              createdAt: new Date(doc.updatedAt),
-              updatedAt: new Date(doc.updatedAt)
-            });
-          }
-        }
+								createdAt: comment.createdAt,
+								updatedAt: comment.createdAt
+							}))
+						];
 
-        // Skip a post whose interaction migration would collide with a foreign
-        // doc: convert its body but KEEP the embedded copies (reads fold them),
-        // so nothing is lost or double-counted and a re-run finishes it once
-        // the collision is resolved.
-        let collision = false;
-        if (inserts.length) {
-          const ids = inserts.map((entry) => entry.shareId);
-          const existing = (await things.find({ shareId: { $in: ids } } as any).toArray()) as any[];
-          const byId = new Map(existing.map((row) => [row.shareId, row]));
-          collision = inserts.some((entry) => {
-            const twin = byId.get(entry.shareId);
-            // free id, or a genuine prior-run counterpart (same owner + target)
-            return (
-              twin &&
-              (String(twin.ownerId) !== String(entry.ownerId) || String(twin.targetId) !== String(entry.targetId))
-            );
-          });
-        }
-
-        if (collision) {
-          // Leave the whole post at v1 (reads fold its embedded data) so a
-          // re-run retries it once the squatting doc is removed. Never $unset
-          // embedded data we couldn't safely relocate.
-          notes.push(`post ${doc.shareId}: interaction id collision — left at v1 for a later re-run`);
-          skipped += 1;
-          skippedPostIds.push(doc._id);
-          continue;
-        }
-
-        if (inserts.length) {
-          try {
-            const result = await things.insertMany(inserts, { ordered: false });
-            created += result.insertedCount;
-          } catch (err: any) {
-            // duplicate shareIds from a previous partial run — count the rest
-            const inserted = err?.result?.insertedCount ?? err?.insertedCount ?? 0;
-            const duplicates = (err?.writeErrors || []).filter((we: any) => we?.code === 11000).length;
-            if (!duplicates && err?.code !== 11000) throw err;
-            created += inserted;
-            skipped += duplicates || inserts.length - inserted;
-          }
-
-          // Post-insert verification closes the TOCTOU window: a doc could have
-          // been squatted at a destination id between the pre-check above and
-          // this insert (making the genuine insert dup-fail). Re-read every
-          // destination and confirm each is a genuine counterpart (our owner +
-          // target). If any isn't, roll back the counterparts we DID create and
-          // leave the post at v1 — never $unset embedded data we couldn't
-          // fully relocate, and never double-count by keeping both copies.
-          const ids = inserts.map((entry) => entry.shareId);
-          const after = (await things.find({ shareId: { $in: ids } } as any).toArray()) as any[];
-          const afterById = new Map(after.map((row) => [row.shareId, row]));
-          const isGenuine = (entry: any) => {
-            const twin = afterById.get(entry.shareId);
-            return (
-              !!twin &&
-              String(twin.ownerId) === String(entry.ownerId) &&
-              String(twin.targetId) === String(entry.targetId)
-            );
-          };
-          if (!inserts.every(isGenuine)) {
-            const ours = inserts.filter(isGenuine).map((entry) => entry.shareId);
-            if (ours.length) {
-              await things.deleteMany({ shareId: { $in: ours }, targetId: doc.shareId } as any);
-            }
-            notes.push(`post ${doc.shareId}: interaction id race — rolled back, left at v1 for a later re-run`);
-            skipped += 1;
-            skippedPostIds.push(doc._id);
-            continue;
-          }
-        }
-
-        await things.updateOne(
-          { _id: doc._id },
+						// Claim/convert the parent first. The source clear and every child
+						// insert share one snapshot transaction, so a collision or crash
+						// automatically restores the embedded source and a concurrent
+						// parent writer becomes a write conflict rather than lost data.
+						const currentEnvelope = fresh.schemaVersion === THINGS_VERSION && Array.isArray(fresh.thingtime) && fresh.thingtime.includes('post');
+						const claim = await things.updateOne(
           {
-            $set: {
+								_id: fresh._id,
+								...(Object.prototype.hasOwnProperty.call(fresh, 'updatedAt') ? { updatedAt: fresh.updatedAt } : { updatedAt: { $exists: false } }),
+								...(hasComments ? { comments: fresh.comments } : { comments: { $exists: false } }),
+								...(hasReactions ? { reactions: fresh.reactions } : { reactions: { $exists: false } })
+							} as any,
+							{
+								$set: currentEnvelope
+									? { schemaVersion: THINGS_VERSION }
+									: {
               schemaVersion: THINGS_VERSION,
-              thingtime: doc.shareOfId ? ['post', 'share'] : ['post'],
+											thingtime: fresh.shareOfId ? ['post', 'share'] : ['post'],
               crystal: {
-                type: doc.type || 'text',
-                text: doc.text || '',
-                images: doc.images || [],
-                listing: doc.listing || null
+												type: fresh.type || 'text',
+												text: fresh.text || '',
+												images: fresh.images || [],
+												listing: fresh.listing || null
               },
-              targetId: doc.shareOfId || null,
-              tags: doc.tags || [],
-              // legacy visibility enum becomes acl grants/exclusions
-              acl: aclFromVisibility(doc.visibility) || [ACL_OWNER]
+											targetId: fresh.shareOfId || null,
+											tags: fresh.tags || [],
+											acl: aclFromVisibility(fresh.visibility) || [ACL_OWNER]
             },
             $unset: {
+									comments: '',
+									reactions: '',
+									...(currentEnvelope
+										? {}
+										: {
               kind: '',
               type: '',
               text: '',
               images: '',
               listing: '',
-              comments: '',
-              reactions: '',
               shareOfId: '',
               shareCount: '',
               visibility: ''
+											})
             }
-          }
+							},
+							{ session }
         );
+						if (claim.matchedCount !== 1) return { kind: 'race' as const, created: 0 };
+
+						let inserted = 0;
+						for (const expected of children) {
+							const twin = await things.findOne({ shareId: expected.shareId } as any, { session });
+							if (twin) {
+								if (!exactInteractionTwin(twin, expected)) {
+									throw new InteractionMigrationCollision(String(expected.shareId));
+								}
+								continue;
+							}
+							await things.insertOne(expected as any, { session });
+							inserted += 1;
+						}
+						return { kind: 'migrated' as const, created: inserted };
+					});
+
+					if (outcome.kind === 'migrated') {
         migrated += 1;
+						created += outcome.created;
+					} else if (outcome.kind === 'malformed') {
+						notes.push(`post ${String(doc.shareId || doc._id)}: malformed embedded interactions (${outcome.reason}) — left for repair`);
+						skipped += 1;
+						skippedPostIds.push(doc._id);
+					} else if (outcome.kind === 'race') {
+						notes.push(`post ${String(doc.shareId || doc._id)}: changed concurrently — left for a later re-run`);
+						skipped += 1;
+						skippedPostIds.push(doc._id);
+					}
+				} catch (error: any) {
+					const duplicate =
+						error?.code === 11000 || (Array.isArray(error?.writeErrors) && error.writeErrors.some((entry: any) => entry?.code === 11000));
+					if (!(error instanceof InteractionMigrationCollision) && !duplicate) throw error;
+					notes.push(`post ${String(doc.shareId || doc._id)}: interaction id collision — transaction rolled back, source kept`);
+					skipped += 1;
+					skippedPostIds.push(doc._id);
+				}
       }
     }
 
@@ -347,49 +614,60 @@ const thingsMigration: Migration = {
     let converted = 0;
     const skippedRelationalIds: any[] = [];
     for (;;) {
+			await assertLease?.();
       const relFilter = skippedRelationalIds.length
         ? { $and: [legacyRelationalFilter, { _id: { $nin: skippedRelationalIds } }] }
         : legacyRelationalFilter;
-      const batch = (await things.find(relFilter as any).limit(THINGS_BATCH).toArray()) as any[];
+			const batch = (await things
+				.find(relFilter as any)
+				.limit(THINGS_BATCH)
+				.toArray()) as any[];
       if (!batch.length) break;
       for (const doc of batch) {
-        const shareId =
-          doc.kind === 'reaction'
-            ? reactionShareId(String(doc.parentId), String(doc.ownerId), String(doc.token))
-            : String(doc.commentId || doc._id);
-        const res = await things.updateOne(
-          { shareId },
-          {
-            $setOnInsert: {
-              shareId,
-              schemaVersion: THINGS_VERSION,
-              thingtime: [doc.kind],
-              crystal: doc.kind === 'reaction' ? { emoji: doc.token } : { text: doc.text || '' },
-              ownerId: doc.ownerId,
-              acl: [ACL_INHERIT],
-              targetId: doc.parentId,
-              tags: [],
-              createdAt: new Date(doc.createdAt),
-              updatedAt: new Date(doc.createdAt)
+				await assertLease?.();
+				try {
+					const outcome = await withMongoTransaction(async (session) => {
+						const fresh = (await things.findOne({ _id: doc._id, kind: { $in: ['reaction', 'comment'] } } as any, {
+							session
+						})) as any;
+						if (!fresh) return { kind: 'gone' as const, created: 0, shareId: '' };
+						const expected = buildLegacyRelationalDestination(fresh);
+						if (!expected) return { kind: 'malformed' as const, created: 0, shareId: String(fresh._id) };
+
+						const twin = await things.findOne({ shareId: expected.shareId } as any, { session });
+						let inserted = 0;
+						if (twin) {
+							if (!exactInteractionTwin(twin, expected)) {
+								throw new InteractionMigrationCollision(String(expected.shareId));
             }
-          },
-          { upsert: true }
-        );
-        // Only delete the source once its converted counterpart is safely in
-        // place — either we just inserted it, or the existing doc at that id is
-        // a genuine twin (same owner + target). A foreign doc squatting the id
-        // ($setOnInsert no-ops) must NOT cause the source to be deleted.
-        let genuine = !!res.upsertedCount;
-        if (!genuine) {
-          const twin = (await things.findOne({ shareId } as any)) as any;
-          genuine =
-            !!twin && String(twin.ownerId) === String(doc.ownerId) && String(twin.targetId) === String(doc.parentId);
-        }
-        if (genuine) {
-          await things.deleteOne({ _id: doc._id });
-          converted += 1;
         } else {
-          notes.push(`relational ${doc.kind} ${shareId}: id collision — source kept for a later re-run`);
+							await things.insertOne(expected as any, { session });
+							inserted = 1;
+						}
+
+						// The source delete participates in the same transaction as the
+						// exact destination check/insert. A concurrent edit/delete becomes
+						// a transaction conflict; no partial copy can commit.
+						const removed = await things.deleteOne({ _id: fresh._id, kind: fresh.kind } as any, { session });
+						if (removed.deletedCount !== 1) {
+							throw new MigrationOperatorError('legacy_source_changed');
+						}
+						return { kind: 'converted' as const, created: inserted, shareId: String(expected.shareId) };
+					});
+
+					if (outcome.kind === 'converted') {
+						converted += 1;
+						created += outcome.created;
+					} else if (outcome.kind === 'malformed') {
+						notes.push(`relational ${doc.kind} ${outcome.shareId}: malformed source — kept for repair`);
+						skipped += 1;
+						skippedRelationalIds.push(doc._id);
+					}
+				} catch (error: any) {
+					const duplicate =
+						error?.code === 11000 || (Array.isArray(error?.writeErrors) && error.writeErrors.some((entry: any) => entry?.code === 11000));
+					if (!(error instanceof InteractionMigrationCollision) && !duplicate) throw error;
+					notes.push(`relational ${doc.kind} ${String(doc.commentId || doc._id)}: id collision — transaction rolled back, source kept`);
           skipped += 1;
           skippedRelationalIds.push(doc._id);
         }
@@ -397,12 +675,13 @@ const thingsMigration: Migration = {
     }
     if (converted) notes.push(`${converted} interim relational kind doc(s) converted to things`);
 
-    return { dryRun, matched: matched + converted, migrated: migrated + converted, created, skipped, notes };
+		return { dryRun, matched: matched + relationalMatched, migrated: migrated + converted, created, skipped, notes };
   }
 };
 
 // ---------------------------------------------------------------------------
-// Collection → things migrations (claude-todo/12: everything is a thing).
+// Collection → things migrations (everything is a thing —
+// TODO/claude-todo/22-everything-is-a-thing-collections.md).
 // users, themes, feedAlgorithms, and waitlist collapse into the things
 // collection. The destination shapes are EXACTLY what the new-write paths
 // produce (auth/users insertUser, themes saveTheme, algorithms
@@ -435,6 +714,155 @@ const makeNotes = () => {
 
 type BuiltThing = { ok: true; thing: Record<string, any> } | { ok: false; reason: string };
 
+const stableMigrationValue = (value: any): any => {
+	if (value === null || value === undefined || typeof value === 'string' || typeof value === 'boolean') return value;
+	if (typeof value === 'number') return Number.isFinite(value) ? value : String(value);
+	if (typeof value === 'bigint') return value.toString();
+	if (value instanceof Date) return { $date: value.toISOString() };
+	if (Array.isArray(value)) return value.map(stableMigrationValue);
+	if (value && typeof value.toJSON === 'function') {
+		const json = value.toJSON();
+		if (json !== value) return stableMigrationValue(json);
+	}
+	if (value && typeof value === 'object') {
+		return Object.fromEntries(
+			Object.keys(value)
+				.sort()
+				.map((key) => [key, stableMigrationValue(value[key])])
+		);
+	}
+	return String(value);
+};
+
+const migrationSourceDigest = (doc: any): string =>
+	createHash('sha256')
+		.update(JSON.stringify(stableMigrationValue(doc)))
+		.digest('hex');
+
+const migrationReceiptKey = (collection: string, sourceId: unknown): string =>
+	`migration-conversion:${collection}:${createHash('sha256')
+		.update(JSON.stringify(stableMigrationValue(sourceId)))
+		.digest('hex')}`;
+
+const sourceUpdatedAtMs = (doc: any): number | null => {
+	if (!doc?.updatedAt) return null;
+	const value = new Date(doc.updatedAt).getTime();
+	return Number.isFinite(value) ? value : null;
+};
+
+// This receipt is the durable proof that a server migration, rather than an
+// identity-shaped foreign Thing, produced and verified the destination. It is
+// deliberately stored outside Things so users cannot forge it and it never
+// participates in account-byte accounting.
+const writeCollectionConversionReceipt = async (collection: string, source: any, destinationShareId: string) => {
+	const settings = await getSettingsCollection();
+	const now = new Date();
+	await settings.updateOne(
+		{ key: migrationReceiptKey(collection, source._id) },
+		{
+			$set: {
+				sourceCollection: collection,
+				sourceId: String(source._id),
+				sourceUpdatedAtMs: sourceUpdatedAtMs(source),
+				sourceDigest: migrationSourceDigest(source),
+				destinationShareId,
+				convertedAt: now,
+				updatedAt: now
+			},
+			$setOnInsert: {
+				key: migrationReceiptKey(collection, source._id),
+				schemaVersion: COLLECTION_SCHEMA_VERSIONS.settings,
+				createdAt: now
+			}
+		},
+		{ upsert: true }
+	);
+};
+
+// Everything the receipt decision needs; `key` is carried so a batched read can
+// map each row back to the source it certifies.
+const CONVERSION_RECEIPT_PROJECTION = { key: 1, sourceUpdatedAtMs: 1, sourceDigest: 1, destinationShareId: 1 };
+
+// Does an ALREADY-FETCHED receipt certify this exact source snapshot? Pure, so
+// the single-doc and batched lookups below cannot drift apart in what they
+// accept — the two are read by the same consume phase and disagreement would
+// mean deleting a legacy source on weaker proof in one path than the other.
+export const conversionReceiptCovers = (receipt: any, source: any): boolean => {
+	if (!receipt || typeof receipt.destinationShareId !== 'string') return false;
+	const sourceTime = sourceUpdatedAtMs(source);
+	return sourceTime !== null && Number.isFinite(receipt.sourceUpdatedAtMs)
+		? Number(receipt.sourceUpdatedAtMs) >= sourceTime
+		: receipt.sourceDigest === migrationSourceDigest(source);
+};
+
+const hasCollectionConversionReceipt = async (collection: string, source: any): Promise<boolean> => {
+	const receipt = await (
+		await getSettingsCollection()
+	).findOne(
+		{ key: migrationReceiptKey(collection, source._id), sourceCollection: collection },
+		{ projection: CONVERSION_RECEIPT_PROJECTION }
+	);
+	return conversionReceiptCovers(receipt, source);
+};
+
+// Batched form of the lookup above: one `key: { $in: [...] }` read resolves a
+// whole page's receipts against the unique `settings.key` index, instead of one
+// findOne per surviving document.
+//
+// Safe to hoist out of the per-doc loop because the receipt key derives ONLY
+// from (collection, source._id) — identical for a page-query snapshot and its
+// consume-phase re-read — and because receipts are only ever upserted, never
+// deleted or revoked. So a page-old snapshot can miss a receipt a concurrent
+// runner just wrote, but can never invent one: a miss falls through to the
+// stricter semantic-equality path, which is the same direction every other
+// batched read here already fails. The freshness comparison itself stays
+// per-document, run against the exact snapshot being judged.
+const findCollectionConversionReceipts = async (collection: string, sourceIds: any[]): Promise<Map<string, any>> => {
+	if (!sourceIds.length) return new Map();
+	const sourceIdByKey = new Map(sourceIds.map((id) => [migrationReceiptKey(collection, id), String(id)]));
+	const receipts = (await (
+		await getSettingsCollection()
+	)
+		.find({ key: { $in: [...sourceIdByKey.keys()] }, sourceCollection: collection }, { projection: CONVERSION_RECEIPT_PROJECTION })
+		.toArray()) as any[];
+	const bySourceId = new Map<string, any>();
+	for (const receipt of receipts) {
+		const sourceId = sourceIdByKey.get(String(receipt?.key));
+		if (sourceId !== undefined) bySourceId.set(sourceId, receipt);
+	}
+	return bySourceId;
+};
+
+const conversionSemanticFields = [
+	'shareId',
+	'schemaVersion',
+	'thingtime',
+	'crystal',
+	'ownerId',
+	'acl',
+	'targetId',
+	'tags',
+	'uniqueKeys',
+	'secure',
+	'secureVersion',
+	'secureAdmin',
+	'secureRecentReactions',
+	'avatarAttachmentId',
+	'bannerAttachmentId'
+] as const;
+
+export const conversionThingSemanticallyEquals = (actual: any, expected: any, ignoreShareId: boolean): boolean => {
+	const project = (doc: any) =>
+		Object.fromEntries(conversionSemanticFields.filter((field) => !(ignoreShareId && field === 'shareId')).map((field) => [field, doc?.[field]]));
+	return JSON.stringify(stableMigrationValue(project(actual))) === JSON.stringify(stableMigrationValue(project(expected)));
+};
+
+const destinationVersionCas = (doc: any): Record<string, unknown> => ({
+	_id: doc._id,
+	...(Object.prototype.hasOwnProperty.call(doc, 'updatedAt') ? { updatedAt: doc.updatedAt } : { updatedAt: { $exists: false } }),
+	...(Object.prototype.hasOwnProperty.call(doc, 'secureVersion') ? { secureVersion: doc.secureVersion } : { secureVersion: { $exists: false } })
+});
+
 type ConvertSpec = {
   id: string;
   collection: string; // legacy source collection
@@ -448,6 +876,14 @@ type ConvertSpec = {
   // when the destination shareId is NOT deterministic (waitlist mints uuids),
   // locate the existing counterpart by its uniqueKeys instead
   findExisting?: (things: any, doc: any, thing: Record<string, any>) => Promise<any>;
+  // batched form of findExisting: given the whole page of built candidates,
+  // return each one's existing counterpart (or null) in ONE query so the
+  // non-deterministic path costs O(pages) reads instead of O(docs). Falls back
+  // to per-doc findExisting when a spec doesn't provide it.
+  findExistingMany?: (
+    things: any,
+    candidates: { doc: any; thing: Record<string, any> }[]
+  ) => Promise<(any | null)[]>;
   // is the doc sitting at the destination genuinely this legacy doc's twin?
   isGenuine: (twin: any, doc: any, thing: Record<string, any>) => boolean;
 };
@@ -464,7 +900,7 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
   pending: async () => {
     return (await getCollection(spec.collection)).countDocuments({});
   },
-  run: async ({ dryRun }) => {
+	run: async ({ dryRun, assertLease }) => {
     await ensureIndexes();
     const things = await getCollection('things');
     const legacy = await getCollection(spec.collection);
@@ -483,112 +919,278 @@ const collectionToThingsMigration = (spec: ConvertSpec): Migration => ({
     let created = 0;
     let skipped = 0;
 
-    // batch through the legacy collection; collided/malformed docs stay put
-    // and would re-match forever, so exclude the ones skipped this run
+    // Batch through the legacy collection ONE ~CONVERT_BATCH page at a time,
+    // batching every Mongo step that can batch without weakening a guard: the
+    // claim is one bulk write and the consume-phase source/destination re-reads
+    // are one query each, so a ~50k collection is O(pages) round trips for
+    // those steps instead of O(docs) × 3-4. The receipt-verified consume of
+    // each survivor (CAS repair, exact-snapshot delete, receipt write) stays
+    // per-doc — a conversion receipt may only certify a delete that verifiably
+    // landed. Every guard the per-doc path had is preserved — only the
+    // batching around it changed.
+    //
+    // Collided/malformed docs stay put and would re-match the page query
+    // forever, so exclude the ones skipped this run.
     const skippedIds: any[] = [];
-    for (;;) {
-      const filter = skippedIds.length ? { _id: { $nin: skippedIds } } : {};
-      const batch = (await legacy.find(filter as any).limit(CONVERT_BATCH).toArray()) as any[];
-      if (!batch.length) break;
-      for (const doc of batch) {
-        const skip = (reason: string) => {
-          notes.push(`${spec.collection} ${spec.label(doc)}: ${reason}`);
-          skipped += 1;
-          skippedIds.push(doc._id);
-        };
-        try {
-          const built = spec.toThing(doc);
-          if (!built.ok) {
-            const reason = 'reason' in built ? built.reason : 'conversion failed';
-            skip(`${reason} — left for a later re-run`);
-            continue;
-          }
-          const thing = built.thing;
+    const skip = (doc: any, reason: string) => {
+      notes.push(`${spec.collection} ${spec.label(doc)}: ${reason}`);
+      skipped += 1;
+      skippedIds.push(doc._id);
+    };
 
-          let twin = spec.findExisting ? await spec.findExisting(things, doc, thing) : null;
-          let inserted = false;
-          if (!twin) {
-            try {
-              if (spec.findExisting) {
-                // non-deterministic shareId — the unique uniqueKeys index is
-                // what dedupes concurrent/partial runs
-                await things.insertOne(thing as any);
-                inserted = true;
-              } else {
-                // atomic claim of the deterministic destination id: either we
-                // created the doc at shareId (upsertedCount, genuinely ours by
-                // construction) or something already sits there — re-read it
-                // and let the genuine check decide
-                const res = await things.updateOne(
-                  { shareId: thing.shareId } as any,
-                  { $setOnInsert: thing },
-                  { upsert: true }
-                );
-                inserted = !!res.upsertedCount;
-                if (!inserted) twin = await things.findOne({ shareId: thing.shareId } as any);
-              }
-            } catch (err: any) {
-              if (err?.code !== 11000) throw err;
-              // a unique index (shareId race, or a uniqueKeys element held by
-              // another doc) blocked the insert — re-read the counterpart and
-              // let the genuine check decide; nothing was written
-              twin = spec.findExisting
-                ? await spec.findExisting(things, doc, thing)
-                : await things.findOne({ shareId: thing.shareId } as any);
-              if (!twin) {
-                skip('unique key held by a foreign doc — left for a later re-run');
+    for (;;) {
+			await assertLease?.();
+      const filter = skippedIds.length ? { _id: { $nin: skippedIds } } : {};
+			const batch = (await legacy
+				.find(filter as any)
+				.limit(CONVERT_BATCH)
+				.toArray()) as any[];
+      if (!batch.length) break;
+
+      // Phase 1 — BUILD every destination thing (pure, no I/O). A malformed doc
+      // is skipped + noted exactly as the per-doc path did, and so is one whose
+      // conversion THROWS: the per-doc loop built inside its try/catch, and
+      // losing that isolation would let a single corrupt legacy row abort the
+      // whole run before it ever reaches skippedIds (see conversionBuildOutcomes).
+      const candidates: { doc: any; thing: Record<string, any> }[] = [];
+      for (const outcome of conversionBuildOutcomes(batch, spec.toThing)) {
+        // `=== false`, not `!outcome.ok`: this tsconfig runs with
+        // strictNullChecks off, where truthiness does NOT narrow a boolean
+        // discriminant (the same reason the old build read `'reason' in built`)
+        if (outcome.ok === false) {
+          skip(outcome.doc, `${outcome.reason} — left for a later re-run`);
+          continue;
+        }
+        candidates.push({ doc: outcome.doc, thing: outcome.thing });
+      }
+      // Every doc on this page was malformed → all now in skippedIds; the next
+      // page query excludes them and eventually returns empty. Guard against a
+      // no-progress spin only if the whole page skipped (candidates empty).
+      if (!candidates.length) continue;
+
+      // Per-candidate outcome of the CLAIM phase, aligned to `candidates`:
+      //  inserted[i] — a fresh doc we created (genuinely ours by construction)
+      //  twins[i]    — a verified genuine prior-run counterpart at the destination
+      //  done[i]     — skipped in this phase (collision/error), excluded below
+      const inserted = new Array<boolean>(candidates.length).fill(false);
+      const twins = new Array<any>(candidates.length).fill(null);
+      const done = new Array<boolean>(candidates.length).fill(false);
+
+      if (spec.findExisting) {
+        // Non-deterministic shareId (waitlist mints uuids): the unique uniqueKeys
+        // index is the identity, so we can't upsert on shareId. Locate existing
+        // twins in one batched read when the spec supports it, else per-doc.
+        const existingTwins = spec.findExistingMany
+          ? await spec.findExistingMany(things, candidates)
+          : await (async () => {
+              const out: (any | null)[] = [];
+              for (const c of candidates) out.push(await spec.findExisting!(things, c.doc, c.thing));
+              return out;
+            })();
+        existingTwins.forEach((twin, i) => {
+          if (twin) twins[i] = twin;
+        });
+
+        // Insert the ones with no twin in a single unordered bulk insert; the
+        // unique uniqueKeys index dedupes concurrent/partial runs.
+        const toInsert = candidates.map((c, i) => ({ c, i })).filter(({ i }) => !twins[i]);
+        if (toInsert.length) {
+          try {
+            await things.bulkWrite(
+              toInsert.map(({ c }) => ({ insertOne: { document: c.thing } })) as any,
+              { ordered: false }
+            );
+            toInsert.forEach(({ i }) => {
+              inserted[i] = true;
+            });
+          } catch (err: any) {
+            // position in toInsert → code (the ops array IS toInsert here)
+            const failed = bulkWriteErrorCodesByOp(err);
+            if (!failed) throw err; // not a per-op bulk failure
+            // Inserts are all-or-nothing per op, so absence from the error map
+            // IS the success signal — unlike the upsert branch below, where a
+            // non-failing op may have merely matched an existing doc.
+            toInsert.forEach(({ i }, pos) => {
+              if (!failed.has(pos)) inserted[i] = true;
+            });
+            // A per-doc fallback ONLY for genuine conflicts: a unique key already
+            // held. If it's OUR counterpart (uniqueKeys race), re-read + let the
+            // genuine check below decide; a foreign holder is skipped for a later
+            // re-run. A non-11000 error is a generic per-doc conversion error.
+            for (const [pos, code] of failed) {
+              const { c, i } = toInsert[pos];
+              if (code !== 11000) {
+                skip(c.doc, 'conversion error — left for a later re-run');
+                done[i] = true;
                 continue;
               }
+              const twin = await spec.findExisting!(things, c.doc, c.thing);
+              if (twin) twins[i] = twin;
+              else {
+                skip(c.doc, 'unique key held by a foreign doc — left for a later re-run');
+                done[i] = true;
+              }
             }
           }
-          if (!inserted && (!twin || !spec.isGenuine(twin, doc, thing))) {
-            skip('destination id held by a foreign doc — left for a later re-run');
+        }
+
+        // Anything not freshly inserted must sit at a genuine twin, or it's a
+        // foreign doc squatting our unique key.
+        candidates.forEach((c, i) => {
+          if (inserted[i] || done[i]) return;
+          if (!twins[i] || !spec.isGenuine(twins[i], c.doc, c.thing)) {
+            skip(c.doc, 'destination id held by a foreign doc — left for a later re-run');
+            done[i] = true;
+          }
+        });
+      } else {
+        // Deterministic destination shareId: ONE unordered bulk upsert atomically
+        // CLAIMS every id. upsertedIds tells us which we created (genuinely ours
+        // by construction); every other candidate already existed (or hit a
+        // unique key) and is verified by a single re-read below.
+        const ops = candidates.map((c) => ({
+          updateOne: { filter: { shareId: c.thing.shareId }, update: { $setOnInsert: c.thing }, upsert: true }
+        }));
+        const errorCodes = new Map<number, number>(); // op index → write-error code
+        try {
+          const res: any = await things.bulkWrite(ops as any, { ordered: false });
+          for (const i of upsertedOpIndexes(res)) inserted[i] = true;
+        } catch (err: any) {
+          const codes = bulkWriteErrorCodesByOp(err);
+          if (!codes) throw err; // not a per-op bulk failure
+          // Unordered: the non-failing ops still applied — recover their upserts.
+          for (const i of upsertedOpIndexes(err?.result)) inserted[i] = true;
+          for (const [i, code] of codes) errorCodes.set(i, code);
+        }
+
+        // Non-11000 failures are generic per-doc errors (the per-doc path threw
+        // to its outer catch → skip); isolate them to that doc.
+        for (const [i, code] of errorCodes) {
+          if (code !== 11000 && !inserted[i]) {
+            skip(candidates[i].doc, 'conversion error — left for a later re-run');
+            done[i] = true;
+          }
+        }
+
+        // One re-read for every not-inserted candidate closes the genuine check:
+        // a prior-run twin (same owner/target per spec.isGenuine) is kept; an id
+        // with NO doc after an 11000 means a foreign doc holds one of our OTHER
+        // unique keys (uniqueKeys); a non-genuine holder squats the id.
+        const pending = candidates.map((c, i) => ({ c, i })).filter(({ i }) => !inserted[i] && !done[i]);
+        if (pending.length) {
+          const found = (await things
+            .find({ shareId: { $in: pending.map(({ c }) => c.thing.shareId) } } as any)
+            .toArray()) as any[];
+          const byShareId = new Map(found.map((t) => [String(t.shareId), t]));
+          for (const { c, i } of pending) {
+            const twin = byShareId.get(String(c.thing.shareId)) ?? null;
+            if (!twin) {
+              skip(
+                c.doc,
+                errorCodes.get(i) === 11000
+                  ? 'unique key held by a foreign doc — left for a later re-run'
+                  : 'destination id held by a foreign doc — left for a later re-run'
+              );
+              done[i] = true;
+              continue;
+            }
+            if (!spec.isGenuine(twin, c.doc, c.thing)) {
+              skip(c.doc, 'destination id held by a foreign doc — left for a later re-run');
+              done[i] = true;
+              continue;
+            }
+            twins[i] = twin;
+          }
+        }
+      }
+
+      // Survivors: freshly inserted, or a verified genuine twin. Their legacy
+      // source may be consumed only after the receipt verification below
+      // (thingsMigration's convention: never delete data that wasn't safely
+      // relocated).
+      const survivors = candidates.map((c, i) => ({ c, i })).filter(({ i }) => !done[i]);
+      created += survivors.filter(({ i }) => inserted[i]).length;
+      if (!survivors.length) continue;
+
+      // Batched form of the per-doc consume guard: re-read every survivor's
+      // legacy source and its destination thing in ONE query each, then require
+      // either byte-semantic equivalence or a prior server receipt before
+      // consuming the source — a kind/owner-shaped twin alone is never
+      // conversion proof. Every mutation below is CAS-guarded on these
+      // snapshots (destinationVersionCas for the repair, the exact source
+      // snapshot for the delete), so a write racing the batched reads matches 0
+      // and leaves the doc for the next (idempotent) run instead of dropping
+      // the racing write.
+      const freshDocs = (await legacy
+        .find({ _id: { $in: survivors.map(({ c }) => c.doc._id) } } as any)
+        .toArray()) as any[];
+      const freshById = new Map(freshDocs.map((d) => [String(d._id), d]));
+      const destinations = (await things
+        .find({ shareId: { $in: survivors.map(({ c, i }) => (inserted[i] ? c.thing.shareId : twins[i]?.shareId ?? c.thing.shareId)) } } as any)
+        .toArray()) as any[];
+      const destinationByShareId = new Map(destinations.map((d) => [String(d.shareId), d]));
+      // Third batched read: the conversion receipts. Keyed by source _id, which
+      // both consume-phase checks below share (`fresh` is this same _id re-read),
+      // so one page-wide lookup serves the already-consumed branch and the
+      // freshness check alike.
+      const receiptBySourceId = await findCollectionConversionReceipts(
+        spec.collection,
+        survivors.map(({ c }) => c.doc._id)
+      );
+
+      for (const { c, i } of survivors) {
+        const { doc, thing } = c;
+        const twin = twins[i];
+        const fresh = freshById.get(String(doc._id));
+        const destinationShareId = inserted[i] ? thing.shareId : twin?.shareId ?? thing.shareId;
+        try {
+          const receipt = receiptBySourceId.get(String(doc._id));
+          if (!fresh) {
+            // Another runner already consumed the source. Its receipt, not our
+            // observation of a destination-shaped row, is the completion proof.
+            if (!conversionReceiptCovers(receipt, doc)) {
+              skip(doc, 'source changed during conversion — left for a later re-run');
+            }
             continue;
           }
-          // destination verified (fresh atomic insert, or a genuine prior-run
-          // twin) — only now is the legacy source removed (thingsMigration's
-          // convention: never delete data that wasn't safely relocated).
-          //
-          // Data-loss guard: a live write can land on the legacy doc between the
-          // batch snapshot and here (until the thing exists, updateUserStore &
-          // co. target legacy). Re-read fresh; if updatedAt advanced, the thing
-          // we built is stale — rebuild it from the fresh doc before deleting,
-          // and guard the delete on that fresh updatedAt so a write in the
-          // remaining sliver leaves legacy for the next (idempotent) run.
-          if (inserted) created += 1;
-          const fresh = await legacy.findOne({ _id: doc._id } as any);
-          const freshTime = fresh?.updatedAt ? +new Date(fresh.updatedAt) : 0;
-          // What the destination thing currently reflects. On a fresh insert
-          // that's this batch's snapshot (the thing we just built from `doc`).
-          // On a prior-run twin it's the twin's OWN updatedAt — comparing only
-          // against the batch snapshot missed this: a twin an earlier pass built
-          // from older legacy data was never refreshed, so the guarded delete
-          // then dropped a legacy write that had raced that earlier pass.
-          const destinationShareId = inserted ? thing.shareId : twin?.shareId ?? thing.shareId;
-          const destinationTime = inserted
-            ? doc.updatedAt
-              ? +new Date(doc.updatedAt)
-              : 0
-            : twin?.updatedAt
-              ? +new Date(twin.updatedAt)
-              : 0;
-          if (fresh && freshTime > destinationTime) {
-            const rebuilt = spec.toThing(fresh);
-            // keep the destination's shareId so references never rotate — a
-            // random-shareId spec would otherwise mint a new id on rebuild
-            if (rebuilt.ok) {
-              await things.replaceOne(
-                { shareId: destinationShareId } as any,
-                { ...rebuilt.thing, shareId: destinationShareId } as any
-              );
+          const rebuilt = spec.toThing(fresh);
+          if (!rebuilt.ok) {
+            skip(doc, 'source changed to an invalid shape during conversion — left for a later repair');
+            continue;
+          }
+          const expected = { ...rebuilt.thing, shareId: destinationShareId };
+          const destination = destinationByShareId.get(String(destinationShareId)) ?? null;
+          if (!destination || !spec.isGenuine(destination, fresh, expected)) {
+            skip(doc, 'destination changed during conversion — left for a later re-run');
+            continue;
+          }
+          const receiptCoversFresh = conversionReceiptCovers(receipt, fresh);
+          if (!receiptCoversFresh && !conversionThingSemanticallyEquals(destination, expected, !!spec.findExisting)) {
+            // We may repair only the row inserted by THIS invocation, and only
+            // while it still equals our original snapshot. A pre-existing weak
+            // twin or a concurrently edited destination is left untouched.
+            if (!inserted[i] || !conversionThingSemanticallyEquals(destination, thing, !!spec.findExisting)) {
+              skip(doc, 'destination payload differs from the source and has no conversion receipt — left for repair');
+              continue;
+            }
+            const replaced = await things.replaceOne(destinationVersionCas(destination) as any, expected as any);
+            if (!replaced.matchedCount) {
+              skip(doc, 'destination changed during conversion — left for a later re-run');
+              continue;
             }
           }
-          await legacy.deleteOne(fresh ? ({ _id: doc._id, updatedAt: fresh.updatedAt } as any) : ({ _id: doc._id } as any));
+          await assertLease?.();
+          const deleted = await legacy.deleteOne(exactDocumentSnapshotMatch(fresh) as any);
+          if (!deleted.deletedCount) {
+            skip(doc, 'source changed during conversion — left for a later re-run');
+            continue;
+          }
+          await writeCollectionConversionReceipt(spec.collection, fresh, destinationShareId);
           migrated += 1;
         } catch (err: any) {
           // generic note only — never echo err.message (could embed a doc
           // field value) into the admin-visible migration report
-          skip('conversion error — left for a later re-run');
+          skip(doc, 'conversion error — left for a later re-run');
         }
       }
     }
@@ -652,6 +1254,7 @@ const usersToThings = collectionToThingsMigration({
         acl: [ACL_ALL],
         targetId: null,
         tags: [],
+				...profileAttachmentRefsForUserRoot(doc),
         uniqueKeys: [userUsernameKey(doc.username), userEmailKey(doc.email)],
         secure,
         secureVersion: 0, // matches insertUser — optimistic-concurrency token
@@ -706,8 +1309,7 @@ const themesToThings = collectionToThingsMigration({
       }
     };
   },
-  isGenuine: (twin, doc) =>
-    Array.isArray(twin?.thingtime) && twin.thingtime.includes('theme') && String(twin.ownerId) === String(doc.ownerId)
+	isGenuine: (twin, doc) => Array.isArray(twin?.thingtime) && twin.thingtime.includes('theme') && String(twin.ownerId) === String(doc.ownerId)
 });
 
 const feedAlgorithmsToThings = collectionToThingsMigration({
@@ -718,7 +1320,7 @@ const feedAlgorithmsToThings = collectionToThingsMigration({
   description:
     'Converts each legacy feedAlgorithms doc into a feed-algorithm thing (thingtime ' +
     '["feed-algorithm"]) shaped exactly like createAlgorithm writes new ones: the trained ' +
-    'profile in crystal { name, emoji, parentId, weights, eventCount, lastTrainedAt }, ALWAYS ' +
+    'profile in crystal { name, emoji, parentId, weights, eventCount, lastTrainedAt, shared }, ALWAYS ' +
     'private (acl ["tt:user"] — weights encode reading habits), targetId null so the ' +
     'reaction-unique partial index can never collide on crystal.emoji. shareIds are preserved so ' +
     'users.meta.activeFeedAlgorithmId pointers keep working. Each legacy doc is deleted only ' +
@@ -741,7 +1343,13 @@ const feedAlgorithmsToThings = collectionToThingsMigration({
           parentId: doc.parentId ?? null,
           weights: doc.weights && typeof doc.weights === 'object' ? doc.weights : { types: {}, tags: {}, authors: {} },
           eventCount: typeof doc.eventCount === 'number' && doc.eventCount >= 0 ? doc.eventCount : 0,
-          lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt) : null
+          lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt) : null,
+          // the "try my feed brain 🧠" branch invitation is owner state, not
+          // derived: dropping it here would silently revoke every share link a
+          // legacy-era owner had handed out, since the source doc is deleted
+          // once the twin verifies. Strict === true matches algorithmThingToDoc,
+          // so a pre-share doc migrates as unshared.
+          shared: doc.shared === true
         },
         ownerId: String(doc.ownerId),
         acl: [ACL_OWNER],
@@ -756,9 +1364,7 @@ const feedAlgorithmsToThings = collectionToThingsMigration({
     };
   },
   isGenuine: (twin, doc) =>
-    Array.isArray(twin?.thingtime) &&
-    twin.thingtime.includes('feed-algorithm') &&
-    String(twin.ownerId) === String(doc.ownerId)
+		Array.isArray(twin?.thingtime) && twin.thingtime.includes('feed-algorithm') && String(twin.ownerId) === String(doc.ownerId)
 });
 
 const waitlistToThings = collectionToThingsMigration({
@@ -802,12 +1408,20 @@ const waitlistToThings = collectionToThingsMigration({
   },
   // random shareId — the hashed-email uniqueKey is the deterministic identity
   findExisting: async (things, _doc, thing) => things.findOne({ uniqueKeys: thing.uniqueKeys[0] } as any),
-  isGenuine: (twin) =>
-    Array.isArray(twin?.thingtime) && twin.thingtime.includes('waitlist') && twin.ownerId === 'system'
+  // batched form: one $in over the whole page's hashed-email keys, mapped back
+  // by decoding each BinData uniqueKey (fromBin is the canonical decoder)
+  findExistingMany: async (things, candidates) => {
+    const keys = candidates.map((c) => c.thing.uniqueKeys[0]);
+    const found = (await things.find({ uniqueKeys: { $in: keys } } as any).toArray()) as any[];
+    const byKey = new Map<string, any>();
+    for (const doc of found) for (const key of doc.uniqueKeys || []) byKey.set(fromBin(key), doc);
+    return candidates.map((c) => byKey.get(fromBin(c.thing.uniqueKeys[0])) ?? null);
+  },
+	isGenuine: (twin) => Array.isArray(twin?.thingtime) && twin.thingtime.includes('waitlist') && twin.ownerId === 'system'
 });
 
 // ---------------------------------------------------------------------------
-// Builtin-schema seeding: every builtin crystal schema in the code registry
+// Builtin-schema seeding: every builtin schema in the code registry
 // becomes a system-owned, public schema THING. These are real schema things,
 // not search sugar: each crystal is projected onto the schema-thing grammar
 // (projectBuiltinSchemaCrystal — lives in the registry beside the grammar it
@@ -818,20 +1432,19 @@ const waitlistToThings = collectionToThingsMigration({
 // needs system-only powers the generic CRUD rightly refuses: ownerId 'system',
 // the reserved 'schema-' shareId prefix (sanitizeShareId blocks it against
 // squatters), uniqueKeys, and reconciling upserts. Re-runs self-heal drift —
-// a genuine seeded doc whose crystal no longer matches the validated registry
-// projection is refreshed in place — and pending() counts missing AND stale
-// docs, so drift genuinely surfaces in the admin census.
+// a genuine seeded doc whose crystal or server-owned control-plane storage
+// stamp no longer matches is refreshed in place — and pending() counts missing
+// AND stale docs, so drift genuinely surfaces in the admin census.
 
 const BUILTIN_SCHEMA_SHARE_PREFIX = 'schema-';
 
-const builtinCrystalSchemas = () => thingtimeSchemas.filter((schema) => schema.kind === 'crystal');
-const builtinSchemaShareIds = () => builtinCrystalSchemas().map((schema) => `${BUILTIN_SCHEMA_SHARE_PREFIX}${schema.id}`);
+const builtinPublicSchemas = () => thingtimeSchemas;
+const builtinSchemaShareIds = () => builtinPublicSchemas().map((schema) => `${BUILTIN_SCHEMA_SHARE_PREFIX}${schema.id}`);
 
 // Registry schema -> the validated schema-thing crystal the seed stores. One
 // call chains the shared projection + the shared write gate, so seeded
 // builtins and user publishes can never drift onto different grammars.
-const builtinSchemaCrystal = (schema: (typeof thingtimeSchemas)[number]) =>
-  validateThingtimeCrystal(['schema'], projectBuiltinSchemaCrystal(schema));
+const builtinSchemaCrystal = (schema: (typeof thingtimeSchemas)[number]) => validateThingtimeCrystal(['schema'], projectBuiltinSchemaCrystal(schema));
 
 const genuineSeededSchema = (twin: any): boolean =>
   !!twin && Array.isArray(twin.thingtime) && twin.thingtime.includes('schema') && twin.ownerId === 'system';
@@ -841,25 +1454,24 @@ const seedBuiltinSchemas: Migration = {
   collection: 'things',
   fromVersion: THINGS_VERSION,
   toVersion: THINGS_VERSION,
-  title: 'Seed builtin crystal schemas as schema things',
+  title: 'Seed all builtin schemas as public schema things',
   description:
-    'Every builtin crystal schema in the code registry (all 13 crystal kinds: post, comment, ' +
-    'reaction, share, data, schema, save, app, app-data, user, theme, feed-algorithm, waitlist) ' +
-    'is seeded as a system-owned public schema thing — thingtime ["schema"], shareId ' +
-    'schema-<id>, uniqueKeys ["schema:<id>"], acl ["tt:all"]. Each crystal is projected onto ' +
+    'Every builtin schema in the code registry is seeded as a system-owned public schema ' +
+    'thing — thingtime ["schema"], shareId schema-<id>, uniqueKeys ["schema:<id>"], acl ["tt:all"], ' +
+    'and the server-owned storageClass "control". Each crystal is projected onto ' +
     'the schema-thing field grammar and validated through validateThingtimeCrystal(["schema"]) ' +
-    '— the same gate user-published schemas pass — before writing; open record shapes and ' +
-    'reserved names are projected away, and a validation failure is reported as a bug. ' +
+    '— the same gate user-published schemas pass — before writing; open records use bounded JSON fields, ' +
+    'reserved tagging names are omitted, and a validation failure is reported as a bug. ' +
     'Idempotent and self-healing: re-runs upsert by shareId, refresh genuine seeded docs whose ' +
-    'crystal drifted from the registry, and skip+note foreign docs squatting a destination id.',
+    'crystal or control-plane storage stamp drifted, and skip+note foreign docs squatting a destination id.',
   pending: async () => {
     const things = await getCollection('things');
-    const schemas = builtinCrystalSchemas();
+    const schemas = builtinPublicSchemas();
     const docs = await things
       .find({ shareId: { $in: builtinSchemaShareIds() } } as any)
-      .project({ shareId: 1, thingtime: 1, ownerId: 1, crystal: 1 })
+      .project({ shareId: 1, thingtime: 1, ownerId: 1, crystal: 1, storageClass: 1 })
       .toArray();
-    const byShareId = new Map(docs.map((doc: any) => [doc.shareId, doc]));
+		const byShareId = new Map<string, any>(docs.map((doc: any) => [String(doc.shareId), doc]));
     let count = 0;
     for (const schema of schemas) {
       const twin = byShareId.get(`${BUILTIN_SCHEMA_SHARE_PREFIX}${schema.id}`);
@@ -869,19 +1481,19 @@ const seedBuiltinSchemas: Migration = {
         continue;
       }
       const validated = builtinSchemaCrystal(schema);
-      // projection no longer validates (registry/grammar drift) or the stored
-      // crystal differs from the validated projection — both are pending work
-      if (validated.ok === false || JSON.stringify(twin.crystal ?? {}) !== JSON.stringify(validated.crystal)) {
+      // Projection/grammar drift, registry crystal drift, and a missing or
+      // incorrect server-owned control-plane stamp are all pending work.
+      if (validated.ok === false || builtinSchemaSeedNeedsRefresh(twin, validated.crystal)) {
         count += 1;
       }
     }
     return count;
   },
-  run: async ({ dryRun }) => {
+	run: async ({ dryRun, assertLease }) => {
     await ensureIndexes();
     const things = await getCollection('things');
     const notes = makeNotes();
-    const schemas = builtinCrystalSchemas();
+    const schemas = builtinPublicSchemas();
     const matched = schemas.length;
 
     let created = 0;
@@ -907,6 +1519,7 @@ const seedBuiltinSchemas: Migration = {
           thingtime: validated.thingtime,
           crystal: validated.crystal,
           ownerId: 'system',
+          storageClass: 'control',
           acl: [ACL_ALL],
           targetId: null,
           tags: [],
@@ -931,16 +1544,20 @@ const seedBuiltinSchemas: Migration = {
           skipped += 1;
           continue;
         }
-        if (JSON.stringify(twin!.crystal ?? {}) !== JSON.stringify(validated.crystal)) {
+        const crystalNeedsRefresh = JSON.stringify(twin!.crystal ?? {}) !== JSON.stringify(validated.crystal);
+        const storageClassNeedsRefresh = twin!.storageClass !== 'control';
+        if (builtinSchemaSeedNeedsRefresh(twin, validated.crystal)) {
           if (!dryRun) {
             // genuineness lives IN the filter — a foreign doc matches nothing,
             // preserving the same anti-squat guarantee as the skip above
-            await things.updateOne(
-              { shareId, ownerId: 'system', thingtime: 'schema' } as any,
-              { $set: { crystal: validated.crystal, updatedAt: now } }
-            );
+						await things.updateOne({ shareId, ownerId: 'system', thingtime: 'schema' } as any, {
+							$set: { crystal: validated.crystal, storageClass: 'control', updatedAt: now }
+						});
           }
-          notes.push(`schema ${schema.id}: crystal ${dryRun ? 'would be ' : ''}refreshed from the registry`);
+					const repairs = [crystalNeedsRefresh ? 'registry crystal' : null, storageClassNeedsRefresh ? 'control-plane storage class' : null].filter(
+						Boolean
+					);
+          notes.push(`schema ${schema.id}: ${dryRun ? 'would repair' : 'repaired'} ${repairs.join(' and ')}`);
           refreshed += 1;
           continue;
         }
@@ -992,14 +1609,71 @@ const seedBuiltinSchemas: Migration = {
 // pinned old physical name (declare it in sourcePhysicals so cleanup waits for
 // it), run it, verify, then run the cleanup to drop the superseded generation.
 
-const MERGE_BATCH = 200;
-
 type LegacyResidueRow = {
   collection: string;
   physical: string;
   // docs in the legacy collection whose _id is absent from the current
   // generation — the exact set merge-legacy-collections still has to copy
   missing: number;
+};
+
+// A collection-to-Things migration intentionally removes its current physical
+// source after verifying the destination. If an older unversioned collection
+// still exists as a frozen snapshot, absence from the current generation no
+// longer means that row needs copying again: the genuine Thing is the durable
+// successor. Keep this predicate aligned with the conversion specs above so a
+// malformed row or a foreign destination collision remains pending.
+const legacyRowHasConvertedThing = async (collection: string, doc: any, things: any): Promise<boolean> => {
+	if (!(await hasCollectionConversionReceipt(collection, doc))) return false;
+	if (collection === 'users') {
+		if (
+			typeof doc?.username !== 'string' ||
+			!doc.username ||
+			typeof doc?.email !== 'string' ||
+			!doc.email ||
+			typeof doc?.passwordHash !== 'string' ||
+			!doc.passwordHash
+		) {
+			return false;
+		}
+		const shareId = String(doc._id);
+		const twin = await things.findOne({ shareId }, { projection: { thingtime: 1, ownerId: 1, 'crystal.username': 1 } });
+		return (
+			Array.isArray(twin?.thingtime) && twin.thingtime.includes('user') && String(twin.ownerId) === shareId && twin.crystal?.username === doc.username
+		);
+	}
+
+	if (collection === 'themes') {
+		if (
+			typeof doc?.shareId !== 'string' ||
+			!doc.shareId ||
+			typeof doc?.name !== 'string' ||
+			!doc.name ||
+			!doc.theme ||
+			typeof doc.theme !== 'object' ||
+			Array.isArray(doc.theme)
+		) {
+			return false;
+		}
+		const twin = await things.findOne({ shareId: doc.shareId }, { projection: { thingtime: 1, ownerId: 1 } });
+		return Array.isArray(twin?.thingtime) && twin.thingtime.includes('theme') && String(twin.ownerId) === String(doc.ownerId);
+	}
+
+	if (collection === 'feedAlgorithms') {
+		if (typeof doc?.shareId !== 'string' || !doc.shareId || typeof doc?.name !== 'string' || !doc.name) {
+			return false;
+		}
+		const twin = await things.findOne({ shareId: doc.shareId }, { projection: { thingtime: 1, ownerId: 1 } });
+		return Array.isArray(twin?.thingtime) && twin.thingtime.includes('feed-algorithm') && String(twin.ownerId) === String(doc.ownerId);
+	}
+
+	if (collection === 'waitlist') {
+		if (typeof doc?.email !== 'string' || !doc.email.trim()) return false;
+		const twin = await things.findOne({ uniqueKeys: waitlistEmailKey(doc.email.trim().toLowerCase()) }, { projection: { thingtime: 1, ownerId: 1 } });
+		return Array.isArray(twin?.thingtime) && twin.thingtime.includes('waitlist') && twin.ownerId === 'system';
+	}
+
+	return false;
 };
 
 // The unversioned legacy collections that still exist, with their unmerged-doc
@@ -1009,11 +1683,10 @@ const legacyResidue = async (): Promise<LegacyResidueRow[]> => {
   const db = await getThingtimeDb();
   const names = (await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name);
   const legacyRows = classifyPhysicalCollections(names).filter((row) => row.version === null);
+	const things = db.collection(physicalCollectionName('things'));
   return Promise.all(
     legacyRows.map(async (row) => {
-      const counted = (await db
-        .collection(row.physical)
-        .aggregate([
+			const cursor = db.collection(row.physical).aggregate([
           {
             $lookup: {
               from: physicalCollectionName(row.collection),
@@ -1023,12 +1696,1025 @@ const legacyResidue = async (): Promise<LegacyResidueRow[]> => {
             }
           },
           { $match: { copied: { $size: 0 } } },
-          { $count: 'n' }
-        ])
-        .toArray()) as any[];
-      return { collection: row.collection, physical: row.physical, missing: counted.length ? counted[0].n : 0 };
+				{ $project: { copied: 0 } }
+			]);
+			let missing = 0;
+			for await (const doc of cursor) {
+				if (!(await legacyRowHasConvertedThing(row.collection, doc, things))) missing += 1;
+			}
+			return { collection: row.collection, physical: row.physical, missing };
     })
   );
+};
+
+// ---------------------------------------------------------------------------
+// Full-power app namespaces (TODO/claude-todo/16-full-power-app-namespaces.md):
+// pre-namespace app-data things carry only crystal.appId. Stamp the scalar
+// root appId (the namespace marker every app-lens query keys on) + sizeBytes
+// (the storage ledger's unit), then reconcile each (user, app) ledger to the
+// $sum of its namespace — absolute writes, so re-running is always safe. Sandbox docs
+// get stamped too but never enter a standing ledger (they TTL away).
+
+const appNamespaceBackfillFilter = {
+  thingtime: 'app-data',
+  'crystal.appId': { $exists: true },
+  $or: [{ appId: { $exists: false } }, { sizeBytes: { $exists: false } }]
+};
+
+const backfillAppNamespaceFields: Migration = {
+  id: 'backfill-app-namespace-fields',
+  collection: 'things',
+  fromVersion: THINGS_VERSION,
+  toVersion: THINGS_VERSION,
+  title: 'Backfill app namespace stamps (appId + sizeBytes) and storage ledgers',
+  description:
+    'Stamps the scalar root appId and serialized sizeBytes onto pre-namespace app-data things ' +
+    '(crystal.appId only), then reconciles every (user, app) storage ledger to the sum of its ' +
+    'namespace. Idempotent: stamps are recomputed deterministically and ledgers are set absolutely.',
+  pending: async () => {
+    return (await getCollection('things')).countDocuments(appNamespaceBackfillFilter);
+  },
+	run: async ({ dryRun, assertLease }) => {
+    const things = await getCollection('things');
+    const matched = await things.countDocuments(appNamespaceBackfillFilter);
+    const notes: string[] = [];
+    if (dryRun) return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes };
+
+    let migrated = 0;
+    // batch the stamp pass — each doc's sizeBytes depends on its own payload
+    while (true) {
+			await assertLease?.();
+      const batch = await things
+        .find(appNamespaceBackfillFilter)
+        .project({ shareId: 1, crystal: 1, extended: 1, tags: 1 })
+        .limit(THINGS_BATCH)
+        .toArray();
+      if (!batch.length) break;
+      for (const doc of batch) {
+				await things.updateOne({ shareId: doc.shareId }, { $set: { appId: doc.crystal?.appId, sizeBytes: appThingSizeBytes(doc as any) } });
+        migrated += 1;
+      }
+      if (batch.length < THINGS_BATCH) break;
+    }
+
+    // ledger reconcile: absolute sums over every non-sandbox namespace doc
+    const sums = await things
+      .aggregate([
+        { $match: { appId: { $exists: true }, sandboxExpiresAt: { $exists: false }, sizeBytes: { $type: 'number' } } },
+        { $group: { _id: { ownerId: '$ownerId', appId: '$appId' }, bytes: { $sum: '$sizeBytes' } } }
+      ])
+      .toArray();
+    let ledgers = 0;
+    for (const entry of sums) {
+			await assertLease?.();
+      const ownerId = String(entry._id?.ownerId || '');
+      const appId = String(entry._id?.appId || '');
+      if (!ownerId || !appId) continue;
+			await convertHistoricalAppStorageCounter(ownerId, appId);
+      if (await setAppStorageUsed(ownerId, appId, entry.bytes || 0, { onlyIfNotLive: true })) {
+        ledgers += 1;
+      }
+    }
+    notes.push(`${ledgers} storage ledger(s) reconciled to their namespace sums`);
+
+    return { dryRun, matched, migrated, created: ledgers, skipped: 0, notes };
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Registered-app storage allowances. PR 16's namespace ledger was per user;
+// this follow-up makes the app's real aggregate ceiling explicit too. Legacy
+// apps stay fail-closed because positive writes require the accounting-version
+// marker plus the policy fields. For each app we stamp pre-namespace residue,
+// reconcile/protect user ledgers, then initialize the aggregate LAST. That is
+// the writer fence: no new-code write can race a baseline into an undercount.
+
+const appStorageAllowanceBackfillFilter = {
+  thingtime: 'app',
+  'crystal.storageAccountingVersion': { $ne: APP_STORAGE_ACCOUNTING_VERSION }
+};
+
+const backfillAppStorageAllowances: Migration = {
+  id: 'backfill-app-storage-allowances',
+  collection: 'things',
+  fromVersion: THINGS_VERSION,
+  toVersion: THINGS_VERSION,
+  title: 'Initialize whole-app and per-app-user storage allowances',
+  description:
+    'Initializes each legacy app with the free storage plan, aggregate usage, and 50 MiB default user ' +
+    'allowance. Reconciles every user ledger and converts it to the protected app-storage kind before ' +
+    'enabling writes, then installs the app aggregate/version marker last so concurrent new-code writes ' +
+    'cannot be overwritten by the baseline.',
+  pending: async () => {
+    return (await getCollection('things')).countDocuments(appStorageAllowanceBackfillFilter);
+  },
+	run: async ({ dryRun, assertLease }) => {
+    const things = await getCollection('things');
+		const apps = await things.find(appStorageAllowanceBackfillFilter).project({ 'crystal.clientId': 1 }).toArray();
+    const matched = apps.length;
+    const notes: string[] = [];
+    if (dryRun) return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes };
+
+    let migrated = 0;
+    let ledgers = 0;
+    let stamped = 0;
+    let skipped = 0;
+
+    for (const app of apps) {
+			await assertLease?.();
+      const appId = typeof app.crystal?.clientId === 'string' ? app.crystal.clientId : '';
+      if (!appId) {
+        skipped += 1;
+        continue;
+      }
+
+      // A legacy KV entry may still carry only crystal.appId. Stamp it before
+      // either sum so this migration is safe even when the older namespace
+      // migration has not been run yet.
+      while (true) {
+				await assertLease?.();
+        const batch = await things
+          .find({
+            thingtime: 'app-data',
+            'crystal.appId': appId,
+            $or: [{ appId: { $exists: false } }, { sizeBytes: { $exists: false } }]
+          })
+          .project({ shareId: 1, crystal: 1, extended: 1, tags: 1 })
+          .limit(THINGS_BATCH)
+          .toArray();
+        if (!batch.length) break;
+        for (const doc of batch) {
+					await things.updateOne({ shareId: doc.shareId }, { $set: { appId, sizeBytes: appThingSizeBytes(doc as any) } });
+          stamped += 1;
+        }
+        if (batch.length < THINGS_BATCH) break;
+      }
+
+      const perUser = await things
+        .aggregate([
+          {
+            $match: {
+              appId,
+              sandboxExpiresAt: { $exists: false },
+              sizeBytes: { $type: 'number' }
+            }
+          },
+          { $group: { _id: '$ownerId', bytes: { $sum: '$sizeBytes' } } }
+        ])
+        .toArray();
+      const bytesByOwner = new Map<string, number>();
+      let appUsedBytes = 0;
+      for (const entry of perUser) {
+				await assertLease?.();
+        const ownerId = String(entry._id || '');
+        if (!ownerId) continue;
+        const usedBytes = Math.max(0, Math.floor(entry.bytes || 0));
+        bytesByOwner.set(ownerId, usedBytes);
+				await convertHistoricalAppStorageCounter(ownerId, appId);
+        const reconciled = await setAppStorageUsed(ownerId, appId, usedBytes, { onlyIfNotLive: true });
+        appUsedBytes += usedBytes;
+        if (reconciled) ledgers += 1;
+      }
+
+      // A prior ambiguous refund can leave a conservative counter even when
+      // that user has no namespace docs left, so the aggregation above has no
+      // row for them. Reconcile those existing counters explicitly to zero.
+      const existingLedgers = await things
+        .find({
+					shareId: { $regex: `^${APP_STORAGE_RESERVED_ID_PREFIX}` },
+          'crystal.appId': appId,
+          sandboxExpiresAt: { $exists: false }
+        })
+        .project({ ownerId: 1 })
+        .toArray();
+      for (const ledger of existingLedgers) {
+				await assertLease?.();
+        const ownerId = String(ledger.ownerId || '');
+        if (!ownerId || bytesByOwner.has(ownerId)) continue;
+				await convertHistoricalAppStorageCounter(ownerId, appId);
+        if (await setAppStorageUsed(ownerId, appId, 0, { onlyIfNotLive: true })) {
+          ledgers += 1;
+        }
+      }
+
+      if (await initializeAppStorageAccounting(appId, appUsedBytes)) migrated += 1;
+      else skipped += 1; // another idempotent migration runner initialized it
+    }
+
+    notes.push(`${stamped} legacy namespace doc(s) stamped before accounting`);
+    notes.push(`${ledgers} per-app-user ledger(s) reconciled`);
+    notes.push(`${migrated} whole-app aggregate(s) initialized last`);
+    return { dryRun, matched, migrated, created: ledgers, skipped, notes };
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Whole-account storage. Every customer-controlled Thing uses the same
+// versioned logical-byte stamp, while the protected user subscription Thing is
+// the one hot enforcement/display ledger. App content contributes to this
+// account total once and keeps its app/app-user counters only as overlapping
+// sub-limits. Existing secure-blob usage is ignored because no write path ever
+// maintained it; an explicit legacy allowance is preserved as a real override.
+
+// Function (rather than a module-time array) because mergeLegacyCollections is
+// declared below this migration. Calls happen only after module initialization.
+export const userStoragePrerequisites = (): Migration[] => [
+	mergeLegacyCollections,
+	thingsMigration,
+	seedBuiltinSchemas,
+	usersToThings,
+	themesToThings,
+	feedAlgorithmsToThings,
+	backfillAppNamespaceFields,
+	backfillAppStorageAllowances
+];
+
+const currentUserIds = async (): Promise<string[]> => {
+	const [thingUsers, legacyUsers] = await Promise.all([
+		getCollection('things').then((things) => things.find({ thingtime: 'user' }).project({ shareId: 1 }).toArray()),
+		getCollection('users').then((users) => users.find({}).project({ _id: 1 }).toArray())
+	]);
+	return [
+		...new Set([
+			...thingUsers.map((doc: any) => String(doc.shareId || '')).filter(Boolean),
+			...legacyUsers.map((doc: any) => String(doc._id || '')).filter(Boolean)
+		])
+	];
+};
+
+const legacyServiceQuotaMatch = {
+	thingtime: 'data',
+	'crystal.quotaKind': SERVICE_QUOTA_THINGTIME
+};
+const LEGACY_SERVICE_QUOTA_QUARANTINE_KIND = 'legacy-service-quota-quarantine';
+
+const countLegacyServiceQuotaThings = async (): Promise<number> => {
+	const things = await getCollection('things');
+	// Exact-envelope classification must inspect the unprojected document. A
+	// projection could hide an attacker-controlled root field and accidentally
+	// make arbitrary content look like the historical server envelope.
+	const cursor = things.find(legacyServiceQuotaMatch);
+	let count = 0;
+	for await (const doc of cursor) {
+		if (classifyLegacyServiceQuotaThing(doc).disposition !== 'ignore') count += 1;
+	}
+	return count;
+};
+
+const migrateLegacyServiceQuotaThings = async (assertLease: () => Promise<void>): Promise<{ rebuilt: number; quarantined: number }> => {
+	const things = await getCollection('things');
+	const cursor = things.find(legacyServiceQuotaMatch);
+	let rebuilt = 0;
+	let quarantined = 0;
+	for await (const doc of cursor) {
+		await assertLease();
+		const disposition = await withMongoTransaction(async (session) => {
+			await assertLease();
+			const fresh = await things.findOne({ _id: doc._id, thingtime: 'data', 'crystal.quotaKind': SERVICE_QUOTA_THINGTIME }, { session });
+			if (!fresh) return 'ignore' as const;
+
+			const classification = classifyLegacyServiceQuotaThing(fresh);
+			if (classification.disposition === 'ignore') return 'ignore' as const;
+			await assertLease();
+			const at = Date.now();
+			let modified = 0;
+			if (classification.disposition === 'rebuild') {
+				const replacement = buildConservativeLegacyServiceQuotaThing(classification, at);
+				const result = await things.replaceOne(
+					{ _id: fresh._id, thingtime: 'data', 'crystal.quotaKind': SERVICE_QUOTA_THINGTIME },
+					{ _id: fresh._id, ...replacement },
+					{ session }
+				);
+				modified = result.modifiedCount;
+			} else {
+				// Preserve arbitrary content fields, but remove every root-level route
+				// to a storage exemption and retire the forged quota marker. The
+				// normal byte-stamping pass below will then account for the complete
+				// quarantined payload as generic data.
+				const result = await things.updateOne(
+					{ _id: fresh._id, thingtime: 'data', 'crystal.quotaKind': SERVICE_QUOTA_THINGTIME },
+					{
+						$set: {
+							thingtime: ['data'],
+							storageClass: 'content',
+							'crystal.quotaKind': LEGACY_SERVICE_QUOTA_QUARANTINE_KIND,
+							updatedAt: new Date(at)
+						},
+						$unset: {
+							sandboxExpiresAt: '',
+							sizeBytes: '',
+							storageAccountingVersion: ''
+						}
+					},
+					{ session }
+				);
+				modified = result.modifiedCount;
+			}
+			if (!modified) return 'ignore' as const;
+
+			// A prior partial account total may include this row. Keep the owner
+			// fenced in the same transaction; exact reconciliation later in this
+			// migration is the only path back to ready.
+			if (typeof fresh.ownerId === 'string' && fresh.ownerId) {
+				await things.updateOne(
+					{
+						...subscriptionThingMatch('user', fresh.ownerId),
+						'crystal.storageAccountingVersion': USER_STORAGE_ACCOUNTING_VERSION
+					},
+					{
+						$set: {
+							'crystal.storageLedgerStatus': USER_STORAGE_STATUS.needsReconcile,
+							'crystal.storageUpdatedAt': new Date(at)
+						}
+					},
+					{ session }
+				);
+			}
+			return classification.disposition;
+		});
+		if (disposition === 'rebuild') rebuilt += 1;
+		if (disposition === 'quarantine') quarantined += 1;
+		await assertLease();
+	}
+	return { rebuilt, quarantined };
+};
+
+// Both the pending census and the mutation pass must read the same complete
+// source document. Attachment accounting is intentionally defined by a closed
+// protected root envelope, including optional in-flight/delete fields. A
+// projection of ordinary Thing payload fields makes a valid attachment look
+// corrupt during the final fixed-point check even after it was stamped
+// successfully by the mutation pass.
+export const userStorageAccountingSourceCursor = <T extends { find: (filter: Record<string, unknown>) => any }>(things: T) =>
+	things.find({ ownerId: { $type: 'string' } });
+
+const countUnstampedBillableThings = async (knownUsers: Set<string>): Promise<number> => {
+	const things = await getCollection('things');
+	// USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION enumerates the fields this
+	// pass needs; reading the whole document is the stronger form of the same
+	// guarantee, because no future protected root field can be dropped here.
+	const cursor = userStorageAccountingSourceCursor(things);
+	let pending = 0;
+	for await (const doc of cursor) {
+		// Every data-kind service-quota claim is counted independently above. An
+		// exact full-document envelope will be conservatively rebuilt; any other
+		// claim will first be normalized to billable quarantine content. Skipping
+		// it here avoids double-counting pending work without granting an exemption.
+		if (
+			doc.crystal?.quotaKind === SERVICE_QUOTA_THINGTIME &&
+			(doc.thingtime === 'data' || (Array.isArray(doc.thingtime) && doc.thingtime.includes('data')))
+		) {
+			continue;
+		}
+		const sandboxState = storageSandboxState(doc as any);
+		if (sandboxState === 'sandbox') continue;
+		const ownership = storageMigrationOwnership(doc as any, knownUsers);
+		if (ownership === 'excluded') continue;
+		if (ownership === 'unknown-user') {
+			pending += 1;
+			continue;
+		}
+		if (sandboxState === 'invalid') {
+			pending += 1;
+			continue;
+		}
+		if (
+			doc.schemaVersion !== COLLECTION_SCHEMA_VERSIONS.things ||
+			!Array.isArray(doc.thingtime) ||
+			doc.storageClass !== 'content' ||
+			doc.storageAccountingVersion !== USER_STORAGE_ACCOUNTING_VERSION ||
+			!Number.isSafeInteger(doc.sizeBytes) ||
+			Number(doc.sizeBytes) < 0 ||
+			doc.sizeBytes !== thingStorageSizeBytes(doc as any)
+		) {
+			pending += 1;
+		}
+	}
+	return pending;
+};
+
+const registeredAppStorageIds = (things: any) =>
+	things.aggregate([
+		{
+			$match: {
+				$or: [
+					{ thingtime: 'app', 'crystal.clientId': { $type: 'string' } },
+					{ appId: { $type: 'string' } },
+					{
+						shareId: { $regex: `^${APP_STORAGE_RESERVED_ID_PREFIX}` },
+						'crystal.appId': { $type: 'string' }
+					}
+				]
+			}
+		},
+		{
+			$project: {
+				appId: {
+					$switch: {
+						branches: [
+							{
+								case: {
+									$and: [
+										{ $eq: [{ $type: '$crystal.clientId' }, 'string'] },
+										{ $in: ['app', { $cond: [{ $isArray: '$thingtime' }, '$thingtime', []] }] }
+									]
+								},
+								then: '$crystal.clientId'
+							},
+							{ case: { $eq: [{ $type: '$appId' }, 'string'] }, then: '$appId' },
+							{ case: { $eq: [{ $type: '$crystal.appId' }, 'string'] }, then: '$crystal.appId' }
+						],
+						default: null
+					}
+				}
+			}
+		},
+		{ $match: { appId: { $type: 'string', $ne: '' } } },
+		{ $group: { _id: '$appId' } },
+		{ $sort: { _id: 1 } }
+	]);
+
+const canonicalStandingAppCounter = (counter: any, ownerId: string, appId: string): boolean => {
+	const scope: AppNamespaceScope = {
+		appId,
+		ownerId,
+		sharedRead: false,
+		scopes: [],
+		username: '',
+		sandbox: null
+	};
+	return !!counter && appStorageCounterEnvelopeIsTrusted(counter, scope) && appStorageCounterCrystalIsReady(counter.crystal);
+};
+
+// Exact postflight for all overlapping app ledgers, including deleted apps.
+// It deliberately checks source (owner, app) pairs against deterministic
+// counters instead of independently summing bytes for display; the protected
+// counter remains the sole rendered/enforced source.
+const pendingAppStorageAccounting = async (): Promise<number> => {
+	const things = await getCollection('things');
+	let pending = 0;
+
+	const liveApps = things.find({ thingtime: 'app', 'crystal.clientId': { $type: 'string' } });
+	for await (const app of liveApps) {
+		if (!appStoragePolicyOf(app).ready) pending += 1;
+	}
+
+	// Every reserved standing counter must be the exact protected envelope and
+	// ready. Valid Date-scoped sandbox counters are intentionally outside the
+	// standing ledger universe and expire with their sandbox.
+	const counterCursor = things.find({ shareId: { $regex: `^${APP_STORAGE_RESERVED_ID_PREFIX}` } });
+	for await (const counter of counterCursor) {
+		if (counter.sandboxExpiresAt instanceof Date && Number.isFinite(counter.sandboxExpiresAt.getTime())) continue;
+		const ownerId = typeof counter.ownerId === 'string' ? counter.ownerId : '';
+		const appId = typeof counter.crystal?.appId === 'string' ? counter.crystal.appId : '';
+		if (!ownerId || !appId || ownerId.startsWith('sandbox:') || !canonicalStandingAppCounter(counter, ownerId, appId)) {
+			pending += 1;
+		}
+	}
+
+	const verifyPairs = async (pairs: Array<{ ownerId: string; appId: string; shareId: string }>) => {
+		if (!pairs.length) return;
+		const docs = await things.find({ shareId: { $in: pairs.map((pair) => pair.shareId) } }).toArray();
+		const byId = new Map(docs.map((doc: any) => [String(doc.shareId), doc]));
+		for (const pair of pairs) {
+			if (!canonicalStandingAppCounter(byId.get(pair.shareId), pair.ownerId, pair.appId)) pending += 1;
+		}
+	};
+
+	let pairs: Array<{ ownerId: string; appId: string; shareId: string }> = [];
+	const sourcePairs = things.aggregate([
+		{
+			$match: {
+				ownerId: { $type: 'string' },
+				appId: { $type: 'string' },
+				sandboxExpiresAt: { $exists: false }
+			}
+		},
+		{ $group: { _id: { ownerId: '$ownerId', appId: '$appId' } } }
+	]);
+	for await (const row of sourcePairs) {
+		const ownerId = String(row._id?.ownerId || '');
+		const appId = String(row._id?.appId || '');
+		if (!ownerId || !appId || ownerId.startsWith('sandbox:')) {
+			pending += 1;
+			continue;
+		}
+		pairs.push({ ownerId, appId, shareId: appStorageCounterShareId(ownerId, appId) });
+		if (pairs.length === 500) {
+			await verifyPairs(pairs);
+			pairs = [];
+		}
+	}
+	await verifyPairs(pairs);
+	return pending;
+};
+
+const pendingUserStorageAccounting = async (): Promise<number> => {
+	const [prerequisitePending, legacyServiceQuotas, appStoragePending] = await Promise.all([
+		Promise.all(userStoragePrerequisites().map((migration) => migration.pending())),
+		countLegacyServiceQuotaThings(),
+		pendingAppStorageAccounting()
+	]);
+	const things = await getCollection('things');
+	const ids = await currentUserIds();
+	if (!ids.length) {
+		return prerequisitePending.reduce((sum, count) => sum + count, 0) + legacyServiceQuotas + appStoragePending;
+	}
+	let ready = 0;
+	// Keep every $in beneath Mongo's command/BSON ceilings even on a very
+	// large install. The migration itself checkpoints through source stamps and
+	// per-owner ledgers, so reruns resume rather than restart from guessed data.
+	for (let offset = 0; offset < ids.length; offset += 500) {
+		const batch = ids.slice(offset, offset + 500);
+		const docs = await things.find({ shareId: { $in: batch.map((id) => subscriptionThingMatch('user', id).shareId) } }).toArray();
+		const byShareId = new Map<string, any>(docs.map((doc: any) => [String(doc.shareId), doc]));
+		for (const ownerId of batch) {
+			const doc = byShareId.get(subscriptionThingMatch('user', ownerId).shareId);
+			if (
+				userSubscriptionLedgerEnvelopeIsTrusted(doc, ownerId) &&
+				doc.crystal?.storageAccountingVersion === USER_STORAGE_ACCOUNTING_VERSION &&
+				doc.crystal?.storageLedgerStatus === USER_STORAGE_STATUS.ready &&
+				Number.isSafeInteger(doc.crystal?.storageUsedBytes) &&
+				Number(doc.crystal.storageUsedBytes) >= 0 &&
+				userStorageAllowanceIsValid(doc.crystal)
+			) {
+				ready += 1;
+			}
+		}
+	}
+	return (
+		prerequisitePending.reduce((sum, count) => sum + count, 0) +
+		legacyServiceQuotas +
+		appStoragePending +
+		ids.length -
+		ready +
+		(await countUnstampedBillableThings(new Set(ids)))
+	);
+};
+
+// Existing installations predate the root proof marker. Only the exact old
+// server envelope may receive it; a row with a wrong subject, ACL, extra
+// payload, or any other reserved-id squatting is left untouched and blocks
+// publication. The CAS match repeats the complete old envelope so a
+// concurrent change can never be accidentally blessed.
+const upgradeUserSubscriptionLedgerEnvelopes = async (ids: readonly string[]): Promise<number> => {
+	const things = await getCollection('things');
+	let upgraded = 0;
+	for (const ownerId of ids) {
+		const looseMatch = subscriptionThingMatch('user', ownerId);
+		let doc = await things.findOne(looseMatch);
+		if (!doc || userSubscriptionLedgerEnvelopeIsTrusted(doc, ownerId)) continue;
+		if (!legacyUserSubscriptionLedgerEnvelopeCanUpgrade(doc, ownerId)) {
+			throw new MigrationOperatorError('subscription_envelope_invalid', {
+				internalMessage: `Subscription ledger ${looseMatch.shareId} has an invalid protected envelope: ${userSubscriptionLedgerEnvelopeIssues(doc, ownerId).join(', ')}`
+			});
+		}
+		const result = await things.updateOne(legacyUserSubscriptionLedgerMatch(ownerId) as any, {
+			$set: { storageLedgerEnvelopeVersion: USER_STORAGE_LEDGER_ENVELOPE_VERSION }
+		});
+		if (result.modifiedCount) upgraded += 1;
+		doc = await things.findOne(looseMatch);
+		if (!userSubscriptionLedgerEnvelopeIsTrusted(doc, ownerId)) {
+			throw new MigrationOperatorError('subscription_envelope_changed', {
+				internalMessage: `Subscription ledger ${looseMatch.shareId} changed while its protected envelope was upgraded`
+			});
+		}
+	}
+	return upgraded;
+};
+
+const fenceAllStorageLedgers = async (): Promise<{ accounts: number; apps: number; appUsers: number }> => {
+	const things = await getCollection('things');
+	const now = new Date();
+	const userIds = await currentUserIds();
+	await upgradeUserSubscriptionLedgerEnvelopes(userIds);
+	let accounts = 0;
+	for (const ownerId of userIds) {
+		const result = await things.updateOne(
+			{
+				...userSubscriptionLedgerMatch(ownerId),
+				'crystal.storageAccountingVersion': USER_STORAGE_ACCOUNTING_VERSION
+			} as any,
+			{
+				$set: {
+					'crystal.storageLedgerStatus': USER_STORAGE_STATUS.initializing,
+					'crystal.storageUpdatedAt': now
+				}
+			}
+		);
+		accounts += result.modifiedCount;
+	}
+	const [apps, appUsers] = await Promise.all([
+		things.updateMany(
+			{
+				thingtime: 'app',
+				'crystal.storageAccountingVersion': APP_STORAGE_ACCOUNTING_VERSION
+			},
+			{
+				$set: {
+					'crystal.storageLedgerStatus': USER_STORAGE_STATUS.initializing,
+					'crystal.storageUpdatedAt': now
+				}
+			}
+		),
+		things.updateMany(
+			{
+				thingtime: 'app-storage',
+				'crystal.quotaKind': 'app-storage',
+				'crystal.storageAccountingVersion': APP_STORAGE_ACCOUNTING_VERSION
+			},
+			{
+				$set: {
+					'crystal.storageLedgerStatus': USER_STORAGE_STATUS.initializing,
+					'crystal.storageUpdatedAt': now,
+					updatedAt: now
+				}
+			}
+		)
+	]);
+	return {
+		accounts,
+		apps: apps.modifiedCount,
+		appUsers: appUsers.modifiedCount
+	};
+};
+
+const backfillUserStorageAccounting: Migration = {
+	id: 'backfill-user-storage-accounting',
+	collection: 'things',
+	fromVersion: THINGS_VERSION,
+	toVersion: THINGS_VERSION,
+	title: 'Initialize exact whole-account storage ledgers',
+	description:
+		'Stamps every customer-controlled Thing with the canonical UTF-8 payload byte count, then initializes ' +
+		'the protected subscription ledger from those source documents. App data is included once in the account ' +
+		'total. Legacy used counters are ignored; explicit legacy allowances become subscription overrides. ' +
+		'Existing accounts stay fail-closed until their ledger is enabled last.',
+	pending: pendingUserStorageAccounting,
+	run: async ({ dryRun, assertLease }) => {
+		await ensureIndexes();
+		const things = await getCollection('things');
+		const matched = await pendingUserStorageAccounting();
+		const notes: string[] = [];
+		if (dryRun) {
+			// The admin-only dry run must identify the actual failed predicates
+			// before an operator considers repair. Never expose raw protected rows.
+			for (const ownerId of await currentUserIds()) {
+				const match = subscriptionThingMatch('user', ownerId);
+				const doc = await things.findOne(match);
+				if (!doc) continue;
+				const issues = userSubscriptionLedgerEnvelopeIssues(doc, ownerId);
+				if (issues.length) notes.push(`Subscription ledger ${match.shareId}: ${issues.join(', ')}`);
+				if (notes.length === 10) {
+					notes.push('Diagnostic limit reached (10 ledgers). Repair these and dry-run again.');
+					break;
+				}
+			}
+			return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes };
+		}
+		if (!assertLease) throw new MigrationOperatorError('lease_required');
+		await assertLease();
+
+		// Eliminate every dual-era content bypass before a whole-account ledger is
+		// enabled. Each prerequisite is idempotent; running only when pending keeps
+		// this migration self-contained even if an administrator selects it first.
+		// Fence every already-initialized account before any legacy source can be
+		// copied/converted. Normal positive writers now fail closed; deletes and
+		// shrinks remain possible and conflict/retry against final reconciliation.
+		// App/app-user counters overlap the account ledger. Fence every current
+		// ledger before a prerequisite can copy or reclassify source content.
+		let publishedComplete = false;
+		try {
+			const fenced = await fenceAllStorageLedgers();
+			if (fenced.accounts || fenced.apps || fenced.appUsers) {
+				notes.push(`${fenced.accounts} account, ${fenced.apps} app, and ${fenced.appUsers} app-user ledger(s) fenced during migration`);
+			}
+			await assertLease();
+
+			for (const prerequisite of userStoragePrerequisites()) {
+				await assertLease();
+				const pending = await prerequisite.pending();
+				if (!pending) continue;
+				const report = await prerequisite.run({ dryRun: false, assertLease });
+				notes.push(`${prerequisite.id}: ${report.migrated} prerequisite record(s) migrated`);
+				await assertLease();
+				const remaining = await prerequisite.pending();
+				if (remaining) {
+					throw new MigrationOperatorError('prerequisite_unresolved', {
+						prerequisiteId: prerequisite.id,
+						pending: remaining
+					});
+				}
+			}
+
+			// A later prerequisite can change an earlier migration's source view. The
+			// final fixed-point check is what prevents a locally-successful sequence
+			// from publishing ledgers while copy/convert work became pending again.
+			await assertLease();
+			const finalPrerequisitePending = await Promise.all(
+				userStoragePrerequisites().map(async (prerequisite) => ({
+					id: prerequisite.id,
+					pending: await prerequisite.pending()
+				}))
+			);
+			const unresolvedPrerequisite = finalPrerequisitePending.find((entry) => entry.pending > 0);
+			if (unresolvedPrerequisite) {
+				throw new MigrationOperatorError('prerequisite_reappeared', {
+					prerequisiteId: unresolvedPrerequisite.id,
+					pending: unresolvedPrerequisite.pending
+				});
+			}
+
+			// Service quotas used to masquerade as user-editable `data` Things. Only an
+			// exact historical envelope is replaced, from scratch, with a fully
+			// consumed canonical control record. Every malformed or extended claim is
+			// retained as billable quarantine content and continues to fail closed at
+			// the reserved quota id.
+			const legacyServiceQuotas = await migrateLegacyServiceQuotaThings(assertLease);
+			notes.push(
+				`${legacyServiceQuotas.rebuilt} exact legacy service quota Thing(s) conservatively rebuilt; ` +
+					`${legacyServiceQuotas.quarantined} invalid claim(s) quarantined as billable content`
+			);
+			await assertLease();
+
+			const ids = await currentUserIds();
+			const knownUsers = new Set(ids);
+
+			let stamped = 0;
+			// Same rule as the census pass: the mutation pass reads whole documents
+			// rather than USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION's field list,
+			// so a protected attachment root field can never be projected away.
+			const cursor = userStorageAccountingSourceCursor(things);
+			for await (const initialDoc of cursor) {
+				const initialSandboxState = storageSandboxState(initialDoc as any);
+				if (initialSandboxState === 'sandbox') continue;
+				const ownership = storageMigrationOwnership(initialDoc as any, knownUsers);
+				if (ownership === 'excluded') continue;
+				if (ownership === 'unknown-user') {
+					throw new MigrationOperatorError('orphan_billable_thing', {
+						internalMessage: `Billable Thing ${String(initialDoc._id)} belongs to no current user`,
+						diagnosticObjectIds: [String(initialDoc._id)]
+					});
+				}
+				if (initialSandboxState === 'invalid' && initialDoc.sandboxExpiresAt !== null) {
+					throw new MigrationOperatorError('invalid_sandbox_marker', {
+						internalMessage: `Billable Thing ${String(initialDoc._id)} has an invalid sandbox marker`,
+						diagnosticObjectIds: [String(initialDoc._id)]
+					});
+				}
+				let doc: any = initialDoc;
+				for (let attempt = 0; attempt < 3; attempt += 1) {
+					if (doc.schemaVersion !== COLLECTION_SCHEMA_VERSIONS.things || !Array.isArray(doc.thingtime)) {
+						throw new MigrationOperatorError('schema_prerequisite', {
+							internalMessage: `Billable Thing ${String(doc._id)} requires its schema migration before storage accounting`,
+							diagnosticObjectIds: [String(doc._id)]
+						});
+					}
+					let sizeBytes: number;
+					try {
+						sizeBytes = thingStorageSizeBytes(doc as any);
+					} catch (error) {
+						if (error instanceof InvalidAttachmentStorageEnvelopeError) {
+							throw new MigrationOperatorError('invalid_attachment_envelope', {
+								internalMessage: `Attachment Thing ${String(doc._id)} has an invalid protected storage envelope`,
+								diagnosticObjectIds: [String(doc._id)]
+							});
+						}
+						throw error;
+					}
+					if (
+						doc.storageClass === 'content' &&
+						doc.storageAccountingVersion === USER_STORAGE_ACCOUNTING_VERSION &&
+						doc.sizeBytes === sizeBytes &&
+						storageSandboxState(doc) === 'real'
+					) {
+						break;
+					}
+					const result = await things.updateOne(
+						{
+							_id: doc._id,
+							...(doc.updatedAt instanceof Date ? { updatedAt: doc.updatedAt } : { updatedAt: { $exists: false } })
+						},
+						{
+							$set: {
+								storageClass: 'content',
+								sizeBytes,
+								storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION
+							},
+							...(doc.sandboxExpiresAt === null ? { $unset: { sandboxExpiresAt: '' } } : {})
+						}
+					);
+					if (result.modifiedCount) {
+						stamped += 1;
+						break;
+					}
+					const fresh = await things.findOne({ _id: doc._id });
+					if (!fresh || storageSandboxState(fresh as any) === 'sandbox') break;
+					const freshOwnership = storageMigrationOwnership(fresh as any, knownUsers);
+					if (freshOwnership === 'excluded') break;
+					if (freshOwnership === 'unknown-user') {
+						throw new MigrationOperatorError('unknown_owner_change', {
+							internalMessage: `Billable Thing ${String(fresh._id)} changed to an unknown owner during storage migration`,
+							diagnosticObjectIds: [String(fresh._id)]
+						});
+					}
+					if (storageSandboxState(fresh as any) === 'invalid' && fresh.sandboxExpiresAt !== null) {
+						throw new MigrationOperatorError('invalid_sandbox_marker', {
+							internalMessage: `Billable Thing ${String(fresh._id)} has an invalid sandbox marker`,
+							diagnosticObjectIds: [String(fresh._id)]
+						});
+					}
+					doc = fresh;
+					if (attempt === 2) {
+						throw new MigrationOperatorError('billable_thing_churn', {
+							internalMessage: `Billable Thing ${String(doc._id)} kept changing during storage migration`,
+							diagnosticObjectIds: [String(doc._id)]
+						});
+					}
+				}
+			}
+			await assertLease();
+			// Rebuild every app and app-user sub-ledger from the exact same stamped
+			// source universe before any account is published ready. The id stream is
+			// the union of live app Things, persisted namespace content, and reserved
+			// counters, so deleting an app can never strand its retained user data.
+			let reconciledApps = 0;
+			let reconciledOrphanApps = 0;
+			for await (const row of registeredAppStorageIds(things)) {
+				await assertLease();
+				const appId = String(row._id || '');
+				if (!appId) continue;
+				const liveApp = await things.findOne({ thingtime: 'app', 'crystal.clientId': appId }, { projection: { _id: 1 } });
+				if (liveApp) {
+					// Canonicalize old deterministic counters before the strict
+					// reconciliation query can touch them. Claimed values/allowances are
+					// discarded; the source sum below is the only authority.
+					const candidates = things.find({
+						shareId: { $regex: `^${APP_STORAGE_RESERVED_ID_PREFIX}` },
+						'crystal.appId': appId,
+						sandboxExpiresAt: { $exists: false }
+					});
+					for await (const candidate of candidates) {
+						await assertLease();
+						const ownerId = typeof candidate.ownerId === 'string' ? candidate.ownerId : '';
+						if (!ownerId || ownerId.startsWith('sandbox:')) {
+							throw new MigrationOperatorError('app_counter_owner_invalid', {
+								internalMessage: `Reserved app-storage counter for ${appId} has an invalid owner`
+							});
+						}
+						await convertHistoricalAppStorageCounter(ownerId, appId);
+					}
+					await reconcileAppStorage(appId);
+					reconciledApps += 1;
+				} else {
+					await reconcileOrphanAppStorage(appId);
+					reconciledOrphanApps += 1;
+				}
+			}
+			notes.push(
+				`${reconciledApps} live app aggregate set(s) and ${reconciledOrphanApps} orphan namespace ledger set(s) reconciled from canonical bytes`
+			);
+
+			let initialized = 0;
+			let reconciled = 0;
+			let preservedAllowances = 0;
+			let removedLegacyStorageFields = 0;
+			for (let offset = 0; offset < ids.length; offset += 100) {
+				const ownerIds = ids.slice(offset, offset + 100);
+				const legacyStorageById = await findLegacyUserStorageFieldsByIds(ownerIds);
+				for (const ownerId of ownerIds) {
+					await assertLease();
+					const match = subscriptionThingMatch('user', ownerId);
+					const legacyStorage = legacyStorageById.get(ownerId);
+					const legacyAllowance = legacyStorage?.storageAllowanceBytes;
+					const hasLegacyAllowance = Number.isSafeInteger(legacyAllowance) && Number(legacyAllowance) >= 0;
+					const hasLegacyStorageResidue =
+						!!legacyStorage &&
+						(Object.prototype.hasOwnProperty.call(legacyStorage, 'storageAllowanceBytes') ||
+							Object.prototype.hasOwnProperty.call(legacyStorage, 'storageUsedBytes'));
+					const now = new Date();
+					let existing = await things.findOne(match);
+					if (!existing) {
+						const info = await getSubscription('user', ownerId);
+						const inserted = await things.updateOne(
+							match,
+							{
+								$setOnInsert: {
+									shareId: match.shareId,
+									schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+									thingtime: ['subscription'],
+									crystal: {
+										quotaKind: 'subscription',
+										subjectType: 'user',
+										subjectId: ownerId,
+										tier: info.tier,
+										tierVersionId: info.tierVersionId,
+										tierVersion: info.tierVersion,
+										tierName: info.tierName,
+										tierMetered: info.metered,
+										tierQuotas: info.effective,
+										overrides: hasLegacyAllowance ? { userStorageBytes: Number(legacyAllowance) } : info.overrides,
+										note: info.note,
+										updatedBy: info.updatedBy,
+										isDefaultAssignment: info.isDefault,
+										storageUsedBytes: 0,
+										storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+										storageLedgerStatus: USER_STORAGE_STATUS.initializing,
+										storageUpdatedAt: now
+									},
+									ownerId,
+									acl: [ACL_OWNER],
+									targetId: null,
+									tags: [],
+									storageLedgerEnvelopeVersion: USER_STORAGE_LEDGER_ENVELOPE_VERSION,
+									createdAt: now,
+									updatedAt: now
+								}
+							},
+							{ upsert: true }
+						);
+						if (inserted.upsertedCount) {
+							initialized += 1;
+							if (hasLegacyAllowance) preservedAllowances += 1;
+						}
+						existing = await things.findOne(match);
+						if (!existing) {
+							throw new MigrationOperatorError('subscription_init_failed', {
+								internalMessage: `Subscription ledger for ${ownerId} could not be initialized`
+							});
+						}
+					}
+					if (!userSubscriptionLedgerEnvelopeIsTrusted(existing, ownerId)) {
+						throw new MigrationOperatorError('subscription_envelope_invalid', {
+							internalMessage: `Subscription ledger ${match.shareId} has an invalid protected envelope`
+						});
+					}
+
+					const overrideWasAbsent =
+						hasLegacyAllowance &&
+						(!existing.crystal?.overrides ||
+							typeof existing.crystal.overrides !== 'object' ||
+							!Object.prototype.hasOwnProperty.call(existing.crystal.overrides, 'userStorageBytes'));
+					const setStage: Record<string, unknown> = {
+						'crystal.storageAccountingVersion': USER_STORAGE_ACCOUNTING_VERSION,
+						'crystal.storageLedgerStatus': USER_STORAGE_STATUS.initializing,
+						'crystal.storageUpdatedAt': now,
+						updatedAt: now
+					};
+					if (hasLegacyAllowance) {
+						setStage['crystal.overrides'] = {
+							$cond: [
+								{ $eq: [{ $type: '$crystal.overrides.userStorageBytes' }, 'missing'] },
+								{
+									$mergeObjects: [
+										{
+											$cond: [{ $eq: [{ $type: '$crystal.overrides' }, 'object'] }, '$crystal.overrides', {}]
+										},
+										{ userStorageBytes: Number(legacyAllowance) }
+									]
+								},
+								'$crystal.overrides'
+							]
+						};
+					}
+					await things.updateOne(userSubscriptionLedgerMatch(ownerId) as any, [{ $set: setStage }]);
+					if (overrideWasAbsent) preservedAllowances += 1;
+					// Reconciliation is the only operation that publishes ready. Every
+					// owner is reconciled on every run, including ledgers that were ready
+					// before prerequisites stamped or removed content.
+					await reconcileUserStorage(ownerId);
+					if (hasLegacyStorageResidue) {
+						await removeLegacyUserStorageFields(ownerId);
+						removedLegacyStorageFields += 1;
+					}
+					reconciled += 1;
+				}
+			}
+
+			await assertLease();
+			const unfinished = await pendingUserStorageAccounting();
+			if (unfinished) {
+				throw new MigrationOperatorError('pending_storage_records', { pending: unfinished });
+			}
+
+			notes.push(`${stamped} billable Thing(s) stamped with canonical bytes`);
+			notes.push(`${initialized} account ledger(s) initialized; ${reconciled} transactionally reconciled`);
+			notes.push(`${preservedAllowances} explicit legacy allowance(s) preserved as subscription overrides`);
+			notes.push(
+				`${removedLegacyStorageFields} legacy user storage field set(s) removed after handoff; ` +
+					'storageUsedBytes values were ignored because they were never maintained'
+			);
+			publishedComplete = true;
+			return { dryRun, matched, migrated: stamped + reconciled, created: initialized, skipped: 0, notes };
+		} finally {
+			if (!publishedComplete) {
+				// This invariant lives inside the migration as well as its API wrapper:
+				// tests, future orchestrators, or an internal caller must not be able
+				// to observe a partially-published ready ledger after any late error.
+				await fenceAllStorageLedgers().catch(() => {});
+			}
+		}
+	}
 };
 
 const mergeLegacyCollections: Migration = {
@@ -1050,7 +2736,7 @@ const mergeLegacyCollections: Migration = {
     const residue = await legacyResidue();
     return residue.reduce((sum, row) => sum + row.missing, 0);
   },
-  run: async ({ dryRun }) => {
+	run: async ({ dryRun, assertLease }) => {
     await ensureIndexes();
     const db = await getThingtimeDb();
     const notes = makeNotes();
@@ -1066,44 +2752,43 @@ const mergeLegacyCollections: Migration = {
 
     let created = 0;
     let skipped = 0;
+		let alreadyConverted = 0;
 
     for (const row of residue) {
+			await assertLease?.();
       if (!row.missing) continue;
       const legacy = db.collection(row.physical);
       const destinationName = physicalCollectionName(row.collection);
-      // docs that failed to insert (unique key held by a newer doc at another
-      // _id) would re-match forever — exclude them from later batches
-      const blockedIds: any[] = [];
-      for (;;) {
-        const pipeline: any[] = [
-          ...(blockedIds.length ? [{ $match: { _id: { $nin: blockedIds } } }] : []),
+			const destination = db.collection(destinationName);
+			const cursor = legacy.aggregate([
           {
             $lookup: { from: destinationName, localField: '_id', foreignField: '_id', as: 'copied' }
           },
           { $match: { copied: { $size: 0 } } },
-          { $project: { copied: 0 } },
-          { $limit: MERGE_BATCH }
-        ];
-        const batch = (await legacy.aggregate(pipeline).toArray()) as any[];
-        if (!batch.length) break;
+				{ $project: { copied: 0 } }
+			]);
+			for await (const doc of cursor) {
+				await assertLease?.();
+				if (await legacyRowHasConvertedThing(row.collection, doc, db.collection(physicalCollectionName('things')))) {
+					alreadyConverted += 1;
+					continue;
+				}
         try {
-          const result = await db.collection(destinationName).insertMany(batch, { ordered: false });
-          created += result.insertedCount;
+					await destination.insertOne(doc);
+					created += 1;
         } catch (err: any) {
-          const writeErrors = err?.writeErrors || [];
-          const duplicates = writeErrors.filter((we: any) => we?.code === 11000);
-          if (writeErrors.length !== duplicates.length && err?.code !== 11000) throw err;
-          created += err?.result?.insertedCount ?? err?.insertedCount ?? 0;
-          for (const we of duplicates) {
-            const doc = batch[we.index];
-            if (doc) blockedIds.push(doc._id);
+					if (err?.code !== 11000) throw err;
+					// A concurrent copier may have won this exact _id. Only a duplicate
+					// held elsewhere is unresolved and remains visible in pending().
+					if (await destination.findOne({ _id: doc._id }, { projection: { _id: 1 } })) continue;
             skipped += 1;
-          }
-          if (duplicates.length) {
-            notes.push(`${row.physical}: ${duplicates.length} doc(s) blocked by a unique key — versioned collection wins`);
+					notes.push(`${row.physical}: one doc blocked by a unique key — versioned collection wins`);
           }
         }
       }
+
+		if (alreadyConverted) {
+			notes.push(`${alreadyConverted} frozen legacy snapshot doc(s) already had verified Things-era successors`);
     }
 
     return { dryRun, matched, migrated: created, created, skipped, notes: notes.list() };
@@ -1155,7 +2840,7 @@ const dropStaleCollectionGenerations: Migration = {
 
     for (const row of stale) {
       const docs = await db.collection(row.physical).estimatedDocumentCount();
-      const missing = row.version === null ? unmerged.get(row.physical) ?? 0 : 0;
+			const missing = row.version === null ? unmerged.get(row.physical) ?? 0 : 0;
       if (missing > 0) {
         notes.push(`${row.physical}: kept — ${missing} doc(s) not yet merged (run merge-legacy-collections)`);
         skipped += 1;
@@ -1180,6 +2865,189 @@ const dropStaleCollectionGenerations: Migration = {
   }
 };
 
+// ---------------------------------------------------------------------------
+// CI control-plane relocation. Every ci-* Thing (current-state projections +
+// the append-only ci-event history) now lives on the ciControl satellite
+// collection (FUNDAMENTALS §3). This moves the rows a pre-satellite deployment
+// left in `things`, applying the retention policy as it goes: a row whose
+// window has already closed is deleted without being copied. Insert-if-absent
+// by deterministic shareId, so a row the live writers have already re-created
+// on the satellite is never overwritten by its stale copy. Time-budgeted and
+// idempotent: one run drains as much as it can inside the request window and
+// reports what is left; re-run until pending reads 0.
+const CI_RELOCATION_BUDGET_MS = Number(process.env.THINGTIME_CI_RELOCATION_BUDGET_MS) > 0 ? Number(process.env.THINGTIME_CI_RELOCATION_BUDGET_MS) : 120_000;
+
+const relocateCiControlTelemetry: Migration = {
+  id: 'relocate-ci-control-telemetry',
+  collection: 'things',
+  fromVersion: THINGS_VERSION,
+  toVersion: THINGS_VERSION,
+  destructive: true,
+  title: 'Relocate CI control-plane rows out of things (into ciControl)',
+  description:
+    'Moves every ci-* Thing (ci-event history, workflow runs/jobs, deployments, previews, repository/branch/PR ' +
+    'projections, policies, dispatches, feature stacks) from things into the ciControl satellite collection, ' +
+    'stamping root expiresAt from the CI retention policy (events 14d, job rows 30d, runs/deployments/previews ' +
+    '90d by default; entities never expire). Rows already past their window are deleted without being copied. ' +
+    'Copies are insert-if-absent by shareId so live satellite rows are never overwritten. Each run works inside ' +
+    'a time budget and reports drained: false when more remains — re-run until pending is 0, then run ' +
+    'rebuild-things-indexes to reclaim the index storage the deleted rows leave behind. Destructive (deletes ' +
+    'from things): the real run requires confirm: true.',
+  // HOME things explicitly, NOT getCollection('things'). The data-plane
+  // migrations above follow the request's active endpoint on purpose (an
+  // override's things_v2 gets the same schema treatment), but ci-* rows are
+  // control plane: every writer used getHomeThingsCollection before this
+  // change and the target getCiControlCollection() is home-pinned like every
+  // satellite. Reading the active plane here would, under an endpoint
+  // override, count and drain the OPERATOR'S OWN database into Thingtime's
+  // home ciControl — and report drained: true while production is untouched.
+  pending: async () => (await getHomeThingsCollection()).countDocuments({ thingtime: { $in: [...CI_CONTROL_THINGTIME] } }),
+  run: async ({ dryRun, assertLease }) => {
+    const [things, satellite] = await Promise.all([getHomeThingsCollection(), getCiControlCollection()]);
+    const notes = makeNotes();
+    const report = await relocateCiControlRows({
+      source: things,
+      target: satellite,
+      kinds: CI_CONTROL_THINGTIME,
+      targetSchemaVersion: collectionVersion('ciControl'),
+      dryRun,
+      budgetMs: CI_RELOCATION_BUDGET_MS,
+      assertLease
+    });
+    for (const [kind, counts] of Object.entries(report.byKind).sort((a, b) => b[1].matched - a[1].matched)) {
+      notes.push(
+        `${kind}: ${counts.matched} row(s) — ${counts.copied} ${dryRun ? 'would relocate' : 'relocated'} (insert-if-absent by shareId), ` +
+          `${counts.expired} past retention (${dryRun ? 'would be ' : ''}deleted without copying)`
+      );
+    }
+    if (!report.drained) {
+      // A dry run writes nothing, so pending cannot move: telling the operator
+      // to "re-run until pending reads 0" here would be an instruction that can
+      // never be satisfied. On the 1.8M-row production collection the dry run
+      // hits the budget every time, so this is the note the rollout actually
+      // starts on — the counts above are a sample, not the whole collection.
+      const budgetSeconds = Math.round(CI_RELOCATION_BUDGET_MS / 1000);
+      notes.push(
+        dryRun
+          ? `Time budget reached (${budgetSeconds}s): the counts above cover only the rows scanned so far, not every pending row — pending() is the authoritative total`
+          : `Time budget reached (${budgetSeconds}s): more rows remain — run this migration again until pending reads 0`
+      );
+    } else if (!dryRun && report.matched) {
+      notes.push('things has no ci-* rows left — run rebuild-things-indexes next to reclaim the index storage they occupied');
+    }
+    return { dryRun, matched: report.matched, migrated: report.copied, created: report.copied, skipped: report.expired, notes: notes.list() };
+  }
+};
+
+// Index rebuild. Deleting ~1.8M rows leaves every things index file at its
+// old size (WiredTiger keeps freed pages inside the file, and the boot ensure
+// only creates what is MISSING). Dropping an index releases its file, so this
+// drops every plan-owned things index and recreates it from the current plan.
+// Unique constraints never lapse: each unique index gets a same-key twin with
+// an equivalent partial filter first, and the twin is dropped once the rebuilt
+// original is back. Indexes the plan does not own (another deployment's
+// residue, an operator's ad-hoc index) are reported and left alone.
+const rebuildThingsIndexes: Migration = {
+  id: 'rebuild-things-indexes',
+  collection: 'things',
+  fromVersion: THINGS_VERSION,
+  toVersion: THINGS_VERSION,
+  destructive: true,
+  title: 'Rebuild things indexes (reclaim storage after mass deletes)',
+  description:
+    'Drops and recreates every index the current code plan owns on things so their storage shrinks to the rows ' +
+    'that remain — run it after relocate-ci-control-telemetry has drained. Unique indexes are protected by a ' +
+    'same-key twin throughout, so no duplicate can slip in mid-rebuild; non-unique indexes are briefly absent ' +
+    '(queries fall back to scans of a small collection). The wildcard text index is rebuilt last, so ranked ' +
+    'text search errors for the seconds it takes to build. Indexes the plan does not own are listed, never ' +
+    'dropped. pending() reports 1 while any plan-owned index is larger than 8× the collection data size ' +
+    '(the signature of a file that still holds freed pages). Requires confirm: true.',
+  pending: async () => {
+    const db = await getHomeThingtimeDb();
+    const physical = physicalCollectionName('things');
+    const stats = await collectionStorage(db, physical);
+    if (!stats) return 0;
+    const owned = await thingsIndexPlanNames();
+    const bloated = Object.entries(stats.indexSizes).filter(([name, bytes]) => owned.has(name) && bytes > Math.max(8 * stats.dataBytes, 64 * 1024 * 1024));
+    return bloated.length ? 1 : 0;
+  },
+  run: async ({ dryRun, assertLease }) => {
+    const db = await getHomeThingtimeDb();
+    const notes = makeNotes();
+    const before = await collectionStorage(db, physicalCollectionName('things'));
+    const runRebuild = async (targetDb: any, assertIndexLease?: () => Promise<void>) => rebuildPlanIndexes({
+      collection: targetDb.collection(physicalCollectionName('things')),
+      planNames: await thingsIndexPlanNames(),
+      ensurePlan: () => ensureHomeThingsIndexPlan(targetDb, { underLease: true }),
+      dryRun,
+      assertLease: async () => { await assertLease?.(); await assertIndexLease?.(); }
+    });
+    // Startup cannot prune a live rebuild's twin or race its create/drop phase.
+    // Preserve the independent admin migration lease as well as the DDL lease.
+    const report = dryRun ? await runRebuild(db) : await withHomeIndexMaintenance(runRebuild);
+    notes.push(
+      `${report.rebuilt.length} plan-owned index(es) ${dryRun ? 'would be' : 'were'} rebuilt one at a time; ${report.twins.length} unique constraint(s) ${dryRun ? 'would be' : 'were'} held by a twin throughout`
+    );
+    if (report.recovered.length) notes.push(`Recovered an interrupted rebuild first: dropped ${report.recovered.join(', ')}`);
+    // Unique rebuilds now require a protective slot and fail closed at the cap.
+    for (const name of report.skipped) notes.push(`${name}: not in the current plan — left untouched`);
+    if (!dryRun) {
+      const after = await collectionStorage(db, physicalCollectionName('things'));
+      if (before && after) notes.push(`things index storage: ${formatBytes(before.indexBytes)} → ${formatBytes(after.indexBytes)}`);
+    } else if (before) {
+      notes.push(`things index storage now: ${formatBytes(before.indexBytes)} for ${formatBytes(before.dataBytes)} of documents`);
+    }
+    return { dryRun, matched: report.rebuilt.length + report.skipped.length, migrated: dryRun ? 0 : report.rebuilt.length, created: 0, skipped: report.skipped.length, notes: notes.list() };
+  }
+};
+
+// Storage census for one physical collection ($collStats): document bytes,
+// on-disk storage, and per-index bytes — the numbers the generations table and
+// the index rebuild reason about. null when there is no census to report.
+//
+// ADVISORY, never fatal. $collStats is not universally available: it is
+// rejected on a view (CommandNotSupportedOnView 166), restricted on some
+// managed tiers, and gone the moment a generation is dropped
+// (NamespaceNotFound 26). Every caller already has a null path — the
+// generations table falls back to estimatedDocumentCount and renders "—",
+// and rebuild-things-indexes reports no pending work — so a census that
+// cannot be taken must degrade, not 500 /api/v1/admin/migrations. That
+// endpoint is the ONLY in-app way to run relocate-ci-control-telemetry and
+// rebuild-things-indexes, so losing it to a decorative number would block
+// the very rollout the census exists to guide.
+export type CollectionStorage = { docs: number; dataBytes: number; storageBytes: number; indexBytes: number; indexSizes: Record<string, number> };
+export const collectionStorage = async (db: any, physical: string): Promise<CollectionStorage | null> => {
+  try {
+    const [row] = await db
+      .collection(physical)
+      .aggregate([{ $collStats: { storageStats: {} } }])
+      .toArray();
+    const stats = row?.storageStats;
+    if (!stats) return null;
+    return {
+      docs: Number(stats.count) || 0,
+      dataBytes: Number(stats.size) || 0,
+      storageBytes: Number(stats.storageSize) || 0,
+      indexBytes: Number(stats.totalIndexSize) || 0,
+      indexSizes: Object.fromEntries(Object.entries(stats.indexSizes || {}).map(([name, bytes]) => [name, Number(bytes) || 0]))
+    };
+  } catch {
+    return null;
+  }
+};
+
+const formatBytes = (bytes: number): string => {
+  if (!Number.isFinite(bytes) || bytes < 1024) return `${Math.max(0, Math.round(bytes))} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 100 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
+};
+
 // Does a registered migration still READ this stale physical collection while
 // having pending work? Cleanup keeps the collection until that migration is
 // done. (Declared via sourcePhysicals on future copy-forward migrations.)
@@ -1192,7 +3060,206 @@ const staleGenerationBlocker = async (physical: string): Promise<string | null> 
   return null;
 };
 
+// ---------------------------------------------------------------------------
+// Relationship uniqueKeys backfill. Relationship dedupe moved off the
+// kind-blind crystal-path unique indexes (squattable through free-form data
+// crystals — see KIND-BLIND HISTORY in collections.ts) onto the
+// server-only root uniqueKeys namespace. New docs stamp at insert
+// (messenger/shared.ts newThingDoc + the friend writer); this stamps legacy
+// docs so their create-race dedupe is structural again, and counts (never
+// touches) data things carrying a relationship-shaped name. Before phase 2
+// that is the squat census; after the namespace reopens it may be intentional
+// ordinary data and remains operator information only.
+
+const backfillRelationshipUniqueKeys: Migration = {
+	id: 'backfill-relationship-unique-keys',
+	collection: 'things',
+	fromVersion: THINGS_VERSION,
+	toVersion: THINGS_VERSION,
+	title: 'Backfill relationship uniqueKeys (follow/member/DM/invite/emoji/friend/vote/passkey link)',
+	description:
+		'Stamps the server-only root uniqueKeys dedupe entry (`<field>:<key>` BinData) onto legacy relationship ' +
+		'things whose uniqueness previously rode kind-blind crystal-path unique indexes (retired to lookup ' +
+		'indexes by the boot-time ensure). Idempotent: adds only missing individual keys, preserving other ' +
+		'uniqueKeys and checking the source identity before each write. Conflicts remain pending without retry loops. Also counts — never modifies — free-form data things carrying a relationship ' +
+		'name at the crystal root: operator census only, because phase 2 makes those names valid ordinary data. ' +
+		'Targets are read from the relationship map, so a family that joins later (passkey-app-link, which ' +
+		'shipped mid-migration with its own crystal-path unique index) is covered by re-running this.',
+	pending: async () => {
+		const things = await getCollection('things');
+		return (await repairRelationshipKeys(things, { dryRun: true })).matched;
+	},
+	run: async ({ dryRun, assertLease }) => {
+		const things = await getCollection('things');
+		const result = await repairRelationshipKeys(things, { dryRun, assertLease });
+		const notes = result.notes;
+		const relationshipFields = Array.from(new Set(Object.values(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS)));
+		for (const field of relationshipFields) {
+			await assertLease?.();
+			const count = await things.countDocuments({ thingtime: 'data', [`crystal.${field}`]: { $exists: true } } as any);
+			if (count) {
+				notes.push(
+					`${count} data thing(s) carry crystal.${field} at the root (operator census only — never modified; valid ordinary data after phase 2)`
+				);
+			}
+		}
+		return result;
+	}
+};
+
+// Connections membership went relational: an external post used to carry a
+// root `sourceIds` array (one element per sourcing account) plus, for personal
+// providers, one `tt:extacct/<accountId>` acl entry per source. Both grew with
+// the number of accounts that ever surfaced the post — for personal-timeline
+// providers that means one element PER USER, so a viral post's doc grew
+// without bound, and the acl (which PublicPost discloses verbatim) leaked the
+// external-account ids of everyone else who sourced it. Membership is now one
+// external-post-source row per (post, account), and the post's acl is the
+// constant `tt:extsourced`, resolved live against those rows.
+const legacyExternalSourceFilter = { thingtime: 'external-post', sourceIds: { $type: 'array' } } as any;
+
+const relationalExternalPostSources: Migration = {
+	id: 'relational-external-post-sources',
+	collection: 'things',
+	fromVersion: THINGS_VERSION,
+	toVersion: THINGS_VERSION,
+	title: 'Move external-post source membership onto relational rows',
+	description:
+		'Converts each synced external post\'s embedded `sourceIds` array into one external-post-source thing per ' +
+		'(post, account) — canonical v2 child relation (root targetId = the post\'s shareId), uniqueKeys-deduped on ' +
+		'`sourceKey:<postId>:<accountId>`, createdAt denormalized from the post so the feed can page membership ' +
+		'directly. Rewrites the per-source `tt:extacct/<accountId>` acl entries to the single constant ' +
+		'`tt:extsourced` (public posts keep tt:all), then unsets sourceIds. Idempotent: row shareIds are ' +
+		'deterministic and only posts still carrying sourceIds are touched.',
+	pending: async () => {
+		const things = await getCollection('things');
+		return things.countDocuments(legacyExternalSourceFilter);
+	},
+	run: async ({ dryRun, assertLease }) => {
+		const things = await getCollection('things');
+		const matched = await things.countDocuments(legacyExternalSourceFilter);
+		const notes: string[] = [];
+		let migrated = 0;
+		let created = 0;
+		let skipped = 0;
+		if (dryRun || !matched) return { dryRun, matched, migrated, created, skipped, notes };
+		// Progress comes from `$unset: sourceIds` taking each converted doc out of
+		// the filter, so a doc the loop SKIPS would be handed back by every
+		// subsequent page — a full batch of them spins forever, holding the
+		// migration lease. Skips are carried out of the filter explicitly instead.
+		const skippedIds: unknown[] = [];
+		while (true) {
+			await assertLease?.();
+			const batch = await things
+				.find(skippedIds.length ? ({ ...legacyExternalSourceFilter, _id: { $nin: skippedIds } } as any) : legacyExternalSourceFilter)
+				.project({ shareId: 1, sourceIds: 1, acl: 1, crystal: 1, createdAt: 1 })
+				.limit(THINGS_BATCH)
+				.toArray();
+			if (!batch.length) break;
+			for (const doc of batch) {
+				const postShareId = String(doc.shareId || '');
+				const accountIds: string[] = Array.from(
+					new Set<string>(
+						(Array.isArray(doc.sourceIds) ? (doc.sourceIds as unknown[]) : [])
+							.map((id: unknown) => String(id || ''))
+							.filter((id: string): id is string => !!id)
+					)
+				);
+				if (!postShareId) {
+					skipped += 1;
+					skippedIds.push(doc._id);
+					continue;
+				}
+				const now = new Date();
+				for (const accountId of accountIds) {
+					const sourceKey = externalPostSourceKey(postShareId, accountId);
+					try {
+						const result = await things.updateOne(
+							{ shareId: externalPostSourceShareId(postShareId, accountId), thingtime: 'external-post-source' } as any,
+							{
+								// root parentId = the sourcing account: the feed and the
+								// tt:extsourced membership check both filter on it, as a
+								// root-field residual over the existing (thingtime, createdAt,
+								// shareId) and (targetId, thingtime, …) indexes.
+								// In $set so a row created by an earlier run converges too.
+								$set: { updatedAt: now, parentId: accountId },
+								$setOnInsert: {
+									schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+									thingtime: ['external-post-source'],
+									ownerId: 'system',
+									acl: [],
+									storageClass: 'control',
+									targetId: postShareId,
+									crystal: { accountId, provider: String(doc?.crystal?.provider || ''), sourceKey },
+									uniqueKeys: [toBin(`sourceKey:${sourceKey}`)],
+									extended: null,
+									tags: [],
+									createdAt: doc.createdAt instanceof Date ? doc.createdAt : new Date(doc.createdAt || now)
+								}
+							} as any,
+							{ upsert: true }
+						);
+						if (result.upsertedCount) created += 1;
+					} catch (err: any) {
+						// a uniqueKeys twin already holds this (post, account) slot —
+						// membership is already represented, nothing to guess at
+						if (err?.code !== 11000) throw err;
+						skipped += 1;
+					}
+				}
+				// Personal posts carried per-source tt:extacct/ entries and nothing
+				// else; public posts carried tt:all. Preserve which of the two the
+				// post was, and drop every account-naming entry.
+				const acl = (Array.isArray(doc.acl) ? doc.acl : []).map((entry: unknown) => String(entry || ''));
+				const hadPerSource = acl.some((entry) => entry.includes(ACL_EXTACCT_PREFIX));
+				const nextAcl = acl.filter((entry) => entry && !entry.includes(ACL_EXTACCT_PREFIX));
+				if (hadPerSource && !nextAcl.includes(ACL_EXT_SOURCED)) nextAcl.push(ACL_EXT_SOURCED);
+				// a post with neither audience would become invisible to everyone —
+				// it can only mean an empty legacy acl, so fail closed to personal
+				if (!nextAcl.length) nextAcl.push(ACL_EXT_SOURCED);
+				await things.updateOne({ shareId: postShareId } as any, {
+					$set: { acl: nextAcl, updatedAt: new Date() },
+					$unset: { sourceIds: '' }
+				} as any);
+				migrated += 1;
+			}
+			if (batch.length < THINGS_BATCH) break;
+		}
+		if (created) notes.push(`${created} external-post-source row(s) created`);
+		if (migrated) notes.push(`${migrated} external post(s) converted to relational membership`);
+		return { dryRun, matched, migrated, created, skipped, notes };
+	}
+};
+
+const consolidateRelationshipIndexes: Migration = {
+	id: 'consolidate-relationship-lookup-indexes',
+	collection: 'things',
+	fromVersion: THINGS_VERSION,
+	toVersion: THINGS_VERSION,
+	title: 'Consolidate five relationship lookup indexes',
+	description: 'Home database only. Deploy compatible shared-key readers and key-stamping writers on every origin sharing this database first. First run repairs and validates keys and activates reads; run again after at least one minute to remove five exact non-unique legacy lookups after caches drain. Preserves custom databases, unique ancestors, unknown indexes and conflicting relationships. No document deletion.',
+	destructive: true,
+	pending: async () => (await migrateRelationshipIndexLayout(await getHomeThingsCollection(), await getSettingsCollection(), { dryRun: true })).matched,
+	run: async ({ dryRun, assertLease }) => {
+		try {
+			return await migrateRelationshipIndexLayout(await getHomeThingsCollection(), await getSettingsCollection(), { dryRun, assertLease });
+		} finally { if (!dryRun) invalidateHomeRelationshipKeys(); }
+	}
+};
+
+const retireLegacyThingIndexes: Migration = {
+	id: 'retire-legacy-thing-indexes', collection: 'things', fromVersion: THINGS_VERSION, toVersion: THINGS_VERSION,
+	title: 'Retire eight legacy Thing indexes', destructive: true,
+	description: 'After every shared-database origin supports canonical Thing reads, require no incompatible legacy rows, ensure the shared schema/owner updated-order index and activate home-only canonical reads. Run again after at least one minute to clean redundant embed kind metadata and remove eight exact legacy indexes after caches drain. Custom databases keep legacy compatibility. No Thing documents are deleted.',
+	pending: async () => (await migrateLegacyThingIndexLayout({ dryRun: true })).matched,
+	run: migrateLegacyThingIndexLayout
+};
 export const migrations: Migration[] = [
+  subspaceMessagingMigration,
+	accidentalCatalogAccountMigration,
+	// Physical residue must land in the current generation before any logical
+	// shape or byte-ledger migration can declare its source universe complete.
+	mergeLegacyCollections,
   thingsMigration,
   usersToThings,
   themesToThings,
@@ -1205,11 +3272,19 @@ export const migrations: Migration[] = [
   stampMigration('themes', 'Theme docs already match the v2 shape — stamps schemaVersion.'),
   stampMigration('waitlist', 'Waitlist docs already match the v2 shape — stamps schemaVersion.'),
   stampMigration('feedAlgorithms', 'Feed algorithm docs already match the v2 shape — stamps schemaVersion.'),
-  stampMigration(
-    'lopuMusingRateLimits',
-    'Stamps schemaVersion on both rate-limit shapes (musing sliding windows and waitlist counters).'
-  ),
-  mergeLegacyCollections,
+	stampMigration('lopuMusingRateLimits', 'Stamps schemaVersion on both rate-limit shapes (musing sliding windows and waitlist counters).'),
+  backfillAppNamespaceFields,
+  backfillAppStorageAllowances,
+	backfillUserStorageAccounting,
+	backfillRelationshipUniqueKeys,
+	relationalExternalPostSources,
+	// Shape first, then storage: relocate drains the ci-* rows out of things and
+	// rebuild reclaims the index bytes they left behind, so both run after every
+	// migration that still reads or rewrites things documents.
+	consolidateRelationshipIndexes,
+	retireLegacyThingIndexes,
+	relocateCiControlTelemetry,
+	rebuildThingsIndexes,
   dropStaleCollectionGenerations
 ];
 
@@ -1234,6 +3309,17 @@ export type CollectionGenerationStatus = {
   docs: number;
   current: boolean;
   stale: boolean;
+  // storage census ($collStats): uncompressed document bytes, on-disk
+  // collection bytes, total index bytes, and the index count — so "which
+  // generation is eating the cluster" is visible where cleanup is decided.
+  // OPTIONAL: absent when the census could not be taken (collectionStorage).
+  // "Unknown" must not serialize as 0 — 0 B of documents beside 0 B of index
+  // is what a genuinely empty generation looks like, and the panel decides
+  // whether to raise its bloat badge from exactly these numbers.
+  dataBytes?: number;
+  storageBytes?: number;
+  indexBytes?: number;
+  indexes?: number;
 };
 
 // Per-collection version census + storage generations + which registered
@@ -1254,9 +3340,7 @@ export const getMigrationStatus = async (): Promise<{
   const collections = await Promise.all(
     COLLECTIONS.map(async (collection) => {
       const rows = (await getCollection(collection).then((target) =>
-        target
-          .aggregate([{ $group: { _id: { $ifNull: ['$schemaVersion', LEGACY_SCHEMA_VERSION] }, count: { $sum: 1 } } }])
-          .toArray()
+				target.aggregate([{ $group: { _id: { $ifNull: ['$schemaVersion', LEGACY_SCHEMA_VERSION] }, count: { $sum: 1 } } }]).toArray()
       )) as any[];
       const versions: Record<string, number> = {};
       let total = 0;
@@ -1279,14 +3363,27 @@ export const getMigrationStatus = async (): Promise<{
   // admin sees exactly what cleanup would drop before running it
   const physicalNames = (await db.listCollections({}, { nameOnly: true }).toArray()).map((entry: any) => entry.name);
   const generations = await Promise.all(
-    classifyPhysicalCollections(physicalNames).map(async (row) => ({
-      collection: row.collection,
-      physical: row.physical,
-      version: row.version,
-      docs: await db.collection(row.physical).estimatedDocumentCount(),
-      current: row.current,
-      stale: row.stale
-    }))
+    classifyPhysicalCollections(physicalNames).map(async (row): Promise<CollectionGenerationStatus> => {
+      const storage = await collectionStorage(db, row.physical);
+      // omitted, not zeroed, when there is no census — see CollectionStorage
+      const census: Partial<CollectionGenerationStatus> = storage
+        ? {
+            dataBytes: storage.dataBytes,
+            storageBytes: storage.storageBytes,
+            indexBytes: storage.indexBytes,
+            indexes: Object.keys(storage.indexSizes).length
+          }
+        : {};
+      return {
+        collection: row.collection,
+        physical: row.physical,
+        version: row.version,
+        docs: storage ? storage.docs : await db.collection(row.physical).estimatedDocumentCount(),
+        current: row.current,
+        stale: row.stale,
+        ...census
+      };
+    })
   );
   generations.sort((a, b) => a.collection.localeCompare(b.collection) || (a.version ?? 0) - (b.version ?? 0));
 
@@ -1302,7 +3399,9 @@ export const getMigrationStatus = async (): Promise<{
     .map(
       (generation) =>
         renameFailures.get(generation.collection) ||
-        `${generation.collection}: legacy collection still exists beside ${physicalCollectionName(generation.collection)} — run merge-legacy-collections`
+				`${generation.collection}: legacy collection still exists beside ${physicalCollectionName(
+					generation.collection
+				)} — run merge-legacy-collections`
     );
 
   const withPending = await Promise.all(
@@ -1330,7 +3429,7 @@ export const getMigrationStatus = async (): Promise<{
 export const runMigration = async (
   id: unknown,
   options: { dryRun?: unknown; confirm?: unknown }
-): Promise<Fail | { ok: true; migration: string; report: MigrationReport }> => {
+): Promise<Fail | MigrationFailure | { ok: true; migration: string; report: MigrationReport }> => {
   const migration = getMigration(id);
   if (!migration) return fail(404, 'Unknown migration');
   const dryRun = options.dryRun === true || options.dryRun === 'true';
@@ -1339,6 +3438,85 @@ export const runMigration = async (
   if (migration.destructive && !dryRun && options.confirm !== true) {
     return fail(400, `Migration ${migration.id} drops data — pass confirm: true to run it`);
   }
-  const report = await migration.run({ dryRun });
-  return { ok: true, migration: migration.id, report };
+	if (dryRun) {
+		try {
+			const report = await migration.run({ dryRun: true });
+			return { ok: true, migration: migration.id, report };
+		} catch (error) {
+			// Dry runs never mutate migration target documents, so an exception is
+			// a known rejection rather than an ambiguous mutation outcome. Some
+			// runners may still bootstrap database indexes before their read pass.
+			return migrationFailureResult(migration.id, error, 'rejected');
+		}
+	}
+
+	let lease: Awaited<ReturnType<typeof acquireMigrationLease>>;
+	try {
+		lease = await acquireMigrationLease(migration.id);
+	} catch (error) {
+		return migrationFailureResult(migration.id, error, 'rejected');
+	}
+	if (!lease) return fail(409, 'Another database migration is already running; wait for it to finish and refresh');
+	let migrationStarted = false;
+	try {
+		await lease.assert();
+		if (migration.id !== backfillUserStorageAccounting.id && new Set(userStoragePrerequisites().map((entry) => entry.id)).has(migration.id)) {
+			const things = await getCollection('things');
+			// Do not predicate this safety gate on a pre-run pending snapshot. New
+			// legacy residue can arrive between pending() and run(); if any
+			// overlapping ledger is authoritative, only the orchestrated storage
+			// migration may fence first and mutate source data afterward.
+			const [readyAccounts, readyApps, readyAppUsers] = await Promise.all([
+				things.countDocuments(
+					{
+						thingtime: 'subscription',
+						'crystal.subjectType': 'user',
+						'crystal.storageAccountingVersion': USER_STORAGE_ACCOUNTING_VERSION,
+						'crystal.storageLedgerStatus': USER_STORAGE_STATUS.ready
+					},
+					{ limit: 1 }
+				),
+				things.countDocuments(
+					{
+						thingtime: 'app',
+						'crystal.storageAccountingVersion': APP_STORAGE_ACCOUNTING_VERSION,
+						'crystal.storageLedgerStatus': USER_STORAGE_STATUS.ready
+					},
+					{ limit: 1 }
+				),
+				things.countDocuments(
+					{
+						thingtime: 'app-storage',
+						'crystal.quotaKind': 'app-storage',
+						'crystal.storageAccountingVersion': APP_STORAGE_ACCOUNTING_VERSION,
+						'crystal.storageLedgerStatus': USER_STORAGE_STATUS.ready
+					},
+					{ limit: 1 }
+				)
+			]);
+			if (readyAccounts || readyApps || readyAppUsers) {
+				return fail(
+					409,
+					`Migration ${migration.id} can change billable source data while storage ledgers are live. ` +
+						`Run ${backfillUserStorageAccounting.id}; it fences, migrates, and reconciles every overlapping ledger safely.`
+				);
+			}
+		}
+		await lease.assert();
+		migrationStarted = true;
+		const report = await migration.run({ dryRun: false, assertLease: lease.assert });
+		await lease.assert();
+		return { ok: true, migration: migration.id, report };
+	} catch (error) {
+		if (migrationStarted && migration.id === backfillUserStorageAccounting.id) {
+			// A late postflight/lease failure must never leave the ledgers that were
+			// already reconciled earlier in the sweep looking authoritative. This
+			// fence is monotonic-safe even if a successor has begun: it can only
+			// remove readiness, never publish a stale total.
+			await fenceAllStorageLedgers().catch(() => {});
+		}
+		return migrationFailureResult(migration.id, error, migrationStarted ? 'unknown' : 'rejected');
+	} finally {
+		await lease.release();
+	}
 };
