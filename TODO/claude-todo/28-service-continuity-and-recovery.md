@@ -145,6 +145,14 @@ purchase before approval.
       confirmation, or resurrect deleted/revoked state.
 - [ ] Bound timeout, retry, exponential backoff/jitter, concurrency, and circuit
       budgets. Shed optional provider work before critical first-party paths.
+- [ ] Close the release-level acceptance gap for the scoped sync controls in
+      [PR #1086](https://github.com/lopugit/thingtime/pull/1086): on the signed
+      installed bundle and deployed origin, exercise Pause during an active
+      throttled transfer; verify immediate abort, journal-safe cleanup, no
+      automatic restart for that connection, unchanged folder selection, and
+      persisted limits. Confirm unsupported clients/providers fail closed and
+      attach exact build/deployment receipts. Do not infer a global SLO from
+      the feature-specific limits. See the [continuity evidence ledger](../../NOTES/service-continuity-and-recovery-baseline.md).
 - [ ] Keep safe core data/text paths available when attachments, email, AI,
       previews, ranking, or external integrations fail independently.
 - [ ] Surface actionable states through Lopu and pass desktop/mobile, keyboard,
@@ -209,6 +217,19 @@ purchase before approval.
 - [ ] Add continuity gates to release review: selected journey health, current
       exercise receipts, no unresolved P0/P1 data-safety action, and error-
       budget consequence.
+- [ ] Before treating native small-file backup as validated, complete the
+      [attachment-backup release gate](../../PLAN/service-continuity-and-recovery-roadmap.md#native-small-file-backup-integration-gate):
+      verify integration into the intended `develop` head and the exact server
+      capability, then exercise the intended installed same-Home path with a
+      synthetic fixed fixture, an approved matched baseline, and separate
+      interruption/capability-loss recovery runs. Reconcile every file outcome
+      to its durable receipt; keep any performance target owner-approved and
+      do not infer one from a synthetic run. Reconcile new measurements with
+      [the partial batch and recovery evidence](../../NOTES/service-continuity-and-recovery-baseline.md#evidence-ledger):
+      PR #1083 missed its original local threshold and left installed speed
+      acceptance open; PR #1084's draining-barrier observation was
+      observability-only, not proof of independent recovery or complete file
+      outcomes. Do not reuse the superseded threshold or imply a general speedup.
 - [ ] Review objectives, receipts, owners, provider assumptions, support load,
       and cost on an approved cadence; expire stale evidence visibly.
 - [ ] Keep truthful status, baseline safety, export/delete, and tested recovery

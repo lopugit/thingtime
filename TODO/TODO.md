@@ -1,5 +1,22 @@
 # TODO
 
+## Agent operating foundations
+
+- **Complete authorized connected-host acceptance for Character coordination and Agent overview reporting.**
+  The current integration tree now contains the Character, Agent overview, and
+  Agent reporting runbooks, an origin-bound preflight, and focused test scripts;
+  see the [2026-10-29 evidence note](../NOTES/agent-coordination-runtime-evidence-2026-10-29.md).
+  Those artifacts and the recorded local synthetic acceptance do not prove the
+  selected deployed origin, connected host, independent `agents.report` grant,
+  saved workspace references, or private-subspace membership are available
+  now. Complete the separately gated workflow only through the intended
+  authorized account, then verify stable task reuse and exact readback without
+  owner/public fallback. [Acceptance criteria](claude-todo/58-agent-coordination-and-task-reporting.md);
+  [phased roadmap](../PLAN/agent-coordination-and-task-reporting-roadmap.md).
+  Related developer-ecosystem context:
+  [baseline](../NOTES/trusted-developer-ecosystem-baseline.md) and
+  [roadmap](../PLAN/trusted-developer-ecosystem-roadmap.md).
+
 ## Priority 1 — Fundamental product behavior
 
 - **Complete SEO, Schema.org and rich results across all pages, `/things` and public UGC.**
@@ -26,6 +43,16 @@
   ever append versions. Design concept delivered on `/docs/design`
   (`docs/design/thingtime-history-timeline/`); spec and phases:
   `claude-todo/56-unified-thing-history-and-timeline-browser.md`.
+
+- **Make connected-account and credential lifecycles understandable and safe.**
+  Distinguish provider consent, Thingtime storage, device cache, transient relay,
+  imported secrets, revocation, unlink, deletion, and external-action outcomes.
+  Include the bounded admin credential-import flow in the evidence inventory:
+  its API tests and capability version do not prove browser acceptance or a
+  successful vault write. Rehearse only with synthetic credentials; no real
+  production import, new scopes, or migration is approved. [Evidence](../NOTES/credential-and-connected-account-stewardship-baseline.md),
+  [phases](../PLAN/credential-and-connected-account-stewardship-roadmap.md),
+  [TODO 57](claude-todo/57-credential-and-connected-account-stewardship.md).
 
 1. **~~Make true `hydrateRoot(document, ...)` merge-ready.~~ RESOLVED — obsolete
    (closed 2026-07-21).**
@@ -795,3 +822,131 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     model/provider calls, training, public feeds, advertising, sensitive-trait
     inference, minors, institutions, and high-impact uses remain separately
     gated.
+
+50. **🕯️ Make legacy agency and dignified stewardship a product contract.**
+
+    Let people leave, review, and revoke bounded instructions for prolonged
+    inactivity, incapacity, or death without granting present access, treating
+    silence as proof, transferring credentials, exposing other people, or
+    letting software decide legal authority. Start only with adult internal
+    reviewers, one synthetic owner, one synthetic contact, one conflicting
+    claimant, one synthetic private text Thing, one local test inbox, and one
+    exact non-production build; rehearse a notify-only instruction and a scoped
+    export decision without contacting anyone or exporting content. Execute
+    `claude-todo/50-legacy-agency-and-dignified-stewardship.md` only after
+    qualified owners approve the event/role/action/data matrix, safe default,
+    instruction and claim envelopes, conflict/hold/appeal path, accessibility,
+    evidence retention, cleanup, and manual stop authority. Real people,
+    claims, documents, notifications, account access, content disclosure,
+    ownership transfer, memorialization, deletion, closure, minors, money,
+    entitlements, and legal or privacy claims remain separately gated.
+
+51. **🌱 Make affordability agency and fair access a product contract.**
+
+    Protect a useful free floor and make any future Thingtime service offer
+    understandable, stoppable, privacy-preserving, and humane. Show minimum
+    total cost, period, renewal, change, cancellation, grace, data effects, and
+    remedy before synthetic acceptance; keep safety, privacy, security,
+    accessibility, export, deletion, support, appeal, and correction available
+    through failure or downgrade. Start only with adult internal reviewers,
+    synthetic accounts, invented AUD prices, one exact non-production build,
+    and a deterministic local fake provider. Execute
+    `claude-todo/51-affordability-agency-and-fair-access.md` only after qualified
+    owners approve the essential-floor matrix, state vocabulary, immutable
+    offer/receipt contract, cancellation/grace/downgrade rules, privacy and
+    accessibility matrix, measures, cleanup, and manual stop authority. Real
+    money, provider credentials, production prices or entitlements, sensitive
+    hardship data, personalized pricing, behavioral targeting, public claims,
+    hidden commitments, minors, institutions, and blocked data exit remain
+    separately gated.
+
+52. **📍 Make place agency and location privacy a product contract.**
+
+    Keep nearby discovery and deliberate place expression useful without
+    turning a one-shot location choice into tracking, unintended exact
+    publication, routine inference, or hidden authority for another system.
+    Separate query input, stored place, publication, and derivation; prefer the
+    coarsest sufficient precision; preview audience and effects; preserve a
+    useful tag/text/no-location path; and make correction and safety stopping
+    follow the full location family. Start only with adult internal reviewers,
+    synthetic accounts, fixed fictional coordinates, one fictional region/tag,
+    one synthetic private text Thing, and one exact non-production build.
+    Execute `claude-todo/52-place-agency-and-location-privacy.md` only after
+    qualified owners approve the taxonomy, purpose/effect matrix, precision
+    ladder, choice/preview/receipt fields, request/log minimisation proof,
+    audience-change and family-cleanup rules, threat model, accessible
+    rehearsal, measures, cleanup, and stop authority. Real positions,
+    background tracking, public exact points, production permission changes,
+    derived routines, advertising/rank/eligibility effects, minors, high-risk
+    safety contexts, and public privacy or compliance claims remain separately
+    gated.
+
+53. **💬 Make conversation agency and private communication a product contract.**
+
+    Make every DM, group, channel, Lopu conversation, and private archive
+    legible and controllable: treat membership and roles as live scoped
+    authority; separate request, delivery, display, read, edit, delete, and
+    action; minimize metadata; make safety stops distinct; explain residual
+    retention; keep archives inert; and never present server access controls as
+    end-to-end encryption. Start only with adult internal reviewers, three
+    synthetic accounts, one synthetic DM, one private group, invented messages,
+    one harmless generated attachment, and one exact non-production build.
+    Execute
+    `claude-todo/53-conversation-agency-and-private-communication.md` only after
+    qualified owners approve the taxonomy, role/history matrix,
+    delivery/edit/delete vocabulary, settings scopes, retention and
+    conversation-family cleanup, archive contract, safety-stop handoff,
+    confidentiality language, accessible rehearsal, measures, cleanup, and
+    stop authority. Real messages, contacts, accounts, devices, notifications,
+    reports, moderation, minors, high-risk conversations, production data,
+    external processors, message scanning, covert monitoring, cryptographic
+    implementation, and public privacy/safety/deletion/encryption claims remain
+    separately gated.
+
+54. **📏 Make measurement agency and privacy-respecting telemetry a product contract.**
+
+    Learn enough to operate, protect, and improve Thingtime without turning
+    visits, reading time, viewport position, errors, or product choices into a
+    hidden behavioral dossier or unrelated decision authority. Give every
+    signal one approved purpose and necessity test; separate diagnostics,
+    public counters, user-owned adaptation, optional product learning, and
+    safety evidence; preserve a useful baseline without optional analytics;
+    minimize resolution and identifier stability; bound the whole measurement
+    family's retention; version metrics and uncertainty; and prohibit silent
+    secondary use. Start only with adult internal reviewers, three synthetic
+    accounts, one fictional public post, one synthetic feed session, generated
+    routes, a deterministic local fake collector, and one exact non-production
+    build. Execute
+    `claude-todo/54-measurement-agency-and-privacy-respecting-telemetry.md`
+    only after qualified owners approve the purpose/plane taxonomy, current
+    signal and provider inventory, field-necessity matrix, essential/optional
+    boundary, inspect/pause/reset/delete scopes, retention and cleanup,
+    aggregation thresholds, metric schema, secondary-use threat model,
+    accessible rehearsal, measures, and stop authority. Real behavior,
+    production analytics, dashboards, exports, drains, experiments, private
+    content, stable identifiers, device fingerprinting, vulnerable groups,
+    minors, advertising, ranking/pricing/eligibility/moderation/AI reuse, and
+    public privacy or accuracy claims remain separately gated.
+
+55. **⏳ Make temporal agency and humane time semantics a product contract.**
+
+    Make “today,” “tomorrow,” “daily at 9,” “expires,” “last seen,” and
+    “never” predictable across time zones, locale, daylight-saving changes,
+    travel, offline recovery, and clock skew. Name every value as an instant,
+    duration, civil time, recurrence, day domain, deadline, expiry, lease,
+    retention, freshness, or display; preserve future wall-time intent and its
+    resolved instant; keep security authority on trusted clocks; provide
+    accessible exact-time disclosure; and distinguish due, late, skipped,
+    expired, interrupted, and unknown. Start only with adult internal
+    reviewers, synthetic dates, a deterministic fake authority clock,
+    Melbourne/New York zones, DST gap/fold, leap-day, midnight, offline, skew,
+    and tzdata-change fixtures in one exact non-production build. Execute
+    `claude-todo/55-temporal-agency-and-humane-time-semantics.md` only after
+    qualified owners approve the temporal vocabulary, field/helper inventory,
+    authority-clock map, day/zone/calendar scopes, gap/fold and recalculation
+    rules, shared formatting and receipt presets, WCAG time-limit review,
+    notification-filter slice, measures, rollback, cleanup, and stop authority.
+    Production clocks, tzdata, sessions, tokens, grants, retention, legal
+    deadlines, real schedules or notifications, routine/location inference,
+    dark-pattern countdowns, bulk semantic migration, and public punctuality,
+    expiry, accessibility, or deletion claims remain separately gated.
