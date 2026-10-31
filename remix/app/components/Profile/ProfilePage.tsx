@@ -313,8 +313,15 @@ export const ProfilePage = (props: ProfilePageProps) => {
         });
         if (generationRef.current !== generation) return;
 
-        const page: PublicPost[] = mergeReactionOverlays(startedAt, Array.isArray(resp?.posts) ? resp.posts : []);
-        setPosts((prev) => appendPostsDeduped(cursor ? prev : [], page));
+        const page: PublicPost[] = Array.isArray(resp?.posts) ? resp.posts : [];
+        setPosts((prev) => {
+          if (!cursor) return page;
+          // a post composed (and prepended) between page loads shifts offsets,
+          // so a later page can re-serve an id already on screen — dedupe or
+          // PostList gets duplicate keys
+          const seen = new Set(prev.map((post) => post.id));
+          return [...prev, ...page.filter((post) => !seen.has(post.id))];
+        });
         nextCursorRef.current = resp?.nextCursor ?? null;
         setNextCursor(resp?.nextCursor ?? null);
         if (typeof resp?.postCount === 'number') setPostCount(resp.postCount);
