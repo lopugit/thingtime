@@ -156,6 +156,26 @@ test('the messages toggle defaults on, round-trips only when off and ignores oth
 	assert.deepEqual(readHistoryFilters(shown), { ...filters, messages: true });
 });
 
+test('a per-viewer messages default round-trips: the URL carries on/off only when the state differs from the default', () => {
+	const off = { messages: false }; const on = { messages: true };
+	assert.equal(readHistoryFilters(new URLSearchParams(''), '', off).messages, false, 'default off paints off');
+	assert.equal(readHistoryFilters(new URLSearchParams(''), '', on).messages, true);
+	assert.equal(readHistoryFilters(new URLSearchParams('messages=on'), '', off).messages, true, 'an explicit on beats a default of off');
+	assert.equal(readHistoryFilters(new URLSearchParams('messages=off'), '', on).messages, false);
+	assert.equal(readHistoryFilters(new URLSearchParams('messages=weird'), '', off).messages, true, 'any value other than off reads as on');
+	const hidden = readHistoryFilters(new URLSearchParams('storage=home'), '', off);
+	assert.equal(writeHistoryFilters(new URLSearchParams('storage=home'), hidden, off).has('messages'), false, 'matching the default writes nothing');
+	const shown = writeHistoryFilters(new URLSearchParams('storage=home'), { ...hidden, messages: true }, off);
+	assert.equal(shown.get('messages'), 'on'); assert.equal(shown.get('storage'), 'home');
+	assert.equal(readHistoryFilters(shown, '', off).messages, true, 'the in-panel toggle sticks on the next read instead of snapping back');
+	const back = writeHistoryFilters(shown, { ...hidden, messages: false }, off);
+	assert.equal(back.has('messages'), false);
+	assert.equal(writeHistoryFilters(new URLSearchParams(''), { ...hidden, messages: false }, on).get('messages'), 'off');
+	assert.equal(writeHistoryFilters(new URLSearchParams('messages=off'), { ...hidden, messages: true }, on).has('messages'), false);
+	assert.equal(writeHistoryFilters(new URLSearchParams(''), { ...hidden, messages: true }).has('messages'), false, 'callers without defaults keep the old contract');
+	assert.equal(writeHistoryFilters(new URLSearchParams(''), { ...hidden, messages: false }).get('messages'), 'off');
+});
+
 test('system lines come from the recorded operation only and never invent version numbers', () => {
 	const base = row('a', 1).event;
 	assert.equal(historySystemLine(base), null);

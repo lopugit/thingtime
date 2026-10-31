@@ -18,8 +18,9 @@ import { timelineRequestScope, type TimelineStorage } from '../timeline/storageS
 import { draftRequest } from '~/drafts/draftClient';
 import type { BranchMergeRequest } from '../timeline/branchMerge';
 import { parseTimelineBranchLookup, parseTimelineBranchLookupResult, type TimelineBranchCommand } from '../timeline/branches';
-import type { TimelineNoteCommand } from '../timeline/notes';
-import type { TimelineVersionNameCommand } from '../timeline/versionNames';
+import type { TimelineNote, TimelineNoteCommand } from '../timeline/notes';
+import { parseTimelineVersionName, type TimelineVersionName, type TimelineVersionNameCommand } from '../timeline/versionNames';
+import type { HistoryPrefsPatch } from '../timeline/historyPrefs';
 import { browserActionMinimumVersion } from '~/schemas/actionRequestPagination';
 import type { TimelineEvent } from '~/timeline/contract';
 import { retainActionOutcomeRecovery, type ActionOutcomeRecovery } from '~/timeline/actionRecovery';
@@ -257,7 +258,20 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
         // Undo first: it always carries componentMode, which alone would negotiate 1.12.0 and earn a 400 from an older server.
         await requireThingtimeCapability('api.timeline', request.mode === 'undo' ? '1.18.0' : request.recover ? '1.14.0' : request.componentMode ? '1.12.0' : scope.dataPlane === 'home' ? '1.6.0' : '1.1.0');
         return asyncFetcher.submit(request, { action: `/api/v1/timeline${toQuery(timelineRequestScope(scope))}`, expectedActor: scope.ownerId });
-      }, [asyncFetcher])
+      }, [asyncFetcher]),
+      // Account history preferences (Settings → History): its own feature, so an
+      // older origin that still serves api.timeline 1.18 is "unavailable", not a 404.
+      // Account-level and home-pinned on the server: no ownerId/dataPlane query.
+      settings: {
+        get: useCallback(async (options?: { signal?: AbortSignal }) => {
+          await requireThingtimeCapability('api.timeline-settings', '1.0.0');
+          return getJson('/api/v1/timeline/settings', options);
+        }, []),
+        set: useCallback(async (patch: HistoryPrefsPatch, scope: { ownerId: string }, options?: { signal?: AbortSignal }) => {
+          await requireThingtimeCapability('api.timeline-settings', '1.0.0');
+          return asyncFetcher.submit({ prefs: patch }, { action: '/api/v1/timeline/settings', expectedActor: scope.ownerId, signal: options?.signal });
+        }, [asyncFetcher])
+      }
     },
     tiers: useCallback(async (options?: { signal?: AbortSignal }) => {
       await requireThingtimeCapability('api.tiers', '1.1.0');
@@ -350,6 +364,9 @@ export function useApi(explicitView?: AccountLocalView, actorOverride?: Workspac
           // floating window's last state) are the viewer's private chat
           // with the assistant — same shared-browser privacy bar.
           clearLocalCachePrefix('tt-lopu-');
+          // the History settings record names the viewer's paused Things —
+          // private Thing ids on a shared device, same rule
+          clearLocalCachePrefix('tt-history-prefs:');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;

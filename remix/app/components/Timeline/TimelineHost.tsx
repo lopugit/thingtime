@@ -8,7 +8,8 @@ import { HistoryChangeBox, TimelineCompareNow, useTimelineCompareNow } from './T
 import { historyAncestryLine } from './timelineVersionControls';
 import { readHistoryFilters, writeHistoryFilters, historyCard, historyComparison, type HistoryFilters } from '../../timeline/browserModel';
 import { HistoryMessageComposer } from './TimelineMessages';
-import type { LocalTimelineRow } from '../../timeline/localStore';
+import { TIMELINE_PENDING_MAX_EVENTS, type LocalTimelineRow } from '../../timeline/localStore';
+import { useHistoryPrefs } from '../../timeline/historyPrefsClient';
 import { COMPONENT_BINDING_PREFIX } from '../../timeline/componentBindings';
 import { TimelinePagePreview } from './TimelinePagePreview';
 import { TimelineFileVersions } from './TimelineFileVersions';
@@ -19,8 +20,8 @@ import { TIMELINE_SNAPSHOT_PARTS_ADAPTER } from '../../timeline/snapshotParts';
 import React from 'react';
 import { useMediaQuery } from '@chakra-ui/react';
 import { TimelineBranches } from './TimelineBranches';
-import { Box, Button, Flex, Heading, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Tab, TabList, TabPanel, TabPanels, Tabs, Text } from '@chakra-ui/react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { Badge, Box, Button, Flex, Heading, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Tab, TabList, TabPanel, TabPanels, Tabs, Text } from '@chakra-ui/react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '../Nav/Drawer/useDrawer';
 import { PageHeader, PageShell } from '../Layout/PageShell';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
@@ -36,8 +37,12 @@ import { apiErrorMessage } from '../../hooks/apiFailure';
 import { workspaceStorageIdentity, subscribeWorkspaceStorage } from '../../local-workspace/storageStatus.client';
 
 const OPEN_HISTORY = 'thingtime:open-history';
-export function openThingHistory(thingId: string, thingtime?: readonly string[], storage?: TimelineStorage) {
-	window.dispatchEvent(new CustomEvent(OPEN_HISTORY, { detail: { thingId, storage: storage ?? historyStorageForThing(thingtime) } }));
+/** Under the account sync hold, from this many pending rows the status line warns that the device queue is bounded (TIMELINE_PENDING_MAX_EVENTS). */
+export const HISTORY_HOLD_WARNING_PENDING = 1600;
+const HISTORY_SETTINGS_HREF = '/settings/history';
+const PAUSED_THING_TITLE = 'Draft history is paused for this Thing on your devices: the Builder page and definition editors do not capture drafts. Saved versions still record.';
+export function openThingHistory(thingId: string, thingtime?: readonly string[]) {
+	window.dispatchEvent(new CustomEvent(OPEN_HISTORY, { detail: { thingId, storage: historyStorageForThing(thingtime) } }));
 }
 
 const date = (value: string) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
@@ -53,17 +58,32 @@ const sourceLabel = (event: TimelineEvent) => ({ client: 'Editor', api: 'API', a
 function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: string | null; folderId?: string; urlState?: boolean }) {
 	const contentPath = useCharacterContentPath();
 	const [params, setParams] = useSearchParams();
-	const [filters, setFilters] = React.useState(() => readHistoryFilters(urlState ? params : new URLSearchParams(), thingId ?? ''));
+	// The Settings → History "Show messages" row is the per-viewer default; the in-panel toggle writes the same cache field.
+	const history = useHistoryPrefs();
+	const showMessages = history.showMessages;
+	const [filters, setFilters] = React.useState(() => readHistoryFilters(urlState ? params : new URLSearchParams(), thingId ?? '', { messages: showMessages }));
 	React.useEffect(() => {
-		setFilters(readHistoryFilters(urlState ? params : new URLSearchParams(), thingId ?? ''));
-	}, [urlState, params, thingId]);
+		setFilters(readHistoryFilters(urlState ? params : new URLSearchParams(), thingId ?? '', { messages: showMessages }));
+	}, [urlState, params, thingId, showMessages]);
 	const changeFilters = (next: HistoryFilters) => {
 		// Controls and cached history respond before route revalidation finishes.
 		setFilters(next);
-		if (urlState) setParams(writeHistoryFilters(params, next), { replace: true, preventScrollReset: true });
+		if (next.messages !== filters.messages) history.setShowMessages(next.messages);
+		if (urlState) setParams(writeHistoryFilters(params, next, { messages: showMessages }), { replace: true, preventScrollReset: true });
 	};
 	const timeline = useThingTimeline(filters.thingId || null, true, filters.related);
 	const session = useTimelineSession();
+	const held = session.held;
+	const pausedThing = !!filters.thingId && history.prefs.pausedThingIds.includes(filters.thingId);
+	// Scope-wide queue size while held, refreshed on the history hook's own cadence (its rows change on every poll), not per render.
+	const [devicePending, setDevicePending] = React.useState<number | null>(null);
+	const store = session.connection?.store;
+	React.useEffect(() => {
+		if (!held || !store) { setDevicePending(null); return; }
+		let alive = true;
+		void store.pendingCount().then(count => { if (alive) setDevicePending(count); }).catch(() => { if (alive) setDevicePending(null); });
+		return () => { alive = false; };
+	}, [held, store, timeline.rows]);
 	const dataPlane = useDataPlane();
 	const api = useApi();
 	const homeHistory = session.connection?.scope.dataPlane === 'home';
@@ -92,7 +112,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 	);
 	// Typed version names outlive the detail panel (the mobile sheet unmounts it on Escape); keyed by history identity and event.
 	const nameDrafts = React.useRef(new Map<string, string>());
-	const now = useTimelineCompareNow(selected);
+	const now = useTimelineCompareNow(selected, selectedRow?.status);
 	const versions = React.useMemo(
 		() =>
 			selected
@@ -174,20 +194,26 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 									Clear comparison
 								</Button>
 							) : null}
-							{selected.mode !== 'effect' && selected.after !== null && selected.after.adapter !== CLOUD_FILE_ADAPTER && selectedRow?.status === 'accepted' ? (
+							{selected.mode !== 'effect' && selected.after !== null && (selectedRow?.status === 'accepted' || now.caption) ? (
 								// Enabled for split-snapshot versions and deleted Things too: the server resolves both sides and the
 								// parser accepts a null `current`. The preview costs a POST (timeline.write budget) and applies nothing.
+								// A pending row under the sync hold shows the control inert with its reason instead of a server 404.
 								now.preview ? (
 									<Button size="sm" variant="ghost" onClick={() => now.clear()}>
 										Back to before / after
 									</Button>
 								) : (
-									<Button size="sm" variant="outline" isLoading={now.busy} isDisabled={!now.enabled} onClick={() => void now.compare()}>
+									<Button size="sm" variant="outline" isLoading={now.busy} isDisabled={!now.enabled} title={now.caption || undefined} onClick={() => void now.compare()}>
 										Compare with now
 									</Button>
 								)
 							) : null}
 						</Flex>
+						{now.caption ? (
+							<Text fontSize="xs" color="var(--tt-muted)" mb={3}>
+								{now.caption}
+							</Text>
+						) : null}
 						{now.error ? (
 							<Text role="alert" fontSize="sm" mb={3} overflowWrap="anywhere">
 								{now.error}
@@ -300,7 +326,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 								{openError}
 							</Text>
 						) : null}
-						<TimelineVersionActions key={`${timeline.identity}:${selected.id}`} event={selected} onApplied={() => void timeline.refresh()} />
+						<TimelineVersionActions key={`${timeline.identity}:${selected.id}`} event={selected} rowPending={selectedRow?.status === 'pending'} onApplied={() => void timeline.refresh()} />
 					</TabPanel>
 					<TabPanel px={0} py={0}>
 						{selectedCard ? <HistoryMessageComposer key={detailKey} card={selectedCard} /> : null}
@@ -374,15 +400,22 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 	return (
 		<Flex direction="column" gap={4} minW={0}>
 			<Flex gap={2} wrap="wrap" align="center">
-				<Text flex="1" minW="min(180px, 100%)" fontSize="sm" color="var(--tt-muted)">
-					{pending
-						? `${pending} ${pending === 1 ? 'change' : 'changes'} waiting to ${timeline.localOnly ? 'save on this device' : 'sync'}`
+				<Text flex="1" fontSize="sm" color="var(--tt-muted)">
+					{held
+						? `Sync paused · ${devicePending ?? pending} waiting on this device`
+						: pending
+						? `${pending} ${pending === 1 ? 'change' : 'changes'} waiting to sync`
 						: timeline.error
 						? 'Could not refresh history'
 						: timeline.ready
 						? timeline.localOnly ? 'Saved on this device · never uploaded' : 'Saved to your account'
 						: 'Opening history…'}
 				</Text>
+				{pausedThing ? (
+					<Badge variant="subtle" colorScheme="orange" title={PAUSED_THING_TITLE} aria-label={`Paused. ${PAUSED_THING_TITLE}`}>
+						Paused
+					</Badge>
+				) : null}
 
 				<Button size="sm" variant="outline" onClick={() => void timeline.refresh()}>
 					Refresh
@@ -397,6 +430,16 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 					</Button>
 				) : null}
 			</Flex>
+			{held ? (
+				<Text role="status" fontSize="sm" color="var(--tt-muted)">
+					{devicePending !== null && devicePending >= HISTORY_HOLD_WARNING_PENDING
+						? `Resume soon — this device holds at most ${TIMELINE_PENDING_MAX_EVENTS} changes. `
+						: 'Changes stay on this device until you resume syncing. '}
+					<Button as={Link} to={HISTORY_SETTINGS_HREF} size="xs" variant="link">
+						History settings
+					</Button>
+				</Text>
+			) : null}
 			{differentSource ? (
 				<Text fontSize="sm" color="var(--tt-muted)">
 					Home account history · your selected database is unchanged.
@@ -416,7 +459,7 @@ function TimelinePanel({ thingId, folderId, urlState = false }: { thingId: strin
 						: ''}
 				</Text>
 			) : null}
-			{filters.thingId ? <TimelineBranches key={timeline.identity} thingId={filters.thingId} selected={selected} onSelect={setSelected} /> : null}
+			{filters.thingId ? <TimelineBranches key={timeline.identity} thingId={filters.thingId} selected={selected} selectedStatus={selectedRow?.status} onSelect={setSelected} /> : null}
 			<Flex direction={{ base: 'column', lg: selected ? 'row' : 'column' }} gap={4} minW={0} align="stretch">
 				<Box flex={selected ? '0 0 48%' : '1'} minW={0}>
 					<TimelineEventBrowser
@@ -532,8 +575,18 @@ export function HistoryPage() {
 	const storage: TimelineStorage = params.get('storage') === 'selected' ? 'selected' : 'home';
 	return (
 		<PageShell width={1180} columnProps={{ pt: 4 }}>
-			<PageHeader eyebrow="Thingtime" title="History" variant="ink" subtitle="Every change, in its place. Explore your Things as they were." />
-			{selected.connection?.scope.dataPlane !== 'home' && selected.connection?.scope.dataPlane !== 'local-workspace' ? (
+			<PageHeader
+				eyebrow="Thingtime"
+				title="History"
+				variant="ink"
+				subtitle="Every change, in its place. Explore your Things as they were."
+				after={
+					<Button as={Link} to={HISTORY_SETTINGS_HREF} size="sm" variant="outline" flexShrink={0}>
+						History settings
+					</Button>
+				}
+			/>
+			{selected.connection?.scope.dataPlane !== 'home' ? (
 				<Flex gap={2} wrap="wrap" role="group" aria-label="History location">
 					{(['home', 'selected'] as const).map((value) => (
 						<Button
@@ -560,6 +613,41 @@ export function HistoryPage() {
 	);
 }
 
+/** The Thing page's owner-only History section. Collapsed by default so the
+ * page mounts no Timeline panel (and starts no 10 s / 15 s polls) until the
+ * viewer asks for it; the links go to the full browser and to its settings. */
+export function ThingHistorySection({ thingId, thingtime }: { thingId: string; thingtime?: readonly string[] }) {
+	const user = useCurrentUser();
+	const [open, setOpen] = React.useState(false);
+	const storage = historyStorageForThing(thingtime);
+	const browserHref = `/history?${new URLSearchParams({ storage, thing: thingId })}`;
+	return (
+		<Box as="section" aria-label="History" borderWidth="1px" borderColor="var(--tt-border)" borderRadius="xl" p={{ base: 4, md: 6 }} minW={0}>
+			<Flex align="center" justify="space-between" gap={3} wrap="wrap" mb={open ? 3 : 0}>
+				<Heading as="h2" fontSize="md">
+					History
+				</Heading>
+				<Flex gap={2} wrap="wrap">
+					<Button size="sm" variant="outline" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+						{open ? 'Hide history' : 'Show history'}
+					</Button>
+					<Button as={Link} to={browserHref} size="sm" variant="ghost">
+						Open History browser
+					</Button>
+					<Button as={Link} to={HISTORY_SETTINGS_HREF} size="sm" variant="ghost">
+						History settings
+					</Button>
+				</Flex>
+			</Flex>
+			{open ? (
+				<TimelineStorageProvider storage={storage}>
+					<TimelinePanel key={`${user?.id}:${thingId}:${storage}`} thingId={thingId} />
+				</TimelineStorageProvider>
+			) : null}
+		</Box>
+	);
+}
+
 export function TimelineHost() {
 	const [query] = useSearchParams();
 	const character = query.get('character');
@@ -581,7 +669,14 @@ export function TimelineHost() {
 		<Modal isOpen={target !== null} onClose={() => setTarget(null)} size="5xl" scrollBehavior="inside" isCentered>
 			<ModalOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} />
 			<ModalContent maxW="min(1100px, calc(100vw - 24px))" maxH="calc(100dvh - 24px)" containerProps={{ zIndex: DRAWER_MODAL_Z }}>
-				<ModalHeader>History</ModalHeader>
+				<ModalHeader pr={12}>
+					<Flex align="center" gap={3} wrap="wrap">
+						History
+						<Button as={Link} to={HISTORY_SETTINGS_HREF} size="xs" variant="link">
+							History settings
+						</Button>
+					</Flex>
+				</ModalHeader>
 				<ModalCloseButton />
 				<ModalBody pb={6} minW={0}>
 					{target ? (

@@ -135,7 +135,10 @@ reads and pruning without loading every snapshot. Pending events and the latest
 unsaved draft per editor branch survive cache eviction. A save releases only the
 draft it actually published; later edits remain recoverable. API page reads first
 select small headers, then fetch only enough immutable payloads for the response
-byte budget. The complete remote timeline is never downloaded eagerly. Active
+byte budget. The complete remote timeline is never downloaded eagerly; the one
+deliberate bounded account-wide read is the Settings → History export, which
+scans pages through the transport without writing to the cache (see the
+2026-10-14 section). Active
 editors subscribe to recent history for their Thing, with in-flight page reads
 shared with an open History panel.
 
@@ -1095,63 +1098,106 @@ Run `test:timeline`, `test:api-capabilities` and the opt-in
 `test:timeline:versions` (`scripts/timeline-versions.integration.mts`) on the
 guarded `timeline-rs` replica.
 
+## History settings, sync hold, per-Thing pause and entry points — 2026-10-14
 
-### Durable note removal — api.timeline 1.19.0
+`api.timeline-settings` 1.0.0 (`GET`/`POST /api/v1/timeline/settings`, route
+`remix/app/routes/api/v1/timeline/settings/_settings.tsx`, shared contract
+`remix/app/timeline/historyPrefs.ts`) adds account history preferences without
+touching `api.timeline`, which stays pinned at 1.18.0 — settings handling never
+goes inside `_timeline.tsx`. The record is scalar preferences plus one bounded
+list, `{ syncHold, retention, pausedThingIds }`, stored on the user Thing's
+packed `secure.meta.historyPrefs` blob by `createHistoryPrefsStore` in
+`remix/app/api/utils/auth/users.ts`: home-pinned by construction (the store is
+built from injected `getHomeThingsCollection`/`getUsersCollection` getters, so a
+selected custom data source can neither read defaults nor write elsewhere),
+dual-era like the notification prefs (legacy `users.meta.historyPrefs`
+fallback), never a new collection, index or crystal field, and never part of
+`toPublicUser`. The list holds ids only — no labels, no timestamps, because the
+feed's author-card resolution unpacks every author's full blob — capped at 200
+and validated by the Timeline id rule. `pause`/`resume` are deltas: the server
+computes union(pause) \ resume inside the `secureVersion` compare-and-set
+write, so two devices pausing different Things never clobber each other, and
+the reply is always the full stored record, never an echo of the patch. A write
+that loses every CAS round answers 503 with `Retry-After: 1` and persists
+nothing; a merged list over 200 answers 400 and applies nothing; bodies are
+capped at 64 KiB (200 ids × 200 characters do not fit the 16 KiB notifications
+cap); `timeline.settings` bounds POST at 30/min and GET spends `timeline.read`,
+both fail-closed. Only a current full account passes: temporary and service
+accounts, personal access tokens and app tokens are 401, and every reply is
+`private, no-store`. There is no `ownerId`/`dataPlane` query fence — the
+preference is account-level and the catch-all's `enforceExpectedActor` applies
+when the client sends `X-Thingtime-Expected-Actor`.
 
-`TimelineNoteRemoval` is the shared local/account record for a removed note
-identity. The account retains a small metered private protected Thing while
-erasing note text and source references; ordinary note reads/counts exclude it
-through its empty target. Retrying an old add or explanation returns 409, and
-removing a not-yet-created identity also fences a delayed add. Fresh notes use
-fresh operation IDs. The browser queues dependent removals durably and keeps a
-single read revision per scope to reject stale cache replies. See
-[local coverage](local-workspaces.md#pending-history-note-removal--2026-10-17)
-and README's guarded `test:timeline:notes` setup. Existing auth, owner scope,
-quota, transaction and capability gates remain required.
+**The sync hold is account-wide; the queue is per device.** While `syncHold`
+is true, `TimelineSync.push()` on every session of that owner (selected and
+home share one reader) resolves 0 without network, so enabling it on one device
+also freezes the others' queues — the switch says so. Pending rows were already
+eviction-proof (`prune` removes only accepted, unpinned rows), so the hold adds
+no new protection; it only stops the upload. Unknown preferences never hold
+(offline, or against an origin without the feature, the device keeps syncing:
+fail-safe is to keep syncing), the first push after `connect()` waits for the
+preference store to settle, and lifting the hold dispatches
+`TIMELINE_CHANGED_EVENT` so queues drain in dependency order at once. The
+status line reads "Sync paused · n waiting on this device" from the index-only
+`pendingCount()`, with a warning from 1600 pending because a device holds at
+most 2000 changes. Online-only controls that push and then read a pending event
+(Restore, Compare, Compare with now, Review and combine, name and export) are
+disabled with "Resume sync to …" instead of surfacing a server 404.
 
+**Retention is stored only.** `forever | 90d | named` is a preference the
+settings page labels "Coming: nothing is deleted yet". No retention policy
+runs, nothing is deleted, and no history storage figure is shown: no API
+exposes a per-kind history storage number and none is derived from IndexedDB
+bytes or account totals.
 
-### Naming device versions — api.timeline 1.20.0
+**Pausing a Thing pauses client draft capture only.** Exactly two editors
+capture client drafts today — the Builder page editor (`useWebpage`, adapter
+`webpage-draft`) and the definition editor (`ThingDefinitionEditor`, adapter
+`definition-source`). For a paused Thing `useTimelineDraft` keeps every hook
+call unconditional and `ready` true, reports `paused: true`, resolves
+`record()` to `null` without capturing, still drains an existing recorder on
+`flush()`, and refuses `release()`/`dismissRecovery()` so a pinned draft is
+never released without a capture; the two editors disable Recover/Dismiss and
+their discard paths with a "Paused" caption. Canonical server revisions keep
+recording inside the content transaction, and named-branch editing (its own
+recorder) keeps capturing. The `pause-history`/`resume-history` verbs sit after
+`history` in the persisted-Thing menu for the owner only, backed by one prefs
+store per owner (at most one in-flight GET per owner per page load), and are
+not offered in the Drive menu, bulk menus or other users' menus.
 
-Version names now admit retained owner-authored client drafts with after content,
-using the existing canonical name command, name record and effect receipt.
-The shared `canNameTimelineVersion` rule extends eligibility without changing
-any event provenance or the saved-revision authority rules for other operations.
-Account queues may accept a name offline before upload, but the remote writer
-must already hold the exact draft. Anonymous local authority accepts names and
-exports draft content without remote synchronization. See
-[coverage](local-workspaces.md#device-draft-names-and-anonymous-version-export--2026-10-17)
-for local-versus-account export metadata and unfinished acceptance boundaries.
+**The export is the one deliberate bounded account-wide read.** "The complete
+remote timeline is never downloaded eagerly" still holds: the Settings →
+History export walks `TimelineSync.scan()` — the same validation as a page read
+with no cache accept, no notes/names store writes and no prune — while
+connected, bounded to 2000 events, 64 MiB and 50 pages, backing off on 429 up
+to three times, and writes one JSON file (`kind: thingtime-history-export`,
+`formatVersion: 1`, with `bounds` and `truncated`) that deliberately never
+satisfies `timelineExportRecord`. Nothing it reads lands in IndexedDB.
 
+Per-viewer conveniences (`showMessages`, the cached prefs paint) live in
+localStorage under `tt-history-prefs:<ownerId>` — keyed by account, not origin,
+re-keyed on account change so one account's prefs never paint for another —
+and are swept on sign-out because `pausedThingIds` reveals private Thing ids
+on shared devices. The prefs client's 401/403 never reach the Timeline
+session's deny path; a temporary account can open the History browser but the
+prefs store short-circuits before any request. Entry points: `/settings/history`
+(also `?settings=history` in the drawer popup; signed out shows the existing
+sign-in card, a temporary or service account "History settings need a full
+account.", an older origin "This Thingtime doesn't support history settings
+yet." with Retry because the well-known manifest is CDN-cached for up to five
+minutes after a deploy), a collapsed History section on the owner's Thing page
+that mounts the panel only while open, a ghost History button in the post
+editor only while editing an existing post, and "History settings" links from
+the History page and modal headers.
 
-### Algorithm device versions — api.timeline 1.22.0
+Not in this slice: server-side clear or retention enforcement, server search
+or day counts, Frames as-of rendering, an "Edited" indicator on posts (no
+`updatedAt` reaches the post projection and the parent's `updatedAt` is bumped
+by child writes, so the signal would be fabricated), pausing named-branch
+capture, and a Drive-menu pause verb.
 
-`algorithmContent.ts` projects the approved saved profile design and library
-placement into the canonical `algorithm-content` version-1 snapshot. Local
-create, edit, training, import, organization and deletion use the existing
-Timeline transaction. Account hydration and content-sync acknowledgements do
-not invent edits. Training observations, sharing/listing authority, lineage and
-active selection are never restorable snapshot data.
-
-The shared version planner opts into `algorithmVersionWriter`, whose dedicated
-transaction restores, undoes or merges design fields while preserving the live
-library title/folder, authority and selection. The preview fingerprint rejects
-a changed live profile even before its next Timeline event is available. Local
-commit and its History event survive failed content upload; account History
-receipts acknowledge only the immutable device event. Generic protected-Thing
-mutation and deleted-profile recovery remain refused. Named-branch checkout and
-branch-merge composition are not supported for these protected profiles.
-
-Remote export now accepts canonical algorithm snapshots from revisions and
-admitted owner-authored client drafts, including deletion before-images. It
-retains the actual receipt and draft provenance, applies the existing private
-owner scope, metering and response-size limit, and writes nothing. The client
-requires `api.timeline` 1.22.0 only for remote algorithm export; ordinary and
-theme export keep their existing minima, and local operations need no server
-capability. Other client-draft adapters remain unsupported by remote export.
-
-Coverage: `local-workspace/algorithmHistory.test.ts`,
-`api/utils/timeline/exportVersion.test.ts`, `test:api-capabilities`, and the
-opt-in native `local-workspace/algorithmHistory.browser.test.ts`. The browser
-fixture requires a disposable isolated runtime and emits narrow/desktop restore
-screenshots plus actual API receipt/export checks; a skipped fixture is not
-acceptance evidence.
+Run `test:timeline` (`historyPrefs`, `historyPrefsStore`,
+`timelineSettingsRoute`, the client store, sync hold and export tests),
+`test:api-capabilities`, `test:rate-limit`, `test:settings` and `test:things`.
+The `users.ts` round-trip against a real replica set is integration-tier
+beyond the injected-collection unit test.

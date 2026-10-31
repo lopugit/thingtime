@@ -1121,6 +1121,8 @@ const AccountPostComposer = (props: PostComposerProps) => {
 						}}
             placeholder={TEXTAREA_PLACEHOLDERS[type]}
             minHeight="72px"
+						// Only an existing post has saved history to open; new posts and comments get no History button.
+						thingId={editPost?.id ?? null}
           />
           <MentionAutocomplete containerRef={editorBoxRef} />
         </Box>

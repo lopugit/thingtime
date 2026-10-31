@@ -10,6 +10,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useWorkspaceUser } from '~/hooks/useWorkspaceUser';
 import { workspaceStorageIdentity, subscribeWorkspaceStorage } from '~/local-workspace/storageStatus.client';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { useHistoryPrefs } from '~/timeline/historyPrefsClient';
 import { canOfferRecordingHandoff, sendRecordingThingToLopu, type RecordingThingIdentity } from '~/components/Lopu/recordingThingHandoff';
 import type { ThingActionId } from '~/schemas/thingActions';
 import type { ThingContextMenuAction } from './ThingContextMenu';
@@ -39,7 +40,9 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   const scope = React.useSyncExternalStore(subscribeWorkspaceStorage, workspaceStorageIdentity, () => '');
   const navigate = useNavigate();
   const lopu = useLopu();
-  const identity = `${scope}:${user?.id || ''}:${id}`;
+  // One module-level prefs store per owner: a feed of cards shares one GET, never one per card.
+  const history = useHistoryPrefs();
+  const identity = `${user?.id || ''}:${id}`;
   const currentIdentity = React.useRef(identity);
   const owner = React.useRef(user?.id);
   currentIdentity.current = identity;
@@ -84,9 +87,24 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
       if (currentIdentity.current === identity) lopu({ title: 'Could not send to Lopu', description: error instanceof Error ? error.message : 'Check Recording activity before retrying.', status: 'error' });
     } finally { busy.current = false; setSending(false); }
   };
-  const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: !!scope && !!user?.id && thing?.author?.id === user.id, rename: !!user?.id && !!thing && thing.author?.id === user.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, download: true, ...capabilities,
-    'send-to-lopu': !!thing && canOfferRecordingHandoff(thing, accountUser?.id) ? { disabled: sending || handoffDisabled } : false
+  // Pause/resume stop CLIENT draft capture for this Thing on the viewer's devices (Builder page and
+  // definition editors); saved versions still record. Offered only to the owner once the account prefs
+  // are known — an unavailable prefs store (older origin, temporary account) hides both verbs.
+  const isOwner = !!user?.id && thing?.author?.id === user.id;
+  const pausePrefsReady = history.status === 'ready' && history.ownerId === user?.id;
+  const paused = history.prefs.pausedThingIds.includes(id);
+  const model = id.startsWith('timeline-folder-') ? buildThingEntityMenu({ open: { href }, 'copy-link': true }) : buildThingEntityMenu({ history: isOwner,
+    'pause-history': isOwner && pausePrefsReady && !paused ? { hint: 'Stops draft capture for this Thing on your devices. Saved versions still record.' } : false,
+    'resume-history': isOwner && pausePrefsReady && paused ? { hint: 'Builder and definition editors capture drafts for this Thing again.' } : false,
+    rename: !!thing && thing.author?.id === user?.id, open: { href }, inspect: { href: inspectHref }, 'copy-link': true, ...capabilities,
+    'send-to-lopu': !!thing && canOfferRecordingHandoff(thing, user?.id) ? { disabled: sending || handoffDisabled } : false
   }, extensions);
+  const setPaused = (next: boolean) => {
+    // Optimistic in the shared store; a failed write reverts there, the hook reports it through Lopu and resolves null.
+    void history.update(next ? { pause: [id] } : { resume: [id] }).then(result => {
+      if (result && currentIdentity.current === identity) lopu({ title: next ? 'Draft history paused' : 'Draft history resumed', description: next ? 'Builder and definition editors stop capturing drafts for this Thing on your devices. Saved versions still record.' : 'Drafts for this Thing are captured again on your devices.', status: 'success' });
+    });
+  };
   return <><ThingActionMenuButton identity={identity} label={label} model={model} onOpen={() => void resolve()}
     onAction={event => {
       if (currentIdentity.current !== identity) return;
@@ -96,7 +114,8 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
         case 'open-live': { const target = thing && thingLiveHref(thing); if (target) navigate(sharedPath(target)); break; }
         case 'inspect': navigate(inspectHref); break;
         case 'history': openThingHistory(id, thing?.thingtime); break;
-        case 'download': setDownloadContext({ identity, linkKey: sharedAccess.key }); break;
+        case 'pause-history': setPaused(true); break;
+        case 'resume-history': setPaused(false); break;
         case 'copy-link': {
           const url = thingEntityLink(permalink, window.location.origin, thing, user?.id, sharedAccess.key);
           void navigator.clipboard.writeText(url.href).then(() => lopu({ title: 'Link copied',
