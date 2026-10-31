@@ -32,6 +32,7 @@ import {
   CopyCodeButton,
   copyToClipboard
 } from './docsCode';
+import { ApiTryIt } from './ApiTryIt';
 import { Link as RouterLink, useLocation, useParams } from 'react-router';
 
 import { ApiPlayground } from './ApiPlayground';
@@ -388,6 +389,7 @@ function EndpointDocs({
                       No request body.
                     </Text>
                   ) : null}
+                  <ApiTryIt doc={doc} example={example} />
                 </Box>
               ))}
             </Stack>

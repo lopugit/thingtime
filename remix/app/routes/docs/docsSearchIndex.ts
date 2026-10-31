@@ -1,3 +1,4 @@
+import { builderGuideSections } from '~/docs/builderGuide';
 import { apiEndpointDocs, type ApiEndpointDoc } from '~/docs/apiDocs';
 import { thingtimeSchemas } from '~/schemas/registry';
 
@@ -207,6 +208,10 @@ const buildDocs = (): DocsSearchDoc[] => {
       to: '/docs/concepts'
     }
   );
+
+  for (const section of builderGuideSections) {
+    docs.push({ id: `builder-${section.id}`, area: 'Guide', title: section.title, meta: `/docs/builder/${section.id}`, description: 'Builder components SDK', sectionTitles: [], content: section.paragraphs.join(' '), to: `/docs/builder/${section.id}` });
+  }
 
   for (const section of embedGuideSections) {
     docs.push({

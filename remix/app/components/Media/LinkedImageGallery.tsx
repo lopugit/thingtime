@@ -29,6 +29,10 @@ export type LinkedImageGalleryProps = {
 	submitButtonLabel?: string;
 	aspectRatio?: MediaGalleryTileProps['aspectRatio'];
 	gridTemplateColumns?: MediaGalleryGridProps['templateColumns'];
+	// inline: no "Add from URL" disclosure — a single always-visible URL input
+	// with an Add button sits below the preview grid, clearing after each add
+	// so the next URL can go straight in
+	inline?: boolean;
 };
 
 export const LinkedImageGallery = React.memo((props: LinkedImageGalleryProps) => {
@@ -45,7 +49,8 @@ export const LinkedImageGallery = React.memo((props: LinkedImageGalleryProps) =>
 		noun = 'linked image',
 		submitButtonLabel,
 		aspectRatio,
-		gridTemplateColumns
+		gridTemplateColumns,
+		inline = false
 	} = props;
 	const [adding, setAdding] = React.useState(false);
 	const [input, setInput] = React.useState('');
@@ -80,12 +85,14 @@ export const LinkedImageGallery = React.memo((props: LinkedImageGalleryProps) =>
 	);
 
 	const addLinkedImages = React.useCallback(() => {
-		const result = appendLinkedImageLines(items, input, { maxItems });
+		// the inline single-line input can receive several pasted URLs at once —
+		// URLs never contain whitespace, so every run of it splits entries
+		const result = appendLinkedImageLines(items, inline ? input.trim().replace(/\s+/g, '\n') : input, { maxItems });
 		onChange(result.items);
 		setInput(result.remainingInput);
 		setMessage(linkedImageAddMessage(result, maxItems, noun));
 		if (!result.remainingInput && result.addedCount > 0) setAdding(false);
-	}, [input, items, maxItems, noun, onChange]);
+	}, [inline, input, items, maxItems, noun, onChange]);
 
 	const labelForItem = React.useCallback((index: number) => (maxItems === 1 ? itemLabel : `${itemLabel} ${index + 1}`), [itemLabel, maxItems]);
 
@@ -166,7 +173,47 @@ export const LinkedImageGallery = React.memo((props: LinkedImageGalleryProps) =>
 				</MediaGalleryGrid>
 			) : null}
 
-			{items.length < maxItems ? (
+			{inline && items.length < maxItems ? (
+				<Flex columnGap={2} alignItems="center">
+					<Input
+						id={`${panelId}-input`}
+						size="sm"
+						value={input}
+						placeholder="https://example.com/photo.jpg"
+						aria-label={inputLabel}
+						borderRadius={RADIUS_SM}
+						isDisabled={disabled}
+						onChange={(event) => {
+							setInput(event.target.value);
+							setMessage(null);
+						}}
+						onKeyDown={(event) => {
+							if (event.key !== 'Enter') return;
+							event.preventDefault();
+							if (input.trim()) addLinkedImages();
+						}}
+					/>
+					<Button
+						type="button"
+						size="sm"
+						minHeight="44px"
+						flexShrink={0}
+						borderRadius="var(--tt-radius-md, 12px)"
+						leftIcon={<Link2 size={14} />}
+						isDisabled={disabled || !input.trim()}
+						onClick={addLinkedImages}
+					>
+						{submitButtonLabel ?? 'Add'}
+					</Button>
+				</Flex>
+			) : null}
+			{inline && helperText ? (
+				<Text fontSize="11px" color={MUTED} whiteSpace="normal">
+					{helperText}
+				</Text>
+			) : null}
+
+			{!inline && items.length < maxItems ? (
 				<Box>
 					<Button
 						type="button"
@@ -186,7 +233,7 @@ export const LinkedImageGallery = React.memo((props: LinkedImageGalleryProps) =>
 				</Box>
 			) : null}
 
-			{adding ? (
+			{!inline && adding ? (
 				<Flex
 					id={panelId}
 					flexDirection="column"

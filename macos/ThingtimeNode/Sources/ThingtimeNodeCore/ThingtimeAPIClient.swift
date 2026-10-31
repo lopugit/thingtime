@@ -1,0 +1,810 @@
+import CryptoKit
+import Foundation
+import Security
+
+public enum ThingtimeAPIClientError: Error, LocalizedError, Equatable {
+    case invalidBaseURL
+    case notPaired
+    case invalidResponse
+    case incompatibleCapabilities
+    case rejected(status: Int)
+    case pairingClaimOutcomeUncertain
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidBaseURL: "The Thingtime API URL is invalid."
+        case .notPaired: "Thingtime Node is not paired."
+        case .invalidResponse: "Thingtime returned an invalid device response."
+        case .incompatibleCapabilities: "This Thingtime server does not support the required device features. Update the server before connecting."
+        case let .rejected(status): "Thingtime rejected the device request (HTTP \(status))."
+        case .pairingClaimOutcomeUncertain: "The pairing response was not confirmed; retry the exact pending claim."
+        }
+    }
+}
+
+private final class ThingtimeAPIRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        guard let original = task.originalRequest?.url,
+              let destination = request.url,
+              original.scheme == destination.scheme,
+              original.host == destination.host,
+              original.port == destination.port else {
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
+    }
+}
+
+private actor DeviceCapabilityCache {
+    private var checkedAt: Date?
+    private var batteryDetails = false
+    private var fileSyncIdentity = false
+    private var menuBar = false
+    private var scripts = false
+    func isFresh() -> Bool { checkedAt.map { Date().timeIntervalSince($0) < 300 } ?? false }
+    func supportsBatteryDetails() -> Bool { batteryDetails }
+    func supportsFileSyncIdentity() -> Bool { fileSyncIdentity }
+    func supportsMenuBar() -> Bool { menuBar }
+    func supportsScripts() -> Bool { scripts }
+    func accept(supportsBatteryDetails: Bool, supportsFileSyncIdentity: Bool, supportsMenuBar: Bool, supportsScripts: Bool) { batteryDetails = supportsBatteryDetails; fileSyncIdentity = supportsFileSyncIdentity; menuBar = supportsMenuBar; scripts = supportsScripts; checkedAt = Date() }
+}
+
+public final class ThingtimeAPIClient: ControlPlaneClient, @unchecked Sendable {
+    public static let maximumOpenApplications = 64
+    public static let capabilityRequirements = [
+        "api.devices-pairing-claim": "1.0.0", "api.devices-node-state": "1.9.0",
+        "api.devices-node-commands": "1.9.0", "api.devices-node-live-sync": "1.0.0"
+    ]
+    private let capabilityCache = DeviceCapabilityCache()
+    static func compatibleManifest(_ data: Data, origin: URL) -> Bool {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              json["schemaVersion"] as? Int == 1, let declared = json["origin"] as? String,
+              let url = URL(string: declared), url.scheme == origin.scheme, url.host == origin.host,
+              url.port == origin.port, url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
+              url.path.isEmpty || url.path == "/", let features = json["features"] as? [String: [String: Any]] else { return false }
+        func semver(_ string: String) -> [Int]? {
+            guard string.range(of: "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$", options: .regularExpression) != nil else { return nil }
+            let values = string.split(separator: ".").compactMap { Int($0) }
+            return values.count == 3 ? values : nil
+        }
+        return capabilityRequirements.allSatisfy { key, required in
+            guard let text = features[key]?["version"] as? String, let actual = semver(text), let minimum = semver(required) else { return false }
+            return actual[0] == minimum[0] && (actual[1] > minimum[1] || (actual[1] == minimum[1] && actual[2] >= minimum[2]))
+        }
+    }
+    static func supportsBatteryDetails(_ data: Data, origin: URL) -> Bool {
+        guard compatibleManifest(data, origin: origin),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [String: [String: Any]],
+              let version = features["api.devices-node-state"]?["version"] as? String else { return false }
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        return parts.count == 3 && parts[0] == 1 && parts[1] >= 10
+    }
+    static func supportsMenuBar(_ data: Data, origin: URL) -> Bool {
+        guard compatibleManifest(data, origin: origin),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [String: [String: Any]],
+              let version = features["api.devices-node-state"]?["version"] as? String else { return false }
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        return parts.count == 3 && parts[0] == 1 && parts[1] >= 13
+    }
+    static func supportsScripts(_ data: Data, origin: URL) -> Bool {
+        guard compatibleManifest(data, origin: origin),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [String: [String: Any]],
+              let version = features["api.devices-node-commands"]?["version"] as? String else { return false }
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        return parts.count == 3 && parts[0] == 1 && parts[1] >= 10
+    }
+    static func supportsFileSyncIdentity(_ data: Data, origin: URL) -> Bool {
+        guard compatibleManifest(data, origin: origin),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let features = json["features"] as? [String: [String: Any]],
+              let version = features["api.devices-node-identity"]?["version"] as? String else { return false }
+        return version.range(of: "^1\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$", options: .regularExpression) != nil
+    }
+
+    /// Select the exact native credential; never infer the owner from renderer input.
+    // Closed scalar diagnostics only. Fast successful checks stay quiet; no
+    // owner/device/session IDs, headers, URLs, body text or throwable messages.
+    static func fileSyncIdentityDiagnostic(status: Int, elapsedMilliseconds: Int, attempt: Int, cooldownSeconds: Int?, admissionMilliseconds: Int = 0) -> String? {
+        guard (100...599).contains(status), (0...120_000).contains(elapsedMilliseconds), (0...300_000).contains(admissionMilliseconds), (0...1).contains(attempt),
+              cooldownSeconds == nil || (status == 429 && attempt == 0 && (1...60).contains(cooldownSeconds!)),
+              status != 200 || elapsedMilliseconds > 1000 || admissionMilliseconds > 1000 || attempt > 0 else { return nil }
+        let retry = cooldownSeconds != nil ? "cooldown" : attempt == 1 ? "after-cooldown" : "none"
+        return "File-sync identity: status=\(status) elapsedMilliseconds=\(elapsedMilliseconds) attempt=\(attempt) retry=\(retry) cooldownSeconds=\(cooldownSeconds ?? 0) admissionMs=\(admissionMilliseconds)"
+    }
+
+    // The canonical limiter emits only integer Retry-After (no limit/remaining
+    // pacing headers). Longer custom windows still fence other queued callers;
+    // this individual RPC retains its existing single <=60-second retry bound.
+    static func identityCooldown(_ response: HTTPURLResponse) -> Int? {
+        guard response.statusCode == 429,
+              let text = response.value(forHTTPHeaderField: "Retry-After"),
+              text.range(of: "^[1-9][0-9]{0,4}$", options: .regularExpression) != nil,
+              let seconds = Int(text), seconds <= 86_400 else { return nil }
+        return seconds
+    }
+
+    // A malformed injected clock disables only diagnostics, never identity checks.
+    static func fileSyncDiagnosticMilliseconds(from start: Double, to end: Double) -> Int? {
+        let elapsed = (end - start) * 1000
+        guard start.isFinite, end.isFinite, start >= 0, elapsed.isFinite, (0...300_000).contains(elapsed) else { return nil }
+        return Int(elapsed)
+    }
+
+    /// Identity is uncached, and local unpairing during the request also fails closed.
+    public func verifyFileSyncIdentity(ownerID: String, deviceID: String) async throws {
+        try Task.checkCancellation()
+        try await requireCapabilities(force: !(await capabilityCache.supportsFileSyncIdentity()), preserveTransientHTTPFailures: true)
+        guard await capabilityCache.supportsFileSyncIdentity() else { throw ThingtimeAPIClientError.incompatibleCapabilities }
+        let matching = try await credentialStore.loadAll().filter { $0.deviceID == deviceID }
+        guard matching.count == 1, let credential = matching.first else { throw ThingtimeAPIClientError.notPaired }
+        struct Identity: Decodable { let ok: Bool; let ownerId: String; let deviceId: String }
+        let url = URL(string: "/api/v1/devices/node/identity", relativeTo: baseURL)!.absoluteURL
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(credential.refreshToken)", forHTTPHeaderField: "Authorization")
+        let admissionScope = FileSyncIdentityAdmission.scope(origin: baseURL, credential: credential)
+        for attempt in 0...1 {
+            let admissionBegan = fileSyncNow()
+            let permit = try await identityAdmission.acquire(admissionScope)
+            let admission = Self.fileSyncDiagnosticMilliseconds(from: admissionBegan, to: fileSyncNow())
+            let data: Data, response: HTTPURLResponse, elapsed: Int?
+            do {
+                try Task.checkCancellation()
+                // Admission can wait behind another lane or a shared cooldown.
+                // Never send a credential that was revoked/rotated while queued.
+                let current = try await credentialStore.loadAll().filter { $0.deviceID == deviceID }
+                guard current == [credential] else { throw ThingtimeAPIClientError.notPaired }
+                try Task.checkCancellation()
+                try await identityAdmission.willSend(permit)
+                try Task.checkCancellation()
+                let began = fileSyncNow()
+                let received = try await session.data(for: request)
+                guard let http = received.1 as? HTTPURLResponse, http.url == url else {
+                    throw ThingtimeAPIClientError.invalidResponse
+                }
+                response = http; data = received.0
+                elapsed = Self.fileSyncDiagnosticMilliseconds(from: began, to: fileSyncNow())
+                // Publish the response's cooldown before another queued lane runs,
+                // even if this caller was cancelled as the response arrived.
+                await identityAdmission.finish(permit, cooldownSeconds: Self.identityCooldown(response))
+                try Task.checkCancellation()
+            } catch {
+                await identityAdmission.finish(permit)
+                throw error
+            }
+            let cooldown = attempt == 0 ? Self.identityCooldown(response).flatMap { $0 <= 60 ? $0 : nil } : nil
+            if let elapsed, let admission,
+               let diagnostic = Self.fileSyncIdentityDiagnostic(status: response.statusCode, elapsedMilliseconds: elapsed,
+                                                                attempt: attempt, cooldownSeconds: cooldown, admissionMilliseconds: admission) {
+                fileSyncIdentityLog(diagnostic)
+            }
+            // A single server-directed cooldown stays within the folder request
+            // deadline. Never shorten a longer delay, retry auth failures, cache
+            // identity, or use a replacement credential after local unpairing.
+            if let cooldown {
+                try await fileSyncRetrySleep(UInt64(cooldown))
+                continue
+            }
+            guard response.statusCode == 200 else { throw ThingtimeAPIClientError.rejected(status: response.statusCode) }
+            guard data.count <= 16_384 else { throw ThingtimeAPIClientError.invalidResponse }
+            let identity = try decoder.decode(Identity.self, from: data)
+            guard identity.ok, identity.ownerId == ownerID, identity.deviceId == deviceID,
+                  try await credentialStore.loadAll().filter({ $0.deviceID == deviceID }) == [credential] else { throw ThingtimeAPIClientError.notPaired }
+            return
+        }
+    }
+
+    private func requireCapabilities(force: Bool = false, preserveTransientHTTPFailures: Bool = false) async throws {
+        if !force, await capabilityCache.isFresh() { return }
+        guard let url = URL(string: "/.well-known/thingtime-capabilities.json", relativeTo: baseURL)?.absoluteURL else { throw ThingtimeAPIClientError.invalidBaseURL }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, raw) = try await session.data(for: request)
+        if preserveTransientHTTPFailures, let response = raw as? HTTPURLResponse,
+           response.url?.scheme == baseURL.scheme, response.url?.host == baseURL.host, response.url?.port == baseURL.port,
+           response.statusCode == 408 || response.statusCode == 429 || (500...599).contains(response.statusCode) {
+            throw ThingtimeAPIClientError.rejected(status: response.statusCode)
+        }
+        guard let response = raw as? HTTPURLResponse, response.statusCode == 200,
+              response.url?.scheme == baseURL.scheme, response.url?.host == baseURL.host, response.url?.port == baseURL.port,
+              data.count <= 2_097_152, Self.compatibleManifest(data, origin: baseURL) else { throw ThingtimeAPIClientError.incompatibleCapabilities }
+        await capabilityCache.accept(supportsBatteryDetails: Self.supportsBatteryDetails(data, origin: baseURL), supportsFileSyncIdentity: Self.supportsFileSyncIdentity(data, origin: baseURL), supportsMenuBar: Self.supportsMenuBar(data, origin: baseURL), supportsScripts: Self.supportsScripts(data, origin: baseURL))
+    }
+
+
+    private struct PairingPrepareBody: Encodable {
+        let op: String
+        let pairingSecret: String
+        let publicKey: String
+        let nonce: String
+    }
+
+    private struct PairingPrepareEnvelope: Decodable {
+        struct Proof: Decodable {
+            let pairingId: String
+            let serverNonce: String
+            let expiresAt: String
+        }
+        let ok: Bool
+        let op: String
+        let proof: Proof
+    }
+
+    private struct ClaimBody: Encodable {
+        struct Proof: Encodable {
+            let pairingId: String
+            let publicKey: String
+            let nonce: String
+            let serverNonce: String
+            let signature: String
+        }
+        let op: String
+        let pairingSecret: String
+        let credential: String
+        let device: PairingDeviceDescriptor
+        let capabilities: [String]
+        let proof: Proof
+    }
+
+    private struct ClaimResponse: Decodable {
+        struct Device: Decodable { let id: String }
+        let ok: Bool
+        let device: Device
+        let credentialStored: Bool
+    }
+
+    private struct StateBody: Encodable {
+        struct State: Encodable {
+            struct App: Encodable { let id: String; let name: String; let frontmost: Bool; let hidden: Bool }
+            struct AudioDevice: Encodable {
+                let id: String
+                let name: String
+                let hasInput: Bool
+                let hasOutput: Bool
+                let isDefaultInput: Bool
+                let isDefaultOutput: Bool
+                let isDefaultSoundEffectsOutput: Bool
+            }
+            struct WiFi: Encodable {
+                let powerOn: Bool?
+                let ssid: String?
+            }
+            struct DisplayMode: Encodable { let id: String; let width: Int; let height: Int; let refreshRate: Double }
+            struct Display: Encodable {
+                let id: UInt32
+                let width: Int
+                let height: Int
+                let isMain: Bool
+                let isBuiltIn: Bool
+                let brightness: Double?
+                let brightnessControlSupported: Bool
+                let currentMode: DisplayMode?
+                let availableModes: [DisplayMode]
+                let originX: Int
+                let originY: Int
+                let mirroredDisplayId: UInt32?
+                let hdrActive: Bool
+            }
+            struct Printer: Encodable { let id: String; let name: String; let isDefault: Bool }
+            struct Camera: Encodable { let id: String; let name: String; let isConnected: Bool; let isPreferred: Bool; let authorization: String }
+            struct BluetoothDevice: Encodable { let id: String; let name: String; let isConnected: Bool }
+            struct VPNService: Encodable { let id: String; let name: String; let isConnected: Bool }
+            struct Battery: Encodable {
+                let level: Double?; let charging: Bool?; let isExternalPower: Bool?
+                let isPreventingIdleSleep: Bool; let isLowPowerModeEnabled: Bool
+                let fullyCharged: Bool?; let cycleCount: Int?; let designCycleCount: Int?
+                let designCapacityMAh: Int?; let fullChargeCapacityMAh: Int?; let remainingCapacityMAh: Int?
+                let currentMA: Int?; let voltageMV: Int?; let temperatureC: Double?
+                let timeToEmptyMinutes: Int?; let timeToFullMinutes: Int?
+                let adapterWatts: Int?; let adapterVoltageMV: Int?; let adapterCurrentMA: Int?
+                enum CodingKeys: String, CodingKey {
+                    case level, charging, isExternalPower, isPreventingIdleSleep, isLowPowerModeEnabled
+                    case fullyCharged, cycleCount, designCycleCount, designCapacityMAh, fullChargeCapacityMAh, remainingCapacityMAh
+                    case currentMA, voltageMV, temperatureC, timeToEmptyMinutes, timeToFullMinutes
+                    case adapterWatts, adapterVoltageMV, adapterCurrentMA
+                }
+                func encode(to encoder: Encoder) throws {
+                    var values = encoder.container(keyedBy: CodingKeys.self)
+                    try values.encode(level, forKey: .level)
+                    try values.encode(charging, forKey: .charging)
+                    try values.encode(isExternalPower, forKey: .isExternalPower)
+                    try values.encode(isPreventingIdleSleep, forKey: .isPreventingIdleSleep)
+                    try values.encode(isLowPowerModeEnabled, forKey: .isLowPowerModeEnabled)
+                    try values.encodeIfPresent(fullyCharged, forKey: .fullyCharged)
+                    try values.encodeIfPresent(cycleCount, forKey: .cycleCount)
+                    try values.encodeIfPresent(designCycleCount, forKey: .designCycleCount)
+                    try values.encodeIfPresent(designCapacityMAh, forKey: .designCapacityMAh)
+                    try values.encodeIfPresent(fullChargeCapacityMAh, forKey: .fullChargeCapacityMAh)
+                    try values.encodeIfPresent(remainingCapacityMAh, forKey: .remainingCapacityMAh)
+                    try values.encodeIfPresent(currentMA, forKey: .currentMA)
+                    try values.encodeIfPresent(voltageMV, forKey: .voltageMV)
+                    try values.encodeIfPresent(temperatureC, forKey: .temperatureC)
+                    try values.encodeIfPresent(timeToEmptyMinutes, forKey: .timeToEmptyMinutes)
+                    try values.encodeIfPresent(timeToFullMinutes, forKey: .timeToFullMinutes)
+                    try values.encodeIfPresent(adapterWatts, forKey: .adapterWatts)
+                    try values.encodeIfPresent(adapterVoltageMV, forKey: .adapterVoltageMV)
+                    try values.encodeIfPresent(adapterCurrentMA, forKey: .adapterCurrentMA)
+                }
+            }
+            struct PowerTimers: Encodable { let displayIdleMinutes: Int?; let systemSleepMinutes: Int?; let diskIdleMinutes: Int? }
+            struct AppleMusic: Encodable { let isInstalled: Bool; let isRunning: Bool }
+            struct Spotify: Encodable { let isInstalled: Bool; let isRunning: Bool }
+            struct ChromeYouTube: Encodable { let isInstalled: Bool; let isRunning: Bool }
+            let locked: Bool
+            let volume: Double?
+            let muted: Bool?
+            let inputVolume: Double?
+            let inputMuted: Bool?
+            let soundEffectsVolume: Double?
+            let soundEffectsMuted: Bool?
+            let brightness: Double?
+            let menuBar: MenuBarTelemetry?
+            let openApps: [App]
+            let audioDevices: [AudioDevice]
+            let wifi: WiFi
+            let displays: [Display]
+            let printers: [Printer]
+            let cameras: [Camera]
+            let bluetoothDevices: [BluetoothDevice]
+            let vpnServices: [VPNService]
+            let battery: Battery
+            let powerTimers: PowerTimers
+            let appleMusic: AppleMusic
+            let spotify: Spotify
+            let chromeYouTube: ChromeYouTube
+        }
+        struct Connector: Encodable {
+            let id: String
+            let kind: String
+            let label: String
+            let status: String
+            let capabilities: [String]
+            let projects: [ConnectorProjectReference]
+        }
+        let revision: Int64
+        let state: State
+        let connectors: [Connector]
+        let capabilities: [String]
+    }
+
+    private struct CommandEnvelope: Decodable {
+        struct Command: Decodable {
+            let id: String
+            let leaseId: String?
+            let kind: String
+            let input: JSONValue
+            let leaseExpiresAt: String?
+            let requiresApproval: Bool
+            let approvalState: String?
+        }
+        let ok: Bool
+        let command: Command?
+    }
+
+    private struct OKResponse: Decodable { let ok: Bool }
+
+    private struct LeaseHeartbeatResponse: Decodable {
+        let ok: Bool
+        let leaseExpiresAt: String
+    }
+
+    public static let connectorCapabilities = [
+        "read-history", "create-session", "send-message", "steer-turn", "interrupt-turn", "review-approval"
+    ]
+
+    private let baseURL: URL
+    private let credentialStore: any DeviceCredentialStore
+    private let identityAdmission: FileSyncIdentityAdmission
+    private let fileSyncRetrySleep: @Sendable (UInt64) async throws -> Void
+    private let fileSyncNow: @Sendable () -> Double
+    private let fileSyncIdentityLog: @Sendable (String) -> Void
+    private let session: URLSession
+    private let encoder: JSONEncoder
+    private let decoder: JSONDecoder
+
+    public convenience init(
+        baseURL: URL,
+        credentialStore: any DeviceCredentialStore,
+        session: URLSession? = nil,
+        fileSyncRetrySleep: @escaping @Sendable (UInt64) async throws -> Void = { seconds in
+            try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+        }
+    ) throws {
+        try self.init(baseURL: baseURL, credentialStore: credentialStore, session: session,
+                      identityAdmission: .shared, fileSyncRetrySleep: fileSyncRetrySleep)
+    }
+
+    init(baseURL: URL, credentialStore: any DeviceCredentialStore, session: URLSession? = nil,
+         identityAdmission: FileSyncIdentityAdmission,
+         fileSyncNow: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime },
+         fileSyncIdentityLog: @escaping @Sendable (String) -> Void = { diagnostic in ThingtimeNodeLog.actions.notice("\(diagnostic, privacy: .public)") },
+         fileSyncRetrySleep: @escaping @Sendable (UInt64) async throws -> Void = { seconds in
+             try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+         }) throws {
+        guard Self.allowed(baseURL) else { throw ThingtimeAPIClientError.invalidBaseURL }
+        self.identityAdmission = identityAdmission
+        self.fileSyncNow = fileSyncNow
+        self.fileSyncIdentityLog = fileSyncIdentityLog
+        self.baseURL = baseURL
+        self.credentialStore = credentialStore
+        self.fileSyncRetrySleep = fileSyncRetrySleep
+        if let session {
+            self.session = session
+        } else {
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.timeoutIntervalForRequest = 35
+            configuration.timeoutIntervalForResource = 45
+            configuration.httpCookieStorage = nil
+            configuration.urlCredentialStorage = nil
+            configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+            self.session = URLSession(configuration: configuration, delegate: ThingtimeAPIRedirectDelegate(), delegateQueue: nil)
+        }
+        encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        encoder.dateEncodingStrategy = .iso8601
+        decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+    }
+
+    public func preparePairing(_ request: PairingPrepareRequest) async throws -> PairingPrepareResponse {
+        guard request.publicKey.count == 32, request.nonce.count == 32 else {
+            throw ThingtimeAPIClientError.invalidResponse
+        }
+        let response: PairingPrepareEnvelope
+        do {
+            response = try await send(
+                path: "api/v1/devices/pairing/claim",
+                body: PairingPrepareBody(
+                    op: "prepare",
+                    pairingSecret: request.pairingSecret,
+                    publicKey: request.publicKey.base64URLEncodedString(),
+                    nonce: request.nonce.base64URLEncodedString()
+                ),
+                credential: nil
+            )
+        } catch {
+            throw Self.pairingError(error)
+        }
+        guard response.ok,
+              response.op == "prepare",
+              !response.proof.pairingId.isEmpty,
+              let serverNonce = Data(base64URLUnpadded: response.proof.serverNonce),
+              serverNonce.count == 32,
+              let expiresAt = Self.isoDate(response.proof.expiresAt) else {
+            throw ThingtimeAPIClientError.pairingClaimOutcomeUncertain
+        }
+        return PairingPrepareResponse(
+            pairingID: response.proof.pairingId,
+            serverNonce: serverNonce,
+            expiresAt: expiresAt
+        )
+    }
+
+    public func claimPairing(_ request: PairingClaimRequest) async throws -> PairingClaimResponse {
+        let body = ClaimBody(
+            op: "complete",
+            pairingSecret: request.pairingSecret,
+            credential: request.credential,
+            device: request.device,
+            capabilities: request.capabilities,
+            proof: .init(
+                pairingId: request.proof.pairingID,
+                publicKey: request.proof.publicKey.base64URLEncodedString(),
+                nonce: request.proof.nonce.base64URLEncodedString(),
+                serverNonce: request.proof.serverNonce.base64URLEncodedString(),
+                signature: request.proof.signature.base64URLEncodedString()
+            )
+        )
+        let response: ClaimResponse
+        do {
+            response = try await send(path: "api/v1/devices/pairing/claim", body: body, credential: nil)
+        } catch {
+            throw Self.pairingError(error)
+        }
+        guard response.ok, response.credentialStored, !response.device.id.isEmpty else {
+            throw ThingtimeAPIClientError.pairingClaimOutcomeUncertain
+        }
+        return PairingClaimResponse(deviceID: response.device.id, refreshToken: request.credential)
+    }
+
+    public func sendHeartbeat(_ heartbeat: DeviceHeartbeat) async throws {
+        let credential = try await requireCredential(deviceID: heartbeat.deviceID)
+        try await requireCapabilities()
+        let detailedBattery = await capabilityCache.supportsBatteryDetails()
+        let menuBarSupported = await capabilityCache.supportsMenuBar()
+        let telemetry = heartbeat.telemetry
+        let brightness = telemetry.displays.first(where: { $0.isMain })?.brightness
+        var connectors = [StateBody.Connector(
+            id: "codex-app-server",
+            kind: "codex",
+            label: "Codex",
+            status: Self.connectorStatus(heartbeat.connector.state),
+            capabilities: Self.connectorCapabilities,
+            projects: Array(heartbeat.connectorProjects.prefix(128))
+        )]
+        connectors.append(contentsOf: heartbeat.additionalConnectors.prefix(8).map {
+            StateBody.Connector(
+                id: String($0.id.prefix(128)),
+                kind: String($0.kind.prefix(64)),
+                label: String($0.label.prefix(120)),
+                status: $0.status,
+                capabilities: Array($0.capabilities.prefix(16)),
+                projects: Array($0.projects.prefix(128))
+            )
+        })
+        let state = StateBody(
+            revision: max(1, Int64(telemetry.collectedAt.timeIntervalSince1970 * 1_000)),
+            state: .init(
+                locked: telemetry.session.isLocked,
+                volume: telemetry.outputVolume,
+                muted: telemetry.outputMuted,
+                inputVolume: telemetry.inputVolume,
+                inputMuted: telemetry.inputMuted,
+                soundEffectsVolume: telemetry.soundEffectsOutputVolume,
+                soundEffectsMuted: telemetry.soundEffectsOutputMuted,
+                brightness: brightness,
+                menuBar: menuBarSupported ? telemetry.menuBar : nil,
+                openApps: Array(telemetry.runningApplications.compactMap { application in
+                    guard let identifier = application.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines),
+                          !identifier.isEmpty else { return nil }
+                    let name = application.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return .init(
+                        id: String(identifier.prefix(160)),
+                        name: String((name.flatMap { $0.isEmpty ? nil : $0 } ?? identifier).prefix(120)),
+                        frontmost: application.isActive,
+                        hidden: application.isHidden
+                    )
+                }.prefix(Self.maximumOpenApplications)),
+                audioDevices: Array(telemetry.audioDevices.prefix(32)).map {
+                    .init(
+                        id: String($0.id.prefix(512)),
+                        name: String($0.name.prefix(120)),
+                        hasInput: $0.hasInput,
+                        hasOutput: $0.hasOutput,
+                        isDefaultInput: $0.isDefaultInput,
+                        isDefaultOutput: $0.isDefaultOutput,
+                        isDefaultSoundEffectsOutput: $0.isDefaultSoundEffectsOutput
+                    )
+                },
+                wifi: .init(powerOn: telemetry.wifi.powerOn, ssid: telemetry.wifi.ssid),
+                displays: Array(telemetry.displays.prefix(16)).map {
+                    .init(
+                        id: $0.displayID,
+                        width: $0.width,
+                        height: $0.height,
+                        isMain: $0.isMain,
+                        isBuiltIn: $0.isBuiltIn,
+                        brightness: $0.brightness,
+                        brightnessControlSupported: $0.brightnessControlSupported,
+                        currentMode: $0.currentMode.map { .init(id: String($0.id.prefix(160)), width: $0.width, height: $0.height, refreshRate: $0.refreshRate) },
+                        availableModes: Array($0.availableModes.prefix(64)).map { .init(id: String($0.id.prefix(160)), width: $0.width, height: $0.height, refreshRate: $0.refreshRate) },
+                        originX: $0.originX,
+                        originY: $0.originY,
+                        mirroredDisplayId: $0.mirroredDisplayID,
+                        hdrActive: $0.hdrActive
+                    )
+                },
+                printers: Array(telemetry.printers.prefix(64)).map { .init(id: String($0.id.prefix(512)), name: String($0.name.prefix(120)), isDefault: $0.isDefault) },
+                cameras: Array(telemetry.cameras.prefix(32)).map { .init(id: String($0.id.prefix(512)), name: String($0.name.prefix(120)), isConnected: $0.isConnected, isPreferred: $0.isPreferred, authorization: $0.authorization.rawValue) },
+                bluetoothDevices: Array(telemetry.bluetoothDevices.prefix(64)).map { .init(id: String($0.id.prefix(120)), name: String($0.name.prefix(120)), isConnected: $0.isConnected) },
+                vpnServices: Array(telemetry.vpnServices.prefix(32)).map { .init(id: String($0.id.prefix(512)), name: String($0.name.prefix(120)), isConnected: $0.isConnected) },
+                battery: .init(level: telemetry.battery.level, charging: telemetry.battery.isCharging, isExternalPower: telemetry.battery.isExternalPower, isPreventingIdleSleep: telemetry.battery.isPreventingIdleSleep, isLowPowerModeEnabled: telemetry.battery.isLowPowerModeEnabled,
+                               fullyCharged: detailedBattery ? telemetry.battery.fullyCharged : nil, cycleCount: detailedBattery ? telemetry.battery.cycleCount : nil, designCycleCount: detailedBattery ? telemetry.battery.designCycleCount : nil,
+                               designCapacityMAh: detailedBattery ? telemetry.battery.designCapacityMAh : nil, fullChargeCapacityMAh: detailedBattery ? telemetry.battery.fullChargeCapacityMAh : nil, remainingCapacityMAh: detailedBattery ? telemetry.battery.remainingCapacityMAh : nil,
+                               currentMA: detailedBattery ? telemetry.battery.currentMA : nil, voltageMV: detailedBattery ? telemetry.battery.voltageMV : nil, temperatureC: detailedBattery ? telemetry.battery.temperatureC : nil,
+                               timeToEmptyMinutes: detailedBattery ? telemetry.battery.timeToEmptyMinutes : nil, timeToFullMinutes: detailedBattery ? telemetry.battery.timeToFullMinutes : nil,
+                               adapterWatts: detailedBattery ? telemetry.battery.adapterWatts : nil, adapterVoltageMV: detailedBattery ? telemetry.battery.adapterVoltageMV : nil, adapterCurrentMA: detailedBattery ? telemetry.battery.adapterCurrentMA : nil),
+                powerTimers: .init(displayIdleMinutes: telemetry.powerTimers.displayIdleMinutes, systemSleepMinutes: telemetry.powerTimers.systemSleepMinutes, diskIdleMinutes: telemetry.powerTimers.diskIdleMinutes),
+                appleMusic: .init(isInstalled: telemetry.appleMusic.isInstalled, isRunning: telemetry.appleMusic.isRunning),
+				spotify: .init(isInstalled: telemetry.spotify.isInstalled, isRunning: telemetry.spotify.isRunning),
+				chromeYouTube: .init(isInstalled: telemetry.chromeYouTube.isInstalled, isRunning: telemetry.chromeYouTube.isRunning)
+            ),
+            connectors: connectors,
+            capabilities: ThingtimeNodeController.runtimeCapabilities(for: telemetry)
+        )
+        let response: OKResponse = try await send(path: "api/v1/devices/node/state", body: state, credential: credential.refreshToken)
+        guard response.ok else { throw ThingtimeAPIClientError.invalidResponse }
+    }
+
+    public func leaseCommands(_ request: CommandLeaseRequest) async throws -> CommandLeaseBatch {
+        let credential = try await requireCredential(deviceID: request.deviceID)
+        let response: CommandEnvelope = try await send(
+            path: "api/v1/devices/node/commands",
+            body: [
+                "op": .string("claim"),
+                "waitMs": .number(Double(min(request.waitSeconds * 1_000, 20_000)))
+            ] as [String: JSONValue],
+            credential: credential.refreshToken
+        )
+        guard response.ok else { throw ThingtimeAPIClientError.invalidResponse }
+        guard let command = response.command else { return CommandLeaseBatch(commands: []) }
+        if command.kind == "script.run", !(await capabilityCache.supportsScripts()) { throw ThingtimeAPIClientError.incompatibleCapabilities }
+        guard let leaseID = command.leaseId,
+              !leaseID.isEmpty,
+              let expiresAt = Self.isoDate(command.leaseExpiresAt) else {
+            throw ThingtimeAPIClientError.invalidResponse
+        }
+        guard (command.kind != "script.run" || command.requiresApproval), !command.requiresApproval || command.approvalState == "approved" else {
+            throw ThingtimeAPIClientError.invalidResponse
+        }
+        return CommandLeaseBatch(commands: [LeasedCommand(
+            commandID: command.id,
+            leaseID: leaseID,
+            method: command.kind,
+            parameters: command.input,
+            leaseExpiresAt: expiresAt,
+            approvedForExecution: !command.requiresApproval || command.approvalState == "approved"
+        )])
+    }
+
+    public func reportCommand(_ report: CommandExecutionReport) async throws {
+        let credential = try await requireCredential()
+        let status: String
+        switch report.status {
+        case .succeeded: status = "succeeded"
+        case .failed: status = "failed"
+        case .uncertain: status = "needs-review"
+        }
+        let eventID = Self.reportEventID(report)
+        var body: [String: JSONValue] = [
+            "op": .string("report"),
+            "commandId": .string(report.commandID),
+            "leaseId": .string(report.leaseID),
+            "eventId": .string(eventID),
+            "status": .string(status)
+        ]
+        if let error = report.response.error {
+            body["error"] = .string(String("\(error.code): \(error.message)".prefix(500)))
+        }
+        if report.status == .succeeded, let filesystem = report.response.result?.objectValue?["filesystem"] {
+            body["result"] = filesystem
+        }
+        if report.status == .succeeded, let script = report.response.result?.objectValue?["script"] {
+            body["result"] = script
+        }
+        if let outputReference = Self.commandOutputReference(report.response) {
+            body["outputRef"] = .string(outputReference)
+        }
+        let response: OKResponse = try await send(path: "api/v1/devices/node/commands", body: body, credential: credential.refreshToken)
+        guard response.ok else { throw ThingtimeAPIClientError.invalidResponse }
+    }
+
+    public func heartbeatCommand(commandID: String, leaseID: String) async throws -> Date {
+        let credential = try await requireCredential()
+        let response: LeaseHeartbeatResponse = try await send(
+            path: "api/v1/devices/node/commands",
+            body: [
+                "op": .string("heartbeat"),
+                "commandId": .string(commandID),
+                "leaseId": .string(leaseID)
+            ] as [String: JSONValue],
+            credential: credential.refreshToken
+        )
+        guard response.ok, let leaseExpiresAt = Self.isoDate(response.leaseExpiresAt) else {
+            throw ThingtimeAPIClientError.invalidResponse
+        }
+        return leaseExpiresAt
+    }
+
+    /// Sends a closed, already-normalized live AI mirror envelope. The server
+    /// revalidates every field and derives owner/device/connector identity from
+    /// the node credential and current connector projection.
+    public func syncLiveAI(_ body: JSONValue) async throws -> JSONValue {
+        let credential = try await requireCredential()
+        let response: JSONValue = try await send(
+            path: "api/v1/devices/node/live-sync",
+            body: body,
+            credential: credential.refreshToken
+        )
+        guard response.objectValue?["ok"] == .bool(true) else {
+            throw ThingtimeAPIClientError.invalidResponse
+        }
+        return response
+    }
+
+    private func requireCredential(deviceID: String? = nil) async throws -> DeviceCredential {
+        guard let credential = try await credentialStore.load(),
+              deviceID == nil || credential.deviceID == deviceID else {
+            throw ThingtimeAPIClientError.notPaired
+        }
+        return credential
+    }
+
+    private func send<Body: Encodable, Response: Decodable>(
+        path: String,
+        body: Body,
+        credential: String?
+    ) async throws -> Response {
+        try await requireCapabilities()
+        guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
+            throw ThingtimeAPIClientError.invalidBaseURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpBody = try encoder.encode(body)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Thingtime-Node/0.1", forHTTPHeaderField: "User-Agent")
+        if let credential { request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization") }
+        let (data, rawResponse) = try await session.data(for: request)
+        guard data.count <= 2_097_152,
+              let response = rawResponse as? HTTPURLResponse,
+              response.url?.scheme == baseURL.scheme,
+              response.url?.host == baseURL.host,
+              response.url?.port == baseURL.port else {
+            throw ThingtimeAPIClientError.invalidResponse
+        }
+        guard (200 ..< 300).contains(response.statusCode) else {
+            throw ThingtimeAPIClientError.rejected(status: response.statusCode)
+        }
+        return try decoder.decode(Response.self, from: data)
+    }
+
+    private static func allowed(_ url: URL) -> Bool {
+        guard url.user == nil, url.password == nil, url.query == nil, url.fragment == nil, url.host != nil else { return false }
+        if url.scheme == "https" { return true }
+        return url.scheme == "http" && (url.host == "127.0.0.1" || url.host == "localhost" || url.host == "::1")
+    }
+
+    private static func pairingError(_ error: Error) -> Error {
+        if case let ThingtimeAPIClientError.rejected(status) = error,
+           (400 ..< 500).contains(status),
+           status != 408,
+           status != 425,
+           status != 429 {
+            return error
+        }
+        return ThingtimeAPIClientError.pairingClaimOutcomeUncertain
+    }
+
+    private static func connectorStatus(_ state: ConnectorRuntimeState) -> String {
+        switch state {
+        case .running: "connected"
+        case .disabled, .stopped, .starting: "disconnected"
+        case .degraded, .failed: "degraded"
+        }
+    }
+
+    private static func isoDate(_ value: String?) -> Date? {
+        guard let value else { return nil }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: value) { return date }
+        let standard = ISO8601DateFormatter()
+        standard.formatOptions = [.withInternetDateTime]
+        return standard.date(from: value)
+    }
+
+    private static func reportEventID(_ report: CommandExecutionReport) -> String {
+        let value = "\(report.commandID)\u{0}\(report.leaseID)\u{0}\(report.status.rawValue)\u{0}\(report.response.ok)"
+        let digest = SHA256.hash(data: Data(value.utf8))
+        return "node-report-" + digest.map { String(format: "%02x", $0) }.joined().prefix(40)
+    }
+
+    /// The control plane needs only the opaque list cursor to request the next
+    /// bounded page. Never serialize the remaining connector response (which
+    /// may contain session metadata) into a command row.
+    private static func commandOutputReference(_ response: NodeResponse) -> String? {
+        guard response.ok,
+              let value = response.result?.objectValue?["nextCursor"]?.stringValue,
+              !value.isEmpty,
+              value == value.trimmingCharacters(in: .whitespacesAndNewlines),
+              value.unicodeScalars.count <= 2_048,
+              !value.unicodeScalars.contains(where: {
+                  $0.properties.generalCategory == .control || $0.properties.generalCategory == .format
+              }) else {
+            return nil
+        }
+        return value
+    }
+}

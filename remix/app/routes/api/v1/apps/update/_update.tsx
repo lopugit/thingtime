@@ -4,7 +4,7 @@ import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { updateApp } from '~/api/utils/apps/apps';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
-// POST /api/v1/apps/update — { clientId, name?, origins? } — update one of
+// POST /api/v1/apps/update — { clientId, name?, origins?, nativeRedirectUris? } — update one of
 // your embed apps. Origins are re-validated; tokens minted for an origin you
 // remove stop working on their next request (appTokens re-checks the list).
 export const action = async ({ request }: { request: Request }) => {
@@ -19,7 +19,11 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBody(request, 16 * 1024);
-  const result = await updateApp(user.id, body?.clientId, { name: body?.name, origins: body?.origins });
+  const result = await updateApp(user.id, body?.clientId, {
+    name: body?.name,
+    origins: body?.origins,
+    nativeRedirectUris: body?.nativeRedirectUris
+  });
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });

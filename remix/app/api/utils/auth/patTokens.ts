@@ -1,9 +1,16 @@
+import { characterAccountLive } from './characterSession';
+import { CHARACTER_HEADER } from './characterSession';
+import { resolveSessionUser } from './getCurrentUser';
+import { internalRequestActor } from './internalRequestActor';
+import { resolveAppToken } from '../apps/appTokens';
+import { appAccountAllows, appAccountThingScopes } from '../apps/accountScopes';
 import { getAuthToken } from './authCookie';
+import { sessionPurposeCanActAsAccount } from './credentialPurpose';
 import { serviceAccountAuthenticationAllowed } from './getCurrentUser';
 import { isKnownPatScope, isKnownPatVisibility, patScopeCovers } from './patScopes';
 import type { PatVisibilityMode } from './patScopes';
 import { signJwt, verifyJwt } from './jwt';
-import { createSession, getLiveSession } from './sessions';
+import { createSession, getLiveSession, REVOKED_SESSION_REAP_MS } from './sessions';
 import type { SessionDoc } from './sessions';
 import { findUserById, toPublicUserWithStorage } from './users';
 import type { PublicUser } from './users';
@@ -43,7 +50,10 @@ export const PAT_MIN_EXPIRY_MS = 1;
 export const PAT_MAX_EXPIRY_MS = 1000 * 60 * 60 * 24 * 365 * 100; // 100 years ≈ never, but finite
 export const PAT_MIN_USES = 1;
 export const PAT_MAX_USES = 1_000_000_000;
-const REVOKED_PAT_REAP_MS = 1000 * 60 * 60 * 24 * 30;
+// One reap window for every revoked never-expiring session, owned by
+// sessions.ts. PATs and the bridge/service purposes are the same TTL problem —
+// two copies of the same 30 days could drift apart silently, and the drift
+// would only ever show up as rows lingering in Mongo.
 
 export type PublicPatToken = {
   id: string; // the session jti — what list/revoke exchange
@@ -55,6 +65,9 @@ export type PublicPatToken = {
   // audience fence: which visibility of things the token may see/touch
   // ('all' = unrestricted; tokens minted before the field read as 'all')
   visibility: PatVisibilityMode;
+  // GET bridge: this token may drive /api/v1/get — CRUD via plain GET URLs
+  // with the token in a query param (for browse-only agents). Default off.
+  allowGet: boolean;
   createdAt: string;
   expiresAt: string | null;
   maxUses: number | null;
@@ -92,6 +105,7 @@ export const toPublicPatToken = (session: SessionDoc): PublicPatToken => {
     scopes: patSessionScopes(meta),
     onlyCreatedThings: meta.onlyCreatedThings === true,
     visibility: patSessionVisibility(meta),
+    allowGet: meta.allowGet === true,
     createdAt: new Date(session.createdAt).toISOString(),
     expiresAt: expiresAt ? expiresAt.toISOString() : null,
     maxUses,
@@ -109,6 +123,10 @@ export type MintPatInput = {
   maxUses?: unknown;
   onlyCreatedThings?: unknown;
   visibility?: unknown;
+  allowGet?: unknown;
+  // Internal mint sites can identify a generated credential without exposing
+  // the provenance knob on the public token-minter API.
+  createdVia?: 'chatgpt-oauth';
 };
 
 export type MintPatResult =
@@ -167,7 +185,9 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
   // free mirrors MAX_PAT_TOKENS_PER_USER.
   const maxPats = (await getSubscription('user', userId)).effective.maxPats;
   if (maxPats !== null) {
-    const existing = await sessions.countDocuments({ userId, purpose: 'pat' });
+    // Revoked credentials are no longer usable and already have a bounded
+    // reap date, so they must not prevent a user from replacing a token.
+    const existing = await sessions.countDocuments({ userId, purpose: 'pat', revokedAt: null });
     if (existing >= maxPats) {
       return {
         ok: false,
@@ -191,7 +211,10 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
       // only restrictions are stored — absent means 'all', matching every
       // token minted before the field existed
       ...(visibility !== 'all' ? { visibility } : {}),
-      createdVia: 'token-minter'
+      // opt-in only: GET URLs put the credential in logs/history, so the
+      // holder must have chosen that trade at mint time
+      ...(input.allowGet === true ? { allowGet: true } : {}),
+      createdVia: input.createdVia === 'chatgpt-oauth' ? 'chatgpt-oauth' : 'token-minter'
     }
   });
 
@@ -232,7 +255,7 @@ export const revokePatToken = async (userId: string, id: unknown): Promise<Revok
   if (!session.revokedAt) {
     const revokedAt = new Date();
     const patch: Record<string, any> = { revokedAt };
-    if (!session.expiresAt) patch.expiresAt = new Date(revokedAt.getTime() + REVOKED_PAT_REAP_MS);
+    if (!session.expiresAt) patch.expiresAt = new Date(revokedAt.getTime() + REVOKED_SESSION_REAP_MS);
     await sessions.updateOne({ jti: session.jti }, { $set: patch });
     Object.assign(session, patch);
   }
@@ -277,14 +300,118 @@ export type ThingsActor = { user: PublicUser | null; pat: PatContext | null };
 
 export type ThingsActorResult = { ok: true; actor: ThingsActor } | { ok: false; status: number; error: string };
 
+// The shared PAT-session → actor path (used by the Bearer route above and the
+// GET bridge below): scope check first (403s are free), then atomic use
+// consumption, then user resolution. `null` = degrade to anonymous (dead or
+// disallowed account) — the caller decides what anonymous means for it.
+const resolvePatSessionActor = async (
+  session: SessionDoc,
+  sub: string,
+  scope: string | string[],
+  consumeUse = true
+): Promise<ThingsActorResult | null> => {
+  const scopes = patSessionScopes(session.meta);
+  for (const required of Array.isArray(scope) ? scope : [scope]) {
+    if (!patScopeCovers(scopes, required)) {
+      return { ok: false, status: 403, error: `This token is missing the ${required} permission 🔐` };
+    }
+  }
+
+  if (consumeUse && !(await consumePatUse(session))) {
+    return { ok: false, status: 401, error: 'This token has no uses remaining 🔋' };
+  }
+
+  const userDoc = await findUserById(sub);
+  if (!userDoc || (!serviceAccountAuthenticationAllowed(userDoc) || !(await characterAccountLive(userDoc)))) return null;
+
+  const maxUses = typeof session.meta?.maxUses === 'number' ? session.meta.maxUses : null;
+  const before = typeof session.meta?.usesRemaining === 'number' ? session.meta.usesRemaining : null;
+  return {
+    ok: true,
+    actor: {
+      user: await toPublicUserWithStorage(userDoc),
+      pat: {
+        jti: session.jti,
+        name: typeof session.meta?.name === 'string' ? session.meta.name : 'API token',
+        scopes,
+        onlyCreatedThings: session.meta?.onlyCreatedThings === true,
+        visibility: patSessionVisibility(session.meta),
+        expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
+        maxUses,
+        usesRemaining: maxUses === null ? null : Math.max(0, (before ?? 0) - (consumeUse ? 1 : 0))
+      }
+    }
+  };
+};
+
+// A raw token string → its live PAT session, shared by the GET bridge paths.
+const livePatSessionOf = async (
+  rawToken: unknown
+): Promise<{ ok: true; session: SessionDoc; sub: string } | { ok: false; status: number; error: string }> => {
+  if (typeof rawToken !== 'string' || !rawToken.trim()) {
+    return { ok: false, status: 401, error: 'Send a personal access token as ?token=<token> (or an Authorization: Bearer header)' };
+  }
+  const claims = await verifyJwt(rawToken.trim());
+  if (!claims) return { ok: false, status: 401, error: 'Token is invalid, expired, or revoked' };
+  const session = await getLiveSession(claims.jti);
+  if (!session || session.purpose !== 'pat' || String(session.userId) !== claims.sub) {
+    return { ok: false, status: 401, error: 'Token is invalid, expired, or revoked' };
+  }
+  return { ok: true, session: session as SessionDoc, sub: claims.sub };
+};
+
+// GET-bridge resolution (/api/v1/get): the token arrives as a ?token= query
+// param — a deliberate trade (URLs land in logs and history) that only tokens
+// minted with the "works via GET links" tick (meta.allowGet) are allowed to
+// make. Cookies are never read here, so a mutating GET can't be forged
+// cross-site with ambient credentials. Everything else — scope check before
+// use consumption, atomic use accounting, the sandbox and visibility fences
+// riding PatContext — is byte-for-byte the Bearer path.
+export const resolveGetBridgeActor = async (rawToken: unknown, scope: string | string[]): Promise<ThingsActorResult> => {
+  const live = await livePatSessionOf(rawToken);
+  if (live.ok === false) return live;
+  if (live.session.meta?.allowGet !== true) {
+    return { ok: false, status: 403, error: 'This token is not enabled for GET links 🌍 — mint one with “Works via GET links” ticked' };
+  }
+  const resolved = await resolvePatSessionActor(live.session, live.sub, scope);
+  return resolved ?? { ok: false, status: 401, error: 'Token is invalid, expired, or revoked' };
+};
+
+// Free introspection for the bridge (op=self) — same promise as
+// /api/v1/tokens/self: asking "who am I" never spends a use.
+export const resolveGetBridgeSelf = async (rawToken: unknown): Promise<PatIntrospection> => {
+  const live = await livePatSessionOf(rawToken);
+  if (live.ok === false) return live;
+  if (live.session.meta?.allowGet !== true) {
+    return { ok: false, status: 403, error: 'This token is not enabled for GET links 🌍 — mint one with “Works via GET links” ticked' };
+  }
+  const userDoc = await findUserById(live.sub);
+  if (!userDoc || (!serviceAccountAuthenticationAllowed(userDoc) || !(await characterAccountLive(userDoc)))) {
+    return { ok: false, status: 401, error: 'Token is invalid, expired, or revoked' };
+  }
+  return {
+    ok: true,
+    token: toPublicPatToken(live.session),
+    user: {
+      id: String(userDoc._id),
+      username: userDoc.username,
+      displayName: typeof userDoc.displayName === 'string' ? userDoc.displayName : null
+    }
+  };
+};
+
 // Resolve who is calling a things-family route: a full session (cookie or
 // Bearer — pat: null, no scope limits), a PAT (Bearer only — must cover the
 // required scope(s), consumes one use), or nobody. Unknown/expired/revoked
 // credentials degrade to anonymous exactly like getCurrentUser, so browser
 // tabs with stale cookies keep their logged-out UX; PAT-specific failures the
 // caller can act on (missing scope, uses exhausted) return explicit errors.
-export const resolveThingsActor = async (request: Request, scope: string | string[]): Promise<ThingsActorResult> => {
-  const anonymous: ThingsActorResult = { ok: true, actor: { user: null, pat: null } };
+const resolveThingsActorInternal = async (request: Request, scope: string | string[], admittedPat?: PatContext): Promise<ThingsActorResult> => {
+  const anonymous: ThingsActorResult = request.headers.has(CHARACTER_HEADER)
+    ? { ok: false, status: 401, error: 'Session or Character unavailable' }
+    : { ok: true, actor: { user: null, pat: null } };
+  const internal = internalRequestActor(request);
+  if (internal) return { ok: true, actor: { user: await internal(), pat: null } };
 
   const token = await getAuthToken(request);
   if (!token) return anonymous;
@@ -295,63 +422,68 @@ export const resolveThingsActor = async (request: Request, scope: string | strin
   const session = await getLiveSession(claims.jti);
   if (!session) return anonymous;
   if (String(session.userId) !== claims.sub) return anonymous;
+  if (admittedPat && session.jti !== admittedPat.jti) return anonymous;
 
-  // App-scoped tokens only work through their dedicated path (apps/appTokens)
-  // — same rejection as resolveSessionUser.
-  if (
-    session.purpose === 'app' ||
-    session.purpose === 'app-sandbox' ||
-    session.purpose === 'oauth-code' ||
-    session.purpose === 'chatgpt-oauth-code' ||
-    session.purpose === 'chatgpt-mcp' ||
-    session.purpose === 'chatgpt-mcp-refresh' ||
-    session.purpose === 'chatgpt-mcp-connection'
-  ) return anonymous;
+  if (!sessionPurposeCanActAsAccount(session.purpose) && request.headers.has(CHARACTER_HEADER)) return anonymous;
 
   if (session.purpose === 'pat') {
     // Bearer-only: PATs live in agent/script configs and never ride a cookie,
     // so a cross-site request can't replay one as an ambient credential.
+    // (Query-param delivery exists ONLY on the /api/v1/get bridge, gated by
+    // the token's own allowGet tick — resolveGetBridgeActor below.)
     const header = request.headers.get('Authorization');
     if (!header?.startsWith('Bearer ')) return anonymous;
-
-    const scopes = patSessionScopes(session.meta);
-    for (const required of Array.isArray(scope) ? scope : [scope]) {
-      if (!patScopeCovers(scopes, required)) {
-        return { ok: false, status: 403, error: `This token is missing the ${required} permission 🔐` };
-      }
-    }
-
-    if (!(await consumePatUse(session))) {
-      return { ok: false, status: 401, error: 'This token has no uses remaining 🔋' };
-    }
-
-    const userDoc = await findUserById(claims.sub);
-    if (!userDoc || !serviceAccountAuthenticationAllowed(userDoc)) return anonymous;
-
-    const maxUses = typeof session.meta?.maxUses === 'number' ? session.meta.maxUses : null;
-    const before = typeof session.meta?.usesRemaining === 'number' ? session.meta.usesRemaining : null;
-    return {
-      ok: true,
-      actor: {
-				user: await toPublicUserWithStorage(userDoc),
-        pat: {
-          jti: session.jti,
-          name: typeof session.meta?.name === 'string' ? session.meta.name : 'API token',
-          scopes,
-          onlyCreatedThings: session.meta?.onlyCreatedThings === true,
-          visibility: patSessionVisibility(session.meta),
-          expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
-          maxUses,
-          usesRemaining: maxUses === null ? null : Math.max(0, (before ?? 0) - 1)
-        }
-      }
-    };
+    const resolved = await resolvePatSessionActor(session, claims.sub, scope, !admittedPat);
+    return resolved ?? anonymous;
   }
 
-  // Full browser/service session — the normal path, no scope limits.
-  const userDoc = await findUserById(claims.sub);
-  if (!userDoc || !serviceAccountAuthenticationAllowed(userDoc)) return anonymous;
-	return { ok: true, actor: { user: await toPublicUserWithStorage(userDoc), pat: null } };
+  if (session.purpose === 'app') {
+    const app = await resolveAppToken(request);
+    if (!app || app.sandbox) return anonymous;
+    const origin = request.headers.get('Origin');
+    if (origin && origin !== app.origin) return { ok: false, status: 403, error: 'Origin does not match this token' };
+    if (!appAccountAllows(app.scopes, scope)) {
+      return { ok: false, status: 403, error: 'Approve the required account Things permissions for this app' };
+    }
+    const userDoc = await findUserById(claims.sub);
+    if (!userDoc || (!serviceAccountAuthenticationAllowed(userDoc) || !(await characterAccountLive(userDoc)))) return anonymous;
+    return { ok: true, actor: { user: app.user, pat: {
+      jti: session.jti, name: 'Connected app', scopes: appAccountThingScopes(app.scopes),
+      onlyCreatedThings: false, visibility: 'all',
+      expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
+      maxUses: null, usesRemaining: null
+    } } };
+  }
+
+  // Every other scoped credential (app, sandbox app, one-time OAuth code, and
+  // future purpose values) only works through its dedicated resolver. Keep the
+  // full things surface aligned with resolveSessionUser's fail-closed gate.
+  if (!sessionPurposeCanActAsAccount(session.purpose)) return anonymous;
+
+  // Resolve the acting identity once. A rejected selection must not degrade
+  // into anonymous access (or permit an anonymous write).
+  const user = await resolveSessionUser(claims.jti, claims.sub, request.headers.get(CHARACTER_HEADER));
+  if (!user) return { ok: false, status: 401, error: 'Session or Character unavailable' };
+  return { ok: true, actor: { user, pat: null } };
+};
+
+// Admission is an in-memory capability for this exact server Request and
+// resolved object. It cannot be reconstructed from JSON, a header or another
+// request. A stream spends one use on admission, then rechecks live revocation,
+// expiration, account and scopes without spending further uses. Remaining=0
+// permits only that admitted request to finish; a new request still fails.
+const admittedThingsActors = new WeakMap<PatContext, { request: Request; scope: string }>();
+const scopeIdentity = (scope: string | string[]) => JSON.stringify((Array.isArray(scope) ? [...scope] : [scope]).sort());
+export const resolveThingsActor = async (request: Request, scope: string | string[]): Promise<ThingsActorResult> => {
+  const result = await resolveThingsActorInternal(request, scope);
+  if (result.ok && result.actor.pat) admittedThingsActors.set(result.actor.pat, { request, scope: scopeIdentity(scope) });
+  return result;
+};
+
+export const revalidateThingsActor = async (request: Request, scope: string | string[], admittedPat: PatContext): Promise<ThingsActorResult> => {
+  const admission = admittedThingsActors.get(admittedPat);
+  if (!admission || admission.request !== request || admission.scope !== scopeIdentity(scope)) return { ok: false, status: 401, error: 'This request has no matching token admission' };
+  return resolveThingsActorInternal(request, scope, admittedPat);
 };
 
 export type PatIntrospection =
@@ -381,7 +513,7 @@ export const resolvePatIntrospection = async (request: Request): Promise<PatIntr
   }
 
   const userDoc = await findUserById(claims.sub);
-  if (!userDoc || !serviceAccountAuthenticationAllowed(userDoc)) {
+  if (!userDoc || (!serviceAccountAuthenticationAllowed(userDoc) || !(await characterAccountLive(userDoc)))) {
     return { ok: false, status: 401, error: 'Token is invalid, expired, or revoked' };
   }
 

@@ -1,12 +1,24 @@
+import { ensureViewerSubspaceMessaging } from './subspaceMessages';
+import { linkedSubspaceId, messagingRole, subspaceMessagingAccess } from './subspaceAccess';
+import { isActiveMember, membershipOfDoc } from '../subspaces/gate';
 // Communities: Slack-style workspaces. A community thing owns channels (chat
 // things via targetId), sidebar sections, invites and custom emojis — all
 // relational children, aggregated on read, per FUNDAMENTALS §3.
 import { randomBytes } from 'node:crypto';
 import { getThingsCollection } from '../mongodb/collections';
+import { relationshipLookupFilter } from '../mongodb/relationshipLookup';
 import { resolveProfiles } from '../things/things';
 import { MAX_COMMUNITIES_PER_USER, MAX_COMMUNITY_DESCRIPTION_CHARS, MAX_COMMUNITY_NAME_CHARS, MAX_SECTION_NAME_CHARS } from '~/schemas/registry';
 import type { ChatRole, Fail } from './shared';
 import { boundedTrimmed, communityMemberKey, communityRoleOf, fail, findThingByKind, getCommunityMemberDoc, newThingDoc, ROLE_RANK } from './shared';
+import { publicExternalAiSource, type PublicExternalAiSource } from './externalAi';
+import {
+	deleteMessengerThing,
+	insertMessengerThing,
+	updateMessengerThing,
+	updateMessengerThings,
+	withMessengerStorageTransaction
+} from './storage';
 
 export type PublicCommunity = {
   id: string;
@@ -16,6 +28,9 @@ export type PublicCommunity = {
   myRole: ChatRole | null;
   memberCount: number;
   createdAt: string;
+  externalSource: PublicExternalAiSource | null;
+  subspaceId: string | null;
+  subspaceSlug: string | null;
 };
 
 export type PublicSection = { id: string; name: string; order: number };
@@ -27,7 +42,10 @@ const toPublicCommunity = (doc: any, myRole: ChatRole | null, memberCount: numbe
   avatarUrl: doc.crystal?.avatarUrl ?? null,
   myRole,
   memberCount,
-  createdAt: new Date(doc.createdAt).toISOString()
+  createdAt: new Date(doc.createdAt).toISOString(),
+  externalSource: publicExternalAiSource(doc.crystal?.externalSource),
+  subspaceId: linkedSubspaceId(doc),
+  subspaceSlug: doc.crystal?.subspaceSlug ?? null
 });
 
 const toPublicSection = (doc: any): PublicSection => ({
@@ -38,38 +56,41 @@ const toPublicSection = (doc: any): PublicSection => ({
 
 // ── membership helpers ──
 
-const insertMember = async (communityId: string, userId: string, role: ChatRole) => {
+const insertMember = async (communityId: string, userId: string, role: ChatRole, session?: any) => {
   const things = await getThingsCollection();
-  try {
-    await things.insertOne(
-      newThingDoc('community-member', {
-        ownerId: userId,
-        targetId: communityId,
-        crystal: { memberKey: communityMemberKey(communityId, userId), role }
-      }) as any
-    );
-    return true;
-  } catch (err: any) {
-    if (err?.code === 11000) return false; // already a member (race) — fine
-    throw err;
-  }
+  await insertMessengerThing(
+		things,
+    newThingDoc('community-member', {
+      ownerId: userId,
+      targetId: communityId,
+      crystal: { memberKey: communityMemberKey(communityId, userId), role }
+		}) as any,
+		session ? { session } : {}
+  );
 };
 
 // Community membership is the outer wall of every channel, so losing it must
 // take the channel keys too: mark the user's memberships across this
 // community's channels as left (their DMs/groups are untouched).
-const revokeCommunityChannelMemberships = async (communityId: string, userId: string) => {
+const revokeCommunityChannelMemberships = async (communityId: string, userId: string, session?: any) => {
   const things = await getThingsCollection();
-	const channels = await things.find({ thingtime: 'chat', 'crystal.communityId': communityId } as any, { projection: { shareId: 1 } }).toArray();
+	const channels = await things
+		.find(
+			{ thingtime: 'chat', 'crystal.communityId': communityId } as any,
+			{ projection: { shareId: 1 }, ...(session ? { session } : {}) }
+		)
+		.toArray();
   if (!channels.length) return;
-  await things.updateMany(
+	await updateMessengerThings(
+		things,
     {
       thingtime: 'chat-member',
       ownerId: userId,
       targetId: { $in: channels.map((c: any) => c.shareId) },
       'crystal.state': { $in: ['active', 'pending'] }
     } as any,
-    { $set: { 'crystal.state': 'left', updatedAt: new Date() } }
+    { $set: { 'crystal.state': 'left', updatedAt: new Date() } },
+		session ? { session } : {}
   );
 };
 
@@ -89,13 +110,15 @@ export const createCommunity = async (ownerId: string, input: { name?: unknown; 
   if (!name) return fail(400, 'Communities need a name');
   const description = boundedTrimmed(input.description, MAX_COMMUNITY_DESCRIPTION_CHARS);
   const things = await getThingsCollection();
-  const owned = await things.countDocuments({ thingtime: 'community-member', ownerId, 'crystal.role': 'owner' } as any);
+  const owned = await things.countDocuments({ thingtime: 'community', ownerId, 'crystal.subspaceId': { $exists: false } } as any);
   if (owned >= MAX_COMMUNITIES_PER_USER) {
     return fail(400, `You already run ${MAX_COMMUNITIES_PER_USER} communities — that is a lot of communities`);
   }
   const community = newThingDoc('community', { ownerId, crystal: { name, description, avatarUrl: null } });
-  await things.insertOne(community as any);
-  await insertMember(community.shareId, ownerId, 'owner');
+	await withMessengerStorageTransaction(async (session) => {
+		await insertMessengerThing(things, community as any, { session });
+		await insertMember(community.shareId, ownerId, 'owner', session);
+	});
   return { ok: true, community: toPublicCommunity(community, 'owner', 1) };
 };
 
@@ -105,6 +128,7 @@ export const createCommunity = async (ownerId: string, input: { name?: unknown; 
 export const listMyCommunities = async (
   viewerId: string
 ): Promise<{ ok: true; communities: (PublicCommunity & { sections: PublicSection[] })[] }> => {
+  await ensureViewerSubspaceMessaging(viewerId);
   const things = await getThingsCollection();
   const memberships = await things
     .find({ thingtime: 'community-member', ownerId: viewerId } as any)
@@ -133,7 +157,34 @@ export const listMyCommunities = async (
     if (!sectionsById.has(key)) sectionsById.set(key, []);
     sectionsById.get(key)!.push(toPublicSection(doc));
   }
-  const communities = communityDocs
+  const linkedIds = communityDocs.map((doc: any) => linkedSubspaceId(doc)).filter((id): id is string => !!id);
+  const [subspaces, subspaceMembers] = linkedIds.length ? await Promise.all([
+    things.find({ thingtime: 'subspace', shareId: { $in: linkedIds }, subspaceMediaDeleting: { $ne: true } } as any).toArray(),
+    things.find({ thingtime: 'subspace-member', targetId: { $in: linkedIds } } as any).toArray()
+  ]) : [[], []];
+  const subspaceById = new Map<string, any>(subspaces.map((doc: any) => [String(doc.shareId), doc]));
+  const viewerRoleBySubspace = new Map<string, ChatRole>();
+  const activeCounts = new Map<string, number>();
+  for (const doc of subspaceMembers) {
+    if (!isActiveMember(membershipOfDoc(doc))) continue;
+    const id = String(doc.targetId);
+    activeCounts.set(id, (activeCounts.get(id) || 0) + 1);
+    if (String(doc.ownerId) === viewerId) viewerRoleBySubspace.set(id, messagingRole(doc.crystal?.role));
+  }
+  const visibleCommunityDocs: any[] = [];
+  for (const doc of communityDocs) {
+    const id = linkedSubspaceId(doc);
+    if (id) {
+      const subspace = subspaceById.get(id);
+      const role = viewerRoleBySubspace.get(id);
+      if (!subspace || !role) continue;
+      roleById.set(String(doc.shareId), role);
+      doc.crystal = { ...doc.crystal, name: subspace.crystal?.name, description: subspace.crystal?.description ?? null, subspaceSlug: subspace.crystal?.slug };
+      countById.set(String(doc.shareId), activeCounts.get(id) || 0);
+    }
+    visibleCommunityDocs.push(doc);
+  }
+  const communities = visibleCommunityDocs
     .map((doc: any) => ({
       ...toPublicCommunity(doc, (roleById.get(doc.shareId) as ChatRole) || null, countById.get(doc.shareId) || 0),
       sections: sectionsById.get(doc.shareId) || []
@@ -160,6 +211,20 @@ export const getCommunityDetail = async (viewerId: string, communityId: unknown)
   const myRole = await communityRoleOf(community.shareId, viewerId);
   if (!myRole) return fail(403, 'You are not a member of this community');
   const things = await getThingsCollection();
+  if (linkedSubspaceId(community)) {
+    const access = await subspaceMessagingAccess(things, community, viewerId);
+    if (!access?.allowed) return fail(403, 'Join this subspace to open its messages');
+    const [rows, sections] = await Promise.all([
+      things.find({ thingtime: 'subspace-member', targetId: access.subspace.shareId } as any).sort({ createdAt: 1, shareId: 1 }).toArray(),
+      things.find({ thingtime: 'chat-section', targetId: community.shareId } as any).sort({ 'crystal.order': 1, createdAt: 1 }).toArray()
+    ]);
+    const active = rows.filter((doc: any) => isActiveMember(membershipOfDoc(doc)));
+    const page = active.slice(0, COMMUNITY_MEMBER_PAGE);
+    const profiles = await resolveProfiles(page.map((doc: any) => String(doc.ownerId)));
+    const current = { ...community, crystal: { ...community.crystal, name: access.subspace.crystal?.name, description: access.subspace.crystal?.description ?? null, subspaceSlug: access.subspace.crystal?.slug } };
+    return { ok: true, community: { ...toPublicCommunity(current, access.role, active.length), sections: sections.map(toPublicSection) },
+      members: page.map((doc: any) => ({ userId: String(doc.ownerId), profile: profiles.get(String(doc.ownerId)) || null, role: messagingRole(doc.crystal?.role), joinedAt: new Date(doc.createdAt).toISOString() })), memberCount: active.length };
+  }
   const [memberDocs, memberCount, sectionDocs] = await Promise.all([
     things
       .find({ thingtime: 'community-member', targetId: community.shareId } as any)
@@ -196,6 +261,8 @@ export const updateCommunity = async (
   if (typeof input.id !== 'string' || !input.id.trim()) return fail(400, 'Community id required');
   const community = await findThingByKind('community', input.id.trim());
   if (!community) return fail(404, 'Community not found');
+  if (linkedSubspaceId(community)) return fail(409, 'Manage this space through its subspace settings and membership controls');
+  if (community.crystal?.externalSource) return fail(409, 'Imported AI space details are read-only; resync the source to update them');
   const gate = await requireCommunityRole(community.shareId, viewerId, 'admin');
   if (gate.ok === false) return gate;
   const patch: Record<string, unknown> = {};
@@ -209,7 +276,7 @@ export const updateCommunity = async (
   }
   if (!Object.keys(patch).length) return fail(400, 'Nothing to update');
   const things = await getThingsCollection();
-  await things.updateOne({ shareId: community.shareId } as any, { $set: { ...patch, updatedAt: new Date() } });
+  await updateMessengerThing(things, { shareId: community.shareId } as any, { $set: { ...patch, updatedAt: new Date() } });
   const fresh = await findThingByKind('community', community.shareId);
   const memberCount = await things.countDocuments({ thingtime: 'community-member', targetId: community.shareId } as any);
   return { ok: true, community: toPublicCommunity(fresh, gate.role, memberCount) };
@@ -225,22 +292,26 @@ export const manageCommunityMember = async (
 ): Promise<CommunityMembersResult> => {
   if (typeof input.communityId !== 'string' || !input.communityId.trim()) return fail(400, 'Community id required');
   if (typeof input.userId !== 'string' || !input.userId.trim()) return fail(400, 'User id required');
+	const targetUserId = input.userId.trim();
   const community = await findThingByKind('community', input.communityId.trim());
   if (!community) return fail(404, 'Community not found');
+  if (linkedSubspaceId(community)) return fail(409, 'Manage this space through its subspace settings and membership controls');
   const gate = await requireCommunityRole(community.shareId, viewerId, 'admin');
   if (gate.ok === false) return gate;
-  const targetDoc = await getCommunityMemberDoc(community.shareId, input.userId.trim());
+  const targetDoc = await getCommunityMemberDoc(community.shareId, targetUserId);
   if (!targetDoc) return fail(404, 'That user is not a member');
   const targetRole = (targetDoc.crystal?.role as ChatRole) || 'member';
   if (targetRole === 'owner') return fail(403, 'The community owner cannot be changed or removed');
   const things = await getThingsCollection();
   if (input.remove === true) {
-    await things.deleteOne({ shareId: targetDoc.shareId } as any);
-    await revokeCommunityChannelMemberships(community.shareId, input.userId.trim());
+		await withMessengerStorageTransaction(async (session) => {
+			await deleteMessengerThing(things, { shareId: targetDoc.shareId } as any, { session });
+			await revokeCommunityChannelMemberships(community.shareId, targetUserId, session);
+		});
     return { ok: true };
   }
   if (input.role === 'admin' || input.role === 'member') {
-    await things.updateOne({ shareId: targetDoc.shareId } as any, { $set: { 'crystal.role': input.role, updatedAt: new Date() } });
+    await updateMessengerThing(things, { shareId: targetDoc.shareId } as any, { $set: { 'crystal.role': input.role, updatedAt: new Date() } });
     return { ok: true };
   }
   return fail(400, 'Pass role: "admin" | "member" or remove: true');
@@ -248,12 +319,16 @@ export const manageCommunityMember = async (
 
 export const leaveCommunity = async (viewerId: string, communityId: unknown): Promise<CommunityMembersResult> => {
   if (typeof communityId !== 'string' || !communityId.trim()) return fail(400, 'Community id required');
+  const community = await findThingByKind('community', communityId.trim());
+  if (linkedSubspaceId(community)) return fail(409, 'Leave the subspace to leave its messages space');
   const doc = await getCommunityMemberDoc(communityId.trim(), viewerId);
   if (!doc) return fail(404, 'You are not a member of this community');
   if (doc.crystal?.role === 'owner') return fail(400, 'Owners cannot leave their community (yet) — it would be a ghost ship');
   const things = await getThingsCollection();
-  await things.deleteOne({ shareId: doc.shareId } as any);
-  await revokeCommunityChannelMemberships(communityId.trim(), viewerId);
+	await withMessengerStorageTransaction(async (session) => {
+		await deleteMessengerThing(things, { shareId: doc.shareId } as any, { session });
+		await revokeCommunityChannelMemberships(communityId.trim(), viewerId, session);
+	});
   return { ok: true };
 };
 
@@ -293,11 +368,12 @@ export const createInvite = async (
   if (typeof input.communityId !== 'string' || !input.communityId.trim()) return fail(400, 'Community id required');
   const community = await findThingByKind('community', input.communityId.trim());
   if (!community) return fail(404, 'Community not found');
+  if (linkedSubspaceId(community)) return fail(409, 'Manage this space through its subspace settings and membership controls');
   const gate = await requireCommunityRole(community.shareId, viewerId, 'admin');
   if (gate.ok === false) return gate;
   const things = await getThingsCollection();
   if (typeof input.revokeId === 'string' && input.revokeId.trim()) {
-		const res = await things.updateOne({ shareId: input.revokeId.trim(), thingtime: 'community-invite', targetId: community.shareId } as any, {
+		const res = await updateMessengerThing(things, { shareId: input.revokeId.trim(), thingtime: 'community-invite', targetId: community.shareId } as any, {
 			$set: { 'crystal.revoked': true, updatedAt: new Date() }
 		});
     if (!res.matchedCount) return fail(404, 'Invite not found');
@@ -325,7 +401,7 @@ export const createInvite = async (
       revoked: false
     }
   });
-  await things.insertOne(invite as any);
+  await insertMessengerThing(things, invite as any);
   return { ok: true, invite: toPublicInvite(invite) };
 };
 
@@ -354,23 +430,55 @@ export const joinCommunityByCode = async (viewerId: string, code: unknown): Prom
   const trimmed = boundedTrimmed(code, 100);
   if (!trimmed) return fail(400, 'Invite code required');
   const things = await getThingsCollection();
-  const invite = await things.findOne({ thingtime: 'community-invite', 'crystal.inviteCode': trimmed } as any);
+  const invite = await things.findOne({ thingtime: 'community-invite', ...await relationshipLookupFilter('inviteCode', trimmed) } as any);
   if (!invite) return fail(404, 'Invalid invite code');
   const crystal = (invite as any).crystal || {};
   if (crystal.revoked) return fail(410, 'This invite was revoked');
   if (crystal.expiresAt && new Date(crystal.expiresAt).getTime() < Date.now()) return fail(410, 'This invite expired');
   const community = await findThingByKind('community', String((invite as any).targetId));
   if (!community) return fail(404, 'That community no longer exists');
+  if (linkedSubspaceId(community)) return fail(409, 'Join this space through its subspace membership controls');
   const existingRole = await communityRoleOf(community.shareId, viewerId);
   if (existingRole) {
     const memberCount = await things.countDocuments({ thingtime: 'community-member', targetId: community.shareId } as any);
     return { ok: true, community: toPublicCommunity(community, existingRole, memberCount) };
   }
-  const guard: any = { shareId: (invite as any).shareId, 'crystal.revoked': { $ne: true } };
-  if (crystal.maxUses) guard['crystal.uses'] = { $lt: crystal.maxUses };
-  const bump = await things.updateOne(guard, { $inc: { 'crystal.uses': 1 }, $set: { updatedAt: new Date() } });
-  if (!bump.matchedCount) return fail(410, 'This invite has been used up');
-  await insertMember(community.shareId, viewerId, 'member');
+	try {
+		const joined = await withMessengerStorageTransaction(async (session) => {
+			const currentInvite = await things.findOne(
+				{ shareId: (invite as any).shareId, thingtime: 'community-invite' } as any,
+				{ session }
+			);
+			if (!currentInvite || (currentInvite as any).crystal?.revoked) return fail(410, 'This invite was revoked');
+			const currentCrystal = (currentInvite as any).crystal || {};
+			if (currentCrystal.expiresAt && new Date(currentCrystal.expiresAt).getTime() < Date.now()) {
+				return fail(410, 'This invite expired');
+			}
+			const existing = await things.findOne(
+				{ thingtime: 'community-member', ownerId: viewerId, targetId: community.shareId } as any,
+				{ session }
+			);
+			if (existing) return { ok: true as const };
+
+			const guard: any = { shareId: (currentInvite as any).shareId, 'crystal.revoked': { $ne: true } };
+			if (currentCrystal.maxUses) guard['crystal.uses'] = { $lt: currentCrystal.maxUses };
+			const bump = await updateMessengerThing(
+				things,
+				guard,
+				{ $inc: { 'crystal.uses': 1 }, $set: { updatedAt: new Date() } },
+				{ session }
+			);
+			if (!bump.matchedCount) return fail(410, 'This invite has been used up');
+			await insertMember(community.shareId, viewerId, 'member', session);
+			return { ok: true as const };
+		});
+		if (joined.ok === false) return joined;
+	} catch (err: any) {
+		// Two redemptions by the same account can race on the unique member key.
+		// The losing transaction is fully rolled back (including invite uses), so
+		// an already-present membership is the idempotent success case.
+		if (err?.code !== 11000 || !(await communityRoleOf(community.shareId, viewerId))) throw err;
+	}
   const memberCount = await things.countDocuments({ thingtime: 'community-member', targetId: community.shareId } as any);
   return { ok: true, community: toPublicCommunity(community, 'member', memberCount) };
 };
@@ -386,6 +494,7 @@ export const manageSections = async (
   if (typeof input.communityId !== 'string' || !input.communityId.trim()) return fail(400, 'Community id required');
   const community = await findThingByKind('community', input.communityId.trim());
   if (!community) return fail(404, 'Community not found');
+  if (linkedSubspaceId(community)) return fail(409, 'Subspace spaces use their shared general channel');
   const gate = await requireCommunityRole(community.shareId, viewerId, 'admin');
   if (gate.ok === false) return gate;
   const things = await getThingsCollection();
@@ -394,34 +503,44 @@ export const manageSections = async (
     if (!name) return fail(400, 'Sections need a name');
     const count = await things.countDocuments({ thingtime: 'chat-section', targetId: community.shareId } as any);
     if (count >= 50) return fail(400, 'That is enough sections');
-		await things.insertOne(newThingDoc('chat-section', { ownerId: viewerId, targetId: community.shareId, crystal: { name, order: count } }) as any);
+		await insertMessengerThing(
+			things,
+			newThingDoc('chat-section', { ownerId: viewerId, targetId: community.shareId, crystal: { name, order: count } }) as any
+		);
   } else if (input.rename && typeof input.rename === 'object') {
     const id = boundedTrimmed((input.rename as any).id, 128);
     const name = boundedTrimmed((input.rename as any).name, MAX_SECTION_NAME_CHARS);
     if (!id || !name) return fail(400, 'Renaming a section needs { id, name }');
-		const res = await things.updateOne({ shareId: id, thingtime: 'chat-section', targetId: community.shareId } as any, {
+		const res = await updateMessengerThing(things, { shareId: id, thingtime: 'chat-section', targetId: community.shareId } as any, {
 			$set: { 'crystal.name': name, updatedAt: new Date() }
 		});
     if (!res.matchedCount) return fail(404, 'Section not found');
   } else if (typeof input.remove === 'string' && input.remove.trim()) {
     const removed = await things.findOne({ shareId: input.remove.trim(), thingtime: 'chat-section', targetId: community.shareId } as any);
     if (!removed) return fail(404, 'Section not found');
-    await things.deleteOne({ shareId: (removed as any).shareId } as any);
-    // un-file the section's channels rather than orphaning their pointer
-		await things.updateMany({ thingtime: 'chat', 'crystal.communityId': community.shareId, 'crystal.sectionId': (removed as any).shareId } as any, {
-			$set: { 'crystal.sectionId': null, updatedAt: new Date() }
+		await withMessengerStorageTransaction(async (session) => {
+			await deleteMessengerThing(things, { shareId: (removed as any).shareId } as any, { session });
+			// Un-file the section's channels rather than orphaning their pointer.
+			await updateMessengerThings(
+				things,
+				{ thingtime: 'chat', 'crystal.communityId': community.shareId, 'crystal.sectionId': (removed as any).shareId } as any,
+				{ $set: { 'crystal.sectionId': null, updatedAt: new Date() } },
+				{ session }
+			);
 		});
   } else if (Array.isArray(input.reorder)) {
     const ids = (input.reorder as unknown[]).filter((id): id is string => typeof id === 'string').slice(0, 100);
     if (ids.length) {
-      await things.bulkWrite(
-        ids.map((id, index) => ({
-          updateOne: {
-            filter: { shareId: id, thingtime: 'chat-section', targetId: community.shareId } as any,
-            update: { $set: { 'crystal.order': index, updatedAt: new Date() } }
-          }
-        }))
-      );
+			await withMessengerStorageTransaction(async (session) => {
+				for (const [index, id] of ids.entries()) {
+					await updateMessengerThing(
+						things,
+						{ shareId: id, thingtime: 'chat-section', targetId: community.shareId } as any,
+						{ $set: { 'crystal.order': index, updatedAt: new Date() } },
+						{ session }
+					);
+				}
+			});
     }
   } else {
     return fail(400, 'Pass create: {name} | rename: {id,name} | remove: id | reorder: [ids]');

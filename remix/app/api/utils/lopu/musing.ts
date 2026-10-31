@@ -1,3 +1,7 @@
+import { refreshUnavailableAiModel } from '../ai/modelSync';
+import { getLopuPromptSettings } from '../settings/lopuPromptSettings';
+import { composeLopuSurfacePrompt } from './promptSettingsCore';
+import { createClaudeOAuthClient, claudeOAuthConfigured } from '../ai/claudeOAuth';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
@@ -9,13 +13,13 @@ import {
   toAnthropicEffort,
   toOpenAiReasoningEffort
 } from '../settings/prConflictResolverModelWaterfallCore';
-import { FALLBACK_MUSINGS } from './fallbacks';
+import { pickFallbackMusing } from './fallbacks';
 
 // 🦄 Lopu's musings — a little message generated from the user's real-world
 // context (approximate location + current weather + local time of day).
 //
 // Providers (set either or both env keys):
-//   - ANTHROPIC_API_KEY → Claude (first Anthropic-capable Thingtime Admin
+//   - Claude OAuth credentials → Claude (first Anthropic-capable Thingtime Admin
 //     waterfall entry, with its effort/fast knobs; LOPU_CLAUDE_MODEL is the
 //     provider-valid fallback when the Admin preference resolves to `default`)
 //   - OPENAI_API_KEY    → ChatGPT (first OpenAI Admin waterfall entry with its
@@ -49,14 +53,15 @@ export type LopuStreamEvent =
 // Rotate through the big fallback library by time (no RNG — not security-
 // sensitive, and CodeQL flags any range-reduction of a secure RNG). With ~370
 // lines this gives plenty of variety while the endpoint stays live with no keys.
-const pickFallback = () => FALLBACK_MUSINGS[Date.now() % FALLBACK_MUSINGS.length];
+// The picker itself lives in fallbacks.ts (shared with the waitlist fortune).
+const pickFallback = pickFallbackMusing;
 
 // Same time-based rotation for the mode, so each click feels a little different.
 const ALL_MODES: LopuMode[] = ['weather', 'musing', 'quote', 'commented', 'surprise', 'fallback'];
 const pickMode = (): LopuMode => ALL_MODES[Date.now() % ALL_MODES.length];
 
 const SYSTEM_PROMPT =
-  'You are Lopu, the whimsical unicorn AI living inside Thingtime. Reply with ONE short, delightful musing ' +
+  'Reply with ONE short, delightful musing ' +
   "(max two sentences) — warm, a touch magical, and weave in the user's weather, city, or time of day when given. " +
   'Use at most one emoji. Output ONLY the musing text: no preamble, no quotes, no meta-commentary, no reasoning.';
 
@@ -160,8 +165,8 @@ const MUSING_MAX_OUTPUT_TOKENS = 4096;
 // fast-mode knobs are applied when present; if the decorated request fails
 // before producing any text (e.g. a knob the model rejects), one bare retry
 // with just the model keeps the admin's model preference alive.
-async function* streamClaude(system: string, user: string, choice: AiWorkflowModelChoice): AsyncGenerator<string> {
-  const client = new Anthropic();
+async function* streamClaude(system: string, user: string, choice: AiWorkflowModelChoice, signal?: AbortSignal): AsyncGenerator<string> {
+  const client = createClaudeOAuthClient();
   const base = {
     model: choice.model,
     max_tokens: MUSING_MAX_OUTPUT_TOKENS,
@@ -171,22 +176,9 @@ async function* streamClaude(system: string, user: string, choice: AiWorkflowMod
 
   const effort = toAnthropicEffort(choice.effort);
   const decorated = choice.speed === 'fast' || effort;
-  const attempts =
-    choice.speed === 'fast'
-      ? [
-          // Fast mode is beta-gated and needs the beta stream surface.
-          () =>
-            client.beta.messages.stream({
-              ...base,
-              ...(effort ? { output_config: { effort } } : {}),
-              speed: 'fast',
-              betas: ['fast-mode-2026-02-01']
-            }),
-          () => client.messages.stream(base)
-        ]
-      : effort
-        ? [() => client.messages.stream({ ...base, output_config: { effort } }), () => client.messages.stream(base)]
-        : [() => client.messages.stream(base)];
+  const attempts = [() => choice.speed === 'fast'
+    ? client.beta.messages.stream({ ...base, ...(effort ? { output_config: { effort } } : {}), speed: 'fast', betas: ['fast-mode-2026-02-01'] }, { signal })
+    : client.messages.stream({ ...base, ...(effort ? { output_config: { effort } } : {}) }, { signal })];
 
   for (let attempt = 0; attempt < attempts.length; attempt++) {
     let yielded = false;
@@ -203,6 +195,7 @@ async function* streamClaude(system: string, user: string, choice: AiWorkflowMod
       // silently skipped in favor of the next provider.
       if (yielded || attempt === attempts.length - 1) return;
     } catch (err) {
+      await refreshUnavailableAiModel('anthropic', err);
       // Never retry after emitting text (it would duplicate the musing), and
       // never swallow the final attempt's failure — the provider loop needs it.
       if (yielded || !decorated || attempt === attempts.length - 1) throw err;
@@ -213,7 +206,8 @@ async function* streamClaude(system: string, user: string, choice: AiWorkflowMod
 async function* streamOpenAI(
   system: string,
   user: string,
-  choice: AiWorkflowModelChoice | null
+  choice: AiWorkflowModelChoice | null,
+  signal?: AbortSignal
 ): AsyncGenerator<string> {
   const client = new OpenAI();
   const base = {
@@ -239,10 +233,10 @@ async function* streamOpenAI(
             ...(effort ? { reasoning_effort: effort } : {}),
             // 'fast' maps to OpenAI priority processing.
             ...(choice.speed === 'fast' ? { service_tier: 'priority' as const } : {})
-          }),
-        () => client.chat.completions.create(base)
+          }, { signal }),
+        () => client.chat.completions.create(base, { signal })
       ]
-    : [() => client.chat.completions.create(base)];
+    : [() => client.chat.completions.create(base, { signal })];
 
   for (let attempt = 0; attempt < attempts.length; attempt++) {
     let yielded = false;
@@ -258,10 +252,113 @@ async function* streamOpenAI(
       // falls through to the bare retry before the provider is given up on.
       if (yielded || attempt === attempts.length - 1) return;
     } catch (err) {
+      await refreshUnavailableAiModel('openai', err);
       if (yielded || attempt === attempts.length - 1) throw err;
     }
   }
 }
+
+// Drain a provider stream, giving up if `deadlineAt` passes mid-stream.
+//
+// A caller-side "have I run out of time?" check can only ever gate STARTING a
+// call: once `for await` is waiting on the provider, nothing short of the SDK's
+// own (10-minute) default timeout ends it. That is the whole gap this closes —
+// a request-scoped deadline has to be enforced where the stream is consumed.
+//
+// The abandoned generator is returned but NOT awaited: `.return()` on an async
+// generator with a pending `next()` queues BEHIND that next, so awaiting it
+// would block for exactly as long as the stall we are escaping. Firing it
+// un-awaited closes the underlying SDK stream whenever the read settles, while
+// the caller returns now. `Promise.race` keeps a handler attached to the losing
+// `next()`, so a late provider rejection is never an unhandled rejection.
+const drainWithin = async (gen: AsyncGenerator<string>, deadlineAt: number | null): Promise<string | null> => {
+  if (deadlineAt === null) {
+    let all = '';
+    for await (const chunk of gen) all += chunk;
+    return all;
+  }
+  const abandon = () => void Promise.resolve(gen.return(undefined as never)).catch(() => {});
+  let text = '';
+  for (;;) {
+    const remaining = deadlineAt - Date.now();
+    if (remaining <= 0) {
+      abandon();
+      return null;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const step = await Promise.race([
+      gen.next(),
+      new Promise<'timeout'>((resolve) => {
+        timer = setTimeout(() => resolve('timeout'), remaining);
+      })
+    ]).finally(() => clearTimeout(timer));
+    if (step === 'timeout') {
+      abandon();
+      return null;
+    }
+    if (step.done) return text;
+    text += step.value;
+  }
+};
+
+// Generic non-streaming completion for other Thingtime features (e.g. the
+// connections feed filters). Same provider waterfall + admin model routing as
+// the musing, same graceful degradation: null when no provider is configured
+// or every provider fails — callers must have a non-AI fallback. AI clients
+// are constructed ONLY in this module (scripts/ai-model-routing-contract.mjs).
+// `maxTokens` is the caller's MINIMUM viable budget, not a per-call cap: an
+// admin entry can pin a reasoning model, and both providers bill that thinking
+// against the one shared MUSING_MAX_OUTPUT_TOKENS ceiling, so a per-caller
+// allowance would only starve the visible answer. A caller needing more than
+// the ceiling would silently receive a truncated completion — for the feed
+// classifier that loses the closing bracket and the whole batch — so degrade to
+// its non-AI fallback instead of answering with something unparseable.
+// `timeoutMs` bounds the WHOLE call — every provider attempt in the waterfall
+// shares the one deadline, so a caller that must answer inside a request budget
+// gets that budget, not a multiple of it. Omitted = drain to completion (the
+// musing's own behaviour, where the response IS the stream).
+export const generateAiCompletion = async (opts: {
+  system: string;
+  user: string;
+  maxTokens?: number;
+  timeoutMs?: number;
+}): Promise<{ text: string; source: 'claude' | 'openai' } | null> => {
+  if (!hasAnyKey()) return null;
+  if ((opts.maxTokens ?? 0) > MUSING_MAX_OUTPUT_TOKENS) return null;
+  const deadlineAt = opts.timeoutMs !== undefined && opts.timeoutMs > 0 ? Date.now() + opts.timeoutMs : null;
+  // One durable waterfall read serves every provider attempt, as in the musing.
+  const choices = await getLopuModelChoices();
+  for (const provider of providerOrder()) {
+    // Ask the SAME question the provider's client will: streamClaude builds its
+    // client with createClaudeOAuthClient, which authenticates from the OAuth
+    // token / admin vault and never reads ANTHROPIC_API_KEY. Gating on that key
+    // therefore tested a credential this path does not use — on a Claude-first
+    // deployment (the default, and the only one hasAnyKey below accepts without
+    // OpenAI) it skipped Claude every time, so classification silently fell all
+    // the way through to the caller's non-AI heuristic while hasAnyKey still
+    // reported a provider configured. Mirrors streamLopuMusing's gate exactly.
+    const key = provider === 'claude' ? claudeOAuthConfigured() : process.env.OPENAI_API_KEY;
+    if (!key) continue;
+    // A provider that burned the whole deadline must not hand the NEXT one a
+    // fresh start — that is how a two-provider waterfall doubles its own bound.
+    if (deadlineAt !== null && Date.now() >= deadlineAt) return null;
+    try {
+      const gen =
+        provider === 'claude'
+          ? streamClaude(opts.system, opts.user, choices.claude)
+          : streamOpenAI(opts.system, opts.user, choices.openai);
+      const text = await drainWithin(gen, deadlineAt);
+      // null = the deadline passed mid-stream. Falling through to the next
+      // provider would spend a bound that is already gone, so stop here and let
+      // the caller take its non-AI fallback.
+      if (text === null) return null;
+      if (text.trim()) return { text: text.trim(), source: provider };
+    } catch {
+      // try the next provider
+    }
+  }
+  return null;
+};
 
 // Provider preference: LOPU_PROVIDER picks who goes first; the other is the
 // automatic fallback. Default is Claude first.
@@ -270,7 +367,7 @@ const providerOrder = (): Array<'claude' | 'openai'> => {
   return pref === 'openai' ? ['openai', 'claude'] : ['claude', 'openai'];
 };
 
-const hasAnyKey = () => !!process.env.ANTHROPIC_API_KEY || !!process.env.OPENAI_API_KEY;
+const hasAnyKey = () => claudeOAuthConfigured() || !!process.env.OPENAI_API_KEY;
 export const hasLopuAiProviderConfigured = hasAnyKey;
 
 // Split a string into word-sized chunks (keeping trailing spaces) so a canned
@@ -291,8 +388,9 @@ async function* streamFallback(mode: LopuMode): AsyncGenerator<LopuStreamEvent> 
 // failure (no key / no credits / network) fall back to the canned library.
 export async function* streamLopuMusing(
   ctx: LopuContext,
-  opts: { forceFallback?: boolean } = {}
+  opts: { forceFallback?: boolean; signal?: AbortSignal; ownerId?: string } = {}
 ): AsyncGenerator<LopuStreamEvent> {
+  opts.signal?.throwIfAborted();
   const mode = opts.forceFallback ? 'fallback' : pickMode();
 
   // Pure-fallback mode, or no AI configured at all: serve a canned line.
@@ -308,15 +406,16 @@ export async function* streamLopuMusing(
   // One durable read serves every provider attempt in this musing;
   // getWaterfall catches internally and never throws.
   const choices = await getLopuModelChoices();
+  const system = composeLopuSurfacePrompt(await getLopuPromptSettings(opts.ownerId), SYSTEM_PROMPT);
 
   for (const provider of providerOrder()) {
-    const key = provider === 'claude' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY;
+    const key = provider === 'claude' ? claudeOAuthConfigured() : process.env.OPENAI_API_KEY;
     if (!key) continue;
     try {
       const gen =
         provider === 'claude'
-          ? streamClaude(SYSTEM_PROMPT, user, choices.claude)
-          : streamOpenAI(SYSTEM_PROMPT, user, choices.openai);
+          ? streamClaude(system, user, choices.claude, opts.signal)
+          : streamOpenAI(system, user, choices.openai, opts.signal);
       // Pull the first chunk inside the try so a failing provider (bad key, no
       // credits) is caught here and we move to the next one cleanly.
       const first = await gen.next();
@@ -339,6 +438,7 @@ export async function* streamLopuMusing(
       yield { type: 'done' };
       return;
     } catch {
+      opts.signal?.throwIfAborted();
       // try the next provider
     }
   }

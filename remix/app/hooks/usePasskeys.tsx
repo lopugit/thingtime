@@ -2,13 +2,13 @@ import React from 'react';
 import {
 	browserSupportsWebAuthn,
 	browserSupportsWebAuthnAutofill,
-	startAuthentication,
-	startRegistration,
-	WebAuthnAbortService
 } from '@simplewebauthn/browser';
 
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
+import { authenticatePasskey, createPasskey, passkeyCeremonies } from './passkeyCeremony';
+import { ensurePasskeyCapabilities } from './passkeyCapabilities';
+export { passkeyErrorMessage } from './passkeyCeremony';
 
 // Client half of the WebAuthn ceremonies. The platform integrations the
 // feature asks for — macOS/iOS Passwords sheets, 1Password's "Save in
@@ -53,7 +53,7 @@ export const isPasskeyCancel = (err: any): boolean => err?.name === 'NotAllowedE
 
 export const passkeysSupported = (): boolean => {
 	try {
-		return typeof window !== 'undefined' && browserSupportsWebAuthn();
+		return typeof window !== 'undefined' && window.isSecureContext && Boolean(navigator.credentials) && browserSupportsWebAuthn();
 	} catch {
 		return false;
 	}
@@ -67,57 +67,66 @@ export const usePasskeyAuth = () => {
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
 
-	// Full ceremony: mint options (sets the signed challenge cookie), hand them
-	// to the browser/platform sheet, POST the assertion back. `conditional`
-	// runs the browser-autofill flavor: it resolves only when the user picks a
-	// passkey from the username-field popup (iCloud Keychain / 1Password), so
-	// callers await it for the whole life of the login form.
-	const loginWithPasskey = React.useCallback(async (opts?: { conditional?: boolean; clientId?: string }) => {
-		const minted = await apiRef.current.v1.auth.passkeys.loginOptions();
-		if (!minted?.ok) throw minted;
-		const assertion = await startAuthentication({
-			optionsJSON: minted.options,
-			useBrowserAutofill: opts?.conditional === true
-		});
-		return apiRef.current.v1.auth.passkeys.login({ response: assertion, clientId: opts?.clientId });
+	const owner = React.useRef({});
+	React.useEffect(() => {
+		const currentOwner = owner.current;
+		return () => passkeyCeremonies.cancel(currentOwner);
 	}, []);
 
-	// Password-confirmed registration ceremony. The platform (or 1Password)
-	// shows its own "save this passkey" sheet during startRegistration.
-	const registerPasskey = React.useCallback(async (opts: { password: string; nickname?: string; description?: string }) => {
-		const minted = await apiRef.current.v1.auth.passkeys.registerOptions({ password: opts.password });
-		if (!minted?.ok) throw minted;
-		const attestation = await startRegistration({ optionsJSON: minted.options });
-		return apiRef.current.v1.auth.passkeys.register({
-			response: attestation,
-			nickname: opts.nickname,
-			description: opts.description
-		});
-	}, []);
+	const cancelPasskey = React.useCallback(() => passkeyCeremonies.cancel(owner.current), []);
+	const loginWithPasskey = React.useCallback((opts?: { conditional?: boolean; clientId?: string; signal?: AbortSignal }) =>
+		passkeyCeremonies.run(owner.current, opts?.conditional === true, async (signal) => {
+			await ensurePasskeyCapabilities('login', signal);
+			const minted = await apiRef.current.v1.auth.passkeys.loginOptions({ signal });
+			signal.throwIfAborted();
+			if (!minted?.ok) throw minted;
+			const assertion = await authenticatePasskey(minted.options, signal, opts?.conditional === true);
+			signal.throwIfAborted();
+			try {
+				return await apiRef.current.v1.auth.passkeys.login({ response: assertion, clientId: opts?.clientId, signal });
+			} catch (error: any) {
+				throw Object.assign(error instanceof Error ? error : { ...error }, { passkeyStage: 'verify' });
+			}
+		}, opts?.signal), []);
 
-	return { loginWithPasskey, registerPasskey };
+	const registerPasskey = React.useCallback((opts: { password: string; nickname?: string; description?: string }) =>
+		passkeyCeremonies.run(owner.current, false, async (signal) => {
+			await ensurePasskeyCapabilities('registration', signal);
+			const minted = await apiRef.current.v1.auth.passkeys.registerOptions({ password: opts.password, signal });
+			signal.throwIfAborted();
+			if (!minted?.ok) throw minted;
+			const attestation = await createPasskey(minted.options, signal);
+			signal.throwIfAborted();
+			return apiRef.current.v1.auth.passkeys.register({ response: attestation, nickname: opts.nickname, description: opts.description, signal });
+		}), []);
+
+	return { loginWithPasskey, registerPasskey, cancelPasskey };
 };
 
 // Conditional-UI (autofill) arm: resolves browser support once, then runs one
 // background conditional ceremony for the lifetime of the mounting surface.
 // When the user picks a passkey from the field popup, onSuccess fires with the
 // login response. Silent on cancel/unsupported — the form works as normal.
-export const usePasskeyAutofill = (enabled: boolean, onSuccess: (resp: any) => void) => {
+export const usePasskeyAutofill = (enabled: boolean, onSuccess: (resp: any) => void, onError?: (error: any) => void) => {
 	const { loginWithPasskey } = usePasskeyAuth();
 	const onSuccessRef = React.useRef(onSuccess);
 	onSuccessRef.current = onSuccess;
+	const onErrorRef = React.useRef(onError);
+	onErrorRef.current = onError;
 
 	React.useEffect(() => {
 		if (!enabled || !passkeysSupported()) return;
 		let alive = true;
+		const controller = new AbortController();
 		browserSupportsWebAuthnAutofill()
 			.then((supported) => {
 				if (!supported || !alive) return null;
-				return loginWithPasskey({ conditional: true }).then((resp) => {
+				return loginWithPasskey({ conditional: true, signal: controller.signal }).then((resp) => {
 					if (alive && resp?.ok) onSuccessRef.current(resp);
 				});
 			})
-			.catch(() => {
+			.catch((error) => {
+				if (alive && error?.passkeyStage === 'verify' && !isPasskeyCancel(error)) onErrorRef.current?.(error);
 				// cancelled, superseded by a modal ceremony, or unsupported — the
 				// password form (and the explicit passkey button) still work
 			});
@@ -128,7 +137,7 @@ export const usePasskeyAutofill = (enabled: boolean, onSuccess: (resp: any) => v
 			// request left running after navigation is what lets the browser's
 			// cross-device QR sheet (or a password manager popup) surface
 			// uninvited later, long after the user logged in.
-			WebAuthnAbortService.cancelCeremony();
+			controller.abort();
 		};
 	}, [enabled, loginWithPasskey]);
 };

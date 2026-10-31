@@ -1,3 +1,4 @@
+import { withFoundPostBrowser, foundPostVisitIp } from '~/api/utils/things/foundPostRequest';
 import { json } from '~/api/http';
 
 import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
@@ -6,9 +7,10 @@ import {
   createReadyAttachmentPostInsertHook,
   inspectReadyAttachmentsForPost,
   prepareAttachmentCascadeForThing,
-  reorderReadyAttachmentsForTarget
+  syncReadyAttachmentsForTarget
 } from '~/api/utils/attachments/attachments';
 import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
+import { bindOwnedWebpageAttachments } from '~/api/utils/webpages/webpageAttachments';
 import {
   attachmentPostActorAllowed,
   postAttachmentRequest,
@@ -26,8 +28,15 @@ import {
   toPublicThings,
   updateThing,
   upsertThing,
-  viewerOf
+  viewerOf,
+  withLinkKeys
 } from '~/api/utils/things/things';
+import { isCustomMongoEndpointActive } from '~/api/utils/mongodb/endpoint';
+import { parseCommentSort } from '~/api/utils/things/updownCore';
+import { sharedThingRead } from './sharedThingRead';
+import { deleteOwnedChatArchive } from '~/api/utils/things/chatArchiveOwnerTransfer';
+import { renameLibraryThing } from '~/api/utils/things/renameLibraryThing';
+import { readOwnedChatArchive } from '~/api/utils/things/chatArchiveReadTransfer';
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
 // use, so the generic endpoint can't be used to bypass the per-op limits.
@@ -73,11 +82,12 @@ const csv = (value: string | null): string[] =>
     .map((entry) => entry.trim())
     .filter(Boolean);
 
-// GET /api/v1/things?id=<shareId> — read one thing (post projection included
-// for post things).
+// GET /api/v1/things?id=<shareId>[&commentSort=top|new|old] — read one thing
+// (post projection included for post things; commentSort re-orders the
+// shipped comment page — default: the newest comments, oldest → newest).
 // GET /api/v1/things?target=<shareId>&thingtime=comment&cursor=&limit= — list
 // things attached to a viewable thing (its comments/reactions).
-// GET /api/v1/things?thingtime=&folder=&cursor=&limit= — list your own things
+// GET /api/v1/things?thingtime=&schemaId=&parentId=&folder=&cursor=&limit= — list your own things
 // (folder=root for unfiled things, folder=<folder shareId> for its children;
 // session auth may add appId=<clientId> to browse ONE app's namespace).
 //
@@ -89,11 +99,45 @@ export const loader = async ({ request }: { request: Request }) => {
   const actor = await resolveActor(request, { thingsScope: 'things.read' });
   if (actor instanceof Response) return actor;
   const user = actorUser(actor);
+  const params = new URL(request.url).searchParams;
   // pat context rides reads too: a visibility-restricted token (public-only /
-  // private-only) must have its audience fence applied to everything it lists
-  const viewer = viewerOf(user, actorPat(actor));
+  // private-only) must have its audience fence applied to everything it lists.
+  // A presented ?key= rides along so hidden things resolve for key-holders —
+  // logged-out ones included.
+  const viewer = withLinkKeys(withFoundPostBrowser(viewerOf(user, actorPat(actor)), request, actor.kind === 'anonymous'), [(params.get('key') || '').trim()]);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
+
+  const commentProjection = params.has('commentProjection');
+  if (commentProjection) {
+    const id = (params.get('id') || '').trim(), target = (params.get('target') || '').trim();
+    const invalid = ['commentProjection', 'id', 'target', 'thingtime', 'cursor', 'limit'].some(key => params.getAll(key).length > 1) || params.get('commentProjection') !== 'true' || actor.kind === 'app' || isCustomMongoEndpointActive() ||
+      ['archive', 'sharedRoot', 'appId', 'folder', 'commentSort', 'schemaId', 'parentId'].some(key => params.has(key)) ||
+      (id ? params.has('target') || ['thingtime', 'cursor', 'limit'].some(key => params.has(key))
+          : params.has('id') || !target || csv(params.get('thingtime')).length !== 1 || csv(params.get('thingtime'))[0] !== 'comment') ||
+      (params.has('limit') && !/^(?:[1-9]|1[0-9]|20)$/.test(params.get('limit') || ''));
+    if (invalid) return json({ ok: false, error: 'Invalid first-party discussion projection request' }, { status: 400, headers: cors });
+  }
+
+  if (params.has('archive')) {
+    const headers = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' };
+    if (actor.kind !== 'user' || user?.accountKind !== 'user') return json({ ok: false, error: 'Sign in to read your archive' }, { status: 401, headers });
+    const id = (params.get('id') || '').trim();
+    if (params.get('archive') !== 'true' || !id || params.has('sharedRoot') || params.has('key') || params.has('appId')) return json({ ok: false, error: 'Invalid archive request' }, { status: 400, headers });
+    const limit = await enforceRateLimit(request, 'oauth.read', `archive-user:${user.id}`, { failClosed: true });
+    if (!limit.allowed) {
+      const init = rateLimitedResponseInit(limit);
+      return json({ ok: false, error: 'Archive reads are temporarily rate-limited' }, { ...init, headers: { ...init.headers, ...headers } });
+    }
+    try {
+      const archive = await readOwnedChatArchive(user.id, id);
+      return archive ? json({ ok: true, archive }, { headers }) : json({ ok: false, error: 'Archive not found' }, { status: 404, headers });
+    } catch {
+      return json({ ok: false, error: 'Archive history is unavailable; try again' }, { status: 503, headers });
+    }
+  }
+
+  if (params.has('sharedRoot')) return sharedThingRead(request, { viewer, app: actor.kind === 'app', cors });
 
   if (actor.kind === 'app') {
     // per-(user, app) buckets — an app never rides the user's own windows
@@ -107,38 +151,54 @@ export const loader = async ({ request }: { request: Request }) => {
     }
   }
 
-  const params = new URL(request.url).searchParams;
-
   const id = (params.get('id') || '').trim();
+  if (['schemaId', 'parentId', 'builderApp'].some(key => params.getAll(key).length > 1)) return json({ ok: false, error: 'Crystal filters must be supplied once' }, { status: 400, headers: cors });
+  if (params.has('builderApp') && params.get('builderApp') !== 'true') return json({ ok: false, error: 'builderApp must be true' }, { status: 400, headers: cors });
   if (id) {
-    const result = await getThing(viewer, id, app);
+    if (params.has('schemaId') || params.has('parentId') || params.has('builderApp')) return json({ ok: false, error: 'Crystal filters apply to Thing lists only' }, { status: 400, headers: cors });
+    // commentSort=top|new|old re-orders the shipped comment page of the post
+    // projection (round 2 S7); absent keeps the default page, a typo is a 400
+    // (never a silently re-ordered thread)
+    const commentSort = parseCommentSort(params.get('commentSort') || undefined);
+    if (commentSort.ok === false) return json({ ok: false, error: commentSort.error }, { status: 400, headers: cors });
+    // Canonical-link reads stay readable during limiter outages, but creating
+    // durable discovery state is bounded per authenticated user or request IP.
+    const canRemember = (actor.kind === 'anonymous' || (actor.kind === 'user' && user?.accountKind === 'user'));
+    const discoveryAllowed = canRemember && (await enforceRateLimit(request, 'things.views', user ? `user:${user.id}` : null, { failClosed: true })).allowed;
+    const result = await getThing(viewer, id, app, { commentProjection, commentSort: commentSort.sort, rememberDiscovery: discoveryAllowed, discoveryIp: foundPostVisitIp(request) });
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }
     // comments project as posts too; parent/root carry their thread context
-    // (post/parent/root are first-party projections — null under the app lens)
+    // (post/parent/root are first-party projections — null under the app lens);
+    // the response echoes the comment order it shipped (null = default)
     return json(
-      { ok: true, thing: result.thing, post: result.post, parent: result.parent, root: result.root },
-      { headers: cors }
+      { ok: true, thing: result.thing, post: result.post, discussion: result.discussion, parent: result.parent, root: result.root, commentSort: commentSort.sort },
+      { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } }
     );
   }
 
   const result = await listThings(
     viewer,
     {
+      commentProjection,
       thingtime: csv(params.get('thingtime')),
+      schemaId: params.get('schemaId'),
+      parentId: params.get('parentId'),
       targetId: (params.get('target') || '').trim() || null,
       folder: (params.get('folder') || '').trim() || null,
       cursor: params.get('cursor'),
       limit: Number(params.get('limit')) || undefined,
-      appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null
+      appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null,
+      builderAppOnly: params.get('builderApp') === 'true'
     },
-    app
+    app,
+    { archiveOwnerId: actor.kind === 'user' && user?.accountKind === 'user' ? user.id : undefined }
   );
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
   }
-  return json({ ok: true, things: result.things, nextCursor: result.nextCursor }, { headers: cors });
+  return json({ ok: true, things: result.things, nextCursor: result.nextCursor, ...(result.comments ? { comments: result.comments } : {}) }, { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } });
 };
 
 // One endpoint, full CRUD (the GET loader above is the R):
@@ -187,8 +247,10 @@ export const action = async ({ request }: { request: Request }) => {
   }
   const user = actorUser(actor)!;
   // pat context rides the viewer: creates stamp the token's tt:token grant,
-  // and a sandboxed token's writes stay inside its granted things (things.ts)
-  const viewer = viewerOf(user, actorPat(actor));
+  // and a sandboxed token's writes stay inside its granted things (things.ts).
+  // body.key lets a hidden-link holder attach to (comment on, react to) the
+  // hidden thing their key reveals.
+  const viewer = withLinkKeys(viewerOf(user, actorPat(actor)), [typeof body?.key === 'string' ? body.key : '']);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
 
@@ -283,6 +345,12 @@ export const action = async ({ request }: { request: Request }) => {
       if (result.ok === false) {
         return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
       }
+      // webpage saves claim the owner's referenced builder uploads so the
+      // draft reaper can't take a page's media out from under it (tolerant:
+      // foreign/external/expired references are simply not bound)
+      if (actor.kind !== 'app' && user.accountKind === 'user' && (result.doc.thingtime || []).includes('webpage')) {
+        await bindOwnedWebpageAttachments(user.id, result.doc.crystal, result.doc.shareId);
+      }
       if (app) {
         const thing = (await toPublicThings([result.doc], viewer))[0];
         await appShapeProjections(app, [result.doc], [thing]);
@@ -313,14 +381,22 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   if (method === 'PATCH') {
-    // Reorder before the document update so the projection the client gets
-    // back already lists attachments in the new order. The reorder is an
-    // idempotent permutation stamp — a failed updateThing after it leaves
-    // nothing dangling, and a retry re-applies the same order safely.
-    if (attachmentRequest.present && attachmentRequest.kind === 'reorder') {
-      const reordered = await reorderReadyAttachmentsForTarget(user.id, body?.id, attachmentRequest.attachmentIds);
-      if (reordered.ok === false) {
-        return json({ ok: false, error: reordered.error }, { status: reordered.status, headers: cors });
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'displayTitle')) {
+      if (Object.keys(body).some(key => !['id', 'displayTitle', 'expectedUpdatedAt'].includes(key))) return json({ ok: false, error: 'Rename accepts only id, displayTitle and expectedUpdatedAt' }, { status: 400, headers: cors });
+      const result = await renameLibraryThing({ actorKind: actor.kind, accountKind: user.accountKind, ownerId: user.id,
+        sameOrigin: isSameOriginAttachmentRequest(request), id: body.id, title: body.displayTitle, expectedUpdatedAt: body.expectedUpdatedAt });
+      return json(result, { status: result.ok === false ? result.status : 200, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
+    }
+    // Sync attachments before the document update so the projection the
+    // client gets back already lists them in the new order — and so
+    // updateThing's boundAttachmentPresence sees freshly added media when it
+    // validates the crystal. The sync is idempotent (owner-fenced bind +
+    // order stamp of the full desired list), so a failed updateThing after
+    // it leaves nothing inconsistent and a retry re-applies the same list.
+    if (attachmentRequest.present && attachmentRequest.kind === 'sync') {
+      const synced = await syncReadyAttachmentsForTarget(user.id, body?.id, attachmentRequest.attachmentIds);
+      if (synced.ok === false) {
+        return json({ ok: false, error: synced.error }, { status: synced.status, headers: cors });
       }
     }
     const result = await updateThing(
@@ -333,11 +409,23 @@ export const action = async ({ request }: { request: Request }) => {
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }
+    const updatedThing = result.thing as { id?: unknown; thingtime?: unknown; crystal?: unknown } | undefined;
+    if (
+      actor.kind !== 'app' &&
+      user.accountKind === 'user' &&
+      Array.isArray(updatedThing?.thingtime) &&
+      (updatedThing.thingtime as unknown[]).includes('webpage')
+    ) {
+      await bindOwnedWebpageAttachments(user.id, updatedThing.crystal, String(updatedThing.id || ''));
+    }
     return json({ ok: true, thing: result.thing, post: result.post }, { headers: cors });
   }
 
   if (method === 'DELETE') {
     const id = (new URL(request.url).searchParams.get('id') || '').trim() || body?.id;
+    const archiveResult = await deleteOwnedChatArchive({ actorKind: actor.kind, accountKind: user.accountKind,
+      ownerId: user.id, id, sameOrigin: isSameOriginAttachmentRequest(request), expectedUpdatedAt: body?.expectedUpdatedAt });
+    if (archiveResult) return json(archiveResult, { status: archiveResult.ok === false ? archiveResult.status : 200, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
     const attachmentHooks =
       actor.kind !== 'app' && user.accountKind === 'user'
         ? { beforeCascade: prepareAttachmentCascadeForThing, expectedUpdatedAt: body?.expectedUpdatedAt }

@@ -57,6 +57,16 @@ export const readJsonBody = async (request: Request, maxBytes: number): Promise<
   }
 };
 
+// Cookie-authenticated mutations only accept JSON bodies: a cross-origin form
+// (or a fetch with a safelisted content type) cannot send application/json
+// without a preflight, so the header doubles as the CSRF fence. Every Lopu
+// POST applies it before reading the body — the reply and voice streams and
+// the vault included, since a session cookie is all they need otherwise.
+export const requireJsonContentType = (request: Request): Response | null => {
+  const mediaType = request.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase();
+  return mediaType === 'application/json' ? null : json({ ok: false, error: 'Content-Type must be application/json' }, { status: 415 });
+};
+
 export const redirect = (url: string, init: number | ResponseInit = 302) => {
   const responseInit: ResponseInit = typeof init === 'number' ? { status: init } : init;
   const headers = new Headers(responseInit.headers);
