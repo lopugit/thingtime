@@ -3,7 +3,8 @@ import { json } from '~/api/http';
 import { removeAccounts } from '~/api/utils/auth/accounts';
 import { clearAuthCookie, getAuthToken } from '~/api/utils/auth/authCookie';
 import { verifyJwt } from '~/api/utils/auth/jwt';
-import { revokeSession } from '~/api/utils/auth/sessions';
+import { getLiveSession, revokeSession } from '~/api/utils/auth/sessions';
+import { emitSystemNotification } from '~/api/utils/notifications/notifications';
 import { prepareUnboundAttachmentCleanupForSessionReplacement } from '~/api/utils/attachments/attachments';
 
 // POST /api/v1/auth/logout — body optional: { all?: boolean }
@@ -18,6 +19,7 @@ export const action = async ({ request }: { request: Request }) => {
 
   const token = await getAuthToken(request);
   const claims = token ? await verifyJwt(token) : null;
+  const wasLive = claims ? await getLiveSession(claims.jti) : null;
 
   if (!claims && !all) {
     // Can't tell which account this was (missing/undecodable token) — just
@@ -35,6 +37,7 @@ export const action = async ({ request }: { request: Request }) => {
   // it — always revoke the session this request authenticated with directly
   // (idempotent when the roster removal already got it).
   if (claims) await revokeSession(claims.jti);
+  if (claims && wasLive) await emitSystemNotification({ recipientId: claims.sub, type: 'system-message', title: 'Signed out successfully', historyOnly: true, outcome: 'ok' });
 
   const headers = new Headers();
   for (const cookie of result.setCookies) headers.append('Set-Cookie', cookie);

@@ -1,0 +1,187 @@
+import { BranchWebpage } from './BranchWebpage';
+import React from 'react';
+import { Box, Flex, Text } from '@chakra-ui/react';
+import { useNavigate, useSearchParams } from 'react-router';
+
+import LiveWebpage from './LiveWebpage';
+import { isSafeCssText } from '../Kinds/safeUrl';
+import { WebpageBlocksRenderer } from './WebpageBlocksRenderer';
+import { getNativeSection, NativeSectionView } from './nativeSections';
+import { BuilderDrawer, InspectorReopenPill, useBuilderDrawerWidth } from './BuilderDrawer';
+import { useBuilderChrome } from './useBuilderChrome';
+import { useWebpageDraft } from './useWebpage';
+import { countBlocks } from './webpageBlocks';
+import { ThingDefinitionEditor } from './DefinitionEditor/ThingDefinitionEditor';
+import { ThingsPage } from '~/components/Things/ThingsPage';
+
+// /builder — create and edit block-based webpages. Without ?page= it lists
+// the user's pages (+ New page); with ?page=<id> it opens the canvas: the
+// page renders exactly as /p/ renders it, wrapped in builder chrome (hover
+// boundaries, inline + add block menus, drag/drop) with the right-side
+// drawer for page settings and the selected block's inspector.
+
+const BuilderCanvas = ({ pageId }: { pageId: string }) => {
+	const navigate = useNavigate();
+	const isGlobal = pageId === '__global__';
+	const draft = useWebpageDraft(
+		React.useMemo(() => (isGlobal ? { kind: 'global' as const } : { kind: 'id' as const, id: pageId }), [isGlobal, pageId])
+	);
+	const [drawerOpen, setDrawerOpen] = React.useState(
+		() => typeof window === 'undefined' || window.innerWidth >= 768
+	);
+	const inspectBlock = React.useCallback(() => setDrawerOpen(true), []);
+	const { chrome, selectedId, deselect, insertMenu, uploadToBlock, uploadToPosition } = useBuilderChrome(draft, {
+		onInspect: inspectBlock
+	});
+	// ?page= can open someone else's page on the fork path, so previewBg is not
+	// necessarily the viewer's own. Screen it with the same shared render-time
+	// check the component previews apply to this field.
+	const canvasBg =
+		typeof draft.resolved?.page?.crystal?.previewBg === 'string' && isSafeCssText(draft.resolved.page.crystal.previewBg)
+			? draft.resolved.page.crystal.previewBg
+			: 'var(--tt-card, #ffffff)';
+	const [pageName, setPageName] = React.useState('');
+	const [audienceAcl, setAudienceAcl] = React.useState<string[]>(['tt:user']);
+	const drawerWidth = useBuilderDrawerWidth();
+
+	// the canvas owns window-level file drops — unhandled ones append to the
+	// end of the page instead of the browser opening the file
+	const dropRef = React.useRef({ upload: uploadToPosition, length: draft.blocks.length });
+	dropRef.current = { upload: uploadToPosition, length: draft.blocks.length };
+	React.useEffect(() => {
+		const hasFiles = (event: DragEvent) => !!event.dataTransfer && Array.from(event.dataTransfer.types || []).includes('Files');
+		const onDragOver = (event: DragEvent) => {
+			if (hasFiles(event)) event.preventDefault();
+		};
+		const onDrop = (event: DragEvent) => {
+			if (!hasFiles(event)) return;
+			// an inner surface (frame, zone, the app's own composer) already
+			// claimed this drop — appending a second copy would double-handle it
+			if (event.defaultPrevented) return;
+			event.preventDefault();
+			const files = Array.from(event.dataTransfer?.files || []);
+			if (files.length) dropRef.current.upload(files, null, dropRef.current.length);
+		};
+		window.addEventListener('dragover', onDragOver);
+		window.addEventListener('drop', onDrop);
+		return () => {
+			window.removeEventListener('dragover', onDragOver);
+			window.removeEventListener('drop', onDrop);
+		};
+	}, []);
+	// collapsible on small screens — closing the drawer never exits the canvas
+	// phones: the drawer covers nearly the whole viewport, so edit mode
+	// starts with the CANVAS visible — selecting a block opens the drawer
+	// (existing effect), and the 🧱 Inspector pill reopens it any time
+	const namedForRef = React.useRef<string | null>(null);
+
+	// selecting a block is a request to inspect it — reopen a collapsed drawer
+	React.useEffect(() => {
+		if (selectedId) setDrawerOpen(true);
+	}, [selectedId]);
+
+	React.useEffect(() => {
+		const page = draft.resolved?.page;
+		if (page && namedForRef.current !== page.id) {
+			namedForRef.current = page.id;
+			setPageName(page.crystal?.name || 'Untitled page');
+			setAudienceAcl(Array.isArray(page.acl) && page.acl.length ? page.acl : ['tt:user']);
+		}
+		// unseeded deployments: the global doc may not exist yet — name the
+		// fork properly instead of "Untitled page"
+		if (!page && isGlobal && !draft.loading && !pageName) setPageName('Global blocks');
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- pageName guard reads current value only
+	}, [draft.resolved, draft.loading, isGlobal]);
+
+	const isSiteDoc = isGlobal || !!draft.resolved?.page?.crystal?.siteRoute;
+
+	return (
+		<>
+			<Flex
+				flexDirection="column"
+				width="100%"
+				minHeight="100vh"
+				background="var(--tt-surface, #fafafb)"
+				paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
+				paddingRight={drawerOpen ? [0, `${drawerWidth}px`] : 0}
+				whiteSpace="normal"
+			>
+				<Flex flexDirection="column" width="100%" maxWidth="960px" marginX="auto" paddingX={4} paddingY={8} flex={1}>
+					<Flex alignItems="baseline" justifyContent="space-between" marginBottom={4}>
+						<Text
+							color="var(--tt-muted, #9a9aa6)"
+							fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+							fontSize="10px"
+							fontWeight={700}
+							letterSpacing="0.12em"
+							textTransform="uppercase"
+						>
+							Builder canvas · {countBlocks(draft.blocks)} blocks{draft.dirty ? ' · unsaved' : ''}
+						</Text>
+						<Box
+							as="button"
+							color="var(--tt-link, #2f8fd6)"
+							fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+							fontSize="11px"
+							cursor="pointer"
+							_hover={{ textDecoration: 'underline' }}
+							onClick={() => navigate('/builder')}
+						>
+							← my pages
+						</Box>
+					</Flex>
+					<Box
+						background={canvasBg}
+						border="1px solid"
+						borderColor="var(--tt-border, #ececef)"
+						borderRadius="var(--tt-radius-lg, 16px)"
+						padding={[3, 6]}
+						minHeight="50vh"
+					>
+						<WebpageBlocksRenderer
+							blocks={draft.blocks}
+							componentsByRef={draft.componentsByRef}
+							chrome={chrome}
+							// registered native sections render for real in the canvas
+							// too; unregistered keys keep the placeholder chip
+							renderNative={(key) => (getNativeSection(key) ? <NativeSectionView sectionKey={key} /> : null)}
+						/>
+					</Box>
+				</Flex>
+			</Flex>
+			{!drawerOpen ? <InspectorReopenPill onClick={() => setDrawerOpen(true)} /> : null}
+			{drawerOpen ? (
+			<BuilderDrawer
+				title={isGlobal ? 'Global blocks 🌐' : isSiteDoc ? `Site page · ${draft.resolved?.page?.crystal?.siteRoute}` : 'Page builder 🧱'}
+				draft={draft}
+				selectedId={selectedId}
+				onDeselect={deselect}
+				onClose={() => setDrawerOpen(false)}
+				mode={isSiteDoc ? 'site' : 'page'}
+				pageName={pageName}
+				onPageName={setPageName}
+				audienceAcl={audienceAcl}
+				onAudienceAcl={setAudienceAcl}
+				onSaved={(id) => {
+					if (!isGlobal && id !== pageId) navigate(`/builder?page=${encodeURIComponent(id)}`, { replace: true });
+				}}
+				onUploadToBlock={uploadToBlock}
+			/>
+			) : null}
+			{insertMenu}
+		</>
+	);
+};
+
+export const BuilderPage = () => {
+	const [searchParams, setSearchParams] = useSearchParams();
+	const pageId = searchParams.get('page');
+	const thingId = searchParams.get('thing');
+	if (thingId) return <><ThingsPage builderMode /><ThingDefinitionEditor id={thingId} requireBuilder onClose={() => { const next = new URLSearchParams(searchParams); next.delete('thing'); setSearchParams(next); }} /></>;
+	if (searchParams.has('branchId')) return <BranchWebpage pageId={pageId || ''} />;
+	if (!pageId) return <ThingsPage builderMode />;
+	if (pageId === '__global__') return <BuilderCanvas pageId={pageId} />;
+	return <LiveWebpage builderPageId={pageId} />;
+};
+
+export default BuilderPage;
