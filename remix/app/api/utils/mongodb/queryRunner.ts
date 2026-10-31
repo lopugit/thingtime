@@ -1,10 +1,12 @@
 import { getThingtimeDb } from './collections';
+import { physicalCollectionName } from './collectionNames';
 import { MONGO_QUERY_LIMITS, type MongoQueryRequest, type MongoQuerySuccess } from './queryContract';
 import {
   hardenThingsQuery,
   mongoQueryCapabilities,
   normalizeMongoQueryRequest,
   redactMongoValue,
+  resolvePipelineCollections,
   safeMongoError,
   type NormalizedMongoQuery
 } from './querySafety';
@@ -89,7 +91,10 @@ export const runMongoQuery = async (
   const started = performance.now();
   try {
     const db = await getThingtimeDb();
-    const collection = db.collection(normalized.collection);
+    // requests and responses speak logical names; the versioned physical
+    // collection (things → things_v2) is resolved only here, at execution
+    const collection = db.collection(physicalCollectionName(normalized.collection));
+    const pipeline = resolvePipelineCollections(normalized.pipeline);
     const options = baseOptions(normalized, signal) as any;
     let values: AsyncIterable<unknown> | Iterable<unknown> = [];
     let total: number | undefined;
@@ -98,7 +103,7 @@ export const runMongoQuery = async (
       if (normalized.operation === 'aggregate') {
         values = [
           await collection
-            .aggregate(normalized.pipeline, { ...options, allowDiskUse: normalized.allowDiskUse })
+            .aggregate(pipeline, { ...options, allowDiskUse: normalized.allowDiskUse })
             .explain('executionStats')
         ];
       } else if (normalized.operation === 'countDocuments') {
@@ -146,7 +151,7 @@ export const runMongoQuery = async (
         .aggregate(boundedDistinctPipeline(normalized), { ...options, allowDiskUse: false })
         .map((row: { _id: unknown }) => row._id);
     } else if (normalized.operation === 'aggregate') {
-      values = collection.aggregate(normalized.pipeline, {
+      values = collection.aggregate(pipeline, {
         ...options,
         allowDiskUse: normalized.allowDiskUse,
         batchSize: Math.min(normalized.limit, 100)
@@ -156,7 +161,7 @@ export const runMongoQuery = async (
     } else if (normalized.operation === 'collectionStats') {
       values = [
         await db.command(
-          { collStats: normalized.collection, scale: 1, maxTimeMS: normalized.maxTimeMS },
+          { collStats: physicalCollectionName(normalized.collection), scale: 1, maxTimeMS: normalized.maxTimeMS },
           signal ? { signal } : undefined
         )
       ];
