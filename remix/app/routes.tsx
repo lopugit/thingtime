@@ -1,3 +1,4 @@
+import { InviteSignup } from './components/Invites/InviteSignup';
 import type { ComponentType } from 'react';
 import { createBrowserRouter, redirect, type LoaderFunctionArgs } from 'react-router';
 
@@ -26,6 +27,7 @@ import Welcome from './routes/welcome';
 import { recoverStaleChunk } from './utils/staleChunkRecovery';
 import { shouldBootstrapTemporaryUser } from './utils/temporaryUserBootstrap';
 import { fetchRootData } from './utils/rootDataRecovery';
+import { createRootDataLoader } from './utils/rootDataLoader';
 import { rootIdentity } from './utils/rootIdentity';
 import { RootRecovery } from './components/Layout/RootRecovery';
 
@@ -81,7 +83,7 @@ const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
   return (await response.json()) as T;
 };
 
-const rootLoader = async ({ request }: LoaderFunctionArgs) => {
+const rootLoader = createRootDataLoader(async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const generation = rootIdentity.read().generation;
   const rootData = await fetchRootData<RootLoaderData>(`/api/root-data${url.search}`, request.signal);
@@ -104,7 +106,7 @@ const rootLoader = async ({ request }: LoaderFunctionArgs) => {
     // with an error boundary for an optional first-session convenience.
     return current(rootData);
   }
-};
+}, rootIdentity);
 
 const currentUserLoader = async () => {
   const response = await fetchJson<{ user: RootLoaderData['user'] }>('/api/v1/auth/me');
@@ -143,6 +145,13 @@ export const router = createBrowserRouter([
     errorElement: <RootRecovery />,
     children: [
       { index: true, element: <Index /> },
+      { path: 'legal', lazy: lazyRoute(() => import('./routes/legal')) },
+      { path: 'pages/:slug', lazy: lazyRoute(() => import('./routes/legal')) },
+      { path: 'pages/:slug/:version', lazy: lazyRoute(() => import('./routes/legal')) },
+      { path: 'privacy', loader: () => redirect('/pages/privacy-policy') },
+      { path: 'terms', loader: () => redirect('/pages/terms-of-service') },
+      { path: 'support', lazy: lazyRoute(() => import('./routes/support')) },
+
       // "Login with Thingtime" popup (embed SDK) — no guest/user guard: it
       // handles both states itself (login form → consent screen).
       { path: 'authorize', element: <Authorize /> },
@@ -160,22 +169,36 @@ export const router = createBrowserRouter([
       { path: 'branding_old', lazy: lazyRoute(() => import('./routes/branding_old')) },
       // the block-based site builder — create webpages from component things;
       // ?page=<id> opens the canvas (site pages included)
+      { path: 'builder/docs', loader: () => redirect('/docs/builder'), element: <HydrateFallback /> },
       { path: 'builder', lazy: lazyRoute(() => import('./routes/builder')) },
       // the demo library — a few hundred example sections/pages to preview and
       // copy into your own pages (catalog in schemas/webpageDemos)
+      { path: 'library', lazy: lazyRoute(() => import('./routes/library')) },
+      { path: 'library/:id', lazy: lazyRoute(() => import('./routes/library')) },
       { path: 'builder/demos', lazy: lazyRoute(() => import('./routes/builder-demos')) },
       // one demo / suite / app on its own page: preview + the LIVE version
       { path: 'builder/demos/:slug', lazy: lazyRoute(() => import('./routes/builder-demo-detail')) },
       // published block-based webpages (reserved prefix — outranks the * catch-all)
       { path: 'p/:id', lazy: lazyRoute(() => import('./routes/p')) },
+      { path: 't/:id', lazy: lazyRoute(() => import('./routes/p')) },
       // the storybook-style design-system docs own the canonical short URL too
       { path: 'design-system', loader: () => redirect('/docs/design-system'), element: <HydrateFallback /> },
+      // third-party app connections — no guard: both pages render their own
+      // signed-out quiet state (the /settings, /apps idiom)
+      { path: 'mail', lazy: lazyRoute(() => import('./routes/mail')) },
+      { path: 'email', lazy: lazyRoute(() => import('./routes/mail')) },
+      { path: 'passwords/provider', lazy: lazyRoute(() => import('./routes/passwords.provider')) },
+      { path: 'passwords', lazy: lazyRoute(() => import('./routes/passwords')) },
+      { path: 'connections', lazy: lazyRoute(() => import('./routes/connections')) },
+      { path: 'connections/feed', lazy: lazyRoute(() => import('./routes/connections-feed')) },
       { path: 'crypto', lazy: lazyRoute(() => import('./routes/crypto')) },
       {
         path: 'docs',
         lazy: lazyRoute(() => import('./routes/docs/DocsLayout')),
         children: [
           { index: true, lazy: lazyRoute(() => import('./routes/docs/index')) },
+          { path: 'builder', lazy: lazyRoute(() => import('./routes/docs/builder')) },
+          { path: 'builder/:section', lazy: lazyRoute(() => import('./routes/docs/builder')) },
           { path: 'mcp', lazy: lazyRoute(() => import('./routes/docs/mcp')) },
           { path: 'embed', lazy: lazyRoute(() => import('./routes/docs/embed')) },
           { path: 'api', lazy: lazyRoute(() => import('./routes/docs/api')) },
@@ -190,11 +213,13 @@ export const router = createBrowserRouter([
       // public trending board — guest-visible like /feed
       { path: 'explore', element: <Explore /> },
       { path: 'feed', element: <Feed /> },
+      { path: 'algorithms', lazy: lazyRoute(() => import('./routes/algorithms')) },
       { path: 'messages', lazy: lazyRoute(() => import('./routes/messages')), loader: requireUser('/login') },
       // Lopu 🦄 — the AI assistant page; no loader guard: it renders its own
       // signed-out quiet state, like /apps. /lopu/:chatId deep-links a
       // conversation (the floating window shares the same store).
       { path: 'lopu', lazy: lazyRoute(() => import('./routes/lopu')) },
+      { path: 'lopu/tasks', lazy: lazyRoute(() => import('./routes/lopu.tasks')), loader: requireUser('/login') },
       { path: 'lopu/voice', lazy: lazyRoute(() => import('./routes/lopu-voice')), loader: requireUser('/login') },
       { path: 'lopu/:chatId', lazy: lazyRoute(() => import('./routes/lopu')) },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
@@ -227,6 +252,7 @@ export const router = createBrowserRouter([
       { path: 'profile/:username', element: <Profile /> },
       { path: 'rainbow/*', lazy: lazyRoute(() => import('./routes/rainbow.$')) },
       { path: 'raw', lazy: lazyRoute(() => import('./routes/raw')) },
+      { path: 'invite', element: <InviteSignup /> },
       { path: 'register', element: <Register />, loader: requireGuest('/welcome') },
       // password-reset + verification landing pages work logged-out by design
       // (the emailed token/link is the credential, not the session)
@@ -240,6 +266,7 @@ export const router = createBrowserRouter([
       { path: 's/:slug', lazy: lazyRoute(() => import('./routes/subspace')) },
       { path: 's/:slug/mod', lazy: lazyRoute(() => import('./routes/subspace-mod')), loader: requireUser('/login') },      // the viewer's full notification history (search + category/type/
       // unread/date filters in the URL) — same signed-out quiet state posture
+      { path: 'history', lazy: lazyRoute(() => import('./routes/history')) },
       { path: 'notifications', lazy: lazyRoute(() => import('./routes/notifications')) },
       { path: 'lopu/recordings', lazy: lazyRoute(() => import('./routes/lopu.recordings')) },
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
@@ -278,6 +305,7 @@ export const router = createBrowserRouter([
       // the unified Things browser claims EXACTLY /things; deeper /things/*
       // paths still reach the ThingtimeUrl tree viewer via the catch-all
       { path: 'things', lazy: lazyRoute(() => import('./routes/things')) },
+      { path: 'agent-browsers/:taskId?', lazy: lazyRoute(() => import('./routes/agent-browsers')) },
       { path: 'welcome', element: <Welcome />, loader: requireUser('/register') },
       { path: '*', element: <ThingtimeUrl /> }
     ]

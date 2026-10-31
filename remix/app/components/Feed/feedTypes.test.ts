@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { appendPostsDeduped, FEED_SCOPE_CACHE_KEY, feedScopeOf, isCommentSort, isPendingComment, mergeCommentPage, sortCommentPage, windowCommentPage } from './feedTypes';
-import type { PublicPost } from './feedTypes';
+import { appendPostsDeduped, authorLinkTarget, FEED_SCOPE_CACHE_KEY, feedScopeOf, isCommentSort, isPendingComment, mergeCommentPage, sortCommentPage, windowCommentPage } from './feedTypes';
+import type { FeedAuthor, PublicPost } from './feedTypes';
 
 // Minimal PublicPost stand-in: appendPostsDeduped only ever reads `id`, so the
 // rest of the projection is filled from one shared skeleton and the tests stay
@@ -165,4 +165,39 @@ test('mergeCommentPage: the page wins the order, the viewer’s pending / kept c
   const pendingOnly = mergeCommentPage([], [row('pending-b', '2026-09-06T11:00:00.000Z')], [], readStartedAt);
   assert.deepEqual(pendingOnly.comments.map((entry) => entry.id), ['pending-b'], 'a pending row is kept whatever its timestamp');
   assert.equal(pendingOnly.unseen, 1);
+});
+
+// Where an author's name/avatar links. The rule has to key on the `external`
+// FLAG, not on externalUrl being present: a provider need not give us a link
+// (the demo feed never does; an RSS <item> with a <guid> but no <link> does
+// not either), and a third-party handle is provider-supplied — an RSS feed's
+// <dc:creator> is whatever the feed says. Falling back to /profile/<handle>
+// for those authors either dead-ends or, when the handle matches a real
+// account, renders an unrelated Thingtime user as the author of a synced
+// third-party post — on an rss/tt:all post any signed-out visitor can open.
+const author = (extra: Partial<FeedAuthor>): FeedAuthor => ({
+  id: 'u1',
+  username: 'nik',
+  displayName: 'Nik',
+  avatarUrl: null,
+  ...extra
+});
+
+test('authorLinkTarget: native authors keep their profile route', () => {
+  assert.deepEqual(authorLinkTarget(author({})), { external: false, href: '/profile/nik' });
+  assert.equal(authorLinkTarget(null), null);
+  assert.equal(authorLinkTarget(author({ username: '' })), null);
+});
+
+test('authorLinkTarget: third-party authors link out, or nowhere at all', () => {
+  assert.deepEqual(
+    authorLinkTarget(author({ external: true, username: 'algo-x', externalUrl: 'https://news.example/@algo-x' })),
+    { external: true, href: 'https://news.example/@algo-x' }
+  );
+  assert.equal(
+    authorLinkTarget(author({ external: true, username: 'nik', externalUrl: null })),
+    null,
+    'no provider url → plain text, never the native profile of whoever holds that username'
+  );
+  assert.equal(authorLinkTarget(author({ external: true, username: 'algo-x' })), null, 'externalUrl absent entirely');
 });

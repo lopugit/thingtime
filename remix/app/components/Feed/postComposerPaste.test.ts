@@ -12,7 +12,7 @@ test('the expanded post composer routes file-bearing paste into its attachment u
 	assert.match(composer, /onPasteCapture=\{handleComposerPaste\}/);
 	assert.match(composer, /attachmentFilesFromClipboard\(event\.clipboardData\)/);
 	assert.match(composer, /event\.preventDefault\(\);\s*event\.stopPropagation\(\);[\s\S]*setPollOn\(false\);/);
-	assert.match(composer, /pendingPastedFilesRef\.current = \[\.\.\.pendingPastedFilesRef\.current, \.\.\.files\];[\s\S]*setPhotosOn\(true\);/);
+	assert.match(composer, /pendingMediaFilesRef\.current = \[\.\.\.pendingMediaFilesRef\.current, \.\.\.files\];[\s\S]*setPhotosOn\(true\);/);
 	assert.match(composer, /attachmentComposerRef\.current\.addFiles\(files\)/);
 });
 

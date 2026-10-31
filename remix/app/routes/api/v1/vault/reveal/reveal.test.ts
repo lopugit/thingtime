@@ -22,6 +22,7 @@ const fixture = (overrides: Record<string, unknown> = {}) => {
 			reads.push(id);
 			return 'synthetic-secret';
 		},
+		revealSystemEnvironment: async (id) => { reads.push(id); return 'synthetic-secret'; },
 		revealAdminSecret: async (id) => {
 			reads.push(id);
 			return 'synthetic-secret';
@@ -37,7 +38,7 @@ const fixture = (overrides: Record<string, unknown> = {}) => {
 const privateResponse = (response: Response) => assert.equal(response.headers.get('Cache-Control'), 'private, no-store, max-age=0');
 
 test('reveals exactly one value after fresh password verification, never a bundle', async () => {
-	for (const vault of ['ci', 'admin', 'personal']) {
+	for (const vault of ['ci', 'admin', 'personal', 'deployment']) {
 		const { action, reads } = fixture();
 		const response = await action({ request: post({ ...selection, vault }) });
 		assert.equal(response.status, 200);
@@ -143,4 +144,13 @@ test('missing entry, decrypt errors and unsupported methods never leak secrets o
 	const response = await loader();
 	assert.equal(response.status, 405);
 	privateResponse(response);
+});
+
+
+test('deployment values require both current admin access and fresh verification', async () => {
+  for (const overrides of [{ confirmCurrentPassword: async () => 'mismatch' }, { resolveTokenUser: async () => ({ ...account, user: { ...account.user, isAdmin: false } }) }]) {
+    const { action, reads } = fixture(overrides);
+    assert.ok((await action({ request: post({ ...selection, vault: 'deployment' }) })).status >= 400);
+    assert.deepEqual(reads, []);
+  }
 });

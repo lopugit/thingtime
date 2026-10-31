@@ -23,3 +23,18 @@ test('history rows keep mobile summaries below the label without restoring actio
 		assert.doesNotMatch(html, /<button\b/);
 	}
 });
+
+
+test('saved reference links render as native anchors with safe external targets', () => {
+ const html = renderToStaticMarkup(React.createElement(ChakraProvider, null,
+  React.createElement(MemoryRouter, null, React.createElement(LopuToolCallRow, {
+   call: { name: 'get_page', ok: true, summary: 'Read page', thingId: null, links: [
+    { label: 'Open page', href: '/builder?page=p1' },
+    { label: 'Open specs', href: 'https://example.com/specs' },
+    { label: 'Unsafe', href: 'javascript:alert(1)' }
+   ] }
+  }))));
+ assert.match(html, /<a[^>]*href="\/builder\?page=p1"/);
+ assert.match(html, /<a[^>]*href="https:\/\/example.com\/specs"[^>]*target="_blank"[^>]*rel="noopener noreferrer"/);
+ assert.doesNotMatch(html, /javascript:|Unsafe/);
+});

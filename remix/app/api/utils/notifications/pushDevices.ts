@@ -136,7 +136,7 @@ export const registerPushDevices = async (
   }
 
   const rows = await things
-    .find({ thingtime: 'push-device', ownerId } as any)
+    .find({ thingtime: 'push-device', ownerId, 'crystal.purpose': { $ne: 'lopu-chat-live-activity' } } as any)
     .sort({ updatedAt: -1, shareId: 1 })
     .project({ _id: 1, shareId: 1, crystal: 1, updatedAt: 1 })
     .toArray();
@@ -149,7 +149,7 @@ export const registerPushDevices = async (
 export const listPushDevicesForUser = async (ownerId: string): Promise<PushDevice[]> => {
   const things = await getHomeThingsCollection();
   const rows = await things
-    .find({ thingtime: 'push-device', ownerId } as any)
+    .find({ thingtime: 'push-device', ownerId, 'crystal.purpose': { $ne: 'lopu-chat-live-activity' } } as any)
     .sort({ updatedAt: -1, shareId: 1 })
     .limit(MAX_DEVICES_PER_USER)
     .project({ shareId: 1, ownerId: 1, targetId: 1, crystal: 1, secure: 1, updatedAt: 1 })

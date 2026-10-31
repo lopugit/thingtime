@@ -85,6 +85,7 @@ export const ActionCard = ({
 			) : null}
 			{size !== 'sm' ? (
 				<Flex gap={1.5} mt={3} wrap="wrap">
+					{effects.lookups.map((provider) => <ActionChip key={provider} tone="read" wrap>sends query to {provider} · uses your Vault key</ActionChip>)}
 					{effects.creates.map((schema) => (
 						<ActionChip key={`c-${schema}`} size={size} tone="create">
 							creates {displayRef(schema, schemaNames)}

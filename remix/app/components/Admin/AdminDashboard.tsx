@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router';
+import { Link as RouterLink, useNavigate, useParams, useLocation } from 'react-router';
 import {
   Box,
   Button,
@@ -25,6 +25,8 @@ import {
   Tr
 } from '@chakra-ui/react';
 
+import { PreviewRetentionSettings } from './PreviewRetentionSettings';
+import { SystemVault } from './SystemVault';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { CIControlDashboard } from '~/components/Admin/CIControl/CIControlDashboard';
 import { IntegrationManager } from '~/components/Admin/IntegrationManager';
@@ -48,6 +50,11 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CARD_STYLES } from '~/theme/card';
+// The marketing publishing panel imports the 1,600-page marketing catalog;
+// keep it out of the admin chunk until the tab is actually opened.
+const MarketingPublishingTab = React.lazy(() =>
+  import('~/components/Admin/MarketingPublishingTab').then((module) => ({ default: module.MarketingPublishingTab }))
+);
 
 // /admin — the management dashboard: Users (tiers, quotas, storage, links),
 // Apps (owners, users, storage, suspension), System (the existing rate-limit
@@ -947,11 +954,13 @@ export const AdminDashboard = () => {
   const user = useCurrentUser();
   const navigate = useNavigate();
   const { section } = useParams();
-  const selectedTabIndex = adminTabIndex(section);
+	const { hash } = useLocation();
+	const selectedTabIndex = adminTabIndex(section, hash);
 
   React.useEffect(() => {
     if (selectedTabIndex === null) navigate('/admin', { replace: true });
-  }, [navigate, selectedTabIndex]);
+		else if (section === 'system') navigate(`${adminTabPath(selectedTabIndex)}${hash}`, { replace: true });
+	}, [navigate, selectedTabIndex, section, hash]);
 
   // Same whole-page gate idiom as the MongoDB workbench (Raw.tsx): a card,
   // never a redirect, so the URL is shareable between admins.
@@ -1018,10 +1027,29 @@ export const AdminDashboard = () => {
             <CIControlDashboard cacheIdentity={user.id} />
           </TabPanel>
           <TabPanel px={0}>
+            <PreviewRetentionSettings key={user.id} />
+          </TabPanel>
+          <TabPanel px={0}>
             <IntegrationManager />
           </TabPanel>
           <TabPanel px={0}>
-            <AdminPanel />
+            {/* empty fallback, never a spinner: the panel paints from the cached publish state */}
+            <React.Suspense fallback={<Box minHeight="240px" />}>
+              <MarketingPublishingTab />
+            </React.Suspense>
+          </TabPanel>
+          <TabPanel px={0}>
+						<SystemVault key={user.id} cacheIdentity={user.id} category="ai-providers" />
+						<AdminPanel category="ai-providers" />
+					</TabPanel>
+					<TabPanel px={0}>
+						<AdminPanel category="lopu" />
+					</TabPanel>
+					<TabPanel px={0}>
+						<SystemVault key={user.id} cacheIdentity={user.id} category="platform" />
+					</TabPanel>
+					<TabPanel px={0}>
+						<AdminPanel category="access" />
           </TabPanel>
         </TabPanels>
       </Tabs>

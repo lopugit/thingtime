@@ -1,3 +1,8 @@
+import { resolveOwnedChatGPTPlan } from '~/api/utils/ai/chatgptPlanAdmission';
+import { isChatGPTPlanProvider, chatGPTPlanFailure } from '~/api/utils/ai/chatgptPlanScope';
+import type { OwnedPlanAdmission } from '~/api/utils/ai/chatgptPlanAdmissionCore';
+import { isLopuAccessActor } from '~/api/utils/lopu/accessMode';
+import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 
 import { getScopedUser } from '~/api/utils/auth/scopedUser';
@@ -58,6 +63,11 @@ export const action = async ({ request }: { request: Request }) => {
 	const unsupported = requireJsonContentType(request);
 	if (unsupported) return unsupported;
 	const body = objectBody(await readJsonBody(request, 16 * 1024));
+	let ownedPlan: OwnedPlanAdmission | null = null;
+	if (isChatGPTPlanProvider(body.providerId)) {
+		try { ownedPlan = (await resolveOwnedChatGPTPlan(request, user.id, body.providerId)).admission; }
+		catch (error) { return json({ ok: false, ...chatGPTPlanFailure(error) }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } }); }
+	}
 	// the access gate: verified access, and credits when the conversation
 	// will run on Thingtime's keys (a pinned vault provider bills the viewer)
 	const billing = resolveLopuBilling({
@@ -65,9 +75,10 @@ export const action = async ({ request }: { request: Request }) => {
 		mode: lopuChatProviderMode(),
 		configured: hasLopuChatProviderConfigured()
 	});
-	const access = await assertLopuAccess(user, { billing });
+	const access = await assertLopuAccess(user, { billing, ownedPlan });
 	if (access.ok === false) return lopuAccessResponse(access);
-	const result = await createLopuChat(user.id, body);
+	if (body.accessMode !== undefined && !isLopuAccessActor(await getCurrentUser(request), user.id)) return json({ ok: false, error: 'Change chat access from your first-party account session' }, { status: 403 });
+	const result = await createLopuChat(user.id, body, undefined, ownedPlan);
 	if (result.ok === false) {
 		return json({ ok: false, error: result.error }, { status: result.status });
 	}

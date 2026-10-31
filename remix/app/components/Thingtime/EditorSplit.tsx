@@ -1,3 +1,4 @@
+import { ThingDraftPicker } from '~/drafts/ThingDrafts';
 import React from 'react';
 import { Box, Flex, Input } from '@chakra-ui/react';
 import { ArrowDown, ArrowUp, Columns2, Ellipsis, Eye, Grip, Paintbrush, PictureInPicture, PictureInPicture2, Rows2 } from 'lucide-react';
@@ -1928,12 +1929,13 @@ export const EditorSplit = (props: EditorSplitProps) => {
 	const draggingDocked = windowDrag?.kind === 'docked' && windowDrag.active;
 
 	return (
-		<>
+		<Flex direction="column" width="100%" minWidth={0} height={props.embedded ? props.height || "100%" : undefined}>
+      {!props.embedded && <ThingDraftPicker />}
 			<Box
 				ref={rootRef}
 				className="editor-split-root"
 				width="100%"
-				height={props.height || 'calc(100vh - 92px)'}
+				height={props.height || 'calc(100vh - 132px)'}
 				minHeight={props.embedded ? undefined : '440px'}
 				border="1px solid var(--tt-border, #ececef)"
 				borderRadius="var(--tt-radius-md, 12px)"
@@ -2054,6 +2056,6 @@ export const EditorSplit = (props: EditorSplitProps) => {
 					)}
 				</Flex>
 			)}
-		</>
+		</Flex>
 	);
 };

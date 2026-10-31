@@ -1,3 +1,4 @@
+import { revealSystemEnvironment } from '~/api/utils/admin/systemEnvironment';
 import { createHash } from 'node:crypto';
 import { json, readJsonBody } from '~/api/http';
 import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
@@ -17,6 +18,7 @@ const defaults = {
 	startVaultPasskeyVerification,
 	finishVaultPasskeyVerification,
 	revealAdminSecret,
+	revealSystemEnvironment,
 	revealLopuCredential,
 	revealUserVaultValue,
 	enforceFixedRateLimit
@@ -44,7 +46,7 @@ export const createVaultRevealAction = (overrides: Partial<typeof defaults> = {}
 					return deny(400, 'Invalid verification request');
 				const { vault, id, action } = body;
 				if (
-					!['ci', 'admin', 'personal'].includes(vault) ||
+					!['ci', 'admin', 'personal', 'deployment'].includes(vault) ||
 					typeof id !== 'string' ||
 					!/^[a-zA-Z0-9_-]{1,256}$/.test(id) ||
 					!['options', 'reveal'].includes(action)
@@ -87,7 +89,9 @@ export const createVaultRevealAction = (overrides: Partial<typeof defaults> = {}
 				if (!fresh || fresh.user.id !== account.user.id || fresh.user.temporary || (vault !== 'personal' && !fresh.user.isAdmin))
 					return deny(403, 'Your access changed. Sign in again.');
 				const value =
-					vault === 'ci'
+					vault === 'deployment'
+						? await deps.revealSystemEnvironment(id)
+						: vault === 'ci'
 						? await deps.revealLopuCredential(id)
 						: vault === 'admin'
 						? await deps.revealAdminSecret(id)

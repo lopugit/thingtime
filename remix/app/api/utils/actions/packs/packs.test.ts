@@ -5,6 +5,7 @@ import { EXPRESSION_CATALOGUE } from '~/schemas/actionExpressions';
 import { ACTION_PACKS, bindPacks } from './index';
 import { ASTRO_PACK_ARITIES } from './astro/index';
 import { POKEWORLD_PACK_ARITIES } from './pokeworld/index';
+import { THINGMON_PACK_ARITIES } from './thingmon/index';
 
 // The isomorphic catalogue (save-time validation) and the server-bound packs
 // (run-time evaluation) must agree name for name and arity for arity — a
@@ -12,7 +13,7 @@ import { POKEWORLD_PACK_ARITIES } from './pokeworld/index';
 // catalogue does not list is unreachable.
 
 test('every pack function is declared in the expression catalogue with the same arity', () => {
-	const declared = { ...ASTRO_PACK_ARITIES, ...POKEWORLD_PACK_ARITIES };
+	const declared = { ...ASTRO_PACK_ARITIES, ...POKEWORLD_PACK_ARITIES, ...THINGMON_PACK_ARITIES };
 	for (const [name, arity] of Object.entries(declared)) {
 		const entry = EXPRESSION_CATALOGUE[name];
 		assert.ok(entry, `${name} is missing from EXPRESSION_CATALOGUE`);
@@ -33,4 +34,6 @@ test('bound packs run with the supplied context', () => {
 	assert.equal(meta.signs.length, 12);
 	const species = packs['pokeworld.species']([25]) as Record<string, unknown>;
 	assert.equal(species.name, 'pikachu');
+	const critter = packs['thingmon.newCritter']([{ speciesId: 1, level: 5 }]) as Record<string, unknown>;
+	assert.equal(critter.species, 'Cindrel');
 });

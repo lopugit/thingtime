@@ -1,3 +1,4 @@
+import type { OwnedPlanAdmission } from '../ai/chatgptPlanAdmissionCore';
 import { json } from '~/api/http';
 
 import { getStoredLopuAccessSettings, type LopuAccessSettings } from '../settings/lopuAccess';
@@ -45,6 +46,7 @@ export type LopuAccessGrant = {
   account: LopuAccountRecord | null;
   // held only when the caller asked to reserve; release it in a finally
   release: (() => Promise<void>) | null;
+  renew?: () => Promise<void>;
 };
 
 export type LopuAccessResult = LopuAccessGrant | LopuAccessRefusal;
@@ -57,25 +59,27 @@ export type AssertLopuAccessDependencies = {
 
 export const createAssertLopuAccess =
   (dependencies: AssertLopuAccessDependencies) =>
-  async (user: LopuAccessUser | null | undefined, input: { billing: LopuBilling; reserve?: boolean }): Promise<LopuAccessResult> => {
+  async (user: LopuAccessUser | null | undefined, input: { billing: LopuBilling; reserve?: boolean; ownedPlan?: OwnedPlanAdmission | null }): Promise<LopuAccessResult> => {
     const settings = await dependencies.getSettings();
     // the cheap refusals first — an unverified guest never creates an account
-    const early = evaluateLopuAccess(user, { billing: input.billing, settings, balanceMicros: 1 });
+    const early = evaluateLopuAccess(user, { billing: input.billing, ownedPlan: input.ownedPlan, settings, balanceMicros: 1 });
     if (early.ok === false) return early;
     let account: LopuAccountRecord | null = null;
     let release: (() => Promise<void>) | null = null;
+    let renew: (() => Promise<void>) | undefined;
     if (input.billing === 'thingtime' && user) {
       account = await dependencies.ensureAccount(user.id);
-      const verdict = evaluateLopuAccess(user, { billing: input.billing, settings, balanceMicros: account.crystal.balanceMicros });
+      const verdict = evaluateLopuAccess(user, { billing: input.billing, ownedPlan: input.ownedPlan, settings, balanceMicros: account.crystal.balanceMicros });
       if (verdict.ok === false) return verdict;
       // only after the balance passed, so a broke account never holds a slot
       if (input.reserve) {
         const reserved = await dependencies.reserveTurn(user.id);
         if (reserved.ok === false) return { ok: false, status: 429, code: LOPU_BUSY_CODE, error: LOPU_BUSY_ERROR };
         release = reserved.release;
+        renew = reserved.renew;
       }
     }
-    return { ok: true, billing: input.billing, settings, verified: lopuUserVerified(user), account, release };
+    return { ok: true, billing: input.billing, settings, verified: lopuUserVerified(user), account, release, ...(renew ? { renew } : {}) };
   };
 
 export const assertLopuAccess = createAssertLopuAccess({ getSettings: getStoredLopuAccessSettings, ensureAccount: ensureLopuAccount, reserveTurn: reserveLopuTurn });

@@ -1,3 +1,4 @@
+import { deleteSubspaceMessaging, ensureSubspaceMessaging, ensureSubspaceMessagingMember, subspaceMessagingIds } from '../messenger/subspaceMessages';
 // Subspaces — Reddit-style communities as things (see subspaceSchema and
 // friends in schemas/registry.ts). A subspace thing owns its branding, rules,
 // flairs and access mode; membership is one relational subspace-member doc per
@@ -10,6 +11,10 @@
 // generic crystal sanitizer, so /api/v1/things refuses them outright, and
 // things.ts excludes them from own-things listings and generic DELETE the way
 // the messenger family is excluded.
+import { parseSubspaceMedia, subspaceMediaUrl } from './subspaceMediaCore';
+import { AttachmentBindingError } from '../attachments/attachmentStore';
+import { reconcileSubspaceMedia } from './subspaceMediaStore';
+import { prepareAttachmentCascadeForThing } from '../attachments/attachments';
 import { randomUUID } from 'node:crypto';
 
 import { getThingsCollection } from '../mongodb/collections';
@@ -186,6 +191,8 @@ export type PublicSubspaceViewer = {
 
 export type PublicSubspace = {
 	id: string;
+	messagesCommunityId: string;
+	messagesChatId: string;
 	slug: string;
 	name: string;
 	description: string | null;
@@ -268,8 +275,8 @@ const viewerStateOf = (subspace: any, membership: SubspaceMembership | null): Pu
 
 const brandingOf = (doc: any): SubspaceBranding => ({
 	icon: doc?.crystal?.branding?.icon ?? null,
-	iconUrl: doc?.crystal?.branding?.iconUrl ?? null,
-	bannerUrl: doc?.crystal?.branding?.bannerUrl ?? null,
+	iconUrl: subspaceMediaUrl(doc, 'icon'),
+	bannerUrl: subspaceMediaUrl(doc, 'banner'),
 	accent: doc?.crystal?.branding?.accent ?? null
 });
 
@@ -285,6 +292,8 @@ export const toPublicSubspace = (
 	}
 ): PublicSubspace => ({
 	id: String(doc.shareId),
+	messagesCommunityId: subspaceMessagingIds(String(doc.shareId)).communityId,
+	messagesChatId: subspaceMessagingIds(String(doc.shareId)).chatId,
 	slug: String(doc.crystal?.slug || ''),
 	name: String(doc.crystal?.name || doc.crystal?.slug || 'Subspace'),
 	description: doc.crystal?.description ?? null,
@@ -643,6 +652,8 @@ export const createSubspace = async (viewerInput: string | Viewer, input: Create
 			if (tombstone) await things.deleteOne({ _id: tombstone._id } as any, { session });
 			await insertAccountedThing(things, subspace as any, { session });
 			await things.insertOne(owner as any, { session });
+				await ensureSubspaceMessaging(subspace, session);
+				await ensureSubspaceMessagingMember(subspace, owner, session);
 		});
 	} catch (err) {
 		if (isDuplicateKey(err)) return fail(409, `s/${slug} is taken — pick another slug`);
@@ -805,6 +816,7 @@ const activatePendingRequests = async (subspaceId: string, slug: string, actor: 
 };
 
 export type UpdateSubspaceInput = SubspaceRef & {
+	newSlug?: unknown;
 	name?: unknown;
 	description?: unknown;
 	access?: unknown;
@@ -812,6 +824,7 @@ export type UpdateSubspaceInput = SubspaceRef & {
 	rules?: unknown;
 	flairs?: unknown;
 	branding?: unknown;
+	media?: unknown;
 	// user flairs (moderators): the templates + the two self-service switches
 	userFlairs?: unknown;
 	userFlairSelfAssign?: unknown;
@@ -833,6 +846,16 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
 
 	const set: Record<string, unknown> = {};
 	const changed: string[] = [];
+	if (input.newSlug !== undefined) {
+		if (!isOwner || subspace.ownerId !== auth.viewer.id) return fail(403, 'Only the owner can change the slug');
+		const slug = sanitizeSlug(input.newSlug);
+		if (isFail(slug)) return slug;
+		if (slug !== subspace.crystal?.slug) {
+			set['crystal.slug'] = slug;
+			set.uniqueKeys = [thingUniqueKey(SUBSPACE_SLUG_KEY_FIELD, slug)];
+			changed.push('slug');
+		}
+	}
 	if (input.name !== undefined) {
 		const name = sanitizeName(input.name);
 		if (isFail(name)) return name;
@@ -858,7 +881,7 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
 		changed.push('flairs');
 	}
 	if (input.branding !== undefined) {
-		const branding = sanitizeBranding(input.branding, brandingOf(subspace));
+		const branding = sanitizeBranding(input.branding, { ...brandingOf(subspace), iconUrl: subspace.crystal?.branding?.iconUrl ?? null, bannerUrl: subspace.crystal?.branding?.bannerUrl ?? null });
 		if (isFail(branding)) return branding;
 		set['crystal.branding'] = branding;
 		changed.push('branding');
@@ -902,11 +925,36 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
 		set['crystal.nsfw'] = input.nsfw === true;
 		changed.push('nsfw');
 	}
+	let media: ReturnType<typeof parseSubspaceMedia>;
+	try { media = parseSubspaceMedia(input.media); } catch (error) { return fail(400, (error as Error).message); }
+	if (Object.values(media).some((item) => item.kind !== 'preserve')) changed.push('branding');
 	if (!changed.length) return fail(400, 'Nothing to update');
 
 	const things = await getThingsCollection();
 	const now = new Date();
-	await updateAccountedThing(things, { shareId: id, thingtime: 'subspace' }, { $set: { ...set, updatedAt: now } });
+	try {
+    await withAccountedThingsTransaction(async (session) => {
+      // Touch the membership inside this transaction to serialize revocation.
+      const member = await things.findOne({ targetId: id, ownerId: auth.viewer.id, thingtime: 'subspace-member' } as any, { session });
+      if (!member || !canModerate(membershipOfDoc(member))) throw new AttachmentBindingError(403, 'Moderator access changed — reload and try again');
+      await things.updateOne({ _id: member._id } as any, { $set: { updatedAt: now } }, { session });
+      const current = await things.findOne({ shareId: id, thingtime: 'subspace' } as any, { session });
+      if (!current) throw new AttachmentBindingError(404, 'Subspace not found');
+      if (current.subspaceMediaDeleting) throw new AttachmentBindingError(409, 'Subspace deletion is in progress');
+      if ((input.access !== undefined || input.nsfw !== undefined) && current.ownerId !== auth.viewer.id) throw new AttachmentBindingError(403, 'Only the current owner can change access');
+      if (input.newSlug !== undefined && (current.ownerId !== auth.viewer.id || membershipOfDoc(member)?.role !== 'owner')) throw new AttachmentBindingError(403, 'Only the current owner can change the slug');
+      if (input.newSlug !== undefined && current.crystal?.slug !== subspace.crystal?.slug) throw new AttachmentBindingError(409, 'Subspace changed while saving — reload and try again');
+      const branding = { ...(set['crystal.branding'] as any || current.crystal?.branding) };
+      Object.assign(set, await reconcileSubspaceMedia({ things, session, actorId: auth.viewer.id, current, branding, legacyBranding: input.branding, media, now }));
+      set['crystal.branding'] = branding;
+      await updateAccountedThing(things, { shareId: id, thingtime: 'subspace' }, { $set: { ...set, updatedAt: now } }, { session });
+    });
+  } catch (error) {
+    if (isDuplicateKey(error)) return fail(409, 'That subspace slug is taken or held — pick another slug');
+    if (error instanceof AttachmentBindingError) return fail(error.status, error.message);
+    throw error;
+  }
+
 	const detail: Record<string, unknown> = { fields: changed };
 	if (set['crystal.access'] !== undefined) {
 		const previousAccess = accessOf(subspace);
@@ -1223,7 +1271,7 @@ const setUserFlair = async (viewer: NonNullable<Viewer>, subspace: any, input: M
 	return { ok: true, member: toPublicMember(fresh, profiles.get(targetUserId) || null, subspace) };
 };
 
-export const mutateMember = async (viewerInput: string | Viewer, input: MutateMemberInput): Promise<Fail | { ok: true; member: PublicSubspaceMember }> => {
+export const mutateMember = async (viewerInput: string | Viewer, input: MutateMemberInput, options: { insertOnly?: boolean } = {}): Promise<Fail | { ok: true; member: PublicSubspaceMember }> => {
 	const auth = requireViewer(viewerInput);
 	if (auth.ok === false) return auth;
 	const actorId = auth.viewer.id;
@@ -1244,6 +1292,7 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 	if (isFail(targetUserId)) return targetUserId;
 	const things = await getThingsCollection();
 	const existing = await findSubspaceMemberDoc(id, targetUserId);
+	if (options.insertOnly && (action !== 'add' || existing)) return fail(409, 'Membership changed; insert-only addition cannot replace or revive it');
 	const target = existing ? membershipOfDoc(existing) : null;
 	if (target?.role === 'owner') return fail(403, 'The owner can’t be moderated');
 	if (target && target.role === 'moderator' && !target.left && !actorIsOwner && (action === 'ban' || action === 'remove' || action === 'role')) {
@@ -1380,6 +1429,7 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 			await things.insertOne(newSubspaceMemberDoc(id, targetUserId, crystal) as any);
 		} catch (err) {
 			if (!isDuplicateKey(err)) throw err;
+			if (options.insertOnly) return fail(409, 'Membership changed; insert-only addition cannot replace or revive it');
 			await things.updateOne(
 				{ thingtime: 'subspace-member', targetId: id, ownerId: targetUserId } as any,
 				{ $set: { ...set, updatedAt: now } }
@@ -1469,7 +1519,7 @@ export const transferSubspace = async (
 			// transaction aborts — never two owner rows, never an ownerId that
 			// disagrees with the roster. The cap is re-read under the session too.
 			if ((await ownedSubspaceCount(targetUserId, session)) >= MAX_SUBSPACES_PER_USER) throw new LifecycleConflict(ownerCapMessage);
-			const handedOver = await updateAccountedThing(things, { shareId: id, thingtime: 'subspace', ownerId: actorId }, { $set: { ownerId: targetUserId, updatedAt: now } }, { session });
+			const handedOver = await updateAccountedThing(things, { shareId: id, thingtime: 'subspace', ownerId: actorId, subspaceMediaDeleting: { $ne: true } }, { $set: { ownerId: targetUserId, updatedAt: now } }, { session });
 			if (!Number(handedOver?.matchedCount)) throw new LifecycleConflict(`s/${slug} changed hands while you were transferring it — reload and try again`);
 			const crowned = await things.updateOne(
 				// still an active member: not left, and not banned (an expired
@@ -1599,6 +1649,17 @@ export const deleteSubspace = async (viewerInput: string | Viewer, input: Delete
 	if (first.remaining > 0) {
 		return fail(409, `s/${slug} still has ${first.remaining.toLocaleString('en-US')} posts to release — run delete again to continue (it is safe to retry)`);
 	}
+  // Fence new branding writes, then drain each uploader's canonical object
+  // lifecycle. A failed deletion leaves this retry anchor and billed bytes.
+  const fenced = await things.updateOne({ shareId: id, thingtime: 'subspace', ownerId: actorId } as any, { $set: { subspaceMediaDeleting: true } });
+  if (!fenced.matchedCount) return fail(409, 'Subspace ownership changed — reload and try again');
+  const mediaOwners = await things.distinct('ownerId', { thingtime: 'attachment', targetId: id, attachmentPurpose: { $in: ['subspace-icon', 'subspace-banner'] } } as any);
+  for (const ownerId of mediaOwners) {
+    const cleanup = await prepareAttachmentCascadeForThing({ shareId: id, ownerId: String(ownerId) });
+    if (cleanup.ok === false) return cleanup;
+  }
+	const messagingCleanup = await deleteSubspaceMessaging(id);
+	if (messagingCleanup.ok === false) return messagingCleanup;
 	// the doc goes and the slug tombstone arrives in ONE transaction, guarded
 	// by the ownership the gate saw: a transfer that landed meanwhile makes the
 	// delete match nothing and the whole thing aborts with 409

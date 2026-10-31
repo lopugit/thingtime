@@ -1,5 +1,6 @@
+import { subscribeBackgroundRefresh } from '~/hooks/backgroundRefresh';
 import React from 'react';
-import { Box, Button, Flex } from '@chakra-ui/react';
+import { Box, Button, Checkbox, Flex } from '@chakra-ui/react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 
 import { LopuChatView } from '../Lopu/LopuChatView';
@@ -25,6 +26,7 @@ import { RequestsView } from './RequestsView';
 import { SlackSidebar } from './SlackSidebar';
 import { MESSENGER_REFRESH_EVENT, modeKey, readChatList, readCommunities, writeChatList, writeCommunities, writeUnread } from './messengerCache';
 import { chatDisplayName, isLopuAiSource, type ChatSummary, type Community, type MessengerMode } from './messengerTypes';
+import { messengerVisibleChats, showLopuChatsKey } from './conversationVisibility';
 import { useMessengerApi } from './useMessengerApi';
 
 const LIST_POLL_MS = 15_000;
@@ -44,6 +46,14 @@ export const MessengerPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
 	const [mode, setMode] = React.useState<MessengerMode>(() => (readLocalCache<MessengerMode>(modeKey(userId)) === 'slack' ? 'slack' : 'messenger'));
+  const [lopuPreference, setLopuPreference] = React.useState(() => ({
+    userId,
+    show: readLocalCache<boolean>(showLopuChatsKey(userId)) === true
+  }));
+  // Resolve the current account before rendering, including account switches.
+  const showLopuChats = lopuPreference.userId === userId
+    ? lopuPreference.show
+    : readLocalCache<boolean>(showLopuChatsKey(userId)) === true;
   const [chats, setChats] = React.useState<ChatSummary[]>(() => readChatList(userId));
   const [communities, setCommunities] = React.useState<Community[]>(() => readCommunities(userId));
   const [requestsCount, setRequestsCount] = React.useState(0);
@@ -63,6 +73,8 @@ export const MessengerPage = () => {
     | { kind: 'invite' }
     | null
   >(null);
+
+  const visibleChats = messengerVisibleChats(chats, showLopuChats);
 
   const selectedChat = chats.find((c) => c.id === selectedChatId) || null;
   const activeCommunity = communities.find((c) => c.id === activeCommunityId) || communities[0] || null;
@@ -90,22 +102,20 @@ export const MessengerPage = () => {
   }, [api, navigate, userId]);
 
   React.useEffect(() => {
-    void refresh();
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void refresh();
-    }, LIST_POLL_MS);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void refresh();
+    let pending = false;
+    const poll = async () => {
+      if (pending) return;
+      pending = true;
+      try { await refresh(); } finally { pending = false; }
     };
-    const onRefreshEvent = () => void refresh();
-    document.addEventListener('visibilitychange', onVisible);
+    const unsubscribe = subscribeBackgroundRefresh(`messenger-list:${userId}`, poll, LIST_POLL_MS);
+    const onRefreshEvent = () => { void poll(); };
     window.addEventListener(MESSENGER_REFRESH_EVENT, onRefreshEvent);
     return () => {
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
+      unsubscribe();
       window.removeEventListener(MESSENGER_REFRESH_EVENT, onRefreshEvent);
     };
-  }, [refresh]);
+  }, [refresh, userId]);
 
   // deep links stay shareable: ?chat= opens a conversation, ?view=requests
   // (the drawer's Requests entry) opens the requests pane
@@ -129,6 +139,7 @@ export const MessengerPage = () => {
 
   const switchMode = (next: MessengerMode) => {
     setMode(next);
+    if (next === 'slack' && selectedChat?.communityId !== activeCommunity?.id) selectChat(null);
     writeLocalCache(modeKey(userId), next);
   };
 
@@ -173,8 +184,11 @@ export const MessengerPage = () => {
     <SlackSidebar
       communities={communities}
       activeCommunityId={activeCommunity?.id || null}
-      onSelectCommunity={(id) => setActiveCommunityId(id)}
-      chats={chats}
+      onSelectCommunity={(id) => {
+        setActiveCommunityId(id);
+        if (selectedChat?.communityId !== id) selectChat(null);
+      }}
+      chats={visibleChats}
       viewerId={userId}
       selectedChatId={selectedChatId}
       onSelectChat={selectChat}
@@ -233,7 +247,7 @@ export const MessengerPage = () => {
   ) : (
     <InboxSidebar
       api={api}
-      chats={chats}
+      chats={visibleChats}
       viewerId={userId}
       selectedChatId={selectedChatId}
       requestsCount={requestsCount}
@@ -347,6 +361,21 @@ export const MessengerPage = () => {
                 ✦ AI
               </Button>
             </Flex>
+            <Box paddingX={3} paddingY={2} borderBottom="1px solid var(--tt-border-light, #f3f3f5)">
+              <Checkbox
+                size="md"
+                colorScheme="purple"
+                sx={{ '& .chakra-checkbox__control': { borderColor: 'var(--tt-muted, #9a9aa6)' }, '& .chakra-checkbox__label': { fontSize: '13px' } }}
+                isChecked={showLopuChats}
+                onChange={(event) => {
+                  const show = event.target.checked;
+                  setLopuPreference({ userId, show });
+                  writeLocalCache(showLopuChatsKey(userId), show);
+                }}
+              >
+                Show Lopu chats
+              </Checkbox>
+            </Box>
             <Box flex={1} minHeight={0}>
               {sidebar}
             </Box>

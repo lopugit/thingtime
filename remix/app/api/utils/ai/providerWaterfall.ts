@@ -3,6 +3,7 @@
 export type AiAttempt = { connectionId: string; outcome: 'succeeded' | 'unavailable'; status?: number };
 
 export class AiTransportFailure extends Error {
+  code?: 'model_not_available';
 	constructor(public readonly status?: number) {
 		super(status ? `The selected AI provider rejected the request (${status}).` : 'The selected AI provider could not be reached.');
 		this.name = 'AiTransportFailure';

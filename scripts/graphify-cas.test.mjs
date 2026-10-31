@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { execFileSync, spawn, spawnSync } from "node:child_process"
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -8,6 +9,7 @@ import {
   readlinkSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
@@ -18,10 +20,12 @@ import test from "node:test"
 import {
   activateSnapshot,
   computeSourceFingerprint,
+  copyPortableFiles,
   finalizeSnapshot,
   hydrateSemanticCache,
   ingestSemanticCache,
   listSnapshots,
+  markSnapshotReadOnly,
   pruneSnapshots,
   selectSnapshot,
   snapshotRetentionLimit,
@@ -237,6 +241,8 @@ test("an existing artifact path rejects changed portable bytes", () => {
       ...fingerprint,
       version: "graphify test",
     })
+    // snapshot files are read-only on disk; simulate an out-of-band corruption
+    chmodSync(path.join(snapshot.path, "graph.json"), 0o644)
     writeFileSync(
       path.join(snapshot.path, "graph.json"),
       '{"directed":false,"multigraph":false,"graph":{},"nodes":[],"links":[]}\n',
@@ -784,5 +790,44 @@ test("a routed query holds its snapshot lock until the subprocess finishes", { t
   } finally {
     await stopLockWorkers(workers)
     rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("snapshot files are marked read-only so alias writes cannot mutate committed content", () => {
+  const snapshot = mkdtempSync(path.join(tmpdir(), "graphify-readonly-"))
+  try {
+    for (const name of ["graph.json", "manifest.json", "GRAPH_REPORT.md", "snapshot.json"]) writeFileSync(path.join(snapshot, name), "{}\n")
+    writeFileSync(path.join(snapshot, "unrelated.txt"), "x")
+    markSnapshotReadOnly(snapshot)
+    for (const name of ["graph.json", "manifest.json", "GRAPH_REPORT.md", "snapshot.json"]) {
+      assert.equal(statSync(path.join(snapshot, name)).mode & 0o222, 0, `${name} must be read-only`)
+    }
+    assert.notEqual(statSync(path.join(snapshot, "unrelated.txt")).mode & 0o222, 0, "only snapshot files are touched")
+    // an in-place write through the path now fails instead of editing the snapshot
+    assert.throws(() => writeFileSync(path.join(snapshot, "GRAPH_REPORT.md"), "rewritten"), /EACCES|EPERM/)
+    assert.equal(readFileSync(path.join(snapshot, "GRAPH_REPORT.md"), "utf8"), "{}\n")
+    // idempotent and safe on an already read-only tree; the directory stays removable
+    markSnapshotReadOnly(snapshot)
+  } finally {
+    rmSync(snapshot, { recursive: true, force: true })
+  }
+  assert.equal(existsSync(snapshot), false, "read-only files never block pruning")
+})
+
+test("working copies of a read-only snapshot are writable again", () => {
+  const snapshot = mkdtempSync(path.join(tmpdir(), "graphify-readonly-source-"))
+  const work = mkdtempSync(path.join(tmpdir(), "graphify-work-"))
+  try {
+    for (const name of ["graph.json", "manifest.json", "GRAPH_REPORT.md", ".graphify_labels.json"]) writeFileSync(path.join(snapshot, name), "{}\n")
+    markSnapshotReadOnly(snapshot)
+    copyPortableFiles(snapshot, work)
+    for (const name of ["graph.json", "manifest.json", "GRAPH_REPORT.md", ".graphify_labels.json"]) {
+      assert.notEqual(statSync(path.join(work, name)).mode & 0o200, 0, `${name} copy must be writable`)
+      writeFileSync(path.join(work, name), "rewritten\n")
+    }
+    assert.equal(statSync(path.join(snapshot, "graph.json")).mode & 0o222, 0, "the source snapshot stays read-only")
+  } finally {
+    rmSync(snapshot, { recursive: true, force: true })
+    rmSync(work, { recursive: true, force: true })
   }
 })

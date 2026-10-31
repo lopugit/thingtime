@@ -4,11 +4,26 @@ public enum RecoveryProduct: String, CaseIterable, Identifiable {
     case electron
     case commander
     case widgets
+    case recovery
 
     public var id: String { rawValue }
-    public var title: String { self == .electron ? "Thingtime Electron" : self == .widgets ? "Thingtime Widgets" : "Commander" }
-    public var component: RecoveryComponent { self == .electron ? .desktop : self == .widgets ? .widgets : .commander }
-    public var systemImage: String { self == .electron ? "desktopcomputer" : self == .widgets ? "rectangle.3.group" : "command" }
+    public var title: String { self == .electron ? "Thingtime Electron" : component.title }
+    public var component: RecoveryComponent {
+        switch self {
+        case .electron: .desktop
+        case .commander: .commander
+        case .widgets: .widgets
+        case .recovery: .recovery
+        }
+    }
+    public var systemImage: String {
+        switch self {
+        case .electron: "desktopcomputer"
+        case .commander: "command"
+        case .widgets: "rectangle.3.group"
+        case .recovery: "cross.case.fill"
+        }
+    }
 }
 
 /// Read legacy bundles directly as well as new manifests. Never invent a build
@@ -19,6 +34,7 @@ public struct RecoveryBuildMetadata {
     public let commit: String?
     public let branch: String?
     public let pullRequest: String?
+    public let builtAt: Date?
 
     public init(bundleURL: URL? = nil, version: String? = nil, buildNumber: String? = nil, tag: String? = nil, commit: String? = nil, branch: String? = nil) {
         let info = bundleURL.flatMap { NSDictionary(contentsOf: $0.appendingPathComponent("Contents/Info.plist")) }
@@ -35,6 +51,8 @@ public struct RecoveryBuildMetadata {
         self.commit = commit ?? info?["ThingtimeGitCommit"] as? String ?? Self.capture("(?:^|[.])g([a-f0-9]{7,40})(?:[.]|$)", in: releaseTag) ?? web?["gitCommit"] as? String
         self.pullRequest = Self.capture("(?:^|[.-])pr[.]([0-9]+)[.]", in: releaseTag)
         self.branch = branch ?? info?["ThingtimeGitBranch"] as? String ?? web?["gitBranch"] as? String
+        self.builtAt = RecoveryBuildDate.parse(info?["ThingtimeBuildDate"] as? String)
+            ?? RecoveryBuildDate.parse(web?["builtAt"] as? String)
     }
 
     public var shortCommit: String? { commit.map { String($0.prefix(12)) } }
@@ -45,6 +63,34 @@ public struct RecoveryBuildMetadata {
               let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
               let range = Range(match.range(at: 1), in: text) else { return nil }
         return String(text[range])
+    }
+}
+
+/// Release publication is a useful fallback, but never pretend a cache/copy
+/// timestamp is when the app was built.
+public enum RecoveryBuildDate: Equatable {
+    case built(Date)
+    case released(Date)
+    case unavailable
+
+    public var label: String {
+        switch self {
+        case .built(let date): "Built \(Self.format(date))"
+        case .released(let date): "Released \(Self.format(date))"
+        case .unavailable: "Build date unavailable"
+        }
+    }
+
+    public static func parse(_ value: String?) -> Date? {
+        guard let value else { return nil }
+        let formatter = ISO8601DateFormatter()
+        if let date = formatter.date(from: value) { return date }
+        formatter.formatOptions.insert(.withFractionalSeconds)
+        return formatter.date(from: value)
+    }
+
+    private static func format(_ date: Date) -> String {
+        date.formatted(.dateTime.day().month(.abbreviated).year().hour().minute())
     }
 }
 

@@ -35,14 +35,14 @@ struct ReleaseCardView: View {
                 HStack(spacing: 5) { trustBadge; channelBadge }
                 VStack(alignment: .leading, spacing: 5) { trustBadge; channelBadge }
             }
-            HStack(spacing: 6) {
-                Text(release.metadata.buildNumber.map { "Build \($0)" } ?? "Release #\(release.id)")
-                if let sha = release.metadata.shortCommit { Text("· \(sha)").monospaced() }
-            }
+            Text("\(release.metadata.buildNumber.map { "Build \($0)" } ?? "Release #\(release.id)") · \(release.publishedAt.map { RecoveryBuildDate.released($0).label } ?? RecoveryBuildDate.unavailable.label)")
             .font(.caption).foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            if let sha = release.metadata.shortCommit {
+                Text(sha).font(.caption.monospaced()).foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)
+            }
             HStack(spacing: 6) {
-                if let date = release.publishedAt { Text(date, format: .dateTime.day().month(.abbreviated).year()) }
-                Text("· \(release.architectureLabel)")
+                Text(release.architectureLabel)
                 if let size = release.sizeLabel { Text("· \(size)") }
             }
             .font(.caption2).foregroundStyle(isSelected ? Color.white.opacity(0.85) : Color.secondary)

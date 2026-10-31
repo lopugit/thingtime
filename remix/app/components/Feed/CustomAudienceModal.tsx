@@ -41,7 +41,7 @@ const CAP_OPTIONS: Array<{ id: Cap; label: string }> = [
 
 const BASELINES: Array<{ id: Baseline; label: string; hint: string }> = [
   { id: 'private', label: '🔒 Only these people', hint: 'Nobody outside your picks can even see it' },
-  { id: 'hidden', label: '🕵️ + secret link', hint: 'Anyone holding its hidden link can also view' },
+  { id: 'hidden', label: '🕵️ + anyone with the link', hint: 'Anyone with its URL can also view' },
   { id: 'public', label: '🌐 + everyone', hint: 'Everyone can view — your picks get extra powers' }
 ];
 

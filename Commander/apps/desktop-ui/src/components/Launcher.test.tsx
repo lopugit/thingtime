@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { BootstrapResponse, SearchHit } from '@commander/protocol';
+import type { BootstrapResponse, SearchHit, IndexingStatus } from '@commander/protocol';
 import { DEFAULT_SETTINGS } from '@commander/protocol';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommanderState } from '../hooks/useCommander.js';
 import { resetNativeFileIconSchedulerForTests } from '../lib/nativeFileIcons.js';
 import { beginWindowDrag, hideLauncher, nativeRequest } from '../lib/nativeBridge.js';
-import { Launcher } from './Launcher.js';
+import { Launcher, indexSummary } from './Launcher.js';
 
 vi.mock('../lib/nativeBridge.js', () => ({
   beginWindowDrag: vi.fn(),
@@ -95,6 +95,28 @@ describe('Launcher keyboard navigation', () => {
   afterEach(() => {
     cleanup();
     resetNativeFileIconSchedulerForTests();
+  });
+
+  it('opens Settings without changing the query or running the selected result from keyboard focus', async () => {
+    const commander = state({ query: 'notes', selectedIndex: 1 });
+    render(<Launcher state={commander} />);
+    const button = screen.getByRole('button', { name: 'Open Commander Settings' });
+    button.focus();
+    fireEvent.keyDown(button, { key: 'Enter' });
+    expect(commander.executeCommand).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(commander.executeCommand).toHaveBeenCalledWith('builtin:settings', 'open-settings', ''),
+    );
+    expect(commander.setQuery).not.toHaveBeenCalled();
+    expect(commander.rememberRecentSearch).not.toHaveBeenCalled();
+  });
+
+  it('reports Settings failures through the existing error surface', async () => {
+    const commander = state({ executeCommand: vi.fn().mockRejectedValue(new Error('Settings unavailable')) });
+    render(<Launcher state={commander} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open Commander Settings' }));
+    await waitFor(() => expect(commander.reportError).toHaveBeenCalledWith('Settings unavailable'));
   });
 
   it('returns focus to the previous app when Escape dismisses the launcher', async () => {
@@ -617,7 +639,7 @@ describe('Launcher keyboard navigation', () => {
     expect(view.container.querySelectorAll('.search-spinner')).toHaveLength(1);
   });
 
-  it('shows live index progress in the footer', () => {
+  it('shows searchable total and index age while indexing stays in the background', () => {
     render(
       <Launcher
         state={state({
@@ -625,6 +647,8 @@ describe('Launcher keyboard navigation', () => {
             available: true,
             running: ['files'],
             totalRecords: 4_000,
+            searchableRecords: 4_020,
+            lastIndexedAtMs: Date.now() - 120_000,
             databaseSizeBytes: 1_024,
             kinds: [],
             commands: { count: 20 },
@@ -645,7 +669,8 @@ describe('Launcher keyboard navigation', () => {
       />,
     );
 
-    expect(screen.getByText('Indexing Files · 1,250 / 4,000')).toBeVisible();
+    expect(screen.getByText('4,020 searchable items · indexed 2m ago')).toBeVisible();
+    expect(screen.queryByText(/Indexing Files/)).toBeNull();
   });
 
   it('pins the current window and offers a right-click Open New Window action', async () => {
@@ -720,4 +745,27 @@ describe('Launcher keyboard navigation', () => {
       );
     },
   );
+});
+
+describe('launcher index summary', () => {
+  const status: IndexingStatus = {
+    available: true,
+    running: ['all'],
+    totalRecords: 0,
+    databaseSizeBytes: 0,
+    kinds: [],
+    commands: { count: 0 },
+    automaticRefresh: { applicationsMinutes: 360, filesystemMinutes: 360 },
+    customTimeoutMs: null,
+    resourceLimits: DEFAULT_SETTINGS.indexing.resourceLimits,
+    timing: { samples: 0 },
+    timeoutAttempts: [],
+  };
+  it('stays ready to search when eligible counts are unknown', () => {
+    expect(indexSummary(null)).toBe('Ready to search');
+    expect(indexSummary({ ...status, countsCurrent: false })).toBe('Ready to search');
+  });
+  it('shows a known count without implying a wait when its timestamp is unavailable', () => {
+    expect(indexSummary({ ...status, searchableRecords: 42 })).toBe('42 searchable items');
+  });
 });

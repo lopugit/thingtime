@@ -1,4 +1,4 @@
-import { crystalSchemas, getThingtimeSchema } from '~/schemas/registry';
+import { thingtimeSchemas, getThingtimeSchema, projectBuiltinSchemaCrystal } from '~/schemas/registry';
 import type { SchemaThingField, ThingtimeSchema } from '~/schemas/registry';
 import { flattenSchemaFields } from '~/schemas/tools';
 import type { SchemaSource } from '~/components/Search/searchTypes';
@@ -96,9 +96,23 @@ export const registryToCardSource = (schema: ThingtimeSchema): SchemaCardSource 
   id: schema.id,
   name: schema.title,
   description: schema.summary,
-  fields: (schema.fields || []) as unknown as SchemaThingField[],
-  registry: schema
+  fields: projectBuiltinSchemaCrystal(schema).fields as SchemaThingField[],
+  registry: schema,
+  render: schema.render
 });
+
+// The editable shape uses exactly the public seed projection: registry max
+// constraints become maxLength/maxItems, and reserved/open fields stay out.
+export const schemaCopyPrefill = (source: SchemaCardSource) => {
+  const crystal = source.registry ? projectBuiltinSchemaCrystal(source.registry) : { fields: source.fields, render: source.render };
+  return {
+    name: `${source.name} copy`,
+    description: source.description,
+    fields: structuredClone(crystal.fields) as SchemaThingField[],
+    forkOf: source.origin === 'builtin' ? `schema-${source.id}` : source.id,
+    ...(crystal.render ? { render: structuredClone(crystal.render) as Record<string, unknown> } : {})
+  };
+};
 
 // ---------------------------------------------------------------------------
 // The ONE key a schema is addressed by outside the browse list — the
@@ -133,7 +147,7 @@ export const builtinSchemaForKey = (key: string): ThingtimeSchema | null => {
       ? key.slice(SEEDED_MIRROR_PREFIX.length)
       : key;
   const schema = getThingtimeSchema(id);
-  return schema && (schema.kind === 'root' || schema.kind === 'crystal') ? schema : null;
+  return schema ?? null;
 };
 
 export const parseSchemaDetailKey = (raw: string | undefined): SchemaDetailKey | null => {
@@ -194,7 +208,7 @@ export const cachedSchemaEntry = (userId: string | null | undefined, id: string)
 // registry, so those mirrors are dropped from the community column — without
 // this they'd render twice. One set, one predicate, both pages, so the rule
 // can never drift between them.
-export const seededBuiltinShareIds = new Set(crystalSchemas().map((schema) => `schema-${schema.id}`));
+export const seededBuiltinShareIds = new Set(thingtimeSchemas.map((schema) => `schema-${schema.id}`));
 
 export const isSeededBuiltinMirror = (id: string, author: unknown): boolean =>
   seededBuiltinShareIds.has(id) && !author;

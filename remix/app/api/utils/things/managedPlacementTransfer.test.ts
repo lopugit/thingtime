@@ -12,7 +12,7 @@ const source = (kind = 'theme'): PlacementRecord => ({
 const folder = (): PlacementRecord => ({ ...source('folder'), shareId: 'destination' });
 
 test('managed placement produces only folder and timestamp patches, including root moves', () => {
-  for (const kind of ['theme', 'feed-algorithm', 'attachment', 'custom-emoji']) {
+  for (const kind of ['theme', 'feed-algorithm', 'attachment', 'custom-emoji', 'file']) {
     const before = source(kind); const snapshot = structuredClone(before);
     const patch = prepareManagedPlacement(before, 'owner', folder(), now);
     assert.deepEqual(patch, { folderId: 'destination', updatedAt: now });
@@ -67,5 +67,13 @@ test('archive placement moves only a complete owned root and preserves history a
     { thingtime: ['chat-archive-message'] }, { thingtime: ['chat-archive-reaction'] },
     { appId: 'app' }, { sandbox: true }, { targetId: 'root' }]) {
     assert.throws(() => prepareManagedPlacement({ ...archive, ...change }, 'owner', folder(), now));
+  }
+});
+
+test('legacy explicit data folders accept owner placement while retaining namespace and owner fences', () => {
+  const legacy = { ...folder(), thingtime: ['data'], crystal: { kind: 'folder', name: 'Legacy Lopu folder' } };
+  assert.equal(prepareManagedPlacement(source('attachment'), 'owner', legacy, now).folderId, legacy.shareId);
+  for (const patch of [{ ownerId: 'other' }, { appId: 'app' }, { sandbox: true }, { crystal: { name: 'folder' } }, { thingtime: ['post', 'data'] }]) {
+    assert.throws(() => prepareManagedPlacement(source('attachment'), 'owner', { ...legacy, ...patch }, now));
   }
 });

@@ -7,6 +7,7 @@ import {
 	HeadObjectCommand,
 	ListPartsCommand,
 	PutObjectTaggingCommand,
+    PutObjectCommand,
 	S3Client,
 	UploadPartCommand,
 	UploadPartCopyCommand,
@@ -17,6 +18,7 @@ import { awsCredentialsProvider } from '@vercel/oidc-aws-credentials-provider';
 import { fileTypeFromBuffer } from 'file-type';
 
 import { getPrivateS3Config, type PrivateS3Config } from './config';
+import { getLocalAttachmentStorage, resolveLocalAttachmentStorageConfig } from './localAttachmentStorage';
 
 export type AttachmentUploadedPart = {
 	partNumber: number;
@@ -34,6 +36,7 @@ export type AttachmentObjectHead = {
 };
 
 export type AttachmentS3 = {
+    putEmptyObject(input: { objectKey: string; attachmentId: string }): Promise<{ versionId: string }>;
 	copyUploadPart(input: {
 		objectKey: string; uploadId: string; partNumber: number;
 		sourceObjectKey: string; sourceVersionId: string;
@@ -61,6 +64,7 @@ export type AttachmentS3 = {
 		contentDisposition: string;
 		contentType: string;
 	}): Promise<{ url: string; expiresAt: string }>;
+	signDownloadRange?(input: { objectKey: string; versionId: string; offset: number; length: number }): Promise<{ url: string; expiresAt: string }>;
 	isNoSuchUpload(error: unknown): boolean;
 	isNotFound(error: unknown): boolean;
 };
@@ -98,6 +102,15 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 	const common = { Bucket: config.bucket, ExpectedBucketOwner: config.expectedBucketOwner } as const;
 
 	return {
+        async putEmptyObject({ objectKey, attachmentId }) {
+            if (!/^objects\/[A-Za-z0-9_-]+$/.test(objectKey) || objectKey !== `objects/${attachmentId}` || /[\p{Cc}]/u.test(attachmentId)) throw new Error('Invalid empty attachment object');
+            const result = await client.send(new PutObjectCommand({ ...common, Key: objectKey,
+                Body: new Uint8Array(0), ContentLength: 0, ContentType: 'application/octet-stream',
+                ServerSideEncryption: 'AES256', ChecksumAlgorithm: 'SHA256',
+                ChecksumSHA256: '47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=',
+                Metadata: { 'attachment-id': attachmentId }, Tagging: 'thingtime-state=pending', IfNoneMatch: '*' }));
+            return { versionId: String(result.VersionId || '') };
+        },
 		async copyUploadPart({ objectKey, uploadId, partNumber, sourceObjectKey, sourceVersionId, range, signal }) {
 			// Only protected same-bucket keys are accepted, never a URL supplied by
 			// a client. Pin both bucket owners and the exact authorized source version.
@@ -278,6 +291,11 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 			};
 		},
 
+		async signDownloadRange({ objectKey, versionId, offset, length }) {
+			if (!objectKey.startsWith('objects/') || !versionId || !Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 1 || length > 2 * 1024 * 1024 || !Number.isSafeInteger(offset + length)) throw Error('Invalid signed download range.');
+			const command = new GetObjectCommand({ ...common, Key: objectKey, VersionId: versionId, Range: `bytes=${offset}-${offset + length - 1}`, ResponseCacheControl: 'private, no-store', ResponseContentType: 'application/octet-stream' });
+			return { url: await presign(client, command, { expiresIn: 60, signableHeaders: new Set(['range']) }), expiresAt: expiresAt(60) };
+		},
 		isNoSuchUpload(error) {
 			return errorName(error) === 'NoSuchUpload' || (errorStatus(error) === 404 && errorName(error).includes('Upload'));
 		},
@@ -289,6 +307,10 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 };
 
 export const getPrivateS3 = (): AttachmentS3 => {
+	// Laptop stand-in (localAttachmentStorage.ts): only when the env opts in,
+	// and never on Vercel. Every caller keeps the same AttachmentS3 contract.
+	const local = resolveLocalAttachmentStorageConfig();
+	if (local) return getLocalAttachmentStorage(local);
 	const config = getPrivateS3Config();
 	const key = `${config.roleArn}\0${config.bucket}\0${config.region}`;
 	if (cached?.key === key) return cached.value;

@@ -11,10 +11,19 @@ export type RateLimitRule = { limit: number; windowMs: number; enabled: boolean 
 export type RateLimitConfig = Record<string, RateLimitRule>;
 
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
+  'mail.read': { limit: 120, windowMs: 60_000, enabled: true },
+  'mail.write': { limit: 60, windowMs: 60_000, enabled: true },
+  'mail.sync': { limit: 30, windowMs: 60_000, enabled: true },
+  'passwords.read': { limit: 120, windowMs: 60_000, enabled: true },
+  'passwords.write': { limit: 240, windowMs: 60_000, enabled: true },
+  'drafts.read': { limit: 180, windowMs: 60_000, enabled: true },
+  'drafts.write': { limit: 240, windowMs: 60_000, enabled: true },
+  'invites.create': { limit: 20, windowMs: 3_600_000, enabled: true },
+  'invites.read': { limit: 120, windowMs: 60_000, enabled: true },
   // Private attachment storage: start and completion mutate both S3 and the
   // quota ledger; part-signing is batched (<=20 URLs/request), and reads issue
   // short-lived private redirects. Every surface stays bounded per account/IP.
-  'attachments.start': { limit: 30, windowMs: 3_600_000, enabled: true },
+  'attachments.start': { limit: 60, windowMs: 60_000, enabled: true },
   'attachments.parts': { limit: 600, windowMs: 60_000, enabled: true },
   'attachments.complete': { limit: 60, windowMs: 60_000, enabled: true },
   'attachments.delete': { limit: 120, windowMs: 60_000, enabled: true },
@@ -25,6 +34,13 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // thing inserts, no object storage; same shape as annotate/delete
   'attachments.link': { limit: 120, windowMs: 60_000, enabled: true },
   'attachments.read': { limit: 600, windowMs: 60_000, enabled: true },
+  // "download all" ZIP builds (GET /api/v1/attachments/archive) — each call
+  // enumerates a Thing's files and streams them; heavier than one read
+  'attachments.archive': { limit: 30, windowMs: 60_000, enabled: true },
+  // manifest=1 and HEAD probes on the same endpoint: enumerate + authorize
+  // without presigning or streaming. Their own window so folder browsing and
+  // download-manager probes never spend the ZIP budget above.
+  'attachments.archiveManifest': { limit: 120, windowMs: 60_000, enabled: true },
   // admin-only legacy re-detection sweep; each call is one bounded S3-reading pass
   'attachments.detectionBackfill': { limit: 30, windowMs: 60_000, enabled: true },
   'things.react': { limit: 60, windowMs: 60_000, enabled: true },
@@ -94,6 +110,18 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // anonymous browse shape as schemas.browse; it only ever returns public theme
   // projections, but each call is two indexed reads and up to 60 token docs
   'themes.gallery': { limit: 120, windowMs: 60_000, enabled: true },
+  // third-party connections (/api/v1/connections) — reads of stored feed
+  // pages and connection lists, bounded like the other authenticated reads
+  'connections.read': { limit: 120, windowMs: 60_000, enabled: true },
+  // link/unlink/filter writes and OAuth begin — each mints or mutates account
+  // linkage, write-shaped like things.write
+  'connections.write': { limit: 60, windowMs: 60_000, enabled: true },
+  // calls that leave our infrastructure for a provider API (YouTube channel
+  // search/resolve, forced feed sync). These spend a SHARED, quota-limited
+  // third-party budget — a YouTube Data API search costs 100 of ~10,000 daily
+  // units — so one signed-in account must not be able to exhaust the feature
+  // for everyone. Deliberately much tighter than the local reads above.
+  'connections.provider': { limit: 20, windowMs: 60_000, enabled: true },
   // any other mutating write through /api/v1/things (create/upsert/patch/delete
   // posts and other thing kinds) — reactions/comments route to their own keys
   'things.write': { limit: 60, windowMs: 60_000, enabled: true },
@@ -119,6 +147,12 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'notifications.list': { limit: 120, windowMs: 60_000, enabled: true },
   'notifications.read': { limit: 60, windowMs: 60_000, enabled: true },
   'notifications.record': { limit: 120, windowMs: 60_000, enabled: true },
+  'timeline.read': { limit: 240, windowMs: 60_000, enabled: true },
+  'timeline.write': { limit: 240, windowMs: 60_000, enabled: true },
+  'timeline.explain': { limit: 20, windowMs: 600_000, enabled: true },
+  // version export (GET export=1) resolves one full version plus its notes and
+  // name into a 4 MiB file; bounded separately from ordinary history reads
+  'timeline.export': { limit: 30, windowMs: 60_000, enabled: true },
   'notifications.settings': { limit: 30, windowMs: 60_000, enabled: true },
   'notifications.devices': { limit: 30, windowMs: 60_000, enabled: true },
   // one-click email unsubscribe — anonymous (keys by IP), tokens are HMACs so
@@ -229,6 +263,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // token cap
   // Lopu model catalog (GET /api/v1/ai/models) — public read of a code-backed
   // list plus one indexed row scan; browse-shaped, anonymous callers key by IP
+  'ai.chatgpt-plan': { limit: 120, windowMs: 60_000, enabled: true },
   'ai.models': { limit: 120, windowMs: 60_000, enabled: true },
   'ai.complete': { limit: 20, windowMs: 600_000, enabled: true },
   // admin catalog toggles, on-demand re-seed and provider-key re-check
@@ -239,6 +274,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // Thingtime.LopuChatDefaults singleton (GET public / POST admin) — a rare
   // interactive read/save; the public GET keys anonymous callers by IP and
   // the admin POST is enforced fail-closed at the route
+  'settings.lopu-prompt': { limit: 30, windowMs: 60_000, enabled: true },
   'settings.lopu-chat-defaults': { limit: 30, windowMs: 60_000, enabled: true },
   // Thingtime.LopuAccess singleton (GET public / POST admin) — the client
   // reads it to render the locked state; the admin POST fails closed
@@ -286,6 +322,13 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'ai.sync': { limit: 600, windowMs: 3_600_000, enabled: true },
 	// User Secure Vault writes are rare and credential-sensitive; voice replies
 	// can spend a user-supplied provider quota, so both fail closed at routes.
+  'library.request': { limit: 20, windowMs: 60_000, enabled: true },
+  // Provider calls for the editable route planner. Suggestions need headroom
+  // for ordinary typing; optimized routes are costlier and have a smaller cap.
+  'maps.suggest': { limit: 120, windowMs: 60_000, enabled: true },
+  'maps.optimize': { limit: 20, windowMs: 60_000, enabled: true },
+  'maps.browser-config': { limit: 60, windowMs: 60_000, enabled: true },
+  'maps.request': { limit: 60, windowMs: 60_000, enabled: true },
 	'lopu.vault': { limit: 60, windowMs: 60_000, enabled: true },
 	'lopu.voiceReply': { limit: 30, windowMs: 60_000, enabled: true },
 	// Paired device mesh. Pairing creates credentials and therefore fails
@@ -330,6 +373,12 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // The integration vault can trigger provider operations; keep its admin
   // control plane bounded even before an endpoint policy is consulted.
   'admin.integrations': { limit: 60, windowMs: 60_000, enabled: true },
+  // marketing publish state (GET /api/v1/marketing/publications) — one tiny
+  // settings read per /marketing navigation, anonymous callers key by IP
+  'marketing.publications': { limit: 240, windowMs: 60_000, enabled: true },
+  // admin publish/unpublish sweeps (POST /api/v1/admin/marketing/publications)
+  // — up to 2,000 keys per call; enforced fail-closed at the route
+  'admin.marketingPublications': { limit: 60, windowMs: 60_000, enabled: true },
   // service-account provisioning is public self-service but each call mints a
   // permanent bearer token + a 5 GiB-allowance account and sends a verification
   // email — bound it tightly per IP (a legit integrator provisions a handful,
@@ -373,10 +422,16 @@ const clampRule = (rule: any, fallback: RateLimitRule): RateLimitRule => ({
 
 // Only known endpoints survive, each clamped — a stored/patched config can never
 // widen the endpoint set or set nonsensical values.
-const normalize = (endpoints: any): RateLimitConfig => {
+export const normalizeRateLimitConfig = (endpoints: any, uploadStartPolicyVersion = 0): RateLimitConfig => {
 	const out: RateLimitConfig = {};
 	for (const [name, def] of Object.entries(RATE_LIMIT_DEFAULTS)) {
-		out[name] = clampRule(endpoints?.[name], def);
+		const stored = endpoints?.[name];
+		// Admin saves historically persisted every default, so changing only the
+		// default leaves existing deployments stuck at 30/hour. Upgrade that exact
+		// legacy policy; preserve disabled and genuinely customized rules.
+		const legacyUploadDefault = uploadStartPolicyVersion < 1 && name === 'attachments.start' &&
+			stored?.limit === 30 && stored?.windowMs === 3_600_000 && stored?.enabled === true;
+		out[name] = clampRule(legacyUploadDefault ? undefined : stored, def);
 	}
 	return out;
 };
@@ -385,12 +440,12 @@ export const getRateLimitConfig = async (force = false): Promise<RateLimitConfig
 	if (!force && cache && Date.now() - cache.at < CONFIG_TTL_MS) return cache.config;
 	try {
 		const doc = await (await getSettingsCollection()).findOne({ key: SETTINGS_KEY });
-		const config = normalize(doc?.endpoints);
+		const config = normalizeRateLimitConfig(doc?.endpoints, doc?.uploadStartPolicyVersion);
 		cache = { at: Date.now(), config };
 		return config;
 	} catch {
 		// fall back to the last cache or the defaults if the settings read fails
-		return cache?.config || normalize(null);
+		return cache?.config || normalizeRateLimitConfig(null);
 	}
 };
 
@@ -406,7 +461,7 @@ export const setRateLimitConfig = async (patch: RateLimitConfig, updatedBy: stri
 	}
 	await (
 		await getSettingsCollection()
-	).updateOne({ key: SETTINGS_KEY }, { $set: { key: SETTINGS_KEY, endpoints, updatedAt: new Date(), updatedBy } }, { upsert: true });
+	).updateOne({ key: SETTINGS_KEY }, { $set: { key: SETTINGS_KEY, endpoints, uploadStartPolicyVersion: 1, updatedAt: new Date(), updatedBy } }, { upsert: true });
 	cache = { at: Date.now(), config: endpoints };
 	return endpoints;
 };

@@ -80,3 +80,17 @@ test('embedded recording references use the new recording ID rather than its por
   assert.ok(result.ok);
   assert.equal(crystal.render.props.src, '/api/v1/attachments/content?id=new-upload');
 });
+
+test('file transfer purpose is preserved and mismatched upload purpose is rejected before commit', async () => {
+  const manifest = fixture(); manifest.things[0].crystal.filePurpose = 'file';
+  assert.equal(recordingTransferFile(manifest.things[0], manifest).id, 'bytes');
+  let committed = 0;
+  for (const purpose of ['recording', 'file']) {
+    const result = await importTransfer({ id: 'owner' }, { manifest, files: { bytes: 'new-upload' } }, undefined, {
+      getFile: async () => ({ ...draft(), attachmentPurpose: purpose }),
+      createRecording: async () => { committed++; return { ...draft(), attachmentPurpose: 'file' }; }
+    });
+    assert.equal(result.ok, purpose === 'file');
+  }
+  assert.equal(committed, 1);
+});

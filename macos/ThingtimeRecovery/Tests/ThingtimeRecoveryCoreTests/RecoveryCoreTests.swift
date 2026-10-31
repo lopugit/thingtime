@@ -349,9 +349,25 @@ func withdrawnReleaseDoesNotDownload() async {
     let reason = "This release archive was withdrawn. Choose a newer release."
     let release = RecoveryRelease(asset: RecoveryReleaseAsset(downloadURL: URL(string: "https://example.invalid/never-download.zip")!, name: "never-download.zip", size: nil), id: "withdrawn", isPrerelease: false, name: "withdrawn", publishedAt: nil, releaseURL: nil, tag: "v1.2.3", version: "1.2.3", unavailableReason: reason)
     let store = RecoveryStore()
-    await store.cache(release, component: .desktop)
+    let result = await store.cache(release, component: .desktop)
+    #expect(result == nil)
+    await store.downloadAndInstall(release, component: .desktop)
     #expect(store.notice == reason)
     #expect(!store.isCaching)
+}
+
+@Test("download and install stops on a rejected download instead of installing an older cached bundle")
+@MainActor
+func failedDownloadDoesNotInstall() async {
+    let release = RecoveryRelease(asset: RecoveryReleaseAsset(downloadURL: URL(string: "file:///not-a-release.zip")!, name: "not-a-release.zip", size: nil), id: "rejected", isPrerelease: false, name: "rejected", publishedAt: nil, releaseURL: nil, tag: "v1.2.3", version: "1.2.3")
+    let store = RecoveryStore()
+    await store.downloadAndInstall(release, component: .commander)
+    #expect(!store.isCaching)
+    // The rejection message must survive untouched: a handoff would overwrite
+    // errorMessage with the installer-helper failure, so an exact match is what
+    // proves install was skipped rather than attempted and failed.
+    #expect(store.errorMessage == "Thingtime Recovery accepts only GitHub-hosted macOS ZIP release assets.")
+    #expect(store.notice == "Download was not cached. Installed apps and existing cached versions are unchanged.")
 }
 
 @Test("legacy cached bundles expose their embedded build ID without changing the manifest")
@@ -468,4 +484,61 @@ func widgetsRecoveryIsolation() async throws {
     let wrong = RecoveryInstallPlan(action: .installDesktop, cacheRoot: cache, sourceApp: source, waitForPID: .max)
     #expect(throws: (any Error).self) { try wrong.validate(paths: paths) }
     #expect(paths.installedApp(for: .widgets).lastPathComponent == "Thingtime Widgets.app")
+}
+
+@Test("Recovery has its own product and each app selects only its component")
+func recoveryIsIndependentProduct() {
+    #expect(RecoveryProduct.allCases.count == 4)
+    #expect(RecoveryProduct(rawValue: "recovery") == .recovery)
+    #expect(RecoveryProduct.recovery.title == "Thingtime Recovery")
+    #expect(Set(RecoveryProduct.allCases.map(\.component)) == Set(RecoveryComponent.allCases))
+    #expect(RecoveryProduct.electron.component == .desktop)
+    #expect(RecoveryProduct.commander.component == .commander)
+    #expect(RecoveryProduct.widgets.component == .widgets)
+}
+
+@Test("build dates read native and fractional Electron timestamps without using cache time")
+func embeddedBuildDates() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let web = root.appendingPathComponent("Contents/Resources/web")
+    try FileManager.default.createDirectory(at: web, withIntermediateDirectories: true)
+    let built = try #require(RecoveryBuildDate.parse("2026-09-12T02:03:04.125Z"))
+    try Data(#"{"builtAt":"2026-09-12T02:03:04.125Z"}"#.utf8).write(to: web.appendingPathComponent("metadata.json"))
+    #expect(RecoveryBuildMetadata(bundleURL: root).builtAt == built)
+    let native = try #require(RecoveryBuildDate.parse("2026-09-13T02:03:04Z"))
+    let plist = root.appendingPathComponent("Contents/Info.plist")
+    try PropertyListSerialization.data(fromPropertyList: ["ThingtimeBuildDate": "2026-09-13T02:03:04Z"], format: .xml, options: 0).write(to: plist)
+    let entry = CacheManifestEntry(cachedAt: "2026-09-14T00:00:00Z", key: "date-abcdef123456", publishedAt: "2026-09-13T03:00:00Z")
+    #expect(CachedBundle(entry: entry, appURL: root, component: .desktop).buildDate == .built(native))
+    try FileManager.default.removeItem(at: plist)
+    try FileManager.default.removeItem(at: web.appendingPathComponent("metadata.json"))
+    #expect(CachedBundle(entry: entry, appURL: root, component: .desktop).buildDate == .released(try #require(RecoveryBuildDate.parse(entry.publishedAt))))
+    let legacy = try JSONDecoder().decode(CacheManifestEntry.self, from: Data(#"{"key":"old-abcdef123456","cachedAt":"2026-09-14T00:00:00Z"}"#.utf8))
+    #expect(CachedBundle(entry: legacy, appURL: root, component: .desktop).buildDate == .unavailable)
+    #expect(RecoveryBuildDate.parse("not a date") == nil)
+}
+
+@Test("release dates persist in new caches and backfill legacy entries for offline lists")
+func cachedReleaseDatesSurviveOffline() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let source = root.appendingPathComponent("source/Thingtime.app")
+    try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+    let date = try #require(RecoveryBuildDate.parse("2026-09-13T04:05:06Z"))
+    let release = RecoveryRelease(asset: .init(downloadURL: URL(string: "https://github.com/lopugit/thingtime/releases/download/v1/test.zip")!, name: "test.zip", size: nil), id: "date", isPrerelease: false, name: "test", publishedAt: date, releaseURL: nil, tag: "v1", version: "1")
+    let cache = RecoveryCache(component: .desktop, root: root.appendingPathComponent("cache"))
+    let saved = try cache.cacheBundle(sourceApp: source, descriptor: CacheReleaseDescriptor(release: release)) { _ in }
+    #expect(saved.buildDate == .released(date))
+    let legacy = try cache.cacheBundle(sourceApp: source, descriptor: .init(id: "legacy", tag: "v1", isUnsigned: true)) { _ in }
+    #expect(legacy.buildDate == .unavailable)
+    try cache.updateReleaseDates(from: [release])
+    let offline = RecoveryCache(component: .desktop, root: cache.root)
+    let restored = try #require(offline.listBundles().first { $0.id == legacy.id })
+    #expect(restored.buildDate == .released(date))
+    #expect(restored.entry.cachedAt == legacy.entry.cachedAt)
+    #expect(restored.entry.isUnsigned == legacy.entry.isUnsigned)
+    let before = try Data(contentsOf: cache.root.appendingPathComponent("manifest.json"))
+    try offline.updateReleaseDates(from: [release])
+    #expect(try Data(contentsOf: cache.root.appendingPathComponent("manifest.json")) == before)
 }

@@ -1,5 +1,16 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { refreshUnavailableAiModel } from '../ai/modelSync';
+import { normalizeReadReferences, rememberReadReference, restoreReadContext, type LopuReadReference } from './readContext';
+import { looksLikeUnexecutedToolCall } from './toolTextParser';
+import { checkpointResultContext } from './checkpointResults';
+import type { LopuPromptSettings } from './promptSettingsCore';
+import { anthropicMediaContent, isLopuImage, openAiMediaContent, type LopuMedia } from './chatMedia';
+import { recordErrorLog } from '../errors/errorLogs';
+import { lopuResultLinks } from '~/utils/lopuLinks';
+import { createClaudeOAuthClient, claudeOAuthConfigured } from '../ai/claudeOAuth';
+import { createTtToolTextParser, type TtToolTextParser } from './toolTextParser';
+import type Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { adaptChatGPTResponsesRequest, ChatGPTPlanError, normaliseChatGPTPlanError } from '../ai/chatgptPlanProtocol';
 
 import { parsePartialJson } from '~/utils/partialJson';
 import { addCacheTokens } from '../ai/pricing';
@@ -11,7 +22,8 @@ import {
   resolveAiPreferredAnthropicChoice,
   resolveAiPreferredOpenAiChoice,
   toAnthropicEffort,
-  toOpenAiReasoningEffort
+  toOpenAiReasoningEffort,
+  requiresOpenAiResponsesForTools
 } from '../settings/prConflictResolverModelWaterfallCore';
 import type {
   LopuChatContext,
@@ -67,8 +79,9 @@ import { friendlyVaultProviderError, resolveVaultTurnModel, vaultProviderTranspo
 // followed by the canned vault line.
 //
 // Providers (set either or both env keys):
-//   - ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN) → Claude with native tools
-//   - OPENAI_API_KEY → ChatGPT-compatible chat.completions; LOPU_OPENAI_TOOLS
+//   - Claude OAuth credentials → Claude with native tools
+//   - OPENAI_API_KEY → Responses for registry-marked native tools, otherwise
+//     ChatGPT-compatible chat.completions; LOPU_OPENAI_TOOLS
 //     = native (function calling) | text (fenced ```tt-tool blocks parsed
 //     out of the streamed text, for endpoints without function calling such
 //     as the local Codex proxy)
@@ -86,9 +99,10 @@ import { friendlyVaultProviderError, resolveVaultTurnModel, vaultProviderTranspo
 // canned line — never a blank reply.
 
 export const LOPU_CHAT_MAX_OUTPUT_TOKENS = 16000;
-export const LOPU_CHAT_MAX_HOPS = 12;
-export const LOPU_CHAT_MAX_TOOL_EXECUTIONS = 24;
-export const LOPU_CHAT_MAX_TURN_MS = 240_000;
+// A serverless request is an execution window, never a deadline for the task.
+// Yield only BETWEEN completed tool batches so no in-flight mutation is cut off.
+// The client resumes saved checkpoints without a continuation-count limit.
+export const LOPU_HOSTED_CHECKPOINT_MS = 60_000;
 export const LOPU_CHAT_MAX_HISTORY_CHARS = 60_000;
 export const LOPU_CHAT_MAX_TOOL_RESULT_CHARS = 16 * 1024;
 
@@ -106,7 +120,7 @@ export const lopuChatProviderMode = (): LopuChatProviderMode => {
 export const lopuOpenAiToolMode = (): LopuOpenAiToolMode => ((process.env.LOPU_OPENAI_TOOLS || '').trim().toLowerCase() === 'text' ? 'text' : 'native');
 
 export const lopuChatProvidersConfigured = () => ({
-  anthropic: !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN),
+  anthropic: claudeOAuthConfigured(),
   openai: !!process.env.OPENAI_API_KEY
 });
 
@@ -130,6 +144,7 @@ export type LopuVaultTurnProvider = LopuVaultProviderRecord & {
 };
 
 export type LopuChatDependencies = {
+  getPromptSettings: (ownerId: string) => Promise<LopuPromptSettings>;
   runTool: (call: LopuToolCall, ctx: LopuToolContext) => Promise<LopuToolResult>;
   getPreferredModelWaterfall: typeof getAiPreferredModelWaterfall;
   // options are passed only for a vault turn (the viewer's own key + base URL
@@ -147,12 +162,18 @@ export type LopuChatDependencies = {
 };
 
 export type LopuChatTurnInput = {
+  checkpointResults?: LopuProviderToolResult[];
+  readReferences?: LopuReadReference[];
+  readAccessMode?: LopuToolContext['readAccessMode'];
+  resolveActionActor?: LopuToolContext['resolveActionActor'];
+  readNotes?: () => Promise<string[]>;
   readOnly?: boolean;
   viewer: LopuToolViewer;
   chatId: string;
   userMessageId: string;
   requestId: string;
   text: string;
+  media?: LopuMedia[];
   history?: LopuChatHistoryTurn[];
   // the resolved model choice for this turn (null = no provider configured)
   choice?: AiWorkflowModelChoice | null;
@@ -169,9 +190,10 @@ export type LopuChatTurnInput = {
 };
 
 const defaultDependencies = (): LopuChatDependencies => ({
+  getPromptSettings: async ownerId => (await import('../settings/lopuPromptSettings')).getLopuPromptSettings(ownerId),
   runTool: runLopuTool,
   getPreferredModelWaterfall: getAiPreferredModelWaterfall,
-  createAnthropic: (options) => (options ? new Anthropic(options) : new Anthropic()),
+  createAnthropic: (options) => createClaudeOAuthClient(typeof options?.apiKey === 'string' ? { token: options.apiKey } : {}),
   createOpenAi: (options) => (options ? new OpenAI(options) : new OpenAI()),
   resolveVaultProviderClient: resolveVaultProviderClientConfig,
   mintConfirmation: mintLopuConfirmation,
@@ -201,8 +223,8 @@ const planProviderAttempts = async (explicit: AiWorkflowModelChoice | null, deps
   const explicitProvider: 'claude' | 'openai' | null =
     explicit?.provider === 'anthropic' ? 'claude' : explicit?.provider === 'openai' ? 'openai' : null;
   const mode = lopuChatProviderMode();
-  const primary: 'claude' | 'openai' = mode === 'claude' || mode === 'openai' ? mode : (explicitProvider ?? 'claude');
-  const order: Array<'claude' | 'openai'> = primary === 'claude' ? ['claude', 'openai'] : ['openai', 'claude'];
+  const primary: 'claude' | 'openai' = explicitProvider ?? (mode === 'openai' ? 'openai' : 'claude');
+  const order: Array<'claude' | 'openai'> = explicitProvider ? [explicitProvider] : primary === 'claude' ? ['claude', 'openai'] : ['openai', 'claude'];
   return order
     .filter((provider) => (provider === 'claude' ? configured.anthropic : configured.openai))
     .map((provider) => ({
@@ -240,7 +262,7 @@ const normaliseHistory = (history: LopuChatHistoryTurn[] | undefined): LopuChatH
 const toolResultPayload = (result: LopuProviderToolResult): Record<string, unknown> =>
   result.ok
     ? { ok: true, summary: result.summary, ...(result.data !== undefined ? { data: result.data } : {}) }
-    : { ok: false, error: result.error || result.summary };
+    : { ok: false, error: result.error || result.summary, ...(result.data !== undefined ? { data: result.data } : {}) };
 
 const boundedJson = (value: unknown, fallback: unknown): string => {
   let json = '';
@@ -274,166 +296,7 @@ const isAbortError = (error: unknown): boolean =>
 // closed fence becomes a tool_use. `drop` mode swallows fences (the final
 // text-only hop).
 
-export type TtToolTextParser = {
-  push: (chunk: string) => LopuProviderEvent[];
-  finish: () => LopuProviderEvent[];
-  calls: () => Array<{ id: string; name: string; input: unknown }>;
-  rawText: () => string;
-};
-
-const FENCE_OPEN = /```[ \t]*tt-tool[ \t]*\r?\n?/;
-const FENCE_MARKERS = ['```tt-tool', '``` tt-tool'];
-
-const partialMarkerSuffix = (buffer: string): number => {
-  let longest = 0;
-  for (const marker of FENCE_MARKERS) {
-    const max = Math.min(marker.length - 1, buffer.length);
-    for (let length = max; length > 0; length--) {
-      if (marker.startsWith(buffer.slice(buffer.length - length))) {
-        longest = Math.max(longest, length);
-        break;
-      }
-    }
-  }
-  return longest;
-};
-
-export const createTtToolTextParser = (options: { nextId: () => string; mode: 'execute' | 'drop' }): TtToolTextParser => {
-  let buffer = '';
-  let raw = '';
-  let state: 'text' | 'fence' = 'text';
-  let body = '';
-  let current: { id: string; name: string | null; started: boolean; inputEmitted: number } | null = null;
-  const calls: Array<{ id: string; name: string; input: unknown }> = [];
-
-  const inputSlice = (text: string): string => {
-    const key = text.indexOf('"input"');
-    if (key === -1) return '';
-    const colon = text.indexOf(':', key + 7);
-    return colon === -1 ? '' : text.slice(colon + 1);
-  };
-
-  const progress = (): LopuProviderEvent[] => {
-    if (!current || options.mode === 'drop') return [];
-    const out: LopuProviderEvent[] = [];
-    if (!current.started) {
-      const parsed = parsePartialJson(body);
-      const name = parsed.value && typeof parsed.value === 'object' ? (parsed.value as any).name : null;
-      if (typeof name === 'string' && name.trim()) {
-        current.name = name.trim();
-        current.started = true;
-        out.push({ type: 'tool_use_start', id: current.id, name: current.name });
-      }
-    }
-    if (current.started) {
-      const input = inputSlice(body);
-      if (input.length > current.inputEmitted) {
-        out.push({ type: 'tool_input_delta', id: current.id, name: current.name!, partial: input.slice(current.inputEmitted) });
-        current.inputEmitted = input.length;
-      }
-    }
-    return out;
-  };
-
-  const closeFence = (): LopuProviderEvent[] => {
-    const out: LopuProviderEvent[] = [];
-    const call = current;
-    current = null;
-    state = 'text';
-    if (!call) return out;
-    if (options.mode === 'drop') {
-      out.push({ type: 'text', text: '(tool call skipped — the tool budget for this turn is spent)' });
-      body = '';
-      return out;
-    }
-    let parsed = parsePartialJson(body);
-    // a fence body that arrived JSON-escaped ({\"name\":…} — the reply was a
-    // JSON string literal on the wire) decodes to the real object
-    if ((!parsed.value || typeof parsed.value !== 'object') && /\\"/.test(body)) {
-      try {
-        const decoded = JSON.parse(`"${body.replace(/\r?\n/g, '\\n')}"`);
-        if (typeof decoded === 'string') parsed = parsePartialJson(decoded);
-      } catch {
-        // keep the original parse result
-      }
-    }
-    const value = parsed.value && typeof parsed.value === 'object' ? (parsed.value as any) : {};
-    // the documented shape is { name, input }; models on text-mode endpoints
-    // also reach for OpenAI-ish spellings, so read those too
-    const nameCandidate = [value.name, value.tool, value.tool_name, value.function?.name, value.function].find((entry) => typeof entry === 'string' && entry.trim());
-    const name = typeof nameCandidate === 'string' ? nameCandidate.trim() : call.name || 'unknown_tool';
-    const inputCandidate = [value.input, value.arguments, value.args, value.parameters, value.params, value.function?.arguments].find((entry) => entry !== undefined && entry !== null);
-    const input =
-      inputCandidate && typeof inputCandidate === 'object'
-        ? inputCandidate
-        : typeof inputCandidate === 'string'
-          ? (() => {
-              const inner = parsePartialJson(inputCandidate).value;
-              return inner && typeof inner === 'object' ? inner : {};
-            })()
-          : {};
-    if (!call.started) out.push({ type: 'tool_use_start', id: call.id, name });
-    out.push({ type: 'tool_use', id: call.id, name, input });
-    calls.push({ id: call.id, name, input });
-    body = '';
-    return out;
-  };
-
-  const push = (chunk: string): LopuProviderEvent[] => {
-    raw += chunk;
-    buffer += chunk;
-    const out: LopuProviderEvent[] = [];
-    for (;;) {
-      if (state === 'text') {
-        const match = FENCE_OPEN.exec(buffer);
-        if (match) {
-          const before = buffer.slice(0, match.index);
-          if (before) out.push({ type: 'text', text: before });
-          buffer = buffer.slice(match.index + match[0].length);
-          state = 'fence';
-          body = '';
-          current = { id: options.nextId(), name: null, started: false, inputEmitted: 0 };
-          continue;
-        }
-        const hold = partialMarkerSuffix(buffer);
-        const emit = buffer.slice(0, buffer.length - hold);
-        if (emit) out.push({ type: 'text', text: emit });
-        buffer = buffer.slice(buffer.length - hold);
-        return out;
-      }
-      const close = buffer.indexOf('```');
-      if (close === -1) {
-        // hold back a possible partial closing marker
-        const hold = buffer.endsWith('``') ? 2 : buffer.endsWith('`') ? 1 : 0;
-        body += buffer.slice(0, buffer.length - hold);
-        buffer = buffer.slice(buffer.length - hold);
-        out.push(...progress());
-        return out;
-      }
-      body += buffer.slice(0, close);
-      buffer = buffer.slice(close + 3);
-      out.push(...progress());
-      out.push(...closeFence());
-    }
-  };
-
-  const finish = (): LopuProviderEvent[] => {
-    const out: LopuProviderEvent[] = [];
-    if (state === 'text') {
-      if (buffer) out.push({ type: 'text', text: buffer });
-      buffer = '';
-      return out;
-    }
-    // the model was cut off inside a fence — close it with what we have
-    body += buffer;
-    buffer = '';
-    out.push(...progress());
-    out.push(...closeFence());
-    return out;
-  };
-
-  return { push, finish, calls: () => [...calls], rawText: () => raw };
-};
+export { createTtToolTextParser } from './toolTextParser';
 
 // ---------------------------------------------------------------------------
 // Anthropic
@@ -446,6 +309,7 @@ type AnthropicProviderOptions = {
   system: SystemBlocks;
   history: LopuChatHistoryTurn[];
   text: string;
+  media?: LopuMedia[];
   signal?: AbortSignal;
 };
 
@@ -458,7 +322,7 @@ async function* anthropicProvider(options: AnthropicProviderOptions): LopuProvid
   ];
   const messages: Anthropic.Messages.MessageParam[] = [
     ...options.history.map((turn) => ({ role: turn.role, content: turn.text })),
-    { role: 'user', content: options.text }
+    { role: 'user', content: anthropicMediaContent(options.text, options.media) }
   ];
   const effort = toAnthropicEffort(choice.effort);
   const usage: LopuChatUsage = { inputTokens: 0, outputTokens: 0 };
@@ -476,22 +340,13 @@ async function* anthropicProvider(options: AnthropicProviderOptions): LopuProvid
     };
     const requestOptions = signal ? { signal } : {};
     const decorated = !degraded && (choice.speed === 'fast' || !!effort);
-    // Fast mode is beta-gated and needs the beta stream surface; a decorated
-    // request that fails (or completes empty) before producing anything is
-    // retried bare on the same model — and the turn stays bare afterwards.
-    const attempts: Array<() => AsyncIterable<any> & { finalMessage: () => Promise<any> }> =
-      !decorated
-        ? [() => client.messages.stream(base, requestOptions)]
-        : choice.speed === 'fast'
-          ? [
-              () =>
-                client.beta.messages.stream(
-                  { ...(base as any), ...(effort ? { output_config: { effort } } : {}), speed: 'fast', betas: ['fast-mode-2026-02-01'] },
-                  requestOptions
-                ),
-              () => client.messages.stream(base, requestOptions)
-            ]
-          : [() => client.messages.stream({ ...base, output_config: { effort: effort! } }, requestOptions), () => client.messages.stream(base, requestOptions)];
+    // Preserve the chosen effort and speed. Credential retries happen inside
+    // the OAuth runtime; a failure must not silently downgrade the model knobs.
+    const attempts: Array<() => AsyncIterable<any> & { finalMessage: () => Promise<any> }> = [() =>
+      choice.speed === 'fast'
+        ? client.beta.messages.stream({ ...(base as any), ...(effort ? { output_config: { effort } } : {}), speed: 'fast', betas: ['fast-mode-2026-02-01'] }, requestOptions)
+        : client.messages.stream({ ...base, ...(effort ? { output_config: { effort } } : {}) }, requestOptions)
+    ];
 
     let finalMessage: any = null;
     for (let attempt = 0; attempt < attempts.length; attempt++) {
@@ -563,11 +418,19 @@ async function* anthropicProvider(options: AnthropicProviderOptions): LopuProvid
           ...(result.ok ? {} : { is_error: true })
         }))
       });
+      for (const note of feed.notes ?? []) messages.push({ role: 'user', content: note });
       finalHop = feed.finalHop;
       continue;
     }
-    yield { type: 'hop_end', stopReason: finalMessage.stop_reason === 'max_tokens' ? 'max_tokens' : 'end_turn', usage: { ...usage } };
-    return;
+    if (finalMessage.stop_reason === 'pause_turn') {
+      // The provider has saved its server-tool state in this assistant content.
+      // Resume that exact message; a pause is not a completed user request.
+      yield { type: 'hop_end', stopReason: 'pause_turn', usage: { ...usage } };
+      continue;
+    }
+    const next = yield { type: 'hop_end', stopReason: ['max_tokens', 'model_context_window_exceeded'].includes(finalMessage.stop_reason) ? 'max_tokens' : 'end_turn', usage: { ...usage } };
+    if (!next?.notes?.length) return;
+    for (const note of next.notes) messages.push({ role: 'user', content: note });
   }
 }
 
@@ -580,8 +443,10 @@ type OpenAiProviderOptions = {
   systemText: string;
   history: LopuChatHistoryTurn[];
   text: string;
+  media?: LopuMedia[];
   toolMode: LopuOpenAiToolMode;
   signal?: AbortSignal;
+  authMode?: 'chatgpt-plan';
 };
 
 // Word-ish pieces so a non-streaming answer still paints progressively.
@@ -674,12 +539,199 @@ async function* completionAsChunks(completion: unknown, normalize: (content: str
   };
 }
 
+// Some OpenAI models require Responses for native tools with reasoning. Keep
+// this explicit: compatible custom/text endpoints and other model contracts
+// retain their existing transport. Never repair it by dropping chosen effort.
+async function* openAiResponsesProvider(options: OpenAiProviderOptions): LopuProviderStream {
+  const { client, choice, signal } = options;
+  const input: OpenAI.Responses.ResponseInput = [
+    ...options.history.map((turn) => ({ role: turn.role, content: turn.text })),
+    {
+      role: 'user',
+      content: [
+        { type: 'input_text', text: options.text || 'Please inspect the attached files.' },
+        ...(options.media || []).map((file): OpenAI.Responses.ResponseInputContent => isLopuImage(file.contentType)
+          ? { type: 'input_image', image_url: `data:${file.contentType};base64,${file.data}`, detail: 'auto' }
+          : { type: 'input_file', filename: file.name, file_data: `data:application/pdf;base64,${file.data}` })
+      ]
+    }
+  ];
+  const tools: OpenAI.Responses.FunctionTool[] = openAiToolDefinitions().map((tool) => ({
+    type: 'function', ...tool.function, strict: false
+  }));
+  const effort = toOpenAiReasoningEffort(choice.effort);
+  const usage: LopuChatUsage = { inputTokens: 0, outputTokens: 0 };
+  const acceptedCallIds = new Set<string>();
+  const acceptedItemIds = new Set<string>();
+  let finalHop = false;
+
+  for (;;) {
+    signal?.throwIfAborted();
+    const request: OpenAI.Responses.ResponseCreateParamsStreaming = {
+      model: choice.model,
+      instructions: options.systemText,
+      input,
+      tools,
+      tool_choice: finalHop ? 'none' : 'auto',
+      max_output_tokens: LOPU_CHAT_MAX_OUTPUT_TOKENS,
+      stream: true,
+      // Do not create stored provider conversations. Carry encrypted reasoning
+      // between tool hops in this generator only, never in client events/history.
+      store: false,
+      include: ['reasoning.encrypted_content'],
+      ...(effort ? { reasoning: { effort } } : {}),
+      ...(choice.speed === 'fast' ? { service_tier: 'priority' as const } : {})
+    };
+    // The subscription endpoint has a distinct contract despite sharing the
+    // Responses URL. Never retry it through Chat Completions or API billing.
+    const stream = await client.responses.create(
+      (options.authMode === 'chatgpt-plan' ? adaptChatGPTResponsesRequest(request as unknown as Record<string, unknown>) : request) as unknown as OpenAI.Responses.ResponseCreateParamsStreaming,
+      signal ? { signal } : {}
+    );
+    let completed: OpenAI.Responses.Response | null = null;
+    const finishedItems = new Map<number, OpenAI.Responses.ResponseOutputItem>();
+    const started = new Map<string, { id: string; name: string }>();
+    const startedCallItems = new Map<string, string>();
+    for await (const event of stream) {
+      signal?.throwIfAborted();
+      if (event.type === 'response.output_text.delta' && event.delta) {
+        yield { type: 'text', text: event.delta };
+      } else if (event.type === 'response.refusal.delta' && event.delta) {
+        yield { type: 'text', text: event.delta };
+      } else if (event.type === 'response.output_item.added' && event.item.type === 'function_call') {
+        const call = event.item;
+        if (options.authMode === 'chatgpt-plan' && (call as { namespace?: unknown }).namespace !== 'thingtime') throw new ChatGPTPlanError('invalid_request');
+        const prior = call.id ? started.get(call.id) : undefined;
+        if (!call.id || !call.call_id || !call.name ||
+          acceptedCallIds.has(call.call_id) || acceptedItemIds.has(call.id) ||
+          (prior && (prior.id !== call.call_id || prior.name !== call.name)) ||
+          (startedCallItems.has(call.call_id) && startedCallItems.get(call.call_id) !== call.id)) {
+          throw new Error('The selected model returned inconsistent tool call identifiers.');
+        }
+        if (!prior) {
+          started.set(call.id, { id: call.call_id, name: call.name });
+          startedCallItems.set(call.call_id, call.id);
+          yield { type: 'tool_use_start', id: call.call_id, name: call.name };
+        }
+      } else if (event.type === 'response.function_call_arguments.delta') {
+        const call = started.get(event.item_id);
+        if (call && event.delta) yield { type: 'tool_input_delta', ...call, partial: event.delta };
+      } else if (event.type === 'response.output_item.done') {
+        if (!Number.isInteger(event.output_index) || event.output_index < 0 || finishedItems.has(event.output_index)) {
+          throw new Error('The selected model returned inconsistent completed response items.');
+        }
+        finishedItems.set(event.output_index, event.item);
+      } else if (event.type === 'response.completed' || event.type === 'response.incomplete') {
+        completed = event.response;
+      } else if (event.type === 'response.failed' || event.type === 'error') {
+        if (options.authMode === 'chatgpt-plan') throw normaliseChatGPTPlanError(event);
+        throw new Error('The selected model could not finish its response.');
+      }
+    }
+    signal?.throwIfAborted();
+    // A dropped stream or unfinished function argument is never permission to
+    // execute a tool or to repeat a possibly accepted provider request.
+    if (!completed || !['completed', 'incomplete'].includes(completed.status)) {
+      if (options.authMode === 'chatgpt-plan') throw new ChatGPTPlanError('response_incomplete', 502);
+      throw new Error('The selected model response ended before completion.');
+    }
+    if (options.authMode === 'chatgpt-plan' && completed.status !== 'completed') throw new ChatGPTPlanError('response_incomplete', 502);
+    if (completed.usage) {
+      const cached = Math.max(0, Number(completed.usage.input_tokens_details?.cached_tokens) || 0);
+      usage.inputTokens += Math.max(0, (Number(completed.usage.input_tokens) || 0) - cached);
+      usage.outputTokens += Number(completed.usage.output_tokens) || 0;
+      addCacheTokens(usage, cached, undefined);
+    }
+    if (completed.status === 'incomplete') {
+      if (completed.incomplete_details?.reason !== 'max_output_tokens') {
+        throw new Error('The selected model could not finish its response.');
+      }
+      yield { type: 'hop_end', stopReason: 'max_tokens', usage: { ...usage } };
+      return;
+    }
+    // Some streamed responses complete without repeating their output items in
+    // the terminal envelope. Only finalized items may fill that empty envelope,
+    // and only after the successful terminal event above. Argument deltas alone
+    // never authorize execution. Preserve reasoning and item order for replay.
+    const streamedOutput = [...finishedItems.entries()].sort(([a], [b]) => a - b).map(([, item]) => item);
+    const output = completed.output.length ? completed.output : streamedOutput;
+    if (completed.output.length) {
+      for (const item of finishedItems.values()) {
+        const terminal = completed.output.find(candidate => candidate.id === item.id);
+        if (!terminal || terminal.type !== item.type || terminal.id !== item.id ||
+          (item.type === 'function_call' && (terminal.type !== 'function_call' ||
+            terminal.call_id !== item.call_id || terminal.name !== item.name || terminal.arguments !== item.arguments ||
+            (terminal.status ?? 'completed') !== (item.status ?? 'completed') ||
+            (terminal as { namespace?: unknown }).namespace !== (item as { namespace?: unknown }).namespace))) {
+          throw new Error('The selected model returned conflicting completed response items.');
+        }
+      }
+    }
+    const calls = output.filter((item): item is OpenAI.Responses.ResponseFunctionToolCall => item.type === 'function_call');
+    if ([...started.keys()].some(id => !calls.some(call => call.id === id))) {
+      throw new Error('The selected model response ended before a streamed tool call completed.');
+    }
+    if (options.authMode === 'chatgpt-plan' && calls.some(call => (call as { namespace?: unknown }).namespace !== 'thingtime')) throw new ChatGPTPlanError('invalid_request');
+    if (calls.some((call) => !call.id || !call.call_id || !call.name || (call.status && call.status !== 'completed'))) {
+      throw new Error('The selected model returned an unfinished tool call.');
+    }
+    if (new Set(calls.map((call) => call.call_id)).size !== calls.length || new Set(calls.map((call) => call.id)).size !== calls.length) {
+      throw new Error('The selected model returned duplicate tool call identifiers.');
+    }
+    for (const call of calls) {
+      const prior = started.get(call.id);
+      if ((prior && (prior.id !== call.call_id || prior.name !== call.name)) ||
+        (startedCallItems.has(call.call_id) && startedCallItems.get(call.call_id) !== call.id) ||
+        acceptedCallIds.has(call.call_id) || acceptedItemIds.has(call.id)) {
+        throw new Error('The selected model returned inconsistent tool call identifiers.');
+      }
+    }
+    const parsedCalls = calls.map((call) => {
+      // Validate the entire batch before handing any call to the executor.
+      // Keep provider argument fragments out of persisted error diagnostics.
+      try {
+        return { call, input: JSON.parse(call.arguments) as unknown };
+      } catch {
+        throw new Error('The selected model returned invalid tool arguments.');
+      }
+    });
+    for (const item of output) {
+      // Only custom function tools are offered. Refuse an unexpected hosted
+      // tool surface rather than silently discarding its continuation state.
+      if (item.type !== 'message' && item.type !== 'reasoning' && item.type !== 'function_call') {
+        throw new Error('The selected model returned an unsupported response item.');
+      }
+      input.push(item);
+    }
+    if (calls.length && !finalHop) {
+      for (const { call, input: toolInput } of parsedCalls) {
+        acceptedCallIds.add(call.call_id);
+        acceptedItemIds.add(call.id);
+        if (!call.id || !started.has(call.id)) yield { type: 'tool_use_start', id: call.call_id, name: call.name };
+        yield { type: 'tool_use', id: call.call_id, name: call.name, input: toolInput };
+      }
+      const feed = yield { type: 'hop_end', stopReason: 'tool_use', usage: { ...usage } };
+      if (!feed) return;
+      for (const result of feed.results) input.push({ type: 'function_call_output', call_id: result.id, output: toolResultText(result) });
+      for (const note of feed.notes ?? []) input.push({ role: 'user', content: note });
+      finalHop = feed.finalHop;
+      continue;
+    }
+    const next = yield { type: 'hop_end', stopReason: 'end_turn', usage: { ...usage } };
+    if (!next?.notes?.length) return;
+    for (const note of next.notes) input.push({ role: 'user', content: note });
+  }
+}
+
 async function* openAiProvider(options: OpenAiProviderOptions): LopuProviderStream {
+  if (options.authMode === 'chatgpt-plan' || (options.toolMode === 'native' && requiresOpenAiResponsesForTools(options.choice.model))) {
+    return yield* openAiResponsesProvider(options);
+  }
   const { client, choice, signal, toolMode } = options;
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: options.systemText },
     ...options.history.map((turn) => ({ role: turn.role, content: turn.text })),
-    { role: 'user', content: options.text }
+    { role: 'user', content: openAiMediaContent(options.text, options.media) }
   ];
   const tools = toolMode === 'native' ? openAiToolDefinitions() : null;
   const effort = toOpenAiReasoningEffort(choice.effort);
@@ -851,11 +903,14 @@ async function* openAiProvider(options: OpenAiProviderOptions): LopuProviderStre
           }`
         });
       }
+      for (const note of feed.notes ?? []) messages.push({ role: 'user', content: note });
       finalHop = feed.finalHop;
       continue;
     }
-    yield { type: 'hop_end', stopReason: finish === 'length' ? 'max_tokens' : 'end_turn', usage: { ...usage } };
-    return;
+    const next = yield { type: 'hop_end', stopReason: finish === 'length' ? 'max_tokens' : 'end_turn', usage: { ...usage } };
+    if (!next?.notes?.length) return;
+    messages.push({ role: 'assistant', content: text });
+    for (const note of next.notes) messages.push({ role: 'user', content: note });
   }
 }
 
@@ -863,6 +918,8 @@ async function* openAiProvider(options: OpenAiProviderOptions): LopuProviderStre
 // the tool loop
 
 type TurnState = {
+  awaitingConfirmation?: boolean;
+  readReferences: LopuReadReference[];
   text: string;
   toolCalls: LopuToolCallSummary[];
   usage: LopuChatUsage;
@@ -872,7 +929,7 @@ type TurnState = {
   error?: string;
 };
 
-const newTurnState = (): TurnState => ({ text: '', toolCalls: [], usage: { inputTokens: 0, outputTokens: 0 }, hops: 0, toolExecutions: 0, stopReason: 'end_turn' });
+const newTurnState = (): TurnState => ({ readReferences: [], text: '', toolCalls: [], usage: { inputTokens: 0, outputTokens: 0 }, hops: 0, toolExecutions: 0, stopReason: 'end_turn' });
 
 // A tiny async channel: tool executors push events while the loop drains
 // them in arrival order, so patches paint the moment a tool finishes even
@@ -917,6 +974,7 @@ const thingIdOf = (result: LopuToolResult): string | undefined => {
 const summarise = (text: string, max = 240): string => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 type LoopOptions = {
+  readNotes?: () => Promise<string[]>;
   provider: LopuProviderStream;
   ctx: LopuToolContext;
   deps: LopuChatDependencies;
@@ -930,10 +988,9 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
   const { provider, ctx, deps, state, startedAt, signal } = options;
   let pending: LopuToolCall[] = [];
   let feed: LopuProviderHopInput | undefined;
-  let finalRequested = false;
-
-  const budgetLeft = () => LOPU_CHAT_MAX_TOOL_EXECUTIONS - state.toolExecutions;
-  const timeLeft = () => LOPU_CHAT_MAX_TURN_MS - (deps.now() - startedAt);
+  let wireChars = 0;
+  let hopText = '';
+  let protocolRepairs = 0;
 
   for (;;) {
     if (signal?.aborted) {
@@ -947,8 +1004,10 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
     // `done` discriminant does not narrow IteratorResult
     if (step.done === true) return;
     const event = step.value;
+    wireChars += JSON.stringify(event).length;
     switch (event.type) {
       case 'text':
+        hopText += event.text;
         state.text += event.text;
         yield { type: 'delta', text: event.text };
         break;
@@ -970,41 +1029,56 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
         if (event.usage) state.usage = { ...event.usage };
         if (event.stopReason === 'max_tokens') state.stopReason = 'max_tokens';
         if (event.stopReason !== 'tool_use' || !pending.length) {
-          // the provider is done (it returns on the next resume)
+          const notes = event.stopReason === 'end_turn' ? await options.readNotes?.() ?? [] : [];
+          if (event.stopReason === 'end_turn' && !pending.length && options.toolsAllowed && !state.awaitingConfirmation && looksLikeUnexecutedToolCall(hopText)) {
+            if (++protocolRepairs > 2) {
+              state.stopReason = 'error';
+              state.error = 'The provider repeatedly printed a tool request without invoking it. No displayed request was executed.';
+              yield { type: 'error', message: state.error, retryable: true };
+              await provider.return();
+              return;
+            }
+            notes.push('Your last reply printed a tool request as ordinary text. It did not execute. If the task still requires that tool, invoke it using the configured tool protocol with complete JSON arguments, then use its result to continue. Do not claim the action completed or replay actions with existing success receipts. If you were explaining an example, finish the explanation without emitting another tool-request example.');
+          }
+          hopText = '';
+          if (notes?.length) feed = { results: [], finalHop: false, notes };
+          // Resume with notes only after the current provider request finishes.
           if (pending.length) {
             for (const call of pending) yield { type: 'tool_result', id: call.id, name: call.name, ok: false, summary: 'Not run — this turn ended before the tool could execute' };
             pending = [];
           }
           break;
         }
-        if (finalRequested || !options.toolsAllowed) {
-          // the final text hop asked for tools anyway — refuse politely
-          for (const call of pending) yield { type: 'tool_result', id: call.id, name: call.name, ok: false, summary: 'Not run — the tool budget for this turn is spent' };
+        if (!options.toolsAllowed) {
+          // tools are disabled for this request
+          for (const call of pending) yield { type: 'tool_result', id: call.id, name: call.name, ok: false, summary: 'Not run — tools are disabled for this request' };
           pending = [];
           break;
         }
 
-        const left = Math.max(0, budgetLeft());
-        const toRun = pending.slice(0, left);
-        const refused = pending.slice(left);
+        hopText = '';
+        const toRun = pending;
         pending = [];
 
         const channel = createChannel<LopuChatStreamEvent>();
         ctx.emit = (toolEvent: LopuToolEvent) => channel.push(toolEvent);
         const results: LopuProviderToolResult[] = [];
-        const runs = Promise.all(
+        const runs = Promise.allSettled(
           toRun.map(async (call) => {
             const result = await deps.runTool(call, ctx);
+            if (result.ok === false && result.needsConfirmation) state.awaitingConfirmation = true;
             state.toolExecutions += 1;
+            state.readReferences = rememberReadReference(state.readReferences, call, result);
             state.toolCalls.push({
               name: call.name,
               ok: result.ok,
               summary: summarise(result.ok === true ? result.summary : result.error),
-              ...(thingIdOf(result) ? { thingId: thingIdOf(result) } : {})
+              ...(thingIdOf(result) ? { thingId: thingIdOf(result) } : {}),
+              ...(result.ok ? { links: lopuResultLinks(result.data) } : {})
             });
             const entry: LopuProviderToolResult = result.ok === true
               ? { id: call.id, name: call.name, ok: true, summary: result.summary, ...(result.data !== undefined ? { data: boundToolData(result.data) } : {}) }
-              : { id: call.id, name: call.name, ok: false, summary: result.error, error: result.error };
+              : { id: call.id, name: call.name, ok: false, summary: result.error, error: result.error, ...(result.data !== undefined ? { data: boundToolData(result.data) } : {}) };
             results.push(entry);
             channel.push({
               type: 'tool_result',
@@ -1012,7 +1086,7 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
               name: call.name,
               ok: entry.ok,
               summary: entry.summary,
-              ...(entry.ok && entry.data !== undefined ? { data: entry.data } : {}),
+              ...(entry.data !== undefined ? { data: entry.data } : {}),
               ...(result.ok === false && result.needsConfirmation ? { needsConfirmation: true } : {})
             });
           })
@@ -1022,31 +1096,23 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
           () => channel.close()
         );
         for await (const toolEvent of channel.drain()) yield toolEvent;
-        await runs;
-        for (const call of refused) {
-          const error = `Not run — Lopu may run at most ${LOPU_CHAT_MAX_TOOL_EXECUTIONS} tools per reply. Summarise what is done and ask the user to continue in a new message.`;
-          results.push({ id: call.id, name: call.name, ok: false, summary: error, error });
-          state.toolCalls.push({ name: call.name, ok: false, summary: summarise(error) });
-          yield { type: 'tool_result', id: call.id, name: call.name, ok: false, summary: error };
-        }
+        const settled = await runs;
+        const failed = settled.find(result => result.status === 'rejected');
+        if (failed?.status === 'rejected') throw failed.reason;
         // keep the provider's order so tool_result blocks line up with its tool_use ids
-        const order = new Map([...toRun, ...refused].map((call, index) => [call.id, index]));
+        const order = new Map(toRun.map((call, index) => [call.id, index]));
         results.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
 
-        const overBudget = refused.length > 0 || budgetLeft() <= 0;
-        const outOfTime = timeLeft() <= 0;
-        const outOfHops = state.hops >= LOPU_CHAT_MAX_HOPS - 1;
-        if (overBudget) {
-          state.stopReason = 'tool_limit';
-          yield { type: 'error', message: `Lopu hit the ${LOPU_CHAT_MAX_TOOL_EXECUTIONS}-tool limit for one reply — wrapping up.`, retryable: true };
-        } else if (outOfTime) {
-          state.stopReason = 'time_limit';
-          yield { type: 'error', message: 'Lopu ran out of time for this reply — wrapping up.', retryable: true };
-        } else if (outOfHops) {
-          state.stopReason = 'hop_limit';
+        // Checkpoint before another provider request on finite-lifetime hosts,
+        // and rotate large streams on every host. Neither limits total work.
+        // Account/persistence completes before the client sees done.
+        const hostedCheckpoint = process.env.VERCEL === '1' && deps.now() - startedAt >= LOPU_HOSTED_CHECKPOINT_MS;
+        if (hostedCheckpoint || wireChars >= 256 * 1024) {
+          state.stopReason = 'checkpoint';
+          await provider.return();
+          return;
         }
-        finalRequested = overBudget || outOfTime || outOfHops;
-        feed = { results, finalHop: finalRequested };
+        feed = { results, finalHop: false, notes: await options.readNotes?.() };
         break;
       }
       default:
@@ -1061,7 +1127,7 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
 const chunkWords = (text: string): string[] => text.match(/\S+\s*/g) || [text];
 
 export const LOPU_FALLBACK_UNCONFIGURED =
-  'Lopu is resting its horn — no AI provider is configured yet. Ask an admin to add ANTHROPIC_API_KEY (or OPENAI_API_KEY) to this deployment and I will come alive 🦄';
+  'Lopu is resting its horn — no AI provider is configured yet. Ask an admin to add Claude OAuth credentials (or OPENAI_API_KEY) to this deployment and I will come alive 🦄';
 export const LOPU_FALLBACK_FAILED = 'Lopu is daydreaming… every AI provider stumbled just now. Give it a moment and try again 🔮';
 // A vault turn never falls back to the server keys — the user chose their own
 // provider — so its canned line points at the connection instead.
@@ -1092,18 +1158,23 @@ const vaultClientOptions = (config: LopuVaultProviderClientConfig): AnthropicCli
   apiKey: config.apiKey,
   baseURL: config.baseURL,
   // never let the server's own credentials ride along on a user's endpoint:
-  // the SDKs read ANTHROPIC_AUTH_TOKEN / OPENAI_ORG_ID / OPENAI_PROJECT_ID /
+  // OpenAI SDKs read OPENAI_ORG_ID / OPENAI_PROJECT_ID /
   // OPENAI_ADMIN_KEY from the env unless told not to
   authToken: null,
   organization: null,
   project: null,
   adminAPIKey: null,
   fetch: createGuardedProviderFetch(),
-  maxRetries: 1,
+  maxRetries: config.authMode === 'chatgpt-plan' ? 0 : 1,
   timeout: LOPU_PROVIDER_TIMEOUT_MS
 });
 
 export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenerator<LopuChatStreamEvent, LopuChatTurnOutcome> {
+  if (input.vaultProvider?.authMode === 'chatgpt-plan' && input.vaultProvider.authSignal) {
+    input = { ...input, signal: input.signal
+      ? AbortSignal.any([input.signal, input.vaultProvider.authSignal])
+      : input.vaultProvider.authSignal };
+  }
   const deps: LopuChatDependencies = { ...defaultDependencies(), ...(input.deps || {}) };
   const startedAt = deps.now();
   const history = normaliseHistory(input.history);
@@ -1133,6 +1204,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     usage: state.usage,
     hops: state.hops,
     toolCalls: state.toolCalls,
+    readReferences: state.readReferences,
     stopReason: state.stopReason,
     ...(state.error ? { error: state.error } : {})
   });
@@ -1142,10 +1214,20 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     createLopuToolContext(input.viewer, input.context, () => {}, {
       requestScope: `${input.chatId}:${input.requestId}`,
       readOnly: input.readOnly,
+      resolveActionActor: input.resolveActionActor,
+      readAccessMode: input.readAccessMode,
+      signal: input.signal,
       chatId: input.chatId,
       approved,
       mint: (action) => deps.mintConfirmation({ userId: input.viewer.id, chatId: input.chatId, action })
     });
+
+  const restored = await restoreReadContext(input.readReferences, deps.runTool, makeContext());
+  const providerText = input.text + restored.text + checkpointResultContext(input.checkpointResults);
+  const newState = () => ({ ...newTurnState(), readReferences: normalizeReadReferences(restored.references) });
+
+  let promptSettings: LopuPromptSettings | undefined;
+  const readPromptSettings = async () => promptSettings ??= await deps.getPromptSettings(input.viewer.id);
 
   // --- the viewer's own provider (Secure Vault, design note §1.3) --------
   // Takes precedence over every mode, LOPU_CHAT_PROVIDER=test included: the
@@ -1164,8 +1246,15 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
       effort: entry.effort ?? null,
       speed: 'normal'
     });
-    const state = newTurnState();
+    const state = newState();
     const vaultFailure = async function* (model: string | null, error: unknown): AsyncGenerator<LopuChatStreamEvent, LopuChatTurnOutcome> {
+      if (entry.authMode === 'chatgpt-plan') {
+        const failure = normaliseChatGPTPlanError(error);
+        state.stopReason = 'error';
+        state.error = failure.message;
+        yield { type: 'error', message: failure.message, retryable: failure.retryable };
+        return outcome('vault', model ? vaultChoice(model) : null, state, model ?? undefined, entry.name);
+      }
       const message = friendlyVaultProviderError(entry.name, model, error);
       console.error(`[lopu] vault provider "${entry.name}" failed before replying:`, (error as any)?.message || error);
       yield { type: 'error', message, retryable: true };
@@ -1188,13 +1277,13 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
 
     const ctx = makeContext();
     const toolProtocol: LopuToolProtocol = config.transport === 'anthropic' ? 'native' : config.toolProtocol;
-    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved });
+    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved, accessMode: await ctx.readAccessMode(), promptSettings: await readPromptSettings() });
     const options = vaultClientOptions(config);
     const provider =
       config.transport === 'anthropic'
-        ? anthropicProvider({ client: deps.createAnthropic(options), choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: input.text, signal: input.signal })
-        : openAiProvider({ client: deps.createOpenAi(options), choice, systemText: prompt.text, history, text: input.text, toolMode: config.toolProtocol, signal: input.signal });
-    const loop = runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true });
+        ? anthropicProvider({ client: deps.createAnthropic(options), choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: providerText, media: input.media, signal: input.signal })
+        : openAiProvider({ client: deps.createOpenAi(options), choice, systemText: prompt.text, history, text: providerText, media: input.media, toolMode: config.toolProtocol, signal: input.signal, authMode: entry.authMode });
+    const loop = runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true, readNotes: input.readNotes });
 
     let first: IteratorResult<LopuChatStreamEvent, void>;
     try {
@@ -1216,6 +1305,12 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
       }
     } catch (error) {
       if (isAbortError(error)) state.stopReason = 'aborted';
+      else if (entry.authMode === 'chatgpt-plan') {
+        const failure = normaliseChatGPTPlanError(error);
+        state.stopReason = 'error';
+        state.error = failure.message;
+        yield { type: 'error', message: failure.message, retryable: failure.retryable };
+      }
       else {
         console.error(`[lopu] vault provider "${entry.name}" failed mid-reply:`, (error as any)?.message || error);
         state.stopReason = 'error';
@@ -1229,11 +1324,11 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
   // --- deterministic scripted provider ---------------------------------
   if (lopuChatProviderMode() === 'test') {
     const ctx = makeContext();
-    const state = newTurnState();
+    const state = newState();
     const provider = createLopuTestProvider({ userText: input.text, activePage: ctx.activePage, paceMs: deps.testPaceMs });
     yield meta('test', explicit, 'test');
     try {
-      yield* runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true });
+      yield* runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true, readNotes: input.readNotes });
     } catch (error) {
       if (isAbortError(error)) state.stopReason = 'aborted';
       else {
@@ -1254,7 +1349,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
   }
 
   if (!attempts.length) {
-    const state = newTurnState();
+    const state = newState();
     yield meta('fallback', null);
     state.text = yield* streamFallbackReply('unconfigured', deps.fallbackPaceMs);
     state.stopReason = 'fallback';
@@ -1264,15 +1359,15 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
   let lastError: unknown = null;
   for (const attempt of attempts) {
     const ctx = makeContext();
-    const state = newTurnState();
+    const state = newState();
     const toolMode = lopuOpenAiToolMode();
     const toolProtocol: LopuToolProtocol = attempt.provider === 'openai' && toolMode === 'text' ? 'text' : 'native';
-    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved });
+    const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved, accessMode: await ctx.readAccessMode(), promptSettings: await readPromptSettings() });
     const provider =
       attempt.provider === 'claude'
-        ? anthropicProvider({ client: deps.createAnthropic(), choice: attempt.choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: input.text, signal: input.signal })
-        : openAiProvider({ client: deps.createOpenAi(), choice: attempt.choice, systemText: prompt.text, history, text: input.text, toolMode, signal: input.signal });
-    const loop = runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true });
+        ? anthropicProvider({ client: deps.createAnthropic(), choice: attempt.choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: providerText, media: input.media, signal: input.signal })
+        : openAiProvider({ client: deps.createOpenAi(), choice: attempt.choice, systemText: prompt.text, history, text: providerText, media: input.media, toolMode, signal: input.signal });
+    const loop = runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true, readNotes: input.readNotes });
 
     // Pull the first event inside the try so a provider failing before any
     // output (bad key, no credits, rejected model) falls through cleanly to
@@ -1285,6 +1380,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
         state.stopReason = 'aborted';
         return outcome(attempt.provider, attempt.choice, state);
       }
+      await refreshUnavailableAiModel(attempt.provider === 'claude' ? 'anthropic' : 'openai', error);
       lastError = error;
       console.error(`[lopu] ${attempt.provider} failed before replying:`, (error as any)?.message || error);
       continue;
@@ -1304,19 +1400,23 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     } catch (error) {
       if (isAbortError(error)) state.stopReason = 'aborted';
       else {
-        console.error(`[lopu] ${attempt.provider} failed mid-reply:`, (error as any)?.message || error);
+        await refreshUnavailableAiModel(attempt.provider === 'claude' ? 'anthropic' : 'openai', error);
+        await recordErrorLog(error, { source: 'lopu-chat-stream', provider: attempt.provider });
         state.stopReason = 'error';
         state.error = String((error as any)?.message || error).slice(0, 300);
-        yield { type: 'error', message: 'Lopu lost the thread mid-reply — what streamed so far is kept. Try again.', retryable: true };
+        yield { type: 'error', message: 'The AI connection was interrupted. Your saved progress is kept — use Retry / Continue to pick up from here.', retryable: true };
       }
     }
     return outcome(attempt.provider, attempt.choice, state);
   }
 
   // every provider failed before saying anything — never leave the user empty-handed
-  const state = newTurnState();
+  const state = newState();
   yield meta('fallback', null);
-  state.text = yield* streamFallbackReply('failed', deps.fallbackPaceMs);
+  if (explicit) {
+    state.text = 'The selected model could not complete this reply. The provider could not process the request; please try again. Your model selection has been kept.';
+    yield { type: 'delta', text: state.text };
+  } else state.text = yield* streamFallbackReply('failed', deps.fallbackPaceMs);
   state.stopReason = 'fallback';
   state.error = lastError ? String((lastError as any)?.message || lastError).slice(0, 300) : undefined;
   return outcome('fallback', null, state);

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { MAX_PAGINATION_CURSOR_CHARS, INVALID_PAGINATION_CURSOR } from '~/schemas/paginationCursor';
+import { buildOverview, OVERVIEW_ROLES, parseOverviewInput, type OverviewRole, type OverviewThing } from '~/api/utils/agents/overviewCore';
+import { localQueryHref } from '../Actions/localUiAction';
 
-import { MAX_SHARED_SOURCE_LOADS, evictSharedLoads, queryScopeOf, readSourceCache, sourceCacheKey, writeSourceCache } from './webpageRuntime';
+import { MAX_SHARED_SOURCE_LOADS, gatherFormFields, evictSharedLoads, queryScopeOf, readSourceCache, sourceCacheKey, writeSourceCache } from './webpageRuntime';
 
 // The bounds the page runtime puts on things it does not control: the
 // shared-load map (how many in-flight/settled source requests it may retain),
@@ -68,6 +71,31 @@ test('the query scope caps value length and key count', () => {
 	assert.ok(Object.keys(queryScopeOf(`?${many}`)).length <= 32);
 });
 
+test('overview next-page cursors survive local navigation and query binding intact', () => {
+	const input = parseOverviewInput(new URLSearchParams('taskSchema=tasks&projectSchema=projects&agentSchema=agents&questionSchema=questions&progressSchema=progress&todoSchema=todos'));
+	const records = Object.fromEntries(OVERVIEW_ROLES.map(role => [role, []])) as Record<OverviewRole, OverviewThing[]>;
+	records.task = Array.from({ length: 55 }, (_, i) => ({ id: `task-${i}`, crystal: { title: String(i) } }));
+	const first = buildOverview(input, records, true, 'now');
+	assert.ok(first.nextCursor!.length > 200);
+	const href = localQueryHref('overview-page', { cursor: first.nextCursor });
+	assert.ok(href);
+	const scope = queryScopeOf(new URL(href, 'https://thingtime.test').search);
+	assert.equal(scope.cursor, first.nextCursor);
+	const next = buildOverview({ ...input, cursor: scope.cursor }, records, true, 'now');
+	assert.deepEqual(next.rows.map(row => row.id), ['task-50', 'task-51', 'task-52', 'task-53', 'task-54']);
+});
+
+test('pagination query values retain the transport budget and oversize stays an explicit refusal', () => {
+	const cursor = 'a'.repeat(MAX_PAGINATION_CURSOR_CHARS);
+	for (const key of ['cursor', 'todoCursor', 'progressCursor']) {
+		const href = localQueryHref('overview-page', { [key]: cursor });
+		assert.ok(href);
+		assert.equal(queryScopeOf(new URL(href, 'https://thingtime.test').search)[key], cursor);
+		assert.equal(localQueryHref('overview-page', { [key]: `${cursor}a` }), null);
+		assert.equal(queryScopeOf(`?${key}=${cursor}a`)[key], INVALID_PAGINATION_CURSOR);
+	}
+});
+
 // ── source cache: whose last result a page may paint ────────────────────────
 // /p/<page> is a shared public URL and a source result is the signed-in
 // viewer's own private data, so the cache line has to be per-viewer. These
@@ -132,4 +160,80 @@ test('a `__proto__` query key never becomes a scope entry', () => {
 	assert.equal(scope.safe, 'yes');
 	assert.equal(Object.prototype.hasOwnProperty.call(scope, '__proto__'), false);
 	assert.equal(Object.getPrototypeOf(scope), Object.prototype);
+});
+
+test('form gathering treats iframe password and checkbox fields by element type', async () => {
+	const { gatherFormFields } = await import('./webpageRuntime');
+	const fields = [
+		{ tagName: 'INPUT', type: 'password', value: 'must-not-be-collected', getAttribute: () => 'password' },
+		{ tagName: 'INPUT', type: 'checkbox', checked: false, value: 'on', getAttribute: () => 'enabled' },
+		{ tagName: 'INPUT', type: 'text', value: 'hello', getAttribute: () => 'message' }
+	];
+	const form = { querySelectorAll: () => fields.map((field) => ({ ...field, matches: () => false })) } as unknown as HTMLElement;
+	assert.deepEqual(gatherFormFields(form), { enabled: false, message: 'hello' });
+});
+
+test('forms preserve empty text, false, leading zeros and long text without collecting unsafe fields', async () => {
+	const { gatherFormFields } = await import('./webpageRuntime');
+	const fields = [
+		['notes', 'text', '', false],
+		['phone', 'text', '0412345678', false],
+		['long', 'text', 'a'.repeat(5000), false],
+		['secret', 'password', 'private', false],
+		['file', 'file', 'fakepath', false],
+		['disabled', 'text', 'old', true],
+		['constructor', 'text', 'bad', false]
+	].map(([name, type, value, disabled]) => ({ tagName: 'INPUT', type, value, getAttribute: () => name, matches: () => disabled }));
+	const result = gatherFormFields({ querySelectorAll: () => fields } as unknown as HTMLElement);
+	assert.deepEqual(result, { notes: '', phone: '0412345678', long: 'a'.repeat(5000) });
+});
+
+test('a source cache paints only the matching action and resolved input binding', () => {
+	withFakeStorage((store) => {
+		const a = JSON.stringify({ action: 'detail', inputs: { id: 'record-a' } });
+		const b = JSON.stringify({ action: 'detail', inputs: { id: 'record-b' } });
+		writeSourceCache('viewer', 'page', 'block', { id: 'record-a' }, a);
+		assert.deepEqual(readSourceCache('viewer', 'page', 'block', a), { id: 'record-a' });
+		assert.equal(readSourceCache('viewer', 'page', 'block', b), undefined);
+		writeSourceCache('viewer', 'page', 'block', { id: 'record-b' }, b);
+		assert.equal(readSourceCache('viewer', 'page', 'block', a), undefined);
+		assert.deepEqual(readSourceCache('viewer', 'page', 'block', b), { id: 'record-b' });
+		assert.equal(store.size, 1, 'record navigation reuses one bounded cache slot');
+	});
+});
+
+test('legacy unbound and malformed source caches cannot seed a new record', () => {
+	withFakeStorage((store) => {
+		const key = sourceCacheKey('viewer', 'page', 'block')!;
+		store.set(key, JSON.stringify({ id: 'old-record' }));
+		assert.equal(readSourceCache('viewer', 'page', 'block', 'new-binding'), undefined);
+		store.set(key, 'invalid json');
+		assert.equal(readSourceCache('viewer', 'page', 'block', 'new-binding'), undefined);
+		writeSourceCache('viewer', 'page', 'block', 'x'.repeat(256 * 1024), 'new-binding');
+		assert.equal(store.get(key), 'invalid json', 'oversized cache is not stored');
+	});
+});
+
+test('typed JSON form fields decode once and reject invalid drafts before an Action can run', async () => {
+	const { gatherFormFields } = await import('./webpageRuntime');
+	const form = (value: string) => ({ querySelectorAll: () => [{
+		tagName: 'INPUT', type: 'hidden', value, matches: () => false,
+		getAttribute: (key: string) => key === 'name' ? 'program' : key === 'data-tt-input-type' ? 'json' : null
+	}] } as unknown as HTMLElement);
+	for (const value of [{ nested: [[0, false], [null, '{name}']], ttArg: 'literal' }, '', 'null', '123', '$input.keep', null]) {
+		assert.deepEqual(gatherFormFields(form(JSON.stringify(value))), { program: value });
+	}
+	for (const value of ['', '{', 'x'.repeat(65537)]) assert.throws(() => gatherFormFields(form(value)), /Check the JSON/);
+});
+
+
+test('ordinary Actions cannot gather fields from nested transient settings hosts', () => {
+	const field = (name: string, privateHost: boolean) => ({
+		tagName: 'INPUT', type: 'text', value: privateHost ? 'synthetic-private-transfer-code' : 'public',
+		getAttribute: (key: string) => key === 'name' ? name : null,
+		matches: () => false,
+		closest: (selector: string) => privateHost && selector === '[data-tt-transient-boundary]' ? {} : null
+	});
+	const form = { querySelectorAll: () => [field('ordinary', false), field('destinationCode', true)] } as unknown as HTMLElement;
+	assert.deepEqual(gatherFormFields(form), { ordinary: 'public' });
 });

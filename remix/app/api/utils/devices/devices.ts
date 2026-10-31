@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { isDevicePlatform } from '../../../devices/platform';
+import { normalizeCapabilities, safeCapabilities } from './deviceCapabilities';
 
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { createSession, type SessionDoc } from '../auth/sessions';
@@ -109,22 +111,6 @@ const iso = (value: unknown): string | null => {
 	if (!value) return null;
 	const date = new Date(value as any);
 	return Number.isFinite(date.getTime()) ? date.toISOString() : null;
-};
-
-const safeCapabilities = (value: unknown): string[] =>
-	Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string').slice(0, 64) : [];
-
-const normalizeCapabilities = (value: unknown): string[] | null => {
-	if (value === undefined) return [];
-	if (!Array.isArray(value) || value.length > 64) return null;
-	const out: string[] = [];
-	for (const entry of value) {
-		if (typeof entry !== 'string') return null;
-		const capability = entry.trim().slice(0, 100);
-		if (!capability || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(capability)) return null;
-		if (!out.includes(capability)) out.push(capability);
-	}
-	return out.sort();
 };
 
 export type PublicDeviceState = DeviceStateSnapshot & {
@@ -329,13 +315,10 @@ type ClaimDeviceResult =
 	| { ok: true; op: 'prepare'; proof: { pairingId: string; serverNonce: string; expiresAt: string } }
 	| { ok: true; device: PublicDevice; credentialStored: true };
 
-const minimalPublicDevice = (doc: any): PublicDevice => ({
+export const minimalPublicDevice = (doc: any): PublicDevice => ({
 	id: String(doc.shareId),
 	name: String(doc.crystal?.name || 'Computer'),
-	platform:
-		doc.crystal?.platform === 'windows' || doc.crystal?.platform === 'linux' || doc.crystal?.platform === 'watchos'
-			? doc.crystal.platform
-			: 'macos',
+	platform: isDevicePlatform(doc.crystal?.platform) ? doc.crystal.platform : 'macos',
 	model: typeof doc.crystal?.model === 'string' ? doc.crystal.model : null,
 	osVersion: typeof doc.crystal?.osVersion === 'string' ? doc.crystal.osVersion : null,
 	appVersion: typeof doc.crystal?.appVersion === 'string' ? doc.crystal.appVersion : null,
@@ -622,6 +605,12 @@ export const claimDevicePairing = async (input: ClaimDeviceInput): Promise<Claim
 	return deviceFail(400, 'Pairing claim op must be prepare or complete; legacy unproved claims are rejected');
 };
 
+/** Native clients may bind local grants only to the owner of their current device credential. */
+export const readDeviceIdentity = async (ownerId: string, deviceId: string): Promise<DeviceFail | { ok: true; ownerId: string; deviceId: string }> => {
+	if (!(await deviceOwnedBy(ownerId, deviceId))) return deviceFail(404, 'Device not found');
+	return { ok: true, ownerId, deviceId };
+};
+
 export const listDevices = async (
 	ownerId: string,
 	requestedDeviceId?: unknown
@@ -799,6 +788,7 @@ export const listDevices = async (
 };
 
 type UpdateDeviceStateInput = {
+	capabilities?: unknown;
 	revision?: unknown;
 	state?: unknown;
 	connectors?: unknown;
@@ -809,6 +799,8 @@ export const updateDeviceState = async (
 	deviceId: string,
 	input: UpdateDeviceStateInput
 ): Promise<DeviceFail | { ok: true; revision: number; applied: boolean; stale: boolean }> => {
+	const capabilities = input?.capabilities === undefined ? undefined : normalizeCapabilities(input.capabilities);
+	if (capabilities === null) return deviceFail(400, 'capabilities must be a bounded list of identifiers');
 	const revision = Number(input?.revision);
 	if (!Number.isSafeInteger(revision) || revision < 1) return deviceFail(400, 'revision must be a positive safe integer');
 	const state = normalizeDeviceState(input?.state);
@@ -826,7 +818,7 @@ export const updateDeviceState = async (
 		things.find({ thingtime: 'device-connector', ownerId, targetId: deviceId } as any).toArray()
 	]);
 	const stateHash = devicePayloadHash(state);
-	const snapshotHash = deviceSnapshotHash(state, connectors);
+	const snapshotHash = deviceSnapshotHash(state, connectors, capabilities);
 	const stateDecision = decideDeviceRevision(
 		Number.isSafeInteger(existingState?.crystal?.revision) ? Number(existingState.crystal.revision) : null,
 		typeof existingState?.crystal?.snapshotHash === 'string' ? existingState.crystal.snapshotHash : null,
@@ -886,6 +878,10 @@ export const updateDeviceState = async (
 					{ ...HOME_ACCOUNTING, session }
 				);
 				if (!updated.modifiedCount) throw Object.assign(new Error('device_snapshot_race'), { status: 409 });
+			}
+			if (capabilities !== undefined) {
+				await updateAccountedThing(things, { shareId: deviceId, ownerId, thingtime: 'device' } as any,
+					{ $set: { 'crystal.capabilities': capabilities, updatedAt: now } }, { ...HOME_ACCOUNTING, session });
 			}
 			await deleteAccountedThings(
 				things,

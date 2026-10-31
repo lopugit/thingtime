@@ -1,3 +1,4 @@
+import { withFoundPostBrowser, foundPostVisitIp } from '~/api/utils/things/foundPostRequest';
 import { json } from '~/api/http';
 
 import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
@@ -30,9 +31,11 @@ import {
   viewerOf,
   withLinkKeys
 } from '~/api/utils/things/things';
+import { isCustomMongoEndpointActive } from '~/api/utils/mongodb/endpoint';
 import { parseCommentSort } from '~/api/utils/things/updownCore';
 import { sharedThingRead } from './sharedThingRead';
 import { deleteOwnedChatArchive } from '~/api/utils/things/chatArchiveOwnerTransfer';
+import { renameLibraryThing } from '~/api/utils/things/renameLibraryThing';
 import { readOwnedChatArchive } from '~/api/utils/things/chatArchiveReadTransfer';
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
@@ -84,7 +87,7 @@ const csv = (value: string | null): string[] =>
 // shipped comment page — default: the newest comments, oldest → newest).
 // GET /api/v1/things?target=<shareId>&thingtime=comment&cursor=&limit= — list
 // things attached to a viewable thing (its comments/reactions).
-// GET /api/v1/things?thingtime=&folder=&cursor=&limit= — list your own things
+// GET /api/v1/things?thingtime=&schemaId=&parentId=&folder=&cursor=&limit= — list your own things
 // (folder=root for unfiled things, folder=<folder shareId> for its children;
 // session auth may add appId=<clientId> to browse ONE app's namespace).
 //
@@ -101,9 +104,20 @@ export const loader = async ({ request }: { request: Request }) => {
   // private-only) must have its audience fence applied to everything it lists.
   // A presented ?key= rides along so hidden things resolve for key-holders —
   // logged-out ones included.
-  const viewer = withLinkKeys(viewerOf(user, actorPat(actor)), [(params.get('key') || '').trim()]);
+  const viewer = withLinkKeys(withFoundPostBrowser(viewerOf(user, actorPat(actor)), request, actor.kind === 'anonymous'), [(params.get('key') || '').trim()]);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
+
+  const commentProjection = params.has('commentProjection');
+  if (commentProjection) {
+    const id = (params.get('id') || '').trim(), target = (params.get('target') || '').trim();
+    const invalid = ['commentProjection', 'id', 'target', 'thingtime', 'cursor', 'limit'].some(key => params.getAll(key).length > 1) || params.get('commentProjection') !== 'true' || actor.kind === 'app' || isCustomMongoEndpointActive() ||
+      ['archive', 'sharedRoot', 'appId', 'folder', 'commentSort', 'schemaId', 'parentId'].some(key => params.has(key)) ||
+      (id ? params.has('target') || ['thingtime', 'cursor', 'limit'].some(key => params.has(key))
+          : params.has('id') || !target || csv(params.get('thingtime')).length !== 1 || csv(params.get('thingtime'))[0] !== 'comment') ||
+      (params.has('limit') && !/^(?:[1-9]|1[0-9]|20)$/.test(params.get('limit') || ''));
+    if (invalid) return json({ ok: false, error: 'Invalid first-party discussion projection request' }, { status: 400, headers: cors });
+  }
 
   if (params.has('archive')) {
     const headers = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' };
@@ -138,13 +152,20 @@ export const loader = async ({ request }: { request: Request }) => {
   }
 
   const id = (params.get('id') || '').trim();
+  if (['schemaId', 'parentId', 'builderApp'].some(key => params.getAll(key).length > 1)) return json({ ok: false, error: 'Crystal filters must be supplied once' }, { status: 400, headers: cors });
+  if (params.has('builderApp') && params.get('builderApp') !== 'true') return json({ ok: false, error: 'builderApp must be true' }, { status: 400, headers: cors });
   if (id) {
+    if (params.has('schemaId') || params.has('parentId') || params.has('builderApp')) return json({ ok: false, error: 'Crystal filters apply to Thing lists only' }, { status: 400, headers: cors });
     // commentSort=top|new|old re-orders the shipped comment page of the post
     // projection (round 2 S7); absent keeps the default page, a typo is a 400
     // (never a silently re-ordered thread)
     const commentSort = parseCommentSort(params.get('commentSort') || undefined);
     if (commentSort.ok === false) return json({ ok: false, error: commentSort.error }, { status: 400, headers: cors });
-    const result = await getThing(viewer, id, app, { commentSort: commentSort.sort });
+    // Canonical-link reads stay readable during limiter outages, but creating
+    // durable discovery state is bounded per authenticated user or request IP.
+    const canRemember = (actor.kind === 'anonymous' || (actor.kind === 'user' && user?.accountKind === 'user'));
+    const discoveryAllowed = canRemember && (await enforceRateLimit(request, 'things.views', user ? `user:${user.id}` : null, { failClosed: true })).allowed;
+    const result = await getThing(viewer, id, app, { commentProjection, commentSort: commentSort.sort, rememberDiscovery: discoveryAllowed, discoveryIp: foundPostVisitIp(request) });
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }
@@ -152,20 +173,24 @@ export const loader = async ({ request }: { request: Request }) => {
     // (post/parent/root are first-party projections — null under the app lens);
     // the response echoes the comment order it shipped (null = default)
     return json(
-      { ok: true, thing: result.thing, post: result.post, parent: result.parent, root: result.root, commentSort: commentSort.sort },
-      { headers: cors }
+      { ok: true, thing: result.thing, post: result.post, discussion: result.discussion, parent: result.parent, root: result.root, commentSort: commentSort.sort },
+      { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } }
     );
   }
 
   const result = await listThings(
     viewer,
     {
+      commentProjection,
       thingtime: csv(params.get('thingtime')),
+      schemaId: params.get('schemaId'),
+      parentId: params.get('parentId'),
       targetId: (params.get('target') || '').trim() || null,
       folder: (params.get('folder') || '').trim() || null,
       cursor: params.get('cursor'),
       limit: Number(params.get('limit')) || undefined,
-      appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null
+      appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null,
+      builderAppOnly: params.get('builderApp') === 'true'
     },
     app,
     { archiveOwnerId: actor.kind === 'user' && user?.accountKind === 'user' ? user.id : undefined }
@@ -173,7 +198,7 @@ export const loader = async ({ request }: { request: Request }) => {
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
   }
-  return json({ ok: true, things: result.things, nextCursor: result.nextCursor }, { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } });
+  return json({ ok: true, things: result.things, nextCursor: result.nextCursor, ...(result.comments ? { comments: result.comments } : {}) }, { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } });
 };
 
 // One endpoint, full CRUD (the GET loader above is the R):
@@ -356,6 +381,12 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   if (method === 'PATCH') {
+    if (Object.prototype.hasOwnProperty.call(body || {}, 'displayTitle')) {
+      if (Object.keys(body).some(key => !['id', 'displayTitle', 'expectedUpdatedAt'].includes(key))) return json({ ok: false, error: 'Rename accepts only id, displayTitle and expectedUpdatedAt' }, { status: 400, headers: cors });
+      const result = await renameLibraryThing({ actorKind: actor.kind, accountKind: user.accountKind, ownerId: user.id,
+        sameOrigin: isSameOriginAttachmentRequest(request), id: body.id, title: body.displayTitle, expectedUpdatedAt: body.expectedUpdatedAt });
+      return json(result, { status: result.ok === false ? result.status : 200, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
+    }
     // Sync attachments before the document update so the projection the
     // client gets back already lists them in the new order — and so
     // updateThing's boundAttachmentPresence sees freshly added media when it

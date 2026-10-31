@@ -1,9 +1,11 @@
+import { webpageComponentRefs } from '../../../timeline/componentBindings.ts';
 import { getThingsCollection } from '../mongodb/collections';
 import {
 	fail,
 	canViewInherited,
 	batchedThingLookup,
 	findViewableThing,
+	withThingLink,
 	toPublicThings,
 	visibilityQueryFor,
 	withMatch,
@@ -15,7 +17,6 @@ import {
 } from '../things/things';
 import {
 	COMPONENT_KEY_PATTERN,
-	MAX_WEBPAGE_BLOCK_REF_CHARS,
 	MAX_WEBPAGE_ROUTE_CHARS,
 	WEBPAGE_ROUTE_PATTERN
 } from '~/schemas/registry';
@@ -46,18 +47,7 @@ export type ResolveWebpageResult = {
 	refs: Record<string, string | null>;
 };
 
-const collectComponentRefs = (blocks: unknown, refs: Set<string>): void => {
-	if (!Array.isArray(blocks)) return;
-	for (const block of blocks) {
-		if (!block || typeof block !== 'object') continue;
-		const raw = block as Record<string, unknown>;
-		if (raw.type === 'component' && typeof raw.component === 'string') {
-			const ref = raw.component.trim();
-			if (ref && ref.length <= MAX_WEBPAGE_BLOCK_REF_CHARS && !/[$\s]/.test(ref)) refs.add(ref);
-		}
-		if (raw.type === 'container') collectComponentRefs(raw.children, refs);
-	}
-};
+const collectComponentRefs = (blocks: unknown, refs: Set<string>): void => { for (const ref of webpageComponentRefs(blocks)) refs.add(ref); };
 
 // Resolve every distinct component ref in one batched query. Priority per
 // ref: exact visible shareId → seeded platform doc (component-<ref>) →
@@ -65,7 +55,8 @@ const collectComponentRefs = (blocks: unknown, refs: Set<string>): void => {
 const resolveComponents = async (
 	viewer: Viewer,
 	page: ThingDoc | null,
-	inheritAudience = true
+	inheritAudience = true,
+	storage?: { collection: any; session: any; capture: true }
 ): Promise<{ components: PublicThing[]; refs: Record<string, string | null> }> => {
 	const wanted = new Set<string>();
 	collectComponentRefs(page?.crystal?.blocks, wanted);
@@ -73,7 +64,7 @@ const resolveComponents = async (
 
 	const refs = [...wanted];
 	const slugRefs = refs.filter((ref) => COMPONENT_KEY_PATTERN.test(ref));
-	const collection = await getThingsCollection();
+	const collection = storage?.collection ?? await getThingsCollection();
 	const visibility = visibilityQueryFor(viewer, []);
 	// Only a stored, authorised composition delegates its audience. The demo
 	// block-list helper has no root authority and retains viewer-local lookup.
@@ -104,7 +95,7 @@ const resolveComponents = async (
 		] }, doc: { $first: '$$ROOT' } } },
 		{ $replaceRoot: { newRoot: '$doc' } },
 		{ $limit: refs.length * 3 }
-	]).toArray()) as unknown as ThingDoc[];
+	], storage ? { session: storage.session } : {}).toArray()) as unknown as ThingDoc[];
 
 	const lookup = batchedThingLookup();
 	const permitted = (await Promise.all(docs.map(async (doc) => {
@@ -118,7 +109,7 @@ const resolveComponents = async (
 		return allowed ? doc : null;
 	}))).filter((doc): doc is ThingDoc => !!doc);
 
-	const resolved: Record<string, string | null> = {};
+	const resolved: Record<string, string | null> = Object.create(null);
 	const picked = new Map<string, ThingDoc>();
 	for (const ref of refs) {
 		const doc = selectComponent(ref, permitted, compositionOwnerId);
@@ -126,9 +117,16 @@ const resolveComponents = async (
 		if (doc?.shareId) picked.set(doc.shareId, doc);
 	}
 
-	const components = await toPublicThings([...picked.values()], viewer);
+	const components = storage?.capture
+		? [...picked.values()].map(doc => ({ id: doc.shareId, crystal: doc.crystal })) as PublicThing[]
+		: await toPublicThings([...picked.values()], viewer);
 	return { components, refs: resolved };
 };
+
+/** Same resolver and audience boundary as the live page, reading component
+ * definitions in the content transaction. Only approved render fields leave. */
+export const resolvePageComponentCapture = async (collection: any, session: any, page: ThingDoc) =>
+ resolveComponents(await withFriendIds({ id: page.ownerId }), page, true, { collection, session, capture: true });
 
 // Shared writers can edit the included content, but cannot use a new guessed
 // author-local ref to publish an unrelated private component. Only the owner
@@ -218,17 +216,9 @@ export const resolveWebpage = async (
 		: { shareId: id, thingtime: 'webpage', acl: 'tt:all' };
 	let doc = (await collection.findOne(match as any)) as any as ThingDoc | null;
 
-	// Hidden 🕵️ pages are unlisted, so they can NEVER come back from the match
-	// above: visibilityQueryFor only knows circles, own-things and grants, and
-	// tt:hidden deliberately matches no viewer — the audience of a hidden page
-	// is whoever presents its secret linkKey. The reader threads that key here
-	// (/p/<id>?key= → _resolve.tsx → withLinkKeys), so consult it with the same
-	// authority /api/v1/things uses: findViewableThing → canView, which admits a
-	// key holder (logged out included) only while the acl still says hidden, so
-	// un-hiding a page instantly retires every link that circulated. Narrow by
-	// design — a miss stays a plain 404, and nothing here widens feeds, search,
-	// or any listing path.
-	if (!doc && viewer?.linkKeys?.size) {
+	// A direct canonical id opens an unlisted page. This exact lookup never
+	// changes feed/search visibility or the separate route/page-key resolver.
+	if (!doc) {
 		const byKey = await findViewableThing(id, viewer);
 		if (byKey && (byKey.thingtime || []).includes('webpage')) doc = byKey;
 	}
@@ -252,5 +242,5 @@ export const resolveWebpage = async (
 	// Someone else's shared page must report as 'system' so a viewer who edits
 	// it takes the fork path (their own twin) instead of a doomed update.
 	const source: 'user' | 'system' = viewer?.id && doc.ownerId === viewer.id ? 'user' : 'system';
-	return resultFor(viewer, doc, source);
+	return resultFor(withThingLink(viewer, doc.shareId), doc, source);
 };

@@ -2,11 +2,17 @@
 import {
 	COLLECTION_SCHEMA_VERSIONS,
 	DEVICE_CONTROL_THINGTIME,
-	MIGRATION_DIAGNOSTIC_THINGTIME,
+	MIGRATION_DIAGNOSTIC_THINGTIME, ERROR_LOG_THINGTIME, STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
 	USER_STORAGE_ACCOUNTING_VERSION
 } from '../../../schemas/registry.ts';
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
 import { attachmentObjectSizeBytesForAccounting } from '../attachments/attachmentCore.ts';
+import { timelineNoteBytes, timelinePayloadBytes } from '../timeline/envelope.ts';
+import { TIMELINE_EVENT_KIND } from '../../../timeline/contract.ts';
+
+export class InvalidTimelineStorageEnvelopeError extends Error {
+	constructor() { super('Timeline storage envelope is invalid'); this.name = 'InvalidTimelineStorageEnvelopeError'; }
+}
 
 export class InvalidAttachmentStorageEnvelopeError extends Error {
   constructor() {
@@ -30,6 +36,9 @@ export const thingStorageSizeBytes = (doc: {
   attachmentState?: unknown;
   objectSizeBytes?: unknown;
   objectKey?: unknown;
+  timelineEnvelopeVersion?: unknown;
+  timelineNoteVersion?: unknown;
+  secure?: unknown;
 }): number => {
   const payloadBytes = Buffer.byteLength(
     JSON.stringify({
@@ -41,7 +50,12 @@ export const thingStorageSizeBytes = (doc: {
   );
   const objectBytes = attachmentObjectSizeBytesForAccounting(doc);
   if (objectBytes === null) throw new InvalidAttachmentStorageEnvelopeError();
-  const total = payloadBytes + (objectBytes ?? 0);
+  const historyBytes = timelinePayloadBytes(doc);
+  if (historyBytes === null) throw new InvalidTimelineStorageEnvelopeError();
+  const noteBytes = timelineNoteBytes(doc);
+  if (noteBytes === null) throw new InvalidTimelineStorageEnvelopeError();
+  const timelineV2 = Array.isArray(doc.thingtime) && doc.thingtime.includes(TIMELINE_EVENT_KIND) && (doc.timelineEnvelopeVersion === 2 || doc.timelineEnvelopeVersion === 3);
+  const total = (timelineV2 ? 0 : payloadBytes) + (objectBytes ?? 0) + historyBytes + noteBytes;
   if (!Number.isSafeInteger(total)) throw new RangeError('Thing storage size exceeds the exact counter range');
   return total;
 };
@@ -63,6 +77,8 @@ export const currentContentStorageSizeBytes = (doc: {
   attachmentState?: unknown;
   objectSizeBytes?: unknown;
   objectKey?: unknown;
+  timelineEnvelopeVersion?: unknown;
+  secure?: unknown;
 }): number | null => {
   let canonical: number;
   try {
@@ -102,7 +118,10 @@ export type UserStorageUsage = {
 };
 
 export const CONTROL_PLANE_STORAGE_THINGTIMES = [
+  STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
+  'post-discovery',
 	'lopu-recording-settings',
+	'lopu-background-task',
 	'lopu-recording-job',
 	'lopu-recording-reminder',
   'account-link',
@@ -146,7 +165,7 @@ export const CONTROL_PLANE_STORAGE_THINGTIMES = [
   'subscription-tier',
   'user',
 	'waitlist',
-	MIGRATION_DIAGNOSTIC_THINGTIME
+	MIGRATION_DIAGNOSTIC_THINGTIME, ERROR_LOG_THINGTIME
 ] as const;
 const CONTROL_PLANE_THINGTIMES = new Set<string>(CONTROL_PLANE_STORAGE_THINGTIMES);
 
@@ -169,6 +188,23 @@ export const nonSandboxStorageCandidateExpression = {
 };
 export const realStorageSourceExpression = {
   $eq: [{ $type: '$sandboxExpiresAt' }, 'missing']
+};
+
+// The same source-stamp proof is required by reconciliation and release
+// readiness. Keep malformed/legacy candidates outside this match rather than
+// silently dropping them from the billable census.
+export const currentStorageSourceMatch = {
+  schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+  thingtime: { $type: 'array' },
+  storageClass: 'content',
+  storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+  sizeBytes: { $type: 'number', $gte: 0, $lte: Number.MAX_SAFE_INTEGER },
+  $expr: {
+    $and: [
+      realStorageSourceExpression,
+      { $eq: ['$sizeBytes', { $convert: { input: '$sizeBytes', to: 'long', onError: null, onNull: null } }] }
+    ]
+  }
 };
 
 export const billableStorageCandidateExpression = {

@@ -3,7 +3,9 @@ import test from 'node:test';
 
 // @ts-ignore Node executes this TypeScript test directly and requires the .ts extension.
 import {
+	abortLopuTurn,
 	bindLopuApi,
+	archiveLopuChat,
 	confirmLopuTool,
 	declineLopuTool,
 	getLopuStoreSnapshot,
@@ -17,6 +19,8 @@ import {
 	selectLopuChat,
 	sendLopuMessage,
 	setLopuSettings,
+  setLopuAiDefaults,
+  createLopuChat,
 	type AiModelPublic,
 	type LopuApiClient,
 	type LopuVaultProvider
@@ -219,20 +223,20 @@ test('a 402 / 403 from the reply endpoint becomes a gated turn kept in the timel
 	resetLopuStoreForTests();
 });
 
-test('reconcileLopuSettings keeps a providerId only while the vault lists it as available', () => {
+test('reconcileLopuSettings retains explicit credential intent even after revocation or catalog removal', () => {
 	assert.equal(reconcileLopuSettings({ model: 'gpt-5', providerId: 'vp-1' }, MODELS, DEFAULTS, VAULT).providerId, 'vp-1');
-	assert.equal(reconcileLopuSettings({ model: 'gpt-5', providerId: 'vp-off' }, MODELS, DEFAULTS, VAULT).providerId, null);
-	assert.equal(reconcileLopuSettings({ model: 'gpt-5', providerId: 'ghost' }, MODELS, DEFAULTS, VAULT).providerId, null);
-	// an unknown vault (null) trusts the cached choice; an empty list drops it
+	assert.equal(reconcileLopuSettings({ model: 'gpt-5', providerId: 'vp-off' }, MODELS, DEFAULTS, VAULT).providerId, 'vp-off');
+	assert.equal(reconcileLopuSettings({ model: 'gpt-5', providerId: 'ghost' }, MODELS, DEFAULTS, VAULT).providerId, 'ghost');
+	// Both an unknown vault and an empty catalog preserve the explicit pin.
 	assert.equal(reconcileLopuSettings({ providerId: 'ghost' }, MODELS, DEFAULTS, null).providerId, 'ghost');
-	assert.equal(reconcileLopuSettings({ providerId: 'ghost' }, MODELS, DEFAULTS, []).providerId, null);
+	assert.equal(reconcileLopuSettings({ providerId: 'ghost' }, MODELS, DEFAULTS, []).providerId, 'ghost');
 	// the catalog choice still clamps alongside the provider
 	const clamped = reconcileLopuSettings({ model: 'claude-opus-5', effort: 'max', providerId: 'vp-1' }, MODELS, DEFAULTS, VAULT);
 	assert.deepEqual(clamped, { model: 'gpt-5', effort: 'high', speed: 'normal', providerId: 'vp-1' });
 	assert.deepEqual(reconcileLopuSettings(null, [], null, null), { model: null, effort: null, speed: null, providerId: null });
 });
 
-test('the catalog load adopts vaultProviders + vault and drops a providerId the vault no longer offers', async () => {
+test('the catalog load adopts vaultProviders + vault and preserves a providerId the vault no longer offers', async () => {
 	resetLopuStoreForTests();
 	const { client } = fakeClient();
 	bindLopuApi(client);
@@ -243,7 +247,7 @@ test('the catalog load adopts vaultProviders + vault and drops a providerId the 
 	const snapshot = getLopuStoreSnapshot();
 	assert.equal(snapshot.vaultProviders.length, 2);
 	assert.deepEqual(snapshot.vault, { configured: true });
-	assert.equal(snapshot.settings.providerId, null);
+	assert.equal(snapshot.settings.providerId, 'ghost');
 	assert.equal(snapshot.settings.model, 'gpt-5');
 	resetLopuStoreForTests();
 });
@@ -270,11 +274,11 @@ test('choosing a provider persists it on the active chat and clears it back thro
 	setLopuSettings({ providerId: null });
 	await flush();
 	assert.deepEqual(calls.find((call) => call.name === 'chats.update')?.args, { chatId: 'chat-1', providerId: null });
-	// a model change alone never touches the chat's provider
+	// Model/effort edits persist independently without changing the credential.
 	calls.length = 0;
 	setLopuSettings({ effort: 'low' });
 	await flush();
-	assert.equal(calls.filter((call) => call.name === 'chats.update').length, 0);
+	assert.deepEqual(calls.find(call => call.name === 'chats.update')?.args, { chatId: 'chat-1', effort: 'low' });
 	resetLopuStoreForTests();
 });
 
@@ -299,7 +303,7 @@ test('selecting a chat adopts its stored providerId (and a chat without one clea
 	assert.equal(getLopuStoreSnapshot().settings.providerId, null, 'an explicit null clears the provider');
 	setLopuSettings({ providerId: 'vp-1' });
 	selectLopuChat('chat-legacy');
-	assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1', 'a row without the key leaves the choice alone');
+	assert.equal(getLopuStoreSnapshot().settings.providerId, null, 'a legacy chat never inherits another conversation’s credential');
 	resetLopuStoreForTests();
 });
 
@@ -312,7 +316,7 @@ test('send carries providerId in the reply body and a vault meta names the provi
 	const plain = await sendLopuMessage('hello');
 	assert.equal(plain.ok, true);
 	const plainBody = calls.find((call) => call.name === 'reply')?.args as { providerId?: string; model?: string };
-	assert.equal(plainBody.providerId, undefined);
+	assert.equal(plainBody.providerId, null, 'new chats explicitly use credits unless a credential was chosen');
 	assert.equal(plainBody.model, 'gpt-5');
 
 	calls.length = 0;
@@ -448,4 +452,493 @@ test('a Confirm card sends its grant back once as a "Confirmed:" turn; Cancel re
 	assert.equal(calls.filter((call) => call.name === 'reply').length, 0);
 	assert.equal(getLopuStoreSnapshot().turns[requestId3].tools[0].confirm?.resolved, null);
 	resetLopuStoreForTests();
+});
+
+test('another conversation can reply while the first stream stays active', async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('parallel-owner');
+ let controller: ReadableStreamDefaultController<Uint8Array>;
+ const emit = (event: unknown) => controller.enqueue(new TextEncoder().encode(JSON.stringify(event) + '\n'));
+ const { client } = fakeClient({reply: body => body.chatId === 'first-chat' ? new Response(new ReadableStream({start(c) {controller=c; emit({type:'meta',chatId:body.chatId,userMessageId:'first-user',requestId:body.requestId});}}),{headers:{'Content-Type':'application/x-ndjson'}}) : ndjson([{type:'meta',chatId:body.chatId,userMessageId:'second-user',requestId:body.requestId},{type:'delta',text:'Second complete'},{type:'done',stopReason:'end_turn'}])});
+ bindLopuApi(client); selectLopuChat('first-chat');
+ const first = sendLopuMessage('First reply'); await flush();
+ selectLopuChat('second-chat'); const second = await sendLopuMessage('Second reply');
+ assert.equal(second.ok,true);
+ assert.equal(Object.values(getLopuStoreSnapshot().turns).find(t=>t.chatId==='first-chat')?.status,'streaming');
+ emit({type:'delta',text:'First complete'});emit({type:'done',stopReason:'end_turn'});controller.close();
+ assert.equal((await first).ok,true);assert.equal(getLopuStoreSnapshot().activeChatId,'second-chat');
+ assert.equal(Object.values(getLopuStoreSnapshot().turns).filter(t=>t.status==='done').length,2);
+ resetLopuStoreForTests();
+});
+
+test('background conversation reads reject an older account generation, even after switching back', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('viewer-a');
+  const { client } = fakeClient(); let resolve!: (value: unknown) => void;
+  client.chats.list = () => new Promise(r => { resolve = r; }); bindLopuApi(client);
+  const pending = loadLopuChats({ quiet: true });
+  hydrateLopuStore('viewer-b'); hydrateLopuStore('viewer-a');
+  resolve({ ok: true, chats: [{ id: 'stale', name: 'Stale response' }] }); await pending;
+  assert.deepEqual(getLopuStoreSnapshot().chats, []);
+});
+
+test('background reads preserve cached conversations on malformed responses and network failures', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('viewer-a');
+  const { client } = fakeClient({ chats: [{ id: 'saved', name: 'Saved chat' }] }); bindLopuApi(client);
+  await loadLopuChats();
+  client.chats.list = async () => ({ ok: false }); await loadLopuChats({ quiet: true });
+  assert.equal(getLopuStoreSnapshot().chats[0].id, 'saved');
+  client.chats.list = async () => { throw new Error('offline'); }; await loadLopuChats({ quiet: true });
+  assert.equal(getLopuStoreSnapshot().chats[0].id, 'saved'); assert.equal(getLopuStoreSnapshot().error, null);
+});
+
+test('periodic reads discover new conversations without changing the selected chat', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('viewer-a');
+  const { client } = fakeClient({ chats: [{ id: 'first', name: 'First' }] }); bindLopuApi(client);
+  await loadLopuChats(); selectLopuChat('first');
+  client.chats.list = async () => ({ ok: true, chats: [{ id: 'second', name: 'Created elsewhere' }, { id: 'first', name: 'First' }] });
+  await loadLopuChats({ quiet: true });
+  assert.equal(getLopuStoreSnapshot().chats.length, 2); assert.equal(getLopuStoreSnapshot().activeChatId, 'first');
+  client.messages = async () => ({ ok: true, messages: [{ id: 'remote-message', chatId: 'first', text: 'From another tab', createdAt: '2026-09-16T00:00:00Z' }] });
+  await loadLopuMessages('first');
+  assert.equal(getLopuStoreSnapshot().messages.first[0].text, 'From another tab');
+});
+
+test('an older list read cannot undo a rename and polling waits for the write', async () => {
+  const { renameLopuChat } = await import('./lopuChatStore.ts');
+  resetLopuStoreForTests(); hydrateLopuStore('viewer-a');
+  const { client } = fakeClient({ chats: [{ id: 'first', name: 'Old title' }] }); bindLopuApi(client); await loadLopuChats();
+  let resolveRead!: (value: unknown) => void, resolveWrite!: (value: unknown) => void; let reads = 0;
+  client.chats.list = () => { reads++; return new Promise(r => { resolveRead = r; }); };
+  client.chats.update = () => new Promise(r => { resolveWrite = r; });
+  const pendingRead = loadLopuChats({ quiet: true }); const pendingWrite = renameLopuChat('first', 'New title');
+  resolveRead({ ok: true, chats: [{ id: 'first', name: 'Old title' }] }); await pendingRead;
+  await loadLopuChats({ quiet: true }); assert.equal(reads, 1);
+  assert.equal(getLopuStoreSnapshot().chats[0].name, 'New title');
+  resolveWrite({ ok: true, chat: { id: 'first', name: 'New title' } }); await pendingWrite;
+});
+
+test('a deleted conversation clears cached messages when the read API returns 404', async () => {
+  const { getMessengerJson } = await import('../Messenger/messengerRequest.ts');
+  resetLopuStoreForTests(); hydrateLopuStore('viewer-a');
+  const { client } = fakeClient({ chats: [{ id: 'gone', name: 'Deleted elsewhere' }] }); bindLopuApi(client);
+  client.messages = async () => ({ ok: true, messages: [{ id: 'm', chatId: 'gone', text: 'Private history', createdAt: '2026-09-16T00:00:00Z' }] });
+  await loadLopuChats(); selectLopuChat('gone'); await loadLopuMessages('gone');
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({ ok: false, error: 'Chat not found' }), { status: 404 });
+    client.messages = () => getMessengerJson('/api/v1/chats/messages?chatId=gone');
+    await loadLopuMessages('gone');
+    assert.deepEqual(getLopuStoreSnapshot().messages.gone, []);
+    assert.equal(getLopuStoreSnapshot().activeChatId, null);
+    assert.deepEqual(getLopuStoreSnapshot().chats, []);
+  } finally { globalThis.fetch = original; }
+});
+
+
+test('message acceptance releases the composer before the reply stream finishes', async () => {
+	resetLopuStoreForTests(); hydrateLopuStore('owner');
+	let stream!: ReadableStreamDefaultController<Uint8Array>;
+	const encoder = new TextEncoder();
+	const { client } = fakeClient({ reply: body => new Response(new ReadableStream({
+		start(controller) {
+			stream = controller;
+			controller.enqueue(encoder.encode(JSON.stringify({ type: 'meta', chatId: 'chat-1', userMessageId: 'u-1', requestId: body.requestId }) + '\n'));
+		}
+	})) });
+	bindLopuApi(client);
+	let accepted = 0;
+	let finished = false;
+	const sending = sendLopuMessage('File attached', { onAccepted: () => { accepted++; } }).then(result => { finished = true; return result; });
+	await flush();
+	assert.equal(accepted, 1);
+	assert.equal(finished, false);
+	stream.enqueue(encoder.encode(JSON.stringify({ type: 'done', assistantMessageId: 'a-1', messages: [], stopReason: 'end_turn' }) + '\n'));
+	stream.close();
+	await sending;
+	assert.equal(accepted, 1);
+});
+
+test('rejected sends do not release draft attachments', async () => {
+	resetLopuStoreForTests(); hydrateLopuStore('owner');
+	const { client } = fakeClient({ reply: () => new Response('Unavailable', { status: 503 }) });
+	bindLopuApi(client);
+	let accepted = false;
+	const result = await sendLopuMessage('Retry me', { onAccepted: () => { accepted = true; } });
+	assert.equal(result.ok, false);
+	assert.equal(accepted, false);
+});
+
+const continuationReply = (body: any, reason: string, extra: unknown[] = [], saved = true) => ndjson([
+ { type: 'meta', chatId: body.chatId || 'chat-1', userMessageId: `u-${body.requestId}`, requestId: body.requestId, model: body.model || null, effort: body.effort || null, speed: body.speed || 'normal', provider: 'openai', label: 'GPT-5' },
+ { type: 'delta', text: 'Progress saved.' }, ...extra,
+ { type: 'done', assistantMessageId: saved ? `a-${body.requestId}` : '', messages: [], stopReason: reason }
+]);
+
+test('saved budget boundaries automatically continue with fresh IDs and preserve the selected model', async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('owner');
+ let count = 0, accepted = 0;
+ const { client, calls } = fakeClient({ reply: body => continuationReply(body, count++ === 0 ? 'time_limit' : 'end_turn') });
+ bindLopuApi(client);
+ const result = await sendLopuMessage('Build it', { settings: { model: 'gpt-5', effort: 'high', providerId: null }, onAccepted: () => accepted++, attachmentIds: ['file'], confirmations: [{ key: 'once', token: 'grant' }], context: { route: '/builder', page: { id: 'page', blocks: [] } } });
+ assert.equal(result.ok, true);
+ const bodies = calls.filter(c => c.name === 'reply').map(c => c.args as any);
+ assert.equal(bodies.length, 2);
+ assert.equal(bodies[1].chatId, 'chat-1');
+ assert.notEqual(bodies[0].requestId, bodies[1].requestId);
+ assert.equal(bodies[1].model, 'gpt-5'); assert.equal(bodies[1].effort, 'high');
+ assert.match(bodies[1].text, /Do not repeat completed actions/);
+ assert.equal(bodies[1].attachmentIds, undefined); assert.equal(bodies[1].confirmations, undefined);
+ assert.equal(bodies[1].context.page.blocks, undefined); assert.equal(bodies[1].context.page.id, 'page'); assert.equal(accepted, 1);
+ assert.equal(getLopuStoreSnapshot().sending, false);
+});
+
+test('automatic continuation has no fixed step or continuation count cap', async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('owner');
+ let count = 0;
+ const { client, calls } = fakeClient({ reply: body => continuationReply(body, count++ < 16 ? 'checkpoint' : 'end_turn') }); bindLopuApi(client);
+ await sendLopuMessage('Build it');
+ assert.equal(calls.filter(c => c.name === 'reply').length, 17);
+});
+
+for (const reason of ['end_turn', 'aborted', 'error', 'fallback']) test(`does not automatically resume ${reason}`, async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('owner');
+ const { client, calls } = fakeClient({ reply: body => continuationReply(body, reason) }); bindLopuApi(client);
+ await sendLopuMessage('Build it'); assert.equal(calls.filter(c => c.name === 'reply').length, 1);
+});
+
+for (const scenario of ['unsaved', 'confirmation', 'unfinished-tool', 'account-change', 'stop']) test(`does not auto-continue after ${scenario}`, async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('owner');
+ const { client, calls } = fakeClient({ reply: body => {
+  const extra = scenario === 'confirmation' ? [{ type: 'confirm', id: 'delete', name: 'delete_thing', key: 'delete:x', token: 'grant', expiresAt: '2099-01-01', summary: 'Delete x' }] : scenario === 'unfinished-tool' ? [{ type: 'tool_use_start', id: 'write', name: 'create_thing' }] : [];
+  const response = continuationReply(body, 'time_limit', extra, scenario !== 'unsaved');
+  if (scenario === 'account-change') hydrateLopuStore('other');
+  if (scenario === 'stop') abortLopuTurn();
+  return response;
+ } }); bindLopuApi(client);
+ await sendLopuMessage('Build it'); assert.equal(calls.filter(c => c.name === 'reply').length, 1);
+});
+
+
+test('continuation stays with its original conversation without changing the newly selected chat or model', async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('owner');
+ let count = 0;
+ const { client, calls } = fakeClient({ reply: body => {
+  if (count++ === 0) return new Response(new ReadableStream({ async start(controller) {
+   const data = continuationReply(body, 'hop_limit');
+   controller.enqueue(new Uint8Array(await data.arrayBuffer()));
+   await flush();
+   selectLopuChat('chat-other'); setLopuSettings({ model: 'another-model' });
+   controller.close();
+  } }));
+  return continuationReply(body, 'end_turn');
+ } }); bindLopuApi(client);
+ await sendLopuMessage('Build it', { settings: { model: 'gpt-5' } });
+ const bodies = calls.filter(c => c.name === 'reply').map(c => c.args as any);
+ assert.equal(bodies.length, 2); assert.equal(bodies[1].chatId, 'chat-1'); assert.equal(bodies[1].model, 'gpt-5');
+ assert.equal(getLopuStoreSnapshot().activeChatId, 'chat-other'); assert.equal(getLopuStoreSnapshot().settings.model, 'another-model');
+});
+
+test('a truncated stream never automatically replays the request', async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('owner');
+ const { client, calls } = fakeClient({ reply: body => ndjson([
+  { type: 'meta', chatId: 'chat-1', userMessageId: 'u-1', requestId: body.requestId, model: null, effort: null, speed: 'normal', provider: 'openai', label: 'AI' },
+  { type: 'delta', text: 'Working' }
+ ]) }); bindLopuApi(client);
+ await sendLopuMessage('Build it'); assert.equal(calls.filter(c => c.name === 'reply').length, 1);
+});
+
+test('queued sends retain the target and immutable id without selecting it over another conversation', async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('queue-owner');
+ let body: any;
+ const { client } = fakeClient({ reply: input => { body = input; return ndjson([{type:'meta',chatId:input.chatId,userMessageId:'queued-user',requestId:input.requestId},{type:'delta',text:'Done'},{type:'done',stopReason:'end_turn'}]); } });
+ bindLopuApi(client); selectLopuChat('other-chat');
+ await sendLopuMessage('first\n\nsecond', { chatId: 'queued-chat', requestId: 'stable-queue-id', settings: { model: 'gpt-5' } });
+ assert.equal(body.chatId, 'queued-chat'); assert.equal(body.requestId, 'stable-queue-id');
+ assert.equal(getLopuStoreSnapshot().activeChatId, 'other-chat');
+});
+
+test('archive and restore preserve selection and prevent an older list refresh undoing the change', async () => {
+ resetLopuStoreForTests();
+ hydrateLopuStore('archive-owner');
+ const { client } = fakeClient({ chats: [{ id: 'chat-archive', name: 'Keep me', lopu: {} }] });
+ bindLopuApi(client);
+ await loadLopuChats();
+ selectLopuChat('chat-archive');
+ let finishRead!: (value: any) => void;
+ client.chats.list = () => new Promise(resolve => { finishRead = resolve; });
+ const read = loadLopuChats();
+ let finishWrite!: (value: any) => void;
+ client.chats.update = () => new Promise(resolve => { finishWrite = resolve; });
+ const write = archiveLopuChat('chat-archive', true);
+ assert.equal(getLopuStoreSnapshot().chats[0].lopu?.archived, true);
+ assert.equal(getLopuStoreSnapshot().activeChatId, 'chat-archive');
+ finishRead({ ok: true, chats: [{ id: 'chat-archive', lopu: {} }] });
+ await read;
+ finishWrite({ ok: true });
+ await write;
+ assert.equal(getLopuStoreSnapshot().chats[0].lopu?.archived, true);
+ client.chats.update = async args => { assert.equal(args.archived, false); return { ok: true }; };
+ assert.equal((await archiveLopuChat('chat-archive', false)).ok, true);
+ assert.equal(getLopuStoreSnapshot().chats[0].lopu?.archived, false);
+});
+
+test('archive failure rolls back only its own field and never crosses an account switch', async () => {
+ resetLopuStoreForTests();
+ hydrateLopuStore('archive-owner');
+ const { client } = fakeClient({ chats: [{ id: 'chat-archive', name: 'Keep me', lopu: {} }] });
+ bindLopuApi(client);
+ await loadLopuChats();
+ client.chats.update = async () => ({ ok: false, error: 'Unavailable' });
+ assert.equal((await archiveLopuChat('chat-archive', true)).ok, false);
+ assert.equal(getLopuStoreSnapshot().chats[0].lopu?.archived, false);
+ let reject!: (reason: Error) => void;
+ client.chats.update = () => new Promise((_resolve, failure) => { reject = failure; });
+ const write = archiveLopuChat('chat-archive', true);
+ hydrateLopuStore('other-owner');
+ reject(new Error('Unavailable'));
+ await write;
+ assert.deepEqual(getLopuStoreSnapshot().chats, []);
+ assert.deepEqual(getLopuStoreSnapshot().notices, []);
+});
+
+test('new invite-gated chats can change management without an available model', async () => {
+ resetLopuStoreForTests();
+ const {client}=fakeClient();
+ client.models=async()=>({ok:true,models:MODELS.map(model=>({...model,available:false})),defaults:DEFAULTS,vaultProviders:[],providers:{}});
+ bindLopuApi(client); hydrateLopuStore('invite-gated'); await loadLopuModels();
+ assert.equal(getLopuStoreSnapshot().activeChatId,null);
+ for (const management of ['server','client','server'] as const) {
+  setLopuSettings({management}); assert.equal(getLopuStoreSnapshot().settings.management,management);
+  assert.equal(getLopuStoreSnapshot().settings.model,null);
+ }
+ resetLopuStoreForTests();
+});
+
+test('chat access is per chat and new/legacy chats always start in Ask', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('owner');
+  const { client, calls } = fakeClient({ chats: [
+    { id: 'full-chat', lopu: { accessMode: 'full' } }, { id: 'legacy-chat', lopu: {} }
+  ] });
+  bindLopuApi(client); await loadLopuChats();
+  selectLopuChat('full-chat'); assert.equal(getLopuStoreSnapshot().settings.accessMode, 'full');
+  selectLopuChat('legacy-chat'); assert.equal(getLopuStoreSnapshot().settings.accessMode, 'ask');
+  selectLopuChat('full-chat'); selectLopuChat(null); assert.equal(getLopuStoreSnapshot().settings.accessMode, 'ask');
+  selectLopuChat('full-chat'); setLopuSettings({ accessMode: 'ask' });
+  await sendLopuMessage('hello');
+  assert.deepEqual(calls.find(call => call.name === 'chats.update')?.args, { chatId: 'full-chat', accessMode: 'ask' });
+  assert.equal('accessMode' in (calls.find(call => call.name === 'reply')!.args as any), false, 'reply cannot re-grant a stale mode');
+});
+
+test('permission writes serialize, block Send until saved, and failures restore the confirmed mode', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('owner');
+  const { client, calls } = fakeClient({ chats: [{ id: 'chat', lopu: { accessMode: 'ask' } }] });
+  bindLopuApi(client); await loadLopuChats(); selectLopuChat('chat');
+  let finish!: (value: any) => void;
+  client.chats.update = () => new Promise(resolve => { finish = resolve; });
+  setLopuSettings({ accessMode: 'full' }); await flush();
+  const sending = sendLopuMessage('hello'); await flush();
+  assert.equal(calls.some(call => call.name === 'reply'), false);
+  finish({ ok: false, error: 'Cannot save' });
+  assert.equal((await sending).ok, false);
+  assert.equal(getLopuStoreSnapshot().settings.accessMode, 'ask');
+  assert.equal(calls.some(call => call.name === 'reply'), false);
+});
+
+
+test('chat refresh preserves the access choice for an unsent new chat', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('new-chat-owner');
+  const { client } = fakeClient(); bindLopuApi(client);
+  setLopuSettings({ accessMode: 'full' });
+  await loadLopuChats();
+  assert.equal(getLopuStoreSnapshot().settings.accessMode, 'full');
+});
+
+
+test('rapid access changes preserve the last server-confirmed mode and await the latest save', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('rapid-owner');
+  const { client, calls } = fakeClient({ chats: [{ id: 'chat', lopu: { accessMode: 'ask' } }] });
+  bindLopuApi(client); await loadLopuChats(); selectLopuChat('chat');
+  const pending: ((value: any) => void)[] = [];
+  client.chats.update = () => new Promise(resolve => pending.push(resolve));
+  setLopuSettings({ accessMode: 'full' }); await flush();
+  const send = sendLopuMessage('hello');
+  setLopuSettings({ accessMode: 'ask' });
+  pending[0]({ ok: true }); await flush();
+  assert.equal(calls.some(call => call.name === 'reply'), false);
+  pending[1]({ ok: false, error: 'Unavailable' });
+  assert.equal((await send).ok, false);
+  assert.equal(getLopuStoreSnapshot().settings.accessMode, 'full');
+  client.chats.update = async () => ({ ok: true });
+  setLopuSettings({ accessMode: 'full' }); // Same selected mode retries a failed save.
+  assert.equal((await sendLopuMessage('retry')).ok, true);
+});
+
+test('catalog errors retain last-known state and an old account refresh cannot publish', async () => {
+  resetLopuStoreForTests();
+  const { client } = fakeClient();
+  bindLopuApi(client);
+  hydrateLopuStore('catalog-first');
+  await loadLopuModels();
+  const previous = getLopuStoreSnapshot().models;
+  client.models = async () => ({ ok: false, error: 'Temporary database outage' });
+  await loadLopuModels();
+  assert.deepEqual(getLopuStoreSnapshot().models, previous);
+  let resolve!: (value: any) => void;
+  client.models = () => new Promise((done) => { resolve = done; });
+  const pending = loadLopuModels();
+  hydrateLopuStore('catalog-second');
+  const afterSwitch = getLopuStoreSnapshot().models;
+  resolve({ok:true,models:[model('gpt-99','openai')],vaultProviders:VAULT});
+  await pending;
+  assert.deepEqual(getLopuStoreSnapshot().models, afterSwitch);
+  assert.deepEqual(getLopuStoreSnapshot().vaultProviders, []);
+});
+
+test('plan admission is discarded after catalog failure and identity change', async () => {
+  resetLopuStoreForTests();
+  const { client } = fakeClient();
+  client.models = async () => ({ ok: true, models: MODELS, defaults: DEFAULTS, vaultProviders: [{ ...VAULT[0], id: 'chatgpt-plan-owned', planChatEligible: true }] });
+  bindLopuApi(client); hydrateLopuStore('plan-owner');
+  await loadLopuModels();
+  assert.equal(getLopuStoreSnapshot().vaultProviders[0].planChatEligible, true);
+  client.models = async () => { throw new Error('offline'); };
+  await loadLopuModels();
+  assert.equal(getLopuStoreSnapshot().vaultProviders[0].planChatEligible, undefined);
+  assert.equal(getLopuStoreSnapshot().vaultProviders[0].id, 'chatgpt-plan-owned', 'last-known display metadata remains');
+  hydrateLopuStore('other-owner');
+  assert.deepEqual(getLopuStoreSnapshot().vaultProviders, []);
+  resetLopuStoreForTests();
+});
+
+test('refused provider saves roll back only the latest choice in the same account, and serialized success survives an older failure', async () => {
+  resetLopuStoreForTests();
+  const { client } = fakeClient();
+  bindLopuApi(client); hydrateLopuStore('u1'); await loadLopuModels(); selectLopuChat('chat-1');
+  client.chats.update = async () => ({ ok: false, error: 'Plan disconnected' });
+  setLopuSettings({ providerId: 'vp-1' }); await flush();
+  assert.equal(getLopuStoreSnapshot().settings.providerId, null);
+  assert.equal(getLopuStoreSnapshot().notices.slice(-1)[0]?.title, 'Plan disconnected');
+  let rejectFirst!: (error: Error) => void;
+  let calls = 0;
+  client.chats.update = async () => { if (++calls === 1) return new Promise((_resolve, reject) => { rejectFirst = reject; }); return { ok: true }; };
+  setLopuSettings({ providerId: 'vp-1' }); await flush();
+  setLopuSettings({ providerId: null });
+  rejectFirst(new Error('old failure')); await flush(); await flush();
+  assert.equal(getLopuStoreSnapshot().settings.providerId, null);
+  assert.equal(calls, 2);
+  calls = 0; setLopuSettings({ providerId: 'vp-1' }); await flush(); hydrateLopuStore('u2');
+  rejectFirst(new Error('old account failure')); await flush();
+  assert.equal(getLopuStoreSnapshot().userId, 'u2'); assert.equal(getLopuStoreSnapshot().settings.providerId, null);
+  resetLopuStoreForTests();
+});
+
+test('hydration never restores plan admission hints and never shares provider metadata across accounts', async () => {
+  const previous = (globalThis as any).window;
+  const storage = new Map<string, string>();
+  (globalThis as any).window = { localStorage: { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value) }, dispatchEvent: () => {}, addEventListener: () => {}, removeEventListener: () => {} };
+  try {
+    storage.set('tt-lopu-models', JSON.stringify({ ownerId: 'owner', vaultProviders: [{ ...VAULT[0], id: 'chatgpt-plan-cached', planChatEligible: true }] }));
+    resetLopuStoreForTests(); hydrateLopuStore('owner');
+    assert.equal(getLopuStoreSnapshot().vaultProviders[0].id, 'chatgpt-plan-cached');
+    assert.equal(getLopuStoreSnapshot().vaultProviders[0].planChatEligible, undefined);
+    hydrateLopuStore('other'); assert.deepEqual(getLopuStoreSnapshot().vaultProviders, []);
+  } finally { (globalThis as any).window = previous; resetLopuStoreForTests(); }
+});
+
+
+test('personal-plan sends use local management even with a server default or per-turn override', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('plan-owner');
+  const fixture = fakeClient({ chats: [{ id: 'chat-1', name: 'Plan chat', updatedAt: new Date().toISOString(), lopu: { providerId: 'chatgpt-plan-test', management: 'client' } }] }); bindLopuApi(fixture.client);
+  setLopuSettings({ providerId: 'chatgpt-plan-test', management: 'server' });
+  assert.equal(getLopuStoreSnapshot().settings.management, 'client');
+  await sendLopuMessage('First', { settings: { management: 'server' } });
+  await sendLopuMessage('Follow up');
+  const replies = fixture.calls.filter(call => call.name === 'reply').map(call => call.args as any);
+  assert.equal(replies.length, 2);
+  assert.ok(replies.every(body => body.management === 'client' && body.providerId === 'chatgpt-plan-test'));
+  for (const models of [[], MODELS]) {
+    assert.equal(reconcileLopuSettings({ providerId: 'chatgpt-plan-test', management: 'server' }, models, DEFAULTS).management, 'client');
+    assert.equal(reconcileLopuSettings({ providerId: 'vp-1', management: 'server' }, models, DEFAULTS).management, 'server');
+    assert.equal(reconcileLopuSettings({ management: 'server' }, models, DEFAULTS).management, 'server');
+  }
+});
+
+
+test('AI defaults seed new chats and stay separate from saved chat overrides', async () => {
+  resetLopuStoreForTests();
+  const { client, calls } = fakeClient({ chats: [{ id: 'existing', name: 'Existing', updatedAt: new Date().toISOString(), lopu: { model: 'gpt-5', providerId: null } }] });
+  bindLopuApi(client); hydrateLopuStore('defaults-owner');
+  await loadLopuModels(); await loadLopuChats();
+  setLopuAiDefaults({ providerId: 'vp-1', model: 'gpt-5', effort: 'low', speed: 'normal' });
+  selectLopuChat('existing');
+  assert.equal(getLopuStoreSnapshot().settings.providerId, null);
+  setLopuSettings({ effort: 'high' }); await flush();
+  assert.equal(getLopuStoreSnapshot().aiDefaults?.effort, 'low');
+  const created = await createLopuChat();
+  assert.equal(created.ok, true);
+  assert.equal((calls.find(row => row.name === 'chats.create')?.args as any).providerId, 'vp-1');
+  assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1');
+  setLopuSettings({ providerId: null }); await flush();
+  selectLopuChat(null);
+  assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1');
+  assert.equal(getLopuStoreSnapshot().settings.effort, 'low');
+  hydrateLopuStore('other-owner');
+  assert.equal(getLopuStoreSnapshot().aiDefaults, null);
+  assert.equal(getLopuStoreSnapshot().settings.providerId, null);
+  resetLopuStoreForTests();
+});
+
+test('removed ChatGPT pins remain explicit on the next request instead of spending credits', async () => {
+  resetLopuStoreForTests();
+  const { client, calls } = fakeClient(); bindLopuApi(client); hydrateLopuStore('removed-plan-owner');
+  setLopuSettings({ providerId: 'chatgpt-plan-removed' });
+  await loadLopuModels();
+  assert.equal(getLopuStoreSnapshot().settings.providerId, 'chatgpt-plan-removed');
+  await sendLopuMessage('synthetic request');
+  const body = calls.find(row => row.name === 'reply')?.args as any;
+  assert.equal(body.providerId, 'chatgpt-plan-removed');
+  resetLopuStoreForTests();
+});
+
+
+test('cold deep links load their saved credential before sending and background sends use the target chat', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('deep-link-owner');
+  const fixture = fakeClient({ chats: [
+    { id: 'personal', name: 'Personal', updatedAt: new Date().toISOString(), lopu: { ...DEFAULTS, providerId: 'vp-1' } },
+    { id: 'credits', name: 'Credits', updatedAt: new Date().toISOString(), lopu: { ...DEFAULTS, providerId: null } }
+  ] });
+  bindLopuApi(fixture.client); await loadLopuModels();
+  setLopuAiDefaults({ providerId: null, ...DEFAULTS }); selectLopuChat('personal');
+  await sendLopuMessage('Cold link');
+  assert.equal((fixture.calls.find(row => row.name === 'reply')?.args as any).providerId, 'vp-1');
+  assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1');
+  fixture.calls.length = 0;
+  await sendLopuMessage('Other chat', { chatId: 'credits' });
+  assert.equal((fixture.calls.find(row => row.name === 'reply')?.args as any).providerId, null);
+  assert.equal(getLopuStoreSnapshot().settings.providerId, 'vp-1');
+  resetLopuStoreForTests();
+});
+
+test('an unknown chat never receives a new-chat credential default', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('unknown-owner');
+  const fixture = fakeClient(); bindLopuApi(fixture.client); await loadLopuModels();
+  setLopuAiDefaults({ providerId: 'vp-1', ...DEFAULTS }); selectLopuChat('not-in-list');
+  await sendLopuMessage('Use saved server settings');
+  const body = fixture.calls.find(row => row.name === 'reply')?.args as any;
+  for (const key of ['providerId', 'model', 'effort', 'speed']) assert.equal(key in body, false, key);
+  resetLopuStoreForTests();
+});
+
+test('sending waits for a credential save and a refusal prevents any billed request', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('pending-owner');
+  const fixture = fakeClient({ chats: [{ id: 'chat', name: 'Chat', updatedAt: new Date().toISOString(), lopu: { ...DEFAULTS, providerId: null } }] });
+  bindLopuApi(fixture.client); await loadLopuModels(); await loadLopuChats(); selectLopuChat('chat');
+  let complete!: (value: any) => void;
+  fixture.client.chats.update = () => new Promise(resolve => { complete = resolve; });
+  setLopuSettings({ providerId: 'vp-1' }); await flush();
+  const sending = sendLopuMessage('Wait for my choice'); await flush();
+  assert.equal(fixture.calls.some(row => row.name === 'reply'), false);
+  complete({ ok: false, error: 'Connection revoked' });
+  assert.equal((await sending).ok, false);
+  assert.equal(fixture.calls.some(row => row.name === 'reply'), false);
+  resetLopuStoreForTests();
 });

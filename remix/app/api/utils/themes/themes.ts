@@ -9,6 +9,8 @@ import { ACL_ALL, ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/regist
 import { clearUserActiveTheme } from '../auth/users';
 import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore';
 import { applyUserStorageDelta, markUserStorageNeedsReconcile, readyUserStorageMatch } from '../storage/userStorage';
+import { newThingMutationCapture } from '../timeline/recordMutation';
+import { recordThemeMutation } from '../timeline/themeContent';
 
 // Themes are THINGS now (thingtime ["theme"], see
 // TODO/claude-todo/22-everything-is-a-thing-collections.md): the resolved,
@@ -137,6 +139,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
   const things = await getThingsCollection();
   const themes = await getThemesCollection();
   const now = new Date();
+	const capture = newThingMutationCapture(ownerId);
 
   if (typeof input.id === 'string' && input.id) {
     // Update whichever store holds the doc: things first, legacy fallback.
@@ -193,6 +196,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
 						storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
 						updatedAt: now
 					};
+					await recordThemeMutation(things, before, updatedThing, capture, session);
 				});
 			} catch (error) {
 				const projected = storageFail(error);
@@ -268,6 +272,7 @@ export const saveTheme = async (ownerId: string, input: SaveThemeInput): Promise
 		await withHomeMongoTransaction(async (session) => {
 			await applyUserStorageDelta(ownerId, sizeBytes, session);
 			await things.insertOne(thing as any, { session });
+			await recordThemeMutation(things, null, thing, capture, session);
 		});
 	} catch (error) {
 		const projected = storageFail(error);
@@ -356,6 +361,7 @@ export const deleteTheme = async (ownerId: string, shareId: unknown): Promise<{ 
     return { ok: false, status: 400, error: 'Theme id is required' };
   }
   const id = shareId.trim();
+	const capture = newThingMutationCapture(ownerId);
   // Delete from BOTH stores (owner-scoped, so someone else's shareId 404s like
 	// an unknown one). A Thing deletion refunds its exact before-image in the
 	// same transaction. A ready account is never allowed to mutate a leftover
@@ -375,6 +381,7 @@ export const deleteTheme = async (ownerId: string, shareId: unknown): Promise<{ 
 				const exactBytes = currentContentStorageSizeBytes(before);
 				if (exactBytes === null) await markUserStorageNeedsReconcile(ownerId, session);
 				else await applyUserStorageDelta(ownerId, -exactBytes, session);
+				await recordThemeMutation(things, before, null, capture, session);
 			}
 			deletedThing = !!before;
 			deletedLegacy = legacyRes.deletedCount > 0;

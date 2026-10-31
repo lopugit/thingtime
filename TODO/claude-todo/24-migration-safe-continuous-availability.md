@@ -52,6 +52,12 @@ Feature flags are appropriate for exposing a new feature. They are not a
 substitute for storage compatibility and must never become a kill switch for
 pre-existing user actions.
 
+[TODO 48 — Change agency and humane product evolution](./48-change-agency-and-humane-product-evolution.md)
+owns person-facing impact, preview, choice, compatibility communication,
+deprecation, sunset, and transition remedy. This TODO retains the non-waivable
+technical rule: established reads and writes work throughout storage change,
+whether or not a person saw or accepted a notice.
+
 ## Engineering requirements
 
 - Centralize storage-generation and migration-state decisions in one tested

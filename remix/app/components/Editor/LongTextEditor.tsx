@@ -277,6 +277,8 @@ export { blocksToText };
 export type LongTextEditorProps = {
 	value: LongTextValue;
 	onValueChange?: (next: LongTextValue) => void;
+	/** Complete editor draft, including unfinished blocks omitted from publish output. */
+	onDraftValueChange?: (doc: EditorJsDoc) => void;
 	placeholder?: string;
 	minHeight?: string;
 	/** Inline pages inherit typography; fields reserve a stable history row. Tools stay identical. */
@@ -643,6 +645,10 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 			const onRawInput = (event: Event) => saveEditorValue?.(event instanceof CustomEvent ? event.detail?.label : undefined);
 			holderRef.current?.addEventListener('input', onRawInput);
 			holderRef.current?.addEventListener('tt-editor-change', onRawInput);
+			// The editable DOM is visible before isReady and the initial history
+			// capture settle. Reconcile input typed during that interval, when both
+			// the raw listener and onChange's ready guard could have missed it.
+			saveEditorValue?.();
 			rawInputCleanupRef.current = () => {
 				holderRef.current?.removeEventListener('input', onRawInput);
 				holderRef.current?.removeEventListener('tt-editor-change', onRawInput);
@@ -910,6 +916,7 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 	).join(',')}`;
 	activeConfigKeyRef.current = configKey;
 	const onValueChange = props.onValueChange;
+	const onDraftValueChange = props.onDraftValueChange;
 
 	const handleChange = React.useCallback(
 		(next: LongTextValue, source: EditorJsSourceRevision, sequence: number, doc: EditorJsDoc, label?: string) => {
@@ -946,8 +953,9 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 			pending.push(signature);
 			if (pending.length > 32) pending.splice(0, pending.length - 32);
 			onValueChange?.(next);
+			onDraftValueChange?.(doc);
 		},
-		[onValueChange, history]
+		[onValueChange, onDraftValueChange, history]
 	);
 	const act = React.useCallback(
 		async (action: HistoryAction) => {

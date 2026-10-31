@@ -115,7 +115,7 @@ gate before Commander may claim a view extension works.
 The filesystem index is local device metadata, not Thingtime cloud data. It stores only path, display name, kind,
 modification time, and size in `filesystem-index.sqlite3` with owner-only file permissions; it never reads file
 contents. Commander indexes applications as a dedicated scope, then applications, files, and directories found in user-configured
-roots. Application directories are watched for changes and reconciled every five minutes. Files and directories
+roots. Application and filesystem roots are watched for changes, with six-hour full application reconciliation. Files and directories
 reconcile in the background every six hours by default, after index-setting changes, or immediately through the
 built-in Index Now commands. Hidden items are included and entry count is unlimited by default; Search Settings can
 apply an explicit machine-local cap. The status reports the live SQLite/WAL/SHM footprint.
@@ -152,9 +152,21 @@ commits a bounded partial index and surfaces a warning
 instead of leaving first-run search empty. Main search selection counts are a separate bounded, device-local daemon
 state: exact-query frequency, global frequency, and recency add a capped boost across apps, commands, extensions, and
 filesystem results without uploading search history. Coarse typo/path candidate scans are time-bounded, status uses
-indexed row counts, the daemon retains the last good status across a transient failure, and the Node protocol client
-restarts a timed-out reader before its next request. Filesystem event-level incremental updates are a future optimization; scheduled
-reconciliation is the current cross-platform freshness guarantee.
+cached unique path/kind counters maintained transactionally on insert/delete, and the daemon retains the last good
+status across a transient failure. Schema 4 materializes overlapping-source reference counts once in the background
+writer, while `serve --reader` can query the preceding committed schema during migration. Pre-fingerprint caches
+use a bounded-result eligibility policy in `read_policy.rs`: exact active source membership, current custom/hidden/Git
+rules and filesystem existence. Known fingerprint mismatches remain suppressed; legacy totals are unmeasured until
+full reconciliation. This policy does not install a SQL view or replace the normal indexed query plan. Per-source counters make
+partial refresh status independent of total index size. `changedPaths` restricts traversal and generation cleanup to
+changed branches, preserving inherited ignore, package and mount boundaries. Notifications coalesce for 750 ms with
+a three-second deadline, remain queued during writes and widen to parent subtrees under a burst. Mount removal prunes
+inactive sources; saved settings plus effective roots fingerprint the file snapshot across restarts. Search uses a
+separate WAL reader and never starts or joins an indexing operation. Periodic reconciliation is the fallback for
+unavailable/missed notifications. The launcher uses `commander.index-status` 1.1.1 for the latest measured committed file/folder counters plus the
+enabled application/command catalogue and conservative full-refresh age. Ordinary pending observations retain
+that measured baseline; legacy adoption or a root/policy mismatch keeps the total unmeasured. Detailed running
+progress stays in Search Settings.
 
 Linux shares the protocol and product implementation but remains runtime-unverified until WebKitGTK, global-hotkey,
 tray, accessibility, IME, drag/drop, and credential-store behavior have dedicated testing.

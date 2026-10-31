@@ -16,6 +16,13 @@ import {
 
 const baseEntry = { at: 1, method: 'GET', url: '/api/v1/health', status: 200, ok: true, durationMs: 12 };
 
+test('Timeline snapshots and scope queries never enter the request log or copied curl', () => {
+	clearApiCalls();
+	recordApiCall({ ...baseEntry, method: 'POST', url: '/api/v1/timeline?ownerId=private-owner&thingId=private-thing', body: { after: { text: 'private old content' } } });
+	assert.equal(getApiCalls()[0].url, '/api/v1/timeline');
+	assert.equal(getApiCalls()[0].body, undefined);
+});
+
 // A fixture for the position a credential occupies in a URI (`user:HERE@host`).
 // Deliberately not credential-shaped: every assertion below only checks that
 // whatever sits in that position is gone afterwards, so a self-describing

@@ -1,4 +1,5 @@
 import { json } from '~/api/http';
+import { agentTestEnvironment } from '~/api/utils/agentTesting';
 import { safeErrorText } from '~/api/utils/errors/safeError';
 import {
   type BasicServiceHealthStatus,
@@ -20,7 +21,7 @@ const getLocalNitroStatus = async (origin: string): Promise<BasicServiceHealthSt
       ok: ready,
       service: 'nitro',
       state: ready ? 'ready' : 'degraded',
-      label: ready ? 'Nitro API: ready' : 'Nitro API: storage migration required',
+      label: ready ? 'Nitro API: ready' : storageAccounting.state === 'recovering' ? 'Nitro API: storage recovery pending' : 'Nitro API: storage migration required',
       checkedAt: new Date().toISOString(),
       origin,
       targetOrigin: origin,
@@ -53,7 +54,8 @@ export const loader = async ({ request }: { request: Request }) => {
   const target = resolveStatusTarget(request);
 
   if (!target.isRemote) {
-    return json(await getLocalNitroStatus(target.requestOrigin));
+    const testEnvironment = agentTestEnvironment();
+    return json({ ...(await getLocalNitroStatus(target.requestOrigin)), ...(testEnvironment ? { testEnvironment } : {}) });
   }
 
   try {

@@ -17,8 +17,7 @@ struct RecoveryContentView: View {
     @State private var selection: RecoverySelection? = .cache(.desktop)
 
     private var releaseRows: [RecoveryCatalogRow] {
-        (store.releases(for: store.selectedProduct.component).map { RecoveryCatalogRow(component: store.selectedProduct.component, release: $0) }
-         + store.recoveryReleases.map { RecoveryCatalogRow(component: .recovery, release: $0) })
+        store.releases(for: store.selectedProduct.component).map { RecoveryCatalogRow(component: store.selectedProduct.component, release: $0) }
             .sorted { ($0.release.publishedAt ?? .distantPast) > ($1.release.publishedAt ?? .distantPast) }
     }
 
@@ -28,11 +27,9 @@ struct RecoveryContentView: View {
                 Section("This Mac") {
                     Label("Cached \(store.selectedProduct.title)", systemImage: store.selectedProduct.systemImage)
                         .tag(RecoverySelection.cache(store.selectedProduct.component))
-                    Label("Cached Recovery", systemImage: "cross.case")
-                        .tag(RecoverySelection.cache(.recovery))
                 }
                 Section("GitHub releases") {
-                    Text("\(store.releases(for: store.selectedProduct.component).count) \(store.selectedProduct.title) · \(store.recoveryReleases.count) Recovery")
+                    Text("\(store.releases(for: store.selectedProduct.component).count) \(store.selectedProduct.title) releases")
                         .font(.caption).foregroundStyle(.secondary)
                     if let status = store.catalogStatus {
                         Text(status).font(.caption).foregroundStyle(.secondary)

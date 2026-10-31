@@ -53,7 +53,8 @@ const makeContext = (scope: Record<string, unknown> = {}, random = () => 0.5): E
 	return ctx;
 };
 
-const run = (expression: unknown[], scope?: Record<string, unknown>, random?: () => number): any => evaluateExpression(expression, makeContext(scope, random));
+const run = (expression: unknown[], scope?: Record<string, unknown>, random?: () => number): any =>
+	evaluateExpression(expression, makeContext(scope, random));
 
 test('math functions compute over numbers and numeric strings', () => {
 	assert.equal(run(['add', 1, 2, '3']), 6);
@@ -74,11 +75,26 @@ test('math functions compute over numbers and numeric strings', () => {
 });
 
 test('random helpers honour the injected generator and seeded ints are stable', () => {
-	assert.equal(run(['randomInt', 1, 10], {}, () => 0), 1);
-	assert.equal(run(['randomInt', 1, 10], {}, () => 0.999), 10);
-	assert.equal(run(['chance', 0.3], {}, () => 0.2), true);
-	assert.equal(run(['chance', 0.3], {}, () => 0.9), false);
-	assert.equal(run(['randomPick', ['a', 'b', 'c']], {}, () => 0.5), 'b');
+	assert.equal(
+		run(['randomInt', 1, 10], {}, () => 0),
+		1
+	);
+	assert.equal(
+		run(['randomInt', 1, 10], {}, () => 0.999),
+		10
+	);
+	assert.equal(
+		run(['chance', 0.3], {}, () => 0.2),
+		true
+	);
+	assert.equal(
+		run(['chance', 0.3], {}, () => 0.9),
+		false
+	);
+	assert.equal(
+		run(['randomPick', ['a', 'b', 'c']], {}, () => 0.5),
+		'b'
+	);
 	assert.equal(run(['seededInt', 'block:3,4', 1, 100]), run(['seededInt', 'block:3,4', 1, 100]));
 	assert.equal(run(['hash', 'pikachu']), run(['hash', 'pikachu']));
 	assert.notEqual(run(['hash', 'pikachu']), run(['hash', 'pikachU']));
@@ -123,7 +139,10 @@ test('list functions with lambdas bind $item and $index', () => {
 		{ name: 'C', hp: 3, level: 7 }
 	];
 	assert.equal(run(['len', party]), 3);
-	assert.deepEqual(run(['filter', party, { ttExpr: ['gt', '$item.hp', 0] }]).map((entry: any) => entry.name), ['A', 'C']);
+	assert.deepEqual(
+		run(['filter', party, { ttExpr: ['gt', '$item.hp', 0] }]).map((entry: any) => entry.name),
+		['A', 'C']
+	);
 	assert.deepEqual(run(['map', party, '$item.level']), [5, 9, 7]);
 	assert.deepEqual(run(['map', party, '$index']), [0, 1, 2]);
 	assert.equal(run(['find', party, { ttExpr: ['eq', '$item.name', 'C'] }]).hp, 3);
@@ -133,7 +152,10 @@ test('list functions with lambdas bind $item and $index', () => {
 	assert.equal(run(['sum', party, '$item.level']), 21);
 	assert.equal(run(['avg', [2, 4]]), 3);
 	assert.equal(run(['count', party, { ttExpr: ['gt', '$item.hp', 0] }]), 2);
-	assert.deepEqual(run(['sortBy', party, '$item.level', 'desc']).map((entry: any) => entry.name), ['B', 'C', 'A']);
+	assert.deepEqual(
+		run(['sortBy', party, '$item.level', 'desc']).map((entry: any) => entry.name),
+		['B', 'C', 'A']
+	);
 	assert.deepEqual(run(['pluck', party, 'name']), ['A', 'B', 'C']);
 	assert.deepEqual(run(['range', 3]), [0, 1, 2]);
 	assert.deepEqual(run(['range', 2, 4]), [2, 3]);
@@ -143,6 +165,25 @@ test('list functions with lambdas bind $item and $index', () => {
 	assert.equal(run(['get', party, 1]).name, 'B');
 	assert.equal(run(['get', { a: 1 }, 'missing', 'dflt']), 'dflt');
 	assert.equal(run(['get', { a: 1 }, 'constructor', 'guarded']), 'guarded');
+});
+
+test('indexBy and groupBy build reusable bounded own-key lookups', () => {
+	const rows = [
+		{ id: 'a', group: 1 },
+		{ id: 'b', group: 2 },
+		{ id: 'c', group: 1 }
+	];
+	assert.deepEqual(run(['indexBy', rows, '$item.group']), { 1: rows[2], 2: rows[1] });
+	assert.deepEqual(run(['groupBy', rows, '$item.group']), { 1: [rows[0], rows[2]], 2: [rows[1]] });
+	assert.deepEqual(run(['indexBy', [], '$item.id']), {});
+	for (const operation of ['indexBy', 'groupBy']) {
+		for (const key of ['', null, true, {}, [], Infinity, '__proto__', 'constructor', 'prototype'])
+			assert.throws(() => run([operation, [key], '$item']), /keys/);
+		assert.throws(() => run([operation, Array(MAX_EXPRESSION_LIST_LENGTH + 1).fill('id'), '$item']), /cap/);
+		const context = makeContext();
+		context.budget.nodes = 2;
+		assert.throws(() => evaluateExpression([operation, rows, '$item.id'], context), /budget/);
+	}
 });
 
 test('object and date functions', () => {
@@ -218,7 +259,7 @@ test('the object builders refuse prototype-accessor keys, not just `set`', () =>
 	assert.deepEqual(omitted, { b: 2 });
 	assert.equal(Object.getPrototypeOf(omitted), Object.prototype, 'a benign omit keeps the ordinary prototype');
 
-	assert.equal((({}) as Record<string, unknown>).polluted, undefined, 'nothing reaches the global prototype');
+	assert.equal(({} as Record<string, unknown>).polluted, undefined, 'nothing reaches the global prototype');
 });
 
 test('if / and / or / coalesce short-circuit — the untaken branch never evaluates', () => {

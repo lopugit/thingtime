@@ -1,8 +1,10 @@
+import type { LopuPageReference } from '~/utils/lopuPageContext';
 // The Lopu chat transport: POST /api/v1/lopu/chats/reply (credentials
 // included, JSON body) and the NDJSON reader — the `useLopuStream` loop from
 // useLopu.tsx generalised so every consumer (the shared chat store, tests)
 // parses the stream identically. Pure fetch/Response code, no React.
 
+import { aiTaskFetch } from './aiTasks.client';
 import { recordApiCall } from '~/hooks/apiRequestLog';
 import { isLopuChatEvent, type LopuChatEvent } from './lopuTurnCore';
 
@@ -10,8 +12,11 @@ export const LOPU_REPLY_PATH = '/api/v1/lopu/chats/reply';
 
 // Design note §2.6
 export type LopuReplyContext = {
+	pages?: LopuPageReference[];
 	route?: string;
 	page?: {
+		dirty?: boolean;
+		ready?: boolean;
 		id?: string;
 		source?: 'user' | 'system';
 		pageKey?: string;
@@ -28,6 +33,10 @@ export type LopuReplyContext = {
 export type LopuReplyConfirmation = { key: string; token: string };
 
 export type LopuReplyBody = {
+ accessMode?: 'ask' | 'full';
+ management?: 'client' | 'server';
+ continueFromRequestId?: string;
+ automaticContinuation?: boolean;
 	attachmentIds?: string[];
 	thingIds?: string[];
 	chatId?: string;
@@ -75,14 +84,14 @@ export class LopuStreamError extends Error {
  * consumes it. Recorded in the DevKit request log like every useApi call.
  */
 export const postLopuReply = async (body: LopuReplyBody, options?: { signal?: AbortSignal }): Promise<Response> => {
-	if (body.attachmentIds?.length || body.thingIds?.length) {
+	{ // Includes Astra's Responses transport and the checkpoint-capable contract.
 		const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-		await requireThingtimeCapability('api.lopu-chats-reply', '1.6.0');
+		await requireThingtimeCapability('api.lopu-chats-reply', body.providerId?.startsWith('chatgpt-plan-') ? '1.21.1' : '1.20.0');
 	}
 	const started = performance.now();
 	let response: Response;
 	try {
-		response = await fetch(LOPU_REPLY_PATH, {
+		response = await aiTaskFetch(LOPU_REPLY_PATH, {
 			method: 'POST',
 			credentials: 'include',
 			headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },

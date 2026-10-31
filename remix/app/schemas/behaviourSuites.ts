@@ -24,6 +24,9 @@
 // Every materialised crystal clears its kind's write gate unchanged; the unit
 // test asserts that for both modes across the whole catalog.
 
+import { suiteControlForms } from './suiteControlForms';
+import { catalogRecordsSuite } from './catalogRecordsSuite';
+import { siteFormsSuite } from './siteFormsSuite.ts';
 import { demoBlockKit, type DemoBlock, type DemoBlockCtx } from './webpageDemos.ts';
 
 export const SUITE_SLUG_PREFIX = 'demo-';
@@ -55,10 +58,10 @@ type ArgSpec = {
 
 type InputSpec = {
 	name: string;
-	type: 'string' | 'text' | 'number' | 'boolean' | 'enum';
+	type: 'string' | 'text' | 'number' | 'boolean' | 'enum' | 'json';
 	label: string;
 	required?: boolean;
-	default?: string | number | boolean;
+	default?: unknown;
 	values?: string[];
 	maxLength?: number;
 	min?: number;
@@ -88,6 +91,7 @@ export type SuiteComponentDef = {
 	render: (refs: SuiteRefs) => Record<string, unknown>;
 };
 export type SuiteActionDef = {
+	runtime?: 'browser';
 	key: string;
 	name: string;
 	description: string;
@@ -109,6 +113,11 @@ export type SuitePageDef = {
 	description?: string;
 	blocks: (ctx: DemoBlockCtx, refs: SuiteRefs, suite: BehaviourSuite) => DemoBlock[];
 };
+
+// PUBLIC CONTENT an app ships (a species catalogue, a story, a question
+// bank): seeded once as public system data things (data-app-<suite>-<id>)
+// that installed programs read in `system` scope — never part of an install.
+export type SuiteContentDef = { id: string; schema: string; tags?: string[]; values: Record<string, unknown> };
 
 export type SuiteAppDef = {
 	tagline: string;
@@ -135,6 +144,8 @@ export type BehaviourSuite = {
 	// multi-page APP suites — installed as a whole, pages link by key
 	pages?: SuitePageDef[];
 	app?: SuiteAppDef;
+	// app content (see SuiteContentDef) — a pure generator, seeded by seed.ts
+	content?: () => SuiteContentDef[];
 };
 
 // ---------------------------------------------------------------------------
@@ -263,6 +274,8 @@ const suitePage = (
 
 // ---------------------------------------------------------------------------
 export const BEHAVIOUR_SUITES: BehaviourSuite[] = [
+	siteFormsSuite,
+	catalogRecordsSuite,
 	{
 		key: 'guestbook',
 		title: 'Guestbook',
@@ -270,7 +283,7 @@ export const BEHAVIOUR_SUITES: BehaviourSuite[] = [
 		description: 'Sign a guestbook, then read the signatures back.',
 		story: [
 			'The simplest program: one schema, one create action, one search action. Signing mints a private guestbook-entry data thing stamped with $now; the reader lists the newest twelve.',
-			'Change the name, message, or mood in the builder inspector — the control passes its args as the action inputs.'
+			'Enter your name, message, and mood in the form. Save a signature, then read the latest entries below.'
 		],
 		tone: 'paper',
 		schemas: [
@@ -1334,9 +1347,9 @@ export const materializeSuite = (suite: BehaviourSuite, mode: SuiteMode): Materi
 				library: 'thingtime',
 				category: 'demo suites',
 				componentKey: suiteSlug(suite.key, component.key),
-				version: 1,
+				version: isAppSuite(suite) ? 1 : 2,
 				args: component.args,
-				render: component.render(refs)
+				render: isAppSuite(suite) ? component.render(refs) : suiteControlForms(component.render(refs), suite.actions, refs)
 			}
 		})),
 		actions: suite.actions.map((action) => ({
@@ -1350,6 +1363,7 @@ export const materializeSuite = (suite: BehaviourSuite, mode: SuiteMode): Materi
 				category: action.category,
 				version: 1,
 				inputs: action.inputs,
+				...(action.runtime ? { runtime: action.runtime } : {}),
 				steps: action.steps(refs),
 				capabilities: action.capabilities(refs),
 				...(action.limits ? { limits: action.limits } : {})

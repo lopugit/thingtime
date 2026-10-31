@@ -68,19 +68,18 @@ const callAndCapture = async (
 	};
 };
 
-test('Anthropic completions apply effort and fast mode to the provider request', async () => {
-	// the connection's own model (claude-opus-5) runs the turn
-	const request = await callAndCapture('anthropic', { model: null, effort: 'high', speed: 'fast' }, { content: [{ type: 'text', text: 'Hello from Claude' }] }, 'claude-opus-5');
-	assert.equal(request.text, 'Hello from Claude');
-	assert.equal(request.url, 'https://api.anthropic.com/v1/messages');
-	assert.equal(request.headers['x-api-key'], TOKEN);
-	assert.equal(request.headers['anthropic-beta'], 'fast-mode-2026-02-01');
-	assert.equal(request.body.model, 'claude-opus-5');
-	assert.equal(request.body.output_config.effort, 'high');
-	assert.equal(request.body.speed, 'fast');
-	assert.equal(request.body.system, 'Be brief.');
-	// every provider call refuses redirects (the fence after the DNS check)
-	assert.equal(request.redirect, 'error');
+test('Claude completions use OAuth and preserve effort and speed', async () => {
+  let actual: any;
+  const text = await callVaultProviderPlainCompletion({ ...provider('anthropic', 'claude-opus-5'), token: 'sk-ant-oat-test' }, {
+    system: 'Be brief.', history: [], prompt: 'Hello', effort: 'high', speed: 'fast',
+    claudeRun: async function* (request, token) {
+      assert.equal(token, 'sk-ant-oat-test'); actual = request;
+      yield { text: 'Hello from Claude' };
+      yield { usage: { input_tokens: 1, output_tokens: 2, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } };
+    }
+  });
+  assert.equal(text, 'Hello from Claude');
+  assert.equal(actual.model, 'claude-opus-5'); assert.equal(actual.output_config.effort, 'high'); assert.equal(actual.speed, 'fast');
 });
 
 test('Google completions apply the selected thinking level', async () => {
@@ -208,7 +207,7 @@ test('a rejected or empty provider answer is a user-facing error, never the raw 
 
 test('buildPlainCompletionRequest keeps effort "none" out of Anthropic and Gemini bodies', () => {
 	const base = { system: 's', messages: [], model: 'm', maxTokens: 10, effort: 'none' as const, speed: 'normal' as const };
-	assert.equal('output_config' in buildPlainCompletionRequest(provider('anthropic'), 'https://api.anthropic.com', base).body, false);
+	assert.throws(() => buildPlainCompletionRequest(provider('anthropic'), 'https://api.anthropic.com', base), /OAuth runtime/);
 	assert.equal('thinkingConfig' in (buildPlainCompletionRequest(provider('google'), 'https://g.example', base).body.generationConfig as any), false);
 });
 
@@ -300,6 +299,7 @@ test('mintVaultProviderRealtimeSession refuses a credential that is (or contains
 test('createLopuVoiceRealtimeSession resolves the caller’s own connection, validates the tuning, and returns no key', async () => {
 	const calls: Array<{ ownerId: string; providerId: unknown }> = [];
 	const deps = {
+    getPromptSettings: async () => ({ basePrompt: 'Shared prompt', instructions: [{ id: 'on', text: 'Enabled preference', enabled: true }, { id: 'off', text: 'Disabled preference', enabled: false }] }),
 		getProvider: async (ownerId: string, providerId: unknown) => {
 			calls.push({ ownerId, providerId });
 			return provider('xai');
@@ -313,8 +313,12 @@ test('createLopuVoiceRealtimeSession resolves the caller’s own connection, val
 		})
 	};
 	const session = await createLopuVoiceRealtimeSession('user-1', { providerId: 'prov-1', effort: 'high', textResponse: true }, deps);
+  assert.match(session.instructions, /Shared prompt/);
+  assert.match(session.instructions, /Enabled preference/);
+  assert.doesNotMatch(session.instructions, /Disabled preference/);
 	assert.deepEqual(calls, [{ ownerId: 'user-1', providerId: 'prov-1' }]);
 	assert.deepEqual(session, {
+    instructions: session.instructions,
 		provider: 'xai',
 		model: 'grok-voice-latest',
 		token: 'ephemeral-secret',

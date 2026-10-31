@@ -14,3 +14,6 @@ graphify-out/graph.json merge=graphify
 # Safe for the control plane: its promotion patches exclude graphify-out/** and
 # are generated with `git diff --binary --full-index`, which is unaffected here.
 graphify-out/snapshots/** -diff linguist-generated
+
+# Preserve the upstream third-party notice byte-for-byte, including whitespace.
+remix/public/platform/magick-wasm-NOTICE.txt -whitespace

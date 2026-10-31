@@ -713,6 +713,7 @@ type CardImage = { uri: string; pixels: number };
 const loadAttachmentDataUri = async (attachmentId: string): Promise<CardImage | null> => {
 	try {
 		const { getAttachmentDownload } = await import('../attachments/attachments');
+		const { fetchStoredObject } = await import('../attachments/localAttachmentStorage');
 		const download = await getAttachmentDownload(null, attachmentId, false);
 		if (!download.ok) return null;
 		// The record's own size is verified against the stored object's head and
@@ -720,7 +721,8 @@ const loadAttachmentDataUri = async (attachmentId: string): Promise<CardImage | 
 		// can be dropped before a byte is fetched. Only a definite overage skips
 		// the fetch — anything else still goes through the bounded read below.
 		if (Number.isFinite(download.size) && download.size > MAX_CARD_IMAGE_BYTES) return null;
-		const response = await fetch(download.url, { signal: AbortSignal.timeout(5_000) });
+		// Signed object URLs: real S3 over the network, the local stand-in in-process.
+		const response = await fetchStoredObject(download.url, { signal: AbortSignal.timeout(5_000) });
 		const contentType = response.headers.get('content-type')?.split(';')[0]?.toLowerCase() || '';
 		if (!response.ok || !SAFE_IMAGE_TYPES.has(contentType)) return null;
 		const bytes = await readBodyWithin(response, MAX_CARD_IMAGE_BYTES);

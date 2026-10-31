@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval, activityEvents } from '~/activity/activityManager';
 import React from 'react';
 import { Box, Center, Flex, Popover, PopoverTrigger, PopoverContent, Spinner, Text } from '@chakra-ui/react';
 import { Bell } from 'lucide-react';
@@ -59,7 +60,7 @@ export const NotificationsBell = () => {
       if (inFlight) { again = true; return; }
       inFlight = true;
       const generation = badgeGeneration.current;
-      listRef.current({ limit: 1 })
+      return listRef.current({ limit: 1 })
         .then((resp: any) => {
           if (!cancelled && !markingRead.current && generation === badgeGeneration.current && typeof resp?.unreadCount === 'number') setUnreadPersisted(resp.unreadCount);
         })
@@ -73,8 +74,8 @@ export const NotificationsBell = () => {
     // visibilityState, and without it a backgrounded tab keeps counting
     // notifications forever. visibilitychange re-reconciles on return, so
     // hiding the tab costs freshness for exactly as long as it stays hidden.
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') refresh();
+    const interval = activityInterval('timer:components/Nav/NotificationsBell:1', 'Notification badge', () => {
+      if (document.visibilityState === 'visible') return refresh();
     }, POLL_MS);
     const onFocus = () => refresh();
     const onVisible = () => {
@@ -86,17 +87,17 @@ export const NotificationsBell = () => {
     const onNative = (event: Event) => {
       if ((event as CustomEvent).detail?.type === 'notifications-changed') refresh();
     };
-    window.addEventListener('thingtime:notification-recorded', onRecorded);
-    window.addEventListener('thingtime:native-message', onNative);
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVisible);
+    activityEvents(window, 'events:components/Nav/NotificationsBell', 'NotificationsBell').addEventListener('thingtime:notification-recorded', onRecorded);
+    activityEvents(window, 'events:components/Nav/NotificationsBell', 'NotificationsBell').addEventListener('thingtime:native-message', onNative);
+    activityEvents(window, 'events:components/Nav/NotificationsBell', 'NotificationsBell').addEventListener('focus', onFocus);
+    activityEvents(document, 'events:components/Nav/NotificationsBell', 'NotificationsBell').addEventListener('visibilitychange', onVisible);
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
-      window.removeEventListener('thingtime:notification-recorded', onRecorded);
-      window.removeEventListener('thingtime:native-message', onNative);
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVisible);
+      clearActivityInterval(interval);
+      activityEvents(window, 'events:components/Nav/NotificationsBell', 'NotificationsBell').removeEventListener('thingtime:notification-recorded', onRecorded);
+      activityEvents(window, 'events:components/Nav/NotificationsBell', 'NotificationsBell').removeEventListener('thingtime:native-message', onNative);
+      activityEvents(window, 'events:components/Nav/NotificationsBell', 'NotificationsBell').removeEventListener('focus', onFocus);
+      activityEvents(document, 'events:components/Nav/NotificationsBell', 'NotificationsBell').removeEventListener('visibilitychange', onVisible);
     };
     // per-user: switcher swaps identity under the same mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -139,17 +140,21 @@ export const NotificationsBell = () => {
           as="button"
           type="button"
           position="relative"
+          width="36px"
+          height="36px"
+          flexShrink={0}
+          borderRadius="8px"
           cursor="pointer"
           aria-label={unread > 0 ? `Notifications — ${unread} unread` : 'Notifications'}
           title="Notifications 🔔"
-          sx={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
+          sx={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation', WebkitAppRegion: 'no-drag' }}
         >
-          <Bell size={16} strokeWidth={1.9} />
+          <Bell size={16} strokeWidth={1.9} style={{ pointerEvents: 'none' }} />
           {unread > 0 && (
             <Center
               position="absolute"
-              top="-6px"
-              right="-8px"
+              top="2px"
+              right="0px"
               minWidth="15px"
               height="15px"
               paddingX="4px"

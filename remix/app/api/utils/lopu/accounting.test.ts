@@ -582,3 +582,11 @@ test('public projections bound and default every field', () => {
   // unique keys are the server-owned BinData namespace
   assert.equal(Buffer.from(thingUniqueKey('lopuAccount', 'u').buffer).toString('utf8'), 'lopuAccount:u');
 });
+
+test('a gift exhausting the balance between the access read and turn reservation prevents provider work', async () => {
+  const { things, service } = setup({ starterCredits: 1 });
+  const before = await service.ensureLopuAccount('gift-owner');
+  assert.equal(before.crystal.balanceMicros, 1_000_000);
+  await things.updateOne({ ownerId: 'gift-owner', thingtime: LOPU_ACCOUNT_THINGTIME }, { $inc: { 'crystal.balanceMicros': -1_000_000 } });
+  assert.deepEqual(await service.reserveLopuTurn('gift-owner'), { ok: false, reason: 'busy' });
+});

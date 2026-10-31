@@ -9,7 +9,7 @@ export const prepareRecordingImport = (
   patch: AttachmentAnnotationPatch = {}, now = new Date()
 ): AttachmentDoc => {
   if (before.ownerId !== ownerId || before.attachmentState !== 'ready' ||
-    before.attachmentPurpose !== 'recording' || before.attachmentImportDraft !== true ||
+    !['recording', 'file'].includes(before.attachmentPurpose || '') || before.attachmentImportDraft !== true ||
     before.attachmentLinked || before.targetId || before.attachmentProfileSlot ||
     !(before.attachmentExpiresAt instanceof Date) || !Number.isFinite(before.attachmentExpiresAt.getTime()) ||
     before.attachmentExpiresAt <= now || !Number.isSafeInteger(expectedBytes) || expectedBytes < 0 ||
@@ -25,4 +25,4 @@ export const prepareRecordingImport = (
 };
 
 export const isDurableRecordingUpload = (doc: Pick<AttachmentDoc, 'attachmentPurpose' | 'attachmentImportDraft'>) =>
-  doc.attachmentPurpose === 'recording' && doc.attachmentImportDraft !== true;
+  ['recording', 'file'].includes(doc.attachmentPurpose || '') && doc.attachmentImportDraft !== true;

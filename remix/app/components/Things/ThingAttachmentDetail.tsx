@@ -1,3 +1,4 @@
+import { PostAttachments } from '../Attachments/PostAttachments';
 import { ProgressiveImage } from '~/components/Attachments/ProgressiveImage';
 import React from 'react';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
@@ -143,6 +144,7 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 						)}
 					</Box>
 				) : null}
+				{attachment.mediaKind === 'video' ? <Box mt={5}><PostAttachments attachments={[attachment]} /></Box> : null}
 				{isAudio ? (
 					<Box mt={5}>
 						<AudioAttachmentPlayer attachments={[attachment]} />
@@ -154,7 +156,7 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 				<Flex align="center" justify="space-between" gap={3} wrap="wrap">
 					<Box>
 						<Heading as="h2" fontSize="md">
-							Referenced by {references.length}
+							Direct post references · {references.length}
 						</Heading>
 						<Text color={MUTED} fontSize="sm" mt={1}>
 							{references.length

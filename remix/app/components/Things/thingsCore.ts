@@ -1,9 +1,12 @@
+import { isBuilderThing } from '../../schemas/builderThing';
+import { renderComponentDeclaration } from '../Thingtime/renderComponentDeclaration';
+import { isFolderThing } from '../../schemas/folderThing';
 // Shared vocabulary for the /things page — types, display helpers, and the
 // localCache shape. Pure module (no React) so views/dialogs/tests can all
 // import it without dragging component code along.
 
 import { primaryKindOf, THING_KIND_ICONS } from './thingIcon';
-import { THING_AUDIENCE_META, sharePathForThing, thingPath } from '../Sharing/audienceCore';
+import { THING_AUDIENCE_META, sharePathForThing, thingPath, type ResolvedAudience } from '../Sharing/audienceCore';
 
 export { FILE_TYPE_ICON_RULES, THING_KIND_ICONS, fileIconForThing, primaryKindOf, thingIcon } from './thingIcon';
 
@@ -16,6 +19,8 @@ export type ThingsAuthor = {
 
 // PublicThing as the /things page consumes it (see api/utils/things/things.ts)
 export type ThingsThing = {
+  inode?: import('~/api/utils/devices/deviceFilesystemCore').FilesystemEntry & { deviceId: string };
+  audience?: ResolvedAudience;
   id: string;
   thingtime: string[];
   author: ThingsAuthor;
@@ -23,6 +28,7 @@ export type ThingsThing = {
   acl: string[];
   linkKey?: string;
   targetId: string | null;
+  parentId?: string | null;
   folderId: string | null;
   crystal: Record<string, any>;
   extended: unknown | null;
@@ -77,11 +83,18 @@ export type ThingsCache = {
   schemaRenders?: Record<string, Record<string, unknown> | null>;
 };
 
-export const thingsCacheKey = (userId: string | null | undefined) => `tt-things-${userId || 'anon'}`;
+export const thingsCacheKey = (userId: string | null | undefined) => `tt-things-v2-${userId || 'anon'}`;
 
 export const folderKeyOf = (folderId: string | null) => folderId || 'root';
 
-export const isFolder = (thing: Pick<ThingsThing, 'thingtime'>): boolean => thing.thingtime.includes('folder');
+/** Apply the root contract to cached first paint as well as fresh API pages.
+ * Search and explicit folder views keep their own scope. */
+export const isTopLevelLibraryThing = (thing: Pick<ThingsThing, 'thingtime' | 'folderId' | 'targetId' | 'parentId' | 'crystal'>): boolean =>
+  !thing.folderId && !thing.targetId && !thing.parentId && !thing.crystal?.parentId && !thing.thingtime.some(kind => kind === 'attachment' || kind === 'file-sync');
+
+export const isFolder = (thing: Pick<ThingsThing, 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>): boolean => isFolderThing(thing);
+export const isBuilderApp = (thing: Pick<ThingsThing, 'thingtime' | 'crystal' | 'folderId'>): boolean =>
+  isFolder(thing) && thing.folderId == null && thing.crystal?.builderApp === true;
 
 // Kinds the server refuses to copy (mirrors UNCOPYABLE in
 // api/utils/things/things.ts): attached children live under their target — a
@@ -97,15 +110,29 @@ export const isDuplicable = (thing: Pick<ThingsThing, 'thingtime'>): boolean =>
 // kinds the listing can actually contain (protected kinds never appear).
 export const THINGS_KIND_FILTERS = [
   { id: 'all', label: 'All', icon: '🌀' },
+  { id: 'apps', label: 'Apps', icon: '▦' },
   { id: 'folder', label: 'Folders', icon: '📁' },
+  { id: 'attachment', label: 'Files', icon: '💾' },
   { id: 'post', label: 'Posts', icon: '📝' },
   { id: 'data', label: 'Data', icon: '📦' },
   { id: 'schema', label: 'Schemas', icon: '💎' },
   { id: 'component', label: 'Components', icon: '🧩' },
+  { id: 'webpage', label: 'Pages', icon: '▤' },
   { id: 'action', label: 'Actions', icon: '⚡' },
   { id: 'comment', label: 'Comments', icon: '💬' }
 ] as const;
 export type ThingsKindFilter = (typeof THINGS_KIND_FILTERS)[number]['id'];
+
+export const BUILDER_KIND_FILTERS = [
+  { id: 'apps', label: 'All apps', icon: '▦' },
+  { id: 'component', label: 'All components', icon: '🧩' },
+  { id: 'webpage', label: 'All pages', icon: '▤' },
+  { id: 'data', label: 'All data', icon: '📦' },
+  { id: 'action', label: 'All Actions', icon: '⚡' },
+  { id: 'schema', label: 'All schemas', icon: '💎' },
+  { id: 'all', label: 'All app items', icon: '◫' }
+] as const;
+export type BuilderKindFilter = (typeof BUILDER_KIND_FILTERS)[number]['id'];
 
 const firstLine = (value: string, max = 80): string => {
   const line = value.split('\n').find((entry) => entry.trim()) || '';
@@ -117,7 +144,7 @@ const firstLine = (value: string, max = 80): string => {
 // about what the thing is instead of rendering an empty row.
 export const thingDisplayName = (thing: Pick<ThingsThing, 'thingtime' | 'crystal'>): string => {
   const crystal = thing.crystal || {};
-  for (const key of ['name', 'title']) {
+  for (const key of ['title', 'name']) {
     if (typeof crystal[key] === 'string' && crystal[key].trim()) return firstLine(crystal[key]);
   }
   if (typeof crystal.text === 'string' && crystal.text.trim()) return firstLine(crystal.text);
@@ -150,13 +177,12 @@ export const formatWhen = (iso: string): string => {
   return date.toLocaleDateString();
 };
 
-// Where a thing's OWN page lives — the permalink Copy link / Share hand out
-// and the page a double-click opens, so a pasted link and an opened tile
-// land on the same surface. Every kind with a dedicated page routes there
+// Where a thing's public/readable page lives — the permalink Copy link /
+// Share hand out. Owner edit navigation is separate in thingOpenHref. Every kind with a dedicated page routes there
 // (folders open in place on /things); components, data and whatever kind
 // comes next land on the universal /thing/:id page. The /things?preview=
 // deep link stays the explicit quick-look, never the permalink.
-export const thingLink = (thing: Pick<ThingsThing, 'id' | 'thingtime'>): string => {
+export const thingLink = (thing: Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>>): string => {
   return thingPath(thing);
 };
 
@@ -167,11 +193,34 @@ export const thingShareLink = (
 // The surfaces the universal page can send a viewer back to.
 export type ThingsReferrer = 'things' | 'actions' | 'feed';
 
-// The href a browse surface NAVIGATES to: the permalink plus the referrer
+type NavigableThing = Pick<ThingsThing, 'id' | 'thingtime'> & Partial<Pick<ThingsThing, 'crystal'>> & { author?: { id: string } | null };
+
+/** Builder identity is explicit (with canonical legacy kinds supported). A
+ * viewer's access to a saved Thing never implies ownership or edit authority. */
+export const thingBuilderHref = (thing: NavigableThing, viewerId?: string | null): string | null => {
+  if (!viewerId || thing.author?.id !== viewerId || !isBuilderThing(thing)) return null;
+  const id = encodeURIComponent(thing.id);
+  if (isFolder(thing)) return `/builder?folder=${id}&kind=all`;
+  if (thing.thingtime.includes('webpage')) return `/builder?page=${id}`;
+  return `/builder?thing=${id}`;
+};
+
+/** A live presentation uses an existing reader, never an inferred data shape. */
+export const thingLiveHref = (thing: NavigableThing): string | null => {
+  if (isFolder(thing)) return null;
+  const presentation = renderComponentDeclaration(thing.crystal);
+  if (thing.thingtime.some(kind => ['webpage', 'component', 'action', 'schema'].includes(kind)) || (presentation && presentation.kind !== 'invalid')) return thingLink(thing);
+  return null;
+};
+
+// The href a browse surface NAVIGATES to: owners edit Builder Things; other
+// activation uses the readable permalink plus the referrer
 // hint the universal /thing/:id page reads for its back link. Only that page
 // consumes the hint, so dedicated pages (post/action/webpage/schema) and the
 // shareable permalink itself never carry it.
-export const thingOpenHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'>, from: ThingsReferrer): string => {
+export const thingOpenHref = (thing: NavigableThing, from: ThingsReferrer, viewerId?: string | null): string => {
+  const builderHref = thingBuilderHref(thing, viewerId);
+  if (builderHref) return builderHref;
   const href = thingLink(thing);
   return href.startsWith('/thing/') ? `${href}${href.includes('?') ? '&' : '?'}from=${from}` : href;
 };
@@ -324,3 +373,11 @@ export const interpolateRenderTree = (
   };
   return walk(tree) as Record<string, unknown>;
 };
+
+// Match the writer's projection: dedicated library/attachment renames change
+// display metadata only; ordinary schema names stay in sync with their title.
+export const thingRenameCrystal = (thing: Pick<ThingsThing, 'crystal' | 'thingtime'>, title: string): Record<string, string> =>
+  ({ title, ...(!isManagedLibraryThing(thing) && !thing.thingtime.includes('attachment') && typeof thing.crystal?.name === 'string' ? { name: title } : {}) });
+
+export const isManagedLibraryThing = (thing: Pick<ThingsThing, 'thingtime'>): boolean =>
+  thing.thingtime.length === 1 && ['theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(thing.thingtime[0]);

@@ -51,6 +51,8 @@ import {
 test('sanitizeSlug normalizes and enforces the /s/<slug> grammar', () => {
 	assert.equal(sanitizeSlug(' Rainbow Makers '), 'rainbow_makers');
 	assert.equal(sanitizeSlug('s/tools'), 'tools');
+	assert.equal(sanitizeSlug('thingtime'), 'thingtime');
+	assert.equal(sanitizeSlug(' S/Thingtime '), 'thingtime');
 	assert.equal(sanitizeSlug('a-b-c'), 'a_b_c');
 	for (const bad of ['ab', 'x'.repeat(31), 'has.dot', 'has/slash', '', 42, null, 'ünïcode']) {
 		const result = sanitizeSlug(bad);

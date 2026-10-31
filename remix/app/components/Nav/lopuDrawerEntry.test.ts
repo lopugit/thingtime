@@ -29,6 +29,8 @@ test('the drawer lists Lopu right after Messages with chat, conversations and se
 		[
 			['lopu-chat', '/lopu'],
 			['lopu-voice', '/lopu/voice'],
+			['lopu-tasks', '/lopu/tasks'],
+			['lopu-agent-browsers', '/agent-browsers'],
 			['lopu-conversations', '/messages'],
 			['lopu-vault', '/settings#secure-vault'],
 			['lopu-settings', '/settings#lopu']
@@ -52,7 +54,7 @@ test('the drawer lists Lopu right after Messages with chat, conversations and se
 	);
 	assert.deepEqual(
 		filterDrawerItemsByAuth(lopu.children, true).map((child) => child.id),
-		['lopu-chat', 'lopu-voice', 'lopu-conversations', 'lopu-vault', 'lopu-settings']
+		['lopu-chat', 'lopu-voice', 'lopu-tasks', 'lopu-agent-browsers', 'lopu-conversations', 'lopu-vault', 'lopu-settings']
 	);
 
 	// a navigating hub: clicking it closes the drawer like Feed/Messages do
@@ -80,14 +82,16 @@ test('useDrawer exports the Lopu z rungs and documents them in the ladder', () =
 	assert.ok(drawerZ + 200 > hoverZ && drawerZ + 200 < popupZ, 'LOPU_LAUNCHER_Z must sit above the hovered drawer and below popups');
 });
 
-test('root mounts the floating host after DrawerSystem, client-only and never in the authorize popup', () => {
+test('root mounts the floating host after DrawerSystem, client-only and outside popup/password surfaces', () => {
 	const source = read('root.tsx');
 	assert.match(source, /import \{ LopuHost \} from '\.\/components\/Lopu\/LopuHost';/);
 	const drawerAt = source.indexOf('<DrawerSystem />');
-	const hostAt = source.indexOf('{mounted && !isAuthorizePopup ? <LopuHost /> : null}');
+	const hostAt = source.indexOf('{mounted && !isAuthorizePopup && !isPasswordSurface ? <LopuHost /> : null}');
 	assert.notEqual(drawerAt, -1);
 	assert.notEqual(hostAt, -1);
 	assert.ok(hostAt > drawerAt, 'LopuHost must mount after DrawerSystem');
+	assert.match(source, /const isPasswordSurface = pathname === '\/passwords' \|\| pathname === '\/settings\/passwords';/);
+	assert.match(source, /const isAuthorizePopup = .*pathname === '\/passwords\/provider'/);
 });
 
 test('the drawer row and the floating host show the shared streaming badge', () => {
@@ -125,8 +129,8 @@ test('the floating host is non-modal chrome that hides on /lopu and honours the 
 	assert.match(source, /if \(hiddenOnPath\) \{\s*return null;/);
 	// the launcher setting hides the bubble only — the window still follows
 	// `open`, so the navbar 🦄 can open it with the bubble turned off
-	assert.match(source, /const showLauncher = !hiddenOnPath && settings\.launcher;/);
-	assert.match(source, /const showWindow = !hiddenOnPath && open;/);
+	assert.match(source, /const showLauncher = !hiddenOnPath && \(settings\.launcher \|\| minimised\);/);
+	assert.match(source, /const showWindow = !hiddenOnPath && open && !minimised;/);
 	assert.match(source, /\{showLauncher && !showSheet && !\(showFrame && docked\) && \(/);
 	assert.doesNotMatch(source, /role="dialog"/, 'the window must not claim to be a dialog while non-modal');
 	assert.match(source, /role="complementary"/);
@@ -138,8 +142,11 @@ test('the floating host is non-modal chrome that hides on /lopu and honours the 
 	assert.match(source, /shouldIgnoreGlobalKeydown\(event\)/);
 	// the window never focuses itself — no programmatic focus() calls
 	assert.doesNotMatch(source, /\.focus\(\)/);
-	// mobile: an 88dvh bottom sheet instead of a floating frame
-	assert.match(source, /height: '88dvh'/);
+	// Mobile sheets follow the visual viewport, retaining an SSR fallback.
+	assert.match(source, /useLopuVisualViewport/);
+	assert.match(source, /bottom=\{visualViewport\?\.bottom \?\? 0\}/);
+	assert.match(source, /visualViewport\.height \* \(visualViewport\.keyboardOpen \? 1 : 0\.88\)/);
+	assert.match(source, /88dvh/);
 	// the shared chat view, compact, without the conversation column
 	assert.match(source, /<LopuChatView compact showConversations=\{false\} onOpenFull=\{openFull\} \/>/);
 });

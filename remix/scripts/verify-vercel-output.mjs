@@ -2,9 +2,11 @@
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 
-import { authorizeCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
+import { mediaWorkerCsp, draftPreviewCsp, platformRuntimeCsp, authorizeCsp, librarySdkCsp, librarySandboxCsp, designBundlesCsp, mcpLabCsp, mcpLabScriptHash, prodCsp } from './csp.mjs';
 import { findSourceMapAnnotation } from './embed-bundle-source-map.mjs';
+import { verifyClaudeOAuthArtifacts } from './claude-oauth-artifacts.mjs';
 
 const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const indexHtml = readFileSync('.vercel/output/static/index.html', 'utf8');
@@ -15,7 +17,11 @@ const embedBridge = readFileSync('.vercel/output/static/embed/bridge.html', 'utf
 const embedDemo = readFileSync('.vercel/output/static/embed/demo.html', 'utf8');
 const config = readJson('.vercel/output/config.json');
 const serverFunctionDir = '.vercel/output/functions/__server.func';
+if (readJson(join(serverFunctionDir, '.vc-config.json')).maxDuration < 300) {
+ throw new Error('Background AI needs a 300-second server function budget for execution and persistence.');
+}
 const tracedServerPackage = readJson(join(serverFunctionDir, 'package.json'));
+await verifyClaudeOAuthArtifacts();
 
 const filesBelow = (dir) =>
 	readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -72,6 +78,26 @@ const appScriptSources = getDirectiveSources(prodCsp, 'script-src');
 for (const forbidden of ["'unsafe-inline'", "'unsafe-eval'"]) {
 	if (appScriptSources.includes(forbidden)) {
 		throw new Error(`Application script-src must not contain ${forbidden}.`);
+	}
+}
+
+for (const host of ['https://maps.googleapis.com', 'https://maps.gstatic.com'])
+	if (!appScriptSources.includes(host)) throw new Error('Missing Maps SDK host: ' + host);
+for (const host of ['https://maps.googleapis.com', 'https://mapsresources-pa.googleapis.com'])
+	if (!getDirectiveSources(prodCsp, 'connect-src').includes(host)) throw new Error('Missing Maps service host: ' + host);
+for (const host of ['https://api.mapbox.com', 'https://events.mapbox.com'])
+	if (!getDirectiveSources(prodCsp, 'connect-src').includes(host)) throw new Error('Missing Mapbox service host: ' + host);
+if (appScriptSources.includes('https://api.mapbox.com')) throw new Error('Native Mapbox SDK must load from the bundled application assets.');
+
+// The loader names a fixed versioned same-origin path. Verify the deployed
+// bytes are the exact npm distribution rather than a missing or stale copy.
+const mapboxVersion = readJson('node_modules/mapbox-gl/package.json').version;
+if (mapboxVersion !== '3.30.0') throw new Error('Mapbox SDK package and saved map loader versions differ.');
+for (const file of ['mapbox-gl.js', 'mapbox-gl.css']) {
+	const source = readFileSync(join('node_modules/mapbox-gl/dist', file));
+	const deployedPath = join('.vercel/output/static/vendor/mapbox-gl', `v${mapboxVersion}`, file);
+	if (!existsSync(deployedPath) || createHash('sha256').update(readFileSync(deployedPath)).digest('hex') !== createHash('sha256').update(source).digest('hex')) {
+		throw new Error(`Mapbox SDK asset missing or changed: ${file}`);
 	}
 }
 
@@ -156,11 +182,14 @@ const wellKnownDiscoveryIndex = routes.findIndex(
 		route.src === '^/\\.well-known/(?:apple-app-site-association(?:-docs)?|oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json|thingtime-capabilities\\.json)$' &&
 		route.dest === '/__server'
 );
+const seoDiscoveryIndex = routes.findIndex(
+	(route) => route.src === '^/(?:robots\\.txt|sitemap\\.xml)(?:-docs)?$' && route.dest === '/__server'
+);
 const socialCardIndex = routes.findIndex((route) => route.src === '^/social-card$' && route.dest === '/__server');
 const socialMetaIndex = routes.findIndex(
-	(route) => route.dest === '/__server' && typeof route.src === 'string' && route.src.includes('post/[^/]+') && route.src.includes('media/[^/]+')
+	(route) => route.dest === '/__server' && route.src === '^/(?:.*)$'
 );
-const socialRouteIndexes = new Set([rootIndex, socialCardIndex, socialMetaIndex]);
+const socialRouteIndexes = new Set([rootIndex, socialCardIndex, socialMetaIndex, seoDiscoveryIndex]);
 const serverFallbackIndex = routes.findIndex(
 	(route, index) => route.dest === '/__server' && index !== wellKnownDiscoveryIndex && !socialRouteIndexes.has(index)
 );
@@ -203,6 +232,14 @@ if (wellKnownDiscoveryIndex === -1) {
 
 if (wellKnownDiscoveryIndex > filesystemIndex || wellKnownDiscoveryIndex > spaIndex) {
 	throw new Error('Vercel output checks static or SPA fallbacks before well-known discovery.');
+}
+
+if (seoDiscoveryIndex === -1) {
+	throw new Error('Vercel output does not route /robots.txt and /sitemap.xml to Nitro.');
+}
+
+if (seoDiscoveryIndex > filesystemIndex || seoDiscoveryIndex > spaIndex) {
+	throw new Error('Vercel output checks static or SPA fallbacks before robots/sitemap discovery.');
 }
 
 if (apiIndex > spaIndex) {
@@ -297,8 +334,10 @@ if (mcpLabHeadersIndex < cspHeadersIndex || mcpLabHeadersIndex > spaIndex) {
 }
 for (const route of routes) {
 	const csp = route.headers?.['Content-Security-Policy'];
-	if (typeof csp === 'string' && csp.includes('unsafe-eval') && csp !== designBundlesCsp) {
-		throw new Error(`Vercel output CSP re-introduces 'unsafe-eval' outside design bundles (route ${route.src}).`);
+	const isolatedSdk = route.src === '^/library/sdk\\.html$' && csp === librarySdkCsp;
+	if (typeof csp === 'string' && csp.includes('wasm-unsafe-eval') && !(route.src === '^/assets/mediaWorker-[A-Za-z0-9_-]+\\.js$' && csp === mediaWorkerCsp)) throw new Error('WebAssembly compilation permission must stay scoped to the fixed media worker.');
+	if (typeof csp === 'string' && getDirectiveSources(csp, 'script-src').includes("'unsafe-eval'") && csp !== designBundlesCsp && !isolatedSdk) {
+		throw new Error(`Vercel output CSP re-introduces 'unsafe-eval' outside isolated design/SDK documents (route ${route.src}).`);
 	}
 }
 const mcpLabScriptSources = new Set(getDirectiveSources(mcpLabCsp, 'script-src'));
@@ -335,3 +374,35 @@ if (!authorizeCsp.includes("frame-ancestors 'none'")) {
 console.log(
 	'[verify] Vercel output includes the external-boot Vite shell, external pre-app preview guard, no executable inline scripts, no-store HTML shell, traced server data dependencies, OAuth and Thingtime capability discovery, Thingtime embed bundle and popup bridge, filesystem route, SPA fallback, injection-resistant strict app CSP, hash-scoped Limitless MCP Lab CSP, scoped design-bundle CSP, and /authorize frame-deny.'
 );
+
+const draftHeaders = routes.find(route => route.src === '^/draft-preview(?:/.*)?$' && route.headers?.['Content-Security-Policy'] === draftPreviewCsp);
+if (!draftHeaders || draftHeaders.headers['Cache-Control'] !== 'no-store' || getDirectiveSources(draftPreviewCsp, 'sandbox').join(' ') !== 'allow-scripts allow-downloads' || getDirectiveSources(draftPreviewCsp, 'connect-src').join(' ') !== "'none'") throw new Error('Draft preview must retain opaque-origin offline containment.');
+for (const file of ['index.html', 'runner.js', 'policy.json']) if (!existsSync(`.vercel/output/static/draft-preview/${file}`)) throw new Error(`Missing draft preview asset: ${file}`);
+if (readJson('.vercel/output/static/draft-preview/policy.json').contentSecurityPolicy !== draftPreviewCsp) throw new Error('Draft policy differs from packaged headers.');
+
+const libraryHeaders = routes.find(route => route.src === '^/library/sandbox\\.html$' && route.headers?.['Content-Security-Policy'] === librarySandboxCsp);
+if (!libraryHeaders || routes.indexOf(libraryHeaders) < cspHeadersIndex || routes.indexOf(libraryHeaders) > spaIndex || !libraryHeaders.continue) throw new Error('Isolated library CSP must override only its document before filesystem routing.');
+for (const asset of ['library/sandbox.html','library/sdk.html','library/runner.js']) {
+ if (!existsSync(join('.vercel/output/static',asset))) throw new Error(`Missing isolated library asset: ${asset}`);
+}
+const librarySandboxTokens = getDirectiveSources(librarySandboxCsp,'sandbox');
+if (!librarySandboxTokens.includes('allow-scripts') || librarySandboxTokens.includes('allow-same-origin')) throw new Error('Library preview must retain its opaque origin.');
+
+const sdkHeaders = routes.find(route => route.src === '^/library/sdk\\.html$' && route.headers?.['Content-Security-Policy'] === librarySdkCsp);
+if (!sdkHeaders || routes.indexOf(sdkHeaders) < cspHeadersIndex || routes.indexOf(sdkHeaders) > spaIndex || !sdkHeaders.continue) throw new Error('SDK CSP must stay scoped to its isolated document.');
+if (getDirectiveSources(librarySdkCsp,'sandbox').join(' ') !== 'allow-scripts') throw new Error('SDK previews must retain opaque-origin containment.');
+
+const platformHeaders = routes.find(route => route.src === '^/platform/runtime\\.html$' && route.headers?.['Content-Security-Policy'] === platformRuntimeCsp);
+if (!platformHeaders || getDirectiveSources(platformRuntimeCsp,'sandbox').join(' ') !== 'allow-scripts allow-forms' || getDirectiveSources(platformRuntimeCsp,'form-action').join(' ') !== "'none'") throw new Error('Web Platform runtime must retain opaque-origin containment.');
+for (const filename of ['platform/runtime.html','platform/runtime.js']) if (!existsSync(join('.vercel/output/static', filename))) throw new Error(`Missing Web Platform runtime ${filename}`);
+for (const extension of ['html', 'js']) {
+ const headers = routes.find(route => route.src === `^/platform/runtime\\.${extension}$`);
+ if (!headers?.continue || headers.headers?.['Cache-Control'] !== 'no-store' || routes.indexOf(headers) < cspHeadersIndex || routes.indexOf(headers) > filesystemIndex) throw new Error(`Web Platform runtime ${extension} must be no-store before filesystem routing.`);
+}
+const runtimeDigest = createHash('sha256').update(readFileSync('.vercel/output/static/platform/runtime.js')).digest('hex');
+if (!readFileSync('.vercel/output/static/platform/runtime.html', 'utf8').includes(`src="/platform/runtime.js?v=${runtimeDigest}"`)) throw new Error('Web Platform document must reference its exact runtime digest to bypass previously cached compiler code.');
+
+const mediaHeaders = routes.find(route => route.src === '^/assets/mediaWorker-[A-Za-z0-9_-]+\\.js$');
+if (!mediaHeaders?.continue || mediaHeaders.headers?.['Content-Security-Policy'] !== mediaWorkerCsp || routes.indexOf(mediaHeaders) < cspHeadersIndex || routes.indexOf(mediaHeaders) > filesystemIndex)
+ throw new Error('Media worker must deny network through its own CSP before filesystem routing.');
+if (!readdirSync('.vercel/output/static/assets').some(name => /^mediaWorker-[A-Za-z0-9_-]+\.js$/.test(name))) throw new Error('Missing secure-context media worker bundle.');

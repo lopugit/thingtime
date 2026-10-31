@@ -1,3 +1,5 @@
+import { thingOpenHref, type ThingsAuthor } from '../Things/thingsCore';
+import { PersistedThingMenu } from '../Thingtime/ContextMenu/PersistedThingMenu';
 import React from 'react';
 import { Badge, Box, Button, Flex, Text } from '@chakra-ui/react';
 import { ArrowLeft, BookOpen, ExternalLink, Link as LinkIcon, Search } from 'lucide-react';
@@ -6,7 +8,6 @@ import { Link, useParams } from 'react-router';
 import { timeAgo } from '~/components/Feed/feedTypes';
 import { RenderThing } from '~/components/Kinds';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { thingDetailPath } from '~/components/Search/commanderSearch';
 import { SchemaTemplateRender } from '~/components/Things/ThingsViews';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -18,6 +19,7 @@ import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity'
 
 import { SampleRender, ShapeChip, kindOf, monoLabel, systemThingFields } from './SchemasBrowsePage';
 import { SchemaThingFormBody } from './SchemaThingForm';
+import { SchemaBuilder, type BuilderPrefill } from './SchemaBuilder';
 import {
   SCHEMAS_LEGACY_CACHE_KEY,
   builtinSchemaForKey,
@@ -26,6 +28,7 @@ import {
   parseSchemaDetailKey,
   registryToCardSource,
   schemaDetailKeyFor,
+  schemaCopyPrefill,
   schemaDetailPath,
   schemaSearchPath,
   searchableSchemaSource,
@@ -67,6 +70,7 @@ const MAX_CACHED_OWN_THING_LISTS = 16;
 const ownThingsCacheKey = (userId: string, schemaKey: string) => `${OWN_THINGS_CACHE_PREFIX}${userId}:${schemaKey}`;
 
 type OwnThing = {
+  author?: ThingsAuthor;
   id: string;
   thingtime: string[];
   crystal: Record<string, any>;
@@ -79,6 +83,7 @@ const asOwnThing = (thing: unknown): OwnThing | null => {
   if (typeof record.id !== 'string' || !record.id) return null;
   return {
     id: record.id,
+    author: record.author && typeof record.author === 'object' && typeof (record.author as { id?: unknown }).id === 'string' ? record.author as ThingsAuthor : null,
     thingtime: Array.isArray(record.thingtime) ? record.thingtime.filter((entry): entry is string => typeof entry === 'string') : [],
     crystal: record.crystal && typeof record.crystal === 'object' && !Array.isArray(record.crystal) ? (record.crystal as Record<string, any>) : {},
     createdAt: typeof record.createdAt === 'string' ? record.createdAt : ''
@@ -135,6 +140,7 @@ const CrystalChips = ({ crystal }: { crystal: Record<string, any> }) => {
 };
 
 const OwnThingCard = ({ thing, source }: { thing: OwnThing; source: SchemaCardSource }) => {
+  const user = useCurrentUser();
   const title = titleOf(thing);
   const rendered = React.useMemo(() => ({ kind: kindOf(source.name), ...thing.crystal }), [source.name, thing.crystal]);
   return (
@@ -162,11 +168,12 @@ const OwnThingCard = ({ thing, source }: { thing: OwnThing; source: SchemaCardSo
           fontSize="xs"
           gap={1}
           textDecoration="underline"
-          to={thingDetailPath(thing.id)}
+          to={thingOpenHref(thing, 'things', user?.id)}
         >
           Open thing
           <ExternalLink size={11} />
         </Flex>
+        <PersistedThingMenu id={thing.id} initialThing={thing} label={`${title || "Thing"} actions`} />
       </Flex>
       {source.render ? (
         // the schema's render over the viewer's own values — INERT: {field}
@@ -183,6 +190,7 @@ const OwnThingCard = ({ thing, source }: { thing: OwnThing; source: SchemaCardSo
 export const SchemaDetailPage = () => {
   const { key: rawKey } = useParams();
   const api = useApi();
+  const [copyPrefill, setCopyPrefill] = React.useState<BuilderPrefill | null>(null);
   const lopu = useLopu();
   const user = useCurrentUser();
   const apiRef = React.useRef(api);
@@ -209,6 +217,10 @@ export const SchemaDetailPage = () => {
     communityId ? (cachedSchemaEntry(user?.id, communityId)?.usageCount ?? null) : null
   );
   const [notFound, setNotFound] = React.useState(!key || (!builtin && !communityId));
+
+  React.useEffect(() => {
+    setCopyPrefill(null);
+  }, [user?.id, key]);
 
   React.useEffect(() => {
     if (!communityId) {
@@ -384,6 +396,18 @@ export const SchemaDetailPage = () => {
           )}
         </Flex>
 
+        {source && (
+          <Button alignSelf="flex-start" size="sm" onClick={() => {
+            if (!user) { lopu({ title: 'Sign in to copy this schema', status: 'info' }); return; }
+            setCopyPrefill(schemaCopyPrefill(source));
+          }}>
+            Copy and extend
+          </Button>
+        )}
+        {copyPrefill && <SchemaBuilder key={`${user?.id}:${source?.key}`} prefill={copyPrefill} onClose={() => setCopyPrefill(null)} onCreated={(thing) => {
+          setCopyPrefill(null);
+          lopu({ title: 'Your schema copy is ready', status: 'success', link: { label: 'Open your schema', href: `/schemas/${encodeURIComponent(thing.id)}` } });
+        }} />}
         {!source && !notFound && (
           <Box color="var(--tt-muted, #9a9aa6)" padding={10} textAlign="center">
             Loading schema…

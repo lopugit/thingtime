@@ -1,3 +1,5 @@
+import { lopuRecoveryFailures } from '~/api/utils/lopu/continuationCore';
+import { lopuResultLinks, normalizeLopuLinks, safeLopuHref, type LopuToolLink } from '~/utils/lopuLinks';
 // Pure, DOM-free core for the Lopu chat client (PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md
 // §2.3 event protocol, §3.1 streaming reducer): the client mirror of the
 // NDJSON event union, the streaming-turn reducer, tool labels + links, the
@@ -7,6 +9,7 @@
 
 import type { WebpageBlock } from '~/components/Builder/webpageBlocks';
 import type { ChatMessage } from '~/components/Messenger/messengerTypes';
+export type { LopuToolLink } from '~/utils/lopuLinks';
 
 // ——— the wire protocol (client mirror of api/utils/lopu/chatEvents.ts) ——————
 
@@ -52,6 +55,7 @@ export const microsOrNull = (value: unknown): number | null => (typeof value ===
 export type LopuConfirmSubject = { id?: string; kind?: string; name?: string };
 
 export type LopuTurnMeta = {
+ continuation?: boolean;
 	chatId: string;
 	userMessageId: string;
 	requestId: string;
@@ -108,7 +112,7 @@ export type LopuChatEvent =
 	| { type: 'confirm'; id: string; name: string; key: string; token: string; expiresAt: string; summary: string; subject?: LopuConfirmSubject }
 	| { type: 'error'; message: string; retryable: boolean }
 	| {
-			type: 'done';
+			type: 'done'; continuationSafe?: boolean; recoveryFailures?: number;
 			assistantMessageId?: string | null;
 			messages?: ChatMessage[];
 			usage?: LopuUsage;
@@ -196,6 +200,8 @@ export type LopuTurnState = {
 	chatId: string | null;
 	userMessageId: string;
 	userText: string;
+	continuation?: boolean;
+	continuationSafe?: boolean; recoveryFailures?: number;
 	userAttachments: ChatMessage['attachments'];
 	startedAt: number;
 	meta: LopuTurnMeta | null;
@@ -340,6 +346,7 @@ export const reduceLopuTurn = (state: LopuTurnState, event: LopuChatEvent): Lopu
 			const billing = normalizeLopuBilling(meta.billing);
 			return bump(state, {
 				meta: { ...meta, billing },
+    continuation: meta.continuation === true,
 				chatId: meta.chatId || state.chatId,
 				userMessageId: meta.userMessageId || state.userMessageId,
 				billing
@@ -467,6 +474,8 @@ export const reduceLopuTurn = (state: LopuTurnState, event: LopuChatEvent): Lopu
 				assistantMessageId: typeof event.assistantMessageId === 'string' ? event.assistantMessageId : null,
 				messages: Array.isArray(event.messages) ? event.messages : [],
 				usage: normalizeLopuUsage(event.usage),
+				continuationSafe: event.continuationSafe,
+				recoveryFailures: lopuRecoveryFailures(event.recoveryFailures),
 				stopReason: typeof event.stopReason === 'string' ? event.stopReason : null,
 				costMicros: microsOrNull(event.costMicros),
 				// the done event's billing wins (a fallback mid-turn can change who pays)
@@ -576,6 +585,8 @@ const TOOL_LABELS: Record<string, [string, string]> = {
 	list_actions: ['Listing your actions', 'Listed your actions'],
 	install_suite: ['Installing a suite', 'Installed a suite'],
 	create_schema: ['Creating a schema', 'Created a schema'],
+	get_schema: ['Reading a schema', 'Read schema'],
+	save_attachment: ['Saving your file', 'Saved file to Things'],
 	create_data: ['Saving data', 'Saved data'],
 	update_thing: ['Updating a thing', 'Updated a thing'],
 	delete_thing: ['Deleting a thing', 'Deleted a thing'],
@@ -613,6 +624,8 @@ export const TOOL_GLYPHS: Record<string, string> = {
 	list_actions: '⚡',
 	install_suite: '📦',
 	create_schema: '🧬',
+	get_schema: '🧬',
+	save_attachment: '📎',
 	create_data: '💎',
 	search_things: '🔎',
 	get_thing: '🔎',
@@ -626,60 +639,19 @@ export const TOOL_GLYPHS: Record<string, string> = {
 
 export const toolGlyph = (name: string): string => TOOL_GLYPHS[name] || '🔧';
 
-export type LopuToolLink = { label: string; href: string };
-
-const thingKind = (thing: LopuThingLike | null | undefined, fallback: string | null): string | null => {
-	const declared = Array.isArray(thing?.thingtime) ? thing?.thingtime.find((kind) => typeof kind === 'string') : null;
-	return declared || fallback;
-};
-
-const linkForThing = (thing: LopuThingLike | null | undefined, kind: string | null): LopuToolLink | null => {
-	if (!thing || typeof thing.id !== 'string' || !thing.id) return null;
-	const resolvedKind = thingKind(thing, kind);
-	const crystal = thing.crystal || {};
-	if (resolvedKind === 'webpage') {
-		return { label: `Open ${crystal.name || 'the page'} in the builder`, href: `/builder?page=${encodeURIComponent(thing.id)}` };
-	}
-	if (resolvedKind === 'component') {
-		const key = typeof crystal.componentKey === 'string' && crystal.componentKey ? crystal.componentKey : thing.id;
-		return { label: `Open ${crystal.name || 'the component'}`, href: `/components/${encodeURIComponent(key)}` };
-	}
-	if (resolvedKind === 'action') {
-		const key = typeof crystal.actionKey === 'string' && crystal.actionKey ? crystal.actionKey : thing.id;
-		return { label: `Open ${crystal.name || 'the action'}`, href: `/actions/${encodeURIComponent(key)}` };
-	}
-	if (resolvedKind === 'schema') {
-		return { label: `Open ${crystal.name || 'the schema'}`, href: `/schemas/${encodeURIComponent(thing.id)}` };
-	}
-	return { label: `Open ${crystal.name || 'the thing'}`, href: `/thing/${encodeURIComponent(thing.id)}` };
-};
-
-/**
- * Where a finished tool card links: the thing it created/updated, the page a
- * patch landed on, or a page named in the result data. Deduplicated by href.
- */
+/** Shared reference extraction keeps live and persisted cards consistent. */
 export const toolLinks = (activity: LopuToolActivity): LopuToolLink[] => {
-	const links: LopuToolLink[] = [];
-	const push = (link: LopuToolLink | null) => {
-		if (link && !links.some((entry) => entry.href === link.href)) links.push(link);
-	};
-	push(linkForThing(activity.thing?.thing, activity.thing?.kind ?? null));
-	if (activity.patch?.pageId) {
-		push({ label: 'Open in the builder', href: `/builder?page=${encodeURIComponent(activity.patch.pageId)}` });
-	}
-	const data = activity.result?.data;
-	if (data && typeof data === 'object') {
-		const record = data as { thing?: LopuThingLike; pageId?: unknown; things?: unknown };
-		if (record.thing && typeof record.thing === 'object') push(linkForThing(record.thing, null));
-		if (typeof record.pageId === 'string' && record.pageId) {
-			push({ label: 'Open in the builder', href: `/builder?page=${encodeURIComponent(record.pageId)}` });
-		}
-	}
+	const links = lopuResultLinks({
+		thing: activity.thing ? { ...activity.thing.thing, kind: activity.thing.kind } : undefined,
+		pageId: activity.patch?.pageId,
+		subject: activity.confirm?.subject
+	});
+	links.push(...lopuResultLinks(activity.result?.data));
 	if (activity.name === 'navigate' && activity.input && typeof activity.input === 'object') {
 		const path = (activity.input as { path?: unknown }).path;
-		if (typeof path === 'string' && isSiteRelativePath(path)) push({ label: `Go to ${path}`, href: path });
+		if (typeof path === 'string' && isSiteRelativePath(path)) links.push({ label: `Go to ${path}`, href: path });
 	}
-	return links;
+	return normalizeLopuLinks(links);
 };
 
 // ——— chat titling ————————————————————————————————————————————————————————
@@ -703,9 +675,8 @@ export const chatTitleFromText = (text: string): string => {
 // Deliberately tiny: paragraphs, bullet lists, fenced code, inline code, bold,
 // italic and `[label](/site-relative)` links. NO raw HTML ever — the renderer
 // draws text nodes only, so a model that emits `<script>` shows the literal
-// characters. A link that is not site-relative (another host, a scheme) is
-// demoted to plain text "label (url)" — nothing ever leaves the site through
-// a Lopu bubble.
+// characters. Local paths and credential-free HTTP(S) links are clickable;
+// unsafe schemes are demoted to plain text "label (url)".
 export type LopuInline =
 	| { kind: 'text'; text: string }
 	| { kind: 'code'; text: string }
@@ -736,7 +707,7 @@ export const parseLopuInlines = (text: string): LopuInline[] => {
 			const link = LINK_TOKEN.exec(token);
 			const label = link?.[1] ?? token;
 			const href = link?.[2] ?? '';
-			if (isSiteRelativePath(href)) out.push({ kind: 'link', text: label, href });
+			if (safeLopuHref(href)) out.push({ kind: 'link', text: label, href });
 			else out.push({ kind: 'text', text: `${label} (${href})` });
 		} else if (token.startsWith('**') || token.startsWith('__')) out.push({ kind: 'strong', text: token.slice(2, -2) });
 		else out.push({ kind: 'em', text: token.slice(1, -1) });
@@ -881,6 +852,7 @@ export const buildUserMessage = (turn: LopuTurnState, viewerId: string, chatId: 
 		text: turn.userText,
 		createdAt: new Date(turn.startedAt).toISOString()
 	}),
+	...(turn.continuation ? { lopu: { role: 'user' as const, requestId: turn.requestId, segmentIndex: 0, segmentCount: 1, continuation: true } } : {}),
 	attachments: turn.userAttachments ?? []
 });
 
@@ -936,11 +908,37 @@ export type LopuTimelineItem =
  * their user row. A placed turn absorbs the Lopu rows that follow it — its
  * own persisted segments and any optimistic row — so a turn never shows
  * twice; a turn whose user row is not (yet) in the list is appended at the
- * end with its own optimistic user bubble. System rows are never drawn.
+ * end with its own optimistic user bubble when it has user content. An empty
+ * recovered terminal turn yields to its saved assistant reply. System rows are
+ * never drawn.
  */
 export const buildLopuTimeline = (messages: ChatMessage[], turns: LopuTurnState[], viewerId: string): LopuTimelineItem[] => {
+	const savedAssistantStops = new Map<string, Set<string>>();
+	const savedAssistantMeta = new Map<string, { requestId: string; stopReason: string }>();
+	for (const message of messages) {
+		if (message.systemType || message.deleted || isOptimisticLopuMessage(message) || !isLopuAssistantMessage(message)) continue;
+		const meta = lopuMessageMeta(message);
+		if (meta?.continuation || (!message.text.trim() && !message.attachments?.length)) continue;
+		// Persisted-row Retry needs both fields. Keep the recovered control when
+		// legacy history cannot identify the request and its terminal state.
+		if (meta?.requestId && meta.stopReason) {
+			savedAssistantMeta.set(message.id, { requestId: meta.requestId, stopReason: meta.stopReason });
+			const stops = savedAssistantStops.get(meta.requestId) || new Set<string>();
+			stops.add(meta.stopReason);
+			savedAssistantStops.set(meta.requestId, stops);
+		}
+	}
+	const timelineTurns = turns.filter(turn => {
+		const savedMessagesLoaded = turn.messages.every(message => {
+			const saved = savedAssistantMeta.get(message.id);
+			return saved?.requestId === turn.requestId && saved?.stopReason === turn.stopReason;
+		});
+		const emptyRecoveredTurn = !isLopuTurnActive(turn) && !turn.userText.trim() && !turn.userAttachments?.length &&
+			!turn.text.trim() && !turn.segments.length && !turn.tools.length && savedMessagesLoaded;
+		return !emptyRecoveredTurn || !turn.stopReason || !savedAssistantStops.get(turn.requestId)?.has(turn.stopReason);
+	});
 	const byUserMessageId = new Map<string, LopuTurnState>();
-	for (const turn of turns) byUserMessageId.set(turn.userMessageId, turn);
+	for (const turn of timelineTurns) byUserMessageId.set(turn.userMessageId, turn);
 	const placed = new Set<string>();
 	const items: LopuTimelineItem[] = [];
 	let absorbing = false;
@@ -949,7 +947,7 @@ export const buildLopuTimeline = (messages: ChatMessage[], turns: LopuTurnState[
 		const assistant = isLopuAssistantMessage(message);
 		if (assistant && absorbing) continue;
 		absorbing = false;
-		items.push({ kind: 'message', message, role: assistant ? 'assistant' : 'user' });
+		if (!lopuMessageMeta(message)?.continuation) items.push({ kind: 'message', message, role: assistant ? 'assistant' : 'user' });
 		const turn = byUserMessageId.get(message.id);
 		if (turn && !assistant) {
 			items.push({ kind: 'turn', turn });
@@ -957,9 +955,13 @@ export const buildLopuTimeline = (messages: ChatMessage[], turns: LopuTurnState[
 			absorbing = true;
 		}
 	}
-	for (const turn of turns) {
+	for (const turn of timelineTurns) {
 		if (placed.has(turn.requestId)) continue;
-		items.push({ kind: 'message', message: buildUserMessage(turn, viewerId), role: 'user' });
+		// Recovered background turns may have only provider output and no loaded
+		// user row. Keep their assistant state without inventing an empty input.
+		if (!turn.continuation && (turn.userText.trim() || turn.userAttachments?.length)) {
+			items.push({ kind: 'message', message: buildUserMessage(turn, viewerId), role: 'user' });
+		}
 		items.push({ kind: 'turn', turn });
 	}
 	return items;
@@ -977,7 +979,7 @@ export const isLopuAssistantMessage = (message: Pick<ChatMessage, 'externalSourc
 // What an assistant row remembers about the turn that produced it (design
 // note §1.2: crystal.lopu projects onto the public message as `lopu`). Read
 // defensively — older rows and user rows carry nothing.
-export type LopuMessageToolCall = { name: string; ok: boolean; summary: string; thingId: string | null };
+export type LopuMessageToolCall = { name: string; ok: boolean; summary: string; thingId: string | null; links?: LopuToolLink[] };
 
 /**
  * Old receipts store only ok + the server's bounded summary, not a live grant.
@@ -991,6 +993,9 @@ export const historicalToolStatus = (call: Pick<LopuMessageToolCall, 'ok' | 'sum
 };
 
 export type LopuMessageMeta = {
+ requestId?: string | null;
+ continuation?: boolean;
+ continuationSafe?: boolean; recoveryFailures?: number;
 	role: 'user' | 'assistant' | null;
 	model: string | null;
 	effort: string | null;
@@ -1019,11 +1024,12 @@ export const lopuMessageMeta = (message: unknown): LopuMessageMeta | null => {
 		if (!call || typeof call !== 'object') continue;
 		const entry = call as Record<string, unknown>;
 		if (typeof entry.name !== 'string' || !entry.name) continue;
-		toolCalls.push({ name: entry.name, ok: entry.ok === true, summary: stringOrNull(entry.summary) ?? '', thingId: stringOrNull(entry.thingId) });
+		toolCalls.push({ name: entry.name, ok: entry.ok === true, summary: stringOrNull(entry.summary) ?? '', thingId: stringOrNull(entry.thingId), ...(Array.isArray(entry.links) ? { links: normalizeLopuLinks(entry.links) } : {}) });
 	}
 	const provider = LOPU_PROVIDERS.includes(record.provider as LopuProvider) ? (record.provider as LopuProvider) : null;
 	const usageRaw = record.usage && typeof record.usage === 'object' ? (record.usage as Record<string, unknown>) : null;
 	return {
+		requestId: stringOrNull(record.requestId), continuation: record.continuation === true, continuationSafe: record.continuationSafe === true, recoveryFailures: lopuRecoveryFailures(record.recoveryFailures),
 		role: record.role === 'assistant' || record.role === 'user' ? record.role : null,
 		model: stringOrNull(record.model),
 		effort: stringOrNull(record.effort),

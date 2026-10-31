@@ -1,9 +1,11 @@
+import { builderDocuments } from './builderCoordinates';
 import React from 'react';
 import { Box, Flex, Input, Text } from '@chakra-ui/react';
 
 import { DRAWER_POPUP_Z } from '../Nav/Drawer/useDrawer';
 import { CARD_STYLES } from '../../theme/card';
-import { blockLabel, type WebpageBlock, type WebpageContainerDirection } from './webpageBlocks';
+import { blockLabel, type WebpageBlock, type WebpageContainerDirection, type BlockInsertDirection } from './webpageBlocks';
+import type { BlockStructureScope } from './blockStructure';
 
 // Right-click menu for a block (also opened by the chip's ⊞ shortcut, which
 // jumps straight to the wrap drill-down). Wrap targets are the container
@@ -30,7 +32,7 @@ const MenuRow = ({
 	label: string;
 	hint?: string;
 	danger?: boolean;
-	onClick: () => void;
+	onClick: (event: React.MouseEvent<HTMLElement>) => void;
 	testId?: string;
 	chevron?: boolean;
 }) => (
@@ -44,6 +46,7 @@ const MenuRow = ({
 		textAlign="left"
 		paddingX={3}
 		paddingY="8px"
+		minHeight="44px"
 		borderRadius="var(--tt-radius-sm, 9px)"
 		color={danger ? 'var(--tt-danger, #d6455a)' : 'var(--tt-ink, #16161a)'}
 		fontSize="13px"
@@ -80,6 +83,8 @@ export const BlockContextMenu = ({
 	onDuplicate,
 	onDelete,
 	onMove,
+	onInsert,
+	onShowStructure,
 	onOpenRichEditor
 }: {
 	block: WebpageBlock;
@@ -92,6 +97,8 @@ export const BlockContextMenu = ({
 	onDuplicate: () => void;
 	onDelete: () => void;
 	onMove: (delta: -1 | 1) => void;
+	onInsert: (direction: BlockInsertDirection, anchor: HTMLElement) => void;
+	onShowStructure: (scope: BlockStructureScope) => void;
 	onOpenRichEditor?: () => void;
 }) => {
 	const [wrapOpen, setWrapOpen] = React.useState(!!wrapOnly);
@@ -110,19 +117,20 @@ export const BlockContextMenu = ({
 				onClose();
 			}
 		};
-		window.addEventListener('mousedown', onDown);
+		const documents = builderDocuments();
+		for (const doc of documents) doc.addEventListener('mousedown', onDown);
 		// CAPTURE phase: the canvas's own Escape-deselect listener (registered
 		// earlier, bubble phase) must see this Escape already consumed
-		window.addEventListener('keydown', onKey, true);
+		for (const doc of documents) doc.addEventListener('keydown', onKey, true);
 		return () => {
-			window.removeEventListener('mousedown', onDown);
-			window.removeEventListener('keydown', onKey, true);
+			for (const doc of documents) doc.removeEventListener('mousedown', onDown);
+			for (const doc of documents) doc.removeEventListener('keydown', onKey, true);
 		};
 	}, [onClose]);
 
-	const width = 280;
+	const width = Math.min(320, (typeof window !== 'undefined' ? window.innerWidth : 1280) - 16);
 	const left = Math.max(8, Math.min(x, (typeof window !== 'undefined' ? window.innerWidth : 1280) - width - 8));
-	const top = Math.max(8, Math.min(y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 260));
+	const top = Math.max(8, Math.min(y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 560));
 	const targets = WRAP_TARGETS.filter(
 		(target) => !filter.trim() || `${target.label} ${target.hint}`.toLowerCase().includes(filter.trim().toLowerCase())
 	);
@@ -136,6 +144,8 @@ export const BlockContextMenu = ({
 			left={`${left}px`}
 			top={`${top}px`}
 			width={`${width}px`}
+			maxHeight="calc(100dvh - 16px)"
+			overflowY="auto"
 			zIndex={DRAWER_POPUP_Z + 1}
 			{...CARD_STYLES}
 			boxShadow="var(--tt-shadow-popover, 0 12px 32px rgba(0, 0, 0, 0.12))"
@@ -156,6 +166,16 @@ export const BlockContextMenu = ({
 			</Text>
 			{!wrapOpen ? (
 				<>
+					{([
+						['above', '↑', 'Insert block above'], ['below', '↓', 'Insert block below'],
+						['left', '←', 'Insert block beside left'], ['right', '→', 'Insert block beside right']
+					] as const).map(([direction, icon, label]) => <MenuRow key={direction} icon={icon} label={label}
+						testId={`ctx-insert-${direction}`} onClick={event => onInsert(direction, event.currentTarget)} />)}
+					<Box borderTop="1px solid var(--tt-border, #ececef)" my={1} />
+					{([
+						['page', 'Show block structure for page'], ['parent', 'Show block structure up to parent'], ['block', 'Show block structure for this block']
+					] as const).map(([scope, label]) => <MenuRow key={scope} icon="☷" label={label} testId={`ctx-structure-${scope}`} onClick={() => onShowStructure(scope)} />)}
+					<Box borderTop="1px solid var(--tt-border, #ececef)" my={1} />
 					{block.type === 'text' && onOpenRichEditor ? (
 						<MenuRow icon="📝" label="Advanced rich editor…" testId="ctx-rich-editor" onClick={onOpenRichEditor} />
 					) : null}
@@ -214,7 +234,7 @@ export const BlockContextMenu = ({
 						</Text>
 					) : null}
 					<Text color="var(--tt-faint, #b6b6c0)" fontSize="11px" lineHeight="1.5" paddingX={3} paddingY={2}>
-						Containers are the blocks that hold children — components don’t have a children slot (yet), so they can’t wrap.
+					Wrap this block in a column, row or grid. Its content stays individually editable.
 					</Text>
 				</>
 			)}

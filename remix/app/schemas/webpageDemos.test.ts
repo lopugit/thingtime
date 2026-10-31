@@ -11,6 +11,7 @@ import {
 } from './registry.ts';
 import {
 	COMPONENT_DEMO_REFS,
+	demoNavigationHref,
 	WEBPAGE_DEMO_FAMILIES,
 	countDemoBlocks,
 	getWebpageDemo,
@@ -108,4 +109,17 @@ test('the catalog is deterministic and memoised', () => {
 	assert.ok(hero, 'hero-centered-paper is missing');
 	assert.deepEqual(hero!.blocks, first.find((demo) => demo.slug === 'hero-centered-paper')!.blocks);
 	assert.equal(getWebpageDemo('nope-nope'), null);
+});
+
+
+test('demo navigation targets existing sections and forms declare their install dependency', () => {
+  const families = new Set(WEBPAGE_DEMO_FAMILIES.map(family => family.key));
+  for (const label of ['Pricing', 'Journal', 'About', 'Contact', 'Calendar', 'Portfolio', 'Docs', 'Features']) {
+    const url = new URL(demoNavigationHref(label), 'https://thingtime.com');
+    assert.ok(url.pathname === '/docs' || families.has(url.searchParams.get('family')!));
+  }
+  for (const slug of ['contact-card-paper', 'newsletter-inline-paper', 'hero-centered-paper', 'video-frame-paper']) {
+    const demo = getWebpageDemo(slug)!;
+    assert.equal(webpageDemoCrystal(demo).suiteKey, 'site-forms', slug);
+  }
 });

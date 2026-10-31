@@ -9,6 +9,7 @@ import {
   readFileSync,
   readlinkSync,
   readdirSync,
+  chmodSync,
   renameSync,
   rmdirSync,
   rmSync,
@@ -491,15 +492,22 @@ export function pruneSnapshots(
   }
 }
 
-function copyPortableFiles(from, to) {
+// Snapshot files are read-only on disk (markSnapshotReadOnly); a working copy
+// must be writable again or upstream Graphify cannot overwrite its own output.
+function copyWritable(source, destination) {
+  cpSync(source, destination)
+  chmodSync(destination, (statSync(destination).mode & 0o777) | 0o600)
+}
+
+export function copyPortableFiles(from, to) {
   mkdirSync(to, { recursive: true })
   for (const name of PORTABLE_FILES) {
     const source = path.join(from, name)
-    if (existsSync(source)) cpSync(source, path.join(to, name))
+    if (existsSync(source)) copyWritable(source, path.join(to, name))
   }
   for (const name of [".graphify_analysis.json", ".graphify_labels.json"]) {
     const source = path.join(from, name)
-    if (existsSync(source)) cpSync(source, path.join(to, name))
+    if (existsSync(source)) copyWritable(source, path.join(to, name))
   }
 }
 
@@ -677,6 +685,7 @@ export function finalizeSnapshot(
       }
     } else {
       renameSync(staging, destination)
+      markSnapshotReadOnly(destination)
     }
   } finally {
     rmSync(staging, { recursive: true, force: true })
@@ -703,10 +712,27 @@ function isIgnored(root, relativePath) {
   }
 }
 
+/**
+ * Snapshot files are immutable content: mark them read-only so an older
+ * upstream `graphify` hook that writes through a root alias symlink fails
+ * loudly (EACCES) instead of silently editing committed bytes. Git only tracks
+ * the executable bit, so this never shows up as a diff; directories stay
+ * writable so pruning can still remove a superseded snapshot.
+ */
+export function markSnapshotReadOnly(snapshotPath) {
+  for (const name of SNAPSHOT_FILES) {
+    const file = path.join(snapshotPath, name)
+    if (!existsSync(file)) continue
+    const mode = statSync(file).mode & 0o777
+    if (mode & 0o222) chmodSync(file, mode & ~0o222)
+  }
+}
+
 /** Materialize compatibility aliases without putting mutable pointers in Git. */
 export function activateSnapshot(root, snapshot) {
   const outputRoot = graphifyRoot(root)
   mkdirSync(outputRoot, { recursive: true })
+  markSnapshotReadOnly(snapshot.path)
   const names = [...PORTABLE_FILES, "graph.html"]
   for (const name of names) {
     const source = path.join(snapshot.path, name)

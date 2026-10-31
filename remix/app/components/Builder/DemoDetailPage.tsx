@@ -1,3 +1,4 @@
+import { siteDemoComponents, siteDemoActionNames, installSiteDemoAction, installSiteDemoDependencies } from './siteDemoRuntime';
 import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Link, useNavigate, useParams } from 'react-router';
@@ -16,7 +17,7 @@ import { useActionRunConfirm } from '../Actions/ActionRunConfirm';
 import type { TtActionConfirmHandler, TtActionUnownedHandler } from '../Actions/useTtActionClicks';
 import { WebpageBlocksRenderer, buildComponentsByRef, type ComponentsByRef, type WebpageBlocksRendererProps } from './WebpageBlocksRenderer';
 import { WebpageRuntimeProvider } from './webpageRuntime';
-import { installSuite as installSuiteThings, installSuiteOnServer, suiteKeyFromActionKey } from './installSuite';
+import { installSuiteOnServer, suiteKeyFromActionKey } from './installSuite';
 import { DemoThumb, type DemoBlockList } from './DemoLibraryPage';
 import {
 	DEMO_LIBRARY_PATH,
@@ -88,32 +89,6 @@ const useCatalogReconcile = (id: string, query: string, pickSeeded: (data: any) 
 	return state;
 };
 
-// The post-install hand-off is deferred so the "installed ✨" toast is
-// readable before the page moves. That timer OUTLIVES this component if the
-// viewer navigates away inside the delay, and it would then yank them off
-// whatever they opened next. Held in a ref so unmount — and a second install
-// — cancels the pending hand-off. (Same shape as p.tsx / DemoLibraryPage.)
-const useHandoff = () => {
-	const handoffRef = React.useRef<number | null>(null);
-	const scheduleHandoff = React.useCallback((run: () => void, delayMs: number) => {
-		if (handoffRef.current !== null) window.clearTimeout(handoffRef.current);
-		handoffRef.current = window.setTimeout(() => {
-			handoffRef.current = null;
-			run();
-		}, delayMs);
-	}, []);
-	React.useEffect(
-		() => () => {
-			if (handoffRef.current !== null) {
-				window.clearTimeout(handoffRef.current);
-				handoffRef.current = null;
-			}
-		},
-		[]
-	);
-	return scheduleHandoff;
-};
-
 const MONO = 'var(--tt-font-mono, ui-monospace, monospace)';
 const INK = 'var(--tt-ink, #16161a)';
 const TEXT = 'var(--tt-text, #5a5a66)';
@@ -162,10 +137,10 @@ const SignInCard = ({ what }: { what: string }) => (
 		</Text>
 		<Box flex="1" minWidth="200px">
 			<Text fontWeight={700} color={INK} fontSize="sm">
-				Sign in to use {what} live
+				Sign in to save from {what}
 			</Text>
 			<Text fontSize="xs" color={TEXT}>
-				Controls run as you, on your own things. Until then this is the same picture as the preview — nothing here can run.
+				Try local controls now. Sign in to run Actions and save private Things.
 			</Text>
 		</Box>
 		<Button as={Link} to="/login" size="sm" data-testid="demo-signin">
@@ -176,7 +151,7 @@ const SignInCard = ({ what }: { what: string }) => (
 
 // The LIVE pane: one block tree inside the page runtime. `interactive` is the
 // platform-curation decision described in the header note — a signed-in
-// viewer, and nothing else, because the tree is catalog code; the executor
+// viewer can use local controls because the tree is catalog code; the executor
 // still resolves clicks owner-only.
 const LivePane = ({
 	pageId,
@@ -208,13 +183,11 @@ const LivePane = ({
 	// the catalog-side run confirmation: the first press of each control
 	// names what will run before anything executes (ActionRunConfirm)
 	const { confirm, dialog } = useActionRunConfirm({ resolveActionName: (action) => actionNames[action] || null });
-	// `confirm` is not a WebpageBlocksRenderer prop yet — it is threaded here
-	// so the gate arms the moment the renderer forwards it to ComponentBlockView
-	// (useTtActionClicks already accepts it); until then the dialog stays idle
+	// Every component control receives the catalog confirmation gate.
 	const rendererProps: WebpageBlocksRendererProps & { confirm: TtActionConfirmHandler } = {
 		blocks: blocks as WebpageBlock[],
 		componentsByRef,
-		interactive: signedIn,
+		interactive: true,
 		onTtActionUnowned: signedIn ? onUnowned : undefined,
 		confirm
 	};
@@ -229,7 +202,7 @@ const LivePane = ({
 				overflowX="auto"
 				whiteSpace="normal"
 				data-testid="demo-live-pane"
-				data-live={signedIn ? 'true' : 'false'}
+				data-live="true"
 			>
 				<WebpageRuntimeProvider pageId={pageId} pageKey={pageKey} suiteKey={suiteKey} source={source} onInstall={onInstall}>
 					<Box width="100%" maxWidth="960px" marginX="auto" minWidth={0}>
@@ -285,13 +258,14 @@ const DemoView = ({ demo, slug }: { demo: WebpageDemo; slug: string }) => {
 		}
 		setBusy(true);
 		try {
-			const resp: any = await apiRef.current.v1.things.create({ thingtime: ['webpage'], crystal: templateCrystalOf(demo, { seeded }), acl: ['tt:user'] });
+			const blocks = await installSiteDemoDependencies(demo.blocks);
+			const resp: any = await apiRef.current.v1.things.create({ thingtime: ['webpage'], crystal: { ...templateCrystalOf(demo, { seeded }), blocks }, acl: ['tt:user'] });
 			if (!resp?.ok) throw resp;
 			const id = resp?.thing?.id || resp?.id;
 			lopu({ title: 'Template copied into your pages 🧱✨', status: 'success' });
 			navigate(`/builder?page=${encodeURIComponent(id)}`);
 		} catch (err: any) {
-			lopu({ title: err?.error || 'Couldn’t copy the template — try again 🌈', status: 'error' });
+			lopu({ title: err?.error || err?.message || 'Couldn’t copy the template — try again 🌈', status: 'error' });
 		} finally {
 			setBusy(false);
 		}
@@ -325,7 +299,7 @@ const DemoView = ({ demo, slug }: { demo: WebpageDemo; slug: string }) => {
 			<Box display="grid" gridTemplateColumns={{ base: '1fr', lg: '340px minmax(0, 1fr)' }} gap={4} alignItems="start" minWidth={0}>
 				<Flex {...CARD_STYLES} flexDirection="column" rowGap={3} padding={3} minWidth={0} data-testid="demo-preview-pane">
 					<PaneHeading title="Preview" eyebrow="catalog · inert" />
-					<DemoThumb blocks={demo.blocks} background={demo.previewBg} componentsByRef={reconciled.library} height={RAIL_THUMB_HEIGHT} />
+					<DemoThumb blocks={demo.blocks} background={demo.previewBg} componentsByRef={{ ...reconciled.library, ...siteDemoComponents }} height={RAIL_THUMB_HEIGHT} />
 					<Flex flexDirection="column" rowGap={2} data-testid="demo-meta-rail">
 						<MetaRow label="Family" testId="demo-meta-family">
 							{family?.emoji} {family?.title || demo.family}
@@ -345,16 +319,17 @@ const DemoView = ({ demo, slug }: { demo: WebpageDemo; slug: string }) => {
 					</Flex>
 				</Flex>
 				<Flex flexDirection="column" rowGap={2} minWidth={0}>
-					<PaneHeading title="Live" eyebrow={user?.id ? 'runs as you · owner-only resolution' : 'sign in to arm'} />
+					<PaneHeading title="Live" eyebrow={user?.id ? 'runs as you · owner-only resolution' : 'local controls ready · sign in to save'} />
 					<LivePane
 						pageId={runtime.pageId}
 						pageKey={identity.pageKey}
 						suiteKey={null}
 						source={runtime.source}
 						blocks={demo.blocks}
-						componentsByRef={reconciled.library}
+						componentsByRef={{ ...reconciled.library, ...siteDemoComponents }}
 						background={demo.previewBg}
-						actionNames={{}}
+						actionNames={siteDemoActionNames}
+						onUnowned={installSiteDemoAction}
 						what="this demo"
 					/>
 				</Flex>
@@ -372,7 +347,6 @@ const SuiteView = ({ suite }: { suite: BehaviourSuite }) => {
 	const lopu = useLopu();
 	const user = useCurrentUser();
 	const navigate = useNavigate();
-	const scheduleHandoff = useHandoff();
 	const materialized = React.useMemo(() => materializeSuite(suite, 'own'), [suite]);
 	const summary = React.useMemo(() => summarizeBehaviourSuite(suite), [suite]);
 	const pages = React.useMemo(() => suitePageViews(suite, materialized), [suite, materialized]);
@@ -388,13 +362,9 @@ const SuiteView = ({ suite }: { suite: BehaviourSuite }) => {
 	const isApp = !!suite.app;
 	const origin = suite.app?.origin && /^https:\/\//.test(suite.app.origin) ? suite.app.origin : null;
 
-	// Install the suite for the viewer — the same split as p.tsx
-	// installForViewer: app suites go through the one-request idempotent
-	// server install (every page keeps its key, so /p/<pageKey> now serves the
-	// viewer's own copy); the demo suites keep the part-by-part client install
-	// and open the personal copy by id.
+	// Idempotently install or refresh the viewer’s private copy.
 	const installForViewer = React.useCallback(
-		async (key: string): Promise<{ href: string | null } | null> => {
+		async (key: string, onlyMissing = false): Promise<{ href: string | null } | null> => {
 			const target = ALL_SUITES.find((entry) => entry.key === key) || null;
 			if (!target) return null;
 			if (!user?.id) {
@@ -403,49 +373,29 @@ const SuiteView = ({ suite }: { suite: BehaviourSuite }) => {
 				return null;
 			}
 			lopu({ title: `Installing ${target.emoji} ${target.title}…`, description: 'Your own schemas, controls, actions, and pages.', status: 'info', duration: 4000 });
-			if (target.app) {
-				const installed = await installSuiteOnServer(target.key);
-				lopu({
-					title: `${target.emoji} ${target.title} installed ✨`,
-					description: `${installed.created} things created · ${installed.updated} refreshed — opening your copy at /p/${installed.entryPageKey}.`,
-					status: 'success',
-					duration: 6000
-				});
-				return { href: `/p/${encodeURIComponent(installed.entryPageKey)}` };
-			}
-			const installed = await installSuiteThings((payload) => apiRef.current.v1.things.create(payload), target, { seeded });
-			lopu({
-				title: `${target.emoji} ${target.title} installed ✨`,
-				description: 'Opening your own copy of this page.',
-				status: 'success',
-				duration: 6000,
-				link: { label: 'Open my page', href: `/p/${encodeURIComponent(installed.pageId)}` }
-			});
-			return { href: `/p/${encodeURIComponent(installed.pageId)}` };
+			const installed = await installSuiteOnServer(target.key, { onlyMissing });
+			const href = `/p/${encodeURIComponent(installed.entryPageKey)}`;
+			lopu({ title: `${target.emoji} ${target.title} installed ✨`, description: 'Your controls are ready.', status: 'success', duration: 6000, link: { label: 'Open my page', href } });
+			return { href };
 		},
-		[lopu, navigate, seeded, user?.id]
+		[lopu, navigate, user?.id]
 	);
 
 	// a control the viewer has no program for: install the suite (their own
-	// schemas/controls/actions/data/page), let the click re-run, then take
-	// them to their own copy where every control is theirs
+	// schemas/controls/actions/data/page), then show the result in place.
 	const onUnowned = React.useCallback<TtActionUnownedHandler>(
 		async (action: string): Promise<boolean> => {
 			const key = suiteKeyFromActionKey(action, ALL_SUITES) || suite.key;
 			try {
-				const outcome = await installForViewer(key);
+				const outcome = await installForViewer(key, true);
 				if (!outcome) return false;
-				if (outcome.href) {
-					const href = outcome.href;
-					scheduleHandoff(() => navigate(href), 1200);
-				}
 				return true;
 			} catch (err: any) {
 				lopu({ title: err?.error || 'Couldn’t install — try again 🌈', status: 'error' });
 				return false;
 			}
 		},
-		[installForViewer, lopu, navigate, scheduleHandoff, suite.key]
+		[installForViewer, lopu, suite.key]
 	);
 
 	// the Install button and the page's `$install` pseudo-action
@@ -542,7 +492,7 @@ const SuiteView = ({ suite }: { suite: BehaviourSuite }) => {
 					</Flex>
 				</Flex>
 				<Flex flexDirection="column" rowGap={2} minWidth={0}>
-					<PaneHeading title="Live" eyebrow={user?.id ? 'runs as you · owner-only resolution · installs on first run' : 'sign in to arm'} />
+					<PaneHeading title="Live" eyebrow={user?.id ? 'runs as you · owner-only resolution · installs on first run' : 'local controls ready · sign in to save'} />
 					{pages.length > 1 ? (
 						<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center" role="tablist" aria-label={`${suite.title} pages`} data-testid="suite-page-tabs">
 							{pages.map((page) => (

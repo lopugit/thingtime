@@ -35,6 +35,7 @@ enum ThingtimeBridgeScript {
             version: '1.3.0',
             lopuVoiceVersion: '1.2.0',
             widgetVersion: '1.0.0',
+            lopuChatActivityVersion: \(lopuChatActivityVersion),
             notificationsVersion: \(notificationsVersion),
             platform: '\(platform)',
             isNativeWebView: true,
@@ -61,6 +62,13 @@ enum ThingtimeBridgeScript {
         injectionTime: .atDocumentStart,
         forMainFrameOnly: true
     )
+    static var lopuChatActivityVersion: String {
+#if os(iOS)
+        return "'1.0.0'"
+#else
+        return "undefined"
+#endif
+    }
     static var notificationsVersion: String {
 #if os(iOS)
         return "'1.0.0'"

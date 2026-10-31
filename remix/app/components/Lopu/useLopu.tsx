@@ -1,3 +1,4 @@
+import { aiTaskFetch } from './aiTasks.client';
 import { useCallback } from 'react';
 import { Box, Flex, Text, useToast } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
@@ -255,7 +256,6 @@ export const useLopuStream = () => {
         (props: LopuArgs & { loading?: boolean; countdown?: number | null }) =>
         ({ onClose }: { onClose: () => void }) => {
           const close = () => {
-            controller.abort();
             onClose();
           };
           return <LopuToast {...props} onClose={close} />;
@@ -278,7 +278,7 @@ export const useLopuStream = () => {
       let finalMessage: LopuArgs | undefined;
 
       try {
-        const resp = await fetch(url, { signal: controller.signal });
+        const resp = await aiTaskFetch(url, { signal: controller.signal });
         if (!resp.ok || !resp.body) throw new Error('no stream');
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();

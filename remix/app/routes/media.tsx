@@ -1,7 +1,10 @@
+import { sharePathForThing } from '~/components/Sharing/audienceCore';
+import { sharedThingPath } from '~/components/Sharing/sharedMediaCore';
+import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
 import React from 'react';
 import { Box, Button, Center, Flex, IconButton, Input, Spinner, Text, Textarea } from '@chakra-ui/react';
-import { Link, useNavigate, useParams } from 'react-router';
-import { ArrowLeft, Check, Download, Pencil, X } from 'lucide-react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { ArrowLeft, Check, Download, FolderDown, Pencil, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -10,11 +13,14 @@ import { PostCard } from '~/components/Feed/PostCard';
 import { useViewTracking } from '~/components/Feed/useViewTracking';
 import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
 import {
+	archiveDownloadLabel,
 	attachmentContentUrl,
 	attachmentDisplayName,
+	downloadableAttachments,
 	formatAttachmentBytes,
 	normalizePublicAttachment
 } from '~/components/Attachments/attachmentUiCore';
+import { useAttachmentArchive } from '~/components/Attachments/useAttachmentArchive';
 import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
@@ -36,6 +42,9 @@ type MediaResponse = {
 
 export const MediaPage = () => {
 	const { id } = useParams();
+	const [searchParams] = useSearchParams();
+	const linkKey = searchParams.get('key') || '';
+	const sharedRoot = searchParams.get('sharedRoot') || '';
 	const api = useApi();
 	const user = useCurrentUser();
 	const lopu = useLopu();
@@ -62,7 +71,7 @@ export const MediaPage = () => {
 
 		const startedAt = Date.now();
 		api.v1.things
-			.get({ id: id || '' })
+			.get({ id: id || '', key: linkKey || undefined, sharedRoot: sharedRoot || undefined })
 			.then((resp: any) => {
 				if (cancelled) return;
 				const thing = resp?.thing;
@@ -90,12 +99,21 @@ export const MediaPage = () => {
 		};
 		// api.v1.things.get is a stable useCallback
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [id]);
+	}, [id, linkKey, sharedRoot, user?.id]);
 
 	const attachment = data?.attachment ?? null;
 	const post = data?.post ?? null;
 	const parentId = data?.parent?.id ?? null;
 	const isOwner = !!user?.id && !!post?.author?.id && user.id === post.author.id;
+	// this media is one of several stored files on its parent post: offer the
+	// whole gallery as one ZIP (the single-file download stays beside it)
+	const archive = useAttachmentArchive({ key: linkKey || undefined, sharedRoot: sharedRoot || undefined });
+	const gallery = React.useMemo(() => {
+		const stored = downloadableAttachments(data?.parent?.attachments);
+		return data?.parent && stored.length > 1
+			? { id: data.parent.id, fileCount: stored.length, totalBytes: stored.reduce((sum, item) => sum + (Number.isFinite(item.size) ? item.size : 0), 0) }
+			: null;
+	}, [data?.parent]);
 
 	// the interaction card renders the media itself as the body — one visual
 	// system with the feed (masonry/lightbox included via PostAttachments)
@@ -150,7 +168,7 @@ export const MediaPage = () => {
 	};
 
 	return (
-		<Flex
+		<SharedMediaProvider linkKey={post?.audience?.linkKey || linkKey} sharedRoot={sharedRoot}><Flex
 			justifyContent="center"
 			width="100%"
 			minHeight="100vh"
@@ -262,7 +280,7 @@ export const MediaPage = () => {
 				{(parentId || attachment) && (
 					<Flex alignItems="center" columnGap={2} flexWrap="wrap">
 						{parentId && (
-							<Link to={`/post/${parentId}`}>
+							<Link to={sharedThingPath(sharePathForThing(data!.parent!), post?.audience?.linkKey || linkKey, sharedRoot)}>
 								<Button size="xs" variant="outline" borderRadius="999px" leftIcon={<ArrowLeft size={12} />}>
 									View the post this media lives in 📌
 								</Button>
@@ -271,7 +289,7 @@ export const MediaPage = () => {
 						{attachment && (
 							<Button
 								as="a"
-								href={attachment.url || attachmentContentUrl(attachment.id, true)}
+								href={attachment.url || `${attachmentContentUrl(attachment.id, true)}${linkKey ? `&key=${encodeURIComponent(linkKey)}` : ''}${sharedRoot ? `&sharedRoot=${encodeURIComponent(sharedRoot)}` : ''}`}
 								// cross-origin ignores the download attribute — linked media
 								// opens the original URL in a new tab instead
 								{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}
@@ -281,6 +299,18 @@ export const MediaPage = () => {
 								leftIcon={<Download size={12} />}
 							>
 								Download
+							</Button>
+						)}
+						{gallery && (
+							<Button
+								size="xs"
+								variant="ghost"
+								borderRadius="999px"
+								leftIcon={<FolderDown size={12} />}
+								title="Every stored file of the post this media lives in, as one ZIP"
+								onClick={() => void archive.download(gallery.id, 'gallery')}
+							>
+								{archiveDownloadLabel(gallery.fileCount, gallery.totalBytes)}
 							</Button>
 						)}
 					</Flex>
@@ -307,11 +337,11 @@ export const MediaPage = () => {
 
 				{!loading && displayPost && (
 					<Box ref={(element: HTMLDivElement | null) => observeView(element, displayPost.id)}>
-						<PostCard post={displayPost} onChanged={handleChanged} defaultCommentsOpen mediaThing />
+						<PostCard post={displayPost} onChanged={handleChanged} defaultCommentsOpen mediaThing gallery={gallery ? { id: gallery.id, fileCount: gallery.fileCount } : null} />
 					</Box>
 				)}
 			</Flex>
-		</Flex>
+		</Flex></SharedMediaProvider>
 	);
 };
 

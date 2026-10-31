@@ -1,3 +1,4 @@
+import { elapsedClockActive } from './elapsedTime';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -21,6 +22,16 @@ test('Builder nested scope values preserve structure without executing template-
 	assert.deepEqual(resolveTemplate({ ttEach: { arg: 'result.items', node: '{item.label}' } }, { result: { items: [data] } }), ['Buy tubes']);
 });
 
+test('draft fallback reads another safe scope path only when the draft is absent', () => {
+	const binding = { ttArg: 'draft', fallback: 'result.value' };
+	assert.equal(resolveTemplate(binding, { result: { value: 'Saved value' } }), 'Saved value');
+	for (const value of ['', 0, false, null]) assert.equal(resolveTemplate(binding, { draft: value, result: { value: 'Saved' } }), value);
+	assert.equal(resolveTemplate({ ttArg: 'absent', fallback: 'constructor.prototype' }, {}), undefined);
+	assert.deepEqual(resolveTemplate(binding, { result: { value: { ttArg: 'secret' } }, secret: 'no' }), { ttArg: 'secret' });
+	const large = resolveTemplate({ ttRepeat: { count: 24, node: binding } }, { result: { value: 'x'.repeat(MAX_RESOLVED_CHARS) } });
+	assert.ok(JSON.stringify(large).length <= MAX_RESOLVED_CHARS + 256);
+});
+
 test('Builder nested ttArg and ttFormat share the existing text expansion ceiling', () => {
 	const scope = { result: { payload: { text: 'x'.repeat(MAX_RESOLVED_CHARS * 2) } } };
 	for (const leaf of [{ ttArg: 'result.payload' }, { ttFormat: { arg: 'result.payload', kind: 'json' } }]) {
@@ -38,7 +49,11 @@ test('stored media resolution preserves unknown and over-budget values without c
 	assert.equal(resolveTemplate('prefix{query.id}'), 'prefix');
 	const exhausted = createTemplateResolver({ preserveUnboundTokens: true });
 	exhausted('x'.repeat(MAX_RESOLVED_CHARS - 2));
-	assert.equal(exhausted('{prefix}{suffix}', { prefix: 'ab', suffix: 'cd' }), 'ab{suffix}', 'A later token must not disappear when an earlier token consumes the remaining budget');
+	assert.equal(
+		exhausted('{prefix}{suffix}', { prefix: 'ab', suffix: 'cd' }),
+		'ab{suffix}',
+		'A later token must not disappear when an earlier token consumes the remaining budget'
+	);
 	for (const template of ['{image}', { ttArg: 'image' }]) {
 		const bounded = createTemplateResolver({ preserveUnboundTokens: true });
 		bounded('x'.repeat(MAX_RESOLVED_CHARS - 30));
@@ -99,10 +114,7 @@ test('nested ttRepeat cannot expand past the shared budget', () => {
 
 	const started = Date.now();
 	const produced = countValues(resolveTemplate(attack, {}));
-	assert.ok(
-		produced <= MAX_RESOLVED_NODES + 1,
-		`resolution produced ${produced} values, above the ${MAX_RESOLVED_NODES} budget`
-	);
+	assert.ok(produced <= MAX_RESOLVED_NODES + 1, `resolution produced ${produced} values, above the ${MAX_RESOLVED_NODES} budget`);
 	assert.ok(Date.now() - started < 5_000, 'bounded resolution must stay fast');
 });
 
@@ -123,8 +135,7 @@ test('the budget is shared across sibling repeats, not per node', () => {
 // sibling exhausted a 3 GB heap.
 test('token substitution cannot expand past the resolve budget', () => {
 	const leaf = '{a}'.repeat(200); // 600-char string, 200 tokens
-	const nest = (depth: number): unknown =>
-		depth === 0 ? leaf : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } };
+	const nest = (depth: number): unknown => (depth === 0 ? leaf : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } });
 	const attack = { tag: 'div', children: [nest(3)] };
 	assert.ok(countValues(attack) <= 600, 'attack template must pass the raw-template node cap');
 	assert.ok(JSON.stringify(attack).length <= 32 * 1024, 'attack template must pass the raw-template byte cap');
@@ -151,8 +162,7 @@ test('token substitution cannot expand past the resolve budget', () => {
 test('a shared tokenless string cannot expand through ttActionInputs', () => {
 	const big = 'A'.repeat(28 * 1024);
 	// 3 nestings is already 24^3 = 13824 >= MAX_RESOLVED_NODES
-	const nest = (depth: number): unknown =>
-		depth === 0 ? big : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } };
+	const nest = (depth: number): unknown => (depth === 0 ? big : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } });
 	const attack = { tag: 'div', ttAction: 'run', ttActionInputs: { x: nest(3) } };
 	assert.ok(countValues(attack) <= 600, 'attack template must pass the raw-template node cap');
 	assert.ok(JSON.stringify(attack).length <= 32 * 1024, 'attack template must pass the raw-template byte cap');
@@ -164,10 +174,7 @@ test('a shared tokenless string cannot expand through ttActionInputs', () => {
 	// the shared string is charged once per occurrence, so the budget stops the
 	// repeat long before the serialisation can multiply it
 	const ceiling = MAX_RESOLVED_CHARS + JSON.stringify(attack).length;
-	assert.ok(
-		serialized.length <= ceiling,
-		`ttActionInputs serialised to ${serialized.length} chars, over the ${ceiling} ceiling`
-	);
+	assert.ok(serialized.length <= ceiling, `ttActionInputs serialised to ${serialized.length} chars, over the ${ceiling} ceiling`);
 	assert.ok(Date.now() - started < 5_000, 'bounded resolution must stay fast');
 });
 
@@ -181,8 +188,7 @@ test('a shared tokenless string cannot expand through ttActionInputs', () => {
 // while the 256KB char budget read 7 of 262,144 spent.
 test('a long node key cannot expand through ttActionInputs', () => {
 	const bigKey = 'k'.repeat(28 * 1024); // no dot / '$' / prototype name: the render gate accepts it
-	const nest = (depth: number): unknown =>
-		depth === 0 ? { [bigKey]: 1 } : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } };
+	const nest = (depth: number): unknown => (depth === 0 ? { [bigKey]: 1 } : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } });
 	const attack = { tag: 'div', ttAction: 'run', ttActionInputs: { x: nest(3) } };
 	assert.ok(countValues(attack) <= 600, 'attack template must pass the raw-template node cap');
 	assert.ok(JSON.stringify(attack).length <= 32 * 1024, 'attack template must pass the raw-template byte cap');
@@ -194,10 +200,7 @@ test('a long node key cannot expand through ttActionInputs', () => {
 	// one key is charged per occurrence, so the budget stops the repeat before
 	// the serialisation can multiply it
 	const ceiling = MAX_RESOLVED_CHARS + JSON.stringify(attack).length;
-	assert.ok(
-		serialized.length <= ceiling,
-		`ttActionInputs serialised to ${serialized.length} chars, over the ${ceiling} ceiling`
-	);
+	assert.ok(serialized.length <= ceiling, `ttActionInputs serialised to ${serialized.length} chars, over the ${ceiling} ceiling`);
 	assert.ok(Date.now() - started < 5_000, 'bounded resolution must stay fast');
 });
 
@@ -213,8 +216,7 @@ test('a long node key cannot expand through ttActionInputs', () => {
 const MAX_SAVED_ARG_CHARS = 2000; // MAX_COMPONENT_SAVED_ARG_CHARS in schemas/registry.ts
 
 test('a ttArg leaf cannot expand past the resolve budget', () => {
-	const nest = (depth: number): unknown =>
-		depth === 0 ? { ttArg: 'a' } : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } };
+	const nest = (depth: number): unknown => (depth === 0 ? { ttArg: 'a' } : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } });
 	const attack = { tag: 'div', children: [nest(3)] };
 	assert.ok(countValues(attack) <= 600, 'attack template must pass the raw-template node cap');
 	assert.ok(JSON.stringify(attack).length <= 32 * 1024, 'attack template must pass the raw-template byte cap');
@@ -231,8 +233,7 @@ test('a ttArg leaf cannot expand past the resolve budget', () => {
 });
 
 test('a ttArg leaf cannot expand through ttActionInputs', () => {
-	const nest = (depth: number): unknown =>
-		depth === 0 ? { ttArg: 'a' } : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } };
+	const nest = (depth: number): unknown => (depth === 0 ? { ttArg: 'a' } : { ttRepeat: { count: REPEAT_HARD_CAP, node: nest(depth - 1) } });
 	const attack = { tag: 'div', ttAction: 'run', ttActionInputs: { x: nest(3) } };
 	assert.ok(countValues(attack) <= 600, 'attack template must pass the raw-template node cap');
 	assert.ok(JSON.stringify(attack).length <= 32 * 1024, 'attack template must pass the raw-template byte cap');
@@ -249,10 +250,7 @@ test('a ttArg leaf cannot expand through ttActionInputs', () => {
 	// template, and the one arg value charged whole — 7.67 MB uncharged still
 	// clears this by 27x, which is what the test is here to catch.
 	const ceiling = MAX_RESOLVED_CHARS + JSON.stringify(attack).length + MAX_SAVED_ARG_CHARS + 4 * MAX_RESOLVED_NODES;
-	assert.ok(
-		serialized.length <= ceiling,
-		`ttActionInputs serialised to ${serialized.length} chars, over the ${ceiling} ceiling`
-	);
+	assert.ok(serialized.length <= ceiling, `ttActionInputs serialised to ${serialized.length} chars, over the ${ceiling} ceiling`);
 	assert.ok(Date.now() - started < 5_000, 'bounded resolution must stay fast');
 });
 
@@ -382,10 +380,10 @@ test('coerceArgValue clamps back into each arg type', () => {
 // (useTtActionClicks) and the executor's envelope carry the actual authority.
 
 test('ttAction folds into data-tt-action and is stripped from the node', () => {
-	const resolved = resolveTemplate(
-		{ tag: 'div', ttAction: 'send-invoice', props: { style: { color: '#fff' } }, children: ['Send'] },
-		{}
-	) as Record<string, unknown>;
+	const resolved = resolveTemplate({ tag: 'div', ttAction: 'send-invoice', props: { style: { color: '#fff' } }, children: ['Send'] }, {}) as Record<
+		string,
+		unknown
+	>;
 	assert.equal('ttAction' in resolved, false);
 	const props = resolved.props as Record<string, unknown>;
 	assert.equal(props['data-tt-action'], 'send-invoice');
@@ -408,10 +406,7 @@ test('ttAction with no props object creates one', () => {
 });
 
 test('{arg} tokens substitute inside the ttAction key itself', () => {
-	const resolved = resolveTemplate({ tag: 'div', ttAction: '{which}', children: ['go'] }, { which: 'tag-customer' }) as Record<
-		string,
-		unknown
-	>;
+	const resolved = resolveTemplate({ tag: 'div', ttAction: '{which}', children: ['go'] }, { which: 'tag-customer' }) as Record<string, unknown>;
 	assert.equal((resolved.props as Record<string, unknown>)['data-tt-action'], 'tag-customer');
 });
 
@@ -471,10 +466,7 @@ test('ttActionInputs spend the shared budget, not a fresh one per node', () => {
 		}))
 	};
 	const produced = sumActionInputValues(resolveTemplate(template, {}));
-	assert.ok(
-		produced <= MAX_RESOLVED_NODES + 1,
-		`ttActionInputs produced ${produced} values, above the ${MAX_RESOLVED_NODES} shared budget`
-	);
+	assert.ok(produced <= MAX_RESOLVED_NODES + 1, `ttActionInputs produced ${produced} values, above the ${MAX_RESOLVED_NODES} shared budget`);
 });
 
 test('nested ttEach flattens into one list of nodes (a grid of rows of tiles)', () => {
@@ -482,15 +474,23 @@ test('nested ttEach flattens into one list of nodes (a grid of rows of tiles)', 
 		tag: 'div',
 		children: [{ ttEach: { arg: 'rows', node: { ttEach: { arg: 'item', node: { tag: 'img', props: { src: '{item.url}' } } } } } }]
 	};
-	const resolved = resolveTemplate(template, { rows: [[{ url: 'https://a/1.png' }, { url: 'https://a/2.png' }], [{ url: 'https://a/3.png' }]] }) as { children: unknown[] };
+	const resolved = resolveTemplate(template, { rows: [[{ url: 'https://a/1.png' }, { url: 'https://a/2.png' }], [{ url: 'https://a/3.png' }]] }) as {
+		children: unknown[];
+	};
 	assert.equal(resolved.children.length, 3);
-	assert.deepEqual(resolved.children.map((child: any) => child.props.src), ['https://a/1.png', 'https://a/2.png', 'https://a/3.png']);
+	assert.deepEqual(
+		resolved.children.map((child: any) => child.props.src),
+		['https://a/1.png', 'https://a/2.png', 'https://a/3.png']
+	);
 });
 
 test('ttEach binds item/index/count and dotted tokens read nested scope', () => {
 	const template = { ttEach: { arg: 'result.items', node: { tag: 'li', children: ['{n}/{count} {item.name} {first}'] } } };
 	const resolved = resolveTemplate(template, { result: { items: [{ name: 'a' }, { name: 'b' }] } }) as any[];
-	assert.deepEqual(resolved.map((node) => node.children[0]), ['1/2 a true', '2/2 b false']);
+	assert.deepEqual(
+		resolved.map((node) => node.children[0]),
+		['1/2 a true', '2/2 b false']
+	);
 	const empty = resolveTemplate({ ttEach: { arg: 'result.items', node: 'x', empty: 'none' } }, { result: { items: [] } });
 	assert.equal(empty, 'none');
 	const ops = resolveTemplate({ ttIf: { arg: 'hp', op: 'gt', value: 50, then: 'high', else: 'low' } }, { hp: 51 });
@@ -511,4 +511,44 @@ test('ttEach caps the element count for any max, including a negative one', () =
 	assert.equal(drawn(EACH_HARD_CAP * 10), EACH_HARD_CAP, 'an oversized max is clamped to the cap');
 	assert.equal(drawn(-1), EACH_HARD_CAP, 'a negative max never counts from the end of the list');
 	assert.equal(drawn(5), 5, 'a positive max under the cap is honoured');
+});
+
+test('deferred row templates preserve bindings until their row is resolved', () => {
+	const row = { tag: 'a', props: { href: '?id={item.id}' }, children: ['{item.title}'], ttAction: 'saved-action' };
+	const deferred = resolveTemplate({ ttTemplate: row }, { item: { id: 'outer', title: 'Wrong row' } });
+	assert.deepEqual(deferred, row);
+	assert.deepEqual((resolveTemplate(deferred, { item: { id: 'inner', title: 'Correct row' } }) as { props: unknown }).props, {
+		href: '?id=inner',
+		'data-tt-action': 'saved-action'
+	});
+});
+
+test('deferred templates consume the same expansion budget as other saved values', () => {
+	const output = resolveTemplate({ ttRepeat: { count: 24, node: { ttTemplate: { tag: 'div', children: ['x'.repeat(MAX_RESOLVED_CHARS)] } } } });
+	assert.ok(countChars(output) <= MAX_RESOLVED_CHARS);
+	assert.ok(countValues(output) <= MAX_RESOLVED_VALUES + 10);
+});
+
+test('elapsed formatter uses reported start/end values and the scoped live clock', () => {
+ const format = { ttFormat: { kind: 'elapsed', arg: 'item.startedAt', endArg: 'item.endedAt' } };
+ const start = Date.parse('2026-10-19T00:00:00Z');
+ const live = (offset: number, item = { startedAt: start, endedAt: null as number | null }) => resolveTemplate(format, { item, clock: { now: start + offset } });
+ assert.equal(live(0), '00:00:00');
+ assert.equal(live(1_000), '00:00:01');
+ assert.equal(live(90_061_000), '1d 01:01:01');
+ assert.equal(live(9_000, { startedAt: start, endedAt: start + 2_000 }), '00:00:02');
+ assert.equal(live(10_000, { startedAt: start, endedAt: start + 2_000 }), '00:00:02');
+ assert.equal(live(-1_000), 'Not reported');
+ assert.equal(resolveTemplate(format, { item: { startedAt: null, endedAt: null } }), 'Not reported');
+ assert.equal(resolveTemplate(format, { item: { startedAt: 'invalid', endedAt: null } }), 'Not reported');
+ assert.equal(resolveTemplate(format, { item: { startedAt: start, endedAt: 'invalid' } }), 'Not reported');
+ assert.equal(resolveTemplate(format, { item: { startedAt: 0, endedAt: 0 } }), '00:00:00');
+});
+
+
+test('only a valid running measurement activates the authored block clock', () => {
+ for (const start of [null, undefined, '', 'invalid', NaN, Infinity, false, {}]) assert.equal(elapsedClockActive(start, null), false);
+ assert.equal(elapsedClockActive(0, null), true);
+ assert.equal(elapsedClockActive('2026-10-19T00:00:00Z', undefined), true);
+ for (const end of [0, '2026-10-19T00:00:01Z', 'invalid', false]) assert.equal(elapsedClockActive(0, end), false);
 });

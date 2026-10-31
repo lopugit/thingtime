@@ -1,4 +1,5 @@
 import React from 'react';
+import { normalizeLopuLinks } from '~/utils/lopuLinks';
 import { Box, Flex, Spinner, Text } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router';
 import { Check, ChevronDown, ShieldAlert, X } from 'lucide-react';
@@ -14,7 +15,7 @@ import { historicalToolStatus, isLopuConfirmUsable, toolGlyph, toolLabel, toolLi
 // grows a Confirm / Cancel pair under the row — the only way its grant ever
 // leaves the client (design note §2.4). `LopuToolCallRow` is the same row
 // for a persisted turn (history rows remember only name / ok / summary /
-// thingId).
+// thingId and bounded navigation links).
 
 const StatusGlyph = ({ status, historical = false }: { status: LopuToolStatus; historical?: boolean }) => {
 	if (status === 'streaming' || status === 'running') {
@@ -49,8 +50,10 @@ const patchCaption = (activity: LopuToolActivity): string | null => {
 
 const RowLink = ({ to, children }: { to: string; children: React.ReactNode }) => (
 	<Box
-		as={RouterLink}
-		to={to}
+		as={to.startsWith('/') ? RouterLink : 'a'}
+		{...(to.startsWith('/') ? { to } : { href: to, target: '_blank', rel: 'noopener noreferrer' })}
+		minW={0}
+		maxW="100%"
 		fontSize={LOPU_UI.fontSmall}
 		fontWeight={600}
 		color={LOPU_UI.link}
@@ -325,9 +328,11 @@ export const LopuToolCard = ({
 	);
 };
 
-/** A persisted turn's tool call (history rows keep name · ok · summary · thingId only). */
+/** A persisted turn's tool call with inert navigation links, never action grants. */
 export const LopuToolCallRow = ({ call, compact = false }: { call: LopuMessageToolCall; compact?: boolean }) => {
 	const status = historicalToolStatus(call);
+	const links = normalizeLopuLinks(call.links);
+	if (!links.length && call.thingId) links.push({ label: 'Open', href: `/thing/${encodeURIComponent(call.thingId)}` });
 	const label = status === 'confirm' ? 'Approval requested' : toolLabel(call.name, status);
 	const summary = toolRowSummary({ name: call.name, status, result: { ok: call.ok, summary: call.summary } });
 	return (
@@ -350,9 +355,9 @@ export const LopuToolCallRow = ({ call, compact = false }: { call: LopuMessageTo
 				) : null}
 				<Box gridColumn={{ base: 3, md: 4 }} gridRow={1} display="inline-flex"><StatusGlyph status={status} historical /></Box>
 			</Box>
-			{call.thingId ? (
-				<Flex px={2.5} pb={1.5} mt="-2px">
-					<RowLink to={`/thing/${encodeURIComponent(call.thingId)}`}>Open →</RowLink>
+			{links.length ? (
+				<Flex px={2.5} pb={1.5} mt="-2px" gap={3} wrap="wrap">
+					{links.map((link) => <RowLink key={link.href} to={link.href}>{link.label} →</RowLink>)}
 				</Flex>
 			) : null}
 		</Box>

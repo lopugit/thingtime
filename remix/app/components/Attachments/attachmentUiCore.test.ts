@@ -127,7 +127,7 @@ test('normalises only canonical stable attachment metadata', () => {
 		}),
 		{ id: 'att-4', name: 'blob.bin', size: 1, contentType: 'application/octet-stream', mediaKind: 'file' }
 	);
-	assert.equal(MAX_POST_ATTACHMENTS, 25);
+	assert.equal(MAX_POST_ATTACHMENTS, Number.POSITIVE_INFINITY);
 });
 
 test('audio playback prefers a legacy row’s server-sniffed MIME', () => {
@@ -288,6 +288,10 @@ test('ambiguous post creation reconciles only an exact committed snapshot', () =
 		}
 	};
 	assert.equal(matchesCommittedPostCreate(response, expected), true);
+	// Every normal composer payload included mediaLayout:null, but the real
+	// sanitizer omitted it. A lost response then froze an already-saved post.
+	assert.equal(matchesCommittedPostCreate(response, { ...expected, crystal: { ...expected.crystal, mediaLayout: null } }), true);
+	assert.equal(matchesCommittedPostCreate(response, { ...expected, crystal: { ...expected.crystal, mediaLayout: { mode: 'grid', columns: 2 } } }), false);
 	assert.equal(matchesCommittedPostCreate({ ...response, post: { ...response.post, attachments: [{ id: 'attachment-a' }] } }, expected), false);
 	assert.equal(matchesCommittedPostCreate({ ...response, thing: { ...response.thing, author: { id: 'another-owner' } } }, expected), false);
 	assert.equal(

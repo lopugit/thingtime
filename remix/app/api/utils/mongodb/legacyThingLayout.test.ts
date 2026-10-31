@@ -33,9 +33,11 @@ const fixture = async (residue = 0) => {
 
 test('steady home plan omits eight legacy indexes while compatibility plan retains them', async () => {
   const home = await thingsIndexPlanEntries();
-  assert.equal(home.length + 1, 48); // includes Watch recording scheduler
+  assert.equal(home.length + 1, 52); // Includes the modern owner/ID snapshot lookup.
   const fallback = await thingsIndexPlanEntries({ legacyLookups: true });
-  assert.equal(fallback.length + 1, 56);
+  assert.equal(fallback.length + 1, 59);
+  assert.ok(home.some(index => index.name === 'ownerId_1_shareId_1'));
+  assert.equal(fallback.some(index => index.name === 'ownerId_1_shareId_1'), false);
   for (const name of LEGACY_THING_INDEX_NAMES) {
     assert.equal(home.some(index => index.name === name), false);
     assert.equal(fallback.some(index => index.name === name), true);

@@ -1,3 +1,7 @@
+import { sharePathForThing } from '~/components/Sharing/audienceCore';
+import { sharedThingPath } from '~/components/Sharing/sharedMediaCore';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
 import React from 'react';
 import { Box, Button, Center, Flex, Spinner, Text } from '@chakra-ui/react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -28,7 +32,10 @@ export const PostPage = () => {
   // post viewable to whoever opened it — logged out included
   const [searchParams] = useSearchParams();
   const linkKey = (searchParams.get('key') || '').trim();
+  const sharedRoot = searchParams.get('sharedRoot') || '';
+  const parentPath = (thing: PublicPost) => sharedThingPath(sharePathForThing(thing), linkKey, sharedRoot);
   const api = useApi();
+  const user = useCurrentUser();
   const navigate = useNavigate();
 
   const [data, setData] = React.useState<ThingResponse | null>(null);
@@ -47,7 +54,7 @@ export const PostPage = () => {
     // lands after it merges through the viewer's overlay, never clobbers it
     const startedAt = Date.now();
     api.v1.things
-      .get({ id: id || '', ...(linkKey ? { key: linkKey } : {}) })
+      .get({ id: id || '', key: linkKey || undefined, sharedRoot: sharedRoot || undefined })
       .then((resp: any) => {
         if (cancelled) return;
         setData({
@@ -69,7 +76,7 @@ export const PostPage = () => {
     };
     // api.v1.things.get is a stable useCallback
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, linkKey]);
+  }, [id, linkKey, sharedRoot, user?.id]);
 
   const post = data?.post ?? null;
   const isComment = !!post?.thingtime?.includes('comment');
@@ -90,7 +97,7 @@ export const PostPage = () => {
   };
 
   return (
-    <Flex
+    <SharedMediaProvider linkKey={post?.audience?.linkKey || post?.linkKey || linkKey} sharedRoot={sharedRoot}><Flex
       justifyContent="center"
       width="100%"
       minHeight="100vh"
@@ -141,14 +148,14 @@ export const PostPage = () => {
         {post && isComment && (
           <Flex alignItems="center" columnGap={3} flexWrap="wrap">
             {parentId && (
-              <Link to={`/post/${parentId}`}>
+              <Link to={parentPath(data!.parent!)}>
                 <Button size="xs" variant="outline" borderRadius="999px" leftIcon={<ArrowLeft size={12} />}>
                   {parentId === rootId ? 'View full conversation 🧵' : 'View parent comment 💬'}
                 </Button>
               </Link>
             )}
             {rootId && rootId !== parentId && (
-              <Link to={`/post/${rootId}`}>
+              <Link to={parentPath(data!.root!)}>
                 <Button size="xs" variant="ghost" borderRadius="999px">
                   Go to the top of the thread 🧵
                 </Button>
@@ -187,7 +194,7 @@ export const PostPage = () => {
           </Box>
         )}
       </Flex>
-    </Flex>
+    </Flex></SharedMediaProvider>
   );
 };
 

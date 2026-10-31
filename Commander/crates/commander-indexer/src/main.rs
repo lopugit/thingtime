@@ -49,6 +49,14 @@ fn main() -> ExitCode {
 }
 
 fn run_cli(arguments: Vec<String>) -> Result<(), IndexerError> {
+    #[cfg(unix)]
+    if arguments.as_slice() == ["backup"] {
+        // Grant paths and policy travel over a private pipe, never argv/logs.
+        return commander_indexer::backup::serve(
+            io::BufReader::new(io::stdin()),
+            io::stdout().lock(),
+        );
+    }
     if arguments.is_empty()
         || arguments
             .iter()
@@ -66,7 +74,11 @@ fn run_cli(arguments: Vec<String>) -> Result<(), IndexerError> {
     }
     let command = arguments[0].as_str();
     let database_path = required_value(&arguments, "--database")?;
-    let mut database = IndexDatabase::open(database_path)?;
+    let mut database = if arguments.iter().any(|argument| argument == "--reader") {
+        IndexDatabase::open_reader(database_path)?
+    } else {
+        IndexDatabase::open(database_path)?
+    };
     match command {
         "serve" => serve(&mut database, io::stdin().lock(), io::stdout().lock()),
         "index" => {

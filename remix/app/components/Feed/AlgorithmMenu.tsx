@@ -25,6 +25,7 @@ import {
   useIsMobileViewport
 } from '~/components/Nav/Drawer/useDrawer';
 import { RAINBOW } from '~/theme/rainbow';
+import { DEFAULT_ALGORITHMS, defaultAlgorithm, isDefaultAlgorithm } from './defaultAlgorithms';
 import { growthStageFor } from './algorithmGrowth';
 import type { EngagementEvent, PublicAlgorithm } from './feedTypes';
 
@@ -241,6 +242,7 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
   }, [reload]);
 
   const handleSelect = async (id: string | null) => {
+    if (!user && isDefaultAlgorithm(id)) { onChange(id); return; }
     if (!user) {
       if (id !== null) {
         lopu({ title: 'Log in to train algorithms 🗝️', status: 'info', duration: 6000 });
@@ -318,7 +320,8 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
     setSaving(false);
   };
 
-  const buttonLabel = value === null ? '⏱️ Latest' : active ? `${active.emoji} ${active.name}` : '🧠 Algorithm';
+  const preset = defaultAlgorithm(value);
+  const buttonLabel = preset ? `${preset.emoji} ${preset.name}` : value === null ? '⏱️ Latest' : active ? `${active.emoji} ${active.name}` : '🧠 Algorithm';
 
   // growth stage (🥚→🐣→🐥→🧠): server-counted signals + this session's
   // events that the server total cannot include yet (see `sessionBaseline`).
@@ -356,7 +359,7 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
             <Box as="span" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
               {buttonLabel}
             </Box>
-            {value !== null && (
+            {active && (
               <Box
                 as="span"
                 flexShrink={0}
@@ -377,7 +380,7 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
             )}
           </Flex>
         </MenuButton>
-        <MenuList zIndex={DRAWER_POPUP_Z} minWidth="250px" borderRadius={RADIUS_MD} borderColor={BORDER_COLOR}>
+        <MenuList zIndex={DRAWER_POPUP_Z} maxHeight="min(70vh, 560px)" overflowY="auto" maxWidth="calc(100vw - 32px)" minWidth="250px" borderRadius={RADIUS_MD} borderColor={BORDER_COLOR}>
           <MenuItem fontSize="sm" onClick={() => handleSelect(null)}>
             <Flex alignItems="center" columnGap={2} width="100%">
               <Box as="span">⏱️ Latest</Box>
@@ -388,6 +391,14 @@ export const AlgorithmMenu = (props: AlgorithmMenuProps) => {
             </Flex>
           </MenuItem>
 
+          {DEFAULT_ALGORITHMS.map((item) => (
+            <MenuItem key={item.id} fontSize="sm" onClick={() => handleSelect(item.id)} title={item.description}>
+              {item.emoji} {item.name}
+              {value === item.id && <Check size={13} style={{ marginLeft: 'auto' }} />}
+            </MenuItem>
+          ))}
+          <MenuDivider />
+          <MenuItem fontSize="sm" onClick={() => navigate('/algorithms')}>Explore algorithms 🔎</MenuItem>
           {algorithms.length > 0 && <MenuDivider />}
           {algorithms.map((algorithm) => (
             <MenuItem key={algorithm.id} fontSize="sm" onClick={() => handleSelect(algorithm.id)}>

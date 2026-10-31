@@ -1,18 +1,45 @@
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { useLopu } from '~/components/Lopu/useLopu';
+import { draftRequest } from '~/drafts/draftClient';
 import React from 'react';
 import { PersistedThingMenu } from '~/components/Thingtime/ContextMenu/PersistedThingMenu';
 import type { ThingContextSection } from '~/components/Thingtime/ContextMenu/contextMenuModel';
 import { CIRCLE_META, type PublicPost, type PostVisibility } from './feedTypes';
+import { ARCHIVE_DOWNLOAD_COMMAND, ARCHIVE_SHARE_COMMAND, buildArchiveMenuSection, type ArchiveNoun } from '~/components/Attachments/attachmentArchiveActions';
+
+export type PostArchiveTarget = { id: string; fileCount: number; noun: ArchiveNoun };
 
 // A post contributes its schema-specific actions to the parent Thing menu.
 // Existing writers/moderation dialogs stay the authority for these actions.
-export function PostThingMenu({ post, mediaThing, isOwner, canModerate, canReport, guestReport, flairs, onOpen, handlers, openHref }: {
+export function PostThingMenu({ post, mediaThing, isOwner, canModerate, canReport, guestReport, flairs, onOpen, handlers, openHref, archive }: {
   post: PublicPost; mediaThing?: boolean; isOwner: boolean; canModerate: boolean; canReport: boolean; guestReport: boolean;
   flairs: Array<{ id: string; label: string; emoji?: string | null; modOnly?: boolean }> | null;
   onOpen: () => void; openHref: string;
-  handlers: { edit: () => void; delete: () => void; privacy: (value: PostVisibility) => void; report: () => void;
-    remove: () => void; moderate: (action: string, extra?: Record<string, unknown>) => void; flair: (id: string | null) => void };
+  // the ZIP this card can offer: its own stored gallery, or (media pages) the
+  // parent gallery the media belongs to — null when nothing is downloadable
+  archive?: PostArchiveTarget | null;
+  handlers: { rename?: (title: string) => void; edit: () => void; delete: () => void; privacy: (value: PostVisibility) => void; report: () => void;
+    remove: () => void; moderate: (action: string, extra?: Record<string, unknown>) => void; flair: (id: string | null) => void;
+    downloadArchive?: () => void; shareDownloadLink?: () => void };
 }) {
+  const user = useCurrentUser(), lopu = useLopu();
+  const [savingTemplate, setSavingTemplate] = React.useState(false);
+  const templateId = React.useRef<string | null>(null);
+  const saveTemplate = async () => {
+    if (!user || savingTemplate) return;
+    setSavingTemplate(true);
+    templateId.current ||= crypto.randomUUID();
+    try {
+      await draftRequest(user.id, { operation: 'from-post', postId: post.id, id: templateId.current });
+      lopu({ title: 'Saved as a reusable template 📋', description: 'Find it under Load drafts & templates when making a post.', status: 'success' });
+      templateId.current = null;
+    } catch (error) { lopu({ title: (error as Error).message, status: 'error' }); }
+    finally { setSavingTemplate(false); }
+  };
   const extensions: ThingContextSection[] = [];
+  if (user && !mediaThing && !post.thingtime.includes('comment')) extensions.push({ id: 'templates', actions: [{ id: 'save-template', command: 'save-template', label: savingTemplate ? 'Saving template…' : 'Save as template', icon: '📋', disabled: savingTemplate }] });
+  const files = archive ? buildArchiveMenuSection({ fileCount: archive.fileCount, noun: archive.noun }) : null;
+  if (files) extensions.push(files);
   const privacy: ThingContextSection = { id: 'privacy', label: 'Privacy', actions: (Object.keys(CIRCLE_META) as PostVisibility[]).map(value => ({
     id: `privacy-${value}`, command: 'privacy', payload: value, label: CIRCLE_META[value].label, icon: CIRCLE_META[value].emoji, selected: post.visibility === value
   })) };
@@ -32,12 +59,15 @@ export function PostThingMenu({ post, mediaThing, isOwner, canModerate, canRepor
     ] }] } }] });
   }
   return <PersistedThingMenu id={post.id} initialThing={post} label={mediaThing ? 'Media options' : 'Post options'} openHref={openHref}
-    onOpen={onOpen} extensions={extensions} capabilities={{ edit: isOwner && !mediaThing, delete: isOwner && !mediaThing,
+    onOpen={onOpen} onRenamed={handlers.rename} extensions={extensions} capabilities={{ edit: isOwner && !mediaThing, delete: isOwner && !mediaThing,
       share: isOwner && !mediaThing ? { submenu: { title: 'Share / permissions', sections: [privacy] } } : false }}
     onAction={({ action }) => {
       const command = action.command;
-      if (command === 'edit') handlers.edit();
+      if (command === 'save-template') { void saveTemplate(); }
+      else if (command === 'edit') handlers.edit();
       else if (command === 'delete') handlers.delete();
+      else if (command === ARCHIVE_DOWNLOAD_COMMAND) handlers.downloadArchive?.();
+      else if (command === ARCHIVE_SHARE_COMMAND) handlers.shareDownloadLink?.();
       else if (command === 'privacy') handlers.privacy(action.payload as PostVisibility);
       else if (command === 'report') handlers.report();
       else if (command === 'remove') handlers.remove();

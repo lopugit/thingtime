@@ -1,3 +1,4 @@
+import { createClaudeOAuthClient, type runClaudeOAuth } from '../ai/claudeOAuth';
 // The one place Thingtime dials a user's own AI provider (design note §1.3):
 // the SSRF guard (server allowlist → fresh public DNS → private-range check),
 // the redirect-refusing fetch every call goes through, the SDK client
@@ -13,7 +14,9 @@
 // provider-minted short-lived credential, never the stored key.
 
 import { lookup } from 'node:dns/promises';
+import { isModelUnavailableError } from '../ai/modelDiscovery';
 import { AiTransportFailure } from '../ai/providerWaterfall';
+import { ChatGPTPlanError, RESOURCE as CHATGPT_PLAN_RESOURCE } from '../ai/chatgptPlanProtocol';
 
 import {
 	defaultVaultProviderModel,
@@ -53,6 +56,9 @@ export type LopuVaultProviderRecord = {
 	endpoint: string;
 	model: string | null;
 	token: string;
+	authMode?: 'chatgpt-plan';
+	// Runtime-owned cancellation for this authorization generation. Never stored.
+	authSignal?: AbortSignal;
 };
 
 export type LopuVaultHistoryMessage = { role: 'user' | 'assistant'; content: string };
@@ -111,6 +117,7 @@ export type LopuVaultProviderClientConfig = {
 	apiKey: string;
 	model: string;
 	rewritten: boolean;
+	authMode?: 'chatgpt-plan';
 };
 
 // What chat.ts builds its SDK client from: guard first, then the base URL
@@ -122,6 +129,17 @@ export const resolveVaultProviderClientConfig = async (
 	provider: LopuVaultProviderRecord,
 	options: { model?: string | null } = {}
 ): Promise<LopuVaultProviderClientConfig> => {
+	if (provider.authMode === 'chatgpt-plan') {
+		// Plan credentials must never follow an API-key endpoint, default model,
+		// or development rewrite. The runtime supplied an account-discovered model.
+		if (provider.provider !== 'openai' || provider.endpoint !== CHATGPT_PLAN_RESOURCE || !provider.token ||
+			applyProviderDevRewrite(provider.endpoint, devRewrites())) throw new ChatGPTPlanError('invalid_request');
+		const model = resolveVaultTurnModel(provider.model, options.model);
+		if (!model) throw new ChatGPTPlanError('invalid_request');
+		await assertSafeProviderEndpoint(provider.endpoint);
+		return { transport: 'openai', toolProtocol: 'native', baseURL: CHATGPT_PLAN_RESOURCE,
+			apiKey: provider.token, model, rewritten: false, authMode: 'chatgpt-plan' };
+	}
 	const model = resolveVaultTurnModel(provider.model, options.model, defaultVaultProviderModel(provider.provider));
 	if (!model) throw vaultGuardError(LOPU_VAULT_NO_MODEL_REASON);
 	const safe = await assertSafeProviderEndpoint(provider.endpoint);
@@ -167,6 +185,7 @@ const readBoundedJson = async (response: Response): Promise<any> => {
 };
 
 export type PlainCompletionInput = {
+  claudeRun?: typeof runClaudeOAuth;
 	system: string;
 	history: LopuVaultHistoryMessage[];
 	prompt: string;
@@ -196,25 +215,7 @@ export const buildPlainCompletionRequest = (
 ): { url: string; headers: Record<string, string>; body: Record<string, unknown> } => {
 	const { effort, speed } = input;
 	const active = effort && effort !== 'none' ? effort : null;
-	if (provider.provider === 'anthropic') {
-		return {
-			url: joinEndpoint(endpoint, 'v1/messages'),
-			headers: {
-				'Content-Type': 'application/json',
-				'x-api-key': provider.token,
-				'anthropic-version': '2023-06-01',
-				...(speed === 'fast' ? { 'anthropic-beta': 'fast-mode-2026-02-01' } : {})
-			},
-			body: {
-				model: input.model,
-				max_tokens: input.maxTokens,
-				system: input.system,
-				messages: input.messages,
-				...(active ? { output_config: { effort: active } } : {}),
-				...(speed === 'fast' ? { speed: 'fast' } : {})
-			}
-		};
-	}
+	if (provider.provider === 'anthropic') throw new Error('Claude uses the OAuth runtime, not an HTTP API-key request.');
 	if (provider.provider === 'google') {
 		return {
 			url: joinEndpoint(endpoint, `models/${encodeURIComponent(input.model)}:generateContent`),
@@ -303,8 +304,20 @@ export const callVaultProviderPlainCompletion = async (provider: LopuVaultProvid
 	(await callVaultProviderCompletion(provider, input)).text;
 
 export const callVaultProviderCompletion = async (provider: LopuVaultProviderRecord, input: PlainCompletionInput): Promise<VaultProviderCompletion> => {
+	if (provider.authMode === 'chatgpt-plan') throw new ChatGPTPlanError('subscription_sharing_route_not_supported');
 	const model = resolveVaultTurnModel(provider.model, input.model, defaultVaultProviderModel(provider.provider));
 	if (!model) throw vaultGuardError(LOPU_VAULT_NO_MODEL_REASON);
+	if (provider.provider === 'anthropic') {
+    const result = await createClaudeOAuthClient({ token: provider.token, run: input.claudeRun }).messages.create({
+      model, system: input.system, messages: [...input.history, { role: 'user', content: input.prompt }],
+      max_tokens: input.maxTokens ?? 4096,
+      ...(input.speed === 'fast' ? { speed: 'fast' } : {}),
+      ...(input.effort && input.effort !== 'none' ? { output_config: { effort: input.effort as any } } : {})
+    }, { signal: input.signal });
+    const text = extractPlainCompletionText('anthropic', result);
+    if (!text?.trim()) throw new Error('Claude OAuth returned no text.');
+    return { text: text.trim(), model, usage: extractPlainCompletionUsage('anthropic', result) };
+  }
 	const safe = await (input.assertEndpoint ?? assertSafeProviderEndpoint)(provider.endpoint);
 	const request = buildPlainCompletionRequest(provider, safe.endpoint, {
 		system: input.system,
@@ -326,8 +339,13 @@ export const callVaultProviderCompletion = async (provider: LopuVaultProviderRec
 	// readBoundedJson throw "unreadable response" over the one fact the caller
 	// needs — the status. Nothing reads `result` on the failure path anyway.
 	if (!response.ok) {
-		await response.body?.cancel().catch(() => {});
-		throw new AiTransportFailure(response.status);
+    const failure = new AiTransportFailure(response.status);
+    if ([400, 404, 410].includes(response.status)) {
+      const body = await readBoundedJson(response).catch(() => null);
+      if (isModelUnavailableError({ status: response.status, code: body?.error?.code, message: body?.error?.message }))
+        failure.code = 'model_not_available';
+    } else await response.body?.cancel().catch(() => {});
+    throw failure;
 	}
 	const result = await readBoundedJson(response);
 	const text = extractPlainCompletionText(provider.provider, result);
@@ -366,6 +384,7 @@ export type RealtimeSessionInput = {
 // response. The credential that comes back must differ from the key it was
 // minted with, so a misbehaving endpoint can never echo the key downstream.
 export const mintVaultProviderRealtimeSession = async (provider: LopuVaultProviderRecord, input: RealtimeSessionInput): Promise<VaultProviderRealtimeSession> => {
+	if (provider.authMode === 'chatgpt-plan') throw new ChatGPTPlanError('subscription_sharing_route_not_supported');
 	if (!vaultProviderSupportsRealtime(provider.provider)) throw vaultGuardError(LOPU_VAULT_REALTIME_UNSUPPORTED_REASON);
 	const model = input.model.trim();
 	if (!model) throw vaultGuardError(LOPU_VAULT_NO_MODEL_REASON);

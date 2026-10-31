@@ -1,3 +1,12 @@
+import { resolveOwnedChatGPTPlan } from '~/api/utils/ai/chatgptPlanAdmission';
+import type { OwnedPlanAdmission } from '~/api/utils/ai/chatgptPlanAdmissionCore';
+import { chatGPTPlanFailure, isChatGPTPlanProvider } from '~/api/utils/ai/chatgptPlanScope';
+import { isLopuAccessActor, lopuAccessMode } from '~/api/utils/lopu/accessMode';
+import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import type { ResolveActionActor } from '~/api/utils/actions/firstPartyActionHost';
+import { LOPU_CONTINUE_PROMPT, continuationRequestId, lopuProviderManagement, LOPU_RECOVERABLE_STOPS, lopuRecoveryFailures } from '~/api/utils/lopu/continuationCore';
+import { lopuPageReference, lopuPageReferences, LOPU_MAX_PAGE_REFERENCES } from '~/utils/lopuPageContext';
+import { resolveLopuMedia } from '~/api/utils/lopu/chatMedia.server';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { lopuReferenceIds, resolveLopuThingReferences, lopuReferenceContext } from '~/api/utils/lopu/chatAttachments';
 import { listAiModels, resolveLopuModelChoice } from '~/api/utils/ai/models';
@@ -12,7 +21,7 @@ import type { LopuApprovedAction } from '~/api/utils/lopu/chatTools';
 import { parseLopuConfirmations, verifyLopuConfirmation, type LopuConfirmationInput } from '~/api/utils/lopu/confirmations';
 import { getUserVaultProvider, userVaultConfigured } from '~/api/utils/lopu/userVault';
 import { safeVaultId } from '~/api/utils/lopu/userVaultCore';
-import { createLopuChat, deleteLopuChat, getLopuChat, loadLopuHistory, persistLopuAssistantTurn, persistLopuUserTurn, updateLopuChat } from '~/api/utils/messenger/lopuChats';
+import { readLopuContinuation, createLopuNoteReader, createLopuChat, deleteLopuChat, getLopuChat, loadLopuHistory, persistLopuAssistantTurn, persistLopuUserTurn, updateLopuChat } from '~/api/utils/messenger/lopuChats';
 import type { PublicChatMessage } from '~/api/utils/messenger/messenger';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import type { AiWorkflowModelChoice } from '~/api/utils/settings/prConflictResolverModelWaterfallCore';
@@ -50,6 +59,10 @@ const HISTORY_TURNS = 40;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 type ReplyBody = {
+  accessMode?: 'ask' | 'full';
+  management?: 'client' | 'server';
+  continueFromRequestId?: string;
+  automaticContinuation?: boolean;
   attachmentIds: string[];
   thingIds: string[];
   chatId: string | null;
@@ -81,6 +94,10 @@ const parseContext = (raw: unknown): { ok: true; context: LopuChatContext | null
   if (raw === undefined || raw === null) return { ok: true, context: null };
   if (!isRecord(raw)) return { ok: false, error: 'context must be an object' };
   const context: LopuChatContext = {};
+  if (raw.pages !== undefined) {
+    if (!Array.isArray(raw.pages) || raw.pages.length > LOPU_MAX_PAGE_REFERENCES || raw.pages.some(page => !lopuPageReference(page))) return { ok: false, error: 'context.pages must contain up to ten Thingtime page links' };
+    context.pages = lopuPageReferences(raw.pages);
+  }
   if (raw.route !== undefined && raw.route !== null) {
     if (typeof raw.route !== 'string' || raw.route.length > MAX_ROUTE_CHARS) return { ok: false, error: 'context.route must be a short path' };
     context.route = raw.route;
@@ -94,6 +111,10 @@ const parseContext = (raw: unknown): { ok: true; context: LopuChatContext | null
   if (raw.page !== undefined && raw.page !== null) {
     if (!isRecord(raw.page)) return { ok: false, error: 'context.page must be an object' };
     const page: NonNullable<LopuChatContext['page']> = {};
+    for (const field of ['dirty', 'ready'] as const) {
+      if (raw.page[field] !== undefined && typeof raw.page[field] !== 'boolean') return { ok: false, error: `context.page.${field} must be a boolean` };
+      if (typeof raw.page[field] === 'boolean') page[field] = raw.page[field];
+    }
     if (raw.page.id !== undefined && raw.page.id !== null) {
       const id = optionalToken(raw.page.id, MAX_CONTEXT_ID_CHARS);
       if (!id) return { ok: false, error: 'context.page.id must be a webpage id' };
@@ -125,7 +146,12 @@ const parseBody = (body: unknown): Validation => {
   let attachmentIds: string[], thingIds: string[];
   try { attachmentIds = lopuReferenceIds(body.attachmentIds); thingIds = lopuReferenceIds(body.thingIds); }
   catch (error) { return { ok: false, error: (error as Error).message }; }
-  const text = typeof body.text === 'string' ? body.text.trim() : '';
+  if (body.accessMode !== undefined && body.accessMode !== 'ask' && body.accessMode !== 'full') return { ok: false, error: 'accessMode must be ask or full.' };
+  if (body.management !== undefined && body.management !== 'client' && body.management !== 'server') return { ok: false, error: 'management must be client or server.' };
+  const continuation = typeof body.continueFromRequestId === 'string' ? body.continueFromRequestId : undefined;
+  if (body.continueFromRequestId !== undefined && !continuation) return { ok: false, error: 'Invalid continuation request.' };
+  if (continuation !== undefined && (typeof continuation !== 'string' || !REQUEST_ID_PATTERN.test(continuation))) return { ok: false, error: 'Invalid continuation request.' };
+  const text = continuation ? LOPU_CONTINUE_PROMPT : typeof body.text === 'string' ? body.text.trim() : '';
   if (!text) return { ok: false, error: 'Say something first' };
   if (Array.from(text).length > MAX_TEXT_CHARS) return { ok: false, error: `Messages to Lopu cap at ${MAX_TEXT_CHARS} characters` };
   const requestId = typeof body.requestId === 'string' ? body.requestId.trim() : '';
@@ -152,11 +178,15 @@ const parseBody = (body: unknown): Validation => {
   if (context.ok === false) return context;
   const confirmations = parseLopuConfirmations(body.confirmations);
   if (confirmations.ok === false) return confirmations;
+  if (continuation && (attachmentIds.length || thingIds.length || confirmations.confirmations.length || context.context?.page?.blocks)) return { ok: false, error: 'Continuations use saved progress without attachments, confirmations or draft snapshots.' };
   if (confirmations.confirmations.length && !chatId) return { ok: false, error: 'Confirmations belong to an existing conversation — send its chatId' };
   return {
     ok: true,
     value: {
       attachmentIds, thingIds,
+      ...(body.accessMode ? { accessMode: body.accessMode as 'ask' | 'full' } : {}),
+      ...(body.management ? { management: body.management as 'client' | 'server' } : {}),
+      ...(continuation ? { continueFromRequestId: continuation, automaticContinuation: body.automaticContinuation === true } : {}),
       chatId,
       text,
       requestId,
@@ -186,6 +216,7 @@ export const titleFromMessage = (text: string): string => {
 const interruptedNote = (outcome: LopuChatTurnOutcome | null): string => {
   if (!outcome) return 'Lopu’s reply was interrupted before it started — ask again in a moment.';
   const text = outcome.text.trim();
+  if (outcome.stopReason === 'checkpoint') return text || 'Progress saved. Continuing…';
   if (outcome.stopReason === 'aborted') return text ? `${text}\n\n_(reply stopped)_` : 'Lopu’s reply was stopped before it started.';
   if (outcome.stopReason === 'error') return text ? `${text}\n\n_(reply interrupted — try again)_` : 'Lopu lost the thread before replying — try again.';
   return text || 'Lopu went quiet for a moment — ask again in a little while.';
@@ -197,7 +228,7 @@ export const action = async ({ request }: { request: Request }) => {
 
 // Internal entry point for an explicitly requested recording handoff. The
 // public action always authenticates above; no caller-supplied user is accepted.
-export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typeof getScopedUser>>, execution: { scheduled?: boolean } = {}) => {
+export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typeof getScopedUser>>, execution: { scheduled?: boolean; resolveActionActor?: ResolveActionActor } = {}) => {
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, { status: 405 });
   if (!user) return json({ ok: false, error: 'Sign in to talk to Lopu' }, { status: 401 });
   if (user.temporary) return json({ ok: false, error: 'Create an account to chat with Lopu — conversations are saved to your account' }, { status: 403 });
@@ -216,14 +247,28 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
   const parsed = parseBody(body);
   if (parsed.ok === false) return json({ ok: false, error: parsed.error }, { status: 400 });
   const input = parsed.value;
+  if (input.accessMode !== undefined && (input.chatId || input.continueFromRequestId)) return json({ ok: false, error: 'Change existing chat access through chat settings.' }, { status: 400 });
+  const resolveActionActor = execution.resolveActionActor ?? (() => getCurrentUser(request));
+  if (input.accessMode !== undefined && !isLopuAccessActor(await resolveActionActor(), user.id)) return json({ ok: false, error: 'Change chat access from your first-party account session' }, { status: 403 });
   const viewer = { id: user.id, username: user.username };
+  let previousRecoveryFailures = 0;
+  if (input.continueFromRequestId) {
+    if (!input.chatId) return json({ ok: false, error: 'A continuation requires its conversation.' }, { status: 400 });
+    const continuation = await readLopuContinuation(user.id, input.chatId, input.continueFromRequestId, input.automaticContinuation === true);
+    if (continuation.ok === false) return json({ ok: false, error: continuation.error }, { status: continuation.status });
+    if (input.automaticContinuation === true) previousRecoveryFailures = lopuRecoveryFailures(continuation.meta.recoveryFailures);
+    const expectedRequestId = await continuationRequestId(input.chatId, input.continueFromRequestId);
+    if (input.requestId !== expectedRequestId) return json({ ok: false, error: 'Use the continuation request id for this saved checkpoint.' }, { status: 400 });
+  }
 
   // Reject inaccessible references before creating a conversation or reserving
   // a billed turn. Store stable links alongside the user's original prompt.
   let references: Awaited<ReturnType<typeof resolveLopuThingReferences>>;
   try { references = await resolveLopuThingReferences(user.id, input.thingIds); }
   catch { return json({ ok: false, error: 'One or more attached Things are unavailable.' }, { status: 400 }); }
-  const linkedText = input.thingIds.length ? `${input.text}\n\nAttached Things:\n${input.thingIds.map(id => `/thing/${id}`).join('\n')}` : input.text;
+  const thingLinkedText = input.thingIds.length ? `${input.text}\n\nAttached Things:\n${input.thingIds.map(id => `/thing/${id}`).join('\n')}` : input.text;
+
+  const linkedText = input.context?.pages?.length ? `${thingLinkedText}\n\nAttached pages:\n${input.context.pages.map(page => `${page.title}: ${page.url}`).join('\n')}` : thingLinkedText;
 
   // --- conversation -----------------------------------------------------
   let chatId = input.chatId;
@@ -253,9 +298,20 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
   const providerExplicit = input.providerId !== undefined;
   const wantedProviderId = providerExplicit ? input.providerId : settings.providerId;
   let vaultProvider: LopuVaultTurnProvider | null = null;
+  let ownedPlan: OwnedPlanAdmission | null = null;
   let clearStoredProvider = false;
   if (wantedProviderId) {
-    if (!userVaultConfigured()) {
+    if (isChatGPTPlanProvider(wantedProviderId)) {
+      try {
+        const resolved = await resolveOwnedChatGPTPlan(request, user.id, wantedProviderId, execution.resolveActionActor);
+        ownedPlan = resolved.admission;
+        input.management = lopuProviderManagement(input.management, resolved.provider.id);
+        vaultProvider = { ...resolved.provider, effort: null, requestedModel: null };
+      } catch (error) {
+        // A saved plan pin is strict too: losing a runtime must never spend API credits.
+        return json({ ok: false, ...chatGPTPlanFailure(error) }, { status: 409, headers: { 'Cache-Control': 'private, no-store' } });
+      }
+    } else if (!userVaultConfigured()) {
       if (providerExplicit) return json({ ok: false, error: 'Secure Vault is not configured on this server — pick a Thingtime model instead' }, { status: 400 });
       clearStoredProvider = true;
     } else {
@@ -281,7 +337,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
   // in the finally below (early return or throw) or once the stream has
   // finished accounting for the turn.
   const expectedBilling = resolveLopuBilling({ vault: !!vaultProvider, mode: lopuChatProviderMode(), configured: hasLopuChatProviderConfigured() });
-  const access = await assertLopuAccess(user, { billing: expectedBilling, reserve: true });
+  const access = await assertLopuAccess(user, { billing: expectedBilling, reserve: true, ownedPlan });
   if (access.ok === false) return lopuAccessResponse(access);
   let released = false;
   const releaseTurn = async () => {
@@ -324,9 +380,11 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
     if (!chatId) {
       const created = await createLopuChat(user.id, {
         title: titleFromMessage(input.text),
+        accessMode: lopuAccessMode(input.accessMode),
+        ...(input.management ? { management: input.management } : {}),
         ...(choice ? { model: choice.model, effort: choice.effort, speed: choice.speed } : {}),
         ...(providerExplicit && vaultProvider ? { providerId: vaultProvider.id } : {})
-      });
+      }, undefined, ownedPlan);
       if (created.ok === false) return json({ ok: false, error: created.error }, { status: created.status });
       chatId = created.chat.id;
       createdHere = true;
@@ -335,11 +393,23 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
       // the turn itself already carries the resolved choice); an explicit
       // providerId (or null) does too, and a stored connection that no longer
       // resolves is cleared so the picker stops showing it
-      const patch: { model?: string; effort?: string | null; speed?: string; providerId?: string | null } = {};
+      const patch: { management?: 'client' | 'server'; model?: string; effort?: string | null; speed?: string; providerId?: string | null } = {};
+      if (input.management) patch.management = input.management;
       if (overrides && choice) Object.assign(patch, { model: choice.model, effort: choice.effort, speed: choice.speed });
       if (providerExplicit) patch.providerId = vaultProvider?.id ?? null;
       else if (clearStoredProvider) patch.providerId = null;
-      if (Object.keys(patch).length) await updateLopuChat(user.id, chatId, patch).catch(() => null);
+      if (Object.keys(patch).length) {
+        if (ownedPlan && providerExplicit) {
+          // A newly selected plan must be pinned before inference. Do not
+          // present a successful turn while silently retaining another provider.
+          try {
+            const updated = await updateLopuChat(user.id, chatId, patch, ownedPlan);
+            if (updated.ok === false) return json({ ok: false, error: updated.error }, { status: updated.status });
+          } catch {
+            return json({ ok: false, error: 'Could not save the selected ChatGPT plan. Try again.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
+          }
+        } else await updateLopuChat(user.id, chatId, patch, ownedPlan).catch(() => null);
+      }
     }
 
     // --- history + the user turn ------------------------------------------
@@ -353,7 +423,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
     };
     let userTurn: Awaited<ReturnType<typeof persistLopuUserTurn>>;
     try {
-      userTurn = await persistLopuUserTurn(user.id, { chatId, requestId: input.requestId, text: linkedText, attachmentIds: input.attachmentIds, unread: execution.scheduled });
+      userTurn = await persistLopuUserTurn(user.id, { chatId, requestId: input.requestId, text: linkedText, attachmentIds: input.attachmentIds, unread: execution.scheduled, continuation: !!input.continueFromRequestId });
     } catch (error) {
       await discardCreated();
       throw error;
@@ -379,7 +449,13 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
     const stream = new ReadableStream({
       async start(controller) {
         let closed = false;
+        const pendingTools = new Set<string>();
+        let awaitingConfirmation = false;
         const send = (event: LopuChatEvent) => {
+          if (event.type === 'meta' && input.continueFromRequestId) event = { ...event, continuation: true };
+          if (event.type === 'tool_use' || event.type === 'tool_use_start') pendingTools.add(event.id);
+          if (event.type === 'tool_result') { pendingTools.delete(event.id); awaitingConfirmation ||= event.needsConfirmation === true; }
+          if (event.type === 'confirm') awaitingConfirmation = true;
           if (closed) return;
           try {
             controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'));
@@ -388,22 +464,45 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           }
         };
 
+        let renewing = false;
+        const leaseHeartbeat = access.renew ? setInterval(async () => {
+          if (renewing) return;
+          renewing = true;
+          try { await access.renew?.(); }
+          catch { abort.abort(); }
+          finally { renewing = false; }
+        }, 30_000) : null;
         let outcome: LopuChatTurnOutcome | null = null;
-        const generator = streamLopuChatTurn({
-          readOnly: execution.scheduled,
-          viewer,
-          chatId: persistedChatId,
-          userMessageId,
-          requestId: input.requestId,
-          text: input.text + lopuReferenceContext(references) + (input.attachmentIds.length ? '\n\nFiles attached to this message: ' + JSON.stringify(userTurn.message.attachments ?? []).slice(0, 5000) + '\nThese are metadata only. Do not claim to have seen, heard or transcribed their contents.' : ''),
-          history,
-          choice,
-          vaultProvider,
-          context: input.context,
-          approvedConfirmations: approved,
-          signal: abort.signal
-        });
         try {
+          const attachedContent = await resolveLopuMedia(user.id, [...input.attachmentIds, ...references.filter(ref => typeof ref.crystal === "object" && ref.crystal && "contentType" in ref.crystal).map(ref => ref.id), ...(loaded.ok ? loaded.attachmentIds ?? [] : [])], abort.signal);
+          const generator = streamLopuChatTurn({
+            readNotes: createLopuNoteReader(user.id, persistedChatId, input.requestId),
+            readOnly: execution.scheduled,
+            resolveActionActor: execution.scheduled ? undefined : resolveActionActor,
+            readAccessMode: async () => {
+              const actor = await resolveActionActor();
+              if (!actor || actor.id !== user.id || actor.temporary || actor.accountKind !== 'user') return 'ask';
+              const current = await getLopuChat(user.id, persistedChatId);
+              if (current.ok === false) throw new Error('This chat is no longer available');
+              return lopuAccessMode(current.settings.accessMode);
+            },
+            viewer,
+            chatId: persistedChatId,
+            userMessageId,
+            requestId: input.requestId,
+            text: input.text + lopuReferenceContext(references) + attachedContent.text,
+            media: attachedContent.media,
+            history,
+            readReferences: loaded.ok ? loaded.readReferences : undefined,
+            checkpointResults: input.continueFromRequestId
+              ? await (await import('~/api/utils/lopu/backgroundTasks')).readCheckpointToolResults(request, chatId, input.continueFromRequestId)
+              : undefined,
+            choice,
+            vaultProvider,
+            context: input.context,
+            approvedConfirmations: approved,
+            signal: abort.signal
+          });
           for (;;) {
             const step = await generator.next();
             if (step.done === true) {
@@ -414,12 +513,15 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           }
         } catch (error: any) {
           console.error('[lopu] reply stream failed:', error?.message || error);
-          send({ type: 'error', message: 'Lopu lost the thread mid-reply — what streamed so far is kept.', retryable: true });
+          send({ type: 'error', message: 'The AI connection was interrupted. Saved progress is kept — use Retry / Continue to pick up from here.', retryable: true });
         } finally {
+          if (leaseHeartbeat) clearInterval(leaseHeartbeat);
           // persist whatever streamed, even after an error or a disconnect
-          const finished = outcome?.stopReason === 'end_turn' || outcome?.stopReason === 'fallback' || outcome?.stopReason === 'tool_limit' || outcome?.stopReason === 'hop_limit' || outcome?.stopReason === 'time_limit' || outcome?.stopReason === 'max_tokens';
-          const text = finished && outcome?.text.trim() ? outcome.text : interruptedNote(outcome);
+          const finished = outcome?.stopReason === 'checkpoint' || outcome?.stopReason === 'end_turn' || outcome?.stopReason === 'fallback' || outcome?.stopReason === 'tool_limit' || outcome?.stopReason === 'hop_limit' || outcome?.stopReason === 'time_limit' || outcome?.stopReason === 'max_tokens';
           const stopReason = outcome?.stopReason || 'error';
+          const recoveryFailures = stopReason === 'error' ? previousRecoveryFailures + 1 : 0;
+          const continuationSafe = !!outcome && !abort.signal.aborted && !pendingTools.size && !awaitingConfirmation && !(input.context?.page && !input.context.page.id) && LOPU_RECOVERABLE_STOPS.includes(stopReason);
+          const text = (finished || continuationSafe) && outcome?.text.trim() ? outcome.text : continuationSafe ? 'Progress saved.' : interruptedNote(outcome);
 
           // --- accounting (verified-access design note §2) ----------------------
           // price what the provider reported and record the turn; thingtime
@@ -458,6 +560,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
               chatId: persistedChatId,
               requestId: input.requestId,
               text,
+              readReferences: outcome?.readReferences,
               lopu: {
                 model: outcome?.model ?? choice?.model ?? null,
                 effort: outcome?.effort ?? choice?.effort ?? null,
@@ -470,6 +573,8 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
                 priced,
                 balanceMicros,
                 toolCalls: outcome?.toolCalls ?? [],
+                continuationSafe,
+                recoveryFailures,
                 stopReason
               }
             });
@@ -482,7 +587,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           } catch (error: any) {
             console.error('[lopu] assistant turn persist threw:', error?.message || error);
           }
-          send({ type: 'done', assistantMessageId, messages, ...(outcome?.usage ? { usage: outcome.usage } : {}), billing, costMicros, priced, balanceMicros, stopReason });
+          send({ type: 'done', assistantMessageId, messages, ...(outcome?.usage ? { usage: outcome.usage } : {}), billing, costMicros, priced, balanceMicros, stopReason, continuationSafe, recoveryFailures });
           try {
             controller.close();
           } catch {

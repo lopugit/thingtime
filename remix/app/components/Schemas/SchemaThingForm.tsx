@@ -1,3 +1,9 @@
+import { BUILDER_THING_KIND } from '~/schemas/builderThing';
+import { useAccountDraft } from '~/drafts/useAccountDraft';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { DraftSaveStatus } from '~/drafts/DraftPicker';
+import { restoreSchemaFormDraft, schemaFormValue } from '~/drafts/schemaFormDraft';
+import { GENERIC_NATIVE_SCHEMA_KINDS, schemaThingCreateInput } from '~/schemas/schemaCopies';
 import React from 'react';
 import {
   Box,
@@ -10,7 +16,8 @@ import {
   ModalOverlay,
   Select,
   Switch,
-  Text
+  Text,
+  Textarea
 } from '@chakra-ui/react';
 import { Plus, Trash2, X } from 'lucide-react';
 
@@ -96,8 +103,16 @@ type LeafInputProps = {
   onChange: (next: unknown) => void;
 };
 
+// Keep source text in the parent draft, including incomplete JSON. The form
+// converts it to typed values only when validating or publishing.
+const JsonInput = ({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) => {
+  return <Textarea aria-label="JSON value" value={typeof value === 'string' ? value : ''} fontFamily="mono" minH="100px"
+    onChange={event => onChange(event.target.value || undefined)} />;
+};
+
 const LeafInput = ({ field, value, onChange }: LeafInputProps) => {
   switch (field.type) {
+    case 'json': return <JsonInput value={value} onChange={onChange} />;
     case 'boolean':
       return <Switch isChecked={value === true} onChange={(event) => onChange(event.target.checked)} size="sm" />;
     case 'enum':
@@ -324,13 +339,20 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
   const [value, setValue] = React.useState<Record<string, unknown>>({});
   const [publishing, setPublishing] = React.useState(false);
   const [touched, setTouched] = React.useState(false);
+  const user = useCurrentUser();
+  const draft = useAccountDraft({ actor: user?.id, surface: 'schema', context: `schema-form:${source.id}`,
+    onRestore: saved => setValue(restoreSchemaFormDraft(saved.snapshot, source.fields)) });
+  const captureDraft = draft.capture;
+ React.useEffect(() => { if (!publishing) captureDraft({ name: `${source.name} draft`.slice(0, 160), surface: 'schema', context: `schema-form:${source.id}`,
+    snapshot: JSON.stringify({ version: 2, value }), attachmentIds: [] }, Object.keys(value).length > 0); }, [value, source.id, source.name, publishing, captureDraft]);
 
   const handleChange = React.useCallback((path: string[], next: unknown) => {
     setTouched(true);
     setValue((prev) => setPath(prev, path, next));
   }, []);
 
-  const validation = React.useMemo(() => validateValueAgainstFields(source.fields, value), [source.fields, value]);
+  const normalizedValue = React.useMemo(() => schemaFormValue(source.fields, value), [source.fields, value]);
+  const validation = React.useMemo(() => validateValueAgainstFields(source.fields, normalizedValue), [source.fields, normalizedValue]);
 
   const publish = async () => {
     setTouched(true);
@@ -340,17 +362,10 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
     }
     setPublishing(true);
     try {
-      // the scope/provenance tags spread LAST so no user field can clobber
-      // them (top-level fields named schema/schemaId are also rejected at
-      // author time); schemaId pins usage counts to this exact schema thing
-      const resp: any = await api.v1.things.create({
-        thingtime: ['data'],
-        crystal: {
-          ...value,
-          schema: source.name,
-          ...(source.origin === 'community' ? { schemaId: source.id } : {})
-        }
-      });
+      await draft.flush();
+      const payload = schemaThingCreateInput(source, normalizedValue);
+      if (payload.thingtime.includes('data') || payload.thingtime.includes('folder')) payload.thingtime.push(BUILDER_THING_KIND);
+      const resp: any = await api.v1.things.create(payload);
       if (!resp?.ok) throw resp;
       // only link to /search when SearchPage can actually resolve the schema
       // — non-searchable builtin kinds (share/save/user/…) would dead-end on
@@ -361,6 +376,7 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
         duration: 8000,
         ...(searchableSchemaSource(source) ? { link: { label: 'Find it on /search', href: schemaSearchPath(source) } } : {})
       });
+      await draft.clear().catch(() => {});
       if (resetOnCreate) {
         setValue({});
         setTouched(false);
@@ -373,8 +389,10 @@ export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }
     }
   };
 
+  if (source.origin === 'builtin' && !GENERIC_NATIVE_SCHEMA_KINDS.has(source.id)) return <Text fontSize="sm">Copy and extend this schema to create your own Things. Thingtime manages system records through their dedicated features.</Text>;
   return (
     <Flex direction="column" gap={3}>
+      <DraftSaveStatus status={draft.status} error={draft.error} retry={draft.retry} />
       {source.description && (
         <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
           {source.description}

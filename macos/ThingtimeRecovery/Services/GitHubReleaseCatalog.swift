@@ -78,7 +78,7 @@ public actor GitHubReleaseCatalog {
                 isPrerelease: release.prerelease == true,
                 isUnsigned: isUnsigned,
                 name: release.name ?? tag,
-                publishedAt: release.publishedAt.flatMap(ISO8601DateFormatter().date(from:)),
+                publishedAt: RecoveryBuildDate.parse(release.publishedAt),
                 releaseURL: release.htmlURL.flatMap(URL.init(string:)),
                 tag: tag,
                 version: semanticVersion(in: tag),

@@ -32,7 +32,7 @@
         : '';
 
   if (prefix) {
-    document.title = `${prefix} Thingtime`;
+    document.title = `${prefix} ${document.title}`;
   }
 })();
 

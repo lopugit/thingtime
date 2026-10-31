@@ -1,3 +1,5 @@
+import { BUILDER_THING_KIND } from '~/schemas/builderThing';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { materializeSuite, type BehaviourSuite } from '~/schemas/behaviourSuites';
 
 // Install a behaviour suite into the viewer's own things = the suite's
@@ -29,7 +31,7 @@ export const installSuite = async (
 	const actionIds: Record<string, string> = {};
 	for (const action of bundle.actions) actionIds[action.key] = await createId({ thingtime: ['action'], crystal: action.crystal, acl: ['tt:user'] });
 	for (const entry of bundle.data) {
-		await createId({ thingtime: ['data'], crystal: { ...entry.crystal, schemaId: schemaIds[entry.schemaKey] }, acl: ['tt:user'] });
+		await createId({ thingtime: ['data', BUILDER_THING_KIND], crystal: { ...entry.crystal, schemaId: schemaIds[entry.schemaKey] }, acl: ['tt:user'] });
 	}
 	// App suites (bundle.app) install EVERY page and KEEP each pageKey: that is
 	// what makes /p/<pageKey> resolve the viewer's copy ahead of the seeded
@@ -59,16 +61,18 @@ export type ServerInstalledSuite = {
 	created: number;
 	updated: number;
 	pageIds: Record<string, string>;
+	componentIds: Record<string, string>;
 	entryPageId: string;
 	entryPageKey: string;
 };
 
-export const installSuiteOnServer = async (key: string): Promise<ServerInstalledSuite> => {
+export const installSuiteOnServer = async (key: string, options: { onlyMissing?: boolean } = {}): Promise<ServerInstalledSuite> => {
+	await requireThingtimeCapability('api.webpages-suites-install', key === 'mac-menu-bar' ? '1.6.0' : key === 'agent-tasks' ? '1.5.0' : key === 'media-tools' ? '1.4.0' : key === 'web-standards' ? '1.3.0' : '1.1.0');
 	const response = await fetch('/api/v1/webpages/suites/install', {
 		method: 'POST',
 		credentials: 'include',
 		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({ key })
+		body: JSON.stringify({ key, ...(options.onlyMissing ? { onlyMissing: true } : {}) })
 	});
 	const data = await response.json().catch(() => null);
 	if (!response.ok || !data?.ok) throw data || { error: `Install failed (${response.status})` };

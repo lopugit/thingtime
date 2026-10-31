@@ -82,7 +82,9 @@ test('packaging contract ignores the complete pre-signed native app', () => {
 	for (const relativePath of [
 		'Contents/Helpers/Thingtime Node.app',
 		'Contents/Helpers/Thingtime Node.app/Contents/MacOS/ThingtimeNode',
-		'Contents/Helpers/Thingtime Node.app/Contents/MacOS/ThingtimeNodeBridge'
+		'Contents/Helpers/Thingtime Node.app/Contents/MacOS/ThingtimeNodeBridge',
+		'Contents/Helpers/Thingtime Passwords.app',
+		'Contents/Helpers/Thingtime Passwords.app/Contents/PlugIns/ThingtimePasswordProvider.appex'
 	]) {
 		assert.equal(
 			patterns.some((pattern) => pattern.test(relativePath)),
@@ -92,7 +94,7 @@ test('packaging contract ignores the complete pre-signed native app', () => {
 	}
 	assert.deepEqual(
 		packageJson.build.extraFiles.map((entry) => entry.to),
-		['Helpers/Thingtime Node.app']
+		['Helpers/Thingtime Node.app', 'Helpers/Thingtime Passwords.app']
 	);
 	assert.equal(
 		packageJson.build.extraFiles.some((entry) => /LaunchAgents/iu.test(entry.to)),

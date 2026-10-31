@@ -21,7 +21,7 @@ import { useLocation } from 'react-router';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 
-type Props = { vault: 'ci' | 'admin' | 'personal'; id: string; label: string };
+type Props = { vault: 'ci' | 'admin' | 'personal' | 'deployment'; id: string; label: string };
 const HIDE_EVENT = 'thingtime:hide-vault-values';
 
 // Keyed to the account and selected item, never passed through localCache,
@@ -103,7 +103,7 @@ const VaultRevealScope = ({ vault, id, label }: Props) => {
 			return result;
 		};
 		try {
-			await requireThingtimeCapability('api.vault-reveal', '1.0.0');
+			await requireThingtimeCapability('api.vault-reveal', vault === 'deployment' ? '1.1.0' : '1.0.0');
 			if (controller.signal.aborted) return;
 			let result;
 			if (method === 'password') result = await post({ action: 'reveal', password: currentPassword });

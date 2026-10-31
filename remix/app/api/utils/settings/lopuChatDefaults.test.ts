@@ -24,7 +24,7 @@ test('every read hits the durable singleton so an external Admin save is visible
 });
 
 test('reads are forgiving: unknown models, unoffered efforts, and unsold fast lanes normalize instead of failing', async () => {
-  let stored: unknown = { model: 'claude-opus-99', effort: 'ultra', speed: 'fast' };
+  let stored: unknown = { model: 'claude-unknown-99', effort: 'ultra', speed: 'fast' };
   const store = createLopuChatDefaultsStore({
     readStoredDefaults: async () => stored,
     writeStoredDefaults: async () => undefined
@@ -85,4 +85,10 @@ test('an Admin save validates strictly, persists with the actor, and becomes the
   // the returned copy is detached from the fallback
   saved.model = 'mutated';
   assert.equal((await store.getDefaults()).model, 'claude-opus-5');
+});
+
+
+test('stored discovered model versions survive normalization with conservative options', async () => {
+  const store = createLopuChatDefaultsStore({ readStoredDefaults: async () => ({ model: 'claude-opus-99', effort: 'ultra', speed: 'fast' }), writeStoredDefaults: async () => undefined });
+  assert.deepEqual(await store.getDefaults(), { model: 'claude-opus-99', effort: null, speed: 'normal' });
 });

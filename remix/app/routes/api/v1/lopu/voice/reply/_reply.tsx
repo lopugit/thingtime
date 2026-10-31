@@ -35,7 +35,7 @@ export const action = async ({ request }: { request: Request }) => {
 		async start(controller) {
 			const send = (event: LopuVoiceEvent) => controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
 			try {
-				for await (const event of streamLopuVoiceReply(user.id, body)) send(event);
+				for await (const event of streamLopuVoiceReply(user.id, body, { signal: request.signal })) send(event);
 			} catch (error) {
 				send({ type: 'error', error: error instanceof Error ? error.message : 'Lopu could not complete this turn.' });
 				send({ type: 'done' });

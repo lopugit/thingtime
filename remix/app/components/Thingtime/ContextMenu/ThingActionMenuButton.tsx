@@ -7,13 +7,14 @@ import { useThingContextMenu } from './useThingContextMenu';
 import { useThingtime } from '../useThingtime';
 
 // One accessible touch/keyboard/pointer entry point for persisted Things.
-export function ThingActionMenuButton({ identity, model, onAction, onOpen, label = 'Thing actions', disabled = false }: {
+export function ThingActionMenuButton({ identity, model, onAction, onOpen, label = 'Thing actions', disabled = false, zIndex }: {
   identity: string;
   model: ThingContextMenuModel;
   onAction: (event: ThingContextMenuAction) => void;
   onOpen?: () => void;
   label?: string;
   disabled?: boolean;
+  zIndex?: number;
 }) {
   const menu = useThingContextMenu();
   const { events } = useThingtime();
@@ -37,6 +38,6 @@ export function ThingActionMenuButton({ identity, model, onAction, onOpen, label
       icon={<MoreHorizontal size={16} />} size="xs" variant="ghost" isDisabled={disabled}
       onClick={() => { if (menu.menuProps.open) close(); else { onOpen?.(); menu.openPopover(); } }}
       onKeyDown={event => { if (event.key === 'ArrowDown') { event.preventDefault(); onOpen?.(); menu.openPopover(); } }} />
-    <ThingContextMenu {...menu.menuProps} onSurfaceMouseLeave={undefined} model={model} onClose={close} onAction={onAction} />
+    <ThingContextMenu {...menu.menuProps} zIndex={zIndex} onSurfaceMouseLeave={undefined} model={model} onClose={close} onAction={onAction} />
   </Box>;
 }

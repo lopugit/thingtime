@@ -84,7 +84,7 @@ export const NATIVE_PAGES: NativePageDef[] = [
 			lazySection('home-developers', 'Developers', () =>
 				import('../Landing/landingSections').then((m) => ({ default: m.HomeDevelopersSection }))
 			),
-			lazySection('home-back', 'Back the launch', () =>
+			lazySection('home-back', 'Support Thingtime', () =>
 				import('../Landing/landingSections').then((m) => ({ default: m.HomeBackSection }))
 			),
 			lazySection('home-faq', 'FAQ', () =>

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 
-import { isReadOnlyWebpageViewerRoute, isStaleWebpageLanding, mergeSavedWebpage, type ResolvedWebpage, type WebpageTarget } from '../Builder/useWebpage';
+import { canAdoptSavedWebpage, isReadOnlyWebpageViewerRoute, isStaleWebpageLanding, mergeSavedWebpage, type ResolvedWebpage, type WebpageTarget } from '../Builder/useWebpage';
 import type { ComponentThingLike, ComponentsByRef } from '../Builder/WebpageBlocksRenderer';
-import { MAX_BLOCKS, collectBlockIds, countBlocks, findBlock, type WebpageBlock } from '../Builder/webpageBlocks';
+import { collectBlockIds, countBlocks, findBlock, type WebpageBlock } from '../Builder/webpageBlocks';
 import {
   applyLopuPartialComponent,
   applyLopuPartialPageOps,
@@ -224,6 +224,7 @@ test('describeActiveWebpageDraft carries exactly the context.page fields the rep
   });
   registerWebpageDraft(draft);
   assert.deepEqual(describeActiveWebpageDraft(), {
+    dirty: false, ready: true,
     id: 'page-a',
     source: 'user',
     pageKey: 'home',
@@ -235,7 +236,7 @@ test('describeActiveWebpageDraft carries exactly the context.page fields the rep
   // apply ops (unpersisted) to the empty draft
   resetLopuBuildBridge();
   registerWebpageDraft(fakeDraft({ target: { kind: 'path', path: '/about' } }));
-  assert.deepEqual(describeActiveWebpageDraft(), { siteRoute: '/about', blocks: [] });
+  assert.deepEqual(describeActiveWebpageDraft(), { siteRoute: '/about', blocks: [], dirty: false, ready: true });
 });
 
 // ——— applyPageOps (§2.5 grammar) ————————————————————————————————————————
@@ -333,8 +334,10 @@ test('applyPageOps: refused ops are reported and skipped, duplicate ids are rewr
   assert.equal(notString.errors.length, 3);
   assert.match(notString.errors[1], /^op 1: must be an object/);
 
-  const tooMany = applyPageOps([], [{ op: 'setBlocks', blocks: Array.from({ length: MAX_BLOCKS + 1 }, (_, i) => textBlock(`t-${i}`)) }]);
-  assert.match(tooMany.errors[0], /exceed/);
+  const largePage = applyPageOps([], [{ op: 'setBlocks', blocks: Array.from({ length: 121 }, (_, i) => textBlock(`t-${i}`)) }]);
+  assert.deepEqual(largePage.errors, []);
+  assert.equal(largePage.applied, 1);
+  assert.equal(countBlocks(largePage.blocks), 121, 'the bridge preserves pages beyond the former product cap');
 
   let deep: WebpageBlock = textBlock('leaf');
   for (let level = 0; level < 8; level += 1) deep = { id: `box-${level}`, type: 'container', children: [deep] };
@@ -628,6 +631,9 @@ test('mergeSavedWebpage adopts the saved page as the viewer-owned resolved page'
   assert.equal(partial.page!.updatedAt, '2026-09-03T11:00:00.000Z');
   // nothing to adopt and nothing resolved: stay empty
   assert.equal(mergeSavedWebpage(null, { updatedAt: 'x' }), null);
+  const versioned = { ...prev, page: { ...prev.page!, timelineHeadId: 'previous-revision' } };
+  assert.equal(mergeSavedWebpage(versioned, { ...thing, timelineHeadId: 'saved-revision' })?.page?.timelineHeadId, 'saved-revision');
+  assert.equal(mergeSavedWebpage(versioned, { ...thing, id: 'copied-page' })?.page?.timelineHeadId, undefined, 'a fresh Thing cannot inherit another Thing history head');
 });
 
 test('isStaleWebpageLanding only flags an older answer for the SAME page', () => {
@@ -639,6 +645,18 @@ test('isStaleWebpageLanding only flags an older answer for the SAME page', () =>
   assert.equal(isStaleWebpageLanding(saved, { id: 'page-a' }), false);
   assert.equal(isStaleWebpageLanding(null, { id: 'page-a', updatedAt: '2026-09-03T09:00:00.000Z' }), false);
   assert.equal(isStaleWebpageLanding(saved, null), false);
+});
+
+test('an AI save cannot clear newer typing or a dirty empty page without acknowledging its exact content', () => {
+  const sent = [textBlock('AI revision')];
+  const newer = [textBlock('User typed while the tool saved')];
+  const reply = { id: 'page-a', crystal: { blocks: sent }, updatedAt: '2026-09-27T07:00:00.000Z' };
+  assert.equal(canAdoptSavedWebpage(true, newer, reply), false);
+  assert.equal(canAdoptSavedWebpage(true, [], reply), false, 'a user deletion is an edit too');
+  assert.equal(canAdoptSavedWebpage(true, sent, { id: 'page-a', updatedAt: reply.updatedAt }), false, 'metadata is not a content acknowledgment');
+  assert.equal(canAdoptSavedWebpage(true, sent, reply), true);
+  assert.equal(canAdoptSavedWebpage(true, [], { ...reply, crystal: { blocks: [] } }), true);
+  assert.equal(canAdoptSavedWebpage(false, newer, reply), true, 'clean viewers follow the saved version');
 });
 
 test('only the /p/ viewer route is read-only by default', () => {

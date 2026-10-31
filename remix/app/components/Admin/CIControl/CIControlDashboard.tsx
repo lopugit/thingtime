@@ -1,3 +1,4 @@
+import { activityInterval, clearActivityInterval } from '~/activity/activityManager';
 import type { AiWaterfallConfig } from '~/api/utils/ai/waterfallConfig';
 import { StackActivityPanel } from './StackActivityPanel';
 import { StackRunChat } from './StackRunChat';
@@ -92,7 +93,7 @@ import {
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { CARD_STYLES } from '~/theme/card';
-import { ClaudeCredentialWaterfall } from './ClaudeCredentialWaterfall';
+import { PlatformCredentials } from '../PlatformCredentials';
 import {
 	ALL_PULL_REQUEST_STATUS_FILTER_IDS,
 	matchesPullRequestStatusFilter,
@@ -1414,12 +1415,12 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
     const controller = new AbortController();
     load({ signal: controller.signal });
 		loadSavedFeatureStacks({ signal: controller.signal }).catch(() => undefined);
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') load();
+    const interval = activityInterval('timer:components/Admin/CIControl/CIControlDashboard:1', 'CIControl Dashboard', () => {
+      if (document.visibilityState === 'visible') return load();
     }, CI_DASHBOARD_POLL_INTERVAL_MS);
     return () => {
       controller.abort();
-      window.clearInterval(interval);
+      clearActivityInterval(interval);
     };
 	}, [load, loadSavedFeatureStacks]);
 
@@ -1644,14 +1645,14 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 	React.useEffect(() => {
 		if (!featureStackLiveSnapshot?.live) return;
 		let inFlight = false;
-		const interval = window.setInterval(() => {
+		const interval = activityInterval('timer:components/Admin/CIControl/CIControlDashboard:2', 'CIControl Dashboard', () => {
 			if (inFlight || document.visibilityState !== 'visible') return;
 			inFlight = true;
-			Promise.allSettled([load(), loadSavedFeatureStacks()]).finally(() => {
+			return Promise.allSettled([load(), loadSavedFeatureStacks()]).finally(() => {
 				inFlight = false;
 			});
 		}, CI_DASHBOARD_LIVE_POLL_INTERVAL_MS);
-		return () => window.clearInterval(interval);
+		return () => clearActivityInterval(interval);
 	}, [featureStackLiveSnapshot?.live, load, loadSavedFeatureStacks]);
 	React.useEffect(() => {
 		if (!activeFeatureStackId || dashboard?.features.length || pendingFeatureStackPrNumbers.length) return;
@@ -2112,7 +2113,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
         onToggleCollapsed={() => toggleSection('automation')}
       />
 
-      <ClaudeCredentialWaterfall
+      <PlatformCredentials readOnly
         cacheIdentity={cacheIdentity}
         collapsed={collapsedSections.has('credentials')}
         onToggleCollapsed={() => toggleSection('credentials')}

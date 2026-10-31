@@ -1,6 +1,6 @@
 /** Retry only the idempotent root read, never login or another mutation. */
 export class RootDataUnavailableError extends Error {
-	constructor() {
+	constructor(readonly retryable = false) {
 		super('Could not refresh the current session');
 		this.name = 'RootDataUnavailableError';
 	}
@@ -35,9 +35,10 @@ export const fetchRootData = async <T>(
 			}
 			retry = [408, 502, 503, 504].includes(response.status);
 			await response.body?.cancel();
-			if (!retry) throw new RootDataUnavailableError();
+			if (!retry) throw new RootDataUnavailableError([429, 500].includes(response.status));
 		} catch (error) {
 			signal.throwIfAborted();
+			if (error instanceof RootDataUnavailableError) throw error;
 			// Browser network failures and our own timeout can be transient. Bad
 			// JSON and HTTP permission/validation failures are not retried.
 			retry = error instanceof TypeError || controller.signal.aborted;
@@ -46,7 +47,7 @@ export const fetchRootData = async <T>(
 			clearTimeout(timer);
 			signal.removeEventListener('abort', abort);
 		}
-		if (!retry || attempt === 1) throw new RootDataUnavailableError();
+		if (!retry || attempt === 1) throw new RootDataUnavailableError(retry);
 		await new Promise<void>((resolve, reject) => {
 			const aborted = () => {
 				clearTimeout(delay);

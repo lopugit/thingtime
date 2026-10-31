@@ -7,7 +7,8 @@ import { thingUniqueKey } from './uniqueKeys';
 
 test('home shares five lookup families while custom/repair fallback retains their indexes', async () => {
 	const home = await thingsIndexPlanEntries();
-	assert.equal(home.length + 1, 48); // includes Watch recording scheduler
+	assert.equal(home.length + 1, 52); // Includes the modern owner/ID snapshot lookup.
+	assert.ok(home.some(entry => entry.name === 'service_workspace_records'));
 	for (const name of Object.keys(SHARED_RELATIONSHIP_LOOKUPS)) assert.equal(home.some(entry => entry.name === name), false);
 	const customNames: string[] = [];
 	await Promise.all(createThingsDataIndexes({ collection: () => ({

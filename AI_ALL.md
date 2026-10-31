@@ -29,6 +29,55 @@ update stale details. Do not recursively reread this file through its aliases.
 - For PR reviews, prioritize code quality, performance, potential bugs,
   crashes, and especially security issues before style commentary.
 
+## Get it done; report decisions after completion
+
+Original request (verbatim):
+
+> “Can you please add a global and thingtime local AI_ALL.md entry that AI agents should never come back to the user with questions, they should decide on what to do and what the user would want them to do, generally being the user would want them to "Get it done", and to never block work on a goal or task or tasks with questions to the user, but should work in a way where when the task/feature is complete they can send a report to the user will all the decisions and potential questions they may have for the user and assumptions they took in the task and then ask if the user wants those things changed or corrected please? Thank you.”
+
+- Default to "Get it done." Do not come back to the user with routine clarification or preference questions, or block a goal, task, subtask, or feature on those questions. Infer the intended outcome from the request, prior decisions, existing conventions, and available evidence; make reasonable decisions and carry the authorized work through implementation and verification.
+- Investigate uncertainty yourself, use supported tools and bounded recovery, and choose safe, reversible defaults where practical. Do not make the user select between reasonable implementation options, approve a routine plan, or answer questions the agent can resolve. Keep independent work moving when one path is unavailable.
+- Keep a concise record of material decisions, assumptions, tradeoffs, and potential questions while working. Defer optional questions until the task or feature is complete; do not use them as checkpoints or completion gates.
+- When the work is complete, send a report covering the delivered result, verification, material decisions and assumptions, tradeoffs, and any deferred questions. Then invite the user to change or correct those choices. Make corrections when requested without requiring a response to consider the completed work delivered.
+- This preference does not supply missing authorization or override explicit constraints, required confirmations, security or credential boundaries, or genuinely required human presence. If one of those prevents a dependent action, complete all independent authorized work, explain the exact remaining blocker and the smallest necessary intervention, and never claim the blocked action or overall task is complete. Do not invent an approval requirement for ordinary agent decisions.
+
+## Individually editable Thingtime blocks
+
+- Things created for human-facing display (including agent notes, status cards and subspace embeds) must carry an explicit `renderComponent` pointing to an accessible saved Component Thing or containing an embedded Component definition. The renderer comes from that pointer or embedded definition, never from a `type`/`kind` alias or a data-shape guess. Keep the content as editable Thing data, bind it into the Component through the supported composition contract, and keep saved Component/Webpage Things on their canonical editable render/block definitions.
+- Default display surfaces to the rendered presentation. Keep the data/Thingtime inspector as an explicit user-selected inspection or editing view; a tree of `type`, `text`, and other implementation fields is not the finished presentation. Reuse the canonical Component resolver, renderer and permission checks rather than hardcoding each embed. A reference does not grant access to its Component or dependencies; missing, invalid or inaccessible explicit render components must not silently select another renderer from the data type.
+- Verify the saved render component and content through exact-Thing readback, then check the rendered result and reload in every intended placement, including narrow sidebars and mobile. Preserve existing content, ownership, audiences, and individual block editing when repairing older Things; missing renderers or access must be reported accurately rather than claimed as working.
+- Build Thingtime pages and interfaces from individual, user-editable Thingtime blocks. Headings, text, inputs, buttons, images/icons, containers, lists, and each field inside a repeated card must be selectable and editable through normal Builder controls, including rearranging, styling, duplicating, and deleting them where applicable.
+- Do not package a whole page, form, dashboard, or multi-part card as one opaque Component, native block, or monolithic HTML template. Editing one large source definition is not a substitute for individual block editing. Reusable Components must expose their constituent blocks for editing; repeated content must expose an editable block template rather than freezing each rendered instance into hardcoded markup.
+- When a needed primitive, binding, repetition, or interaction is missing, extend the reusable Thingtime Builder/framework so ordinary users can compose and edit it. Keep native code limited to necessary device capabilities and data adapters; compose the visible interface with editable Thingtime blocks.
+- Verify this in the actual Builder: select and edit representative nested text, controls, icons, and repeated-card fields separately, save, reload, and confirm the live page still works. A single outer selection outline or editable JSON/HTML alone does not meet this requirement.
+
+## Power users: no arbitrary product limits
+
+Thingtime is for power users and should stay simple to use at any scale. Do not
+impose arbitrary file-size, character-count, field-count, item-count, or similar
+limits on features, uploads, text inputs, imports, or exports. A product limit is
+allowed only when the user explicitly requests it for that particular feature.
+Use streaming, chunking, pagination, backpressure, cancellation and resumable
+operations to manage resources without rejecting or truncating valid user data.
+Processing batch sizes are implementation details, not maximum user data sizes.
+Preserve authorization, integrity validation and legitimate storage accounting.
+Where a protocol or external platform has an unavoidable constraint, identify it
+accurately, handle it transparently where possible, and explain the concrete
+constraint rather than presenting an invented Thingtime limit. Remove existing
+arbitrary caps in the flow being changed, including hidden UI/server mismatches.
+
+## Feature maps — read the map for the domain you touch
+
+`docs/feature-map/` holds one short map per domain (attachments and media,
+sharing and audiences, things and folders, posts and feed, API endpoints and
+capabilities, UI shell and menus, auth and accounts, local development). Each
+lists the routes, service modules, the authorization helper every read/write
+must call, the UI entry points, the registration steps and the tests to run.
+Before broad `graphify`/`rg` exploration, read the map for the domain you are
+changing; when you add a route, service, menu action or test script, update the
+map in the same PR. Maps link to `FUNDAMENTALS.md`, `TESTING.md`, the API docs
+registry and design notes instead of duplicating them.
+
 ## Recurring development lessons — 2026-09-11
 
 These rules come from the [two-month PR review](docs/ai-guidance-review-2026-09-11.md)
@@ -56,6 +105,12 @@ or authorization for new work.
   uses Vite, React Router in non-framework mode and Nitro; `entry.client.tsx`
   mounts with `createRoot`. Do not add SSR/hydration machinery to repair a stale
   chunk, client cache or missing-route problem without reproducing that cause.
+- When work exposes a build, test, setup or runtime failure, trace the cause and
+  repair the canonical entry point, dependency declaration, bootstrap step or
+  contract that let it recur. Verify the repaired path from a clean or missing
+  dependency state when practical. A manual install or one-off retry may unblock
+  the current run, but it is not the final fix; record a focused regression or
+  runbook check so later worktrees encounter the repaired workflow.
 
 ### Carry new fields through the whole data path
 
@@ -122,6 +177,27 @@ or authorization for new work.
 
 ### Keep storage, uniqueness and migrations coherent
 
+- Keep MongoDB indexes to the smallest performant set. Define index creation at
+  the highest reusable Thing abstraction through the central index registry and
+  shared query builders. Logs, posts, media and other kinds must prefer common
+  property paths and the existing general Thing indexes instead of adding one
+  index per kind or field. Reuse or generalize an existing index wherever it can
+  serve the query correctly and efficiently.
+- A new index is a rare, evidence-backed exception. Before proposing one, inspect
+  existing definitions and representative `explain('executionStats')` plans;
+  document why shared indexes or a better query/property layout cannot meet the
+  need. Heavily favor performance and optimization: compare scan/sort work,
+  latency, write amplification, storage and index-budget headroom. Do not force
+  a slow scan merely to reduce the count, or assume one wildcard/compound index
+  can satisfy every sort, uniqueness constraint or TTL lifecycle.
+- Keep reusable index definitions, shared property semantics and query ordering
+  aligned across writers and readers. Consolidate kind-specific indexes when
+  practical, preserve authorization and uniqueness, and explicitly opt only
+  safe-to-delete kinds into shared TTL policies. Retention that refunds credits,
+  deletes external media or updates accounting requires its canonical cleanup
+  lifecycle. Verify replacement performance and live rollout before retiring
+  old indexes; never remove a required constraint to meet a numeric target.
+
 - Keep user-writable crystal fields separate from protected root `uniqueKeys`
   identities. Never add a kind-blind unique crystal-path index or reserve normal
   data-property names as the permanent fix. Trace **every** generic, dedicated,
@@ -165,6 +241,27 @@ or authorization for new work.
   Test revocation between read and commit, namespace escape, wrong-account
   references and private metadata in logs/toasts. Preserve protected storage
   projections rather than weakening validators to get a migration green.
+
+### Keep Vercel variables minimal and configuration in the vault
+
+- Keep Vercel environment variables to the absolute minimum. Store application
+  configuration, provider credentials and environment-specific values in the
+  Thingtime vault, scoped to the deployment environment, instead of duplicating
+  them across Vercel production, preview, development or custom environments.
+- Keep only irreducible startup values in Vercel: the minimum needed to identify
+  the environment and securely reach and unlock the vault. Do not create a
+  circular dependency by storing the only vault bootstrap credential inside
+  that same vault. Reuse platform-provided deployment metadata where possible.
+  A new Vercel variable requires a documented bootstrap necessity.
+- Resolve configuration through a central server-side vault abstraction with
+  explicit environment selection, validation and bounded caching. Preserve
+  production/development isolation and fail closed when required configuration
+  is unavailable; never silently borrow another environment's credentials.
+  Keep secrets out of client bundles, build artifacts, logs and public APIs.
+- Migrate existing Vercel values through the canonical vault workflow. Verify
+  each affected environment's build and runtime behavior, rotation and recovery
+  before removing the old value. Keep a bounded rollback path and document
+  fork-safe setup with placeholders rather than real credentials.
 
 ### Register and negotiate the real executable API
 
@@ -235,6 +332,44 @@ or authorization for new work.
 
 ### Native apps and recordings need native acceptance
 
+- Iterate with `corepack pnpm@10.12.1 --dir electron dev:parallel`, the repo's
+  unsigned Electron development app, rather than repeatedly packaging and
+  signing `Thingtime.app`. Keep its bundle identity,
+  user data, local web port, process names, and any helper or LaunchAgent
+  separate from `/Users/lopu/Applications/Thingtime.app` so both apps can run
+  at once. If a feature needs a parallel dev lane that is missing, add durable
+  scripts/configuration for it during the task and document how to start,
+  inspect, stop and clean it. Do not let a dev app replace or stop the user's
+  installed signed app or its Node service.
+- Use a specifically built, separate Thingtime Mac development app on this
+  machine for feature testing and ongoing development usage. Keep a verified
+  development build available for that usage; clean up only superseded builds
+  and task-owned temporary resources. If Node/XPC, TCC or another security
+  boundary requires signing, build and verify a signed development app with a
+  stable, distinct development identity and installed path. Check the real
+  protected operation there; unsigned acceptance does not prove that boundary.
+- Treat `~/Applications/Thingtime.app` as the stable production app. Rebuild or
+  reinstall it only when a new Mac feature merged into `main` makes a newer
+  version available. Verify the fetched `main` source, merged feature and
+  version/build against the installed app before using the canonical stable
+  build/install workflow. Never install an unmerged branch or worktree build
+  over it. Follow the development/production policy below for final delivery.
+
+- For user-visible native telemetry, verify the real running app against an
+  independent operating-system reading on the user's machine. For Thingtime
+  Mac development, use the separate development build installed for this
+  purpose; stable release acceptance remains a separate check after the
+  eligible `main` update. Exercise the
+  full collector → local/remote transport → selected origin → rendered control
+  path for the paired device and account, in every promised view. Record which
+  fields have actual values and which macOS truly omits. Synthetic tests,
+  successful builds, API snapshots and a card full of placeholders do not
+  establish feature acceptance. If a selected origin lacks a needed capability,
+  provide a working local path or treat delivery as blocked and say so.
+- When QA exposes a missing value or broken path, fix the underlying path and
+  add a regression check before release. Update `TESTING.md` for the new bug
+  class; do not convert the observed failure into an accepted exception.
+
 - Negotiate an explicit native feature version; the existence of a generic bridge
   does not prove microphone recording, Watch delivery or Live Activity support.
   Verify selected origin, generated build settings, signed entitlements and the
@@ -296,6 +431,29 @@ or authorization for new work.
   fails, record that limitation, and never claim missing semantic coverage was
   indexed. Use the immutable snapshot/cache policy below.
 
+## Agent browsers and editable tasks
+
+- For Character coordination, follow [the Characters runbook](docs/characters.md#agent-coordination)
+  and run `npm --prefix remix run characters:preflight -- --origin <selected-origin>`.
+  A Cloudflare 403 from an ad hoc Python probe does not prove Characters are
+  unavailable. Use the supported origin-scoped discovery path, distinguish edge
+  refusal from capability/authentication/membership failures, and continue
+  independent work. Never spoof clients, copy browser credentials, change origins
+  or weaken network isolation to recover coordination.
+- Follow [the agent-browser runbook](docs/agent-browsers.md) for task-owned
+  testing in the Thingtime Mac app, installation, CLI claims and live viewing.
+  Keep tasks, todos and progress as editable Things; the native adapter owns
+  device browser installations, claims and enforced network boundaries.
+- Scope a native task to its origin, database identity, owner and Thing ID.
+  Claim separately for each concurrent agent; never reuse another claim's
+  handle or mutable browser profile. Read and preserve the effective policy.
+- Full-app acceptance must cover independent data and authentication, rendered
+  desktop/mobile task controls, live viewing, cleanup and enforced browser plus
+  backend network restrictions. A fixture, healthy API or build alone is not
+  evidence that the installed feature works.
+- The live global credential policy remains authoritative: use the Thingtime
+  password manager on the executing device through its supported interfaces.
+
 ## Fundamentals (read first)
 
 Read `FUNDAMENTALS.md` before adding features. Non-negotiables:
@@ -339,11 +497,15 @@ product direction or architecture tradeoffs matter. Default to
 single-source-of-truth, determinism, test-equals-live cohesion, and merge
 commits.
 
-## Commander macOS distribution signing
-
-- For Commander direct-distribution builds, prefer an installed `Developer ID Application` identity whenever one is available. Do not silently fall back to `Apple Development`, `Apple Distribution`, or ad-hoc signing for a release build: those identities do not provide the same Gatekeeper contract.
-- Keep local iteration explicit with `COMMANDER_SIGNING_MODE=development`; production/direct-distribution builds must fail closed when no Developer ID Application certificate and private key are installed.
-- Keep Apple Developer and notarization credentials in the Keychain or CI secret store only. Never print, export, commit, or copy their values into project documentation.
+Evidence and sequencing sit upstream of that backlog, one stage per tree:
+`NOTES/` holds dated, sourced observations and open questions that nothing has
+committed to yet; `PLAN/` turns a note into gated milestones, metrics, and stop
+conditions; `TODO/` is the actionable work; `DECISIONS.md` records the durable
+fork once the owner decides. Write a note before a plan and a plan before a new
+`TODO/claude-todo/NN-*.md`, and update the index that fronts each tree
+(`NOTES/README.md`, `PLAN/README.md`, `TODO/TODO.md` plus
+`TODO/claude-todo/README.md`) in the same change — those indexes are the entry
+points, not the individual files.
 
 ## Local development and worktrees
 
@@ -388,6 +550,18 @@ commits.
   PM2 on a free trio: `TT_WEB_PORT=<web> TT_HMR_PORT=<hmr> TT_API_PORT=<api>
   npm --prefix remix run dev`. Keep any tooling config that hardcodes worktree
   ports (for example `.claude/launch.json`) untracked.
+- Fresh worktrees: run `npm run worktree-bootstrap` (or let the tracked
+  `post-checkout` hook do it on first checkout). It relinks remix dependencies,
+  copies missing ignored env files from the main checkout, writes the
+  derived-port `.claude/launch.json`, and sets this worktree's `core.hooksPath`
+  to the relative `.githooks` so stale hooks from another checkout never run
+  here. Keep `core.hooksPath` relative; an absolute path shared across
+  worktrees runs one checkout's hook files everywhere.
+- Local attachment bytes: set `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR` in
+  `remix/.env` (see README "Local attachment storage") so uploads, previews,
+  downloads and archives work without the private bucket. Seed realistic data
+  with `node remix/scripts/seed-fixture.mjs create` (real API only) and remove it
+  with `cleanup`; never insert attachment records into Mongo by hand.
 - Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local
   setup into new managed worktrees. Keep tracked files and every
   `node_modules/` directory out of `.worktreeinclude`: copied pnpm symlink
@@ -409,7 +583,72 @@ commits.
   and Vercel reads `VERCEL_GIT_COMMIT_REF` at build and runtime.
 - If local web dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-nitro-react-router-9999` app. The app `postinstall`, `dev`, and `build` scripts also run this check automatically.
 
+## Thingtime Mac development and production delivery
+
+- All Thingtime Mac development work, including bundled UI/assets,
+  dependencies, build settings, helpers and daemons, must be tested and used
+  on this machine through a specifically built, separate development app.
+  Use the canonical parallel development workflow; build the final changed
+  source, start that development app and exercise the affected surface before
+  handoff. A commit, PR or cloud build alone is not local acceptance.
+- Keep the development app's bundle identity, installed path, profile/user data,
+  database, ports, processes, helpers and LaunchAgents separate from the stable
+  `~/Applications/Thingtime.app` and its services. Preserve the stable app and
+  user data. Do not stop, replace or reinstall it as routine feature delivery.
+  Add durable parallel tooling when a required development lane is missing.
+- Keep the stable app connected to Production (`https://thingtime.com`)
+  unless the user explicitly requests a different stable-app connection.
+  Use the separate development app for local and preview test connections.
+- Use fast unsigned development builds where appropriate. When signing or a
+  privacy permission is required, use a stable, distinct development bundle
+  identifier, signing identity, entitlements and path; install the verified
+  development bundle under its own name in `~/Applications/`. Verify its
+  signature with `codesign --verify --deep --strict`, executable path, permission
+  preflights and real protected operations after rebuilding. Never reuse the
+  production app identity or migrate its data to make development tests pass.
+  Explicit user presence and privacy-consent requirements remain in force.
+- Keep a verified development build available for testing and ongoing usage.
+  Stop obsolete task-owned processes and remove superseded generated artifacts
+  without removing the active development build, user state or live work.
+- Rebuild/reinstall the stable `~/Applications/Thingtime.app` only when a new Mac
+  feature merged into `main` makes a newer version available. Before replacing
+  it, fetch and verify the canonical `main`, identify the merged feature and
+  candidate source SHA, and compare candidate version/build with the installed
+  app. Build stable releases from verified `main` source; never use unmerged
+  feature-branch/worktree changes or treat a newer timestamp alone as a release.
+  This installation condition grants no permission to merge or push `main`.
+- For an eligible stable update, run canonical verification, signing and
+  installation checks before replacement; preserve the known-good app on
+  failure. Use `ditto` or the canonical installer to preserve signatures and
+  bundle contents. Quit the old app cleanly, retain its settings and user data,
+  restart only affected services through their canonical lifecycle, and launch
+  the installed copy. Verify its signature, running executable, version/build
+  and relevant smoke checks, including signing-sensitive operations. Never
+  force-quit unsaved work or change privacy grants without required consent.
+- Report development build/output and installed paths, source revision, running
+  build, smoke-check evidence and remaining limitations. Distinguish development
+  acceptance from stable release acceptance. Report an ineligible stable update
+  as intentionally deferred; do not replace the stable app to close a task.
+- Thingtime Recovery, Commander and other native apps retain their existing
+  local-delivery requirement: rebuild affected apps from final changed source,
+  run their canonical tests/signing workflow, install verified bundles under
+  their own names in `~/Applications/`, launch and verify the installed copies
+  before handoff. Preserve known-good installations and user data on failure.
+  For targets that cannot run on this Mac, use the supported simulator or
+  connected test device and report the exact verified target. This requirement
+  never authorizes replacing the stable Thingtime app with development work.
+
+## Commander macOS distribution signing
+
+- For Commander direct-distribution builds, prefer an installed `Developer ID Application` identity whenever one is available. Do not silently fall back to `Apple Development`, `Apple Distribution`, or ad-hoc signing for a release build: those identities do not provide the same Gatekeeper contract.
+- Keep local iteration explicit with `COMMANDER_SIGNING_MODE=development`; production/direct-distribution builds must fail closed when no Developer ID Application certificate and private key are installed.
+- Keep Apple Developer and notarization credentials in the Keychain or CI secret store only. Never print, export, commit, or copy their values into project documentation.
+
 ## Browser and UI validation
+
+### Configurable images and files
+
+- Every configurable or customizable image/file usage across Thingtime must use the shared upload-first pattern: offer an upload picker as the primary control and an optional **Use URL instead** button that reveals a URL field. Reuse the shared media/upload components; do not introduce URL-only settings. Preserve previews, replacement/removal, progress, retry, and unsaved drafts. Use canonical server-validated attachment purposes, target/slot authorization, moderation, quota accounting, and cleanup; a pasted URL remains a validated fallback and must never bypass these boundaries.
 
 ### Feature customization defaults
 
@@ -538,13 +777,17 @@ commits.
 
   This entry point also repairs missing pnpm links in fresh worktrees before
   ESLint starts.
-- Use `corepack pnpm --dir remix run typecheck` for raw TypeScript results and
-  `corepack pnpm --dir remix run typecheck:ratchet` for the tracked comparison.
-  The ratchet is warning-only, including increases: read its diagnostics rather
-  than treating exit 0 as a clean typecheck. Compare with the current base and
-  baseline file, fix errors introduced by the change, and report unrelated
-  failures precisely. Never raise a baseline merely to hide a regression or
-  reuse historical error counts without rerunning the check.
+- Run `corepack pnpm --dir remix run typecheck` and
+  `corepack pnpm --dir remix run typecheck:ratchet`. The tracked TypeScript
+  error baseline is zero; the ratchet is a failing gate, not warning-only.
+  Fix diagnostics rather than raising the baseline, suppressing errors,
+  excluding source or weakening compiler/lint settings. Baseline updates may
+  only preserve or lower the count and must reject compiler failures.
+- Run the full Remix lint command before delivery as well as focused checks.
+  ESLint errors fail; warnings currently have no numeric budget. Do not claim
+  zero warnings, formatting coverage or stronger compiler strictness from a
+  passing error gate. See `docs/static-analysis-baselines.md` for commands,
+  audit evidence, coverage limits and follow-up priorities.
 - Use the package manager already used by the workspace being changed. For
   Remix checks, prefer `pnpm --dir remix ...`. Avoid lockfile changes unless
   dependency changes are intentional.

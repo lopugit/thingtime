@@ -5,7 +5,8 @@ export const isTransferRecording = (thing: Pick<TransferThing, 'thingtime'>) =>
 
 export const recordingTransferFile = (thing: TransferThing, manifest: ThingTransfer) => {
   const file = manifest.files.find(entry => entry.id === thing.crystal.recordingFileId);
-  if (!isTransferRecording(thing) || Object.keys(thing.crystal).length !== 1 ||
+  if (!isTransferRecording(thing) || Object.keys(thing.crystal).some(key => !['recordingFileId', 'filePurpose'].includes(key)) ||
+    (thing.crystal.filePurpose !== undefined && thing.crystal.filePurpose !== 'file') ||
     typeof thing.crystal.recordingFileId !== 'string' || !file || file.targetId !== thing.id ||
     thing.targetId || thing.extended != null || thing.tags?.length ||
     manifest.files.filter(entry => entry.targetId === thing.id).length !== 1 ||

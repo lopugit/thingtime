@@ -4,6 +4,7 @@ import CoreGraphics
 import CryptoKit
 import Foundation
 import IOBluetooth
+import IOKit
 import IOKit.ps
 import IOKit.pwr_mgt
 import SystemConfiguration
@@ -275,6 +276,41 @@ public enum SystemVPN {
 }
 
 public enum SystemBattery {
+    private static func number(_ values: [String: Any], _ key: String) -> Int? {
+        (values[key] as? NSNumber)?.intValue
+    }
+
+    private static func positive(_ values: [String: Any], _ key: String) -> Int? {
+        guard let value = number(values, key), value > 0 else { return nil }
+        return value
+    }
+
+    /// Only fixed, non-identifying power fields leave this machine. The registry
+    /// can contain serial numbers and opaque firmware data; never publish it whole.
+    static func enriched(_ basic: BatteryTelemetry, battery: [String: Any], adapter: [String: Any]) -> BatteryTelemetry {
+        let data = battery["BatteryData"] as? [String: Any] ?? [:]
+        let batteryAdapter = battery["AdapterDetails"] as? [String: Any] ?? [:]
+        let full = positive(battery, "AppleRawMaxCapacity") ?? positive(data, "FullChargeCapacity")
+        let remaining = positive(battery, "AppleRawCurrentCapacity") ?? positive(data, "RemainingCapacity")
+        let temperature = number(battery, "Temperature").flatMap { $0 > 0 && $0 < 10_000 ? Double($0) / 100 : nil }
+        let timeToEmpty = positive(battery, "TimeRemaining").flatMap { $0 < 10_000 ? $0 : nil }
+        let timeToFull = positive(battery, "AvgTimeToFull").flatMap { $0 < 10_000 ? $0 : nil }
+        return BatteryTelemetry(
+            level: basic.level, isCharging: basic.isCharging, isExternalPower: basic.isExternalPower,
+            isPreventingIdleSleep: basic.isPreventingIdleSleep, isLowPowerModeEnabled: basic.isLowPowerModeEnabled,
+            fullyCharged: battery["FullyCharged"] as? Bool,
+            cycleCount: number(battery, "CycleCount"), designCycleCount: positive(battery, "DesignCycleCount9C"),
+            designCapacityMAh: positive(battery, "DesignCapacity") ?? positive(data, "DesignCapacity"),
+            fullChargeCapacityMAh: full, remainingCapacityMAh: remaining,
+            currentMA: number(battery, "InstantAmperage") ?? number(battery, "Amperage"),
+            voltageMV: positive(battery, "Voltage"), temperatureC: temperature,
+            timeToEmptyMinutes: timeToEmpty, timeToFullMinutes: timeToFull,
+            adapterWatts: positive(adapter, "Watts") ?? positive(batteryAdapter, "Watts"),
+            adapterVoltageMV: positive(adapter, "AdapterVoltage") ?? positive(batteryAdapter, "AdapterVoltage"),
+            adapterCurrentMA: positive(adapter, "Current") ?? positive(batteryAdapter, "Current")
+        )
+    }
+
     public static func snapshot(isPreventingIdleSleep: Bool) -> BatteryTelemetry {
         let isLowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
         guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
@@ -293,7 +329,18 @@ public enum SystemBattery {
         }.first
         let charging = values.compactMap { $0[kIOPSIsChargingKey] as? Bool }.first
         let external = values.compactMap { $0[kIOPSPowerSourceStateKey] as? String }.contains(kIOPSACPowerValue)
-        return BatteryTelemetry(level: level, isCharging: charging, isExternalPower: external, isPreventingIdleSleep: isPreventingIdleSleep, isLowPowerModeEnabled: isLowPowerModeEnabled)
+        let basic = BatteryTelemetry(level: level, isCharging: charging, isExternalPower: external, isPreventingIdleSleep: isPreventingIdleSleep, isLowPowerModeEnabled: isLowPowerModeEnabled)
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
+        var battery: [String: Any] = [:]
+        if service != 0 {
+            defer { IOObjectRelease(service) }
+            var properties: Unmanaged<CFMutableDictionary>?
+            if IORegistryEntryCreateCFProperties(service, &properties, kCFAllocatorDefault, 0) == KERN_SUCCESS {
+                battery = properties?.takeRetainedValue() as? [String: Any] ?? [:]
+            }
+        }
+        let adapter = IOPSCopyExternalPowerAdapterDetails()?.takeRetainedValue() as? [String: Any] ?? [:]
+        return enriched(basic, battery: battery, adapter: adapter)
     }
 }
 

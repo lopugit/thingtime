@@ -1,4 +1,5 @@
 import React from 'react';
+import { ActionProgramComposer } from './ActionProgramComposer';
 import { Box, Button, Checkbox, Flex, Input, Select, Stack, Text, Textarea } from '@chakra-ui/react';
 import { Plus, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
@@ -36,9 +37,9 @@ const slugify = (value: string): string =>
 
 type InputRow = { name: string; type: string; required: boolean; default: string };
 type ValueRow = { key: string; value: string };
-type StepRow = { op: string; schema: string; id: string; action: string; limit: string; values: ValueRow[] };
+type StepRow = { provider: string; credentialId: string; query: string; op: string; schema: string; id: string; action: string; limit: string; values: ValueRow[] };
 
-const emptyStep = (op = 'things.create'): StepRow => ({ op, schema: '', id: '', action: '', limit: '', values: [{ key: '', value: '' }] });
+const emptyStep = (op = 'things.create'): StepRow => ({ op, provider: 'google-geocoding', credentialId: '', query: '$input.address', schema: '', id: '', action: '', limit: '', values: [{ key: '', value: '' }] });
 
 const FieldLabel = ({ children }: { children: React.ReactNode }) => (
 	<Text color="var(--tt-text, #33333c)" fontSize="xs" fontWeight="600" mb={1}>
@@ -57,6 +58,7 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 	lopuRef.current = lopu;
 	const navigate = useNavigate();
 
+	const [fullProgram, setFullProgram] = React.useState(false);
 	const [name, setName] = React.useState('');
 	const [keyTouched, setKeyTouched] = React.useState(false);
 	const [actionKey, setActionKey] = React.useState('');
@@ -100,6 +102,7 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 			if (row.op === 'things.get' || row.op === 'things.update') {
 				if (row.id.trim()) step.id = row.id.trim();
 			}
+			if (row.op === 'lookup') { step.provider = row.provider; step.credentialId = row.credentialId.trim(); step.query = row.query; }
 			if (row.op === 'actions.invoke' && row.action.trim()) step.action = row.action.trim();
 			if (row.op === 'things.search' && row.limit.trim()) step.limit = Number(row.limit);
 			if (row.op === 'things.create' || row.op === 'things.update' || row.op === 'actions.invoke') {
@@ -135,9 +138,7 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 		});
 	}, [builtSteps, scopeEdits]);
 
-	const save = React.useCallback(async () => {
-		setSaving(true);
-		try {
+	const buildCrystal = () => {
 			const crystal: Record<string, unknown> = { name: name.trim() };
 			if (description.trim()) crystal.description = description.trim();
 			if (actionKey.trim()) crystal.actionKey = actionKey.trim();
@@ -153,6 +154,13 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 			if (inputDescriptors.length) crystal.inputs = inputDescriptors;
 			crystal.steps = builtSteps;
 			if (capabilities.length) crystal.capabilities = capabilities;
+		return crystal;
+	};
+
+	const save = async () => {
+		setSaving(true);
+		try {
+			const crystal = buildCrystal();
 			const response = await apiRef.current.v1.things.create({ thingtime: ['action'], crystal });
 			const id = response?.thing?.id;
 			if (!id) throw response;
@@ -169,7 +177,9 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 		} finally {
 			setSaving(false);
 		}
-	}, [name, description, actionKey, category, inputs, builtSteps, capabilities, navigate, onCreated]);
+	};
+
+	if (fullProgram) return <ActionProgramComposer initial={buildCrystal()} onClose={onClose} onCreated={onCreated} />;
 
 	return (
 		<Box {...CARD_STYLES} p={{ base: 4, md: 5 }}>
@@ -180,6 +190,10 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 				</Button>
 			</Flex>
 
+			<Button size="sm" mb={4} onClick={() => {
+				try { buildCrystal(); setFullProgram(true); }
+				catch (error) { lopuRef.current({ title: 'Check the input defaults', description: error instanceof Error ? error.message : 'Enter valid defaults', status: 'error' }); }
+			}}>Edit full program · requests, expressions and flows</Button>
 			<Stack spacing={4}>
 				<Flex gap={3} wrap="wrap">
 					<Box flex="1" minW="220px">
@@ -304,12 +318,17 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 										onChange={(event) => setSteps((prior) => prior.map((entry, i) => (i === index ? { ...emptyStep(event.target.value), values: entry.values } : entry)))}
 										value={row.op}
 									>
-										{ACTION_STEP_OPS.filter((op) => op !== 'return').map((op) => (
+										{ACTION_STEP_OPS.filter((op) => op !== 'return' && op !== 'http.request').map((op) => (
 											<option key={op} value={op}>
 												{op}
 											</option>
 										))}
 									</Select>
+									{row.op === 'lookup' ? <>
+										<Text fontSize="sm">Google Maps · sends your address query</Text>
+										<Input {...rowInput} aria-label="Vault credential entry id" placeholder="Vault entry id (not the key)" value={row.credentialId} onChange={(event) => setSteps((prior) => prior.map((entry, i) => i === index ? { ...entry, credentialId: event.target.value } : entry))} />
+										<Input {...rowInput} aria-label="Lookup query" placeholder="$input.address" value={row.query} onChange={(event) => setSteps((prior) => prior.map((entry, i) => i === index ? { ...entry, query: event.target.value } : entry))} />
+									</> : null}
 									{(row.op === 'things.create' || row.op === 'things.search') ? (
 										<>
 											<Input
@@ -438,8 +457,9 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 										{entry.capability}
 										{entry.schemas?.length ? `: ${entry.schemas.map((ref) => displayRef(ref, schemaNames)).join(', ')}` : ''}
 										{entry.actions?.length ? `: ${entry.actions.join(', ')}` : ''}
+										{entry.providers?.length ? `: ${entry.providers.join(', ')}` : ''}
 									</ActionChip>
-									{entry.capability !== 'actions.invoke' ? (
+									{entry.capability !== 'actions.invoke' && entry.capability !== 'lookup' ? (
 										<Input
 											{...rowInput}
 											maxW="320px"

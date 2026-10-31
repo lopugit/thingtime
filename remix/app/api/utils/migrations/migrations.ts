@@ -1,8 +1,12 @@
+import { subspaceMessagingMigration } from './subspaceMessaging';
+import { accidentalCatalogAccountMigration } from './accidentalCatalogAccount';
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
 import {
   ensureHomeThingsIndexPlan,
+  withHomeIndexMaintenance,
+  isHomeIndexRecoveryActive,
   ensureIndexes,
   getAdoptionIssues,
   getCiControlCollection,
@@ -44,6 +48,7 @@ import {
 	userUsernameKey
 } from '../auth/users';
 import { waitlistEmailKey } from '../waitlist/waitlist';
+import { externalPostSourceKey, externalPostSourceShareId } from '../connections/connections';
 import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS } from '../messenger/shared';
 import { repairRelationshipKeys } from './relationshipKeys';
 import { migrateRelationshipIndexLayout } from '../mongodb/relationshipIndexLayout';
@@ -77,6 +82,8 @@ import {
 import { reconcileUserStorage, userStorageAllowanceIsValid } from '../storage/userStorage';
 import {
   ACL_ALL,
+  ACL_EXTACCT_PREFIX,
+  ACL_EXT_SOURCED,
   ACL_INHERIT,
   ACL_OWNER,
   APP_STORAGE_ACCOUNTING_VERSION,
@@ -123,6 +130,8 @@ export const USER_STORAGE_ACCOUNTING_MIGRATION_PROJECTION = {
 	sandboxExpiresAt: 1,
 	sizeBytes: 1,
 	storageAccountingVersion: 1,
+	timelineEnvelopeVersion: 1,
+	secure: 1,
 	updatedAt: 1,
 	attachmentEnvelopeVersion: 1,
 	attachmentState: 1,
@@ -188,8 +197,11 @@ type MigrationLease = {
 };
 
 const acquireMigrationLease = async (migrationId: string): Promise<MigrationLease | null> => {
-	await ensureIndexes();
+	if (!isHomeIndexRecoveryActive()) await ensureIndexes();
 	const settings = await getSettingsCollection();
+	// Authenticated repair must remain reachable when an unrelated unique index
+	// cannot build, but the existing migration lease still needs its own constraint.
+	if (isHomeIndexRecoveryActive()) await settings.createIndex({ key: 1 }, { unique: true, maxTimeMS: 15_000 });
 	const token = randomUUID();
 	const now = new Date();
 	try {
@@ -1409,7 +1421,7 @@ const waitlistToThings = collectionToThingsMigration({
 });
 
 // ---------------------------------------------------------------------------
-// Builtin-schema seeding: every builtin crystal schema in the code registry
+// Builtin-schema seeding: every builtin schema in the code registry
 // becomes a system-owned, public schema THING. These are real schema things,
 // not search sugar: each crystal is projected onto the schema-thing grammar
 // (projectBuiltinSchemaCrystal — lives in the registry beside the grammar it
@@ -1426,8 +1438,8 @@ const waitlistToThings = collectionToThingsMigration({
 
 const BUILTIN_SCHEMA_SHARE_PREFIX = 'schema-';
 
-const builtinCrystalSchemas = () => thingtimeSchemas.filter((schema) => schema.kind === 'crystal');
-const builtinSchemaShareIds = () => builtinCrystalSchemas().map((schema) => `${BUILTIN_SCHEMA_SHARE_PREFIX}${schema.id}`);
+const builtinPublicSchemas = () => thingtimeSchemas;
+const builtinSchemaShareIds = () => builtinPublicSchemas().map((schema) => `${BUILTIN_SCHEMA_SHARE_PREFIX}${schema.id}`);
 
 // Registry schema -> the validated schema-thing crystal the seed stores. One
 // call chains the shared projection + the shared write gate, so seeded
@@ -1442,19 +1454,19 @@ const seedBuiltinSchemas: Migration = {
   collection: 'things',
   fromVersion: THINGS_VERSION,
   toVersion: THINGS_VERSION,
-  title: 'Seed builtin crystal schemas as schema things',
+  title: 'Seed all builtin schemas as public schema things',
   description:
-    'Every builtin crystal schema in the code registry is seeded as a system-owned public schema ' +
+    'Every builtin schema in the code registry is seeded as a system-owned public schema ' +
     'thing — thingtime ["schema"], shareId schema-<id>, uniqueKeys ["schema:<id>"], acl ["tt:all"], ' +
     'and the server-owned storageClass "control". Each crystal is projected onto ' +
     'the schema-thing field grammar and validated through validateThingtimeCrystal(["schema"]) ' +
-    '— the same gate user-published schemas pass — before writing; open record shapes and ' +
-    'reserved names are projected away, and a validation failure is reported as a bug. ' +
+    '— the same gate user-published schemas pass — before writing; open records use bounded JSON fields, ' +
+    'reserved tagging names are omitted, and a validation failure is reported as a bug. ' +
     'Idempotent and self-healing: re-runs upsert by shareId, refresh genuine seeded docs whose ' +
     'crystal or control-plane storage stamp drifted, and skip+note foreign docs squatting a destination id.',
   pending: async () => {
     const things = await getCollection('things');
-    const schemas = builtinCrystalSchemas();
+    const schemas = builtinPublicSchemas();
     const docs = await things
       .find({ shareId: { $in: builtinSchemaShareIds() } } as any)
       .project({ shareId: 1, thingtime: 1, ownerId: 1, crystal: 1, storageClass: 1 })
@@ -1481,7 +1493,7 @@ const seedBuiltinSchemas: Migration = {
     await ensureIndexes();
     const things = await getCollection('things');
     const notes = makeNotes();
-    const schemas = builtinCrystalSchemas();
+    const schemas = builtinPublicSchemas();
     const matched = schemas.length;
 
     let created = 0;
@@ -2961,21 +2973,23 @@ const rebuildThingsIndexes: Migration = {
   },
   run: async ({ dryRun, assertLease }) => {
     const db = await getHomeThingtimeDb();
-    const collection = db.collection(physicalCollectionName('things'));
     const notes = makeNotes();
     const before = await collectionStorage(db, physicalCollectionName('things'));
-    const report = await rebuildPlanIndexes({
-      collection,
+    const runRebuild = async (targetDb: any, assertIndexLease?: () => Promise<void>) => rebuildPlanIndexes({
+      collection: targetDb.collection(physicalCollectionName('things')),
       planNames: await thingsIndexPlanNames(),
-      ensurePlan: () => ensureHomeThingsIndexPlan(db),
+      ensurePlan: () => ensureHomeThingsIndexPlan(targetDb, { underLease: true }),
       dryRun,
-      assertLease
+      assertLease: async () => { await assertLease?.(); await assertIndexLease?.(); }
     });
+    // Startup cannot prune a live rebuild's twin or race its create/drop phase.
+    // Preserve the independent admin migration lease as well as the DDL lease.
+    const report = dryRun ? await runRebuild(db) : await withHomeIndexMaintenance(runRebuild);
     notes.push(
       `${report.rebuilt.length} plan-owned index(es) ${dryRun ? 'would be' : 'were'} rebuilt one at a time; ${report.twins.length} unique constraint(s) ${dryRun ? 'would be' : 'were'} held by a twin throughout`
     );
     if (report.recovered.length) notes.push(`Recovered an interrupted rebuild first: dropped ${report.recovered.join(', ')}`);
-    for (const name of report.unprotected) notes.push(`${name}: rebuilt WITHOUT a twin — the collection sits at MongoDB's 64-index cap, so its uniqueness lapsed for the rebuild window`);
+    // Unique rebuilds now require a protective slot and fail closed at the cap.
     for (const name of report.skipped) notes.push(`${name}: not in the current plan — left untouched`);
     if (!dryRun) {
       const after = await collectionStorage(db, physicalCollectionName('things'));
@@ -3093,6 +3107,130 @@ const backfillRelationshipUniqueKeys: Migration = {
 	}
 };
 
+// Connections membership went relational: an external post used to carry a
+// root `sourceIds` array (one element per sourcing account) plus, for personal
+// providers, one `tt:extacct/<accountId>` acl entry per source. Both grew with
+// the number of accounts that ever surfaced the post — for personal-timeline
+// providers that means one element PER USER, so a viral post's doc grew
+// without bound, and the acl (which PublicPost discloses verbatim) leaked the
+// external-account ids of everyone else who sourced it. Membership is now one
+// external-post-source row per (post, account), and the post's acl is the
+// constant `tt:extsourced`, resolved live against those rows.
+const legacyExternalSourceFilter = { thingtime: 'external-post', sourceIds: { $type: 'array' } } as any;
+
+const relationalExternalPostSources: Migration = {
+	id: 'relational-external-post-sources',
+	collection: 'things',
+	fromVersion: THINGS_VERSION,
+	toVersion: THINGS_VERSION,
+	title: 'Move external-post source membership onto relational rows',
+	description:
+		'Converts each synced external post\'s embedded `sourceIds` array into one external-post-source thing per ' +
+		'(post, account) — canonical v2 child relation (root targetId = the post\'s shareId), uniqueKeys-deduped on ' +
+		'`sourceKey:<postId>:<accountId>`, createdAt denormalized from the post so the feed can page membership ' +
+		'directly. Rewrites the per-source `tt:extacct/<accountId>` acl entries to the single constant ' +
+		'`tt:extsourced` (public posts keep tt:all), then unsets sourceIds. Idempotent: row shareIds are ' +
+		'deterministic and only posts still carrying sourceIds are touched.',
+	pending: async () => {
+		const things = await getCollection('things');
+		return things.countDocuments(legacyExternalSourceFilter);
+	},
+	run: async ({ dryRun, assertLease }) => {
+		const things = await getCollection('things');
+		const matched = await things.countDocuments(legacyExternalSourceFilter);
+		const notes: string[] = [];
+		let migrated = 0;
+		let created = 0;
+		let skipped = 0;
+		if (dryRun || !matched) return { dryRun, matched, migrated, created, skipped, notes };
+		// Progress comes from `$unset: sourceIds` taking each converted doc out of
+		// the filter, so a doc the loop SKIPS would be handed back by every
+		// subsequent page — a full batch of them spins forever, holding the
+		// migration lease. Skips are carried out of the filter explicitly instead.
+		const skippedIds: unknown[] = [];
+		while (true) {
+			await assertLease?.();
+			const batch = await things
+				.find(skippedIds.length ? ({ ...legacyExternalSourceFilter, _id: { $nin: skippedIds } } as any) : legacyExternalSourceFilter)
+				.project({ shareId: 1, sourceIds: 1, acl: 1, crystal: 1, createdAt: 1 })
+				.limit(THINGS_BATCH)
+				.toArray();
+			if (!batch.length) break;
+			for (const doc of batch) {
+				const postShareId = String(doc.shareId || '');
+				const accountIds: string[] = Array.from(
+					new Set<string>(
+						(Array.isArray(doc.sourceIds) ? (doc.sourceIds as unknown[]) : [])
+							.map((id: unknown) => String(id || ''))
+							.filter((id: string): id is string => !!id)
+					)
+				);
+				if (!postShareId) {
+					skipped += 1;
+					skippedIds.push(doc._id);
+					continue;
+				}
+				const now = new Date();
+				for (const accountId of accountIds) {
+					const sourceKey = externalPostSourceKey(postShareId, accountId);
+					try {
+						const result = await things.updateOne(
+							{ shareId: externalPostSourceShareId(postShareId, accountId), thingtime: 'external-post-source' } as any,
+							{
+								// root parentId = the sourcing account: the feed and the
+								// tt:extsourced membership check both filter on it, as a
+								// root-field residual over the existing (thingtime, createdAt,
+								// shareId) and (targetId, thingtime, …) indexes.
+								// In $set so a row created by an earlier run converges too.
+								$set: { updatedAt: now, parentId: accountId },
+								$setOnInsert: {
+									schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+									thingtime: ['external-post-source'],
+									ownerId: 'system',
+									acl: [],
+									storageClass: 'control',
+									targetId: postShareId,
+									crystal: { accountId, provider: String(doc?.crystal?.provider || ''), sourceKey },
+									uniqueKeys: [toBin(`sourceKey:${sourceKey}`)],
+									extended: null,
+									tags: [],
+									createdAt: doc.createdAt instanceof Date ? doc.createdAt : new Date(doc.createdAt || now)
+								}
+							} as any,
+							{ upsert: true }
+						);
+						if (result.upsertedCount) created += 1;
+					} catch (err: any) {
+						// a uniqueKeys twin already holds this (post, account) slot —
+						// membership is already represented, nothing to guess at
+						if (err?.code !== 11000) throw err;
+						skipped += 1;
+					}
+				}
+				// Personal posts carried per-source tt:extacct/ entries and nothing
+				// else; public posts carried tt:all. Preserve which of the two the
+				// post was, and drop every account-naming entry.
+				const acl = (Array.isArray(doc.acl) ? doc.acl : []).map((entry: unknown) => String(entry || ''));
+				const hadPerSource = acl.some((entry) => entry.includes(ACL_EXTACCT_PREFIX));
+				const nextAcl = acl.filter((entry) => entry && !entry.includes(ACL_EXTACCT_PREFIX));
+				if (hadPerSource && !nextAcl.includes(ACL_EXT_SOURCED)) nextAcl.push(ACL_EXT_SOURCED);
+				// a post with neither audience would become invisible to everyone —
+				// it can only mean an empty legacy acl, so fail closed to personal
+				if (!nextAcl.length) nextAcl.push(ACL_EXT_SOURCED);
+				await things.updateOne({ shareId: postShareId } as any, {
+					$set: { acl: nextAcl, updatedAt: new Date() },
+					$unset: { sourceIds: '' }
+				} as any);
+				migrated += 1;
+			}
+			if (batch.length < THINGS_BATCH) break;
+		}
+		if (created) notes.push(`${created} external-post-source row(s) created`);
+		if (migrated) notes.push(`${migrated} external post(s) converted to relational membership`);
+		return { dryRun, matched, migrated, created, skipped, notes };
+	}
+};
+
 const consolidateRelationshipIndexes: Migration = {
 	id: 'consolidate-relationship-lookup-indexes',
 	collection: 'things',
@@ -3116,8 +3254,9 @@ const retireLegacyThingIndexes: Migration = {
 	pending: async () => (await migrateLegacyThingIndexLayout({ dryRun: true })).matched,
 	run: migrateLegacyThingIndexLayout
 };
-
 export const migrations: Migration[] = [
+  subspaceMessagingMigration,
+	accidentalCatalogAccountMigration,
 	// Physical residue must land in the current generation before any logical
 	// shape or byte-ledger migration can declare its source universe complete.
 	mergeLegacyCollections,
@@ -3138,6 +3277,10 @@ export const migrations: Migration[] = [
   backfillAppStorageAllowances,
 	backfillUserStorageAccounting,
 	backfillRelationshipUniqueKeys,
+	relationalExternalPostSources,
+	// Shape first, then storage: relocate drains the ci-* rows out of things and
+	// rebuild reclaims the index bytes they left behind, so both run after every
+	// migration that still reads or rewrites things documents.
 	consolidateRelationshipIndexes,
 	retireLegacyThingIndexes,
 	relocateCiControlTelemetry,

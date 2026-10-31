@@ -1,3 +1,7 @@
+import { ownsPlanAdmission, type OwnedPlanAdmission } from '../ai/chatgptPlanAdmissionCore';
+import { Binary } from 'mongodb';
+import { normalizeReadReferences, type LopuReadReference } from '../lopu/readContext';
+import { lopuAccessMode, type LopuAccessMode } from '../lopu/accessMode';
 // Lopu conversations — the assistant's chats, stored as messenger rows.
 //
 // A Lopu chat is an ordinary `chat` thing (group, exactly one member: the
@@ -21,6 +25,7 @@
 // models; the id is validated for shape here and for ownership on write.
 // `turns` counts persisted assistant replies and `lastModel` remembers the
 // provider-native id that answered last.
+import { canAutomaticallyResume } from '../lopu/continuationCore';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { MAX_CHAT_NAME_CHARS, MAX_MESSAGE_CHARS } from '~/schemas/registry';
@@ -28,10 +33,10 @@ import { prepareAttachmentCascadeForThing, createReadyAttachmentMessageInsertHoo
 import { splitLiveMessageText } from '../devices/deviceLiveAiCore';
 import { hasUserVaultProvider } from '../lopu/userVault';
 import { safeVaultId } from '../lopu/userVaultCore';
-import { getThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
+import { getThingsCollection, getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import {
 	AI_MODEL_EFFORT_LABELS,
-	AI_WORKFLOW_BASE_MODELS,
+	getAiWorkflowBaseModel,
 	parseAiWorkflowModelOptionId,
 	type AiModelEffort,
 	type AiModelSpeed
@@ -61,12 +66,9 @@ export const LOPU_ASSISTANT_LABEL = 'Lopu';
 export const MAX_LOPU_CHATS_PER_USER = 500;
 export const MAX_LISTED_LOPU_CHATS = 300;
 export const DEFAULT_LISTED_LOPU_CHATS = 100;
-// The reply request accepts up to 8000 chars; rows cap at MAX_MESSAGE_CHARS
-// (4000), so a long prompt lands as two plain segments.
-// Voice accepts 12k; the public typed-reply route retains its 8k input cap.
-export const LOPU_USER_TURN_MAX_CHARS = 12000;
-// One assistant reply is at most 15 segment rows; anything longer is cut.
-export const LOPU_ASSISTANT_TURN_MAX_CHARS = 60_000;
+// Typed input accepts 8k and voice accepts 12k. Bounded attached Thing/page
+// references can extend the persisted turn to 16k, split into 4k message rows.
+export const LOPU_USER_TURN_MAX_CHARS = 16000;
 export const LOPU_HISTORY_MAX_CHARS = 60_000;
 export const DEFAULT_LOPU_HISTORY_TURNS = 40;
 export const MAX_LOPU_HISTORY_TURNS = 200;
@@ -85,13 +87,15 @@ export const LOPU_CHAT_SOURCE = Object.freeze({
 } as const);
 
 export type LopuChatSettings = {
+ accessMode?: LopuAccessMode;
+ management?: 'client' | 'server';
 	model: string | null; // provider-native id from AI_WORKFLOW_BASE_MODELS; null = catalog default
 	effort: AiModelEffort | null; // null = catalog default (the reply route inherits the admin default effort); 'default' on the wire means the provider's own default
 	speed: AiModelSpeed | null; // null = catalog default (the admin default speed, else 'normal')
 	providerId?: string | null; // one of the owner's Secure Vault provider connections; null/absent = Thingtime's models
 };
-export type LopuChatState = LopuChatSettings & { turns: number; lastModel: string | null };
-export type LopuChatSettingsInput = { model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown };
+export type LopuChatState = LopuChatSettings & { turns: number; lastModel: string | null; archived?: boolean };
+export type LopuChatSettingsInput = { accessMode?: unknown; management?: unknown; model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown };
 export type LopuTurnProvider = NonNullable<PublicLopuMessageMeta['provider']>;
 export type LopuAssistantTurnMeta = {
 	model?: unknown;
@@ -109,6 +113,8 @@ export type LopuAssistantTurnMeta = {
 	balanceMicros?: unknown;
 	toolCalls?: unknown;
 	stopReason?: unknown;
+	continuationSafe?: boolean;
+	recoveryFailures?: number;
 };
 export type LopuHistoryTurn = { role: 'user' | 'assistant'; text: string };
 
@@ -123,13 +129,13 @@ export type DeleteLopuChatResult = Fail | { ok: true };
 // `message` is the first (usually only) row; `messages` lists every segment.
 export type LopuUserTurnResult = Fail | { ok: true; message: PublicChatMessage; messages: PublicChatMessage[]; existing?: boolean };
 export type LopuAssistantTurnResult = Fail | { ok: true; messages: PublicChatMessage[]; existing?: boolean };
-export type LoadLopuHistoryResult = Fail | { ok: true; history: LopuHistoryTurn[]; chars: number; truncated: boolean };
+export type LoadLopuHistoryResult = Fail | { ok: true; history: LopuHistoryTurn[]; chars: number; truncated: boolean; attachmentIds?: string[]; readReferences?: LopuReadReference[] };
 
 export const EMPTY_LOPU_SETTINGS: LopuChatSettings = Object.freeze({ model: null, effort: null, speed: null, providerId: null });
 
 const EFFORT_VALUES: readonly string[] = Object.keys(AI_MODEL_EFFORT_LABELS);
 const isEffort = (value: unknown): value is AiModelEffort => typeof value === 'string' && EFFORT_VALUES.includes(value);
-const baseModelOf = (id: string | null) => (id ? AI_WORKFLOW_BASE_MODELS.find((entry) => entry.id === id) ?? null : null);
+const baseModelOf = (id: string | null) => (id ? getAiWorkflowBaseModel(id) : null);
 const clampInt = (value: unknown, fallback: number, min: number, max: number): number => {
 	const num = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
 	if (!Number.isFinite(num)) return fallback;
@@ -181,7 +187,7 @@ export const lopuChatStateOf = (value: unknown): LopuChatState => {
 	const turns = Number.isSafeInteger(raw.turns) && Number(raw.turns) >= 0 ? Number(raw.turns) : 0;
 	const lastModel = typeof raw.lastModel === 'string' && raw.lastModel.trim() ? raw.lastModel.trim().slice(0, 128) : null;
 	const providerId = safeVaultId(raw.providerId);
-	return { model, effort, speed, providerId, turns, lastModel };
+	return { model, effort, speed, providerId, turns, lastModel, accessMode: lopuAccessMode(raw.accessMode), ...(raw.management === 'client' || raw.management === 'server' ? { management: raw.management } : {}), ...(raw.archived === true ? { archived: true } : {}) };
 };
 
 const withLopuState = (entry: ChatListEntry, lopu: unknown): LopuChatEntry => ({ ...entry, lopu: lopuChatStateOf(lopu) });
@@ -199,6 +205,13 @@ export type NormalizedLopuChatSettings = { ok: true; settings: LopuChatSettings;
 // `providerId` is shape-checked here (a Secure Vault record id); ownership is
 // verified by the Mongo-backed writers below.
 export const normalizeLopuChatSettings = (input: LopuChatSettingsInput, current: LopuChatSettings = EMPTY_LOPU_SETTINGS): Fail | NormalizedLopuChatSettings => {
+	if (input.accessMode !== undefined && input.accessMode !== 'ask' && input.accessMode !== 'full') return fail(400, 'accessMode must be ask or full.');
+	const accessMode = lopuAccessMode(input.accessMode ?? current.accessMode);
+	let management = current.management;
+ if (input.management !== undefined) {
+  if (input.management !== 'client' && input.management !== 'server') return fail(400, 'management must be client or server.');
+  management = input.management;
+ }
 	let model = current.model;
 	let effort = current.effort;
 	let speed = current.speed;
@@ -268,8 +281,8 @@ export const normalizeLopuChatSettings = (input: LopuChatSettingsInput, current:
 		}
 	}
 
-	const settings: LopuChatSettings = { model, effort, speed, providerId };
-	const changed =
+	const settings: LopuChatSettings = { accessMode, model, effort, speed, providerId, ...(management ? { management } : {}) };
+	const changed = accessMode !== lopuAccessMode(current.accessMode) || settings.management !== current.management ||
 		settings.model !== current.model ||
 		settings.effort !== current.effort ||
 		settings.speed !== current.speed ||
@@ -281,8 +294,8 @@ export const LOPU_PROVIDER_NOT_IN_VAULT_ERROR = 'That AI provider is not in your
 
 // A pinned providerId must name one of the viewer's own provider connections
 // (never someone else's, never a deleted one) before it is stored.
-const assertOwnVaultProvider = async (viewerId: string, providerId: string | null): Promise<Fail | null> =>
-	!providerId || (await hasUserVaultProvider(viewerId, providerId)) ? null : fail(400, LOPU_PROVIDER_NOT_IN_VAULT_ERROR);
+const assertOwnVaultProvider = async (viewerId: string, providerId: string | null, ownedPlan?: OwnedPlanAdmission | null): Promise<Fail | null> =>
+	!providerId || ownsPlanAdmission(ownedPlan, viewerId, providerId) || (await hasUserVaultProvider(viewerId, providerId)) ? null : fail(400, LOPU_PROVIDER_NOT_IN_VAULT_ERROR);
 
 export type LopuHistoryRow = {
 	crystal?: {
@@ -310,7 +323,7 @@ const historyToolReceipts = (row: LopuHistoryRow): PublicLopuToolCall[] => {
 	const source = row.crystal?.externalSource;
 	if (source?.access !== 'lopu' || source.provider !== 'lopu' || source.role !== 'assistant') return [];
 	const meta = publicLopuMessageMeta(row.crystal?.lopu);
-	return meta?.role === 'assistant' && meta.segmentIndex === 0 ? meta.toolCalls ?? [] : [];
+	return meta?.role === 'assistant' && (meta.segmentIndex === 0 || meta.toolReceiptOffset === meta.segmentIndex * LOPU_MAX_TOOL_CALLS) ? meta.toolCalls ?? [] : [];
 };
 
 const historicalReceiptText = (receipts: PublicLopuToolCall[]): string => receipts.length
@@ -340,7 +353,7 @@ export const buildLopuHistory = (
 		const last = turns[turns.length - 1];
 		if (last && last.role === role) {
 			last.text += last.key && last.key === key ? text : `\n\n${text}`;
-			last.receipts.push(...receipts.slice(0, LOPU_MAX_TOOL_CALLS - last.receipts.length));
+			last.receipts.push(...receipts);
 			continue;
 		}
 		turns.push({ role, text, key, receipts });
@@ -428,8 +441,9 @@ const turnRows = async (things: any, chatId: string, requestId: string, role: 'u
 
 export const createLopuChat = async (
 	viewerId: string,
-	input: { title?: unknown; model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown } = {},
-	identity?: { creationKey: string }
+	input: LopuChatSettingsInput & { title?: unknown } = {},
+	identity?: { creationKey: string },
+	ownedPlan?: OwnedPlanAdmission | null
 ): Promise<LopuChatResult> => {
 	const stableId = identity ? `${LOPU_CHAT_SHARE_ID_PREFIX}${createHash('sha256').update(`${viewerId}:${identity.creationKey}`).digest('hex')}` : null;
 	if (stableId) { const existing = await getLopuChat(viewerId, stableId); if (existing.ok) return existing; }
@@ -438,7 +452,7 @@ export const createLopuChat = async (
 	if (wantsTitle && !title) return fail(400, 'That title did not survive validation');
 	const normalized = normalizeLopuChatSettings(input);
 	if (normalized.ok === false) return normalized;
-	const foreignProvider = await assertOwnVaultProvider(viewerId, normalized.settings.providerId);
+	const foreignProvider = await assertOwnVaultProvider(viewerId, normalized.settings.providerId, ownedPlan);
 	if (foreignProvider) return foreignProvider;
 
 	const things = await getThingsCollection();
@@ -511,12 +525,20 @@ export const getLopuChat = async (viewerId: string, chatId: unknown): Promise<Ge
 export const updateLopuChat = async (
 	viewerId: string,
 	chatId: unknown,
-	input: { title?: unknown; model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown } = {}
+	input: LopuChatSettingsInput & { title?: unknown; archived?: unknown } = {},
+	ownedPlan?: OwnedPlanAdmission | null
 ): Promise<LopuChatResult> => {
 	const access = await resolveLopuChat(viewerId, chatId);
 	if ('ok' in access && access.ok === false) return access;
 	const { chat } = access as ChatAccess;
 	const patch: Record<string, unknown> = {};
+	if (input.accessMode !== undefined && String(chat.ownerId) !== viewerId) return fail(403, 'Only the owner can change Lopu access');
+	if (input.archived !== undefined) {
+		if (typeof input.archived !== 'boolean') return fail(400, 'archived must be a boolean');
+		if (String(chat.ownerId) !== viewerId) return fail(403, 'Only the owner can archive a Lopu conversation');
+		// Explicit assignment is idempotent; never touches turns or membership.
+		patch['crystal.lopu.archived'] = input.archived;
+	}
 	if (input.title !== undefined) {
 		const title = boundedTrimmed(input.title, MAX_CHAT_NAME_CHARS);
 		if (!title) return fail(400, 'Lopu conversations need a title');
@@ -525,22 +547,30 @@ export const updateLopuChat = async (
 	const current = lopuChatStateOf(chat.crystal?.lopu);
 	const normalized = normalizeLopuChatSettings(input, current);
 	if (normalized.ok === false) return normalized;
+	// Explicit permission writes must commit even if a concurrent read saw
+	// the same mode; an unrelated settings update never writes this field.
+	if (input.accessMode !== undefined) patch['crystal.lopu.accessMode'] = normalized.settings.accessMode;
+	// Repeated explicit pins still require live ownership, including no-op updates.
+	if (input.providerId !== undefined || normalized.settings.providerId !== current.providerId) {
+		const foreignProvider = await assertOwnVaultProvider(viewerId, normalized.settings.providerId, ownedPlan);
+		if (foreignProvider) return foreignProvider;
+	}
 	if (normalized.changed) {
-		if (normalized.settings.providerId !== current.providerId) {
-			const foreignProvider = await assertOwnVaultProvider(viewerId, normalized.settings.providerId);
-			if (foreignProvider) return foreignProvider;
-		}
 		patch['crystal.lopu.model'] = normalized.settings.model;
 		patch['crystal.lopu.effort'] = normalized.settings.effort;
 		patch['crystal.lopu.speed'] = normalized.settings.speed;
 		patch['crystal.lopu.providerId'] = normalized.settings.providerId;
+  if (normalized.settings.management) patch['crystal.lopu.management'] = normalized.settings.management;
 	}
-	if (!Object.keys(patch).length) return fail(400, 'Nothing to update');
-	const things = await getThingsCollection();
-	await updateMessengerThing(things, { shareId: chat.shareId, thingtime: 'chat' } as any, { $set: { ...patch, updatedAt: new Date() } });
+	const explicitSetting = ['title', 'model', 'effort', 'speed', 'providerId', 'management', 'accessMode', 'archived'].some(key => (input as Record<string, unknown>)[key] !== undefined);
+	if (!Object.keys(patch).length && !explicitSetting) return fail(400, 'Nothing to update');
+	if (Object.keys(patch).length) {
+		const things = await getThingsCollection();
+		await updateMessengerThing(things, { shareId: chat.shareId, thingtime: 'chat' } as any, { $set: { ...patch, updatedAt: new Date() } });
+	}
 	const entry = await chatListEntryFor(viewerId, chat.shareId);
 	if (entry.ok === false) return entry;
-	return { ok: true, chat: withLopuState(entry.chat, { ...(chat.crystal?.lopu || {}), ...(normalized.changed ? normalized.settings : {}) }) };
+	return { ok: true, chat: withLopuState(entry.chat, { ...(chat.crystal?.lopu || {}), ...(normalized.changed ? normalized.settings : {}), ...(input.archived !== undefined ? { archived: input.archived } : {}) }) };
 };
 
 // Owner only. Chat + membership + every message (+ their reactions) go in one
@@ -592,7 +622,7 @@ export const deleteLopuChat = async (viewerId: string, chatId: unknown): Promise
 // under the same id is a 409 — the sendMessage rule.
 export const persistLopuUserTurn = async (
 	viewerId: string,
-	input: { chatId?: unknown; requestId?: unknown; text?: unknown; attachmentIds?: string[]; unread?: boolean }
+	input: { chatId?: unknown; requestId?: unknown; text?: unknown; attachmentIds?: string[]; unread?: boolean; continuation?: boolean }
 ): Promise<LopuUserTurnResult> => {
 	const access = await resolveLopuChat(viewerId, input.chatId);
 	if ('ok' in access && access.ok === false) return access;
@@ -609,7 +639,7 @@ export const persistLopuUserTurn = async (
 	const base = new Date();
 	const rows = parts.map((part, index) =>
 		messageRow(viewerId, chat.shareId, lopuUserMessageShareId(viewerId, requestId, index), part, new Date(base.getTime() + index), {
-			lopu: { role: 'user', requestId, segmentIndex: index, segmentCount: parts.length }
+			lopu: { role: 'user', requestId, segmentIndex: index, segmentCount: parts.length, ...(input.continuation ? { continuation: true } : {}) }
 		})
 	);
 	const things = await getThingsCollection();
@@ -655,6 +685,18 @@ export const persistLopuUserTurn = async (
 	return { ok: true, message: projected.messages[0]!, messages: projected.messages };
 };
 
+// Store every receipt in bounded relational message segments, rather than
+// silently losing tools after the first twenty when long jobs checkpoint.
+export const splitLopuAssistantSegments = (text: string, toolCalls: unknown) => {
+ const parts = splitLiveMessageText(text || LOPU_EMPTY_REPLY_TEXT, MAX_MESSAGE_CHARS);
+ const receipts = Array.isArray(toolCalls) ? chunk(toolCalls, LOPU_MAX_TOOL_CALLS) : [];
+ return Array.from({ length: Math.max(parts.length, receipts.length) }, (_, index) => ({
+  text: parts[index] ?? 'Tool results (continued).',
+  toolCalls: receipts[index],
+  ...(index > 0 && receipts[index]?.length ? { toolReceiptOffset: index * LOPU_MAX_TOOL_CALLS } : {})
+ }));
+};
+
 // Lopu's side of a turn: rows owned by the user carrying the read-only
 // assistant externalSource (+ per-turn metadata under crystal.lopu — model,
 // provider, usage, tool calls — sanitised through publicLopuMessageMeta, tool
@@ -663,7 +705,7 @@ export const persistLopuUserTurn = async (
 // chat's lastMessage preview and bumps crystal.lopu.turns / lastModel.
 export const persistLopuAssistantTurn = async (
 	viewerId: string,
-	input: { chatId?: unknown; requestId?: unknown; text?: unknown; lopu?: LopuAssistantTurnMeta | null; unread?: boolean; requireExactReplay?: boolean }
+	input: { chatId?: unknown; requestId?: unknown; text?: unknown; lopu?: LopuAssistantTurnMeta | null; unread?: boolean; requireExactReplay?: boolean; readReferences?: LopuReadReference[] }
 ): Promise<LopuAssistantTurnResult> => {
 	const access = await resolveLopuChat(viewerId, input.chatId);
 	if ('ok' in access && access.ok === false) return access;
@@ -671,10 +713,10 @@ export const persistLopuAssistantTurn = async (
 	const requestId = normalizedMessengerRequestId(input.requestId);
 	if (!requestId) return fail(400, 'Invalid message request id');
 	const rawText = typeof input.text === 'string' ? input.text.trim() : '';
-	const text = (Array.from(rawText).slice(0, LOPU_ASSISTANT_TURN_MAX_CHARS).join('') || LOPU_EMPTY_REPLY_TEXT).trim();
+	const text = rawText || LOPU_EMPTY_REPLY_TEXT;
 	const meta = input.lopu && typeof input.lopu === 'object' ? input.lopu : {};
 
-	const parts = splitLiveMessageText(text, MAX_MESSAGE_CHARS);
+	const parts = splitLopuAssistantSegments(text, meta.toolCalls);
 	const base = new Date();
 	const rows = parts.map((part, index) => {
 		const lopu = publicLopuMessageMeta({
@@ -683,12 +725,16 @@ export const persistLopuAssistantTurn = async (
 			requestId,
 			segmentIndex: index,
 			segmentCount: parts.length,
-			...(index === 0 ? {} : { toolCalls: undefined, usage: undefined })
+			toolCalls: part.toolCalls,
+      toolReceiptOffset: part.toolReceiptOffset,
+			...(index === 0 ? {} : { usage: undefined })
 		});
-		return messageRow(viewerId, chat.shareId, lopuAssistantMessageShareId(viewerId, requestId, index), part, new Date(base.getTime() + index), {
+		const row = messageRow(viewerId, chat.shareId, lopuAssistantMessageShareId(viewerId, requestId, index), part.text, new Date(base.getTime() + index), {
 			externalSource: lopuAssistantSource(requestId, index, parts.length),
 			lopu
 		});
+    if (index === 0) Object.assign(row, { secure: new Binary(Buffer.from(JSON.stringify({ lopuReadReferences: normalizeReadReferences(input.readReferences) }))) });
+    return row;
 	});
 	const model = typeof meta.model === 'string' && meta.model.trim() ? meta.model.trim().slice(0, 128) : null;
 	const things = await getThingsCollection();
@@ -728,6 +774,12 @@ export const persistLopuAssistantTurn = async (
 	return { ok: true, messages: projected.messages };
 };
 
+// Bounded owner-private locators expire independently of the chat transcript.
+export function decodeLopuReadReferences(row: any, now = Date.now()): LopuReadReference[] {
+  if (!(row?.secure instanceof Binary) || row.secure.length() > 20_000 || !(new Date(row.createdAt).getTime() >= now - 86_400_000)) return [];
+  try { return normalizeReadReferences(JSON.parse(Buffer.from(row.secure.value()).toString('utf8')).lopuReadReferences); } catch { return []; }
+}
+
 // The transcript the model sees: the newest `limit` turns, oldest first,
 // capped at LOPU_HISTORY_MAX_CHARS. Reads the main list only (threads and
 // system rows never reach the model).
@@ -748,5 +800,59 @@ export const loadLopuHistory = async (viewerId: string, chatId: unknown, opts: {
 		.limit(Math.min(limit * 8, 400))
 		.toArray();
 	const folded = buildLopuHistory([...(rows as LopuHistoryRow[])].reverse(), { limit, maxChars: LOPU_HISTORY_MAX_CHARS });
-	return { ok: true, ...folded };
+	// Read relational attachments only from this already-authorized conversation.
+	// Each file is reauthorized again immediately before provider disclosure.
+	const messageIds = rows.filter(row => historyRole(row as LopuHistoryRow) === 'user').slice(0, 10).map(row => row.shareId);
+	const attachments = messageIds.length ? await things.find(
+		{ thingtime: 'attachment', targetId: { $in: messageIds }, attachmentPurpose: 'message', attachmentState: 'ready' } as any,
+		{ projection: { shareId: 1 } }
+	).sort({ createdAt: -1 }).limit(10).toArray() : [];
+  // Only the newest first-party assistant's private locators, scoped to this
+  // owner/chat. No imported messages, old results, grants or caller payloads.
+  const latest = rows.find(row => row.ownerId === viewerId && historyRole(row as LopuHistoryRow) === 'assistant' && row.crystal?.externalSource?.access === 'lopu' && row.crystal?.externalSource?.provider === 'lopu' && row.crystal?.lopu?.segmentIndex === 0);
+  const privateRow = latest ? await things.findOne({ shareId: latest.shareId, ownerId: viewerId, targetId: chat.shareId, thingtime: 'chat-message', 'crystal.deletedAt': null } as any, { projection: { secure: 1, createdAt: 1 } }) : null;
+  const readReferences = decodeLopuReadReferences(privateRow);
+
+	return { ok: true, ...folded, readReferences, ...(attachments.length ? { attachmentIds: attachments.map(row => String(row.shareId)) } : {}) };
+};
+
+/** Only the latest persisted assistant boundary can authorize recovery. */
+export const readLopuContinuation = async (viewerId: string, chatId: string, requestId: string, automatic: boolean) => {
+ const access = await getLopuChat(viewerId, chatId);
+ if (access.ok === false) return access;
+ if (access.settings.archived) return fail(409, 'This conversation is archived.');
+ const things = await getThingsCollection();
+ const latest = await things.findOne({ thingtime: 'chat-message', targetId: chatId,
+  'crystal.threadRootId': null, 'crystal.deletedAt': null, 'crystal.systemType': null
+ } as any, { sort: { createdAt: -1, shareId: 1 }, projection: { crystal: 1 } });
+ const meta = publicLopuMessageMeta(latest?.crystal?.lopu);
+ if (meta?.role !== 'assistant' || meta.requestId !== requestId) return fail(409, 'The conversation has newer work or is still saving.');
+ if (automatic) {
+  const homeThings = await getHomeThingsCollection();
+  const stopped = await homeThings.findOne({ ownerId: viewerId, targetId: chatId, thingtime: 'lopu-background-task', 'crystal.requestId': requestId, cancelRequested: true } as any, { projection: { _id: 1 } });
+  if (stopped) return fail(409, 'This reply was stopped. Continue it manually when ready.');
+ }
+ if (automatic && !canAutomaticallyResume(meta)) {
+  return fail(409, 'This reply needs your review before it can continue.');
+ }
+ return { ok: true as const, meta };
+};
+
+/** Notes are ordinary, membership-gated relational user messages, scoped to one run. */
+export const createLopuNoteReader = (viewerId: string, chatId: string, requestId: string) => {
+ const seen = new Set<string>();
+ const prefix = `note:${createHash('sha256').update(requestId).digest('hex').slice(0, 32)}:`;
+ return async (): Promise<string[]> => {
+  const access = await getLopuChat(viewerId, chatId);
+  if (access.ok === false) throw new Error('Conversation is no longer available');
+  const things = await getThingsCollection();
+  const rows = await things.find({ thingtime: 'chat-message', targetId: chatId, ownerId: viewerId,
+   'crystal.lopu.role': 'user', 'crystal.lopu.requestId': { $regex: '^' + prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') },
+   'crystal.deletedAt': null, shareId: { $nin: [...seen] }
+  } as any).sort({ createdAt: 1, shareId: 1 }).limit(100).toArray();
+  let chars = 0;
+  const fresh = rows.filter(row => { const size = String(row.crystal?.text || '').length; if (chars + size > 16000) return false; chars += size; return true; });
+  for (const row of fresh) seen.add(row.shareId);
+  return fresh.map(row => String(row.crystal?.text || ''));
+ };
 };

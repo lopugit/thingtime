@@ -1,8 +1,11 @@
 import { useCallback, useMemo } from 'react';
+import type { DevicePlatform } from '../../devices/platform';
 
 import { createApiFailure, readApiResponsePayload } from '~/hooks/apiFailure';
+import type { DeviceBattery } from './deviceTypes';
 
 export const PUBLIC_DEVICE_COMMAND_KINDS = [
+	'filesystem',
 	'connector.start',
 	'connector.stop',
 	'session.list',
@@ -85,7 +88,7 @@ export type PublicDeviceState = {
 	soundEffectsVolume?: number | null;
 	soundEffectsMuted?: boolean | null;
 	brightness: number | null;
-	battery: { level: number | null; charging: boolean | null; isExternalPower?: boolean | null; isPreventingIdleSleep?: boolean; isLowPowerModeEnabled?: boolean } | null;
+	battery: DeviceBattery | null;
 	powerTimers?: { displayIdleMinutes: number | null; systemSleepMinutes: number | null; diskIdleMinutes: number | null };
 	openApps: PublicDeviceOpenApp[];
 	audioDevices: Array<{
@@ -130,7 +133,7 @@ export type PublicDeviceConnector = {
 export type PublicDevice = {
 	id: string;
 	name: string;
-	platform: 'macos' | 'windows' | 'linux' | 'watchos';
+	platform: DevicePlatform;
 	model: string | null;
 	osVersion: string | null;
 	appVersion: string | null;
@@ -146,7 +149,7 @@ export type PublicDevice = {
 	locked: boolean | null;
 	volume: number | null;
 	brightness: number | null;
-	battery: { level: number | null; charging: boolean | null; isExternalPower?: boolean | null; isPreventingIdleSleep?: boolean; isLowPowerModeEnabled?: boolean } | null;
+	battery: DeviceBattery | null;
 	openApps: PublicDeviceOpenApp[];
 	state: PublicDeviceState | null;
 	connectors: PublicDeviceConnector[];

@@ -4,6 +4,7 @@ import {
 	createUserVaultGroup,
 	deleteUserVaultRecord,
 	listUserVault,
+	moveUserVaultEntry,
 	saveUserVaultProvider,
 	saveUserVaultSecret
 } from '~/api/utils/lopu/userVault';
@@ -39,6 +40,8 @@ export const action = async ({ request }: { request: Request }) => {
 				return json({ ok: true, entry: await saveUserVaultSecret(user.id, body) }, { headers: NO_STORE });
 			case 'save-provider':
 				return json({ ok: true, entry: await saveUserVaultProvider(user.id, body) }, { headers: NO_STORE });
+			case 'move-entry':
+				return json({ ok: true, entry: await moveUserVaultEntry(user.id, body) }, { headers: NO_STORE });
 			case 'delete':
 				await deleteUserVaultRecord(user.id, body?.id);
 				return json({ ok: true }, { headers: NO_STORE });

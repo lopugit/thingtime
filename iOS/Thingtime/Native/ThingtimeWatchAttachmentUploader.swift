@@ -132,10 +132,15 @@ final class ThingtimeWatchAttachmentUploader {
         guard let signedParts = signed["parts"] as? [[String: Any]], signedParts.count == partCount else {
             throw ThingtimeWatchAttachmentUploadError.invalidServerResponse
         }
+        // Real buckets presign absolute URLs; the local development stand-in mints
+        // first-party ones that may be root-relative, so resolve against the page the
+        // web view is showing (read on the main actor, as WKWebView requires).
+        let pageWebView = webView
+        let baseURL = await MainActor.run { pageWebView?.url }
         for signedPart in signedParts {
             let partNumber = try signedPart.requiredInt("partNumber")
             let urlString = try signedPart.requiredString("url")
-            guard let url = URL(string: urlString), let payload = payloads[partNumber] else {
+            guard let url = URL(string: urlString, relativeTo: baseURL)?.absoluteURL, url.scheme != nil, url.host != nil, let payload = payloads[partNumber] else {
                 throw ThingtimeWatchAttachmentUploadError.invalidServerResponse
             }
             let headers = signedPart["headers"] as? [String: String] ?? [:]

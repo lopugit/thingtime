@@ -1,3 +1,4 @@
+import { BUILDER_THING_KIND } from '../../../schemas/builderThing';
 import { randomUUID } from 'node:crypto';
 import { validateChatArchives } from '../../../utils/thingTransfer/chatArchive';
 import { orderedTransferAttachments, serializeTransfer, validateTransfer, type ThingTransfer } from '../../../utils/thingTransfer/format';
@@ -7,6 +8,7 @@ import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { newThingDoc } from '../messenger/shared';
 import { insertAccountedThing } from '../storage/accountedThings';
 import { bindReadyAttachmentsToTarget } from '../attachments/attachmentStore';
+import { lockFolderDestination } from './folderPlacement';
 
 const defaults = {
   collection: getHomeThingsCollection, transaction: withHomeMongoTransaction,
@@ -75,13 +77,8 @@ export const createTransferChatArchive = async (
   return deps.transaction(async session => {
     const things = await deps.collection();
     if (folderId) {
-      const folder = await things.findOne({ shareId: folderId, ownerId, thingtime: ['folder'] } as any, { session });
-      if (!folder || folder.appId != null || folder.sandbox != null || folder.sandboxSpace != null || !(folder.updatedAt instanceof Date) || !Number.isFinite(folder.updatedAt.getTime())) reject('Archive destination folder not found');
-      // A snapshot read alone would race with folder deletion. Advance the same
-      // timestamp fence used by managed placement before inserting children.
-      const lock = await things.updateOne({ shareId: folderId, ownerId, thingtime: ['folder'], updatedAt: folder.updatedAt } as any,
-        { $set: { updatedAt: new Date(Math.max(now.getTime(), folder.updatedAt.getTime() + 1)) } }, { session });
-      if (lock.matchedCount !== 1) reject('Archive destination folder changed');
+      const folder = await lockFolderDestination(things, ownerId, folderId, session);
+      if (!folder || folder.thingtime?.filter(kind => kind !== BUILDER_THING_KIND).length !== 1 || !folder.thingtime.includes('folder') || folder.appId != null || folder.sandbox != null || folder.sandboxSpace != null || !(folder.updatedAt instanceof Date) || !Number.isFinite(folder.updatedAt.getTime())) reject('Archive destination folder not found');
     }
     for (const id of emojis.values()) {
       const emoji = await things.findOne({ shareId: id, ownerId, thingtime: ['custom-emoji'] } as any, { session });

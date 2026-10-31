@@ -1,3 +1,7 @@
+import { LIVE_SOURCES } from '~/schemas/liveSources';
+import { expandedComponentBlock, templateToBlocks } from './templateBlocks';
+import { collectBlockIds, newBlockId } from './webpageBlocks';
+import { HEIC_IMAGE_ACCEPT } from '../Attachments/heicImage';
 import React from 'react';
 import { Box, Button, Flex, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
 
@@ -361,12 +365,21 @@ const RichTextEditorButton = ({
 	);
 };
 
+const StructuredValue = ({value,onChange}:{value:unknown;onChange:(value:unknown)=>void}) => {
+ const encoded=value === undefined ? '' : JSON.stringify(value,null,2);
+ const [draft,setDraft]=React.useState(encoded),[error,setError]=React.useState('');
+ React.useEffect(()=>{setDraft(encoded);setError('');},[encoded]);
+ return <><Textarea aria-label="Action inputs" value={draft} onChange={e=>{const text=e.target.value;setDraft(text);try { const parsed=text.trim() ? JSON.parse(text) : undefined;onChange(parsed);setError(''); } catch {setError('Enter valid JSON; the saved inputs stay unchanged until it is valid.');}}}/>{error && <Text role="alert" fontSize="xs">{error}</Text>}</>;
+};
+
 const BlockInspector = ({
 	draft,
 	block,
 	onDeselect,
-	onUploadToBlock
+	onUploadToBlock,
+ allowDataSources = true
 }: {
+	allowDataSources?: boolean;
 	draft: UseWebpageDraft;
 	block: WebpageBlock;
 	onDeselect: () => void;
@@ -382,6 +395,7 @@ const BlockInspector = ({
 		else css[key] = value;
 		patch({ css: Object.keys(css).length ? css : undefined });
 	};
+	const [expandError, setExpandError] = React.useState('');
 	const component = block.type === 'component' ? draft.componentsByRef[block.component || ''] : null;
 	const specs = React.useMemo(() => sanitizeArgSpecs(component?.crystal?.args), [component?.crystal?.args]);
 
@@ -440,6 +454,45 @@ const BlockInspector = ({
 				</Text>
 			) : null}
 
+
+   {['element', 'collection', 'condition'].includes(block.type) ? <>
+    {block.type === 'element' ? <>
+     <FieldRow label="Element"><Input {...inputStyles} aria-label="Element tag" value={block.tag || 'div'} onChange={e => patch({ tag: e.target.value })} /></FieldRow>
+     <FieldRow label="Text"><Textarea {...inputStyles} aria-label="Block text" value={block.text || ''} onChange={e => patch({ text: e.target.value })} /></FieldRow>
+     {['name', 'placeholder', 'defaultValue', 'href', 'src', 'alt', 'title', 'type', 'data-tt-action'].map(key => <FieldRow key={key} label={key}>
+      <Input {...inputStyles} aria-label={`Element ${key}`} value={String(block.props?.[key] ?? '')} onChange={e => patch({ props: { ...block.props, [key]: e.target.value } })} />
+     </FieldRow>)}
+     <FieldRow label="Action inputs"><StructuredValue key={block.id} value={block.props?.['data-tt-action-inputs']} onChange={value=>patch({props:{...block.props,'data-tt-action-inputs':value}})} /></FieldRow>
+    </> : null}
+    {block.type === 'element' && ['img','video','audio'].includes(block.tag || '') ? <FieldRow label="Upload media">
+     <Button size="sm" isDisabled={!onUploadToBlock} onClick={() => uploadInputRef.current?.click()}>Upload file</Button>
+     <input ref={uploadInputRef} type="file" accept={`image/*,video/*,audio/*,${HEIC_IMAGE_ACCEPT}`} style={{display:'none'}} onChange={event => { const files=Array.from(event.target.files || []); if(files.length) onUploadToBlock?.(block.id,files); event.target.value=''; }} />
+    </FieldRow> : null}
+    {block.type === 'element' && block.format ? <>
+     <FieldRow label="Formatted value path"><Input {...inputStyles} value={String(block.format.arg || '')} onChange={e => patch({ format: { ...block.format, arg: e.target.value } })} /></FieldRow>
+     <FieldRow label="Format"><Input {...inputStyles} value={String(block.format.kind || '')} onChange={e => patch({ format: { ...block.format, kind: e.target.value } })} /></FieldRow>
+    </> : null}
+    {block.type === 'collection' ? <>
+     {['itemsPath', 'label', 'empty', 'filterPath', 'filterValue'].map(key => <FieldRow key={key} label={key}>
+      <Input {...inputStyles} aria-label={`Collection ${key}`} value={String(block.props?.[key] ?? '')} onChange={e => patch({ props: { ...block.props, [key]: e.target.value } })} />
+     </FieldRow>)}
+     <FieldRow label="Default page size"><Select {...inputStyles} aria-label="Default page size" value={String(block.props?.size ?? 'all')} onChange={e => patch({ props: { ...block.props, size: ['all','infinite'].includes(e.target.value) ? e.target.value : Number(e.target.value) } })}>
+      <option value="all">Show all</option><option value="5">5</option><option value="10">10</option><option value="15">15</option><option value="20">20</option><option value="infinite">Infinite scrolling</option>
+     </Select></FieldRow>
+     <Text fontSize="xs">Child blocks are the editable template for every result.</Text>
+    </> : null}
+    {block.type === 'condition' ? <>
+     <FieldRow label="Value path"><Input {...inputStyles} aria-label="Condition path" value={String(block.condition?.arg || '')} onChange={e => patch({ condition: { ...block.condition, arg: e.target.value } })} /></FieldRow>
+     <FieldRow label="Equals">{typeof block.condition?.equals === 'boolean' ?
+      <Select {...inputStyles} aria-label="Condition equals" value={String(block.condition.equals)} onChange={e=>patch({condition:{...block.condition,equals:e.target.value==='true'}})}><option value="true">true</option><option value="false">false</option></Select> :
+      <Input {...inputStyles} aria-label="Condition equals" type={typeof block.condition?.equals==='number' ? 'number' : 'text'} placeholder={block.condition?.equals===null ? 'null' : 'Truthy when blank'} value={String(block.condition?.equals ?? '')} onChange={e => patch({ condition: { ...block.condition, equals: e.target.value === '' ? undefined : typeof block.condition?.equals==='number' ? Number(e.target.value) : e.target.value } })} />}</FieldRow>
+    </> : null}
+   </> : null}
+   {allowDataSources ? block.source ? <>
+    <FieldRow label="Data Action"><Input {...inputStyles} value={block.source.action} onChange={e=>patch({source:{...block.source!,action:e.target.value}})} /></FieldRow>
+    <FieldRow label="Refresh"><Select {...inputStyles} value={block.source.refresh || 'load'} onChange={e=>patch({source:{...block.source!,refresh:e.target.value as 'load'|'manual'|'interval'|'live',...(e.target.value==='live'&&!block.source!.stream?{stream:LIVE_SOURCES[0]}:{})}})}><option value="load">After actions</option><option value="manual">On page load</option><option value="interval">Timed refresh</option><option value="live">Live updates</option></Select></FieldRow>
+    {block.source.refresh === 'interval' ? <FieldRow label="Refresh interval (ms)"><Input {...inputStyles} type="number" value={block.source.intervalMs || 15000} onChange={e=>patch({source:{...block.source!,intervalMs:Number(e.target.value)}})} /></FieldRow> : null}
+   </> : <Button size="sm" onClick={()=>patch({source:{action:'',refresh:'load'}})}>Bind data Action</Button> : null}
 			{block.type === 'text' ? (
 				<>
 					{block.html ? (
@@ -448,7 +501,7 @@ const BlockInspector = ({
 						</Text>
 					) : (
 						<FieldRow label="Text">
-							<Textarea {...inputStyles} rows={4} value={block.text || ''} onChange={(event) => patch({ text: event.target.value })} />
+							<Textarea {...inputStyles} aria-label="Block text" rows={4} value={block.text || ''} onChange={(event) => patch({ text: event.target.value })} />
 						</FieldRow>
 					)}
 					<RichTextEditorButton block={block} patch={patch} />
@@ -522,7 +575,7 @@ const BlockInspector = ({
 						<Box
 							as="input"
 							type="file"
-							accept="image/*,video/*,audio/*"
+							accept={`image/*,video/*,audio/*,${HEIC_IMAGE_ACCEPT}`}
 							display="none"
 							ref={uploadInputRef}
 							data-testid="media-upload-input"
@@ -597,6 +650,18 @@ const BlockInspector = ({
 
 			{block.type === 'component' ? (
 				<>
+     <Button size="sm" onClick={() => {
+      try {
+       const ids = collectBlockIds(draft.blocks);
+       const children = templateToBlocks(component?.crystal?.render, kind => { const id = newBlockId(kind, ids); ids.add(id); return id; });
+       const replace = (blocks: WebpageBlock[]): WebpageBlock[] => blocks.map(entry => entry.id === block.id
+        ? expandedComponentBlock(entry, component?.crystal, children)
+        : { ...entry, ...(entry.children ? { children: replace(entry.children) } : {}) });
+       draft.setBlocks(replace(draft.blocks)); setExpandError('');
+      } catch (error) { setExpandError(error instanceof Error ? error.message : 'Could not expand this component'); }
+     }}>Expand into editable blocks</Button>
+     {expandError && <Text role="alert" fontSize="xs">{expandError}</Text>}
+
 					<Text color="var(--tt-muted, #9a9aa6)" fontFamily="var(--tt-font-mono, ui-monospace, monospace)" fontSize="10px">
 						🧩 {block.component}
 					</Text>
@@ -694,6 +759,12 @@ const BlockInspector = ({
 };
 
 export const BuilderDrawer = (props: {
+ onSelectBlock?: (id: string) => void;
+ allowedBlockTypes?: readonly WebpageBlock['type'][];
+ allowDataSources?: boolean;
+	helpText?: string;
+	hideTransfer?: boolean;
+	footerSpace?: string;
 	title: string;
 	draft: UseWebpageDraft;
 	selectedId: string | null;
@@ -759,7 +830,7 @@ export const BuilderDrawer = (props: {
 		setSaving(false);
 		if (result.ok) {
 			setMetaDirty(false);
-			lopu({ title: mode === 'site' ? 'Your page is saved — this is your Thingtime now 🧱✨' : 'Page saved ✨', status: 'success' });
+			lopu({ title: draft.branch ? 'Branch changes saved on this device' : mode === 'site' ? 'Your page is saved — this is your Thingtime now 🧱✨' : 'Page saved ✨', status: 'success' });
 			// Only the single-page draft.save() reports an id; onSaveAll settles
 			// several drafts at once and has no single page to hand back, so the
 			// id is read off the narrowed result instead of the union.
@@ -771,12 +842,12 @@ export const BuilderDrawer = (props: {
 	};
 
 	const copyPageLink = async () => {
-		if (!pageLink || (audienceAcl.includes('tt:hidden') && !draft.resolved?.page?.linkKey)) return;
+		if (!pageLink) return;
 		const url = `${window.location.origin}${pageLink}`;
 		try {
 			await navigator.clipboard.writeText(url);
 			lopu({
-				title: audienceAcl.includes('tt:hidden') ? 'Secret page link copied 🕵️' : 'Page link copied 🔗',
+				title: 'Page link copied 🔗',
 				description: url,
 				status: 'success',
 				duration: 6000
@@ -857,7 +928,12 @@ export const BuilderDrawer = (props: {
 				</Box>
 			</Flex>
 
-			<Flex flexDirection="column" rowGap={4} padding={4} flex="1" minHeight={0} overflowY="auto">
+			<Flex flexDirection="column" rowGap={4} padding={4} flex="1" minHeight={0} overflowY="auto" paddingBottom={props.footerSpace}>
+				{props.onSelectBlock ? <FieldRow label="Blocks"><Select aria-label="Select block" value={props.selectedId || ''} onChange={e=>props.onSelectBlock?.(e.target.value)}>
+     <option value="">Select a block…</option>
+     {(() => { const rows:React.ReactNode[]=[]; const queue=draft.blocks.map(block=>({block,depth:0})).reverse(); while(queue.length) { const {block,depth}=queue.pop()!; rows.push(<option key={block.id} value={block.id}>{'· '.repeat(depth)}{blockLabel(block)}</option>); if(block.children) for(const child of [...block.children].reverse()) queue.push({block:child,depth:depth+1}); } return rows; })()}
+    </Select></FieldRow> : null}
+    {props.helpText ? <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">{props.helpText}</Text> : null}
 				{selected ? (
 					<>
 						{regionLabel ? (
@@ -873,9 +949,9 @@ export const BuilderDrawer = (props: {
 								{regionLabel}
 							</Text>
 						) : null}
-						<BlockInspector draft={draft} block={selected} onDeselect={onDeselect} onUploadToBlock={onUploadToBlock} />
+						<Box as="fieldset" disabled={!!draft.branch?.locked} minW={0} border={0} p={0}><BlockInspector allowDataSources={props.allowDataSources} draft={draft} block={selected} onDeselect={onDeselect} onUploadToBlock={onUploadToBlock} /></Box>
 					</>
-				) : (
+				) : !props.helpText ? (
 					<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" lineHeight="1.7">
 						Hover blocks to see their boundaries, click one to edit it, drag the ⠿ chip to move it, and use the inline
 						<Box as="span" color="var(--tt-accent, hotpink)" fontWeight={700}>
@@ -884,7 +960,7 @@ export const BuilderDrawer = (props: {
 						</Box>
 						lines to build. 🌈
 					</Text>
-				)}
+				) : null}
 
 				<Box borderTop="1px solid" borderColor="var(--tt-border-light, #f0f0f2)" paddingTop={3}>
 					<Eyebrow>{mode === 'site' ? 'Site page' : 'Page'}</Eyebrow>
@@ -897,7 +973,8 @@ export const BuilderDrawer = (props: {
 									onPageName(event.target.value);
 									setMetaDirty(true);
 								}}
-								data-testid="builder-page-name"
+								isDisabled={draft.branch?.locked}
+                                data-testid="builder-page-name"
 							/>
 						</FieldRow>
 						{mode === 'page' ? (
@@ -916,7 +993,7 @@ export const BuilderDrawer = (props: {
 									: 'Saving forks this page into your Things — only you see your version.'}
 							</Text>
 						)}
-						{mode === 'page' && pageId && source === 'user' ? (
+						{mode === 'page' && pageId && source === 'user' && !draft.branch ? (
 							<Flex alignItems="center" gap={2} minWidth={0}>
 								<Box
 									as="a"
@@ -930,38 +1007,39 @@ export const BuilderDrawer = (props: {
 									{pageLink || `/p/${pageId}`}
 								</Box>
 								<Button
-									isDisabled={audienceAcl.includes('tt:hidden') && !draft.resolved?.page?.linkKey}
+									isDisabled={!pageLink}
 									onClick={copyPageLink}
 									size="xs"
 									variant="outline"
 								>
-									{audienceAcl.includes('tt:hidden') ? '🕵️ Copy secret link' : '🔗 Copy link'}
+									🔗 Copy link
 								</Button>
 							</Flex>
 						) : null}
-						{mode === 'page' && audienceAcl.includes('tt:hidden') && !draft.resolved?.page?.linkKey ? (
+						{mode === 'page' && !pageId ? (
 							<Text color="var(--tt-faint, #b6b6c0)" fontSize="11px">
-								Save once to mint the secret link.
+								Save this page to create its link.
 							</Text>
 						) : null}
 					</Flex>
 				</Box>
 
-				<ThingTransferControls id={pageId} linkKey={draft.resolved?.page?.linkKey}
-					disabledReason={!pageId || source !== 'user' || draft.dirty || metaDirty || anyDirty ? 'Save this page before copying or downloading its saved content.' : undefined} />
+				{!props.hideTransfer && !draft.branch && <ThingTransferControls id={pageId} linkKey={draft.resolved?.page?.linkKey}
+					disabledReason={!pageId || source !== 'user' || draft.dirty || metaDirty || anyDirty ? 'Save this page before copying or downloading its saved content.' : undefined} />}
 				<Flex columnGap={2}>
 					<Button
 						size="sm"
 						onClick={handleSave}
+						onMouseDown={draft.branch ? event => event.preventDefault() : undefined}
 						isLoading={saving}
-						isDisabled={anyDirty !== undefined ? !anyDirty && !metaDirty : !draft.dirty && !metaDirty && source === 'user'}
+						isDisabled={!!draft.branch?.locked || (anyDirty !== undefined ? !anyDirty && !metaDirty : !draft.dirty && !metaDirty && source === 'user')}
 						data-testid="builder-save"
 						flex={1}
 					>
-						{source === 'user' ? 'Save' : mode === 'site' ? 'Save my version' : 'Save page'}
+						{draft.branch ? 'Save to branch' : source === 'user' ? 'Save' : mode === 'site' ? 'Save my version' : 'Save page'}
 					</Button>
 					{draft.dirty ? (
-						<Button size="sm" variant="outline" onClick={draft.discardDraft} data-testid="builder-discard">
+						<Button size="sm" variant="outline" onClick={draft.discardDraft} isDisabled={draft.branch?.locked} data-testid="builder-discard">
 							Discard
 						</Button>
 					) : null}

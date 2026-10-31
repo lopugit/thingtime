@@ -37,6 +37,7 @@ api/index.js
 api/index.js.map
 remix/.vercel/
 remix/dist/
+remix/.functional-preview/
 remix/server/assets/*
 !remix/server/assets/.gitignore
 electron/dist/
@@ -84,11 +85,12 @@ graphify-out/.locks/
 graphify-out/cache/*
 !graphify-out/cache/semantic-cas/
 !graphify-out/cache/semantic-cas/**
-# derived 27MB viz - regenerate with `graphify export html`
+# HTML is local derived visualization; immutable portable graph data stays tracked.
 graphify-out/graph.html
 graphify-out/snapshots/**/graph.html
 graphify-out/snapshots/**/.graphify_*
 graphify-out/snapshots/**/.staging-*
+graphify-out/snapshots/**/cache/
 # dated curated-graph backups created by `graphify update`
 graphify-out/[0-9]*/
 
@@ -112,3 +114,17 @@ macos/ThingtimeWidgets/build/
 # Native Widgets distribution artifacts
 macos/ThingtimeWidgets/release/
 macos/ThingtimeWidgets/release-upload/
+
+# Claude Code per-checkout tooling state (worktree-derived dev ports, local permissions)
+.claude/launch.json
+.claude/settings.local.json
+
+# Query stamps are local even when a query targets a portable snapshot.
+graphify-out/snapshots/**/cache/last_query_stamp
+
+# Generated browser extension download and task-owned isolated acceptance state.
+remix/public/downloads/thingtime-passwords-extension.zip
+.task-password-qa/
+
+# Python bytecode from native release verification tests.
+iOS/scripts/__pycache__/

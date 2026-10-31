@@ -1,3 +1,4 @@
+import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
 // 🦄 The viewer's Lopu account (verified-credits design note §3/§4): the
 // verified flag + the access rules, the credit balance, this month's and the
 // lifetime usage, a pending top-up request and the optional "Buy credits"
@@ -366,7 +367,7 @@ const OPEN_ACCESS: LopuAccess = {
  * `byo` says whether the composer's current choice is one of the viewer's
  * own providers.
  */
-export const selectLopuAccess = (account: LopuAccount | null | undefined, viewer: LopuAccessViewer, options?: { byo?: boolean }): LopuAccess => {
+export const selectLopuAccess = (account: LopuAccount | null | undefined, viewer: LopuAccessViewer, options?: { byo?: boolean; planChatEligible?: boolean }): LopuAccess => {
 	if (!viewer.signedIn || viewer.temporary) {
 		return { ...OPEN_ACCESS, known: true, verified: false, locked: true, reason: 'temporary' };
 	}
@@ -377,13 +378,13 @@ export const selectLopuAccess = (account: LopuAccount | null | undefined, viewer
 		// says whether that even matters (defaulting to the server's own
 		// default, "verification required")
 		const requireVerification = viewer.requireVerificationHint !== false;
-		const locked = requireVerification && viewer.verifiedHint === false;
+		const locked = requireVerification && viewer.verifiedHint === false && !(options?.byo === true && options.planChatEligible === true);
 		return { ...OPEN_ACCESS, verified: viewer.verifiedHint !== false, requireVerification, locked, reason: locked ? 'unverified' : null };
 	}
 	const verified = account.verified;
 	const unverifiedGate = account.requireVerification && !verified;
 	const byoOnly = unverifiedGate && account.allowByoUnverified;
-	const locked = unverifiedGate && !(byoOnly && options?.byo === true);
+	const locked = unverifiedGate && !(options?.byo === true && (byoOnly || options.planChatEligible === true));
 	return {
 		known: true,
 		verified,
@@ -686,6 +687,8 @@ export const resetLopuAccountForTests = () => {
 export type UseLopuAccountOptions = {
 	// the composer's current choice is one of the viewer's own providers
 	byo?: boolean;
+	// Text chat only: supplied from the current owner’s freshly read catalog.
+	planChatEligible?: boolean;
 	// fetch on mount / focus (false for surfaces that only read the cache)
 	active?: boolean;
 };
@@ -727,30 +730,19 @@ export const useLopuAccount = (options: UseLopuAccountOptions = {}): UseLopuAcco
 		void refreshLopuAccount({ minAgeMs: LOPU_ACCOUNT_MOUNT_MIN_AGE_MS });
 	}, [active, userId]);
 
-	// …and slowly on focus / when the tab comes back
-	React.useEffect(() => {
-		if (!active || typeof window === 'undefined') return;
-		const onFocus = () => {
-			if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-			void refreshLopuAccount({ minAgeMs: LOPU_ACCOUNT_FOCUS_MIN_AGE_MS });
-		};
-		window.addEventListener('focus', onFocus);
-		document.addEventListener('visibilitychange', onFocus);
-		return () => {
-			window.removeEventListener('focus', onFocus);
-			document.removeEventListener('visibilitychange', onFocus);
-		};
-	}, [active]);
+	useBackgroundRefresh(active && userId ? `lopu-account:${userId}` : null,
+		() => refreshLopuAccount({ minAgeMs: LOPU_ACCOUNT_FOCUS_MIN_AGE_MS }), 30_000, false);
 
 	const byo = options.byo === true;
+	const planChatEligible = options.planChatEligible === true;
 	const access = React.useMemo(
 		() =>
 			selectLopuAccess(
 				snapshot.account,
 				{ signedIn: !!userId && !temporary, temporary, admin, verifiedHint, requireVerificationHint: snapshot.requireVerificationHint },
-				{ byo }
+				{ byo, planChatEligible }
 			),
-		[snapshot.account, snapshot.requireVerificationHint, userId, temporary, admin, verifiedHint, byo]
+		[snapshot.account, snapshot.requireVerificationHint, userId, temporary, admin, verifiedHint, byo, planChatEligible]
 	);
 
 	const refresh = React.useCallback(() => refreshLopuAccount(), []);

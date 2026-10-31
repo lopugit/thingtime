@@ -14,7 +14,7 @@ import {
 	pruneRetiredHomeThingsIndexes
 } from './collections.ts';
 const REQUIRED_INDEX_HEADROOM = 4;
-const HOME_ONLY_THINGS_INDEXES = 1; // migration_diagnostic_expires_at
+const HOME_ONLY_THINGS_INDEXES = 2; // migration diagnostics TTL + non-TTL invite expiry
 // The CI satellite is deliberately small: two readers, one TTL, one unique.
 const CI_CONTROL_INDEX_BUDGET = 8;
 
@@ -79,6 +79,9 @@ test('current Things index plan keeps four slots free below MongoDB hard limit',
 	assert.equal(desired.has('things_ci_repository_updated'), false);
 	assert.equal(desired.has('things_vote_key_lookup'), true, 'poll legacy reads retain their index until a separately verified migration');
 	assert.equal(desired.has('thingtime_1_parentId_1_createdAt_-1_shareId_1'), false);
+	const snapshotIndex = fixture.options.find(index => index.name === 'ownerId_1_shareId_1');
+	assert.deepEqual(snapshotIndex?.keys, { ownerId: 1, shareId: 1 });
+	assert.deepEqual(snapshotIndex?.options.collation, { locale: 'simple' });
 });
 
 test('the five dead pre-Things indexes measured on production are retired by name', () => {
@@ -94,6 +97,20 @@ test('the five dead pre-Things indexes measured on production are retired by nam
 	]) {
 		assert.ok(retired.has(dead), `${dead} must be retired`);
 	}
+});
+
+test('legacy-compatible bootstrap fits after retiring the pre-release Connections lookup', async () => {
+	const fixture = fakeThingsDb();
+	const stale = 'thingtime_1_targetId_1_crystal.accountId_1';
+	await pruneRetiredHomeThingsIndexes(fixture.db);
+	await Promise.all(createThingsDataIndexes(fixture.db, { legacyLookups: true, relationshipLookups: true }));
+	const desired = new Set(fixture.created);
+	assert.ok(fixture.dropped.includes(stale), 'the obsolete lookup must release its slot before any build');
+	assert.equal(desired.has(stale), false, 'the retired lookup must not be recreated');
+	assert.ok(fixture.actions.indexOf(`drop:${stale}`) < fixture.actions.findIndex((action) => action.startsWith('create:')));
+	assert.ok(1 + HOME_ONLY_THINGS_INDEXES + desired.size <= MONGODB_COLLECTION_INDEX_LIMIT);
+	assert.ok(desired.has('service_workspace_records'), 'new workspace lookups still fit beside compatibility indexes');
+	assert.equal(desired.has('ownerId_1_shareId_1'), false, 'account snapshots require the modern index plan');
 });
 
 test('v1-era kind indexes and the sandbox TTL are partial, and their unfiltered originals retire', async () => {
@@ -254,10 +271,10 @@ test('an ORPHAN twin is left alone: it is the only thing holding a unique key mi
 	assert.equal(fixture.dropped.includes('uniqueKeys_1__rebuild'), false);
 });
 
-test('an orphan twin IS dropped when the collection has no free slot left', async () => {
-	// a stuck boot ensure (every createIndex failing with CannotCreateIndex) is
-	// the worse failure, and the plan recreates the original moments later
+test('an orphan twin remains protected when the collection has no free slot left', async () => {
+	// Bootstrap must fail safely rather than temporarily admit duplicate keys.
 	const filler = Array.from({ length: MONGODB_COLLECTION_INDEX_LIMIT - 2 }, (_value, index) => `filler_${index}`);
 	const fixture = twinPruneFixture(['_id_', ...filler, 'uniqueKeys_1__rebuild']);
-	assert.deepEqual(await pruneRebuildTwins(fixture.db), ['uniqueKeys_1__rebuild']);
+	assert.deepEqual(await pruneRebuildTwins(fixture.db), []);
+	assert.deepEqual(fixture.dropped, []);
 });

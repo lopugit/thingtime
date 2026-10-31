@@ -15,8 +15,8 @@ portable from day one.
   native file icons, compact `.app` badges, and learned/text relevance that can still overcome the preferred order;
 - an automatic, bounded expression evaluator that recognizes complete arithmetic directly in the root search field,
   leads with a dedicated Calculator result, keeps ordinary results underneath, and copies the answer with Return;
-- automatic application-directory watching with five-minute reconciliation, configurable six-hour file/folder
-  refresh, and built-in Index Now, Index Apps, Index Commands, Index Files, and Index Directories commands;
+- coalesced application/file/folder background watching, six-hour full application reconciliation, configurable
+  six-hour file/folder refresh, and built-in Index Now, Index Apps, Index Commands, Index Files, and Index Directories commands;
 - inherited `.gitignore`/Git excludes plus user-defined wildcard and regular-expression ignore rules, editable with
   index roots, an optional entry cap, and live database size/status in dedicated Search Settings;
 - unlimited filesystem entries and hidden files by default, including metadata-only references for executables,
@@ -28,6 +28,7 @@ portable from day one.
 - arrow-key selection, Return execution, Escape dismissal, and Command-K actions;
 - type-aware right-click menus, including Finder reveal, file copy, path/name copy, recoverable Trash, and confirmed
   permanent delete actions for filesystem-backed results;
+- a Settings gear in the launcher header, with mouse and keyboard access to the native Settings window;
 - searchable Commander Settings results with tab-aware deep links into the separate native settings window;
 - a dedicated Activity settings tab that samples Commander host/daemon CPU, memory, storage, process count, plus
   local Mac CPU, best-effort system GPU, memory, thermal state, and filesystem capacity without uploading metrics;
@@ -177,12 +178,27 @@ Recovery never changes privacy toggles or resets grants.
 
 Commander uses the real Thingtime API; it never reads the database directly.
 
-Commander ships with its public Thingtime client registration for the exact loopback origin
-`http://127.0.0.1:47820` and its native callback
-`com.thingtime.commander://oauth/callback`. The latter is registered as an exact native redirect URI
-(not a web origin), so the user signs in with their normal browser session and the browser hands the
-one-time PKCE response straight back to Commander. The login requests `profile.username` and
-`app-data`; Advanced settings retain a client-ID override for another Thingtime deployment.
+The local daemon publishes `/.well-known/commander-capabilities.json`, generated from the
+same operation registry used for HTTP dispatch. Its origin-scoped feature versions cover
+every active route, including native callbacks and static assets, without exposing account
+data or credentials. Before sign-in the UI requires `commander.accounts-login` 1.1.0 or a
+compatible same-major update. That contract adds verified callback selection; callback
+contracts also enforce the original server, client and redirect binding. Add or change
+operations in `apps/daemon/src/services/httpRoutes.ts` and deliberately version their contracts.
+
+Commander ships with a public Thingtime client ID. Before opening browser sign-in, it negotiates
+the selected server's OAuth capabilities and checks the exact callback registration. It prefers
+`com.thingtime.commander://oauth/callback`. If the server explicitly reports that native callback
+as unregistered, Commander checks and uses its currently bound loopback callback, normally
+`http://127.0.0.1:47820/oauth/callback`. Both paths use one-time authorization codes and S256 PKCE;
+each attempt is bound to its original server, client ID and callback. Network errors, suspended apps
+and incompatible capabilities fail without switching callbacks.
+
+For another deployment, register your own app through Thingtime Apps, allow the exact loopback
+origin used by Commander, and optionally register the exact native callback under native redirect
+URIs (not web origins). Advanced settings retain the server/client-ID overrides. Do not assume a
+callback is registered merely because it appears in this README: the live server remains the
+authority. The login requests only `profile.username` and `app-data`.
 
 The browser login uses authorization code + PKCE. Access tokens are saved only through the native credential bridge:
 Keychain on macOS, Credential Manager on Windows, and Secret Service on Linux. Sync data is stored privately under
@@ -196,8 +212,8 @@ a bounded 15-minute writer window; a custom-capped scan normally stops a blocked
 prior committed snapshot searchable, and reports actionable guidance. Deliberately constraining a capped indexer
 below 25% CPU extends that shorter deadline proportionally, up to 15 minutes.
 
-The launcher footer replaces its idle status with the current source label and live processed/indexed count during
-a scan. Search settings also expose the result-section order and a private cache policy: enable/disable, maximum
+The launcher footer retains its measured count and index age during a scan; live processed/indexed progress
+appears in Search Settings. Search settings also expose the result-section order and a private cache policy: enable/disable, maximum
 size, expiry, custom cache-directory override, reveal, and clear. Cache files contain result metadata only, use
 owner-only permissions, and are never included in Thingtime cloud settings sync. Commander warms recent snapshots
 into a bounded in-memory tier and re-ranks cached filesystem candidates while a refined live query completes. When
@@ -241,3 +257,77 @@ swift build --package-path hosts/macos
 
 Windows and Linux compile/runtime testing is deliberately deferred, as requested. Their shared layers are covered
 by the TypeScript and Rust checks; their native shells remain explicitly unverified.
+
+## Process monitor and utility windows
+
+Activity's Processes panel defaults to Name ascending, with PID as the final
+stable tie-breaker. CPU/memory/disk changes update readings without reordering
+rows unless you choose a usage sort. Sort by, Order, Average window, parent
+grouping and composable filters are saved locally and shared with the separate
+Processes window. Filters support text matching, numeric comparisons, binary
+memory/throughput units and explicit available/unavailable values.
+
+Average window offers Current, 5/10/30 minutes, 1/3/6/12 hours and 1 day. Usage
+columns, filters and sorting all use the selected sampled average. Native windows
+share one sampler and history; readings are duration-weighted in one-minute
+buckets. History is collected while a metrics view polls, stays in memory for the
+running app, expires after one day, and resets for exited/reused PIDs. Each row
+shows the actual observed minutes; sleep/closed-view gaps are excluded, and
+unavailable GPU/network readings never become zero. No past history is invented
+when selecting a longer window. This is a sampled monitor, not a historical
+recorder or a guarantee of continuous background collection.
+
+Use the pop-out icon beside Processes for its resizable native window. Keep above
+sets only that window's level; closing/reopening reuses the window during the
+current app session. Double-click the Settings or Processes title bar to maximize
+within the current screen's usable area, then again to restore its previous frame.
+This does not enter a fullscreen Space.
+
+### Isolated native window development
+
+Run `./script/window-preview.sh` from `Commander/` to build a fast unsigned
+window preview, then open the printed `.app` path. It uses the production
+`CommanderUtilityWindow` implementation and a worktree-specific bundle identity
+and cache directory. It has no daemon, ports, network, credentials, global
+hotkeys, or access to the installed Commander profile. Its duplicate-delivery
+button exercises native/web double-click coalescing; the titlebar and Keep above
+control exercise native window behavior. Run `./script/window-preview.sh --clean`
+to stop and remove this worktree's generated preview before final verification.
+The preview supplements the canonical signed installed-app acceptance checks.
+
+
+### Background search indexes and isolated development
+
+The launcher footer combines the latest measured committed file/folder snapshot with the enabled application and
+command catalogue, alongside the age of the oldest successful full index refresh. It keeps that summary while ordinary
+background changes are pending; live search can reflect changes before the measured count catches up. Detailed
+progress, errors and resource controls remain in Search Settings. Remote Store results, disabled
+file sources and duplicate paths are excluded. An absent age means that an active source has not completed its first
+index. Full application reconciliation runs six-hourly; file/folder reconciliation uses the saved interval (six hours
+by default), and the command catalogue refreshes each minute. Supported OS notifications normally refresh affected
+subtrees after a 750 ms quiet period, with a three-second batching deadline during continuous activity. Events arriving
+during a scan are coalesced and processed afterward. Missed/unsupported filesystem notifications use periodic
+reconciliation. The Linux non-recursive watcher remains best-effort; macOS is the accepted native target.
+
+A changed index configuration or mounted-source set suppresses the previous file source until its replacement is
+committed, including after relaunch. The schema-4 upgrade computes unique counters once in the writer; the independent
+reader can continue reading committed data while that migration runs. Legacy databases lack the saved settings fingerprint. Their valid cached file results remain searchable under a
+scoped current-root, ignore, hidden-file, Git and existence policy while migration and reconciliation run; totals
+remain explicitly unmeasured until a complete current snapshot is committed. A known mismatched saved fingerprint
+never uses this legacy fallback. During this transition a result page can contain fewer items after ineligible old
+candidates are removed; it does not scan the whole index to refill the page.
+
+For unsigned iteration alongside the installed app:
+
+```bash
+./script/dev-parallel.sh build
+./script/dev-parallel.sh start
+./script/dev-parallel.sh status
+node ./script/verify-background-index.mjs '<printed development app path>'
+./script/dev-parallel.sh clean
+```
+
+The lane owns an isolated bundle identity, data/cache/Keychain identity, fixture application roots and deterministic
+port; it leaves the installed app and profile in place. `COMMANDER_APPLICATION_ROOTS` is a JSON array of absolute
+roots for the isolated daemon application inventory. Production omits it and indexes eligible mounted volumes.
+After development acceptance, clean this lane and use the canonical signed build/install verification above.
