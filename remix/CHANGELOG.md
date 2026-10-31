@@ -12,7 +12,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
-- 2026-10-29: Documented and verified popup-free native sync fixture acceptance, with focused byte/restart tests and separate signed installed UI acceptance gates.
+- 2026-10-23: Stop sends with an explicitly unavailable credential before routing or billing. Fence late chat create/rename/delete results and pending-write counters by account generation; rename/delete rollbacks preserve concurrent credential saves, messages and selection. — Codex (AI)
 
 - 2026-10-22: Add immediate per-connection Pause/Resume with durable restart fences, coalesced status work and individually editable optional bandwidth, transfer/index concurrency and sync-only CPU ceilings. Legacy policy IDs remain compatible; new limits require negotiated configuration3/native support. Release acceptance pending. [Details](../PRs/1086-codex-sync-resource-controls-make-sync-pause-immediate-and-add-scoped-resource-controls.md). **Codex (AI)**
 

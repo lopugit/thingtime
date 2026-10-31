@@ -251,16 +251,49 @@
       payload decoding. Run `timelineBranchMerge.test.ts`, the offline History
       browser test and guarded `timeline-branches.integration.mts` account parity.
 
-- [ ] Anonymous variations: while offline, select a saved version, create a
-      variation, edit its fields, open it in Builder, save and cold-reload.
-      Recorded components must render with Actions/live data paused, and the
-      current Thing must remain unchanged. Check 1440/390/320px, including the
-      phone inspector and unobstructed preview. Observe zero mutation/account
-      Timeline requests. Concurrent stale/divergent pushes must fail safely;
-      uncertain retries replay exactly and quota failures roll back effects,
-      heads and ordering. Foreign/retired scopes must never fall through to HTTP.
-      Run `timelineBranches.test.ts`, the offline History browser test and the
-      disposable real-account `timeline-branches.integration.mts` regression.
+- [ ] File selection is visible immediately on both the intrinsic page and a
+      previously saved Web Platform media program, without Run example. Change
+      settings after selecting a file; Start must use them without losing it.
+- [ ] Compress PNG/JPEG/TIFF/HEIC and animated GIF fixtures locally. Independently
+      decode outputs: compare dimensions, alpha, orientation, frames, delays and
+      loops, including optimized delta rectangles. Duplicate two compressor instances; each native file label must target its own input. JPEG transparency requires an explicit background. APNG, layered or
+      multi-page images, unsupported SVG and invalid files fail clearly.
+- [ ] Select a non-image file whose first 4096 bytes are `<!--` followed by many
+      repetitions of `--><!--`. The SVG header test must refuse it immediately
+      and the tab must stay responsive, never backtrack exponentially.
+      Regression coverage: `test:web-platform`.
+- [ ] Cancel while image codecs load and while encoding; stale jobs cannot
+      publish a preview/download. Asset loading fetches public same-origin WASM
+      only; selected bytes never enter a request. The worker still denies network.
+- [ ] In the actual Builder, edit nested heading text, a label, a numeric field,
+      a button and image preview independently; move/duplicate a control, save,
+      reload and verify the live compressor. Keep installed/deployed acceptance
+      separate from the isolated regression fixture.
+- [ ] Install `media-tools` as the intended account; inspect the returned owned
+      Page, Component and Action. An origin with suite capability below 1.7.0 refuses
+      this install before mutation; compatible 1.7.0 accepts it.
+- [ ] Run the isolated browser flow documented in README: actual WebCodecs
+      conversion, MP4 H.264/AAC, WebM VP9/Opus and explicit audio removal. Compare
+      downloaded bytes, codecs, dimensions, duration and tracks using ffprobe.
+- [ ] The opaque preview frame still has no same-origin permission. Its fixed
+      secure-host worker can encode and has a network-denying response CSP.
+      An iframe-local worker must not regress into a false unsupported browser.
+- [ ] Invalid files and unsupported codecs show a useful error and clear old
+      downloads. Cancel, Stop / clear, replacing the selected file and replacing
+      a run terminate work; delayed worker output never recreates a download.
+- [ ] Change settings and document labels/styles; save an edited Component,
+      reopen it through Builder and run it with those saved defaults. Reloading
+      never retains local selected video bytes. Check access as the owner.
+- [ ] On the intended deployed origin, encode a synthetic local clip, preview
+      it and download it. Compare the result with the independent source.
+- [ ] At desktop and 390px widths scroll the complete page and preview; open
+      the JSON editor and saved Component controls. No clipping, overlap or
+      horizontal overflow, including progress, errors, video and download.
+- [ ] Shared documentation examples still validate through saved-Thing grammar
+      after adding guide sections; locate examples by section ID, not position.
+- [ ] Lopu's default and custom base prompt paths retain framework-discovery
+      guidance for `/docs/builder`, components, demos and Action inspection.
+      Missing tools or short Action budgets never imply encoding is impossible.
 
 - [ ] Anonymous version names: use Versions offline to name, rename, reload,
       clear and reload again. Verify the pinned badge and immutable effects,
@@ -4897,6 +4930,43 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       git, grep and ripgrep treat the whole file as binary and silently skip
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
+
+- [ ] Credential defaults: choose a catalog model and a saved ChatGPT connection
+      in Settings → Lopu; reload. Existing chats retain their override; new chats
+      use the device/account defaults. Another owner sees no previous choice.
+- [ ] In each composer gear, switch between two saved connections and Thingtime
+      credits. Compare the saved chat readback and actual provider receipt;
+      model/endpoint/billing labels match the selected connection. Revoked or
+      removed credentials never silently spend credits. Cold deep links and
+      background sends use the target conversation's choice.
+- [ ] Change a choice immediately before sending, refuse a save, queue rapid
+      selections and switch accounts while saving. Requests wait for saves;
+      a refusal cancels that send and stale responses cannot overwrite newer
+      choices or another account. Regression coverage: `test:lopu-ui`.
+- [ ] Keep create, rename and delete requests pending while switching accounts,
+      including switching away and back. Late successes and failures must not
+      restore the previous account's chats, provider choice, messages, notices
+      or cache. The new account can load chats immediately; an old completion
+      cannot release its pending credential-save fence. Try a queued send whose
+      explicit credential has disappeared or become unavailable: it must stop
+      with an error before sending, even when the prior choice used credits.
+- [ ] While a rename or delete is pending, save a personal credential in another
+      chat, select it and load a new message. Refuse the earlier mutation; only
+      its own title or removed entry returns. The confirmed credential, later
+      selection, message and cached list survive. A successful rename response
+      containing older chat metadata must not restore a credit-backed choice.
+- [ ] Delete a selected chat with a different credential from the account's
+      new-chat default, then send a new message: the default handles it. Refuse
+      deletion and verify the prior chat/choice return only if no later draft
+      settings or selection have changed.
+- [ ] At desktop and 390px, scroll defaults and open chat settings top to bottom;
+      select credentials/models, reopen and reload. Edit nested label/control
+      blocks with Builder, save, reload and confirm credential actions still
+      work. Synthetic isolated fixture: `scripts/lopu-credentials.browser.html`
+      and `scripts/check-lopu-credentials-browser.cjs` (container-only).
+
+
+- [ ] GPT-6 Astra: choose provider-default, High and Max reasoning; only Low/Medium/High/Extra high/Max are offered, never None/Minimal/Ultra. On an authorized deployment, verify a plain reply and a harmless read-only tool round trip, keeping the selected model and effort. Native calls must use Responses with `store:false`; encrypted reasoning stays server-side and failed requests never retry with weaker reasoning. Reload to confirm saved model choices and terminal replies. Public catalogue 1.5.1 and reply 1.19.3 must agree in both manifests.
 
 - [ ] Action discovery: inspect an owned server/browser Action in Ask mode;
       no confirmation or run is created. Check enum choices, required fields,

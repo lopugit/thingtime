@@ -80,7 +80,13 @@ private draft API, editor recovery, account isolation and independent media copi
 
 `GET/POST /api/v1/settings/lopu-prompt` exposes the shared public base prompt, the authenticated account's private instruction checklist, and admin-only base edits. `settings/lopuPromptSettings.ts` stores the shared revision in home settings and personal revisions in protected account metadata through `users.ts`; public user projections omit that text. `promptSettingsCore.ts` validates canonical entries and composes enabled preferences. Revision comparisons reject stale writes. `api.settings-lopu-prompt` 2.0.0 adds owner-fenced, resumable instruction generations with a compact private account reference. Immutable parts preserve complete content beyond the unchanged 96 KiB per-request boundary; base-only reads avoid loading personal content. Committed generations are retained for backup/recovery, and abandoned staging is cleaned in accounted batches. Ordinary inference remains functional; large enabled inference requires verified provider capacity and currently fails explicitly without truncation.
 
-`LopuPromptSettings.tsx` uses `local-workspace/lopuInstructions.ts` for anonymous and offline device saves, with root-bound account/origin isolation and home-pinned account preferences. `lopuInstructions.client.tsx` runs an independent confirmed-account sync worker with immutable attempts, lost-reply reconciliation and explicit conflict review. Anonymous work never uses account transport or becomes an account queue. The existing workspace database and canonical instruction shape are reused. Admin base edits keep their authenticated API path. Prompt text never grants tool authority. See [local workspace coverage](../local-workspaces.md) for browser evidence and remaining account-UI acceptance. Regressions: `lopuInstructions*.test.ts`, `test:lopu`, `test:settings`, `test:api-capabilities`; the opt-in browser fixture requires a claimed isolated full-app runtime.
+`components/Lopu/lopuChatStore.ts` owns account-scoped AI defaults and per-chat
+credential choices. Explicit unavailable send choices fail before dispatch;
+saved unavailable pins remain selected. Async chat writes and their list-read
+fences belong to the starting account generation, including create/rename/delete
+results, failures and cache writes. `test:lopu-ui` covers delayed completions,
+switch-away/return, queued credential refusal and independent chat routing.
+
 
 ## Password manager
 
