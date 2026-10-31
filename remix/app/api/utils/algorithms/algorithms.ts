@@ -1,23 +1,26 @@
+import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 
 // feed-algorithm is a PROTECTED system kind: algorithm things stay on the home
 // deployment DB even while a data-plane endpoint override is active.
-import { getFeedAlgorithmsCollection, getHomeThingsCollection as getThingsCollection, getUsersCollection, withMongoTransaction } from '../mongodb/collections';
+import { getFeedAlgorithmsCollection, getHomeThingsCollection as getThingsCollection, getUsersCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { clearUserActiveFeedAlgorithm, setUserActiveFeedAlgorithm } from '../auth/users';
 import { applyEventsToWeights, emptyWeights, topInterests, type AlgorithmWeights, type EngagementEvent } from '../things/feedRanking';
 import { getPostFeatures } from '../things/things';
 import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore';
 import { applyUserStorageDelta, markUserStorageNeedsReconcile, readyUserStorageMatch } from '../storage/userStorage';
+import { parseAlgorithmTransfer, type AlgorithmTransferContent } from './algorithmTransferCore';
 
 // Personal feed algorithms: named, branchable interest-weight profiles trained
 // by doomscroll engagement. A user can keep many and switch the active one
 // (users.meta.activeFeedAlgorithmId).
 //
 // Feed algorithms are THINGS now (thingtime ['feed-algorithm'], see
-// claude-todo/12): the trained profile lives in crystal, ALWAYS private
-// (acl ['tt:user']) because the weight maps encode the owner's reading habits.
+// TODO/claude-todo/22-everything-is-a-thing-collections.md): the trained
+// profile lives in crystal, ALWAYS private (acl ['tt:user']) because the
+// weight maps encode the owner's reading habits.
 // This module keeps the legacy FeedAlgorithmDoc shape as its interchange
 // format — every things-era read adapts back to it, so projectAlgorithm and
 // the /api/v1/algorithms* routes are untouched. Reads are dual-era (things
@@ -35,6 +38,12 @@ export type FeedAlgorithmDoc = {
   weights: AlgorithmWeights;
   eventCount: number;
   lastTrainedAt: Date | null;
+  // "try my feed brain 🧠" (claude-todo/10): an explicit owner-granted branch
+  // invitation. The doc itself STAYS private (acl never changes) — shared:true
+  // only lets link-holders read the tiny preview and branch their own copy.
+  shared: boolean;
+  listed?: boolean;
+  description?: string;
   schemaVersion: number;
   createdAt: Date;
   updatedAt: Date;
@@ -47,9 +56,27 @@ export type PublicAlgorithm = {
   parentId: string | null;
   eventCount: number;
   lastTrainedAt: string | null;
+  shared: boolean;
+  listed?: boolean;
+  description?: string;
   createdAt: string;
   updatedAt: string;
   topInterests: Array<{ kind: 'type' | 'tag' | 'author'; key: string; label?: string; weight: number }>;
+};
+
+// What a share-link holder may see BEFORE branching: identity + training size
+// only. Never weights or topInterests — the doc itself is never readable.
+// Note this bounds the PREVIEW, not the disclosure: branching copies the
+// weights into the caller's own algorithm (see createAlgorithm), where they
+// surface as that copy's topInterests. Flipping shared:true is therefore
+// consent to disclose the trained profile to link-holders, and the owner-facing
+// copy in AlgorithmManager says exactly that.
+export type SharedAlgorithmPreview = {
+  id: string;
+  name: string;
+  emoji: string;
+  eventCount: number;
+  ownerUsername: string | null;
 };
 
 const MAX_ALGORITHMS_PER_USER = 50;
@@ -100,6 +127,9 @@ const algorithmThingToDoc = (thing: any): FeedAlgorithmDoc => ({
   weights: thing.crystal?.weights || emptyWeights(),
   eventCount: thing.crystal?.eventCount || 0,
   lastTrainedAt: thing.crystal?.lastTrainedAt ?? null,
+  shared: thing.crystal?.shared === true,
+  listed: thing.crystal?.listed === true,
+  description: thing.crystal?.description || '',
   schemaVersion: thing.schemaVersion,
   createdAt: thing.createdAt,
   updatedAt: thing.updatedAt
@@ -140,6 +170,9 @@ const projectAlgorithm = (doc: FeedAlgorithmDoc, usernames: Map<string, string>)
   name: doc.name,
   emoji: doc.emoji || DEFAULT_EMOJI,
   parentId: doc.parentId || null,
+  shared: doc.shared === true,
+  listed: doc.listed === true,
+  description: doc.description || '',
   eventCount: doc.eventCount || 0,
   lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt).toISOString() : null,
   createdAt: new Date(doc.createdAt).toISOString(),
@@ -197,6 +230,34 @@ const findOwnedAlgorithmWithEra = async (ownerId: string, shareId: unknown): Pro
 const findOwnedAlgorithm = async (ownerId: string, shareId: unknown): Promise<FeedAlgorithmDoc | null> =>
   (await findOwnedAlgorithmWithEra(ownerId, shareId))?.doc ?? null;
 
+// Any-owner lookup honoured ONLY for algorithms whose owner flipped shared:true
+// — the branch-invitation gate. shareId is an unguessable UUID, so possession
+// of the link + the explicit flag together are the consent.
+const findSharedAlgorithm = async (shareId: unknown): Promise<FeedAlgorithmDoc | null> => {
+  if (typeof shareId !== 'string' || !shareId.trim()) return null;
+  const id = shareId.trim();
+  const things = await getThingsCollection();
+  const thing = await things.findOne({ shareId: id, thingtime: 'feed-algorithm', 'crystal.shared': true } as any);
+  if (thing) return algorithmThingToDoc(thing);
+  const algorithms = await getFeedAlgorithmsCollection();
+  const legacy = (await algorithms.findOne({ shareId: id, shared: true } as any)) as any as FeedAlgorithmDoc | null;
+  return legacy || null;
+};
+
+// The share-link preview: identity + training size, never the profile.
+export const getSharedAlgorithmPreview = async (shareId: unknown): Promise<SharedAlgorithmPreview | null> => {
+  const doc = await findSharedAlgorithm(shareId);
+  if (!doc) return null;
+  const usernames = await resolveAuthorUsernames([String(doc.ownerId)]);
+  return {
+    id: doc.shareId,
+    name: doc.name,
+    emoji: doc.emoji || DEFAULT_EMOJI,
+    eventCount: doc.eventCount || 0,
+    ownerUsername: usernames.get(String(doc.ownerId)) ?? null
+  };
+};
+
 export const listAlgorithmsForUser = async (ownerId: string): Promise<PublicAlgorithm[]> => {
   // things era rides {thingtime, ownerId, createdAt, shareId}; legacy rides
   // {ownerId}. Merge both (dedup by shareId), keep the picker's stable
@@ -242,17 +303,36 @@ export const getOwnedAlgorithmWeights = async (ownerId: string, shareId: string)
   return doc ? doc.weights || emptyWeights() : null;
 };
 
+/** Owner-only full portable profile. Shared previews deliberately omit weights;
+ * possessing a preview URL is not authority for this export path. */
+export const getOwnedAlgorithmTransfer = async (ownerId: string, shareId: string): Promise<AlgorithmTransferContent | null> => {
+  const doc = await findOwnedAlgorithm(ownerId, shareId);
+  return doc ? parseAlgorithmTransfer({ name: doc.name, emoji: doc.emoji, weights: doc.weights || emptyWeights(),
+    eventCount: doc.eventCount, lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt).toISOString() : null }) : null;
+};
+
+/** Server-only entry point. Normal algorithm HTTP input cannot supply a seed.
+ * The canonical writer still owns caps, storage admission, private ACL and IDs. */
+export const importAlgorithmTransfer = async (ownerId: string, content: unknown) => {
+  const parsed = parseAlgorithmTransfer(content);
+  return createAlgorithm(ownerId, { name: parsed.name, emoji: parsed.emoji }, parsed);
+};
+
 export type CreateAlgorithmInput = {
   name?: unknown;
   emoji?: unknown;
   branchFrom?: unknown;
   events?: unknown;
+  description?: unknown;
 };
 
 // Create a fresh algorithm, optionally branched from an existing one (weights
 // copied, lineage kept in parentId) and optionally seed-trained from a batch
 // of session events ("save this doomscroll session as an algorithm").
-export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInput): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
+export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInput, transferSeed?: AlgorithmTransferContent): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
+  // Validate again at the writer boundary, even for an in-process caller.
+  const imported = transferSeed === undefined ? undefined : parseAlgorithmTransfer(transferSeed);
+  if (imported && (input.branchFrom != null || input.events !== undefined)) return fail(400, 'An imported profile cannot also branch or train');
   const name = typeof input.name === 'string' ? input.name.trim().slice(0, MAX_NAME_CHARS) : '';
   if (!name) return fail(400, 'Algorithm name is required');
 
@@ -267,10 +347,16 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
     return fail(400, `Algorithm limit reached (${MAX_ALGORITHMS_PER_USER})`);
   }
 
-  let weights = emptyWeights();
+  let weights = imported?.weights || emptyWeights();
   let parentId: string | null = null;
   if (input.branchFrom !== undefined && input.branchFrom !== null) {
-    const parent = await findOwnedAlgorithm(ownerId, input.branchFrom);
+    // own algorithms first; otherwise a share-link branch — allowed only when
+    // the parent's owner explicitly flipped shared:true. The parent doc stays
+    // untouched and unreadable, but its weights ARE copied here into the
+    // caller's own algorithm and become visible to them as topInterests — that
+    // disclosure is what shared:true consents to, and it survives a later
+    // unshare because the copy is independent from the moment it is made.
+    const parent = (await findOwnedAlgorithm(ownerId, input.branchFrom)) || (await findSharedAlgorithm(input.branchFrom));
     if (!parent) return fail(404, 'Algorithm to branch from was not found');
     weights = {
       types: { ...(parent.weights?.types || {}) },
@@ -281,8 +367,8 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
   }
 
   const now = new Date();
-  let eventCount = 0;
-  let lastTrainedAt: Date | null = null;
+  let eventCount = imported?.eventCount || 0;
+  let lastTrainedAt: Date | null = imported?.lastTrainedAt ? new Date(imported.lastTrainedAt) : null;
 
   const seedEvents = sanitizeEvents(input.events);
   if (seedEvents.length) {
@@ -300,11 +386,15 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
     shareId: randomUUID(),
     ownerId,
     name,
+    description: typeof input.description === 'string' ? input.description.trim().slice(0, 300) : '',
+    listed: false,
     emoji: sanitizeEmoji(input.emoji),
     parentId,
     weights,
     eventCount,
     lastTrainedAt,
+    // branches always start unshared — sharing is a per-algorithm owner choice
+    shared: false,
     schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
     createdAt: now,
     updatedAt: now
@@ -324,7 +414,10 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
       parentId: doc.parentId,
       weights: doc.weights,
       eventCount: doc.eventCount,
-      lastTrainedAt: doc.lastTrainedAt
+      lastTrainedAt: doc.lastTrainedAt,
+      shared: doc.shared,
+      listed: false,
+      description: doc.description
     },
 		extended: null,
     ownerId,
@@ -341,7 +434,7 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
 		storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION
 	});
 	try {
-		await withMongoTransaction(async (session) => {
+		await withHomeMongoTransaction(async (session) => {
 			await applyUserStorageDelta(ownerId, sizeBytes, session);
 			await things.insertOne(thing as any, { session });
 		});
@@ -350,12 +443,14 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
 		if (projected) return projected;
 		throw error;
 	}
-  return { ok: true, algorithm: await toPublicAlgorithm(doc) };
+  // Import must return the minted ID without a fallible username lookup after
+  // commit; its caller needs that ID to compensate a later mixed-import failure.
+  return { ok: true, algorithm: imported ? projectAlgorithm(doc, new Map()) : await toPublicAlgorithm(doc) };
 };
 
 export const updateAlgorithm = async (
   ownerId: string,
-  input: { id?: unknown; name?: unknown; emoji?: unknown }
+  input: { id?: unknown; name?: unknown; emoji?: unknown; shared?: unknown; listed?: unknown; description?: unknown }
 ): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
   const found = await findOwnedAlgorithmWithEra(ownerId, input.id);
   if (!found) return fail(404, 'Algorithm not found');
@@ -370,6 +465,23 @@ export const updateAlgorithm = async (
   if (input.emoji !== undefined) {
     set.emoji = sanitizeEmoji(input.emoji);
   }
+  if (input.shared !== undefined) {
+    // strict boolean — a truthy string must not silently publish a share link
+    if (typeof input.shared !== 'boolean') return fail(400, 'shared must be a boolean');
+    set.shared = input.shared;
+  }
+
+  if (input.description !== undefined) {
+    if (typeof input.description !== 'string') return fail(400, 'description must be text');
+    set.description = input.description.trim().slice(0, 300);
+  }
+  if (input.listed !== undefined) {
+    if (typeof input.listed !== 'boolean') return fail(400, 'listed must be a boolean');
+    if (input.listed && input.shared === false) return fail(400, 'Listed algorithms must be shared');
+    set.listed = input.listed;
+    if (input.listed) set.shared = true;
+  }
+  if (set.shared === false) set.listed = false;
 
 	let updatedDoc: FeedAlgorithmDoc | null = null;
 	try {
@@ -379,7 +491,7 @@ export const updateAlgorithm = async (
 		// ledger becomes ready; after that, migration is mandatory.
   if (era === 'things') {
 			const things = await getThingsCollection();
-			await withMongoTransaction(async (session) => {
+			await withHomeMongoTransaction(async (session) => {
 				const before = await things.findOne({ shareId: doc.shareId, ownerId, thingtime: 'feed-algorithm' } as any, { session });
 				if (!before) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being updated — try again');
@@ -387,6 +499,9 @@ export const updateAlgorithm = async (
 				const crystal = { ...(before.crystal || {}) };
 				if (set.name !== undefined) crystal.name = set.name;
 				if (set.emoji !== undefined) crystal.emoji = set.emoji;
+				if (set.shared !== undefined) crystal.shared = set.shared;
+        if (set.listed !== undefined) crystal.listed = set.listed;
+        if (set.description !== undefined) crystal.description = set.description;
 				const extended = before.extended ?? null;
 				const tags = Array.isArray(before.tags) ? before.tags : [];
 				const sizeBytes = thingStorageSizeBytes({ crystal, extended, tags });
@@ -431,7 +546,7 @@ export const updateAlgorithm = async (
   } else {
 			const things = await getThingsCollection();
 			const algorithms = await getFeedAlgorithmsCollection();
-			await withMongoTransaction(async (session) => {
+			await withHomeMongoTransaction(async (session) => {
 				await assertLegacyAlgorithmMutationAllowed(ownerId, things, session);
 				const before = (await algorithms.findOne({ shareId: doc.shareId, ownerId } as any, { session })) as any as FeedAlgorithmDoc | null;
 				if (!before) {
@@ -464,7 +579,7 @@ export const deleteAlgorithm = async (ownerId: string, shareId: unknown): Promis
 	let deletedThing = false;
 	let deletedLegacy = false;
 	try {
-		await withMongoTransaction(async (session) => {
+		await withHomeMongoTransaction(async (session) => {
 			const legacy = await algorithms.findOne({ shareId: id, ownerId } as any, { projection: { _id: 1 }, session });
 			if (legacy) await assertLegacyAlgorithmMutationAllowed(ownerId, things, session);
 			const before = await things.findOneAndDelete({ shareId: id, ownerId, thingtime: 'feed-algorithm' } as any, { session });
@@ -496,6 +611,10 @@ export const setActiveAlgorithm = async (ownerId: string, algorithmId: unknown):
     await setUserActiveFeedAlgorithm(ownerId, null);
     return { ok: true, activeAlgorithmId: null };
   }
+  if (isDefaultAlgorithm(algorithmId)) {
+    await setUserActiveFeedAlgorithm(ownerId, algorithmId);
+    return { ok: true, activeAlgorithmId: algorithmId };
+  }
   const doc = await findOwnedAlgorithm(ownerId, algorithmId);
   if (!doc) return fail(404, 'Algorithm not found');
   await setUserActiveFeedAlgorithm(ownerId, doc.shareId);
@@ -509,7 +628,7 @@ export const trackEngagement = async (
   ownerId: string,
   activeAlgorithmId: string | null,
   input: { algorithmId?: unknown; events?: unknown }
-): Promise<Fail | { ok: true; trained: boolean; applied: number }> => {
+): Promise<Fail | { ok: true; trained: boolean; applied: number; eventCount?: number }> => {
   const events = sanitizeEvents(input.events);
   if (!events.length) {
     return fail(400, 'events are required');
@@ -528,6 +647,11 @@ export const trackEngagement = async (
 	);
   const now = new Date();
 	let applied = 0;
+	// Captured from the in-transaction before-image, not the pre-transaction
+	// read above: a concurrent flush (second tab/device) commits between them,
+	// and a stale total makes the client's before/after crossing check both
+	// miss milestones and re-fire ones already celebrated.
+	let eventCount = 0;
 	try {
 		// Weights replace as one object (never dotted per-tag keys), but the
 		// before-image is read inside the transaction so concurrent training is
@@ -535,7 +659,7 @@ export const trackEngagement = async (
 		// the account ledger.
   if (era === 'things') {
 			const things = await getThingsCollection();
-			await withMongoTransaction(async (session) => {
+			await withHomeMongoTransaction(async (session) => {
 				const before = await things.findOne({ shareId: doc.shareId, ownerId, thingtime: 'feed-algorithm' } as any, { session });
 				if (!before) {
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being trained — try again');
@@ -543,6 +667,7 @@ export const trackEngagement = async (
 				const trained = applyEventsToWeights(before.crystal?.weights || emptyWeights(), events, features);
 				if (!trained.applied) {
 					applied = 0;
+					eventCount = Math.max(0, Number(before.crystal?.eventCount || 0));
 					return;
 				}
 				const crystal = {
@@ -581,11 +706,12 @@ export const trackEngagement = async (
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being trained — try again');
 				}
 				applied = trained.applied;
+				eventCount = crystal.eventCount;
 			});
   } else {
 			const things = await getThingsCollection();
 			const algorithms = await getFeedAlgorithmsCollection();
-			await withMongoTransaction(async (session) => {
+			await withHomeMongoTransaction(async (session) => {
 				await assertLegacyAlgorithmMutationAllowed(ownerId, things, session);
 				const before = (await algorithms.findOne({ shareId: doc.shareId, ownerId } as any, { session })) as any as FeedAlgorithmDoc | null;
 				if (!before) {
@@ -594,6 +720,7 @@ export const trackEngagement = async (
 				const trained = applyEventsToWeights(before.weights || emptyWeights(), events, features);
 				if (!trained.applied) {
 					applied = 0;
+					eventCount = Math.max(0, Number(before.eventCount || 0));
 					return;
 				}
 				const write = await algorithms.updateOne(
@@ -608,6 +735,7 @@ export const trackEngagement = async (
 					throw new StorageMutationError(409, 'storage_conflict', 'Algorithm changed while it was being trained — try again');
 				}
 				applied = trained.applied;
+				eventCount = Math.max(0, Number(before.eventCount || 0)) + trained.applied;
 			});
 		}
 	} catch (error) {
@@ -615,5 +743,48 @@ export const trackEngagement = async (
 		if (projected) return projected;
 		throw error;
   }
-	return { ok: true, trained: applied > 0, applied };
+	// authoritative post-flush total so clients can detect growth-stage
+	// crossings (🥚→🐣→🐥→🧠) without double-counting session events
+	return { ok: true, trained: applied > 0, applied, eventCount };
+};
+
+/** Public directory: explicit listing consent, bounded search, no behavioral profile. */
+export const searchListedAlgorithms = async (query: { q?: string | null; cursor?: string | null }) => {
+  const things = await getThingsCollection();
+  const text = (query.q || '').trim().slice(0, 80);
+  const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match: Record<string, unknown> = {
+    thingtime: 'feed-algorithm', 'crystal.shared': true, 'crystal.listed': true,
+    ...(text ? { $or: [{ 'crystal.name': { $regex: escaped, $options: 'i' } }, { 'crystal.description': { $regex: escaped, $options: 'i' } }] } : {}),
+    ...(query.cursor ? { shareId: { $gt: query.cursor.slice(0, 100) } } : {})
+  };
+  const legacy = await getFeedAlgorithmsCollection();
+  const legacyMatch = {
+    shared: true, listed: true,
+    ...(text ? { $or: [{ name: { $regex: escaped, $options: 'i' } }, { description: { $regex: escaped, $options: 'i' } }] } : {}),
+    ...(query.cursor ? { shareId: { $gt: query.cursor.slice(0, 100) } } : {})
+  };
+  const [current, old] = await Promise.all([
+    things.find(match as any).sort({ shareId: 1 }).limit(21).maxTimeMS(5000)
+      .project({ shareId: 1, ownerId: 1, 'crystal.name': 1, 'crystal.emoji': 1, 'crystal.description': 1, 'crystal.eventCount': 1 }).toArray(),
+    legacy.find(legacyMatch as any).sort({ shareId: 1 }).limit(21).maxTimeMS(5000)
+      .project({ shareId: 1, ownerId: 1, name: 1, emoji: 1, description: 1, eventCount: 1 }).toArray()
+  ]);
+  // A current-era twin is authoritative even after it was unlisted/unshared.
+  const twins = old.length ? await things.find({ thingtime: 'feed-algorithm', shareId: { $in: old.map((doc) => doc.shareId) } } as any).project({ shareId: 1 }).toArray() : [];
+  const superseded = new Set(twins.map((doc) => doc.shareId));
+  const docs = [...current.map((doc) => ({ ...doc, ...doc.crystal, current: true })), ...old.map((doc) => ({ ...doc, current: false }))]
+    .sort((a, b) => a.shareId.localeCompare(b.shareId));
+  // Keep both eras at a cursor boundary together so a legacy twin cannot
+  // advance the cursor past the authoritative current listing.
+  const cutoff = docs[19]?.shareId;
+  const page = cutoff ? docs.filter((doc) => doc.shareId.localeCompare(cutoff) <= 0) : docs;
+  const visible = page.filter((doc) => doc.current || !superseded.has(doc.shareId));
+  const usernames = await resolveAuthorUsernames(visible.map((doc) => String(doc.ownerId)));
+  return {
+    algorithms: visible.map((doc) => ({ id: doc.shareId, name: doc.name || '', emoji: doc.emoji || '🧠',
+      description: doc.description || '', eventCount: doc.eventCount || 0,
+      ownerUsername: usernames.get(String(doc.ownerId)) ?? null })),
+    nextCursor: docs.length > page.length ? page[page.length - 1].shareId : null
+  };
 };

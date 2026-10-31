@@ -1,13 +1,46 @@
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
-import { COLLECTION_SCHEMA_VERSIONS, USER_STORAGE_ACCOUNTING_VERSION } from '../../../schemas/registry.ts';
+import {
+	COLLECTION_SCHEMA_VERSIONS,
+	DEVICE_CONTROL_THINGTIME,
+	MIGRATION_DIAGNOSTIC_THINGTIME, ERROR_LOG_THINGTIME, STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
+	USER_STORAGE_ACCOUNTING_VERSION
+} from '../../../schemas/registry.ts';
+// @ts-ignore Node 24's direct TypeScript test runner requires the extension.
+import { attachmentObjectSizeBytesForAccounting } from '../attachments/attachmentCore.ts';
+import { timelineNoteBytes, timelinePayloadBytes } from '../timeline/envelope.ts';
+import { TIMELINE_EVENT_KIND } from '../../../timeline/contract.ts';
 
-// One versioned logical byte definition for every billable Thing. We measure
-// the exact UTF-8 JSON stored in the customer-controlled payload fields. This
-// intentionally excludes MongoDB/WiredTiger compression, indexes, replication
-// and platform-owned envelope fields: those physical costs are shared and are
-// not deterministically attributable to one user.
-export const thingStorageSizeBytes = (doc: { crystal?: unknown; extended?: unknown; tags?: unknown }): number =>
-  Buffer.byteLength(
+export class InvalidTimelineStorageEnvelopeError extends Error {
+	constructor() { super('Timeline storage envelope is invalid'); this.name = 'InvalidTimelineStorageEnvelopeError'; }
+}
+
+export class InvalidAttachmentStorageEnvelopeError extends Error {
+  constructor() {
+    super('Attachment storage envelope is invalid');
+    this.name = 'InvalidAttachmentStorageEnvelopeError';
+  }
+}
+
+// One versioned logical byte definition for every billable Thing. Ordinary
+// Things measure the exact UTF-8 JSON stored in the customer-controlled payload
+// fields. Protected attachment Things additionally add their verified root
+// objectSizeBytes allocation; no historical Thing changes size, and arbitrary
+// user crystals cannot opt into object billing. MongoDB/WiredTiger compression,
+// indexes, and replication remain excluded shared physical costs.
+export const thingStorageSizeBytes = (doc: {
+  thingtime?: unknown;
+  crystal?: unknown;
+  extended?: unknown;
+  tags?: unknown;
+  attachmentEnvelopeVersion?: unknown;
+  attachmentState?: unknown;
+  objectSizeBytes?: unknown;
+  objectKey?: unknown;
+  timelineEnvelopeVersion?: unknown;
+  timelineNoteVersion?: unknown;
+  secure?: unknown;
+}): number => {
+  const payloadBytes = Buffer.byteLength(
     JSON.stringify({
       crystal: doc.crystal ?? null,
       extended: doc.extended ?? null,
@@ -15,6 +48,17 @@ export const thingStorageSizeBytes = (doc: { crystal?: unknown; extended?: unkno
     }),
     'utf8'
   );
+  const objectBytes = attachmentObjectSizeBytesForAccounting(doc);
+  if (objectBytes === null) throw new InvalidAttachmentStorageEnvelopeError();
+  const historyBytes = timelinePayloadBytes(doc);
+  if (historyBytes === null) throw new InvalidTimelineStorageEnvelopeError();
+  const noteBytes = timelineNoteBytes(doc);
+  if (noteBytes === null) throw new InvalidTimelineStorageEnvelopeError();
+  const timelineV2 = Array.isArray(doc.thingtime) && doc.thingtime.includes(TIMELINE_EVENT_KIND) && (doc.timelineEnvelopeVersion === 2 || doc.timelineEnvelopeVersion === 3);
+  const total = (timelineV2 ? 0 : payloadBytes) + (objectBytes ?? 0) + historyBytes + noteBytes;
+  if (!Number.isSafeInteger(total)) throw new RangeError('Thing storage size exceeds the exact counter range');
+  return total;
+};
 
 // The one proof that a persisted row may participate in incremental ledger
 // arithmetic. Writers and deletes recompute the payload instead of trusting a
@@ -29,8 +73,19 @@ export const currentContentStorageSizeBytes = (doc: {
   crystal?: unknown;
   extended?: unknown;
   tags?: unknown;
+  attachmentEnvelopeVersion?: unknown;
+  attachmentState?: unknown;
+  objectSizeBytes?: unknown;
+  objectKey?: unknown;
+  timelineEnvelopeVersion?: unknown;
+  secure?: unknown;
 }): number | null => {
-  const canonical = thingStorageSizeBytes(doc);
+  let canonical: number;
+  try {
+    canonical = thingStorageSizeBytes(doc);
+  } catch {
+    return null;
+  }
   return doc.schemaVersion === COLLECTION_SCHEMA_VERSIONS.things &&
     Array.isArray(doc.thingtime) &&
     doc.storageClass === 'content' &&
@@ -63,14 +118,54 @@ export type UserStorageUsage = {
 };
 
 export const CONTROL_PLANE_STORAGE_THINGTIMES = [
+  STORAGE_PENDING_THINGTIME, STORAGE_RECOVERY_THINGTIME,
+  'post-discovery',
+	'lopu-recording-settings',
+	'lopu-background-task',
+	'lopu-recording-job',
+	'lopu-recording-reminder',
   'account-link',
+  // the Lopu model catalog: system-owned control docs seeded from code
+  // (api/utils/ai/models.ts), never user content
+  'ai-model',
+  // Lopu credits + usage accounting (api/utils/lopu/accounting.ts): the
+  // platform's own bill for a user, never user content
+  'lopu-account',
+  'lopu-credit',
+  'lopu-usage',
   'app',
   'app-storage',
+	// Protected server-plumbing state is platform overhead. These Things are
+	// minted by dedicated home-plane state machines, never generic user CRUD.
+	'friend',
+	'notification',
+	// Poll votes are bounded engagement plumbing: one tiny fixed-shape doc per
+	// (user, poll), minted only by POST /api/v1/things/vote (no generic
+	// sanitizer). Direct-inserted without a storage stamp, so they must stay
+	// out of billable arithmetic like the other dedicated-endpoint kinds.
+	'vote',
+	// Up/down votes, subspace memberships and mod-log rows are the same class of
+	// bounded engagement/plumbing docs (one tiny fixed-shape doc per relation,
+	// minted only by their dedicated endpoints — api/utils/subspaces, things/updown).
+	'updown',
+	'subspace-member',
+	'subspace-modlog',
+	// a deleted subspace's slug hold (one tiny row per deletion, consumed when
+	// the slug is re-founded) — plumbing, never billable content
+	'subspace-tombstone',
+	// a viewer's report of a post to the mods (one tiny row per (post,
+	// reporter), settled by moderation) — plumbing, never billable content
+	'subspace-report',
+	// Messenger communities, conversations, messages, comments, and custom
+	// emoji are user-owned content and intentionally remain billable. Their
+	// attachment object bytes are metered separately by attachment Things.
+	...DEVICE_CONTROL_THINGTIME,
   'service-quota',
   'subscription',
   'subscription-tier',
   'user',
-  'waitlist'
+	'waitlist',
+	MIGRATION_DIAGNOSTIC_THINGTIME, ERROR_LOG_THINGTIME
 ] as const;
 const CONTROL_PLANE_THINGTIMES = new Set<string>(CONTROL_PLANE_STORAGE_THINGTIMES);
 
@@ -82,9 +177,7 @@ export type StorageSandboxState = 'real' | 'sandbox' | 'invalid';
 // both the standing ledger and TTL cleanup.
 export const storageSandboxState = (doc: { sandboxExpiresAt?: unknown }): StorageSandboxState => {
   if (!Object.prototype.hasOwnProperty.call(doc, 'sandboxExpiresAt')) return 'real';
-  return doc.sandboxExpiresAt instanceof Date && Number.isFinite(doc.sandboxExpiresAt.getTime())
-    ? 'sandbox'
-    : 'invalid';
+	return doc.sandboxExpiresAt instanceof Date && Number.isFinite(doc.sandboxExpiresAt.getTime()) ? 'sandbox' : 'invalid';
 };
 
 // Shared Mongo expressions for the same three-way rule. Candidate scans retain
@@ -97,6 +190,23 @@ export const realStorageSourceExpression = {
   $eq: [{ $type: '$sandboxExpiresAt' }, 'missing']
 };
 
+// The same source-stamp proof is required by reconciliation and release
+// readiness. Keep malformed/legacy candidates outside this match rather than
+// silently dropping them from the billable census.
+export const currentStorageSourceMatch = {
+  schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+  thingtime: { $type: 'array' },
+  storageClass: 'content',
+  storageAccountingVersion: USER_STORAGE_ACCOUNTING_VERSION,
+  sizeBytes: { $type: 'number', $gte: 0, $lte: Number.MAX_SAFE_INTEGER },
+  $expr: {
+    $and: [
+      realStorageSourceExpression,
+      { $eq: ['$sizeBytes', { $convert: { input: '$sizeBytes', to: 'long', onError: null, onNull: null } }] }
+    ]
+  }
+};
+
 export const billableStorageCandidateExpression = {
   $and: [
     nonSandboxStorageCandidateExpression,
@@ -105,10 +215,7 @@ export const billableStorageCandidateExpression = {
       $eq: [
         {
           $size: {
-            $setIntersection: [
-              { $cond: [{ $isArray: '$thingtime' }, '$thingtime', []] },
-              [...CONTROL_PLANE_STORAGE_THINGTIMES]
-            ]
+						$setIntersection: [{ $cond: [{ $isArray: '$thingtime' }, '$thingtime', []] }, [...CONTROL_PLANE_STORAGE_THINGTIMES]]
           }
         },
         0
@@ -159,20 +266,12 @@ export const normalizedStorageUsage = (input: {
   const storedUsedBytes = validUsedBytes ? Number(input.usedBytes) : null;
   const validAllowance =
     input.allowanceValid !== false &&
-    (input.allowanceBytes === null ||
-      (Number.isSafeInteger(input.allowanceBytes) && Number(input.allowanceBytes) >= 0));
+		(input.allowanceBytes === null || (Number.isSafeInteger(input.allowanceBytes) && Number(input.allowanceBytes) >= 0));
   const expectedAccountingVersion = input.expectedAccountingVersion ?? USER_STORAGE_ACCOUNTING_VERSION;
-  const structurallyCurrent =
-    validUsedBytes &&
-    validAllowance &&
-    input.accountingVersion === expectedAccountingVersion;
-  const ready =
-    structurallyCurrent &&
-    input.ledgerStatus === USER_STORAGE_STATUS.ready;
+	const structurallyCurrent = validUsedBytes && validAllowance && input.accountingVersion === expectedAccountingVersion;
+	const ready = structurallyCurrent && input.ledgerStatus === USER_STORAGE_STATUS.ready;
   const reconciling =
-    structurallyCurrent &&
-    (input.ledgerStatus === USER_STORAGE_STATUS.initializing ||
-      input.ledgerStatus === USER_STORAGE_STATUS.needsReconcile);
+		structurallyCurrent && (input.ledgerStatus === USER_STORAGE_STATUS.initializing || input.ledgerStatus === USER_STORAGE_STATUS.needsReconcile);
   const status = ready ? 'ready' : reconciling ? 'reconciling' : 'unavailable';
   const usedBytes = status === 'unavailable' ? null : storedUsedBytes!;
   return {
