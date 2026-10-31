@@ -7,9 +7,38 @@ struct ThingtimeWebDeploymentsClient {
     }
 
     var session: URLSession = .shared
-    var requestURL: URL = ThingtimeWebDestination.deploymentsAPIURL()
+    var requestURLs: [URL] = ThingtimeWebDestination.deploymentsAPIURLs()
 
-    func fetchDeployments() async throws -> [ThingtimeWebDestination.DeploymentSummary] {
+    func fetchDeployments() async throws -> ThingtimeWebDestination.DeploymentsOverview {
+        var fallbackOverview: ThingtimeWebDestination.DeploymentsOverview?
+        var lastError: Error?
+
+        for requestURL in requestURLs {
+            do {
+                let overview = try await fetchDeployments(from: requestURL)
+
+                if overview.supportsDeploymentHistory {
+                    return overview
+                }
+
+                if overview.fallbackDeploymentCount > (fallbackOverview?.fallbackDeploymentCount ?? -1) {
+                    fallbackOverview = overview
+                }
+            } catch {
+                lastError = error
+            }
+        }
+
+        if let fallbackOverview {
+            return fallbackOverview
+        }
+
+        throw lastError ?? ClientError.invalidResponse
+    }
+
+    private func fetchDeployments(
+        from requestURL: URL
+    ) async throws -> ThingtimeWebDestination.DeploymentsOverview {
         let (data, response) = try await session.data(from: requestURL)
 
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -20,7 +49,6 @@ struct ThingtimeWebDeploymentsClient {
             throw ClientError.requestFailed(httpResponse.statusCode)
         }
 
-        let overview = try JSONDecoder().decode(ThingtimeWebDestination.DeploymentsOverview.self, from: data)
-        return overview.deployments
+        return try JSONDecoder().decode(ThingtimeWebDestination.DeploymentsOverview.self, from: data)
     }
 }

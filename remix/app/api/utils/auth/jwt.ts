@@ -153,6 +153,58 @@ export const verifyJwt = async (token: string): Promise<JwtClaims | null> => {
   }
 };
 
+// Short-lived single-purpose tokens (e.g. WebAuthn challenge cookies). The
+// `purpose` claim fences them off from session JWTs in BOTH directions: these
+// carry no sub/jti so verifyJwt rejects them, and session JWTs carry no
+// purpose so verifyPurposeToken rejects those. Same key material as signJwt.
+export const signPurposeToken = async (
+  purpose: string,
+  claims: Record<string, unknown>,
+  expiresIn: string
+): Promise<string> => {
+  const build = (jwt: SignJWT) => jwt.setIssuer(getJwtIssuer()).setIssuedAt().setExpirationTime(expiresIn);
+
+  const es256Key = getEs256SigningKey();
+  if (es256Key) {
+    return build(
+      new SignJWT({ ...claims, purpose }).setProtectedHeader({ alg: 'ES256', kid: getJwtKeyId(), typ: 'JWT' })
+    ).sign(await es256Key);
+  }
+
+  const legacySecret = getLegacySecret({ allowDevFallback: true });
+  if (!legacySecret) {
+    throw new Error('[auth] JWT_PRIVATE_KEY or JWT_SECRET must be set before auth can run.');
+  }
+  return build(new SignJWT({ ...claims, purpose }).setProtectedHeader({ alg: 'HS256', typ: 'JWT' })).sign(legacySecret);
+};
+
+export const verifyPurposeToken = async (
+  token: string,
+  purpose: string
+): Promise<Record<string, unknown> | null> => {
+  const es256Key = getEs256VerifyKey();
+  if (es256Key) {
+    try {
+      const { payload } = await jwtVerify(token, await es256Key, { algorithms: ['ES256'] });
+      if (payload.purpose !== purpose) return null;
+      return payload as Record<string, unknown>;
+    } catch {
+      // fall through to the legacy HS256 verifier
+    }
+  }
+
+  const legacySecret = getLegacySecret({ allowDevFallback: process.env.NODE_ENV !== 'production' });
+  if (!legacySecret) return null;
+
+  try {
+    const { payload } = await jwtVerify(token, legacySecret, { algorithms: ['HS256'] });
+    if (payload.purpose !== purpose) return null;
+    return payload as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+};
+
 export const getPublicJwks = async (): Promise<PublicJwks> => {
   publicJwkPromise ??= getPublicJwk();
   const jwk = await publicJwkPromise;
@@ -169,3 +221,36 @@ export const getPublicJwks = async (): Promise<PublicJwks> => {
     ],
   };
 };
+
+/** A durable seal over immutable content, NOT an account/session credential.
+ * No expiry: offline delivery is not a time-limited authorization grant. The
+ * receiving service still authenticates the owner and verifies the exact
+ * content, issuer and storage audience. Never use the public dev fallback. */
+const contentProofSecret = () => {
+  const secret = getLegacySecret({ allowDevFallback: false });
+  return secret && secret.length >= 32 && process.env.JWT_SECRET !== LEGACY_DEV_SECRET ? secret : null;
+};
+export async function signContentProof(purpose: string, digest: string, audience: string): Promise<string> {
+  const build = (alg: string) => new SignJWT({ purpose, digest })
+    .setProtectedHeader({ alg, typ: 'thingtime-content-proof+jwt', ...(alg === 'ES256' ? { kid: getJwtKeyId() } : {}) })
+    .setIssuer(getJwtIssuer()).setAudience(audience).setIssuedAt();
+  const key = getEs256SigningKey();
+  if (key) return build('ES256').sign(await key);
+  const secret = contentProofSecret();
+  if (!secret) throw new Error('A configured signing key is required for durable content proofs');
+  return build('HS256').sign(secret);
+}
+export async function verifyContentProof(token: string, purpose: string, digest: string, audience: string): Promise<boolean> {
+  const options = { issuer: getJwtIssuer(), audience, typ: 'thingtime-content-proof+jwt' };
+  const matches = (payload: Record<string, unknown>) => payload.purpose === purpose && payload.digest === digest &&
+    Object.keys(payload).sort().join(',') === 'aud,digest,iat,iss,purpose';
+  const key = getEs256VerifyKey();
+  if (key) {
+    try { return matches((await jwtVerify(token, await key, { ...options, algorithms: ['ES256'] })).payload); }
+    catch { /* Configured legacy signatures remain verifiable during migration. */ }
+  }
+  const secret = contentProofSecret();
+  if (!secret) return false;
+  try { return matches((await jwtVerify(token, secret, { ...options, algorithms: ['HS256'] })).payload); }
+  catch { return false; }
+}
