@@ -104,20 +104,29 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-10-14 — **Claude (AI)**: History settings. New `api.timeline-settings`
-  1.0.0 (`GET`/`POST /api/v1/timeline/settings`; `api.timeline` stays 1.18.0)
-  stores the account-wide sync hold, the retention choice (stored only —
-  nothing is deleted yet) and the per-Thing draft-capture pause list on the
-  user Thing's protected `secure.meta.historyPrefs` blob through a
-  home-pinned, injectable `createHistoryPrefsStore` (`users.ts`; pause/resume
-  are deltas merged inside the `secureVersion` CAS write, 200-id cap, 64 KiB
-  body cap, `timeline.settings` 30/min, 503 + `Retry-After: 1` on contention).
-  Shared contract `remix/app/timeline/historyPrefs.ts`; Settings → History
-  category, `pause-history`/`resume-history` verbs, Thing-page and editor
-  History entry points, bounded client export. Pausing stops client draft
-  capture in the Builder page and definition editors only; saved versions
-  keep recording. Docs: `docs/unified-timeline.md` (2026-10-14 section),
-  `docs/feature-map/history-and-timeline.md`.
+### 2026-09-03 — Generated marketing suite: 1,600+ pages, animated walkthroughs, social image suite — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/610-claude-marketing-suite--generated-marketing-suite.md`).
+- **`/marketing`** is a catalog-generated marketing site: feature landing
+  pages, how-to guides, animated cursor walkthroughs over mock screens,
+  fair competitor comparisons and alternatives, audience pages, use cases,
+  concept explainers, starter templates, twelve "style editions" per lead
+  feature, FAQ pages and getting-started checklists — 1,635 pages from one
+  data set (`remix/app/marketing/`), every slug validated, every link
+  resolved, hero-first and CTA-last, deterministic per slug.
+- **`/marketing/social-media`** is a menu-navigable image suite: every
+  feature × twelve viral trend styles × ten platform formats renders as a
+  self-contained SVG and downloads as PNG at the exact platform size, with
+  per-platform captions and hashtags (10,680 images).
+- Routes are lazy (`marketing`, `marketing/social-media`,
+  `marketing/:category`, `marketing/*`); the root title effect defers to
+  `useMarketingSeo` under `/marketing`; the drawer gains a Marketing hub.
+- Tests: `npm run test:marketing` (catalog validation, walkthrough target
+  coverage, SVG rendering, copy determinism, mock-screen coverage, player
+  engine); manual checklist in `TESTING.md` ("Marketing suite"); design
+  notes in `docs/marketing-suite.md`.
+
+- 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
 
 - **One merged PR can promote to several branches**: the promoter had exactly
   one target, so a source PR owing changes to two branches — #211 converts

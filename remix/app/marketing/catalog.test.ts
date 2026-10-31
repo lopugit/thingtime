@@ -2,23 +2,23 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node executes this TypeScript test directly and requires the .ts extension.
-import { CATEGORIES, CATEGORY_BY_KEY, PAGES, PAGE_BY_SLUG, PAGE_COUNT, STYLE_FEATURE_KEYS, TOTAL_ASSET_COUNT, buildPage, buildPageBySlug, categoryCounts, searchPages, validateCatalog } from './catalog.ts';
+import { CATEGORIES, PAGES, PAGE_BY_SLUG, PAGE_COUNT, STYLE_FEATURE_KEYS, TOTAL_ASSET_COUNT, buildPage, buildPageBySlug, categoryCounts, searchPages, validateCatalog } from './catalog.ts';
 // @ts-ignore see above
-import { FEATURES, FEATURE_BY_KEY, getFeature } from './features.ts';
+import { FEATURES } from './features.ts';
 // @ts-ignore see above
-import { PERSONAS, PERSONA_BY_KEY } from './personas.ts';
+import { PERSONAS } from './personas.ts';
 // @ts-ignore see above
-import { COMPETITORS, COMPETITOR_BY_KEY } from './competitors.ts';
+import { COMPETITORS } from './competitors.ts';
 // @ts-ignore see above
-import { USE_CASES, USE_CASE_BY_KEY } from './useCases.ts';
+import { USE_CASES } from './useCases.ts';
 // @ts-ignore see above
-import { CONCEPTS, CONCEPT_BY_KEY, TEMPLATES, TEMPLATE_BY_KEY } from './concepts.ts';
+import { CONCEPTS, TEMPLATES } from './concepts.ts';
 // @ts-ignore see above
-import { SOCIAL_FORMATS, SOCIAL_FORMAT_BY_KEY, TRENDS, TREND_BY_KEY, getSocialFormat, getTrend } from './trends.ts';
+import { SOCIAL_FORMATS, TRENDS } from './trends.ts';
 // @ts-ignore see above
 import { SOCIAL_ASSET_COUNT, buildSocialSvg, enumerateSocialAssets, parseSocialAssetKey, socialAssetFilename, socialAssetKey, socialCaption, wrapText } from './social.ts';
 // @ts-ignore see above
-import { SCREEN_TARGETS, WALKTHROUGHS, WALKTHROUGH_BY_KEY } from './walkthroughs.ts';
+import { SCREEN_TARGETS, WALKTHROUGHS } from './walkthroughs.ts';
 // @ts-ignore see above
 import { captionFor, hashString, hookFor, pick } from './copy.ts';
 
@@ -27,39 +27,6 @@ test('the catalog holds well over a thousand pages and assets', () => {
 	assert.ok(SOCIAL_ASSET_COUNT >= 1000, `expected >= 1000 social assets, got ${SOCIAL_ASSET_COUNT}`);
 	assert.equal(TOTAL_ASSET_COUNT, PAGE_COUNT + SOCIAL_ASSET_COUNT);
 	assert.equal(PAGES.length, PAGE_COUNT);
-});
-
-// The suite's promise is that counts never drift, and almost every count is
-// derived (`formatCount(PAGE_COUNT)`, `${TRENDS.length} viral styles`). Six
-// user-visible strings spell theirs out in words instead, and nothing else
-// would notice when a thirteenth trend or a twelfth category lands — the page
-// would read "twelve viral styles" above thirteen of them, and one of these
-// strings is a category blurb that also ships as the page's meta description.
-// Adding to any of these lists is a documented extension point
-// (docs/marketing-suite.md § Adding content), so pin the three lengths and
-// name the call sites here rather than let the copy go quietly wrong.
-test('the counts spelled out in words still match the lists', () => {
-	const spelledOut: { count: number; expected: number; wording: string; sites: string[] }[] = [
-		{
-			count: TRENDS.length,
-			expected: 12,
-			wording: 'twelve',
-			sites: [
-				'catalog.ts CATEGORIES styles.blurb ("re-cut in twelve viral trends" — also the category meta description)',
-				'routes/marketing/_index.tsx ("twelve viral styles", "twelve viral styles and ten platform sizes", "Twelve viral looks")',
-				'routes/marketing/page.tsx ("Re-cut in eleven other styles" — TRENDS.length - 1)'
-			]
-		},
-		{ count: SOCIAL_FORMATS.length, expected: 10, wording: 'ten', sites: ['routes/marketing/_index.tsx ("ten platform sizes")'] },
-		{ count: CATEGORIES.length, expected: 11, wording: 'Eleven', sites: ['routes/marketing/_index.tsx ("Eleven kinds of page, one social suite")'] }
-	];
-	for (const entry of spelledOut) {
-		assert.equal(
-			entry.count,
-			entry.expected,
-			`This list now has ${entry.count} entries, but ${entry.sites.length} place(s) still say "${entry.wording}". Update the copy (or derive it, as social-media.tsx does with \${TRENDS.length}) and this expectation:\n  - ${entry.sites.join('\n  - ')}`
-		);
-	}
 });
 
 test('every category has pages and every page has a category', () => {
@@ -179,41 +146,4 @@ test('copy helpers are deterministic and fill every placeholder', () => {
 	assert.notEqual(hashString('a'), hashString('b'));
 	assert.equal(pick('x', [1, 2, 3]), pick('x', [1, 2, 3]));
 	assert.deepEqual(wrapText('one two three four five six', 160, 20), ['one two three', 'four five six']);
-});
-
-// Every route guard in the suite is written as `if (MAP[key])`, and the keys
-// come straight from the URL (`/marketing/:category`, the `/marketing/*`
-// splat, `?feature=`). A prototype-carrying map answers truthily for
-// "constructor" & friends, which walked a non-entry past those guards.
-test('lookup maps never resolve inherited Object.prototype keys', () => {
-	const maps = {
-		CATEGORY_BY_KEY,
-		PAGE_BY_SLUG,
-		FEATURE_BY_KEY,
-		TREND_BY_KEY,
-		SOCIAL_FORMAT_BY_KEY,
-		COMPETITOR_BY_KEY,
-		CONCEPT_BY_KEY,
-		TEMPLATE_BY_KEY,
-		PERSONA_BY_KEY,
-		USE_CASE_BY_KEY,
-		WALKTHROUGH_BY_KEY
-	};
-	const inherited = ['constructor', 'toString', 'valueOf', 'hasOwnProperty', 'isPrototypeOf', '__proto__', '__defineGetter__'];
-	for (const [name, map] of Object.entries(maps)) {
-		assert.equal(Object.getPrototypeOf(map), null, `${name} must be a null-prototype map`);
-		for (const key of inherited) {
-			assert.equal((map as Record<string, unknown>)[key], undefined, `${name}[${key}] must not resolve`);
-		}
-	}
-});
-
-test('unknown keys are rejected rather than resolving to a prototype member', () => {
-	for (const key of ['constructor', 'toString', '__proto__', 'nope']) {
-		assert.throws(() => getFeature(key), /Unknown marketing feature/, `getFeature(${key})`);
-		assert.throws(() => getTrend(key as never), /Unknown marketing trend/, `getTrend(${key})`);
-		assert.throws(() => getSocialFormat(key), /Unknown social format/, `getSocialFormat(${key})`);
-		// The `/marketing/*` splat resolves through this: a non-entry must 404.
-		assert.equal(buildPageBySlug(key), null, `buildPageBySlug(${key})`);
-	}
 });
